@@ -987,5 +987,207 @@ describe('StrategyConfigDialog', () => {
       expect(screen.getByText(/2\./)).toBeInTheDocument();
       expect(screen.getByText('rot13')).toBeInTheDocument();
     });
+
+    it('should display "Configure Layer Strategy" description when no steps are added', () => {
+      render(
+        <StrategyConfigDialog
+          open={true}
+          strategy="layer"
+          config={{}}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={{ id: 'layer', name: 'Layer', description: 'Layer strategy' }}
+        />,
+      );
+
+      expect(screen.getByText('Configure Layer Strategy')).toBeInTheDocument();
+      expect(
+        screen.getByText(/Add steps to create transform chains or combine agentic strategies/),
+      ).toBeInTheDocument();
+    });
+
+    it('should display "Transform Chain" mode when only transform steps are added', () => {
+      render(
+        <StrategyConfigDialog
+          open={true}
+          strategy="layer"
+          config={{ steps: ['base64', 'rot13'] }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={{ id: 'layer', name: 'Layer', description: 'Layer strategy' }}
+        />,
+      );
+
+      expect(screen.getByText('Transform Chain')).toBeInTheDocument();
+      expect(
+        screen.getByText(/Test cases will be transformed through 2 steps sequentially/),
+      ).toBeInTheDocument();
+    });
+
+    it('should display "Multi-Turn + Multi-Modal Attack" mode when agentic and multi-modal steps are combined', () => {
+      render(
+        <StrategyConfigDialog
+          open={true}
+          strategy="layer"
+          config={{ steps: ['jailbreak:hydra', 'audio'] }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={{ id: 'layer', name: 'Layer', description: 'Layer strategy' }}
+        />,
+      );
+
+      expect(screen.getByText('Multi-Turn + Multi-Modal Attack')).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          /The agentic strategy will orchestrate the attack.*converted to audio\/image/,
+        ),
+      ).toBeInTheDocument();
+    });
+
+    it('should display "Multi-Turn Agentic Attack" mode when only agentic step is added', () => {
+      render(
+        <StrategyConfigDialog
+          open={true}
+          strategy="layer"
+          config={{ steps: ['crescendo'] }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={{ id: 'layer', name: 'Layer', description: 'Layer strategy' }}
+        />,
+      );
+
+      expect(screen.getByText('Multi-Turn Agentic Attack')).toBeInTheDocument();
+      expect(
+        screen.getByText(/The agentic strategy will orchestrate a multi-turn conversation/),
+      ).toBeInTheDocument();
+    });
+
+    it('should display "Multi-Modal Transform" mode when only multi-modal step is added', () => {
+      render(
+        <StrategyConfigDialog
+          open={true}
+          strategy="layer"
+          config={{ steps: ['audio'] }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={{ id: 'layer', name: 'Layer', description: 'Layer strategy' }}
+        />,
+      );
+
+      expect(screen.getByText('Multi-Modal Transform')).toBeInTheDocument();
+      expect(
+        screen.getByText(/Test cases will be converted to audio\/image format/),
+      ).toBeInTheDocument();
+    });
+
+    it('should display "agentic" chip for agentic strategies', () => {
+      render(
+        <StrategyConfigDialog
+          open={true}
+          strategy="layer"
+          config={{ steps: ['jailbreak:hydra'] }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={{ id: 'layer', name: 'Layer', description: 'Layer strategy' }}
+        />,
+      );
+
+      expect(screen.getByText('agentic')).toBeInTheDocument();
+    });
+
+    it('should display "multi-modal" chip for multi-modal strategies', () => {
+      render(
+        <StrategyConfigDialog
+          open={true}
+          strategy="layer"
+          config={{ steps: ['audio'] }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={{ id: 'layer', name: 'Layer', description: 'Layer strategy' }}
+        />,
+      );
+
+      expect(screen.getByText('multi-modal')).toBeInTheDocument();
+    });
+
+    it('should display "configured" chip when step has config', () => {
+      render(
+        <StrategyConfigDialog
+          open={true}
+          strategy="layer"
+          config={{ steps: [{ id: 'base64', config: { option: 'value' } }] }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={{ id: 'layer', name: 'Layer', description: 'Layer strategy' }}
+        />,
+      );
+
+      expect(screen.getByText('configured')).toBeInTheDocument();
+    });
+
+    it('should show warning when agentic strategy is not first step', () => {
+      render(
+        <StrategyConfigDialog
+          open={true}
+          strategy="layer"
+          config={{ steps: ['base64', 'jailbreak:hydra'] }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={{ id: 'layer', name: 'Layer', description: 'Layer strategy' }}
+        />,
+      );
+
+      expect(
+        screen.getByText(/Agentic strategies work best as the first step/),
+      ).toBeInTheDocument();
+    });
+
+    it('should show warning when transforms are between agentic and multi-modal steps', () => {
+      render(
+        <StrategyConfigDialog
+          open={true}
+          strategy="layer"
+          config={{ steps: ['jailbreak:hydra', 'base64', 'audio'] }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={{ id: 'layer', name: 'Layer', description: 'Layer strategy' }}
+        />,
+      );
+
+      expect(screen.getByText(/Transforms between agentic and multi-modal/)).toBeInTheDocument();
+    });
+
+    it('should disable step movement when multi-modal is at the end', () => {
+      render(
+        <StrategyConfigDialog
+          open={true}
+          strategy="layer"
+          config={{ steps: ['jailbreak:hydra', 'audio'] }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={{ id: 'layer', name: 'Layer', description: 'Layer strategy' }}
+        />,
+      );
+
+      // The move down button for jailbreak:hydra should be disabled
+      const moveDownButtons = screen.getAllByLabelText('move step down');
+      expect(moveDownButtons[0]).toBeDisabled();
+    });
+
+    it('should show validation message when last step is multi-modal', () => {
+      render(
+        <StrategyConfigDialog
+          open={true}
+          strategy="layer"
+          config={{ steps: ['jailbreak:hydra', 'audio'] }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={{ id: 'layer', name: 'Layer', description: 'Layer strategy' }}
+        />,
+      );
+
+      // The autocomplete should show that multi-modal must be last
+      expect(screen.getByText(/Multi-modal strategies must be the last step/)).toBeInTheDocument();
+    });
   });
 });

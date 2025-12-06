@@ -26,11 +26,18 @@ import { getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
+import {
+  applyRuntimeTransforms,
+  type LayerConfig,
+  type MediaData,
+  type TransformResult,
+} from '../shared/runtimeTransform';
+import { Strategies } from '../strategies';
 import type { BaseRedteamMetadata } from '../types';
 import { getSessionId } from '../util';
 import { getGoalRubric } from './prompts';
 import type { Message } from './shared';
-import { getLastMessageContent, messagesToRedteamHistory, tryUnblocking } from './shared';
+import { getLastMessageContent, tryUnblocking } from './shared';
 import { formatTraceForMetadata, formatTraceSummary } from './traceFormatting';
 import { type RawTracingConfig, resolveTracingOptions } from './tracingOptions';
 
@@ -70,6 +77,11 @@ interface GoatConfig {
   stateful: boolean;
   continueAfterSuccess: boolean;
   tracing?: RawTracingConfig;
+  /**
+   * Per-turn layer transforms to apply to each turn's prompt before sending to target.
+   * Set by the layer strategy when used as: layer: { steps: [goat, audio] }
+   */
+  _perTurnLayers?: LayerConfig[];
   [key: string]: unknown;
 }
 
@@ -81,6 +93,7 @@ interface GoatProviderResponse extends ProviderResponse {
 export default class GoatProvider implements ApiProvider {
   readonly config: GoatConfig;
   private readonly nunjucks: any;
+  private readonly perTurnLayers: LayerConfig[];
   private successfulAttacks: Array<{
     turn: number;
     prompt: string;
@@ -100,6 +113,7 @@ export default class GoatProvider implements ApiProvider {
       excludeTargetOutputFromAgenticAttackGeneration?: boolean;
       continueAfterSuccess?: boolean;
       tracing?: RawTracingConfig;
+      _perTurnLayers?: LayerConfig[];
     } = {},
   ) {
     if (neverGenerateRemote()) {
@@ -114,13 +128,16 @@ export default class GoatProvider implements ApiProvider {
         options.excludeTargetOutputFromAgenticAttackGeneration ?? false,
       continueAfterSuccess: options.continueAfterSuccess ?? false,
       tracing: options.tracing,
+      _perTurnLayers: options._perTurnLayers,
     };
+    this.perTurnLayers = options._perTurnLayers ?? [];
     this.nunjucks = getNunjucksEngine();
     logger.debug('[GOAT] Constructor options', {
       injectVar: options.injectVar,
       maxTurns: options.maxTurns,
       stateful: options.stateful,
       continueAfterSuccess: options.continueAfterSuccess,
+      perTurnLayers: this.perTurnLayers.map((l) => (typeof l === 'string' ? l : l.id)),
     });
   }
 
@@ -151,6 +168,16 @@ export default class GoatProvider implements ApiProvider {
 
     const messages: Message[] = [];
     const totalTokenUsage: TokenUsage = createEmptyTokenUsage();
+
+    // Track redteamHistory entries with audio/image data for UI rendering
+    const redteamHistory: Array<{
+      prompt: string;
+      promptAudio?: MediaData;
+      promptImage?: MediaData;
+      output: string;
+      outputAudio?: MediaData;
+      outputImage?: MediaData;
+    }> = [];
 
     let lastTargetResponse: ProviderResponse | undefined = undefined;
 
@@ -198,9 +225,28 @@ export default class GoatProvider implements ApiProvider {
 
             messages.push({ role: 'user', content: unblockingResult.unblockingPrompt });
 
-            const unblockingTargetPrompt = this.config.stateful
+            let unblockingTargetPrompt = this.config.stateful
               ? unblockingResult.unblockingPrompt
               : JSON.stringify(messages);
+
+            // Apply per-turn transforms to unblocking prompt as well
+            if (this.perTurnLayers.length > 0) {
+              // Transform just the unblocking prompt content, not the full JSON
+              const transformResult = await applyRuntimeTransforms(
+                unblockingResult.unblockingPrompt,
+                this.config.injectVar,
+                this.perTurnLayers,
+                Strategies,
+              );
+              if (transformResult.error) {
+                logger.warn('[GOAT] Transform failed for unblocking prompt', {
+                  error: transformResult.error,
+                });
+                continue; // Skip unblocking attempt
+              }
+              // For audio/image transforms, send the transformed content directly
+              unblockingTargetPrompt = transformResult.prompt;
+            }
 
             const unblockingResponse = await targetProvider.callApi(
               unblockingTargetPrompt,
@@ -328,10 +374,78 @@ export default class GoatProvider implements ApiProvider {
         `,
         );
 
-        const targetPrompt = this.config.stateful
-          ? messages[messages.length - 1].content
-          : JSON.stringify(messages);
+        // Get the latest message content for transforms
+        const latestMessageContent = messages[messages.length - 1].content;
+        let targetPrompt = this.config.stateful ? latestMessageContent : JSON.stringify(messages);
         logger.debug(`GOAT turn ${turn} target prompt: ${renderedAttackerPrompt}`);
+
+        // ═══════════════════════════════════════════════════════════════════════
+        // Apply per-turn layer transforms if configured (e.g., audio, base64)
+        // This enables: layer: { steps: [goat, audio] }
+        // ═══════════════════════════════════════════════════════════════════════
+        let lastTransformResult: TransformResult | undefined;
+        if (this.perTurnLayers.length > 0) {
+          logger.debug('[GOAT] Applying per-turn transforms', {
+            turn,
+            layers: this.perTurnLayers.map((l) => (typeof l === 'string' ? l : l.id)),
+          });
+          // Transform the actual message content, not the full targetPrompt (which may be JSON)
+          // This ensures we convert just the text to audio, not the JSON structure
+          lastTransformResult = await applyRuntimeTransforms(
+            latestMessageContent,
+            this.config.injectVar,
+            this.perTurnLayers,
+            Strategies,
+          );
+
+          // Skip turn if transform failed
+          if (lastTransformResult.error) {
+            logger.warn('[GOAT] Transform failed, skipping turn', {
+              turn,
+              error: lastTransformResult.error,
+            });
+            continue;
+          }
+
+          // For audio/image transforms, send a hybrid format:
+          // - Previous turns as text (for context)
+          // - Current turn as audio/image (the actual attack)
+          if (lastTransformResult.audio || lastTransformResult.image) {
+            // Build hybrid payload with conversation history + current transformed turn
+            const historyWithoutCurrentTurn = messages.slice(0, -1);
+            const hybridPayload = {
+              _promptfoo_audio_hybrid: true,
+              history: historyWithoutCurrentTurn,
+              currentTurn: {
+                role: 'user' as const,
+                transcript: latestMessageContent, // Original text for reference
+                ...(lastTransformResult.audio && {
+                  audio: lastTransformResult.audio,
+                }),
+                ...(lastTransformResult.image && {
+                  image: lastTransformResult.image,
+                }),
+              },
+            };
+            targetPrompt = JSON.stringify(hybridPayload);
+            logger.debug('[GOAT] Using hybrid format (history + audio/image current turn)', {
+              turn,
+              historyLength: historyWithoutCurrentTurn.length,
+              hasAudio: !!lastTransformResult.audio,
+              hasImage: !!lastTransformResult.image,
+            });
+          } else {
+            // No audio/image, just use the transformed text
+            targetPrompt = lastTransformResult.prompt;
+          }
+
+          logger.debug('[GOAT] Per-turn transforms applied', {
+            turn,
+            hasAudio: !!lastTransformResult.audio,
+            hasImage: !!lastTransformResult.image,
+          });
+        }
+
         const iterationStart = Date.now();
         const targetResponse = (await targetProvider.callApi(
           targetPrompt,
@@ -405,6 +519,19 @@ export default class GoatProvider implements ApiProvider {
         messages.push({
           role: 'assistant',
           content: stringifiedOutput,
+        });
+
+        // Store this turn in redteamHistory with audio/image data if present
+        redteamHistory.push({
+          prompt: attackerMessage.content,
+          promptAudio: lastTransformResult?.audio,
+          promptImage: lastTransformResult?.image,
+          output: stringifiedOutput,
+          outputAudio:
+            targetResponse.audio?.data && targetResponse.audio?.format
+              ? { data: targetResponse.audio.data, format: targetResponse.audio.format }
+              : undefined,
+          // Note: outputImage not tracked as ProviderResponse doesn't include image yet
         });
 
         // Store the attack response for potential unblocking in next turn
@@ -483,7 +610,7 @@ export default class GoatProvider implements ApiProvider {
           this.successfulAttacks.length > 0 && !this.config.continueAfterSuccess
             ? 'Grader failed'
             : 'Max turns reached',
-        redteamHistory: messagesToRedteamHistory(messages),
+        redteamHistory,
         successfulAttacks: this.successfulAttacks,
         totalSuccessfulAttacks: this.successfulAttacks.length,
         storedGraderResult,

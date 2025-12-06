@@ -1211,6 +1211,124 @@ describe('RedteamGoatProvider', () => {
     });
   });
 
+  describe('perTurnLayers configuration', () => {
+    it('should initialize with _perTurnLayers config', () => {
+      const provider = new RedteamGoatProvider({
+        injectVar: 'goal',
+        maxTurns: 3,
+        _perTurnLayers: ['audio', 'base64'],
+      });
+
+      expect(provider.config._perTurnLayers).toEqual(['audio', 'base64']);
+    });
+
+    it('should accept perTurnLayers with object config', () => {
+      const provider = new RedteamGoatProvider({
+        injectVar: 'goal',
+        maxTurns: 3,
+        _perTurnLayers: [{ id: 'audio', config: { voice: 'alloy' } }, 'base64'],
+      });
+
+      expect(provider.config._perTurnLayers).toHaveLength(2);
+      expect(provider.config._perTurnLayers![0]).toEqual({
+        id: 'audio',
+        config: { voice: 'alloy' },
+      });
+    });
+
+    it('should default perTurnLayers to empty array when not provided', () => {
+      const provider = new RedteamGoatProvider({
+        injectVar: 'goal',
+      });
+
+      expect(provider.config._perTurnLayers).toBeUndefined();
+    });
+  });
+
+  describe('redteamHistory with audio/image data', () => {
+    it('should include redteamHistory in metadata', async () => {
+      const provider = new RedteamGoatProvider({
+        injectVar: 'goal',
+        maxTurns: 2,
+      });
+
+      const targetProvider = createMockTargetProvider('target response');
+      const context = createMockContext(targetProvider);
+
+      const result = await provider.callApi('test prompt', context);
+
+      // redteamHistory should be present in metadata
+      expect(result.metadata?.redteamHistory).toBeDefined();
+      expect(Array.isArray(result.metadata?.redteamHistory)).toBe(true);
+    });
+
+    it('should capture prompt and output in redteamHistory entries', async () => {
+      const provider = new RedteamGoatProvider({
+        injectVar: 'goal',
+        maxTurns: 1,
+      });
+
+      const targetProvider = createMockTargetProvider('target response text');
+      const context = createMockContext(targetProvider);
+
+      const result = await provider.callApi('test prompt', context);
+
+      const history = result.metadata?.redteamHistory;
+      if (history && history.length > 0) {
+        const entry = history[0];
+        expect(entry).toHaveProperty('prompt');
+        expect(entry).toHaveProperty('output');
+        expect(entry.output).toBe('target response text');
+      }
+    });
+
+    it('should have optional promptAudio and promptImage fields in redteamHistory', async () => {
+      const provider = new RedteamGoatProvider({
+        injectVar: 'goal',
+        maxTurns: 1,
+      });
+
+      const targetProvider = createMockTargetProvider('response');
+      const context = createMockContext(targetProvider);
+
+      const result = await provider.callApi('test prompt', context);
+
+      const history = result.metadata?.redteamHistory;
+      if (history && history.length > 0) {
+        const entry = history[0];
+        // These fields should be undefined when no perTurnLayers are configured
+        expect(entry.promptAudio).toBeUndefined();
+        expect(entry.promptImage).toBeUndefined();
+      }
+    });
+
+    it('should capture outputAudio when target returns audio data', async () => {
+      const provider = new RedteamGoatProvider({
+        injectVar: 'goal',
+        maxTurns: 1,
+      });
+
+      const targetProvider = createMockTargetProvider(
+        'response with audio',
+        {},
+        {
+          audio: { data: 'base64audiodata', format: 'mp3' },
+        },
+      );
+      const context = createMockContext(targetProvider);
+
+      const result = await provider.callApi('test prompt', context);
+
+      const history = result.metadata?.redteamHistory;
+      if (history && history.length > 0) {
+        const entry = history[0];
+        expect(entry.outputAudio).toBeDefined();
+        expect(entry.outputAudio?.data).toBe('base64audiodata');
+        expect(entry.outputAudio?.format).toBe('mp3');
+      }
+    });
+  });
+
   describe('sessionId handling', () => {
     it('should include sessionId from context.vars in metadata', async () => {
       const provider = new RedteamGoatProvider({

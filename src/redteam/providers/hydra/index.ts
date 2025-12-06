@@ -19,6 +19,13 @@ import { isValidJson } from '../../../util/json';
 import { sleep } from '../../../util/time';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../../util/tokenUsageUtils';
 import { shouldGenerateRemote } from '../../remoteGeneration';
+import {
+  applyRuntimeTransforms,
+  type LayerConfig,
+  type MediaData,
+  type TransformResult,
+} from '../../shared/runtimeTransform';
+import { Strategies } from '../../strategies';
 import type { BaseRedteamMetadata } from '../../types';
 import { getSessionId, isBasicRefusal } from '../../util';
 import {
@@ -45,7 +52,11 @@ interface HydraMetadata extends BaseRedteamMetadata {
   storedGraderResult?: GradingResult;
   redteamHistory: Array<{
     prompt: string;
+    promptAudio?: MediaData;
+    promptImage?: MediaData;
     output: string;
+    outputAudio?: MediaData;
+    outputImage?: MediaData;
     graderPassed: boolean | undefined;
   }>;
   sessionIds: string[];
@@ -62,6 +73,12 @@ interface HydraConfig {
   maxBacktracks?: number;
   stateful?: boolean;
   excludeTargetOutputFromAgenticAttackGeneration?: boolean;
+  /**
+   * Per-turn layer transforms to apply to each turn's prompt before sending to target.
+   * This enables composing Hydra with delivery strategies like audio, base64, etc.
+   * Set by the layer strategy when used as: layer: { steps: [hydra, audio] }
+   */
+  _perTurnLayers?: LayerConfig[];
 }
 
 export class HydraProvider implements ApiProvider {
@@ -73,6 +90,7 @@ export class HydraProvider implements ApiProvider {
   private readonly maxBacktracks: number;
   private readonly stateful: boolean;
   private readonly excludeTargetOutputFromAgenticAttackGeneration: boolean;
+  private readonly perTurnLayers: LayerConfig[];
   private conversationHistory: Message[] = [];
   private sessionId?: string;
 
@@ -85,6 +103,7 @@ export class HydraProvider implements ApiProvider {
     this.stateful = config.stateful ?? false;
     this.excludeTargetOutputFromAgenticAttackGeneration =
       config.excludeTargetOutputFromAgenticAttackGeneration ?? false;
+    this.perTurnLayers = config._perTurnLayers ?? [];
 
     if (this.stateful && this.maxBacktracks > 0) {
       logger.debug('[Hydra] Backtracking disabled in stateful mode');
@@ -110,6 +129,7 @@ export class HydraProvider implements ApiProvider {
       injectVar: this.injectVar,
       excludeTargetOutputFromAgenticAttackGeneration:
         this.excludeTargetOutputFromAgenticAttackGeneration,
+      perTurnLayers: this.perTurnLayers.map((l) => (typeof l === 'string' ? l : l.id)),
     });
   }
 
@@ -190,9 +210,14 @@ export class HydraProvider implements ApiProvider {
 
     const redteamHistory: Array<{
       prompt: string;
+      promptAudio?: MediaData;
+      promptImage?: MediaData;
       output: string;
+      outputAudio?: MediaData;
+      outputImage?: MediaData;
       graderPassed: boolean | undefined;
     }> = [];
+    let lastTransformResult: TransformResult | undefined;
 
     // Find the grader
     const { getGraderById } = await import('../../graders');
@@ -345,10 +370,83 @@ export class HydraProvider implements ApiProvider {
         messageLength: nextMessage.length,
       });
 
+      // ═══════════════════════════════════════════════════════════════════════
+      // Apply per-turn layer transforms if configured (e.g., audio, base64)
+      // This enables: layer: { steps: [hydra, audio] }
+      // ═══════════════════════════════════════════════════════════════════════
+      let finalTargetPrompt = targetPrompt;
+      lastTransformResult = undefined;
+      if (this.perTurnLayers.length > 0) {
+        logger.debug('[Hydra] Applying per-turn transforms', {
+          turn,
+          layers: this.perTurnLayers.map((l) => (typeof l === 'string' ? l : l.id)),
+        });
+        // Transform the actual message content (nextMessage), not the full targetPrompt
+        // This ensures we convert just the text to audio, not the JSON structure
+        lastTransformResult = await applyRuntimeTransforms(
+          nextMessage,
+          this.injectVar,
+          this.perTurnLayers,
+          Strategies,
+        );
+
+        // Skip turn if transform failed
+        if (lastTransformResult.error) {
+          logger.warn('[Hydra] Transform failed, skipping turn', {
+            turn,
+            error: lastTransformResult.error,
+          });
+          // Remove the user message we added since we're skipping
+          this.conversationHistory.pop();
+          continue;
+        }
+
+        // For audio/image transforms, send a hybrid format:
+        // - Previous turns as text (for context)
+        // - Current turn as audio/image (the actual attack)
+        // This allows the target model to understand conversation context while receiving the current attack in the transformed format
+        if (lastTransformResult.audio || lastTransformResult.image) {
+          // Build hybrid payload with conversation history + current transformed turn
+          const historyWithoutCurrentTurn = this.conversationHistory.slice(0, -1);
+          const hybridPayload = {
+            _promptfoo_audio_hybrid: true,
+            history: historyWithoutCurrentTurn,
+            currentTurn: {
+              role: 'user' as const,
+              transcript: nextMessage, // Original text for reference
+              ...(lastTransformResult.audio && {
+                audio: lastTransformResult.audio,
+              }),
+              ...(lastTransformResult.image && {
+                image: lastTransformResult.image,
+              }),
+            },
+          };
+          finalTargetPrompt = JSON.stringify(hybridPayload);
+          logger.debug('[Hydra] Using hybrid format (history + audio/image current turn)', {
+            turn,
+            historyLength: historyWithoutCurrentTurn.length,
+            hasAudio: !!lastTransformResult.audio,
+            hasImage: !!lastTransformResult.image,
+          });
+        } else {
+          // No audio/image, just use the transformed text
+          finalTargetPrompt = lastTransformResult.prompt;
+        }
+
+        logger.debug('[Hydra] Per-turn transforms applied', {
+          turn,
+          originalLength: nextMessage.length,
+          transformedLength: finalTargetPrompt.length,
+          hasAudio: !!lastTransformResult.audio,
+          hasImage: !!lastTransformResult.image,
+        });
+      }
+
       // Get target response
       const targetResponse = await getTargetResponse(
         targetProvider,
-        targetPrompt,
+        finalTargetPrompt,
         context,
         options,
       );
@@ -461,10 +559,16 @@ export class HydraProvider implements ApiProvider {
         }
       }
 
-      // Store in redteam history
+      // Store in redteam history (with audio/image if transforms were applied)
       redteamHistory.push({
         prompt: nextMessage,
+        promptAudio: lastTransformResult?.audio,
+        promptImage: lastTransformResult?.image,
         output: targetResponse.output,
+        outputAudio: targetResponse.audio
+          ? { data: targetResponse.audio.data || '', format: targetResponse.audio.format || 'wav' }
+          : undefined,
+        // Note: outputImage would come from provider if model responds with image
         graderPassed: graderResult?.pass,
       });
 

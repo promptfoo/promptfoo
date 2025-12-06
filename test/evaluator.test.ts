@@ -208,7 +208,12 @@ vi.mock('glob', () => {
   };
 });
 
-vi.mock('../src/esm');
+vi.mock('../src/esm', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    importModule: vi.fn(),
+  };
+});
 
 vi.mock('../src/evaluatorHelpers', async () => {
   const actual =

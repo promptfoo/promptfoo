@@ -71,7 +71,7 @@ modelAuditRouter.post('/check-path', async (req: Request, res: Response): Promis
 // Run model scan
 modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { paths, options } = req.body;
+    const { paths, options = {} } = req.body;
 
     if (!paths || !Array.isArray(paths) || paths.length === 0) {
       res.status(400).json({ error: 'No paths provided' });
@@ -152,6 +152,31 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
     const modelAudit = spawn('modelaudit', args);
     let stdout = '';
     let stderr = '';
+    let responded = false; // Prevent double-response
+
+    // Helper to safely send response (prevents double-response if both error and close fire)
+    const safeRespond = (statusCode: number, body: object) => {
+      if (responded) {
+        return;
+      }
+      responded = true;
+      res.status(statusCode).json(body);
+    };
+
+    // Clean up child process if client disconnects
+    const cleanup = () => {
+      if (!modelAudit.killed) {
+        logger.debug('Client disconnected, killing modelaudit process');
+        modelAudit.kill('SIGTERM');
+      }
+    };
+
+    // Handle client disconnect (request abort)
+    req.on('close', () => {
+      if (!responded) {
+        cleanup();
+      }
+    });
 
     modelAudit.stdout.on('data', (data) => {
       stdout += data.toString();
@@ -175,7 +200,7 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
         suggestion = 'Check that modelaudit is executable and you have the necessary permissions';
       }
 
-      res.status(500).json({
+      safeRespond(500, {
         error: errorMessage,
         originalError: error.message,
         suggestion: suggestion,
@@ -189,6 +214,10 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
     });
 
     modelAudit.on('close', async (code) => {
+      // If client already disconnected, don't process results
+      if (responded) {
+        return;
+      }
       // ModelAudit returns exit code 1 when it finds issues, which is expected
       if (code !== null && code !== 0 && code !== 1) {
         logger.error(`Model scan process exited with code ${code}`);
@@ -280,7 +309,7 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
           }
         }
 
-        res.status(500).json({
+        safeRespond(500, {
           error: errorMessage,
           exitCode: code,
           stderr: stderr || undefined,
@@ -299,7 +328,7 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
       try {
         const jsonOutput = stdout.trim();
         if (!jsonOutput) {
-          res.status(500).json({
+          safeRespond(500, {
             error: 'No output received from model scan',
             stderr: stderr || undefined,
             suggestion:
@@ -320,7 +349,7 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
           scanResults = JSON.parse(jsonOutput);
         } catch (parseError) {
           logger.error(`Failed to parse model scan output: ${parseError}`);
-          res.status(500).json({
+          safeRespond(500, {
             error: 'Failed to parse scan results - invalid JSON output',
             parseError: String(parseError),
             output: jsonOutput.substring(0, 1000), // Include first 1000 chars for debugging
@@ -371,7 +400,7 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
         }
 
         // Return the scan results along with audit ID if saved
-        res.json({
+        safeRespond(200, {
           ...scanResults,
           rawOutput: jsonOutput, // Include the raw output from the scanner
           ...(auditId && { auditId }),
@@ -379,7 +408,7 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
         });
       } catch (error) {
         logger.error(`Error processing model scan results: ${error}`);
-        res.status(500).json({
+        safeRespond(500, {
           error: 'Error processing scan results',
           details: String(error),
         });

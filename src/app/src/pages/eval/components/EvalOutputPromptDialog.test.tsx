@@ -933,6 +933,135 @@ describe('EvalOutputPromptDialog cloud config', () => {
   });
 });
 
+describe('EvalOutputPromptDialog redteamHistory messages rendering', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should display Messages tab when redteamHistory has entries', async () => {
+    const propsWithRedteamHistory = {
+      ...defaultProps,
+      metadata: {
+        redteamHistory: [
+          { prompt: 'Attack prompt 1', output: 'Target response 1' },
+          { prompt: 'Attack prompt 2', output: 'Target response 2' },
+        ],
+      },
+    };
+
+    render(<EvalOutputPromptDialog {...propsWithRedteamHistory} />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Messages' })).toBeInTheDocument();
+    });
+  });
+
+  it('should render redteamHistory messages with promptAudio and promptImage', async () => {
+    const propsWithAudioImage = {
+      ...defaultProps,
+      metadata: {
+        redteamHistory: [
+          {
+            prompt: 'Attack with audio',
+            promptAudio: { data: 'audiodata', format: 'mp3' },
+            output: 'Target response',
+          },
+          {
+            prompt: 'Attack with image',
+            promptImage: { data: 'imagedata', format: 'png' },
+            output: 'Target response 2',
+          },
+        ],
+      },
+    };
+
+    render(<EvalOutputPromptDialog {...propsWithAudioImage} />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Messages' })).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Messages' }));
+
+    // Verify the messages are rendered (ChatMessages component handles audio/image)
+    expect(screen.getByText('Attack with audio')).toBeInTheDocument();
+    expect(screen.getByText('Attack with image')).toBeInTheDocument();
+  });
+
+  it('should render redteamHistory messages with outputAudio and outputImage', async () => {
+    const propsWithOutputMedia = {
+      ...defaultProps,
+      metadata: {
+        redteamHistory: [
+          {
+            prompt: 'Attack prompt',
+            output: 'Response with audio',
+            outputAudio: { data: 'responseaudio', format: 'wav' },
+          },
+          {
+            prompt: 'Attack prompt 2',
+            output: 'Response with image',
+            outputImage: { data: 'responseimage', format: 'jpeg' },
+          },
+        ],
+      },
+    };
+
+    render(<EvalOutputPromptDialog {...propsWithOutputMedia} />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Messages' })).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Messages' }));
+
+    expect(screen.getByText('Response with audio')).toBeInTheDocument();
+    expect(screen.getByText('Response with image')).toBeInTheDocument();
+  });
+
+  it('should display Messages tab when redteamTreeHistory is present', async () => {
+    const propsWithTreeHistory = {
+      ...defaultProps,
+      metadata: {
+        redteamTreeHistory: [{ prompt: 'Tree attack prompt', output: 'Tree response' }],
+      },
+    };
+
+    render(<EvalOutputPromptDialog {...propsWithTreeHistory} />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Messages' })).toBeInTheDocument();
+    });
+  });
+
+  it('should filter out entries without prompt or output from redteamHistory', async () => {
+    const propsWithIncompleteEntries = {
+      ...defaultProps,
+      metadata: {
+        redteamHistory: [
+          { prompt: 'Valid prompt', output: 'Valid output' },
+          { prompt: 'Prompt without output' }, // Missing output
+          { output: 'Output without prompt' }, // Missing prompt
+        ],
+      },
+    };
+
+    render(<EvalOutputPromptDialog {...propsWithIncompleteEntries} />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Messages' })).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Messages' }));
+
+    // Only the valid entry should be rendered
+    expect(screen.getByText('Valid prompt')).toBeInTheDocument();
+    expect(screen.getByText('Valid output')).toBeInTheDocument();
+    expect(screen.queryByText('Prompt without output')).not.toBeInTheDocument();
+    expect(screen.queryByText('Output without prompt')).not.toBeInTheDocument();
+  });
+});
+
 describe('EvalOutputPromptDialog traces tab visibility', () => {
   beforeEach(() => {
     vi.clearAllMocks();

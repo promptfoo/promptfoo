@@ -351,12 +351,16 @@ export async function doEval(
     } else {
       // Misc settings with proper CLI vs config priority
       // CLI values explicitly provided by user should override config, but defaults should not
-      const iterations = cmdObj.repeat ?? evaluateOptions.repeat ?? Number.NaN;
+      const iterations =
+        cmdObj.repeat ?? commandLineOptions?.repeat ?? evaluateOptions.repeat ?? Number.NaN;
       repeat = Number.isSafeInteger(iterations) && iterations > 0 ? iterations : 1;
-      cache = cmdObj.cache ?? evaluateOptions.cache ?? true;
+      cache = cmdObj.cache ?? commandLineOptions?.cache ?? evaluateOptions.cache ?? true;
       maxConcurrency =
-        cmdObj.maxConcurrency ?? evaluateOptions.maxConcurrency ?? DEFAULT_MAX_CONCURRENCY;
-      delay = cmdObj.delay ?? evaluateOptions.delay ?? 0;
+        cmdObj.maxConcurrency ??
+        commandLineOptions?.maxConcurrency ??
+        evaluateOptions.maxConcurrency ??
+        DEFAULT_MAX_CONCURRENCY;
+      delay = cmdObj.delay ?? commandLineOptions?.delay ?? evaluateOptions.delay ?? 0;
     }
 
     if (cache === false || repeat > 1) {
