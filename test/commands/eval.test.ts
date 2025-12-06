@@ -183,7 +183,7 @@ describe('evalCommand', () => {
 
     await doEval(cmdObj, config, defaultConfigPath, {});
 
-    expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval));
+    expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval), { silent: true });
   });
 
   it('should not share when share is explicitly set to false even if config has sharing enabled', async () => {
@@ -232,7 +232,7 @@ describe('evalCommand', () => {
 
     await doEval(cmdObj, config, defaultConfigPath, {});
 
-    expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval));
+    expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval), { silent: true });
   });
 
   it('should share when share is undefined and config has sharing enabled', async () => {
@@ -257,7 +257,7 @@ describe('evalCommand', () => {
 
     await doEval(cmdObj, config, defaultConfigPath, {});
 
-    expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval));
+    expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval), { silent: true });
   });
 
   it('should auto-share when connected to cloud even if sharing is not explicitly enabled', async () => {
@@ -287,7 +287,7 @@ describe('evalCommand', () => {
 
     await doEval(cmdObj, config, defaultConfigPath, {});
 
-    expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval));
+    expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval), { silent: true });
   });
 
   it('should not auto-share when connected to cloud if share is explicitly set to false', async () => {
@@ -886,7 +886,7 @@ describe('Sharing Precedence - Comprehensive Test Coverage', () => {
 
       await doEval(cmdObj, config, defaultConfigPath, {});
 
-      expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval));
+      expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval), { silent: true });
     });
 
     it('should share when cmdObj.share = true, overriding commandLineOptions.share = false', async () => {
@@ -907,7 +907,7 @@ describe('Sharing Precedence - Comprehensive Test Coverage', () => {
 
       await doEval(cmdObj, config, defaultConfigPath, {});
 
-      expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval));
+      expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval), { silent: true });
     });
   });
 
@@ -930,7 +930,7 @@ describe('Sharing Precedence - Comprehensive Test Coverage', () => {
 
       await doEval(cmdObj, config, defaultConfigPath, {});
 
-      expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval));
+      expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval), { silent: true });
     });
 
     it('should not share when commandLineOptions.share = false, overriding cloud enabled', async () => {
@@ -973,7 +973,7 @@ describe('Sharing Precedence - Comprehensive Test Coverage', () => {
 
       await doEval(cmdObj, config, defaultConfigPath, {});
 
-      expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval));
+      expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval), { silent: true });
     });
 
     it('should not share when config.sharing = false, overriding cloud enabled', async () => {
@@ -1013,7 +1013,7 @@ describe('Sharing Precedence - Comprehensive Test Coverage', () => {
 
       await doEval(cmdObj, config, defaultConfigPath, {});
 
-      expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval));
+      expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval), { silent: true });
     });
   });
 
@@ -1035,7 +1035,7 @@ describe('Sharing Precedence - Comprehensive Test Coverage', () => {
 
       await doEval(cmdObj, config, defaultConfigPath, {});
 
-      expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval));
+      expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval), { silent: true });
     });
 
     it('should not share when cloud is disabled and no other settings are specified', async () => {
@@ -1077,7 +1077,7 @@ describe('Sharing Precedence - Comprehensive Test Coverage', () => {
 
       await doEval(cmdObj, config, defaultConfigPath, {});
 
-      expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval));
+      expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval), { silent: true });
     });
 
     it('should respect commandLineOptions.share = true even when config.sharing = false and cloud disabled', async () => {
@@ -1098,7 +1098,7 @@ describe('Sharing Precedence - Comprehensive Test Coverage', () => {
 
       await doEval(cmdObj, config, defaultConfigPath, {});
 
-      expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval));
+      expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval), { silent: true });
     });
 
     it('should not call createShareableUrl when isSharingEnabled returns false', async () => {
@@ -1205,7 +1205,7 @@ describe('Sharing Precedence - Comprehensive Test Coverage', () => {
           await doEval(cmdObj, config, defaultConfigPath, {});
 
           if (expectedToShare) {
-            expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval));
+            expect(createShareableUrl).toHaveBeenCalledWith(expect.any(Eval), { silent: true });
           } else {
             expect(createShareableUrl).not.toHaveBeenCalled();
           }
