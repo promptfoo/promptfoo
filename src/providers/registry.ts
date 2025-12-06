@@ -40,6 +40,14 @@ import { CohereChatCompletionProvider, CohereEmbeddingProvider } from './cohere'
 import { DatabricksMosaicAiChatCompletionProvider } from './databricks';
 import { createDeepSeekProvider } from './deepseek';
 import { EchoProvider } from './echo';
+import {
+  ElevenLabsTTSProvider,
+  ElevenLabsSTTProvider,
+  ElevenLabsAgentsProvider,
+  ElevenLabsHistoryProvider,
+  ElevenLabsIsolationProvider,
+  ElevenLabsAlignmentProvider,
+} from './elevenlabs';
 import { createEnvoyProvider } from './envoy';
 import { FalImageGenerationProvider } from './fal';
 import { createGitHubProvider } from './github/index';
@@ -512,6 +520,56 @@ export const providerMap: ProviderFactory[] = [
       _context: LoadApiProviderContext,
     ) => {
       return new EchoProvider(providerOptions);
+    },
+  },
+  {
+    test: (providerPath: string) => providerPath.startsWith('elevenlabs:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const splits = providerPath.split(':');
+      const capability = splits[1]; // tts, stt, agents, history, isolation, alignment
+      const _additionalId = splits.length > 2 ? splits.slice(2).join(':') : undefined;
+
+      // Route to appropriate provider based on capability
+      switch (capability) {
+        case 'tts':
+          return new ElevenLabsTTSProvider(providerPath, {
+            ...providerOptions,
+            env: context.env,
+          });
+        case 'stt':
+          return new ElevenLabsSTTProvider(providerPath, {
+            ...providerOptions,
+            env: context.env,
+          });
+        case 'agents':
+          return new ElevenLabsAgentsProvider(providerPath, {
+            ...providerOptions,
+            env: context.env,
+          });
+        case 'history':
+          return new ElevenLabsHistoryProvider(providerPath, {
+            ...providerOptions,
+            env: context.env,
+          });
+        case 'isolation':
+          return new ElevenLabsIsolationProvider(providerPath, {
+            ...providerOptions,
+            env: context.env,
+          });
+        case 'alignment':
+          return new ElevenLabsAlignmentProvider(providerPath, {
+            ...providerOptions,
+            env: context.env,
+          });
+        default:
+          throw new Error(
+            `ElevenLabs capability "${capability}" is not supported. Available: tts, stt, agents, history, isolation, alignment`,
+          );
+      }
     },
   },
   {

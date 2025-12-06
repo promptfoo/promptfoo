@@ -1,0 +1,63 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: ElevenLabs Speech-to-Text (STT) - Transcription accuracy testing
+
+# STT uses audio files as inputs - pass via vars
+prompts:
+  - '{{audioFile}}'
+
+providers:
+  # Basic transcription
+  - id: elevenlabs:stt:basic
+    label: Basic Transcription
+    config:
+      modelId: scribe_v1
+      language: en
+
+  # Transcription with speaker diarization
+  - id: elevenlabs:stt:diarization
+    label: With Speaker Diarization
+    config:
+      modelId: scribe_v1
+      language: en
+      diarization: true
+      maxSpeakers: 3
+
+  # Accuracy testing with WER calculation
+  - id: elevenlabs:stt:accuracy
+    label: Accuracy Testing (WER)
+    config:
+      modelId: scribe_v1
+      language: en
+      calculateWER: true
+      referenceText: The quick brown fox jumps over the lazy dog
+
+# Default test configuration
+defaultTest:
+  # All tests will require transcription to complete
+  assert:
+    - type: not-contains
+      value: error
+
+tests:
+  - description: Transcription of sample1
+    vars:
+      audioFile: examples/elevenlabs-stt/audio/sample1.mp3
+    assert:
+      - type: javascript
+        value: output.length > 10
+      - type: cost
+        threshold: 0.10
+
+  - description: Transcription of sample2
+    vars:
+      audioFile: examples/elevenlabs-stt/audio/sample2.wav
+    assert:
+      - type: javascript
+        value: output.length > 10
+
+  - description: Diarization test
+    vars:
+      audioFile: examples/elevenlabs-stt/audio/sample3_multiple_speakers.mp3
+    assert:
+      - type: javascript
+        value: output.length > 10
