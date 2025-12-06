@@ -512,22 +512,13 @@ export async function doEval(
     // Clear results from memory to avoid memory issues
     evalRecord.clearResults();
 
-<<<<<<< HEAD
     // Check for explicit disable signals first
     const hasExplicitDisable =
       cmdObj.share === false || cmdObj.noShare === true || getEnvBool('PROMPTFOO_DISABLE_SHARING');
 
-    const wantsToShare = hasExplicitDisable
-      ? false
-      : cmdObj.share || Boolean(config.sharing) || cloudConfig.isEnabled();
-=======
     // Determine sharing with explicit precedence handling
     let wantsToShare: boolean;
-    if (
-      cmdObj.share === false ||
-      cmdObj.noShare === true ||
-      getEnvBool('PROMPTFOO_DISABLE_SHARING')
-    ) {
+    if (hasExplicitDisable) {
       // Explicit disable via CLI or env var takes highest priority
       wantsToShare = false;
     } else if (cmdObj.share === true) {
@@ -543,7 +534,6 @@ export async function doEval(
       // Default: auto-share when cloud is enabled
       wantsToShare = cloudConfig.isEnabled();
     }
->>>>>>> origin/main
 
     const canShareEval = isSharingEnabled(evalRecord);
 

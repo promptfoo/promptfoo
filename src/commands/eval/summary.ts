@@ -4,48 +4,6 @@ import type { TokenUsage } from '../../types/index';
 import type { TokenUsageTracker } from '../../util/tokenUsage';
 
 /**
- * Format token usage statistics for display in CLI output.
- *
- * Converts token usage data into a human-readable string with comma-separated values.
- * Each component (total, prompt, completion, cached, reasoning) is formatted with
- * locale-specific number formatting and separated by " / ".
- *
- * @param usage - Token usage statistics (partial object with optional fields)
- * @returns Formatted string like "1,000 total / 400 prompt / 600 completion" or empty string if no usage data
- *
- * @example
- * ```typescript
- * formatTokenUsage({ total: 1000, prompt: 400, completion: 600 })
- * // Returns: "1,000 total / 400 prompt / 600 completion"
- * ```
- */
-export function formatTokenUsage(usage: Partial<TokenUsage>): string {
-  const parts = [];
-
-  if (usage.total !== undefined) {
-    parts.push(`${usage.total.toLocaleString()} total`);
-  }
-
-  if (usage.prompt !== undefined) {
-    parts.push(`${usage.prompt.toLocaleString()} prompt`);
-  }
-
-  if (usage.completion !== undefined) {
-    parts.push(`${usage.completion.toLocaleString()} completion`);
-  }
-
-  if (usage.cached !== undefined) {
-    parts.push(`${usage.cached.toLocaleString()} cached`);
-  }
-
-  if (usage.completionDetails?.reasoning !== undefined) {
-    parts.push(`${usage.completionDetails.reasoning.toLocaleString()} reasoning`);
-  }
-
-  return parts.join(' / ');
-}
-
-/**
  * Parameters for generating an evaluation summary report.
  *
  * Contains all the data needed to generate a formatted CLI summary including
@@ -150,24 +108,21 @@ export function generateEvalSummary(params: EvalSummaryParams): string[] {
 
   lines.push(completionMessage);
 
-  // Guidance section (only when writing to DB and no shareable URL)
-  if (writeToDatabase && !shareableUrl) {
-    if (wantsToShare) {
-      // Will be handled by notCloudEnabledShareInstructions() in the main function
-    } else {
-      lines.push('');
-      lines.push(`» View results: ${chalk.green.bold('promptfoo view')}`);
+  // Guidance section (only when writing to DB, no shareable URL, and not wanting to share)
+  // When wantsToShare is true, guidance is handled by notCloudEnabledShareInstructions() in eval.ts
+  if (writeToDatabase && !shareableUrl && !wantsToShare) {
+    lines.push('');
+    lines.push(`» View results: ${chalk.green.bold('promptfoo view')}`);
 
-      if (!hasExplicitDisable) {
-        if (cloudEnabled) {
-          lines.push(`» Create shareable URL: ${chalk.green.bold('promptfoo share')}`);
-        } else {
-          lines.push(`» Share with your team: ${chalk.green.bold('https://promptfoo.app')}`);
-        }
+    if (!hasExplicitDisable) {
+      if (cloudEnabled) {
+        lines.push(`» Create shareable URL: ${chalk.green.bold('promptfoo share')}`);
+      } else {
+        lines.push(`» Share with your team: ${chalk.green.bold('https://promptfoo.app')}`);
       }
-
-      lines.push(`» Feedback: ${chalk.green.bold('https://promptfoo.dev/feedback')}`);
     }
+
+    lines.push(`» Feedback: ${chalk.green.bold('https://promptfoo.dev/feedback')}`);
   }
 
   lines.push('');
@@ -265,9 +220,10 @@ export function generateEvalSummary(params: EvalSummaryParams): string[] {
       lines.push('');
       lines.push(chalk.bold('Providers:'));
 
-      // Sort providers by total token usage (descending)
+      // Sort providers by total token usage (descending), filtering out any with undefined usage
       const sortedProviders = providerIds
-        .map((id) => ({ id, usage: tracker.getProviderUsage(id)! }))
+        .map((id) => ({ id, usage: tracker.getProviderUsage(id) }))
+        .filter((p): p is { id: string; usage: NonNullable<typeof p.usage> } => p.usage != null)
         .sort((a, b) => (b.usage.total || 0) - (a.usage.total || 0));
 
       for (const { id, usage } of sortedProviders) {
@@ -340,10 +296,11 @@ export function generateEvalSummary(params: EvalSummaryParams): string[] {
     failures > 0
       ? `${chalk.red('✗')} ${chalk.red.bold(failures.toLocaleString())} failed`
       : `${chalk.gray.bold(failures.toLocaleString())} failed`;
+  const errorLabel = errors === 1 ? 'error' : 'errors';
   const errorsPart =
     errors > 0
-      ? `${chalk.red('✗')} ${chalk.red.bold(errors.toLocaleString())} errors`
-      : `${chalk.gray.bold(errors.toLocaleString())} errors`;
+      ? `${chalk.red('✗')} ${chalk.red.bold(errors.toLocaleString())} ${errorLabel}`
+      : `${chalk.gray.bold(errors.toLocaleString())} ${errorLabel}`;
 
   const resultsLine = `${passedPart}, ${failedPart}, ${errorsPart}`;
   if (Number.isNaN(passRate)) {

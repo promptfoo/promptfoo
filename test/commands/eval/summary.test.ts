@@ -1,56 +1,29 @@
-import { formatTokenUsage, generateEvalSummary } from '../../../src/commands/eval/summary';
+import { vi, type Mock } from 'vitest';
+import { generateEvalSummary } from '../../../src/commands/eval/summary';
 import type { EvalSummaryParams } from '../../../src/commands/eval/summary';
-import { TokenUsageTracker } from '../../../src/util/tokenUsage';
 import { stripAnsi } from '../../util/utils';
 
-describe('formatTokenUsage', () => {
-  it('should format complete token usage data', () => {
-    const usage = {
-      total: 1000,
-      prompt: 400,
-      completion: 600,
-      cached: 200,
-      completionDetails: {
-        reasoning: 300,
-        acceptedPrediction: 0,
-        rejectedPrediction: 0,
-      },
-    };
-
-    const result = formatTokenUsage(usage);
-    expect(result).toBe('1,000 total / 400 prompt / 600 completion / 200 cached / 300 reasoning');
-  });
-
-  it('should handle partial token usage data', () => {
-    const usage = {
-      total: 1000,
-    };
-
-    const result = formatTokenUsage(usage);
-    expect(result).toBe('1,000 total');
-  });
-
-  it('should handle empty token usage', () => {
-    const usage = {};
-
-    const result = formatTokenUsage(usage);
-    expect(result).toBe('');
-  });
-});
-
 describe('generateEvalSummary', () => {
-  let mockTracker: jest.Mocked<TokenUsageTracker>;
+  let mockTracker: {
+    getProviderIds: Mock;
+    getProviderUsage: Mock;
+    trackUsage: Mock;
+    resetAllUsage: Mock;
+    resetProviderUsage: Mock;
+    getTotalUsage: Mock;
+    cleanup: Mock;
+  };
 
   beforeEach(() => {
     mockTracker = {
-      getProviderIds: jest.fn().mockReturnValue([]),
-      getProviderUsage: jest.fn(),
-      trackUsage: jest.fn(),
-      resetAllUsage: jest.fn(),
-      resetProviderUsage: jest.fn(),
-      getTotalUsage: jest.fn(),
-      cleanup: jest.fn(),
-    } as any;
+      getProviderIds: vi.fn().mockReturnValue([]),
+      getProviderUsage: vi.fn(),
+      trackUsage: vi.fn(),
+      resetAllUsage: vi.fn(),
+      resetProviderUsage: vi.fn(),
+      getTotalUsage: vi.fn(),
+      cleanup: vi.fn(),
+    };
   });
 
   describe('completion message', () => {
@@ -542,7 +515,8 @@ describe('generateEvalSummary', () => {
       expect(plainOutput).toContain('Results:');
       expect(plainOutput).toContain('8 passed');
       expect(plainOutput).toContain('1 failed');
-      expect(plainOutput).toContain('1 errors');
+      expect(plainOutput).toContain('1 error');
+      expect(plainOutput).not.toContain('1 errors');
       expect(plainOutput).toContain('(80.00%)');
     });
   });
@@ -703,6 +677,139 @@ describe('generateEvalSummary', () => {
 
       expect(output).toContain('Duration:');
       expect(output).toContain('(concurrency: 8)');
+    });
+  });
+
+  describe('edge cases', () => {
+    it('should use singular "error" when there is exactly 1 error', () => {
+      const params: EvalSummaryParams = {
+        evalId: 'eval-singular-error',
+        isRedteam: false,
+        writeToDatabase: false,
+        shareableUrl: null,
+        wantsToShare: false,
+        hasExplicitDisable: false,
+        cloudEnabled: false,
+        tokenUsage: { total: 0 },
+        successes: 5,
+        failures: 0,
+        errors: 1,
+        duration: 5000,
+        maxConcurrency: 4,
+        tracker: mockTracker,
+      };
+
+      const lines = generateEvalSummary(params);
+      const plainOutput = stripAnsi(lines.join('\n'));
+
+      expect(plainOutput).toContain('1 error');
+      expect(plainOutput).not.toContain('1 errors');
+    });
+
+    it('should use plural "errors" when there are multiple errors', () => {
+      const params: EvalSummaryParams = {
+        evalId: 'eval-plural-errors',
+        isRedteam: false,
+        writeToDatabase: false,
+        shareableUrl: null,
+        wantsToShare: false,
+        hasExplicitDisable: false,
+        cloudEnabled: false,
+        tokenUsage: { total: 0 },
+        successes: 5,
+        failures: 0,
+        errors: 3,
+        duration: 5000,
+        maxConcurrency: 4,
+        tracker: mockTracker,
+      };
+
+      const lines = generateEvalSummary(params);
+      const plainOutput = stripAnsi(lines.join('\n'));
+
+      expect(plainOutput).toContain('3 errors');
+    });
+
+    it('should use plural "errors" when there are 0 errors', () => {
+      const params: EvalSummaryParams = {
+        evalId: 'eval-zero-errors',
+        isRedteam: false,
+        writeToDatabase: false,
+        shareableUrl: null,
+        wantsToShare: false,
+        hasExplicitDisable: false,
+        cloudEnabled: false,
+        tokenUsage: { total: 0 },
+        successes: 5,
+        failures: 0,
+        errors: 0,
+        duration: 5000,
+        maxConcurrency: 4,
+        tracker: mockTracker,
+      };
+
+      const lines = generateEvalSummary(params);
+      const plainOutput = stripAnsi(lines.join('\n'));
+
+      expect(plainOutput).toContain('0 errors');
+    });
+
+    it('should handle provider returning undefined usage gracefully', () => {
+      mockTracker.getProviderIds.mockReturnValue([
+        'openai:gpt-4',
+        'missing-provider',
+        'anthropic:claude-3',
+      ]);
+      mockTracker.getProviderUsage.mockImplementation((id: string) => {
+        if (id === 'openai:gpt-4') {
+          return {
+            total: 1000,
+            prompt: 400,
+            completion: 600,
+            numRequests: 5,
+          };
+        }
+        if (id === 'missing-provider') {
+          return undefined; // Simulates a provider that returns undefined
+        }
+        if (id === 'anthropic:claude-3') {
+          return {
+            total: 500,
+            prompt: 200,
+            completion: 300,
+            numRequests: 3,
+          };
+        }
+        return undefined;
+      });
+
+      const params: EvalSummaryParams = {
+        evalId: 'eval-undefined-provider',
+        isRedteam: false,
+        writeToDatabase: false,
+        shareableUrl: null,
+        wantsToShare: false,
+        hasExplicitDisable: false,
+        cloudEnabled: false,
+        tokenUsage: { total: 1500 },
+        successes: 8,
+        failures: 0,
+        errors: 0,
+        duration: 5000,
+        maxConcurrency: 4,
+        tracker: mockTracker,
+      };
+
+      // Should not throw
+      const lines = generateEvalSummary(params);
+      const output = stripAnsi(lines.join('\n'));
+
+      // Should show the providers that have valid usage
+      expect(output).toContain('Providers:');
+      expect(output).toContain('openai:gpt-4');
+      expect(output).toContain('anthropic:claude-3');
+      // Should NOT show the missing provider
+      expect(output).not.toContain('missing-provider');
     });
   });
 });
