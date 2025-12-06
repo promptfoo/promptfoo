@@ -1,7 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Review from './Review';
-import { useEmailVerification } from '@app/hooks/useEmailVerification';
 import { callApi } from '@app/utils/api';
 import { useApiHealth, type ApiHealthResult } from '@app/hooks/useApiHealth';
 import type { DefinedUseQueryResult } from '@tanstack/react-query';
@@ -77,6 +76,48 @@ vi.mock('../hooks/useRedTeamConfig', () => ({
   useRedTeamConfig: () => mockUseRedTeamConfig(),
 }));
 
+// Mock the new job hooks
+const mockJobActions = {
+  startJob: vi.fn(),
+  reset: vi.fn(),
+  updateFromWebSocket: vi.fn(),
+  updateFromPolling: vi.fn(),
+  completeJob: vi.fn(),
+  errorJob: vi.fn(),
+  toggleLogs: vi.fn(),
+  setPollInterval: vi.fn(),
+  clearPollInterval: vi.fn(),
+};
+
+const mockJobState = {
+  jobId: null as string | null,
+  status: 'idle' as 'idle' | 'in-progress' | 'complete' | 'error',
+  evalId: null as string | null,
+  progress: 0,
+  total: 0,
+  startedAt: null as number | null,
+  phase: undefined,
+  phaseDetail: undefined,
+  metrics: undefined,
+  errors: undefined,
+  summary: undefined,
+  logs: [] as string[],
+  logsExpanded: false,
+  lastUpdateTimestamp: 0,
+};
+
+vi.mock('../hooks/useJobState', () => ({
+  useJobState: () => ({
+    state: mockJobState,
+    actions: mockJobActions,
+    pollIntervalRef: { current: null },
+  }),
+}));
+
+vi.mock('../hooks/useJobSocket', () => ({
+  useJobSocket: vi.fn(),
+}));
+
 describe('Review Component', () => {
   const defaultConfig = {
     description: 'Test Configuration',
@@ -106,6 +147,21 @@ describe('Review Component', () => {
       config: defaultConfig,
       updateConfig: mockUpdateConfig,
     });
+
+    // Reset job state to idle
+    mockJobState.jobId = null;
+    mockJobState.status = 'idle';
+    mockJobState.evalId = null;
+    mockJobState.progress = 0;
+    mockJobState.total = 0;
+    mockJobState.startedAt = null;
+    mockJobState.phase = undefined;
+    mockJobState.phaseDetail = undefined;
+    mockJobState.metrics = undefined;
+    mockJobState.errors = undefined;
+    mockJobState.summary = undefined;
+    mockJobState.logs = [];
+    mockJobState.logsExpanded = false;
   });
 
   afterEach(() => {
@@ -729,17 +785,15 @@ Application Details:
       });
     });
 
-    it('should disable button when isRunning is true regardless of API status', async () => {
+    it('should disable button when isRunning is true regardless of API status', () => {
+      // Set job state to in-progress (simulates running state)
+      mockJobState.status = 'in-progress';
+
       vi.mocked(useApiHealth).mockReturnValue({
         data: { status: 'connected', message: null },
         refetch: vi.fn(),
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
-
-      // Mock email verification to proceed
-      vi.mocked(useEmailVerification).mockReturnValue({
-        checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
-      } as any);
 
       render(
         <Review
@@ -749,34 +803,20 @@ Application Details:
         />,
       );
 
-      // Initially button should be enabled
-      const runButton = screen.getByRole('button', { name: /run now/i });
-      expect(runButton).toBeEnabled();
-
-      // Click the button to start running
-      fireEvent.click(runButton);
-
-      // Wait for the button to update to "Running..." state
-      await waitFor(() => {
-        const runningButton = screen.getByRole('button', { name: /running/i });
-        expect(runningButton).toBeDisabled();
-      });
-
-      // Verify API was called
-      expect(callApi).toHaveBeenCalledWith('/redteam/run', expect.any(Object));
+      // Button should be disabled when running
+      const runningButton = screen.getByRole('button', { name: /running/i });
+      expect(runningButton).toBeDisabled();
     });
 
-    it('should show "Running..." text when isRunning is true', async () => {
+    it('should show "Running..." text when isRunning is true', () => {
       vi.mocked(useApiHealth).mockReturnValue({
         data: { status: 'connected', message: null },
         refetch: vi.fn(),
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      // Mock email verification to proceed
-      vi.mocked(useEmailVerification).mockReturnValue({
-        checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
-      } as any);
+      // Set job state to in-progress (simulates running state)
+      mockJobState.status = 'in-progress';
 
       render(
         <Review
@@ -786,30 +826,20 @@ Application Details:
         />,
       );
 
-      // Initially button should show "Run Now"
-      expect(screen.getByRole('button', { name: /run now/i })).toBeInTheDocument();
-
-      // Click the button to start running
-      fireEvent.click(screen.getByRole('button', { name: /run now/i }));
-
-      // Wait for the button text to change to "Running..."
-      await waitFor(() => {
-        expect(screen.getByRole('button', { name: /running/i })).toBeInTheDocument();
-        expect(screen.queryByRole('button', { name: /run now/i })).not.toBeInTheDocument();
-      });
+      // Button should show "Running..." when job is in progress
+      expect(screen.getByRole('button', { name: /running/i })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /run now/i })).not.toBeInTheDocument();
     });
 
-    it('should show Cancel button when isRunning is true', async () => {
+    it('should show Cancel button when isRunning is true', () => {
       vi.mocked(useApiHealth).mockReturnValue({
         data: { status: 'connected', message: null },
         refetch: vi.fn(),
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      // Mock email verification to proceed
-      vi.mocked(useEmailVerification).mockReturnValue({
-        checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
-      } as any);
+      // Set job state to in-progress (simulates running state)
+      mockJobState.status = 'in-progress';
 
       render(
         <Review
@@ -819,31 +849,22 @@ Application Details:
         />,
       );
 
-      // Initially Cancel button should not be present
-      expect(screen.queryByRole('button', { name: /cancel/i })).not.toBeInTheDocument();
-
-      // Click the Run Now button to start running
-      fireEvent.click(screen.getByRole('button', { name: /run now/i }));
-
-      // Wait for the Cancel button to appear
-      await waitFor(() => {
-        const cancelButton = screen.getByRole('button', { name: /cancel/i });
-        expect(cancelButton).toBeInTheDocument();
-        expect(cancelButton).toBeEnabled(); // Cancel button should always be enabled
-      });
+      // Cancel buttons should be present when running (main button bar and ExecutionProgress)
+      const cancelButtons = screen.getAllByRole('button', { name: /cancel/i });
+      expect(cancelButtons.length).toBeGreaterThan(0);
+      // The main cancel button in the button bar should be enabled
+      expect(cancelButtons[0]).toBeEnabled();
     });
 
-    it('should not show tooltip when button is disabled due to isRunning', async () => {
+    it('should not show tooltip when button is disabled due to isRunning', () => {
       vi.mocked(useApiHealth).mockReturnValue({
         data: { status: 'connected', message: null },
         refetch: vi.fn(),
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      // Mock email verification to proceed
-      vi.mocked(useEmailVerification).mockReturnValue({
-        checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
-      } as any);
+      // Set job state to in-progress (simulates running state)
+      mockJobState.status = 'in-progress';
 
       render(
         <Review
@@ -853,13 +874,8 @@ Application Details:
         />,
       );
 
-      // Click the Run Now button to start running
-      fireEvent.click(screen.getByRole('button', { name: /run now/i }));
-
-      // Wait for the button to be in running state
-      await waitFor(() => {
-        expect(screen.getByRole('button', { name: /running/i })).toBeInTheDocument();
-      });
+      // Button should be in running state
+      expect(screen.getByRole('button', { name: /running/i })).toBeInTheDocument();
 
       const runningButton = screen.getByRole('button', { name: /running/i });
       const buttonWrapper = runningButton.parentElement;
@@ -867,53 +883,24 @@ Application Details:
       if (buttonWrapper) {
         fireEvent.mouseOver(buttonWrapper);
 
-        // Wait a bit to ensure tooltip would have time to appear if it was going to
-        await new Promise((resolve) => setTimeout(resolve, 100));
-
-        // Check that no tooltip is shown
+        // Check that no tooltip is shown (synchronous check)
         expect(screen.queryByText(/cannot connect to promptfoo cloud/i)).not.toBeInTheDocument();
         expect(screen.queryByText(/remote generation is disabled/i)).not.toBeInTheDocument();
         expect(screen.queryByText(/checking connection/i)).not.toBeInTheDocument();
       }
     });
 
-    it('should disable button when both isRunning is true and API is blocked', async () => {
-      // Start with API connected so we can trigger running state
-      vi.mocked(useApiHealth).mockReturnValue({
-        data: { status: 'connected', message: null },
-        refetch: vi.fn(),
-        isLoading: false,
-      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+    it('should disable button when both isRunning is true and API is blocked', () => {
+      // Set job state to in-progress AND API blocked
+      mockJobState.status = 'in-progress';
 
-      // Mock email verification to proceed
-      vi.mocked(useEmailVerification).mockReturnValue({
-        checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
-      } as any);
-
-      const { rerender } = render(
-        <Review
-          navigateToPlugins={vi.fn()}
-          navigateToStrategies={vi.fn()}
-          navigateToPurpose={vi.fn()}
-        />,
-      );
-
-      // Click the Run Now button to start running
-      fireEvent.click(screen.getByRole('button', { name: /run now/i }));
-
-      // Wait for running state
-      await waitFor(() => {
-        expect(screen.getByRole('button', { name: /running/i })).toBeDisabled();
-      });
-
-      // Now simulate API becoming blocked while running
       vi.mocked(useApiHealth).mockReturnValue({
         data: { status: 'blocked', message: null },
         refetch: vi.fn(),
         isLoading: false,
       } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
-      rerender(
+      render(
         <Review
           navigateToPlugins={vi.fn()}
           navigateToStrategies={vi.fn()}
@@ -921,7 +908,7 @@ Application Details:
         />,
       );
 
-      // Button should still be disabled (due to isRunning)
+      // Button should be disabled (due to isRunning)
       const runningButton = screen.getByRole('button', { name: /running/i });
       expect(runningButton).toBeDisabled();
     });

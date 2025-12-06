@@ -226,7 +226,11 @@ describe('ExecutionProgress', () => {
           startedAt={Date.now()}
         />,
       );
-      expect(screen.getByText('3 vulnerabilities found')).toBeInTheDocument();
+      // Check for the fail count (3) and the Vuln label in the results panel
+      // Percentage is 3/(10+3+1) = 3/14 = 21%
+      expect(screen.getByText('3')).toBeInTheDocument();
+      // Vuln label is shown with percentage in parentheses
+      expect(screen.getByText(/Vuln \(21%\)/)).toBeInTheDocument();
     });
   });
 
