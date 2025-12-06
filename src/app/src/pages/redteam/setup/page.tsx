@@ -12,6 +12,7 @@ import AppIcon from '@mui/icons-material/Apps';
 import DownloadIcon from '@mui/icons-material/Download';
 import PluginIcon from '@mui/icons-material/Extension';
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
+import UploadFileIcon from '@mui/icons-material/UploadFile';
 import TargetIcon from '@mui/icons-material/GpsFixed';
 import StrategyIcon from '@mui/icons-material/Psychology';
 import ReviewIcon from '@mui/icons-material/RateReview';
@@ -47,6 +48,7 @@ import TargetTypeSelection from './components/Targets/TargetTypeSelection';
 import { TestCaseGenerationProvider } from './components/TestCaseGenerationProvider';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from './hooks/useRedTeamConfig';
 import { useSetupState } from './hooks/useSetupState';
+import { purposeToApplicationDefinition } from './utils/purposeParser';
 import { generateOrderedYaml } from './utils/yamlHelpers';
 import type { RedteamStrategy } from '@promptfoo/types';
 
@@ -521,6 +523,12 @@ export default function RedTeamSetupPage() {
         }
       }
 
+      // Parse applicationDefinition from purpose string or use explicit definition if available
+      // Priority: 1) explicit applicationDefinition in YAML, 2) parse from purpose string, 3) empty defaults
+      const applicationDefinition = yamlConfig.redteam?.applicationDefinition
+        ? yamlConfig.redteam.applicationDefinition
+        : purposeToApplicationDefinition(yamlConfig.redteam?.purpose);
+
       // Map the YAML structure to our expected Config format
       const mappedConfig: Config = {
         description: yamlConfig.description || 'My Red Team Configuration',
@@ -532,16 +540,10 @@ export default function RedTeamSetupPage() {
         entities: yamlConfig.redteam?.entities || [],
         numTests: yamlConfig.redteam?.numTests || REDTEAM_DEFAULTS.NUM_TESTS,
         maxConcurrency: yamlConfig.redteam?.maxConcurrency || REDTEAM_DEFAULTS.MAX_CONCURRENCY,
-        applicationDefinition: {
-          purpose: yamlConfig.redteam?.purpose || '',
-          // We could potentially parse these from redteam.purpose if it follows a specific format.
-          redteamUser: '',
-          accessToData: '',
-          forbiddenData: '',
-          accessToActions: '',
-          forbiddenActions: '',
-          connectedSystems: '',
-        },
+        applicationDefinition,
+        testGenerationInstructions: yamlConfig.redteam?.testGenerationInstructions || '',
+        language: yamlConfig.redteam?.language,
+        extensions: yamlConfig.extensions,
       };
 
       setFullConfig(mappedConfig);
@@ -813,9 +815,16 @@ export default function RedTeamSetupPage() {
             maxWidth="sm"
             fullWidth
           >
-            <DialogTitle>Load Configuration</DialogTitle>
+            <DialogTitle>Load or Import Configuration</DialogTitle>
             <DialogContent>
-              <Box sx={{ mb: 2 }}>
+              <Box sx={{ mb: 3 }}>
+                <Typography variant="subtitle1" sx={{ fontWeight: 'medium', mb: 1 }}>
+                  Import YAML File
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                  Import an existing promptfoo redteam YAML configuration. Your application details
+                  will be automatically parsed and pre-filled in the form.
+                </Typography>
                 <input
                   accept=".yml,.yaml"
                   style={{ display: 'none' }}
@@ -824,16 +833,24 @@ export default function RedTeamSetupPage() {
                   onChange={handleFileUpload}
                 />
                 <label htmlFor="yaml-file-upload">
-                  <Button variant="outlined" component="span" fullWidth sx={{ mb: 2 }}>
-                    Upload YAML File
+                  <Button
+                    variant="contained"
+                    component="span"
+                    fullWidth
+                    startIcon={<UploadFileIcon />}
+                  >
+                    Import YAML File
                   </Button>
                 </label>
               </Box>
-              <Typography variant="subtitle2" sx={{ mb: 2 }}>
-                Or choose a saved configuration:
+              <Typography variant="subtitle1" sx={{ fontWeight: 'medium', mb: 1 }}>
+                Saved Configurations
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Load a previously saved configuration from the browser.
               </Typography>
               {savedConfigs.length === 0 ? (
-                <Box sx={{ py: 4, textAlign: 'center' }}>
+                <Box sx={{ py: 3, textAlign: 'center' }}>
                   <Typography color="text.secondary">No saved configurations found</Typography>
                 </Box>
               ) : (
