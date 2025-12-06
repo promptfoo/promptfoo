@@ -34,120 +34,111 @@ import {
   getPluginConfigurationError,
   RemoteGenerationDisabledError,
 } from '../services/redteamTestCaseGenerationService';
-import type { Job, JobError, JobMetrics } from '../../types';
+import { emitJobUpdate } from '../server';
+import {
+  addJobError,
+  createInitialMetrics,
+  detectErrorFromLog,
+  detectPhaseFromLog,
+} from '../utils/jobProgress';
+import type { Job } from '../../types';
 
 /**
- * Helper to create initial job metrics
+ * Emit job update via WebSocket (throttled to avoid flooding)
  */
-function createInitialMetrics(): JobMetrics {
-  return {
-    testPassCount: 0,
-    testFailCount: 0,
-    testErrorCount: 0,
-    tokenUsage: {
-      total: 0,
-      prompt: 0,
-      completion: 0,
-      numRequests: 0,
-    },
-    totalLatencyMs: 0,
-  };
-}
+const lastEmitTime = new Map<string, number>();
+const EMIT_THROTTLE_MS = 500; // Emit at most every 500ms per job
 
-/**
- * Helper to add an error to a job with deduplication
- */
-function addJobError(job: Job, errorType: JobError['type'], message: string): void {
-  if (!job.errors) {
-    job.errors = [];
-  }
+function emitThrottledJobUpdate(jobId: string, job: Job): void {
+  const now = Date.now();
+  const lastTime = lastEmitTime.get(jobId) || 0;
 
-  // Check for existing error with same type and message
-  const existing = job.errors.find((e) => e.type === errorType && e.message === message);
-  if (existing) {
-    existing.count++;
-    existing.timestamp = Date.now();
-  } else {
-    job.errors.push({
-      type: errorType,
-      message,
-      timestamp: Date.now(),
-      count: 1,
+  if (now - lastTime >= EMIT_THROTTLE_MS) {
+    lastEmitTime.set(jobId, now);
+    emitJobUpdate(jobId, 'job:update', {
+      status: job.status,
+      progress: job.progress,
+      total: job.total,
+      phase: job.phase,
+      phaseDetail: job.phaseDetail,
+      startedAt: job.startedAt,
+      metrics: job.metrics,
+      errors: job.errors,
+      logs: job.logs.slice(-50), // Only send last 50 log lines via socket
     });
   }
 }
 
 /**
- * Detect phase and detail from log message
+ * Clean up throttle tracking for a job
  */
-function detectPhaseFromLog(
-  message: string,
-  currentPhase: Job['phase'],
-): { phase: Job['phase']; detail?: string } | null {
-  // Generation phase indicators
-  if (message.includes('Generating test cases')) {
-    return { phase: 'generating', detail: 'Initializing test generation...' };
-  }
-  if (message.includes('Extracting system purpose')) {
-    return { phase: 'generating', detail: 'Extracting system purpose...' };
-  }
-  if (message.includes('Extracting entities')) {
-    return { phase: 'generating', detail: 'Extracting entities...' };
-  }
-  const pluginMatch = message.match(/Generating tests for (\S+)/);
-  if (pluginMatch) {
-    return { phase: 'generating', detail: `Generating ${pluginMatch[1]} tests...` };
-  }
-  const strategyMatch = message.match(/Generating (\S+) tests/);
-  if (strategyMatch && !message.includes('Generating tests for')) {
-    return { phase: 'generating', detail: `Applying ${strategyMatch[1]} strategy...` };
-  }
-
-  // Evaluation phase indicators
-  if (message.includes('Running scan')) {
-    return { phase: 'evaluating', detail: 'Starting evaluation...' };
-  }
-  if (message.includes('Evaluating')) {
-    return { phase: 'evaluating' };
-  }
-
-  // Completion indicators
-  if (message.includes('Red team scan complete')) {
-    return { phase: 'complete' };
-  }
-
-  // Error detection
-  if (message.toLowerCase().includes('rate limit')) {
-    return { phase: currentPhase }; // Keep current phase, will add error separately
-  }
-
-  return null;
+function cleanupJobThrottling(jobId: string): void {
+  lastEmitTime.delete(jobId);
 }
 
 /**
- * Detect error type from log message
+ * Emit job completion via WebSocket (always sent immediately)
  */
-function detectErrorFromLog(message: string): { type: JobError['type']; message: string } | null {
-  const lowerMessage = message.toLowerCase();
-
-  if (lowerMessage.includes('rate limit')) {
-    return { type: 'rate_limit', message: 'Rate limit exceeded' };
-  }
-  if (lowerMessage.includes('timeout')) {
-    return { type: 'timeout', message: 'Request timed out' };
-  }
-  if (lowerMessage.includes('error') && lowerMessage.includes('target')) {
-    return { type: 'target_error', message };
-  }
-  if (lowerMessage.includes('error') && lowerMessage.includes('grad')) {
-    return { type: 'grader_error', message };
-  }
-  if (message.startsWith('Error:')) {
-    return { type: 'unknown', message: message.substring(7).trim() };
-  }
-
-  return null;
+function emitJobComplete(jobId: string, job: Job): void {
+  cleanupJobThrottling(jobId);
+  emitJobUpdate(jobId, 'job:complete', {
+    status: job.status,
+    evalId: job.evalId,
+    phase: job.phase,
+    phaseDetail: job.phaseDetail,
+    metrics: job.metrics,
+    errors: job.errors,
+    summary: job.summary,
+  });
 }
+
+/**
+ * Clean up old completed/errored jobs from evalJobs map
+ * Jobs older than JOB_RETENTION_MS are removed to prevent memory leaks
+ */
+const JOB_RETENTION_MS = 30 * 60 * 1000; // 30 minutes
+
+function cleanupOldJobs(): void {
+  const now = Date.now();
+  for (const [jobId, job] of evalJobs.entries()) {
+    // Only clean up completed or errored jobs
+    if (job.status === 'complete' || job.status === 'error') {
+      const jobAge = job.startedAt ? now - job.startedAt : 0;
+      if (jobAge > JOB_RETENTION_MS) {
+        evalJobs.delete(jobId);
+        cleanupJobThrottling(jobId);
+        logger.debug(`Cleaned up old job: ${jobId}`);
+      }
+    }
+  }
+}
+
+// Run cleanup periodically (every 5 minutes)
+let cleanupIntervalId: ReturnType<typeof setInterval> | null = null;
+
+/**
+ * Start the job cleanup interval
+ * Called when server starts
+ */
+export function startJobCleanupInterval(): void {
+  if (!cleanupIntervalId) {
+    cleanupIntervalId = setInterval(cleanupOldJobs, 5 * 60 * 1000);
+  }
+}
+
+/**
+ * Stop the job cleanup interval
+ * Should be called on server shutdown to prevent memory leaks
+ */
+export function stopJobCleanupInterval(): void {
+  if (cleanupIntervalId) {
+    clearInterval(cleanupIntervalId);
+    cleanupIntervalId = null;
+  }
+}
+
+// Start cleanup interval on module load
+startJobCleanupInterval();
 
 export const redteamRouter = Router();
 
@@ -398,10 +389,19 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
           if (errorInfo) {
             addJobError(job, errorInfo.type, errorInfo.message);
           }
+
+          // Emit throttled update via WebSocket
+          emitThrottledJobUpdate(id, job);
         }
       }
     },
-    progressCallback: (progress: number, total: number, _index: number, _evalStep: any) => {
+    progressCallback: (
+      progress: number,
+      total: number,
+      _index: number | string,
+      _evalStep: any,
+      _metrics: any,
+    ) => {
       if (currentJobId === id) {
         const job = evalJobs.get(id);
         if (job) {
@@ -409,6 +409,9 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
           job.total = total;
           job.phase = 'evaluating';
           job.phaseDetail = `Evaluating probe ${progress}/${total}...`;
+
+          // Emit throttled update via WebSocket
+          emitThrottledJobUpdate(id, job);
         }
       }
     },
@@ -430,8 +433,9 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
           let passCount = 0;
           let failCount = 0;
           let errorCount = 0;
+          let totalLatencyMs = 0;
 
-          // Count pass/fail/error from results
+          // Count pass/fail/error from results and aggregate latency
           for (const result of results) {
             if (result.error) {
               errorCount++;
@@ -440,12 +444,28 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
             } else {
               failCount++;
             }
+            // Aggregate latency from individual results
+            if (result.latencyMs) {
+              totalLatencyMs += result.latencyMs;
+            }
           }
 
           if (job.metrics) {
             job.metrics.testPassCount = passCount;
             job.metrics.testFailCount = failCount;
             job.metrics.testErrorCount = errorCount;
+            job.metrics.totalLatencyMs = totalLatencyMs;
+
+            // Get aggregated token usage from stats if available
+            if ('stats' in summary && summary.stats?.tokenUsage) {
+              const tokenUsage = summary.stats.tokenUsage;
+              job.metrics.tokenUsage = {
+                total: tokenUsage.total ?? 0,
+                prompt: tokenUsage.prompt ?? 0,
+                completion: tokenUsage.completion ?? 0,
+                numRequests: tokenUsage.numRequests ?? results.length,
+              };
+            }
           }
 
           // Calculate top categories for vulnerabilities (failed tests)
@@ -455,7 +475,7 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
               // This is a vulnerability (failed test)
               const pluginId =
                 (result.vars as Record<string, unknown>)?.pluginId ||
-                (result as Record<string, unknown>).pluginId ||
+                (result as unknown as Record<string, unknown>).pluginId ||
                 'unknown';
               const category = String(pluginId);
               categoryCount[category] = (categoryCount[category] || 0) + 1;
@@ -473,6 +493,9 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
             topCategories,
           };
         }
+
+        // Emit completion via WebSocket
+        emitJobComplete(id, job);
       }
       if (currentJobId === id) {
         cliState.webUI = false;
@@ -492,6 +515,9 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
           job.logs.push(`Stack trace: ${error.stack}`);
         }
         addJobError(job, 'unknown', error.message);
+
+        // Emit error via WebSocket and cleanup
+        emitJobComplete(id, job);
       }
       if (currentJobId === id) {
         cliState.webUI = false;

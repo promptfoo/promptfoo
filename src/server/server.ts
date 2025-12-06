@@ -9,6 +9,25 @@ import path from 'node:path';
 
 import express from 'express';
 import { Server as SocketIOServer } from 'socket.io';
+
+// Global socket.io instance for emitting events from routes
+let ioInstance: SocketIOServer | null = null;
+
+/**
+ * Get the Socket.IO server instance for emitting events
+ */
+export function getSocketIO(): SocketIOServer | null {
+  return ioInstance;
+}
+
+/**
+ * Emit an event to a specific job room
+ */
+export function emitJobUpdate(jobId: string, event: string, data: unknown): void {
+  if (ioInstance) {
+    ioInstance.to(`job:${jobId}`).emit(event, data);
+  }
+}
 import { fromError } from 'zod-validation-error';
 import { getDefaultPort, VERSION } from '../constants';
 import { setupSignalWatcher } from '../database/signal';
@@ -35,7 +54,7 @@ import { configsRouter } from './routes/configs';
 import { evalRouter } from './routes/eval';
 import { modelAuditRouter } from './routes/modelAudit';
 import { providersRouter } from './routes/providers';
-import { redteamRouter } from './routes/redteam';
+import { redteamRouter, stopJobCleanupInterval } from './routes/redteam';
 import { tracesRouter } from './routes/traces';
 import { userRouter } from './routes/user';
 import versionRouter from './routes/version';
@@ -287,6 +306,9 @@ export async function startServer(
     },
   });
 
+  // Store the io instance globally for use in routes
+  ioInstance = io;
+
   await runDbMigrations();
 
   const watcher = setupSignalWatcher(async () => {
@@ -304,6 +326,18 @@ export async function startServer(
 
   io.on('connection', async (socket) => {
     socket.emit('init', await Eval.latest());
+
+    // Handle job subscription
+    socket.on('job:subscribe', (jobId: string) => {
+      logger.debug(`Client ${socket.id} subscribed to job ${jobId}`);
+      socket.join(`job:${jobId}`);
+    });
+
+    // Handle job unsubscription
+    socket.on('job:unsubscribe', (jobId: string) => {
+      logger.debug(`Client ${socket.id} unsubscribed from job ${jobId}`);
+      socket.leave(`job:${jobId}`);
+    });
   });
 
   // Return a Promise that only resolves when the server shuts down
@@ -333,6 +367,9 @@ export async function startServer(
 
       // Close the file watcher first to stop monitoring
       watcher.close();
+
+      // Stop the redteam job cleanup interval to prevent memory leaks
+      stopJobCleanupInterval();
 
       // Set a timeout in case connections don't close gracefully
       const SHUTDOWN_TIMEOUT_MS = 5000;
