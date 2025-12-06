@@ -150,8 +150,8 @@ describe('ModelAuditResultLatestPage', () => {
   });
 
   it('should display scan name or default title', async () => {
-    const mockScan = createMockScan('latest-scan', null as any); // No name
-    mockScan.name = null;
+    const mockScan = createMockScan('latest-scan', '');
+    (mockScan as { name: string | null }).name = null;
 
     mockCallApi.mockResolvedValueOnce({
       ok: true,

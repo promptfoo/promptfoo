@@ -240,7 +240,7 @@ describe('useModelAuditHistoryStore', () => {
       expect(result.current.historicalScans).toHaveLength(2);
       expect(result.current.totalCount).toBe(2);
 
-      let thrownError: Error | null = null;
+      let thrownError: Error | undefined;
       await act(async () => {
         try {
           await result.current.deleteHistoricalScan('1');
@@ -249,7 +249,8 @@ describe('useModelAuditHistoryStore', () => {
         }
       });
 
-      expect(thrownError?.message).toBe('Failed to delete scan');
+      expect(thrownError).toBeDefined();
+      expect(thrownError!.message).toBe('Failed to delete scan');
       expect(result.current.historyError).toBe('Failed to delete scan');
 
       // Verify rollback: scans should be restored after failed delete
