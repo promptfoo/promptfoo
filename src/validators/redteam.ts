@@ -9,6 +9,7 @@ import {
   DEFAULT_STRATEGIES,
   FINANCIAL_PLUGINS,
   FOUNDATION_PLUGINS,
+  FRAMEWORK_COMPLIANCE_IDS,
   GUARDRAILS_EVALUATION_PLUGINS,
   HARM_PLUGINS,
   INSURANCE_PLUGINS,
@@ -21,13 +22,12 @@ import {
   DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
   Severity,
   SeveritySchema,
-  FRAMEWORK_COMPLIANCE_IDS,
 } from '../redteam/constants';
-import type { FrameworkComplianceId, Plugin, Strategy } from '../redteam/constants';
 import { isCustomStrategy } from '../redteam/constants/strategies';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { ProviderSchema } from '../validators/providers';
 
+import type { FrameworkComplianceId, Plugin, Strategy } from '../redteam/constants';
 import type { RedteamFileConfig, RedteamPluginObject, RedteamStrategy } from '../redteam/types';
 
 const TracingConfigSchema: z.ZodType<any> = z.lazy(() =>
@@ -309,17 +309,13 @@ export const RedteamConfigSchema = z
       const strategyLanguages = multilingualStrategy.config?.languages;
 
       if (Array.isArray(strategyLanguages) && strategyLanguages.length > 0) {
-        // Lazy require to avoid mock interference in tests during module initialization
-        try {
-          // Use eval to prevent bundler issues in browser builds
-          // eslint-disable-next-line no-eval
-          const logger = require('../logger').default;
+        // Fire-and-forget async import to avoid circular dependency at module load time
+        (async () => {
+          const { default: logger } = await import('../logger');
           logger.debug(
             '[DEPRECATED] The "multilingual" strategy is deprecated. Use the top-level "language" config instead. See: https://www.promptfoo.dev/docs/red-team/configuration/#language',
           );
-        } catch {
-          // Silently fail if require fails - deprecation warning is not critical
-        }
+        })();
 
         if (data.language) {
           // Global language exists, merge with 'en' and strategy languages, then deduplicate
@@ -468,6 +464,27 @@ export const RedteamConfigSchema = z
         return JSON.stringify(a.config || {}).localeCompare(JSON.stringify(b.config || {}));
       });
 
+    // Helper to generate a unique key for strategies
+    // For layer strategies, use label or steps to differentiate multiple instances
+    const getStrategyKey = (strategy: RedteamStrategy): string => {
+      if (typeof strategy === 'string') {
+        return strategy;
+      }
+      if (strategy.id === 'layer' && strategy.config) {
+        if (strategy.config.label) {
+          return `layer/${strategy.config.label}`;
+        }
+        if (strategy.config.steps) {
+          return `layer:${JSON.stringify(strategy.config.steps)}`;
+        }
+      }
+      // For other strategies with config, include config in key to allow multiple instances
+      if (strategy.config && Object.keys(strategy.config).length > 0) {
+        return `${strategy.id}:${JSON.stringify(strategy.config)}`;
+      }
+      return strategy.id;
+    };
+
     const strategies = Array.from(
       new Map<string, RedteamStrategy>(
         [...(data.strategies || []), ...Array.from(strategySet)].flatMap(
@@ -480,8 +497,8 @@ export const RedteamConfigSchema = z
                 ? DEFAULT_STRATEGIES.map((id): [string, RedteamStrategy] => [id, { id }])
                 : [[strategy, { id: strategy }]];
             }
-            // Return tuple of [id, strategy] for Map to deduplicate by id
-            return [[strategy.id, strategy]];
+            // Use unique key that considers label/steps for layer strategies
+            return [[getStrategyKey(strategy), strategy]];
           },
         ),
       ).values(),

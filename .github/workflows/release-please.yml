@@ -58,6 +58,8 @@ jobs:
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
+      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
+      - run: npm install -g npm@latest
       - run: npm ci
       - run: npm test
 
@@ -76,6 +78,8 @@ jobs:
           node-version-file: '.nvmrc'
           cache: 'npm'
           registry-url: 'https://registry.npmjs.org'
+      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
+      - run: npm install -g npm@latest
       - run: npm ci
       - run: npm publish --provenance --access public
         env:

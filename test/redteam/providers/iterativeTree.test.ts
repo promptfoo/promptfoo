@@ -1491,3 +1491,8 @@ describe('Token Counting', () => {
     expect(elapsed).toBeGreaterThanOrEqual(90); // Allow for 10ms variance
   });
 });
+
+// Note: Tests for perTurnLayers in iterativeTree are covered by testing through
+// the RedteamIterativeTreeProvider class, not exposed internal functions.
+// The TreeSearchOutput interface already supports promptAudio, promptImage,
+// outputAudio, and outputImage fields which are populated when perTurnLayers is configured.

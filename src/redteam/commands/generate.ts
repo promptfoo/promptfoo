@@ -7,10 +7,10 @@ import dedent from 'dedent';
 import yaml from 'js-yaml';
 import { validate as uuidValidate } from 'uuid';
 import { z } from 'zod';
-import { fromError } from 'zod-validation-error/v3';
+import { fromError } from 'zod-validation-error';
 import { disableCache } from '../../cache';
 import cliState from '../../cliState';
-import { CLOUD_PROVIDER_PREFIX, VERSION } from '../../constants';
+import { CLOUD_PROVIDER_PREFIX, DEFAULT_MAX_CONCURRENCY, VERSION } from '../../constants';
 import { getAuthor, getUserEmail } from '../../globalConfig/accounts';
 import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
@@ -116,6 +116,7 @@ export async function doGenerateRedteam(
   let configPath = options.config || options.defaultConfigPath;
   const outputPath = options.output || 'redteam.yaml';
   let resolvedConfigMetadata: Record<string, any> | undefined;
+  let commandLineOptions: Record<string, any> | undefined;
 
   // Write a remote config to a temporary file
   if (options.configFromCloud) {
@@ -170,6 +171,7 @@ export async function doGenerateRedteam(
     testSuite = resolved.testSuite;
     redteamConfig = resolved.config.redteam;
     resolvedConfigMetadata = resolved.config.metadata;
+    commandLineOptions = resolved.commandLineOptions;
 
     await checkCloudPermissions(resolved.config);
 
@@ -372,14 +374,15 @@ export async function doGenerateRedteam(
   const config = {
     injectVar: redteamConfig?.injectVar || options.injectVar,
     language: redteamConfig?.language || options.language,
-    maxConcurrency: options.maxConcurrency,
+    maxConcurrency:
+      options.maxConcurrency ?? commandLineOptions?.maxConcurrency ?? DEFAULT_MAX_CONCURRENCY,
     numTests: redteamConfig?.numTests ?? options.numTests,
     entities: redteamConfig?.entities,
     plugins,
     provider: redteamConfig?.provider || options.provider,
     purpose: redteamConfig?.purpose ?? options.purpose,
     strategies: strategyObjs,
-    delay: redteamConfig?.delay || options.delay,
+    delay: redteamConfig?.delay || options.delay || commandLineOptions?.delay,
     sharing: redteamConfig?.sharing || options.sharing,
     excludeTargetOutputFromAgenticAttackGeneration:
       redteamConfig?.excludeTargetOutputFromAgenticAttackGeneration,
@@ -690,11 +693,8 @@ export function redteamGenerateCommand(
       'Specify the language for generated tests. Defaults to English',
     )
     .option('--no-cache', 'Do not read or write results to disk cache', false)
-    .option(
-      '-j, --max-concurrency <number>',
-      'Maximum number of concurrent API calls',
-      (val) => Number.parseInt(val, 10),
-      defaultConfig.evaluateOptions?.maxConcurrency || 5,
+    .option('-j, --max-concurrency <number>', 'Maximum number of concurrent API calls', (val) =>
+      Number.parseInt(val, 10),
     )
     .option('--delay <number>', 'Delay in milliseconds between plugin API calls', (val) =>
       Number.parseInt(val, 10),

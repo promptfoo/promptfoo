@@ -117,6 +117,16 @@ jobs:
             exit 1
           fi
 
+      - name: Use Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
+      - name: Upgrade npm
+        run: npm install -g npm@latest
+
       - name: run promptfoo eval
         id: eval
         env:
@@ -251,7 +261,7 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=sha
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' || github.event_name == 'release' }}
 
       - name: Create manifest list and push
         working-directory: ${{ runner.temp }}/digests
