@@ -1,3 +1,4 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getEnvBool, getEnvString } from '../../../../src/envars';
 import {
   HARM_PLUGINS,
@@ -11,18 +12,18 @@ import {
   getHarmfulAssertions,
 } from '../../../../src/redteam/plugins/harmful/common';
 
-jest.mock('../../../../src/envars');
+vi.mock('../../../../src/envars');
 
 describe('harmful plugin', () => {
   beforeEach(() => {
-    jest.mocked(getEnvBool).mockReset();
-    jest.mocked(getEnvString).mockReset();
+    vi.mocked(getEnvBool).mockReset();
+    vi.mocked(getEnvString).mockReset();
   });
 
   describe('getHarmfulAssertions', () => {
     beforeEach(() => {
-      jest.mocked(getEnvBool).mockReset();
-      jest.mocked(getEnvString).mockReset();
+      vi.mocked(getEnvBool).mockReset();
+      vi.mocked(getEnvString).mockReset();
     });
 
     it('should use specific subcategory as metric name for privacy category', () => {
@@ -59,13 +60,15 @@ describe('harmful plugin', () => {
     });
 
     it('should return only basic assertions when moderation is disabled', () => {
-      jest.mocked(getEnvBool).mockImplementation((key) => {
+      vi.mocked(getEnvBool).mockImplementation(function (key) {
         if (key === 'PROMPTFOO_DISABLE_REDTEAM_MODERATION') {
           return true;
         }
         return false;
       });
-      jest.mocked(getEnvString).mockReturnValue('test-key');
+      vi.mocked(getEnvString).mockImplementation(function () {
+        return 'test-key';
+      });
 
       const assertions = getHarmfulAssertions('harmful:privacy');
       expect(assertions).toHaveLength(1);
@@ -74,7 +77,7 @@ describe('harmful plugin', () => {
     });
 
     it('should prioritize Replicate over OpenAI when both keys are present', () => {
-      jest.mocked(getEnvString).mockImplementation((key) => {
+      vi.mocked(getEnvString).mockImplementation(function (key) {
         if (key === 'REPLICATE_API_KEY') {
           return 'replicate-key';
         }
@@ -98,7 +101,7 @@ describe('harmful plugin', () => {
     });
 
     it('should handle REPLICATE_API_TOKEN', () => {
-      jest.mocked(getEnvString).mockImplementation((key) => {
+      vi.mocked(getEnvString).mockImplementation(function (key) {
         if (key === 'REPLICATE_API_TOKEN') {
           return 'replicate-token';
         }
@@ -115,7 +118,7 @@ describe('harmful plugin', () => {
     });
 
     it('should use subcategory metric name for OpenAI moderation assertions', () => {
-      jest.mocked(getEnvString).mockImplementation((key) => {
+      vi.mocked(getEnvString).mockImplementation(function (key) {
         if (key === 'OPENAI_API_KEY') {
           return 'openai-key';
         }

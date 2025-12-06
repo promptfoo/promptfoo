@@ -6,14 +6,15 @@ prompts:
   - file://prompt.js:formatImagePrompt
 
 providers:
-  - id: bedrock:anthropic.claude-sonnet-4-20250514-v1:0
-  - id: anthropic:claude-3-5-sonnet-20241022
+  - id: bedrock:us.anthropic.claude-sonnet-4-5-20250929-v1:0
+  - id: anthropic:claude-sonnet-4-5-20250929
   - id: openai:gpt-4.1
     label: custom label for gpt-4.1
+  - id: google:gemini-2.5-flash-image
 
 tests:
   - vars:
-      image_url: https://upload.wikimedia.org/wikipedia/commons/thumb/0/0d/Great_Wave_off_Kanagawa2.jpg/640px-Great_Wave_off_Kanagawa2.jpg
+      image_url: https://images.metmuseum.org/CRDImages/as/original/DP130155.jpg
       label: Great Wave off Kanagawa
 
 defaultTest:

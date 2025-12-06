@@ -29,6 +29,7 @@ import type {
 } from '../types/index';
 
 export * from './grading';
+export { DEFAULT_WEB_SEARCH_PROMPT } from './grading';
 
 /**
  * Reads and maps provider prompts based on the configuration and parsed prompts.
@@ -258,6 +259,7 @@ export async function processPrompts(
   ).flat();
 }
 
+// G-Eval prompts
 export const GEVAL_PROMPT_STEPS = `
 Given an evaluation criteria which outlines how you should judge some text, generate 3-4 concise evaluation steps for any text based on the criteria below.
 

@@ -1,5 +1,7 @@
 {
   "bootstrap-sha": "779729198d01eacd9d00b0796d62cc5a16f0ccac",
+  "include-component-in-tag": false,
+  "include-v-in-tag": false,
   "packages": {
     ".": {
       "release-type": "node",

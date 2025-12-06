@@ -5,7 +5,7 @@ import { getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
-import { AwsBedrockGenericProvider } from './index';
+import { AwsBedrockGenericProvider } from './base';
 import type {
   BedrockAgentRuntimeClient,
   RetrieveAndGenerateCommandInput,
