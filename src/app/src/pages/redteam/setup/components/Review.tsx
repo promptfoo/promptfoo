@@ -1,23 +1,28 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 
-import Code from '@app/components/Code';
+// App imports
 import { useApiHealth } from '@app/hooks/useApiHealth';
 import { useEmailVerification } from '@app/hooks/useEmailVerification';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import YamlEditor from '@app/pages/eval-creator/components/YamlEditor';
 import { callApi } from '@app/utils/api';
+
+// MUI Icons
 import AssessmentIcon from '@mui/icons-material/Assessment';
-import CloseIcon from '@mui/icons-material/Close';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import MoreVertIcon from '@mui/icons-material/MoreVert';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import ReplayIcon from '@mui/icons-material/Replay';
 import SaveIcon from '@mui/icons-material/Save';
 import SearchIcon from '@mui/icons-material/Search';
 import StopIcon from '@mui/icons-material/Stop';
-import TuneIcon from '@mui/icons-material/Tune';
 import VisibilityIcon from '@mui/icons-material/Visibility';
-import Grid from '@mui/material/Grid';
+
+// MUI Components
 import Accordion from '@mui/material/Accordion';
 import AccordionDetails from '@mui/material/AccordionDetails';
 import AccordionSummary from '@mui/material/AccordionSummary';
@@ -25,21 +30,36 @@ import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
-import CircularProgress from '@mui/material/CircularProgress';
 import Dialog from '@mui/material/Dialog';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import Divider from '@mui/material/Divider';
+import Grid from '@mui/material/Grid';
 import IconButton from '@mui/material/IconButton';
+import LinearProgress from '@mui/material/LinearProgress';
+import ListItemIcon from '@mui/material/ListItemIcon';
+import ListItemText from '@mui/material/ListItemText';
+import Menu from '@mui/material/Menu';
+import MenuItem from '@mui/material/MenuItem';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
-import { useTheme } from '@mui/material/styles';
+import { alpha, useTheme } from '@mui/material/styles';
 import TextField from '@mui/material/TextField';
+import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
+
+// Promptfoo imports
 import { isFoundationModelProvider } from '@promptfoo/constants';
 import { REDTEAM_DEFAULTS, strategyDisplayNames } from '@promptfoo/redteam/constants';
+import {
+  isValidPolicyObject,
+  makeDefaultPolicyName,
+} from '@promptfoo/redteam/plugins/policy/utils';
 import { getUnifiedConfig } from '@promptfoo/redteam/sharedFrontend';
-import { Link } from 'react-router-dom';
+
+// Local imports
+import { useJobSocket } from '../hooks/useJobSocket';
+import { useJobState } from '../hooks/useJobState';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import { generateOrderedYaml } from '../utils/yamlHelpers';
 import DefaultTestVariables from './DefaultTestVariables';
@@ -47,21 +67,16 @@ import { EmailVerificationDialog } from './EmailVerificationDialog';
 import { LogViewer } from './LogViewer';
 import PageWrapper from './PageWrapper';
 import { RunOptionsContent } from './RunOptions';
-import type { RedteamRunOptions } from '@promptfoo/types';
+import { getEstimatedProbes } from './strategies/utils';
+import VulnerabilityStream from './VulnerabilityStream';
 
+// Types
 import type { RedteamPlugin, Policy, PolicyObject } from '@promptfoo/redteam/types';
-import type { Job } from '@promptfoo/types';
-import EstimationsDisplay from './EstimationsDisplay';
-import Tooltip from '@mui/material/Tooltip';
-import {
-  isValidPolicyObject,
-  makeDefaultPolicyName,
-} from '@promptfoo/redteam/plugins/policy/utils';
+import type { Job, RedteamRunOptions, VulnerabilityFoundEvent } from '@promptfoo/types';
 
 interface ReviewProps {
   onBack?: () => void;
   navigateToPlugins: () => void;
-  navigateToStrategies: () => void;
   navigateToPurpose: () => void;
 }
 
@@ -78,7 +93,6 @@ interface JobStatusResponse {
 export default function Review({
   onBack,
   navigateToPlugins,
-  navigateToStrategies,
   navigateToPurpose,
 }: ReviewProps) {
   const { config, updateConfig } = useRedTeamConfig();
@@ -91,28 +105,132 @@ export default function Review({
   const [isYamlDialogOpen, setIsYamlDialogOpen] = React.useState(false);
   const yamlContent = useMemo(() => generateOrderedYaml(config), [config]);
 
-  const [isRunning, setIsRunning] = React.useState(false);
-  const [logs, setLogs] = React.useState<string[]>([]);
-  const [evalId, setEvalId] = React.useState<string | null>(null);
+  // Consolidated job state management
+  const { state: jobState, actions: jobActions } = useJobState();
+  const isRunning = jobState.status === 'in-progress';
+
   const { showToast } = useToast();
   const [forceRegeneration /*, setForceRegeneration*/] = React.useState(true);
   const [maxConcurrency, setMaxConcurrency] = React.useState(
     String(config.maxConcurrency || REDTEAM_DEFAULTS.MAX_CONCURRENCY),
   );
   const [isJobStatusDialogOpen, setIsJobStatusDialogOpen] = useState(false);
-  const [pollInterval, setPollInterval] = useState<number | null>(null);
+  const [isCancelDialogOpen, setIsCancelDialogOpen] = useState(false);
+  const [cliMenuAnchor, setCliMenuAnchor] = useState<null | HTMLElement>(null);
+  const [isConfigExpanded, setIsConfigExpanded] = useState(false);
+
+  // WebSocket integration for real-time job updates
+  const handleJobUpdate = useCallback(
+    (payload: {
+      status: Job['status'];
+      progress?: number;
+      total?: number;
+      phase?: Job['phase'];
+      phaseDetail?: string;
+      startedAt?: number;
+      metrics?: Job['metrics'];
+      errors?: Job['errors'];
+      logs?: string[];
+    }) => {
+      jobActions.updateFromWebSocket(payload);
+    },
+    [jobActions],
+  );
+
+  const handleJobComplete = useCallback(
+    (payload: {
+      status: Job['status'];
+      evalId?: string | null;
+      phase?: Job['phase'];
+      phaseDetail?: string;
+      metrics?: Job['metrics'];
+      errors?: Job['errors'];
+      summary?: Job['summary'];
+    }) => {
+      jobActions.completeJob(payload);
+
+      if (payload.evalId) {
+        // Track funnel milestone - evaluation completed
+        recordEvent('funnel', {
+          type: 'redteam',
+          step: 'webui_evaluation_completed',
+          source: 'webui',
+          evalId: payload.evalId,
+        });
+      }
+    },
+    [jobActions, recordEvent],
+  );
+
+  const handleVulnerability = useCallback(
+    (vulnerability: VulnerabilityFoundEvent) => {
+      jobActions.addVulnerability(vulnerability);
+    },
+    [jobActions],
+  );
+
+  // WebSocket provides real-time updates; polling is a fallback mechanism
+  useJobSocket({
+    jobId: jobState.jobId,
+    onUpdate: handleJobUpdate,
+    onComplete: handleJobComplete,
+    onVulnerability: handleVulnerability,
+  });
   const [isEmailDialogOpen, setIsEmailDialogOpen] = useState(false);
   const [emailVerificationMessage, setEmailVerificationMessage] = useState('');
   const [emailVerificationError, setEmailVerificationError] = useState<string | null>(null);
   const { checkEmailStatus } = useEmailVerification();
-  const [isPurposeExpanded, setIsPurposeExpanded] = useState(false);
-  const [isTestInstructionsExpanded, setIsTestInstructionsExpanded] = useState(false);
-  const [isRunOptionsExpanded, setIsRunOptionsExpanded] = useState(true);
+  const [logsExpanded, setLogsExpanded] = useState(false);
 
-  // Auto-expand advanced config if there are existing test variables
-  const hasTestVariables =
-    config.defaultTest?.vars && Object.keys(config.defaultTest.vars).length > 0;
-  const [isAdvancedConfigExpanded, setIsAdvancedConfigExpanded] = useState(hasTestVariables);
+  // Elapsed time tracking
+  const [elapsedTime, setElapsedTime] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (jobState.status === 'idle') {
+      setElapsedTime(null);
+      return;
+    }
+    if (jobState.status === 'complete' || jobState.status === 'error') {
+      if (jobState.startedAt) {
+        setElapsedTime(Date.now() - jobState.startedAt);
+      }
+      return;
+    }
+    if (jobState.status !== 'in-progress' || !jobState.startedAt) {
+      return;
+    }
+    setElapsedTime(Date.now() - jobState.startedAt);
+    const interval = setInterval(() => {
+      if (jobState.startedAt) {
+        setElapsedTime(Date.now() - jobState.startedAt);
+      }
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [jobState.status, jobState.startedAt]);
+
+  // Format elapsed time
+  const formatTime = (ms: number) => {
+    const seconds = Math.floor(ms / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+    if (hours > 0) {
+      return `${hours}:${String(minutes % 60).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
+    }
+    return `${minutes}:${String(seconds % 60).padStart(2, '0')}`;
+  };
+
+  // Estimate remaining time
+  const estimateRemaining = useMemo(() => {
+    if (!elapsedTime || jobState.progress === 0 || jobState.total === 0) {
+      return null;
+    }
+    const rate = jobState.progress / elapsedTime;
+    const remaining = (jobState.total - jobState.progress) / rate;
+    return formatTime(remaining);
+  }, [elapsedTime, jobState.progress, jobState.total]);
+
+  // Estimated probes count
+  const estimatedProbes = useMemo(() => getEstimatedProbes(config), [config]);
 
   // Parse purpose text into sections
   const parsedPurposeSections = useMemo(() => {
@@ -217,6 +335,14 @@ export default function Review({
 
   const handleCloseYamlDialog = () => {
     setIsYamlDialogOpen(false);
+  };
+
+  const handleCliMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
+    setCliMenuAnchor(event.currentTarget);
+  };
+
+  const handleCliMenuClose = () => {
+    setCliMenuAnchor(null);
   };
 
   const getPluginSummary = useCallback((plugin: string | RedteamPlugin) => {
@@ -346,10 +472,8 @@ export default function Review({
       return;
     }
 
-    if (pollInterval) {
-      window.clearInterval(pollInterval);
-      setPollInterval(null);
-    }
+    // Clear any existing poll interval
+    jobActions.clearPollInterval();
 
     recordEvent('feature_used', {
       feature: 'redteam_config_run',
@@ -374,10 +498,6 @@ export default function Review({
       targetType: config.target.id,
     });
 
-    setIsRunning(true);
-    setLogs([]);
-    setEvalId(null);
-
     try {
       const response = await callApi('/redteam/run', {
         method: 'POST',
@@ -395,48 +515,71 @@ export default function Review({
 
       const { id } = await response.json();
 
+      // Start job state tracking with the new job ID
+      jobActions.startJob(id);
+
+      // Poll for updates as a fallback (WebSocket provides real-time updates when available)
+      // Use moderate interval - conflict resolution handles any race conditions
+      const POLL_INTERVAL_MS = 2000;
+
       const interval = window.setInterval(async () => {
         const statusResponse = await callApi(`/eval/job/${id}`);
         const status = (await statusResponse.json()) as Job;
 
-        if (status.logs) {
-          setLogs(status.logs);
-        }
+        // Use polling update (respects timestamp-based conflict resolution)
+        jobActions.updateFromPolling({
+          logs: status.logs,
+          progress: status.progress,
+          total: status.total,
+          phase: status.phase,
+          phaseDetail: status.phaseDetail,
+          metrics: status.metrics,
+          errors: status.errors,
+          startedAt: status.startedAt,
+        });
 
         if (status.status === 'complete' || status.status === 'error') {
-          window.clearInterval(interval);
-          setPollInterval(null);
-          setIsRunning(false);
+          jobActions.clearPollInterval();
 
-          if (status.status === 'complete' && status.result && status.evalId) {
-            setEvalId(status.evalId);
-
-            // Track funnel milestone - evaluation completed
-            recordEvent('funnel', {
-              type: 'redteam',
-              step: 'webui_evaluation_completed',
-              source: 'webui',
+          if (status.status === 'complete') {
+            jobActions.completeJob({
               evalId: status.evalId,
+              phase: status.phase,
+              phaseDetail: status.phaseDetail,
+              metrics: status.metrics,
+              errors: status.errors,
+              summary: status.summary,
             });
-          } else if (status.status === 'complete') {
-            console.warn('No evaluation result was generated');
-            showToast(
-              'The evaluation completed but no results were generated. Please check the logs for details.',
-              'warning',
-            );
+
+            if (status.result && status.evalId) {
+              // Track funnel milestone - evaluation completed
+              recordEvent('funnel', {
+                type: 'redteam',
+                step: 'webui_evaluation_completed',
+                source: 'webui',
+                evalId: status.evalId,
+              });
+            } else {
+              console.warn('No evaluation result was generated');
+              showToast(
+                'The evaluation completed but no results were generated. Please check the logs for details.',
+                'warning',
+              );
+            }
           } else {
+            jobActions.errorJob('An error occurred during evaluation');
             showToast(
               'An error occurred during evaluation. Please check the logs for details.',
               'error',
             );
           }
         }
-      }, 1000);
+      }, POLL_INTERVAL_MS);
 
-      setPollInterval(interval);
+      jobActions.setPollInterval(interval);
     } catch (error) {
       console.error('Error running redteam:', error);
-      setIsRunning(false);
+      jobActions.errorJob(error instanceof Error ? error.message : 'Unknown error');
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       showToast(
         `An error occurred while starting the evaluation: ${errorMessage}. Please try again.`,
@@ -445,28 +588,55 @@ export default function Review({
     }
   };
 
-  const handleCancel = async () => {
+  /**
+   * Show confirmation dialog before cancelling
+   */
+  const handleCancel = useCallback(() => {
+    setIsCancelDialogOpen(true);
+  }, []);
+
+  /**
+   * Perform the actual cancellation after user confirms
+   */
+  const performCancel = useCallback(async () => {
     try {
       await callApi('/redteam/cancel', {
         method: 'POST',
       });
 
-      if (pollInterval) {
-        window.clearInterval(pollInterval);
-        setPollInterval(null);
-      }
-
-      setIsRunning(false);
-      showToast('Cancel request submitted', 'success');
+      jobActions.reset();
+      showToast('Evaluation cancelled', 'success');
     } catch (error) {
       console.error('Error cancelling job:', error);
       showToast('Failed to cancel job', 'error');
     }
-  };
+  }, [jobActions, showToast]);
+
+  /**
+   * Confirm cancellation - close dialog and perform cancel
+   */
+  const confirmCancel = useCallback(async () => {
+    setIsCancelDialogOpen(false);
+    await performCancel();
+  }, [performCancel]);
+
+  /**
+   * Dedicated retry handler for failed evaluations.
+   * Resets state and re-runs with current config without re-validating email.
+   */
+  const handleRetry = useCallback(async () => {
+    jobActions.reset();
+
+    // Small delay to ensure state is reset before starting new job
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    // Re-run with current settings (skip email validation since they already ran once)
+    handleRunWithSettings();
+  }, [jobActions, handleRunWithSettings]);
 
   const handleCancelExistingAndRun = async () => {
     try {
-      await handleCancel();
+      await performCancel();
       setIsJobStatusDialogOpen(false);
       setTimeout(() => {
         handleRunWithSettings();
@@ -477,190 +647,615 @@ export default function Review({
     }
   };
 
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
-      if (pollInterval) {
-        window.clearInterval(pollInterval);
+      jobActions.clearPollInterval();
+    };
+  }, [jobActions]);
+
+  // Keyboard shortcut: Cmd/Ctrl + Enter to run scan
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+        e.preventDefault();
+        if (!isRunNowDisabled && !isRunning) {
+          handleRunWithSettings();
+        } else if (isRunning) {
+          handleCancel();
+        }
       }
     };
-  }, [pollInterval]);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isRunNowDisabled, isRunning, handleRunWithSettings, handleCancel]);
+
+  // Progress percentage
+  const progressPercent = useMemo(() => {
+    if (jobState.total === 0) {
+      return 0;
+    }
+    return Math.min(Math.round((jobState.progress / jobState.total) * 100), 100);
+  }, [jobState.progress, jobState.total]);
+
+  // Show indeterminate progress during generation phase
+  const showIndeterminate =
+    jobState.status === 'in-progress' && (jobState.phase === 'generating' || jobState.total === 0);
+
+  // Status text for progress
+  const statusText = useMemo(() => {
+    if (jobState.phaseDetail) {
+      return jobState.phaseDetail;
+    }
+    if (jobState.status === 'in-progress') {
+      if (jobState.phase === 'generating') {
+        return 'Generating test cases...';
+      }
+      if (jobState.phase === 'evaluating' && jobState.total > 0) {
+        return `Evaluating ${jobState.progress} of ${jobState.total}`;
+      }
+      return 'Initializing...';
+    }
+    return '';
+  }, [jobState.status, jobState.phase, jobState.phaseDetail, jobState.progress, jobState.total]);
 
   return (
     <PageWrapper title="Review & Run" onBack={onBack}>
       <Box>
-        <TextField
-          fullWidth
-          label="Description"
-          placeholder="My Red Team Configuration"
-          value={config.description}
-          onChange={handleDescriptionChange}
-          variant="outlined"
-          sx={{ mb: 4 }}
-          autoFocus
-        />
-
-        <Typography variant="h5" gutterBottom sx={{ mb: 3 }}>
-          Configuration Summary
-        </Typography>
-
-        <Grid container spacing={3}>
-          <Grid size={{ xs: 6 }}>
-            <Paper elevation={2} sx={{ p: 3, height: '100%' }}>
-              <Typography variant="h6" gutterBottom>
-                Plugins ({pluginSummary.length})
-              </Typography>
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                {pluginSummary.map(([label, count]) => (
-                  <Chip
-                    key={label}
-                    label={count > 1 ? `${label} (${count})` : label}
+        {/* ═══════════════════════════════════════════════════════════════════════
+            UNIFIED ACTION AREA - Transforms based on state (idle/running/complete)
+            ═══════════════════════════════════════════════════════════════════════ */}
+        <Paper
+          elevation={0}
+          sx={{
+            p: 3,
+            mb: 3,
+            borderRadius: 2,
+            border: `1px solid ${theme.palette.divider}`,
+            backgroundColor:
+              jobState.status === 'complete'
+                ? alpha(
+                    jobState.summary?.vulnerabilitiesFound
+                      ? theme.palette.error.main
+                      : theme.palette.success.main,
+                    0.04,
+                  )
+                : jobState.status === 'error'
+                  ? alpha(theme.palette.error.main, 0.04)
+                  : 'transparent',
+          }}
+        >
+          {/* IDLE STATE - Show config summary and run button */}
+          {jobState.status === 'idle' && (
+            <>
+              <Box
+                sx={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  justifyContent: 'space-between',
+                  gap: 3,
+                  flexDirection: { xs: 'column', md: 'row' },
+                }}
+              >
+                <Box sx={{ flex: 1 }}>
+                  <TextField
+                    fullWidth
+                    label="Description"
+                    placeholder="My Red Team Configuration"
+                    value={config.description}
+                    onChange={handleDescriptionChange}
+                    variant="outlined"
                     size="small"
-                    onDelete={() => {
-                      const newPlugins = config.plugins.filter((plugin) => {
-                        const pluginLabel = getPluginSummary(plugin).label;
-                        return pluginLabel !== label;
-                      });
-                      updateConfig('plugins', newPlugins);
-                    }}
-                    sx={{
-                      backgroundColor:
-                        label === 'Custom Policy' ? theme.palette.primary.main : undefined,
-                      color:
-                        label === 'Custom Policy' ? theme.palette.primary.contrastText : undefined,
-                    }}
+                    sx={{ maxWidth: 400, mb: 2 }}
                   />
-                ))}
-              </Box>
-              {pluginSummary.length === 0 && (
-                <>
-                  <Alert severity="warning" sx={{ mt: 2 }}>
-                    You haven't selected any plugins. Plugins are the vulnerabilities that the red
-                    team will search for.
-                  </Alert>
-                  <Button onClick={navigateToPlugins} sx={{ mt: 2 }} variant="contained">
-                    Add a plugin
-                  </Button>
-                </>
-              )}
-            </Paper>
-          </Grid>
-
-          <Grid size={{ xs: 6 }}>
-            <Paper elevation={2} sx={{ p: 3, height: '100%' }}>
-              <Typography variant="h6" gutterBottom>
-                Strategies ({strategySummary.length})
-              </Typography>
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                {strategySummary.map(([label, count]) => (
-                  <Chip
-                    key={label}
-                    label={count > 1 ? `${label} (${count})` : label}
-                    size="small"
-                    onDelete={() => {
-                      const strategyId =
-                        Object.entries(strategyDisplayNames).find(
-                          ([_id, displayName]) => displayName === label,
-                        )?.[0] || label;
-
-                      // Special handling for 'basic' strategy - set enabled: false instead of removing
-                      if (strategyId === 'basic') {
-                        const newStrategies = config.strategies.map((strategy) => {
-                          const id = getStrategyId(strategy);
-                          if (id === 'basic') {
-                            return {
-                              id: 'basic',
-                              config: {
-                                ...(typeof strategy === 'object' ? strategy.config : {}),
-                                enabled: false,
-                              },
-                            };
-                          }
-                          return strategy;
-                        });
-                        updateConfig('strategies', newStrategies);
-                      } else {
-                        const newStrategies = config.strategies.filter((strategy) => {
-                          const id = getStrategyId(strategy);
-                          return id !== strategyId;
-                        });
-                        updateConfig('strategies', newStrategies);
-                      }
-                    }}
-                  />
-                ))}
-              </Box>
-              {(strategySummary.length === 0 ||
-                (strategySummary.length === 1 && strategySummary[0][0] === 'Basic')) && (
-                <>
-                  <Alert severity="warning" sx={{ mt: 2 }}>
-                    The basic strategy is great for an end-to-end setup test, but don't expect any
-                    findings. Once you've verified that the setup is working, add another strategy.
-                  </Alert>
-                  <Button onClick={navigateToStrategies} sx={{ mt: 2 }} variant="contained">
-                    Add more strategies
-                  </Button>
-                </>
-              )}
-            </Paper>
-          </Grid>
-
-          {customPolicies.length > 0 && (
-            <Grid size={{ xs: 6 }}>
-              <Paper elevation={2} sx={{ p: 3, height: '100%' }}>
-                <Typography variant="h6" gutterBottom>
-                  Custom Policies ({customPolicies.length})
-                </Typography>
-                <Stack spacing={1} sx={{ maxHeight: 400, overflowY: 'auto' }}>
-                  {customPolicies.map((policy, index) => {
-                    const isPolicyObject = isValidPolicyObject(policy.config.policy);
-                    return (
-                      <Box
-                        key={index}
-                        sx={{
-                          p: 1.5,
-                          borderRadius: 1,
-                          bgcolor: theme.palette.action.hover,
-                          position: 'relative',
-                          display: 'flex',
-                          flexDirection: 'row',
-                          justifyContent: 'space-between',
-                          alignItems: 'flex-start',
-                        }}
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                    Target:{' '}
+                    <Typography component="span" fontWeight={500} color="text.primary">
+                      {config.target?.label || 'Not configured'}
+                    </Typography>
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {pluginSummary.length} plugins · {strategySummary.length} strategies ·{' '}
+                    ~{estimatedProbes.toLocaleString()} probes
+                  </Typography>
+                </Box>
+                <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                  <Tooltip title={runNowTooltipMessage} arrow>
+                    <span>
+                      <Button
+                        variant="contained"
+                        color="primary"
+                        size="large"
+                        onClick={handleRunWithSettings}
+                        disabled={isRunNowDisabled}
+                        startIcon={<PlayArrowIcon />}
+                        sx={{ px: 4 }}
                       >
-                        <Box>
-                          <Typography gutterBottom>
-                            {isPolicyObject
-                              ? (policy.config.policy as PolicyObject).name
-                              : // Backwards compatibility w/ text-only inline policies.
-                                makeDefaultPolicyName(index)}
-                          </Typography>
-                          <Typography
-                            variant="body2"
-                            sx={{
-                              display: '-webkit-box',
-                              WebkitLineClamp: 2,
-                              WebkitBoxOrient: 'vertical',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              paddingRight: '24px',
-                            }}
-                          >
-                            {typeof policy.config.policy === 'string'
-                              ? policy.config.policy
-                              : policy.config.policy?.text || ''}
-                          </Typography>
-                        </Box>
-                        <IconButton
+                        Run Scan
+                      </Button>
+                    </span>
+                  </Tooltip>
+                  <IconButton onClick={handleCliMenuOpen} aria-label="More options">
+                    <MoreVertIcon />
+                  </IconButton>
+                </Box>
+              </Box>
+              {apiHealthStatus !== 'connected' && !isCheckingApiHealth && (
+                <Alert severity="warning" sx={{ mt: 2 }}>
+                  {apiHealthStatus === 'blocked'
+                    ? 'Cannot connect to Promptfoo Cloud. Please check your network connection.'
+                    : apiHealthStatus === 'disabled'
+                      ? 'Remote generation is disabled. Save YAML and run via CLI instead.'
+                      : 'Checking connection status...'}
+                </Alert>
+              )}
+            </>
+          )}
+
+          {/* RUNNING STATE - Show progress and live results */}
+          {jobState.status === 'in-progress' && (
+            <>
+              {/* Header row with status and time */}
+              <Box
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  mb: 2,
+                }}
+              >
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                  <Box
+                    sx={{
+                      width: 10,
+                      height: 10,
+                      borderRadius: '50%',
+                      backgroundColor: theme.palette.primary.main,
+                      animation: 'pulse 1.5s infinite',
+                      '@keyframes pulse': {
+                        '0%, 100%': { opacity: 1 },
+                        '50%': { opacity: 0.4 },
+                      },
+                    }}
+                  />
+                  <Typography variant="h6" fontWeight={500}>
+                    {statusText}
+                  </Typography>
+                </Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                  {elapsedTime !== null && (
+                    <Box sx={{ textAlign: 'right' }}>
+                      <Typography variant="body2" fontWeight={500}>
+                        {formatTime(elapsedTime)}
+                      </Typography>
+                      {estimateRemaining && (
+                        <Typography variant="caption" color="text.secondary">
+                          ~{estimateRemaining} remaining
+                        </Typography>
+                      )}
+                    </Box>
+                  )}
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    color="error"
+                    onClick={handleCancel}
+                    startIcon={<StopIcon />}
+                  >
+                    Cancel
+                  </Button>
+                </Box>
+              </Box>
+
+              {/* Progress bar */}
+              <LinearProgress
+                variant={showIndeterminate ? 'indeterminate' : 'determinate'}
+                value={progressPercent}
+                sx={{
+                  height: 8,
+                  borderRadius: 1,
+                  mb: 1,
+                  backgroundColor: alpha(theme.palette.primary.main, 0.1),
+                }}
+              />
+              {!showIndeterminate && jobState.total > 0 && (
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', textAlign: 'right', mb: 2 }}>
+                  {jobState.progress}/{jobState.total} ({progressPercent}%)
+                </Typography>
+              )}
+
+              {/* Live metrics - inline row */}
+              {jobState.metrics &&
+                (jobState.metrics.testPassCount > 0 ||
+                  jobState.metrics.testFailCount > 0 ||
+                  jobState.metrics.testErrorCount > 0) && (
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      gap: 3,
+                      py: 2,
+                      borderTop: `1px solid ${theme.palette.divider}`,
+                      borderBottom: `1px solid ${theme.palette.divider}`,
+                      mb: 2,
+                    }}
+                  >
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Box
+                        sx={{
+                          width: 8,
+                          height: 8,
+                          borderRadius: '50%',
+                          backgroundColor: theme.palette.success.main,
+                        }}
+                      />
+                      <Typography variant="body2">
+                        <strong>{jobState.metrics.testPassCount}</strong> passed
+                      </Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Box
+                        sx={{
+                          width: 8,
+                          height: 8,
+                          borderRadius: '50%',
+                          backgroundColor: theme.palette.error.main,
+                        }}
+                      />
+                      <Typography variant="body2">
+                        <strong>{jobState.metrics.testFailCount}</strong> vulnerabilities
+                      </Typography>
+                    </Box>
+                    {jobState.metrics.testErrorCount > 0 && (
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Box
+                          sx={{
+                            width: 8,
+                            height: 8,
+                            borderRadius: '50%',
+                            backgroundColor: theme.palette.warning.main,
+                          }}
+                        />
+                        <Typography variant="body2">
+                          <strong>{jobState.metrics.testErrorCount}</strong> errors
+                        </Typography>
+                      </Box>
+                    )}
+                  </Box>
+                )}
+
+              {/* Live vulnerability stream */}
+              {jobState.vulnerabilities &&
+                jobState.severityCounts &&
+                jobState.vulnerabilities.length > 0 && (
+                  <VulnerabilityStream
+                    vulnerabilities={jobState.vulnerabilities}
+                    severityCounts={jobState.severityCounts}
+                    sx={{ maxHeight: 350 }}
+                  />
+                )}
+
+              {/* Logs toggle */}
+              {jobState.logs.length > 0 && (
+                <Box sx={{ mt: 2 }}>
+                  <Button
+                    size="small"
+                    onClick={() => setLogsExpanded(!logsExpanded)}
+                    startIcon={
+                      <ExpandMoreIcon
+                        sx={{
+                          transform: logsExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                          transition: 'transform 0.2s',
+                        }}
+                      />
+                    }
+                    sx={{ color: 'text.secondary' }}
+                  >
+                    {logsExpanded ? 'Hide' : 'Show'} logs ({jobState.logs.length})
+                  </Button>
+                  {logsExpanded && (
+                    <Box sx={{ mt: 1 }}>
+                      <LogViewer logs={jobState.logs} />
+                    </Box>
+                  )}
+                </Box>
+              )}
+            </>
+          )}
+
+          {/* COMPLETE STATE - Show results summary */}
+          {jobState.status === 'complete' && (
+            <>
+              <Box
+                sx={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  justifyContent: 'space-between',
+                  gap: 3,
+                  flexDirection: { xs: 'column', md: 'row' },
+                }}
+              >
+                <Box>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1 }}>
+                    <CheckCircleIcon sx={{ color: theme.palette.success.main }} />
+                    <Typography variant="h6" fontWeight={500}>
+                      Evaluation Complete
+                    </Typography>
+                    {elapsedTime !== null && (
+                      <Typography variant="body2" color="text.secondary">
+                        ({formatTime(elapsedTime)})
+                      </Typography>
+                    )}
+                  </Box>
+                  {jobState.summary && (
+                    <Typography
+                      variant="h5"
+                      sx={{
+                        color: jobState.summary.vulnerabilitiesFound
+                          ? theme.palette.error.main
+                          : theme.palette.success.main,
+                        fontWeight: 600,
+                        mb: 2,
+                      }}
+                    >
+                      {jobState.summary.vulnerabilitiesFound > 0
+                        ? `${jobState.summary.vulnerabilitiesFound} vulnerabilities found`
+                        : 'No vulnerabilities found'}
+                    </Typography>
+                  )}
+                  {jobState.summary?.topCategories && jobState.summary.topCategories.length > 0 && (
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2 }}>
+                      {jobState.summary.topCategories.slice(0, 5).map((cat, i) => (
+                        <Chip
+                          key={i}
+                          label={`${cat.name} (${cat.count})`}
                           size="small"
-                          onClick={() => {
+                          sx={{ backgroundColor: alpha(theme.palette.error.main, 0.1) }}
+                        />
+                      ))}
+                    </Box>
+                  )}
+                </Box>
+                <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap' }}>
+                  {jobState.evalId && (
+                    <>
+                      <Button
+                        variant="contained"
+                        color="primary"
+                        href={`/reports?evalId=${jobState.evalId}`}
+                        startIcon={<AssessmentIcon />}
+                      >
+                        View Report
+                      </Button>
+                      <Button
+                        variant="outlined"
+                        href={`/eval?evalId=${jobState.evalId}`}
+                        startIcon={<SearchIcon />}
+                      >
+                        View Probes
+                      </Button>
+                    </>
+                  )}
+                  <Button variant="outlined" onClick={handleRetry} startIcon={<ReplayIcon />}>
+                    Run Again
+                  </Button>
+                </Box>
+              </Box>
+
+              {/* Logs toggle */}
+              {jobState.logs.length > 0 && (
+                <Box sx={{ mt: 2, pt: 2, borderTop: `1px solid ${theme.palette.divider}` }}>
+                  <Button
+                    size="small"
+                    onClick={() => setLogsExpanded(!logsExpanded)}
+                    startIcon={
+                      <ExpandMoreIcon
+                        sx={{
+                          transform: logsExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                          transition: 'transform 0.2s',
+                        }}
+                      />
+                    }
+                    sx={{ color: 'text.secondary' }}
+                  >
+                    {logsExpanded ? 'Hide' : 'Show'} logs ({jobState.logs.length})
+                  </Button>
+                  {logsExpanded && (
+                    <Box sx={{ mt: 1 }}>
+                      <LogViewer logs={jobState.logs} />
+                    </Box>
+                  )}
+                </Box>
+              )}
+            </>
+          )}
+
+          {/* ERROR STATE - Show error message with retry */}
+          {jobState.status === 'error' && (
+            <>
+              <Box
+                sx={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  justifyContent: 'space-between',
+                  gap: 3,
+                  flexDirection: { xs: 'column', md: 'row' },
+                }}
+              >
+                <Box>
+                  <Typography
+                    variant="h6"
+                    sx={{ color: theme.palette.error.main, fontWeight: 500, mb: 1 }}
+                  >
+                    Evaluation Failed
+                  </Typography>
+                  {jobState.errors && jobState.errors.length > 0 && (
+                    <Typography variant="body2" color="text.secondary">
+                      {jobState.errors[0].message}
+                    </Typography>
+                  )}
+                </Box>
+                <Button variant="contained" onClick={handleRetry} startIcon={<ReplayIcon />}>
+                  Retry
+                </Button>
+              </Box>
+
+              {/* Logs toggle */}
+              {jobState.logs.length > 0 && (
+                <Box sx={{ mt: 2, pt: 2, borderTop: `1px solid ${theme.palette.divider}` }}>
+                  <Button
+                    size="small"
+                    onClick={() => setLogsExpanded(!logsExpanded)}
+                    startIcon={
+                      <ExpandMoreIcon
+                        sx={{
+                          transform: logsExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                          transition: 'transform 0.2s',
+                        }}
+                      />
+                    }
+                    sx={{ color: 'text.secondary' }}
+                  >
+                    {logsExpanded ? 'Hide' : 'Show'} logs ({jobState.logs.length})
+                  </Button>
+                  {logsExpanded && (
+                    <Box sx={{ mt: 1 }}>
+                      <LogViewer logs={jobState.logs} />
+                    </Box>
+                  )}
+                </Box>
+              )}
+            </>
+          )}
+        </Paper>
+
+        {/* ═══════════════════════════════════════════════════════════════════════
+            CONFIGURATION - Single consolidated accordion
+            ═══════════════════════════════════════════════════════════════════════ */}
+        <Accordion
+          expanded={isConfigExpanded}
+          onChange={(_e, expanded) => setIsConfigExpanded(expanded)}
+          sx={{
+            borderRadius: 2,
+            '&:before': { display: 'none' },
+            border: `1px solid ${theme.palette.divider}`,
+            boxShadow: 'none',
+          }}
+        >
+          <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+            <Typography variant="subtitle1" fontWeight={500}>
+              Configuration
+            </Typography>
+            {pluginSummary.length === 0 && (
+              <Chip
+                label="No plugins"
+                size="small"
+                color="error"
+                variant="outlined"
+                sx={{ ml: 2 }}
+              />
+            )}
+          </AccordionSummary>
+          <AccordionDetails>
+            {/* Plugins & Strategies */}
+            <Grid container spacing={3}>
+              <Grid size={{ xs: 12, md: 6 }}>
+                <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
+                  Plugins ({pluginSummary.length})
+                </Typography>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
+                  {pluginSummary.map(([label, count]) => (
+                    <Chip
+                      key={label}
+                      label={count > 1 ? `${label} (${count})` : label}
+                      size="small"
+                      variant="outlined"
+                      onDelete={() => {
+                        const newPlugins = config.plugins.filter((plugin) => {
+                          const pluginLabel = getPluginSummary(plugin).label;
+                          return pluginLabel !== label;
+                        });
+                        updateConfig('plugins', newPlugins);
+                      }}
+                    />
+                  ))}
+                  {pluginSummary.length === 0 && (
+                    <Button onClick={navigateToPlugins} size="small" variant="outlined">
+                      Add plugins
+                    </Button>
+                  )}
+                </Box>
+              </Grid>
+              <Grid size={{ xs: 12, md: 6 }}>
+                <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
+                  Strategies ({strategySummary.length})
+                </Typography>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
+                  {strategySummary.map(([label, count]) => (
+                    <Chip
+                      key={label}
+                      label={count > 1 ? `${label} (${count})` : label}
+                      size="small"
+                      variant="outlined"
+                      onDelete={() => {
+                        const strategyId =
+                          Object.entries(strategyDisplayNames).find(
+                            ([_id, displayName]) => displayName === label,
+                          )?.[0] || label;
+                        if (strategyId === 'basic') {
+                          const newStrategies = config.strategies.map((strategy) => {
+                            const id = getStrategyId(strategy);
+                            if (id === 'basic') {
+                              return {
+                                id: 'basic',
+                                config: {
+                                  ...(typeof strategy === 'object' ? strategy.config : {}),
+                                  enabled: false,
+                                },
+                              };
+                            }
+                            return strategy;
+                          });
+                          updateConfig('strategies', newStrategies);
+                        } else {
+                          const newStrategies = config.strategies.filter((strategy) => {
+                            const id = getStrategyId(strategy);
+                            return id !== strategyId;
+                          });
+                          updateConfig('strategies', newStrategies);
+                        }
+                      }}
+                    />
+                  ))}
+                </Box>
+              </Grid>
+
+              {/* Custom Policies */}
+              {customPolicies.length > 0 && (
+                <Grid size={{ xs: 12, md: 6 }}>
+                  <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
+                    Custom Policies ({customPolicies.length})
+                  </Typography>
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
+                    {customPolicies.map((policy, index) => {
+                      const isPolicyObject = isValidPolicyObject(policy.config.policy);
+                      return (
+                        <Chip
+                          key={index}
+                          label={
+                            isPolicyObject
+                              ? (policy.config.policy as PolicyObject).name
+                              : makeDefaultPolicyName(index)
+                          }
+                          size="small"
+                          color="primary"
+                          variant="outlined"
+                          onDelete={() => {
                             const policyToMatch =
-                              // Backwards compatibility for policies w/o object config
                               typeof policy.config.policy === 'string'
                                 ? policy.config.policy
                                 : policy.config.policy?.id;
-
                             const newPlugins = config.plugins.filter(
-                              (p, _i) =>
+                              (p) =>
                                 !(
                                   typeof p === 'object' &&
                                   p.id === 'policy' &&
@@ -672,544 +1267,281 @@ export default function Review({
                             );
                             updateConfig('plugins', newPlugins);
                           }}
-                        >
-                          <CloseIcon fontSize="small" />
-                        </IconButton>
-                      </Box>
-                    );
-                  })}
-                </Stack>
-              </Paper>
-            </Grid>
-          )}
+                        />
+                      );
+                    })}
+                  </Box>
+                </Grid>
+              )}
 
-          {intents.length > 0 && (
-            <Grid size={{ xs: 6 }}>
-              <Paper elevation={2} sx={{ p: 3, height: '100%' }}>
-                <Typography variant="h6" gutterBottom>
-                  Intents ({intents.length})
-                </Typography>
-                <Stack spacing={1}>
-                  {intents.slice(0, expanded ? undefined : 5).map((intent, index) => (
-                    <Box
-                      key={index}
-                      sx={{
-                        p: 1.5,
-                        borderRadius: 1,
-                        bgcolor: theme.palette.action.hover,
-                        position: 'relative',
-                      }}
-                    >
-                      <Typography
-                        variant="body2"
-                        sx={{
-                          display: '-webkit-box',
-                          WebkitLineClamp: 2,
-                          WebkitBoxOrient: 'vertical',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          paddingRight: '24px',
-                        }}
-                      >
-                        {intent}
-                      </Typography>
-                      <IconButton
+              {/* Intents */}
+              {intents.length > 0 && (
+                <Grid size={{ xs: 12, md: 6 }}>
+                  <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
+                    Intents ({intents.length})
+                  </Typography>
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
+                    {intents.slice(0, expanded ? undefined : 5).map((intent, index) => (
+                      <Chip
+                        key={index}
+                        label={intent}
                         size="small"
-                        onClick={() => {
+                        variant="outlined"
+                        onDelete={() => {
                           const intentPlugin = config.plugins.find(
                             (p): p is { id: 'intent'; config: { intent: string | string[] } } =>
                               typeof p === 'object' &&
                               p.id === 'intent' &&
                               p.config?.intent !== undefined,
                           );
-
                           if (intentPlugin) {
                             const currentIntents = Array.isArray(intentPlugin.config.intent)
                               ? intentPlugin.config.intent
                               : [intentPlugin.config.intent];
-
                             const newIntents = currentIntents.filter((i) => i !== intent);
-
                             const newPlugins = config.plugins.map((p) =>
                               typeof p === 'object' && p.id === 'intent'
                                 ? { ...p, config: { ...p.config, intent: newIntents } }
                                 : p,
                             );
-
                             updateConfig('plugins', newPlugins);
                           }
                         }}
-                        sx={{
-                          position: 'absolute',
-                          right: 4,
-                          top: 4,
-                          padding: '2px',
-                        }}
-                      >
-                        <CloseIcon fontSize="small" />
-                      </IconButton>
-                    </Box>
-                  ))}
-                  {intents.length > 5 && (
-                    <Button onClick={() => setExpanded(!expanded)} size="small" sx={{ mt: 1 }}>
-                      {expanded ? 'Show Less' : `Show ${intents.length - 5} More`}
-                    </Button>
-                  )}
-                </Stack>
-              </Paper>
-            </Grid>
-          )}
-
-          <Grid size={{ xs: 12 }}>
-            <Box sx={{ boxShadow: theme.shadows[1], borderRadius: 1, overflow: 'hidden' }}>
-              <Accordion
-                expanded={isPurposeExpanded}
-                onChange={(_e, expanded) => {
-                  setIsPurposeExpanded(expanded);
-                }}
-                sx={{
-                  '&:before': { display: 'none' },
-                  boxShadow: 'none',
-                  borderRadius: 0,
-                  borderBottom: `1px solid ${theme.palette.divider}`,
-                }}
-              >
-                <AccordionSummary
-                  expandIcon={<ExpandMoreIcon />}
-                  sx={{
-                    '& .MuiAccordionSummary-content': {
-                      alignItems: 'center',
-                      gap: 2,
-                    },
-                  }}
-                >
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <InfoOutlinedIcon fontSize="small" color="action" />
-                    <Typography variant="h6">Application Details</Typography>
-                    {config.purpose && (
-                      <Chip
-                        label={config.purpose.length < 100 ? 'Needs more detail' : 'Configured'}
-                        size="small"
-                        variant="outlined"
-                        color={config.purpose.length < 100 ? 'warning' : 'success'}
-                        sx={{ height: 20, fontSize: '0.75rem' }}
                       />
-                    )}
-                    {!config.purpose && (
-                      <Chip
-                        label="Not configured"
-                        size="small"
-                        variant="outlined"
-                        color="error"
-                        sx={{ height: 20, fontSize: '0.75rem' }}
-                      />
+                    ))}
+                    {intents.length > 5 && (
+                      <Button onClick={() => setExpanded(!expanded)} size="small">
+                        {expanded ? 'Show less' : `+${intents.length - 5} more`}
+                      </Button>
                     )}
                   </Box>
-                </AccordionSummary>
-                <AccordionDetails sx={{ pt: 0 }}>
-                  <Grid size={{ xs: 12 }}>
-                    <Box
-                      sx={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'flex-end',
-                        mb: 1,
-                      }}
-                    >
-                      {parsedPurposeSections.length > 1 && (
-                        <Button
-                          size="small"
-                          onClick={() => {
-                            if (expandedPurposeSections.size === parsedPurposeSections.length) {
-                              setExpandedPurposeSections(new Set());
-                            } else {
-                              setExpandedPurposeSections(
-                                new Set(parsedPurposeSections.map((s) => s.title)),
-                              );
-                            }
-                          }}
-                          sx={{ textTransform: 'none' }}
-                        >
-                          {expandedPurposeSections.size === parsedPurposeSections.length
-                            ? 'Collapse All'
-                            : 'Expand All'}
-                        </Button>
-                      )}
-                    </Box>
+                </Grid>
+              )}
+            </Grid>
 
+            {/* Application Details - collapsible subsection */}
+            {config.purpose && (
+              <>
+                <Divider sx={{ my: 2 }} />
+                <Box
+                  onClick={() => togglePurposeSection('app-details')}
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    cursor: 'pointer',
+                    py: 1,
+                    '&:hover': { backgroundColor: theme.palette.action.hover },
+                    borderRadius: 1,
+                    mx: -1,
+                    px: 1,
+                  }}
+                >
+                  <Typography variant="subtitle2" color="text.secondary">
+                    Application Details
+                  </Typography>
+                  <ExpandMoreIcon
+                    sx={{
+                      transform: expandedPurposeSections.has('app-details')
+                        ? 'rotate(180deg)'
+                        : 'rotate(0deg)',
+                      transition: 'transform 0.2s',
+                      fontSize: 20,
+                      color: 'text.secondary',
+                    }}
+                  />
+                </Box>
+                {expandedPurposeSections.has('app-details') && (
+                  <Box sx={{ mt: 1 }}>
                     {(!config.purpose?.trim() || config.purpose.length < 100) &&
                     !isFoundationModelProvider(config.target.id) ? (
-                      <Box sx={{ mb: 2 }}>
-                        <Alert severity="warning">
-                          Application details are required to generate a high quality red team. Go
-                          to the Application Details section and add a purpose.{' '}
-                          <Link
-                            style={{ textDecoration: 'underline' }}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            to="https://www.promptfoo.dev/docs/red-team/troubleshooting/best-practices/#1-provide-comprehensive-application-details"
-                          >
-                            Learn more about red team best practices.
-                          </Link>
-                        </Alert>
-                        <Button onClick={navigateToPurpose} sx={{ mt: 2 }} variant="contained">
-                          Add application details
+                      <Alert severity="warning" sx={{ mb: 2 }}>
+                        Application details are required for high quality red team.{' '}
+                        <Link
+                          style={{ textDecoration: 'underline' }}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          to="https://www.promptfoo.dev/docs/red-team/troubleshooting/best-practices/#1-provide-comprehensive-application-details"
+                        >
+                          Learn more.
+                        </Link>
+                        <Button onClick={navigateToPurpose} size="small" sx={{ ml: 2 }}>
+                          Add details
                         </Button>
-                      </Box>
+                      </Alert>
                     ) : null}
-
                     {parsedPurposeSections.length > 0 ? (
-                      <Stack spacing={2} sx={{ mt: 1 }}>
+                      <Stack spacing={1}>
                         {parsedPurposeSections.map((section, index) => (
                           <Box
                             key={index}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              togglePurposeSection(section.title);
+                            }}
                             sx={{
                               border: `1px solid ${theme.palette.divider}`,
                               borderRadius: 1,
-                              overflow: 'hidden',
+                              cursor: 'pointer',
+                              '&:hover': { backgroundColor: theme.palette.action.hover },
                             }}
                           >
                             <Box
-                              onClick={() => togglePurposeSection(section.title)}
                               sx={{
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'space-between',
                                 p: 1.5,
-                                backgroundColor: theme.palette.action.hover,
-                                cursor: 'pointer',
-                                '&:hover': {
-                                  backgroundColor: theme.palette.action.selected,
-                                },
                               }}
                             >
-                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                <Typography variant="body2" fontWeight="medium">
-                                  {section.title}
-                                </Typography>
-                              </Box>
+                              <Typography variant="body2" fontWeight={500}>
+                                {section.title}
+                              </Typography>
                               <ExpandMoreIcon
                                 sx={{
                                   transform: expandedPurposeSections.has(section.title)
                                     ? 'rotate(180deg)'
                                     : 'rotate(0deg)',
                                   transition: 'transform 0.2s',
+                                  fontSize: 18,
                                 }}
                               />
                             </Box>
                             {expandedPurposeSections.has(section.title) && (
-                              <Box sx={{ p: 2, backgroundColor: 'background.paper' }}>
-                                <Typography
-                                  variant="body2"
-                                  sx={{
-                                    whiteSpace: 'pre-wrap',
-                                    color: 'text.secondary',
-                                  }}
-                                >
-                                  {section.content}
-                                </Typography>
-                              </Box>
+                              <Typography
+                                variant="body2"
+                                color="text.secondary"
+                                sx={{ px: 1.5, pb: 1.5, whiteSpace: 'pre-wrap' }}
+                              >
+                                {section.content}
+                              </Typography>
                             )}
                           </Box>
                         ))}
                       </Stack>
-                    ) : config.purpose ? (
-                      <Typography
-                        variant="body2"
-                        onClick={() => setIsPurposeExpanded(!isPurposeExpanded)}
-                        sx={{
-                          whiteSpace: 'pre-wrap',
-                          padding: 1,
-                          borderRadius: 1,
-                          backgroundColor: 'background.paper',
-                          cursor: 'pointer',
-                          display: '-webkit-box',
-                          WebkitBoxOrient: 'vertical',
-                          overflow: 'hidden',
-                          WebkitLineClamp: isPurposeExpanded ? 'none' : 6,
-                          '&:hover': {
-                            backgroundColor: 'action.hover',
-                          },
-                        }}
-                      >
+                    ) : (
+                      <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
                         {config.purpose}
                       </Typography>
-                    ) : (
-                      <Typography variant="body2" color="text.secondary">
-                        Not specified
-                      </Typography>
                     )}
-                    {config.purpose &&
-                      parsedPurposeSections.length === 0 &&
-                      config.purpose.split('\n').length > 6 && (
-                        <Typography
-                          variant="caption"
-                          sx={{
-                            color: 'primary.main',
-                            cursor: 'pointer',
-                            mt: 0.5,
-                            display: 'block',
-                          }}
-                          onClick={() => setIsPurposeExpanded(!isPurposeExpanded)}
-                        >
-                          {isPurposeExpanded ? 'Show less' : 'Show more'}
-                        </Typography>
-                      )}
-
-                    {config.testGenerationInstructions && (
-                      <Grid size={{ xs: 12 }}>
-                        <Typography variant="subtitle2">Test Generation Instructions</Typography>
-                        <Typography
-                          variant="body2"
-                          onClick={() => setIsTestInstructionsExpanded(!isTestInstructionsExpanded)}
-                          sx={{
-                            whiteSpace: 'pre-wrap',
-                            padding: 1,
-                            borderRadius: 1,
-                            backgroundColor: 'background.paper',
-                            cursor: 'pointer',
-                            display: '-webkit-box',
-                            WebkitBoxOrient: 'vertical',
-                            overflow: 'hidden',
-                            WebkitLineClamp: isTestInstructionsExpanded ? 'none' : 6,
-                            '&:hover': {
-                              backgroundColor: 'action.hover',
-                            },
-                          }}
-                        >
-                          {config.testGenerationInstructions}
-                        </Typography>
-                        {config.testGenerationInstructions &&
-                          config.testGenerationInstructions.split('\n').length > 6 && (
-                            <Typography
-                              variant="caption"
-                              sx={{
-                                color: 'primary.main',
-                                cursor: 'pointer',
-                                mt: 0.5,
-                                display: 'block',
-                              }}
-                              onClick={() =>
-                                setIsTestInstructionsExpanded(!isTestInstructionsExpanded)
-                              }
-                            >
-                              {isTestInstructionsExpanded ? 'Show less' : 'Show more'}
-                            </Typography>
-                          )}
-                      </Grid>
-                    )}
-                  </Grid>
-                </AccordionDetails>
-              </Accordion>
-
-              <Accordion
-                expanded={isAdvancedConfigExpanded}
-                onChange={(_e, expanded) => {
-                  setIsAdvancedConfigExpanded(expanded);
-                }}
-                sx={{
-                  '&:before': { display: 'none' },
-                  boxShadow: 'none',
-                  borderRadius: 0,
-                  borderBottom: `1px solid ${theme.palette.divider}`,
-                }}
-              >
-                <AccordionSummary
-                  expandIcon={<ExpandMoreIcon />}
-                  sx={{
-                    '& .MuiAccordionSummary-content': {
-                      alignItems: 'center',
-                      gap: 2,
-                    },
-                  }}
-                >
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <TuneIcon fontSize="small" color="action" />
-                    <Typography variant="h6">Advanced Configuration</Typography>
-                    <Chip label="Optional" size="small" variant="outlined" sx={{ ml: 1 }} />
                   </Box>
-                </AccordionSummary>
-                <AccordionDetails sx={{ pt: 0 }}>
-                  <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                    Configure advanced options that apply to all test cases. These settings are for
-                    power users who need fine-grained control over their red team evaluation.
-                  </Typography>
-                  <DefaultTestVariables />
-                </AccordionDetails>
-              </Accordion>
-
-              <Accordion
-                expanded={isRunOptionsExpanded}
-                onChange={(_e, expanded) => {
-                  setIsRunOptionsExpanded(expanded);
-                }}
-                sx={{
-                  '&:before': { display: 'none' },
-                  boxShadow: 'none',
-                  borderRadius: 0,
-                }}
-              >
-                <AccordionSummary
-                  expandIcon={<ExpandMoreIcon />}
-                  sx={{
-                    '& .MuiAccordionSummary-content': {
-                      alignItems: 'center',
-                      gap: 2,
-                    },
-                  }}
-                >
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <PlayArrowIcon fontSize="small" color="action" />
-                    <Typography variant="h6">Run Options</Typography>
-                  </Box>
-                </AccordionSummary>
-                <AccordionDetails sx={{ pt: 0 }}>
-                  <RunOptionsContent
-                    numTests={config.numTests}
-                    runOptions={{
-                      maxConcurrency: config.maxConcurrency,
-                      delay: config.target.config.delay,
-                    }}
-                    updateConfig={updateConfig}
-                    updateRunOption={(key: keyof RedteamRunOptions, value: any) => {
-                      if (key === 'delay') {
-                        updateConfig('target', {
-                          ...config.target,
-                          config: { ...config.target.config, delay: value },
-                        });
-                      } else if (key === 'maxConcurrency') {
-                        updateConfig('maxConcurrency', value);
-                      } else if (key === 'verbose') {
-                        updateConfig('target', {
-                          ...config.target,
-                          config: { ...config.target.config, verbose: value },
-                        });
-                      }
-                    }}
-                    language={config.language}
-                  />
-                </AccordionDetails>
-              </Accordion>
-            </Box>
-          </Grid>
-        </Grid>
-
-        <Divider sx={{ my: 4 }} />
-
-        <Typography variant="h5" gutterBottom sx={{ mb: 3 }}>
-          Run Your Scan
-        </Typography>
-
-        <EstimationsDisplay config={config} />
-
-        <Paper elevation={2} sx={{ p: 3 }}>
-          <Box sx={{ mb: 4 }}>
-            <Typography variant="h6" gutterBottom>
-              Option 1: Save and Run via CLI
-            </Typography>
-            <Typography variant="body1">
-              Save your configuration and run it from the command line. Full control over the
-              evaluation process, good for larger scans:
-            </Typography>
-            <Code>promptfoo redteam run</Code>
-            <Stack spacing={2}>
-              <Box>
-                <Button
-                  variant="contained"
-                  color="primary"
-                  onClick={handleSaveYaml}
-                  startIcon={<SaveIcon />}
-                >
-                  Save YAML
-                </Button>
-                <Button
-                  variant="outlined"
-                  color="primary"
-                  startIcon={<VisibilityIcon />}
-                  onClick={handleOpenYamlDialog}
-                  sx={{ ml: 2 }}
-                >
-                  View YAML
-                </Button>
-              </Box>
-            </Stack>
-          </Box>
-
-          <Divider sx={{ my: 3 }} />
-
-          <Box>
-            <Typography variant="h6" gutterBottom>
-              Option 2: Run Directly in Browser
-            </Typography>
-            <Typography variant="body1" paragraph>
-              Run the red team evaluation right here. Simpler but less powerful than the CLI, good
-              for tests and small scans:
-            </Typography>
-            {apiHealthStatus !== 'connected' && !isCheckingApiHealth && (
-              <Alert severity="warning" sx={{ mb: 2 }}>
-                {apiHealthStatus === 'blocked'
-                  ? 'Cannot connect to Promptfoo Cloud. The "Run Now" option requires a connection to Promptfoo Cloud.'
-                  : apiHealthStatus === 'disabled'
-                    ? 'Remote generation is disabled. The "Run Now" option is not available.'
-                    : 'Checking connection status...'}
-              </Alert>
+                )}
+              </>
             )}
-            <Box sx={{ mb: 2 }}>
-              <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-                <Tooltip title={runNowTooltipMessage} arrow>
-                  <span>
-                    <Button
-                      variant="contained"
-                      color="primary"
-                      onClick={handleRunWithSettings}
-                      disabled={isRunNowDisabled}
-                      startIcon={
-                        isRunning ? (
-                          <CircularProgress size={20} color="inherit" />
-                        ) : (
-                          <PlayArrowIcon />
-                        )
-                      }
-                    >
-                      {isRunning ? 'Running...' : 'Run Now'}
-                    </Button>
-                  </span>
-                </Tooltip>
-                {isRunning && (
-                  <Button
-                    variant="contained"
-                    color="error"
-                    onClick={handleCancel}
-                    startIcon={<StopIcon />}
-                  >
-                    Cancel
-                  </Button>
-                )}
-                {evalId && (
-                  <>
-                    <Button
-                      variant="contained"
-                      color="success"
-                      href={`/reports?evalId=${evalId}`}
-                      startIcon={<AssessmentIcon />}
-                    >
-                      View Report
-                    </Button>
-                    <Button
-                      variant="contained"
-                      color="success"
-                      href={`/eval?evalId=${evalId}`}
-                      startIcon={<SearchIcon />}
-                    >
-                      View Probes
-                    </Button>
-                  </>
-                )}
+
+            {/* Run Options - inline */}
+            <Divider sx={{ my: 2 }} />
+            <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 2 }}>
+              Run Options
+            </Typography>
+            <RunOptionsContent
+              numTests={config.numTests}
+              runOptions={{
+                maxConcurrency: config.maxConcurrency,
+                delay: config.target.config.delay,
+              }}
+              updateConfig={updateConfig}
+              updateRunOption={(key: keyof RedteamRunOptions, value: any) => {
+                if (key === 'delay') {
+                  updateConfig('target', {
+                    ...config.target,
+                    config: { ...config.target.config, delay: value },
+                  });
+                } else if (key === 'maxConcurrency') {
+                  updateConfig('maxConcurrency', value);
+                } else if (key === 'verbose') {
+                  updateConfig('target', {
+                    ...config.target,
+                    config: { ...config.target.config, verbose: value },
+                  });
+                }
+              }}
+              language={config.language}
+            />
+
+            {/* Advanced - Test Variables */}
+            <Divider sx={{ my: 2 }} />
+            <Box
+              onClick={() => togglePurposeSection('advanced')}
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                cursor: 'pointer',
+                py: 1,
+                '&:hover': { backgroundColor: theme.palette.action.hover },
+                borderRadius: 1,
+                mx: -1,
+                px: 1,
+              }}
+            >
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Typography variant="subtitle2" color="text.secondary">
+                  Advanced Configuration
+                </Typography>
+                <Chip label="Optional" size="small" variant="outlined" sx={{ height: 20 }} />
               </Box>
+              <ExpandMoreIcon
+                sx={{
+                  transform: expandedPurposeSections.has('advanced')
+                    ? 'rotate(180deg)'
+                    : 'rotate(0deg)',
+                  transition: 'transform 0.2s',
+                  fontSize: 20,
+                  color: 'text.secondary',
+                }}
+              />
             </Box>
-            {logs.length > 0 && <LogViewer logs={logs} />}
-          </Box>
-        </Paper>
+            {expandedPurposeSections.has('advanced') && (
+              <Box sx={{ mt: 2 }}>
+                <DefaultTestVariables />
+              </Box>
+            )}
+          </AccordionDetails>
+        </Accordion>
+
+        {/* CLI Menu */}
+        <Menu anchorEl={cliMenuAnchor} open={Boolean(cliMenuAnchor)} onClose={handleCliMenuClose}>
+          <MenuItem
+            onClick={() => {
+              handleSaveYaml();
+              handleCliMenuClose();
+            }}
+          >
+            <ListItemIcon>
+              <SaveIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText>Save YAML</ListItemText>
+          </MenuItem>
+          <MenuItem
+            onClick={() => {
+              handleOpenYamlDialog();
+              handleCliMenuClose();
+            }}
+          >
+            <ListItemIcon>
+              <VisibilityIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText>View YAML</ListItemText>
+          </MenuItem>
+          <Divider />
+          <MenuItem
+            onClick={() => {
+              navigator.clipboard.writeText('promptfoo redteam run');
+              showToast('Command copied to clipboard', 'success');
+              handleCliMenuClose();
+            }}
+          >
+            <ListItemIcon>
+              <ContentCopyIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText
+              primary="Copy CLI Command"
+              secondary="promptfoo redteam run"
+              secondaryTypographyProps={{ variant: 'caption' }}
+            />
+          </MenuItem>
+        </Menu>
 
         <Dialog open={isYamlDialogOpen} onClose={handleCloseYamlDialog} maxWidth="lg" fullWidth>
           <DialogTitle>YAML Configuration</DialogTitle>
@@ -1231,6 +1563,24 @@ export default function Review({
               </Button>
               <Button variant="contained" color="primary" onClick={handleCancelExistingAndRun}>
                 Cancel Existing & Run New
+              </Button>
+            </Box>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={isCancelDialogOpen} onClose={() => setIsCancelDialogOpen(false)}>
+          <DialogTitle>Cancel Evaluation?</DialogTitle>
+          <DialogContent>
+            <Typography variant="body1" paragraph>
+              Are you sure you want to cancel the current evaluation? This will stop all running
+              tests and any progress will be lost.
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end', mt: 2 }}>
+              <Button variant="outlined" onClick={() => setIsCancelDialogOpen(false)}>
+                Continue Running
+              </Button>
+              <Button variant="contained" color="error" onClick={confirmCancel}>
+                Cancel Evaluation
               </Button>
             </Box>
           </DialogContent>

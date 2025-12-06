@@ -188,6 +188,21 @@ const EvaluateOptionsSchema = z.object({
       z.void(),
     )
     .optional(),
+  /**
+   * Callback invoked after each individual test result is computed.
+   * Receives the result, test index, and total test count.
+   * Useful for real-time vulnerability streaming in red team evaluations.
+   */
+  resultCallback: z
+    .function(
+      z.tuple([
+        z.custom<EvaluateResult>(), // The result
+        z.number(), // Test index
+        z.number(), // Total tests
+      ]),
+      z.void(),
+    )
+    .optional(),
   repeat: z.number().optional(),
   showProgressBar: z.boolean().optional(),
   /**
@@ -1202,6 +1217,84 @@ export interface OutputFile {
   metadata?: OutputMetadata;
 }
 
+// Job error tracking
+export interface JobError {
+  type: 'rate_limit' | 'timeout' | 'target_error' | 'grader_error' | 'validation' | 'unknown';
+  message: string;
+  timestamp: number;
+  count: number; // For deduplication
+}
+
+// Job metrics during evaluation
+export interface JobMetrics {
+  testPassCount: number;
+  testFailCount: number;
+  testErrorCount: number;
+  tokenUsage: {
+    total: number;
+    prompt: number;
+    completion: number;
+    numRequests: number;
+  };
+  totalLatencyMs: number;
+}
+
+// Job generation summary (after test generation phase)
+export interface JobGenerationSummary {
+  testCaseCount: number;
+  pluginCount: number;
+  strategyCount: number;
+}
+
+// Job completion summary (after evaluation phase)
+export interface JobCompletionSummary {
+  vulnerabilitiesFound: number;
+  topCategories: Array<{ name: string; count: number }>;
+}
+
+// Vulnerability severity levels
+export type VulnerabilitySeverity = 'critical' | 'high' | 'medium' | 'low';
+
+// Live vulnerability discovery event
+export interface VulnerabilityFoundEvent {
+  /** Unique ID for this vulnerability instance */
+  id: string;
+
+  /** Plugin that found the vulnerability */
+  pluginId: string;
+  pluginName: string;
+
+  /** Strategy used (if applicable) */
+  strategyId?: string;
+  strategyName?: string;
+
+  /** Severity classification */
+  severity: VulnerabilitySeverity;
+
+  /** Truncated prompt that succeeded in the attack */
+  prompt: string;
+
+  /** Truncated response showing the vulnerability */
+  output: string;
+
+  /** When this vulnerability was discovered */
+  timestamp: number;
+
+  /** Index in the test suite */
+  testIndex: number;
+
+  /** Score from grading (0-1, lower = more vulnerable) */
+  score: number;
+}
+
+// Aggregated severity counts for display
+export interface VulnerabilitySeverityCounts {
+  critical: number;
+  high: number;
+  medium: number;
+  low: number;
+}
+
 // Live eval job state
 export interface Job {
   evalId: string | null;
@@ -1210,6 +1303,18 @@ export interface Job {
   total: number;
   result: EvaluateSummaryV3 | EvaluateSummaryV2 | null;
   logs: string[];
+
+  // Enhanced fields for rich progress tracking
+  phase?: 'initializing' | 'generating' | 'evaluating' | 'complete' | 'error';
+  phaseDetail?: string; // e.g., "Generating tests for pii..."
+  startedAt?: number;
+  metrics?: JobMetrics;
+  errors?: JobError[];
+  generation?: JobGenerationSummary;
+  summary?: JobCompletionSummary;
+
+  // Live vulnerability discoveries during evaluation
+  vulnerabilities?: VulnerabilityFoundEvent[];
 }
 
 // used for writing eval results
