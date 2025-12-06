@@ -75,6 +75,7 @@ describe('handleSearchRubric', () => {
       { city: 'Tokyo' },
       params.assertion,
       undefined,
+      undefined, // providerCallContext
     );
   });
 

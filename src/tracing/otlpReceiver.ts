@@ -2,6 +2,31 @@ import express from 'express';
 import logger from '../logger';
 import { getTraceStore, type ParsedTrace, type SpanData, type TraceStore } from './store';
 
+// Dynamically import protobuf root for decoding
+let protobufRoot: any = null;
+let protobufLoadAttempted = false;
+async function getProtobufRoot() {
+  if (protobufRoot) {
+    return protobufRoot;
+  }
+  if (protobufLoadAttempted) {
+    return null;
+  }
+  protobufLoadAttempted = true;
+
+  try {
+    // The root contains generated protobuf message types
+    // Use dynamic import for ESM module
+    const module = await import('@opentelemetry/otlp-transformer/build/esm/generated/root');
+    protobufRoot = module.default || module;
+    logger.debug('[OtlpReceiver] Protobuf support loaded successfully');
+    return protobufRoot;
+  } catch (error) {
+    logger.debug(`[OtlpReceiver] Protobuf support not available: ${error}`);
+    return null;
+  }
+}
+
 interface OTLPAttribute {
   key: string;
   value: {
@@ -89,13 +114,7 @@ export class OTLPReceiver {
       logger.debug('[OtlpReceiver] Starting to process traces');
 
       // Check content type first before processing
-      if (contentType === 'application/json') {
-        // Continue with JSON processing
-      } else if (contentType === 'application/x-protobuf') {
-        logger.warn('Protobuf format not yet supported, please use JSON');
-        res.status(415).json({ error: 'Protobuf format not yet supported' });
-        return;
-      } else {
+      if (contentType !== 'application/json' && contentType !== 'application/x-protobuf') {
         res.status(415).json({ error: 'Unsupported content type' });
         return;
       }
@@ -103,12 +122,24 @@ export class OTLPReceiver {
       try {
         let traces: ParsedTrace[] = [];
 
-        // We already validated content type above, so this must be JSON
-        logger.debug('[OtlpReceiver] Parsing OTLP JSON request');
-        logger.debug(
-          `[OtlpReceiver] Request body: ${JSON.stringify(req.body).substring(0, 500)}...`,
-        );
-        traces = this.parseOTLPJSONRequest(req.body);
+        if (contentType === 'application/json') {
+          // JSON processing
+          logger.debug('[OtlpReceiver] Parsing OTLP JSON request');
+          logger.debug(
+            `[OtlpReceiver] Request body: ${JSON.stringify(req.body).substring(0, 500)}...`,
+          );
+          traces = this.parseOTLPJSONRequest(req.body);
+        } else if (contentType === 'application/x-protobuf') {
+          // Protobuf processing
+          logger.debug('[OtlpReceiver] Parsing OTLP Protobuf request');
+          const protoRoot = await getProtobufRoot();
+          if (!protoRoot) {
+            logger.warn('[OtlpReceiver] Protobuf support not available');
+            res.status(415).json({ error: 'Protobuf support not available' });
+            return;
+          }
+          traces = this.parseOTLPProtobufRequest(req.body, protoRoot);
+        }
         logger.debug(`[OtlpReceiver] Parsed ${traces.length} traces from request`);
 
         // Group spans by trace ID and extract metadata
@@ -182,7 +213,7 @@ export class OTLPReceiver {
       res.status(200).json({
         service: 'promptfoo-otlp-receiver',
         version: '1.0.0',
-        supported_formats: ['json'], // 'protobuf' will be added in phase 2
+        supported_formats: ['json', 'protobuf'],
       });
     });
 
@@ -265,6 +296,151 @@ export class OTLPReceiver {
     }
 
     return traces;
+  }
+
+  private parseOTLPProtobufRequest(body: Buffer, protoRoot: any): ParsedTrace[] {
+    const traces: ParsedTrace[] = [];
+
+    try {
+      // Access the ExportTraceServiceRequest message type
+      const ExportTraceServiceRequest =
+        protoRoot.opentelemetry?.proto?.collector?.trace?.v1?.ExportTraceServiceRequest;
+
+      if (!ExportTraceServiceRequest) {
+        logger.error('[OtlpReceiver] ExportTraceServiceRequest type not found in protobuf root');
+        return traces;
+      }
+
+      // Decode the protobuf message
+      const decoded = ExportTraceServiceRequest.decode(body);
+      const request = ExportTraceServiceRequest.toObject(decoded, {
+        longs: String,
+        bytes: String,
+        defaults: true,
+      });
+
+      logger.debug(
+        `[OtlpReceiver] Decoded protobuf with ${request.resourceSpans?.length || 0} resource spans`,
+      );
+
+      // Convert to the same format as JSON and reuse parseOTLPJSONRequest
+      // The protobuf toObject format is compatible with our JSON types
+      for (const resourceSpan of request.resourceSpans || []) {
+        const resourceAttributes = this.parseProtobufAttributes(resourceSpan.resource?.attributes);
+
+        for (const scopeSpan of resourceSpan.scopeSpans || []) {
+          for (const span of scopeSpan.spans || []) {
+            // Convert binary IDs to hex
+            const traceId = this.convertProtobufId(span.traceId, 32);
+            const spanId = this.convertProtobufId(span.spanId, 16);
+            const parentSpanId = span.parentSpanId
+              ? this.convertProtobufId(span.parentSpanId, 16)
+              : undefined;
+
+            logger.debug(
+              `[OtlpReceiver] Processing protobuf span: ${span.name} (${spanId}) in trace ${traceId}`,
+            );
+
+            const spanKindName = SPAN_KIND_MAP[span.kind] ?? 'unspecified';
+            const attributes: Record<string, any> = {
+              ...resourceAttributes,
+              ...this.parseProtobufAttributes(span.attributes),
+              'otel.scope.name': scopeSpan.scope?.name,
+              'otel.scope.version': scopeSpan.scope?.version,
+              'otel.span.kind': spanKindName,
+              'otel.span.kind_code': span.kind,
+            };
+
+            traces.push({
+              traceId,
+              span: {
+                spanId,
+                parentSpanId,
+                name: span.name,
+                startTime: Number(span.startTimeUnixNano) / 1_000_000,
+                endTime: span.endTimeUnixNano
+                  ? Number(span.endTimeUnixNano) / 1_000_000
+                  : undefined,
+                attributes,
+                statusCode: span.status?.code,
+                statusMessage: span.status?.message,
+              },
+            });
+          }
+        }
+      }
+    } catch (error) {
+      logger.error(`[OtlpReceiver] Failed to decode protobuf: ${error}`);
+    }
+
+    return traces;
+  }
+
+  private convertProtobufId(id: string | Uint8Array, _expectedHexLength?: number): string {
+    if (!id) {
+      return '';
+    }
+
+    // If it's a Uint8Array or base64 string (from toObject with bytes: String)
+    if (typeof id === 'string') {
+      // toObject converts bytes to base64 string
+      try {
+        const buffer = Buffer.from(id, 'base64');
+        return buffer.toString('hex').toLowerCase();
+      } catch {
+        return id.toLowerCase();
+      }
+    }
+
+    // If it's already a buffer/Uint8Array
+    return Buffer.from(id).toString('hex').toLowerCase();
+  }
+
+  private parseProtobufAttributes(attributes?: any[]): Record<string, any> {
+    if (!attributes) {
+      return {};
+    }
+
+    const result: Record<string, any> = {};
+
+    for (const attr of attributes) {
+      const value = this.parseProtobufAttributeValue(attr.value);
+      if (value !== undefined) {
+        result[attr.key] = value;
+      }
+    }
+
+    return result;
+  }
+
+  private parseProtobufAttributeValue(value: any): any {
+    if (!value) {
+      return undefined;
+    }
+
+    if (value.stringValue !== undefined && value.stringValue !== null) {
+      return value.stringValue;
+    }
+    if (value.intValue !== undefined && value.intValue !== null) {
+      return Number(value.intValue);
+    }
+    if (value.doubleValue !== undefined && value.doubleValue !== null) {
+      return value.doubleValue;
+    }
+    if (value.boolValue !== undefined && value.boolValue !== null) {
+      return value.boolValue;
+    }
+    if (value.arrayValue?.values) {
+      return value.arrayValue.values.map((v: any) => this.parseProtobufAttributeValue(v));
+    }
+    if (value.kvlistValue?.values) {
+      const kvMap: Record<string, any> = {};
+      for (const kv of value.kvlistValue.values) {
+        kvMap[kv.key] = this.parseProtobufAttributeValue(kv.value);
+      }
+      return kvMap;
+    }
+    return undefined;
   }
 
   private parseAttributes(attributes?: OTLPAttribute[]): Record<string, any> {

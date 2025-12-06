@@ -96,7 +96,7 @@ describe('OTLPReceiver', () => {
       expect(response.body).toEqual({
         service: 'promptfoo-otlp-receiver',
         version: '1.0.0',
-        supported_formats: ['json'],
+        supported_formats: ['json', 'protobuf'],
       });
     });
   });
@@ -304,14 +304,15 @@ describe('OTLPReceiver', () => {
       expect(response.body).toEqual({ error: 'Unsupported content type' });
     });
 
-    it('should handle protobuf format with appropriate message', async () => {
+    it('should handle protobuf format', async () => {
+      // Protobuf is now supported - invalid protobuf data parses to 0 traces but returns 200
       const response = await request(receiver.getApp())
         .post('/v1/traces')
         .set('Content-Type', 'application/x-protobuf')
         .send(Buffer.from('dummy protobuf data'))
-        .expect(415);
+        .expect(200);
 
-      expect(response.body).toEqual({ error: 'Protobuf format not yet supported' });
+      expect(response.body).toEqual({ partialSuccess: {} });
     });
 
     it('should handle malformed JSON gracefully', async () => {
