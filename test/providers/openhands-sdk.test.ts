@@ -34,13 +34,37 @@ const createMockConversationResponse = (conversationId = 'conv-123') => ({
   id: conversationId,
 });
 
-// Helper to create mock conversation state
+// Helper to create mock conversation state (matches actual OpenHands API)
 const createMockConversationState = (
-  status: 'idle' | 'running' | 'completed' | 'error' = 'completed',
-  messages: Array<{ role: string; content: string }> = [],
+  executionStatus:
+    | 'idle'
+    | 'running'
+    | 'paused'
+    | 'waiting_for_confirmation'
+    | 'finished'
+    | 'error'
+    | 'stuck' = 'finished',
 ) => ({
-  status,
-  messages,
+  id: 'conv-123',
+  execution_status: executionStatus,
+});
+
+// Helper to create mock events response (matches actual OpenHands API)
+const createMockEventsResponse = (
+  messages: Array<{ role: string; content: string }> = [
+    { role: 'user', content: 'test prompt' },
+    { role: 'assistant', content: 'Test response from OpenHands' },
+  ],
+) => ({
+  results: messages.map((m, i) => ({
+    id: `event-${i}`,
+    kind: 'MessageEvent',
+    source: m.role === 'assistant' ? 'agent' : 'user',
+    llm_message: {
+      role: m.role,
+      content: [{ type: 'text', text: m.content }],
+    },
+  })),
 });
 
 describe('OpenHandsSDKProvider', () => {
@@ -61,43 +85,51 @@ describe('OpenHandsSDKProvider', () => {
     rmSyncSpy = vi.spyOn(fs, 'rmSync').mockImplementation(() => {});
     _readdirSyncSpy = vi.spyOn(fs, 'readdirSync').mockReturnValue([]);
 
-    // Default fetch mock - server health check succeeds
+    // Default fetch mock - matches actual OpenHands API
     mockFetchWithProxy.mockImplementation(async (url: string, options?: RequestInit) => {
       if (url.includes('/health')) {
         // Health check
         return { ok: true };
       }
       if (url.endsWith('/api/conversations') && options?.method === 'POST') {
-        // Create conversation
+        // Create conversation with initial message
         return {
           ok: true,
           json: async () => createMockConversationResponse(),
         };
       }
-      if (url.includes('/start') && options?.method === 'POST') {
-        // Start agent loop
+      if (url.includes('/run') && options?.method === 'POST') {
+        // Run conversation
         return { ok: true };
       }
-      if (url.includes('/message') && options?.method === 'POST') {
-        // Send message
+      if (url.includes('/messages') && options?.method === 'POST') {
+        // Send message (for existing sessions)
         return { ok: true };
+      }
+      if (url.includes('/events/search')) {
+        // Get events
+        return {
+          ok: true,
+          json: async () => createMockEventsResponse(),
+        };
       }
       if (url.match(/\/api\/conversations\/[^/]+$/) && !options?.method) {
         // Get conversation state
         return {
           ok: true,
-          json: async () =>
-            createMockConversationState('completed', [
-              { role: 'user', content: 'test prompt' },
-              { role: 'assistant', content: 'Test response from OpenHands' },
-            ]),
+          json: async () => createMockConversationState('finished'),
         };
       }
       if (url.match(/\/api\/conversations\/[^/]+$/) && options?.method === 'DELETE') {
         // Delete conversation
         return { ok: true };
       }
-      return { ok: false, status: 404, statusText: 'Not Found' };
+      return {
+        ok: false,
+        status: 404,
+        statusText: 'Not Found',
+        text: async () => 'Not Found',
+      };
     });
   });
 
@@ -299,12 +331,13 @@ describe('OpenHandsSDKProvider', () => {
     });
 
     it('should handle API errors gracefully', async () => {
-      mockFetchWithProxy.mockImplementation(async (url: string) => {
-        if (url.includes('/api/conversations') && !url.includes('/messages')) {
+      mockFetchWithProxy.mockImplementation(async (url: string, options?: RequestInit) => {
+        if (url.endsWith('/api/conversations') && options?.method === 'POST') {
           return {
             ok: false,
             status: 500,
             statusText: 'Internal Server Error',
+            text: async () => 'Internal Server Error',
           };
         }
         return { ok: true };
@@ -349,6 +382,14 @@ describe('OpenHandsSDKProvider', () => {
   });
 
   describe('buildToolsConfig', () => {
+    beforeEach(() => {
+      disableCache();
+    });
+
+    afterEach(async () => {
+      enableCache();
+    });
+
     it('should disable all tools when no working_dir', async () => {
       const provider = new OpenHandsSDKProvider({
         config: {
@@ -447,7 +488,7 @@ describe('OpenHandsSDKProvider', () => {
 
       // Should have sent message to the existing session
       const messageCalls = mockFetchWithProxy.mock.calls.filter((call) =>
-        call[0].includes('/message'),
+        call[0].includes('/messages'),
       );
       expect(messageCalls).toHaveLength(1);
       expect(messageCalls[0][0]).toContain('existing-session-id');
@@ -467,6 +508,14 @@ describe('OpenHandsSDKProvider', () => {
   });
 
   describe('cleanup', () => {
+    beforeEach(() => {
+      disableCache();
+    });
+
+    afterEach(async () => {
+      enableCache();
+    });
+
     it('should clear sessions on cleanup', async () => {
       const provider = new OpenHandsSDKProvider({
         config: {
@@ -559,11 +608,12 @@ describe('OpenHandsSDKProvider', () => {
 
     it('should handle conversation creation failure', async () => {
       mockFetchWithProxy.mockImplementation(async (url: string, options?: RequestInit) => {
-        if (url.includes('/api/conversations') && options?.method === 'POST') {
+        if (url.endsWith('/api/conversations') && options?.method === 'POST') {
           return {
             ok: false,
             status: 400,
             statusText: 'Bad Request',
+            text: async () => 'Bad Request: Invalid parameters',
           };
         }
         return { ok: true };
@@ -582,10 +632,16 @@ describe('OpenHandsSDKProvider', () => {
 
     it('should handle message send failure', async () => {
       mockFetchWithProxy.mockImplementation(async (url: string, options?: RequestInit) => {
-        if (url.includes('/api/conversations') && options?.method === 'POST') {
+        if (url.endsWith('/api/conversations') && options?.method === 'POST') {
           return {
             ok: true,
             json: async () => createMockConversationResponse(),
+          };
+        }
+        if (url.includes('/events/search')) {
+          return {
+            ok: true,
+            json: async () => createMockEventsResponse(),
           };
         }
         if (url.includes('/messages') && options?.method === 'POST') {
@@ -593,6 +649,13 @@ describe('OpenHandsSDKProvider', () => {
             ok: false,
             status: 500,
             statusText: 'Internal Server Error',
+            text: async () => 'Internal Server Error',
+          };
+        }
+        if (url.match(/\/api\/conversations\/[^/]+$/) && !options?.method) {
+          return {
+            ok: true,
+            json: async () => createMockConversationState('finished'),
           };
         }
         return { ok: true };
@@ -601,6 +664,7 @@ describe('OpenHandsSDKProvider', () => {
       const provider = new OpenHandsSDKProvider({
         config: {
           baseUrl: 'http://localhost:3000',
+          session_id: 'existing-session', // Use existing session to test message send
         },
       });
 
@@ -611,20 +675,21 @@ describe('OpenHandsSDKProvider', () => {
 
     it('should handle conversation state polling failure', async () => {
       mockFetchWithProxy.mockImplementation(async (url: string, options?: RequestInit) => {
-        if (url.includes('/api/conversations') && options?.method === 'POST') {
+        if (url.endsWith('/api/conversations') && options?.method === 'POST') {
           return {
             ok: true,
             json: async () => createMockConversationResponse(),
           };
         }
-        if (url.includes('/messages') && options?.method === 'POST') {
+        if (url.includes('/run') && options?.method === 'POST') {
           return { ok: true };
         }
-        if (url.includes('/api/conversations/') && !options?.method) {
+        if (url.match(/\/api\/conversations\/[^/]+$/) && !options?.method) {
           return {
             ok: false,
             status: 404,
             statusText: 'Not Found',
+            text: async () => 'Conversation not found',
           };
         }
         return { ok: true };
@@ -643,23 +708,29 @@ describe('OpenHandsSDKProvider', () => {
 
     it('should handle error state in conversation', async () => {
       mockFetchWithProxy.mockImplementation(async (url: string, options?: RequestInit) => {
-        if (url.includes('/api/conversations') && options?.method === 'POST') {
+        if (url.endsWith('/api/conversations') && options?.method === 'POST') {
           return {
             ok: true,
             json: async () => createMockConversationResponse(),
           };
         }
-        if (url.includes('/messages') && options?.method === 'POST') {
+        if (url.includes('/run') && options?.method === 'POST') {
           return { ok: true };
         }
-        if (url.includes('/api/conversations/') && !options?.method) {
+        if (url.includes('/events/search')) {
           return {
             ok: true,
             json: async () =>
-              createMockConversationState('error', [
+              createMockEventsResponse([
                 { role: 'user', content: 'test' },
                 { role: 'assistant', content: 'Error occurred' },
               ]),
+          };
+        }
+        if (url.match(/\/api\/conversations\/[^/]+$/) && !options?.method) {
+          return {
+            ok: true,
+            json: async () => createMockConversationState('error'),
           };
         }
         return { ok: true };
@@ -673,7 +744,7 @@ describe('OpenHandsSDKProvider', () => {
 
       const result = await provider.callApi('Test prompt');
 
-      // Error state still returns the output (last assistant message)
+      // Error state still returns the output (last assistant message from events)
       expect(result.output).toBe('Error occurred');
     });
   });
