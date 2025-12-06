@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import path from 'path';
 
-import { importModule } from '../src/esm';
+import { importModule, isCjsInEsmError } from '../src/esm';
 import logger from '../src/logger';
 
 // Use __dirname directly since tests run in CommonJS mode
@@ -148,6 +148,72 @@ describe('ESM utilities', () => {
       const result = await importModule(modulePath, 'testFunction');
       expect(result).toEqual(expect.any(Function));
       expect(result()).toBe('esm default test result');
+    });
+
+    describe('CJS fallback for .js files', () => {
+      it('loads CommonJS .js files via CJS fallback when ESM fails', async () => {
+        const modulePath = path.resolve(testDir, '__fixtures__/testModuleCjsFallback.js');
+
+        const result = await importModule(modulePath);
+        expect(result).toEqual({
+          testValue: 'cjs-fallback-test',
+          testFunction: expect.any(Function),
+        });
+        expect(result.testFunction()).toBe('cjs fallback result');
+      });
+
+      it('returns named export via CJS fallback', async () => {
+        const modulePath = path.resolve(testDir, '__fixtures__/testModuleCjsFallback.js');
+
+        const result = await importModule(modulePath, 'testFunction');
+        expect(result).toEqual(expect.any(Function));
+        expect(result()).toBe('cjs fallback result');
+      });
+
+      it('returns named value via CJS fallback', async () => {
+        const modulePath = path.resolve(testDir, '__fixtures__/testModuleCjsFallback.js');
+
+        const result = await importModule(modulePath, 'testValue');
+        expect(result).toBe('cjs-fallback-test');
+      });
+    });
+  });
+
+  describe('isCjsInEsmError', () => {
+    it('detects "require is not defined" error', () => {
+      expect(isCjsInEsmError('ReferenceError: require is not defined')).toBe(true);
+    });
+
+    it('detects "module is not defined" error', () => {
+      expect(isCjsInEsmError('ReferenceError: module is not defined in ES module scope')).toBe(
+        true,
+      );
+    });
+
+    it('detects "exports is not defined" error', () => {
+      expect(isCjsInEsmError('ReferenceError: exports is not defined')).toBe(true);
+    });
+
+    it('detects "__dirname is not defined" error', () => {
+      expect(isCjsInEsmError('ReferenceError: __dirname is not defined in ES module scope')).toBe(
+        true,
+      );
+    });
+
+    it('detects "__filename is not defined" error', () => {
+      expect(isCjsInEsmError('ReferenceError: __filename is not defined')).toBe(true);
+    });
+
+    it('detects ERR_REQUIRE_ESM error', () => {
+      expect(isCjsInEsmError('Error [ERR_REQUIRE_ESM]: require() of ES Module not supported')).toBe(
+        true,
+      );
+    });
+
+    it('returns false for unrelated errors', () => {
+      expect(isCjsInEsmError('SyntaxError: Unexpected token')).toBe(false);
+      expect(isCjsInEsmError('TypeError: Cannot read property')).toBe(false);
+      expect(isCjsInEsmError('Module not found')).toBe(false);
     });
   });
 });

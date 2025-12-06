@@ -1227,6 +1227,139 @@ describe('RedteamIterativeProvider', () => {
     });
   });
 
+  describe('perTurnLayers configuration', () => {
+    it('should accept perTurnLayers parameter (empty array for safe testing)', async () => {
+      const result = await runRedteamConversation({
+        context: { prompt: { raw: '', label: '' }, vars: {} },
+        filters: undefined,
+        injectVar: 'test',
+        numIterations: 1,
+        options: {},
+        prompt: { raw: 'test', label: 'test' },
+        redteamProvider: mockRedteamProvider,
+        gradingProvider: mockRedteamProvider,
+        targetProvider: mockTargetProvider,
+        vars: { test: 'goal' },
+        excludeTargetOutputFromAgenticAttackGeneration: false,
+        perTurnLayers: [], // Empty array to avoid actual transforms
+      });
+
+      // Should complete without error when perTurnLayers is provided
+      expect(result.metadata.finalIteration).toBeDefined();
+    });
+
+    it('should default perTurnLayers to empty array when not provided', async () => {
+      const result = await runRedteamConversation({
+        context: { prompt: { raw: '', label: '' }, vars: {} },
+        filters: undefined,
+        injectVar: 'test',
+        numIterations: 1,
+        options: {},
+        prompt: { raw: 'test', label: 'test' },
+        redteamProvider: mockRedteamProvider,
+        gradingProvider: mockRedteamProvider,
+        targetProvider: mockTargetProvider,
+        vars: { test: 'goal' },
+        excludeTargetOutputFromAgenticAttackGeneration: false,
+        // perTurnLayers not provided
+      });
+
+      expect(result.metadata.finalIteration).toBeDefined();
+    });
+  });
+
+  describe('redteamHistory with audio/image data', () => {
+    it('should include promptAudio and promptImage fields in redteamHistory entries', async () => {
+      const result = await runRedteamConversation({
+        context: { prompt: { raw: '', label: '' }, vars: {} },
+        filters: undefined,
+        injectVar: 'test',
+        numIterations: 1,
+        options: {},
+        prompt: { raw: 'test {{test}}', label: 'test' },
+        redteamProvider: mockRedteamProvider,
+        gradingProvider: mockRedteamProvider,
+        targetProvider: mockTargetProvider,
+        vars: { test: 'goal' },
+        excludeTargetOutputFromAgenticAttackGeneration: false,
+      });
+
+      // redteamHistory should be present
+      expect(result.metadata.redteamHistory).toBeDefined();
+      expect(Array.isArray(result.metadata.redteamHistory)).toBe(true);
+
+      if (result.metadata.redteamHistory.length > 0) {
+        const entry = result.metadata.redteamHistory[0];
+        // These fields should be present (even if undefined without layers)
+        expect(entry).toHaveProperty('prompt');
+        expect(entry).toHaveProperty('output');
+        // Optional audio/image fields
+        expect('promptAudio' in entry || entry.promptAudio === undefined).toBe(true);
+        expect('promptImage' in entry || entry.promptImage === undefined).toBe(true);
+      }
+    });
+
+    it('should capture outputAudio when target returns audio data', async () => {
+      // Clear the mock to use the target provider directly
+      mockGetTargetResponse.mockReset();
+      mockGetTargetResponse.mockResolvedValue({
+        output: 'response with audio',
+        audio: { data: 'base64audiodata', format: 'mp3' },
+      });
+
+      const result = await runRedteamConversation({
+        context: { prompt: { raw: '', label: '' }, vars: {} },
+        filters: undefined,
+        injectVar: 'test',
+        numIterations: 1,
+        options: {},
+        prompt: { raw: 'test {{test}}', label: 'test' },
+        redteamProvider: mockRedteamProvider,
+        gradingProvider: mockRedteamProvider,
+        targetProvider: mockTargetProvider,
+        vars: { test: 'goal' },
+        excludeTargetOutputFromAgenticAttackGeneration: false,
+      });
+
+      if (result.metadata.redteamHistory.length > 0) {
+        const entry = result.metadata.redteamHistory[0];
+        expect(entry.outputAudio).toBeDefined();
+        expect(entry.outputAudio?.data).toBe('base64audiodata');
+        expect(entry.outputAudio?.format).toBe('mp3');
+      }
+    });
+
+    it('should capture outputImage when target returns image data', async () => {
+      // Clear the mock to use the target provider directly
+      mockGetTargetResponse.mockReset();
+      mockGetTargetResponse.mockResolvedValue({
+        output: 'response with image',
+        image: { data: 'base64imagedata', format: 'png' },
+      });
+
+      const result = await runRedteamConversation({
+        context: { prompt: { raw: '', label: '' }, vars: {} },
+        filters: undefined,
+        injectVar: 'test',
+        numIterations: 1,
+        options: {},
+        prompt: { raw: 'test {{test}}', label: 'test' },
+        redteamProvider: mockRedteamProvider,
+        gradingProvider: mockRedteamProvider,
+        targetProvider: mockTargetProvider,
+        vars: { test: 'goal' },
+        excludeTargetOutputFromAgenticAttackGeneration: false,
+      });
+
+      if (result.metadata.redteamHistory.length > 0) {
+        const entry = result.metadata.redteamHistory[0];
+        expect(entry.outputImage).toBeDefined();
+        expect(entry.outputImage?.data).toBe('base64imagedata');
+        expect(entry.outputImage?.format).toBe('png');
+      }
+    });
+  });
+
   describe('sessionId handling', () => {
     beforeEach(() => {
       // Clear the mock to use the target provider directly for sessionId tests

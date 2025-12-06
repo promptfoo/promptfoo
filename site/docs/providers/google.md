@@ -363,6 +363,34 @@ providers:
 
 See the [Google Imagen example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-imagen).
 
+### Gemini Native Image Generation Models
+
+Gemini models can generate images natively using the `generateContent` API. Models with `-image` in the name automatically enable image generation:
+
+- `google:gemini-3-pro-image-preview` - Gemini 3 Pro with advanced image generation (~$0.13/image)
+- `google:gemini-2.5-flash-image` - Gemini 2.5 Flash with image generation (~$0.04/image)
+
+Configuration options:
+
+```yaml
+providers:
+  - id: google:gemini-3-pro-image-preview
+    config:
+      imageAspectRatio: '16:9' # 1:1, 2:3, 3:2, 3:4, 4:3, 4:5, 5:4, 9:16, 16:9, 21:9
+      imageSize: '2K' # 1K, 2K, 4K
+      temperature: 0.7
+```
+
+Key differences from Imagen:
+
+- Uses same namespace as Gemini chat (`google:model-name`)
+- More aspect ratio options (includes 2:3, 3:2, 4:5, 5:4, 21:9)
+- Resolution control via `imageSize` (1K, 2K, 4K) - Gemini 3 models only
+- Can return both text and images in the same response
+- Uses same authentication as Gemini chat models
+
+See the [Google Imagen example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-imagen) for Gemini image generation configurations.
+
 ### Basic Configuration
 
 The provider supports various configuration options that can be used to customize the behavior of the model:

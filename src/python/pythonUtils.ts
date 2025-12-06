@@ -1,22 +1,10 @@
-﻿import fs from 'fs';
+import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Lazy initialization to avoid module-level side effects in Jest
-let currentDir: string | undefined;
-function getCurrentDir(): string {
-  if (!currentDir) {
-    currentDir = __dirname;
-  }
-  return currentDir;
-}
 
 import { PythonShell } from 'python-shell';
 import { getEnvBool, getEnvString } from '../envars';
+import { getWrapperDir } from '../esm';
 import logger from '../logger';
 import { safeJsonStringify } from '../util/json';
 import { execFile } from 'child_process';
@@ -310,7 +298,7 @@ export async function runPython(
     env: process.env,
     mode: 'binary',
     pythonPath,
-    scriptPath: getCurrentDir(),
+    scriptPath: getWrapperDir('python'),
     // When `inherit` is used, `import pdb; pdb.set_trace()` will work.
     ...(getEnvBool('PROMPTFOO_PYTHON_DEBUG_ENABLED') && { stdio: 'inherit' }),
   };
