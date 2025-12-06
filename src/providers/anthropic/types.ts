@@ -25,6 +25,18 @@ export interface WebSearchToolConfig {
 
 export type AnthropicToolConfig = WebFetchToolConfig | WebSearchToolConfig;
 
+// Structured outputs configuration (JSON schema)
+export interface OutputFormat {
+  type: 'json_schema';
+  schema: {
+    type: 'object';
+    properties: Record<string, any>;
+    required?: string[];
+    additionalProperties?: false;
+    [key: string]: any;
+  };
+}
+
 export interface AnthropicMessageOptions {
   apiBaseUrl?: string;
   apiKey?: string;
@@ -40,9 +52,10 @@ export interface AnthropicMessageOptions {
   tools?: (Anthropic.Tool | AnthropicToolConfig)[];
   top_k?: number;
   top_p?: number;
-  beta?: string[]; // For features like 'output-128k-2025-02-19', 'web-fetch-2025-09-10'
+  beta?: string[]; // For features like 'output-128k-2025-02-19', 'web-fetch-2025-09-10', 'structured-outputs-2025-11-13'
   showThinking?: boolean;
   mcp?: MCPConfig;
+  output_format?: OutputFormat; // Structured outputs - JSON schema for response format
 }
 
 export interface AnthropicCompletionOptions {

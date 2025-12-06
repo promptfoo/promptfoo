@@ -9,6 +9,6 @@
     "eval": "cd ../.. && npm run local -- eval -c examples/redteam-tracing-example/promptfooconfig.yaml"
   },
   "dependencies": {
-    "express": "^4.18.2"
+    "express": "^5.2.1"
   }
 }

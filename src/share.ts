@@ -105,11 +105,13 @@ async function sendEvalRecord(
   url: string,
   headers: Record<string, string>,
 ): Promise<string> {
-  const evalDataWithoutResults = { ...evalRecord, results: [] };
+  // Fetch traces for the eval
+  const traces = await evalRecord.getTraces();
+  const evalDataWithoutResults = { ...evalRecord, results: [], traces };
   const jsonData = JSON.stringify(evalDataWithoutResults);
 
   logger.debug(
-    `Sending initial eval data to ${url} - eval ${evalRecord.id} with ${evalRecord.prompts.length} prompts`,
+    `Sending initial eval data to ${url} - eval ${evalRecord.id} with ${evalRecord.prompts.length} prompts ${traces.length > 0 ? `and trace data` : ''}`,
   );
 
   const response = await fetchWithProxy(url, {
@@ -248,7 +250,8 @@ async function sendChunkedResults(evalRecord: Eval, url: string): Promise<string
     headers['Authorization'] = `Bearer ${cloudConfig.getApiKey()}`;
   }
 
-  const totalResults = await evalRecord.getResultsCount();
+  // Use total row count (not distinct test count) since we iterate over all result rows
+  const totalResults = await evalRecord.getTotalResultRowCount();
   logger.debug(`Total results to share: ${totalResults}`);
 
   // Setup progress bar only if not in verbose mode or CI

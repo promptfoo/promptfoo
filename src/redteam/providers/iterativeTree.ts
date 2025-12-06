@@ -14,10 +14,24 @@
  * @module RedteamIterative
  */
 import dedent from 'dedent';
+import type { Environment } from 'nunjucks';
 import { v4 as uuidv4 } from 'uuid';
+
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
+import type {
+  ApiProvider,
+  AtomicTestCase,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  GradingResult,
+  GuardrailResponse,
+  NunjucksFilterMap,
+  Prompt,
+  ProviderResponse,
+  TokenUsage,
+} from '../../types/index';
 import invariant from '../../util/invariant';
 import { extractFirstJsonObject } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
@@ -25,6 +39,14 @@ import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { shouldGenerateRemote } from '../remoteGeneration';
+import {
+  applyRuntimeTransforms,
+  type LayerConfig,
+  type MediaData,
+  type TransformResult,
+} from '../shared/runtimeTransform';
+import { Strategies } from '../strategies';
+import type { BaseRedteamMetadata } from '../types';
 import { getSessionId } from '../util';
 import {
   ATTACKER_SYSTEM_PROMPT,
@@ -38,21 +60,6 @@ import {
   redteamProviderManager,
   type TargetResponse,
 } from './shared';
-import type { Environment } from 'nunjucks';
-
-import type {
-  ApiProvider,
-  AtomicTestCase,
-  CallApiContextParams,
-  CallApiOptionsParams,
-  GradingResult,
-  GuardrailResponse,
-  NunjucksFilterMap,
-  Prompt,
-  ProviderResponse,
-  TokenUsage,
-} from '../../types';
-import type { BaseRedteamMetadata } from '../types';
 
 // Based on: https://arxiv.org/abs/2312.02119
 
@@ -212,6 +219,10 @@ export async function evaluateResponse(
       explanation: parsed?.currentResponse?.explanation,
     };
   } catch (e) {
+    // Re-throw abort errors to properly cancel the operation
+    if (e instanceof Error && e.name === 'AbortError') {
+      throw e;
+    }
     logger.debug(`[IterativeTree] Error parsing judge response, using default score: ${e}`);
     return { score: 1, explanation: 'Failed to parse judge response' };
   }
@@ -251,6 +262,10 @@ export async function getNewPrompt(
       // Primary path: extract first JSON object from possibly fenced/prose output
       retObj = extractFirstJsonObject<{ improvement: string; prompt: string }>(redteamResp.output);
     } catch (primaryErr) {
+      // Re-throw abort errors to properly cancel the operation
+      if (primaryErr instanceof Error && primaryErr.name === 'AbortError') {
+        throw primaryErr;
+      }
       // Fallback: sometimes models return a JSON-encoded string; try one decode then extract
       try {
         const decoded = JSON.parse(redteamResp.output);
@@ -260,6 +275,10 @@ export async function getNewPrompt(
           retObj = decoded as { improvement: string; prompt: string };
         }
       } catch (fallbackErr) {
+        // Re-throw abort errors to properly cancel the operation
+        if (fallbackErr instanceof Error && fallbackErr.name === 'AbortError') {
+          throw fallbackErr;
+        }
         logger.info(
           `[IterativeTree] Failed to parse attacker response as JSON (primary and fallback). Skipping this turn. primary=${String(
             primaryErr,
@@ -385,7 +404,11 @@ export async function selectNodes(nodes: TreeNode[]): Promise<TreeNode[]> {
 export interface TreeSearchOutput {
   id: string; // UUID
   prompt: string;
+  promptAudio?: MediaData;
+  promptImage?: MediaData;
   output: string;
+  outputAudio?: MediaData;
+  outputImage?: MediaData;
   score: number;
   depth: number;
   parentId?: string; // UUID
@@ -435,6 +458,7 @@ async function runRedteamConversation({
   test,
   vars,
   excludeTargetOutputFromAgenticAttackGeneration,
+  perTurnLayers = [],
 }: {
   context: CallApiContextParams;
   filters: NunjucksFilterMap | undefined;
@@ -447,6 +471,7 @@ async function runRedteamConversation({
   test?: AtomicTestCase;
   vars: Record<string, string | object>;
   excludeTargetOutputFromAgenticAttackGeneration: boolean;
+  perTurnLayers?: LayerConfig[];
 }): Promise<RedteamTreeResponse> {
   const nunjucks = getNunjucksEngine();
   const goal: string = context?.test?.metadata?.goal || (vars[injectVar] as string);
@@ -529,14 +554,55 @@ async function runRedteamConversation({
           `[Depth ${depth}, Attempt ${attempts}] Generated new prompt: "${newInjectVar.substring(0, 30)}...", improvement="${improvement.substring(0, 30)}...". Max score so far: ${maxScore}`,
         );
 
+        // ═══════════════════════════════════════════════════════════════════════
+        // Apply per-turn layer transforms if configured (e.g., audio, base64)
+        // This enables: layer: { steps: [jailbreak:tree, audio] }
+        // For tree iterative, we just transform the attack and send directly
+        // ═══════════════════════════════════════════════════════════════════════
+        let lastTransformResult: TransformResult | undefined;
+        let finalInjectVar = newInjectVar;
+        if (perTurnLayers.length > 0) {
+          logger.debug('[IterativeTree] Applying per-turn transforms', {
+            depth,
+            attempt: attempts,
+            layers: perTurnLayers.map((l) => (typeof l === 'string' ? l : l.id)),
+          });
+          lastTransformResult = await applyRuntimeTransforms(
+            newInjectVar,
+            injectVar,
+            perTurnLayers,
+            Strategies,
+          );
+
+          if (lastTransformResult.error) {
+            logger.warn('[IterativeTree] Transform failed, skipping attempt', {
+              depth,
+              attempt: attempts,
+              error: lastTransformResult.error,
+            });
+            continue;
+          }
+
+          finalInjectVar = lastTransformResult.prompt;
+          logger.debug('[IterativeTree] Per-turn transforms applied', {
+            depth,
+            attempt: attempts,
+            originalLength: newInjectVar.length,
+            transformedLength: finalInjectVar.length,
+            hasAudio: !!lastTransformResult.audio,
+            hasImage: !!lastTransformResult.image,
+          });
+        }
+
         const targetPrompt = await renderPrompt(
           prompt,
           {
             ...iterationVars,
-            [injectVar]: newInjectVar,
+            [injectVar]: finalInjectVar,
           },
           filters,
           targetProvider,
+          [injectVar], // Skip template rendering for injection variable to prevent double-evaluation
         );
 
         const targetResponse = await getTargetResponse(
@@ -559,8 +625,14 @@ async function runRedteamConversation({
             id: uuidv4(),
             improvement,
             output: typeof targetResponse.output === 'string' ? targetResponse.output : '',
+            outputAudio:
+              targetResponse.audio?.data && targetResponse.audio?.format
+                ? { data: targetResponse.audio.data, format: targetResponse.audio.format }
+                : undefined,
             parentId: node.id,
             prompt: targetPrompt,
+            promptAudio: lastTransformResult?.audio,
+            promptImage: lastTransformResult?.image,
             score: 0,
             wasSelected: false,
             guardrails: targetResponse.guardrails,
@@ -661,8 +733,14 @@ async function runRedteamConversation({
             graderPassed,
             id: uuidv4(),
             output: targetResponse.output,
+            outputAudio:
+              targetResponse.audio?.data && targetResponse.audio?.format
+                ? { data: targetResponse.audio.data, format: targetResponse.audio.format }
+                : undefined,
             parentId: node.id,
             prompt: targetPrompt,
+            promptAudio: lastTransformResult?.audio,
+            promptImage: lastTransformResult?.image,
             score,
             wasSelected: false,
             guardrails: targetResponse.guardrails,
@@ -693,7 +771,13 @@ async function runRedteamConversation({
           treeOutputs.push({
             id: uuidv4(),
             prompt: targetPrompt,
+            promptAudio: lastTransformResult?.audio,
+            promptImage: lastTransformResult?.image,
             output: bestResponse,
+            outputAudio:
+              targetResponse.audio?.data && targetResponse.audio?.format
+                ? { data: targetResponse.audio.data, format: targetResponse.audio.format }
+                : undefined,
             score,
             depth,
             parentId: node.id,
@@ -728,8 +812,14 @@ async function runRedteamConversation({
             graderPassed,
             id: uuidv4(),
             output: bestResponse,
+            outputAudio:
+              targetResponse.audio?.data && targetResponse.audio?.format
+                ? { data: targetResponse.audio.data, format: targetResponse.audio.format }
+                : undefined,
             parentId: node.id,
             prompt: targetPrompt,
+            promptAudio: lastTransformResult?.audio,
+            promptImage: lastTransformResult?.image,
             score,
             wasSelected: false,
             guardrails: targetResponse.guardrails,
@@ -769,8 +859,14 @@ async function runRedteamConversation({
           id: uuidv4(),
           improvement,
           output: targetResponse.output,
+          outputAudio:
+            targetResponse.audio?.data && targetResponse.audio?.format
+              ? { data: targetResponse.audio.data, format: targetResponse.audio.format }
+              : undefined,
           parentId: node.id,
           prompt: targetPrompt,
+          promptAudio: lastTransformResult?.audio,
+          promptImage: lastTransformResult?.image,
           score,
           wasSelected: true,
           guardrails: targetResponse.guardrails,
@@ -793,6 +889,7 @@ async function runRedteamConversation({
     },
     filters,
     targetProvider,
+    [injectVar], // Skip template rendering for injection variable to prevent double-evaluation
   );
 
   const finalTargetResponse = await getTargetResponse(
@@ -814,7 +911,12 @@ async function runRedteamConversation({
   treeOutputs.push({
     id: uuidv4(),
     prompt: finalTargetPrompt,
+    // Note: promptAudio/promptImage not included here as this is a summary node after tree exploration
     output: bestResponse,
+    outputAudio:
+      finalTargetResponse.audio?.data && finalTargetResponse.audio?.format
+        ? { data: finalTargetResponse.audio.data, format: finalTargetResponse.audio.format }
+        : undefined,
     score: maxScore,
     depth: MAX_DEPTH - 1,
     parentId: bestNode.id,

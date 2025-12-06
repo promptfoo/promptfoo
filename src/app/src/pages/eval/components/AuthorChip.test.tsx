@@ -1,6 +1,6 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthorChip } from './AuthorChip';
 
 describe('AuthorChip', () => {
@@ -13,6 +13,11 @@ describe('AuthorChip', () => {
   };
 
   beforeEach(() => {
+    vi.clearAllMocks();
+    // Note: Do NOT use vi.useFakeTimers() here - it breaks userEvent interactions
+  });
+
+  afterEach(() => {
     vi.clearAllMocks();
   });
 
@@ -86,13 +91,24 @@ describe('AuthorChip', () => {
   });
 
   it('shows loading indicator while saving', async () => {
+    let resolvePromise: () => void;
     mockOnEditAuthor.mockImplementationOnce(
-      () => new Promise((resolve) => setTimeout(resolve, 100)),
+      () =>
+        new Promise<void>((resolve) => {
+          resolvePromise = resolve;
+        }),
     );
+
     render(<AuthorChip {...defaultProps} />);
     await userEvent.click(screen.getByText('test@example.com'));
     await userEvent.click(screen.getByText('Save'));
     expect(screen.getByRole('progressbar')).toBeInTheDocument();
+
+    // Resolve the promise to complete the save
+    await act(async () => {
+      resolvePromise!();
+    });
+
     await waitFor(() => {
       expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
     });

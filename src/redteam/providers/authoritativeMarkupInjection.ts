@@ -2,11 +2,6 @@ import { VERSION } from '../../constants';
 import { renderPrompt } from '../../evaluatorHelpers';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
-import { fetchWithProxy } from '../../util/fetch/index';
-import invariant from '../../util/invariant';
-import { safeJsonStringify } from '../../util/json';
-import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
-
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -14,6 +9,10 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../../types/providers';
+import { fetchWithProxy } from '../../util/fetch/index';
+import invariant from '../../util/invariant';
+import { safeJsonStringify } from '../../util/json';
+import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
 
 interface AuthoritativeMarkupInjectionConfig {
   injectVar: string;
@@ -73,13 +72,17 @@ export default class AuthoritativeMarkupInjectionProvider implements ApiProvider
       `[AuthoritativeMarkupInjection] Sending request to ${getRemoteGenerationUrl()}: ${body}`,
     );
 
-    const response = await fetchWithProxy(getRemoteGenerationUrl(), {
-      body,
-      headers: {
-        'Content-Type': 'application/json',
+    const response = await fetchWithProxy(
+      getRemoteGenerationUrl(),
+      {
+        body,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        method: 'POST',
       },
-      method: 'POST',
-    });
+      options?.abortSignal,
+    );
 
     const data = await response.json();
     if (typeof data?.message !== 'object' || !data.message?.content || !data.message?.role) {
@@ -101,6 +104,7 @@ export default class AuthoritativeMarkupInjectionProvider implements ApiProvider
       targetVars,
       context.filters,
       targetProvider,
+      [this.config.injectVar], // Skip template rendering for injection variable to prevent double-evaluation
     );
 
     logger.debug(`[AuthoritativeMarkupInjection] Rendered attack prompt`, {

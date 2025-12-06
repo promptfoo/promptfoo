@@ -6,7 +6,7 @@
 
 import type { Command } from 'commander';
 import telemetry from '../../telemetry';
-import type { ScanOptions } from '../scanner';
+import type { ScanOptions } from '../scanner/index';
 
 /**
  * Register the run subcommand with Commander

@@ -1,16 +1,30 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
 import { fetchWithCache } from '../../src/cache';
 import logger from '../../src/logger';
 import { AI21ChatCompletionProvider } from '../../src/providers/ai21';
 
-jest.mock('../../src/cache');
-jest.mock('../../src/logger');
+vi.mock('../../src/cache', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    fetchWithCache: vi.fn(),
+  };
+});
+vi.mock('../../src/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+  },
+}));
 
 describe('AI21ChatCompletionProvider', () => {
   let originalApiKey: string | undefined;
 
   beforeEach(() => {
-    jest.clearAllMocks();
-    jest.resetAllMocks();
+    vi.clearAllMocks();
+    vi.resetAllMocks();
     // Save original environment variable
     originalApiKey = process.env.AI21_API_KEY;
     // Ensure clean state for environment
@@ -24,7 +38,7 @@ describe('AI21ChatCompletionProvider', () => {
     } else {
       process.env.AI21_API_KEY = originalApiKey;
     }
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('should construct with valid model name', () => {
@@ -33,7 +47,7 @@ describe('AI21ChatCompletionProvider', () => {
   });
 
   it('should warn when constructing with unknown model', () => {
-    const mockWarn = jest.spyOn(logger, 'warn').mockImplementation();
+    const mockWarn = vi.spyOn(logger, 'warn').mockImplementation(function () {});
     new AI21ChatCompletionProvider('unknown-model');
     expect(mockWarn).toHaveBeenCalledWith(expect.stringContaining('unknown-model'));
     mockWarn.mockRestore();
@@ -90,7 +104,7 @@ describe('AI21ChatCompletionProvider', () => {
       statusText: 'OK',
     };
 
-    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
     const provider = new AI21ChatCompletionProvider('jamba-1.5-mini', {
       config: { apiKey: 'test-key' },
@@ -115,7 +129,7 @@ describe('AI21ChatCompletionProvider', () => {
       statusText: 'Bad Request',
     };
 
-    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
     const provider = new AI21ChatCompletionProvider('jamba-1.5-mini', {
       config: { apiKey: 'test-key' },
@@ -135,7 +149,7 @@ describe('AI21ChatCompletionProvider', () => {
       statusText: 'OK',
     };
 
-    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
     const provider = new AI21ChatCompletionProvider('jamba-1.5-mini', {
       config: { apiKey: 'test-key' },
@@ -146,7 +160,7 @@ describe('AI21ChatCompletionProvider', () => {
   });
 
   it('should handle network errors', async () => {
-    jest.mocked(fetchWithCache).mockRejectedValue(new Error('Network error'));
+    vi.mocked(fetchWithCache).mockRejectedValue(new Error('Network error'));
 
     const provider = new AI21ChatCompletionProvider('jamba-1.5-mini', {
       config: { apiKey: 'test-key' },
@@ -177,7 +191,7 @@ describe('AI21ChatCompletionProvider', () => {
       statusText: 'OK',
     };
 
-    jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+    vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
     const provider = new AI21ChatCompletionProvider('jamba-1.5-mini', {
       config: { apiKey: 'test-key' },

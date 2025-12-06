@@ -1,23 +1,24 @@
+import { vi, describe, it, expect } from 'vitest';
 import ModelAudit from '../../src/models/modelAudit';
 import type { ModelAuditScanResults } from '../../src/types/modelAudit';
 
 // Mock the database
-jest.mock('../../src/database', () => ({
+vi.mock('../../src/database', () => ({
   getDb: () => ({
     insert: () => ({
       values: () => ({
-        run: jest.fn().mockResolvedValue({}),
+        run: vi.fn().mockResolvedValue({}),
       }),
     }),
     select: () => ({
       from: () => ({
         where: () => ({
-          get: jest.fn().mockResolvedValue(null),
+          get: vi.fn().mockResolvedValue(null),
         }),
         orderBy: () => ({
-          all: jest.fn().mockResolvedValue([]),
+          all: vi.fn().mockResolvedValue([]),
           limit: () => ({
-            all: jest.fn().mockResolvedValue([]),
+            all: vi.fn().mockResolvedValue([]),
           }),
         }),
       }),

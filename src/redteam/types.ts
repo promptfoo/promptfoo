@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import type { ApiProvider, ProviderOptions } from '../types/providers';
-import type { FrameworkComplianceId, Plugin, Severity } from './constants';
+import { type FrameworkComplianceId, type Plugin, Severity, SeveritySchema } from './constants';
 import { isValidPolicyId } from './plugins/policy/validators';
 
 // Modifiers are used to modify the behavior of the plugin.
@@ -32,6 +32,7 @@ export type PoliciesById = Map<
 
 // Base types
 export type RedteamObjectConfig = Record<string, unknown>;
+
 export interface TracingConfig {
   enabled?: boolean;
   includeInAttack?: boolean;
@@ -45,41 +46,69 @@ export interface TracingConfig {
   sanitizeAttributes?: boolean;
   strategies?: Record<string, TracingConfig>;
 }
-export type PluginConfig = {
-  examples?: string[];
-  graderExamples?: {
-    output: string;
-    pass: boolean;
-    score: number;
-    reason: string;
-  }[];
-  graderGuidance?: string;
-  severity?: Severity;
-  language?: string | string[];
-  prompt?: string;
-  purpose?: string;
-  modifiers?: Partial<Record<Modifier, unknown>>;
-  // BOLA
-  targetIdentifiers?: string[];
-  // BFLA
-  targetSystems?: string[];
-  // Competitor
-  mentions?: boolean;
-  // SSRF
-  targetUrls?: string[];
-  // PII
-  name?: string;
-  // CyberSecEval
-  multilingual?: boolean;
 
-  indirectInjectionVar?: string;
-  intent?: Intent | Intent[];
-  policy?: Policy;
-  systemPrompt?: string;
+export const PluginConfigSchema = z.object({
+  examples: z.array(z.string()).optional(),
+  graderExamples: z
+    .array(
+      z.object({
+        output: z.string(),
+        pass: z.boolean(),
+        score: z.number(),
+        reason: z.string(),
+      }),
+    )
+    .optional(),
+  graderGuidance: z.string().optional(),
+  severity: SeveritySchema.optional(),
+  language: z.union([z.string(), z.array(z.string())]).optional(),
+  prompt: z.string().optional(),
+  purpose: z.string().optional(),
+  // TODO: should be z.record(Modifier, z.unknown())
+  modifiers: z.record(z.unknown()).optional(),
+  // BOLA
+  targetIdentifiers: z.array(z.string()).optional(),
+  // BFLA
+  targetSystems: z.array(z.string()).optional(),
+  // Competitor
+  mentions: z.boolean().optional(),
+  // SSRF
+  targetUrls: z.array(z.string()).optional(),
+  // PII
+  name: z.string().optional(),
+  // CyberSecEval
+  multilingual: z.boolean().optional(),
+
+  indirectInjectionVar: z.string().optional(),
+  intent: z.union([z.string(), z.array(z.union([z.string(), z.array(z.string())]))]).optional(),
+  policy: z.union([z.string(), PolicyObjectSchema]).optional(),
+  systemPrompt: z.string().optional(),
   // Strategy exclusions - allows plugins to exclude incompatible strategies
-  excludeStrategies?: string[];
-};
-export type StrategyConfig = RedteamObjectConfig;
+  excludeStrategies: z.array(z.string()).optional(),
+
+  // Allow for the inclusion of a nonce to prevent caching of test cases.
+  __nonce: z.number().optional(),
+});
+
+export type PluginConfig = z.infer<typeof PluginConfigSchema>;
+
+export const StrategyConfigSchema = z
+  .object({
+    enabled: z.boolean().optional(),
+    plugins: z.array(z.string()).optional(),
+    // Allow arbitrary extra fields for strategy configs
+    // Use .catchall to accept any additional unknown properties
+    // See: https://github.com/colinhacks/zod#catchall
+  })
+  .catchall(z.unknown());
+
+export type StrategyConfig = z.infer<typeof StrategyConfigSchema>;
+
+export const ConversationMessageSchema = z.object({
+  role: z.enum(['assistant', 'user']),
+  content: z.string(),
+});
+export type ConversationMessage = z.infer<typeof ConversationMessageSchema>;
 
 type ConfigurableObject = {
   id: string;
@@ -107,13 +136,9 @@ export type RedteamPluginObject = ConfigurableObject &
   };
 export type RedteamPlugin = string | RedteamPluginObject;
 
-export type RedteamStrategyObject = ConfigurableObject & {
+export type RedteamStrategyObject = {
   id: string;
-  config?: {
-    enabled?: boolean;
-    plugins?: string[];
-    [key: string]: unknown;
-  };
+  config?: StrategyConfig;
 };
 export type RedteamStrategy = string | RedteamStrategyObject;
 

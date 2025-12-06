@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import type { AssertionType, GradingResult } from '@promptfoo/types';
 import * as ReactDOM from 'react-dom/client';
@@ -77,6 +77,11 @@ const defaultProps = {
 
 describe('EvalOutputPromptDialog', () => {
   beforeEach(() => {
+    vi.clearAllMocks();
+    // Note: Do NOT use vi.useFakeTimers() here - it breaks component rendering
+  });
+
+  afterEach(() => {
     vi.clearAllMocks();
   });
 
@@ -329,6 +334,9 @@ describe('EvalOutputPromptDialog', () => {
   });
 
   it('handles unmounting during drawer transition', async () => {
+    // This test needs fake timers to control transition timing
+    vi.useFakeTimers();
+
     const container = document.createElement('div');
     document.body.appendChild(container);
 
@@ -337,32 +345,35 @@ describe('EvalOutputPromptDialog', () => {
     const root = ReactDOM.createRoot(container);
     root.render(<EvalOutputPromptDialog {...defaultProps} />);
 
-    await act(() => new Promise((resolve) => setTimeout(resolve, 50)));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(50);
+    });
 
     act(() => {
       root.unmount();
     });
 
-    await act(() => new Promise((resolve) => setTimeout(resolve, transitionDuration.enter)));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(transitionDuration.enter);
+    });
 
     expect(true).toBe(true);
 
     document.body.removeChild(container);
+    vi.useRealTimers();
   });
 
   it('passes the promptIndex prop to DebuggingPanel when provided', async () => {
     const promptIndex = 5;
     render(<EvalOutputPromptDialog {...defaultProps} promptIndex={promptIndex} />);
 
-    // Wait for traces to be fetched
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 100));
+    // Wait for traces tab to be available
+    await waitFor(() => {
+      expect(screen.getByText('Traces')).toBeInTheDocument();
     });
 
     const tracesTab = screen.getByText('Traces');
-    await act(async () => {
-      await userEvent.click(tracesTab);
-    });
+    await userEvent.click(tracesTab);
 
     expect(MockDebuggingPanel).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -375,9 +386,9 @@ describe('EvalOutputPromptDialog', () => {
   it('passes undefined promptIndex to DebuggingPanel when promptIndex is not provided', async () => {
     render(<EvalOutputPromptDialog {...defaultProps} promptIndex={undefined} />);
 
-    // Wait for traces to be fetched
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 100));
+    // Wait for traces tab to be available
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: /traces/i })).toBeInTheDocument();
     });
 
     const tracesTab = screen.getByRole('tab', { name: /traces/i });
@@ -395,9 +406,9 @@ describe('EvalOutputPromptDialog', () => {
       <EvalOutputPromptDialog {...defaultProps} testIndex={undefined} promptIndex={promptIndex} />,
     );
 
-    // Wait for traces to be fetched
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 100));
+    // Wait for traces tab to be available
+    await waitFor(() => {
+      expect(screen.getByText('Traces')).toBeInTheDocument();
     });
 
     const tracesTab = screen.getByText('Traces');
@@ -602,20 +613,15 @@ describe('EvalOutputPromptDialog metadata interaction', () => {
     const cell = screen.getByText(/^a+\.\.\.$/);
 
     // First click to expand
-    await act(async () => {
-      await user.click(cell);
-    });
+    await user.click(cell);
+
     expect(screen.getByText(longValue)).toBeInTheDocument();
 
-    // Wait just over the double-click threshold (300ms)
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 301));
-    });
+    // Wait just over the double-click threshold (300ms) using real delay
+    await new Promise((resolve) => setTimeout(resolve, 310));
 
-    // Second click should keep it expanded
-    await act(async () => {
-      await user.click(cell);
-    });
+    // Second click should keep it expanded (not counted as double-click)
+    await user.click(cell);
 
     expect(screen.getByText(longValue)).toBeInTheDocument();
   });
@@ -652,11 +658,13 @@ describe('EvalOutputPromptDialog metadata interaction', () => {
 });
 
 describe('EvalOutputPromptDialog dependency injection', () => {
-  let user: ReturnType<typeof userEvent.setup>;
-
   beforeEach(() => {
     vi.clearAllMocks();
-    user = userEvent.setup();
+    // Note: Do NOT use vi.useFakeTimers() here - it causes component rendering issues
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
   });
 
   it('should work without dependencies (graceful degradation)', async () => {
@@ -672,14 +680,10 @@ describe('EvalOutputPromptDialog dependency injection', () => {
     };
 
     render(<EvalOutputPromptDialog {...propsWithoutDependencies} />);
-    await act(async () => {
-      await user.click(screen.getByRole('tab', { name: 'Metadata' }));
-    });
+    await userEvent.click(screen.getByRole('tab', { name: 'Metadata' }));
 
     const filterButton = screen.getByLabelText('Filter by testKey');
-    await act(async () => {
-      await user.click(filterButton);
-    });
+    await userEvent.click(filterButton);
 
     // Should close dialog without errors
     expect(mockOnClose).toHaveBeenCalledTimes(1);
@@ -698,14 +702,10 @@ describe('EvalOutputPromptDialog dependency injection', () => {
     };
 
     render(<EvalOutputPromptDialog {...propsWithCustomFilters} />);
-    await act(async () => {
-      await user.click(screen.getByRole('tab', { name: 'Metadata' }));
-    });
+    await userEvent.click(screen.getByRole('tab', { name: 'Metadata' }));
 
     const filterButton = screen.getByLabelText('Filter by customField');
-    await act(async () => {
-      await user.click(filterButton);
-    });
+    await userEvent.click(filterButton);
 
     expect(customResetFilters).toHaveBeenCalledTimes(1);
     expect(customAddFilter).toHaveBeenCalledWith({
@@ -730,14 +730,10 @@ describe('EvalOutputPromptDialog dependency injection', () => {
     };
 
     render(<EvalOutputPromptDialog {...propsWithObjectMetadata} />);
-    await act(async () => {
-      await user.click(screen.getByRole('tab', { name: 'Metadata' }));
-    });
+    await userEvent.click(screen.getByRole('tab', { name: 'Metadata' }));
 
     const filterButton = screen.getByLabelText('Filter by objectField');
-    await act(async () => {
-      await user.click(filterButton);
-    });
+    await userEvent.click(filterButton);
 
     expect(customAddFilter).toHaveBeenCalledWith({
       type: 'metadata',
@@ -759,16 +755,12 @@ describe('EvalOutputPromptDialog dependency injection', () => {
     };
 
     render(<EvalOutputPromptDialog {...propsWithoutFilterFunctions} />);
-    await act(async () => {
-      await user.click(screen.getByRole('tab', { name: 'Metadata' }));
-    });
+    await userEvent.click(screen.getByRole('tab', { name: 'Metadata' }));
 
     const filterButton = screen.getByLabelText('Filter by key');
 
     // Should not throw error
-    await act(async () => {
-      await user.click(filterButton);
-    });
+    await userEvent.click(filterButton);
 
     expect(mockOnClose).toHaveBeenCalledTimes(1);
   });
@@ -941,8 +933,142 @@ describe('EvalOutputPromptDialog cloud config', () => {
   });
 });
 
+describe('EvalOutputPromptDialog redteamHistory messages rendering', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should display Messages tab when redteamHistory has entries', async () => {
+    const propsWithRedteamHistory = {
+      ...defaultProps,
+      metadata: {
+        redteamHistory: [
+          { prompt: 'Attack prompt 1', output: 'Target response 1' },
+          { prompt: 'Attack prompt 2', output: 'Target response 2' },
+        ],
+      },
+    };
+
+    render(<EvalOutputPromptDialog {...propsWithRedteamHistory} />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Messages' })).toBeInTheDocument();
+    });
+  });
+
+  it('should render redteamHistory messages with promptAudio and promptImage', async () => {
+    const propsWithAudioImage = {
+      ...defaultProps,
+      metadata: {
+        redteamHistory: [
+          {
+            prompt: 'Attack with audio',
+            promptAudio: { data: 'audiodata', format: 'mp3' },
+            output: 'Target response',
+          },
+          {
+            prompt: 'Attack with image',
+            promptImage: { data: 'imagedata', format: 'png' },
+            output: 'Target response 2',
+          },
+        ],
+      },
+    };
+
+    render(<EvalOutputPromptDialog {...propsWithAudioImage} />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Messages' })).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Messages' }));
+
+    // Verify the messages are rendered (ChatMessages component handles audio/image)
+    expect(screen.getByText('Attack with audio')).toBeInTheDocument();
+    expect(screen.getByText('Attack with image')).toBeInTheDocument();
+  });
+
+  it('should render redteamHistory messages with outputAudio and outputImage', async () => {
+    const propsWithOutputMedia = {
+      ...defaultProps,
+      metadata: {
+        redteamHistory: [
+          {
+            prompt: 'Attack prompt',
+            output: 'Response with audio',
+            outputAudio: { data: 'responseaudio', format: 'wav' },
+          },
+          {
+            prompt: 'Attack prompt 2',
+            output: 'Response with image',
+            outputImage: { data: 'responseimage', format: 'jpeg' },
+          },
+        ],
+      },
+    };
+
+    render(<EvalOutputPromptDialog {...propsWithOutputMedia} />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Messages' })).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Messages' }));
+
+    expect(screen.getByText('Response with audio')).toBeInTheDocument();
+    expect(screen.getByText('Response with image')).toBeInTheDocument();
+  });
+
+  it('should display Messages tab when redteamTreeHistory is present', async () => {
+    const propsWithTreeHistory = {
+      ...defaultProps,
+      metadata: {
+        redteamTreeHistory: [{ prompt: 'Tree attack prompt', output: 'Tree response' }],
+      },
+    };
+
+    render(<EvalOutputPromptDialog {...propsWithTreeHistory} />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Messages' })).toBeInTheDocument();
+    });
+  });
+
+  it('should filter out entries without prompt or output from redteamHistory', async () => {
+    const propsWithIncompleteEntries = {
+      ...defaultProps,
+      metadata: {
+        redteamHistory: [
+          { prompt: 'Valid prompt', output: 'Valid output' },
+          { prompt: 'Prompt without output' }, // Missing output
+          { output: 'Output without prompt' }, // Missing prompt
+        ],
+      },
+    };
+
+    render(<EvalOutputPromptDialog {...propsWithIncompleteEntries} />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Messages' })).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Messages' }));
+
+    // Only the valid entry should be rendered
+    expect(screen.getByText('Valid prompt')).toBeInTheDocument();
+    expect(screen.getByText('Valid output')).toBeInTheDocument();
+    expect(screen.queryByText('Prompt without output')).not.toBeInTheDocument();
+    expect(screen.queryByText('Output without prompt')).not.toBeInTheDocument();
+  });
+});
+
 describe('EvalOutputPromptDialog traces tab visibility', () => {
   beforeEach(() => {
+    vi.clearAllMocks();
+    // Use real timers here - fake timers prevent the component from rendering
+  });
+
+  afterEach(() => {
     vi.clearAllMocks();
   });
 
@@ -962,11 +1088,9 @@ describe('EvalOutputPromptDialog traces tab visibility', () => {
     render(<EvalOutputPromptDialog {...propsWithTraces} />);
 
     // Wait for traces to be fetched
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 100));
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Traces' })).toBeInTheDocument();
     });
-
-    expect(screen.getByRole('tab', { name: 'Traces' })).toBeInTheDocument();
   });
 
   it('should hide Traces tab when fetchTraces returns empty array', async () => {
@@ -978,11 +1102,10 @@ describe('EvalOutputPromptDialog traces tab visibility', () => {
 
     render(<EvalOutputPromptDialog {...propsWithoutTraces} />);
 
-    // Wait for traces to be fetched
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 100));
+    // Wait for component to render and verify no Traces tab
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Prompt & Output' })).toBeInTheDocument();
     });
-
     expect(screen.queryByRole('tab', { name: 'Traces' })).not.toBeInTheDocument();
   });
 
@@ -1018,11 +1141,10 @@ describe('EvalOutputPromptDialog traces tab visibility', () => {
 
     render(<EvalOutputPromptDialog {...propsWithFailedFetch} />);
 
-    // Wait for traces fetch to fail
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 100));
+    // Wait for component to render and verify no Traces tab
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Prompt & Output' })).toBeInTheDocument();
     });
-
     expect(screen.queryByRole('tab', { name: 'Traces' })).not.toBeInTheDocument();
   });
 });

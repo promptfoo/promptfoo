@@ -1,6 +1,7 @@
+import { describe, expect, it } from 'vitest';
 import { deduplicateTests } from '../../../src/redteam/strategies/retry';
 
-import type { TestCase } from '../../../src/types';
+import type { TestCase } from '../../../src/types/index';
 
 describe('deduplicateTests', () => {
   it('should deduplicate test cases based on vars', () => {

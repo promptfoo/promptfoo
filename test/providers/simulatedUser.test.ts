@@ -1,23 +1,31 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SimulatedUser } from '../../src/providers/simulatedUser';
 import * as timeUtils from '../../src/util/time';
 
 import type { ApiProvider } from '../../src/types/index';
 
-jest.mock('../../src/util/time', () => ({
-  sleep: jest.fn().mockResolvedValue(undefined),
-}));
+vi.mock('../../src/util/time', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    sleep: vi.fn().mockResolvedValue(undefined),
+  };
+});
 
-jest.mock('../../src/util/fetch/index.ts');
+vi.mock('../../src/util/fetch/index.ts');
 
 // Mock PromptfooSimulatedUserProvider
-const mockUserProviderCallApi = jest.fn().mockResolvedValue({ output: 'user response' });
-jest.mock('../../src/providers/promptfoo', () => {
+const mockUserProviderCallApi = vi.fn().mockResolvedValue({ output: 'user response' });
+vi.mock('../../src/providers/promptfoo', async (importOriginal) => {
   return {
-    PromptfooSimulatedUserProvider: jest.fn().mockImplementation(() => ({
-      callApi: mockUserProviderCallApi,
-      id: jest.fn().mockReturnValue('mock-user-provider'),
-      options: {},
-    })),
+    ...(await importOriginal()),
+
+    PromptfooSimulatedUserProvider: vi.fn().mockImplementation(function () {
+      return {
+        callApi: mockUserProviderCallApi,
+        id: vi.fn().mockReturnValue('mock-user-provider'),
+        options: {},
+      };
+    }),
   };
 });
 
@@ -31,10 +39,12 @@ describe('SimulatedUser', () => {
 
     originalProvider = {
       id: () => 'test-agent',
-      callApi: jest.fn().mockImplementation(async () => ({
-        output: 'agent response',
-        tokenUsage: { numRequests: 1 },
-      })),
+      callApi: vi.fn().mockImplementation(async function () {
+        return {
+          output: 'agent response',
+          tokenUsage: { numRequests: 1 },
+        };
+      }),
     };
 
     simulatedUser = new SimulatedUser({
@@ -45,7 +55,7 @@ describe('SimulatedUser', () => {
       },
     });
 
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('id()', () => {
@@ -106,11 +116,13 @@ describe('SimulatedUser', () => {
     it('should stop conversation when ###STOP### is received', async () => {
       // Set up an initial message exchange to have some conversation history
       // First call is regular exchange
-      const mockedCallApi = jest.mocked(originalProvider.callApi);
-      mockedCallApi.mockImplementationOnce(async () => ({
-        output: 'initial agent response',
-        tokenUsage: { numRequests: 1 },
-      }));
+      const mockedCallApi = vi.mocked(originalProvider.callApi);
+      mockedCallApi.mockImplementationOnce(async function () {
+        return {
+          output: 'initial agent response',
+          tokenUsage: { numRequests: 1 },
+        };
+      });
 
       // Second call returns stop command
       mockUserProviderCallApi
@@ -190,11 +202,13 @@ describe('SimulatedUser', () => {
     it('should include sessionId from agentResponse in metadata', async () => {
       const providerWithSessionId = {
         id: () => 'test-agent',
-        callApi: jest.fn().mockImplementation(async () => ({
-          output: 'agent response',
-          sessionId: 'test-session-123',
-          tokenUsage: { numRequests: 1 },
-        })),
+        callApi: vi.fn().mockImplementation(async function () {
+          return {
+            output: 'agent response',
+            sessionId: 'test-session-123',
+            tokenUsage: { numRequests: 1 },
+          };
+        }),
       };
 
       const result = await simulatedUser.callApi('test prompt', {
@@ -221,11 +235,13 @@ describe('SimulatedUser', () => {
     it('should prioritize agentResponse.sessionId over context.vars.sessionId', async () => {
       const providerWithSessionId = {
         id: () => 'test-agent',
-        callApi: jest.fn().mockImplementation(async () => ({
-          output: 'agent response',
-          sessionId: 'response-session-priority',
-          tokenUsage: { numRequests: 1 },
-        })),
+        callApi: vi.fn().mockImplementation(async function () {
+          return {
+            output: 'agent response',
+            sessionId: 'response-session-priority',
+            tokenUsage: { numRequests: 1 },
+          };
+        }),
       };
 
       const result = await simulatedUser.callApi('test prompt', {
@@ -280,7 +296,7 @@ describe('SimulatedUser', () => {
 
       await simulatedUser.callApi('test prompt', testContext);
 
-      const callApiCalls = jest.mocked(originalProvider.callApi).mock.calls;
+      const callApiCalls = vi.mocked(originalProvider.callApi).mock.calls;
       expect(callApiCalls.length).toBeGreaterThan(0);
 
       const firstCall = callApiCalls[0];
@@ -293,18 +309,22 @@ describe('SimulatedUser', () => {
     it('should include system prompt on first turn only for stateful providers', async () => {
       const providerWithSessionId = {
         id: () => 'test-agent',
-        callApi: jest
+        callApi: vi
           .fn()
-          .mockImplementationOnce(async () => ({
-            output: 'first response',
-            sessionId: 'session-123',
-            tokenUsage: { numRequests: 1 },
-          }))
-          .mockImplementationOnce(async () => ({
-            output: 'second response',
-            sessionId: 'session-123',
-            tokenUsage: { numRequests: 1 },
-          })),
+          .mockImplementationOnce(async function () {
+            return {
+              output: 'first response',
+              sessionId: 'session-123',
+              tokenUsage: { numRequests: 1 },
+            };
+          })
+          .mockImplementationOnce(async function () {
+            return {
+              output: 'second response',
+              sessionId: 'session-123',
+              tokenUsage: { numRequests: 1 },
+            };
+          }),
       };
 
       const statefulUser = new SimulatedUser({
@@ -325,7 +345,7 @@ describe('SimulatedUser', () => {
 
       await statefulUser.callApi('test prompt', testContext);
 
-      const callApiCalls = jest.mocked(providerWithSessionId.callApi).mock.calls;
+      const callApiCalls = vi.mocked(providerWithSessionId.callApi).mock.calls;
       expect(callApiCalls.length).toBe(2);
 
       // First turn: should send system + user (no sessionId yet)
@@ -611,7 +631,7 @@ describe('SimulatedUser', () => {
       expect(originalProvider.callApi).toHaveBeenCalled();
 
       // The first call to the agent should include all 3 initial messages
-      const firstAgentCall = jest.mocked(originalProvider.callApi).mock.calls[0];
+      const firstAgentCall = vi.mocked(originalProvider.callApi).mock.calls[0];
       const firstAgentPrompt = JSON.parse(firstAgentCall[0] as string);
 
       // Should contain system prompt + all 3 initial messages
@@ -963,6 +983,103 @@ describe('SimulatedUser', () => {
       expect(result.output).toBeDefined();
       // Should continue with conversation even if template fails
       expect(result.output).toContain('Response');
+    });
+  });
+
+  describe('error handling', () => {
+    it('should return error when agent provider returns error in main loop', async () => {
+      const errorProvider = {
+        id: () => 'error-agent',
+        callApi: vi.fn().mockResolvedValue({
+          error: 'Model not found: invalid-model',
+          output: undefined,
+        }),
+      };
+
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider: errorProvider,
+        vars: { instructions: 'test instructions' },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.error).toBe('Model not found: invalid-model');
+      expect(result.tokenUsage).toBeDefined();
+    });
+
+    it('should return error when agent provider returns error with initial messages ending in user', async () => {
+      const errorProvider = {
+        id: () => 'error-agent',
+        callApi: vi.fn().mockResolvedValue({
+          error: 'API rate limit exceeded',
+          output: undefined,
+        }),
+      };
+
+      const initialMessages = [{ role: 'user' as const, content: 'Hello' }];
+
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider: errorProvider,
+        vars: {
+          instructions: 'test instructions',
+          initialMessages,
+        },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.error).toBe('API rate limit exceeded');
+      expect(result.tokenUsage).toBeDefined();
+    });
+
+    it('should return error on first turn failure and not continue conversation', async () => {
+      const errorProvider = {
+        id: () => 'error-agent',
+        callApi: vi.fn().mockResolvedValue({
+          error: 'Connection timeout',
+          output: undefined,
+        }),
+      };
+
+      const userWithMultipleTurns = new SimulatedUser({
+        config: {
+          instructions: 'test instructions',
+          maxTurns: 5,
+        },
+      });
+
+      const result = await userWithMultipleTurns.callApi('test prompt', {
+        originalProvider: errorProvider,
+        vars: { instructions: 'test instructions' },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.error).toBe('Connection timeout');
+      // Should only call once before returning error
+      expect(errorProvider.callApi).toHaveBeenCalledTimes(1);
+    });
+
+    it('should return error on second turn when first succeeds but second fails', async () => {
+      const partialErrorProvider = {
+        id: () => 'partial-error-agent',
+        callApi: vi
+          .fn()
+          .mockResolvedValueOnce({
+            output: 'first response',
+            tokenUsage: { numRequests: 1 },
+          })
+          .mockResolvedValueOnce({
+            error: 'Rate limit exceeded',
+            output: undefined,
+          }),
+      };
+
+      const result = await simulatedUser.callApi('test prompt', {
+        originalProvider: partialErrorProvider,
+        vars: { instructions: 'test instructions' },
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+      });
+
+      expect(result.error).toBe('Rate limit exceeded');
+      expect(partialErrorProvider.callApi).toHaveBeenCalledTimes(2);
     });
   });
 });

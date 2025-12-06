@@ -19,8 +19,8 @@ The OpenAI provider supports the following model formats:
 - `openai:responses:<model name>` - uses responses API models over HTTP connections
 - `openai:assistant:<assistant id>` - use an assistant
 - `openai:<model name>` - uses a specific model name (mapped automatically to chat or completion endpoint)
-- `openai:chat` - defaults to `gpt-4.1-mini`
-- `openai:chat:ft:gpt-4.1-mini:company-name:ID` - example of a fine-tuned chat completion model
+- `openai:chat` - defaults to `gpt-5-mini`
+- `openai:chat:ft:gpt-5-mini:company-name:ID` - example of a fine-tuned chat completion model
 - `openai:completion` - defaults to `text-davinci-003`
 - `openai:completion:<model name>` - uses any model name against the `/v1/completions` endpoint
 - `openai:embeddings:<model name>` - uses any model name against the `/v1/embeddings` endpoint
@@ -44,11 +44,11 @@ providers:
         effort: minimal
 ```
 
-The OpenAI provider supports a handful of [configuration options](https://github.com/promptfoo/promptfoo/blob/main/src/providers/openai.ts#L14-L32), such as `temperature`, `functions`, and `tools`, which can be used to customize the behavior of the model like so:
+The OpenAI provider supports a handful of [configuration options](https://github.com/promptfoo/promptfoo/blob/main/src/providers/openai/types.ts#L112-L185), such as `temperature`, `functions`, and `tools`, which can be used to customize the behavior of the model like so:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: openai:gpt-4.1-mini
+  - id: openai:gpt-5-mini
     config:
       temperature: 0
       max_tokens: 1024
@@ -66,7 +66,7 @@ The `providers` list takes a `config` key that allows you to set parameters like
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: openai:gpt-4.1-mini
+  - id: openai:gpt-5-mini
     config:
       temperature: 0
       max_tokens: 128
@@ -170,7 +170,7 @@ Standard model:
 
 ```yaml
 providers:
-  - id: openai:chat:gpt-4.1 # or openai:responses:gpt-4.1
+  - id: openai:chat:gpt-5 # or openai:responses:gpt-5
     config:
       temperature: 0.7
 ```
@@ -179,16 +179,16 @@ More affordable variants:
 
 ```yaml
 providers:
-  - id: openai:chat:gpt-4.1-mini # or -nano variant
+  - id: openai:chat:gpt-5-mini # or -nano variant
 ```
 
 Specific snapshot versions are also available:
 
 ```yaml
 providers:
-  - id: openai:chat:gpt-4.1-2025-04-14 # Standard
-  - id: openai:chat:gpt-4.1-mini-2025-04-14 # Mini
-  - id: openai:chat:gpt-4.1-nano-2025-04-14 # Nano
+  - id: openai:chat:gpt-5-2025-08-07 # Standard
+  - id: openai:chat:gpt-5-mini-2025-08-07 # Mini
+  - id: openai:chat:gpt-5-nano-2025-08-07 # Nano
 ```
 
 ### GPT-5.1
@@ -352,7 +352,7 @@ prompts:
   - file://prompt.json
 
 providers:
-  - openai:gpt-4.1
+  - openai:gpt-5
 
 tests:
   - vars:
@@ -413,6 +413,72 @@ To display images in the web viewer, wrap vars or outputs in markdown image tags
 
 Then, enable 'Render markdown' under Table Settings.
 
+## Web Search Support
+
+The OpenAI Responses API supports web search capabilities through the `web_search_preview` tool, which enables the `search-rubric` assertion type. This allows models to search the web for current information and verify facts.
+
+### Enabling Web Search
+
+To enable web search with the OpenAI Responses API, use the `openai:responses` provider format and add the `web_search_preview` tool to your configuration:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:responses:gpt-5.1
+    config:
+      tools:
+        - type: web_search_preview
+```
+
+### Using Web Search Assertions
+
+The `search-rubric` assertion type uses web search to quickly verify current information:
+
+- Real-time data (weather, stock prices, news)
+- Current events and statistics
+- Time-sensitive information
+- Quick fact verification
+
+Example configuration:
+
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+prompts:
+  - 'What is the current temperature in {{city}}?'
+
+providers:
+  - id: openai:responses:gpt-5.1
+    config:
+      tools:
+        - type: web_search_preview
+
+tests:
+  - vars:
+      city: New York
+    assert:
+      - type: search-rubric
+        value: Current temperature in New York City
+```
+
+### Cost Considerations
+
+:::info
+Web search calls in the Responses API are billed separately from normal tokens:
+
+- The web search tool costs **$10 per 1,000 calls** for the standard tool and **$10-25 per 1,000 calls** for preview variants, plus any search content tokens where applicable
+- Each search-rubric assertion may perform one or more searches
+- Use caching (`--cache`) to avoid redundant searches during development
+- See [OpenAI's pricing page](https://openai.com/api/pricing/) for current rates
+  :::
+
+### Best Practices
+
+1. **Use specific search queries**: More specific queries yield better verification results
+2. **Enable caching**: Run with `npx promptfoo eval --cache` to avoid repeated searches
+3. **Use appropriate models**: gpt-5.1-mini is recommended for cost-effective web search
+4. **Monitor usage**: Track API costs, especially in CI/CD pipelines
+
+For more details on using search-rubric assertions, see the [Search-Rubric documentation](/docs/configuration/expected-outputs/model-graded/search-rubric).
+
 ## Using tools and functions
 
 OpenAI tools and functions are supported. See [OpenAI tools example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-tools-call) and [OpenAI functions example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-function-call).
@@ -426,12 +492,45 @@ To set `tools` on an OpenAI provider, use the provider's `config` key. The model
 
 Tools can be defined inline or loaded from an external file:
 
+:::info Supported file formats
+
+Tools can be loaded from external files in multiple formats:
+
+```yaml
+# Static data files
+tools: file://./tools.yaml
+tools: file://./tools.json
+
+# Dynamic tool definitions from code (requires function name)
+tools: file://./tools.py:get_tools
+tools: file://./tools.js:getTools
+tools: file://./tools.ts:getTools
+```
+
+Python and JavaScript files must export a function that returns the tool definitions array. The function can be synchronous or asynchronous.
+
+**Asynchronous example:**
+
+```javascript
+// tools.js - Fetch tool definitions from API at runtime
+export async function getTools() {
+  const apiKey = process.env.INTERNAL_API_KEY;
+  const response = await fetch('https://api.internal.com/tool-definitions', {
+    headers: { Authorization: `Bearer ${apiKey}` },
+  });
+  const tools = await response.json();
+  return tools;
+}
+```
+
+:::
+
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 prompts:
   - file://prompt.txt
 providers:
-  - id: openai:chat:gpt-4.1-mini
+  - id: openai:chat:gpt-5-mini
     // highlight-start
     config:
       # Load tools from external file
@@ -553,7 +652,7 @@ Use the `functions` config to define custom functions. Each function should be a
 prompts:
   - file://prompt.txt
 providers:
-  - id: openai:chat:gpt-4.1-mini
+  - id: openai:chat:gpt-5-mini
     // highlight-start
     config:
       functions:
@@ -618,6 +717,12 @@ tests:
 
 Instead of duplicating function definitions across multiple configurations, you can reference an external YAML (or JSON) file that contains your functions. This allows you to maintain a single source of truth for your functions, which is particularly useful if you have multiple versions or regular changes to definitions.
 
+:::tip
+
+Tool definitions can be loaded from JSON, YAML, Python, or JavaScript files. For Python/JS files, specify a function name that returns the tool definitions: `file://tools.py:get_tools`
+
+:::
+
 To load your functions from a file, specify the file path in your provider configuration like so:
 
 ```yaml title="promptfooconfig.yaml"
@@ -635,7 +740,7 @@ providers:
 Here's an example of how your `provider_with_function.yaml` might look:
 
 ```yaml title="provider_with_function.yaml"
-id: openai:chat:gpt-4.1-mini
+id: openai:chat:gpt-5-mini
 config:
   functions:
     - name: get_current_weather
@@ -678,7 +783,7 @@ prompts:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: openai:chat:gpt-4.1-mini
+  - id: openai:chat:gpt-5-mini
     config:
       response_format:
         type: json_schema
@@ -790,7 +895,7 @@ providers:
   // highlight-start
   - id: openai:assistant:asst_fEhNN3MClMamLfKLkIaoIpgZ
     config:
-      model: gpt-4.1
+      model: gpt-5
       instructions: "You always speak like a pirate"
       temperature: 0.2
       toolChoice:
@@ -825,7 +930,7 @@ module.exports = /** @type {import('promptfoo').TestSuiteConfig} */ ({
     {
       id: 'openai:assistant:asst_fEhNN3MClMamLfKLkIaoIpgZ',
       config: {
-        model: 'gpt-4.1',
+        model: 'gpt-5',
         instructions: 'You can add two numbers together using the `addNumbers` tool',
         tools: [
           {
@@ -1034,7 +1139,7 @@ The Realtime API allows for real-time communication with GPT-4o class models usi
 - `gpt-realtime` - Latest realtime model ($4/$16 per 1M text tokens, $40/$80 per 1M audio tokens)
 - `gpt-realtime-mini` - Cost-efficient realtime model ($0.60/$2.40 per 1M text tokens, $10/$20 per 1M audio tokens)
 - `gpt-4o-realtime-preview-2024-12-17`
-- `gpt-4.1-mini-realtime-preview-2024-12-17`
+- `gpt-5-mini-realtime-preview-2024-12-17`
 
 ### Using Realtime API
 
@@ -1162,7 +1267,7 @@ OpenAI's Responses API is the most advanced interface for generating model respo
 
 The Responses API supports a wide range of models, including:
 
-- `gpt-4.1` - OpenAI's most capable vision model
+- `gpt-5` - OpenAI's most capable vision model
 - `o1` - Powerful reasoning model
 - `o1-mini` - Smaller, more affordable reasoning model
 - `o1-pro` - Enhanced reasoning model with more compute
@@ -1180,7 +1285,7 @@ To use the OpenAI Responses API, use the provider format `openai:responses:<mode
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: openai:responses:gpt-4.1
+  - id: openai:responses:gpt-5
     config:
       temperature: 0.7
       max_output_tokens: 500
@@ -1212,7 +1317,7 @@ To use MCP tools with the Responses API, add them to the `tools` array:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: openai:responses:gpt-4.1-2025-04-14
+  - id: openai:responses:gpt-5
     config:
       tools:
         - type: mcp
@@ -1238,7 +1343,7 @@ Most MCP servers require authentication. Use the `headers` parameter to provide 
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: openai:responses:gpt-4.1-2025-04-14
+  - id: openai:responses:gpt-5
     config:
       tools:
         - type: mcp
@@ -1255,7 +1360,7 @@ To limit which tools are available from an MCP server, use the `allowed_tools` p
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: openai:responses:gpt-4.1-2025-04-14
+  - id: openai:responses:gpt-5
     config:
       tools:
         - type: mcp
@@ -1272,7 +1377,7 @@ By default, OpenAI requires approval before sharing data with MCP servers. You c
 ```yaml title="promptfooconfig.yaml"
 # Never require approval for all tools
 providers:
-  - id: openai:responses:gpt-4.1-2025-04-14
+  - id: openai:responses:gpt-5
     config:
       tools:
         - type: mcp
@@ -1282,7 +1387,7 @@ providers:
 
 # Never require approval for specific tools only
 providers:
-  - id: openai:responses:gpt-4.1-2025-04-14
+  - id: openai:responses:gpt-5
     config:
       tools:
         - type: mcp
@@ -1301,7 +1406,7 @@ prompts:
   - 'What are the transport protocols supported in the MCP specification for {{repo}}?'
 
 providers:
-  - id: openai:responses:gpt-4.1-2025-04-14
+  - id: openai:responses:gpt-5
     config:
       tools:
         - type: mcp
@@ -1570,7 +1675,7 @@ The Responses API supports tool and function calling, similar to the Chat API:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: openai:responses:gpt-4.1
+  - id: openai:responses:gpt-5
     config:
       tools:
         - type: function
@@ -1628,7 +1733,11 @@ There are a few things you can do if you encounter OpenAI rate limits (most comm
 
 To retry HTTP requests that are Internal Server errors, set the `PROMPTFOO_RETRY_5XX` environment variable to `1`.
 
-## Agents SDK Integration
+## Agentic Providers
+
+OpenAI offers several agentic providers for different use cases:
+
+### Agents SDK
 
 Test multi-turn agentic workflows with the [OpenAI Agents provider](/docs/providers/openai-agents). This provider supports the [@openai/agents](https://github.com/openai/openai-agents-js) SDK with tools, handoffs, and tracing.
 
@@ -1642,3 +1751,22 @@ providers:
 ```
 
 See the [OpenAI Agents documentation](/docs/providers/openai-agents) for full configuration options and examples.
+
+### Codex SDK
+
+For agentic coding tasks with working directory access and structured JSON output, use the [OpenAI Codex SDK provider](/docs/providers/openai-codex-sdk). This provider supports `gpt-5.1-codex` models optimized for code generation:
+
+```yaml
+providers:
+  - id: openai:codex-sdk
+    config:
+      model: gpt-5.1-codex
+      working_dir: ./src
+      output_schema:
+        type: object
+        properties:
+          code: { type: string }
+          explanation: { type: string }
+```
+
+See the [OpenAI Codex SDK documentation](/docs/providers/openai-codex-sdk) for thread management, structured output, and Git-aware operations.

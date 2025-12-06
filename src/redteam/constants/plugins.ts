@@ -6,7 +6,7 @@ export const REDTEAM_DEFAULTS = {
   NUM_TESTS: 10,
 } as const;
 
-export const REDTEAM_MODEL = 'openai:chat:gpt-4.1-2025-04-14';
+export const REDTEAM_MODEL = 'openai:chat:gpt-5-2025-08-07';
 
 // LlamaGuard 4 is the default on Replicate (supports S14: Code Interpreter Abuse)
 export const LLAMA_GUARD_REPLICATE_PROVIDER = 'replicate:moderation:meta/llama-guard-4-12b';
@@ -164,6 +164,7 @@ export const COLLECTIONS = [
   'pharmacy',
   'insurance',
   'financial',
+  'ecommerce',
   'guardrails-eval',
 ] as const;
 export type Collection = (typeof COLLECTIONS)[number];
@@ -257,11 +258,19 @@ export const INSURANCE_PLUGINS = [
   'insurance:phi-disclosure',
 ] as const;
 
+export const ECOMMERCE_PLUGINS = [
+  'ecommerce:compliance-bypass',
+  'ecommerce:order-fraud',
+  'ecommerce:pci-dss',
+  'ecommerce:price-manipulation',
+] as const;
+
 export type PIIPlugin = (typeof PII_PLUGINS)[number];
 export type BiasPlugin = (typeof BIAS_PLUGINS)[number];
 export type MedicalPlugin = (typeof MEDICAL_PLUGINS)[number];
 export type PharmacyPlugin = (typeof PHARMACY_PLUGINS)[number];
 export type InsurancePlugin = (typeof INSURANCE_PLUGINS)[number];
+export type EcommercePlugin = (typeof ECOMMERCE_PLUGINS)[number];
 
 export const BASE_PLUGINS = [
   'contracts',
@@ -308,6 +317,10 @@ export const ADDITIONAL_PLUGINS = [
   'financial:impartiality',
   'financial:misconduct',
   'financial:sycophancy',
+  'ecommerce:compliance-bypass',
+  'ecommerce:order-fraud',
+  'ecommerce:pci-dss',
+  'ecommerce:price-manipulation',
   'goal-misalignment',
   'insurance:coverage-discrimination',
   'insurance:network-misinformation',
@@ -394,6 +407,7 @@ export const ALL_PLUGINS: readonly Plugin[] = [
 
 export const PLUGIN_CATEGORIES = {
   bias: BIAS_PLUGINS,
+  ecommerce: ECOMMERCE_PLUGINS,
   financial: FINANCIAL_PLUGINS,
   harmful: Object.keys(HARM_PLUGINS),
   pii: PII_PLUGINS,
@@ -432,6 +446,7 @@ export const REMOTE_ONLY_PLUGIN_IDS = [
   ...FINANCIAL_PLUGINS,
   ...PHARMACY_PLUGINS,
   ...INSURANCE_PLUGINS,
+  ...ECOMMERCE_PLUGINS,
 ] as const;
 
 // Plugins that frontend should disable when remote generation is unavailable

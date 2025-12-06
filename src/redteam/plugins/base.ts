@@ -427,7 +427,7 @@ export abstract class RedteamGraderBase {
       prompt,
       entities: test.metadata?.entities ?? [],
       tools: provider?.config?.tools
-        ? maybeLoadToolsFromExternalFile(provider.config.tools)
+        ? await maybeLoadToolsFromExternalFile(provider.config.tools)
         : undefined,
       testVars: test.vars ?? {},
       // Spread all gradingContext properties to make them accessible in rubrics

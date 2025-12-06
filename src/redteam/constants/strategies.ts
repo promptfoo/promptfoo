@@ -14,6 +14,8 @@ export type FrameworkComplianceId = (typeof FRAMEWORK_COMPLIANCE_IDS)[number];
 export const DEFAULT_STRATEGIES = ['basic', 'jailbreak:meta', 'jailbreak:composite'] as const;
 export type DefaultStrategy = (typeof DEFAULT_STRATEGIES)[number];
 
+export const DEFAULT_MULTI_TURN_MAX_TURNS = 5;
+
 export const MULTI_TURN_STRATEGIES = [
   'crescendo',
   'goat',
@@ -23,11 +25,21 @@ export const MULTI_TURN_STRATEGIES = [
   'simba',
 ] as const;
 
+export type MultiTurnStrategy = (typeof MULTI_TURN_STRATEGIES)[number];
+export const MULTI_TURN_STRATEGY_SET: ReadonlySet<MultiTurnStrategy> = new Set(
+  MULTI_TURN_STRATEGIES,
+);
+
+export const isMultiTurnStrategy = (
+  strategyId: string | undefined,
+): strategyId is MultiTurnStrategy => {
+  return strategyId ? MULTI_TURN_STRATEGY_SET.has(strategyId as MultiTurnStrategy) : false;
+};
+
 // Helper function to check if a strategy is a custom variant
 export const isCustomStrategy = (strategyId: string): boolean => {
   return strategyId === 'custom' || strategyId.startsWith('custom:');
 };
-export type MultiTurnStrategy = (typeof MULTI_TURN_STRATEGIES)[number];
 
 export const MULTI_MODAL_STRATEGIES = ['audio', 'image', 'video'] as const;
 export type MultiModalStrategy = (typeof MULTI_MODAL_STRATEGIES)[number];
@@ -54,6 +66,7 @@ export const DATASET_PLUGINS = [
   'aegis',
   'pliny',
   'unsafebench',
+  'vlguard',
   'xstest',
 ] as const;
 export type DatasetPlugin = (typeof DATASET_PLUGINS)[number];

@@ -6,7 +6,7 @@ import logger from '../logger';
 import Eval from '../models/eval';
 import { neverGenerateRemote } from '../redteam/remoteGeneration';
 import { doRemoteGrading } from '../remoteGrading';
-import { fetchWithProxy } from '../util/fetch';
+import { fetchWithProxy } from '../util/fetch/index';
 import { sanitizeObject } from '../util/sanitizer';
 import {
   determineEffectiveSessionSource,
@@ -55,7 +55,7 @@ type ValidationResult = { success: true } | { success: false; result: SessionTes
  * @param provider The provider to test
  * @param prompt An optional prompt to test w/
  */
-export async function testHTTPProviderConnectivity(
+export async function testProviderConnectivity(
   provider: ApiProvider,
   prompt: string = 'Hello World!',
 ): Promise<ProviderTestResult> {
@@ -118,6 +118,7 @@ export async function testHTTPProviderConnectivity(
 
     // Call the agent helper endpoint to evaluate the results (even if there's an error)
     const HOST = cloudConfig.getApiHost();
+    const apiKey = cloudConfig.getApiKey();
 
     try {
       logger.debug('[testProviderConnectivity] Calling agent helper', {
@@ -128,6 +129,7 @@ export async function testHTTPProviderConnectivity(
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
           config: provider.config,

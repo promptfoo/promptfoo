@@ -96,6 +96,14 @@ The `inferenceModelType` config option supports the following values:
 ```yaml
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
+  # Claude Opus 4.5 via global inference profile (required for this model)
+  - id: bedrock:arn:aws:bedrock:us-east-2::inference-profile/global.anthropic.claude-opus-4-5-20251101-v1:0
+    config:
+      inferenceModelType: 'claude'
+      region: 'us-east-2'
+      max_tokens: 1024
+      temperature: 0.7
+
   # Using an inference profile that routes to Claude models
   - id: bedrock:arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-profile
     config:
@@ -131,6 +139,90 @@ Application Inference Profiles provide several benefits:
 When using inference profiles, ensure the `inferenceModelType` matches the model family your profile is configured for, as the configuration parameters differ between model types.
 
 :::
+
+## Converse API
+
+The Converse API provides a unified interface across all Bedrock models with native support for extended thinking (reasoning), tool calling, and guardrails. Use the `bedrock:converse:` prefix to access this API.
+
+### Basic Usage
+
+```yaml
+providers:
+  - id: bedrock:converse:anthropic.claude-3-5-sonnet-20241022-v2:0
+    config:
+      region: us-east-1
+      maxTokens: 4096
+      temperature: 0.7
+```
+
+### Extended Thinking
+
+Enable Claude's extended thinking capabilities for complex reasoning tasks:
+
+```yaml
+providers:
+  - id: bedrock:converse:us.anthropic.claude-sonnet-4-5-20250929-v1:0
+    config:
+      region: us-west-2
+      maxTokens: 20000
+      thinking:
+        type: enabled
+        budget_tokens: 16000
+      showThinking: true # Include thinking content in output
+```
+
+The `thinking` configuration controls Claude's reasoning behavior:
+
+- `type: enabled` - Activates extended thinking
+- `budget_tokens` - Maximum tokens allocated for thinking (minimum 1024)
+
+Use `showThinking: true` to include the model's reasoning process in the output, or `false` to only show the final response.
+
+:::warning
+Do not set `temperature`, `topP`, or `topK` when using extended thinking. These sampling parameters are incompatible with reasoning mode.
+:::
+
+### Configuration Options
+
+| Option                | Description                                     |
+| --------------------- | ----------------------------------------------- |
+| `maxTokens`           | Maximum output tokens                           |
+| `temperature`         | Sampling temperature (0-1)                      |
+| `topP`                | Nucleus sampling parameter                      |
+| `stopSequences`       | Array of stop sequences                         |
+| `thinking`            | Extended thinking configuration                 |
+| `showThinking`        | Include thinking in output (default: false)     |
+| `performanceConfig`   | Performance settings (`latency: optimized`)     |
+| `serviceTier`         | Service tier (`priority`, `default`, or `flex`) |
+| `guardrailIdentifier` | Guardrail ID for content filtering              |
+| `guardrailVersion`    | Guardrail version (default: DRAFT)              |
+
+### Performance Configuration
+
+Optimize for latency or cost:
+
+```yaml
+providers:
+  - id: bedrock:converse:anthropic.claude-3-5-sonnet-20241022-v2:0
+    config:
+      performanceConfig:
+        latency: optimized # or 'standard'
+      serviceTier:
+        type: priority # or 'default', 'flex'
+```
+
+### Supported Models
+
+The Converse API works with all Bedrock models that support the Converse operation:
+
+- **Claude**: All Claude 3.x and 4.x models
+- **Amazon Nova**: Lite, Micro, Pro, Premier (not Sonic)
+- **Meta Llama**: 3.x, 4.x models
+- **Mistral**: All Mistral models
+- **Cohere**: Command R and R+ models
+- **AI21**: Jamba models
+- **DeepSeek**: R1 and other models
+- **Qwen**: Qwen3 models
 
 ## Authentication
 
@@ -499,6 +591,8 @@ config:
 
 For Claude models (e.g., `anthropic.claude-sonnet-4-5-20250929-v1:0`, `anthropic.claude-haiku-4-5-20251001-v1:0`, `anthropic.claude-sonnet-4-20250514-v1:0`, `anthropic.us.claude-3-5-sonnet-20241022-v2:0`), you can use the following configuration options:
 
+**Note**: Claude Opus 4.5 (`anthropic.claude-opus-4-5-20251101-v1:0`) requires an inference profile ARN and cannot be used as a direct model ID. See the [Application Inference Profiles](#application-inference-profiles) section for setup.
+
 ```yaml
 config:
   max_tokens: 256
@@ -742,7 +836,7 @@ providers:
 
 ## Model-graded tests
 
-You can use Bedrock models to grade outputs. By default, model-graded tests use `gpt-4.1-2025-04-14` and require the `OPENAI_API_KEY` environment variable to be set. However, when using AWS Bedrock, you have the option of overriding the grader for [model-graded assertions](/docs/configuration/expected-outputs/model-graded/) to point to AWS Bedrock or other providers.
+You can use Bedrock models to grade outputs. By default, model-graded tests use `gpt-5` and require the `OPENAI_API_KEY` environment variable to be set. However, when using AWS Bedrock, you have the option of overriding the grader for [model-graded assertions](/docs/configuration/expected-outputs/model-graded/) to point to AWS Bedrock or other providers.
 
 You can use either regular model IDs or application inference profiles for grading:
 

@@ -6,11 +6,11 @@
 import logger from '../../logger';
 import type { SocketAuthCredentials } from '../../types/codeScan';
 
-// Import promptfoo's cloud config for auth
+// Import promptfoo's cloud config for auth (using ESM dynamic import)
 let cloudConfig: { getApiKey(): string | undefined } | undefined;
 try {
   // Dynamic import to avoid circular dependencies
-  const cloudModule = require('../../globalConfig/cloud');
+  const cloudModule = await import('../../globalConfig/cloud');
   cloudConfig = cloudModule.cloudConfig;
 } catch (_error) {
   // Promptfoo auth not available - that's OK, will fall back to other methods

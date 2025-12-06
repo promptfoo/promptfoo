@@ -11,7 +11,7 @@ import type { Socket } from 'socket.io-client';
 
 import cliState from '../../cliState';
 import logger, { getLogLevel } from '../../logger';
-import type { PullRequestContext } from '../../types/codeScan';
+import type { PullRequestContext, ScanResponse } from '../../types/codeScan';
 import type { Config } from '../config/schema';
 import {
   loadConfigOrDefault,
@@ -24,7 +24,7 @@ import { parseGitHubPr } from '../util/github';
 import { validateOnBranch } from '../git/diff';
 import { processDiff } from '../git/diffProcessor';
 import { extractMetadata } from '../git/metadata';
-import { setupMcpBridge } from '../mcp';
+import { setupMcpBridge } from '../mcp/index';
 import { stopFilesystemMcpServer } from '../mcp/filesystem';
 import type { SocketIoMcpBridge } from '../mcp/transport';
 import { createSocketConnection } from './socket';
@@ -203,6 +203,29 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
     logger.debug(
       `Files changed: ${files.length} (${includedFiles.length} included, ${skippedFiles.length} skipped)`,
     );
+
+    // Check if there are no files to scan
+    if (includedFiles.length === 0) {
+      const msg = 'No files to scan';
+
+      // In JSON mode, output a proper JSON response for programmatic consumption
+      if (options.json) {
+        const response: ScanResponse = { success: true, comments: [], review: msg };
+        logger.info(JSON.stringify(response, null, 2));
+      } else if (showSpinner && spinner) {
+        spinner.succeed(msg);
+      } else {
+        logger.info(msg);
+      }
+
+      // Exit with code 0 (success) when no files to scan
+      cliState.postActionCallback = async () => {
+        await new Promise((resolve) => setTimeout(resolve, 100)); // Wait for output to be flushed
+        process.exitCode = 0;
+      };
+
+      return;
+    }
 
     // Extract git metadata
     const metadata = await extractMetadata(absoluteRepoPath, baseBranch, compareRef);

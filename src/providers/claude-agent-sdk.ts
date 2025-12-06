@@ -13,14 +13,21 @@ import logger from '../logger';
 import { ANTHROPIC_MODELS } from './anthropic/util';
 import { transformMCPConfigToClaudeCode } from './mcp/transform';
 import { MCPConfig } from './mcp/types';
-import type { Options as QueryOptions, SettingSource } from '@anthropic-ai/claude-agent-sdk';
+import type {
+  AgentDefinition,
+  HookCallbackMatcher,
+  HookEvent,
+  Options as QueryOptions,
+  OutputFormat,
+  SettingSource,
+} from '@anthropic-ai/claude-agent-sdk';
 
 import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderResponse,
-} from '../types';
+} from '../types/index';
 import type { EnvOverrides } from '../types/env';
 
 /**
@@ -137,6 +144,71 @@ export interface ClaudeCodeOptions {
    * if not supplied, it won't look for any settings, CLAUDE.md, or slash commands
    */
   setting_sources?: SettingSource[];
+
+  /**
+   * 'plugins' allows loading Claude Code plugins from local file system paths
+   * Each plugin must be a directory containing .claude-plugin/plugin.json manifest
+   */
+  plugins?: Array<{ type: 'local'; path: string }>;
+
+  /**
+   * Maximum budget in USD for this session. When exceeded, the SDK will stop with error_max_budget_usd.
+   * Useful for cost control in automated evaluations.
+   */
+  max_budget_usd?: number;
+
+  /**
+   * Additional directories the agent can access beyond the working directory.
+   * Useful when the agent needs to read files from multiple locations.
+   */
+  additional_directories?: string[];
+
+  /**
+   * Session ID to resume a previous conversation. The agent will continue from where it left off.
+   * Use with 'fork_session' to branch instead of continuing the same session.
+   */
+  resume?: string;
+
+  /**
+   * When true and 'resume' is set, creates a new session branching from the resumed point
+   * instead of continuing the original session.
+   */
+  fork_session?: boolean;
+
+  /**
+   * When resuming, only restore messages up to this message UUID.
+   * Allows resuming from a specific point in the conversation history.
+   */
+  resume_session_at?: string;
+
+  /**
+   * When true, continues from the previous conversation without requiring a resume session ID.
+   */
+  continue?: boolean;
+
+  /**
+   * Programmatic agent definitions. Allows defining custom subagents inline without filesystem dependencies.
+   * Keys are agent names, values are agent definitions with description, tools, and prompt.
+   */
+  agents?: Record<string, AgentDefinition>;
+
+  /**
+   * Output format specification for structured outputs.
+   * When set, the agent will return validated JSON matching the provided schema.
+   */
+  output_format?: OutputFormat;
+
+  /**
+   * Hooks for intercepting events during agent execution.
+   * Allows custom logic at various points like PreToolUse, PostToolUse, etc.
+   */
+  hooks?: Partial<Record<HookEvent, HookCallbackMatcher[]>>;
+
+  /**
+   * When true, includes partial/streaming messages in the response.
+   * Useful for debugging or when you need to see intermediate outputs.
+   */
+  include_partial_messages?: boolean;
 }
 
 export class ClaudeCodeSDKProvider implements ApiProvider {
@@ -290,6 +362,17 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       maxThinkingTokens: config.max_thinking_tokens,
       allowedTools,
       disallowedTools,
+      plugins: config.plugins,
+      maxBudgetUsd: config.max_budget_usd,
+      additionalDirectories: config.additional_directories,
+      resume: config.resume,
+      forkSession: config.fork_session,
+      resumeSessionAt: config.resume_session_at,
+      continue: config.continue,
+      agents: config.agents,
+      outputFormat: config.output_format,
+      hooks: config.hooks,
+      includePartialMessages: config.include_partial_messages,
       env,
     };
 
@@ -425,13 +508,23 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           const sessionId = msg.session_id;
           if (msg.subtype == 'success') {
             logger.debug(`Claude Agent SDK response: ${raw}`);
-            const response = {
-              output: msg.result,
+            // When structured output is enabled and available, use it as the output
+            // Otherwise fall back to the text result
+            const output = msg.structured_output !== undefined ? msg.structured_output : msg.result;
+            const response: ProviderResponse = {
+              output,
               tokenUsage,
               cost,
               raw,
               sessionId,
             };
+            // Include structured output in metadata if available
+            if (msg.structured_output !== undefined) {
+              response.metadata = {
+                ...response.metadata,
+                structuredOutput: msg.structured_output,
+              };
+            }
 
             if (shouldWriteCache && cache && cacheKey) {
               try {

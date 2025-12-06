@@ -10,6 +10,9 @@ const mockProvider: ApiProvider = {
 
 const mockTraceDataWithErrors: TraceData = {
   traceId: 'test-trace-id',
+  evaluationId: 'test-evaluation-id',
+  testCaseId: 'test-test-case-id',
+  metadata: { test: 'value' },
   spans: [
     {
       spanId: 'span-1',
@@ -94,6 +97,9 @@ describe('handleTraceErrorSpans', () => {
         ...defaultParams.assertionValueContext,
         trace: {
           traceId: 'no-errors',
+          evaluationId: 'test-evaluation-id',
+          testCaseId: 'test-test-case-id',
+          metadata: { test: 'value' },
           spans: [
             { spanId: '1', name: 'op1', startTime: 0, endTime: 100, statusCode: 200 },
             { spanId: '2', name: 'op2', startTime: 100, endTime: 200, statusCode: 201 },
@@ -147,6 +153,9 @@ describe('handleTraceErrorSpans', () => {
         ...defaultParams.assertionValueContext,
         trace: {
           traceId: 'status-errors',
+          evaluationId: 'test-evaluation-id',
+          testCaseId: 'test-test-case-id',
+          metadata: { test: 'value' },
           spans: [
             { spanId: '1', name: 'api.call', startTime: 0, endTime: 100, statusCode: 500 },
             { spanId: '2', name: 'api.call', startTime: 100, endTime: 200, statusCode: 403 },
@@ -177,6 +186,9 @@ describe('handleTraceErrorSpans', () => {
         ...defaultParams.assertionValueContext,
         trace: {
           traceId: 'attr-errors',
+          evaluationId: 'test-evaluation-id',
+          testCaseId: 'test-test-case-id',
+          metadata: { test: 'value' },
           spans: [
             {
               spanId: '1',
@@ -216,7 +228,12 @@ describe('handleTraceErrorSpans', () => {
       renderedValue: { max_percentage: 50 },
       assertionValueContext: {
         ...defaultParams.assertionValueContext,
-        trace: mockTraceDataWithErrors, // 4 errors out of 6 spans = 66.7%
+        trace: {
+          ...mockTraceDataWithErrors,
+          evaluationId: 'test-evaluation-id',
+          testCaseId: 'test-test-case-id',
+          metadata: { test: 'value' },
+        },
       },
     };
 
@@ -239,7 +256,12 @@ describe('handleTraceErrorSpans', () => {
       renderedValue: { max_percentage: 70 },
       assertionValueContext: {
         ...defaultParams.assertionValueContext,
-        trace: mockTraceDataWithErrors,
+        trace: {
+          ...mockTraceDataWithErrors,
+          evaluationId: 'test-evaluation-id',
+          testCaseId: 'test-test-case-id',
+          metadata: { test: 'value' },
+        },
       },
     };
 
@@ -262,7 +284,12 @@ describe('handleTraceErrorSpans', () => {
       renderedValue: { pattern: '*api*', max_count: 0 },
       assertionValueContext: {
         ...defaultParams.assertionValueContext,
-        trace: mockTraceDataWithErrors,
+        trace: {
+          ...mockTraceDataWithErrors,
+          evaluationId: 'test-evaluation-id',
+          testCaseId: 'test-test-case-id',
+          metadata: { test: 'value' },
+        },
       },
     };
 
@@ -285,7 +312,12 @@ describe('handleTraceErrorSpans', () => {
       renderedValue: 1,
       assertionValueContext: {
         ...defaultParams.assertionValueContext,
-        trace: mockTraceDataWithErrors,
+        trace: {
+          ...mockTraceDataWithErrors,
+          evaluationId: 'test-evaluation-id',
+          testCaseId: 'test-test-case-id',
+          metadata: { test: 'value' },
+        },
       },
     };
 
@@ -311,6 +343,9 @@ describe('handleTraceErrorSpans', () => {
         ...defaultParams.assertionValueContext,
         trace: {
           traceId: 'msg-errors',
+          evaluationId: 'test-evaluation-id',
+          testCaseId: 'test-test-case-id',
+          metadata: { test: 'value' },
           spans: [
             {
               spanId: '1',
@@ -366,7 +401,13 @@ describe('handleTraceErrorSpans', () => {
       renderedValue: { max_count: 0 },
       assertionValueContext: {
         ...defaultParams.assertionValueContext,
-        trace: { traceId: 'empty-trace', spans: [] },
+        trace: {
+          traceId: 'empty-trace',
+          evaluationId: 'test-evaluation-id',
+          testCaseId: 'test-test-case-id',
+          metadata: { test: 'value' },
+          spans: [],
+        },
       },
     };
 
@@ -389,7 +430,12 @@ describe('handleTraceErrorSpans', () => {
       renderedValue: {},
       assertionValueContext: {
         ...defaultParams.assertionValueContext,
-        trace: mockTraceDataWithErrors,
+        trace: {
+          ...mockTraceDataWithErrors,
+          evaluationId: 'test-evaluation-id',
+          testCaseId: 'test-test-case-id',
+          metadata: { test: 'value' },
+        },
       },
     };
 

@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import {
   ALIASED_PLUGIN_MAPPINGS,
@@ -309,6 +310,37 @@ describe('RedteamConfigSchema', () => {
     // Default plugins should be expanded
     const hasDefaultPlugins = result.plugins?.some((p) => DEFAULT_PLUGINS.has(p.id as any));
     expect(hasDefaultPlugins).toBe(true);
+  });
+
+  it('should migrate multilingual strategy languages to top-level language config', () => {
+    const config = {
+      plugins: ['default'],
+      strategies: [{ id: 'multilingual', config: { languages: ['es', 'fr'] } }],
+    };
+
+    const result = RedteamConfigSchema.parse(config);
+
+    // Languages from multilingual strategy should be migrated to top-level language config
+    expect(result.language).toEqual(['en', 'es', 'fr']);
+
+    // Multilingual strategy should be removed from strategies
+    const hasMultilingual = result.strategies?.some(
+      (s) => (typeof s === 'string' ? s : s.id) === 'multilingual',
+    );
+    expect(hasMultilingual).toBe(false);
+  });
+
+  it('should merge multilingual strategy languages with existing language config', () => {
+    const config = {
+      plugins: ['default'],
+      strategies: [{ id: 'multilingual', config: { languages: ['de', 'it'] } }],
+      language: 'ja',
+    };
+
+    const result = RedteamConfigSchema.parse(config);
+
+    // Should merge existing language with 'en' and multilingual languages
+    expect(result.language).toEqual(['ja', 'en', 'de', 'it']);
   });
 });
 
@@ -721,6 +753,123 @@ describe('redteam validators', () => {
         });
       });
     });
+  });
+});
+
+describe('layer strategy deduplication', () => {
+  it('should keep multiple layer strategies with different labels', () => {
+    const config = {
+      plugins: ['default'],
+      strategies: [
+        { id: 'layer', config: { label: 'hydra-audio', steps: ['jailbreak:hydra', 'audio'] } },
+        { id: 'layer', config: { label: 'crescendo-audio', steps: ['crescendo', 'audio'] } },
+      ],
+    };
+
+    const result = RedteamConfigSchema.parse(config);
+
+    // Both layer strategies should be kept (different labels)
+    const layerStrategies = result.strategies?.filter(
+      (s) => typeof s !== 'string' && s.id === 'layer',
+    );
+    expect(layerStrategies).toHaveLength(2);
+  });
+
+  it('should keep multiple layer strategies with different steps', () => {
+    const config = {
+      plugins: ['default'],
+      strategies: [
+        { id: 'layer', config: { steps: ['jailbreak:hydra', 'audio'] } },
+        { id: 'layer', config: { steps: ['crescendo', 'image'] } },
+      ],
+    };
+
+    const result = RedteamConfigSchema.parse(config);
+
+    // Both layer strategies should be kept (different steps)
+    const layerStrategies = result.strategies?.filter(
+      (s) => typeof s !== 'string' && s.id === 'layer',
+    );
+    expect(layerStrategies).toHaveLength(2);
+  });
+
+  it('should deduplicate identical layer strategies', () => {
+    const config = {
+      plugins: ['default'],
+      strategies: [
+        { id: 'layer', config: { label: 'same-label', steps: ['jailbreak:hydra', 'audio'] } },
+        { id: 'layer', config: { label: 'same-label', steps: ['jailbreak:hydra', 'audio'] } },
+      ],
+    };
+
+    const result = RedteamConfigSchema.parse(config);
+
+    // Duplicate layer strategies should be deduplicated
+    const layerStrategies = result.strategies?.filter(
+      (s) => typeof s !== 'string' && s.id === 'layer',
+    );
+    expect(layerStrategies).toHaveLength(1);
+  });
+
+  it('should use label for deduplication key when provided', () => {
+    const config = {
+      plugins: ['default'],
+      strategies: [
+        { id: 'layer', config: { label: 'unique-label', steps: ['jailbreak:hydra', 'audio'] } },
+        { id: 'layer', config: { label: 'unique-label', steps: ['crescendo', 'image'] } }, // Same label, different steps
+      ],
+    };
+
+    const result = RedteamConfigSchema.parse(config);
+
+    // Should only keep one (label is the key, so second overwrites first)
+    const layerStrategies = result.strategies?.filter(
+      (s) => typeof s !== 'string' && s.id === 'layer',
+    );
+    expect(layerStrategies).toHaveLength(1);
+    // The last one wins
+    expect(layerStrategies?.[0]).toEqual(
+      expect.objectContaining({
+        config: expect.objectContaining({ steps: ['crescendo', 'image'] }),
+      }),
+    );
+  });
+
+  it('should handle layer strategies without label or steps', () => {
+    const config = {
+      plugins: ['default'],
+      strategies: [{ id: 'layer', config: {} }],
+    };
+
+    const result = RedteamConfigSchema.parse(config);
+
+    const layerStrategies = result.strategies?.filter(
+      (s) => typeof s !== 'string' && s.id === 'layer',
+    );
+    expect(layerStrategies).toHaveLength(1);
+  });
+
+  it('should handle mixed layer and non-layer strategies', () => {
+    const config = {
+      plugins: ['default'],
+      strategies: [
+        'basic',
+        { id: 'layer', config: { label: 'audio-attack', steps: ['jailbreak:hydra', 'audio'] } },
+        'jailbreak',
+        { id: 'layer', config: { label: 'image-attack', steps: ['crescendo', 'image'] } },
+      ],
+    };
+
+    const result = RedteamConfigSchema.parse(config);
+
+    // Should have all strategies
+    expect(result.strategies?.length).toBeGreaterThanOrEqual(3);
+
+    // Layer strategies should both be present
+    const layerStrategies = result.strategies?.filter(
+      (s) => typeof s !== 'string' && s.id === 'layer',
+    );
+    expect(layerStrategies).toHaveLength(2);
   });
 });
 
