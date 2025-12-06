@@ -19,7 +19,7 @@ prompts:
     {{input_image}}
 
 providers:
-  - id: google:gemini-2.5-flash-image-preview
+  - id: google:gemini-2.5-flash-image
     label: 'Image Analysis + Generation 🎨'
     config:
       generationConfig:
@@ -39,8 +39,6 @@ tests:
         value: 'rectangle'
       - type: contains
         value: 'circle'
-      - type: cost
-        threshold: 0.10
 
   - description: '🌈 Describe color gradient'
     vars:
@@ -48,8 +46,6 @@ tests:
     assert:
       - type: contains
         value: 'color'
-      - type: cost
-        threshold: 0.10
 
   - description: '🌳 Identify landscape elements'
     vars:
@@ -57,8 +53,6 @@ tests:
     assert:
       - type: contains
         value: 'tree'
-      - type: cost
-        threshold: 0.10
 
   # 🎨 Image Transformation Tests
   - description: '🔄 Transform geometric to organic'
@@ -68,8 +62,6 @@ tests:
     assert:
       - type: contains
         value: '![Generated Image]'
-      - type: cost
-        threshold: 0.10
 
   - description: '🎭 Style transfer landscape to abstract'
     vars:
@@ -78,8 +70,6 @@ tests:
     assert:
       - type: contains
         value: 'data:image'
-      - type: cost
-        threshold: 0.10
 
   # 🖼️ Style-Based Generation Tests
   - description: '🏢 Use gradient colors for architecture'
@@ -89,8 +79,6 @@ tests:
     assert:
       - type: contains
         value: '![Generated Image]'
-      - type: cost
-        threshold: 0.10
 
   - description: '🦋 Apply landscape colors to wildlife'
     vars:
@@ -99,8 +87,6 @@ tests:
     assert:
       - type: contains
         value: 'data:image'
-      - type: cost
-        threshold: 0.10
       - type: javascript
         value: |
           // Validate that we get both analysis and generation

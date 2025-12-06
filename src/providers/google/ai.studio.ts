@@ -7,7 +7,6 @@ import { getNunjucksEngine } from '../../util/templates';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToGoogle } from '../mcp/transform';
 import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
-import { calculateGeminiCost } from './geminiUtils';
 import { CHAT_MODELS } from './shared';
 import {
   formatCandidateContents,
@@ -222,18 +221,11 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
             }),
           };
 
-      // Calculate cost based on token usage and model
-      let cost: number | undefined;
-      if (tokenUsage && tokenUsage.total) {
-        cost = calculateGeminiCost(this.modelName, tokenUsage.total);
-      }
-
       return {
         output,
         tokenUsage,
         raw: data,
         cached,
-        cost,
       };
     } catch (err) {
       return {
@@ -317,14 +309,6 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
       body.generationConfig.response_mime_type = 'application/json';
     }
 
-    // Enable image generation for Gemini 2.5 Flash Image models
-    if (this.modelName.includes('gemini-2.5-flash-image')) {
-      body.generationConfig = body.generationConfig || {};
-      body.generationConfig.responseModalities = ['IMAGE', 'TEXT'];
-    }
-
-    logger.debug(`Calling Google API: ${JSON.stringify(body)}`);
-
     let data;
     let cached = false;
     try {
@@ -336,7 +320,7 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            ...config.headers, // Allow custom headers (provider- and prompt-level)
+            ...this.config.headers, // Allow custom headers to be set
           },
           body: JSON.stringify(body),
         },
@@ -407,18 +391,11 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
             }),
           };
 
-      // Calculate cost based on token usage and model
-      let cost: number | undefined;
-      if (tokenUsage && tokenUsage.total) {
-        cost = calculateGeminiCost(this.modelName, tokenUsage.total);
-      }
-
       return {
         output,
         tokenUsage,
         raw: data,
         cached,
-        cost,
         ...(guardrails && { guardrails }),
         metadata: {
           ...(candidate.groundingChunks && { groundingChunks: candidate.groundingChunks }),

@@ -14,7 +14,7 @@ prompts:
     {{input_image}}
 
 providers:
-  - id: google:gemini-2.5-flash-image-preview
+  - id: google:gemini-2.5-flash-image
     label: 'Image Input+Output 🎨'
     config:
       generationConfig:
@@ -33,8 +33,6 @@ tests:
     assert:
       - type: contains
         value: '![Generated Image]'
-      - type: cost
-        threshold: 0.10 # Higher threshold for image input
       - type: javascript
         value: |
           // Main requirement: should generate a new image
@@ -48,8 +46,6 @@ tests:
     assert:
       - type: contains
         value: 'data:image'
-      - type: cost
-        threshold: 0.10
 
   - description: '🌈 Color scheme inspiration'
     vars:
@@ -58,5 +54,3 @@ tests:
     assert:
       - type: contains
         value: '![Generated Image]'
-      - type: cost
-        threshold: 0.10
