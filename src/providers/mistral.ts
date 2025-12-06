@@ -1,11 +1,7 @@
 import { fetchWithCache, getCache, isCacheEnabled } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
-import {
-  withGenAISpan,
-  type GenAISpanContext,
-  type GenAISpanResult,
-} from '../tracing/genaiTracer';
+import { withGenAISpan, type GenAISpanContext, type GenAISpanResult } from '../tracing/genaiTracer';
 import { calculateCost, parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
 
 import type { EnvVarKey } from '../envars';
@@ -289,7 +285,7 @@ export class MistralChatCompletionProvider implements ApiProvider {
 
   private async callApiInternal(
     prompt: string,
-    context?: CallApiContextParams,
+    _context?: CallApiContextParams,
     config?: MistralChatCompletionOptions,
   ): Promise<ProviderResponse> {
     if (!this.getApiKey()) {

@@ -44,6 +44,11 @@ The following providers have built-in instrumentation:
 | Anthropic | ✓ |
 | Azure OpenAI | ✓ |
 | AWS Bedrock | ✓ |
+| Ollama | ✓ |
+| Mistral | ✓ |
+| HTTP | ✓ |
+| OpenRouter | ✓ |
+| Replicate | ✓ |
 | OpenAI-compatible (Deepseek, Perplexity, etc.) | ✓ (inherited) |
 
 ### GenAI Span Attributes

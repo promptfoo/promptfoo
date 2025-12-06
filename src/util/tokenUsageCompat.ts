@@ -202,9 +202,7 @@ export function extractUsageFromSpan(span: SpanData): TokenUsage | undefined {
  * @param traceId - The trace ID to retrieve usage for
  * @returns Map of provider ID to token usage
  */
-export async function getTokenUsageByProvider(
-  traceId: string,
-): Promise<Map<string, TokenUsage>> {
+export async function getTokenUsageByProvider(traceId: string): Promise<Map<string, TokenUsage>> {
   const store = getTraceStore();
   const spans = await store.getSpans(traceId, {
     sanitizeAttributes: false,
@@ -238,9 +236,7 @@ export async function getTokenUsageByProvider(
  * @param traceId - The trace ID to retrieve usage for
  * @returns Map of test index to token usage
  */
-export async function getTokenUsageByTestIndex(
-  traceId: string,
-): Promise<Map<number, TokenUsage>> {
+export async function getTokenUsageByTestIndex(traceId: string): Promise<Map<number, TokenUsage>> {
   const store = getTraceStore();
   const spans = await store.getSpans(traceId, {
     sanitizeAttributes: false,
