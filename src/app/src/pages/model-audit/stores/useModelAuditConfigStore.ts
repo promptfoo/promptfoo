@@ -2,41 +2,19 @@ import { callApi } from '@app/utils/api';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
-import type { ScanOptions, ScanPath, ScanResult } from './ModelAudit.types';
+import type {
+  InstallationStatus,
+  RecentScan,
+  ScanOptions,
+  ScanPath,
+  ScanResult,
+} from '../ModelAudit.types';
 
-interface RecentScan {
-  id: string;
-  paths: ScanPath[];
-  timestamp: number;
-  label?: string;
-}
+// Re-export types for convenience
+export type { InstallationStatus, RecentScan };
 
-interface InstallationStatus {
-  checking: boolean;
-  installed: boolean | null;
-  error: string | null;
-  cwd: string | null;
-}
-
-// History-related types
-interface HistoricalScan {
-  id: string;
-  createdAt: number;
-  updatedAt: number;
-  name?: string | null;
-  author?: string | null;
-  modelPath: string;
-  modelType?: string | null;
-  results: ScanResult;
-  hasErrors: boolean;
-  totalChecks?: number | null;
-  passedChecks?: number | null;
-  failedChecks?: number | null;
-  metadata?: Record<string, any> | null;
-}
-
-interface ModelAuditState {
-  // Recent scans
+interface ModelAuditConfigState {
+  // Recent scans (persisted)
   recentScans: RecentScan[];
 
   // Current scan configuration
@@ -51,13 +29,7 @@ interface ModelAuditState {
   // Installation status
   installationStatus: InstallationStatus;
 
-  // History state
-  historicalScans: HistoricalScan[];
-  isLoadingHistory: boolean;
-  historyError: string | null;
-
   // UI state
-  activeTab: number;
   showFilesDialog: boolean;
   showOptionsDialog: boolean;
 
@@ -77,18 +49,13 @@ interface ModelAuditState {
   setIsScanning: (isScanning: boolean) => void;
   setScanResults: (results: ScanResult | null) => void;
   setError: (error: string | null) => void;
+  clearScanState: () => void;
 
   // Actions - Installation status
   setInstallationStatus: (status: Partial<InstallationStatus>) => void;
   checkInstallation: () => Promise<{ installed: boolean; cwd: string }>;
 
-  // Actions - History
-  fetchHistoricalScans: () => Promise<void>;
-  deleteHistoricalScan: (id: string) => Promise<void>;
-  viewHistoricalScan: (scan: HistoricalScan) => void;
-
   // Actions - UI state
-  setActiveTab: (tab: number) => void;
   setShowFilesDialog: (show: boolean) => void;
   setShowOptionsDialog: (show: boolean) => void;
 
@@ -106,7 +73,7 @@ const DEFAULT_SCAN_OPTIONS: ScanOptions = {
   timeout: 3600,
 };
 
-export const useModelAuditStore = create<ModelAuditState>()(
+export const useModelAuditConfigStore = create<ModelAuditConfigState>()(
   persist(
     (set, get) => ({
       // Initial state
@@ -122,10 +89,6 @@ export const useModelAuditStore = create<ModelAuditState>()(
         error: null,
         cwd: null,
       },
-      historicalScans: [],
-      isLoadingHistory: false,
-      historyError: null,
-      activeTab: 0,
       showFilesDialog: false,
       showOptionsDialog: false,
 
@@ -189,6 +152,7 @@ export const useModelAuditStore = create<ModelAuditState>()(
       setIsScanning: (isScanning) => set({ isScanning }),
       setScanResults: (scanResults) => set({ scanResults, error: null }),
       setError: (error) => set({ error }),
+      clearScanState: () => set({ scanResults: null, error: null, isScanning: false }),
 
       // Actions - Installation status
       setInstallationStatus: (status) => {
@@ -251,67 +215,7 @@ export const useModelAuditStore = create<ModelAuditState>()(
         return checkInstallationPromise;
       },
 
-      // Actions - History
-      // TODO(faizan): Implement pagination
-      fetchHistoricalScans: async () => {
-        set({ isLoadingHistory: true, historyError: null });
-
-        try {
-          const response = await callApi('/model-audit/scans');
-          if (!response.ok) {
-            throw new Error('Failed to fetch historical scans');
-          }
-
-          const data = await response.json();
-          set({
-            historicalScans: data.scans || [],
-            isLoadingHistory: false,
-          });
-        } catch (error) {
-          const errorMessage = error instanceof Error ? error.message : 'Failed to fetch history';
-          set({
-            isLoadingHistory: false,
-            historyError: errorMessage,
-          });
-        }
-      },
-
-      deleteHistoricalScan: async (id: string) => {
-        try {
-          const response = await callApi(`/model-audit/scans/${id}`, {
-            method: 'DELETE',
-          });
-
-          if (!response.ok) {
-            throw new Error('Failed to delete scan');
-          }
-
-          // Remove from local state
-          set((state) => ({
-            historicalScans: state.historicalScans.filter((scan) => scan.id !== id),
-          }));
-        } catch (error) {
-          const errorMessage = error instanceof Error ? error.message : 'Failed to delete scan';
-          set({ historyError: errorMessage });
-          throw error;
-        }
-      },
-
-      viewHistoricalScan: (scan: HistoricalScan) => {
-        // Set the scan results and switch to Results tab
-        set({
-          scanResults: scan.results,
-          activeTab: 1,
-          paths:
-            scan.metadata?.originalPaths?.map((p: string) => ({
-              path: p,
-              type: 'file' as const,
-            })) || [],
-        });
-      },
-
       // Actions - UI state
-      setActiveTab: (activeTab) => set({ activeTab }),
       setShowFilesDialog: (showFilesDialog) => set({ showFilesDialog }),
       setShowOptionsDialog: (showOptionsDialog) => set({ showOptionsDialog }),
 
@@ -319,15 +223,45 @@ export const useModelAuditStore = create<ModelAuditState>()(
       getRecentScans: () => get().recentScans,
     }),
     {
-      name: 'model-audit-store',
-      version: 2, // Increment version to handle migration
+      name: 'model-audit-config-store',
+      version: 1,
       skipHydration: true,
       partialize: (state) => ({
-        // Only persist these fields - removed installationStatus
+        // Only persist these fields
         recentScans: state.recentScans,
         scanOptions: state.scanOptions,
       }),
       storage: createJSONStorage(() => localStorage),
+      // Migrate data from old store if it exists
+      migrate: (persistedState, version) => {
+        if (version === 0 || !persistedState) {
+          // Check for old store data and migrate it
+          const oldStoreKey = 'model-audit-store';
+          const oldStoreData = localStorage.getItem(oldStoreKey);
+          if (oldStoreData) {
+            try {
+              const parsed = JSON.parse(oldStoreData);
+              const oldState = parsed.state || {};
+
+              // Merge old data with persisted state
+              const migratedState = {
+                ...(persistedState || {}),
+                recentScans: oldState.recentScans || [],
+                scanOptions: oldState.scanOptions || DEFAULT_SCAN_OPTIONS,
+              };
+
+              // Clean up old store after successful migration
+              localStorage.removeItem(oldStoreKey);
+              console.info('[ModelAuditConfigStore] Migrated data from old store');
+
+              return migratedState as typeof persistedState;
+            } catch (e) {
+              console.warn('[ModelAuditConfigStore] Failed to migrate from old store:', e);
+            }
+          }
+        }
+        return persistedState as typeof persistedState;
+      },
     },
   ),
 );
