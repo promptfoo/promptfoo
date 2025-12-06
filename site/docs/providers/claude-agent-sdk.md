@@ -417,6 +417,7 @@ Here are a few complete example implementations:
 
 - [OpenAI Codex SDK](/docs/providers/openai-codex-sdk/) - OpenAI's thread-based agent
 - [OpenCode SDK](/docs/providers/opencode-sdk/) - Multi-provider agent with 75+ LLM support
+- [OpenHands SDK](/docs/providers/openhands-sdk/) - Docker-sandboxed agent with 72.8% SWE-Bench
 
 ### Guides
 

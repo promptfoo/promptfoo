@@ -540,6 +540,7 @@ See the [examples directory](https://github.com/promptfoo/promptfoo/tree/main/ex
 
 - [Claude Agent SDK](/docs/providers/claude-agent-sdk/) - Anthropic's agentic framework
 - [OpenCode SDK](/docs/providers/opencode-sdk/) - Multi-provider agent with 75+ LLM support
+- [OpenHands SDK](/docs/providers/openhands-sdk/) - Docker-sandboxed agent with 72.8% SWE-Bench
 
 ### Guides
 

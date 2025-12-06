@@ -13,6 +13,7 @@ This guide covers evaluating CLI-based coding agents with promptfoo:
 - [Claude Agent SDK](/docs/providers/claude-agent-sdk) - Anthropic's agentic framework
 - [OpenAI Codex SDK](/docs/providers/openai-codex-sdk) - OpenAI's thread-based agent
 - [OpenCode SDK](/docs/providers/opencode-sdk) - Multi-provider agent with 75+ LLM support
+- [OpenHands SDK](/docs/providers/openhands-sdk) - 72.8% SWE-Bench with Docker sandboxing
 
 ## Why agent evals are different
 
@@ -26,23 +27,23 @@ Standard LLM evals test a function: given input X, does output Y meet criteria Z
 
 ## Capability tiers
 
-| Tier           | Example                                                          | Can Do                                       | Cannot Do                |
-| -------------- | ---------------------------------------------------------------- | -------------------------------------------- | ------------------------ |
-| **0: Text**    | `openai:gpt-5.1`, `anthropic:claude-sonnet-4-5-20250929`         | Generate code, discuss patterns, return JSON | Read files, execute code |
-| **1: Agentic** | `openai:codex-sdk`, `anthropic:claude-agent-sdk`, `opencode:sdk` | Read/write files, run commands, iterate      | (Full capabilities)      |
+| Tier           | Example                                                                           | Can Do                                       | Cannot Do                |
+| -------------- | --------------------------------------------------------------------------------- | -------------------------------------------- | ------------------------ |
+| **0: Text**    | `openai:gpt-5.1`, `anthropic:claude-sonnet-4-5-20250929`                          | Generate code, discuss patterns, return JSON | Read files, execute code |
+| **1: Agentic** | `openai:codex-sdk`, `anthropic:claude-agent-sdk`, `opencode:sdk`, `openhands:sdk` | Read/write files, run commands, iterate      | (Full capabilities)      |
 
 The same underlying model behaves differently at each tier. A plain `claude-sonnet-4-5-20250929` call can't read your files; wrap it in Claude Agent SDK and it can.
 
 All agentic providers have similar capabilities. The differences are in defaults, LLM support, and ecosystem:
 
-| Aspect                  | Codex SDK                        | Claude Agent SDK                 | OpenCode SDK                                      |
-| ----------------------- | -------------------------------- | -------------------------------- | ------------------------------------------------- |
-| **LLM providers**       | OpenAI only                      | Anthropic only                   | 75+ via LiteLLM (Anthropic, OpenAI, Ollama, etc.) |
-| **Default permissions** | Full access (Git repo required)  | Read-only until you opt-in       | Read-only until you opt-in                        |
-| **Structured output**   | `output_schema`                  | `output_format.json_schema`      | Not supported                                     |
-| **State management**    | Thread-based (`persist_threads`) | Stateless (or `resume` sessions) | Session-based with LRU eviction                   |
-| **Safety**              | Git repo check                   | Tool allowlists                  | Permission configuration                          |
-| **Ecosystem**           | OpenAI Responses API             | MCP servers, CLAUDE.md           | MCP servers, AGENTS.md                            |
+| Aspect                  | Codex SDK                        | Claude Agent SDK                 | OpenCode SDK                                      | OpenHands SDK                     |
+| ----------------------- | -------------------------------- | -------------------------------- | ------------------------------------------------- | --------------------------------- |
+| **LLM providers**       | OpenAI only                      | Anthropic only                   | 75+ via LiteLLM (Anthropic, OpenAI, Ollama, etc.) | 100+ via LiteLLM                  |
+| **Default permissions** | Full access (Git repo required)  | Read-only until you opt-in       | Read-only until you opt-in                        | Full access in Docker sandbox     |
+| **Structured output**   | `output_schema`                  | `output_format.json_schema`      | Not supported                                     | Not supported                     |
+| **State management**    | Thread-based (`persist_threads`) | Stateless (or `resume` sessions) | Session-based with LRU eviction                   | Session-based with LRU eviction   |
+| **Safety**              | Git repo check                   | Tool allowlists                  | Permission configuration                          | Docker sandboxing                 |
+| **Ecosystem**           | OpenAI Responses API             | MCP servers, CLAUDE.md           | MCP servers, AGENTS.md                            | Python-based, LiteLLM integration |
 
 ## Examples
 
@@ -364,6 +365,13 @@ See [Sandboxed code evals](/docs/guides/sandboxed-code-evals) for container-base
 - You want to use local models (Ollama, LM Studio)
 - You want provider flexibility without vendor lock-in
 
+**Use OpenHands SDK when:**
+
+- You need Docker-based sandboxed execution
+- You're evaluating SWE-Bench style tasks
+- You want high-performance agent (72.8% SWE-Bench Verified)
+- You need container isolation for security
+
 ## See also
 
 ### Provider documentation
@@ -371,6 +379,7 @@ See [Sandboxed code evals](/docs/guides/sandboxed-code-evals) for container-base
 - [Claude Agent SDK provider](/docs/providers/claude-agent-sdk)
 - [OpenAI Codex SDK provider](/docs/providers/openai-codex-sdk)
 - [OpenCode SDK provider](/docs/providers/opencode-sdk)
+- [OpenHands SDK provider](/docs/providers/openhands-sdk)
 
 ### Examples
 
