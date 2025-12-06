@@ -1,5 +1,12 @@
 import { useCallback, useReducer, useRef } from 'react';
-import type { Job, JobError, JobMetrics, JobCompletionSummary } from '@promptfoo/types';
+import type {
+  Job,
+  JobError,
+  JobMetrics,
+  JobCompletionSummary,
+  VulnerabilityFoundEvent,
+  VulnerabilitySeverityCounts,
+} from '@promptfoo/types';
 
 /**
  * Consolidated job state - replaces 15+ individual useState calls
@@ -28,6 +35,10 @@ export interface JobState {
   logs: string[];
   logsExpanded: boolean;
 
+  // Live vulnerability stream
+  vulnerabilities: VulnerabilityFoundEvent[];
+  severityCounts: VulnerabilitySeverityCounts;
+
   // Timestamp for conflict resolution between WebSocket and polling
   lastUpdateTimestamp: number;
 }
@@ -44,7 +55,8 @@ type JobAction =
   | { type: 'COMPLETE'; payload: JobCompletePayload; timestamp: number }
   | { type: 'ERROR'; message: string; timestamp: number }
   | { type: 'TOGGLE_LOGS' }
-  | { type: 'APPEND_LOGS'; logs: string[]; timestamp: number; source: 'websocket' | 'polling' };
+  | { type: 'APPEND_LOGS'; logs: string[]; timestamp: number; source: 'websocket' | 'polling' }
+  | { type: 'ADD_VULNERABILITY'; vulnerability: VulnerabilityFoundEvent };
 
 interface JobCompletePayload {
   evalId?: string | null;
@@ -61,6 +73,15 @@ interface JobCompletePayload {
  */
 const WEBSOCKET_PRIORITY_WINDOW_MS = 2000;
 
+function createInitialSeverityCounts(): VulnerabilitySeverityCounts {
+  return {
+    critical: 0,
+    high: 0,
+    medium: 0,
+    low: 0,
+  };
+}
+
 const initialState: JobState = {
   jobId: null,
   status: 'idle',
@@ -75,6 +96,8 @@ const initialState: JobState = {
   summary: undefined,
   logs: [],
   logsExpanded: false,
+  vulnerabilities: [],
+  severityCounts: createInitialSeverityCounts(),
   lastUpdateTimestamp: 0,
 };
 
@@ -105,6 +128,8 @@ function jobReducer(state: JobState, action: JobAction): JobState {
         phaseDetail: 'Starting red team evaluation...',
         metrics: createInitialMetrics(),
         errors: [],
+        vulnerabilities: [],
+        severityCounts: createInitialSeverityCounts(),
         lastUpdateTimestamp: Date.now(),
       };
 
@@ -209,6 +234,23 @@ function jobReducer(state: JobState, action: JobAction): JobState {
         ...state,
         logsExpanded: !state.logsExpanded,
       };
+
+    case 'ADD_VULNERABILITY': {
+      // Avoid duplicate vulnerabilities by checking ID
+      if (state.vulnerabilities.some((v) => v.id === action.vulnerability.id)) {
+        return state;
+      }
+
+      // Update severity counts
+      const newSeverityCounts = { ...state.severityCounts };
+      newSeverityCounts[action.vulnerability.severity] += 1;
+
+      return {
+        ...state,
+        vulnerabilities: [...state.vulnerabilities, action.vulnerability],
+        severityCounts: newSeverityCounts,
+      };
+    }
 
     default:
       return state;
@@ -332,6 +374,10 @@ export function useJobState() {
     dispatch({ type: 'TOGGLE_LOGS' });
   }, []);
 
+  const addVulnerability = useCallback((vulnerability: VulnerabilityFoundEvent) => {
+    dispatch({ type: 'ADD_VULNERABILITY', vulnerability });
+  }, []);
+
   const setPollInterval = useCallback((interval: number | null) => {
     if (pollIntervalRef.current) {
       window.clearInterval(pollIntervalRef.current);
@@ -356,6 +402,7 @@ export function useJobState() {
       completeJob,
       errorJob,
       toggleLogs,
+      addVulnerability,
       setPollInterval,
       clearPollInterval,
     },

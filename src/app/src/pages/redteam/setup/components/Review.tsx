@@ -68,7 +68,7 @@ import { RunOptionsContent } from './RunOptions';
 
 // Types
 import type { RedteamPlugin, Policy, PolicyObject } from '@promptfoo/redteam/types';
-import type { Job, RedteamRunOptions } from '@promptfoo/types';
+import type { Job, RedteamRunOptions, VulnerabilityFoundEvent } from '@promptfoo/types';
 
 interface ReviewProps {
   onBack?: () => void;
@@ -158,11 +158,19 @@ export default function Review({
     [jobActions, recordEvent],
   );
 
+  const handleVulnerability = useCallback(
+    (vulnerability: VulnerabilityFoundEvent) => {
+      jobActions.addVulnerability(vulnerability);
+    },
+    [jobActions],
+  );
+
   // WebSocket provides real-time updates; polling is a fallback mechanism
   useJobSocket({
     jobId: jobState.jobId,
     onUpdate: handleJobUpdate,
     onComplete: handleJobComplete,
+    onVulnerability: handleVulnerability,
   });
   const [isEmailDialogOpen, setIsEmailDialogOpen] = useState(false);
   const [emailVerificationMessage, setEmailVerificationMessage] = useState('');
@@ -1330,6 +1338,8 @@ export default function Review({
                 errors={jobState.errors}
                 summary={jobState.summary}
                 evalId={jobState.evalId}
+                vulnerabilities={jobState.vulnerabilities}
+                severityCounts={jobState.severityCounts}
               >
                 <LogViewer logs={jobState.logs} />
               </ExecutionProgress>

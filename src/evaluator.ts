@@ -1316,6 +1316,11 @@ class Evaluator {
         if (options.progressCallback) {
           options.progressCallback(numComplete, runEvalOptions.length, index, evalStep, metrics);
         }
+
+        // Call resultCallback with the full result for real-time vulnerability streaming
+        if (options.resultCallback) {
+          options.resultCallback(row, numComplete, runEvalOptions.length);
+        }
       }
     };
 

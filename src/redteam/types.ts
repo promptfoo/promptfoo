@@ -238,6 +238,11 @@ export interface RedteamRunOptions {
     evalStep: any, // RunEvalOptions, but introduces circular dependency
     metrics: any, // PromptMetrics, but introduces circular dependency
   ) => void;
+  resultCallback?: (
+    result: any, // EvaluateResult, but introduces circular dependency
+    index: number,
+    total: number,
+  ) => void;
   abortSignal?: AbortSignal;
 
   loadedFromCloud?: boolean;

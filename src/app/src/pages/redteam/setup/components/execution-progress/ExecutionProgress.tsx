@@ -17,8 +17,15 @@ import { alpha, useTheme } from '@mui/material/styles';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 
-import type { JobError, JobMetrics, JobCompletionSummary } from '@promptfoo/types';
+import type {
+  JobError,
+  JobMetrics,
+  JobCompletionSummary,
+  VulnerabilityFoundEvent,
+  VulnerabilitySeverityCounts,
+} from '@promptfoo/types';
 
+import VulnerabilityStream from '../VulnerabilityStream';
 import { CompletionSummary } from './CompletionSummary';
 import { ErrorsPanel } from './ErrorsPanel';
 import { ResourcesPanel } from './ResourcesPanel';
@@ -43,6 +50,9 @@ export interface ExecutionProgressProps {
   errors?: JobError[];
   summary?: JobCompletionSummary;
   evalId?: string | null;
+  // Live vulnerability stream
+  vulnerabilities?: VulnerabilityFoundEvent[];
+  severityCounts?: VulnerabilitySeverityCounts;
 }
 
 export function ExecutionProgress({
@@ -62,6 +72,8 @@ export function ExecutionProgress({
   errors,
   summary,
   evalId,
+  vulnerabilities,
+  severityCounts,
 }: ExecutionProgressProps) {
   const theme = useTheme();
 
@@ -286,6 +298,15 @@ export function ExecutionProgress({
         (metrics.testPassCount > 0 || metrics.testFailCount > 0 || metrics.testErrorCount > 0) && (
           <ResultsPanel metrics={metrics} />
         )}
+
+      {/* Live vulnerability stream */}
+      {vulnerabilities && severityCounts && (
+        <VulnerabilityStream
+          vulnerabilities={vulnerabilities}
+          severityCounts={severityCounts}
+          sx={{ mt: 2, maxHeight: 400 }}
+        />
+      )}
 
       {/* Completion summary */}
       {status === 'complete' && summary && (

@@ -41,7 +41,8 @@ import {
   detectErrorFromLog,
   detectPhaseFromLog,
 } from '../utils/jobProgress';
-import type { Job } from '../../types';
+import type { EvaluateResult, Job, VulnerabilityFoundEvent } from '../../types';
+import { createVulnerabilityEvent } from '../services/redteamJobService';
 
 /**
  * Emit job update via WebSocket (throttled to avoid flooding)
@@ -90,6 +91,13 @@ function emitJobComplete(jobId: string, job: Job): void {
     errors: job.errors,
     summary: job.summary,
   });
+}
+
+/**
+ * Emit vulnerability discovery via WebSocket (always sent immediately, never throttled)
+ */
+function emitVulnerability(jobId: string, vulnerability: VulnerabilityFoundEvent): void {
+  emitJobUpdate(jobId, 'job:vulnerability', vulnerability);
 }
 
 /**
@@ -353,6 +361,7 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
     startedAt: Date.now(),
     metrics: createInitialMetrics(),
     errors: [],
+    vulnerabilities: [],
   };
   evalJobs.set(id, job);
 
@@ -412,6 +421,25 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
 
           // Emit throttled update via WebSocket
           emitThrottledJobUpdate(id, job);
+        }
+      }
+    },
+    resultCallback: (result: EvaluateResult, testIndex: number, _total: number) => {
+      if (currentJobId === id) {
+        const job = evalJobs.get(id);
+        if (job) {
+          // Check if this result represents a vulnerability
+          const vulnerability = createVulnerabilityEvent(result, testIndex);
+          if (vulnerability) {
+            // Add to job's vulnerability list
+            if (!job.vulnerabilities) {
+              job.vulnerabilities = [];
+            }
+            job.vulnerabilities.push(vulnerability);
+
+            // Emit vulnerability immediately (not throttled)
+            emitVulnerability(id, vulnerability);
+          }
         }
       }
     },

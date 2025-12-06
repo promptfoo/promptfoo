@@ -2,7 +2,13 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { io, type Socket } from 'socket.io-client';
 import { IS_RUNNING_LOCALLY } from '@app/constants';
 import useApiConfig from '@app/stores/apiConfig';
-import type { Job, JobError, JobMetrics, JobCompletionSummary } from '@promptfoo/types';
+import type {
+  Job,
+  JobError,
+  JobMetrics,
+  JobCompletionSummary,
+  VulnerabilityFoundEvent,
+} from '@promptfoo/types';
 
 /**
  * Job update payload from WebSocket
@@ -36,6 +42,7 @@ interface UseJobSocketOptions {
   jobId: string | null;
   onUpdate?: (payload: JobUpdatePayload) => void;
   onComplete?: (payload: JobCompletePayload) => void;
+  onVulnerability?: (vulnerability: VulnerabilityFoundEvent) => void;
   onError?: (error: Error) => void;
 }
 
@@ -55,6 +62,7 @@ export function useJobSocket({
   jobId,
   onUpdate,
   onComplete,
+  onVulnerability,
   onError,
 }: UseJobSocketOptions): UseJobSocketReturn {
   const [isConnected, setIsConnected] = useState(false);
@@ -65,14 +73,16 @@ export function useJobSocket({
   // Store callbacks in refs to avoid reconnection when they change
   const onUpdateRef = useRef(onUpdate);
   const onCompleteRef = useRef(onComplete);
+  const onVulnerabilityRef = useRef(onVulnerability);
   const onErrorRef = useRef(onError);
 
   // Keep refs in sync with props
   useEffect(() => {
     onUpdateRef.current = onUpdate;
     onCompleteRef.current = onComplete;
+    onVulnerabilityRef.current = onVulnerability;
     onErrorRef.current = onError;
-  }, [onUpdate, onComplete, onError]);
+  }, [onUpdate, onComplete, onVulnerability, onError]);
 
   // Initialize socket connection
   useEffect(() => {
@@ -113,6 +123,11 @@ export function useJobSocket({
     // Handle job completion
     socket.on('job:complete', (payload: JobCompletePayload) => {
       onCompleteRef.current?.(payload);
+    });
+
+    // Handle vulnerability discoveries (sent immediately, not throttled)
+    socket.on('job:vulnerability', (vulnerability: VulnerabilityFoundEvent) => {
+      onVulnerabilityRef.current?.(vulnerability);
     });
 
     return () => {
