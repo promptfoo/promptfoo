@@ -12,6 +12,14 @@ export default function BlogPostCard({ post }: BlogPostCardProps): React.ReactEl
   const { title, date, permalink, tags, description } = metadata;
   const author = metadata.authors[0];
 
+  // Format date with UTC timezone to avoid timezone conversion issues
+  const formattedDate = new Date(date).toLocaleDateString('en-US', {
+    day: 'numeric',
+    month: 'numeric',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
+
   return (
     <Link to={permalink} className={styles.blogPostCard}>
       {metadata.frontMatter.image && (
@@ -25,7 +33,7 @@ export default function BlogPostCard({ post }: BlogPostCardProps): React.ReactEl
         <div className={styles.blogPostMeta}>
           {author && (
             <span className={styles.author}>
-              {author.name} · {new Date(date).toLocaleDateString()}
+              {author.name} · {formattedDate}
             </span>
           )}
         </div>
