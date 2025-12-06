@@ -91,6 +91,8 @@ npm run local -- eval -c path/to/config.yaml
 
 This ensures you're testing with your current changes instead of the installed version.
 
+**Don't run `npm run local -- view`** unless explicitly asked. Assume the user already has `npm run dev` running in a separate terminal. The `view` command serves static production builds without hot reload, while the dev server at http://localhost:3000 provides HMR for faster iteration.
+
 **Important:** Always use `--` before additional flags when using `npm run local`:
 
 ```bash
