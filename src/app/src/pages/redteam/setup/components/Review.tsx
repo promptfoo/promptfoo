@@ -11,15 +11,12 @@ import { callApi } from '@app/utils/api';
 
 // MUI Icons
 import AssessmentIcon from '@mui/icons-material/Assessment';
-import CloseIcon from '@mui/icons-material/Close';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import SaveIcon from '@mui/icons-material/Save';
 import SearchIcon from '@mui/icons-material/Search';
-import TuneIcon from '@mui/icons-material/Tune';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 
 // MUI Components
@@ -182,7 +179,6 @@ export default function Review({
   const [emailVerificationError, setEmailVerificationError] = useState<string | null>(null);
   const { checkEmailStatus } = useEmailVerification();
   const [isPurposeExpanded, setIsPurposeExpanded] = useState(false);
-  const [isTestInstructionsExpanded, setIsTestInstructionsExpanded] = useState(false);
   const [isRunOptionsExpanded, setIsRunOptionsExpanded] = useState(true);
 
   // Auto-expand advanced config if there are existing test variables
@@ -632,15 +628,7 @@ export default function Review({
     <PageWrapper title="Review & Run" onBack={onBack}>
       <Box>
         {/* Hero Action Area - Run button at top */}
-        <Paper
-          elevation={1}
-          sx={{
-            p: 2.5,
-            mb: 3,
-            borderRadius: 2,
-            borderLeft: `4px solid ${theme.palette.primary.main}`,
-          }}
-        >
+        <Paper elevation={1} sx={{ p: 2.5, mb: 3, borderRadius: 2 }}>
           <Box
             sx={{
               display: 'flex',
@@ -818,7 +806,7 @@ export default function Review({
 
         {/* Execution Progress - Expands when running */}
         {(jobState.status !== 'idle' || jobState.logs.length > 0) && (
-          <Paper elevation={2} sx={{ p: 3, mb: 3 }}>
+          <Paper elevation={1} sx={{ p: 2.5, mb: 3, borderRadius: 2 }}>
             <ExecutionProgress
               progress={jobState.progress}
               total={jobState.total}
@@ -875,7 +863,7 @@ export default function Review({
         <Accordion
           expanded={isConfigExpanded}
           onChange={(_e, expanded) => setIsConfigExpanded(expanded)}
-          sx={{ mb: 2 }}
+          sx={{ mb: 2, borderRadius: 2, '&:before': { display: 'none' } }}
         >
           <AccordionSummary expandIcon={<ExpandMoreIcon />}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
@@ -886,570 +874,362 @@ export default function Review({
             </Box>
           </AccordionSummary>
           <AccordionDetails>
-            <Grid container spacing={3}>
-              <Grid size={{ xs: 6 }}>
-                <Paper elevation={1} sx={{ p: 2, height: '100%' }}>
-                  <Typography variant="subtitle1" gutterBottom fontWeight={500}>
-                    Plugins ({pluginSummary.length})
-                  </Typography>
-                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                    {pluginSummary.map(([label, count]) => (
-                      <Chip
-                        key={label}
-                        label={count > 1 ? `${label} (${count})` : label}
-                        size="small"
-                        onDelete={() => {
-                          const newPlugins = config.plugins.filter((plugin) => {
-                            const pluginLabel = getPluginSummary(plugin).label;
-                            return pluginLabel !== label;
-                          });
-                          updateConfig('plugins', newPlugins);
-                        }}
-                        sx={{
-                          backgroundColor:
-                            label === 'Custom Policy' ? theme.palette.primary.main : undefined,
-                          color:
-                            label === 'Custom Policy'
-                              ? theme.palette.primary.contrastText
-                              : undefined,
-                        }}
-                      />
-                    ))}
-                  </Box>
-                  {pluginSummary.length === 0 && (
-                    <>
-                      <Alert severity="warning" sx={{ mt: 2 }}>
-                        No plugins selected. Plugins define what vulnerabilities to test.
-                      </Alert>
-                      <Button
-                        onClick={navigateToPlugins}
-                        sx={{ mt: 2 }}
-                        variant="contained"
-                        size="small"
-                      >
-                        Add plugins
-                      </Button>
-                    </>
-                  )}
-                </Paper>
-              </Grid>
-
-              <Grid size={{ xs: 6 }}>
-                <Paper elevation={1} sx={{ p: 2, height: '100%' }}>
-                  <Typography variant="subtitle1" gutterBottom fontWeight={500}>
-                    Strategies ({strategySummary.length})
-                  </Typography>
-                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                    {strategySummary.map(([label, count]) => (
-                      <Chip
-                        key={label}
-                        label={count > 1 ? `${label} (${count})` : label}
-                        size="small"
-                        onDelete={() => {
-                          const strategyId =
-                            Object.entries(strategyDisplayNames).find(
-                              ([_id, displayName]) => displayName === label,
-                            )?.[0] || label;
-
-                          if (strategyId === 'basic') {
-                            const newStrategies = config.strategies.map((strategy) => {
-                              const id = getStrategyId(strategy);
-                              if (id === 'basic') {
-                                return {
-                                  id: 'basic',
-                                  config: {
-                                    ...(typeof strategy === 'object' ? strategy.config : {}),
-                                    enabled: false,
-                                  },
-                                };
-                              }
-                              return strategy;
-                            });
-                            updateConfig('strategies', newStrategies);
-                          } else {
-                            const newStrategies = config.strategies.filter((strategy) => {
-                              const id = getStrategyId(strategy);
-                              return id !== strategyId;
-                            });
-                            updateConfig('strategies', newStrategies);
-                          }
-                        }}
-                      />
-                    ))}
-                  </Box>
-                  {(strategySummary.length === 0 ||
-                    (strategySummary.length === 1 && strategySummary[0][0] === 'Basic')) && (
-                    <>
-                      <Alert severity="warning" sx={{ mt: 2 }}>
-                        Consider adding more strategies for better coverage.
-                      </Alert>
-                      <Button
-                        onClick={navigateToStrategies}
-                        sx={{ mt: 2 }}
-                        variant="contained"
-                        size="small"
-                      >
-                        Add strategies
-                      </Button>
-                    </>
-                  )}
-                </Paper>
-              </Grid>
-
-              {customPolicies.length > 0 && (
-                <Grid size={{ xs: 6 }}>
-                  <Paper elevation={1} sx={{ p: 2, height: '100%' }}>
-                    <Typography variant="subtitle1" gutterBottom fontWeight={500}>
-                      Custom Policies ({customPolicies.length})
-                    </Typography>
-                    <Stack spacing={1} sx={{ maxHeight: 200, overflowY: 'auto' }}>
-                      {customPolicies.map((policy, index) => {
-                        const isPolicyObject = isValidPolicyObject(policy.config.policy);
-                        return (
-                          <Box
-                            key={index}
-                            sx={{
-                              p: 1,
-                              borderRadius: 1,
-                              bgcolor: theme.palette.action.hover,
-                              display: 'flex',
-                              justifyContent: 'space-between',
-                              alignItems: 'center',
-                            }}
-                          >
-                            <Typography variant="body2" noWrap sx={{ flex: 1 }}>
-                              {isPolicyObject
-                                ? (policy.config.policy as PolicyObject).name
-                                : makeDefaultPolicyName(index)}
-                            </Typography>
-                            <IconButton
-                              size="small"
-                              onClick={() => {
-                                const policyToMatch =
-                                  typeof policy.config.policy === 'string'
-                                    ? policy.config.policy
-                                    : policy.config.policy?.id;
-                                const newPlugins = config.plugins.filter(
-                                  (p) =>
-                                    !(
-                                      typeof p === 'object' &&
-                                      p.id === 'policy' &&
-                                      ((typeof p.config?.policy === 'string' &&
-                                        p.config.policy === policyToMatch) ||
-                                        (typeof p.config?.policy === 'object' &&
-                                          p.config.policy?.id === policyToMatch))
-                                    ),
-                                );
-                                updateConfig('plugins', newPlugins);
-                              }}
-                            >
-                              <CloseIcon fontSize="small" />
-                            </IconButton>
-                          </Box>
-                        );
-                      })}
-                    </Stack>
-                  </Paper>
-                </Grid>
-              )}
-
-              {intents.length > 0 && (
-                <Grid size={{ xs: 6 }}>
-                  <Paper elevation={1} sx={{ p: 2, height: '100%' }}>
-                    <Typography variant="subtitle1" gutterBottom fontWeight={500}>
-                      Intents ({intents.length})
-                    </Typography>
-                    <Stack spacing={1} sx={{ maxHeight: 200, overflowY: 'auto' }}>
-                      {intents.slice(0, expanded ? undefined : 5).map((intent, index) => (
-                        <Box
-                          key={index}
-                          sx={{
-                            p: 1,
-                            borderRadius: 1,
-                            bgcolor: theme.palette.action.hover,
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                          }}
-                        >
-                          <Typography variant="body2" noWrap sx={{ flex: 1, mr: 1 }}>
-                            {intent}
-                          </Typography>
-                          <IconButton
-                            size="small"
-                            onClick={() => {
-                              const intentPlugin = config.plugins.find(
-                                (p): p is { id: 'intent'; config: { intent: string | string[] } } =>
-                                  typeof p === 'object' &&
-                                  p.id === 'intent' &&
-                                  p.config?.intent !== undefined,
-                              );
-                              if (intentPlugin) {
-                                const currentIntents = Array.isArray(intentPlugin.config.intent)
-                                  ? intentPlugin.config.intent
-                                  : [intentPlugin.config.intent];
-                                const newIntents = currentIntents.filter((i) => i !== intent);
-                                const newPlugins = config.plugins.map((p) =>
-                                  typeof p === 'object' && p.id === 'intent'
-                                    ? { ...p, config: { ...p.config, intent: newIntents } }
-                                    : p,
-                                );
-                                updateConfig('plugins', newPlugins);
-                              }
-                            }}
-                          >
-                            <CloseIcon fontSize="small" />
-                          </IconButton>
-                        </Box>
-                      ))}
-                      {intents.length > 5 && (
-                        <Button onClick={() => setExpanded(!expanded)} size="small">
-                          {expanded ? 'Show Less' : `Show ${intents.length - 5} More`}
-                        </Button>
-                      )}
-                    </Stack>
-                  </Paper>
-                </Grid>
-              )}
-
-              <Grid size={{ xs: 12 }}>
-                <Box sx={{ boxShadow: theme.shadows[1], borderRadius: 1, overflow: 'hidden' }}>
-                  <Accordion
-                    expanded={isPurposeExpanded}
-                    onChange={(_e, expanded) => {
-                      setIsPurposeExpanded(expanded);
-                    }}
-                    sx={{
-                      '&:before': { display: 'none' },
-                      boxShadow: 'none',
-                      borderRadius: 0,
-                      borderBottom: `1px solid ${theme.palette.divider}`,
-                    }}
-                  >
-                    <AccordionSummary
-                      expandIcon={<ExpandMoreIcon />}
-                      sx={{
-                        '& .MuiAccordionSummary-content': {
-                          alignItems: 'center',
-                          gap: 2,
-                        },
+            <Grid container spacing={2}>
+              {/* Plugins */}
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <Typography variant="subtitle2" gutterBottom fontWeight={500}>
+                  Plugins ({pluginSummary.length})
+                </Typography>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                  {pluginSummary.map(([label, count]) => (
+                    <Chip
+                      key={label}
+                      label={count > 1 ? `${label} (${count})` : label}
+                      size="small"
+                      onDelete={() => {
+                        const newPlugins = config.plugins.filter((plugin) => {
+                          const pluginLabel = getPluginSummary(plugin).label;
+                          return pluginLabel !== label;
+                        });
+                        updateConfig('plugins', newPlugins);
                       }}
-                    >
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <InfoOutlinedIcon fontSize="small" color="action" />
-                        <Typography variant="h6">Application Details</Typography>
-                        {config.purpose && (
-                          <Chip
-                            label={config.purpose.length < 100 ? 'Needs more detail' : 'Configured'}
-                            size="small"
-                            variant="outlined"
-                            color={config.purpose.length < 100 ? 'warning' : 'success'}
-                            sx={{ height: 20, fontSize: '0.75rem' }}
-                          />
-                        )}
-                        {!config.purpose && (
-                          <Chip
-                            label="Not configured"
-                            size="small"
-                            variant="outlined"
-                            color="error"
-                            sx={{ height: 20, fontSize: '0.75rem' }}
-                          />
-                        )}
-                      </Box>
-                    </AccordionSummary>
-                    <AccordionDetails sx={{ pt: 0 }}>
-                      <Grid size={{ xs: 12 }}>
-                        <Box
-                          sx={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'flex-end',
-                            mb: 1,
-                          }}
-                        >
-                          {parsedPurposeSections.length > 1 && (
-                            <Button
-                              size="small"
-                              onClick={() => {
-                                if (expandedPurposeSections.size === parsedPurposeSections.length) {
-                                  setExpandedPurposeSections(new Set());
-                                } else {
-                                  setExpandedPurposeSections(
-                                    new Set(parsedPurposeSections.map((s) => s.title)),
-                                  );
-                                }
-                              }}
-                              sx={{ textTransform: 'none' }}
-                            >
-                              {expandedPurposeSections.size === parsedPurposeSections.length
-                                ? 'Collapse All'
-                                : 'Expand All'}
-                            </Button>
-                          )}
-                        </Box>
-
-                        {(!config.purpose?.trim() || config.purpose.length < 100) &&
-                        !isFoundationModelProvider(config.target.id) ? (
-                          <Box sx={{ mb: 2 }}>
-                            <Alert severity="warning">
-                              Application details are required to generate a high quality red team.
-                              Go to the Application Details section and add a purpose.{' '}
-                              <Link
-                                style={{ textDecoration: 'underline' }}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                to="https://www.promptfoo.dev/docs/red-team/troubleshooting/best-practices/#1-provide-comprehensive-application-details"
-                              >
-                                Learn more about red team best practices.
-                              </Link>
-                            </Alert>
-                            <Button onClick={navigateToPurpose} sx={{ mt: 2 }} variant="contained">
-                              Add application details
-                            </Button>
-                          </Box>
-                        ) : null}
-
-                        {parsedPurposeSections.length > 0 ? (
-                          <Stack spacing={2} sx={{ mt: 1 }}>
-                            {parsedPurposeSections.map((section, index) => (
-                              <Box
-                                key={index}
-                                sx={{
-                                  border: `1px solid ${theme.palette.divider}`,
-                                  borderRadius: 1,
-                                  overflow: 'hidden',
-                                }}
-                              >
-                                <Box
-                                  onClick={() => togglePurposeSection(section.title)}
-                                  sx={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'space-between',
-                                    p: 1.5,
-                                    backgroundColor: theme.palette.action.hover,
-                                    cursor: 'pointer',
-                                    '&:hover': {
-                                      backgroundColor: theme.palette.action.selected,
-                                    },
-                                  }}
-                                >
-                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                    <Typography variant="body2" fontWeight="medium">
-                                      {section.title}
-                                    </Typography>
-                                  </Box>
-                                  <ExpandMoreIcon
-                                    sx={{
-                                      transform: expandedPurposeSections.has(section.title)
-                                        ? 'rotate(180deg)'
-                                        : 'rotate(0deg)',
-                                      transition: 'transform 0.2s',
-                                    }}
-                                  />
-                                </Box>
-                                {expandedPurposeSections.has(section.title) && (
-                                  <Box sx={{ p: 2, backgroundColor: 'background.paper' }}>
-                                    <Typography
-                                      variant="body2"
-                                      sx={{
-                                        whiteSpace: 'pre-wrap',
-                                        color: 'text.secondary',
-                                      }}
-                                    >
-                                      {section.content}
-                                    </Typography>
-                                  </Box>
-                                )}
-                              </Box>
-                            ))}
-                          </Stack>
-                        ) : config.purpose ? (
-                          <Typography
-                            variant="body2"
-                            onClick={() => setIsPurposeExpanded(!isPurposeExpanded)}
-                            sx={{
-                              whiteSpace: 'pre-wrap',
-                              padding: 1,
-                              borderRadius: 1,
-                              backgroundColor: 'background.paper',
-                              cursor: 'pointer',
-                              display: '-webkit-box',
-                              WebkitBoxOrient: 'vertical',
-                              overflow: 'hidden',
-                              WebkitLineClamp: isPurposeExpanded ? 'none' : 6,
-                              '&:hover': {
-                                backgroundColor: 'action.hover',
-                              },
-                            }}
-                          >
-                            {config.purpose}
-                          </Typography>
-                        ) : (
-                          <Typography variant="body2" color="text.secondary">
-                            Not specified
-                          </Typography>
-                        )}
-                        {config.purpose &&
-                          parsedPurposeSections.length === 0 &&
-                          config.purpose.split('\n').length > 6 && (
-                            <Typography
-                              variant="caption"
-                              sx={{
-                                color: 'primary.main',
-                                cursor: 'pointer',
-                                mt: 0.5,
-                                display: 'block',
-                              }}
-                              onClick={() => setIsPurposeExpanded(!isPurposeExpanded)}
-                            >
-                              {isPurposeExpanded ? 'Show less' : 'Show more'}
-                            </Typography>
-                          )}
-
-                        {config.testGenerationInstructions && (
-                          <Grid size={{ xs: 12 }}>
-                            <Typography variant="subtitle2">
-                              Test Generation Instructions
-                            </Typography>
-                            <Typography
-                              variant="body2"
-                              onClick={() =>
-                                setIsTestInstructionsExpanded(!isTestInstructionsExpanded)
-                              }
-                              sx={{
-                                whiteSpace: 'pre-wrap',
-                                padding: 1,
-                                borderRadius: 1,
-                                backgroundColor: 'background.paper',
-                                cursor: 'pointer',
-                                display: '-webkit-box',
-                                WebkitBoxOrient: 'vertical',
-                                overflow: 'hidden',
-                                WebkitLineClamp: isTestInstructionsExpanded ? 'none' : 6,
-                                '&:hover': {
-                                  backgroundColor: 'action.hover',
-                                },
-                              }}
-                            >
-                              {config.testGenerationInstructions}
-                            </Typography>
-                            {config.testGenerationInstructions &&
-                              config.testGenerationInstructions.split('\n').length > 6 && (
-                                <Typography
-                                  variant="caption"
-                                  sx={{
-                                    color: 'primary.main',
-                                    cursor: 'pointer',
-                                    mt: 0.5,
-                                    display: 'block',
-                                  }}
-                                  onClick={() =>
-                                    setIsTestInstructionsExpanded(!isTestInstructionsExpanded)
-                                  }
-                                >
-                                  {isTestInstructionsExpanded ? 'Show less' : 'Show more'}
-                                </Typography>
-                              )}
-                          </Grid>
-                        )}
-                      </Grid>
-                    </AccordionDetails>
-                  </Accordion>
-
-                  <Accordion
-                    expanded={isAdvancedConfigExpanded}
-                    onChange={(_e, expanded) => {
-                      setIsAdvancedConfigExpanded(expanded);
-                    }}
-                    sx={{
-                      '&:before': { display: 'none' },
-                      boxShadow: 'none',
-                      borderRadius: 0,
-                      borderBottom: `1px solid ${theme.palette.divider}`,
-                    }}
-                  >
-                    <AccordionSummary
-                      expandIcon={<ExpandMoreIcon />}
                       sx={{
-                        '& .MuiAccordionSummary-content': {
-                          alignItems: 'center',
-                          gap: 2,
-                        },
+                        backgroundColor:
+                          label === 'Custom Policy' ? theme.palette.primary.main : undefined,
+                        color:
+                          label === 'Custom Policy'
+                            ? theme.palette.primary.contrastText
+                            : undefined,
                       }}
-                    >
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <TuneIcon fontSize="small" color="action" />
-                        <Typography variant="h6">Advanced Configuration</Typography>
-                        <Chip label="Optional" size="small" variant="outlined" sx={{ ml: 1 }} />
-                      </Box>
-                    </AccordionSummary>
-                    <AccordionDetails sx={{ pt: 0 }}>
-                      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                        Configure advanced options that apply to all test cases. These settings are
-                        for power users who need fine-grained control over their red team
-                        evaluation.
-                      </Typography>
-                      <DefaultTestVariables />
-                    </AccordionDetails>
-                  </Accordion>
-
-                  <Accordion
-                    expanded={isRunOptionsExpanded}
-                    onChange={(_e, expanded) => {
-                      setIsRunOptionsExpanded(expanded);
-                    }}
-                    sx={{
-                      '&:before': { display: 'none' },
-                      boxShadow: 'none',
-                      borderRadius: 0,
-                    }}
-                  >
-                    <AccordionSummary
-                      expandIcon={<ExpandMoreIcon />}
-                      sx={{
-                        '& .MuiAccordionSummary-content': {
-                          alignItems: 'center',
-                          gap: 2,
-                        },
-                      }}
-                    >
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <PlayArrowIcon fontSize="small" color="action" />
-                        <Typography variant="h6">Run Options</Typography>
-                      </Box>
-                    </AccordionSummary>
-                    <AccordionDetails sx={{ pt: 0 }}>
-                      <RunOptionsContent
-                        numTests={config.numTests}
-                        runOptions={{
-                          maxConcurrency: config.maxConcurrency,
-                          delay: config.target.config.delay,
-                        }}
-                        updateConfig={updateConfig}
-                        updateRunOption={(key: keyof RedteamRunOptions, value: any) => {
-                          if (key === 'delay') {
-                            updateConfig('target', {
-                              ...config.target,
-                              config: { ...config.target.config, delay: value },
-                            });
-                          } else if (key === 'maxConcurrency') {
-                            updateConfig('maxConcurrency', value);
-                          } else if (key === 'verbose') {
-                            updateConfig('target', {
-                              ...config.target,
-                              config: { ...config.target.config, verbose: value },
-                            });
-                          }
-                        }}
-                        language={config.language}
-                      />
-                    </AccordionDetails>
-                  </Accordion>
+                    />
+                  ))}
                 </Box>
+                {pluginSummary.length === 0 && (
+                  <Box sx={{ mt: 1 }}>
+                    <Alert severity="warning" sx={{ mb: 1 }}>
+                      No plugins selected.
+                    </Alert>
+                    <Button onClick={navigateToPlugins} variant="outlined" size="small">
+                      Add plugins
+                    </Button>
+                  </Box>
+                )}
               </Grid>
+
+              {/* Strategies */}
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <Typography variant="subtitle2" gutterBottom fontWeight={500}>
+                  Strategies ({strategySummary.length})
+                </Typography>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                  {strategySummary.map(([label, count]) => (
+                    <Chip
+                      key={label}
+                      label={count > 1 ? `${label} (${count})` : label}
+                      size="small"
+                      onDelete={() => {
+                        const strategyId =
+                          Object.entries(strategyDisplayNames).find(
+                            ([_id, displayName]) => displayName === label,
+                          )?.[0] || label;
+
+                        if (strategyId === 'basic') {
+                          const newStrategies = config.strategies.map((strategy) => {
+                            const id = getStrategyId(strategy);
+                            if (id === 'basic') {
+                              return {
+                                id: 'basic',
+                                config: {
+                                  ...(typeof strategy === 'object' ? strategy.config : {}),
+                                  enabled: false,
+                                },
+                              };
+                            }
+                            return strategy;
+                          });
+                          updateConfig('strategies', newStrategies);
+                        } else {
+                          const newStrategies = config.strategies.filter((strategy) => {
+                            const id = getStrategyId(strategy);
+                            return id !== strategyId;
+                          });
+                          updateConfig('strategies', newStrategies);
+                        }
+                      }}
+                    />
+                  ))}
+                </Box>
+                {(strategySummary.length === 0 ||
+                  (strategySummary.length === 1 && strategySummary[0][0] === 'Basic')) && (
+                  <Box sx={{ mt: 1 }}>
+                    <Alert severity="warning" sx={{ mb: 1 }}>
+                      Consider adding more strategies.
+                    </Alert>
+                    <Button onClick={navigateToStrategies} variant="outlined" size="small">
+                      Add strategies
+                    </Button>
+                  </Box>
+                )}
+              </Grid>
+
+              {/* Custom Policies */}
+              {customPolicies.length > 0 && (
+                <Grid size={{ xs: 12, sm: 6 }}>
+                  <Typography variant="subtitle2" gutterBottom fontWeight={500}>
+                    Custom Policies ({customPolicies.length})
+                  </Typography>
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                    {customPolicies.map((policy, index) => {
+                      const isPolicyObject = isValidPolicyObject(policy.config.policy);
+                      return (
+                        <Chip
+                          key={index}
+                          label={
+                            isPolicyObject
+                              ? (policy.config.policy as PolicyObject).name
+                              : makeDefaultPolicyName(index)
+                          }
+                          size="small"
+                          onDelete={() => {
+                            const policyToMatch =
+                              typeof policy.config.policy === 'string'
+                                ? policy.config.policy
+                                : policy.config.policy?.id;
+                            const newPlugins = config.plugins.filter(
+                              (p) =>
+                                !(
+                                  typeof p === 'object' &&
+                                  p.id === 'policy' &&
+                                  ((typeof p.config?.policy === 'string' &&
+                                    p.config.policy === policyToMatch) ||
+                                    (typeof p.config?.policy === 'object' &&
+                                      p.config.policy?.id === policyToMatch))
+                                ),
+                            );
+                            updateConfig('plugins', newPlugins);
+                          }}
+                          sx={{
+                            backgroundColor: theme.palette.primary.main,
+                            color: theme.palette.primary.contrastText,
+                          }}
+                        />
+                      );
+                    })}
+                  </Box>
+                </Grid>
+              )}
+
+              {/* Intents */}
+              {intents.length > 0 && (
+                <Grid size={{ xs: 12, sm: 6 }}>
+                  <Typography variant="subtitle2" gutterBottom fontWeight={500}>
+                    Intents ({intents.length})
+                  </Typography>
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                    {intents.slice(0, expanded ? undefined : 5).map((intent, index) => (
+                      <Chip
+                        key={index}
+                        label={intent}
+                        size="small"
+                        onDelete={() => {
+                          const intentPlugin = config.plugins.find(
+                            (p): p is { id: 'intent'; config: { intent: string | string[] } } =>
+                              typeof p === 'object' &&
+                              p.id === 'intent' &&
+                              p.config?.intent !== undefined,
+                          );
+                          if (intentPlugin) {
+                            const currentIntents = Array.isArray(intentPlugin.config.intent)
+                              ? intentPlugin.config.intent
+                              : [intentPlugin.config.intent];
+                            const newIntents = currentIntents.filter((i) => i !== intent);
+                            const newPlugins = config.plugins.map((p) =>
+                              typeof p === 'object' && p.id === 'intent'
+                                ? { ...p, config: { ...p.config, intent: newIntents } }
+                                : p,
+                            );
+                            updateConfig('plugins', newPlugins);
+                          }
+                        }}
+                      />
+                    ))}
+                    {intents.length > 5 && (
+                      <Button onClick={() => setExpanded(!expanded)} size="small">
+                        {expanded ? 'Show Less' : `+${intents.length - 5} more`}
+                      </Button>
+                    )}
+                  </Box>
+                </Grid>
+              )}
+
             </Grid>
+          </AccordionDetails>
+        </Accordion>
+
+        {/* Application Details - separate accordion */}
+        <Accordion
+          expanded={isPurposeExpanded}
+          onChange={(_e, expanded) => setIsPurposeExpanded(expanded)}
+          sx={{ mb: 2, borderRadius: 2, '&:before': { display: 'none' } }}
+        >
+          <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Typography variant="h6">Application Details</Typography>
+              {config.purpose && (
+                <Chip
+                  label={config.purpose.length < 100 ? 'Needs detail' : 'Configured'}
+                  size="small"
+                  variant="outlined"
+                  color={config.purpose.length < 100 ? 'warning' : 'success'}
+                />
+              )}
+              {!config.purpose && (
+                <Chip label="Not configured" size="small" variant="outlined" color="error" />
+              )}
+            </Box>
+          </AccordionSummary>
+          <AccordionDetails>
+            {(!config.purpose?.trim() || config.purpose.length < 100) &&
+            !isFoundationModelProvider(config.target.id) ? (
+              <Alert severity="warning" sx={{ mb: 2 }}>
+                Application details are required for high quality red team.{' '}
+                <Link
+                  style={{ textDecoration: 'underline' }}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  to="https://www.promptfoo.dev/docs/red-team/troubleshooting/best-practices/#1-provide-comprehensive-application-details"
+                >
+                  Learn more.
+                </Link>
+                <Button onClick={navigateToPurpose} size="small" sx={{ ml: 2 }}>
+                  Add details
+                </Button>
+              </Alert>
+            ) : null}
+
+            {parsedPurposeSections.length > 0 ? (
+              <Stack spacing={1}>
+                {parsedPurposeSections.map((section, index) => (
+                  <Box
+                    key={index}
+                    onClick={() => togglePurposeSection(section.title)}
+                    sx={{
+                      border: `1px solid ${theme.palette.divider}`,
+                      borderRadius: 1,
+                      cursor: 'pointer',
+                      '&:hover': { backgroundColor: theme.palette.action.hover },
+                    }}
+                  >
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        p: 1.5,
+                      }}
+                    >
+                      <Typography variant="body2" fontWeight={500}>
+                        {section.title}
+                      </Typography>
+                      <ExpandMoreIcon
+                        sx={{
+                          transform: expandedPurposeSections.has(section.title)
+                            ? 'rotate(180deg)'
+                            : 'rotate(0deg)',
+                          transition: 'transform 0.2s',
+                          fontSize: 18,
+                        }}
+                      />
+                    </Box>
+                    {expandedPurposeSections.has(section.title) && (
+                      <Typography
+                        variant="body2"
+                        color="text.secondary"
+                        sx={{ px: 1.5, pb: 1.5, whiteSpace: 'pre-wrap' }}
+                      >
+                        {section.content}
+                      </Typography>
+                    )}
+                  </Box>
+                ))}
+              </Stack>
+            ) : config.purpose ? (
+              <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
+                {config.purpose}
+              </Typography>
+            ) : (
+              <Typography variant="body2" color="text.secondary">
+                Not specified
+              </Typography>
+            )}
+
+            {config.testGenerationInstructions && (
+              <Box sx={{ mt: 2 }}>
+                <Typography variant="subtitle2" gutterBottom>
+                  Test Generation Instructions
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'pre-wrap' }}>
+                  {config.testGenerationInstructions}
+                </Typography>
+              </Box>
+            )}
+          </AccordionDetails>
+        </Accordion>
+
+        {/* Run Options - separate accordion */}
+        <Accordion
+          expanded={isRunOptionsExpanded}
+          onChange={(_e, expanded) => setIsRunOptionsExpanded(expanded)}
+          sx={{ mb: 2, borderRadius: 2, '&:before': { display: 'none' } }}
+        >
+          <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+            <Typography variant="h6">Run Options</Typography>
+          </AccordionSummary>
+          <AccordionDetails>
+            <RunOptionsContent
+              numTests={config.numTests}
+              runOptions={{
+                maxConcurrency: config.maxConcurrency,
+                delay: config.target.config.delay,
+              }}
+              updateConfig={updateConfig}
+              updateRunOption={(key: keyof RedteamRunOptions, value: any) => {
+                if (key === 'delay') {
+                  updateConfig('target', {
+                    ...config.target,
+                    config: { ...config.target.config, delay: value },
+                  });
+                } else if (key === 'maxConcurrency') {
+                  updateConfig('maxConcurrency', value);
+                } else if (key === 'verbose') {
+                  updateConfig('target', {
+                    ...config.target,
+                    config: { ...config.target.config, verbose: value },
+                  });
+                }
+              }}
+              language={config.language}
+            />
+          </AccordionDetails>
+        </Accordion>
+
+        {/* Advanced Configuration - separate accordion */}
+        <Accordion
+          expanded={isAdvancedConfigExpanded}
+          onChange={(_e, expanded) => setIsAdvancedConfigExpanded(expanded)}
+          sx={{ mb: 2, borderRadius: 2, '&:before': { display: 'none' } }}
+        >
+          <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Typography variant="h6">Advanced Configuration</Typography>
+              <Chip label="Optional" size="small" variant="outlined" />
+            </Box>
+          </AccordionSummary>
+          <AccordionDetails>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              Configure advanced options for power users.
+            </Typography>
+            <DefaultTestVariables />
           </AccordionDetails>
         </Accordion>
 
