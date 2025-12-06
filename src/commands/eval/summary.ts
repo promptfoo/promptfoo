@@ -24,6 +24,8 @@ export interface EvalSummaryParams {
   hasExplicitDisable: boolean;
   /** Whether cloud features are enabled */
   cloudEnabled: boolean;
+  /** Whether sharing is actively in progress (for async background sharing) */
+  activelySharing?: boolean;
   /** Token usage statistics for the evaluation */
   tokenUsage: TokenUsage;
   /** Number of successful test cases */
@@ -86,6 +88,7 @@ export function generateEvalSummary(params: EvalSummaryParams): string[] {
     wantsToShare,
     hasExplicitDisable,
     cloudEnabled,
+    activelySharing = false,
     tokenUsage,
     successes,
     failures,
@@ -108,9 +111,10 @@ export function generateEvalSummary(params: EvalSummaryParams): string[] {
 
   lines.push(completionMessage);
 
-  // Guidance section (only when writing to DB, no shareable URL, and not wanting to share)
+  // Guidance section (only when writing to DB, no shareable URL, not wanting to share, and not actively sharing)
   // When wantsToShare is true, guidance is handled by notCloudEnabledShareInstructions() in eval.ts
-  if (writeToDatabase && !shareableUrl && !wantsToShare) {
+  // When activelySharing is true, share URL will be shown after summary via ora spinner
+  if (writeToDatabase && !shareableUrl && !wantsToShare && !activelySharing) {
     lines.push('');
     lines.push(`» View results: ${chalk.green.bold('promptfoo view')}`);
 

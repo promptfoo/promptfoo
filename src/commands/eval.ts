@@ -4,11 +4,12 @@ import * as path from 'path';
 import chalk from 'chalk';
 import chokidar from 'chokidar';
 import dedent from 'dedent';
+import ora from 'ora';
 import { z } from 'zod';
 import { fromError } from 'zod-validation-error';
 import { disableCache } from '../cache';
 import cliState from '../cliState';
-import { getEnvBool, getEnvFloat, getEnvInt } from '../envars';
+import { getEnvBool, getEnvFloat, getEnvInt, isCI } from '../envars';
 import { DEFAULT_MAX_CONCURRENCY } from '../constants';
 import { evaluate } from '../evaluator';
 import { checkEmailStatusAndMaybeExit, promptForEmailUnverified } from '../globalConfig/accounts';
@@ -22,7 +23,7 @@ import { generateTable } from '../table';
 import telemetry from '../telemetry';
 import { CommandLineOptionsSchema, OutputFileExtension, TestSuiteSchema } from '../types/index';
 import { isApiProvider } from '../types/providers';
-import { checkCloudPermissions } from '../util/cloud';
+import { checkCloudPermissions, getOrgContext } from '../util/cloud';
 import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
 import { resolveConfigs } from '../util/config/load';
 import { maybeLoadFromExternalFile } from '../util/file';
@@ -540,13 +541,14 @@ export async function doEval(
     logger.debug(`Wants to share: ${wantsToShare}`);
     logger.debug(`Can share eval: ${canShareEval}`);
 
-    const shareableUrl = wantsToShare && canShareEval ? await createShareableUrl(evalRecord) : null;
-
-    logger.debug(`Shareable URL: ${shareableUrl}`);
-
-    if (shareableUrl) {
-      evalRecord.shared = true;
+    // Start sharing in background (don't await yet) - this allows us to show results immediately
+    const willShare = wantsToShare && canShareEval;
+    let sharePromise: Promise<string | null> | null = null;
+    if (willShare) {
+      // Start the share operation in background with silent mode (no progress bar)
+      sharePromise = createShareableUrl(evalRecord, { silent: true });
     }
+
     let successes = 0;
     let failures = 0;
     let errors = 0;
@@ -568,6 +570,7 @@ export async function doEval(
     const totalTests = successes + failures + errors;
     const passRate = (successes / totalTests) * 100;
 
+    // Output results table immediately (before share completes)
     if (cmdObj.table && getLogLevel() !== 'debug' && totalTests < 500) {
       const table = await evalRecord.getTable();
       // Output CLI table
@@ -596,24 +599,21 @@ export async function doEval(
     const paths = (Array.isArray(outputPath) ? outputPath : [outputPath]).filter(
       (p): p is string => typeof p === 'string' && p.length > 0 && !p.endsWith('.jsonl'),
     );
-    if (paths.length) {
-      await writeMultipleOutputs(paths, evalRecord, shareableUrl);
-      logger.info(chalk.yellow(`Writing output to ${paths.join(', ')}`));
-    }
 
     const isRedteam = Boolean(config.redteam);
     const duration = Math.round((Date.now() - startTime) / 1000);
     const tracker = TokenUsageTracker.getInstance();
 
-    // Generate and display summary
+    // Generate and display summary immediately (before share completes)
     const summaryLines = generateEvalSummary({
       evalId: evalRecord.id,
       isRedteam,
       writeToDatabase: cmdObj.write !== false,
-      shareableUrl,
+      shareableUrl: null, // Not available yet if sharing in background
       wantsToShare,
       hasExplicitDisable,
       cloudEnabled: cloudConfig.isEnabled(),
+      activelySharing: willShare,
       tokenUsage,
       successes,
       failures,
@@ -624,7 +624,7 @@ export async function doEval(
     });
 
     // Special case: show cloud signup instructions when user wants to share but can't
-    if (cmdObj.write && !shareableUrl && wantsToShare && !isSharingEnabled(evalRecord)) {
+    if (cmdObj.write && wantsToShare && !canShareEval) {
       logger.info(summaryLines[0]); // Show just the completion message
       notCloudEnabledShareInstructions();
       // Skip the guidance lines and show the rest
@@ -644,6 +644,57 @@ export async function doEval(
       for (const line of summaryLines) {
         logger.info(line);
       }
+    }
+
+    // Now wait for share to complete and show spinner (as the last output)
+    let shareableUrl: string | null = null;
+    if (sharePromise) {
+      // Determine org context for spinner text
+      const orgContext = await getOrgContext();
+      const orgSuffix = orgContext
+        ? ` to ${orgContext.organizationName}${orgContext.teamName ? ` > ${orgContext.teamName}` : ''}`
+        : '';
+
+      // Only show spinner in TTY (not CI)
+      if (process.stdout.isTTY && !isCI()) {
+        const spinner = ora({
+          text: `Uploading${orgSuffix}...`,
+          prefixText: chalk.dim('»'),
+          spinner: 'dots',
+        }).start();
+
+        try {
+          shareableUrl = await sharePromise;
+          if (shareableUrl) {
+            evalRecord.shared = true;
+            spinner.succeed(`${chalk.green('Share:')} ${shareableUrl}`);
+          } else {
+            spinner.fail(chalk.red('Share failed'));
+          }
+        } catch (error) {
+          spinner.fail(chalk.red('Share failed'));
+          logger.debug(`Share error: ${error}`);
+        }
+      } else {
+        // CI mode - just await and log result
+        try {
+          shareableUrl = await sharePromise;
+          if (shareableUrl) {
+            evalRecord.shared = true;
+            logger.info(`${chalk.dim('»')} ${chalk.green('Share:')} ${shareableUrl}`);
+          }
+        } catch (error) {
+          logger.debug(`Share error: ${error}`);
+        }
+      }
+    }
+
+    logger.debug(`Shareable URL: ${shareableUrl}`);
+
+    // Write outputs after share completes (so we can include shareableUrl)
+    if (paths.length) {
+      await writeMultipleOutputs(paths, evalRecord, shareableUrl);
+      logger.info(chalk.yellow(`Writing output to ${paths.join(', ')}`));
     }
 
     telemetry.record('command_used', {
