@@ -116,7 +116,8 @@ export function purposeToApplicationDefinition(purpose: string | undefined): App
 
   // Fallback 1: Try alternative format without code blocks
   // Pattern: "Section Title:\nContent until next section or end"
-  const alternativeRegex = /([A-Za-z][A-Za-z0-9\s/']+?):\s*\n([^\n][\s\S]*?)(?=\n[A-Za-z][A-Za-z0-9\s/']+?:\s*\n|$)/g;
+  const alternativeRegex =
+    /([A-Za-z][A-Za-z0-9\s/']+?):\s*\n([^\n][\s\S]*?)(?=\n[A-Za-z][A-Za-z0-9\s/']+?:\s*\n|$)/g;
 
   while ((match = alternativeRegex.exec(trimmedPurpose)) !== null) {
     const [, sectionTitle, content] = match;
@@ -143,7 +144,9 @@ export function purposeToApplicationDefinition(purpose: string | undefined): App
 /**
  * Checks if an ApplicationDefinition has any meaningful content
  */
-export function hasApplicationDefinitionContent(appDef: ApplicationDefinition | undefined): boolean {
+export function hasApplicationDefinitionContent(
+  appDef: ApplicationDefinition | undefined,
+): boolean {
   if (!appDef) {
     return false;
   }
@@ -154,9 +157,7 @@ export function hasApplicationDefinitionContent(appDef: ApplicationDefinition | 
 /**
  * Merges a parsed ApplicationDefinition with defaults, ensuring all fields exist
  */
-export function mergeWithDefaults(
-  parsed: Partial<ApplicationDefinition>,
-): ApplicationDefinition {
+export function mergeWithDefaults(parsed: Partial<ApplicationDefinition>): ApplicationDefinition {
   return {
     ...DEFAULT_APPLICATION_DEFINITION,
     ...parsed,

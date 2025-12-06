@@ -580,7 +580,7 @@ Feature 3: Handle edge cases`,
 
   it('should handle special characters in roundtrip', () => {
     const original: ApplicationDefinition = {
-      purpose: "It's a \"complex\" app with <special> & characters!",
+      purpose: 'It\'s a "complex" app with <special> & characters!',
       features: 'Supports: pipes | and backslashes \\ and quotes "test"',
     };
 
