@@ -1,5 +1,5 @@
 import type React from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { HIDDEN_METADATA_KEYS } from '@app/constants';
 import CheckIcon from '@mui/icons-material/Check';
@@ -11,12 +11,13 @@ import IconButton from '@mui/material/IconButton';
 import Paper from '@mui/material/Paper';
 import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
+import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import type { GradingResult } from '@promptfoo/types';
 
 import type { Trace } from '../../../components/traces/TraceView';
 import type { CloudConfigData } from '../../../hooks/useCloudConfig';
-import ChatMessages, { type Message } from './ChatMessages';
+import ChatMessages, { type LoadedMessage, type Message } from './ChatMessages';
 import { DebuggingPanel } from './DebuggingPanel';
 import { EvaluationPanel } from './EvaluationPanel';
 import { type ExpandedMetadataState, MetadataPanel } from './MetadataPanel';
@@ -215,6 +216,7 @@ export default function EvalOutputPromptDialog({
 }: EvalOutputPromptDialogProps) {
   const [activeTab, setActiveTab] = useState(0);
   const [copied, setCopied] = useState(false);
+  const [copiedMessages, setCopiedMessages] = useState(false);
   const [copiedFields, setCopiedFields] = useState<{ [key: string]: boolean }>({});
   const [expandedMetadata, setExpandedMetadata] = useState<ExpandedMetadataState>({});
   const [hoveredElement, setHoveredElement] = useState<string | null>(null);
@@ -395,6 +397,25 @@ export default function EvalOutputPromptDialog({
       ],
     );
 
+  const formatMessagesForCopy = useCallback((messages: Message[]): string => {
+    return messages
+      .filter((msg): msg is LoadedMessage => !msg.loading && msg.content !== null)
+      .map((msg) => {
+        const roleLabel =
+          msg.role === 'user' ? 'User' : msg.role === 'assistant' ? 'Assistant' : 'System';
+        return `[${roleLabel}]\n${msg.content}`;
+      })
+      .join('\n\n');
+  }, []);
+
+  const copyMessagesToClipboard = useCallback(async () => {
+    const allMessages = [...parsedMessages, ...redteamHistoryMessages];
+    const formattedText = formatMessagesForCopy(allMessages);
+    await navigator.clipboard.writeText(formattedText);
+    setCopiedMessages(true);
+    setTimeout(() => setCopiedMessages(false), 2000);
+  }, [parsedMessages, redteamHistoryMessages, formatMessagesForCopy]);
+
   const hasEvaluationData = gradingResults && gradingResults.length > 0;
   const hasMessagesData = parsedMessages.length > 0 || redteamHistoryMessages.length > 0;
   const hasMetadata =
@@ -534,7 +555,32 @@ export default function EvalOutputPromptDialog({
 
           {/* Messages Panel */}
           {finalTabName === 'messages' && (
-            <Box>
+            <Box sx={{ position: 'relative' }}>
+              <Tooltip title={copiedMessages ? 'Copied!' : 'Copy conversation'}>
+                <IconButton
+                  size="small"
+                  onClick={copyMessagesToClipboard}
+                  sx={{
+                    position: 'absolute',
+                    right: 8,
+                    top: 8,
+                    zIndex: 1,
+                    bgcolor: 'background.paper',
+                    boxShadow: 1,
+                    '&:hover': {
+                      bgcolor: 'action.hover',
+                      boxShadow: 2,
+                    },
+                  }}
+                  aria-label="Copy conversation"
+                >
+                  {copiedMessages ? (
+                    <CheckIcon fontSize="small" />
+                  ) : (
+                    <ContentCopyIcon fontSize="small" />
+                  )}
+                </IconButton>
+              </Tooltip>
               {parsedMessages.length > 0 && <ChatMessages messages={parsedMessages} />}
               {redteamHistoryMessages.length > 0 && (
                 <Box mt={parsedMessages.length > 0 ? 3 : 0}>
