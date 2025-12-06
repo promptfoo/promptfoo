@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 
 import { callApi } from '@app/utils/api';
+import { formatDataGridDate } from '@app/utils/date';
 import {
   Add as AddIcon,
   History as HistoryIcon,
@@ -179,7 +180,7 @@ export default function ModelAuditResultLatestPage() {
               </Typography>
               <Typography variant="body2" color="text.secondary">
                 {latestScan.name || 'Model Security Scan'} •{' '}
-                {new Date(latestScan.createdAt).toLocaleString()}
+                {formatDataGridDate(latestScan.createdAt)}
               </Typography>
             </Box>
             <Stack direction="row" spacing={2}>
@@ -218,8 +219,8 @@ export default function ModelAuditResultLatestPage() {
             paths={((latestScan.metadata?.originalPaths as string[] | undefined) ?? []).map(
               (p: string) => ({
                 path: p,
-                type: 'file' as const,
-                name: p.split('/').pop() || p,
+                type: p.endsWith('/') ? ('directory' as const) : ('file' as const),
+                name: p.split('/').filter(Boolean).pop() || p,
               }),
             )}
           />

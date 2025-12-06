@@ -82,7 +82,13 @@ export function HistoryTableSkeleton() {
   return (
     <Box>
       {/* Toolbar skeleton */}
-      <Stack direction="row" justifyContent="space-between" p={1} borderBottom={1} borderColor="divider">
+      <Stack
+        direction="row"
+        justifyContent="space-between"
+        p={1}
+        borderBottom={1}
+        borderColor="divider"
+      >
         <Stack direction="row" spacing={1}>
           <Skeleton variant="rounded" width={100} height={32} />
           <Skeleton variant="rounded" width={80} height={32} />

@@ -314,8 +314,8 @@ export default function ModelAuditResult() {
             paths={((scan.metadata?.originalPaths as string[] | undefined) ?? []).map(
               (p: string) => ({
                 path: p,
-                type: 'file' as const,
-                name: p.split('/').pop() || p,
+                type: p.endsWith('/') ? ('directory' as const) : ('file' as const),
+                name: p.split('/').filter(Boolean).pop() || p,
               }),
             )}
           />

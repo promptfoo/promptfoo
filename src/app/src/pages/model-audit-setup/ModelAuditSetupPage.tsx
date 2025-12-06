@@ -197,6 +197,7 @@ export default function ModelAuditSetupPage() {
             onClearError={() => setError(null)}
             currentWorkingDir={installationStatus.cwd || ''}
             installationStatus={installationStatus}
+            onRetryInstallationCheck={checkInstallation}
           />
 
           {/* Show inline results if scan completed but wasn't persisted */}

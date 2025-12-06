@@ -118,10 +118,7 @@ describe('ModelAuditHistory', () => {
   });
 
   it('should display scans in the data grid', () => {
-    const mockScans = [
-      createMockScan('1', 'Scan 1'),
-      createMockScan('2', 'Scan 2', true),
-    ];
+    const mockScans = [createMockScan('1', 'Scan 1'), createMockScan('2', 'Scan 2', true)];
 
     mockUseHistoryStore.mockReturnValue({
       ...getDefaultHistoryState(),
@@ -172,7 +169,9 @@ describe('ModelAuditHistory', () => {
     renderComponent();
 
     expect(screen.getByText('No scan history found')).toBeInTheDocument();
-    expect(screen.getByText('Run your first model security scan to see results here')).toBeInTheDocument();
+    expect(
+      screen.getByText('Run your first model security scan to see results here'),
+    ).toBeInTheDocument();
   });
 
   it('should display status chips correctly', () => {

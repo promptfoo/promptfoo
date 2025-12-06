@@ -221,12 +221,24 @@ describe('useModelAuditHistoryStore', () => {
       expect(result.current.totalCount).toBe(1);
     });
 
-    it('should handle delete error', async () => {
+    it('should handle delete error and rollback state', async () => {
+      const mockScans = [createMockScan('1', 'Scan 1'), createMockScan('2', 'Scan 2')];
+
+      // Set up initial state with scans
+      useModelAuditHistoryStore.setState({
+        historicalScans: mockScans,
+        totalCount: 2,
+      });
+
       mockCallApi.mockResolvedValueOnce({
         ok: false,
       } as Response);
 
       const { result } = renderHook(() => useModelAuditHistoryStore());
+
+      // Verify initial state
+      expect(result.current.historicalScans).toHaveLength(2);
+      expect(result.current.totalCount).toBe(2);
 
       let thrownError: Error | null = null;
       await act(async () => {
@@ -239,6 +251,11 @@ describe('useModelAuditHistoryStore', () => {
 
       expect(thrownError?.message).toBe('Failed to delete scan');
       expect(result.current.historyError).toBe('Failed to delete scan');
+
+      // Verify rollback: scans should be restored after failed delete
+      expect(result.current.historicalScans).toHaveLength(2);
+      expect(result.current.historicalScans[0].id).toBe('1');
+      expect(result.current.totalCount).toBe(2);
     });
   });
 

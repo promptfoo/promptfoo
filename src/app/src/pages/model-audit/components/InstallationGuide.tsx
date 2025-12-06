@@ -15,7 +15,7 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 interface InstallationGuideProps {
   onRetryCheck: () => void;
@@ -33,14 +33,28 @@ export default function InstallationGuide({
   error,
 }: InstallationGuideProps) {
   const [copied, setCopied] = useState(false);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const installCommand = 'pip install modelaudit';
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, []);
 
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(installCommand);
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      // Clear any existing timeout before setting a new one
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+      timeoutRef.current = setTimeout(() => setCopied(false), 2000);
     } catch (err) {
       console.error('Failed to copy:', err);
     }
@@ -53,9 +67,7 @@ export default function InstallationGuide({
         p: 3,
         borderColor: 'warning.main',
         backgroundColor: (theme) =>
-          theme.palette.mode === 'dark'
-            ? 'rgba(237, 108, 2, 0.08)'
-            : 'rgba(237, 108, 2, 0.04)',
+          theme.palette.mode === 'dark' ? 'rgba(237, 108, 2, 0.08)' : 'rgba(237, 108, 2, 0.04)',
       }}
     >
       <Alert severity="warning" sx={{ mb: 3 }}>
@@ -76,8 +88,7 @@ export default function InstallationGuide({
           alignItems: 'center',
           justifyContent: 'space-between',
           fontFamily: 'monospace',
-          backgroundColor: (theme) =>
-            theme.palette.mode === 'dark' ? 'grey.900' : 'grey.100',
+          backgroundColor: (theme) => (theme.palette.mode === 'dark' ? 'grey.900' : 'grey.100'),
         }}
       >
         <code>{installCommand}</code>
@@ -89,15 +100,12 @@ export default function InstallationGuide({
       </Paper>
 
       <Typography variant="body2" color="text.secondary" paragraph>
-        Make sure you have Python 3.8+ installed. After installation, run the command in your terminal.
+        Make sure you have Python 3.8+ installed. After installation, run the command in your
+        terminal.
       </Typography>
 
       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} mb={3}>
-        <Button
-          variant="contained"
-          onClick={onRetryCheck}
-          disabled={isChecking}
-        >
+        <Button variant="contained" onClick={onRetryCheck} disabled={isChecking}>
           {isChecking ? 'Checking...' : 'Check Again'}
         </Button>
         <Button
@@ -140,11 +148,7 @@ export default function InstallationGuide({
       <Box sx={{ mt: 3, pt: 2, borderTop: 1, borderColor: 'divider' }}>
         <Typography variant="body2" color="text.secondary">
           Need help?{' '}
-          <Link
-            href="https://github.com/promptfoo/promptfoo/issues"
-            target="_blank"
-            rel="noopener"
-          >
+          <Link href="https://github.com/promptfoo/promptfoo/issues" target="_blank" rel="noopener">
             Open an issue on GitHub
           </Link>{' '}
           or check the{' '}
