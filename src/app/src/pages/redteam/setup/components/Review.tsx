@@ -12,13 +12,14 @@ import { callApi } from '@app/utils/api';
 // MUI Icons
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import CloseIcon from '@mui/icons-material/Close';
-import CodeIcon from '@mui/icons-material/Code';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import SaveIcon from '@mui/icons-material/Save';
 import SearchIcon from '@mui/icons-material/Search';
+import StopIcon from '@mui/icons-material/Stop';
 import TuneIcon from '@mui/icons-material/Tune';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 
@@ -30,7 +31,6 @@ import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
-import CircularProgress from '@mui/material/CircularProgress';
 import Dialog from '@mui/material/Dialog';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
@@ -627,8 +627,16 @@ export default function Review({
             borderRadius: 2,
           }}
         >
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <Box sx={{ flex: 1 }}>
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexDirection: { xs: 'column', md: 'row' },
+              gap: { xs: 2, md: 0 },
+            }}
+          >
+            <Box sx={{ flex: 1, width: { xs: '100%', md: 'auto' } }}>
               <TextField
                 fullWidth
                 label="Description"
@@ -638,7 +646,7 @@ export default function Review({
                 variant="outlined"
                 size="small"
                 sx={{
-                  maxWidth: 400,
+                  maxWidth: { xs: '100%', md: 400 },
                   '& .MuiOutlinedInput-root': {
                     backgroundColor: 'rgba(255,255,255,0.9)',
                   },
@@ -650,7 +658,37 @@ export default function Review({
                   },
                 }}
               />
-              <Box sx={{ display: 'flex', gap: 2, mt: 2, flexWrap: 'wrap' }}>
+              {config.target?.label && (
+                <Typography
+                  variant="body2"
+                  sx={{ mt: 1, opacity: 0.9, display: 'flex', alignItems: 'center', gap: 0.5 }}
+                >
+                  Target: <strong>{config.target.label}</strong>
+                  {config.target.id !== 'http' &&
+                    config.target.id !== 'websocket' &&
+                    config.target.id !== 'browser' && (
+                      <Chip
+                        label={config.target.id}
+                        size="small"
+                        sx={{
+                          ml: 1,
+                          height: 18,
+                          fontSize: '0.7rem',
+                          backgroundColor: 'rgba(255,255,255,0.15)',
+                          color: 'inherit',
+                        }}
+                      />
+                    )}
+                </Typography>
+              )}
+              <Box
+                sx={{
+                  display: 'flex',
+                  gap: { xs: 1, md: 2 },
+                  mt: 2,
+                  flexWrap: 'wrap',
+                }}
+              >
                 <Chip
                   label={`${pluginSummary.length} Plugins`}
                   size="small"
@@ -674,35 +712,63 @@ export default function Review({
                 <EstimationsDisplay config={config} compact />
               </Box>
             </Box>
-            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', ml: 3 }}>
-              <Tooltip title={runNowTooltipMessage} arrow>
-                <span>
-                  <Button
-                    variant="contained"
-                    size="large"
-                    onClick={handleRunWithSettings}
-                    disabled={isRunNowDisabled}
-                    startIcon={
-                      isRunning ? <CircularProgress size={20} color="inherit" /> : <PlayArrowIcon />
-                    }
-                    sx={{
-                      backgroundColor: 'white',
-                      color: theme.palette.primary.main,
-                      fontWeight: 600,
-                      px: 4,
-                      py: 1.5,
-                      '&:hover': {
-                        backgroundColor: 'rgba(255,255,255,0.9)',
-                      },
-                      '&.Mui-disabled': {
-                        backgroundColor: 'rgba(255,255,255,0.5)',
-                      },
-                    }}
-                  >
-                    {isRunning ? 'Running...' : 'Run Scan'}
-                  </Button>
-                </span>
-              </Tooltip>
+            <Box
+              sx={{
+                display: 'flex',
+                gap: 1,
+                alignItems: 'center',
+                ml: { xs: 0, md: 3 },
+                width: { xs: '100%', md: 'auto' },
+                justifyContent: { xs: 'center', md: 'flex-end' },
+              }}
+            >
+              {isRunning ? (
+                <Button
+                  variant="contained"
+                  size="large"
+                  onClick={handleCancel}
+                  startIcon={<StopIcon />}
+                  sx={{
+                    backgroundColor: theme.palette.error.main,
+                    color: theme.palette.error.contrastText,
+                    fontWeight: 600,
+                    px: 4,
+                    py: 1.5,
+                    '&:hover': {
+                      backgroundColor: theme.palette.error.dark,
+                    },
+                  }}
+                >
+                  Stop Scan
+                </Button>
+              ) : (
+                <Tooltip title={runNowTooltipMessage} arrow>
+                  <span>
+                    <Button
+                      variant="contained"
+                      size="large"
+                      onClick={handleRunWithSettings}
+                      disabled={isRunNowDisabled}
+                      startIcon={<PlayArrowIcon />}
+                      sx={{
+                        backgroundColor: 'white',
+                        color: theme.palette.primary.main,
+                        fontWeight: 600,
+                        px: 4,
+                        py: 1.5,
+                        '&:hover': {
+                          backgroundColor: 'rgba(255,255,255,0.9)',
+                        },
+                        '&.Mui-disabled': {
+                          backgroundColor: 'rgba(255,255,255,0.5)',
+                        },
+                      }}
+                    >
+                      Run Scan
+                    </Button>
+                  </span>
+                </Tooltip>
+              )}
               <Tooltip title="CLI & Export Options">
                 <IconButton
                   onClick={handleCliMenuOpen}
@@ -740,12 +806,18 @@ export default function Review({
                   <ListItemText>View YAML</ListItemText>
                 </MenuItem>
                 <Divider />
-                <MenuItem disabled>
+                <MenuItem
+                  onClick={() => {
+                    navigator.clipboard.writeText('promptfoo redteam run');
+                    showToast('Command copied to clipboard', 'success');
+                    handleCliMenuClose();
+                  }}
+                >
                   <ListItemIcon>
-                    <CodeIcon fontSize="small" />
+                    <ContentCopyIcon fontSize="small" />
                   </ListItemIcon>
                   <ListItemText
-                    primary="Run via CLI"
+                    primary="Copy CLI Command"
                     secondary="promptfoo redteam run"
                     secondaryTypographyProps={{ variant: 'caption' }}
                   />
