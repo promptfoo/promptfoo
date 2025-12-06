@@ -125,9 +125,9 @@ def call_api(prompt: str, options: dict, promptfoo_context: dict) -> dict:
             # Phase 1: Document Retrieval
             documents = []
             for i in range(3):
-                doc_name = f"document_{i+1}"
+                doc_name = f"document_{i + 1}"
                 with tracer.start_as_current_span(
-                    f"retrieve_document_{i+1}",
+                    f"retrieve_document_{i + 1}",
                     kind=SpanKind.CLIENT,
                     attributes={
                         "retrieval.document_name": doc_name,
@@ -136,13 +136,17 @@ def call_api(prompt: str, options: dict, promptfoo_context: dict) -> dict:
                 ) as retrieval_span:
                     doc = simulate_document_retrieval(doc_name)
                     documents.append(doc)
-                    retrieval_span.set_attribute("retrieval.relevance", doc["relevance"])
+                    retrieval_span.set_attribute(
+                        "retrieval.relevance", doc["relevance"]
+                    )
 
             workflow_span.set_attribute("rag.documents_retrieved", len(documents))
 
             # Phase 2: Reasoning Steps
             reasoning_results = []
-            for i, step in enumerate(["analyze_query", "rank_documents", "synthesize_context"]):
+            for i, step in enumerate(
+                ["analyze_query", "rank_documents", "synthesize_context"]
+            ):
                 with tracer.start_as_current_span(
                     f"reasoning_{step}",
                     kind=SpanKind.INTERNAL,
@@ -165,7 +169,9 @@ def call_api(prompt: str, options: dict, promptfoo_context: dict) -> dict:
                 },
             ) as generation_span:
                 output = simulate_llm_call(prompt)
-                generation_span.set_attribute("llm.completion_tokens", len(output.split()))
+                generation_span.set_attribute(
+                    "llm.completion_tokens", len(output.split())
+                )
 
             workflow_span.set_status(Status(StatusCode.OK))
 
