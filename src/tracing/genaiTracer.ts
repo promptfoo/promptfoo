@@ -1,4 +1,11 @@
-import { trace, SpanKind, SpanStatusCode, type Span, type Tracer } from '@opentelemetry/api';
+import {
+  trace,
+  SpanKind,
+  SpanStatusCode,
+  type Span,
+  type Tracer,
+  type Attributes,
+} from '@opentelemetry/api';
 
 import type { TokenUsage } from '../types/shared';
 
@@ -179,8 +186,8 @@ export async function withGenAISpan<T>(
 /**
  * Build request attributes for a GenAI span.
  */
-function buildRequestAttributes(ctx: GenAISpanContext): Record<string, unknown> {
-  const attrs: Record<string, unknown> = {
+function buildRequestAttributes(ctx: GenAISpanContext): Attributes {
+  const attrs: Attributes = {
     // GenAI semantic conventions
     [GenAIAttributes.SYSTEM]: ctx.system,
     [GenAIAttributes.OPERATION_NAME]: ctx.operationName,
