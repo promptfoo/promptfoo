@@ -103,7 +103,6 @@ export default function Review({
     String(config.maxConcurrency || REDTEAM_DEFAULTS.MAX_CONCURRENCY),
   );
   const [isJobStatusDialogOpen, setIsJobStatusDialogOpen] = useState(false);
-  const [pollInterval, setPollInterval] = useState<number | null>(null);
   const [isEmailDialogOpen, setIsEmailDialogOpen] = useState(false);
   const [emailVerificationMessage, setEmailVerificationMessage] = useState('');
   const [emailVerificationError, setEmailVerificationError] = useState<string | null>(null);
@@ -221,11 +220,17 @@ export default function Review({
               clearJob();
             } else if (job.status === 'error') {
               setLogs(job.logs || []);
+              showToast('Previous job failed. Check logs for details.', 'error');
               clearJob();
             }
+          } else {
+            // Server reported a running job but we couldn't fetch it
+            showToast('Could not reconnect to running job.', 'warning');
+            clearJob();
           }
         } catch (error) {
           console.error('Failed to recover job:', error);
+          showToast('Failed to reconnect to running job.', 'error');
           clearJob();
         }
       } else if (savedJobId) {
@@ -380,10 +385,7 @@ export default function Review({
       // Clear any existing interval
       if (pollIntervalRef.current) {
         window.clearInterval(pollIntervalRef.current);
-      }
-      if (pollInterval) {
-        window.clearInterval(pollInterval);
-        setPollInterval(null);
+        pollIntervalRef.current = null;
       }
 
       const interval = window.setInterval(async () => {
@@ -393,7 +395,6 @@ export default function Review({
             // Job not found - likely server restarted
             window.clearInterval(interval);
             pollIntervalRef.current = null;
-            setPollInterval(null);
             setIsRunning(false);
             clearJob();
             showToast('Job was interrupted. Please try again.', 'error');
@@ -409,7 +410,6 @@ export default function Review({
           if (status.status === 'complete' || status.status === 'error') {
             window.clearInterval(interval);
             pollIntervalRef.current = null;
-            setPollInterval(null);
             setIsRunning(false);
             clearJob();
 
@@ -441,9 +441,8 @@ export default function Review({
       }, 1000);
 
       pollIntervalRef.current = interval;
-      setPollInterval(interval);
     },
-    [pollInterval, clearJob, recordEvent, showToast],
+    [clearJob, recordEvent, showToast],
   );
 
   const handleRunWithSettings = async () => {
@@ -477,9 +476,10 @@ export default function Review({
       return;
     }
 
-    if (pollInterval) {
-      window.clearInterval(pollInterval);
-      setPollInterval(null);
+    // Clear any existing polling interval before starting a new job
+    if (pollIntervalRef.current) {
+      window.clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
     }
 
     recordEvent('feature_used', {
@@ -550,10 +550,6 @@ export default function Review({
         window.clearInterval(pollIntervalRef.current);
         pollIntervalRef.current = null;
       }
-      if (pollInterval) {
-        window.clearInterval(pollInterval);
-        setPollInterval(null);
-      }
 
       setIsRunning(false);
       clearJob();
@@ -582,11 +578,8 @@ export default function Review({
       if (pollIntervalRef.current) {
         window.clearInterval(pollIntervalRef.current);
       }
-      if (pollInterval) {
-        window.clearInterval(pollInterval);
-      }
     };
-  }, [pollInterval]);
+  }, []);
 
   return (
     <PageWrapper title="Review & Run" onBack={onBack}>
