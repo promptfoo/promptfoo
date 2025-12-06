@@ -856,6 +856,65 @@ Application Details:
       expect(cancelButtons[0]).toBeEnabled();
     });
 
+    it('should show confirmation dialog when Cancel button is clicked', async () => {
+      vi.mocked(useApiHealth).mockReturnValue({
+        data: { status: 'connected', message: null },
+        refetch: vi.fn(),
+        isLoading: false,
+      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+
+      // Set job state to in-progress (simulates running state)
+      mockJobState.status = 'in-progress';
+
+      render(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      // Click the Cancel button
+      const cancelButtons = screen.getAllByRole('button', { name: /cancel/i });
+      fireEvent.click(cancelButtons[0]);
+
+      // Confirmation dialog should appear
+      expect(screen.getByText('Cancel Evaluation?')).toBeInTheDocument();
+      expect(screen.getByText(/Are you sure you want to cancel/)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Continue Running/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Cancel Evaluation/i })).toBeInTheDocument();
+    });
+
+    it('should close confirmation dialog when Continue Running is clicked', async () => {
+      vi.mocked(useApiHealth).mockReturnValue({
+        data: { status: 'connected', message: null },
+        refetch: vi.fn(),
+        isLoading: false,
+      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+
+      mockJobState.status = 'in-progress';
+
+      render(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      // Open the dialog
+      const cancelButtons = screen.getAllByRole('button', { name: /cancel/i });
+      fireEvent.click(cancelButtons[0]);
+
+      // Click Continue Running
+      fireEvent.click(screen.getByRole('button', { name: /Continue Running/i }));
+
+      // Dialog should be closed
+      await waitFor(() => {
+        expect(screen.queryByText('Cancel Evaluation?')).not.toBeInTheDocument();
+      });
+    });
+
     it('should not show tooltip when button is disabled due to isRunning', () => {
       vi.mocked(useApiHealth).mockReturnValue({
         data: { status: 'connected', message: null },

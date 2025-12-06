@@ -113,6 +113,7 @@ export default function Review({
     String(config.maxConcurrency || REDTEAM_DEFAULTS.MAX_CONCURRENCY),
   );
   const [isJobStatusDialogOpen, setIsJobStatusDialogOpen] = useState(false);
+  const [isCancelDialogOpen, setIsCancelDialogOpen] = useState(false);
 
   // WebSocket integration for real-time job updates
   const handleJobUpdate = useCallback(
@@ -524,19 +525,37 @@ export default function Review({
     }
   };
 
-  const handleCancel = useCallback(async () => {
+  /**
+   * Show confirmation dialog before cancelling
+   */
+  const handleCancel = useCallback(() => {
+    setIsCancelDialogOpen(true);
+  }, []);
+
+  /**
+   * Perform the actual cancellation after user confirms
+   */
+  const performCancel = useCallback(async () => {
     try {
       await callApi('/redteam/cancel', {
         method: 'POST',
       });
 
       jobActions.reset();
-      showToast('Cancel request submitted', 'success');
+      showToast('Evaluation cancelled', 'success');
     } catch (error) {
       console.error('Error cancelling job:', error);
       showToast('Failed to cancel job', 'error');
     }
   }, [jobActions, showToast]);
+
+  /**
+   * Confirm cancellation - close dialog and perform cancel
+   */
+  const confirmCancel = useCallback(async () => {
+    setIsCancelDialogOpen(false);
+    await performCancel();
+  }, [performCancel]);
 
   /**
    * Dedicated retry handler for failed evaluations.
@@ -554,7 +573,7 @@ export default function Review({
 
   const handleCancelExistingAndRun = async () => {
     try {
-      await handleCancel();
+      await performCancel();
       setIsJobStatusDialogOpen(false);
       setTimeout(() => {
         handleRunWithSettings();
@@ -1338,6 +1357,25 @@ export default function Review({
               </Button>
               <Button variant="contained" color="primary" onClick={handleCancelExistingAndRun}>
                 Cancel Existing & Run New
+              </Button>
+            </Box>
+          </DialogContent>
+        </Dialog>
+
+        {/* Cancel Confirmation Dialog */}
+        <Dialog open={isCancelDialogOpen} onClose={() => setIsCancelDialogOpen(false)}>
+          <DialogTitle>Cancel Evaluation?</DialogTitle>
+          <DialogContent>
+            <Typography variant="body1" paragraph>
+              Are you sure you want to cancel the current evaluation? This will stop all running
+              tests and any progress will be lost.
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end', mt: 2 }}>
+              <Button variant="outlined" onClick={() => setIsCancelDialogOpen(false)}>
+                Continue Running
+              </Button>
+              <Button variant="contained" color="error" onClick={confirmCancel}>
+                Cancel Evaluation
               </Button>
             </Box>
           </DialogContent>
