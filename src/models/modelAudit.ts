@@ -252,11 +252,18 @@ export default class ModelAudit {
     return new ModelAudit({ ...result, persisted: true });
   }
 
+  /**
+   * Get multiple model audits with pagination, sorting, and optional search.
+   *
+   * Note: The search parameter is safely handled by Drizzle ORM's `like()` function,
+   * which uses parameterized queries under the hood. The search string is passed as
+   * a bound parameter, not interpolated into the SQL string, preventing SQL injection.
+   */
   static async getMany(
     limit: number = 100,
     offset: number = 0,
-    sortField: string = 'createdAt',
-    sortOrder: string = 'desc',
+    sortField: 'createdAt' | 'name' | 'modelPath' = 'createdAt',
+    sortOrder: 'asc' | 'desc' = 'desc',
     search?: string,
   ): Promise<ModelAudit[]> {
     const db = getDb();
@@ -265,6 +272,7 @@ export default class ModelAudit {
     let query = db.select().from(modelAuditsTable);
 
     // Apply search filter if provided
+    // Note: Drizzle ORM's like() uses parameterized queries, making this safe from SQL injection
     if (search) {
       query = query.where(
         or(
@@ -275,7 +283,7 @@ export default class ModelAudit {
       ) as typeof query;
     }
 
-    // Determine the sort column
+    // Determine the sort column using explicit allowlist mapping
     const sortColumn =
       sortField === 'name'
         ? modelAuditsTable.name

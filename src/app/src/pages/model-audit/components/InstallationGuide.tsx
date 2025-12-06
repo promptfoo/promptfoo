@@ -90,10 +90,16 @@ export default function InstallationGuide({
           fontFamily: 'monospace',
           backgroundColor: (theme) => (theme.palette.mode === 'dark' ? 'grey.900' : 'grey.100'),
         }}
+        role="region"
+        aria-label="Installation command"
       >
         <code>{installCommand}</code>
         <Tooltip title={copied ? 'Copied!' : 'Copy command'}>
-          <IconButton size="small" onClick={handleCopy}>
+          <IconButton
+            size="small"
+            onClick={handleCopy}
+            aria-label={copied ? 'Command copied to clipboard' : 'Copy installation command'}
+          >
             {copied ? <CheckCircleIcon color="success" /> : <ContentCopyIcon />}
           </IconButton>
         </Tooltip>

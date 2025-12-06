@@ -420,14 +420,30 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
   }
 });
 
+// Valid sort fields and order values for the /scans endpoint
+const VALID_SORT_FIELDS = ['createdAt', 'name', 'modelPath'] as const;
+const VALID_SORT_ORDERS = ['asc', 'desc'] as const;
+type SortField = (typeof VALID_SORT_FIELDS)[number];
+type SortOrder = (typeof VALID_SORT_ORDERS)[number];
+
 // Get all model scans with pagination support
 modelAuditRouter.get('/scans', async (req: Request, res: Response): Promise<void> => {
   try {
     const limit = Math.min(Math.max(1, parseInt(req.query.limit as string) || 100), 100);
     const offset = Math.max(0, parseInt(req.query.offset as string) || 0);
-    const sort = (req.query.sort as string) || 'createdAt';
-    const order = (req.query.order as string) || 'desc';
+    const sortParam = (req.query.sort as string) || 'createdAt';
+    const orderParam = (req.query.order as string) || 'desc';
     const search = req.query.search as string | undefined;
+
+    // Validate sort field against allowlist
+    const sort: SortField = VALID_SORT_FIELDS.includes(sortParam as SortField)
+      ? (sortParam as SortField)
+      : 'createdAt';
+
+    // Validate order against allowlist
+    const order: SortOrder = VALID_SORT_ORDERS.includes(orderParam as SortOrder)
+      ? (orderParam as SortOrder)
+      : 'desc';
 
     const audits = await ModelAudit.getMany(limit, offset, sort, order, search);
     const total = await ModelAudit.count(search);
