@@ -634,22 +634,21 @@ export default function Review({
       <Box>
         {/* Hero Action Area - Run button at top */}
         <Paper
-          elevation={3}
+          elevation={1}
           sx={{
             p: 3,
             mb: 3,
-            background: `linear-gradient(135deg, ${theme.palette.primary.dark} 0%, ${theme.palette.primary.main} 100%)`,
-            color: theme.palette.primary.contrastText,
             borderRadius: 2,
+            borderLeft: `4px solid ${theme.palette.primary.main}`,
           }}
         >
           <Box
             sx={{
               display: 'flex',
-              alignItems: 'center',
+              alignItems: 'flex-start',
               justifyContent: 'space-between',
               flexDirection: { xs: 'column', md: 'row' },
-              gap: { xs: 2, md: 0 },
+              gap: 2,
             }}
           >
             <Box sx={{ flex: 1, width: { xs: '100%', md: 'auto' } }}>
@@ -661,38 +660,31 @@ export default function Review({
                 onChange={handleDescriptionChange}
                 variant="outlined"
                 size="small"
-                sx={{
-                  maxWidth: { xs: '100%', md: 400 },
-                  '& .MuiOutlinedInput-root': {
-                    backgroundColor: 'rgba(255,255,255,0.9)',
-                  },
-                  '& .MuiInputLabel-root': {
-                    color: 'rgba(255,255,255,0.7)',
-                  },
-                  '& .MuiInputLabel-root.Mui-focused': {
-                    color: theme.palette.primary.main,
-                  },
-                }}
+                sx={{ maxWidth: { xs: '100%', md: 400 } }}
               />
               {config.target?.label && (
                 <Typography
                   variant="body2"
-                  sx={{ mt: 1, opacity: 0.9, display: 'flex', alignItems: 'center', gap: 0.5 }}
+                  color="text.secondary"
+                  sx={{ mt: 1.5, display: 'flex', alignItems: 'center', gap: 0.5 }}
                 >
-                  Target: <strong>{config.target.label}</strong>
+                  Target:{' '}
+                  <Typography
+                    component="span"
+                    variant="body2"
+                    fontWeight={500}
+                    color="text.primary"
+                  >
+                    {config.target.label}
+                  </Typography>
                   {config.target.id !== 'http' &&
                     config.target.id !== 'websocket' &&
                     config.target.id !== 'browser' && (
                       <Chip
                         label={config.target.id}
                         size="small"
-                        sx={{
-                          ml: 1,
-                          height: 18,
-                          fontSize: '0.7rem',
-                          backgroundColor: 'rgba(255,255,255,0.15)',
-                          color: 'inherit',
-                        }}
+                        variant="outlined"
+                        sx={{ ml: 1, height: 20 }}
                       />
                     )}
                 </Typography>
@@ -700,7 +692,7 @@ export default function Review({
               <Box
                 sx={{
                   display: 'flex',
-                  gap: { xs: 1, md: 2 },
+                  gap: 1,
                   mt: 2,
                   flexWrap: 'wrap',
                   alignItems: 'center',
@@ -712,47 +704,32 @@ export default function Review({
                       <Chip
                         label={`${jobState.severityCounts.critical} Critical`}
                         size="small"
-                        sx={{
-                          backgroundColor: theme.palette.error.main,
-                          color: theme.palette.error.contrastText,
-                          fontWeight: 600,
-                        }}
+                        color="error"
                       />
                     )}
                     {jobState.severityCounts.high > 0 && (
                       <Chip
                         label={`${jobState.severityCounts.high} High`}
                         size="small"
-                        sx={{
-                          backgroundColor: theme.palette.warning.main,
-                          color: theme.palette.warning.contrastText,
-                          fontWeight: 600,
-                        }}
+                        color="warning"
                       />
                     )}
                     {jobState.severityCounts.medium > 0 && (
                       <Chip
                         label={`${jobState.severityCounts.medium} Medium`}
                         size="small"
-                        sx={{
-                          backgroundColor: 'rgba(255,255,255,0.3)',
-                          color: 'inherit',
-                          fontWeight: 500,
-                        }}
+                        variant="outlined"
                       />
                     )}
                     {jobState.severityCounts.low > 0 && (
                       <Chip
                         label={`${jobState.severityCounts.low} Low`}
                         size="small"
-                        sx={{
-                          backgroundColor: 'rgba(255,255,255,0.2)',
-                          color: 'inherit',
-                          fontWeight: 500,
-                        }}
+                        variant="outlined"
+                        color="default"
                       />
                     )}
-                    <Typography variant="caption" sx={{ opacity: 0.8, ml: 1 }}>
+                    <Typography variant="body2" color="text.secondary" sx={{ ml: 1 }}>
                       {jobState.progress}/{jobState.total} probes
                     </Typography>
                   </>
@@ -761,22 +738,16 @@ export default function Review({
                     <Chip
                       label={`${pluginSummary.length} Plugins`}
                       size="small"
-                      sx={{
-                        backgroundColor: 'rgba(255,255,255,0.2)',
-                        color: 'inherit',
-                        fontWeight: 500,
-                      }}
+                      variant="outlined"
                       onClick={navigateToPlugins}
+                      clickable
                     />
                     <Chip
                       label={`${strategySummary.length} Strategies`}
                       size="small"
-                      sx={{
-                        backgroundColor: 'rgba(255,255,255,0.2)',
-                        color: 'inherit',
-                        fontWeight: 500,
-                      }}
+                      variant="outlined"
                       onClick={navigateToStrategies}
+                      clickable
                     />
                     <EstimationsDisplay config={config} compact />
                   </>
@@ -788,27 +759,20 @@ export default function Review({
                 display: 'flex',
                 gap: 1,
                 alignItems: 'center',
-                ml: { xs: 0, md: 3 },
                 width: { xs: '100%', md: 'auto' },
-                justifyContent: { xs: 'center', md: 'flex-end' },
+                justifyContent: { xs: 'stretch', md: 'flex-end' },
+                flexDirection: { xs: 'column', sm: 'row' },
               }}
             >
               {isRunning ? (
                 <Button
-                  variant="contained"
+                  variant="outlined"
+                  color="error"
                   size="large"
                   onClick={handleCancel}
                   startIcon={<StopIcon />}
-                  sx={{
-                    backgroundColor: theme.palette.error.main,
-                    color: theme.palette.error.contrastText,
-                    fontWeight: 600,
-                    px: 4,
-                    py: 1.5,
-                    '&:hover': {
-                      backgroundColor: theme.palette.error.dark,
-                    },
-                  }}
+                  fullWidth={false}
+                  sx={{ minWidth: 140 }}
                 >
                   Stop Scan
                 </Button>
@@ -817,23 +781,12 @@ export default function Review({
                   <span>
                     <Button
                       variant="contained"
+                      color="primary"
                       size="large"
                       onClick={handleRunWithSettings}
                       disabled={isRunNowDisabled}
                       startIcon={<PlayArrowIcon />}
-                      sx={{
-                        backgroundColor: 'white',
-                        color: theme.palette.primary.main,
-                        fontWeight: 600,
-                        px: 4,
-                        py: 1.5,
-                        '&:hover': {
-                          backgroundColor: 'rgba(255,255,255,0.9)',
-                        },
-                        '&.Mui-disabled': {
-                          backgroundColor: 'rgba(255,255,255,0.5)',
-                        },
-                      }}
+                      sx={{ minWidth: 140 }}
                     >
                       Run Scan
                     </Button>
@@ -841,11 +794,7 @@ export default function Review({
                 </Tooltip>
               )}
               <Tooltip title="CLI & Export Options">
-                <IconButton
-                  onClick={handleCliMenuOpen}
-                  sx={{ color: 'inherit' }}
-                  aria-label="CLI and export options"
-                >
+                <IconButton onClick={handleCliMenuOpen} aria-label="CLI and export options">
                   <MoreVertIcon />
                 </IconButton>
               </Tooltip>
@@ -897,7 +846,7 @@ export default function Review({
             </Box>
           </Box>
           {apiHealthStatus !== 'connected' && !isCheckingApiHealth && (
-            <Alert severity="warning" sx={{ mt: 2, backgroundColor: 'rgba(255,255,255,0.9)' }}>
+            <Alert severity="warning" sx={{ mt: 2 }}>
               {apiHealthStatus === 'blocked'
                 ? 'Cannot connect to Promptfoo Cloud. Please check your network connection.'
                 : apiHealthStatus === 'disabled'

@@ -19,15 +19,7 @@ export default function EstimationsDisplay({ config, compact }: EstimationsDispl
 
   if (compact) {
     return (
-      <Chip
-        label={`~${estimatedProbes.toLocaleString()} probes`}
-        size="small"
-        sx={{
-          backgroundColor: 'rgba(255,255,255,0.2)',
-          color: 'inherit',
-          fontWeight: 500,
-        }}
-      />
+      <Chip label={`~${estimatedProbes.toLocaleString()} probes`} size="small" variant="outlined" />
     );
   }
 
