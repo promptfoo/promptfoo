@@ -1,0 +1,37 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Clamp long vars via transformVars before templating.
+
+prompts:
+  - '{{ doc }}'
+
+providers:
+  - echo
+
+defaultTest:
+  options:
+    transformVars: |
+      const clamp = (text, max = 80) => {
+        const str = typeof text === 'string' ? text : String(text ?? '');
+        return str.length <= max ? str : `${str.slice(0, max)}...[truncated]`;
+      };
+      return { ...vars, doc: clamp(vars.doc, 80) };
+
+tests:
+  - label: short text stays intact
+    vars:
+      doc: 'Short text stays as-is.'
+    assert:
+      - type: equals
+        value: Short text stays as-is.
+
+  - label: long text is clamped by transformVars
+    vars:
+      doc: >
+        The goal is to show how a lightweight transformVars function can trim an overly
+        long input before it ever reaches the provider. This sentence is intentionally
+        long so the transform slices it and appends a trailing marker.
+    assert:
+      - type: contains
+        value: ...[truncated]
+      - type: javascript
+        value: output.length <= 100

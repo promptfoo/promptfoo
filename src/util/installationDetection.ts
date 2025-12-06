@@ -7,18 +7,20 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as childProcess from 'node:child_process';
 
-export enum PackageManager {
-  NPM = 'npm',
-  YARN = 'yarn',
-  PNPM = 'pnpm',
-  PNPX = 'pnpx',
-  BUN = 'bun',
-  BUNX = 'bunx',
-  HOMEBREW = 'homebrew',
-  NPX = 'npx',
-  DOCKER = 'docker',
-  UNKNOWN = 'unknown',
-}
+export const PackageManager = {
+  NPM: 'npm',
+  YARN: 'yarn',
+  PNPM: 'pnpm',
+  PNPX: 'pnpx',
+  BUN: 'bun',
+  BUNX: 'bunx',
+  HOMEBREW: 'homebrew',
+  NPX: 'npx',
+  DOCKER: 'docker',
+  UNKNOWN: 'unknown',
+} as const;
+
+export type PackageManager = (typeof PackageManager)[keyof typeof PackageManager];
 
 /**
  * Helper function to check if a path contains a pattern.

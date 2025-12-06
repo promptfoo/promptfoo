@@ -1,7 +1,8 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createLiteLLMProvider, LiteLLMProvider } from '../../src/providers/litellm';
 
 // Mock fetch for API call tests
-const mockFetch = jest.fn();
+const mockFetch = vi.fn();
 global.fetch = mockFetch as any;
 
 describe('LiteLLM Provider', () => {

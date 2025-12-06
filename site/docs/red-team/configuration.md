@@ -35,7 +35,7 @@ The red team configuration uses the following YAML structure:
 
 ```yaml
 targets:
-  - id: openai:gpt-4.1
+  - id: openai:gpt-5
     label: customer-service-agent
 
 redteam:
@@ -56,7 +56,7 @@ redteam:
 | `injectVar`                  | `string`                  | Variable to inject adversarial inputs into                               | Inferred from prompts           |
 | `numTests`                   | `number`                  | Default number of tests to generate per plugin                           | 5                               |
 | `plugins`                    | `Array<string\|object>`   | Plugins to use for red team generation                                   | `default`                       |
-| `provider` or `targets`      | `string\|ProviderOptions` | Endpoint or AI model provider for generating adversarial inputs          | `openai:gpt-4.1`                |
+| `provider` or `targets`      | `string\|ProviderOptions` | Endpoint or AI model provider for generating adversarial inputs          | `openai:gpt-5`                  |
 | `purpose`                    | `string`                  | Description of prompt templates' purpose to guide adversarial generation | Inferred from prompts           |
 | `strategies`                 | `Array<string\|object>`   | Strategies to apply to other plugins                                     | `jailbreak`, `prompt-injection` |
 | `language`                   | `string\|string[]`        | Language(s) for generated tests (applies to all plugins/strategies)      | English                         |
@@ -660,10 +660,10 @@ Custom plugins and strategies require an OpenAI key or your own provider configu
 
 ### Changing the model
 
-To use the `openai:chat:gpt-4.1-mini` model, you can override the provider on the command line:
+To use the `openai:chat:gpt-5-mini` model, you can override the provider on the command line:
 
 ```sh
-npx promptfoo@latest redteam generate --provider openai:chat:gpt-4.1-mini
+npx promptfoo@latest redteam generate --provider openai:chat:gpt-5-mini
 ```
 
 Or in the config:
@@ -671,7 +671,7 @@ Or in the config:
 ```yaml
 redteam:
   provider:
-    id: openai:chat:gpt-4.1-mini
+    id: openai:chat:gpt-5-mini
     # Optional config
     config:
       temperature: 0.5
@@ -869,7 +869,7 @@ You can set up the provider in several ways:
 
    ```yaml
    redteam:
-     provider: 'openai:gpt-4'
+     provider: 'openai:gpt-5'
    ```
 
 2. As an object with additional configuration:
@@ -877,7 +877,7 @@ You can set up the provider in several ways:
    ```yaml
    redteam:
      provider:
-       id: 'openai:gpt-4'
+       id: 'openai:gpt-5'
        config:
          temperature: 0.7
          max_tokens: 150
@@ -906,7 +906,7 @@ Configuration values can be set in multiple ways, with the following precedence 
 
    ```yaml
    redteam:
-     provider: openai:gpt-4.1
+     provider: openai:gpt-5
      numTests: 5
    env:
      OPENAI_API_KEY: your-key-here
@@ -949,7 +949,7 @@ redteam:
 redteam:
   injectVar: 'user_input'
   purpose: 'Evaluate chatbot safety and robustness'
-  provider: 'openai:chat:gpt-4.1'
+  provider: 'openai:chat:gpt-5'
   language: ['en', 'fr', 'es', 'de'] # Test in multiple languages
   numTests: 20
   testGenerationInstructions: |

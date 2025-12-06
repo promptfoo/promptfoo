@@ -1,0 +1,57 @@
+# Comprehensive Bedrock Pricing Test Suite
+# Tests all auth methods, concurrency, caching, and cost calculation
+
+providers:
+  # Test 1: IAM credentials with pricing fetch (standard model ID)
+  - id: bedrock:anthropic.claude-3-5-haiku-20241022-v1:0
+    label: 'Test 1: IAM + Standard Model ID'
+    config:
+      region: us-east-1
+      # Uses AWS credential chain for pricing fetch
+
+  # Test 2: IAM credentials with region-prefixed model ID
+  - id: bedrock:us.anthropic.claude-3-5-haiku-20241022-v1:0
+    label: 'Test 2: IAM + Region-Prefixed Model ID'
+    config:
+      region: us-east-1
+
+  # Test 3: Nova model (different model family)
+  - id: bedrock:amazon.nova-micro-v1:0
+    label: 'Test 3: IAM + Nova Model'
+    config:
+      region: us-east-1
+
+  # Test 4: Mistral model (tests revised mapping keys)
+  - id: bedrock:mistral.mistral-7b-instruct-v0:2
+    label: 'Test 4: IAM + Mistral Model (revision suffix)'
+    config:
+      region: us-east-1
+
+  # Test 5: config.cost override (should use this instead of fetched pricing)
+  - id: bedrock:anthropic.claude-3-5-haiku-20241022-v1:0
+    label: 'Test 5: config.cost Override'
+    config:
+      region: us-east-1
+      cost:
+        input: 0.00001 # Custom pricing
+        output: 0.00005
+
+prompts:
+  - 'Count to 5 briefly.'
+
+tests:
+  - description: 'Single request test'
+    vars:
+      test: 'single'
+
+  # Concurrency test - will be run separately
+  # - description: 'Concurrent request test (10x)'
+  #   vars:
+  #     test: 'concurrent'
+
+defaultTest:
+  options:
+    # Enable cache for most tests (will test cache-disabled separately)
+    cache: true
+
+outputPath: ./bedrock-pricing-test-results.json

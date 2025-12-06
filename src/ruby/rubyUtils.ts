@@ -5,6 +5,7 @@ import path from 'path';
 import { promisify } from 'util';
 
 import { getEnvString } from '../envars';
+import { getWrapperDir } from '../esm';
 import logger from '../logger';
 import { safeJsonStringify } from '../util/json';
 
@@ -293,7 +294,7 @@ export async function runRuby(
 
   rubyPath = await validateRubyPath(rubyPath, typeof customPath === 'string');
 
-  const wrapperPath = path.join(__dirname, 'wrapper.rb');
+  const wrapperPath = path.join(getWrapperDir('ruby'), 'wrapper.rb');
 
   try {
     fs.writeFileSync(tempJsonPath, safeJsonStringify(args) as string, 'utf-8');

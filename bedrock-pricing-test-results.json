@@ -1,0 +1,570 @@
+{
+  "evalId": "eval-wVl-2025-11-21T15:40:34",
+  "results": {
+    "version": 3,
+    "timestamp": "2025-11-21T15:40:34.474Z",
+    "prompts": [
+      {
+        "raw": "Count to 5 briefly.",
+        "label": "Count to 5 briefly.",
+        "id": "85e785ffb9d4de3788f5381f5f90415f6d8417d95dcaed51a24e546dafbae4be",
+        "provider": "Test 1: IAM + Standard Model ID",
+        "metrics": {
+          "score": 0,
+          "testPassCount": 0,
+          "testFailCount": 0,
+          "testErrorCount": 1,
+          "assertPassCount": 0,
+          "assertFailCount": 0,
+          "totalLatencyMs": 420,
+          "tokenUsage": {
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "total": 0,
+            "numRequests": 1,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0
+            },
+            "assertions": {
+              "total": 0,
+              "prompt": 0,
+              "completion": 0,
+              "cached": 0,
+              "numRequests": 0,
+              "completionDetails": {
+                "reasoning": 0,
+                "acceptedPrediction": 0,
+                "rejectedPrediction": 0
+              }
+            }
+          },
+          "namedScores": {},
+          "namedScoresCount": {},
+          "cost": 0
+        }
+      },
+      {
+        "raw": "Count to 5 briefly.",
+        "label": "Count to 5 briefly.",
+        "id": "85e785ffb9d4de3788f5381f5f90415f6d8417d95dcaed51a24e546dafbae4be",
+        "provider": "Test 2: IAM + Region-Prefixed Model ID",
+        "metrics": {
+          "score": 1,
+          "testPassCount": 1,
+          "testFailCount": 0,
+          "testErrorCount": 0,
+          "assertPassCount": 0,
+          "assertFailCount": 0,
+          "totalLatencyMs": 1743,
+          "tokenUsage": {
+            "prompt": 14,
+            "completion": 18,
+            "cached": 0,
+            "total": 32,
+            "numRequests": 1,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0
+            },
+            "assertions": {
+              "total": 0,
+              "prompt": 0,
+              "completion": 0,
+              "cached": 0,
+              "numRequests": 0,
+              "completionDetails": {
+                "reasoning": 0,
+                "acceptedPrediction": 0,
+                "rejectedPrediction": 0
+              }
+            }
+          },
+          "namedScores": {},
+          "namedScoresCount": {},
+          "cost": 0
+        }
+      },
+      {
+        "raw": "Count to 5 briefly.",
+        "label": "Count to 5 briefly.",
+        "id": "85e785ffb9d4de3788f5381f5f90415f6d8417d95dcaed51a24e546dafbae4be",
+        "provider": "Test 3: IAM + Nova Model",
+        "metrics": {
+          "score": 1,
+          "testPassCount": 1,
+          "testFailCount": 0,
+          "testErrorCount": 0,
+          "assertPassCount": 0,
+          "assertFailCount": 0,
+          "totalLatencyMs": 561,
+          "tokenUsage": {
+            "prompt": 6,
+            "completion": 30,
+            "cached": 0,
+            "total": 36,
+            "numRequests": 1,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0
+            },
+            "assertions": {
+              "total": 0,
+              "prompt": 0,
+              "completion": 0,
+              "cached": 0,
+              "numRequests": 0,
+              "completionDetails": {
+                "reasoning": 0,
+                "acceptedPrediction": 0,
+                "rejectedPrediction": 0
+              }
+            }
+          },
+          "namedScores": {},
+          "namedScoresCount": {},
+          "cost": 0.0000042524999999999995
+        }
+      },
+      {
+        "raw": "Count to 5 briefly.",
+        "label": "Count to 5 briefly.",
+        "id": "85e785ffb9d4de3788f5381f5f90415f6d8417d95dcaed51a24e546dafbae4be",
+        "provider": "Test 4: IAM + Mistral Model (revision suffix)",
+        "metrics": {
+          "score": 0,
+          "testPassCount": 0,
+          "testFailCount": 0,
+          "testErrorCount": 1,
+          "assertPassCount": 0,
+          "assertFailCount": 0,
+          "totalLatencyMs": 328,
+          "tokenUsage": {
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "total": 0,
+            "numRequests": 1,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0
+            },
+            "assertions": {
+              "total": 0,
+              "prompt": 0,
+              "completion": 0,
+              "cached": 0,
+              "numRequests": 0,
+              "completionDetails": {
+                "reasoning": 0,
+                "acceptedPrediction": 0,
+                "rejectedPrediction": 0
+              }
+            }
+          },
+          "namedScores": {},
+          "namedScoresCount": {},
+          "cost": 0
+        }
+      },
+      {
+        "raw": "Count to 5 briefly.",
+        "label": "Count to 5 briefly.",
+        "id": "85e785ffb9d4de3788f5381f5f90415f6d8417d95dcaed51a24e546dafbae4be",
+        "provider": "Test 5: config.cost Override",
+        "metrics": {
+          "score": 0,
+          "testPassCount": 0,
+          "testFailCount": 0,
+          "testErrorCount": 1,
+          "assertPassCount": 0,
+          "assertFailCount": 0,
+          "totalLatencyMs": 265,
+          "tokenUsage": {
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "total": 0,
+            "numRequests": 1,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0
+            },
+            "assertions": {
+              "total": 0,
+              "prompt": 0,
+              "completion": 0,
+              "cached": 0,
+              "numRequests": 0,
+              "completionDetails": {
+                "reasoning": 0,
+                "acceptedPrediction": 0,
+                "rejectedPrediction": 0
+              }
+            }
+          },
+          "namedScores": {},
+          "namedScoresCount": {},
+          "cost": 0
+        }
+      }
+    ],
+    "results": [
+      {
+        "cost": 0,
+        "error": "Bedrock API invoke model error: ValidationException: Invocation of model ID anthropic.claude-3-5-haiku-20241022-v1:0 with on-demand throughput isn’t supported. Retry your request with the ID or ARN of an inference profile that contains this model.",
+        "gradingResult": null,
+        "id": "76e80d6b-8a04-43a4-9c2e-1fe08df4c26d",
+        "latencyMs": 420,
+        "namedScores": {},
+        "prompt": {
+          "raw": "Count to 5 briefly.",
+          "label": "Count to 5 briefly."
+        },
+        "promptId": "85e785ffb9d4de3788f5381f5f90415f6d8417d95dcaed51a24e546dafbae4be",
+        "promptIdx": 0,
+        "provider": {
+          "id": "bedrock:anthropic.claude-3-5-haiku-20241022-v1:0",
+          "label": "Test 1: IAM + Standard Model ID"
+        },
+        "response": {
+          "error": "Bedrock API invoke model error: ValidationException: Invocation of model ID anthropic.claude-3-5-haiku-20241022-v1:0 with on-demand throughput isn’t supported. Retry your request with the ID or ARN of an inference profile that contains this model."
+        },
+        "score": 0,
+        "success": false,
+        "testCase": {
+          "description": "Single request test",
+          "vars": {
+            "test": "single"
+          },
+          "assert": [],
+          "options": {
+            "cache": true
+          },
+          "metadata": {}
+        },
+        "testIdx": 0,
+        "vars": {
+          "test": "single"
+        },
+        "metadata": {
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 2
+      },
+      {
+        "cost": 0,
+        "error": "Bedrock API invoke model error: ValidationException: Validation Error",
+        "gradingResult": null,
+        "id": "aa01b8a8-2c78-4df8-be5a-c94efea55714",
+        "latencyMs": 328,
+        "namedScores": {},
+        "prompt": {
+          "raw": "Count to 5 briefly.",
+          "label": "Count to 5 briefly."
+        },
+        "promptId": "85e785ffb9d4de3788f5381f5f90415f6d8417d95dcaed51a24e546dafbae4be",
+        "promptIdx": 3,
+        "provider": {
+          "id": "bedrock:mistral.mistral-7b-instruct-v0:2",
+          "label": "Test 4: IAM + Mistral Model (revision suffix)"
+        },
+        "response": {
+          "error": "Bedrock API invoke model error: ValidationException: Validation Error"
+        },
+        "score": 0,
+        "success": false,
+        "testCase": {
+          "description": "Single request test",
+          "vars": {
+            "test": "single"
+          },
+          "assert": [],
+          "options": {
+            "cache": true
+          },
+          "metadata": {}
+        },
+        "testIdx": 0,
+        "vars": {
+          "test": "single"
+        },
+        "metadata": {
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 2
+      },
+      {
+        "cost": 0,
+        "error": "Bedrock API invoke model error: ValidationException: Invocation of model ID anthropic.claude-3-5-haiku-20241022-v1:0 with on-demand throughput isn’t supported. Retry your request with the ID or ARN of an inference profile that contains this model.",
+        "gradingResult": null,
+        "id": "5f3e1be8-a416-40f3-bc85-c01b587bb83b",
+        "latencyMs": 265,
+        "namedScores": {},
+        "prompt": {
+          "raw": "Count to 5 briefly.",
+          "label": "Count to 5 briefly."
+        },
+        "promptId": "85e785ffb9d4de3788f5381f5f90415f6d8417d95dcaed51a24e546dafbae4be",
+        "promptIdx": 4,
+        "provider": {
+          "id": "bedrock:anthropic.claude-3-5-haiku-20241022-v1:0",
+          "label": "Test 5: config.cost Override"
+        },
+        "response": {
+          "error": "Bedrock API invoke model error: ValidationException: Invocation of model ID anthropic.claude-3-5-haiku-20241022-v1:0 with on-demand throughput isn’t supported. Retry your request with the ID or ARN of an inference profile that contains this model."
+        },
+        "score": 0,
+        "success": false,
+        "testCase": {
+          "description": "Single request test",
+          "vars": {
+            "test": "single"
+          },
+          "assert": [],
+          "options": {
+            "cache": true
+          },
+          "metadata": {}
+        },
+        "testIdx": 0,
+        "vars": {
+          "test": "single"
+        },
+        "metadata": {
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 2
+      },
+      {
+        "cost": 0,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "No assertions",
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          }
+        },
+        "id": "66470993-73f4-4ef6-be00-d6e1c50c4c86",
+        "latencyMs": 1743,
+        "namedScores": {},
+        "prompt": {
+          "raw": "Count to 5 briefly.",
+          "label": "Count to 5 briefly."
+        },
+        "promptId": "85e785ffb9d4de3788f5381f5f90415f6d8417d95dcaed51a24e546dafbae4be",
+        "promptIdx": 1,
+        "provider": {
+          "id": "bedrock:us.anthropic.claude-3-5-haiku-20241022-v1:0",
+          "label": "Test 2: IAM + Region-Prefixed Model ID"
+        },
+        "response": {
+          "output": "1, 2, 3, 4, 5.",
+          "tokenUsage": {
+            "prompt": 14,
+            "completion": 18,
+            "total": 32,
+            "numRequests": 1
+          }
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "description": "Single request test",
+          "vars": {
+            "test": "single"
+          },
+          "assert": [],
+          "options": {
+            "cache": true
+          },
+          "metadata": {}
+        },
+        "testIdx": 0,
+        "vars": {
+          "test": "single"
+        },
+        "metadata": {
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      },
+      {
+        "cost": 0.0000042524999999999995,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "No assertions",
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          }
+        },
+        "id": "9600df32-4a1a-4c26-8eb2-8f7079e95df7",
+        "latencyMs": 561,
+        "namedScores": {},
+        "prompt": {
+          "raw": "Count to 5 briefly.",
+          "label": "Count to 5 briefly."
+        },
+        "promptId": "85e785ffb9d4de3788f5381f5f90415f6d8417d95dcaed51a24e546dafbae4be",
+        "promptIdx": 2,
+        "provider": {
+          "id": "bedrock:amazon.nova-micro-v1:0",
+          "label": "Test 3: IAM + Nova Model"
+        },
+        "response": {
+          "output": "Sure, here we go:\n\n1, 2, 3, 4, 5.\n\nThat was a brief count to 5.",
+          "tokenUsage": {
+            "prompt": 6,
+            "completion": 30,
+            "total": 36,
+            "numRequests": 1
+          },
+          "cost": 0.0000042524999999999995
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "description": "Single request test",
+          "vars": {
+            "test": "single"
+          },
+          "assert": [],
+          "options": {
+            "cache": true
+          },
+          "metadata": {}
+        },
+        "testIdx": 0,
+        "vars": {
+          "test": "single"
+        },
+        "metadata": {
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      }
+    ],
+    "stats": {
+      "successes": 2,
+      "failures": 0,
+      "errors": 3,
+      "tokenUsage": {
+        "prompt": 20,
+        "completion": 48,
+        "cached": 0,
+        "total": 68,
+        "numRequests": 5,
+        "completionDetails": {
+          "reasoning": 0,
+          "acceptedPrediction": 0,
+          "rejectedPrediction": 0
+        },
+        "assertions": {
+          "total": 0,
+          "prompt": 0,
+          "completion": 0,
+          "cached": 0,
+          "numRequests": 0,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0
+          }
+        }
+      }
+    }
+  },
+  "config": {
+    "tags": {},
+    "prompts": ["Count to 5 briefly."],
+    "providers": [
+      {
+        "id": "bedrock:anthropic.claude-3-5-haiku-20241022-v1:0",
+        "label": "Test 1: IAM + Standard Model ID",
+        "config": {
+          "region": "us-east-1"
+        }
+      },
+      {
+        "id": "bedrock:us.anthropic.claude-3-5-haiku-20241022-v1:0",
+        "label": "Test 2: IAM + Region-Prefixed Model ID",
+        "config": {
+          "region": "us-east-1"
+        }
+      },
+      {
+        "id": "bedrock:amazon.nova-micro-v1:0",
+        "label": "Test 3: IAM + Nova Model",
+        "config": {
+          "region": "us-east-1"
+        }
+      },
+      {
+        "id": "bedrock:mistral.mistral-7b-instruct-v0:2",
+        "label": "Test 4: IAM + Mistral Model (revision suffix)",
+        "config": {
+          "region": "us-east-1"
+        }
+      },
+      {
+        "id": "bedrock:anthropic.claude-3-5-haiku-20241022-v1:0",
+        "label": "Test 5: config.cost Override",
+        "config": {
+          "region": "us-east-1",
+          "cost": {
+            "input": 0.00001,
+            "output": 0.00005
+          }
+        }
+      }
+    ],
+    "tests": [
+      {
+        "description": "Single request test",
+        "vars": {
+          "test": "single"
+        }
+      }
+    ],
+    "scenarios": [],
+    "env": {},
+    "sharing": false,
+    "defaultTest": {
+      "options": {
+        "cache": true
+      },
+      "vars": {},
+      "assert": [],
+      "metadata": {}
+    },
+    "outputPath": ["./bedrock-pricing-test-results.json"],
+    "extensions": [],
+    "metadata": {},
+    "evaluateOptions": {}
+  },
+  "shareableUrl": null,
+  "metadata": {
+    "promptfooVersion": "0.119.9",
+    "nodeVersion": "v24.7.0",
+    "platform": "darwin",
+    "arch": "arm64",
+    "exportedAt": "2025-11-21T15:40:37.878Z",
+    "evaluationCreatedAt": "2025-11-21T15:40:34.474Z"
+  }
+}

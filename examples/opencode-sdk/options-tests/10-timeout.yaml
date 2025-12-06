@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'OpenCode SDK - Test 10: Custom timeout configuration'
+
+prompts:
+  - 'What is 7 + 7? Reply with just the number.'
+
+providers:
+  - id: opencode:sdk
+    config:
+      provider_id: openai
+      model: gpt-4o-mini
+      timeout: 60000
+
+tests:
+  - vars: {}
+    assert:
+      - type: contains
+        value: '14'

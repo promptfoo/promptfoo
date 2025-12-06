@@ -5,16 +5,8 @@ const { trace, context, SpanStatusCode } = require('@opentelemetry/api');
 const { NodeTracerProvider } = require('@opentelemetry/sdk-trace-node');
 const { OTLPTraceExporter } = require('@opentelemetry/exporter-trace-otlp-http');
 const { BatchSpanProcessor } = require('@opentelemetry/sdk-trace-base'); // Use BatchSpanProcessor
-const { Resource } = require('@opentelemetry/resources');
-const { SemanticResourceAttributes } = require('@opentelemetry/semantic-conventions');
-
-// Initialize OpenTelemetry
-const provider = new NodeTracerProvider({
-  resource: new Resource({
-    [SemanticResourceAttributes.SERVICE_NAME]: 'simple-traced-provider',
-    [SemanticResourceAttributes.SERVICE_VERSION]: '1.0.0',
-  }),
-});
+const { resourceFromAttributes } = require('@opentelemetry/resources');
+const { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } = require('@opentelemetry/semantic-conventions');
 
 // Configure OTLP exporter
 const exporterUrl = process.env.OTEL_EXPORTER_OTLP_ENDPOINT || 'http://localhost:4318/v1/traces';
@@ -30,7 +22,15 @@ const spanProcessor = new BatchSpanProcessor(exporter, {
   scheduledDelayMillis: 500, // Wait 500ms before exporting
   exportTimeoutMillis: 30000,
 });
-provider.addSpanProcessor(spanProcessor);
+
+// Initialize OpenTelemetry with span processor in constructor (v2.x API)
+const provider = new NodeTracerProvider({
+  resource: resourceFromAttributes({
+    [ATTR_SERVICE_NAME]: 'simple-traced-provider',
+    [ATTR_SERVICE_VERSION]: '1.0.0',
+  }),
+  spanProcessors: [spanProcessor],
+});
 provider.register();
 
 // Get a tracer

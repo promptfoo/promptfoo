@@ -1,0 +1,29 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'OpenCode SDK - Test 4: Working directory with read-only tools'
+
+prompts:
+  - |
+    List all Python files in the current directory.
+    Output just the filenames, one per line.
+
+providers:
+  - id: opencode:sdk
+    config:
+      provider_id: anthropic
+      model: claude-sonnet-4-5-20250929
+      working_dir: examples/agentic-sdk-comparison/test-codebase
+
+defaultTest:
+  options:
+    timeout: 120000
+
+tests:
+  - vars: {}
+    assert:
+      - type: icontains
+        value: '.py'
+      - type: javascript
+        value: |
+          const text = String(output).toLowerCase();
+          // Should find at least one Python file
+          return text.includes('.py') || text.includes('python');

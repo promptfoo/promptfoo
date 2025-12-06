@@ -1,0 +1,28 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Azure OpenAI vision model evaluation
+
+prompts:
+  # Vision models require a specific message format with content arrays
+  - file://prompt.vision.json
+
+providers:
+  # Update with your Azure OpenAI deployment details
+  - id: azure:chat:gpt-5
+    config:
+      apiHost: promptfoo.openai.azure.com
+      apiVersion: 2024-02-15-preview
+      temperature: 0.1
+      max_tokens: 500
+
+tests:
+  # Test 2: Load image from local file (automatically converted to base64 with data URL)
+  - vars:
+      question: What color is the planet in this image?
+      image_url: file://assets/earth.jpg
+    assert:
+      - type: contains-any
+        value: [blue, green]
+# Note: If you see 401 errors, ensure:
+# 1. Your AZURE_API_KEY environment variable is set correctly
+# 2. The apiHost matches your Azure OpenAI resource name
+# 3. Your deployment supports vision (GPT-5.1, GPT-4o, GPT-4.1)

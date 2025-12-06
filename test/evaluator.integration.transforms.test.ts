@@ -1,12 +1,15 @@
-import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { evaluate } from '../src/evaluator';
 import Eval from '../src/models/eval';
 
 import type { ApiProvider, TestSuite } from '../src/types/index';
 
+// Create hoisted mock for transform
+const mockTransform = vi.hoisted(() => vi.fn());
+
 // Mock the transform function to track calls
-jest.mock('../src/util/transform', () => ({
-  transform: jest.fn(),
+vi.mock('../src/util/transform', () => ({
+  transform: mockTransform,
   TransformInputType: {
     OUTPUT: 'output',
     VARS: 'vars',
@@ -14,71 +17,72 @@ jest.mock('../src/util/transform', () => ({
 }));
 
 // Mock assertions to prevent timeouts
-jest.mock('../src/assertions', () => ({
-  runAssertions: jest.fn(() =>
-    Promise.resolve({
-      pass: true,
-      score: 1,
-      namedScores: {},
-    }),
-  ),
-}));
+vi.mock('../src/assertions', async () => {
+  const actual = await vi.importActual('../src/assertions');
+  return {
+    ...(actual as any),
+    runAssertions: vi.fn(() =>
+      Promise.resolve({
+        pass: true,
+        score: 1,
+        namedScores: {},
+      }),
+    ),
+  };
+});
 
 // Mock cache to prevent file system operations
-jest.mock('../src/cache', () => ({
-  getCache: jest.fn(() => ({
-    get: jest.fn(),
-    set: jest.fn(),
-    wrap: jest.fn((_key: any, fn: any) => fn()),
+vi.mock('../src/cache', () => ({
+  getCache: vi.fn(() => ({
+    get: vi.fn(),
+    set: vi.fn(),
+    wrap: vi.fn((_key: any, fn: any) => fn()),
   })),
 }));
 
 // Mock logger to prevent console output during tests
-jest.mock('../src/logger', () => ({
+vi.mock('../src/logger', () => ({
   default: {
-    debug: jest.fn(),
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
   },
 }));
 
 // Mock file operations
-jest.mock('../src/util/file', () => ({
-  readFileCached: jest.fn(() => Promise.resolve('')),
+vi.mock('../src/util/file', () => ({
+  readFileCached: vi.fn(() => Promise.resolve('')),
 }));
 
 // Mock evaluator helpers
-jest.mock('../src/evaluatorHelpers', () => {
-  const actual = jest.requireActual('../src/evaluatorHelpers');
+vi.mock('../src/evaluatorHelpers', async () => {
+  const actual = await vi.importActual('../src/evaluatorHelpers');
   return {
     ...(actual as any),
-    runExtensionHook: jest.fn((...args: any[]) => args[2]),
+    runExtensionHook: vi.fn((...args: any[]) => args[2]),
   };
 });
 
 // Mock time utilities
-jest.mock('../src/util/time', () => {
-  const actual = jest.requireActual('../src/util/time');
+vi.mock('../src/util/time', async () => {
+  const actual = await vi.importActual('../src/util/time');
   return {
     ...(actual as any),
-    sleep: jest.fn(() => Promise.resolve()),
+    sleep: vi.fn(() => Promise.resolve()),
   };
 });
 
 // Mock ESM
-jest.mock('../src/esm', () => ({}));
-
-const mockTransform = (jest.requireMock('../src/util/transform') as any)
-  .transform as jest.MockedFunction<typeof import('../src/util/transform').transform>;
+vi.mock('../src/esm', () => ({}));
 
 describe('Transformation integration', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it.skip('should apply test.options.transform and assert.contextTransform from provider output', async () => {

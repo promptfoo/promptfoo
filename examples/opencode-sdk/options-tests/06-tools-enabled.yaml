@@ -1,0 +1,32 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'OpenCode SDK - Test 6: Specific tools enabled'
+
+prompts:
+  - |
+    Use the glob tool to find all Python files in the current directory.
+    List only the filenames.
+
+providers:
+  - id: opencode:sdk
+    config:
+      provider_id: anthropic
+      model: claude-sonnet-4-5-20250929
+      working_dir: examples/agentic-sdk-comparison/test-codebase
+      tools:
+        read: true
+        grep: true
+        glob: true
+        list: true
+        bash: false
+        edit: false
+        write: false
+
+defaultTest:
+  options:
+    timeout: 120000
+
+tests:
+  - vars: {}
+    assert:
+      - type: icontains
+        value: '.py'

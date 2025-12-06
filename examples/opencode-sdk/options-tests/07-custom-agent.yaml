@@ -1,0 +1,24 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'OpenCode SDK - Test 7: Custom agent with system prompt'
+
+prompts:
+  - 'What is 2 + 2? Reply with just the number.'
+
+providers:
+  - id: opencode:sdk
+    config:
+      provider_id: openai
+      model: gpt-4o-mini
+      custom_agent:
+        description: Math assistant
+        prompt: You are a math assistant. Always respond with just the numeric answer, nothing else.
+
+defaultTest:
+  options:
+    timeout: 120000
+
+tests:
+  - vars: {}
+    assert:
+      - type: contains
+        value: '4'

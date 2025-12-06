@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'OpenCode SDK - Test 9: Max retries configuration'
+
+prompts:
+  - 'What is 5 + 5? Reply with just the number.'
+
+providers:
+  - id: opencode:sdk
+    config:
+      provider_id: openai
+      model: gpt-4o-mini
+      max_retries: 5
+
+tests:
+  - vars: {}
+    assert:
+      - type: contains
+        value: '10'

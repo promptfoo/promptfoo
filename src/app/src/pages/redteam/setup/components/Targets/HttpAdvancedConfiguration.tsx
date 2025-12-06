@@ -19,15 +19,15 @@ import TlsHttpsConfigTab from './tabs/TlsHttpsConfigTab';
 import TokenEstimationTab from './tabs/TokenEstimationTab';
 import type { ProviderOptions } from '@promptfoo/types';
 
-// Enum for tab indices to prevent bugs and improve maintainability
-enum TabIndex {
-  SessionManagement = 0,
-  RequestTransform = 1,
-  TokenEstimation = 2,
-  DigitalSignatureAuth = 3,
-  TlsHttpsConfig = 4,
-  HttpStatusCode = 5,
-}
+// Tab indices to prevent bugs and improve maintainability
+const TabIndex = {
+  SessionManagement: 0,
+  RequestTransform: 1,
+  TokenEstimation: 2,
+  DigitalSignatureAuth: 3,
+  TlsHttpsConfig: 4,
+  HttpStatusCode: 5,
+} as const;
 
 interface HttpAdvancedConfigurationProps {
   selectedTarget: ProviderOptions;
@@ -73,7 +73,7 @@ const HttpAdvancedConfiguration: React.FC<HttpAdvancedConfigurationProps> = ({
   onSessionTested,
 }: HttpAdvancedConfigurationProps) => {
   // Tab state management
-  const [activeTab, setActiveTab] = React.useState(TabIndex.SessionManagement);
+  const [activeTab, setActiveTab] = React.useState<number>(TabIndex.SessionManagement);
 
   const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
     setActiveTab(newValue);

@@ -7,7 +7,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ShiftKeyProvider } from '../../../contexts/ShiftKeyContext';
-import EvalOutputCell from './EvalOutputCell';
+import EvalOutputCell, { isImageProvider } from './EvalOutputCell';
 
 import type { EvalOutputCellProps } from './EvalOutputCell';
 
@@ -342,6 +342,89 @@ describe('EvalOutputCell', () => {
     expect(screen.queryByText(/transcript/i)).not.toBeInTheDocument();
   });
 
+  it('renders response audio from redteamHistory last turn', () => {
+    const propsWithRedteamHistory: MockEvalOutputCellProps = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        metadata: {
+          redteamHistory: [
+            {
+              prompt: 'Attack prompt 1',
+              output: 'Target response 1',
+            },
+            {
+              prompt: 'Attack prompt 2',
+              output: 'Target response 2',
+              outputAudio: {
+                data: 'base64responseaudio',
+                format: 'mp3',
+              },
+            },
+          ],
+        },
+      },
+    };
+
+    renderWithProviders(<EvalOutputCell {...propsWithRedteamHistory} />);
+
+    const responseAudioElement = screen.getByTestId('response-audio-player');
+    expect(responseAudioElement).toBeInTheDocument();
+
+    const sourceElement = responseAudioElement.querySelector('source');
+    expect(sourceElement).toHaveAttribute('src', 'data:audio/mp3;base64,base64responseaudio');
+  });
+
+  it('renders response audio from redteamTreeHistory when redteamHistory is not present', () => {
+    const propsWithTreeHistory: MockEvalOutputCellProps = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        metadata: {
+          redteamTreeHistory: [
+            {
+              prompt: 'Tree attack prompt',
+              output: 'Tree response',
+              outputAudio: {
+                data: 'base64treeaudio',
+                format: 'wav',
+              },
+            },
+          ],
+        },
+      },
+    };
+
+    renderWithProviders(<EvalOutputCell {...propsWithTreeHistory} />);
+
+    const responseAudioElement = screen.getByTestId('response-audio-player');
+    expect(responseAudioElement).toBeInTheDocument();
+
+    const sourceElement = responseAudioElement.querySelector('source');
+    expect(sourceElement).toHaveAttribute('src', 'data:audio/wav;base64,base64treeaudio');
+  });
+
+  it('does not render response audio when redteamHistory has no audio in last turn', () => {
+    const propsWithNoAudio: MockEvalOutputCellProps = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        metadata: {
+          redteamHistory: [
+            {
+              prompt: 'Attack prompt',
+              output: 'Target response without audio',
+            },
+          ],
+        },
+      },
+    };
+
+    renderWithProviders(<EvalOutputCell {...propsWithNoAudio} />);
+
+    expect(screen.queryByTestId('response-audio-player')).not.toBeInTheDocument();
+  });
+
   it('uses default wav format when format is not specified', () => {
     const propsWithAudioNoFormat: MockEvalOutputCellProps = {
       ...defaultProps,
@@ -356,8 +439,8 @@ describe('EvalOutputCell', () => {
     renderWithProviders(<EvalOutputCell {...propsWithAudioNoFormat} />);
 
     const sourceElement = screen.getByTestId('audio-player').querySelector('source');
-    expect(sourceElement).toHaveAttribute('src', 'data:audio/wav;base64,base64audiodata');
-    expect(sourceElement).toHaveAttribute('type', 'audio/wav');
+    expect(sourceElement).toHaveAttribute('src', 'data:audio/mp3;base64,base64audiodata');
+    expect(sourceElement).toHaveAttribute('type', 'audio/mp3');
   });
 
   it('allows copying row link to clipboard', async () => {
@@ -1307,6 +1390,48 @@ describe('EvalOutputCell cell highlighting styling', () => {
     expect(statusElement?.contains(statusRowElement)).toBe(true);
     expect(statusRowElement?.contains(pillElement)).toBe(true);
     expect(cellElement?.contains(statusElement)).toBe(true);
+  });
+});
+
+describe('isImageProvider helper function', () => {
+  it('should return true for DALL-E 3 provider', () => {
+    expect(isImageProvider('openai:image:dall-e-3')).toBe(true);
+  });
+
+  it('should return true for DALL-E 2 provider', () => {
+    expect(isImageProvider('openai:image:dall-e-2')).toBe(true);
+  });
+
+  it('should return true for any provider with :image: in the name', () => {
+    expect(isImageProvider('some-provider:image:model')).toBe(true);
+  });
+
+  it('should return true for Gemini image providers', () => {
+    expect(isImageProvider('google:gemini-3-pro-image-preview')).toBe(true);
+  });
+
+  it('should return true for Gemini 2.5 Flash image provider', () => {
+    expect(isImageProvider('google:gemini-2.5-flash-image')).toBe(true);
+  });
+
+  it('should return false for text completion providers', () => {
+    expect(isImageProvider('openai:gpt-4')).toBe(false);
+  });
+
+  it('should return false for chat providers', () => {
+    expect(isImageProvider('openai:chat:gpt-4')).toBe(false);
+  });
+
+  it('should return false for anthropic providers', () => {
+    expect(isImageProvider('anthropic:claude-3-opus')).toBe(false);
+  });
+
+  it('should return false for undefined provider', () => {
+    expect(isImageProvider(undefined)).toBe(false);
+  });
+
+  it('should return false for empty string', () => {
+    expect(isImageProvider('')).toBe(false);
   });
 });
 

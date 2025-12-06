@@ -1,6 +1,7 @@
 import fs from 'fs';
 
 import yaml from 'js-yaml';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { disableCache } from '../../../src/cache';
 import { doGenerateDataset } from '../../../src/commands/generate/dataset';
 import telemetry from '../../../src/telemetry';
@@ -9,37 +10,56 @@ import { resolveConfigs } from '../../../src/util/config/load';
 
 import type { TestSuite, VarMapping } from '../../../src/types/index';
 
-jest.mock('fs');
-jest.mock('js-yaml');
-jest.mock('../../../src/testCase/synthesis');
-jest.mock('../../../src/util/config/load');
-jest.mock('../../../src/cache');
-jest.mock('../../../src/logger');
-jest.mock('../../../src/telemetry', () => ({
-  record: jest.fn(),
-  send: jest.fn().mockResolvedValue(undefined),
+vi.mock('fs');
+vi.mock('js-yaml');
+vi.mock('../../../src/testCase/synthesis');
+vi.mock('../../../src/util/config/load', () => ({
+  resolveConfigs: vi.fn(),
 }));
-jest.mock('../../../src/util', () => ({
-  printBorder: jest.fn(),
-  setupEnv: jest.fn(),
+vi.mock('../../../src/cache', () => ({
+  disableCache: vi.fn(),
+}));
+vi.mock('../../../src/logger', () => ({
+  default: {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+    child: vi.fn().mockReturnValue({}),
+  },
+}));
+vi.mock('../../../src/telemetry', () => ({
+  default: {
+    record: vi.fn(),
+    send: vi.fn().mockResolvedValue(undefined),
+  },
+}));
+vi.mock('../../../src/util', () => ({
+  printBorder: vi.fn(),
+  setupEnv: vi.fn(),
 }));
 
-jest.mock('../../../src/util/promptfooCommand', () => ({
-  promptfooCommand: jest.fn().mockReturnValue('promptfoo eval'),
-  isRunningUnderNpx: jest.fn().mockReturnValue(false),
+vi.mock('../../../src/util/promptfooCommand', () => ({
+  promptfooCommand: vi.fn().mockReturnValue('promptfoo eval'),
+  detectInstaller: vi.fn().mockReturnValue('unknown'),
+  isRunningUnderNpx: vi.fn().mockReturnValue(false),
 }));
 
 describe('dataset generation', () => {
   beforeAll(() => {
-    jest.useFakeTimers();
+    vi.useFakeTimers();
   });
 
   beforeEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
   });
 
   afterAll(() => {
-    jest.useRealTimers();
+    vi.useRealTimers();
   });
 
   describe('doGenerateDataset', () => {
@@ -49,7 +69,7 @@ describe('dataset generation', () => {
       providers: [
         {
           id: () => 'test-provider',
-          callApi: jest.fn(),
+          callApi: vi.fn() as any,
         },
       ],
     };
@@ -57,16 +77,16 @@ describe('dataset generation', () => {
     const mockResults: VarMapping[] = [{ var1: 'value1' }, { var1: 'value2' }];
 
     beforeEach(() => {
-      jest.mocked(synthesizeFromTestSuite).mockResolvedValue(mockResults);
-      jest.mocked(yaml.dump).mockReturnValue('yaml content');
-      jest.mocked(yaml.load).mockReturnValue(mockTestSuite);
-      jest.mocked(fs.readFileSync).mockReturnValue('mock config content');
-      jest.mocked(fs.existsSync).mockReturnValue(true);
-      jest.mocked(fs.writeFileSync).mockImplementation(() => undefined);
-      jest.mocked(disableCache).mockImplementation(() => undefined);
-      jest.mocked(telemetry.record).mockResolvedValue(undefined as never);
+      vi.mocked(synthesizeFromTestSuite).mockResolvedValue(mockResults);
+      vi.mocked(yaml.dump).mockReturnValue('yaml content');
+      vi.mocked(yaml.load).mockReturnValue(mockTestSuite);
+      vi.mocked(fs.readFileSync).mockReturnValue('mock config content');
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.writeFileSync).mockImplementation(() => undefined);
+      vi.mocked(disableCache).mockImplementation(() => undefined);
+      vi.mocked(telemetry.record).mockResolvedValue(undefined as never);
 
-      jest.mocked(resolveConfigs).mockResolvedValue({
+      vi.mocked(resolveConfigs).mockResolvedValue({
         testSuite: mockTestSuite,
         config: {},
         basePath: '',
@@ -172,7 +192,7 @@ describe('dataset generation', () => {
     });
 
     it('should handle synthesis errors', async () => {
-      jest.mocked(synthesizeFromTestSuite).mockRejectedValue(new Error('Synthesis failed'));
+      vi.mocked(synthesizeFromTestSuite).mockRejectedValue(new Error('Synthesis failed'));
       const configPath = 'config.yaml';
 
       await expect(

@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest';
 import { renderPrompt } from '../src/evaluatorHelpers';
 
 describe('renderPrompt with skipRenderVars', () => {

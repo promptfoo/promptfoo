@@ -1,3 +1,4 @@
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { promptfooCommand, isRunningUnderNpx } from '../../src/util/promptfooCommand';
 
 describe('promptfooCommand', () => {

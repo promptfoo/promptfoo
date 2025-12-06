@@ -48,6 +48,41 @@ This directory contains several example configurations for different Bedrock mod
 - [`promptfooconfig.inference-profiles-simple.yaml`](promptfooconfig.inference-profiles-simple.yaml) - Simple production-ready inference profile setup for high availability
 - [`promptfooconfig.yaml`](promptfooconfig.yaml) - Combined evaluation across multiple providers
 - [`promptfooconfig.nova-sonic.yaml`](promptfooconfig.nova-sonic.yaml) - Amazon Nova Sonic model for audio
+- [`promptfooconfig.converse.yaml`](promptfooconfig.converse.yaml) - Converse API with extended thinking (ultrathink)
+
+## Converse API Example
+
+The Converse API example (`promptfooconfig.converse.yaml`) demonstrates the unified Bedrock Converse API with extended thinking (ultrathink) support.
+
+### Key Features
+
+- **Extended Thinking**: Enable Claude's reasoning capabilities with configurable token budgets
+- **Unified Interface**: Single API format works across Claude, Nova, Llama, Mistral, and more
+- **Performance Optimization**: Use `performanceConfig.latency: optimized` for faster responses
+- **Show/Hide Thinking**: Control whether thinking content appears in output with `showThinking`
+
+### Configuration
+
+```yaml
+providers:
+  - id: bedrock:converse:us.anthropic.claude-sonnet-4-5-20250929-v1:0
+    label: Claude Sonnet 4.5 with Thinking
+    config:
+      region: us-west-2
+      maxTokens: 20000
+      thinking:
+        type: enabled
+        budget_tokens: 16000
+      showThinking: true
+      performanceConfig:
+        latency: optimized
+```
+
+Run the Converse API example with:
+
+```bash
+promptfoo eval -c examples/amazon-bedrock/promptfooconfig.converse.yaml
+```
 
 ## Knowledge Base Example
 
@@ -64,7 +99,7 @@ For this example, you'll need to:
 
 ```yaml
 providers:
-  - id: bedrock:kb:us.anthropic.claude-sonnet-4-20250514-v1:0
+  - id: bedrock:kb:us.anthropic.claude-sonnet-4-5-20250929-v1:0
     config:
       region: 'us-east-2' # Change to your region
       knowledgeBaseId: 'YOUR_KNOWLEDGE_BASE_ID' # Replace with your KB ID

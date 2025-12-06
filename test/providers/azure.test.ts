@@ -1,3 +1,5 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
 import { fetchWithCache } from '../../src/cache';
 import { AzureChatCompletionProvider } from '../../src/providers/azure/chat';
 import { AzureCompletionProvider } from '../../src/providers/azure/completion';
@@ -8,17 +10,21 @@ import { OpenAiCompletionProvider } from '../../src/providers/openai/completion'
 
 import type { TestCase, TestSuite } from '../../src/types/index';
 
-jest.mock('../../src/cache', () => ({
-  fetchWithCache: jest.fn(),
-}));
+vi.mock('../../src/cache', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    fetchWithCache: vi.fn(),
+  };
+});
 
 describe('Azure Provider Tests', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
+    vi.spyOn(AzureGenericProvider.prototype as any, 'getAuthHeaders').mockResolvedValue({});
   });
 
   afterEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('maybeEmitAzureOpenAiWarning', () => {
@@ -350,7 +356,7 @@ describe('Azure Provider Tests', () => {
       });
 
       afterEach(() => {
-        jest.resetAllMocks();
+        vi.resetAllMocks();
       });
 
       it('should parse JSON response with json_schema format when finish_reason is not content_filter', async () => {
@@ -392,7 +398,7 @@ describe('Azure Provider Tests', () => {
           },
         };
 
-        jest.mocked(fetchWithCache).mockResolvedValueOnce({
+        vi.mocked(fetchWithCache).mockResolvedValueOnce({
           data: mockResponse,
           cached: false,
           status: 200,
@@ -404,14 +410,14 @@ describe('Azure Provider Tests', () => {
       });
 
       it('should handle API errors', async () => {
-        jest.mocked(fetchWithCache).mockRejectedValueOnce(new Error('API Error'));
+        vi.mocked(fetchWithCache).mockRejectedValueOnce(new Error('API Error'));
 
         const result = await provider.callApi('test prompt');
         expect(result.error).toBe('API call error: API Error');
       });
 
       it('should handle invalid JSON response', async () => {
-        jest.mocked(fetchWithCache).mockResolvedValueOnce({
+        vi.mocked(fetchWithCache).mockResolvedValueOnce({
           data: 'invalid json',
           cached: false,
           status: 200,
@@ -453,7 +459,7 @@ describe('Azure Provider Tests', () => {
           },
         };
 
-        jest.mocked(fetchWithCache).mockResolvedValueOnce({
+        vi.mocked(fetchWithCache).mockResolvedValueOnce({
           data: mockResponse,
           cached: false,
           status: 200,
@@ -492,7 +498,7 @@ describe('Azure Provider Tests', () => {
           },
         };
 
-        jest.mocked(fetchWithCache).mockResolvedValueOnce({
+        vi.mocked(fetchWithCache).mockResolvedValueOnce({
           data: mockResponse,
           cached: false,
           status: 400,
@@ -513,7 +519,7 @@ describe('Azure Provider Tests', () => {
       let provider: AzureChatCompletionProvider;
 
       beforeEach(() => {
-        jest.clearAllMocks();
+        vi.clearAllMocks();
         provider = new AzureChatCompletionProvider('test-deployment', {
           config: {
             apiHost: 'test.azure.com',
@@ -523,8 +529,8 @@ describe('Azure Provider Tests', () => {
       });
 
       afterEach(() => {
-        jest.clearAllMocks();
-        jest.restoreAllMocks();
+        vi.clearAllMocks();
+        vi.restoreAllMocks();
       });
 
       it('should parse JSON response when prompt config specifies json_object format', async () => {
@@ -550,7 +556,7 @@ describe('Azure Provider Tests', () => {
           },
         };
 
-        jest.mocked(fetchWithCache).mockResolvedValueOnce({
+        vi.mocked(fetchWithCache).mockResolvedValueOnce({
           data: mockResponse,
           cached: false,
           status: 200,
@@ -597,7 +603,7 @@ describe('Azure Provider Tests', () => {
           },
         };
 
-        jest.mocked(fetchWithCache).mockResolvedValueOnce({
+        vi.mocked(fetchWithCache).mockResolvedValueOnce({
           data: mockResponse,
           cached: false,
           status: 200,
@@ -633,7 +639,7 @@ describe('Azure Provider Tests', () => {
           usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
         };
 
-        jest.mocked(fetchWithCache).mockResolvedValueOnce({
+        vi.mocked(fetchWithCache).mockResolvedValueOnce({
           data: mockResponse,
           cached: false,
           status: 200,
@@ -653,7 +659,7 @@ describe('Azure Provider Tests', () => {
         });
 
         // Verify the URL includes extensions and uses the custom API version
-        expect(jest.mocked(fetchWithCache).mock.calls[0][0]).toContain(
+        expect(vi.mocked(fetchWithCache).mock.calls[0][0]).toContain(
           '/extensions/chat/completions?api-version=2024-custom',
         );
       });
@@ -751,6 +757,74 @@ describe('Azure Provider Tests', () => {
         expect((provider as any).isReasoningModel()).toBe(false);
       });
 
+      // Third-party reasoning model detection tests
+      it('should auto-detect DeepSeek-R1 reasoning models', () => {
+        const provider = new AzureChatCompletionProvider('DeepSeek-R1', {
+          config: {},
+        });
+        expect((provider as any).isReasoningModel()).toBe(true);
+      });
+
+      it('should auto-detect deepseek-r1 with different separators', () => {
+        const providerHyphen = new AzureChatCompletionProvider('deepseek-r1-distill', {
+          config: {},
+        });
+        const providerUnderscore = new AzureChatCompletionProvider('deepseek_r1', {
+          config: {},
+        });
+        expect((providerHyphen as any).isReasoningModel()).toBe(true);
+        expect((providerUnderscore as any).isReasoningModel()).toBe(true);
+      });
+
+      it('should auto-detect Phi-4-reasoning models', () => {
+        const provider = new AzureChatCompletionProvider('phi-4-reasoning', {
+          config: {},
+        });
+        expect((provider as any).isReasoningModel()).toBe(true);
+      });
+
+      it('should auto-detect Phi-4-mini-reasoning models', () => {
+        const provider = new AzureChatCompletionProvider('Phi-4-mini-reasoning', {
+          config: {},
+        });
+        expect((provider as any).isReasoningModel()).toBe(true);
+      });
+
+      it('should auto-detect Grok reasoning models', () => {
+        const provider = new AzureChatCompletionProvider('grok-3-reasoning', {
+          config: {},
+        });
+        expect((provider as any).isReasoningModel()).toBe(true);
+      });
+
+      it('should auto-detect grok-mini-reasoning models', () => {
+        const provider = new AzureChatCompletionProvider('grok-3-mini-reasoning', {
+          config: {},
+        });
+        expect((provider as any).isReasoningModel()).toBe(true);
+      });
+
+      it('should not detect regular Grok models as reasoning', () => {
+        const provider = new AzureChatCompletionProvider('grok-3', {
+          config: {},
+        });
+        expect((provider as any).isReasoningModel()).toBe(false);
+      });
+
+      it('should not detect regular DeepSeek-V3 as reasoning', () => {
+        const provider = new AzureChatCompletionProvider('DeepSeek-V3', {
+          config: {},
+        });
+        expect((provider as any).isReasoningModel()).toBe(false);
+      });
+
+      it('should not detect regular Phi-4 as reasoning', () => {
+        const provider = new AzureChatCompletionProvider('Phi-4', {
+          config: {},
+        });
+        expect((provider as any).isReasoningModel()).toBe(false);
+      });
+
       it('should use max_completion_tokens for reasoning models', async () => {
         const provider = new AzureChatCompletionProvider('test-deployment', {
           config: {
@@ -806,7 +880,7 @@ describe('Azure Provider Tests', () => {
 
   describe('AzureCompletionProvider', () => {
     it('should handle basic completion with caching', async () => {
-      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: {
           choices: [{ text: 'hello' }],
           usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
@@ -814,7 +888,7 @@ describe('Azure Provider Tests', () => {
         cached: false,
       } as any);
 
-      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: {
           choices: [{ text: 'hello' }],
           usage: { total_tokens: 10 },
