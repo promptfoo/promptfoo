@@ -508,7 +508,7 @@ async function processJsonResults(
   } catch (error) {
     logger.error(`Failed to parse scan results: ${error}`);
     if (options.verbose) {
-      logger.error(`Raw output: ${jsonOutput.substring(0, 500)}`);
+      logger.error(`Raw output: ${jsonOutput}`);
     }
     return 1;
   }
