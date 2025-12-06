@@ -1,0 +1,31 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Use a custom Nunjucks filter to trim long vars before sending to the provider.
+
+prompts:
+  - '{{ doc | truncateChars(80) }}'
+
+providers:
+  - echo
+
+nunjucksFilters:
+  truncateChars: ./truncate.js
+
+tests:
+  - label: short text stays intact
+    vars:
+      doc: 'Short text stays as-is.'
+    assert:
+      - type: equals
+        value: Short text stays as-is.
+
+  - label: long text is truncated with a marker
+    vars:
+      doc: >
+        The goal is to show how a lightweight Nunjucks filter can trim an overly long
+        input before it ever reaches the provider. This sentence is intentionally long
+        so the filter slices it and appends a trailing marker.
+    assert:
+      - type: contains
+        value: ...[truncated]
+      - type: javascript
+        value: output.length <= 100

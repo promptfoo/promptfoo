@@ -1,0 +1,37 @@
+# Focused test with working models only
+
+providers:
+  # Test 1: Nova model (works)
+  - id: bedrock:amazon.nova-micro-v1:0
+    label: 'Nova Micro'
+    config:
+      region: us-east-1
+
+  # Test 2: Region-prefixed model (tests normalization)
+  - id: bedrock:us.amazon.nova-micro-v1:0
+    label: 'Nova Micro (region-prefixed)'
+    config:
+      region: us-east-1
+
+  # Test 3: config.cost override
+  - id: bedrock:amazon.nova-micro-v1:0
+    label: 'Nova Micro (custom cost)'
+    config:
+      region: us-east-1
+      cost:
+        input: 0.00001
+        output: 0.00005
+
+prompts:
+  - 'Say "OK" and nothing else.'
+
+tests:
+  - description: 'Quick test'
+    vars:
+      test: 'working'
+
+defaultTest:
+  options:
+    cache: true
+
+outputPath: ./bedrock-working-test-results.json

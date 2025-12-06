@@ -1,0 +1,21 @@
+description: reproduce_bug
+targets:
+  - id: file:///Users/mdangelo/projects/pf4/plugin_bug.py
+    config:
+      verbose: true
+    label: reproduce_bug
+    delay: 1000
+prompts:
+  - '{{prompt}}'
+redteam:
+  purpose: ''
+  plugins:
+    - id: harmful:misinformation-disinformation
+    - id: harmful:specialized-advice
+  strategies: []
+  numTests: 1
+  maxConcurrency: 10
+defaultTest:
+  vars: {}
+  options:
+    transformVars: '{ ...vars, sessionId: context.uuid }'

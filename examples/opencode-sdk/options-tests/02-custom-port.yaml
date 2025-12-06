@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'OpenCode SDK - Test 2: Custom port configuration'
+
+prompts:
+  - 'What is 2 + 2? Reply with just the number.'
+
+providers:
+  - id: opencode:sdk
+    config:
+      provider_id: openai
+      model: gpt-4o-mini
+      port: 14097
+
+tests:
+  - vars: {}
+    assert:
+      - type: contains
+        value: '4'

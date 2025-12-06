@@ -1,0 +1,19 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'OpenCode SDK - Test 3: Custom hostname and port'
+
+prompts:
+  - 'What is 2 + 2? Reply with just the number.'
+
+providers:
+  - id: opencode:sdk
+    config:
+      provider_id: openai
+      model: gpt-4o-mini
+      hostname: '127.0.0.1'
+      port: 14098
+
+tests:
+  - vars: {}
+    assert:
+      - type: contains
+        value: '4'

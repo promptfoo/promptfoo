@@ -98,6 +98,34 @@ After installation, you can start using promptfoo by running:
 
 This will create a `promptfooconfig.yaml` placeholder in your current directory.
 
+## Updating Promptfoo
+
+To update promptfoo to the latest version, use the built-in update command:
+
+```bash
+promptfoo update
+```
+
+The update command automatically detects how you installed promptfoo and uses the appropriate update method:
+
+- **npm global**: Runs `npm install -g promptfoo@latest`
+- **Homebrew**: Instructs you to run `brew upgrade promptfoo`
+- **yarn global**: Runs `yarn global add promptfoo@latest`
+- **pnpm global**: Runs `pnpm add -g promptfoo@latest`
+- **bun global**: Runs `bun add -g promptfoo@latest`
+
+For installations that cannot be automatically updated (like `npx` or local project installations), the command provides appropriate manual instructions.
+
+### Update Options
+
+```bash
+# Check if updates are available without installing
+promptfoo update --check
+
+# Force update even if already on latest version
+promptfoo update --force
+```
+
 For more detailed usage instructions, please refer to our [Getting Started guide](./getting-started.md).
 
 ## See Also

@@ -19,6 +19,21 @@ vi.mock('../src/logger', () => ({
   setLogLevel: vi.fn(),
 }));
 
+// Mock the update check system
+jest.mock('../src/updates/updateCheck', () => ({
+  checkForUpdates: jest.fn(() => Promise.resolve(null)),
+}));
+
+jest.mock('../src/envars', () => ({
+  getEnvBool: jest.fn(() => false),
+  getEnvInt: jest.fn((_key, defaultValue) => defaultValue),
+  getEnvString: jest.fn((_key, defaultValue) => defaultValue),
+  getEnvFloat: jest.fn((_key, defaultValue) => defaultValue),
+  getEvalTimeoutMs: jest.fn(() => 0),
+  getMaxEvalTimeMs: jest.fn(() => 0),
+  isCI: jest.fn(() => false),
+}));
+
 // Mock code scan commands to avoid ESM import issues with execa
 vi.mock('../src/codeScan', () => ({
   codeScansCommand: vi.fn(),

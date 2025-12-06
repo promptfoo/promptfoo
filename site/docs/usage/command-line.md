@@ -32,6 +32,7 @@ The `promptfoo` command line utility supports the following subcommands:
 - `scan-model` - Scan ML models for security vulnerabilities.
 - `show <id>` - Show details of a specific resource (evaluation, prompt, dataset).
 - `delete <id>` - Delete a resource by its ID (currently, just evaluations)
+- `update` - Update promptfoo to the latest version.
 - `validate` - Validate a promptfoo configuration file.
 - `feedback <message>` - Send feedback to the Promptfoo developers.
 - `import <filepath>` - Import an eval file from JSON format.
@@ -153,6 +154,37 @@ Create a URL that can be shared online.
 | ------------- | ----------------------------------------------- |
 | `--show-auth` | Include auth info in the shared URL             |
 | `-y, --yes`   | Skip confirmation before creating shareable URL |
+
+## `promptfoo update`
+
+Update promptfoo to the latest version. The command automatically detects how promptfoo was installed (npm, yarn, pnpm, bun, homebrew, etc.) and uses the appropriate update method.
+
+| Option    | Description                                    |
+| --------- | ---------------------------------------------- |
+| `--check` | Only check for updates without installing      |
+| `--force` | Force update even if already on latest version |
+
+### Examples
+
+```sh
+# Check if updates are available
+promptfoo update --check
+
+# Update to the latest version
+promptfoo update
+
+# Force update (useful for reinstalling)
+promptfoo update --force
+```
+
+The update command will:
+
+1. Detect your installation method (npm global, yarn global, homebrew, etc.)
+2. Show you what it detected and which command it will run
+3. Execute the appropriate update command for your system
+4. Provide manual instructions if automatic update is not possible
+
+For installations that cannot be automatically updated (like `npx` or local project installations), the command will provide appropriate manual update instructions.
 
 ## `promptfoo cache`
 

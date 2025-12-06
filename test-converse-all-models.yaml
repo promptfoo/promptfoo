@@ -1,0 +1,60 @@
+# Comprehensive E2E test for all Bedrock model families via Converse API
+description: 'E2E Test - All Model Families'
+
+prompts:
+  - 'What is 2+2? Reply with just the number.'
+
+providers:
+  # Claude Models
+  - id: bedrock:converse:us.anthropic.claude-3-5-haiku-20241022-v1:0
+    label: Claude 3.5 Haiku
+    config:
+      region: us-east-1
+      maxTokens: 100
+      temperature: 0
+
+  # Amazon Nova Models
+  - id: bedrock:converse:amazon.nova-lite-v1:0
+    label: Nova Lite
+    config:
+      region: us-east-1
+      maxTokens: 100
+      temperature: 0
+
+  # Meta Llama Models
+  - id: bedrock:converse:us.meta.llama3-3-70b-instruct-v1:0
+    label: Llama 3.3 70B
+    config:
+      region: us-west-2
+      maxTokens: 100
+      temperature: 0
+
+  # Mistral Models
+  - id: bedrock:converse:mistral.mistral-small-2402-v1:0
+    label: Mistral Small
+    config:
+      region: us-east-1
+      maxTokens: 100
+      temperature: 0
+
+  # AI21 Jamba Models
+  - id: bedrock:converse:ai21.jamba-1-5-mini-v1:0
+    label: AI21 Jamba Mini
+    config:
+      region: us-east-1
+      maxTokens: 100
+      temperature: 0
+
+  # Cohere Command R Models
+  - id: bedrock:converse:cohere.command-r-v1:0
+    label: Cohere Command R
+    config:
+      region: us-east-1
+      maxTokens: 100
+      temperature: 0
+
+tests:
+  - vars: {}
+    assert:
+      - type: contains
+        value: '4'

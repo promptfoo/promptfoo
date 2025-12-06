@@ -1,0 +1,32 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'OpenCode SDK - Test 11: Permissions configuration with bash tool'
+
+prompts:
+  - |
+    Run a bash command to print "PERMISSION_TEST_SUCCESS" to stdout.
+    Use the bash tool to execute: echo "PERMISSION_TEST_SUCCESS"
+
+providers:
+  - id: opencode:sdk
+    config:
+      provider_id: anthropic
+      model: claude-sonnet-4-5-20250929
+      working_dir: examples/agentic-sdk-comparison/test-codebase
+      tools:
+        read: true
+        grep: true
+        glob: true
+        list: true
+        bash: true
+      permission:
+        bash: allow
+
+defaultTest:
+  options:
+    timeout: 120000
+
+tests:
+  - vars: {}
+    assert:
+      - type: icontains
+        value: 'PERMISSION_TEST_SUCCESS'

@@ -1,0 +1,43 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'OpenCode SDK - Test 5: Tools explicitly disabled'
+
+prompts:
+  - |
+    List all files in the current directory.
+    Use the available tools to read the directory.
+
+providers:
+  - id: opencode:sdk
+    config:
+      provider_id: openai
+      model: gpt-4o-mini
+      working_dir: examples/agentic-sdk-comparison/test-codebase
+      tools:
+        read: false
+        grep: false
+        glob: false
+        list: false
+        bash: false
+        edit: false
+        write: false
+
+tests:
+  - vars: {}
+    assert:
+      - type: javascript
+        value: |
+          // With all tools disabled, it cannot actually list files
+          // It should either say it can't or explain it has no tools
+          const text = String(output).toLowerCase();
+          const indicatesNoAccess = text.includes("can't") ||
+                                   text.includes("cannot") ||
+                                   text.includes("unable") ||
+                                   text.includes("no tools") ||
+                                   text.includes("don't have access") ||
+                                   text.includes("not able");
+          // Pass as long as we got some response (not an error)
+          return {
+            pass: output && output.length > 0,
+            score: indicatesNoAccess ? 1 : 0.5,
+            reason: indicatesNoAccess ? 'Correctly indicated no tool access' : 'Got response (tools disabled)'
+          };

@@ -40,7 +40,10 @@ import { redteamRunCommand } from './redteam/commands/run';
 import { redteamSetupCommand } from './redteam/commands/setup';
 import { simbaCommand } from './redteam/commands/simba';
 import telemetry from './telemetry';
-import { checkForUpdates } from './updates';
+import { checkForUpdates } from './updates/updateCheck';
+import { handleAutoUpdate, setUpdateHandler } from './updates/handleAutoUpdate';
+import { updateCommand } from './commands/update';
+import { getEnvBool } from './envars';
 import { loadDefaultConfig } from './util/config/default';
 import { printErrorInformation } from './util/errors/index';
 import { setupEnv } from './util/index';
@@ -115,7 +118,58 @@ async function main() {
     process.env.PROMPTFOO_DISABLE_UPDATE = 'true';
   }
 
-  await checkForUpdates();
+  // Track event handlers for cleanup
+  let cleanupUpdateHandlers: (() => void) | undefined;
+
+  // Cleanup function - only cleans up event handlers, NOT the background update process
+  // The update process is detached and unref'd, so it can continue after CLI exits
+  const cleanup = () => {
+    if (cleanupUpdateHandlers) {
+      cleanupUpdateHandlers();
+    }
+  };
+
+  // Register cleanup handlers only for forced exits (SIGINT/SIGTERM)
+  // Don't hook 'exit' because we want background update to continue on normal exit
+  process.on('SIGINT', () => {
+    cleanup();
+    process.exit(130); // Standard exit code for SIGINT
+  });
+  process.on('SIGTERM', () => {
+    cleanup();
+    process.exit(143); // Standard exit code for SIGTERM
+  });
+
+  // Set up update event handlers (for future use by web UI or other consumers)
+  cleanupUpdateHandlers = setUpdateHandler(
+    (info) => logger.debug(`Update notification: ${info.message}`),
+    (info) => logger.info(info.message),
+    (info) => logger.warn(info.message),
+  );
+
+  // Check for updates and show notification (non-blocking)
+  const disableUpdateNag = getEnvBool('PROMPTFOO_DISABLE_UPDATE');
+  // Auto-update is opt-in: only enabled if explicitly set to true
+  const enableAutoUpdate = getEnvBool('PROMPTFOO_ENABLE_AUTO_UPDATE');
+
+  if (!disableUpdateNag) {
+    checkForUpdates()
+      .then((info) => {
+        if (info) {
+          logger.info(info.message);
+          logger.info('Run "promptfoo update" to upgrade to the latest version.');
+
+          // Attempt auto-update in background if explicitly enabled
+          if (enableAutoUpdate) {
+            handleAutoUpdate(info, disableUpdateNag, !enableAutoUpdate, process.cwd());
+          }
+        }
+      })
+      .catch((err) => {
+        logger.debug(`Failed to check for updates: ${err}`);
+      });
+  }
+
   await runDbMigrations();
 
   const { defaultConfig, defaultConfigPath } = await loadDefaultConfig();
@@ -153,6 +207,7 @@ async function main() {
   listCommand(program);
   modelScanCommand(program);
   setupRetryCommand(program);
+  updateCommand(program);
   validateCommand(program, defaultConfig, defaultConfigPath);
   showCommand(program);
 

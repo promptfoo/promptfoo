@@ -1,0 +1,406 @@
+{
+  "evalId": "eval-V0O-2025-11-21T03:27:29",
+  "results": {
+    "version": 3,
+    "timestamp": "2025-11-21T03:27:29.157Z",
+    "prompts": [
+      {
+        "raw": "Say \"OK\" and nothing else.",
+        "label": "Say \"OK\" and nothing else.",
+        "id": "3942c15781d38dab1c4b758093ec63336226a42c87a1cdc9f02fbfe38a26bd8b",
+        "provider": "Nova Micro",
+        "metrics": {
+          "score": 1,
+          "testPassCount": 1,
+          "testFailCount": 0,
+          "testErrorCount": 0,
+          "assertPassCount": 0,
+          "assertFailCount": 0,
+          "totalLatencyMs": 764,
+          "tokenUsage": {
+            "prompt": 8,
+            "completion": 1,
+            "cached": 0,
+            "total": 9,
+            "numRequests": 1,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0
+            },
+            "assertions": {
+              "total": 0,
+              "prompt": 0,
+              "completion": 0,
+              "cached": 0,
+              "numRequests": 0,
+              "completionDetails": {
+                "reasoning": 0,
+                "acceptedPrediction": 0,
+                "rejectedPrediction": 0
+              }
+            }
+          },
+          "namedScores": {},
+          "namedScoresCount": {},
+          "cost": 1.3999999999999998e-7
+        }
+      },
+      {
+        "raw": "Say \"OK\" and nothing else.",
+        "label": "Say \"OK\" and nothing else.",
+        "id": "3942c15781d38dab1c4b758093ec63336226a42c87a1cdc9f02fbfe38a26bd8b",
+        "provider": "Nova Micro (region-prefixed)",
+        "metrics": {
+          "score": 1,
+          "testPassCount": 1,
+          "testFailCount": 0,
+          "testErrorCount": 0,
+          "assertPassCount": 0,
+          "assertFailCount": 0,
+          "totalLatencyMs": 965,
+          "tokenUsage": {
+            "prompt": 8,
+            "completion": 1,
+            "cached": 0,
+            "total": 9,
+            "numRequests": 1,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0
+            },
+            "assertions": {
+              "total": 0,
+              "prompt": 0,
+              "completion": 0,
+              "cached": 0,
+              "numRequests": 0,
+              "completionDetails": {
+                "reasoning": 0,
+                "acceptedPrediction": 0,
+                "rejectedPrediction": 0
+              }
+            }
+          },
+          "namedScores": {},
+          "namedScoresCount": {},
+          "cost": 1.3999999999999998e-7
+        }
+      },
+      {
+        "raw": "Say \"OK\" and nothing else.",
+        "label": "Say \"OK\" and nothing else.",
+        "id": "3942c15781d38dab1c4b758093ec63336226a42c87a1cdc9f02fbfe38a26bd8b",
+        "provider": "Nova Micro (custom cost)",
+        "metrics": {
+          "score": 1,
+          "testPassCount": 1,
+          "testFailCount": 0,
+          "testErrorCount": 0,
+          "assertPassCount": 0,
+          "assertFailCount": 0,
+          "totalLatencyMs": 815,
+          "tokenUsage": {
+            "prompt": 8,
+            "completion": 1,
+            "cached": 0,
+            "total": 9,
+            "numRequests": 1,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0
+            },
+            "assertions": {
+              "total": 0,
+              "prompt": 0,
+              "completion": 0,
+              "cached": 0,
+              "numRequests": 0,
+              "completionDetails": {
+                "reasoning": 0,
+                "acceptedPrediction": 0,
+                "rejectedPrediction": 0
+              }
+            }
+          },
+          "namedScores": {},
+          "namedScoresCount": {},
+          "cost": 0.00013000000000000002
+        }
+      }
+    ],
+    "results": [
+      {
+        "cost": 1.3999999999999998e-7,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "No assertions",
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          }
+        },
+        "id": "77fc8172-31e0-49b2-a202-ab467a76a54b",
+        "latencyMs": 764,
+        "namedScores": {},
+        "prompt": {
+          "raw": "Say \"OK\" and nothing else.",
+          "label": "Say \"OK\" and nothing else."
+        },
+        "promptId": "3942c15781d38dab1c4b758093ec63336226a42c87a1cdc9f02fbfe38a26bd8b",
+        "promptIdx": 0,
+        "provider": {
+          "id": "bedrock:amazon.nova-micro-v1:0",
+          "label": "Nova Micro"
+        },
+        "response": {
+          "output": "OK",
+          "tokenUsage": {
+            "prompt": 8,
+            "completion": 1,
+            "total": 9,
+            "numRequests": 1
+          },
+          "cost": 1.3999999999999998e-7
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "description": "Quick test",
+          "vars": {
+            "test": "working"
+          },
+          "assert": [],
+          "options": {
+            "cache": true
+          },
+          "metadata": {}
+        },
+        "testIdx": 0,
+        "vars": {
+          "test": "working"
+        },
+        "metadata": {
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      },
+      {
+        "cost": 0.00013000000000000002,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "No assertions",
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          }
+        },
+        "id": "8947ecac-36ad-4f21-88e9-7f22b7824ad3",
+        "latencyMs": 815,
+        "namedScores": {},
+        "prompt": {
+          "raw": "Say \"OK\" and nothing else.",
+          "label": "Say \"OK\" and nothing else."
+        },
+        "promptId": "3942c15781d38dab1c4b758093ec63336226a42c87a1cdc9f02fbfe38a26bd8b",
+        "promptIdx": 2,
+        "provider": {
+          "id": "bedrock:amazon.nova-micro-v1:0",
+          "label": "Nova Micro (custom cost)"
+        },
+        "response": {
+          "output": "OK",
+          "tokenUsage": {
+            "prompt": 8,
+            "completion": 1,
+            "total": 9,
+            "numRequests": 1
+          },
+          "cost": 0.00013000000000000002
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "description": "Quick test",
+          "vars": {
+            "test": "working"
+          },
+          "assert": [],
+          "options": {
+            "cache": true
+          },
+          "metadata": {}
+        },
+        "testIdx": 0,
+        "vars": {
+          "test": "working"
+        },
+        "metadata": {
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      },
+      {
+        "cost": 1.3999999999999998e-7,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "No assertions",
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          }
+        },
+        "id": "2aa5b4a4-4b9d-4a56-8380-f5e4e493d314",
+        "latencyMs": 965,
+        "namedScores": {},
+        "prompt": {
+          "raw": "Say \"OK\" and nothing else.",
+          "label": "Say \"OK\" and nothing else."
+        },
+        "promptId": "3942c15781d38dab1c4b758093ec63336226a42c87a1cdc9f02fbfe38a26bd8b",
+        "promptIdx": 1,
+        "provider": {
+          "id": "bedrock:us.amazon.nova-micro-v1:0",
+          "label": "Nova Micro (region-prefixed)"
+        },
+        "response": {
+          "output": "OK",
+          "tokenUsage": {
+            "prompt": 8,
+            "completion": 1,
+            "total": 9,
+            "numRequests": 1
+          },
+          "cost": 1.3999999999999998e-7
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "description": "Quick test",
+          "vars": {
+            "test": "working"
+          },
+          "assert": [],
+          "options": {
+            "cache": true
+          },
+          "metadata": {}
+        },
+        "testIdx": 0,
+        "vars": {
+          "test": "working"
+        },
+        "metadata": {
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      }
+    ],
+    "stats": {
+      "successes": 3,
+      "failures": 0,
+      "errors": 0,
+      "tokenUsage": {
+        "prompt": 24,
+        "completion": 3,
+        "cached": 0,
+        "total": 27,
+        "numRequests": 3,
+        "completionDetails": {
+          "reasoning": 0,
+          "acceptedPrediction": 0,
+          "rejectedPrediction": 0
+        },
+        "assertions": {
+          "total": 0,
+          "prompt": 0,
+          "completion": 0,
+          "cached": 0,
+          "numRequests": 0,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0
+          }
+        }
+      }
+    }
+  },
+  "config": {
+    "tags": {},
+    "prompts": ["Say \"OK\" and nothing else."],
+    "providers": [
+      {
+        "id": "bedrock:amazon.nova-micro-v1:0",
+        "label": "Nova Micro",
+        "config": {
+          "region": "us-east-1"
+        }
+      },
+      {
+        "id": "bedrock:us.amazon.nova-micro-v1:0",
+        "label": "Nova Micro (region-prefixed)",
+        "config": {
+          "region": "us-east-1"
+        }
+      },
+      {
+        "id": "bedrock:amazon.nova-micro-v1:0",
+        "label": "Nova Micro (custom cost)",
+        "config": {
+          "region": "us-east-1",
+          "cost": {
+            "input": 0.00001,
+            "output": 0.00005
+          }
+        }
+      }
+    ],
+    "tests": [
+      {
+        "description": "Quick test",
+        "vars": {
+          "test": "working"
+        }
+      }
+    ],
+    "scenarios": [],
+    "env": {},
+    "sharing": false,
+    "defaultTest": {
+      "options": {
+        "cache": true
+      },
+      "vars": {},
+      "assert": [],
+      "metadata": {}
+    },
+    "outputPath": ["./bedrock-working-test-results.json"],
+    "extensions": [],
+    "metadata": {},
+    "evaluateOptions": {}
+  },
+  "shareableUrl": null,
+  "metadata": {
+    "promptfooVersion": "0.119.9",
+    "nodeVersion": "v24.7.0",
+    "platform": "darwin",
+    "arch": "arm64",
+    "exportedAt": "2025-11-21T03:27:30.145Z",
+    "evaluationCreatedAt": "2025-11-21T03:27:29.157Z"
+  }
+}

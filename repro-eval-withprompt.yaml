@@ -1,0 +1,10 @@
+description: prompt with var
+providers:
+  - id: file:///Users/mdangelo/projects/pf4/plugin_bug.py
+prompts:
+  - '{{prompt}}'
+tests:
+  - vars:
+      prompt: hello world
+    assert:
+      - type: promptfoo:redteam:harmful:misinformation-disinformation

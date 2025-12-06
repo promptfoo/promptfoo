@@ -1,0 +1,30 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'OpenCode SDK - Test 12: Permission deny should block bash'
+
+prompts:
+  - |
+    Run a bash command to print "SHOULD_NOT_APPEAR" to stdout.
+    You must use the bash tool to execute: echo "SHOULD_NOT_APPEAR"
+
+providers:
+  - id: opencode:sdk
+    config:
+      provider_id: anthropic
+      model: claude-sonnet-4-5-20250929
+      working_dir: examples/agentic-sdk-comparison/test-codebase
+      tools:
+        read: true
+        bash: true
+      permission:
+        bash: deny
+
+defaultTest:
+  options:
+    timeout: 120000
+
+tests:
+  - vars: {}
+    assert:
+      # The output should NOT contain the echoed text since bash is denied
+      - type: not-icontains
+        value: 'SHOULD_NOT_APPEAR'
