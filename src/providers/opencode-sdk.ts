@@ -348,7 +348,8 @@ async function loadOpenCodeSDK(): Promise<OpenCodeSDKModule> {
   // Phase 1: Try simple dynamic import (works in most cases)
   try {
     logger.debug('Attempting simple dynamic import of @opencode-ai/sdk');
-    return await import('@opencode-ai/sdk');
+    // Cast to unknown first to handle type mismatch between actual SDK exports and our interface
+    return (await import('@opencode-ai/sdk')) as unknown as OpenCodeSDKModule;
   } catch {
     logger.debug('Simple import failed, falling back to smart ESM resolution');
   }
