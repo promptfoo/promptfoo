@@ -30,6 +30,67 @@ Tracing provides visibility into:
 - **Automatic correlation**: Traces are linked to specific test cases and evaluations
 - **Flexible forwarding**: Send traces to Jaeger, Tempo, or any OTLP-compatible backend
 
+## Built-in Provider Instrumentation
+
+Promptfoo automatically instruments its built-in providers with OpenTelemetry spans following [GenAI Semantic Conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/). When tracing is enabled, every provider call creates spans with standardized attributes.
+
+### Supported Providers
+
+The following providers have built-in instrumentation:
+
+| Provider | Automatic Tracing |
+|----------|-------------------|
+| OpenAI | ✓ |
+| Anthropic | ✓ |
+| Azure OpenAI | ✓ |
+| AWS Bedrock | ✓ |
+| OpenAI-compatible (Deepseek, Perplexity, etc.) | ✓ (inherited) |
+
+### GenAI Span Attributes
+
+Each provider call creates a span with these attributes:
+
+**Request Attributes:**
+- `gen_ai.system` - Provider system (e.g., "openai", "anthropic", "azure", "bedrock")
+- `gen_ai.operation.name` - Operation type ("chat", "completion", "embedding")
+- `gen_ai.request.model` - Model name
+- `gen_ai.request.max_tokens` - Max tokens setting
+- `gen_ai.request.temperature` - Temperature setting
+- `gen_ai.request.top_p` - Top-p setting
+- `gen_ai.request.stop_sequences` - Stop sequences
+
+**Response Attributes:**
+- `gen_ai.usage.input_tokens` - Input/prompt token count
+- `gen_ai.usage.output_tokens` - Output/completion token count
+- `gen_ai.usage.total_tokens` - Total token count
+- `gen_ai.usage.cached_tokens` - Cached token count (if applicable)
+- `gen_ai.usage.reasoning_tokens` - Reasoning token count (for o1, DeepSeek-R1)
+- `gen_ai.response.finish_reasons` - Finish/stop reasons
+
+**Promptfoo-specific Attributes:**
+- `promptfoo.provider.id` - Provider identifier
+- `promptfoo.test.index` - Test case index
+- `promptfoo.prompt.label` - Prompt label
+
+### Example Trace Output
+
+When calling OpenAI's GPT-4:
+
+```
+Span: chat gpt-4
+├─ gen_ai.system: openai
+├─ gen_ai.operation.name: chat
+├─ gen_ai.request.model: gpt-4
+├─ gen_ai.request.max_tokens: 1000
+├─ gen_ai.request.temperature: 0.7
+├─ gen_ai.usage.input_tokens: 150
+├─ gen_ai.usage.output_tokens: 85
+├─ gen_ai.usage.total_tokens: 235
+├─ gen_ai.response.finish_reasons: ["stop"]
+├─ promptfoo.provider.id: openai:chat:gpt-4
+└─ promptfoo.test.index: 0
+```
+
 ## Quick Start
 
 ### 1. Enable Tracing
