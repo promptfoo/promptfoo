@@ -221,6 +221,26 @@ export const providerMap: ProviderFactory[] = [
   },
   {
     test: (providerPath: string) =>
+      providerPath.startsWith('openhands:') || providerPath === 'openhands',
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const { OpenHandsSDKProvider } = await import('./openhands-sdk');
+
+      // openhands:sdk or openhands - uses LiteLLM for model routing
+      // Model selection is configured via provider_id and model config options
+      return new OpenHandsSDKProvider({
+        ...providerOptions,
+        id: providerPath,
+        config: providerOptions.config,
+        env: context.env,
+      });
+    },
+  },
+  {
+    test: (providerPath: string) =>
       providerPath.startsWith('anthropic:claude-agent-sdk') ||
       providerPath.startsWith('anthropic:claude-code'),
     create: async (
