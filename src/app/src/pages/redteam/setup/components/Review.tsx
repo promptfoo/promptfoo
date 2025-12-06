@@ -635,7 +635,7 @@ export default function Review({
         <Paper
           elevation={1}
           sx={{
-            p: 3,
+            p: 2.5,
             mb: 3,
             borderRadius: 2,
             borderLeft: `4px solid ${theme.palette.primary.main}`,
@@ -689,83 +689,34 @@ export default function Review({
                     )}
                 </Typography>
               )}
-              <Box
-                sx={{
-                  display: 'flex',
-                  gap: 1,
-                  mt: 2,
-                  flexWrap: 'wrap',
-                  alignItems: 'center',
-                }}
-              >
-                {isRunning ? (
-                  <>
-                    {jobState.severityCounts &&
-                      (jobState.severityCounts.critical > 0 ||
-                        jobState.severityCounts.high > 0 ||
-                        jobState.severityCounts.medium > 0 ||
-                        jobState.severityCounts.low > 0) && (
-                        <>
-                          {jobState.severityCounts.critical > 0 && (
-                            <Chip
-                              label={`${jobState.severityCounts.critical} Critical`}
-                              size="small"
-                              color="error"
-                            />
-                          )}
-                          {jobState.severityCounts.high > 0 && (
-                            <Chip
-                              label={`${jobState.severityCounts.high} High`}
-                              size="small"
-                              color="warning"
-                            />
-                          )}
-                          {jobState.severityCounts.medium > 0 && (
-                            <Chip
-                              label={`${jobState.severityCounts.medium} Medium`}
-                              size="small"
-                              variant="outlined"
-                            />
-                          )}
-                          {jobState.severityCounts.low > 0 && (
-                            <Chip
-                              label={`${jobState.severityCounts.low} Low`}
-                              size="small"
-                              variant="outlined"
-                            />
-                          )}
-                        </>
-                      )}
-                    <Typography variant="body2" color="text.secondary">
-                      {jobState.total > 0
-                        ? `${jobState.progress}/${jobState.total} probes`
-                        : jobState.phase === 'initializing'
-                          ? 'Initializing...'
-                          : jobState.phase === 'generating'
-                            ? 'Generating probes...'
-                            : 'Starting...'}
-                    </Typography>
-                  </>
-                ) : (
-                  <>
-                    <Chip
-                      label={`${pluginSummary.length} Plugins`}
-                      size="small"
-                      variant="outlined"
-                      onClick={navigateToPlugins}
-                      clickable
-                    />
-                    <Chip
-                      label={`${strategySummary.length} Strategies`}
-                      size="small"
-                      variant="outlined"
-                      onClick={navigateToStrategies}
-                      clickable
-                    />
-                    <EstimationsDisplay config={config} compact />
-                  </>
-                )}
-              </Box>
+              {/* Only show quick stats when NOT running - avoid duplicating ExecutionProgress info */}
+              {!isRunning && (
+                <Box
+                  sx={{
+                    display: 'flex',
+                    gap: 1,
+                    mt: 2,
+                    flexWrap: 'wrap',
+                    alignItems: 'center',
+                  }}
+                >
+                  <Chip
+                    label={`${pluginSummary.length} Plugins`}
+                    size="small"
+                    variant="outlined"
+                    onClick={navigateToPlugins}
+                    clickable
+                  />
+                  <Chip
+                    label={`${strategySummary.length} Strategies`}
+                    size="small"
+                    variant="outlined"
+                    onClick={navigateToStrategies}
+                    clickable
+                  />
+                  <EstimationsDisplay config={config} compact />
+                </Box>
+              )}
             </Box>
             <Box
               sx={{
@@ -777,7 +728,15 @@ export default function Review({
                 flexDirection: { xs: 'column', sm: 'row' },
               }}
             >
-              {isRunning ? null : (
+              {isRunning ? (
+                <Chip
+                  label="Scan Running"
+                  size="small"
+                  color="primary"
+                  variant="outlined"
+                  sx={{ fontWeight: 500 }}
+                />
+              ) : (
                 <Tooltip title={runNowTooltipMessage} arrow>
                   <span>
                     <Button
