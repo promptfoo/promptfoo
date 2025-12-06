@@ -102,12 +102,15 @@ export function generateEvalSummary(params: EvalSummaryParams): string[] {
   const completionType = isRedteam ? 'Red team' : 'Eval';
 
   // Completion message
+  // When activelySharing, don't show eval ID since URL (which contains the ID) will appear right after
   const completionMessage =
     writeToDatabase && shareableUrl
       ? `${chalk.green('✓')} ${completionType} complete: ${shareableUrl}`
-      : writeToDatabase
-        ? `${chalk.green('✓')} ${completionType} complete (ID: ${chalk.cyan(evalId)})`
-        : `${chalk.green('✓')} ${completionType} complete`;
+      : writeToDatabase && activelySharing
+        ? `${chalk.green('✓')} ${completionType} complete`
+        : writeToDatabase
+          ? `${chalk.green('✓')} ${completionType} complete (ID: ${chalk.cyan(evalId)})`
+          : `${chalk.green('✓')} ${completionType} complete`;
 
   lines.push(completionMessage);
 

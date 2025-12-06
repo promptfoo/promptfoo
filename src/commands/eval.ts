@@ -658,7 +658,7 @@ export async function doEval(
       // Only show spinner in TTY (not CI)
       if (process.stdout.isTTY && !isCI()) {
         const spinner = ora({
-          text: `Uploading${orgSuffix}...`,
+          text: `Sharing${orgSuffix}...`,
           prefixText: chalk.dim('»'),
           spinner: 'dots',
         }).start();
@@ -667,7 +667,7 @@ export async function doEval(
           shareableUrl = await sharePromise;
           if (shareableUrl) {
             evalRecord.shared = true;
-            spinner.succeed(`${chalk.green('Share:')} ${shareableUrl}`);
+            spinner.succeed(shareableUrl);
           } else {
             spinner.fail(chalk.red('Share failed'));
           }
@@ -681,7 +681,7 @@ export async function doEval(
           shareableUrl = await sharePromise;
           if (shareableUrl) {
             evalRecord.shared = true;
-            logger.info(`${chalk.dim('»')} ${chalk.green('Share:')} ${shareableUrl}`);
+            logger.info(`${chalk.dim('»')} ${chalk.green('✓')} ${shareableUrl}`);
           }
         } catch (error) {
           logger.debug(`Share error: ${error}`);
