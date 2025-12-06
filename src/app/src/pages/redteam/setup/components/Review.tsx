@@ -613,6 +613,22 @@ export default function Review({
     };
   }, [jobActions]);
 
+  // Keyboard shortcut: Cmd/Ctrl + Enter to run scan
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+        e.preventDefault();
+        if (!isRunNowDisabled && !isRunning) {
+          handleRunWithSettings();
+        } else if (isRunning) {
+          handleCancel();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isRunNowDisabled, isRunning, handleRunWithSettings, handleCancel]);
+
   return (
     <PageWrapper title="Review & Run" onBack={onBack}>
       <Box>
@@ -687,29 +703,84 @@ export default function Review({
                   gap: { xs: 1, md: 2 },
                   mt: 2,
                   flexWrap: 'wrap',
+                  alignItems: 'center',
                 }}
               >
-                <Chip
-                  label={`${pluginSummary.length} Plugins`}
-                  size="small"
-                  sx={{
-                    backgroundColor: 'rgba(255,255,255,0.2)',
-                    color: 'inherit',
-                    fontWeight: 500,
-                  }}
-                  onClick={navigateToPlugins}
-                />
-                <Chip
-                  label={`${strategySummary.length} Strategies`}
-                  size="small"
-                  sx={{
-                    backgroundColor: 'rgba(255,255,255,0.2)',
-                    color: 'inherit',
-                    fontWeight: 500,
-                  }}
-                  onClick={navigateToStrategies}
-                />
-                <EstimationsDisplay config={config} compact />
+                {isRunning && jobState.severityCounts ? (
+                  <>
+                    {jobState.severityCounts.critical > 0 && (
+                      <Chip
+                        label={`${jobState.severityCounts.critical} Critical`}
+                        size="small"
+                        sx={{
+                          backgroundColor: theme.palette.error.main,
+                          color: theme.palette.error.contrastText,
+                          fontWeight: 600,
+                        }}
+                      />
+                    )}
+                    {jobState.severityCounts.high > 0 && (
+                      <Chip
+                        label={`${jobState.severityCounts.high} High`}
+                        size="small"
+                        sx={{
+                          backgroundColor: theme.palette.warning.main,
+                          color: theme.palette.warning.contrastText,
+                          fontWeight: 600,
+                        }}
+                      />
+                    )}
+                    {jobState.severityCounts.medium > 0 && (
+                      <Chip
+                        label={`${jobState.severityCounts.medium} Medium`}
+                        size="small"
+                        sx={{
+                          backgroundColor: 'rgba(255,255,255,0.3)',
+                          color: 'inherit',
+                          fontWeight: 500,
+                        }}
+                      />
+                    )}
+                    {jobState.severityCounts.low > 0 && (
+                      <Chip
+                        label={`${jobState.severityCounts.low} Low`}
+                        size="small"
+                        sx={{
+                          backgroundColor: 'rgba(255,255,255,0.2)',
+                          color: 'inherit',
+                          fontWeight: 500,
+                        }}
+                      />
+                    )}
+                    <Typography variant="caption" sx={{ opacity: 0.8, ml: 1 }}>
+                      {jobState.progress}/{jobState.total} probes
+                    </Typography>
+                  </>
+                ) : (
+                  <>
+                    <Chip
+                      label={`${pluginSummary.length} Plugins`}
+                      size="small"
+                      sx={{
+                        backgroundColor: 'rgba(255,255,255,0.2)',
+                        color: 'inherit',
+                        fontWeight: 500,
+                      }}
+                      onClick={navigateToPlugins}
+                    />
+                    <Chip
+                      label={`${strategySummary.length} Strategies`}
+                      size="small"
+                      sx={{
+                        backgroundColor: 'rgba(255,255,255,0.2)',
+                        color: 'inherit',
+                        fontWeight: 500,
+                      }}
+                      onClick={navigateToStrategies}
+                    />
+                    <EstimationsDisplay config={config} compact />
+                  </>
+                )}
               </Box>
             </Box>
             <Box
