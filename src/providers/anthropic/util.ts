@@ -1,7 +1,7 @@
 import { calculateCost as calculateCostBase } from '../shared';
 import type Anthropic from '@anthropic-ai/sdk';
 
-import type { TokenUsage } from '../../types/index';
+import type { ReasoningContent, TokenUsage } from '../../types/index';
 import type { AnthropicToolConfig, WebFetchToolConfig, WebSearchToolConfig } from './types';
 import { parseDataUrl } from '../../util/dataUrl';
 
@@ -99,6 +99,37 @@ export const ANTHROPIC_MODELS = [
   })),
 ];
 
+/**
+ * Extract reasoning/thinking blocks from Anthropic message as ReasoningContent array.
+ * This preserves the native Anthropic format (thinking/redacted_thinking).
+ */
+export function extractReasoningFromMessage(
+  message: Anthropic.Messages.Message,
+): ReasoningContent[] | undefined {
+  const reasoningBlocks: ReasoningContent[] = [];
+
+  for (const block of message.content) {
+    if (block.type === 'thinking') {
+      reasoningBlocks.push({
+        type: 'thinking',
+        thinking: block.thinking,
+        signature: block.signature,
+      });
+    } else if (block.type === 'redacted_thinking') {
+      reasoningBlocks.push({
+        type: 'redacted_thinking',
+        data: block.data,
+      });
+    }
+  }
+
+  return reasoningBlocks.length > 0 ? reasoningBlocks : undefined;
+}
+
+/**
+ * Extract output from Anthropic message, excluding thinking blocks.
+ * Thinking blocks are now handled separately via extractReasoningFromMessage.
+ */
 export function outputFromMessage(message: Anthropic.Messages.Message, showThinking: boolean) {
   const hasToolUse = message.content.some((block) => block.type === 'tool_use');
   const hasThinking = message.content.some(
@@ -110,14 +141,20 @@ export function outputFromMessage(message: Anthropic.Messages.Message, showThink
       .map((block) => {
         if (block.type === 'text') {
           return block.text;
-        } else if (block.type === 'thinking' && showThinking) {
-          return `Thinking: ${block.thinking}\nSignature: ${block.signature}`;
-        } else if (block.type === 'redacted_thinking' && showThinking) {
-          return `Redacted Thinking: ${block.data}`;
-        } else if (block.type !== 'thinking' && block.type !== 'redacted_thinking') {
+        } else if (block.type === 'thinking' || block.type === 'redacted_thinking') {
+          // Thinking blocks are now handled separately via reasoning field
+          // Only include in output if showThinking is true (for backwards compatibility)
+          if (showThinking) {
+            if (block.type === 'thinking') {
+              return `Thinking: ${block.thinking}\nSignature: ${block.signature}`;
+            } else {
+              return `Redacted Thinking: ${block.data}`;
+            }
+          }
+          return '';
+        } else {
           return JSON.stringify(block);
         }
-        return '';
       })
       .filter((text) => text !== '')
       .join('\n\n');
