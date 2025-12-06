@@ -250,7 +250,7 @@ export function isVulnerability(result: EvaluateResult): boolean {
     (component) =>
       !component.pass &&
       component.assertion?.type &&
-      String(component.assertion.type).startsWith('promptfoo:redteam:')
+      String(component.assertion.type).startsWith('promptfoo:redteam:'),
   );
 }
 
@@ -268,7 +268,7 @@ export function extractPluginId(result: EvaluateResult): string | undefined {
     (component) =>
       !component.pass &&
       component.assertion?.type &&
-      String(component.assertion.type).startsWith('promptfoo:redteam:')
+      String(component.assertion.type).startsWith('promptfoo:redteam:'),
   );
 
   return failingAssertion?.assertion?.type;
@@ -280,7 +280,7 @@ export function extractPluginId(result: EvaluateResult): string | undefined {
  */
 export function createVulnerabilityEvent(
   result: EvaluateResult,
-  testIndex: number
+  testIndex: number,
 ): VulnerabilityFoundEvent | undefined {
   if (!isVulnerability(result)) {
     return undefined;
@@ -317,7 +317,7 @@ export function createVulnerabilityEvent(
  */
 export function createVulnerabilityEvents(
   results: EvaluateResult[],
-  startIndex: number = 0
+  startIndex: number = 0,
 ): VulnerabilityFoundEvent[] {
   const events: VulnerabilityFoundEvent[] = [];
 

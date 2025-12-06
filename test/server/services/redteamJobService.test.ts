@@ -60,10 +60,7 @@ describe('redteamJobService', () => {
   });
 
   describe('extractPluginId', () => {
-    const createMockResult = (
-      assertionType: string,
-      pass: boolean = false,
-    ): EvaluateResult => ({
+    const createMockResult = (assertionType: string, pass: boolean = false): EvaluateResult => ({
       prompt: { raw: 'test', label: 'test' },
       vars: {},
       response: { output: 'test output' },

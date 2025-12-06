@@ -59,9 +59,7 @@ describe('SeverityCounters', () => {
     render(<SeverityCounters counts={defaultCounts} />);
 
     // Each severity chip should have an aria-label (tooltip content)
-    expect(
-      screen.getByLabelText(/Critical security vulnerabilities/i),
-    ).toBeInTheDocument();
+    expect(screen.getByLabelText(/Critical security vulnerabilities/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/High severity issues/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Medium severity issues/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Low severity issues/i)).toBeInTheDocument();

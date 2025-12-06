@@ -56,7 +56,7 @@ export default function SeverityCounters({ counts, sx = {} }: SeverityCountersPr
         tooltip: 'Low severity issues (quality concerns, minor policy violations, etc.)',
       },
     }),
-    [theme]
+    [theme],
   );
 
   const totalCount = counts.critical + counts.high + counts.medium + counts.low;
@@ -71,41 +71,43 @@ export default function SeverityCounters({ counts, sx = {} }: SeverityCountersPr
         ...sx,
       }}
     >
-      {(Object.keys(severityConfigs) as Array<keyof VulnerabilitySeverityCounts>).map((severity) => {
-        const config = severityConfigs[severity];
-        const count = counts[severity];
+      {(Object.keys(severityConfigs) as Array<keyof VulnerabilitySeverityCounts>).map(
+        (severity) => {
+          const config = severityConfigs[severity];
+          const count = counts[severity];
 
-        return (
-          <Tooltip key={severity} title={config.tooltip}>
-            <Chip
-              icon={config.icon}
-              label={`${config.label}: ${count}`}
-              size="small"
-              sx={{
-                backgroundColor: alpha(config.color, 0.1),
-                color: config.color,
-                fontWeight: count > 0 ? 600 : 400,
-                borderColor: count > 0 ? config.color : 'transparent',
-                borderWidth: count > 0 ? 1 : 0,
-                borderStyle: 'solid',
-                transition: 'all 0.3s ease',
-                '& .MuiChip-icon': {
+          return (
+            <Tooltip key={severity} title={config.tooltip}>
+              <Chip
+                icon={config.icon}
+                label={`${config.label}: ${count}`}
+                size="small"
+                sx={{
+                  backgroundColor: alpha(config.color, 0.1),
                   color: config.color,
-                },
-                // Pulse animation when count increases
-                ...(count > 0 && {
-                  animation: 'pulse 0.5s ease-in-out',
-                  '@keyframes pulse': {
-                    '0%': { transform: 'scale(1)' },
-                    '50%': { transform: 'scale(1.05)' },
-                    '100%': { transform: 'scale(1)' },
+                  fontWeight: count > 0 ? 600 : 400,
+                  borderColor: count > 0 ? config.color : 'transparent',
+                  borderWidth: count > 0 ? 1 : 0,
+                  borderStyle: 'solid',
+                  transition: 'all 0.3s ease',
+                  '& .MuiChip-icon': {
+                    color: config.color,
                   },
-                }),
-              }}
-            />
-          </Tooltip>
-        );
-      })}
+                  // Pulse animation when count increases
+                  ...(count > 0 && {
+                    animation: 'pulse 0.5s ease-in-out',
+                    '@keyframes pulse': {
+                      '0%': { transform: 'scale(1)' },
+                      '50%': { transform: 'scale(1.05)' },
+                      '100%': { transform: 'scale(1)' },
+                    },
+                  }),
+                }}
+              />
+            </Tooltip>
+          );
+        },
+      )}
       {totalCount > 0 && (
         <Chip
           label={`Total: ${totalCount}`}

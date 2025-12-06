@@ -31,6 +31,13 @@ describe('useJobState', () => {
         logs: [],
         logsExpanded: false,
         lastUpdateTimestamp: 0,
+        vulnerabilities: [],
+        severityCounts: {
+          critical: 0,
+          high: 0,
+          medium: 0,
+          low: 0,
+        },
       });
     });
   });
