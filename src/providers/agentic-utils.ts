@@ -229,6 +229,8 @@ export async function cacheResponse(
   try {
     await cacheResult.cache.set(cacheResult.cacheKey, JSON.stringify(response));
   } catch (error) {
-    logger.error(`Error caching response${debugContext ? ` for ${debugContext}` : ''}: ${String(error)}`);
+    logger.error(
+      `Error caching response${debugContext ? ` for ${debugContext}` : ''}: ${String(error)}`,
+    );
   }
 }
