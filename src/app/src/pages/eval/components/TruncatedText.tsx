@@ -22,7 +22,10 @@ function containsMarkdownBase64Image(text: string): boolean {
   return /!\[.*?\]\(data:image\/[a-zA-Z0-9.+-]+;base64,[^)]+\)/.test(text);
 }
 
-// Helper function to extract text content from React nodes for base64 detection
+// Helper function to extract text content from React nodes for base64 detection.
+// Note: This utility is needed because TruncatedText receives arbitrary React nodes
+// and needs to check if they contain base64 images before truncation decisions.
+// An alternative would be to parse/detect images upstream before passing to this component.
 function extractTextContent(node: React.ReactNode): string {
   if (typeof node === 'string' || typeof node === 'number') {
     return node.toString();
@@ -107,7 +110,12 @@ function TruncatedText({ text: rawText, maxLength }: TruncatedTextProps) {
         return nodeAsString;
       }
 
-      return nodeAsString.slice(0, maxLength - length);
+      // Guard against negative remaining length
+      const remaining = maxLength - length;
+      if (remaining <= 0) {
+        return '';
+      }
+      return nodeAsString.slice(0, remaining);
     }
     if (Array.isArray(node)) {
       const nodes: React.ReactNode[] = [];

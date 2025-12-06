@@ -183,11 +183,11 @@ export interface CompletionOptions {
     response_mime_type?: string;
     response_schema?: string;
 
-    // Live API
+    // Response modalities (Live API and Image generation)
+    // Controls which types of output the model should generate (e.g., ['TEXT', 'IMAGE'], ['text', 'audio'])
+    // Both snake_case and camelCase are supported for compatibility
     response_modalities?: string[];
-
-    // Image generation
-    responseModalities?: string[];
+    responseModalities?: string[]; // Alias for response_modalities
 
     // Speech configuration
     speechConfig?: {
