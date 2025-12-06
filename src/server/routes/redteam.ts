@@ -34,7 +34,7 @@ import {
   getPluginConfigurationError,
   RemoteGenerationDisabledError,
 } from '../services/redteamTestCaseGenerationService';
-import { emitJobUpdate } from '../server';
+import { emitJobUpdate } from '../socket';
 import {
   addJobError,
   createInitialMetrics,

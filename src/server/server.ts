@@ -10,25 +10,11 @@ import path from 'node:path';
 import express from 'express';
 import { Server as SocketIOServer } from 'socket.io';
 
-// Global socket.io instance for emitting events from routes
-let ioInstance: SocketIOServer | null = null;
-
-/**
- * Get the Socket.IO server instance for emitting events
- */
-export function getSocketIO(): SocketIOServer | null {
-  return ioInstance;
-}
-
-/**
- * Emit an event to a specific job room
- */
-export function emitJobUpdate(jobId: string, event: string, data: unknown): void {
-  if (ioInstance) {
-    ioInstance.to(`job:${jobId}`).emit(event, data);
-  }
-}
 import { fromError } from 'zod-validation-error';
+
+import { setSocketIO } from './socket';
+// Re-export for backward compatibility
+export { emitJobUpdate, getSocketIO } from './socket';
 import { getDefaultPort, VERSION } from '../constants';
 import { setupSignalWatcher } from '../database/signal';
 import { getDirectory } from '../esm';
@@ -307,7 +293,7 @@ export async function startServer(
   });
 
   // Store the io instance globally for use in routes
-  ioInstance = io;
+  setSocketIO(io);
 
   await runDbMigrations();
 
