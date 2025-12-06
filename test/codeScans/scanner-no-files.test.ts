@@ -4,7 +4,8 @@
  * Tests that processDiff handles cases where no files are found to scan
  */
 
-import type { FileRecord } from '../../src/types/codeScan';
+import { vi, beforeEach, afterEach } from 'vitest';
+import type { FileRecord, ScanResponse } from '../../src/types/codeScan';
 
 describe('Scanner - No Files to Scan', () => {
   it('should filter out files with skipReason when determining includedFiles', () => {
@@ -70,5 +71,112 @@ describe('Scanner - No Files to Scan', () => {
     const includedFiles = files.filter((f) => !f.skipReason && f.patch);
 
     expect(includedFiles).toHaveLength(0);
+  });
+});
+
+describe('Scanner JSON Output', () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('should output valid JSON when no files to scan with --json flag', async () => {
+    // Set up mocks before importing executeScan
+    vi.doMock('../../src/codeScan/git/diffProcessor', () => ({
+      processDiff: vi.fn().mockResolvedValue([]),
+    }));
+
+    vi.doMock('../../src/codeScan/git/diff', () => ({
+      validateOnBranch: vi.fn().mockResolvedValue('main'),
+    }));
+
+    vi.doMock('../../src/codeScan/config/loader', () => ({
+      loadConfigOrDefault: vi.fn().mockResolvedValue({
+        minimumSeverity: 'medium',
+        diffsOnly: true,
+      }),
+      mergeConfigWithOptions: vi.fn().mockImplementation((config, options) => ({
+        ...config,
+        diffsOnly: options.diffsOnly ?? config.diffsOnly,
+      })),
+      resolveGuidance: vi.fn().mockResolvedValue(undefined),
+      resolveApiHost: vi.fn().mockReturnValue('https://api.example.com'),
+    }));
+
+    vi.doMock('simple-git', () => ({
+      default: vi.fn(() => ({
+        branch: vi.fn().mockResolvedValue({ current: 'main', all: ['main'] }),
+        revparse: vi.fn().mockResolvedValue('abc123'),
+      })),
+    }));
+
+    vi.doMock('../../src/codeScan/scanner/socket', () => ({
+      createSocketConnection: vi.fn().mockResolvedValue({
+        emit: vi.fn(),
+        on: vi.fn(),
+        disconnect: vi.fn(),
+      }),
+    }));
+
+    vi.doMock('../../src/codeScan/util/auth', () => ({
+      resolveAuthCredentials: vi.fn().mockResolvedValue({ apiKey: 'test-key' }),
+    }));
+
+    vi.doMock('../../src/cliState', () => ({
+      default: {
+        postActionCallback: null,
+      },
+    }));
+
+    vi.doMock('../../src/logger', () => ({
+      default: {
+        info: vi.fn(),
+        debug: vi.fn(),
+        error: vi.fn(),
+        warn: vi.fn(),
+      },
+      getLogLevel: vi.fn().mockReturnValue('info'),
+    }));
+
+    vi.doMock('../../src/codeScan/scanner/cleanup', () => ({
+      registerCleanupHandlers: vi.fn(),
+    }));
+
+    vi.doMock('../../src/codeScan/scanner/output', () => ({
+      createSpinner: vi.fn().mockReturnValue(undefined),
+      displayScanResults: vi.fn(),
+    }));
+
+    // Import after mocks are set up
+    const { executeScan } = await import('../../src/codeScan/scanner/index');
+    const logger = (await import('../../src/logger')).default;
+
+    await executeScan('/test/repo', { json: true, diffsOnly: true });
+
+    // logger.info should have been called with JSON output
+    expect(logger.info).toHaveBeenCalled();
+
+    // Find the call that contains JSON (the last info call should be the JSON output)
+    const infoCalls = (logger.info as any).mock.calls;
+    const jsonCall = infoCalls.find((call: string[]) => {
+      try {
+        JSON.parse(call[0]);
+        return true;
+      } catch {
+        return false;
+      }
+    });
+
+    expect(jsonCall).toBeDefined();
+    const parsed: ScanResponse = JSON.parse(jsonCall[0]);
+
+    expect(parsed).toEqual({
+      success: true,
+      comments: [],
+      review: 'No files to scan',
+    });
   });
 });

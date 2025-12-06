@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest';
 import { deduplicateTests } from '../../../src/redteam/strategies/retry';
 
 import type { TestCase } from '../../../src/types/index';

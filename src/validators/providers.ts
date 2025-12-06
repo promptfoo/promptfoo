@@ -13,17 +13,15 @@ import type {
   ProviderResponse,
 } from '../types/providers';
 
-export const ProviderOptionsSchema = z
-  .object({
-    id: z.custom<ProviderId>().optional(),
-    label: z.custom<ProviderLabel>().optional(),
-    config: z.any().optional(),
-    prompts: z.array(z.string()).optional(),
-    transform: z.string().optional(),
-    delay: z.number().optional(),
-    env: ProviderEnvOverridesSchema.optional(),
-  })
-  .strict();
+export const ProviderOptionsSchema = z.object({
+  id: z.custom<ProviderId>().optional(),
+  label: z.custom<ProviderLabel>().optional(),
+  config: z.any().optional(),
+  prompts: z.array(z.string()).optional(),
+  transform: z.string().optional(),
+  delay: z.number().optional(),
+  env: ProviderEnvOverridesSchema.optional(),
+});
 
 const CallApiContextParamsSchema = z.object({
   fetchWithCache: z.optional(z.any()),
@@ -106,11 +104,11 @@ export const ProvidersSchema = z.union([
   z.array(
     z.union([
       z.string(),
+      CallApiFunctionSchema,
       z.record(z.string(), ProviderOptionsSchema),
       ProviderOptionsSchema,
-      CallApiFunctionSchema,
     ]),
   ),
 ]);
 
-export const ProviderSchema = z.union([z.string(), ProviderOptionsSchema, ApiProviderSchema]);
+export const ProviderSchema = z.union([z.string(), ApiProviderSchema, ProviderOptionsSchema]);

@@ -1,22 +1,26 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache } from '../../src/cache';
 import * as fetchModule from '../../src/util/fetch/index';
 import { OpenRouterProvider } from '../../src/providers/openrouter';
 
 const OPENROUTER_API_BASE = 'https://openrouter.ai/api/v1';
 
-jest.mock('../../src/util', () => ({
-  maybeLoadFromExternalFile: jest.fn((x) => x),
-  renderVarsInObject: jest.fn((x) => x),
-}));
+vi.mock('../../src/util', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    maybeLoadFromExternalFile: vi.fn((x) => x),
+    renderVarsInObject: vi.fn((x) => x),
+  };
+});
 
-jest.mock('../../src/util/fetch');
+vi.mock('../../src/util/fetch');
 
 describe('OpenRouter', () => {
-  const mockedFetchWithRetries = jest.mocked(fetchModule.fetchWithRetries);
+  const mockedFetchWithRetries = vi.mocked(fetchModule.fetchWithRetries);
 
   afterEach(async () => {
     await clearCache();
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('OpenRouterProvider', () => {

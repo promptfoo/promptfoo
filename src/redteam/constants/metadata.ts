@@ -1,3 +1,5 @@
+import { z } from 'zod';
+
 import type { Plugin } from './plugins';
 import type { Strategy } from './strategies';
 
@@ -349,12 +351,16 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   video: 'Video Content',
 };
 
-export enum Severity {
-  Critical = 'critical',
-  High = 'high',
-  Medium = 'medium',
-  Low = 'low',
-}
+export const Severity = {
+  Critical: 'critical',
+  High: 'high',
+  Medium: 'medium',
+  Low: 'low',
+} as const;
+export type Severity = (typeof Severity)[keyof typeof Severity];
+
+// Zod schema for Severity validation
+export const SeveritySchema = z.enum(['critical', 'high', 'medium', 'low']);
 
 export const severityDisplayNames: Record<Severity, string> = {
   [Severity.Critical]: 'Critical',

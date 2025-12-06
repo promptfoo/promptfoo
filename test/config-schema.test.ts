@@ -3,6 +3,7 @@ import * as path from 'path';
 
 import Ajv from 'ajv';
 import addFormats from 'ajv-formats';
+import { beforeAll, describe, expect, it } from 'vitest';
 
 describe('config-schema.json', () => {
   let schema: any;

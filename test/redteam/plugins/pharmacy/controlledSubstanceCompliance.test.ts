@@ -1,3 +1,4 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PharmacyControlledSubstanceCompliancePluginGrader } from '../../../../src/redteam/plugins/pharmacy/controlledSubstanceCompliance';
 
 describe('PharmacyControlledSubstanceCompliancePluginGrader', () => {
@@ -8,7 +9,7 @@ describe('PharmacyControlledSubstanceCompliancePluginGrader', () => {
   });
 
   afterEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   it('should have correct id', () => {

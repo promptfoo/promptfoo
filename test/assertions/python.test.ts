@@ -1,3 +1,4 @@
+import { vi, describe, it, expect, beforeEach } from 'vitest';
 import * as path from 'path';
 
 import { runAssertion } from '../../src/assertions/index';
@@ -8,34 +9,46 @@ import { runPythonCode } from '../../src/python/wrapper';
 
 import type { Assertion, AtomicTestCase, GradingResult } from '../../src/types/index';
 
-jest.mock('../../src/python/wrapper', () => {
-  const actual = jest.requireActual('../../src/python/wrapper');
+vi.mock('../../src/python/wrapper', async () => {
+  const actual = await vi.importActual<typeof import('../../src/python/wrapper')>(
+    '../../src/python/wrapper',
+  );
   return {
     ...actual,
-    runPythonCode: jest.fn(actual.runPythonCode),
+    runPythonCode: vi.fn(actual.runPythonCode),
   };
 });
 
-jest.mock('../../src/python/pythonUtils', () => {
-  const actual = jest.requireActual('../../src/python/pythonUtils');
+vi.mock('../../src/python/pythonUtils', async () => {
+  const actual = await vi.importActual<typeof import('../../src/python/pythonUtils')>(
+    '../../src/python/pythonUtils',
+  );
   return {
     ...actual,
-    runPython: jest.fn(actual.runPython),
+    runPython: vi.fn(actual.runPython),
   };
 });
 
-jest.mock('path', () => ({
-  ...jest.requireActual('path'),
-  resolve: jest.fn(jest.requireActual('path').resolve),
-  extname: jest.fn(jest.requireActual('path').extname),
-}));
+vi.mock('path', async () => {
+  const actualPath = await vi.importActual<typeof import('path')>('path');
+  const mocked = {
+    ...actualPath,
+    resolve: vi.fn(),
+    extname: vi.fn(),
+  };
+  return {
+    ...mocked,
+    default: mocked,
+  };
+});
 
-describe('Python file references', () => {
+// These tests can be slow on Windows due to heavy module imports
+describe('Python file references', { timeout: 15000 }, () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     // Reset mocked implementations to avoid test interference
-    jest.mocked(runPythonCode).mockReset();
-    jest.mocked(runPython).mockReset();
+    vi.mocked(runPythonCode).mockReset();
+    vi.mocked(runPython).mockReset();
     // Reset Python state to avoid test interference
     pythonUtils.state.cachedPythonPath = null;
     pythonUtils.state.validationPromise = null;
@@ -48,9 +61,9 @@ describe('Python file references', () => {
     };
 
     const mockOutput = true;
-    jest.mocked(path.resolve).mockReturnValue('/path/to/assert.py');
-    jest.mocked(path.extname).mockReturnValue('.py');
-    jest.mocked(runPython).mockResolvedValue(mockOutput);
+    vi.mocked(path.resolve).mockReturnValue('/path/to/assert.py');
+    vi.mocked(path.extname).mockReturnValue('.py');
+    vi.mocked(runPython).mockResolvedValue(mockOutput);
 
     const output = 'Expected output';
     const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
@@ -84,9 +97,9 @@ describe('Python file references', () => {
     };
 
     const mockOutput = true;
-    jest.mocked(path.resolve).mockReturnValue('/path/to/assert.py');
-    jest.mocked(path.extname).mockReturnValue('.py');
-    jest.mocked(runPython).mockResolvedValue(mockOutput);
+    vi.mocked(path.resolve).mockReturnValue('/path/to/assert.py');
+    vi.mocked(path.extname).mockReturnValue('.py');
+    vi.mocked(runPython).mockResolvedValue(mockOutput);
 
     const output = 'Expected output';
     const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
@@ -121,9 +134,9 @@ describe('Python file references', () => {
     };
 
     const mockOutput = true;
-    jest.mocked(path.resolve).mockReturnValue('/path/to/assert.py');
-    jest.mocked(path.extname).mockReturnValue('.py');
-    jest.mocked(runPython).mockResolvedValue(mockOutput);
+    vi.mocked(path.resolve).mockReturnValue('/path/to/assert.py');
+    vi.mocked(path.extname).mockReturnValue('.py');
+    vi.mocked(runPython).mockResolvedValue(mockOutput);
 
     const output = 'Expected output';
     const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
@@ -153,9 +166,9 @@ describe('Python file references', () => {
       value: 'file:///path/to/assert.py:custom_function',
     };
 
-    jest.mocked(path.resolve).mockReturnValue('/path/to/assert.py');
-    jest.mocked(path.extname).mockReturnValue('.py');
-    jest.mocked(runPython).mockRejectedValue(new Error('Python error'));
+    vi.mocked(path.resolve).mockReturnValue('/path/to/assert.py');
+    vi.mocked(path.extname).mockReturnValue('.py');
+    vi.mocked(runPython).mockRejectedValue(new Error('Python error'));
 
     const output = 'Expected output';
     const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
@@ -182,9 +195,9 @@ describe('Python file references', () => {
       value: 'file:///path/to/assert.py',
     };
 
-    jest.mocked(path.resolve).mockReturnValue('/path/to/assert.py');
-    jest.mocked(path.extname).mockReturnValue('.py');
-    jest.mocked(runPython).mockResolvedValue(0.75);
+    vi.mocked(path.resolve).mockReturnValue('/path/to/assert.py');
+    vi.mocked(path.extname).mockReturnValue('.py');
+    vi.mocked(runPython).mockResolvedValue(0.75);
 
     const output = 'Expected output';
     const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
@@ -208,7 +221,7 @@ describe('Python file references', () => {
   it('should handle output strings with both single and double quotes correctly in python assertion', async () => {
     const expectedPythonValue = '0.5';
 
-    jest.mocked(runPythonCode).mockResolvedValueOnce(expectedPythonValue);
+    vi.mocked(runPythonCode).mockResolvedValueOnce(expectedPythonValue);
 
     const output =
       'This is a string with "double quotes"\n and \'single quotes\' \n\n and some \n\t newlines.';
@@ -280,7 +293,7 @@ describe('Python file references', () => {
       threshold,
     };
 
-    jest.mocked(runPythonCode).mockResolvedValueOnce(resolvedValue);
+    vi.mocked(runPythonCode).mockResolvedValueOnce(resolvedValue);
 
     const provider = new OpenAiChatCompletionProvider('gpt-4o-mini');
     const providerResponse = { output };
@@ -326,7 +339,9 @@ describe('Python file references', () => {
     ],
   ])('should handle when the file:// assertion with .py file returns a %s', async (_type, pythonOutput, expectedPass, expectedReason) => {
     const output = 'Expected output';
-    jest.mocked(runPython).mockResolvedValueOnce(pythonOutput as string | object);
+    vi.mocked(runPython).mockResolvedValueOnce(pythonOutput as string | object);
+    vi.mocked(path.resolve).mockReturnValue('/path/to/assert.py');
+    vi.mocked(path.extname).mockReturnValue('.py');
 
     const fileAssertion: Assertion = {
       type: 'python',
@@ -343,7 +358,7 @@ describe('Python file references', () => {
       providerResponse,
     });
 
-    expect(runPython).toHaveBeenCalledWith(path.resolve('/path/to/assert.py'), 'get_assert', [
+    expect(runPython).toHaveBeenCalledWith('/path/to/assert.py', 'get_assert', [
       output,
       {
         prompt: 'Some prompt that includes "double quotes" and \'single quotes\'',
@@ -363,11 +378,9 @@ describe('Python file references', () => {
 
   it('should handle when python file assertions throw an error', async () => {
     const output = 'Expected output';
-    jest
-      .mocked(runPython)
-      .mockRejectedValue(
-        new Error('The Python script `call_api` function must return a dict with an `output`'),
-      );
+    vi.mocked(runPython).mockRejectedValue(
+      new Error('The Python script `call_api` function must return a dict with an `output`'),
+    );
     const fileAssertion: Assertion = {
       type: 'python',
       value: 'file:///path/to/assert.py',
@@ -424,7 +437,7 @@ describe('Python file references', () => {
       ],
     };
 
-    jest.mocked(runPython).mockResolvedValueOnce(pythonResult as any);
+    vi.mocked(runPython).mockResolvedValueOnce(pythonResult as any);
 
     const fileAssertion: Assertion = {
       type: 'python',
@@ -487,16 +500,18 @@ describe('Python file references', () => {
     };
 
     beforeEach(() => {
-      jest.clearAllMocks();
+      vi.clearAllMocks();
       // Reset mocked implementations to avoid test interference
-      jest.mocked(runPythonCode).mockReset();
-      jest.mocked(runPython).mockReset();
+      vi.mocked(runPythonCode).mockReset();
+      vi.mocked(runPython).mockReset();
       // Reset Python state to avoid test interference
       pythonUtils.state.cachedPythonPath = null;
       pythonUtils.state.validationPromise = null;
     });
 
     it('should FAIL when score=0 and no threshold', async () => {
+      vi.mocked(runPythonCode).mockResolvedValueOnce(0);
+
       const assertion: Assertion = {
         type: 'python',
         value: '0',
@@ -511,11 +526,9 @@ describe('Python file references', () => {
       expect(result.score).toBe(0);
     });
 
-    it('should FAIL when score=0 and threshold=0 (currently same as no threshold)', async () => {
-      // NOTE: This test currently fails in the full test suite due to test interference,
-      // even though the logic in python.ts suggests it should pass.
-      // The actual behavior treats score=0 as failing regardless of threshold=0.
-      // This may be due to how Python return values are being interpreted.
+    it('should PASS when score=0 and threshold=0 (0 >= 0)', async () => {
+      // With threshold=0, score=0 passes because 0 >= 0 is true
+      vi.mocked(runPythonCode).mockResolvedValueOnce(0);
 
       const assertion: Assertion = {
         type: 'python',
@@ -528,11 +541,13 @@ describe('Python file references', () => {
         assertion,
       });
 
-      expect(result.pass).toBe(false);
+      expect(result.pass).toBe(true);
       expect(result.score).toBe(0);
     });
 
     it('should FAIL when score=0 and threshold=0.1', async () => {
+      vi.mocked(runPythonCode).mockResolvedValueOnce(0);
+
       const assertion: Assertion = {
         type: 'python',
         value: '0',

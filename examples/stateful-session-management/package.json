@@ -7,7 +7,7 @@
     "server": "node server.js"
   },
   "dependencies": {
-    "express": "^4.21.2",
+    "express": "^5.2.1",
     "uuid": "^9.0.1",
     "openai": "^4.104.0"
   }

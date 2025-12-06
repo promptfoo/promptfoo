@@ -1,8 +1,22 @@
+import { describe, expect, it, vi, beforeEach } from 'vitest';
+
 import { fetchWithCache } from '../../../src/cache';
 import { OpenAiImageProvider } from '../../../src/providers/openai/image';
 
-jest.mock('../../../src/cache');
-jest.mock('../../../src/logger');
+vi.mock('../../../src/cache', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    fetchWithCache: vi.fn(),
+  };
+});
+vi.mock('../../../src/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+}));
 
 describe('OpenAiImageProvider', () => {
   const mockFetchResponse = {
@@ -24,8 +38,8 @@ describe('OpenAiImageProvider', () => {
   };
 
   beforeEach(() => {
-    jest.resetAllMocks();
-    jest.mocked(fetchWithCache).mockResolvedValue(mockFetchResponse);
+    vi.resetAllMocks();
+    vi.mocked(fetchWithCache).mockResolvedValue(mockFetchResponse);
   });
 
   describe('Basic functionality', () => {
@@ -61,7 +75,7 @@ describe('OpenAiImageProvider', () => {
         config: { apiKey: 'test-key' },
       });
 
-      jest.mocked(fetchWithCache).mockResolvedValue({
+      vi.mocked(fetchWithCache).mockResolvedValue({
         ...mockFetchResponse,
         cached: true,
       });
@@ -105,7 +119,7 @@ describe('OpenAiImageProvider', () => {
         const provider = new OpenAiImageProvider('dall-e-3');
 
         // Mock fetchWithCache to prevent it from being called
-        jest.mocked(fetchWithCache).mockImplementation(() => {
+        vi.mocked(fetchWithCache).mockImplementation(function () {
           throw new Error('fetchWithCache should not be called');
         });
 
@@ -124,7 +138,7 @@ describe('OpenAiImageProvider', () => {
     it('should handle missing API key', async () => {
       const provider = new OpenAiImageProvider('dall-e-3');
 
-      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: { error: { message: 'OpenAI API key is not set' } },
         cached: false,
         status: 401,
@@ -149,7 +163,7 @@ describe('OpenAiImageProvider', () => {
         statusText: 'Bad Request',
       };
 
-      jest.mocked(fetchWithCache).mockResolvedValue(errorResponse);
+      vi.mocked(fetchWithCache).mockResolvedValue(errorResponse);
 
       const result = await provider.callApi('test prompt');
 
@@ -162,7 +176,7 @@ describe('OpenAiImageProvider', () => {
         config: { apiKey: 'test-key' },
       });
 
-      jest.mocked(fetchWithCache).mockResolvedValue({
+      vi.mocked(fetchWithCache).mockResolvedValue({
         data: 'Error message',
         cached: false,
         status: 500,
@@ -180,7 +194,7 @@ describe('OpenAiImageProvider', () => {
         config: { apiKey: 'test-key' },
       });
 
-      jest.mocked(fetchWithCache).mockRejectedValue(new Error('Network error'));
+      vi.mocked(fetchWithCache).mockRejectedValue(new Error('Network error'));
 
       const result = await provider.callApi('test prompt');
 
@@ -193,7 +207,7 @@ describe('OpenAiImageProvider', () => {
         config: { apiKey: 'test-key' },
       });
 
-      jest.mocked(fetchWithCache).mockResolvedValue({
+      vi.mocked(fetchWithCache).mockResolvedValue({
         data: { data: [{}] },
         cached: false,
         status: 200,
@@ -211,7 +225,7 @@ describe('OpenAiImageProvider', () => {
         config: { apiKey: 'test-key' },
       });
 
-      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: 'Just a simple error string',
         cached: false,
         status: 500,
@@ -229,8 +243,8 @@ describe('OpenAiImageProvider', () => {
         config: { apiKey: 'test-key' },
       });
 
-      const mockDeleteFn = jest.fn();
-      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      const mockDeleteFn = vi.fn();
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: {
           // Invalid data structure that will cause parsing to fail
           deleteFromCache: mockDeleteFn,
@@ -251,7 +265,7 @@ describe('OpenAiImageProvider', () => {
         config: { apiKey: 'test-key', response_format: 'b64_json' },
       });
 
-      jest.mocked(fetchWithCache).mockResolvedValue(mockBase64Response);
+      vi.mocked(fetchWithCache).mockResolvedValue(mockBase64Response);
 
       const result = await provider.callApi('test prompt');
 
@@ -278,7 +292,7 @@ describe('OpenAiImageProvider', () => {
         config: { apiKey: 'test-key', response_format: 'b64_json' },
       });
 
-      jest.mocked(fetchWithCache).mockResolvedValue({
+      vi.mocked(fetchWithCache).mockResolvedValue({
         data: { data: [{}] },
         cached: false,
         status: 200,
