@@ -18,7 +18,6 @@ import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import SaveIcon from '@mui/icons-material/Save';
 import SearchIcon from '@mui/icons-material/Search';
-import StopIcon from '@mui/icons-material/Stop';
 import TuneIcon from '@mui/icons-material/Tune';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 
@@ -1269,7 +1268,7 @@ export default function Review({
               </Alert>
             )}
             <Box sx={{ mb: 2 }}>
-              <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+              <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
                 <Tooltip title={runNowTooltipMessage} arrow>
                   <span>
                     <Button
@@ -1289,16 +1288,6 @@ export default function Review({
                     </Button>
                   </span>
                 </Tooltip>
-                {isRunning && (
-                  <Button
-                    variant="contained"
-                    color="error"
-                    onClick={handleCancel}
-                    startIcon={<StopIcon />}
-                  >
-                    Cancel
-                  </Button>
-                )}
                 {jobState.evalId && (
                   <>
                     <Button
