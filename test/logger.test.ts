@@ -1,89 +1,121 @@
 import path from 'path';
 import chalk from 'chalk';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  type Mock,
+  type MockInstance,
+} from 'vitest';
 import type { Logger } from 'winston';
 import type Transport from 'winston-transport';
 
-const mockGetEnvString = jest.fn((_: string, defaultValue: any) => defaultValue);
-const mockGetEnvBool = jest.fn((_: string, defaultValue: any) => defaultValue);
-const mockGetConfigDirectoryPath = jest.fn(() => '/mock/config');
-const fsMock = {
-  existsSync: jest.fn(),
-  mkdirSync: jest.fn(),
-  readdirSync: jest.fn(),
-  statSync: jest.fn(),
-  unlinkSync: jest.fn(),
-};
+// Create hoisted mocks
+const { mockGetEnvString, mockGetEnvBool, mockGetConfigDirectoryPath, fsMock, mockLogger } =
+  vi.hoisted(() => {
+    const mockGetEnvString = vi.fn((_: string, defaultValue: any) => defaultValue);
+    const mockGetEnvBool = vi.fn((_: string, defaultValue: any) => defaultValue);
+    const mockGetConfigDirectoryPath = vi.fn(() => '/mock/config');
+    const fsMock = {
+      existsSync: vi.fn(),
+      mkdirSync: vi.fn(),
+      readdirSync: vi.fn(),
+      statSync: vi.fn(),
+      unlinkSync: vi.fn(),
+    };
 
-jest.unmock('../src/logger');
-jest.mock('../src/envars', () => ({
+    interface MockLogger extends Omit<Logger, 'transports'> {
+      error: Mock;
+      warn: Mock;
+      info: Mock;
+      debug: Mock;
+      on: Mock;
+      add: Mock;
+      remove: Mock;
+      transports: Array<Partial<Transport>>;
+    }
+
+    const mockLoggerInstance: MockLogger = {
+      error: vi.fn((info) => {
+        process.stdout.write(chalk.red(info.message));
+        return mockLoggerInstance;
+      }),
+      warn: vi.fn((info) => {
+        process.stdout.write(chalk.yellow(info.message));
+        return mockLoggerInstance;
+      }),
+      info: vi.fn((info) => {
+        process.stdout.write(info.message);
+        return mockLoggerInstance;
+      }),
+      debug: vi.fn((info) => {
+        process.stdout.write(chalk.cyan(info.message));
+        return mockLoggerInstance;
+      }),
+      on: vi.fn(),
+      add: vi.fn(),
+      remove: vi.fn(),
+      transports: [{ level: 'info' }],
+    } as MockLogger;
+
+    return {
+      mockGetEnvString,
+      mockGetEnvBool,
+      mockGetConfigDirectoryPath,
+      fsMock,
+      mockLogger: mockLoggerInstance,
+    };
+  });
+
+vi.unmock('../src/logger');
+vi.mock('../src/envars', () => ({
   getEnvString: mockGetEnvString,
   getEnvBool: mockGetEnvBool,
 }));
 
-jest.mock('../src/util/config/manage', () => ({
+vi.mock('../src/util/config/manage', () => ({
   getConfigDirectoryPath: mockGetConfigDirectoryPath,
 }));
 
-jest.mock('fs', () => fsMock);
+vi.mock('fs', () => ({
+  default: fsMock,
+  ...fsMock,
+}));
 
-interface MockLogger extends Omit<Logger, 'transports'> {
-  error: jest.Mock;
-  warn: jest.Mock;
-  info: jest.Mock;
-  debug: jest.Mock;
-  on: jest.Mock;
-  add: jest.Mock;
-  remove: jest.Mock;
-  transports: Array<Partial<Transport>>;
-}
+// Winston transports need to be classes (constructors)
+const winstonMock = vi.hoisted(() => {
+  return {
+    createLogger: vi.fn(() => mockLogger),
+    format: {
+      combine: vi.fn(),
+      simple: vi.fn(),
+      printf: vi.fn((cb: (info: Record<string, unknown>) => string) => cb),
+    },
+    transports: {
+      Console: vi.fn(),
+      File: vi.fn().mockImplementation(function (this: { write: ReturnType<typeof vi.fn> }) {
+        this.write = vi.fn();
+      }),
+    },
+  };
+});
 
-const mockLogger: MockLogger = {
-  error: jest.fn((info) => {
-    process.stdout.write(chalk.red(info.message));
-    return mockLogger;
-  }),
-  warn: jest.fn((info) => {
-    process.stdout.write(chalk.yellow(info.message));
-    return mockLogger;
-  }),
-  info: jest.fn((info) => {
-    process.stdout.write(info.message);
-    return mockLogger;
-  }),
-  debug: jest.fn((info) => {
-    process.stdout.write(chalk.cyan(info.message));
-    return mockLogger;
-  }),
-  on: jest.fn(),
-  add: jest.fn(),
-  remove: jest.fn(),
-  transports: [{ level: 'info' }],
-} as MockLogger;
-
-jest.mock('winston', () => ({
-  createLogger: jest.fn(() => mockLogger),
-  format: {
-    combine: jest.fn(),
-    simple: jest.fn(),
-    printf: jest.fn((cb) => cb),
-  },
-  transports: {
-    Console: jest.fn(),
-    File: jest.fn(() => ({
-      write: jest.fn(),
-    })),
-  },
+vi.mock('winston', () => ({
+  default: winstonMock,
 }));
 
 describe('logger', () => {
   let logger: any;
-  let mockStdout: jest.SpyInstance;
+  let mockStdout: MockInstance;
   let originalError: typeof Error;
 
   beforeEach(async () => {
     originalError = global.Error;
-    mockStdout = jest.spyOn(process.stdout, 'write').mockImplementation(() => true);
-    jest.clearAllMocks();
+    mockStdout = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    vi.clearAllMocks();
     mockGetEnvString.mockReset();
     mockGetEnvBool.mockReset();
     mockGetEnvString.mockImplementation((_, defaultValue) => defaultValue);
@@ -91,11 +123,11 @@ describe('logger', () => {
     mockGetConfigDirectoryPath.mockReset();
     mockGetConfigDirectoryPath.mockReturnValue('/mock/config');
     for (const fn of Object.values(fsMock)) {
-      (fn as jest.Mock).mockReset();
+      (fn as Mock).mockReset();
     }
-    (fsMock.existsSync as jest.Mock).mockReturnValue(true);
-    (fsMock.readdirSync as jest.Mock).mockReturnValue([]);
-    (fsMock.statSync as jest.Mock).mockReturnValue({ mtime: new Date() });
+    (fsMock.existsSync as Mock).mockReturnValue(true);
+    (fsMock.readdirSync as Mock).mockReturnValue([]);
+    (fsMock.statSync as Mock).mockReturnValue({ mtime: new Date() });
     logger = await import('../src/logger');
     mockLogger.transports[0].level = 'info';
   });
@@ -103,7 +135,7 @@ describe('logger', () => {
   afterEach(() => {
     mockStdout.mockRestore();
     global.Error = originalError;
-    jest.resetModules();
+    vi.resetModules();
   });
 
   describe('logger methods', () => {
@@ -133,9 +165,14 @@ describe('logger', () => {
         at logger.test.ts:123:10
         at plain/format/path.js:30:5`;
 
-      const mockError = new Error();
-      Object.defineProperty(mockError, 'stack', { value: mockStack });
-      jest.spyOn(global, 'Error').mockImplementation(() => mockError);
+      // Use a class-based mock for the Error constructor
+      const OriginalError = global.Error;
+      const mockErrorConstructor = function (message?: string) {
+        const error = new OriginalError(message);
+        Object.defineProperty(error, 'stack', { value: mockStack });
+        return error;
+      };
+      vi.spyOn(global, 'Error').mockImplementation(mockErrorConstructor as unknown as typeof Error);
 
       logger.default.debug('debug message');
       expect(mockLogger.debug).toHaveBeenCalledWith({
@@ -154,7 +191,7 @@ describe('logger', () => {
     it('should handle missing stack trace', () => {
       const mockError = new Error();
       Object.defineProperty(mockError, 'stack', { value: undefined });
-      jest.spyOn(global, 'Error').mockImplementation(() => mockError);
+      vi.spyOn(global, 'Error').mockImplementation(() => mockError as Error);
 
       const location = logger.getCallerLocation();
       expect(location).toBe('');
@@ -166,9 +203,15 @@ describe('logger', () => {
         at Object.<anonymous> (test.ts:10:20)
         at Object.foo (/absolute/path/file.js:20:10)
         at plain/format/path.js:30:5`;
-      const mockError = new Error();
-      Object.defineProperty(mockError, 'stack', { value: mockStack });
-      jest.spyOn(global, 'Error').mockImplementation(() => mockError);
+
+      // Use a class-based mock for the Error constructor
+      const OriginalError = global.Error;
+      const mockErrorConstructor = function (message?: string) {
+        const error = new OriginalError(message);
+        Object.defineProperty(error, 'stack', { value: mockStack });
+        return error;
+      };
+      vi.spyOn(global, 'Error').mockImplementation(mockErrorConstructor as unknown as typeof Error);
 
       const location = logger.getCallerLocation();
       expect(location).toMatch(/\[.*:\d+\]/);
@@ -177,7 +220,7 @@ describe('logger', () => {
     it('should handle empty stack trace', () => {
       const mockError = new Error();
       Object.defineProperty(mockError, 'stack', { value: '' });
-      jest.spyOn(global, 'Error').mockImplementation(() => mockError);
+      vi.spyOn(global, 'Error').mockImplementation(() => mockError as Error);
 
       const location = logger.getCallerLocation();
       expect(location).toBe('');
@@ -191,7 +234,7 @@ describe('logger', () => {
           throw new Error('Forced error');
         },
       });
-      jest.spyOn(global, 'Error').mockImplementation(() => mockError);
+      vi.spyOn(global, 'Error').mockImplementation(() => mockError as Error);
 
       const location = logger.getCallerLocation();
       expect(location).toBe('');
@@ -217,7 +260,7 @@ describe('logger', () => {
     });
 
     it('should call global log callback if set', () => {
-      const callback = jest.fn();
+      const callback = vi.fn();
       logger.setLogCallback(callback);
       const info = { level: 'info', message: 'test message' } as any;
       logger.consoleFormatter(info);
@@ -297,12 +340,12 @@ describe('logger', () => {
 
   describe('fileFormatter', () => {
     beforeEach(() => {
-      jest.useFakeTimers();
-      jest.setSystemTime(new Date('2025-03-01T12:00:00.000Z'));
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2025-03-01T12:00:00.000Z'));
     });
 
     afterEach(() => {
-      jest.useRealTimers();
+      vi.useRealTimers();
     });
 
     it('should format messages with timestamp and level', () => {
@@ -363,8 +406,8 @@ describe('logger', () => {
     let expectedErrorFile: string;
 
     beforeEach(async () => {
-      jest.useFakeTimers();
-      jest.setSystemTime(new Date('2025-03-01T12:00:00.000Z'));
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2025-03-01T12:00:00.000Z'));
       expectedDebugFile = path.join(
         '/mock/config',
         'logs',
@@ -376,16 +419,16 @@ describe('logger', () => {
         'promptfoo-error-2025-03-01_12-00-00-000Z.log',
       );
       cliState = (await import('../src/cliState')).default;
-      winston = jest.requireMock('winston');
+      winston = await import('winston');
     });
 
     afterEach(() => {
-      jest.useRealTimers();
+      vi.useRealTimers();
     });
 
     it('should create debug and error log files when enabled', () => {
-      (fsMock.existsSync as jest.Mock).mockReturnValue(false);
-      (fsMock.readdirSync as jest.Mock).mockReturnValue([]);
+      (fsMock.existsSync as Mock).mockReturnValue(false);
+      (fsMock.readdirSync as Mock).mockReturnValue([]);
 
       logger.initializeRunLogging();
 
@@ -396,12 +439,12 @@ describe('logger', () => {
       expect(cliState.debugLogFile).toBe(expectedDebugFile);
       expect(cliState.errorLogFile).toBe(expectedErrorFile);
 
-      const debugCall = winston.transports.File.mock.calls.find(
-        ([config]: any[]) => config.level === 'debug',
-      );
-      const errorCall = winston.transports.File.mock.calls.find(
-        ([config]: any[]) => config.level === 'error',
-      );
+      const debugCall = vi
+        .mocked(winston.default.transports.File)
+        .mock.calls.find(([config]: any[]) => config.level === 'debug');
+      const errorCall = vi
+        .mocked(winston.default.transports.File)
+        .mock.calls.find(([config]: any[]) => config.level === 'error');
 
       expect(debugCall?.[0]).toEqual(
         expect.objectContaining({
@@ -417,22 +460,22 @@ describe('logger', () => {
       );
 
       expect(mockLogger.add).toHaveBeenCalledTimes(2);
-      expect(winston.transports.File).toHaveBeenCalledTimes(2);
+      expect(winston.default.transports.File).toHaveBeenCalledTimes(2);
     });
 
     it('should respect PROMPTFOO_DISABLE_DEBUG_LOG', () => {
       mockGetEnvBool.mockImplementation((key, defaultValue) =>
         key === 'PROMPTFOO_DISABLE_DEBUG_LOG' ? true : defaultValue,
       );
-      (fsMock.existsSync as jest.Mock).mockReturnValue(false);
+      (fsMock.existsSync as Mock).mockReturnValue(false);
 
       logger.initializeRunLogging();
 
       expect(cliState.debugLogFile).toBeUndefined();
       expect(cliState.errorLogFile).toBe(expectedErrorFile);
 
-      expect(winston.transports.File).toHaveBeenCalledTimes(1);
-      const errorConfig = winston.transports.File.mock.calls[0][0];
+      expect(winston.default.transports.File).toHaveBeenCalledTimes(1);
+      const errorConfig = vi.mocked(winston.default.transports.File).mock.calls[0][0];
       expect(errorConfig.level).toBe('error');
       expect(mockLogger.add).toHaveBeenCalledTimes(1);
     });
@@ -441,26 +484,29 @@ describe('logger', () => {
       mockGetEnvBool.mockImplementation((key, defaultValue) =>
         key === 'PROMPTFOO_DISABLE_ERROR_LOG' ? true : defaultValue,
       );
-      (fsMock.existsSync as jest.Mock).mockReturnValue(false);
+      (fsMock.existsSync as Mock).mockReturnValue(false);
 
       logger.initializeRunLogging();
 
       expect(cliState.debugLogFile).toBe(expectedDebugFile);
       expect(cliState.errorLogFile).toBeUndefined();
 
-      expect(winston.transports.File).toHaveBeenCalledTimes(1);
-      const debugConfig = winston.transports.File.mock.calls[0][0];
+      expect(winston.default.transports.File).toHaveBeenCalledTimes(1);
+      const debugConfig = vi.mocked(winston.default.transports.File).mock.calls[0][0];
       expect(debugConfig.level).toBe('debug');
       expect(mockLogger.add).toHaveBeenCalledTimes(1);
     });
 
     it('should warn when creating file transports fails', () => {
-      (fsMock.existsSync as jest.Mock).mockReturnValue(false);
+      (fsMock.existsSync as Mock).mockReturnValue(false);
 
-      const winstonMock = jest.requireMock('winston');
-      winstonMock.transports.File.mockImplementationOnce(() => {
+      // Use function keyword to make it constructable
+      const throwingConstructor = function () {
         throw new Error('boom');
-      });
+      };
+      vi.mocked(winston.default.transports.File).mockImplementationOnce(
+        throwingConstructor as unknown as typeof winston.default.transports.File,
+      );
 
       logger.initializeRunLogging();
 
@@ -472,7 +518,7 @@ describe('logger', () => {
       expect(cliState.debugLogFile).toBe(expectedDebugFile);
       expect(cliState.errorLogFile).toBeUndefined();
       expect(mockLogger.add).not.toHaveBeenCalled();
-      expect(winston.transports.File).toHaveBeenCalledTimes(1);
+      expect(winston.default.transports.File).toHaveBeenCalledTimes(1);
     });
 
     it('should respect PROMPTFOO_LOG_DIR environment variable', () => {
@@ -484,8 +530,8 @@ describe('logger', () => {
         return defaultValue;
       });
 
-      (fsMock.existsSync as jest.Mock).mockReturnValue(false);
-      (fsMock.readdirSync as jest.Mock).mockReturnValue([]);
+      (fsMock.existsSync as Mock).mockReturnValue(false);
+      (fsMock.readdirSync as Mock).mockReturnValue([]);
 
       logger.initializeRunLogging();
 
@@ -507,53 +553,75 @@ describe('logger', () => {
   });
 
   describe('initializeSourceMapSupport', () => {
-    let mockInstall: jest.Mock;
+    it('should only call install once across multiple invocations', async () => {
+      // Save and clear LOG_LEVEL to prevent auto-initialization during import
+      const originalLogLevel = process.env.LOG_LEVEL;
+      delete process.env.LOG_LEVEL;
 
-    beforeEach(async () => {
-      // Reset the module between tests
-      jest.resetModules();
+      try {
+        // Reset modules and set up fresh mocks
+        vi.resetModules();
 
-      // Create a mock for source-map-support
-      mockInstall = jest.fn();
-      jest.doMock('source-map-support', () => ({
-        install: mockInstall,
-      }));
+        const mockInstall = vi.fn();
+        vi.doMock('source-map-support', () => ({
+          install: mockInstall,
+        }));
 
-      // Import the logger using our mock
-      logger = await import('../src/logger');
+        // Import fresh logger with our mock (import needed for side effect)
+        await import('../src/logger');
+
+        // Clear any calls that happened during import
+        mockInstall.mockClear();
+
+        // Reset the initialized flag by reimporting with clean state
+        vi.resetModules();
+        vi.doMock('source-map-support', () => ({
+          install: mockInstall,
+        }));
+        const cleanLogger = await import('../src/logger');
+        mockInstall.mockClear();
+
+        // First explicit call should trigger install
+        await cleanLogger.initializeSourceMapSupport();
+        expect(mockInstall).toHaveBeenCalledTimes(1);
+
+        // Second call should NOT trigger install again (flag is set)
+        mockInstall.mockClear();
+        await cleanLogger.initializeSourceMapSupport();
+        expect(mockInstall).not.toHaveBeenCalled();
+      } finally {
+        // Restore LOG_LEVEL
+        if (originalLogLevel !== undefined) {
+          process.env.LOG_LEVEL = originalLogLevel;
+        }
+        vi.resetModules();
+      }
     });
 
-    afterEach(() => {
-      jest.resetAllMocks();
-    });
+    it('should handle errors gracefully when source-map-support fails', async () => {
+      // Save and clear LOG_LEVEL
+      const originalLogLevel = process.env.LOG_LEVEL;
+      delete process.env.LOG_LEVEL;
 
-    it('should initialize source map support only once', async () => {
-      // First initialize - should call install
-      expect(mockInstall).not.toHaveBeenCalled();
-      await logger.initializeSourceMapSupport();
-      expect(mockInstall).toHaveBeenCalledTimes(1);
+      try {
+        vi.resetModules();
 
-      // Clear the mock to verify next call
-      mockInstall.mockClear();
+        // Override the mock to throw
+        vi.doMock('source-map-support', () => {
+          throw new Error('Module not found');
+        });
 
-      // Second call - sourceMapSupportInitialized should be true
-      // so install shouldn't be called again
-      await logger.initializeSourceMapSupport();
-      expect(mockInstall).not.toHaveBeenCalled();
-    });
+        const freshLogger = await import('../src/logger');
 
-    it('should handle errors gracefully', async () => {
-      // Override the mock to throw
-      jest.doMock('source-map-support', () => {
-        throw new Error('Module not found');
-      });
-
-      // Force re-importing logger module to use our mock
-      jest.resetModules();
-      logger = await import('../src/logger');
-
-      // Should not throw error
-      await expect(logger.initializeSourceMapSupport()).resolves.toBeUndefined();
+        // Should not throw error - the function handles errors gracefully
+        await expect(freshLogger.initializeSourceMapSupport()).resolves.toBeUndefined();
+      } finally {
+        // Restore LOG_LEVEL
+        if (originalLogLevel !== undefined) {
+          process.env.LOG_LEVEL = originalLogLevel;
+        }
+        vi.resetModules();
+      }
     });
   });
 
@@ -649,8 +717,8 @@ describe('logger', () => {
       expect(typeof logger.default.remove).toBe('function');
 
       // Test that the methods are bound to winstonLogger
-      const addSpy = jest.spyOn(mockLogger, 'add');
-      const removeSpy = jest.spyOn(mockLogger, 'remove');
+      const addSpy = vi.spyOn(mockLogger, 'add');
+      const removeSpy = vi.spyOn(mockLogger, 'remove');
 
       const transport = { name: 'test' } as any;
       logger.default.add(transport);
@@ -669,25 +737,146 @@ describe('logger', () => {
     });
   });
 
-  describe('logRequestResponse', () => {
-    let mockResponse: Partial<Response>;
-    let consoleSpy: jest.SpyInstance;
+  describe('closeLogger', () => {
+    // Save original transports state and restore after each test
+    let originalTransports: any[];
 
     beforeEach(() => {
-      consoleSpy = jest.spyOn(console, 'error').mockImplementation();
+      originalTransports = [...mockLogger.transports];
+    });
+
+    afterEach(() => {
+      // Restore transports to original state
+      mockLogger.transports.length = 0;
+      mockLogger.transports.push(...originalTransports);
+    });
+
+    it('should set shutdown flag when closing', async () => {
+      // Create mock file transports
+      const mockFileTransport1 = {
+        filename: '/mock/path/debug.log',
+      };
+      const mockFileTransport2 = {
+        filename: '/mock/path/error.log',
+      };
+
+      // Make transports appear as File instances
+      Object.setPrototypeOf(mockFileTransport1, winstonMock.transports.File.prototype);
+      Object.setPrototypeOf(mockFileTransport2, winstonMock.transports.File.prototype);
+
+      // Set up transports array with file transports
+      mockLogger.transports.length = 0;
+      mockLogger.transports.push(mockFileTransport1 as any, mockFileTransport2 as any);
+
+      // Reset shutdown flag
+      logger.setLoggerShuttingDown(false);
+
+      await logger.closeLogger();
+
+      // Shutdown flag should be set (critical for preventing writes during shutdown)
+      expect(logger.getLoggerShuttingDown()).toBe(true);
+
+      // Reset for other tests
+      logger.setLoggerShuttingDown(false);
+    });
+
+    it('should handle file transports gracefully', async () => {
+      const mockTransport = {
+        filename: '/mock/path/test.log',
+      };
+
+      Object.setPrototypeOf(mockTransport, winstonMock.transports.File.prototype);
+
+      mockLogger.transports.length = 0;
+      mockLogger.transports.push(mockTransport as any);
+
+      // Should not throw
+      await expect(logger.closeLogger()).resolves.not.toThrow();
+
+      // Shutdown flag should be set
+      expect(logger.getLoggerShuttingDown()).toBe(true);
+      logger.setLoggerShuttingDown(false);
+    });
+
+    it('should skip non-file transports', async () => {
+      const mockConsoleTransport = {};
+      // Don't set File prototype - this is a console transport
+
+      mockLogger.transports.length = 0;
+      mockLogger.transports.push(mockConsoleTransport as any);
+
+      await logger.closeLogger();
+
+      // Shutdown flag should still be set even with no file transports
+      expect(logger.getLoggerShuttingDown()).toBe(true);
+      logger.setLoggerShuttingDown(false);
+    });
+
+    it('should handle errors gracefully', async () => {
+      const mockTransport = {
+        filename: '/mock/path/test.log',
+      };
+
+      Object.setPrototypeOf(mockTransport, winstonMock.transports.File.prototype);
+
+      mockLogger.transports.length = 0;
+      mockLogger.transports.push(mockTransport as any);
+
+      // Should not throw
+      await expect(logger.closeLogger()).resolves.not.toThrow();
+
+      logger.setLoggerShuttingDown(false);
+    });
+
+    it('should handle empty transports array', async () => {
+      mockLogger.transports.length = 0;
+
+      logger.setLoggerShuttingDown(false);
+
+      // Should not throw
+      await expect(logger.closeLogger()).resolves.not.toThrow();
+
+      // Shutdown flag should still be set even with no transports
+      expect(logger.getLoggerShuttingDown()).toBe(true);
+      logger.setLoggerShuttingDown(false);
+    });
+
+    it('should prevent logging after shutdown flag is set', async () => {
+      const debugSpy = vi.spyOn(mockLogger, 'debug');
+
+      // Set shutdown flag
+      logger.setLoggerShuttingDown(true);
+
+      // Try to log using default export
+      logger.default.debug('This should not be logged');
+
+      // Logger should not have been called (shutdown flag prevents it)
+      expect(debugSpy).not.toHaveBeenCalled();
+
+      // Reset flag for other tests
+      logger.setLoggerShuttingDown(false);
+    });
+  });
+
+  describe('logRequestResponse', () => {
+    let mockResponse: Partial<Response>;
+    let consoleSpy: MockInstance;
+
+    beforeEach(() => {
+      consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       mockResponse = {
         ok: true,
         status: 200,
         statusText: 'OK',
-        clone: jest.fn().mockReturnValue({
-          text: jest.fn().mockResolvedValue('{"success": true}'),
+        clone: vi.fn().mockReturnValue({
+          text: vi.fn().mockResolvedValue('{"success": true}'),
         }),
       };
     });
 
     afterEach(() => {
       consoleSpy.mockRestore();
-      jest.clearAllMocks();
+      vi.clearAllMocks();
     });
 
     it('should log successful requests as debug', async () => {
@@ -802,8 +991,8 @@ describe('logger', () => {
     });
 
     it('should handle response text extraction errors', async () => {
-      mockResponse.clone = jest.fn().mockReturnValue({
-        text: jest.fn().mockRejectedValue(new Error('Failed to read response')),
+      mockResponse.clone = vi.fn().mockReturnValue({
+        text: vi.fn().mockRejectedValue(new Error('Failed to read response')),
       });
 
       await logger.logRequestResponse({
@@ -974,8 +1163,8 @@ describe('logger', () => {
     });
 
     it('should handle response with empty body', async () => {
-      mockResponse.clone = jest.fn().mockReturnValue({
-        text: jest.fn().mockResolvedValue(''),
+      mockResponse.clone = vi.fn().mockReturnValue({
+        text: vi.fn().mockResolvedValue(''),
       });
 
       await logger.logRequestResponse({
@@ -991,8 +1180,8 @@ describe('logger', () => {
     });
 
     it('should handle response with whitespace-only body', async () => {
-      mockResponse.clone = jest.fn().mockReturnValue({
-        text: jest.fn().mockResolvedValue('   \n\t  '),
+      mockResponse.clone = vi.fn().mockReturnValue({
+        text: vi.fn().mockResolvedValue('   \n\t  '),
       });
 
       await logger.logRequestResponse({

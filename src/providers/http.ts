@@ -31,6 +31,7 @@ import { REQUEST_TIMEOUT_MS } from './shared';
 import type {
   ApiProvider,
   CallApiContextParams,
+  CallApiOptionsParams,
   ProviderOptions,
   ProviderResponse,
   TokenUsage,
@@ -922,11 +923,25 @@ export function processJsonBody(
         }
         return result;
       } else if (typeof obj === 'string') {
-        try {
-          return JSON.parse(obj);
-        } catch {
-          return obj;
+        // Only parse strings that are clearly JSON objects or arrays
+        // This preserves strings that would parse to primitives (numbers, booleans, null)
+        const trimmed = obj.trim();
+        if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+          try {
+            const parsed = JSON.parse(obj);
+            // Only return parsed value if it's an object or array
+            // This prevents primitive values (numbers, booleans, null) from being converted
+            if (typeof parsed === 'object' && parsed !== null) {
+              return parsed;
+            }
+            // If it parsed to a primitive, keep the original string
+            return obj;
+          } catch {
+            return obj;
+          }
         }
+        // Not a JSON object/array, return as-is
+        return obj;
       }
       return obj;
     };
@@ -935,6 +950,8 @@ export function processJsonBody(
   }
 
   // If it's a string, attempt to parse as JSON
+  // For top-level strings, we parse JSON primitives (for backward compatibility)
+  // For nested string values in objects, we only parse objects/arrays (see processNestedValues)
   if (typeof rendered === 'string') {
     try {
       return JSON.parse(rendered);
@@ -1515,7 +1532,11 @@ export class HttpProvider implements ApiProvider {
     );
   }
 
-  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
     const vars = {
       ...(context?.vars || {}),
       prompt,
@@ -1543,7 +1564,7 @@ export class HttpProvider implements ApiProvider {
     }
 
     if (this.config.request) {
-      return this.callApiWithRawRequest(vars, context);
+      return this.callApiWithRawRequest(vars, context, options);
     }
 
     const defaultHeaders = this.getDefaultHeaders(this.config.body);
@@ -1619,6 +1640,7 @@ export class HttpProvider implements ApiProvider {
     const fetchOptions: any = {
       method: renderedConfig.method,
       headers: renderedConfig.headers,
+      ...(options?.abortSignal && { signal: options.abortSignal }),
       ...(method !== 'GET' &&
         renderedConfig.body != null && {
           body: contentTypeIsJson(headers)
@@ -1728,6 +1750,7 @@ export class HttpProvider implements ApiProvider {
   private async callApiWithRawRequest(
     vars: Record<string, any>,
     context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     invariant(this.config.request, 'Expected request to be set in http provider config');
 
@@ -1779,6 +1802,7 @@ export class HttpProvider implements ApiProvider {
     const fetchOptions: any = {
       method: parsedRequest.method,
       headers: parsedRequest.headers,
+      ...(options?.abortSignal && { signal: options.abortSignal }),
       ...(parsedRequest.body?.text && { body: parsedRequest.body.text.trim() }),
     };
 

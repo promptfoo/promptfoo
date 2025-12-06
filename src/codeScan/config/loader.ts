@@ -9,7 +9,7 @@ import path from 'path';
 
 import yaml from 'js-yaml';
 import { type Config, ConfigSchema, DEFAULT_CONFIG } from './schema';
-import { ConfigLoadError } from '../../types/codeScan';
+import { ConfigLoadError, validateSeverity } from '../../types/codeScan';
 
 /**
  * Load configuration from a YAML file
@@ -116,7 +116,6 @@ export function mergeConfigWithOptions(config: Config, options: ConfigMergeOptio
   if (options.minSeverity || options.minimumSeverity) {
     const cliSeverity = (options.minSeverity || options.minimumSeverity) as string;
     // Validate severity input (throws ZodError if invalid)
-    const { validateSeverity } = require('../../types/codeScan');
     merged.minimumSeverity = validateSeverity(cliSeverity);
   }
 

@@ -1,3 +1,4 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   calculateHyperbolicCost,
   createHyperbolicProvider,
@@ -23,7 +24,7 @@ describe('HyperbolicProvider', () => {
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('should create provider with correct config', () => {
@@ -61,7 +62,7 @@ describe('HyperbolicProvider', () => {
       },
     };
 
-    jest.spyOn(OpenAiChatCompletionProvider.prototype, 'callApi').mockResolvedValue(mockResponse);
+    vi.spyOn(OpenAiChatCompletionProvider.prototype, 'callApi').mockResolvedValue(mockResponse);
 
     const result = await provider.callApi('test prompt');
 
@@ -89,7 +90,7 @@ describe('HyperbolicProvider', () => {
       },
     };
 
-    jest.spyOn(OpenAiChatCompletionProvider.prototype, 'callApi').mockResolvedValue(mockResponse);
+    vi.spyOn(OpenAiChatCompletionProvider.prototype, 'callApi').mockResolvedValue(mockResponse);
 
     const result = await provider.callApi('test prompt');
 
@@ -102,7 +103,7 @@ describe('HyperbolicProvider', () => {
 
   it('should handle error response', async () => {
     const mockResponse = { error: 'API error' };
-    jest.spyOn(OpenAiChatCompletionProvider.prototype, 'callApi').mockResolvedValue(mockResponse);
+    vi.spyOn(OpenAiChatCompletionProvider.prototype, 'callApi').mockResolvedValue(mockResponse);
 
     const result = await provider.callApi('test prompt');
     expect(result.error).toBe('API error');
@@ -117,7 +118,7 @@ describe('HyperbolicProvider', () => {
       },
     };
 
-    jest.spyOn(OpenAiChatCompletionProvider.prototype, 'callApi').mockResolvedValue(mockResponse);
+    vi.spyOn(OpenAiChatCompletionProvider.prototype, 'callApi').mockResolvedValue(mockResponse);
 
     const result = await provider.callApi('test prompt');
     expect(result.tokenUsage.completionDetails).toBeUndefined();
@@ -133,7 +134,7 @@ describe('HyperbolicProvider', () => {
       cached: false,
     };
 
-    jest.spyOn(OpenAiChatCompletionProvider.prototype, 'callApi').mockResolvedValue(mockResponse);
+    vi.spyOn(OpenAiChatCompletionProvider.prototype, 'callApi').mockResolvedValue(mockResponse);
 
     const result = await provider.callApi('test prompt');
     expect(result.cost).toBe((0.5 / 1e6) * 1000 + (2.18 / 1e6) * 500);
