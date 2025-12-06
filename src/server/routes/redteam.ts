@@ -34,6 +34,120 @@ import {
   getPluginConfigurationError,
   RemoteGenerationDisabledError,
 } from '../services/redteamTestCaseGenerationService';
+import type { Job, JobError, JobMetrics } from '../../types';
+
+/**
+ * Helper to create initial job metrics
+ */
+function createInitialMetrics(): JobMetrics {
+  return {
+    testPassCount: 0,
+    testFailCount: 0,
+    testErrorCount: 0,
+    tokenUsage: {
+      total: 0,
+      prompt: 0,
+      completion: 0,
+      numRequests: 0,
+    },
+    totalLatencyMs: 0,
+  };
+}
+
+/**
+ * Helper to add an error to a job with deduplication
+ */
+function addJobError(job: Job, errorType: JobError['type'], message: string): void {
+  if (!job.errors) {
+    job.errors = [];
+  }
+
+  // Check for existing error with same type and message
+  const existing = job.errors.find((e) => e.type === errorType && e.message === message);
+  if (existing) {
+    existing.count++;
+    existing.timestamp = Date.now();
+  } else {
+    job.errors.push({
+      type: errorType,
+      message,
+      timestamp: Date.now(),
+      count: 1,
+    });
+  }
+}
+
+/**
+ * Detect phase and detail from log message
+ */
+function detectPhaseFromLog(
+  message: string,
+  currentPhase: Job['phase'],
+): { phase: Job['phase']; detail?: string } | null {
+  // Generation phase indicators
+  if (message.includes('Generating test cases')) {
+    return { phase: 'generating', detail: 'Initializing test generation...' };
+  }
+  if (message.includes('Extracting system purpose')) {
+    return { phase: 'generating', detail: 'Extracting system purpose...' };
+  }
+  if (message.includes('Extracting entities')) {
+    return { phase: 'generating', detail: 'Extracting entities...' };
+  }
+  const pluginMatch = message.match(/Generating tests for (\S+)/);
+  if (pluginMatch) {
+    return { phase: 'generating', detail: `Generating ${pluginMatch[1]} tests...` };
+  }
+  const strategyMatch = message.match(/Generating (\S+) tests/);
+  if (strategyMatch && !message.includes('Generating tests for')) {
+    return { phase: 'generating', detail: `Applying ${strategyMatch[1]} strategy...` };
+  }
+
+  // Evaluation phase indicators
+  if (message.includes('Running scan')) {
+    return { phase: 'evaluating', detail: 'Starting evaluation...' };
+  }
+  if (message.includes('Evaluating')) {
+    return { phase: 'evaluating' };
+  }
+
+  // Completion indicators
+  if (message.includes('Red team scan complete')) {
+    return { phase: 'complete' };
+  }
+
+  // Error detection
+  if (message.toLowerCase().includes('rate limit')) {
+    return { phase: currentPhase }; // Keep current phase, will add error separately
+  }
+
+  return null;
+}
+
+/**
+ * Detect error type from log message
+ */
+function detectErrorFromLog(message: string): { type: JobError['type']; message: string } | null {
+  const lowerMessage = message.toLowerCase();
+
+  if (lowerMessage.includes('rate limit')) {
+    return { type: 'rate_limit', message: 'Rate limit exceeded' };
+  }
+  if (lowerMessage.includes('timeout')) {
+    return { type: 'timeout', message: 'Request timed out' };
+  }
+  if (lowerMessage.includes('error') && lowerMessage.includes('target')) {
+    return { type: 'target_error', message };
+  }
+  if (lowerMessage.includes('error') && lowerMessage.includes('grad')) {
+    return { type: 'grader_error', message };
+  }
+  if (message.startsWith('Error:')) {
+    return { type: 'unknown', message: message.substring(7).trim() };
+  }
+
+  return null;
+}
 
 export const redteamRouter = Router();
 
@@ -234,15 +348,22 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
   currentJobId = id;
   currentAbortController = new AbortController();
 
-  // Initialize job status with empty logs array
-  evalJobs.set(id, {
+  // Initialize job status with enhanced fields
+  const job: Job = {
     evalId: null,
     status: 'in-progress',
     progress: 0,
     total: 0,
     result: null,
     logs: [],
-  });
+    // Enhanced fields
+    phase: 'initializing',
+    phaseDetail: 'Starting red team evaluation...',
+    startedAt: Date.now(),
+    metrics: createInitialMetrics(),
+    errors: [],
+  };
+  evalJobs.set(id, job);
 
   // Set web UI mode
   cliState.webUI = true;
@@ -262,6 +383,32 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
         const job = evalJobs.get(id);
         if (job) {
           job.logs.push(message);
+
+          // Detect phase changes from log messages
+          const phaseInfo = detectPhaseFromLog(message, job.phase);
+          if (phaseInfo) {
+            job.phase = phaseInfo.phase;
+            if (phaseInfo.detail) {
+              job.phaseDetail = phaseInfo.detail;
+            }
+          }
+
+          // Detect and track errors from log messages
+          const errorInfo = detectErrorFromLog(message);
+          if (errorInfo) {
+            addJobError(job, errorInfo.type, errorInfo.message);
+          }
+        }
+      }
+    },
+    progressCallback: (progress: number, total: number, _index: number, _evalStep: any) => {
+      if (currentJobId === id) {
+        const job = evalJobs.get(id);
+        if (job) {
+          job.progress = progress;
+          job.total = total;
+          job.phase = 'evaluating';
+          job.phaseDetail = `Evaluating probe ${progress}/${total}...`;
         }
       }
     },
@@ -274,6 +421,58 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
         job.status = 'complete';
         job.result = summary;
         job.evalId = evalResult?.id ?? null;
+        job.phase = 'complete';
+        job.phaseDetail = 'Evaluation complete';
+
+        // Populate metrics from results
+        if (summary && summary.results) {
+          const results = summary.results;
+          let passCount = 0;
+          let failCount = 0;
+          let errorCount = 0;
+
+          // Count pass/fail/error from results
+          for (const result of results) {
+            if (result.error) {
+              errorCount++;
+            } else if (result.success) {
+              passCount++;
+            } else {
+              failCount++;
+            }
+          }
+
+          if (job.metrics) {
+            job.metrics.testPassCount = passCount;
+            job.metrics.testFailCount = failCount;
+            job.metrics.testErrorCount = errorCount;
+          }
+
+          // Calculate top categories for vulnerabilities (failed tests)
+          const categoryCount: Record<string, number> = {};
+          for (const result of results) {
+            if (!result.success && !result.error) {
+              // This is a vulnerability (failed test)
+              const pluginId =
+                (result.vars as Record<string, unknown>)?.pluginId ||
+                (result as Record<string, unknown>).pluginId ||
+                'unknown';
+              const category = String(pluginId);
+              categoryCount[category] = (categoryCount[category] || 0) + 1;
+            }
+          }
+
+          // Sort by count and take top 5
+          const topCategories = Object.entries(categoryCount)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 5)
+            .map(([name, count]) => ({ name, count }));
+
+          job.summary = {
+            vulnerabilitiesFound: failCount,
+            topCategories,
+          };
+        }
       }
       if (currentJobId === id) {
         cliState.webUI = false;
@@ -286,10 +485,13 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
       const job = evalJobs.get(id);
       if (job && currentJobId === id) {
         job.status = 'error';
+        job.phase = 'error';
+        job.phaseDetail = 'Evaluation failed';
         job.logs.push(`Error: ${error.message}`);
         if (error.stack) {
           job.logs.push(`Stack trace: ${error.stack}`);
         }
+        addJobError(job, 'unknown', error.message);
       }
       if (currentJobId === id) {
         cliState.webUI = false;

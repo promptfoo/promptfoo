@@ -91,26 +91,29 @@ evalRouter.get('/job/:id', (req: Request, res: Response): void => {
     res.status(404).json({ error: 'Job not found' });
     return;
   }
+
+  // Return all job fields including enhanced ones
+  const response: Record<string, unknown> = {
+    status: job.status,
+    progress: job.progress,
+    total: job.total,
+    logs: job.logs,
+    // Enhanced fields
+    phase: job.phase,
+    phaseDetail: job.phaseDetail,
+    startedAt: job.startedAt,
+    metrics: job.metrics,
+    errors: job.errors,
+  };
+
   if (job.status === 'complete') {
-    res.json({
-      status: 'complete',
-      result: job.result,
-      evalId: job.evalId,
-      logs: job.logs,
-    });
-  } else if (job.status === 'error') {
-    res.json({
-      status: 'error',
-      logs: job.logs,
-    });
-  } else {
-    res.json({
-      status: 'in-progress',
-      progress: job.progress,
-      total: job.total,
-      logs: job.logs,
-    });
+    response.result = job.result;
+    response.evalId = job.evalId;
+    response.summary = job.summary;
+    response.generation = job.generation;
   }
+
+  res.json(response);
 });
 
 evalRouter.patch('/:id', (req: Request, res: Response): void => {
