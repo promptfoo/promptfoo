@@ -138,6 +138,17 @@ function getDrizzleTask(): CopyTask {
 }
 
 /**
+ * Get the proto files copy task for OTLP protobuf support.
+ */
+function getProtoTask(): CopyTask {
+  return {
+    src: path.join(SRC, 'tracing', 'proto'),
+    dest: path.join(DIST, 'src', 'tracing', 'proto'),
+    recursive: true,
+  };
+}
+
+/**
  * Verify that all critical build outputs exist.
  */
 function verifyBuildOutputs(): string[] {
@@ -222,7 +233,7 @@ export function postbuild(): PostbuildResult {
   }
 
   // Gather all copy tasks
-  const copyTasks = [...getHtmlFiles(), ...getWrapperTasks(), getDrizzleTask()];
+  const copyTasks = [...getHtmlFiles(), ...getWrapperTasks(), getDrizzleTask(), getProtoTask()];
 
   // Clean destinations to prevent stale files
   cleanDestinations(copyTasks);

@@ -1,0 +1,112 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: OpenTelemetry tracing with Python (protobuf format)
+
+providers:
+  - python:provider.py
+
+prompts:
+  - 'Explain how {{topic}} works in simple terms'
+
+tests:
+  - vars:
+      topic: 'quantum computing'
+    metadata:
+      tracingEnabled: true
+      testCaseId: 'python-test-1'
+    assert:
+      # Ensure the main workflow span exists
+      - type: trace-span-count
+        value:
+          pattern: 'rag_agent_workflow'
+          min: 1
+          max: 1
+
+      # Ensure we retrieve exactly 3 documents
+      - type: trace-span-count
+        value:
+          pattern: 'retrieve_document_*'
+          min: 3
+          max: 3
+
+      # Ensure all reasoning steps occur
+      - type: trace-span-count
+        value:
+          pattern: 'reasoning_*'
+          min: 3
+
+      # Ensure the LLM generation span exists
+      - type: trace-span-count
+        value:
+          pattern: 'llm_generation'
+          min: 1
+
+      # Ensure the overall workflow completes quickly
+      - type: trace-span-duration
+        value:
+          pattern: 'rag_agent_workflow'
+          max: 5000 # 5 seconds max
+
+      # Ensure no errors occur
+      - type: trace-error-spans
+        value:
+          max_count: 0
+
+  - vars:
+      topic: 'machine learning'
+    metadata:
+      tracingEnabled: true
+      testCaseId: 'python-test-2'
+    assert:
+      - type: trace-span-count
+        value:
+          pattern: 'rag_agent_workflow'
+          min: 1
+          max: 1
+
+      - type: trace-span-count
+        value:
+          pattern: 'retrieve_document_*'
+          min: 3
+          max: 3
+
+      - type: trace-span-count
+        value:
+          pattern: 'reasoning_*'
+          min: 3
+
+      - type: trace-span-duration
+        value:
+          pattern: 'rag_agent_workflow'
+          max: 5000
+
+      - type: trace-error-spans
+        value:
+          max_count: 0
+
+# Default assertions for all test cases
+defaultTest:
+  assert:
+    # Monitor overall latency
+    - type: trace-span-duration
+      value:
+        pattern: '*'
+        max: 2000
+        percentile: 95
+      weight: 0
+      metric: p95_latency
+
+    # Ensure retrieval operations are fast
+    - type: trace-span-duration
+      value:
+        pattern: 'retrieve_document_*'
+        max: 500
+
+# Tracing configuration - note we accept both JSON and protobuf
+tracing:
+  enabled: true
+  otlp:
+    http:
+      enabled: true
+      port: 4318
+      # Python's OTLP exporter uses protobuf by default
+      acceptFormats: ['json', 'protobuf']
