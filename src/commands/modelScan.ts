@@ -170,6 +170,8 @@ function warnDeprecatedOptions(options: Record<string, unknown>): void {
  * Spawn modelaudit with proper signal handling and Promise wrapper.
  * Returns stdout/stderr content when capturing output, or empty strings for inherited stdio.
  */
+let modelAudit: ChildProcess | null = null;
+
 function spawnModelAudit(
   args: string[],
   options: {
@@ -188,21 +190,8 @@ function spawnModelAudit(
       ? { env: options.env }
       : { stdio: 'inherit' as const, env: options.env };
 
-    const modelAudit: ChildProcess = spawn('modelaudit', args, spawnOptions);
+    modelAudit = spawn('modelaudit', args, spawnOptions);
 
-    // Graceful shutdown - kill child on SIGINT/SIGTERM
-    const cleanup = () => {
-      if (!modelAudit.killed) {
-        modelAudit.kill('SIGTERM');
-      }
-    };
-    process.once('SIGINT', cleanup);
-    process.once('SIGTERM', cleanup);
-
-    const removeListeners = () => {
-      process.removeListener('SIGINT', cleanup);
-      process.removeListener('SIGTERM', cleanup);
-    };
 
     if (options.captureOutput) {
       modelAudit.stdout?.on('data', (data: Buffer) => {
@@ -767,6 +756,9 @@ export function modelScanCommand(program: Command): void {
                 return;
               }
               cleanedUp = true;
+              if (modelAudit) {
+                modelAudit.kill('SIGTERM');
+              }
               try {
                 // Use sync version for signal handlers which can't be async
                 unlinkSync(tempOutputPath);
