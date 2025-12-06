@@ -24,7 +24,6 @@ import {
   withGenAISpan,
 } from '../../src/tracing/genaiTracer';
 import type { GenAISpanContext, GenAISpanResult } from '../../src/tracing/genaiTracer';
-import type { ProviderResponse } from '../../src/types';
 
 // Mock external dependencies for provider tests
 vi.mock('../../src/cache', () => ({

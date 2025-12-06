@@ -1,8 +1,13 @@
 // These metrics are ported from DeepEval.
 // https://docs.confident-ai.com/docs/metrics-conversation-relevancy. See APACHE_LICENSE for license.
-import { getAndCheckProvider, fail } from '../../matchers';
+import { getAndCheckProvider, fail, callProviderWithContext } from '../../matchers';
 import { getDefaultProviders } from '../../providers/defaults';
-import type { GradingConfig, GradingResult, TokenUsage } from '../../types/index';
+import type {
+  CallApiContextParams,
+  GradingConfig,
+  GradingResult,
+  TokenUsage,
+} from '../../types/index';
 import invariant from '../../util/invariant';
 import { extractJsonObjects } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
@@ -25,6 +30,7 @@ export async function matchesConversationRelevance(
   threshold: number,
   vars?: Record<string, string | object>,
   grading?: GradingConfig,
+  providerCallContext?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   const textProvider = await getAndCheckProvider(
     'text',
@@ -70,7 +76,13 @@ export async function matchesConversationRelevance(
     promptText = ConversationRelevancyTemplate.generateVerdicts(messageRoles);
   }
 
-  const resp = await textProvider.callApi(promptText);
+  const resp = await callProviderWithContext(
+    textProvider,
+    promptText,
+    'conversation-relevance',
+    { messages: renderedMessages, ...(vars || {}) },
+    providerCallContext,
+  );
   if (resp.error || !resp.output) {
     return fail(resp.error || 'No output', resp.tokenUsage);
   }

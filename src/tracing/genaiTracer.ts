@@ -1,7 +1,10 @@
 import {
   trace,
+  context,
+  propagation,
   SpanKind,
   SpanStatusCode,
+  ROOT_CONTEXT,
   type Span,
   type Tracer,
   type Attributes,
@@ -52,7 +55,13 @@ export const PromptfooAttributes = {
   EVAL_ID: 'promptfoo.eval.id',
   TEST_INDEX: 'promptfoo.test.index',
   PROMPT_LABEL: 'promptfoo.prompt.label',
+  CACHE_HIT: 'promptfoo.cache_hit',
+  REQUEST_BODY: 'promptfoo.request.body',
+  RESPONSE_BODY: 'promptfoo.response.body',
 } as const;
+
+/** Maximum length for request/response body attributes (characters) */
+const MAX_BODY_LENGTH = 4096;
 
 /**
  * Context for creating a GenAI span.
@@ -81,6 +90,12 @@ export interface GenAISpanContext {
   evalId?: string;
   testIndex?: number;
   promptLabel?: string;
+
+  // W3C Trace Context - for propagating trace context from evaluation
+  traceparent?: string;
+
+  // Request body (will be truncated to MAX_BODY_LENGTH)
+  requestBody?: string;
 }
 
 /**
@@ -91,6 +106,10 @@ export interface GenAISpanResult {
   responseModel?: string;
   responseId?: string;
   finishReasons?: string[];
+  /** Whether the response was served from cache */
+  cacheHit?: boolean;
+  /** Response body (will be truncated to MAX_BODY_LENGTH) */
+  responseBody?: string;
 }
 
 /**
@@ -147,39 +166,51 @@ export async function withGenAISpan<T>(
   // Span name follows GenAI convention: "{operation} {model}"
   const spanName = `${ctx.operationName} ${ctx.model}`;
 
+  // Extract parent context from traceparent if provided
+  // This allows spans to be linked to the evaluation's trace
+  let parentContext = context.active();
+  if (ctx.traceparent) {
+    const carrier = { traceparent: ctx.traceparent };
+    parentContext = propagation.extract(ROOT_CONTEXT, carrier);
+  }
+
+  // Create the span within the parent context
+  const spanCallback = async (span: Span): Promise<T> => {
+    try {
+      const value = await fn(span);
+
+      // Set response attributes if extractor provided
+      if (resultExtractor) {
+        const result = resultExtractor(value);
+        setGenAIResponseAttributes(span, result);
+      }
+
+      span.setStatus({ code: SpanStatusCode.OK });
+      return value;
+    } catch (error) {
+      span.setStatus({
+        code: SpanStatusCode.ERROR,
+        message: error instanceof Error ? error.message : String(error),
+      });
+
+      if (error instanceof Error) {
+        span.recordException(error);
+      }
+
+      throw error;
+    } finally {
+      span.end();
+    }
+  };
+
   return tracer.startActiveSpan(
     spanName,
     {
       kind: SpanKind.CLIENT,
       attributes: buildRequestAttributes(ctx),
     },
-    async (span) => {
-      try {
-        const value = await fn(span);
-
-        // Set response attributes if extractor provided
-        if (resultExtractor) {
-          const result = resultExtractor(value);
-          setGenAIResponseAttributes(span, result);
-        }
-
-        span.setStatus({ code: SpanStatusCode.OK });
-        return value;
-      } catch (error) {
-        span.setStatus({
-          code: SpanStatusCode.ERROR,
-          message: error instanceof Error ? error.message : String(error),
-        });
-
-        if (error instanceof Error) {
-          span.recordException(error);
-        }
-
-        throw error;
-      } finally {
-        span.end();
-      }
-    },
+    parentContext,
+    spanCallback,
   );
 }
 
@@ -231,7 +262,22 @@ function buildRequestAttributes(ctx: GenAISpanContext): Attributes {
     attrs[PromptfooAttributes.PROMPT_LABEL] = ctx.promptLabel;
   }
 
+  // Request body (truncated)
+  if (ctx.requestBody) {
+    attrs[PromptfooAttributes.REQUEST_BODY] = truncateBody(ctx.requestBody);
+  }
+
   return attrs;
+}
+
+/**
+ * Truncate a body string to MAX_BODY_LENGTH, adding an indicator if truncated.
+ */
+function truncateBody(body: string): string {
+  if (body.length <= MAX_BODY_LENGTH) {
+    return body;
+  }
+  return body.slice(0, MAX_BODY_LENGTH - 13) + '... [truncated]';
 }
 
 /**
@@ -290,6 +336,14 @@ export function setGenAIResponseAttributes(span: Span, result: GenAISpanResult):
   }
   if (result.finishReasons && result.finishReasons.length > 0) {
     span.setAttribute(GenAIAttributes.RESPONSE_FINISH_REASONS, result.finishReasons);
+  }
+
+  // Promptfoo-specific response attributes
+  if (result.cacheHit !== undefined) {
+    span.setAttribute(PromptfooAttributes.CACHE_HIT, result.cacheHit);
+  }
+  if (result.responseBody) {
+    span.setAttribute(PromptfooAttributes.RESPONSE_BODY, truncateBody(result.responseBody));
   }
 }
 

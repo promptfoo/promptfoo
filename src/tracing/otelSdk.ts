@@ -1,4 +1,5 @@
-import { diag, DiagConsoleLogger, DiagLogLevel } from '@opentelemetry/api';
+import { diag, DiagConsoleLogger, DiagLogLevel, propagation } from '@opentelemetry/api';
+import { W3CTraceContextPropagator } from '@opentelemetry/core';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import { Resource } from '@opentelemetry/resources';
 import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from '@opentelemetry/semantic-conventions';
@@ -13,6 +14,30 @@ import type { OtelConfig } from './otelConfig';
 // Singleton instances
 let provider: NodeTracerProvider | null = null;
 let initialized = false;
+
+// Use a global symbol to track handlers across module resets (important for tests)
+const OTEL_HANDLERS_KEY = Symbol.for('promptfoo.otelHandlers');
+
+interface OtelHandlers {
+  sigTermHandler: (() => void) | null;
+  sigIntHandler: (() => void) | null;
+  beforeExitHandler: (() => Promise<void>) | null;
+  registered: boolean;
+}
+
+// Get or create the global handlers registry
+function getHandlers(): OtelHandlers {
+  const globalAny = globalThis as Record<symbol, OtelHandlers | undefined>;
+  if (!globalAny[OTEL_HANDLERS_KEY]) {
+    globalAny[OTEL_HANDLERS_KEY] = {
+      sigTermHandler: null,
+      sigIntHandler: null,
+      beforeExitHandler: null,
+      registered: false,
+    };
+  }
+  return globalAny[OTEL_HANDLERS_KEY]!;
+}
 
 /**
  * Initialize the OpenTelemetry SDK for tracing LLM provider calls.
@@ -45,6 +70,10 @@ export function initializeOtel(config: OtelConfig): void {
   if (config.debug) {
     diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.DEBUG);
   }
+
+  // Register W3C Trace Context propagator for traceparent header support
+  propagation.setGlobalPropagator(new W3CTraceContextPropagator());
+  logger.debug('[OtelSdk] Registered W3C Trace Context propagator');
 
   // Create resource with service info
   const resource = new Resource({
@@ -100,6 +129,7 @@ export async function shutdownOtel(): Promise<void> {
   } finally {
     provider = null;
     initialized = false;
+    cleanupShutdownHandlers();
   }
 }
 
@@ -131,19 +161,61 @@ export function isOtelInitialized(): boolean {
 
 /**
  * Set up handlers for graceful shutdown on process signals.
+ * Uses once() listeners and tracks registration globally to avoid duplicates
+ * across module resets (important for tests).
  */
 function setupShutdownHandlers(): void {
+  const handlers = getHandlers();
+
+  // Skip if handlers are already registered
+  if (handlers.registered) {
+    return;
+  }
+
   const shutdown = async (signal: string) => {
     logger.debug(`[OtelSdk] Received ${signal}, shutting down`);
     await shutdownOtel();
   };
 
+  // Create handler functions so we can remove them later if needed
+  handlers.sigTermHandler = () => {
+    shutdown('SIGTERM');
+  };
+  handlers.sigIntHandler = () => {
+    shutdown('SIGINT');
+  };
+  handlers.beforeExitHandler = async () => {
+    await flushOtel();
+  };
+
   // Handle common termination signals
-  process.once('SIGTERM', () => shutdown('SIGTERM'));
-  process.once('SIGINT', () => shutdown('SIGINT'));
+  process.once('SIGTERM', handlers.sigTermHandler);
+  process.once('SIGINT', handlers.sigIntHandler);
 
   // Handle beforeExit for graceful shutdown
-  process.once('beforeExit', async () => {
-    await flushOtel();
-  });
+  process.once('beforeExit', handlers.beforeExitHandler);
+
+  handlers.registered = true;
+}
+
+/**
+ * Clean up shutdown handlers.
+ * Called during shutdown to prevent duplicate registrations on reinit.
+ */
+function cleanupShutdownHandlers(): void {
+  const handlers = getHandlers();
+
+  if (handlers.sigTermHandler) {
+    process.removeListener('SIGTERM', handlers.sigTermHandler);
+    handlers.sigTermHandler = null;
+  }
+  if (handlers.sigIntHandler) {
+    process.removeListener('SIGINT', handlers.sigIntHandler);
+    handlers.sigIntHandler = null;
+  }
+  if (handlers.beforeExitHandler) {
+    process.removeListener('beforeExit', handlers.beforeExitHandler);
+    handlers.beforeExitHandler = null;
+  }
+  handlers.registered = false;
 }

@@ -97,7 +97,7 @@ function euclideanDistance(vecA: number[], vecB: number[]): number {
  * override. This ensures originalProvider from context is preserved while
  * allowing this call to specify its own prompt metadata.
  */
-function callProviderWithContext(
+export function callProviderWithContext(
   provider: ApiProvider,
   prompt: string,
   label: string,
@@ -1723,6 +1723,7 @@ export async function matchesSearchRubric(
   vars?: Record<string, string | object>,
   assertion?: Assertion,
   _provider?: ApiProvider,
+  providerCallContext?: CallApiContextParams,
 ): Promise<GradingResult> {
   if (!grading) {
     throw new Error(
@@ -1767,7 +1768,13 @@ export async function matchesSearchRubric(
   });
 
   // Get the evaluation from the search provider
-  const resp = await searchProvider.callApi(prompt);
+  const resp = await callProviderWithContext(
+    searchProvider,
+    prompt,
+    'search-rubric',
+    { output: tryParse(llmOutput), rubric, ...(vars || {}) },
+    providerCallContext,
+  );
 
   if (resp.error || !resp.output) {
     return {

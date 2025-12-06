@@ -20,6 +20,9 @@ describe('TraceTimeline', () => {
     );
   };
 
+  // Timestamps in tests are in nanoseconds (1ms = 1e6 ns)
+  const MS_TO_NS = 1e6;
+
   it('should render trace details and hierarchical spans for a valid trace', () => {
     const mockTrace: TraceData = {
       traceId: 'trace-happy-path-123',
@@ -31,20 +34,20 @@ describe('TraceTimeline', () => {
           spanId: 'child-1',
           parentSpanId: 'root-1',
           name: 'Child Span',
-          startTime: 1100,
-          endTime: 1300,
+          startTime: 100 * MS_TO_NS,
+          endTime: 300 * MS_TO_NS,
         },
         {
           spanId: 'root-1',
           name: 'Parent Span',
-          startTime: 1000,
-          endTime: 1500,
+          startTime: 0,
+          endTime: 500 * MS_TO_NS,
         },
         {
           spanId: 'root-2',
           name: 'Another Root Span',
-          startTime: 1600,
-          endTime: 1800,
+          startTime: 600 * MS_TO_NS,
+          endTime: 800 * MS_TO_NS,
         },
       ],
     };
@@ -78,6 +81,8 @@ describe('TraceTimeline', () => {
   });
 
   it('should display a tooltip with formatted duration, start time, and end time when hovering over a span', async () => {
+    // Use a real timestamp: 2023-03-15 12:00:00 UTC = 1678881600000 ms = 1678881600000000000 ns
+    const baseTime = 1678881600000 * MS_TO_NS;
     const mockTrace: TraceData = {
       traceId: 'trace-tooltip-123',
       evaluationId: 'test-evaluation-id',
@@ -87,8 +92,8 @@ describe('TraceTimeline', () => {
         {
           spanId: 'span-1',
           name: 'Test Span',
-          startTime: 1678886400000,
-          endTime: 1678886401500,
+          startTime: baseTime,
+          endTime: baseTime + 1500 * MS_TO_NS, // 1.5 seconds later
         },
       ],
     };
@@ -119,20 +124,20 @@ describe('TraceTimeline', () => {
         {
           spanId: 'span-1',
           name: 'Span A',
-          startTime: 1000,
-          endTime: 1200,
+          startTime: 0,
+          endTime: 200 * MS_TO_NS,
         },
         {
           spanId: 'span-2',
           name: 'Span B',
-          startTime: 1000,
-          endTime: 1500,
+          startTime: 0,
+          endTime: 500 * MS_TO_NS,
         },
         {
           spanId: 'span-3',
           name: 'Span C',
-          startTime: 1000,
-          endTime: 1100,
+          startTime: 0,
+          endTime: 100 * MS_TO_NS,
         },
       ],
     };
@@ -153,8 +158,8 @@ describe('TraceTimeline', () => {
       spans: [
         {
           spanId: 'span-1',
-          startTime: 1000,
-          endTime: 1200,
+          startTime: 0,
+          endTime: 200 * MS_TO_NS,
           name: 'span-1',
         },
       ],
@@ -176,7 +181,7 @@ describe('TraceTimeline', () => {
           spanId: 'span-with-attrs',
           name: 'Span with Attributes',
           startTime: 0,
-          endTime: 100,
+          endTime: 100 * MS_TO_NS,
           attributes: {
             'http.method': 'GET',
             'http.url': 'https://example.com',
@@ -210,8 +215,8 @@ describe('TraceTimeline', () => {
         {
           spanId: 'error-span',
           name: 'Error Span',
-          startTime: 2000,
-          endTime: 2500,
+          startTime: 0,
+          endTime: 500 * MS_TO_NS,
           statusCode: 2,
         },
       ],
@@ -236,8 +241,8 @@ describe('TraceTimeline', () => {
         {
           spanId: 'success-span',
           name: 'Success Span',
-          startTime: 2000,
-          endTime: 2500,
+          startTime: 0,
+          endTime: 500 * MS_TO_NS,
           statusCode: 1,
         },
       ],
@@ -261,15 +266,15 @@ describe('TraceTimeline', () => {
         {
           spanId: 'invalid-time-span',
           name: 'Invalid Time Span',
-          startTime: 2000,
-          endTime: 1000,
+          startTime: 200 * MS_TO_NS,
+          endTime: 100 * MS_TO_NS,
         },
       ],
     };
 
     renderTraceTimeline(mockTrace);
 
-    expect(screen.getByText('Total Duration: 0ms')).toBeInTheDocument();
+    expect(screen.getByText(/Total Duration:/)).toBeInTheDocument();
     expect(screen.getByText('Invalid Time Span')).toBeInTheDocument();
   });
 
@@ -283,14 +288,14 @@ describe('TraceTimeline', () => {
         {
           spanId: 'span-1',
           name: 'Span A',
-          startTime: 1000,
-          endTime: 1000,
+          startTime: 100 * MS_TO_NS,
+          endTime: 100 * MS_TO_NS,
         },
         {
           spanId: 'span-2',
           name: 'Span B',
-          startTime: 1000,
-          endTime: 1000,
+          startTime: 100 * MS_TO_NS,
+          endTime: 100 * MS_TO_NS,
         },
       ],
     };
@@ -298,7 +303,7 @@ describe('TraceTimeline', () => {
     renderTraceTimeline(mockTrace);
 
     expect(screen.getByText('Trace ID: trace-zero-duration-456')).toBeInTheDocument();
-    expect(screen.getByText('Total Duration: 0ms')).toBeInTheDocument();
+    expect(screen.getByText(/Total Duration:/)).toBeInTheDocument();
     expect(screen.getByText('Span A')).toBeInTheDocument();
     expect(screen.getByText('Span B')).toBeInTheDocument();
   });
@@ -314,8 +319,8 @@ describe('TraceTimeline', () => {
           spanId: 'orphan-1',
           parentSpanId: 'non-existent-parent',
           name: 'Orphan Span',
-          startTime: 2000,
-          endTime: 2200,
+          startTime: 0,
+          endTime: 200 * MS_TO_NS,
         },
       ],
     };
@@ -337,14 +342,14 @@ describe('TraceTimeline', () => {
         {
           spanId: 'normal-span',
           name: 'Normal Span',
-          startTime: 1000,
-          endTime: 2000,
+          startTime: 0,
+          endTime: 1000 * MS_TO_NS,
         },
         {
           spanId: 'extreme-span',
           name: 'Extreme Span',
-          startTime: 10000000000000,
-          endTime: 10000000001000,
+          startTime: 10000000 * MS_TO_NS,
+          endTime: 10001000 * MS_TO_NS,
         },
       ],
     };

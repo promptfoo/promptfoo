@@ -32,6 +32,8 @@ import {
   startOtlpReceiverIfNeeded,
   stopOtlpReceiverIfNeeded,
 } from './tracing/evaluatorTracing';
+import { initializeOtel, shutdownOtel, flushOtel } from './tracing/otelSdk';
+import { getDefaultOtelConfig } from './tracing/otelConfig';
 import {
   type Assertion,
   type AssertionType,
@@ -1953,9 +1955,29 @@ class Evaluator {
   async evaluate(): Promise<Eval> {
     await startOtlpReceiverIfNeeded(this.testSuite);
 
+    // Initialize OTEL SDK if tracing is enabled
+    // Check both test suite level and default test metadata
+    const tracingEnabled =
+      this.testSuite.tracing?.enabled === true ||
+      this.testSuite.defaultTest?.metadata?.tracingEnabled === true ||
+      this.testSuite.tests?.some((t) => t.metadata?.tracingEnabled === true);
+
+    if (tracingEnabled) {
+      logger.debug('[Evaluator] Initializing OTEL SDK for tracing');
+      const otelConfig = getDefaultOtelConfig();
+      initializeOtel(otelConfig);
+    }
+
     try {
       return await this._runEvaluation();
     } finally {
+      // Flush and shutdown OTEL SDK
+      if (tracingEnabled) {
+        logger.debug('[Evaluator] Flushing OTEL spans...');
+        await flushOtel();
+        await shutdownOtel();
+      }
+
       if (isOtlpReceiverStarted()) {
         // Add a delay to allow providers to finish exporting spans
         logger.debug('[Evaluator] Waiting for span exports to complete...');

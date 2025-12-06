@@ -78,3 +78,16 @@ export function mergeOtelConfigs(
     debug: yamlConfig.debug ?? envConfig.debug,
   };
 }
+
+/**
+ * Get default OTEL configuration with tracing enabled.
+ * Used when tracing is enabled via test metadata but no explicit config provided.
+ */
+export function getDefaultOtelConfig(): OtelConfig {
+  const envConfig = getOtelConfigFromEnv();
+  // Enable tracing by default when this is called (since we've determined tracing should be on)
+  return {
+    ...envConfig,
+    enabled: true,
+  };
+}

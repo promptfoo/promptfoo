@@ -26,7 +26,11 @@ const mockSpan = {
 };
 
 const mockTracer = {
-  startActiveSpan: vi.fn((_name, _options, fn) => fn(mockSpan)),
+  // Handle both 3-param (name, options, fn) and 4-param (name, options, parentContext, fn) signatures
+  startActiveSpan: vi.fn((_name, _options, arg3, arg4) => {
+    const fn = typeof arg4 === 'function' ? arg4 : arg3;
+    return fn(mockSpan);
+  }),
 };
 
 vi.mock('@opentelemetry/api', async () => {
@@ -89,6 +93,7 @@ describe('genaiTracer', () => {
       expect(mockTracer.startActiveSpan).toHaveBeenCalledWith(
         'chat gpt-4',
         expect.any(Object),
+        expect.anything(), // parentContext
         expect.any(Function),
       );
     });
@@ -99,6 +104,7 @@ describe('genaiTracer', () => {
       expect(mockTracer.startActiveSpan).toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({ kind: SpanKind.CLIENT }),
+        expect.anything(), // parentContext
         expect.any(Function),
       );
     });

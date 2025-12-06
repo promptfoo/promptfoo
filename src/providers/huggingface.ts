@@ -100,6 +100,8 @@ export class HuggingfaceTextGenerationProvider implements ApiProvider {
       maxTokens: this.config.max_new_tokens,
       testIndex: context?.test?.vars?.__testIdx as number | undefined,
       promptLabel: context?.prompt?.label,
+      // W3C Trace Context for linking to evaluation trace
+      traceparent: context?.traceparent,
     };
 
     // Result extractor (Huggingface doesn't return token usage by default)

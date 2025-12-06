@@ -47,6 +47,10 @@ vi.mock('@opentelemetry/exporter-trace-otlp-http', () => ({
   },
 }));
 
+vi.mock('@opentelemetry/core', () => ({
+  W3CTraceContextPropagator: class MockW3CTraceContextPropagator {},
+}));
+
 vi.mock('@opentelemetry/resources', () => ({
   Resource: class MockResource {
     attributes: Record<string, unknown>;
@@ -69,6 +73,9 @@ vi.mock('@opentelemetry/api', () => ({
   DiagConsoleLogger: class MockDiagConsoleLogger {},
   DiagLogLevel: {
     DEBUG: 0,
+  },
+  propagation: {
+    setGlobalPropagator: vi.fn(),
   },
 }));
 

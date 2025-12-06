@@ -84,6 +84,9 @@ Each provider call creates a span with these attributes:
 - `promptfoo.provider.id` - Provider identifier
 - `promptfoo.test.index` - Test case index
 - `promptfoo.prompt.label` - Prompt label
+- `promptfoo.cache_hit` - Whether the response was served from cache
+- `promptfoo.request.body` - The request body sent to the provider (truncated to 4KB)
+- `promptfoo.response.body` - The response body from the provider (truncated to 4KB)
 
 ### Example Trace Output
 
@@ -300,6 +303,8 @@ The web UI displays traces as a hierarchical timeline showing:
 - **Status indicators**: Success (green), error (red), or unset (gray)
 - **Hover details**: Span attributes, duration, and timestamps
 - **Relative timing**: See which operations run in parallel vs. sequentially
+- **Expandable details**: Click any span to reveal full attribute information
+- **Export functionality**: Download traces as JSON for external analysis
 
 ### Understanding the Timeline
 
@@ -316,6 +321,28 @@ Each bar's width represents its duration relative to the total trace time. Hover
 - Duration in milliseconds or seconds
 - Custom attributes you've added
 - Error messages (if any)
+
+### Span Details Panel
+
+Click the expand icon on any span to reveal a detailed attributes panel showing:
+
+- **Span ID** and **Parent Span ID** for tracing relationships
+- **Start** and **End** timestamps with precision
+- **Duration** in a human-readable format
+- **Status** (OK, ERROR, or UNSET)
+- **All span attributes** including GenAI attributes, custom attributes, and Promptfoo-specific data
+
+This is useful for inspecting the full request/response bodies (`promptfoo.request.body` and `promptfoo.response.body`) and debugging provider behavior.
+
+### Exporting Traces
+
+Click the **Export Traces** button to download all traces for the current evaluation or test case as a JSON file. The export includes:
+
+- Evaluation ID and test case ID
+- Export timestamp
+- Complete trace data with all spans and attributes
+
+The exported JSON can be imported into external tools like Jaeger, Grafana Tempo, or custom analysis scripts.
 
 ## Best Practices
 

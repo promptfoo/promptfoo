@@ -225,6 +225,8 @@ export class AzureChatCompletionProvider extends AzureGenericProvider {
       // Promptfoo context from test case if available
       testIndex: context?.test?.vars?.__testIdx as number | undefined,
       promptLabel: context?.prompt?.label,
+      // W3C Trace Context for linking to evaluation trace
+      traceparent: context?.traceparent,
     };
 
     // Result extractor to set response attributes on the span

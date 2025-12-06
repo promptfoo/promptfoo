@@ -102,6 +102,10 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       // Promptfoo context from test case if available
       testIndex: context?.test?.vars?.__testIdx as number | undefined,
       promptLabel: context?.prompt?.label,
+      // W3C Trace Context for linking to evaluation trace
+      traceparent: context?.traceparent,
+      // Request body for debugging/observability
+      requestBody: prompt,
     };
 
     // Result extractor to set response attributes on the span
@@ -120,6 +124,17 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
       // Extract finish reason if available
       if (response.finishReason) {
         result.finishReasons = [response.finishReason];
+      }
+
+      // Cache hit status
+      if (response.cached !== undefined) {
+        result.cacheHit = response.cached;
+      }
+
+      // Response body for debugging/observability
+      if (response.output !== undefined) {
+        result.responseBody =
+          typeof response.output === 'string' ? response.output : JSON.stringify(response.output);
       }
 
       return result;

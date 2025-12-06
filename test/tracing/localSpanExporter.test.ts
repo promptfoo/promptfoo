@@ -103,7 +103,7 @@ describe('LocalSpanExporter', () => {
             name: 'test-span',
           }),
         ],
-        { skipTraceCheck: true },
+        { skipTraceCheck: false },
       );
     });
 
@@ -136,14 +136,14 @@ describe('LocalSpanExporter', () => {
           expect.objectContaining({ spanId: 'span-1' }),
           expect.objectContaining({ spanId: 'span-2' }),
         ]),
-        { skipTraceCheck: true },
+        { skipTraceCheck: false },
       );
 
       // Second call for trace-2 with 1 span
       expect(mockAddSpans).toHaveBeenCalledWith(
         'trace-2',
         [expect.objectContaining({ spanId: 'span-3' })],
-        { skipTraceCheck: true },
+        { skipTraceCheck: false },
       );
     });
 

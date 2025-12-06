@@ -17,8 +17,16 @@ export class LocalSpanExporter implements SpanExporter {
   export(spans: ReadableSpan[], resultCallback: (result: ExportResult) => void): void {
     // Handle async export
     this.exportAsync(spans)
-      .then(() => {
-        resultCallback({ code: ExportResultCode.SUCCESS });
+      .then((error) => {
+        if (error) {
+          // An error occurred during export
+          resultCallback({
+            code: ExportResultCode.FAILED,
+            error,
+          });
+        } else {
+          resultCallback({ code: ExportResultCode.SUCCESS });
+        }
       })
       .catch((error) => {
         logger.error('[LocalSpanExporter] Failed to export spans', { error });
@@ -31,10 +39,11 @@ export class LocalSpanExporter implements SpanExporter {
 
   /**
    * Async implementation of span export.
+   * Returns the first non-FK error encountered, or undefined if successful.
    */
-  private async exportAsync(spans: ReadableSpan[]): Promise<void> {
+  private async exportAsync(spans: ReadableSpan[]): Promise<Error | undefined> {
     if (spans.length === 0) {
-      return;
+      return undefined;
     }
 
     const traceStore = getTraceStore();
@@ -53,25 +62,35 @@ export class LocalSpanExporter implements SpanExporter {
       spansByTrace.get(traceId)!.push(spanData);
     }
 
-    // Store each trace's spans
-    // Use skipTraceCheck since OTEL spans may not have a pre-existing trace record
-    let lastError: Error | undefined;
+    // Store each trace's spans, tracking first error
+    let firstError: Error | undefined;
 
     for (const [traceId, spanDataList] of spansByTrace) {
       try {
-        await traceStore.addSpans(traceId, spanDataList, { skipTraceCheck: true });
+        // First try to add spans normally (if trace exists)
+        await traceStore.addSpans(traceId, spanDataList, { skipTraceCheck: false });
         logger.debug(`[LocalSpanExporter] Added ${spanDataList.length} spans to trace ${traceId}`);
       } catch (error) {
-        logger.error(`[LocalSpanExporter] Failed to add spans to trace ${traceId}`, { error });
-        // Continue with other traces even if one fails, but track the error
-        lastError = error instanceof Error ? error : new Error(String(error));
+        // If foreign key constraint fails, the trace doesn't exist
+        // These spans are from grading calls or other internal operations
+        // that weren't initiated through the evaluation tracing flow.
+        // Just log at debug level and skip - these spans aren't tied to an eval.
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        if (errorMessage.includes('FOREIGN KEY') || errorMessage.includes('Trace')) {
+          logger.debug(
+            `[LocalSpanExporter] Skipping ${spanDataList.length} spans for orphan trace ${traceId}`,
+          );
+        } else {
+          // Track error but continue processing other traces
+          logger.error(`[LocalSpanExporter] Failed to add spans to trace ${traceId}`, { error });
+          if (!firstError) {
+            firstError = error instanceof Error ? error : new Error(String(error));
+          }
+        }
       }
     }
 
-    // If any export failed, throw the last error to signal failure
-    if (lastError) {
-      throw lastError;
-    }
+    return firstError;
   }
 
   /**
