@@ -219,6 +219,7 @@ describe('TrueFoundry', () => {
             total: 10,
             prompt: 5,
             completion: 5,
+            numRequests: 1,
           },
           cached: false,
           cost: undefined,
@@ -507,6 +508,7 @@ describe('TrueFoundry', () => {
           total: 5,
           prompt: 5,
           completion: 0,
+          numRequests: 1,
         },
       });
       expect(result.latencyMs).toBeGreaterThanOrEqual(0);
