@@ -19,7 +19,6 @@ import MoreVertIcon from '@mui/icons-material/MoreVert';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import SaveIcon from '@mui/icons-material/Save';
 import SearchIcon from '@mui/icons-material/Search';
-import StopIcon from '@mui/icons-material/Stop';
 import TuneIcon from '@mui/icons-material/Tune';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 
@@ -660,6 +659,7 @@ export default function Review({
                 onChange={handleDescriptionChange}
                 variant="outlined"
                 size="small"
+                disabled={isRunning}
                 sx={{ maxWidth: { xs: '100%', md: 400 } }}
               />
               {config.target?.label && (
@@ -698,39 +698,52 @@ export default function Review({
                   alignItems: 'center',
                 }}
               >
-                {isRunning && jobState.severityCounts ? (
+                {isRunning ? (
                   <>
-                    {jobState.severityCounts.critical > 0 && (
-                      <Chip
-                        label={`${jobState.severityCounts.critical} Critical`}
-                        size="small"
-                        color="error"
-                      />
-                    )}
-                    {jobState.severityCounts.high > 0 && (
-                      <Chip
-                        label={`${jobState.severityCounts.high} High`}
-                        size="small"
-                        color="warning"
-                      />
-                    )}
-                    {jobState.severityCounts.medium > 0 && (
-                      <Chip
-                        label={`${jobState.severityCounts.medium} Medium`}
-                        size="small"
-                        variant="outlined"
-                      />
-                    )}
-                    {jobState.severityCounts.low > 0 && (
-                      <Chip
-                        label={`${jobState.severityCounts.low} Low`}
-                        size="small"
-                        variant="outlined"
-                        color="default"
-                      />
-                    )}
-                    <Typography variant="body2" color="text.secondary" sx={{ ml: 1 }}>
-                      {jobState.progress}/{jobState.total} probes
+                    {jobState.severityCounts &&
+                      (jobState.severityCounts.critical > 0 ||
+                        jobState.severityCounts.high > 0 ||
+                        jobState.severityCounts.medium > 0 ||
+                        jobState.severityCounts.low > 0) && (
+                        <>
+                          {jobState.severityCounts.critical > 0 && (
+                            <Chip
+                              label={`${jobState.severityCounts.critical} Critical`}
+                              size="small"
+                              color="error"
+                            />
+                          )}
+                          {jobState.severityCounts.high > 0 && (
+                            <Chip
+                              label={`${jobState.severityCounts.high} High`}
+                              size="small"
+                              color="warning"
+                            />
+                          )}
+                          {jobState.severityCounts.medium > 0 && (
+                            <Chip
+                              label={`${jobState.severityCounts.medium} Medium`}
+                              size="small"
+                              variant="outlined"
+                            />
+                          )}
+                          {jobState.severityCounts.low > 0 && (
+                            <Chip
+                              label={`${jobState.severityCounts.low} Low`}
+                              size="small"
+                              variant="outlined"
+                            />
+                          )}
+                        </>
+                      )}
+                    <Typography variant="body2" color="text.secondary">
+                      {jobState.total > 0
+                        ? `${jobState.progress}/${jobState.total} probes`
+                        : jobState.phase === 'initializing'
+                          ? 'Initializing...'
+                          : jobState.phase === 'generating'
+                            ? 'Generating probes...'
+                            : 'Starting...'}
                     </Typography>
                   </>
                 ) : (
@@ -764,19 +777,7 @@ export default function Review({
                 flexDirection: { xs: 'column', sm: 'row' },
               }}
             >
-              {isRunning ? (
-                <Button
-                  variant="outlined"
-                  color="error"
-                  size="large"
-                  onClick={handleCancel}
-                  startIcon={<StopIcon />}
-                  fullWidth={false}
-                  sx={{ minWidth: 140 }}
-                >
-                  Stop Scan
-                </Button>
-              ) : (
+              {isRunning ? null : (
                 <Tooltip title={runNowTooltipMessage} arrow>
                   <span>
                     <Button
