@@ -75,7 +75,8 @@ providers:
 The `inferenceModelType` config option supports the following values:
 
 - `claude` - For Anthropic Claude models
-- `nova` - For Amazon Nova models
+- `nova` - For Amazon Nova models (v1)
+- `nova2` - For Amazon Nova 2 models (with reasoning support)
 - `llama` - Defaults to Llama 4 (latest version)
 - `llama2` - For Meta Llama 2 models
 - `llama3` - For Meta Llama 3 models
@@ -190,7 +191,8 @@ Do not set `temperature`, `topP`, or `topK` when using extended thinking. These 
 | `temperature`         | Sampling temperature (0-1)                      |
 | `topP`                | Nucleus sampling parameter                      |
 | `stopSequences`       | Array of stop sequences                         |
-| `thinking`            | Extended thinking configuration                 |
+| `thinking`            | Extended thinking configuration (Claude models) |
+| `reasoningConfig`     | Reasoning configuration (Amazon Nova 2 models)  |
 | `showThinking`        | Include thinking in output (default: false)     |
 | `performanceConfig`   | Performance settings (`latency: optimized`)     |
 | `serviceTier`         | Service tier (`priority`, `default`, or `flex`) |
@@ -217,6 +219,7 @@ The Converse API works with all Bedrock models that support the Converse operati
 
 - **Claude**: All Claude 3.x and 4.x models
 - **Amazon Nova**: Lite, Micro, Pro, Premier (not Sonic)
+- **Amazon Nova 2**: Lite (with reasoning support)
 - **Meta Llama**: 3.x, 4.x models
 - **Mistral**: All Mistral models
 - **Cohere**: Command R and R+ models
@@ -498,7 +501,7 @@ Different models may support different configuration options. Here are some mode
 
 ### General Configuration Options
 
-- `inferenceModelType`: (Required for inference profiles) Specifies the model family when using application inference profiles. Options include: `claude`, `nova`, `llama`, `llama2`, `llama3`, `llama3.1`, `llama3.2`, `llama3.3`, `llama4`, `mistral`, `cohere`, `ai21`, `titan`, `deepseek`, `openai`, `qwen`
+- `inferenceModelType`: (Required for inference profiles) Specifies the model family when using application inference profiles. Options include: `claude`, `nova`, `nova2`, `llama`, `llama2`, `llama3`, `llama3.1`, `llama3.2`, `llama3.3`, `llama4`, `mistral`, `cohere`, `ai21`, `titan`, `deepseek`, `openai`, `qwen`
 
 ### Amazon Nova Models
 
@@ -537,6 +540,63 @@ providers:
 Nova models use a slightly different configuration structure compared to other Bedrock models, with separate `interfaceConfig` and `toolConfig` sections.
 
 :::
+
+### Amazon Nova 2 Models (Reasoning)
+
+Amazon Nova 2 models introduce extended thinking capabilities with configurable reasoning levels. Nova 2 Lite (`amazon.nova-2-lite-v1:0`) supports step-by-step reasoning and task decomposition with a 1 million token context window.
+
+```yaml
+providers:
+  # Use cross-region model ID (us.) for on-demand access
+  - id: bedrock:us.amazon.nova-2-lite-v1:0
+    config:
+      interfaceConfig:
+        max_new_tokens: 4096
+      reasoningConfig:
+        type: enabled # Enable extended thinking
+        maxReasoningEffort: medium # low, medium, or high
+```
+
+**Reasoning Configuration:**
+
+- `type`: Set to `enabled` to activate extended thinking, or `disabled` for fast responses (default)
+- `maxReasoningEffort`: Controls thinking depth - `low`, `medium`, or `high`
+
+When extended thinking is enabled, the model's reasoning process is captured in the response output with `<thinking>` tags, similar to other reasoning models.
+
+:::warning
+
+When using `reasoningConfig` with `type: enabled`:
+
+- **For all reasoning modes**: Do not set `temperature`, `top_p`, or `top_k` - these are incompatible with reasoning mode
+- **For `maxReasoningEffort: high`**: Also do not set `max_new_tokens` - the model manages output length automatically
+
+:::
+
+**Regional Model IDs:**
+
+Nova 2 models require cross-region inference profiles for on-demand access:
+
+- `us.amazon.nova-2-lite-v1:0` - US region (recommended)
+- `eu.amazon.nova-2-lite-v1:0` - EU region
+- `apac.amazon.nova-2-lite-v1:0` - Asia Pacific region
+- `global.amazon.nova-2-lite-v1:0` - Global cross-region inference
+
+**Using Nova 2 with Converse API:**
+
+Nova 2 reasoning is also supported via the Converse API, which provides a unified interface across Bedrock models:
+
+```yaml
+providers:
+  - id: bedrock:converse:us.amazon.nova-2-lite-v1:0
+    config:
+      maxTokens: 4096
+      reasoningConfig:
+        type: enabled
+        maxReasoningEffort: medium
+```
+
+The same parameter constraints apply when using the Converse API.
 
 ### Amazon Nova Sonic Model
 
