@@ -1080,12 +1080,14 @@ class Evaluator {
                     options: testCase.options,
                   };
                   // Only add tracing metadata fields if tracing is actually enabled
+                  // Check env flag, test case metadata, and test suite config
                   const tracingEnabled =
+                    getEnvBool('PROMPTFOO_TRACING_ENABLED', false) ||
                     testCase.metadata?.tracingEnabled === true ||
                     testSuite.tracing?.enabled === true;
 
                   logger.debug(
-                    `[Evaluator] Tracing check: testCase.metadata?.tracingEnabled=${testCase.metadata?.tracingEnabled}, testSuite.tracing?.enabled=${testSuite.tracing?.enabled}, testSuite.tracing=${JSON.stringify(testSuite.tracing)}, tracingEnabled=${tracingEnabled}`,
+                    `[Evaluator] Tracing check: env=${getEnvBool('PROMPTFOO_TRACING_ENABLED', false)}, testCase.metadata?.tracingEnabled=${testCase.metadata?.tracingEnabled}, testSuite.tracing?.enabled=${testSuite.tracing?.enabled}, tracingEnabled=${tracingEnabled}`,
                   );
 
                   if (tracingEnabled) {
@@ -1956,8 +1958,9 @@ class Evaluator {
     await startOtlpReceiverIfNeeded(this.testSuite);
 
     // Initialize OTEL SDK if tracing is enabled
-    // Check both test suite level and default test metadata
+    // Check env flag, test suite level, and default test metadata
     const tracingEnabled =
+      getEnvBool('PROMPTFOO_TRACING_ENABLED', false) ||
       this.testSuite.tracing?.enabled === true ||
       this.testSuite.defaultTest?.metadata?.tracingEnabled === true ||
       this.testSuite.tests?.some((t) => t.metadata?.tracingEnabled === true);
