@@ -539,7 +539,11 @@ describe('OpenHandsSDKProvider', () => {
       mockFetchWithProxy.mockClear();
 
       // Second call with bustCache - should hit API again
-      await provider.callApi('Test prompt', { bustCache: true, prompt: { raw: 'Test prompt', label: 'test' }, vars: {} });
+      await provider.callApi('Test prompt', {
+        bustCache: true,
+        prompt: { raw: 'Test prompt', label: 'test' },
+        vars: {},
+      });
 
       const conversationCalls = mockFetchWithProxy.mock.calls.filter((call) =>
         call[0].includes('/api/conversations'),

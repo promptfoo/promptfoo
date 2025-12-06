@@ -96,21 +96,21 @@ providers:
 
 ## Supported Parameters
 
-| Parameter          | Type    | Description                                   | Default             |
-| ------------------ | ------- | --------------------------------------------- | ------------------- |
-| `apiKey`           | string  | API key for the LLM provider                  | Environment variable |
-| `provider_id`      | string  | LLM provider (anthropic, openai, google, etc.) | Auto-detect         |
-| `model`            | string  | Model to use                                  | Provider default    |
-| `baseUrl`          | string  | URL for existing OpenHands server             | Auto-start server   |
-| `hostname`         | string  | Server hostname when starting new server      | `127.0.0.1`         |
-| `port`             | number  | Server port when starting new server          | `3000`              |
-| `timeout`          | number  | Server startup timeout (ms)                   | `60000`             |
-| `working_dir`      | string  | Directory for file operations                 | Temporary directory |
-| `workspace_type`   | string  | Execution environment (local, docker, remote) | `local`             |
-| `max_iterations`   | number  | Maximum agent iterations                      | `50`                |
-| `session_id`       | string  | Resume existing session                       | Create new session  |
-| `persist_sessions` | boolean | Keep sessions between calls                   | `false`             |
-| `tools`            | object  | Tool configuration                            | All enabled         |
+| Parameter          | Type    | Description                                    | Default              |
+| ------------------ | ------- | ---------------------------------------------- | -------------------- |
+| `apiKey`           | string  | API key for the LLM provider                   | Environment variable |
+| `provider_id`      | string  | LLM provider (anthropic, openai, google, etc.) | Auto-detect          |
+| `model`            | string  | Model to use                                   | Provider default     |
+| `baseUrl`          | string  | URL for existing OpenHands server              | Auto-start server    |
+| `hostname`         | string  | Server hostname when starting new server       | `127.0.0.1`          |
+| `port`             | number  | Server port when starting new server           | `3000`               |
+| `timeout`          | number  | Server startup timeout (ms)                    | `60000`              |
+| `working_dir`      | string  | Directory for file operations                  | Temporary directory  |
+| `workspace_type`   | string  | Execution environment (local, docker, remote)  | `local`              |
+| `max_iterations`   | number  | Maximum agent iterations                       | `50`                 |
+| `session_id`       | string  | Resume existing session                        | Create new session   |
+| `persist_sessions` | boolean | Keep sessions between calls                    | `false`              |
+| `tools`            | object  | Tool configuration                             | All enabled          |
 
 ## Supported Providers
 
