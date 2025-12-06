@@ -60,19 +60,27 @@ export default function ModelAuditResult() {
 
       try {
         const result = await fetchScanById(id, abortController.signal);
+        // Don't update state if request was aborted
+        if (abortController.signal.aborted) {
+          return;
+        }
         if (result) {
           setScan(result);
         } else {
           setError('Scan not found');
         }
       } catch (err) {
-        if (err instanceof Error && err.name === 'AbortError') {
+        // Don't update state if request was aborted
+        if (abortController.signal.aborted || (err instanceof Error && err.name === 'AbortError')) {
           return;
         }
         const errorMessage = err instanceof Error ? err.message : 'Failed to load scan';
         setError(errorMessage);
       } finally {
-        setIsLoading(false);
+        // Only update loading state if not aborted
+        if (!abortController.signal.aborted) {
+          setIsLoading(false);
+        }
       }
     };
 
@@ -182,12 +190,7 @@ export default function ModelAuditResult() {
             <Link component={RouterLink} to="/model-audit" underline="hover" color="inherit">
               Model Audit
             </Link>
-            <Link
-              component={RouterLink}
-              to="/model-audits"
-              underline="hover"
-              color="inherit"
-            >
+            <Link component={RouterLink} to="/model-audits" underline="hover" color="inherit">
               History
             </Link>
             <Typography color="text.primary">{scan.name || scan.id.slice(0, 8)}</Typography>

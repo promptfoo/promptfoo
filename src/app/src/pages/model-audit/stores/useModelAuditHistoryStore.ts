@@ -104,8 +104,9 @@ export const useModelAuditHistoryStore = create<ModelAuditHistoryState>()((set, 
       }
       return await response.json();
     } catch (error) {
+      // Re-throw AbortError so caller can handle it appropriately
       if (error instanceof Error && error.name === 'AbortError') {
-        return null;
+        throw error;
       }
       throw error;
     }

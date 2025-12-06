@@ -179,19 +179,15 @@ describe('useModelAuditHistoryStore', () => {
       expect(fetchedScan).toBeNull();
     });
 
-    it('should return null on abort', async () => {
+    it('should re-throw AbortError for caller to handle', async () => {
       const abortError = new Error('Aborted');
       abortError.name = 'AbortError';
       mockCallApi.mockRejectedValueOnce(abortError);
 
       const { result } = renderHook(() => useModelAuditHistoryStore());
 
-      let fetchedScan;
-      await act(async () => {
-        fetchedScan = await result.current.fetchScanById('123');
-      });
-
-      expect(fetchedScan).toBeNull();
+      // AbortError should be re-thrown so caller can handle it appropriately
+      await expect(result.current.fetchScanById('123')).rejects.toThrow('Aborted');
     });
 
     it('should handle IDs with special characters', async () => {
@@ -210,10 +206,7 @@ describe('useModelAuditHistoryStore', () => {
       });
 
       // IDs are passed directly - colons are valid in URL paths per RFC 3986
-      expect(mockCallApi).toHaveBeenCalledWith(
-        `/model-audit/scans/${scanId}`,
-        expect.any(Object),
-      );
+      expect(mockCallApi).toHaveBeenCalledWith(`/model-audit/scans/${scanId}`, expect.any(Object));
     });
   });
 

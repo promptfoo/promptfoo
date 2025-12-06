@@ -34,6 +34,11 @@ export default function ModelAuditResultLatestPage() {
           signal: abortController.signal,
         });
 
+        // Don't update state if request was aborted
+        if (abortController.signal.aborted) {
+          return;
+        }
+
         if (!response.ok) {
           throw new Error('Failed to fetch latest scan');
         }
@@ -47,13 +52,17 @@ export default function ModelAuditResultLatestPage() {
           setLatestScan(null);
         }
       } catch (err) {
-        if (err instanceof Error && err.name === 'AbortError') {
+        // Don't update state if request was aborted
+        if (abortController.signal.aborted || (err instanceof Error && err.name === 'AbortError')) {
           return;
         }
         const errorMessage = err instanceof Error ? err.message : 'Failed to load latest scan';
         setError(errorMessage);
       } finally {
-        setIsLoading(false);
+        // Only update loading state if not aborted
+        if (!abortController.signal.aborted) {
+          setIsLoading(false);
+        }
       }
     };
 
