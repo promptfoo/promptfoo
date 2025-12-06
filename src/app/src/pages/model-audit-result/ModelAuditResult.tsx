@@ -301,6 +301,9 @@ export default function ModelAuditResult() {
             <ResultsTab
               scanResults={scan.results}
               onShowFilesDialog={() => setShowFilesDialog(true)}
+              totalChecks={scan.totalChecks}
+              passedChecks={scan.passedChecks}
+              failedChecks={scan.failedChecks}
             />
           )}
         </Paper>

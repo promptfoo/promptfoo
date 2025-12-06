@@ -207,6 +207,9 @@ export default function ModelAuditResultLatestPage() {
             <ResultsTab
               scanResults={latestScan.results}
               onShowFilesDialog={() => setShowFilesDialog(true)}
+              totalChecks={latestScan.totalChecks}
+              passedChecks={latestScan.passedChecks}
+              failedChecks={latestScan.failedChecks}
             />
           )}
         </Paper>
