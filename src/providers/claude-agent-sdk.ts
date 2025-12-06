@@ -1,15 +1,14 @@
 import { createRequire } from 'node:module';
-import crypto from 'crypto';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
 import dedent from 'dedent';
-import { getCache, isCacheEnabled } from '../cache';
 import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import { importModule } from '../esm';
 import logger from '../logger';
+import { cacheResponse, getCachedResponse, initializeAgenticCache } from './agentic-utils';
 import { ANTHROPIC_MODELS } from './anthropic/util';
 import { transformMCPConfigToClaudeCode } from './mcp/transform';
 import { MCPConfig } from './mcp/types';
@@ -376,55 +375,23 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       env,
     };
 
-    let shouldCache = isCacheEnabled();
+    // Cache handling using shared utilities
+    const cacheResult = await initializeAgenticCache(
+      {
+        cacheKeyPrefix: 'anthropic:claude-agent-sdk',
+        workingDir: config.working_dir,
+        bustCache: context?.bustCache,
+      },
+      {
+        prompt,
+        cacheKeyQueryOptions,
+      },
+    );
 
-    // If we're caching, only read from cache if we're not busting it (we can still write to it when busting)
-
-    let cache: Awaited<ReturnType<typeof getCache>> | undefined;
-    let cacheKey: string | undefined;
-    if (shouldCache) {
-      let workingDirFingerprint: string | null = null;
-      if (config.working_dir) {
-        try {
-          workingDirFingerprint = await getWorkingDirFingerprint(config.working_dir);
-        } catch (error) {
-          logger.error(
-            dedent`Error getting working directory fingerprint for cache key - ${config.working_dir}: ${String(error)}
-            
-            Caching is disabled.`,
-          );
-          shouldCache = false;
-        }
-      }
-
-      if (shouldCache) {
-        cache = await getCache();
-        const stringified = JSON.stringify({
-          prompt,
-          cacheKeyQueryOptions,
-          workingDirFingerprint,
-        });
-        // Hash to avoid super long cache keys or including sensitive env vars in the key
-        const hash = crypto.createHash('sha256').update(stringified).digest('hex');
-        cacheKey = `anthropic:claude-agent-sdk:${hash}`;
-      }
-    }
-
-    const shouldReadCache = shouldCache && !context?.bustCache;
-    const shouldWriteCache = shouldCache;
-
-    if (shouldReadCache && cache && cacheKey) {
-      try {
-        const cachedResponse = await cache.get<string | undefined>(cacheKey);
-        if (cachedResponse) {
-          logger.debug(
-            `Returning cached response for ${prompt} (cache key: ${cacheKey}): ${cachedResponse}`,
-          );
-          return JSON.parse(cachedResponse);
-        }
-      } catch (error) {
-        logger.error(`Error getting cached response for ${prompt}: ${String(error)}`);
-      }
+    // Check cache for existing response
+    const cachedResponse = await getCachedResponse(cacheResult, 'Claude Agent SDK');
+    if (cachedResponse) {
+      return cachedResponse;
     }
 
     // Transform MCP config to Claude Agent SDK MCP servers
@@ -526,13 +493,8 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
               };
             }
 
-            if (shouldWriteCache && cache && cacheKey) {
-              try {
-                await cache.set(cacheKey, JSON.stringify(response));
-              } catch (error) {
-                logger.error(`Error caching response for ${prompt}: ${String(error)}`);
-              }
-            }
+            // Cache the response using shared utilities
+            await cacheResponse(cacheResult, response, 'Claude Agent SDK');
             return response;
           } else {
             return {
@@ -585,54 +547,4 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
   async cleanup(): Promise<void> {
     // no cleanup needed
   }
-}
-
-/**
- * Get a fingerprint for the working directory to use as a cache key. Checks directory mtime and descendant file mtimes recursively.
- *
- * This allows for caching prompts that use the same working directory when the files haven't changed.
- *
- * Simple/naive approach with recursion, statSync/readdirSync, and sanity-check timeout should be fine for normal use cases—even with thousands of files it's likely fast enough. Could be optimized later to remove recursion and use async fs calls with a queue and batching if it ever becomes an issue.
- */
-const FINGERPRINT_TIMEOUT_MS = 2000;
-async function getWorkingDirFingerprint(workingDir: string): Promise<string> {
-  const dirStat = fs.statSync(workingDir);
-  const dirMtime = dirStat.mtimeMs;
-
-  const startTime = Date.now();
-
-  // Recursively get all files
-  const getAllFiles = (dir: string, files: string[] = []): string[] => {
-    if (Date.now() - startTime > FINGERPRINT_TIMEOUT_MS) {
-      throw new Error('Working directory fingerprint timed out');
-    }
-
-    const entries = fs.readdirSync(dir, { withFileTypes: true });
-
-    for (const entry of entries) {
-      const fullPath = path.join(dir, entry.name);
-      if (entry.isDirectory()) {
-        getAllFiles(fullPath, files);
-      } else if (entry.isFile()) {
-        files.push(fullPath);
-      }
-    }
-    return files;
-  };
-
-  const allFiles = getAllFiles(workingDir);
-
-  // Create fingerprint from directory mtime + all file mtimes
-  const fileMtimes = allFiles
-    .map((file: string) => {
-      const stat = fs.statSync(file);
-      const relativePath = path.relative(workingDir, file);
-      return `${relativePath}:${stat.mtimeMs}`;
-    })
-    .sort(); // Sort for consistent ordering
-
-  const fingerprintData = `dir:${dirMtime};files:${fileMtimes.join(',')}`;
-  const fingerprint = crypto.createHash('sha256').update(fingerprintData).digest('hex');
-
-  return fingerprint;
 }
