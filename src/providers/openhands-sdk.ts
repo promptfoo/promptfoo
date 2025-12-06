@@ -192,15 +192,23 @@ export interface OpenHandsSDKConfig {
 }
 
 /**
- * OpenHands conversation state
+ * OpenHands conversation state (ConversationInfo from API)
  */
 interface ConversationState {
-  status: 'idle' | 'running' | 'completed' | 'error' | 'awaiting_confirmation';
-  messages: Array<{ role: string; content: string }>;
+  id: string;
+  execution_status: 'idle' | 'running' | 'paused' | 'waiting_for_confirmation' | 'finished' | 'error' | 'stuck';
+  // Alias for easier access
+  status: 'idle' | 'running' | 'paused' | 'waiting_for_confirmation' | 'finished' | 'error' | 'stuck';
+  messages?: Array<{ role: string; content: string }>;
   events?: Array<{
     type: string;
     data: unknown;
   }>;
+  metrics?: {
+    total_tokens?: number;
+    prompt_tokens?: number;
+    completion_tokens?: number;
+  };
 }
 
 /**
@@ -456,20 +464,79 @@ export class OpenHandsSDKProvider implements ApiProvider {
   }
 
   /**
-   * Create a new conversation
+   * Build the tools array for the API request based on config
    */
-  private async createConversation(): Promise<string> {
+  private buildToolsArray(): Array<{ name: string; params?: Record<string, unknown> }> {
+    const toolsConfig = this.buildToolsConfig(this.config);
+    const tools: Array<{ name: string; params?: Record<string, unknown> }> = [];
+
+    // Map our config format to OpenHands tool names
+    if (toolsConfig.terminal !== false) {
+      tools.push({ name: 'BashTool' });
+    }
+    if (toolsConfig.file_editor !== false) {
+      tools.push({ name: 'FileEditorTool' });
+    }
+    if (toolsConfig.task_tracker !== false) {
+      tools.push({ name: 'TaskTrackerTool' });
+    }
+    if (toolsConfig.browser !== false) {
+      tools.push({ name: 'BrowserTool' });
+    }
+
+    return tools;
+  }
+
+  /**
+   * Create a new conversation with initial message
+   */
+  private async createConversation(initialMessage?: string): Promise<string> {
     const baseUrl = this.getBaseUrl();
+    const apiKey = this.getApiKey();
+    const model = this.config.model || 'gpt-4o-mini';
+    const providerId = this.config.provider_id || 'openai';
+
+    // Build the model string in LiteLLM format
+    const modelString = `${providerId}/${model}`;
+
+    // Build request body per OpenHands API spec
+    const requestBody: Record<string, unknown> = {
+      agent: {
+        kind: 'Agent',
+        llm: {
+          model: modelString,
+          ...(apiKey && { api_key: apiKey }),
+          temperature: 0.0,
+        },
+        tools: this.buildToolsArray(),
+      },
+      workspace: {
+        working_dir: this.config.working_dir || '/tmp',
+      },
+      max_iterations: this.config.max_iterations || 50,
+      ...(this.config.session_id && { conversation_id: this.config.session_id }),
+    };
+
+    // Add initial message if provided
+    if (initialMessage) {
+      requestBody.initial_message = {
+        content: [{ text: initialMessage }],
+      };
+    }
+
+    logger.debug('[OpenHands] Creating conversation with:', { requestBody });
+
     const response = await fetchWithProxy(`${baseUrl}/api/conversations`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        // Configuration for the conversation
-      }),
+      body: JSON.stringify(requestBody),
     });
 
     if (!response.ok) {
-      throw new Error(`Failed to create conversation: ${response.status} ${response.statusText}`);
+      const errorText = await response.text();
+      throw new Error(
+        `Failed to create conversation: ${response.status} ${response.statusText} - ${errorText}`,
+      );
     }
 
     const data = (await response.json()) as { conversation_id?: string; id?: string };
@@ -482,38 +549,24 @@ export class OpenHandsSDKProvider implements ApiProvider {
   }
 
   /**
-   * Start the agent execution loop for a conversation
-   */
-  private async startConversation(conversationId: string): Promise<void> {
-    const baseUrl = this.getBaseUrl();
-    const response = await fetchWithProxy(`${baseUrl}/api/conversations/${conversationId}/start`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to start conversation: ${response.status} ${response.statusText}`);
-    }
-  }
-
-  /**
    * Send a message to a conversation
    */
   private async sendMessage(conversationId: string, message: string): Promise<void> {
     const baseUrl = this.getBaseUrl();
     const response = await fetchWithProxy(
-      `${baseUrl}/api/conversations/${conversationId}/message`,
+      `${baseUrl}/api/conversations/${conversationId}/messages`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          message: message,
+          content: [{ text: message }],
         }),
       },
     );
 
     if (!response.ok) {
-      throw new Error(`Failed to send message: ${response.status} ${response.statusText}`);
+      const errorText = await response.text();
+      throw new Error(`Failed to send message: ${response.status} ${response.statusText} - ${errorText}`);
     }
   }
 
@@ -530,7 +583,10 @@ export class OpenHandsSDKProvider implements ApiProvider {
       );
     }
 
-    return (await response.json()) as ConversationState;
+    const data = (await response.json()) as ConversationState;
+    // Normalize: use execution_status as status for easier access
+    data.status = data.execution_status || data.status;
+    return data;
   }
 
   /**
@@ -544,6 +600,25 @@ export class OpenHandsSDKProvider implements ApiProvider {
       });
     } catch (err) {
       logger.debug(`Error deleting conversation ${conversationId}: ${err}`);
+    }
+  }
+
+  /**
+   * Run a conversation (needed after sending messages to idle conversation)
+   */
+  private async runConversation(conversationId: string): Promise<void> {
+    const baseUrl = this.getBaseUrl();
+    const response = await fetchWithProxy(
+      `${baseUrl}/api/conversations/${conversationId}/run`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      },
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to run conversation: ${response.status} ${response.statusText} - ${errorText}`);
     }
   }
 
@@ -564,16 +639,17 @@ export class OpenHandsSDKProvider implements ApiProvider {
 
       const state = await this.getConversationState(conversationId);
 
-      if (state.status === 'completed' || state.status === 'error') {
+      // Terminal states
+      if (state.status === 'finished' || state.status === 'error' || state.status === 'stuck') {
         return state;
       }
 
-      if (state.status === 'awaiting_confirmation') {
-        // In eval mode, we auto-approve (confirmation_policy: 'none')
-        // For now, we'll treat this as an error since we don't have interactive confirmation
+      if (state.status === 'waiting_for_confirmation') {
+        // In eval mode, we don't support interactive confirmation
         throw new Error('Agent awaiting confirmation - not supported in eval mode');
       }
 
+      // Still running, waiting, or idle - keep polling
       await new Promise((r) => setTimeout(r, POLLING_INTERVAL_MS));
     }
 
@@ -581,13 +657,62 @@ export class OpenHandsSDKProvider implements ApiProvider {
   }
 
   /**
-   * Extract the final output from conversation state
+   * Fetch events from a conversation
    */
-  private extractOutput(state: ConversationState): string {
-    // Get the last assistant message
-    const assistantMessages = state.messages?.filter((m) => m.role === 'assistant') || [];
+  private async getConversationEvents(conversationId: string): Promise<Array<{
+    kind: string;
+    source?: string;
+    llm_message?: {
+      role: string;
+      content: Array<{ type?: string; text?: string }>;
+    };
+  }>> {
+    const baseUrl = this.getBaseUrl();
+    const response = await fetchWithProxy(
+      `${baseUrl}/api/conversations/${conversationId}/events/search?limit=100`,
+    );
+
+    if (!response.ok) {
+      throw new Error(`Failed to get events: ${response.status} ${response.statusText}`);
+    }
+
+    const data = (await response.json()) as {
+      results: Array<{
+        kind: string;
+        source?: string;
+        llm_message?: {
+          role: string;
+          content: Array<{ type?: string; text?: string }>;
+        };
+      }>;
+    };
+    return data.results || [];
+  }
+
+  /**
+   * Extract the final output from conversation events
+   */
+  private extractOutput(events: Array<{
+    kind: string;
+    source?: string;
+    llm_message?: {
+      role: string;
+      content: Array<{ type?: string; text?: string }>;
+    };
+  }>): string {
+    // Get the last assistant message from MessageEvents
+    const assistantMessages = events.filter(
+      (e) => e.kind === 'MessageEvent' && e.source === 'agent' && e.llm_message?.role === 'assistant'
+    );
+
     if (assistantMessages.length > 0) {
-      return assistantMessages[assistantMessages.length - 1].content;
+      const lastMessage = assistantMessages[assistantMessages.length - 1];
+      const content = lastMessage.llm_message?.content || [];
+      // Extract text content
+      return content
+        .filter((c) => c.type === 'text' || !c.type)
+        .map((c) => c.text || '')
+        .join('\n');
     }
     return '';
   }
@@ -718,7 +843,7 @@ export class OpenHandsSDKProvider implements ApiProvider {
 
         this.server = await startOpenHandsServer({
           hostname: config.hostname ?? '127.0.0.1',
-          port: config.port ?? 3000,
+          port: config.port ?? 8000,
           timeout: config.timeout ?? 60000,
           env: serverEnv,
         });
@@ -729,41 +854,56 @@ export class OpenHandsSDKProvider implements ApiProvider {
       // Get or create session
       let conversationId: string;
       const sessionCacheKey = cacheResult.cacheKey;
+      let isNewConversation = false;
 
       if (config.session_id) {
         // Resume existing session
         conversationId = config.session_id;
+        // For existing sessions, send the message first, then run
+        await this.sendMessage(conversationId, prompt);
+        await this.runConversation(conversationId);
       } else if (config.persist_sessions && sessionCacheKey && this.sessions.has(sessionCacheKey)) {
         // Reuse persisted session
         conversationId = this.sessions.get(sessionCacheKey)!;
+        // For existing sessions, send the message first, then run
+        await this.sendMessage(conversationId, prompt);
+        await this.runConversation(conversationId);
       } else {
-        // Create new conversation
-        conversationId = await this.createConversation();
+        // Create new conversation with initial message - this starts execution automatically
+        conversationId = await this.createConversation(prompt);
+        isNewConversation = true;
 
         if (config.persist_sessions && sessionCacheKey) {
           this.addSession(sessionCacheKey, conversationId);
         }
       }
 
-      // Send the prompt
-      await this.sendMessage(conversationId, prompt);
-
-      // Start the agent loop
-      await this.startConversation(conversationId);
+      // For new conversations with initial_message, the agent starts automatically
+      // For existing conversations, we already called runConversation above
+      if (isNewConversation) {
+        // Check if conversation needs to be started manually
+        const initialState = await this.getConversationState(conversationId);
+        if (initialState.status === 'idle') {
+          await this.runConversation(conversationId);
+        }
+      }
 
       // Wait for completion
       const finalState = await this.waitForCompletion(conversationId, callOptions?.abortSignal);
 
-      // Extract output
-      const output = this.extractOutput(finalState);
+      // Fetch events to extract output
+      const events = await this.getConversationEvents(conversationId);
+
+      // Extract output from events
+      const output = this.extractOutput(events);
 
       const providerResponse: ProviderResponse = {
         output,
-        raw: JSON.stringify(finalState),
+        raw: JSON.stringify({ state: finalState, events }),
         sessionId: conversationId,
         metadata: config.log_events
           ? {
-              events: finalState.events,
+              events,
             }
           : undefined,
       };
