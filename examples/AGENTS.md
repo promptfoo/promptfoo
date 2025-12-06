@@ -52,7 +52,7 @@ Always include the YAML schema reference:
 
 Use latest model versions:
 
-- OpenAI: `openai:responses:gpt-5.1`, `openai:responses:gpt-5.1-mini` (prefer responses API over chat)
+- OpenAI: `openai:responses:gpt-5.1`, `openai:responses:gpt-5-mini` (prefer responses API over chat)
 - Anthropic: `anthropic:claude-sonnet-4-5-latest`
 - Google: `google:gemini-3-pro-preview`, `google:gemini-2.5-flash`
 - Include mix of providers when comparing performance
@@ -87,7 +87,7 @@ description: A simple evaluation of translation quality
 prompts:
   - Translate "{{input}}" to {{language}}
 providers:
-  - openai:responses:gpt-5.1-mini
+  - openai:responses:gpt-5-mini
   - anthropic:claude-sonnet-4-5-latest
 tests:
   - vars:
