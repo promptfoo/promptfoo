@@ -80,12 +80,35 @@ See `src/app/src/hooks/usePageMeta.test.ts` for patterns. Use `vi.fn()` for mock
 - Prefer composition over prop drilling
 - Check `components/`, `hooks/`, `utils/` for existing patterns
 
+## React Hooks: useMemo vs useCallback
+
+- **`useMemo`**: Use when computing a value (non-callable result)
+- **`useCallback`**: Use when creating a stable function reference
+
+```typescript
+// Good - useMemo for computed values
+const tooltipMessage = useMemo(() => {
+  return apiStatus === 'blocked' ? 'Connection failed' : undefined;
+}, [apiStatus]);
+
+// Good - useCallback for functions with arguments
+const handleClick = useCallback((id: string) => {
+  console.log('Clicked:', id);
+}, []);
+
+// Bad - useCallback for computed values
+const getTooltipMessage = useCallback(() => {
+  return apiStatus === 'blocked' ? 'Connection failed' : undefined;
+}, [apiStatus]);
+```
+
 ## Anti-Patterns
 
 - Using `fetch()` instead of `callApi()`
 - Legacy React patterns (class components, legacy lifecycle methods)
 - Over-memoization of simple values
 - Hardcoded colors/spacing instead of theme tokens
+- Using `useCallback` for computed values (use `useMemo` instead)
 
 ## Path Alias
 

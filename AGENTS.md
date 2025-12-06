@@ -17,8 +17,7 @@ Promptfoo is an open-source framework for evaluating and testing LLM application
 | `src/redteam/`   | Security testing              | `src/redteam/AGENTS.md`   |
 | `src/server/`    | Backend server                | `src/server/AGENTS.md`    |
 | `test/`          | Tests (Vitest preferred)      | `test/AGENTS.md`          |
-| `site/`          | Docs site                     | `site/AGENTS.md`          |
-| `site/docs/`     | Doc content                   | `site/docs/AGENTS.md`     |
+| `site/`          | Docs site (Docusaurus)        | `site/AGENTS.md`          |
 | `examples/`      | Example configs               | `examples/AGENTS.md`      |
 | `drizzle/`       | DB migrations                 | `drizzle/AGENTS.md`       |
 
@@ -104,8 +103,8 @@ git push -u origin feature/your-branch-name # Push after each commit
 
 **Push after every commit** to ensure work is saved remotely.
 
-See `docs/git-workflow.md` for full workflow.
-See `docs/pr-conventions.md` for PR title format and scope selection.
+See `docs/agents/git-workflow.md` for full workflow.
+See `docs/agents/pr-conventions.md` for PR title format and scope selection.
 
 ## Code Style
 
@@ -113,7 +112,7 @@ Handled by Biome linter - don't manually enforce style rules. Run `npm run l && 
 
 ## Logging
 
-Use the logger with object context (auto-sanitized). See `docs/logging.md` for details.
+Use the logger with object context (auto-sanitized). See `docs/agents/logging.md` for details.
 
 ## Testing
 
@@ -141,10 +140,10 @@ See `test/AGENTS.md` for testing patterns.
 
 Read these when relevant to your task:
 
-| Document                        | When to Read             |
-| ------------------------------- | ------------------------ |
-| `docs/pr-conventions.md`        | Creating pull requests   |
-| `docs/git-workflow.md`          | Git operations           |
-| `docs/dependency-management.md` | Updating packages        |
-| `docs/logging.md`               | Adding logging to code   |
-| `docs/python.md`                | Python providers/scripts |
+| Document                               | When to Read             |
+| -------------------------------------- | ------------------------ |
+| `docs/agents/pr-conventions.md`        | Creating pull requests   |
+| `docs/agents/git-workflow.md`          | Git operations           |
+| `docs/agents/dependency-management.md` | Updating packages        |
+| `docs/agents/logging.md`               | Adding logging to code   |
+| `docs/agents/python.md`                | Python providers/scripts |
