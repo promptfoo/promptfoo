@@ -11,7 +11,7 @@ import {
   isSharingEnabled,
 } from '../../../share';
 import { loadDefaultConfig } from '../../../util/config/default';
-import { createToolResponse } from '../utils';
+import { createToolResponse } from '../lib/utils';
 
 /**
  * Share an evaluation to create a publicly accessible URL
