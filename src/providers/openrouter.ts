@@ -119,6 +119,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
 
     // Extract reasoning if present (e.g., from Gemini models)
     // Only extract if showThinking is not explicitly false (check merged config, not just provider config)
+    // Note: OpenRouter API may return empty string when reasoning is unavailable - falsy check handles this
     let reasoning: ReasoningContent[] | undefined;
     if (message.reasoning && config.showThinking !== false) {
       reasoning = [{ type: 'reasoning', content: message.reasoning }];
