@@ -10,12 +10,12 @@ let cleanupFn: (() => void) | null = null;
  */
 function showToggleStatus(isVerbose: boolean): void {
   const status = isVerbose
-    ? chalk.cyan('🔍 Verbose mode ON') + chalk.gray(' (press v to toggle off)')
-    : chalk.gray('Verbose mode OFF') + chalk.gray(' (press v for debug logs)');
+    ? chalk.green.bold('● DEBUG ON') + chalk.dim('  │  press v to hide')
+    : chalk.dim('○ DEBUG OFF  │  press v to show');
 
-  // Clear current line and print status, then restore cursor
+  // Clear current line and print status with spacing for visual clarity
   if (process.stderr.isTTY) {
-    process.stderr.write(`\r\x1b[K${status}\n`);
+    process.stderr.write(`\n\r\x1b[K${status}\n\n`);
   }
 }
 
@@ -86,8 +86,8 @@ export function initVerboseToggle(): (() => void) | null {
     // Show initial hint
     const initialVerbose = getLogLevel() === 'debug';
     process.stderr.write(
-      chalk.gray(
-        `\n💡 Press 'v' to toggle verbose mode${initialVerbose ? ' (currently ON)' : ''}\n`,
+      chalk.dim(
+        `\n  Tip: Press v to toggle debug output${initialVerbose ? ' (currently ON)' : ''}\n\n`,
       ),
     );
 
