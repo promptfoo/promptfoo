@@ -1234,7 +1234,9 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
 
       // Build reasoning content array if present (only when showThinking is true)
       const reasoningContent: ReasoningContent[] | undefined =
-        reasoning && showThinking ? [{ type: 'thinking' as const, thinking: reasoning }] : undefined;
+        reasoning && showThinking
+          ? [{ type: 'thinking' as const, thinking: reasoning }]
+          : undefined;
 
       // Combine output and tool use (reasoning goes ONLY in reasoning field - no double-write)
       const parts: string[] = [];
