@@ -40,11 +40,24 @@ def _reset_token_usage():
 
 
 def _accumulate_tokens(usage):
-    """Accumulate token counts from an OpenAI response usage object."""
+    """Accumulate token counts from an OpenAI response usage object.
+
+    Handles both Chat Completions API (prompt_tokens, completion_tokens) and
+    Responses API (input_tokens, output_tokens) formats.
+    """
     global _token_usage
     if usage:
-        _token_usage["prompt"] += getattr(usage, "prompt_tokens", 0) or 0
-        _token_usage["completion"] += getattr(usage, "completion_tokens", 0) or 0
+        # Chat Completions API format
+        prompt = getattr(usage, "prompt_tokens", 0) or 0
+        completion = getattr(usage, "completion_tokens", 0) or 0
+        # Responses API format
+        if not prompt:
+            prompt = getattr(usage, "input_tokens", 0) or 0
+        if not completion:
+            completion = getattr(usage, "output_tokens", 0) or 0
+
+        _token_usage["prompt"] += prompt
+        _token_usage["completion"] += completion
         _token_usage["total"] += getattr(usage, "total_tokens", 0) or 0
 
 
@@ -167,8 +180,8 @@ def _get_pipeline(model: str, defense: str | None):
                             }
                         return {"role": role, "content": content}
 
-                    def _function_to_openai(self, func) -> dict:
-                        """Convert AgentDojo function to OpenAI tool format."""
+                    def _function_to_openai_chat(self, func) -> dict:
+                        """Convert AgentDojo function to OpenAI Chat Completions tool format."""
                         return {
                             "type": "function",
                             "function": {
@@ -176,6 +189,15 @@ def _get_pipeline(model: str, defense: str | None):
                                 "description": func.description,
                                 "parameters": func.parameters.model_json_schema(),
                             },
+                        }
+
+                    def _function_to_openai_responses(self, func) -> dict:
+                        """Convert AgentDojo function to OpenAI Responses API tool format."""
+                        return {
+                            "type": "function",
+                            "name": func.name,
+                            "description": func.description,
+                            "parameters": func.parameters.model_json_schema(),
                         }
 
                     def _call_responses_api(self, oai_messages, oai_tools):
@@ -215,7 +237,7 @@ def _get_pipeline(model: str, defense: str | None):
                                         input_items.append(
                                             {
                                                 "type": "function_call",
-                                                "id": tc["id"],
+                                                "call_id": tc["id"],
                                                 "name": tc["function"]["name"],
                                                 "arguments": tc["function"][
                                                     "arguments"
@@ -251,9 +273,10 @@ def _get_pipeline(model: str, defense: str | None):
                                     if content_block.type == "output_text":
                                         text_content += content_block.text
                             elif item.type == "function_call":
+                                # Responses API uses call_id for the function call identifier
                                 tool_calls_list.append(
                                     {
-                                        "id": item.id,
+                                        "id": item.call_id,
                                         "function_name": item.name,
                                         "arguments": item.arguments,
                                     }
@@ -311,11 +334,17 @@ def _get_pipeline(model: str, defense: str | None):
                             self._message_to_openai(msg) for msg in messages
                         ]
 
-                        # Build tools list from runtime
-                        oai_tools = [
-                            self._function_to_openai(func)
-                            for func in runtime.functions.values()
-                        ]
+                        # Build tools list from runtime using appropriate format
+                        if self.use_responses_api:
+                            oai_tools = [
+                                self._function_to_openai_responses(func)
+                                for func in runtime.functions.values()
+                            ]
+                        else:
+                            oai_tools = [
+                                self._function_to_openai_chat(func)
+                                for func in runtime.functions.values()
+                            ]
 
                         # Call appropriate API
                         if self.use_responses_api:
