@@ -671,6 +671,13 @@ def call_api(prompt: str, options: dict, context: dict) -> dict:
         # Format trace messages into clean message history (like Hydra's redteamHistory)
         messages = _format_trace_messages(trace_log)
 
+        # Extract the final assistant response for output
+        final_response = ""
+        for msg in reversed(messages):
+            if msg.get("role") == "assistant" and msg.get("content"):
+                final_response = msg["content"]
+                break
+
         # Build result
         result = {
             "user_task_success": utility,
@@ -704,7 +711,7 @@ def call_api(prompt: str, options: dict, context: dict) -> dict:
             }
 
         return {
-            "output": json.dumps(result),
+            "output": final_response if final_response else json.dumps(result),
             "metadata": metadata,
             "tokenUsage": token_usage,
         }
