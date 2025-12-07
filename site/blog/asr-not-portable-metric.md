@@ -20,15 +20,15 @@ authors: [michael]
 tags: [red-teaming, llm-security, measurement, evaluation]
 ---
 
-Promptfoo maintains a public, continuously updated [database of LLM security research](https://www.promptfoo.dev/lm-security-db/). As of Dec 5, 2025, it lists **439 entries** across **406 research papers** (counts change as we update it). A recurring part of our work is taking strong jailbreaking methods from papers and making them runnable inside real evaluation pipelines.
+Promptfoo maintains a public [database of LLM security research](https://www.promptfoo.dev/lm-security-db/). As of Dec 5, 2025, it lists **439 entries** across **406 papers**. We take jailbreaking methods from these papers and make them runnable in production.
 
-That translation step is where the literature often becomes harder to use than it looks.
+That translation step is where the literature becomes harder to use than it looks.
 
-Many papers are valuable as existence proofs. They show that an aligned model can be induced to produce disallowed behavior under some conditions. The NeurIPS 2025 position paper ["Comparison requires valid measurement: Rethinking attack success rate comparisons in AI red teaming"](https://openreview.net/forum?id=d7hqAhLvWG) draws a sharp line between that kind of qualitative red teaming and *quantitative* comparisons based on attack success rate (ASR).
+Many papers are valuable as existence proofs: they show an aligned model can be induced to produce disallowed behavior. The NeurIPS 2025 position paper ["Comparison requires valid measurement"](https://openreview.net/forum?id=d7hqAhLvWG) draws a sharp line between qualitative red teaming and quantitative comparisons based on attack success rate (ASR).
 
-The difficulty begins when papers (or readers) move from existence proofs to comparative claims like "method A is better than method B" or "model X is safer than model Y," often via a single number: **attack success rate (ASR)**, the fraction of *attack goals* judged successful after aggregation. The claim is not that ASR is useless. It's that many ASR comparisons conflate different underlying quantities or rely on low-validity measurement, so the comparison does not support the conclusion.
+The difficulty begins when papers move from existence proofs to comparative claims ("method A is better than method B," "model X is safer than model Y"), often via a single number: **ASR**, the fraction of *attack goals* judged successful. The claim is not that ASR is useless. Many ASR comparisons conflate different quantities or rely on low-validity measurement, so the comparison does not support the conclusion.
 
-Below are three failure modes we repeatedly hit when operationalizing jailbreak papers, with examples from the position paper.
+Below are three failure modes we hit when operationalizing jailbreak papers.
 
 <!-- truncate -->
 
