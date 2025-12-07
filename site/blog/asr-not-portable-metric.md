@@ -111,7 +111,7 @@ Productionizing a jailbreak paper means reconstructing a specification: what suc
 
 We've read hundreds of these papers. When we implement an attack, we reconstruct the full specification. We know what's being measured.
 
-That's why we built [**Meta**](https://www.promptfoo.dev/docs/red-team/strategies/meta/) (`jailbreak:meta`) and [**Hydra**](https://www.promptfoo.dev/docs/red-team/strategies/hydra/) (`jailbreak:hydra`) with explicit threat-model knobs: attempt budget, branching, stopping rules. Meta explores multiple attack approaches; Hydra branches and backtracks across turns. Because we understand measurement validity, these strategies surface vulnerabilities that matter. When a goal succeeds, the model actually produced the harmful output, under a threat model you specified. That's the difference between finding real risk and finding measurement artifacts.
+That's why we built [**Meta**](https://www.promptfoo.dev/docs/red-team/strategies/meta/) (`jailbreak:meta`) and [**Hydra**](https://www.promptfoo.dev/docs/red-team/strategies/hydra/) (`jailbreak:hydra`) with explicit threat-model knobs: attempt budget, branching, stopping rules. Because we understand measurement validity, these strategies surface vulnerabilities that matter. When a goal succeeds, the model actually produced the harmful output, under a threat model you specified. That's the difference between finding real risk and finding measurement artifacts.
 
 ---
 
