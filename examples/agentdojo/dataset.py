@@ -2,10 +2,9 @@
 """
 Generate Promptfoo dataset from AgentDojo task combinations.
 
-Usage:
-    python dataset.py --suite workspace --output dataset.jsonl
-    python dataset.py --all-suites --output full_dataset.jsonl
-    python dataset.py --suite workspace --max-user-tasks 5 --max-injection-tasks 3
+Can be used as:
+1. Promptfoo test adapter: tests: file://dataset.py:generate_tests
+2. CLI tool: python dataset.py --suite workspace --output dataset.jsonl
 """
 
 import argparse
@@ -13,7 +12,38 @@ import json
 import sys
 
 
-def generate_dataset(
+def generate_tests(config: dict | None = None) -> list[dict]:
+    """Promptfoo test adapter - generates test cases at runtime.
+
+    Usage in promptfooconfig.yaml:
+        tests: file://dataset.py:generate_tests
+
+    Or with config:
+        tests:
+          - path: file://dataset.py:generate_tests
+            config:
+              suite: workspace
+              max_user_tasks: 5
+              max_injection_tasks: 3
+
+    Args:
+        config: Optional dict with suite, max_user_tasks, max_injection_tasks, version
+
+    Returns:
+        List of test case dicts with vars for each task combination
+    """
+    if config is None:
+        config = {}
+
+    suite_name = config.get("suite", "workspace")
+    version = config.get("version", "v1.2.2")
+    max_user_tasks = config.get("max_user_tasks")
+    max_injection_tasks = config.get("max_injection_tasks")
+
+    return _generate_dataset(suite_name, version, max_user_tasks, max_injection_tasks)
+
+
+def _generate_dataset(
     suite_name: str,
     version: str = "v1.2.2",
     max_user_tasks: int | None = None,
@@ -47,6 +77,16 @@ def generate_dataset(
             )
 
     return rows
+
+
+def generate_dataset(
+    suite_name: str,
+    version: str = "v1.2.2",
+    max_user_tasks: int | None = None,
+    max_injection_tasks: int | None = None,
+) -> list[dict]:
+    """Public alias for CLI compatibility."""
+    return _generate_dataset(suite_name, version, max_user_tasks, max_injection_tasks)
 
 
 def get_all_suites(version: str = "v1.2.2") -> list[str]:

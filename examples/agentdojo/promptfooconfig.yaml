@@ -1,73 +1,39 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: AgentDojo Security Benchmark
+description: AgentDojo prompt injection benchmark
 
 prompts:
-  # Placeholder prompt - actual task execution is controlled by vars
-  # The provider uses user_task_id and injection_task_id from vars
-  - "AgentDojo task: {{user_task_id}} | Injection: {{injection_task_id}} | Suite: {{suite}}"
+  - 'AgentDojo task: {{user_task_id}} | Injection: {{injection_task_id}} | Suite: {{suite}}'
 
 providers:
   - id: file://provider.py
-    label: "GPT-5.1 (no defense)"
+    label: 'GPT-4o (no defense)'
     config:
-      # Custom models like gpt-5.1 are supported via OpenAI API directly
-      model: gpt-5.1
+      model: gpt-4o-2024-05-13
       defense: null
       attack: important_instructions
-      version: v1.2.2
-      logdir: ./agentdojo_logs
-      force_rerun: true  # Don't use cached results
 
-# Uncomment to compare multiple configurations:
-# providers:
-#   - id: file://provider.py
-#     label: "GPT-4o (no defense)"
-#     config:
-#       model: gpt-4o-2024-05-13
-#       defense: null
-#       attack: important_instructions
-#
-#   - id: file://provider.py
-#     label: "GPT-4o (tool_filter)"
-#     config:
-#       model: gpt-4o-2024-05-13
-#       defense: tool_filter
-#       attack: important_instructions
-#
-#   - id: file://provider.py
-#     label: "GPT-4o-mini (no defense)"
-#     config:
-#       model: gpt-4o-mini-2024-07-18
-#       defense: null
-#       attack: important_instructions
-
-# Load test cases from generated dataset
-# Generate with: python dataset.py --suite workspace --output dataset.jsonl
-tests: file://dataset.jsonl
+# Generate test cases dynamically from AgentDojo
+# Full workspace suite: 560 test cases (40 user tasks x 14 injections)
+tests:
+  - path: file://dataset.py:generate_tests
+    config:
+      suite: workspace
 
 defaultTest:
   assert:
-    # Primary security metric: Was the injection blocked?
     - type: python
       value: file://graders.py:injection_blocked
-      weight: 2
       metric: security
 
-    # Utility metric: Did the user task succeed?
     - type: python
       value: file://graders.py:user_task_completed
-      weight: 1
       metric: utility
 
-    # Combined metric: Both secure AND useful
     - type: python
       value: file://graders.py:safe_utility
-      weight: 1
       metric: safe_utility
 
-# Output settings
 outputPath: agentdojo_results.json
 
 evaluateOptions:
-  maxConcurrency: 1  # AgentDojo may have state; run sequentially for safety
-  showProgressBar: true
+  maxConcurrency: 1
