@@ -68,17 +68,6 @@ export function OutputsPanel({
           showCopyButton={hoveredElement === 'replayOutput' || copiedFields['replayOutput']}
         />
       )}
-      {output && (
-        <CodeDisplay
-          content={output}
-          title="Original Output"
-          onCopy={() => onCopy('output', output)}
-          copied={copiedFields['output'] || false}
-          onMouseEnter={() => onMouseEnter('output')}
-          onMouseLeave={onMouseLeave}
-          showCopyButton={hoveredElement === 'output' || copiedFields['output']}
-        />
-      )}
       {reasoning && (
         <CodeDisplay
           content={reasoning}
@@ -88,6 +77,17 @@ export function OutputsPanel({
           onMouseEnter={() => onMouseEnter('reasoning')}
           onMouseLeave={onMouseLeave}
           showCopyButton={hoveredElement === 'reasoning' || copiedFields['reasoning']}
+        />
+      )}
+      {output && (
+        <CodeDisplay
+          content={output}
+          title="Original Output"
+          onCopy={() => onCopy('output', output)}
+          copied={copiedFields['output'] || false}
+          onMouseEnter={() => onMouseEnter('output')}
+          onMouseLeave={onMouseLeave}
+          showCopyButton={hoveredElement === 'output' || copiedFields['output']}
         />
       )}
       {citations && <Citations citations={citations} />}

@@ -566,7 +566,7 @@ function extractReasoningFromContentBlocks(
  */
 function extractTextFromContentBlocks(
   content: ContentBlock[],
-  showThinking: boolean = true,
+  _showThinking: boolean = true,
 ): string {
   const parts: string[] = [];
 
@@ -574,21 +574,9 @@ function extractTextFromContentBlocks(
     if ('text' in block && block.text) {
       parts.push(block.text);
     } else if ('reasoningContent' in block && block.reasoningContent) {
-      // Reasoning is now handled separately via the reasoning field.
-      // Only include in output if showThinking is true (for backwards compatibility).
-      if (showThinking) {
-        const reasoning = block.reasoningContent;
-        if ('reasoningText' in reasoning && reasoning.reasoningText) {
-          const thinkingText = reasoning.reasoningText.text || '';
-          const signature = reasoning.reasoningText.signature || '';
-          parts.push(`<thinking>\n${thinkingText}\n</thinking>`);
-          if (signature) {
-            parts.push(`Signature: ${signature}`);
-          }
-        } else if ('redactedContent' in reasoning && reasoning.redactedContent) {
-          parts.push('<thinking>[Redacted]</thinking>');
-        }
-      }
+      // Reasoning content is handled ONLY via the reasoning field - never in output.
+      // This prevents double-write where reasoning appears in both output and reasoning fields.
+      // The showThinking parameter is kept for API compatibility but is ignored here.
     } else if ('toolUse' in block && block.toolUse) {
       // Format tool use for output
       parts.push(
@@ -923,7 +911,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       if (cachedResponse) {
         logger.debug('Returning cached response');
         const parsed = JSON.parse(cachedResponse as string) as ConverseCommandOutput;
-        return await this.parseResponse(parsed);
+        return await this.parseResponse(parsed, context);
       }
     }
 
@@ -972,17 +960,22 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       hasMetrics: !!response.metrics,
     });
 
-    return await this.parseResponse(response);
+    return await this.parseResponse(response, context);
   }
 
   /**
    * Parse the Converse API response into ProviderResponse format
    */
-  private async parseResponse(response: ConverseCommandOutput): Promise<ProviderResponse> {
+  private async parseResponse(
+    response: ConverseCommandOutput,
+    context?: CallApiContextParams,
+  ): Promise<ProviderResponse> {
     // Extract output text
     const outputMessage = response.output?.message;
     const content = outputMessage?.content || [];
-    const showThinking = this.config.showThinking !== false;
+    // Merge showThinking from per-call config with provider config (per-call takes priority)
+    const mergedShowThinking = context?.prompt?.config?.showThinking ?? this.config.showThinking;
+    const showThinking = mergedShowThinking !== false;
 
     // Extract token usage
     const usage = response.usage;
@@ -1083,8 +1076,8 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
         }
 
         if (hasSuccessfulCallback && results.length > 0) {
-          // Extract reasoning even when using function callbacks
-          const reasoning = extractReasoningFromContentBlocks(content);
+          // Only extract reasoning if showThinking is not explicitly false
+          const reasoning = showThinking ? extractReasoningFromContentBlocks(content) : undefined;
           return {
             output: results.join('\n'),
             tokenUsage,
@@ -1099,7 +1092,8 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
 
     // Default output extraction
     const output = extractTextFromContentBlocks(content, showThinking);
-    const reasoning = extractReasoningFromContentBlocks(content);
+    // Only extract reasoning if showThinking is not explicitly false
+    const reasoning = showThinking ? extractReasoningFromContentBlocks(content) : undefined;
 
     return {
       output,
@@ -1167,7 +1161,9 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       const toolUseBlocks: Map<number, { toolUseId?: string; name?: string; input: string }> =
         new Map();
 
-      const showThinking = this.config.showThinking !== false;
+      // Merge showThinking from per-call config with provider config (per-call takes priority)
+      const mergedShowThinking = context?.prompt?.config?.showThinking ?? this.config.showThinking;
+      const showThinking = mergedShowThinking !== false;
 
       // Process the stream
       if (response.stream) {
@@ -1236,17 +1232,12 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
         }
       }
 
-      // Build reasoning content array if present
-      const reasoningContent: ReasoningContent[] | undefined = reasoning
-        ? [{ type: 'thinking' as const, thinking: reasoning }]
-        : undefined;
+      // Build reasoning content array if present (only when showThinking is true)
+      const reasoningContent: ReasoningContent[] | undefined =
+        reasoning && showThinking ? [{ type: 'thinking' as const, thinking: reasoning }] : undefined;
 
-      // Combine output and tool use (reasoning is now separate)
+      // Combine output and tool use (reasoning goes ONLY in reasoning field - no double-write)
       const parts: string[] = [];
-      // For backwards compatibility, include reasoning in output if showThinking is true
-      if (reasoning && showThinking) {
-        parts.push(`<thinking>\n${reasoning}\n</thinking>`);
-      }
       if (output) {
         parts.push(output);
       }

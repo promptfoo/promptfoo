@@ -20,7 +20,7 @@ import type {
  *
  * For Gemini models, the base OpenAI provider incorrectly prioritizes the reasoning
  * field over content. This provider ensures content is the primary output with
- * reasoning shown as thinking content when showThinking is enabled.
+ * reasoning stored separately in the reasoning field (never duplicated in output).
  */
 export class OpenRouterProvider extends OpenAiChatCompletionProvider {
   constructor(modelName: string, providerOptions: ProviderOptions) {
@@ -118,31 +118,26 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
     const finishReason = normalizeFinishReason(data.choices[0].finish_reason);
 
     // Extract reasoning if present (e.g., from Gemini models)
+    // Only extract if showThinking is not explicitly false (check merged config, not just provider config)
     let reasoning: ReasoningContent[] | undefined;
-    if (message.reasoning) {
+    if (message.reasoning && config.showThinking !== false) {
       reasoning = [{ type: 'reasoning', content: message.reasoning }];
     }
 
-    // Prioritize tool calls over content and reasoning
+    // Prioritize tool calls over content
+    // Reasoning content goes ONLY to the reasoning field - no double-write to output
     let output = '';
     const hasFunctionCall = !!(message.function_call && message.function_call.name);
     const hasToolCalls = Array.isArray(message.tool_calls) && message.tool_calls.length > 0;
     if (hasFunctionCall || hasToolCalls) {
-      // Tool calls always take priority and never include thinking
+      // Tool calls always take priority
       output = hasFunctionCall ? message.function_call : message.tool_calls;
     } else if (message.content && message.content.trim()) {
       output = message.content;
-      // Add reasoning as thinking content if present and showThinking is enabled (backwards compatibility)
-      if (message.reasoning && (this.config.showThinking ?? true)) {
-        output = `Thinking: ${message.reasoning}\n\n${output}`;
-      }
-    } else if (message.reasoning && (this.config.showThinking ?? true)) {
-      // Fallback to reasoning if no content and showThinking is enabled
-      output = message.reasoning;
     }
     // Handle structured output
     if (config.response_format?.type === 'json_schema') {
-      // Prefer parsing the raw content to avoid the "Thinking:" prefix breaking JSON
+      // Parse the raw content as JSON
       const jsonCandidate =
         typeof message?.content === 'string'
           ? message.content
@@ -153,7 +148,7 @@ export class OpenRouterProvider extends OpenAiChatCompletionProvider {
         try {
           output = JSON.parse(jsonCandidate);
         } catch (error) {
-          // Keep the original output (which may include "Thinking:" prefix) if parsing fails
+          // Keep the original output if parsing fails
           logger.warn(`Failed to parse JSON output for json_schema: ${String(error)}`);
         }
       }

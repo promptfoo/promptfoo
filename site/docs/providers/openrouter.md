@@ -103,19 +103,13 @@ providers:
 
 ## Thinking/Reasoning Models
 
-Some models like Gemini 2.5 Pro include thinking tokens in their responses. You can control whether these are shown using the `showThinking` parameter:
+Some models like Gemini 2.5 Pro include thinking tokens in their responses. You can control whether these are included using the `showThinking` parameter:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
   - id: openrouter:google/gemini-2.5-pro
     config:
-      showThinking: false # Hide thinking content from output (default: true)
+      showThinking: false # Hide thinking content (default: true)
 ```
 
-When `showThinking` is true (default), the output includes thinking content:
-
-```
-Thinking: <reasoning process>
-
-<actual response>
-```
+When `showThinking` is true (default), reasoning content is returned in the response's `reasoning` field and displayed in the UI's Reasoning panel separately from the main output. When set to `false`, reasoning content is not included in the response.

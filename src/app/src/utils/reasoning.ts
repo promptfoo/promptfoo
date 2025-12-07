@@ -4,6 +4,10 @@ import type { ReasoningContent } from '@promptfoo/types';
  * Extract text content from a reasoning array for display.
  * Handles all provider-specific formats and returns a unified string.
  *
+ * Note: This function extracts only text content for UI display. Metadata like
+ * signatures (used for multi-turn extended thinking verification) are not included
+ * in the output string but remain available in the original ReasoningContent objects.
+ *
  * @param reasoning - Array of reasoning content blocks
  * @returns Combined reasoning text, or empty string if none
  */

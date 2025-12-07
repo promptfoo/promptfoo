@@ -127,6 +127,9 @@ export class ResponsesProcessor {
         }
       }
 
+      // Only include reasoning if showThinking is not explicitly false (per-call config takes priority)
+      const showThinking = requestConfig.showThinking !== false;
+
       const result: ProviderResponse = {
         output: finalOutput,
         tokenUsage: getTokenUsage(data, cached),
@@ -134,7 +137,9 @@ export class ResponsesProcessor {
         cost: this.config.costCalculator(this.config.modelName, data.usage, requestConfig),
         raw: data,
         metadata: extractMetadata(data, processedOutput),
-        ...(processedOutput.reasoning?.length ? { reasoning: processedOutput.reasoning } : {}),
+        ...(processedOutput.reasoning?.length && showThinking
+          ? { reasoning: processedOutput.reasoning }
+          : {}),
       };
 
       // Add annotations if present (for deep research citations)

@@ -128,9 +128,15 @@ export function extractReasoningFromMessage(
 
 /**
  * Extract output from Anthropic message, excluding thinking blocks.
- * Thinking blocks are now handled separately via extractReasoningFromMessage.
+ * Thinking blocks are handled separately via the reasoning field - NO double-write.
+ *
+ * Note: The showThinking parameter is kept for API compatibility but is ignored.
+ * Reasoning content is NEVER included in output - it goes only in the reasoning field.
  */
-export function outputFromMessage(message: Anthropic.Messages.Message, showThinking: boolean) {
+export function outputFromMessage(
+  message: Anthropic.Messages.Message,
+  _showThinking: boolean = true,
+) {
   const hasToolUse = message.content.some((block) => block.type === 'tool_use');
   const hasThinking = message.content.some(
     (block) => block.type === 'thinking' || block.type === 'redacted_thinking',
@@ -142,15 +148,7 @@ export function outputFromMessage(message: Anthropic.Messages.Message, showThink
         if (block.type === 'text') {
           return block.text;
         } else if (block.type === 'thinking' || block.type === 'redacted_thinking') {
-          // Thinking blocks are now handled separately via reasoning field
-          // Only include in output if showThinking is true (for backwards compatibility)
-          if (showThinking) {
-            if (block.type === 'thinking') {
-              return `Thinking: ${block.thinking}\nSignature: ${block.signature}`;
-            } else {
-              return `Redacted Thinking: ${block.data}`;
-            }
-          }
+          // Thinking blocks are handled ONLY via reasoning field - never in output
           return '';
         } else {
           return JSON.stringify(block);
