@@ -55,23 +55,31 @@ def _generate_dataset(
 
     suite = get_suite(version, suite_name)
 
-    user_tasks = list(suite.user_tasks.keys())
-    injection_tasks = list(suite.injection_tasks.keys())
+    user_task_ids = list(suite.user_tasks.keys())
+    injection_task_ids = list(suite.injection_tasks.keys())
 
     if max_user_tasks:
-        user_tasks = user_tasks[:max_user_tasks]
+        user_task_ids = user_task_ids[:max_user_tasks]
     if max_injection_tasks:
-        injection_tasks = injection_tasks[:max_injection_tasks]
+        injection_task_ids = injection_task_ids[:max_injection_tasks]
 
     rows = []
-    for user_task_id in user_tasks:
-        for injection_task_id in injection_tasks:
+    for user_task_id in user_task_ids:
+        user_task = suite.user_tasks[user_task_id]
+        user_prompt = getattr(user_task, "PROMPT", user_task_id)
+
+        for injection_task_id in injection_task_ids:
+            injection_task = suite.injection_tasks[injection_task_id]
+            injection_goal = getattr(injection_task, "GOAL", injection_task_id)
+
             rows.append(
                 {
                     "vars": {
                         "suite": suite_name,
                         "user_task_id": user_task_id,
                         "injection_task_id": injection_task_id,
+                        "user_prompt": user_prompt,
+                        "injection_goal": injection_goal,
                     }
                 }
             )
