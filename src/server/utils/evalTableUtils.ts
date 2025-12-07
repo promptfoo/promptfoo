@@ -1,4 +1,5 @@
 import { stringify as csvStringify } from 'csv-stringify/sync';
+import { reasoningToString } from '../../util/reasoning';
 import { ResultFailureReason } from '../../types/index';
 
 import type { EvaluateTableRow, Prompt } from '../../types/index';
@@ -45,7 +46,7 @@ export function evalTableToCsv(
   // Check if any rows have descriptions
   const hasDescriptions = table.body.some((row) => row.test.description);
 
-  // Create headers with additional columns for grader reason, comment, and conversation
+  // Create headers with additional columns for reasoning, grader reason, comment, and conversation
   const headers: string[] = [
     ...(hasDescriptions ? ['Description'] : []),
     ...table.head.vars,
@@ -53,7 +54,7 @@ export function evalTableToCsv(
       // Handle both Prompt and CompletedPrompt types
       const provider = (prompt as any).provider || '';
       const label = provider ? `[${provider}] ${prompt.label}` : prompt.label;
-      return [label, 'Grader Reason', 'Comment'];
+      return [label, 'Reasoning', 'Grader Reason', 'Comment'];
     }),
   ];
 
@@ -72,7 +73,7 @@ export function evalTableToCsv(
       ...row.vars,
       ...row.outputs.flatMap((output) => {
         if (!output) {
-          return ['', '', ''];
+          return ['', '', '', ''];
         }
 
         return [
@@ -82,6 +83,8 @@ export function evalTableToCsv(
             : output.failureReason === ResultFailureReason.ASSERT
               ? '[FAIL] '
               : '[ERROR] ') + (output.text || ''),
+          // Add reasoning
+          reasoningToString(output.response?.reasoning) || '',
           // Add grader reason
           output.gradingResult?.reason || '',
           // Add comment
