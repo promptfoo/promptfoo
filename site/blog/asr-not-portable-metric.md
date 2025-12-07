@@ -36,23 +36,23 @@ Below are three failure modes we hit when operationalizing jailbreak papers.
 
 ## 1. Aggregation changes the estimand (conceptual coherence failure)
 
-Chouldechova et al. frame ASR as an estimate of an **estimand** (the population quantity you intend to measure) defined by an explicit **threat model**, rather than as an intrinsic property of a "jailbreak method." They formalize a threat model as: an oracle success criterion, a goal distribution over prompts, and attacker constraints. The oracle is *approximated* by a judge, and the goal distribution is operationalized via a concrete prompt set.
+Chouldechova et al. frame ASR as an estimate of a population quantity (the **estimand**) defined by a **threat model**, not an intrinsic property of a "jailbreak method." A threat model specifies: what counts as success, what prompts to test, and what the attacker can do. Success is judged by an LLM; the prompt distribution is a concrete test set.
 
 In production evaluation, the aggregation rule is not a reporting detail. It is part of the threat model. Change the aggregation (one-shot vs best-of-K), and you change what is being estimated.
 
-**Example A: Top-1 over 392 vs one-shot, used to argue GE is more effective than GCG.**
-The paper analyzes a comparison involving [Generation Exploitation](https://arxiv.org/abs/2310.06987) (Huang et al., ICLR 2024) and [GCG](https://arxiv.org/abs/2307.15043) (Zou et al., 2023). In that setup, GE is evaluated as a Top-1 metric over **392 candidate responses** (49 decoding configurations × 8 samples), while GCG is evaluated using a single sampled output after optimization. The implied estimands are not comparable because they encode different retry budgets.
+**Example A: Top-1 over 392 vs one-shot**
+The paper compares [Generation Exploitation](https://arxiv.org/abs/2310.06987) (Huang et al., ICLR 2024) and [GCG](https://arxiv.org/abs/2307.15043) (Zou et al., 2023). GE was evaluated as Top-1 over **392 candidate responses** (49 decoding configurations × 8 samples); GCG was evaluated on a single output after optimization. These are not comparable: they encode different retry budgets.
 
-This is not a small effect. If a prompt has one-shot success probability **p₀ = 0.01**, then best-of-392 succeeds with probability:
+This is not a small effect. If one-shot success probability is **p₀ = 0.01**, best-of-392 succeeds with probability:
 
 **1 − (1 − p₀)³⁹² ≈ 0.98**
 
-That apparent "method improvement" can be entirely explained by a changed attempt budget.
+That apparent "method improvement" is entirely explained by the changed attempt budget.
 
-**Example B: "best jailbreak" vs "baseline" is often not retry-budget matched.**
-The paper also shows that simply resampling baseline prompts can be a strong attacker under best-of-K aggregation. In their replication on **Llama 2 7B Chat**, they report **Top-1 ASR = 0.83** for baseline prompts under **K = 50** samples at **temperature 2.0**.
+**Example B: Resampling baseline prompts**
+Simply resampling baseline prompts can be a strong attacker under best-of-K. On **Llama 2 7B Chat**, baseline prompts achieved **Top-1 ASR = 0.83** with **K = 50** samples at **temperature 2.0**.
 
-For practitioners, this matters because best-of-K is an attacker capability assumption. When we implement jailbreak methods, we have to decide whether the threat model is "one attempt," "N attempts," or "adaptive search until success." Many comparisons in the literature unintentionally compare different answers to that question.
+For practitioners, best-of-K is an attacker capability assumption. When implementing jailbreak methods, you must decide: is the threat model "one attempt," "N attempts," or "adaptive search until success"? Many papers unintentionally compare different answers to that question.
 
 ---
 
