@@ -1,22 +1,17 @@
 import type { AssertionParams, GradingResult } from '../types/index';
 import invariant from '../util/invariant';
 
-interface ToolCall {
-  type?: string;
-  function?: {
-    name: string;
-    arguments?: string;
-  };
-  name?: string;
-}
-
 /**
  * Extracts tool names from various output formats.
  *
  * Supports:
  * - OpenAI format: { tool_calls: [{ function: { name: "..." } }] }
- * - Direct array: [{ function: { name: "..." } }]
+ * - OpenAI direct array: [{ function: { name: "..." } }]
  * - Simple format: [{ name: "..." }]
+ * - Anthropic format: { type: 'tool_use', name: '...' } or arrays of content blocks
+ * - Google/Vertex format: { functionCall: { name: '...' } } or arrays
+ * - Google Live format: { toolCall: { functionCalls: [...] } }
+ * - String output: JSON-stringified versions of the above, including mixed text/JSON
  */
 function extractToolNames(output: unknown): Set<string> {
   const names = new Set<string>();
@@ -25,26 +20,137 @@ function extractToolNames(output: unknown): Set<string> {
     return names;
   }
 
-  // Handle object with tool_calls property (OpenAI chat completion format)
-  if (typeof output === 'object' && 'tool_calls' in output) {
-    const toolCalls = (output as { tool_calls: ToolCall[] }).tool_calls;
-    if (Array.isArray(toolCalls)) {
-      for (const tc of toolCalls) {
-        const name = tc.function?.name ?? tc.name;
-        if (name) {
-          names.add(name);
+  // Handle string output - try to parse as JSON and recursively extract
+  if (typeof output === 'string') {
+    // First, try parsing the entire string as JSON
+    try {
+      const parsed = JSON.parse(output);
+      const parsedNames = extractToolNames(parsed);
+      for (const name of parsedNames) {
+        names.add(name);
+      }
+      return names;
+    } catch {
+      // Not valid JSON as a whole, continue to try line-by-line parsing
+    }
+
+    // Handle Anthropic-style output: text and JSON objects separated by newlines
+    // Example: "Let me check the weather.\n\n{"type":"tool_use","name":"get_weather",...}"
+    const lines = output.split('\n');
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+        try {
+          const parsed = JSON.parse(trimmed);
+          const parsedNames = extractToolNames(parsed);
+          for (const name of parsedNames) {
+            names.add(name);
+          }
+        } catch {
+          // Not valid JSON, ignore this line
         }
       }
     }
     return names;
   }
 
-  // Handle direct array of tool calls
+  if (typeof output !== 'object') {
+    return names;
+  }
+
+  const obj = output as Record<string, unknown>;
+
+  // Handle OpenAI format: { tool_calls: [{ function: { name: "..." } }] }
+  if ('tool_calls' in obj && Array.isArray(obj.tool_calls)) {
+    for (const tc of obj.tool_calls) {
+      if (tc && typeof tc === 'object') {
+        const toolCall = tc as Record<string, unknown>;
+        // OpenAI: { function: { name: "..." } }
+        if (toolCall.function && typeof toolCall.function === 'object') {
+          const fn = toolCall.function as Record<string, unknown>;
+          if (typeof fn.name === 'string') {
+            names.add(fn.name);
+          }
+        }
+        // Simple: { name: "..." }
+        if (typeof toolCall.name === 'string') {
+          names.add(toolCall.name);
+        }
+      }
+    }
+    return names;
+  }
+
+  // Handle Anthropic single tool_use block: { type: 'tool_use', name: '...' }
+  if (obj.type === 'tool_use' && typeof obj.name === 'string') {
+    names.add(obj.name);
+    return names;
+  }
+
+  // Handle Google/Vertex single functionCall: { functionCall: { name: '...' } }
+  if ('functionCall' in obj && obj.functionCall && typeof obj.functionCall === 'object') {
+    const fc = obj.functionCall as Record<string, unknown>;
+    if (typeof fc.name === 'string') {
+      names.add(fc.name);
+    }
+    return names;
+  }
+
+  // Handle Google Live format: { toolCall: { functionCalls: [...] } }
+  if ('toolCall' in obj && obj.toolCall && typeof obj.toolCall === 'object') {
+    const toolCall = obj.toolCall as Record<string, unknown>;
+    if ('functionCalls' in toolCall && Array.isArray(toolCall.functionCalls)) {
+      for (const fc of toolCall.functionCalls) {
+        if (
+          fc &&
+          typeof fc === 'object' &&
+          typeof (fc as Record<string, unknown>).name === 'string'
+        ) {
+          names.add((fc as Record<string, unknown>).name as string);
+        }
+      }
+    }
+    return names;
+  }
+
+  // Handle arrays (Anthropic content blocks, Google arrays, OpenAI arrays)
   if (Array.isArray(output)) {
-    for (const tc of output as ToolCall[]) {
-      const name = tc.function?.name ?? tc.name;
-      if (name) {
-        names.add(name);
+    for (const item of output) {
+      if (item && typeof item === 'object') {
+        const block = item as Record<string, unknown>;
+
+        // Anthropic content block: { type: 'tool_use', name: '...' }
+        if (block.type === 'tool_use' && typeof block.name === 'string') {
+          names.add(block.name);
+          continue;
+        }
+
+        // Google/Vertex array item: { functionCall: { name: '...' } }
+        if (
+          'functionCall' in block &&
+          block.functionCall &&
+          typeof block.functionCall === 'object'
+        ) {
+          const fc = block.functionCall as Record<string, unknown>;
+          if (typeof fc.name === 'string') {
+            names.add(fc.name);
+          }
+          continue;
+        }
+
+        // OpenAI format: { function: { name: "..." } }
+        if (block.function && typeof block.function === 'object') {
+          const fn = block.function as Record<string, unknown>;
+          if (typeof fn.name === 'string') {
+            names.add(fn.name);
+          }
+          continue;
+        }
+
+        // Simple format: { name: "..." }
+        if (typeof block.name === 'string') {
+          names.add(block.name);
+        }
       }
     }
   }

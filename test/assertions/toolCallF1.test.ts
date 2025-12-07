@@ -1,4 +1,3 @@
-import { vi } from 'vitest';
 import { handleToolCallF1 } from '../../src/assertions/toolCallF1';
 
 import type { ApiProvider, AssertionParams, AtomicTestCase } from '../../src/types/index';
@@ -32,10 +31,6 @@ const createParams = (
 });
 
 describe('handleToolCallF1', () => {
-  afterEach(() => {
-    vi.resetAllMocks();
-  });
-
   describe('F1 score calculation', () => {
     it('should return F1=1.0 when actual tools exactly match expected tools', () => {
       const output = {
@@ -173,6 +168,166 @@ describe('handleToolCallF1', () => {
 
       expect(result.pass).toBe(true);
       expect(result.score).toBe(1);
+    });
+
+    it('should handle Anthropic single tool_use format', () => {
+      const output = {
+        type: 'tool_use',
+        id: 'toolu_01ABC123',
+        name: 'get_weather',
+        input: { city: 'NYC' },
+      };
+      const params = createParams(output, ['get_weather']);
+
+      const result = handleToolCallF1(params);
+
+      expect(result.pass).toBe(true);
+      expect(result.score).toBe(1);
+    });
+
+    it('should handle Anthropic content blocks array', () => {
+      // Anthropic returns an array of content blocks
+      const output = [
+        { type: 'text', text: 'Let me check the weather for you.' },
+        { type: 'tool_use', id: 'toolu_01ABC123', name: 'get_weather', input: { city: 'NYC' } },
+        { type: 'tool_use', id: 'toolu_01DEF456', name: 'book_flight', input: { dest: 'LA' } },
+      ];
+      const params = createParams(output, ['get_weather', 'book_flight']);
+
+      const result = handleToolCallF1(params);
+
+      expect(result.pass).toBe(true);
+      expect(result.score).toBe(1);
+    });
+
+    it('should handle Google/Vertex single functionCall format', () => {
+      const output = {
+        functionCall: {
+          name: 'get_weather',
+          args: { city: 'NYC' },
+        },
+      };
+      const params = createParams(output, ['get_weather']);
+
+      const result = handleToolCallF1(params);
+
+      expect(result.pass).toBe(true);
+      expect(result.score).toBe(1);
+    });
+
+    it('should handle Google/Vertex array of functionCalls', () => {
+      const output = [
+        { functionCall: { name: 'get_weather', args: { city: 'NYC' } } },
+        { functionCall: { name: 'book_flight', args: { dest: 'LA' } } },
+      ];
+      const params = createParams(output, ['get_weather', 'book_flight']);
+
+      const result = handleToolCallF1(params);
+
+      expect(result.pass).toBe(true);
+      expect(result.score).toBe(1);
+    });
+
+    it('should handle Google Live toolCall format', () => {
+      const output = {
+        toolCall: {
+          functionCalls: [{ name: 'get_weather', args: { city: 'NYC' } }, { name: 'book_flight' }],
+        },
+      };
+      const params = createParams(output, ['get_weather', 'book_flight']);
+
+      const result = handleToolCallF1(params);
+
+      expect(result.pass).toBe(true);
+      expect(result.score).toBe(1);
+    });
+
+    it('should handle JSON stringified OpenAI output', () => {
+      const output = JSON.stringify({
+        tool_calls: [{ function: { name: 'get_weather', arguments: '{}' } }],
+      });
+      const params = createParams(output, ['get_weather']);
+
+      const result = handleToolCallF1(params);
+
+      expect(result.pass).toBe(true);
+      expect(result.score).toBe(1);
+    });
+
+    it('should handle JSON stringified Anthropic output', () => {
+      const output = JSON.stringify([
+        { type: 'tool_use', id: 'toolu_01ABC123', name: 'get_weather', input: { city: 'NYC' } },
+      ]);
+      const params = createParams(output, ['get_weather']);
+
+      const result = handleToolCallF1(params);
+
+      expect(result.pass).toBe(true);
+      expect(result.score).toBe(1);
+    });
+
+    it('should handle JSON stringified Google output', () => {
+      const output = JSON.stringify({
+        functionCall: { name: 'get_weather', args: {} },
+      });
+      const params = createParams(output, ['get_weather']);
+
+      const result = handleToolCallF1(params);
+
+      expect(result.pass).toBe(true);
+      expect(result.score).toBe(1);
+    });
+
+    it('should return empty set for non-JSON string output', () => {
+      const output = 'This is just a text response with no tool calls';
+      const params = createParams(output, ['get_weather']);
+
+      const result = handleToolCallF1(params);
+
+      expect(result.pass).toBe(false);
+      expect(result.score).toBe(0);
+    });
+
+    it('should handle Anthropic mixed text and JSON string output', () => {
+      // Anthropic returns text and tool_use blocks joined by \n\n
+      const output = `Let me check the weather for you.
+
+{"type":"tool_use","id":"toolu_01ABC123","name":"get_weather","input":{"city":"NYC"}}
+
+{"type":"tool_use","id":"toolu_01DEF456","name":"book_flight","input":{"dest":"LA"}}`;
+      const params = createParams(output, ['get_weather', 'book_flight']);
+
+      const result = handleToolCallF1(params);
+
+      expect(result.pass).toBe(true);
+      expect(result.score).toBe(1);
+    });
+
+    it('should handle Anthropic output with only one tool call in string', () => {
+      const output = `I'll help you with that.
+
+{"type":"tool_use","id":"toolu_123","name":"search_web","input":{"query":"test"}}`;
+      const params = createParams(output, ['search_web']);
+
+      const result = handleToolCallF1(params);
+
+      expect(result.pass).toBe(true);
+      expect(result.score).toBe(1);
+    });
+
+    it('should handle partial matches across providers', () => {
+      // Anthropic-style output with 3 tools, but only 2 expected
+      const output = [
+        { type: 'tool_use', name: 'get_weather', input: {} },
+        { type: 'tool_use', name: 'book_flight', input: {} },
+        { type: 'tool_use', name: 'search_web', input: {} },
+      ];
+      const params = createParams(output, ['get_weather', 'book_flight']);
+
+      const result = handleToolCallF1(params);
+
+      // Precision = 2/3, Recall = 2/2 = 1, F1 = 0.8
+      expect(result.score).toBeCloseTo(0.8, 3);
     });
   });
 
