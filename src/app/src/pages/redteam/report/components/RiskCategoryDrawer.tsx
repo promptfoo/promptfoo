@@ -20,6 +20,7 @@ import {
   strategyDescriptions,
 } from '@promptfoo/redteam/constants';
 import { useNavigate } from 'react-router-dom';
+import { reasoningToString } from '@app/utils/reasoning';
 import EvalOutputPromptDialog from '../../../eval/components/EvalOutputPromptDialog';
 import PluginStrategyFlow from './PluginStrategyFlow';
 import SuggestionsDialog from './SuggestionsDialog';
@@ -415,6 +416,7 @@ const RiskCategoryDrawer = ({
             ? JSON.stringify(selectedTest?.result?.response?.output)
             : selectedTest?.result?.response?.output
         }
+        reasoning={reasoningToString(selectedTest?.result?.response?.reasoning)}
         gradingResults={selectedTest?.gradingResult ? [selectedTest.gradingResult] : undefined}
         metadata={selectedTest?.result?.metadata}
       />

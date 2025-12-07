@@ -7,6 +7,7 @@ import remarkGfm from 'remark-gfm';
 import useCloudConfig from '@app/hooks/useCloudConfig';
 import { useEvalOperations } from '@app/hooks/useEvalOperations';
 import { useShiftKey } from '@app/hooks/useShiftKey';
+import { reasoningToString } from '@app/utils/reasoning';
 import {
   Check,
   ContentCopy,
@@ -676,6 +677,7 @@ function EvalOutputCell({
               provider={output.provider}
               gradingResults={output.gradingResult?.componentResults}
               output={text}
+              reasoning={reasoningToString(output.response?.reasoning)}
               metadata={output.metadata}
               evaluationId={evaluationId}
               testCaseId={testCaseId || output.id}
