@@ -124,8 +124,10 @@ async function loadFromProviderOptions(provider: ProviderOptions) {
     `Provider must be an object, but received an array: ${JSON.stringify(provider)}`,
   );
   invariant(provider.id, 'Provider supplied to assertion must have an id');
-  // TODO(ian): set basepath if invoked from filesystem config
-  return loadApiProvider(provider.id, { options: provider as ProviderOptions });
+  return loadApiProvider(provider.id, {
+    options: provider as ProviderOptions,
+    basePath: cliState.basePath,
+  });
 }
 
 export async function getGradingProvider(
@@ -136,7 +138,7 @@ export async function getGradingProvider(
   let finalProvider: ApiProvider | null;
   if (typeof provider === 'string') {
     // Defined as a string
-    finalProvider = await loadApiProvider(provider);
+    finalProvider = await loadApiProvider(provider, { basePath: cliState.basePath });
   } else if (typeof provider === 'object' && typeof (provider as ApiProvider).id === 'function') {
     // Defined as an ApiProvider interface
     finalProvider = provider as ApiProvider;
