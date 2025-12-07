@@ -1,5 +1,5 @@
 ---
-title: 'ASR is not a portable metric: notes from productionizing jailbreak research'
+title: "Why you can't compare jailbreak papers by attack success rate"
 description: 'Attack success rate comparisons in jailbreak papers often conflate different quantities. Why translating academic ASR results into production is harder than it looks.'
 image: /img/blog/asr-not-portable-metric/asr-header.jpg
 keywords:
