@@ -5,7 +5,7 @@ import os
 import sys
 import tempfile
 import unittest
-from unittest.mock import MagicMock, mock_open, patch
+from unittest.mock import MagicMock, patch
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from python import persistent_wrapper
@@ -374,7 +374,7 @@ class TestHandleCall(unittest.TestCase):
         with patch("sys.stdout", stdout_capture):
             with patch("sys.stderr", stderr_capture):
                 persistent_wrapper.handle_call(
-                    f"CALL|only_two_parts",
+                    "CALL|only_two_parts",
                     self.mock_module,
                     "test_func",
                 )
