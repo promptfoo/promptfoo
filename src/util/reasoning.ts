@@ -79,7 +79,8 @@ export function combineReasoningAndOutput(
   }
 
   if (response.output !== undefined && response.output !== null) {
-    const outputStr = typeof response.output === 'string' ? response.output : JSON.stringify(response.output);
+    const outputStr =
+      typeof response.output === 'string' ? response.output : JSON.stringify(response.output);
     parts.push(outputStr);
   }
 

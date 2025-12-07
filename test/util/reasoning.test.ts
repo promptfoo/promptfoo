@@ -94,10 +94,22 @@ describe('reasoning utilities', () => {
     });
 
     it('should return true for response with any reasoning type', () => {
-      const thinking = { output: 'test', reasoning: [{ type: 'thinking' as const, thinking: 'test' }] };
-      const redacted = { output: 'test', reasoning: [{ type: 'redacted_thinking' as const, data: 'test' }] };
-      const reasoning = { output: 'test', reasoning: [{ type: 'reasoning' as const, content: 'test' }] };
-      const thought = { output: 'test', reasoning: [{ type: 'thought' as const, thought: 'test' }] };
+      const thinking = {
+        output: 'test',
+        reasoning: [{ type: 'thinking' as const, thinking: 'test' }],
+      };
+      const redacted = {
+        output: 'test',
+        reasoning: [{ type: 'redacted_thinking' as const, data: 'test' }],
+      };
+      const reasoning = {
+        output: 'test',
+        reasoning: [{ type: 'reasoning' as const, content: 'test' }],
+      };
+      const thought = {
+        output: 'test',
+        reasoning: [{ type: 'thought' as const, thought: 'test' }],
+      };
       const think = { output: 'test', reasoning: [{ type: 'think' as const, content: 'test' }] };
 
       expect(hasReasoning(thinking)).toBe(true);

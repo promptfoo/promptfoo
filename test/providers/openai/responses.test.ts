@@ -2749,7 +2749,15 @@ describe('OpenAiResponsesProvider', () => {
 
     const result = await provider.callApi('Test prompt');
     expect(result.error).toBeUndefined();
-    expect(result.output).toBe('Reasoning: Valid reasoning summary\nFinal answer');
+    // Output should NOT include the reasoning content
+    expect(result.output).toBe('Final answer');
+    // Reasoning should be stored separately
+    expect(result.reasoning).toEqual([
+      {
+        type: 'reasoning',
+        content: 'Valid reasoning summary',
+      },
+    ]);
   });
 
   describe('response format handling', () => {

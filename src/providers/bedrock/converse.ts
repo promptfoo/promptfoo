@@ -527,7 +527,9 @@ export function parseConverseMessages(prompt: string): {
  * Extract reasoning/thinking content from Converse API response content blocks.
  * Preserves native format as ReasoningContent array.
  */
-function extractReasoningFromContentBlocks(content: ContentBlock[]): ReasoningContent[] | undefined {
+function extractReasoningFromContentBlocks(
+  content: ContentBlock[],
+): ReasoningContent[] | undefined {
   const reasoningBlocks: ReasoningContent[] = [];
 
   for (const block of content) {

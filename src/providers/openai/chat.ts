@@ -458,8 +458,9 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         }
       }
 
-      // Build reasoning field (only if we have reasoning content)
-      const reasoning = reasoningBlocks.length > 0 ? reasoningBlocks : undefined;
+      // Build reasoning field (only if we have reasoning content and showThinking is not false)
+      const reasoning =
+        reasoningBlocks.length > 0 && config.showThinking !== false ? reasoningBlocks : undefined;
 
       // Handle function tool callbacks
       const functionCalls = message.function_call ? [message.function_call] : message.tool_calls;
