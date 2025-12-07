@@ -1,5 +1,5 @@
 ---
-title: "Why you can't compare jailbreak papers by attack success rate"
+title: 'How 1% attack success rate becomes 98% (without improving the attack)'
 description: 'Attack success rate comparisons in jailbreak papers often conflate different quantities. Why translating academic ASR results into production is harder than it looks.'
 image: /img/blog/asr-not-portable-metric/asr-header.jpg
 keywords:
