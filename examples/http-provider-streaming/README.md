@@ -1,20 +1,23 @@
-# http-provider-streaming (HTTP Provider Streaming Example)
+# http-provider-streaming
 
-This example shows how to use OpenAI's streaming API via HTTP provider.
+This example demonstrates streaming response handling with **Time to First Token (TTFT)** measurement using promptfoo's HTTP provider.
 
-You can run this example with:
+## Quick Start
+
+Initialize this example with:
 
 ```bash
 npx promptfoo@latest init --example http-provider-streaming
 ```
 
-⚠️ **Streaming is not recommended for evaluations**
+✅ **Streaming enables important performance metrics**
 
-Promptfoo supports streaming HTTP targets, but evals wait for full responses before scoring. That means:
+While promptfoo waits for complete responses, streaming now provides valuable benefits:
 
-- No progressive display during evals
-- Extra parsing complexity for streaming formats (SSE/chunked)
-- Similar end-to-end latency vs. non-streaming
+- **TTFT Measurement**: Track how quickly models start responding
+- **User-Perceived Performance**: Measure streaming responsiveness
+- **Model Comparison**: Compare streaming performance across providers
+- **Production Insights**: Test streaming implementations before deployment
 
 ## Environment Variables
 
@@ -45,5 +48,37 @@ OPENAI_API_KEY=your-openai-api-key
    ```bash
    npx promptfoo@latest view
    ```
+
+## Key Features
+
+### TTFT Measurement
+
+This example uses `stream: true` in the request body to measure Time to First Token:
+
+```yaml
+providers:
+  - id: https://api.openai.com/v1/chat/completions
+    config:
+      # TTFT measurement is automatically enabled when stream: true
+      stream: true # Enable streaming from API
+```
+
+### Performance Assertions
+
+The configuration includes three types of performance tests:
+
+- **Content Quality**: Ensures meaningful output (> 10 characters)
+- **TTFT Performance**: Measures time to first token (< 3000ms)
+- **Total Latency**: Measures end-to-end response time (< 10000ms)
+
+### Expected Results
+
+- **TTFT**: Typically 200-800ms for current OpenAI models
+- **Total Latency**: Usually 2-8 seconds depending on response length
+- **Streaming Benefits**: Real-time performance insights
+
+## Caching Behavior
+
+When `stream: true` is set, response caching is disabled to ensure accurate live measurements. This trade-off provides real performance metrics at the cost of caching benefits.
 
 For more HTTP provider configuration options, see the docs: `https://promptfoo.dev/docs/providers/http`.
