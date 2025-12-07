@@ -1,4 +1,12 @@
-import React, { createContext, useCallback, useContext, useState, useEffect, useRef } from 'react';
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useState,
+  useEffect,
+  useRef,
+  useMemo,
+} from 'react';
 
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
@@ -12,6 +20,8 @@ import {
 import { TestCaseDialog } from './TestCaseDialog';
 import { type Config } from '../types';
 import type { ConversationMessage, PluginConfig, StrategyConfig } from '@promptfoo/redteam/types';
+
+const DEFAULT_PLUGIN = 'harmful:hate';
 
 const TEST_GENERATION_TIMEOUT = 60000; // 60s timeout
 const TEST_EXECUTION_TIMEOUT = 60000; // 60s timeout
@@ -195,6 +205,17 @@ export const TestCaseGenerationProvider: React.FC<{
   const [strategy, setStrategy] = useState<TargetStrategy | null>(null);
 
   const shouldEvaluateAgainstTarget = !!redTeamConfig.target?.id;
+
+  // Compute available plugins from config
+  const availablePlugins = useMemo(() => {
+    const plugins =
+      redTeamConfig.plugins?.map((p) => (typeof p === 'string' ? p : p.id)).filter(Boolean) ?? [];
+    // If no plugins are configured, provide a default
+    if (plugins.length === 0) {
+      return [DEFAULT_PLUGIN];
+    }
+    return plugins;
+  }, [redTeamConfig.plugins]);
 
   // ===================================================================
   // Refs
@@ -425,10 +446,17 @@ export const TestCaseGenerationProvider: React.FC<{
 
   /**
    * Regenerates and optionally evaluates the plugin/strategy combination.
+   * Accepts an optional newPluginId to change the plugin before regenerating.
    */
-  const handleRegenerate = useCallback(() => {
-    handleStart(plugin!, strategy!);
-  }, [handleStart, plugin, strategy]);
+  const handleRegenerate = useCallback(
+    (newPluginId?: string) => {
+      const targetPlugin = newPluginId
+        ? { id: newPluginId as Plugin, config: {}, isStatic: true }
+        : plugin!;
+      handleStart(targetPlugin, strategy!);
+    },
+    [handleStart, plugin, strategy],
+  );
 
   const handleContinue = useCallback((additionalTurns: number) => {
     setMaxTurns((prev) => prev + additionalTurns);
@@ -543,6 +571,7 @@ export const TestCaseGenerationProvider: React.FC<{
         isRunningTest={isRunningTest}
         currentTurn={currentTurn}
         maxTurns={maxTurns}
+        availablePlugins={availablePlugins}
       />
     </TestCaseGenerationContext>
   );

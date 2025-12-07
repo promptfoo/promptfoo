@@ -1,7 +1,8 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 
 import MagicWandIcon from '@mui/icons-material/AutoFixHigh';
 import Alert from '@mui/material/Alert';
+import Autocomplete from '@mui/material/Autocomplete';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
@@ -11,6 +12,8 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import IconButton from '@mui/material/IconButton';
 import Link from '@mui/material/Link';
+import Popover from '@mui/material/Popover';
+import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Divider from '@mui/material/Divider';
 import Stack from '@mui/material/Stack';
@@ -49,10 +52,11 @@ interface TestCaseDialogProps {
   generatedTestCases: GeneratedTestCase[];
   targetResponses: TargetResponse[];
   isRunningTest?: boolean;
-  onRegenerate: () => void;
+  onRegenerate: (newPluginId?: string) => void;
   onContinue: (additionalTurns: number) => void;
   currentTurn: number;
   maxTurns: number;
+  availablePlugins: string[];
 }
 
 export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
@@ -68,12 +72,33 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
   onContinue,
   currentTurn,
   maxTurns,
+  availablePlugins,
 }) => {
   const pluginName = plugin?.id ?? '';
   const pluginDisplayName =
     displayNameOverrides[pluginName as Plugin] ||
     categoryAliases[pluginName as Plugin] ||
     pluginName;
+
+  // State for the selected plugin
+  const [selectedPlugin, setSelectedPlugin] = useState<string>(pluginName);
+
+  // Popover state for plugin selector
+  const [pluginPopoverAnchor, setPluginPopoverAnchor] = useState<HTMLElement | null>(null);
+  const isPluginPopoverOpen = Boolean(pluginPopoverAnchor);
+
+  // Sync selected plugin with the current plugin when it changes
+  useEffect(() => {
+    if (pluginName) {
+      setSelectedPlugin(pluginName);
+    }
+  }, [pluginName]);
+
+  // Get display name for the selected plugin
+  const selectedPluginDisplayName =
+    displayNameOverrides[selectedPlugin as Plugin] ||
+    categoryAliases[selectedPlugin as Plugin] ||
+    selectedPlugin;
 
   const strategyName = strategy?.id ?? '';
   const strategyDisplayName = displayNameOverrides[strategyName as Strategy] || strategyName;
@@ -174,7 +199,68 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
             label={`Strategy: ${strategyDisplayName}${maxTurns > 1 ? ` (${maxTurns} turns)` : ''}`}
             data-testid="strategy-chip"
           />
-          <Chip label={`Plugin: ${pluginDisplayName}`} data-testid="plugin-chip" />
+          <Tooltip title="Click to change plugin">
+            <Chip
+              label={`Plugin: ${selectedPluginDisplayName}`}
+              data-testid="plugin-chip"
+              onClick={(e) => setPluginPopoverAnchor(e.currentTarget)}
+              clickable
+              color={selectedPlugin !== pluginName ? 'primary' : 'default'}
+              sx={{ cursor: 'pointer' }}
+            />
+          </Tooltip>
+          <Popover
+            open={isPluginPopoverOpen}
+            anchorEl={pluginPopoverAnchor}
+            onClose={() => setPluginPopoverAnchor(null)}
+            anchorOrigin={{
+              vertical: 'bottom',
+              horizontal: 'left',
+            }}
+            transformOrigin={{
+              vertical: 'top',
+              horizontal: 'left',
+            }}
+            sx={{ zIndex: 10001 }}
+            slotProps={{
+              paper: {
+                sx: { overflow: 'visible' },
+              },
+            }}
+          >
+            <Box sx={{ p: 2, minWidth: 250 }}>
+              <Autocomplete
+                size="small"
+                value={selectedPlugin}
+                onChange={(_, newValue) => {
+                  if (newValue) {
+                    setSelectedPlugin(newValue);
+                    setPluginPopoverAnchor(null);
+                  }
+                }}
+                options={availablePlugins}
+                getOptionLabel={(option) =>
+                  (displayNameOverrides as Record<string, string>)[option] ||
+                  (categoryAliases as Record<string, string>)[option] ||
+                  option
+                }
+                disableClearable
+                slotProps={{
+                  popper: {
+                    disablePortal: true,
+                  },
+                }}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    variant="outlined"
+                    size="small"
+                    label="Select Plugin"
+                  />
+                )}
+              />
+            </Box>
+          </Popover>
         </Box>
       </Box>
       <DialogContent>
@@ -232,7 +318,7 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
             </>
           )}
           <Button
-            onClick={onRegenerate}
+            onClick={() => onRegenerate(selectedPlugin)}
             variant={canAddAdditionalTurns ? 'outlined' : 'contained'}
             loading={isGenerating || isRunningTest}
           >
