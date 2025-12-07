@@ -65,7 +65,7 @@ async def test_async_function(arg1, arg2):
                 m, "test_async_function", mock_module.test_async_function
             )
             with (
-                patch("inspect.iscoroutinefunction", return_value=True),
+                patch.object(wrapper.inspect, "iscoroutinefunction", return_value=True),
                 patch("asyncio.run", return_value=12),
             ):
                 result = wrapper.call_method(script_path, "test_async_function", 3, 4)
