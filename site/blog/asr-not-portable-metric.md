@@ -103,29 +103,17 @@ We preserve raw outputs and treat judge choice as a first-class variable. Otherw
 
 ---
 
-## Why this matters for "bringing the best jailbreaks into a project"
+## What this means in practice
 
 ASR comparisons are inferential: an observed rate supports a claim about a population parameter under a threat model. That is where results stop being portable.
 
-Productionizing a jailbreak paper means reconstructing a specification:
+Productionizing a jailbreak paper means reconstructing a specification: what success criterion is being approximated (and by what judge), what prompt distribution is intended (and does the prompt set implement it), what attacker constraints apply (attempt budget, access, transfer setting), and what aggregation defines success at the goal level. Many papers do not pin these down because they prioritize conceptual discovery over measurement.
 
-- What success criterion is being approximated (and by what judge)?
-- What prompt distribution is intended (and does the prompt set implement it)?
-- What attacker constraints apply (attempt budget, access, transfer setting)?
-- What aggregation defines success at the goal level?
+We've read hundreds of these papers. When we implement an attack, we reconstruct the full specification. We know what's being measured.
 
-Many papers do not pin these down because they prioritize conceptual discovery over measurement. Practitioners should treat reported ASRs as conditional on the measurement setup, and treat existence proofs and comparative claims as different evidence.
+That's why we built [**Meta**](https://www.promptfoo.dev/docs/red-team/strategies/meta/) (`jailbreak:meta`) and [**Hydra**](https://www.promptfoo.dev/docs/red-team/strategies/hydra/) (`jailbreak:hydra`) with explicit threat-model knobs: attempt budget, branching, stopping rules. Meta explores multiple attack approaches and adapts to target responses. Hydra is a multi-turn attacker that branches and backtracks on refusals.
 
----
-
-## How we approach this at Promptfoo
-
-These concerns shape how we build strategies:
-
-- **[Meta-agent jailbreaks](https://www.promptfoo.dev/docs/red-team/strategies/meta/)** (`jailbreak:meta`): explores multiple attack approaches, adapts to target responses
-- **[Hydra](https://www.promptfoo.dev/docs/red-team/strategies/hydra/)** (`jailbreak:hydra`): multi-turn attacker that branches and backtracks on refusals
-
-We built Meta and Hydra to make threat-model knobs explicit (attempt budget, branching, stopping rules) so users can evaluate under a specified adversary, not a hidden aggregation.
+Because we understand measurement validity, our strategies surface vulnerabilities that matter. When a goal succeeds, the model actually produced the harmful output, under a threat model you specified. That's the difference between finding real risk and finding measurement artifacts.
 
 ---
 
