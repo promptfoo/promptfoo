@@ -20,7 +20,7 @@ authors: [michael]
 tags: [red-teaming, llm-security, measurement, evaluation]
 ---
 
-Attack success rate is the default metric for comparing jailbreak methods. But ASR from paper A and ASR from paper B often measure different things. The numbers aren't portable.
+Attack success rate is the default metric for comparing jailbreak methods. But ASR from paper A and ASR from paper B often measure different things. The numbers are not directly comparable.
 
 We hit this problem constantly. Promptfoo maintains a [database of LLM security research](https://www.promptfoo.dev/lm-security-db/) with 439 entries across 406 papers. We take these methods and make them runnable in production evaluation pipelines. That's where the measurement issues surface.
 
