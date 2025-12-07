@@ -196,9 +196,23 @@ export interface OpenHandsSDKConfig {
  */
 interface ConversationState {
   id: string;
-  execution_status: 'idle' | 'running' | 'paused' | 'waiting_for_confirmation' | 'finished' | 'error' | 'stuck';
+  execution_status:
+    | 'idle'
+    | 'running'
+    | 'paused'
+    | 'waiting_for_confirmation'
+    | 'finished'
+    | 'error'
+    | 'stuck';
   // Alias for easier access
-  status: 'idle' | 'running' | 'paused' | 'waiting_for_confirmation' | 'finished' | 'error' | 'stuck';
+  status:
+    | 'idle'
+    | 'running'
+    | 'paused'
+    | 'waiting_for_confirmation'
+    | 'finished'
+    | 'error'
+    | 'stuck';
   messages?: Array<{ role: string; content: string }>;
   events?: Array<{
     type: string;
@@ -566,7 +580,9 @@ export class OpenHandsSDKProvider implements ApiProvider {
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`Failed to send message: ${response.status} ${response.statusText} - ${errorText}`);
+      throw new Error(
+        `Failed to send message: ${response.status} ${response.statusText} - ${errorText}`,
+      );
     }
   }
 
@@ -608,17 +624,16 @@ export class OpenHandsSDKProvider implements ApiProvider {
    */
   private async runConversation(conversationId: string): Promise<void> {
     const baseUrl = this.getBaseUrl();
-    const response = await fetchWithProxy(
-      `${baseUrl}/api/conversations/${conversationId}/run`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-      },
-    );
+    const response = await fetchWithProxy(`${baseUrl}/api/conversations/${conversationId}/run`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`Failed to run conversation: ${response.status} ${response.statusText} - ${errorText}`);
+      throw new Error(
+        `Failed to run conversation: ${response.status} ${response.statusText} - ${errorText}`,
+      );
     }
   }
 
@@ -659,14 +674,16 @@ export class OpenHandsSDKProvider implements ApiProvider {
   /**
    * Fetch events from a conversation
    */
-  private async getConversationEvents(conversationId: string): Promise<Array<{
-    kind: string;
-    source?: string;
-    llm_message?: {
-      role: string;
-      content: Array<{ type?: string; text?: string }>;
-    };
-  }>> {
+  private async getConversationEvents(conversationId: string): Promise<
+    Array<{
+      kind: string;
+      source?: string;
+      llm_message?: {
+        role: string;
+        content: Array<{ type?: string; text?: string }>;
+      };
+    }>
+  > {
     const baseUrl = this.getBaseUrl();
     const response = await fetchWithProxy(
       `${baseUrl}/api/conversations/${conversationId}/events/search?limit=100`,
@@ -692,17 +709,20 @@ export class OpenHandsSDKProvider implements ApiProvider {
   /**
    * Extract the final output from conversation events
    */
-  private extractOutput(events: Array<{
-    kind: string;
-    source?: string;
-    llm_message?: {
-      role: string;
-      content: Array<{ type?: string; text?: string }>;
-    };
-  }>): string {
+  private extractOutput(
+    events: Array<{
+      kind: string;
+      source?: string;
+      llm_message?: {
+        role: string;
+        content: Array<{ type?: string; text?: string }>;
+      };
+    }>,
+  ): string {
     // Get the last assistant message from MessageEvents
     const assistantMessages = events.filter(
-      (e) => e.kind === 'MessageEvent' && e.source === 'agent' && e.llm_message?.role === 'assistant'
+      (e) =>
+        e.kind === 'MessageEvent' && e.source === 'agent' && e.llm_message?.role === 'assistant',
     );
 
     if (assistantMessages.length > 0) {

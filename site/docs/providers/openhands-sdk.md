@@ -103,7 +103,7 @@ providers:
 | `model`            | string  | Model to use                                   | Provider default     |
 | `baseUrl`          | string  | URL for existing OpenHands server              | Auto-start server    |
 | `hostname`         | string  | Server hostname when starting new server       | `127.0.0.1`          |
-| `port`             | number  | Server port when starting new server           | `3000`               |
+| `port`             | number  | Server port when starting new server           | `8000`               |
 | `timeout`          | number  | Server startup timeout (ms)                    | `60000`              |
 | `working_dir`      | string  | Directory for file operations                  | Temporary directory  |
 | `workspace_type`   | string  | Execution environment (local, docker, remote)  | `local`              |

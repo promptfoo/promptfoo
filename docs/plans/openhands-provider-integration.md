@@ -5,6 +5,7 @@
 This document outlines the plan to integrate [OpenHands](https://github.com/OpenHands/OpenHands) as a coding agent provider in promptfoo. OpenHands is an open-source AI-driven development platform with state-of-the-art performance on coding benchmarks (72.8% on SWE-Bench Verified with Claude Sonnet 4.5).
 
 **Key differentiators from existing providers:**
+
 - **100+ LLM providers** via LiteLLM (vs. single-provider lock-in)
 - **Python-native SDK** with REST/WebSocket API
 - **Built-in security analysis** for agent actions
@@ -62,6 +63,7 @@ This document outlines the plan to integrate [OpenHands](https://github.com/Open
 5. Works with Docker sandboxing
 
 **Alternative considered:** Headless mode via subprocess (`python -m openhands.core.main -t "prompt"`). Rejected because:
+
 - Limited control over execution
 - No streaming support
 - Harder to extract structured metrics
@@ -86,51 +88,51 @@ openhands:sdk:claude-sonnet-4-5  # Specific model override
 ```typescript
 interface OpenHandsConfig {
   // === Connection ===
-  apiKey?: string;                    // API key for the underlying LLM provider
-  baseUrl?: string;                   // URL for existing OpenHands server (default: auto-start)
-  hostname?: string;                  // Server hostname when starting (default: 127.0.0.1)
-  port?: number;                      // Server port when starting (default: auto-select)
-  timeout?: number;                   // Server startup timeout in ms (default: 60000)
+  apiKey?: string; // API key for the underlying LLM provider
+  baseUrl?: string; // URL for existing OpenHands server (default: auto-start)
+  hostname?: string; // Server hostname when starting (default: 127.0.0.1)
+  port?: number; // Server port when starting (default: auto-select)
+  timeout?: number; // Server startup timeout in ms (default: 60000)
 
   // === LLM Configuration ===
-  provider_id?: string;               // LLM provider: anthropic, openai, google, ollama, etc.
-  model?: string;                     // Model ID (e.g., claude-sonnet-4-5-20250929)
+  provider_id?: string; // LLM provider: anthropic, openai, google, ollama, etc.
+  model?: string; // Model ID (e.g., claude-sonnet-4-5-20250929)
 
   // === Workspace ===
-  working_dir?: string;               // Directory for file operations (default: temp dir)
-  workspace_type?: 'local' | 'docker' | 'remote';  // Execution environment (default: local)
-  docker_image?: string;              // Docker image for sandboxed execution
+  working_dir?: string; // Directory for file operations (default: temp dir)
+  workspace_type?: 'local' | 'docker' | 'remote'; // Execution environment (default: local)
+  docker_image?: string; // Docker image for sandboxed execution
 
   // === Tools ===
   tools?: {
-    terminal?: boolean;               // Enable bash/shell execution (default: false without working_dir)
-    file_editor?: boolean;            // Enable file editing (default: read-only with working_dir)
-    task_tracker?: boolean;           // Enable task tracking (default: true)
-    browser?: boolean;                // Enable web browsing (default: false)
+    terminal?: boolean; // Enable bash/shell execution (default: false without working_dir)
+    file_editor?: boolean; // Enable file editing (default: read-only with working_dir)
+    task_tracker?: boolean; // Enable task tracking (default: true)
+    browser?: boolean; // Enable web browsing (default: false)
   };
 
   // === Agent Configuration ===
-  max_iterations?: number;            // Maximum agent iterations (default: 50)
-  max_budget_usd?: number;            // Cost budget limit in USD
-  skills?: string[];                  // Skills/microagents to load
-  system_prompt?: string;             // Custom system prompt override
-  append_system_prompt?: string;      // Append to default system prompt
+  max_iterations?: number; // Maximum agent iterations (default: 50)
+  max_budget_usd?: number; // Cost budget limit in USD
+  skills?: string[]; // Skills/microagents to load
+  system_prompt?: string; // Custom system prompt override
+  append_system_prompt?: string; // Append to default system prompt
 
   // === Session Management ===
-  session_id?: string;                // Resume existing session
-  persist_sessions?: boolean;         // Keep sessions between calls (default: false)
+  session_id?: string; // Resume existing session
+  persist_sessions?: boolean; // Keep sessions between calls (default: false)
 
   // === Security ===
-  security_analyzer?: boolean;        // Enable LLM-based security analysis (default: true)
-  confirmation_policy?: 'none' | 'risky' | 'all';  // Action confirmation (default: none for evals)
+  security_analyzer?: boolean; // Enable LLM-based security analysis (default: true)
+  confirmation_policy?: 'none' | 'risky' | 'all'; // Action confirmation (default: none for evals)
 
   // === MCP Integration ===
-  mcp?: MCPConfig;                    // MCP server configuration (reuse existing type)
+  mcp?: MCPConfig; // MCP server configuration (reuse existing type)
 
   // === Advanced ===
-  condenser?: boolean;                // Enable context compression (default: true)
-  log_events?: boolean;               // Include events in response metadata
-  enable_streaming?: boolean;         // Enable event streaming (default: false)
+  condenser?: boolean; // Enable context compression (default: true)
+  log_events?: boolean; // Include events in response metadata
+  enable_streaming?: boolean; // Enable event streaming (default: false)
 }
 ```
 
@@ -138,22 +140,22 @@ interface OpenHandsConfig {
 
 ```typescript
 interface ProviderResponse {
-  output: string;                     // Final agent response text
+  output: string; // Final agent response text
   tokenUsage?: {
-    prompt: number;                   // Input tokens
-    completion: number;               // Output tokens
-    total: number;                    // Total tokens
+    prompt: number; // Input tokens
+    completion: number; // Output tokens
+    total: number; // Total tokens
   };
-  cost?: number;                      // Cost in USD (from OpenHands metrics)
-  sessionId?: string;                 // Session ID for resumption
-  raw?: string;                       // Full JSON response
+  cost?: number; // Cost in USD (from OpenHands metrics)
+  sessionId?: string; // Session ID for resumption
+  raw?: string; // Full JSON response
   metadata?: {
-    events?: OpenHandsEvent[];        // All events if log_events enabled
-    iterations?: number;              // Number of agent iterations
-    tools_used?: string[];            // Tools invoked during execution
-    condensed?: boolean;              // Whether context was compressed
+    events?: OpenHandsEvent[]; // All events if log_events enabled
+    iterations?: number; // Number of agent iterations
+    tools_used?: string[]; // Tools invoked during execution
+    condensed?: boolean; // Whether context was compressed
   };
-  error?: string;                     // Error message if failed
+  error?: string; // Error message if failed
 }
 ```
 
@@ -184,6 +186,7 @@ class OpenHandsServer {
 ```
 
 **Key considerations:**
+
 - Use `execa` or `child_process.spawn` for subprocess management
 - Implement health check polling with configurable timeout
 - Handle port conflicts with automatic port selection
@@ -209,6 +212,7 @@ class OpenHandsClient {
 ```
 
 **REST Endpoints (based on SDK docs):**
+
 - `POST /conversations` - Create conversation
 - `GET /conversations/{id}` - Get conversation state
 - `DELETE /conversations/{id}` - Delete conversation
@@ -228,6 +232,7 @@ class OpenHandsEventStream {
 ```
 
 **Event types to handle:**
+
 - `message` - Agent/user messages
 - `action` - Tool invocations
 - `observation` - Tool results
@@ -245,7 +250,7 @@ export class OpenHandsSDKProvider implements ApiProvider {
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
-    callOptions?: CallApiOptionsParams
+    callOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     // 1. Initialize server if needed
     // 2. Create or resume conversation
@@ -277,9 +282,9 @@ const NO_TOOLS = {
 
 // With working_dir: read-only by default
 const READ_ONLY_TOOLS = {
-  terminal: false,         // No shell access
-  file_editor: 'read',     // Read-only file access
-  task_tracker: true,      // Planning/tracking
+  terminal: false, // No shell access
+  file_editor: 'read', // Read-only file access
+  task_tracker: true, // Planning/tracking
   browser: false,
 };
 
@@ -296,10 +301,10 @@ const FULL_TOOLS = {
 
 ```typescript
 const EVAL_SECURITY_DEFAULTS = {
-  security_analyzer: true,           // Analyze actions for safety
-  confirmation_policy: 'none',       // Don't pause for confirmation in evals
-  max_iterations: 50,                // Prevent infinite loops
-  max_budget_usd: 10.0,              // Cost cap
+  security_analyzer: true, // Analyze actions for safety
+  confirmation_policy: 'none', // Don't pause for confirmation in evals
+  max_iterations: 50, // Prevent infinite loops
+  max_budget_usd: 10.0, // Cost cap
 };
 ```
 
@@ -373,6 +378,7 @@ vi.mock('child_process', () => ({
 **File:** `site/docs/providers/openhands-sdk.md`
 
 Structure:
+
 - Overview & key features
 - Installation (Python + openhands-ai package)
 - Quick start examples
@@ -409,6 +415,7 @@ examples/openhands-sdk/
 **Solution:** Use REST API approach. The Agent Server exposes all functionality via HTTP/WebSocket, eliminating need for Python IPC.
 
 **Fallback:** If REST API proves insufficient, consider:
+
 - Headless mode subprocess for simple cases
 - `python-shell` npm package for direct SDK calls
 
@@ -417,6 +424,7 @@ examples/openhands-sdk/
 **Problem:** OpenHands server may take 10-30 seconds to start.
 
 **Solutions:**
+
 1. **Server pooling**: Keep server running between calls when `persist_sessions: true`
 2. **Health check polling**: Poll `/health` endpoint with exponential backoff
 3. **Pre-warm option**: `baseUrl` config to connect to existing server
@@ -427,6 +435,7 @@ examples/openhands-sdk/
 **Problem:** Docker workspace adds ~5-10s startup per conversation.
 
 **Solutions:**
+
 1. **Default to local**: Use `LocalWorkspace` by default
 2. **Explicit opt-in**: Require `workspace_type: docker` for sandboxing
 3. **Image pre-pulling**: Document image pre-pull for faster startup
@@ -437,6 +446,7 @@ examples/openhands-sdk/
 **Problem:** Need to track progress for long-running agent tasks.
 
 **Solution:** Implement both modes:
+
 ```typescript
 if (config.enable_streaming) {
   // WebSocket event stream
@@ -452,6 +462,7 @@ if (config.enable_streaming) {
 **Problem:** Need accurate token usage and cost for eval metrics.
 
 **Solution:** OpenHands tracks metrics in `conversation.conversation_stats`:
+
 ```python
 cost = conversation.conversation_stats.get_combined_metrics().accumulated_cost
 ```
@@ -474,6 +485,7 @@ uvx openhands-ai
 ### promptfoo Dependencies
 
 No new npm dependencies required. Uses existing:
+
 - `node:child_process` - Server subprocess
 - `node:http` / `fetch` - REST API calls
 - `ws` (if not already) - WebSocket for streaming
@@ -504,39 +516,39 @@ case 'openhands:sdk':
 
 Update `agentic-sdk-comparison` example and docs:
 
-| Feature | OpenHands SDK | Claude Agent SDK | OpenCode SDK | Codex SDK |
-|---------|--------------|------------------|--------------|-----------|
-| LLM Providers | 100+ (LiteLLM) | Anthropic only | 75+ | OpenAI only |
-| Architecture | REST/WebSocket | Direct SDK | Client-server | Thread-based |
-| Local Models | Ollama, etc. | No | Ollama, etc. | No |
-| Docker Sandbox | Built-in | No | No | Git required |
-| Security Analysis | LLM-based | Permission modes | Permissions | No |
-| Context Compression | Built-in | No | No | No |
-| Benchmarks | SWE-Bench 72.8% | Unknown | Unknown | Unknown |
+| Feature             | OpenHands SDK   | Claude Agent SDK | OpenCode SDK  | Codex SDK    |
+| ------------------- | --------------- | ---------------- | ------------- | ------------ |
+| LLM Providers       | 100+ (LiteLLM)  | Anthropic only   | 75+           | OpenAI only  |
+| Architecture        | REST/WebSocket  | Direct SDK       | Client-server | Thread-based |
+| Local Models        | Ollama, etc.    | No               | Ollama, etc.  | No           |
+| Docker Sandbox      | Built-in        | No               | No            | Git required |
+| Security Analysis   | LLM-based       | Permission modes | Permissions   | No           |
+| Context Compression | Built-in        | No               | No            | No           |
+| Benchmarks          | SWE-Bench 72.8% | Unknown          | Unknown       | Unknown      |
 
 ---
 
 ## Timeline Estimate
 
-| Phase | Tasks | Dependencies |
-|-------|-------|--------------|
-| 1 | Core provider, server lifecycle, REST client | None |
-| 2 | Tool configuration, security defaults | Phase 1 |
-| 3 | Caching integration | Phase 1 |
-| 4 | Testing (unit + integration) | Phases 1-3 |
-| 5 | Documentation & examples | Phase 4 |
+| Phase | Tasks                                        | Dependencies |
+| ----- | -------------------------------------------- | ------------ |
+| 1     | Core provider, server lifecycle, REST client | None         |
+| 2     | Tool configuration, security defaults        | Phase 1      |
+| 3     | Caching integration                          | Phase 1      |
+| 4     | Testing (unit + integration)                 | Phases 1-3   |
+| 5     | Documentation & examples                     | Phase 4      |
 
 ---
 
 ## Risks & Mitigations
 
-| Risk | Impact | Mitigation |
-|------|--------|------------|
-| OpenHands API changes | High | Pin to stable version, add version checks |
-| Python not installed | Medium | Clear error messages, installation docs |
-| Server startup failures | Medium | Retry logic, detailed error logging |
-| Docker not available | Low | Fallback to local workspace with warning |
-| Cost overruns in evals | Medium | Default budget cap, clear docs |
+| Risk                    | Impact | Mitigation                                |
+| ----------------------- | ------ | ----------------------------------------- |
+| OpenHands API changes   | High   | Pin to stable version, add version checks |
+| Python not installed    | Medium | Clear error messages, installation docs   |
+| Server startup failures | Medium | Retry logic, detailed error logging       |
+| Docker not available    | Low    | Fallback to local workspace with warning  |
+| Cost overruns in evals  | Medium | Default budget cap, clear docs            |
 
 ---
 
@@ -570,16 +582,17 @@ This section outlines a broader refactoring to establish shared patterns across 
 
 ### Existing Coding Agent Providers
 
-| Provider | File | SDK Type | Architecture |
-|----------|------|----------|--------------|
-| Claude Agent SDK | `claude-agent-sdk.ts` | TypeScript | Direct SDK |
-| OpenAI Codex SDK | `openai/codex-sdk.ts` | TypeScript | Thread-based |
-| OpenCode SDK | `opencode-sdk.ts` | TypeScript | Client-server |
-| OpenHands SDK | `openhands-sdk.ts` (planned) | Python REST | Client-server |
+| Provider         | File                         | SDK Type    | Architecture  |
+| ---------------- | ---------------------------- | ----------- | ------------- |
+| Claude Agent SDK | `claude-agent-sdk.ts`        | TypeScript  | Direct SDK    |
+| OpenAI Codex SDK | `openai/codex-sdk.ts`        | TypeScript  | Thread-based  |
+| OpenCode SDK     | `opencode-sdk.ts`            | TypeScript  | Client-server |
+| OpenHands SDK    | `openhands-sdk.ts` (planned) | Python REST | Client-server |
 
 ### Identified Duplication
 
 **Code Patterns (repeated in each provider):**
+
 1. Working directory validation & temp directory creation
 2. API key resolution (config > env overrides > process.env)
 3. Caching with working directory fingerprinting
@@ -590,6 +603,7 @@ This section outlines a broader refactoring to establish shared patterns across 
 8. MCP configuration transformation
 
 **Documentation Patterns (repeated in each doc):**
+
 1. Installation & setup sections
 2. Working directory explanation
 3. Tools & permissions tables
@@ -630,28 +644,28 @@ src/providers/
 export interface AgenticProviderBaseConfig {
   // === Connection ===
   apiKey?: string;
-  baseUrl?: string;                    // Connect to existing server
+  baseUrl?: string; // Connect to existing server
 
   // === Workspace ===
-  working_dir?: string;                // Directory for file operations
-  additional_directories?: string[];   // Extra accessible directories
+  working_dir?: string; // Directory for file operations
+  additional_directories?: string[]; // Extra accessible directories
 
   // === LLM Configuration ===
   model?: string;
   fallback_model?: string;
 
   // === Limits ===
-  max_iterations?: number;             // Max agent iterations
-  max_budget_usd?: number;             // Cost budget cap
-  timeout?: number;                    // Operation timeout (ms)
+  max_iterations?: number; // Max agent iterations
+  max_budget_usd?: number; // Cost budget cap
+  timeout?: number; // Operation timeout (ms)
 
   // === Session Management ===
-  session_id?: string;                 // Resume existing session
-  persist_sessions?: boolean;          // Keep sessions between calls
+  session_id?: string; // Resume existing session
+  persist_sessions?: boolean; // Keep sessions between calls
 
   // === System Prompt ===
-  system_prompt?: string;              // Replace default
-  append_system_prompt?: string;       // Append to default
+  system_prompt?: string; // Replace default
+  append_system_prompt?: string; // Append to default
 
   // === MCP ===
   mcp?: MCPConfig;
@@ -661,26 +675,26 @@ export interface AgenticProviderBaseConfig {
  * Common tool configuration patterns
  */
 export interface AgenticToolConfig {
-  read?: boolean;       // Read files
-  write?: boolean;      // Write files
-  edit?: boolean;       // Edit files
-  bash?: boolean;       // Execute shell commands
-  search?: boolean;     // Search/grep files
-  glob?: boolean;       // Find files by pattern
-  list?: boolean;       // List directories
-  browser?: boolean;    // Web browsing
+  read?: boolean; // Read files
+  write?: boolean; // Write files
+  edit?: boolean; // Edit files
+  bash?: boolean; // Execute shell commands
+  search?: boolean; // Search/grep files
+  glob?: boolean; // Find files by pattern
+  list?: boolean; // List directories
+  browser?: boolean; // Web browsing
 }
 
 /**
  * Normalized response for all coding agent providers
  */
 export interface AgenticProviderResponse extends ProviderResponse {
-  sessionId?: string;                  // Session ID for resumption
+  sessionId?: string; // Session ID for resumption
   metadata?: {
-    iterations?: number;               // Agent iterations used
-    tools_used?: string[];             // Tools invoked
-    events?: unknown[];                // Raw events (if enabled)
-    structured_output?: unknown;       // Structured output (if schema)
+    iterations?: number; // Agent iterations used
+    tools_used?: string[]; // Tools invoked
+    events?: unknown[]; // Raw events (if enabled)
+    structured_output?: unknown; // Structured output (if schema)
   };
 }
 
@@ -688,17 +702,22 @@ export interface AgenticProviderResponse extends ProviderResponse {
  * Server configuration for client-server providers
  */
 export interface AgenticServerConfig {
-  hostname?: string;                   // Server hostname (default: 127.0.0.1)
-  port?: number;                       // Server port (default: auto)
-  startupTimeout?: number;             // Startup timeout (ms)
-  healthEndpoint?: string;             // Health check endpoint
+  hostname?: string; // Server hostname (default: 127.0.0.1)
+  port?: number; // Server port (default: auto)
+  startupTimeout?: number; // Startup timeout (ms)
+  healthEndpoint?: string; // Health check endpoint
 }
 ```
 
 ### Base Class (`agentic/base.ts`)
 
 ```typescript
-import type { ApiProvider, CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderResponse,
+} from '../../types';
 import type { AgenticProviderBaseConfig, AgenticToolConfig } from './types';
 
 /**
@@ -711,7 +730,7 @@ export abstract class AgenticProviderBase implements ApiProvider {
 
   constructor(
     protected providerId: string,
-    options: { config?: AgenticProviderBaseConfig; env?: EnvOverrides }
+    options: { config?: AgenticProviderBaseConfig; env?: EnvOverrides },
   ) {
     this.config = options.config ?? {};
   }
@@ -725,7 +744,7 @@ export abstract class AgenticProviderBase implements ApiProvider {
   abstract callApiInternal(
     prompt: string,
     config: AgenticProviderBaseConfig,
-    callOptions?: CallApiOptionsParams
+    callOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse>;
 
   abstract getApiKey(): string | undefined;
@@ -737,7 +756,7 @@ export abstract class AgenticProviderBase implements ApiProvider {
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
-    callOptions?: CallApiOptionsParams
+    callOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     // 1. Merge configs (prompt config overrides provider config)
     const mergedConfig = this.mergeConfigs(context?.prompt?.config);
@@ -757,7 +776,11 @@ export abstract class AgenticProviderBase implements ApiProvider {
 
     // 5. Call provider-specific implementation
     try {
-      const response = await this.callApiInternal(prompt, { ...mergedConfig, working_dir: workingDir }, callOptions);
+      const response = await this.callApiInternal(
+        prompt,
+        { ...mergedConfig, working_dir: workingDir },
+        callOptions,
+      );
 
       // 6. Cache successful responses
       if (!response.error) {
@@ -787,11 +810,11 @@ export abstract class AgenticProviderBase implements ApiProvider {
   protected async initializeCache(
     config: AgenticProviderBaseConfig,
     prompt: string,
-    bustCache?: boolean
+    bustCache?: boolean,
   ) {
     return initializeAgenticCache(
       { cacheKeyPrefix: this.providerId, workingDir: config.working_dir, bustCache },
-      { prompt, cacheKeyQueryOptions: this.getCacheKeyOptions(config) }
+      { prompt, cacheKeyQueryOptions: this.getCacheKeyOptions(config) },
     );
   }
 
@@ -813,8 +836,10 @@ export async function validateWorkingDirectory(workingDir: string): Promise<stri
     ? workingDir
     : path.resolve(process.cwd(), workingDir);
 
-  const stats = await fs.promises.stat(resolved).catch(err => {
-    throw new Error(`Working directory ${workingDir} does not exist or isn't accessible: ${err.message}`);
+  const stats = await fs.promises.stat(resolved).catch((err) => {
+    throw new Error(
+      `Working directory ${workingDir} does not exist or isn't accessible: ${err.message}`,
+    );
   });
 
   if (!stats.isDirectory()) {
@@ -867,13 +892,13 @@ export async function startManagedServer(options: {
           baseUrl: new URL(healthEndpoint).origin,
           close: async () => {
             process.kill('SIGTERM');
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            await new Promise((resolve) => setTimeout(resolve, 1000));
             if (!process.killed) process.kill('SIGKILL');
           },
         };
       }
     } catch {
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise((resolve) => setTimeout(resolve, 500));
     }
   }
 
@@ -902,7 +927,7 @@ export function resolveApiKey(options: {
 
 export function createAbortHandler(
   externalSignal: AbortSignal | undefined,
-  internalController: AbortController
+  internalController: AbortController,
 ): () => void {
   if (!externalSignal) return () => {};
 
@@ -950,8 +975,8 @@ export async function startServer(config: ServerConfig): Promise<ManagedServer> 
   });
 
   // Capture logs
-  proc.stdout?.on('data', data => logger.debug(`[server stdout] ${data}`));
-  proc.stderr?.on('data', data => logger.debug(`[server stderr] ${data}`));
+  proc.stdout?.on('data', (data) => logger.debug(`[server stdout] ${data}`));
+  proc.stderr?.on('data', (data) => logger.debug(`[server stderr] ${data}`));
 
   // Wait for health
   const baseUrl = await waitForHealth(config.healthEndpoint, config.startupTimeout);
@@ -977,7 +1002,7 @@ async function waitForHealth(endpoint: string, timeout: number): Promise<string>
     } catch {
       // Server not ready yet
     }
-    await new Promise(r => setTimeout(r, pollInterval));
+    await new Promise((r) => setTimeout(r, pollInterval));
   }
 
   throw new Error(`Server failed to become healthy at ${endpoint} within ${timeout}ms`);
@@ -1011,6 +1036,7 @@ async function gracefulShutdown(proc: ChildProcess): Promise<void> {
 ### Already Updated
 
 The **[Evaluate Coding Agents guide](/docs/guides/evaluate-coding-agents)** has been updated with:
+
 - All three current coding agent providers (Claude Agent SDK, Codex SDK, OpenCode SDK)
 - Comparison table covering LLM support, permissions, structured output, state management, safety, and ecosystem
 - New example showcasing OpenCode SDK's multi-provider comparison capability
@@ -1027,12 +1053,14 @@ When OpenHands SDK is implemented, add this cross-reference pattern to each prov
 ## See also
 
 ### Other coding agent providers
+
 - [Claude Agent SDK](/docs/providers/claude-agent-sdk) - Anthropic's agentic framework
 - [OpenAI Codex SDK](/docs/providers/openai-codex-sdk) - OpenAI's thread-based agent
 - [OpenCode SDK](/docs/providers/opencode-sdk) - Multi-provider agent (75+ LLMs)
 - [OpenHands SDK](/docs/providers/openhands-sdk) - Docker sandbox, security analysis (100+ LLMs)
 
 ### Guides
+
 - [Evaluate Coding Agents](/docs/guides/evaluate-coding-agents) - Comparison and best practices
 ```
 
@@ -1065,12 +1093,12 @@ OpenHands is an open-source AI coding agent with state-of-the-art benchmark perf
 
 ## Quick comparison with other agents
 
-| Feature | OpenHands SDK | Claude Agent SDK | Codex SDK | OpenCode SDK |
-|---------|---------------|------------------|-----------|--------------|
-| LLM providers | 100+ | Anthropic only | OpenAI only | 75+ |
-| Local models | ✅ Ollama | ❌ | ❌ | ✅ Ollama |
-| Docker sandbox | ✅ Built-in | ❌ | ❌ | ❌ |
-| Structured output | ❌ | ✅ | ✅ | ❌ |
+| Feature           | OpenHands SDK | Claude Agent SDK | Codex SDK   | OpenCode SDK |
+| ----------------- | ------------- | ---------------- | ----------- | ------------ |
+| LLM providers     | 100+          | Anthropic only   | OpenAI only | 75+          |
+| Local models      | ✅ Ollama     | ❌               | ❌          | ✅ Ollama    |
+| Docker sandbox    | ✅ Built-in   | ❌               | ❌          | ❌           |
+| Structured output | ❌            | ✅               | ✅          | ❌           |
 
 → See [Evaluate Coding Agents](/docs/guides/evaluate-coding-agents) for detailed comparison
 
@@ -1089,15 +1117,18 @@ OpenHands is an open-source AI coding agent with state-of-the-art benchmark perf
 ## See also
 
 ### Other coding agent providers
+
 - [Claude Agent SDK](/docs/providers/claude-agent-sdk)
 - [OpenAI Codex SDK](/docs/providers/openai-codex-sdk)
 - [OpenCode SDK](/docs/providers/opencode-sdk)
 
 ### Guides
+
 - [Evaluate Coding Agents](/docs/guides/evaluate-coding-agents) - Comparison and best practices
 - [Sandboxed code evals](/docs/guides/sandboxed-code-evals)
 
 ### External resources
+
 - [OpenHands Documentation](https://docs.openhands.dev)
 - [OpenHands GitHub](https://github.com/OpenHands/OpenHands)
 ```
@@ -1129,6 +1160,7 @@ OpenHands is an open-source AI coding agent with state-of-the-art benchmark perf
 ### Phase 3: Documentation Cross-References (COMPLETED ✅)
 
 ✅ Updated `site/docs/guides/evaluate-coding-agents.md`:
+
 - Added OpenCode SDK alongside Claude Agent SDK and Codex SDK
 - Updated capability tiers table with all three providers
 - Updated comparison table (LLM providers, permissions, structured output, state, safety, ecosystem)
@@ -1137,14 +1169,17 @@ OpenHands is an open-source AI coding agent with state-of-the-art benchmark perf
 - Expanded "See also" with all provider docs, examples, and related guides
 
 ✅ Updated `site/docs/providers/claude-agent-sdk.md`:
+
 - Added "Other coding agent providers" section with links to Codex SDK and OpenCode SDK
 - Added "Guides" section linking to the central Evaluate Coding Agents guide
 
 ✅ Updated `site/docs/providers/openai-codex-sdk.md`:
+
 - Added "Other coding agent providers" section with links to Claude Agent SDK and OpenCode SDK
 - Added "Guides" section linking to the central Evaluate Coding Agents guide
 
 ✅ Updated `site/docs/providers/opencode-sdk.md`:
+
 - Reorganized "See Also" with consistent cross-references
 - Added "Guides" section linking to the central Evaluate Coding Agents guide
 
@@ -1181,8 +1216,8 @@ working_dir: ./src
 additional_directories: [./tests]
 persist_sessions: true
 max_budget_usd: 10.0
-system_prompt: "..."
-append_system_prompt: "..."
+system_prompt: '...'
+append_system_prompt: '...'
 
 # Tool configuration
 tools:
