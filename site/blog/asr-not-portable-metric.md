@@ -125,7 +125,7 @@ These concerns shape how we build strategies:
 - **[Meta-agent jailbreaks](https://www.promptfoo.dev/docs/red-team/strategies/meta/)** (`jailbreak:meta`): explores multiple attack approaches, adapts to target responses
 - **[Hydra](https://www.promptfoo.dev/docs/red-team/strategies/hydra/)** (`jailbreak:hydra`): multi-turn attacker that branches and backtracks on refusals
 
-Meta and hydra have high attack success rates. We built them with these concerns in mind.
+Meta and hydra achieve state-of-the-art attack success rates with strong goal coherence. We built them with these concerns in mind.
 
 ---
 
