@@ -1483,7 +1483,9 @@ describe('EvalOutputCell provider error display', () => {
     renderWithProviders(<EvalOutputCell {...propsWithError} />);
 
     // The error message should be displayed in the fail reason carousel
-    expect(screen.getByText('ConnectionError: Failed to connect to API server')).toBeInTheDocument();
+    expect(
+      screen.getByText('ConnectionError: Failed to connect to API server'),
+    ).toBeInTheDocument();
   });
 
   it('displays provider error alongside assertion failures', () => {
