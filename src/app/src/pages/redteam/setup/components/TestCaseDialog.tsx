@@ -251,12 +251,7 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
                   },
                 }}
                 renderInput={(params) => (
-                  <TextField
-                    {...params}
-                    variant="outlined"
-                    size="small"
-                    label="Select Plugin"
-                  />
+                  <TextField {...params} variant="outlined" size="small" label="Select Plugin" />
                 )}
               />
             </Box>
