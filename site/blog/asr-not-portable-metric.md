@@ -1,6 +1,6 @@
 ---
 title: 'How 1% attack success rate becomes 98% (without improving the attack)'
-description: 'Attack success rate comparisons in jailbreak papers often conflate different quantities. Why translating academic ASR results into production is harder than it looks.'
+description: 'How changing one aggregation rule turns a 1% jailbreak into 98% success. Why ASR comparisons across papers often mean less than you think.'
 image: /img/blog/asr-not-portable-metric/asr-header.jpg
 keywords:
   [
@@ -24,7 +24,7 @@ Attack success rate is the default metric for comparing jailbreak methods. But A
 
 We hit this problem constantly. Promptfoo maintains a [database of LLM security research](https://www.promptfoo.dev/lm-security-db/) with 439 entries across 406 papers. We take these methods and make them runnable in production evaluation pipelines. That's where the measurement issues surface.
 
-The NeurIPS 2025 position paper ["Comparison requires valid measurement"](https://openreview.net/forum?id=d7hqAhLvWG) frames this precisely: many papers are valuable as existence proofs—they show a model can be induced to produce disallowed behavior. The difficulty begins when papers move to comparative claims ("method A beats method B") via a single number. Many ASR comparisons conflate different quantities or rely on low-validity measurement.
+The NeurIPS 2025 position paper ["Comparison requires valid measurement"](https://openreview.net/forum?id=d7hqAhLvWG) frames this: many papers are valuable as existence proofs—they show a model can be induced to produce disallowed behavior. The difficulty begins when papers move to comparative claims ("method A beats method B") via a single number. Many ASR comparisons conflate different quantities or rely on low-validity measurement.
 
 Below are three failure modes we encounter when operationalizing jailbreak papers.
 
@@ -103,7 +103,7 @@ We preserve raw outputs and treat judge choice as a first-class variable. Otherw
 
 ## What this means in practice
 
-ASR comparisons are inferential: an observed rate supports a claim about a population parameter under a threat model. That is where results stop being portable.
+ASR comparisons are inferential: an observed rate supports a claim about a population parameter under a threat model. Direct comparisons break down.
 
 Productionizing a jailbreak paper means reconstructing a specification: what success criterion is being approximated (and by what judge), what prompt distribution is intended (and does the prompt set implement it), what attacker constraints apply (attempt budget, access, transfer setting), and what aggregation defines success at the goal level. Many papers do not pin these down because they prioritize conceptual discovery over measurement.
 
