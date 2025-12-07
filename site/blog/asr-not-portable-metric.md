@@ -26,7 +26,7 @@ That translation step is where the literature becomes harder to use than it look
 
 Many papers are valuable as existence proofs: they show an aligned model can be induced to produce disallowed behavior. The NeurIPS 2025 position paper ["Comparison requires valid measurement"](https://openreview.net/forum?id=d7hqAhLvWG) draws a sharp line between qualitative red teaming and quantitative comparisons based on attack success rate (ASR).
 
-The difficulty begins when papers move from existence proofs to comparative claims ("method A is better than method B," "model X is safer than model Y"), often via a single number: **ASR**, the fraction of *attack goals* judged successful. The claim is not that ASR is useless. Many ASR comparisons conflate different quantities or rely on low-validity measurement, so the comparison does not support the conclusion.
+The difficulty begins when papers move from existence proofs to comparative claims ("method A is better than method B," "model X is safer than model Y"), often via a single number: **ASR**, the fraction of _attack goals_ judged successful. The claim is not that ASR is useless. Many ASR comparisons conflate different quantities or rely on low-validity measurement, so the comparison does not support the conclusion.
 
 Below are three failure modes we hit when operationalizing jailbreak papers.
 
