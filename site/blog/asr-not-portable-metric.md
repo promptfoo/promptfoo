@@ -120,15 +120,12 @@ Many excellent papers do not fully pin these down because they prioritize concep
 
 ## How we approach this at Promptfoo
 
-These measurement concerns shape how we implement attack strategies. We make threat-model knobs explicit rather than hidden in post-hoc aggregation.
+These concerns shape how we build strategies:
 
-Two examples from our red teaming strategies:
+- **[Meta-agent jailbreaks](https://www.promptfoo.dev/docs/red-team/strategies/meta/)** (`jailbreak:meta`): explores multiple attack approaches, adapts to target responses
+- **[Hydra](https://www.promptfoo.dev/docs/red-team/strategies/hydra/)** (`jailbreak:hydra`): multi-turn attacker that branches and backtracks on refusals
 
-- **Meta-agent jailbreaks** ([`jailbreak:meta`](https://www.promptfoo.dev/docs/red-team/strategies/meta/)) explores multiple distinct attack approaches and adapts based on the target's responses. Its attempt budget is explicit via `numIterations` (default 10).
-
-- **Hydra** ([`jailbreak:hydra`](https://www.promptfoo.dev/docs/red-team/strategies/hydra/)) is a multi-turn attacker that branches and backtracks on refusals. Its aggressiveness is explicit via `maxTurns` and `maxBacktracks` (defaults 10).
-
-We do not claim "higher ASR" in the abstract. That would be the comparison this post warns against. For a fixed probe budget, meta and hydra have high attack success rates. We are careful in optimizing our strategies for efficiency.
+Meta and hydra have high attack success rates. We built them with these concerns in mind.
 
 ---
 
