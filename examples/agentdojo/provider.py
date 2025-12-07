@@ -12,7 +12,7 @@ Usage in promptfooconfig.yaml:
           model: gpt-4o
           defense: null
           attack: important_instructions
-          version: v1_2_2
+          version: v1.2.2
 """
 
 import json
@@ -28,6 +28,25 @@ _pipeline_cache: dict[str, Any] = {}
 _suite_cache: dict[str, Any] = {}
 _attack_cache: dict[str, Any] = {}
 
+# Token usage accumulator - reset per task execution
+# Format: {"prompt": int, "completion": int, "total": int}
+_token_usage: dict[str, int] = {"prompt": 0, "completion": 0, "total": 0}
+
+
+def _reset_token_usage():
+    """Reset token accumulator before a new task execution."""
+    global _token_usage
+    _token_usage = {"prompt": 0, "completion": 0, "total": 0}
+
+
+def _accumulate_tokens(usage):
+    """Accumulate token counts from an OpenAI response usage object."""
+    global _token_usage
+    if usage:
+        _token_usage["prompt"] += getattr(usage, "prompt_tokens", 0) or 0
+        _token_usage["completion"] += getattr(usage, "completion_tokens", 0) or 0
+        _token_usage["total"] += getattr(usage, "total_tokens", 0) or 0
+
 
 def _get_pipeline(model: str, defense: str | None):
     """Get or create cached pipeline.
@@ -35,7 +54,7 @@ def _get_pipeline(model: str, defense: str | None):
     Supports both registered AgentDojo models and custom OpenAI models like gpt-5.1.
     """
     from agentdojo.agent_pipeline import AgentPipeline, PipelineConfig
-    from agentdojo.agent_pipeline.agent_pipeline import MODEL_PROVIDERS, ModelsEnum
+    from agentdojo.agent_pipeline.agent_pipeline import ModelsEnum
 
     key = f"{model}:{defense}"
     if key not in _pipeline_cache:
@@ -161,10 +180,17 @@ def _get_pipeline(model: str, defense: str | None):
                         self,
                         query_str: str,
                         runtime: FunctionsRuntime,
-                        env: Env = EmptyEnv(),
-                        messages: Sequence[ChatMessage] = [],
-                        extra_args: dict = {},
+                        env: Env | None = None,
+                        messages: Sequence[ChatMessage] | None = None,
+                        extra_args: dict | None = None,
                     ) -> tuple[str, FunctionsRuntime, Env, Sequence[ChatMessage], dict]:
+                        # Handle mutable default arguments
+                        if env is None:
+                            env = EmptyEnv()
+                        if messages is None:
+                            messages = []
+                        if extra_args is None:
+                            extra_args = {}
                         # Convert messages to OpenAI format
                         oai_messages = [
                             self._message_to_openai(msg) for msg in messages
@@ -183,6 +209,9 @@ def _get_pipeline(model: str, defense: str | None):
                             tool_choice="auto" if oai_tools else NOT_GIVEN,
                             max_completion_tokens=4096,
                         )
+
+                        # Accumulate token usage from response
+                        _accumulate_tokens(response.usage)
 
                         choice = response.choices[0]
                         msg = choice.message
@@ -238,18 +267,27 @@ def _get_pipeline(model: str, defense: str | None):
                 tools_loop,
             ]
             pipeline = AgentPipeline(elements=elements)
-            # Map custom model to a recognized model key for attack system
-            # Attack system uses MODEL_NAMES dict which maps model IDs to display names
-            if "gpt" in model.lower():
-                pipeline.name = "gpt-4o-2024-05-13"  # Maps to "GPT-4"
-            elif "claude" in model.lower():
-                pipeline.name = "claude-3-5-sonnet-20241022"  # Maps to "Claude"
-            elif "gemini" in model.lower():
-                pipeline.name = "gemini-2.0-flash-001"  # Maps to Gemini
+
+            # AgentDojo's attack system requires pipeline.name to map to a known
+            # MODEL_NAME for generating injection prompts. Map custom models to
+            # recognized AgentDojo model IDs.
+            model_lower = model.lower()
+            if "gpt-4" in model_lower or "gpt-5" in model_lower:
+                pipeline.name = "gpt-4o-2024-05-13"
+            elif "gpt-3" in model_lower:
+                pipeline.name = "gpt-3.5-turbo-0125"
+            elif "claude" in model_lower:
+                pipeline.name = "claude-3-5-sonnet-20241022"
+            elif "gemini" in model_lower:
+                pipeline.name = "gemini-2.0-flash-001"
+            elif "command" in model_lower or "cohere" in model_lower:
+                pipeline.name = "command-r-plus"
+            elif "llama" in model_lower or "mixtral" in model_lower:
+                pipeline.name = "meta-llama/Llama-3-70b-chat-hf"
             else:
-                pipeline.name = (
-                    "meta-llama/Llama-3-70b-chat-hf"  # Maps to "AI assistant"
-                )
+                # Default to Llama which maps to "AI assistant" display name
+                pipeline.name = "meta-llama/Llama-3-70b-chat-hf"
+
             _pipeline_cache[key] = pipeline
     return _pipeline_cache[key]
 
@@ -280,8 +318,120 @@ def _setup_logger(logdir: Path):
     from agentdojo.logging import LOGGER_STACK, OutputLogger
 
     logdir.mkdir(parents=True, exist_ok=True)
-    logger = OutputLogger(logdir=str(logdir), live=None)
-    LOGGER_STACK.set([logger])
+    output_logger = OutputLogger(logdir=str(logdir), live=None)
+    LOGGER_STACK.set([output_logger])
+
+
+def _read_agentdojo_log(
+    logdir: Path,
+    pipeline_name: str,
+    suite_name: str,
+    user_task_id: str,
+    attack_name: str,
+    injection_task_id: str | None,
+) -> dict | None:
+    """Read the AgentDojo trace log for a specific task.
+
+    AgentDojo saves logs at: {logdir}/{pipeline}/{suite}/{user_task}/{attack}/{injection_task}.json
+    Pipeline names with slashes are converted to underscores in the path.
+
+    Returns:
+        The parsed JSON log dict, or None if the file doesn't exist or is invalid.
+    """
+    safe_pipeline_name = pipeline_name.replace("/", "_")
+    log_file = (
+        logdir
+        / safe_pipeline_name
+        / suite_name
+        / user_task_id
+        / attack_name
+        / f"{injection_task_id or 'none'}.json"
+    )
+    if log_file.exists():
+        try:
+            with open(log_file, encoding="utf-8") as f:
+                return json.load(f)
+        except (json.JSONDecodeError, OSError) as e:
+            logger.warning(f"Failed to read AgentDojo log {log_file}: {e}")
+            return None
+    return None
+
+
+def _extract_content_text(content: Any) -> str:
+    """Extract text from AgentDojo content which may be string, list of blocks, or None."""
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for block in content:
+            if isinstance(block, dict) and "content" in block:
+                parts.append(block.get("content") or "")
+            elif isinstance(block, str):
+                parts.append(block)
+        return "".join(parts)
+    return str(content)
+
+
+def _format_trace_messages(trace_log: dict | None) -> list[dict]:
+    """Format AgentDojo trace messages into Hydra-style message history.
+
+    Transforms raw AgentDojo message format into a cleaner structure similar to
+    Promptfoo's Hydra provider redteamHistory pattern.
+
+    Returns:
+        List of message dicts with keys: role, content, and optionally tool_calls/tool_call_id.
+    """
+    if not trace_log:
+        return []
+
+    raw_messages = trace_log.get("messages", [])
+    formatted = []
+
+    for msg in raw_messages:
+        role = msg.get("role", "unknown")
+        content = _extract_content_text(msg.get("content"))
+
+        formatted_msg: dict[str, Any] = {
+            "role": role,
+            "content": content,
+        }
+
+        # Include tool calls for assistant messages
+        if role == "assistant" and msg.get("tool_calls"):
+            tool_calls = []
+            for tc in msg["tool_calls"]:
+                # Handle both object-style and dict-style tool calls
+                if hasattr(tc, "function"):
+                    tool_calls.append(
+                        {
+                            "id": getattr(tc, "id", None),
+                            "function": getattr(tc, "function", ""),
+                            "args": getattr(tc, "args", {}),
+                        }
+                    )
+                elif isinstance(tc, dict):
+                    tool_calls.append(
+                        {
+                            "id": tc.get("id"),
+                            "function": tc.get("function", ""),
+                            "args": tc.get("args", {}),
+                        }
+                    )
+            if tool_calls:
+                formatted_msg["tool_calls"] = tool_calls
+
+        # Include tool call ID for tool responses
+        if role == "tool":
+            if msg.get("tool_call_id"):
+                formatted_msg["tool_call_id"] = msg["tool_call_id"]
+            if msg.get("error"):
+                formatted_msg["error"] = msg["error"]
+
+        formatted.append(formatted_msg)
+
+    return formatted
 
 
 def call_api(prompt: str, options: dict, context: dict) -> dict:
@@ -316,10 +466,18 @@ def call_api(prompt: str, options: dict, context: dict) -> dict:
     injection_task_id = vars_.get("injection_task_id")
     version = config.get("version", "v1.2.2")
 
-    # Log directory for AgentDojo
-    logdir = Path(config.get("logdir", "./agentdojo_logs"))
+    # Log directory for AgentDojo - resolve relative to this file's directory
+    config_logdir = config.get("logdir", "./agentdojo_logs")
+    if not os.path.isabs(config_logdir):
+        # Resolve relative to this provider file's directory
+        logdir = Path(__file__).parent / config_logdir
+    else:
+        logdir = Path(config_logdir)
 
     try:
+        # Reset token accumulator for this task execution
+        _reset_token_usage()
+
         # Set up logging before any AgentDojo operations
         _setup_logger(logdir)
 
@@ -356,6 +514,19 @@ def call_api(prompt: str, options: dict, context: dict) -> dict:
             utility = all(utility_results.values()) if utility_results else False
             security = all(security_results.values()) if security_results else True
 
+        # Read the AgentDojo trace log to include in metadata
+        trace_log = _read_agentdojo_log(
+            logdir=logdir,
+            pipeline_name=pipeline.name,
+            suite_name=suite_name,
+            user_task_id=user_task_id,
+            attack_name=attack_name,
+            injection_task_id=injection_task_id,
+        )
+
+        # Format trace messages into clean message history (like Hydra's redteamHistory)
+        messages = _format_trace_messages(trace_log)
+
         # Build result
         result = {
             "user_task_success": utility,
@@ -372,9 +543,26 @@ def call_api(prompt: str, options: dict, context: dict) -> dict:
             "num_security_results": len(security_results),
         }
 
+        # Include formatted messages and raw trace in metadata
+        metadata = {**result}
+        if messages:
+            metadata["messages"] = messages
+        if trace_log:
+            metadata["agentdojo_trace"] = trace_log
+
+        # Build token usage in Promptfoo format
+        token_usage = None
+        if _token_usage["total"] > 0:
+            token_usage = {
+                "prompt": _token_usage["prompt"],
+                "completion": _token_usage["completion"],
+                "total": _token_usage["total"],
+            }
+
         return {
             "output": json.dumps(result),
-            "metadata": result,
+            "metadata": metadata,
+            "tokenUsage": token_usage,
         }
 
     except Exception as e:
