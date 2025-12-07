@@ -88,12 +88,13 @@ def _get_pipeline(model: str, defense: str | None):
 
             client = openai.OpenAI()
 
-            # For newer models like gpt-5.1 that require max_completion_tokens
-            if (
-                "gpt-5" in model.lower()
-                or "o1" in model.lower()
-                or "o3" in model.lower()
-            ):
+            # For newer models - use Responses API for gpt-5.x, Chat Completions for o1/o3
+            use_responses_api = "gpt-5" in model.lower()
+            use_custom_llm = (
+                use_responses_api or "o1" in model.lower() or "o3" in model.lower()
+            )
+
+            if use_custom_llm:
                 from agentdojo.functions_runtime import (
                     EmptyEnv,
                     Env,
@@ -103,11 +104,12 @@ def _get_pipeline(model: str, defense: str | None):
                 from agentdojo.types import text_content_block_from_string
                 from openai._types import NOT_GIVEN
 
-                # Create a custom LLM wrapper for newer models that require max_completion_tokens
+                # Create a custom LLM wrapper for newer models
                 class CustomOpenAILLM(BasePipelineElement):
-                    def __init__(self, llm_client, llm_model):
+                    def __init__(self, llm_client, llm_model, use_responses_api=False):
                         self.client = llm_client
                         self.model = llm_model
+                        self.use_responses_api = use_responses_api
 
                     def _message_to_openai(self, message: ChatMessage) -> dict:
                         """Convert AgentDojo message to OpenAI format."""
@@ -176,6 +178,119 @@ def _get_pipeline(model: str, defense: str | None):
                             },
                         }
 
+                    def _call_responses_api(self, oai_messages, oai_tools):
+                        """Call OpenAI Responses API for gpt-5.x models."""
+                        # Build input for responses API
+                        input_items = []
+                        for msg in oai_messages:
+                            role = msg["role"]
+                            content = msg.get("content", "")
+
+                            if role == "developer":
+                                input_items.append(
+                                    {
+                                        "type": "message",
+                                        "role": "developer",
+                                        "content": content,
+                                    }
+                                )
+                            elif role == "user":
+                                input_items.append(
+                                    {
+                                        "type": "message",
+                                        "role": "user",
+                                        "content": content,
+                                    }
+                                )
+                            elif role == "assistant":
+                                item = {
+                                    "type": "message",
+                                    "role": "assistant",
+                                    "content": content or "",
+                                }
+                                input_items.append(item)
+                                # Add function calls as separate items
+                                if msg.get("tool_calls"):
+                                    for tc in msg["tool_calls"]:
+                                        input_items.append(
+                                            {
+                                                "type": "function_call",
+                                                "id": tc["id"],
+                                                "name": tc["function"]["name"],
+                                                "arguments": tc["function"][
+                                                    "arguments"
+                                                ],
+                                            }
+                                        )
+                            elif role == "tool":
+                                input_items.append(
+                                    {
+                                        "type": "function_call_output",
+                                        "call_id": msg.get("tool_call_id"),
+                                        "output": content,
+                                    }
+                                )
+
+                        # Call responses API
+                        response = self.client.responses.create(
+                            model=self.model,
+                            input=input_items,
+                            tools=oai_tools if oai_tools else NOT_GIVEN,
+                        )
+
+                        # Accumulate token usage
+                        _accumulate_tokens(response.usage)
+
+                        # Extract text and tool calls from response
+                        text_content = ""
+                        tool_calls_list = []
+
+                        for item in response.output:
+                            if item.type == "message":
+                                for content_block in item.content:
+                                    if content_block.type == "output_text":
+                                        text_content += content_block.text
+                            elif item.type == "function_call":
+                                tool_calls_list.append(
+                                    {
+                                        "id": item.id,
+                                        "function_name": item.name,
+                                        "arguments": item.arguments,
+                                    }
+                                )
+
+                        return text_content, tool_calls_list
+
+                    def _call_chat_completions_api(self, oai_messages, oai_tools):
+                        """Call OpenAI Chat Completions API for o1/o3 models."""
+                        response = self.client.chat.completions.create(
+                            model=self.model,
+                            messages=oai_messages,
+                            tools=oai_tools if oai_tools else NOT_GIVEN,
+                            tool_choice="auto" if oai_tools else NOT_GIVEN,
+                            max_completion_tokens=4096,
+                        )
+
+                        # Accumulate token usage
+                        _accumulate_tokens(response.usage)
+
+                        choice = response.choices[0]
+                        msg = choice.message
+
+                        text_content = msg.content or ""
+                        tool_calls_list = []
+                        if msg.tool_calls:
+                            for tc in msg.tool_calls:
+                                tool_calls_list.append(
+                                    {
+                                        "id": tc.id,
+                                        "function_name": tc.function.name,
+                                        "arguments": tc.function.arguments,
+                                    }
+                                )
+
+                        return text_content, tool_calls_list
+
                     def query(
                         self,
                         query_str: str,
@@ -202,38 +317,34 @@ def _get_pipeline(model: str, defense: str | None):
                             for func in runtime.functions.values()
                         ]
 
-                        response = self.client.chat.completions.create(
-                            model=self.model,
-                            messages=oai_messages,
-                            tools=oai_tools if oai_tools else NOT_GIVEN,
-                            tool_choice="auto" if oai_tools else NOT_GIVEN,
-                            max_completion_tokens=4096,
-                        )
-
-                        # Accumulate token usage from response
-                        _accumulate_tokens(response.usage)
-
-                        choice = response.choices[0]
-                        msg = choice.message
+                        # Call appropriate API
+                        if self.use_responses_api:
+                            text_content, tool_calls_list = self._call_responses_api(
+                                oai_messages, oai_tools
+                            )
+                        else:
+                            text_content, tool_calls_list = (
+                                self._call_chat_completions_api(oai_messages, oai_tools)
+                            )
 
                         # Convert tool calls to FunctionCall objects
                         tool_calls = None
-                        if msg.tool_calls:
+                        if tool_calls_list:
                             tool_calls = [
                                 FunctionCall(
-                                    function=tc.function.name,
-                                    args=json.loads(tc.function.arguments)
-                                    if tc.function.arguments
+                                    function=tc["function_name"],
+                                    args=json.loads(tc["arguments"])
+                                    if tc["arguments"]
                                     else {},
-                                    id=tc.id,
+                                    id=tc["id"],
                                 )
-                                for tc in msg.tool_calls
+                                for tc in tool_calls_list
                             ]
 
                         # Build content as list of content blocks
                         content = None
-                        if msg.content:
-                            content = [text_content_block_from_string(msg.content)]
+                        if text_content:
+                            content = [text_content_block_from_string(text_content)]
 
                         output = ChatAssistantMessage(
                             role="assistant",
@@ -243,7 +354,11 @@ def _get_pipeline(model: str, defense: str | None):
                         new_messages = [*messages, output]
                         return query_str, runtime, env, new_messages, extra_args
 
-                llm = CustomOpenAILLM(llm_client=client, llm_model=model)
+                llm = CustomOpenAILLM(
+                    llm_client=client,
+                    llm_model=model,
+                    use_responses_api=use_responses_api,
+                )
             else:
                 llm = OpenAILLM(client=client, model=model)
 

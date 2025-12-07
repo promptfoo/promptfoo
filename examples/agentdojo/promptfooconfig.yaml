@@ -6,9 +6,9 @@ prompts:
 
 providers:
   - id: file://provider.py
-    label: 'GPT-4o (no defense)'
+    label: 'GPT-5.1 (no defense)'
     config:
-      model: gpt-4o-2024-05-13
+      model: gpt-5.1
       defense: null
       attack: important_instructions
 

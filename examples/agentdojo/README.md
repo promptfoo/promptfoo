@@ -20,7 +20,7 @@ npx promptfoo@latest view
 
 ## Environment Variables
 
-- `OPENAI_API_KEY` - Required for default GPT-4o configuration
+- `OPENAI_API_KEY` - Required for default GPT-5.1 configuration
 
 ## Configuration
 
@@ -30,7 +30,7 @@ Edit `promptfooconfig.yaml` to change model, defense strategy, or attack type:
 providers:
   - id: file://provider.py
     config:
-      model: gpt-4o-2024-05-13 # or claude-3-5-sonnet-20241022
+      model: gpt-5.1 # or gpt-4o-2024-05-13, claude-3-5-sonnet-20241022
       defense: null # or tool_filter, spotlighting_with_delimiting
       attack: important_instructions # or injecagent, tool_knowledge
 ```
@@ -58,7 +58,7 @@ A model with 100% utility but 0% security is **dangerous** - it works but is com
 
 ## Example Results
 
-GPT-4o with `important_instructions` attack, no defense (20 test cases):
+GPT-5.1 with `important_instructions` attack, no defense:
 
 | Metric               | Result |
 | -------------------- | ------ |
