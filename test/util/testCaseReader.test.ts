@@ -836,7 +836,7 @@ describe('readTest', () => {
 
       const result = await readTest(testCase);
 
-      expect(loadApiProvider).toHaveBeenCalledWith('mock-provider');
+      expect(loadApiProvider).toHaveBeenCalledWith('mock-provider', { basePath: '' });
       expect(result.provider).toBe(mockProvider);
     });
 
@@ -905,7 +905,7 @@ describe('readTest', () => {
       options: {
         provider: {
           text: {
-            id: 'openai:gpt-4',
+            id: 'openai:gpt-5.1-mini',
             config: {
               temperature: 0.7,
             },
@@ -919,7 +919,7 @@ describe('readTest', () => {
     expect(result.options?.provider).toBeDefined();
     expect(result.options?.provider).toEqual({
       text: {
-        id: 'openai:gpt-4',
+        id: 'openai:gpt-5.1-mini',
         config: {
           temperature: 0.7,
         },

@@ -9,10 +9,11 @@ import type { Vars } from '../types/index';
 
 export type TransformContext = object;
 
-export enum TransformInputType {
-  OUTPUT = 'output',
-  VARS = 'vars',
-}
+export const TransformInputType = {
+  OUTPUT: 'output',
+  VARS: 'vars',
+} as const;
+export type TransformInputType = (typeof TransformInputType)[keyof typeof TransformInputType];
 
 /**
  * Parses a file path string to extract the file path and function name.

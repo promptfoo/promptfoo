@@ -5,15 +5,14 @@
  */
 
 import { z } from 'zod';
-import { CodeScanSeverity } from '../../types/codeScan';
+import { CodeScanSeverity, CodeScanSeveritySchema } from '../../types/codeScan';
 
 export const ConfigSchema = z
   .object({
-    minSeverity: z
-      .nativeEnum(CodeScanSeverity)
-      .optional()
-      .describe('Minimum severity level for reporting vulnerabilities'),
-    minimumSeverity: z.nativeEnum(CodeScanSeverity).optional().describe('Alias for minSeverity'),
+    minSeverity: CodeScanSeveritySchema.optional().describe(
+      'Minimum severity level for reporting vulnerabilities',
+    ),
+    minimumSeverity: CodeScanSeveritySchema.optional().describe('Alias for minSeverity'),
     diffsOnly: z
       .boolean()
       .default(false)
