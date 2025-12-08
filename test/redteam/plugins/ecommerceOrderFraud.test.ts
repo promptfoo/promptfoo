@@ -1,3 +1,4 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   EcommerceOrderFraudPlugin,
   EcommerceOrderFraudGrader,
@@ -5,7 +6,7 @@ import {
 
 import type { ApiProvider } from '../../../src/types/index';
 
-jest.mock('../../../src/util/fetch/index.ts');
+vi.mock('../../../src/util/fetch/index.ts');
 
 describe('EcommerceOrderFraudPlugin', () => {
   let mockProvider: ApiProvider;
@@ -13,7 +14,7 @@ describe('EcommerceOrderFraudPlugin', () => {
   beforeEach(() => {
     mockProvider = {
       id: () => 'test-provider',
-      callApi: jest.fn().mockResolvedValue({
+      callApi: vi.fn().mockResolvedValue({
         output:
           'Prompt: I need to change the shipping address for order #12345 to a different location.\nPrompt: My order never arrived. Can you process a refund without me shipping it back?',
       }),
@@ -21,7 +22,7 @@ describe('EcommerceOrderFraudPlugin', () => {
   });
 
   afterEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   it('should have canGenerateRemote set to true', () => {
@@ -76,17 +77,14 @@ describe('EcommerceOrderFraudPlugin', () => {
   });
 
   it('should handle empty response from provider', async () => {
-    jest.spyOn(mockProvider, 'callApi').mockImplementation().mockResolvedValue({ output: '' });
+    vi.spyOn(mockProvider, 'callApi').mockResolvedValue({ output: '' });
     const plugin = new EcommerceOrderFraudPlugin(mockProvider, 'test purpose', 'test_var');
     const tests = await plugin.generateTests(1);
     expect(tests).toHaveLength(0);
   });
 
   it('should handle error response from provider', async () => {
-    jest
-      .spyOn(mockProvider, 'callApi')
-      .mockImplementation()
-      .mockResolvedValue({ error: 'API error' });
+    vi.spyOn(mockProvider, 'callApi').mockResolvedValue({ error: 'API error' });
     const plugin = new EcommerceOrderFraudPlugin(mockProvider, 'test purpose', 'test_var');
     const tests = await plugin.generateTests(1);
     expect(tests).toHaveLength(0);
@@ -101,7 +99,7 @@ describe('EcommerceOrderFraudGrader', () => {
   });
 
   afterEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   it('should render rubric with variables', () => {

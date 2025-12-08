@@ -1,0 +1,86 @@
+name: Tusk Test Runner - Vitest unit tests (test directory)
+
+# Required for Tusk
+permissions:
+  contents: read
+on:
+  workflow_dispatch:
+    inputs:
+      runId:
+        description: 'Tusk Run ID'
+        required: true
+      tuskUrl:
+        description: 'Tusk server URL'
+        required: true
+      commitSha:
+        description: 'Commit SHA to checkout'
+        required: true
+      runnerIndexes:
+        description: 'Runner indexes'
+        required: false
+        default: '["1"]'
+
+jobs:
+  test-action:
+    name: Tusk Test Runner
+    runs-on: ubuntu-latest
+
+    env:
+      PROMPTFOO_DISABLE_TELEMETRY: 1
+
+    # Required for test parallelization where available, do not remove.
+    strategy:
+      matrix:
+        runnerIndex: ${{ fromJson(github.event.inputs.runnerIndexes) }}
+
+    steps:
+      - name: Checkout
+        id: checkout
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.inputs.commitSha }} # Required for Tusk to access files for the commit being tested
+
+      - name: Use Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
+      - name: Upgrade npm
+        run: npm install -g npm@latest
+
+      - name: Install Dependencies
+        run: |
+          npm ci
+
+      - name: Start runner
+        id: test-action
+        uses: Use-Tusk/test-runner@v1
+        # See https://github.com/Use-Tusk/test-runner for full details and examples.
+        with:
+          # Required for the test runner, do not remove this input
+          runId: ${{ github.event.inputs.runId }}
+
+          # Required for the test runner, do not remove this input
+          tuskUrl: ${{ github.event.inputs.tuskUrl }}
+
+          # Required for the test runner, do not remove this input
+          commitSha: ${{ github.event.inputs.commitSha }}
+
+          # Your Tusk auth token. It is recommended to add it to your repo's secrets.
+          # Please adapt the secret name accordingly if you have named it differently.
+          authToken: ${{ secrets.TUSK_AUTH_TOKEN }}
+
+          testFramework: 'vitest'
+
+          testFileRegex: '^test/.*\.test\.(js|ts|tsx)$'
+
+          lintScript: 'npx @biomejs/biome check --write {{file}}'
+
+          testScript: 'npx vitest run {{file}} --reporter=verbose'
+
+          coverageScript: 'npx vitest run {{testFilePaths}} --coverage --coverage.reporter=json-summary --coverage.reporter=json'
+
+          # Required for test parallelization where available, do not remove.
+          runnerIndex: ${{ matrix.runnerIndex }}

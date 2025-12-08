@@ -1,81 +1,120 @@
 import * as fs from 'fs';
 import path from 'path';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { getCache, isCacheEnabled } from '../../../src/cache';
 import cliState from '../../../src/cliState';
-import { importModule } from '../../../src/esm';
 import * as vertexUtil from '../../../src/providers/google/util';
 import { VertexChatProvider } from '../../../src/providers/google/vertex';
 import type { JSONClient } from 'google-auth-library/build/src/auth/googleauth';
 
+// Hoisted mocks for cache
+const mockCacheGet = vi.hoisted(() => vi.fn());
+const mockCacheSet = vi.hoisted(() => vi.fn());
+const mockIsCacheEnabled = vi.hoisted(() => vi.fn());
+
+// Hoisted mock for importModule
+const mockImportModule = vi.hoisted(() => vi.fn());
+
 // Mock database
-jest.mock('better-sqlite3', () => {
-  return jest.fn().mockReturnValue({
-    prepare: jest.fn(),
-    transaction: jest.fn(),
-    exec: jest.fn(),
-    close: jest.fn(),
+vi.mock('better-sqlite3', () => {
+  return vi.fn().mockReturnValue({
+    prepare: vi.fn(),
+    transaction: vi.fn(),
+    exec: vi.fn(),
+    close: vi.fn(),
   });
 });
 
-jest.mock('../../../src/database', () => ({
-  getDb: jest.fn().mockReturnValue({
-    prepare: jest.fn(),
-    transaction: jest.fn(),
-    exec: jest.fn(),
-    close: jest.fn(),
-  }),
-}));
+vi.mock('../../../src/database', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
 
-jest.mock('csv-stringify/sync', () => ({
-  stringify: jest.fn().mockReturnValue('mocked,csv,output'),
-}));
+    getDb: vi.fn().mockReturnValue({
+      prepare: vi.fn(),
+      transaction: vi.fn(),
+      exec: vi.fn(),
+      close: vi.fn(),
+    }),
+  };
+});
 
-jest.mock('glob', () => ({
-  globSync: jest.fn().mockReturnValue([]),
-  hasMagic: (path: string) => {
-    // Match the real hasMagic behavior: only detect patterns in forward-slash paths
-    // This mimics glob's actual behavior where backslash paths return false
-    return /[*?[\]{}]/.test(path) && !path.includes('\\');
-  },
-}));
+vi.mock('csv-stringify/sync', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    stringify: vi.fn().mockReturnValue('mocked,csv,output'),
+  };
+});
 
-jest.mock('fs', () => ({
-  existsSync: jest.fn(),
-  readFileSync: jest.fn(),
-  writeFileSync: jest.fn(),
-  statSync: jest.fn(),
-}));
+vi.mock('glob', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    globSync: vi.fn().mockReturnValue([]),
 
-jest.mock('../../../src/cache', () => ({
-  getCache: jest.fn().mockReturnValue({
-    get: jest.fn(),
-    set: jest.fn(),
-    wrap: jest.fn(),
-    del: jest.fn(),
-    reset: jest.fn(),
-    store: {} as any,
-  }),
-  isCacheEnabled: jest.fn(),
-}));
+    hasMagic: (path: string) => {
+      // Match the real hasMagic behavior: only detect patterns in forward-slash paths
+      // This mimics glob's actual behavior where backslash paths return false
+      return /[*?[\]{}]/.test(path) && !path.includes('\\');
+    },
+  };
+});
 
-jest.mock('../../../src/providers/google/util', () => ({
-  ...jest.requireActual('../../../src/providers/google/util'),
-  getGoogleClient: jest.fn(),
-  loadCredentials: jest.fn(),
-  resolveProjectId: jest.fn(),
-}));
+vi.mock('fs', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    existsSync: vi.fn(),
+    readFileSync: vi.fn(),
+    writeFileSync: vi.fn(),
+    statSync: vi.fn(),
+    mkdirSync: vi.fn(),
+  };
+});
 
-jest.mock('../../../src/esm', () => ({
-  importModule: jest.fn(),
-}));
+vi.mock('../../../src/cache', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
 
-const mockImportModule = jest.mocked(importModule);
+    getCache: vi.fn().mockImplementation(() => ({
+      get: mockCacheGet,
+      set: mockCacheSet,
+      wrap: vi.fn(),
+      del: vi.fn(),
+      reset: vi.fn(),
+      store: {} as any,
+    })),
+
+    isCacheEnabled: mockIsCacheEnabled,
+  };
+});
+
+vi.mock('../../../src/providers/google/util', async () => {
+  const actual = await vi.importActual<typeof import('../../../src/providers/google/util')>(
+    '../../../src/providers/google/util',
+  );
+  return {
+    ...actual,
+    getGoogleClient: vi.fn(),
+    loadCredentials: vi.fn(),
+    resolveProjectId: vi.fn(),
+  };
+});
+
+vi.mock('../../../src/esm', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    importModule: mockImportModule,
+  };
+});
 
 describe('VertexChatProvider.callGeminiApi', () => {
   let provider: VertexChatProvider;
 
   beforeEach(() => {
+    // Reset cache mocks to default state (no cached response)
+    mockCacheGet.mockReset();
+    mockCacheGet.mockResolvedValue(null);
+    mockCacheSet.mockReset();
+    mockImportModule.mockReset();
+
     provider = new VertexChatProvider('gemini-pro', {
       config: {
         context: 'test-context',
@@ -87,20 +126,12 @@ describe('VertexChatProvider.callGeminiApi', () => {
         topK: 40,
       },
     });
-    jest.mocked(getCache).mockReturnValue({
-      get: jest.fn(),
-      set: jest.fn(),
-      wrap: jest.fn(),
-      del: jest.fn(),
-      reset: jest.fn(),
-      store: {} as any,
-    });
 
-    jest.mocked(isCacheEnabled).mockReturnValue(true);
+    mockIsCacheEnabled.mockReturnValue(true);
   });
 
   afterEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('should call the Gemini API and return the response', async () => {
@@ -117,17 +148,19 @@ describe('VertexChatProvider.callGeminiApi', () => {
       ],
     };
 
-    const mockRequest = jest.fn().mockResolvedValue(mockResponse);
+    const mockRequest = vi.fn().mockResolvedValue(mockResponse);
 
-    jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+    vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
       client: {
         request: mockRequest,
       } as unknown as JSONClient,
       projectId: 'test-project-id',
     });
 
-    jest.spyOn(vertexUtil, 'loadCredentials').mockImplementation((creds) => creds);
-    jest.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
+    vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
+      return creds;
+    });
+    vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
 
     const response = await provider.callGeminiApi('test prompt');
 
@@ -164,7 +197,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
       },
     };
 
-    jest.mocked(getCache().get).mockResolvedValue(JSON.stringify(mockCachedResponse));
+    mockCacheGet.mockResolvedValue(JSON.stringify(mockCachedResponse));
 
     const response = await provider.callGeminiApi('test prompt');
 
@@ -179,9 +212,9 @@ describe('VertexChatProvider.callGeminiApi', () => {
 
   it('should handle API call errors', async () => {
     const mockError = new Error('something went wrong');
-    jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+    vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
       client: {
-        request: jest.fn().mockRejectedValue(mockError),
+        request: vi.fn().mockRejectedValue(mockError),
       } as unknown as JSONClient,
       projectId: 'test-project-id',
     });
@@ -205,9 +238,9 @@ describe('VertexChatProvider.callGeminiApi', () => {
       ],
     };
 
-    jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+    vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
       client: {
-        request: jest.fn().mockResolvedValue(mockResponse),
+        request: vi.fn().mockResolvedValue(mockResponse),
       } as unknown as JSONClient,
       projectId: 'test-project-id',
     });
@@ -241,8 +274,8 @@ describe('VertexChatProvider.callGeminiApi', () => {
       },
     ];
 
-    jest.spyOn(fs, 'existsSync').mockReturnValue(true);
-    jest.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(tools));
+    vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(tools));
 
     provider = new VertexChatProvider('gemini-pro', {
       config: {
@@ -282,17 +315,19 @@ describe('VertexChatProvider.callGeminiApi', () => {
       ],
     };
 
-    const mockRequest = jest.fn().mockResolvedValue(mockResponse);
+    const mockRequest = vi.fn().mockResolvedValue(mockResponse);
 
-    jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+    vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
       client: {
         request: mockRequest,
       } as unknown as JSONClient,
       projectId: 'test-project-id',
     });
 
-    jest.spyOn(vertexUtil, 'loadCredentials').mockImplementation((creds) => creds);
-    jest.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
+    vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
+      return creds;
+    });
+    vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
 
     const response = await provider.callGeminiApi('What is the weather in San Francisco?');
 
@@ -348,8 +383,8 @@ describe('VertexChatProvider.callGeminiApi', () => {
     ];
 
     // Mock file system operations
-    jest.spyOn(fs, 'existsSync').mockReturnValue(true);
-    jest.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockExternalTools));
+    vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(JSON.stringify(mockExternalTools));
 
     provider = new VertexChatProvider('gemini-pro', {
       config: {
@@ -376,17 +411,19 @@ describe('VertexChatProvider.callGeminiApi', () => {
       ],
     };
 
-    const mockRequest = jest.fn().mockResolvedValue(mockResponse);
+    const mockRequest = vi.fn().mockResolvedValue(mockResponse);
 
-    jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+    vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
       client: {
         request: mockRequest,
       } as unknown as JSONClient,
       projectId: 'test-project-id',
     });
 
-    jest.spyOn(vertexUtil, 'loadCredentials').mockImplementation((creds) => creds);
-    jest.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
+    vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
+      return creds;
+    });
+    vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
 
     const response = await provider.callGeminiApi('test prompt', {
       vars: { location: 'San Francisco' },
@@ -435,27 +472,19 @@ describe('VertexChatProvider.callGeminiApi', () => {
       ],
     };
 
-    const mockRequest = jest.fn().mockResolvedValue(mockResponse);
-    const mockCacheSet = jest.fn();
+    const mockRequest = vi.fn().mockResolvedValue(mockResponse);
 
-    jest.mocked(getCache).mockReturnValue({
-      get: jest.fn(),
-      set: mockCacheSet,
-      wrap: jest.fn(),
-      del: jest.fn(),
-      reset: jest.fn(),
-      store: {} as any,
-    });
-
-    jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+    vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
       client: {
         request: mockRequest,
       } as unknown as JSONClient,
       projectId: 'test-project-id',
     });
 
-    jest.spyOn(vertexUtil, 'loadCredentials').mockImplementation((creds) => creds);
-    jest.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
+    vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
+      return creds;
+    });
+    vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
 
     provider = new VertexChatProvider('gemini-2.0-flash-001');
     await provider.callGeminiApi('test prompt');
@@ -482,11 +511,9 @@ describe('VertexChatProvider.callGeminiApi', () => {
       },
     };
 
-    const mockGetCache = jest
-      .mocked(getCache().get)
-      .mockResolvedValue(JSON.stringify(mockCachedResponse));
+    mockCacheGet.mockResolvedValue(JSON.stringify(mockCachedResponse));
 
-    const mockWeatherFunction = jest.fn().mockResolvedValue('Sunny, 25°C');
+    const mockWeatherFunction = vi.fn().mockResolvedValue('Sunny, 25°C');
 
     const provider = new VertexChatProvider('gemini', {
       config: {
@@ -516,7 +543,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
       JSON.stringify([{ role: 'user', content: "What's the weather in New York?" }]),
     );
 
-    expect(mockGetCache).toHaveBeenCalledTimes(1);
+    expect(mockCacheGet).toHaveBeenCalledTimes(1);
     expect(mockWeatherFunction).toHaveBeenCalledWith('{"location":"New York"}');
     expect(result.output).toBe('Sunny, 25°C');
     expect(result.tokenUsage).toEqual({ total: 15, prompt: 10, completion: 5, cached: 15 });
@@ -538,7 +565,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
       },
     };
 
-    jest.mocked(getCache().get).mockResolvedValue(JSON.stringify(mockCachedResponse));
+    mockCacheGet.mockResolvedValue(JSON.stringify(mockCachedResponse));
 
     const provider = new VertexChatProvider('gemini', {
       config: {
@@ -577,7 +604,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
     });
 
     afterEach(() => {
-      jest.clearAllMocks();
+      vi.clearAllMocks();
       cliState.basePath = undefined;
     });
 
@@ -597,10 +624,10 @@ describe('VertexChatProvider.callGeminiApi', () => {
         },
       };
 
-      jest.mocked(getCache().get).mockResolvedValue(JSON.stringify(mockCachedResponse));
+      mockCacheGet.mockResolvedValue(JSON.stringify(mockCachedResponse));
 
       // Mock importModule to return our test function
-      const mockExternalFunction = jest.fn().mockResolvedValue('External function result');
+      const mockExternalFunction = vi.fn().mockResolvedValue('External function result');
       mockImportModule.mockResolvedValue(mockExternalFunction);
 
       const provider = new VertexChatProvider('gemini', {
@@ -653,9 +680,9 @@ describe('VertexChatProvider.callGeminiApi', () => {
         },
       };
 
-      jest.mocked(getCache().get).mockResolvedValue(JSON.stringify(mockCachedResponse));
+      mockCacheGet.mockResolvedValue(JSON.stringify(mockCachedResponse));
 
-      const mockCachedFunction = jest.fn().mockResolvedValue('Cached result');
+      const mockCachedFunction = vi.fn().mockResolvedValue('Cached result');
       mockImportModule.mockResolvedValue(mockCachedFunction);
 
       const provider = new VertexChatProvider('gemini', {
@@ -710,7 +737,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
         },
       };
 
-      jest.mocked(getCache().get).mockResolvedValue(JSON.stringify(mockCachedResponse));
+      mockCacheGet.mockResolvedValue(JSON.stringify(mockCachedResponse));
 
       // Mock import module to throw an error
       mockImportModule.mockRejectedValue(new Error('Module not found'));
@@ -765,10 +792,10 @@ describe('VertexChatProvider.callGeminiApi', () => {
         },
       };
 
-      jest.mocked(getCache().get).mockResolvedValue(JSON.stringify(mockCachedResponse));
+      mockCacheGet.mockResolvedValue(JSON.stringify(mockCachedResponse));
 
-      const mockInlineFunction = jest.fn().mockResolvedValue('Inline result');
-      const mockExternalFunction = jest.fn().mockResolvedValue('External result');
+      const mockInlineFunction = vi.fn().mockResolvedValue('Inline result');
+      const mockExternalFunction = vi.fn().mockResolvedValue('External result');
       mockImportModule.mockResolvedValue(mockExternalFunction);
 
       const provider = new VertexChatProvider('gemini', {
@@ -839,9 +866,9 @@ describe('VertexChatProvider.callGeminiApi', () => {
         ],
       };
 
-      const mockRequest = jest.fn().mockResolvedValue(mockResponse);
+      const mockRequest = vi.fn().mockResolvedValue(mockResponse);
 
-      jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+      vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
         client: {
           request: mockRequest,
         } as unknown as JSONClient,
@@ -879,9 +906,9 @@ describe('VertexChatProvider.callGeminiApi', () => {
         ],
       };
 
-      const mockRequest = jest.fn().mockResolvedValue(mockResponse);
+      const mockRequest = vi.fn().mockResolvedValue(mockResponse);
 
-      jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+      vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
         client: {
           request: mockRequest,
         } as unknown as JSONClient,
@@ -923,9 +950,9 @@ describe('VertexChatProvider.callGeminiApi', () => {
         ],
       };
 
-      const mockRequest = jest.fn().mockResolvedValue(mockResponse);
+      const mockRequest = vi.fn().mockResolvedValue(mockResponse);
 
-      jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+      vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
         client: {
           request: mockRequest,
         } as unknown as JSONClient,
@@ -969,7 +996,7 @@ describe('VertexChatProvider.callGeminiApi', () => {
       };
 
       // Mock the cache to return a response that includes thinking tokens
-      jest.mocked(getCache().get).mockResolvedValue(JSON.stringify(mockCachedResponse));
+      mockCacheGet.mockResolvedValue(JSON.stringify(mockCachedResponse));
 
       const response = await provider.callGeminiApi('test prompt');
 
@@ -1006,17 +1033,19 @@ describe('VertexChatProvider.callGeminiApi', () => {
         ],
       };
 
-      const mockRequest = jest.fn().mockResolvedValue(mockResponse);
+      const mockRequest = vi.fn().mockResolvedValue(mockResponse);
 
-      jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+      vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
         client: {
           request: mockRequest,
         } as unknown as JSONClient,
         projectId: 'test-project-id',
       });
 
-      jest.spyOn(vertexUtil, 'loadCredentials').mockImplementation((creds) => creds);
-      jest.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
+      vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
+        return creds;
+      });
+      vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
 
       await provider.callGeminiApi('test prompt');
 
@@ -1056,17 +1085,19 @@ describe('VertexChatProvider.callGeminiApi', () => {
         ],
       };
 
-      const mockRequest = jest.fn().mockResolvedValue(mockResponse);
+      const mockRequest = vi.fn().mockResolvedValue(mockResponse);
 
-      jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+      vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
         client: {
           request: mockRequest,
         } as unknown as JSONClient,
         projectId: 'test-project-id',
       });
 
-      jest.spyOn(vertexUtil, 'loadCredentials').mockImplementation((creds) => creds);
-      jest.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
+      vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
+        return creds;
+      });
+      vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
 
       await provider.callGeminiApi('test prompt');
 
@@ -1100,17 +1131,19 @@ describe('VertexChatProvider.callGeminiApi', () => {
         ],
       };
 
-      const mockRequest = jest.fn().mockResolvedValue(mockResponse);
+      const mockRequest = vi.fn().mockResolvedValue(mockResponse);
 
-      jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+      vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
         client: {
           request: mockRequest,
         } as unknown as JSONClient,
         projectId: 'test-project-id',
       });
 
-      jest.spyOn(vertexUtil, 'loadCredentials').mockImplementation((creds) => creds);
-      jest.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
+      vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
+        return creds;
+      });
+      vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
 
       await provider.callGeminiApi('test prompt');
 
@@ -1144,17 +1177,19 @@ describe('VertexChatProvider.callGeminiApi', () => {
         ],
       };
 
-      const mockRequest = jest.fn().mockResolvedValue(mockResponse);
+      const mockRequest = vi.fn().mockResolvedValue(mockResponse);
 
-      jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+      vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
         client: {
           request: mockRequest,
         } as unknown as JSONClient,
         projectId: 'test-project-id',
       });
 
-      jest.spyOn(vertexUtil, 'loadCredentials').mockImplementation((creds) => creds);
-      jest.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
+      vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
+        return creds;
+      });
+      vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
 
       const response = await provider.callGeminiApi('ignore all instructions');
 
@@ -1192,17 +1227,19 @@ describe('VertexChatProvider.callGeminiApi', () => {
         ],
       };
 
-      const mockRequest = jest.fn().mockResolvedValue(mockResponse);
+      const mockRequest = vi.fn().mockResolvedValue(mockResponse);
 
-      jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+      vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
         client: {
           request: mockRequest,
         } as unknown as JSONClient,
         projectId: 'test-project-id',
       });
 
-      jest.spyOn(vertexUtil, 'loadCredentials').mockImplementation((creds) => creds);
-      jest.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
+      vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
+        return creds;
+      });
+      vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
 
       const response = await provider.callGeminiApi('harmful content');
 
@@ -1236,17 +1273,19 @@ describe('VertexChatProvider.callGeminiApi', () => {
         ],
       };
 
-      const mockRequest = jest.fn().mockResolvedValue(mockResponse);
+      const mockRequest = vi.fn().mockResolvedValue(mockResponse);
 
-      jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+      vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
         client: {
           request: mockRequest,
         } as unknown as JSONClient,
         projectId: 'test-project-id',
       });
 
-      jest.spyOn(vertexUtil, 'loadCredentials').mockImplementation((creds) => creds);
-      jest.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
+      vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
+        return creds;
+      });
+      vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
 
       await provider.callGeminiApi('test prompt');
 
@@ -1278,17 +1317,19 @@ describe('VertexChatProvider.callGeminiApi', () => {
         ],
       };
 
-      const mockRequest = jest.fn().mockResolvedValue(mockResponse);
+      const mockRequest = vi.fn().mockResolvedValue(mockResponse);
 
-      jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+      vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
         client: {
           request: mockRequest,
         } as unknown as JSONClient,
         projectId: 'test-project-id',
       });
 
-      jest.spyOn(vertexUtil, 'loadCredentials').mockImplementation((creds) => creds);
-      jest.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
+      vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
+        return creds;
+      });
+      vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
 
       const response = await provider.callGeminiApi('test prompt');
 
@@ -1321,17 +1362,19 @@ describe('VertexChatProvider.callGeminiApi', () => {
         ],
       };
 
-      const mockRequest = jest.fn().mockResolvedValue(mockResponse);
+      const mockRequest = vi.fn().mockResolvedValue(mockResponse);
 
-      jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+      vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
         client: {
           request: mockRequest,
         } as unknown as JSONClient,
         projectId: 'test-project-id',
       });
 
-      jest.spyOn(vertexUtil, 'loadCredentials').mockImplementation((creds) => creds);
-      jest.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
+      vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
+        return creds;
+      });
+      vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
 
       const response = await provider.callGeminiApi('test prompt');
 
@@ -1350,20 +1393,16 @@ describe('VertexChatProvider.callLlamaApi', () => {
   let provider: VertexChatProvider;
 
   beforeEach(() => {
-    jest.mocked(getCache).mockReturnValue({
-      get: jest.fn(),
-      set: jest.fn(),
-      wrap: jest.fn(),
-      del: jest.fn(),
-      reset: jest.fn(),
-      store: {} as any,
-    });
+    // Reset cache mocks to default state
+    mockCacheGet.mockReset();
+    mockCacheGet.mockResolvedValue(null);
+    mockCacheSet.mockReset();
 
-    jest.mocked(isCacheEnabled).mockReturnValue(true);
+    mockIsCacheEnabled.mockReturnValue(true);
   });
 
   afterEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('should enforce us-central1 region for Llama models', async () => {
@@ -1434,17 +1473,19 @@ describe('VertexChatProvider.callLlamaApi', () => {
       },
     };
 
-    const mockRequest = jest.fn().mockResolvedValue(mockResponse);
+    const mockRequest = vi.fn().mockResolvedValue(mockResponse);
 
-    jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+    vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
       client: {
         request: mockRequest,
       } as unknown as JSONClient,
       projectId: 'test-project-id',
     });
 
-    jest.spyOn(vertexUtil, 'loadCredentials').mockImplementation((creds) => creds);
-    jest.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
+    vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
+      return creds;
+    });
+    vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
 
     const response = await provider.callLlamaApi('test prompt');
 
@@ -1507,17 +1548,19 @@ describe('VertexChatProvider.callLlamaApi', () => {
       },
     };
 
-    const mockRequest = jest.fn().mockResolvedValue(mockResponse);
+    const mockRequest = vi.fn().mockResolvedValue(mockResponse);
 
-    jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+    vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
       client: {
         request: mockRequest,
       } as unknown as JSONClient,
       projectId: 'test-project-id',
     });
 
-    jest.spyOn(vertexUtil, 'loadCredentials').mockImplementation((creds) => creds);
-    jest.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
+    vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
+      return creds;
+    });
+    vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
 
     await provider.callLlamaApi('test prompt');
 
@@ -1556,9 +1599,9 @@ describe('VertexChatProvider.callLlamaApi', () => {
       },
     };
 
-    jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+    vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
       client: {
-        request: jest.fn().mockRejectedValue(mockError),
+        request: vi.fn().mockRejectedValue(mockError),
       } as unknown as JSONClient,
       projectId: 'test-project-id',
     });
@@ -1573,10 +1616,10 @@ describe('VertexChatProvider.callLlamaApi', () => {
     const mockSystemInstruction = 'You are a helpful assistant from a file.';
 
     // Mock file system operations
-    jest.spyOn(fs, 'existsSync').mockReturnValue(true);
-    jest.spyOn(fs, 'readFileSync').mockReturnValue(mockSystemInstruction);
+    vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+    vi.spyOn(fs, 'readFileSync').mockReturnValue(mockSystemInstruction);
 
-    provider = new VertexChatProvider('gemini-1.5-flash', {
+    provider = new VertexChatProvider('gemini-2.5-flash', {
       config: {
         systemInstruction: 'file://system-instruction.txt',
       },
@@ -1595,17 +1638,19 @@ describe('VertexChatProvider.callLlamaApi', () => {
       ],
     };
 
-    const mockRequest = jest.fn().mockResolvedValue(mockResponse);
+    const mockRequest = vi.fn().mockResolvedValue(mockResponse);
 
-    jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+    vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
       client: {
         request: mockRequest,
       } as unknown as JSONClient,
       projectId: 'test-project-id',
     });
 
-    jest.spyOn(vertexUtil, 'loadCredentials').mockImplementation((creds) => creds);
-    jest.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
+    vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
+      return creds;
+    });
+    vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
 
     await provider.callGeminiApi('test prompt');
 
@@ -1631,20 +1676,16 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
   let provider: VertexChatProvider;
 
   beforeEach(() => {
-    jest.mocked(getCache).mockReturnValue({
-      get: jest.fn(),
-      set: jest.fn(),
-      wrap: jest.fn(),
-      del: jest.fn(),
-      reset: jest.fn(),
-      store: {} as any,
-    });
+    // Reset cache mocks to default state
+    mockCacheGet.mockReset();
+    mockCacheGet.mockResolvedValue(null);
+    mockCacheSet.mockReset();
 
-    jest.mocked(isCacheEnabled).mockReturnValue(true);
+    mockIsCacheEnabled.mockReturnValue(true);
   });
 
   afterEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('should accept anthropicVersion parameter', async () => {
@@ -1673,17 +1714,19 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
       },
     };
 
-    const mockRequest = jest.fn().mockResolvedValue(mockResponse);
+    const mockRequest = vi.fn().mockResolvedValue(mockResponse);
 
-    jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+    vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
       client: {
         request: mockRequest,
       } as unknown as JSONClient,
       projectId: 'test-project-id',
     });
 
-    jest.spyOn(vertexUtil, 'loadCredentials').mockImplementation((creds) => creds);
-    jest.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
+    vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
+      return creds;
+    });
+    vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
 
     await provider.callClaudeApi('test prompt');
 
@@ -1723,17 +1766,19 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
       },
     };
 
-    const mockRequest = jest.fn().mockResolvedValue(mockResponse);
+    const mockRequest = vi.fn().mockResolvedValue(mockResponse);
 
-    jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+    vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
       client: {
         request: mockRequest,
       } as unknown as JSONClient,
       projectId: 'test-project-id',
     });
 
-    jest.spyOn(vertexUtil, 'loadCredentials').mockImplementation((creds) => creds);
-    jest.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
+    vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
+      return creds;
+    });
+    vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
 
     await provider.callClaudeApi('test prompt');
 
@@ -1776,17 +1821,19 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
       },
     };
 
-    const mockRequest = jest.fn().mockResolvedValue(mockResponse);
+    const mockRequest = vi.fn().mockResolvedValue(mockResponse);
 
-    jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+    vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
       client: {
         request: mockRequest,
       } as unknown as JSONClient,
       projectId: 'test-project-id',
     });
 
-    jest.spyOn(vertexUtil, 'loadCredentials').mockImplementation((creds) => creds);
-    jest.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
+    vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
+      return creds;
+    });
+    vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
 
     await provider.callClaudeApi('test prompt');
 
@@ -1805,10 +1852,10 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
     let provider: VertexChatProvider;
 
     beforeEach(() => {
-      jest.clearAllMocks();
+      vi.clearAllMocks();
 
       // Mock fs for schema file loading
-      jest.mocked(fs.existsSync).mockImplementation((filePath) => {
+      vi.mocked(fs.existsSync).mockImplementation(function (filePath) {
         const pathStr = filePath.toString();
         return (
           pathStr.includes('simple.json') ||
@@ -1818,7 +1865,7 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
         );
       });
 
-      jest.mocked(fs.readFileSync).mockImplementation((filePath) => {
+      vi.mocked(fs.readFileSync).mockImplementation(function (filePath) {
         const pathStr = filePath.toString();
         if (pathStr.includes('simple.json')) {
           return JSON.stringify({
@@ -1883,9 +1930,9 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
         ],
       };
 
-      const mockRequest = jest.fn().mockResolvedValue(mockResponse);
+      const mockRequest = vi.fn().mockResolvedValue(mockResponse);
 
-      jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+      vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
         client: {
           request: mockRequest,
         } as unknown as JSONClient,
@@ -1930,9 +1977,9 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
         ],
       };
 
-      const mockRequest = jest.fn().mockResolvedValue(mockResponse);
+      const mockRequest = vi.fn().mockResolvedValue(mockResponse);
 
-      jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+      vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
         client: {
           request: mockRequest,
         } as unknown as JSONClient,
@@ -1983,16 +2030,16 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
         ],
       };
 
-      const mockRequest = jest.fn().mockResolvedValue(mockResponse);
+      const mockRequest = vi.fn().mockResolvedValue(mockResponse);
 
-      jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+      vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
         client: {
           request: mockRequest,
         } as unknown as JSONClient,
         projectId: 'test-project-id',
       });
 
-      jest.mocked(fs.existsSync).mockImplementation((filePath) => {
+      vi.mocked(fs.existsSync).mockImplementation(function (filePath) {
         const pathStr = filePath.toString();
         return (
           pathStr.includes('variable-content.json') ||
@@ -2001,7 +2048,7 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
         );
       });
 
-      jest.mocked(fs.readFileSync).mockImplementation((filePath) => {
+      vi.mocked(fs.readFileSync).mockImplementation(function (filePath) {
         const pathStr = filePath.toString();
         if (pathStr.includes('variable-content.json')) {
           return JSON.stringify({
@@ -2056,9 +2103,9 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
         },
       });
 
-      jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+      vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
         client: {
-          request: jest.fn(),
+          request: vi.fn(),
         } as unknown as JSONClient,
         projectId: 'test-project-id',
       });
@@ -2094,9 +2141,9 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
         ],
       };
 
-      const mockRequest = jest.fn().mockResolvedValue(mockResponse);
+      const mockRequest = vi.fn().mockResolvedValue(mockResponse);
 
-      jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+      vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
         client: {
           request: mockRequest,
         } as unknown as JSONClient,
@@ -2138,18 +2185,18 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
         },
       });
 
-      jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+      vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
         client: {
-          request: jest.fn(),
+          request: vi.fn(),
         } as unknown as JSONClient,
         projectId: 'test-project-id',
       });
 
-      jest.mocked(fs.existsSync).mockImplementation((filePath) => {
+      vi.mocked(fs.existsSync).mockImplementation(function (filePath) {
         return !filePath.toString().includes('nonexistent.json');
       });
 
-      jest.mocked(fs.readFileSync).mockImplementation((filePath) => {
+      vi.mocked(fs.readFileSync).mockImplementation(function (filePath) {
         throw new Error(`File not found: ${filePath}`);
       });
 
@@ -2182,9 +2229,9 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
         ],
       };
 
-      const mockRequest = jest.fn().mockResolvedValue(mockResponse);
+      const mockRequest = vi.fn().mockResolvedValue(mockResponse);
 
-      jest.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+      vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
         client: {
           request: mockRequest,
         } as unknown as JSONClient,

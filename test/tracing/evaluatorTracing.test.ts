@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, jest } from '@jest/globals';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   generateSpanId,
   generateTraceContextIfNeeded,
@@ -10,25 +10,25 @@ import {
 import type { TestCase } from '../../src/types/index';
 
 // Mock the logger
-jest.mock('../../src/logger', () => ({
+vi.mock('../../src/logger', () => ({
   default: {
-    debug: jest.fn(),
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
   },
 }));
 
 // Mock the trace store
-jest.mock('../../src/tracing/store', () => ({
-  getTraceStore: jest.fn(() => ({
-    createTrace: jest.fn(),
+vi.mock('../../src/tracing/store', () => ({
+  getTraceStore: vi.fn(() => ({
+    createTrace: vi.fn(),
   })),
 }));
 
 describe('evaluatorTracing', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     // Reset environment variables
     delete process.env.PROMPTFOO_TRACING_ENABLED;
   });

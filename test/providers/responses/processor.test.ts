@@ -1,19 +1,20 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ResponsesProcessor } from '../../../src/providers/responses/processor';
 
 // Mock dependencies
-jest.mock('../../../src/providers/functionCallbackUtils');
+vi.mock('../../../src/providers/functionCallbackUtils');
 
 const mockFunctionCallbackHandler = {
-  processCalls: jest.fn(),
+  processCalls: vi.fn(),
 } as any;
 
-const mockCostCalculator = jest.fn().mockReturnValue(0.001);
+const mockCostCalculator = vi.fn().mockReturnValue(0.001);
 
 describe('ResponsesProcessor', () => {
   let processor: ResponsesProcessor;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     processor = new ResponsesProcessor({
       modelName: 'gpt-4.1',

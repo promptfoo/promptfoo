@@ -217,7 +217,7 @@ Update the model in the provider configuration:
 config:
   model: "gpt-4o-mini"  # More cost-effective option
   # or
-  model: "gpt-5"      # Latest OpenAI model
+  model: "openai:gpt-5"      # Latest OpenAI model
 ```
 
 ## Security Considerations

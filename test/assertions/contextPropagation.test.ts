@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 import { handleAnswerRelevance } from '../../src/assertions/answerRelevance';
 import { handleContextFaithfulness } from '../../src/assertions/contextFaithfulness';
 import { handleContextRecall } from '../../src/assertions/contextRecall';
@@ -19,21 +20,26 @@ import {
   matchesSelectBest,
 } from '../../src/matchers';
 
-import type { ApiProvider, AssertionParams, CallApiContextParams } from '../../src/types/index';
+import type {
+  ApiProvider,
+  AssertionParams,
+  CallApiContextParams,
+  ProviderResponse,
+} from '../../src/types/index';
 
-jest.mock('../../src/matchers');
-jest.mock('../../src/assertions/contextUtils', () => ({
-  resolveContext: jest.fn().mockResolvedValue('mocked context'),
+vi.mock('../../src/matchers');
+vi.mock('../../src/assertions/contextUtils', () => ({
+  resolveContext: vi.fn().mockResolvedValue('mocked context'),
 }));
 
 describe('Context Propagation in Model-Graded Assertions', () => {
   afterEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   const mockProvider: ApiProvider = {
     id: () => 'test-provider',
-    callApi: jest.fn(),
+    callApi: vi.fn().mockResolvedValue({} as ProviderResponse),
   };
 
   const mockCallApiContext: CallApiContextParams = {
@@ -66,7 +72,7 @@ describe('Context Propagation in Model-Graded Assertions', () => {
   describe('handleLlmRubric', () => {
     it('should pass callApiContext to matchesLlmRubric', async () => {
       const mockResult = { pass: true, score: 1, reason: 'test' };
-      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
       const params = {
         ...baseParams,
@@ -88,7 +94,7 @@ describe('Context Propagation in Model-Graded Assertions', () => {
 
     it('should work when callApiContext is undefined', async () => {
       const mockResult = { pass: true, score: 1, reason: 'test' };
-      jest.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
+      vi.mocked(matchesLlmRubric).mockResolvedValue(mockResult);
 
       const params = {
         ...baseParams,
@@ -113,7 +119,7 @@ describe('Context Propagation in Model-Graded Assertions', () => {
   describe('handleFactuality', () => {
     it('should pass callApiContext to matchesFactuality', async () => {
       const mockResult = { pass: true, score: 1, reason: 'test' };
-      jest.mocked(matchesFactuality).mockResolvedValue(mockResult);
+      vi.mocked(matchesFactuality).mockResolvedValue(mockResult);
 
       const params = {
         ...baseParams,
@@ -138,7 +144,7 @@ describe('Context Propagation in Model-Graded Assertions', () => {
   describe('handleModelGradedClosedQa', () => {
     it('should pass callApiContext to matchesClosedQa', async () => {
       const mockResult = { pass: true, score: 1, reason: 'test' };
-      jest.mocked(matchesClosedQa).mockResolvedValue(mockResult);
+      vi.mocked(matchesClosedQa).mockResolvedValue(mockResult);
 
       const params = {
         ...baseParams,
@@ -163,7 +169,7 @@ describe('Context Propagation in Model-Graded Assertions', () => {
   describe('handleGEval', () => {
     it('should pass callApiContext to matchesGEval', async () => {
       const mockResult = { pass: true, score: 0.8, reason: 'test' };
-      jest.mocked(matchesGEval).mockResolvedValue(mockResult);
+      vi.mocked(matchesGEval).mockResolvedValue(mockResult);
 
       const params = {
         ...baseParams,
@@ -186,7 +192,7 @@ describe('Context Propagation in Model-Graded Assertions', () => {
 
     it('should pass callApiContext when evaluating array of criteria', async () => {
       const mockResult = { pass: true, score: 0.8, reason: 'test' };
-      jest.mocked(matchesGEval).mockResolvedValue(mockResult);
+      vi.mocked(matchesGEval).mockResolvedValue(mockResult);
 
       const params = {
         ...baseParams,
@@ -222,7 +228,7 @@ describe('Context Propagation in Model-Graded Assertions', () => {
   describe('handleAnswerRelevance', () => {
     it('should pass callApiContext to matchesAnswerRelevance', async () => {
       const mockResult = { pass: true, score: 0.9, reason: 'test' };
-      jest.mocked(matchesAnswerRelevance).mockResolvedValue(mockResult);
+      vi.mocked(matchesAnswerRelevance).mockResolvedValue(mockResult);
 
       const params = {
         ...baseParams,
@@ -243,7 +249,7 @@ describe('Context Propagation in Model-Graded Assertions', () => {
 
     it('should use query variable if present', async () => {
       const mockResult = { pass: true, score: 0.9, reason: 'test' };
-      jest.mocked(matchesAnswerRelevance).mockResolvedValue(mockResult);
+      vi.mocked(matchesAnswerRelevance).mockResolvedValue(mockResult);
 
       const params = {
         ...baseParams,
@@ -267,10 +273,10 @@ describe('Context Propagation in Model-Graded Assertions', () => {
   describe('handleContextRecall', () => {
     it('should pass callApiContext to matchesContextRecall', async () => {
       const { resolveContext } = await import('../../src/assertions/contextUtils');
-      jest.mocked(resolveContext).mockResolvedValue('resolved context');
+      vi.mocked(resolveContext).mockResolvedValue('resolved context');
 
       const mockResult = { pass: true, score: 0.85, reason: 'test' };
-      jest.mocked(matchesContextRecall).mockResolvedValue(mockResult);
+      vi.mocked(matchesContextRecall).mockResolvedValue(mockResult);
 
       const params = {
         ...baseParams,
@@ -296,10 +302,10 @@ describe('Context Propagation in Model-Graded Assertions', () => {
   describe('handleContextRelevance', () => {
     it('should pass callApiContext to matchesContextRelevance', async () => {
       const { resolveContext } = await import('../../src/assertions/contextUtils');
-      jest.mocked(resolveContext).mockResolvedValue('resolved context');
+      vi.mocked(resolveContext).mockResolvedValue('resolved context');
 
       const mockResult = { pass: true, score: 0.9, reason: 'test' };
-      jest.mocked(matchesContextRelevance).mockResolvedValue(mockResult);
+      vi.mocked(matchesContextRelevance).mockResolvedValue(mockResult);
 
       const params = {
         ...baseParams,
@@ -324,10 +330,10 @@ describe('Context Propagation in Model-Graded Assertions', () => {
   describe('handleContextFaithfulness', () => {
     it('should pass callApiContext to matchesContextFaithfulness', async () => {
       const { resolveContext } = await import('../../src/assertions/contextUtils');
-      jest.mocked(resolveContext).mockResolvedValue('resolved context');
+      vi.mocked(resolveContext).mockResolvedValue('resolved context');
 
       const mockResult = { pass: true, score: 0.95, reason: 'test' };
-      jest.mocked(matchesContextFaithfulness).mockResolvedValue(mockResult);
+      vi.mocked(matchesContextFaithfulness).mockResolvedValue(mockResult);
 
       const params = {
         ...baseParams,
@@ -357,7 +363,7 @@ describe('Context Propagation in Model-Graded Assertions', () => {
         { pass: true, score: 1, reason: 'best' },
         { pass: false, score: 0, reason: 'not best' },
       ];
-      jest.mocked(matchesSelectBest).mockResolvedValue(mockResult);
+      vi.mocked(matchesSelectBest).mockResolvedValue(mockResult);
 
       const test = { vars: { testVar: 'value' }, options: { provider: 'test-provider' } };
       const assertion = { type: 'select-best' as const, value: 'test criteria' };
@@ -379,7 +385,7 @@ describe('Context Propagation in Model-Graded Assertions', () => {
         { pass: true, score: 1, reason: 'best' },
         { pass: false, score: 0, reason: 'not best' },
       ];
-      jest.mocked(matchesSelectBest).mockResolvedValue(mockResult);
+      vi.mocked(matchesSelectBest).mockResolvedValue(mockResult);
 
       const test = { vars: { testVar: 'value' } };
       const assertion = { type: 'select-best' as const, value: 'test criteria' };

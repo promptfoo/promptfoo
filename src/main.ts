@@ -1,12 +1,15 @@
-#!/usr/bin/env node
-
+import { realpathSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { Command } from 'commander';
-import { version } from '../package.json';
+import { getGlobalDispatcher } from 'undici';
+
+import { VERSION } from './version';
 import { checkNodeVersion } from './checkNodeVersion';
 import cliState from './cliState';
+import { codeScansCommand } from './codeScan/index';
 import { authCommand } from './commands/auth';
 import { cacheCommand } from './commands/cache';
-import { codeScansCommand } from './codeScan/index';
 import { configCommand } from './commands/config';
 import { debugCommand } from './commands/debug';
 import { deleteCommand } from './commands/delete';
@@ -25,7 +28,8 @@ import { shareCommand } from './commands/share';
 import { showCommand } from './commands/show';
 import { validateCommand } from './commands/validate';
 import { viewCommand } from './commands/view';
-import logger, { initializeRunLogging, setLogLevel } from './logger';
+import { closeDbIfOpen } from './database/index';
+import logger, { closeLogger, initializeRunLogging, setLogLevel } from './logger';
 import { runDbMigrations } from './migrate';
 import { discoverCommand as redteamDiscoverCommand } from './redteam/commands/discover';
 import { redteamGenerateCommand } from './redteam/commands/generate';
@@ -41,6 +45,32 @@ import { checkForUpdates } from './updates';
 import { loadDefaultConfig } from './util/config/default';
 import { printErrorInformation } from './util/errors/index';
 import { setupEnv } from './util/index';
+
+/**
+ * Checks if the current module is the main entry point.
+ * Handles npm global bin symlinks by resolving real paths.
+ *
+ * @param importMetaUrl - The import.meta.url of the module
+ * @param processArgv1 - The process.argv[1] value (path to executed script)
+ * @returns true if this module is being run directly
+ */
+export function isMainModule(importMetaUrl: string, processArgv1: string | undefined): boolean {
+  if (!processArgv1) {
+    return false;
+  }
+
+  try {
+    // Resolve symlinks for both paths to handle:
+    // 1. npm global bin symlinks (process.argv[1] points to symlink)
+    // 2. macOS /var -> /private/var symlinks
+    const currentModulePath = realpathSync(fileURLToPath(importMetaUrl));
+    const mainModulePath = realpathSync(resolve(processArgv1));
+    return currentModulePath === mainModulePath;
+  } catch {
+    // realpathSync throws if path doesn't exist
+    return false;
+  }
+}
 
 /**
  * Adds verbose and env-file options to all commands recursively
@@ -81,6 +111,11 @@ export function addCommonOptionsRecursively(command: Command) {
 async function main() {
   initializeRunLogging();
 
+  // Set PROMPTFOO_DISABLE_UPDATE=true in CI to prevent hanging on network requests
+  if (!process.env.PROMPTFOO_DISABLE_UPDATE && typeof process.env.CI !== 'undefined') {
+    process.env.PROMPTFOO_DISABLE_UPDATE = 'true';
+  }
+
   await checkForUpdates();
   await runDbMigrations();
 
@@ -88,7 +123,7 @@ async function main() {
 
   const program = new Command('promptfoo');
   program
-    .version(version)
+    .version(VERSION)
     .showHelpAfterError()
     .showSuggestionAfterError()
     .on('option:*', function () {
@@ -154,14 +189,66 @@ async function main() {
     }
   });
 
-  program.parse();
+  await program.parseAsync();
 }
 
-if (require.main === module) {
+const shutdownGracefully = async () => {
+  logger.debug('Shutting down gracefully...');
+  await telemetry.shutdown();
+  logger.debug('Shutdown complete');
+
+  // Log final messages BEFORE closing logger
+  logger.debug('Closing logger file transports');
+
+  // Now close logger silently (no more logging after this point)
+  await closeLogger();
+  closeDbIfOpen();
+
+  try {
+    const dispatcher = getGlobalDispatcher();
+    await dispatcher.destroy();
+  } catch {
+    // Silently handle dispatcher destroy errors
+  }
+
+  // Give Node.js time to naturally exit if all handles are closed
+  // If there are lingering handles (file watchers, connections, etc), force exit
+  // Using .unref() allows natural exit if everything cleans up properly
+  const FORCE_EXIT_TIMEOUT_MS = 500;
+  setTimeout(() => {
+    process.exit(process.exitCode || 0);
+  }, FORCE_EXIT_TIMEOUT_MS).unref();
+};
+
+// ESM replacement for require.main === module check
+// Check if this module is being run directly (not imported)
+// The isMainModule check may throw in CJS builds where import.meta.url is not available
+let isMain = false;
+try {
+  isMain = isMainModule(import.meta.url, process.argv[1]);
+} catch {
+  // In CJS builds, import.meta.url throws - CJS entry point is handled differently
+}
+
+if (isMain) {
   checkNodeVersion();
-  main().finally(async () => {
-    logger.debug('Shutting down gracefully...');
-    await telemetry.shutdown();
-    logger.debug('Shutdown complete');
-  });
+  let mainError: unknown;
+  try {
+    await main();
+  } catch (error) {
+    mainError = error;
+  } finally {
+    try {
+      await shutdownGracefully();
+    } catch (shutdownError) {
+      // Log shutdown error but preserve the original main error if it exists
+      logger.error(
+        `Shutdown error: ${shutdownError instanceof Error ? shutdownError.message : shutdownError}`,
+      );
+    }
+  }
+  // Re-throw the original error after cleanup is complete
+  if (mainError) {
+    throw mainError;
+  }
 }

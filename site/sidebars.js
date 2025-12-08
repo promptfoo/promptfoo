@@ -301,7 +301,7 @@ const redTeamSidebar = [
       {
         type: 'doc',
         label: 'Agent Red Teaming',
-        id: 'red-team/agents',
+        id: 'red-team/llm-agents',
       },
       {
         type: 'doc',
@@ -435,6 +435,7 @@ const sidebars = {
       items: [
         { type: 'doc', id: 'code-scanning/github-action' },
         { type: 'doc', id: 'code-scanning/cli' },
+        { type: 'doc', id: 'code-scanning/vscode-extension' },
       ],
     },
     {

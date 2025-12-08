@@ -1,0 +1,170 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="100 60 600 380" fill="none">
+  <defs>
+    <!-- Gradients -->
+    <linearGradient id="editorGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#252540"/>
+      <stop offset="100%" style="stop-color:#1e1e32"/>
+    </linearGradient>
+    <linearGradient id="shieldGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#6366f1"/>
+      <stop offset="100%" style="stop-color:#8b5cf6"/>
+    </linearGradient>
+    
+    <!-- Glow filter -->
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="softGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="8" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="4" stdDeviation="12" flood-color="#000" flood-opacity="0.4"/>
+    </filter>
+  </defs>
+  
+  <!-- IDE Window -->
+  <g transform="translate(100, 60)" filter="url(#shadow)">
+    <!-- Main window -->
+    <rect width="600" height="380" rx="12" fill="url(#editorGrad)" stroke="#3f3f5f" stroke-width="1"/>
+    
+    <!-- Title bar -->
+    <rect width="600" height="40" rx="12" fill="#2d2d44"/>
+    <rect y="28" width="600" height="12" fill="#2d2d44"/>
+    
+    <!-- Window controls -->
+    <circle cx="24" cy="20" r="6" fill="#ff5f57"/>
+    <circle cx="48" cy="20" r="6" fill="#ffbd2e"/>
+    <circle cx="72" cy="20" r="6" fill="#28ca41"/>
+    
+    <!-- Tab -->
+    <rect x="100" y="10" width="120" height="30" rx="6" fill="#252540"/>
+    <text x="130" y="30" font-family="SF Mono, Monaco, monospace" font-size="11" fill="#9ca3af">server.ts</text>
+    
+    <!-- Line numbers gutter -->
+    <rect x="0" y="40" width="45" height="340" fill="#1a1a2e" rx="0"/>
+    
+    <!-- Line numbers -->
+    <g font-family="SF Mono, Monaco, monospace" font-size="12" fill="#4b5563">
+      <text x="20" y="72">12</text>
+      <text x="20" y="96">13</text>
+      <text x="20" y="120">14</text>
+      <text x="20" y="144">15</text>
+      <text x="20" y="168">16</text>
+      <text x="20" y="192">17</text>
+      <text x="20" y="216">18</text>
+      <text x="20" y="240">19</text>
+      <text x="20" y="264">20</text>
+      <text x="20" y="288">21</text>
+      <text x="20" y="312">22</text>
+    </g>
+    
+    <!-- Code lines -->
+    <g font-family="SF Mono, Monaco, monospace" font-size="12">
+      <!-- Line 12 - function -->
+      <text x="55" y="72" fill="#c792ea">async</text>
+      <text x="100" y="72" fill="#82aaff">handleChat</text>
+      <text x="185" y="72" fill="#89ddff">(</text>
+      <text x="193" y="72" fill="#f78c6c">req</text>
+      <text x="218" y="72" fill="#89ddff">)</text>
+      <text x="226" y="72" fill="#89ddff">{</text>
+      
+      <!-- Line 13 - const -->
+      <text x="65" y="96" fill="#c792ea">const</text>
+      <text x="108" y="96" fill="#fff">message</text>
+      <text x="168" y="96" fill="#89ddff">=</text>
+      <text x="182" y="96" fill="#f78c6c">req</text>
+      <text x="205" y="96" fill="#89ddff">.</text>
+      <text x="212" y="96" fill="#fff">body</text>
+      <text x="242" y="96" fill="#89ddff">.</text>
+      <text x="249" y="96" fill="#fff">message</text>
+      <text x="309" y="96" fill="#89ddff">;</text>
+      
+      <!-- Highlighted vulnerable line 14 -->
+      <rect x="50" y="105" width="500" height="22" fill="#f59e0b" opacity="0.15" rx="2"/>
+      <rect x="50" y="105" width="3" height="22" fill="#f59e0b" rx="1"/>
+      
+      <text x="65" y="120" fill="#c792ea">const</text>
+      <text x="108" y="120" fill="#fff">response</text>
+      <text x="172" y="120" fill="#89ddff">=</text>
+      <text x="186" y="120" fill="#c792ea">await</text>
+      <text x="228" y="120" fill="#82aaff">llm</text>
+      <text x="252" y="120" fill="#89ddff">.</text>
+      <text x="259" y="120" fill="#82aaff">complete</text>
+      <text x="320" y="120" fill="#89ddff">(</text>
+      <text x="328" y="120" fill="#fff">message</text>
+      <text x="388" y="120" fill="#89ddff">);</text>
+      
+      <!-- Line 15 -->
+      <text x="55" y="144" fill="#89ddff">}</text>
+      
+      <!-- Line 16 - empty -->
+      
+      <!-- Line 17 - tools definition -->
+      <text x="55" y="168" fill="#c792ea">const</text>
+      <text x="98" y="168" fill="#fff">tools</text>
+      <text x="132" y="168" fill="#89ddff">=</text>
+      <text x="146" y="168" fill="#89ddff">[</text>
+      
+      <!-- Highlighted vulnerable line 18 -->
+      <rect x="50" y="177" width="500" height="22" fill="#ef4444" opacity="0.15" rx="2"/>
+      <rect x="50" y="177" width="3" height="22" fill="#ef4444" rx="1"/>
+      
+      <text x="65" y="192" fill="#82aaff">readFileTool</text>
+      <text x="155" y="192" fill="#89ddff">,</text>
+      
+      <!-- Highlighted vulnerable line 19 -->
+      <rect x="50" y="201" width="500" height="22" fill="#ef4444" opacity="0.15" rx="2"/>
+      <rect x="50" y="201" width="3" height="22" fill="#ef4444" rx="1"/>
+      
+      <text x="65" y="216" fill="#82aaff">listDirectoryTool</text>
+      
+      <!-- Line 20 -->
+      <text x="55" y="240" fill="#89ddff">];</text>
+      
+      <!-- Line 21 - comment -->
+      <text x="55" y="264" fill="#546e7a">// Execute with tools</text>
+      
+      <!-- Line 22 -->
+      <text x="55" y="288" fill="#82aaff">executeAgent</text>
+      <text x="145" y="288" fill="#89ddff">(</text>
+      <text x="153" y="288" fill="#fff">tools</text>
+      <text x="188" y="288" fill="#89ddff">);</text>
+    </g>
+    
+    <!-- Warning tooltip -->
+    <g transform="translate(320, 85)" filter="url(#glow)">
+      <rect width="260" height="50" rx="8" fill="#1e1e32" stroke="#f59e0b" stroke-width="1.5"/>
+      <circle cx="20" cy="25" r="10" fill="#f59e0b"/>
+      <text x="16" y="30" font-family="Arial" font-size="14" font-weight="bold" fill="#1e1e32">!</text>
+      <text x="40" y="22" font-family="system-ui" font-size="11" fill="#fbbf24" font-weight="600">Prompt Injection Risk</text>
+      <text x="40" y="38" font-family="system-ui" font-size="10" fill="#9ca3af">Untrusted input passed to LLM</text>
+    </g>
+    
+    <!-- Critical tooltip -->
+    <g transform="translate(180, 235)" filter="url(#glow)">
+      <rect width="280" height="50" rx="8" fill="#1e1e32" stroke="#ef4444" stroke-width="1.5"/>
+      <circle cx="20" cy="25" r="10" fill="#ef4444"/>
+      <path d="M16 20 L24 20 L20 30 Z" fill="#1e1e32"/>
+      <text x="40" y="22" font-family="system-ui" font-size="11" fill="#f87171" font-weight="600">Unrestricted Filesystem Access</text>
+      <text x="40" y="38" font-family="system-ui" font-size="10" fill="#9ca3af">LLM tools lack path restrictions</text>
+    </g>
+    
+    <!-- Problems panel hint -->
+    <rect x="0" y="340" width="600" height="40" fill="#1a1a2e" rx="0"/>
+    <rect x="0" y="340" width="600" height="1" fill="#3f3f5f"/>
+    <text x="20" y="365" font-family="system-ui" font-size="12" fill="#9ca3af">Problems</text>
+    <rect x="82" y="351" width="20" height="18" rx="9" fill="#ef4444"/>
+    <text x="92" y="360" font-family="system-ui" font-size="11" fill="#fff" font-weight="bold" text-anchor="middle" dominant-baseline="central">2</text>
+    <rect x="108" y="351" width="20" height="18" rx="9" fill="#f59e0b"/>
+    <text x="118" y="360" font-family="system-ui" font-size="11" fill="#1e1e32" font-weight="bold" text-anchor="middle" dominant-baseline="central">1</text>
+  </g>
+  
+</svg>
