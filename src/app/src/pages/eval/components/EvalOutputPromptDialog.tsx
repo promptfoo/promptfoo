@@ -69,18 +69,21 @@ function CodeDisplay({
   onMouseLeave,
   showCopyButton = false,
 }: CodeDisplayProps) {
+  // Ensure content is a string - handles cases where providers return objects
+  const safeContent = typeof content === 'string' ? content : JSON.stringify(content, null, 2);
+
   // Improved code detection logic
   const isCode =
-    /^[\s]*[{[]/.test(content) || // JSON-like (starts with { or [)
-    /^#\s/.test(content) || // Markdown headers (starts with # )
-    /```/.test(content) || // Code blocks (contains ```)
-    /^\s*[\w-]+\s*:/.test(content) || // YAML/config-like (key: value)
-    /^\s*<\w+/.test(content) || // XML/HTML-like (starts with <tag)
-    content.includes('function ') || // JavaScript functions
-    content.includes('class ') || // Class definitions
-    content.includes('import ') || // Import statements
-    /^\s*def\s+/.test(content) || // Python functions
-    /^\s*\w+\s*\(/.test(content); // Function calls
+    /^[\s]*[{[]/.test(safeContent) || // JSON-like (starts with { or [)
+    /^#\s/.test(safeContent) || // Markdown headers (starts with # )
+    /```/.test(safeContent) || // Code blocks (contains ```)
+    /^\s*[\w-]+\s*:/.test(safeContent) || // YAML/config-like (key: value)
+    /^\s*<\w+/.test(safeContent) || // XML/HTML-like (starts with <tag)
+    safeContent.includes('function ') || // JavaScript functions
+    safeContent.includes('class ') || // Class definitions
+    safeContent.includes('import ') || // Import statements
+    /^\s*def\s+/.test(safeContent) || // Python functions
+    /^\s*\w+\s*\(/.test(safeContent); // Function calls
 
   return (
     <Box mb={2}>
@@ -121,11 +124,11 @@ function CodeDisplay({
                 wordBreak: 'break-word',
               }}
             >
-              {content}
+              {safeContent}
             </pre>
           ) : (
             <Typography variant="body1" sx={textContentTypographySx}>
-              {content}
+              {safeContent}
             </Typography>
           )}
         </Box>

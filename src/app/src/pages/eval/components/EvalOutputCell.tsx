@@ -750,7 +750,9 @@ function EvalOutputCell({
       {showPrompts && firstOutput.prompt && (
         <div className="prompt">
           <span className="pill">Prompt</span>
-          {output.prompt}
+          {typeof output.prompt === 'string'
+            ? output.prompt
+            : JSON.stringify(output.prompt, null, 2)}
         </div>
       )}
       {/* Show response audio from redteam history if available (target's audio response) */}
