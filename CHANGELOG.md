@@ -6,11 +6,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [0.120.0](https://github.com/promptfoo/promptfoo/compare/0.119.14...0.120.0) (2025-12-08)
 
-### ⚠ BREAKING CHANGES
-
-- **eval:** include provider in Google Sheets output column headers ([#6528](https://github.com/promptfoo/promptfoo/issues/6528))
-- replace TypeScript enums with const objects ([#6428](https://github.com/promptfoo/promptfoo/issues/6428))
-
 ### Features
 
 - **build:** migrate to ESM (ECMAScript Modules) ([#5594](https://github.com/promptfoo/promptfoo/issues/5594)) ([9cdf09b](https://github.com/promptfoo/promptfoo/commit/9cdf09b1c681454ed3fa047dee41a43fea48028a))
