@@ -136,7 +136,7 @@
     "@types/express": "^5.0.5",
     "@types/fluent-ffmpeg": "^2.1.28",
     "@types/js-yaml": "^4.0.9",
-    "@types/jsdom": "^21.1.7",
+    "@types/jsdom": "^27.0.0",
     "@types/node": "^24.10.1",
     "@types/nunjucks": "^3.2.6",
     "@types/opener": "^1.4.3",
