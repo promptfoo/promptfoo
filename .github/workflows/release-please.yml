@@ -84,3 +84,10 @@ jobs:
       - run: npm publish --provenance --access public
         env:
           PROMPTFOO_POSTHOG_KEY: ${{ secrets.PROMPTFOO_POSTHOG_KEY }}
+
+  docker:
+    if: needs.release-please.outputs.release_created
+    needs: [publish-npm, release-please]
+    uses: ./.github/workflows/docker.yml
+    with:
+      tag_name: ${{ needs.release-please.outputs.tag_name }}
