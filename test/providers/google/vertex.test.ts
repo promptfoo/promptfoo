@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import path from 'path';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../../src/cliState';
 import * as vertexUtil from '../../../src/providers/google/util';
 import { VertexChatProvider } from '../../../src/providers/google/vertex';
@@ -1378,12 +1378,14 @@ describe('VertexChatProvider.callGeminiApi', () => {
 
       const response = await provider.callGeminiApi('test prompt');
 
-      expect(response.error).toBe('Content was blocked due to safety settings.');
+      expect(response.error).toBe(
+        'Content was blocked due to safety settings with finish reason: SAFETY.',
+      );
       expect(response.guardrails).toEqual({
         flagged: true,
         flaggedInput: false,
         flaggedOutput: true,
-        reason: 'Content was blocked due to safety settings.',
+        reason: 'Content was blocked due to safety settings with finish reason: SAFETY.',
       });
     });
   });
