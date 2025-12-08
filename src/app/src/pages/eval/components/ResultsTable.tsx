@@ -49,9 +49,65 @@ import type { TruncatedTextProps } from './TruncatedText';
 import './ResultsTable.css';
 
 import { BaseNumberInput } from '@app/components/form/input/BaseNumberInput';
+import { isStorageRef, resolveAudioUrl } from '@app/utils/mediaStorage';
 import ButtonGroup from '@mui/material/ButtonGroup';
 import { isEncodingStrategy } from '@promptfoo/redteam/constants/strategies';
 import { useMetricsGetter, usePassingTestCounts, usePassRates, useTestCounts } from './hooks';
+
+/**
+ * Audio player component that handles both storage refs and base64 data
+ */
+function StorageRefAudioPlayer({ data, format = 'mp3' }: { data: string; format?: string }) {
+  const [audioUrl, setAudioUrl] = React.useState<string | null>(null);
+  const [loading, setLoading] = React.useState(isStorageRef(data));
+
+  React.useEffect(() => {
+    let cancelled = false;
+
+    if (isStorageRef(data)) {
+      setLoading(true);
+      resolveAudioUrl(data, format).then((url) => {
+        if (!cancelled) {
+          setAudioUrl(url);
+          setLoading(false);
+        }
+      });
+    } else {
+      // Inline base64
+      const url = data.startsWith('data:') ? data : `data:audio/${format};base64,${data}`;
+      setAudioUrl(url);
+      setLoading(false);
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [data, format]);
+
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.5 }}>
+        <CircularProgress size={16} />
+        <Typography variant="caption">Loading audio...</Typography>
+      </Box>
+    );
+  }
+
+  if (!audioUrl) {
+    return (
+      <Typography variant="caption" color="error">
+        Failed to load audio
+      </Typography>
+    );
+  }
+
+  return (
+    <audio controls style={{ maxWidth: '100%', height: '32px' }}>
+      <source src={audioUrl} type={`audio/${format}`} />
+      Your browser does not support the audio element.
+    </audio>
+  );
+}
 
 const VARIABLE_COLUMN_SIZE_PX = 200;
 const PROMPT_COLUMN_SIZE_PX = 400;
@@ -712,10 +768,39 @@ function ResultsTable({
                 // Show original text for encoding strategies
                 if (shouldShowOriginal) {
                   const originalForDisplay = metadataOriginal || '';
+                  // Check if value is a storage ref or base64 for audio/image
+                  const isAudioContent =
+                    strategyId === 'audio' ||
+                    (typeof value === 'string' && isStorageRef(value) && value.includes('audio/'));
+                  const isImageContent =
+                    strategyId === 'image' ||
+                    (typeof value === 'string' && isStorageRef(value) && value.includes('image/'));
+
                   return (
                     <div className="cell" data-capture="true">
-                      {cellContent}
-                      {originalForDisplay && String(originalForDisplay) !== String(value) && (
+                      {/* For audio: show player instead of raw base64/storageRef */}
+                      {isAudioContent && typeof value === 'string' ? (
+                        <Box>
+                          <StorageRefAudioPlayer data={value} />
+                        </Box>
+                      ) : isImageContent ? (
+                        /* For image: show image or placeholder */
+                        <Box>
+                          {typeof value === 'string' && isStorageRef(value) ? (
+                            <Typography variant="caption" color="text.secondary">
+                              Image preview not yet supported for storage refs
+                            </Typography>
+                          ) : (
+                            cellContent
+                          )}
+                        </Box>
+                      ) : (
+                        /* For other encoding strategies: show raw content */
+                        cellContent
+                      )}
+
+                      {/* Show original decoded text */}
+                      {originalForDisplay && (
                         <Box
                           sx={{
                             marginTop: '6px',

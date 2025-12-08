@@ -22,12 +22,87 @@ import IconButton from '@mui/material/IconButton';
 import Tooltip, { TooltipProps } from '@mui/material/Tooltip';
 import { type EvaluateTableOutput, ResultFailureReason } from '@promptfoo/types';
 
+import { isStorageRef, resolveAudioUrl } from '@app/utils/mediaStorage';
+import Box from '@mui/material/Box';
+import CircularProgress from '@mui/material/CircularProgress';
+import Typography from '@mui/material/Typography';
+
 import CustomMetrics from './CustomMetrics';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import FailReasonCarousel from './FailReasonCarousel';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import CommentDialog from './TableCommentDialog';
 import TruncatedText from './TruncatedText';
+
+/**
+ * Audio player that handles storage refs and base64 data
+ */
+function AsyncAudioPlayer({
+  data,
+  format = 'mp3',
+  transcript,
+}: {
+  data: string;
+  format?: string;
+  transcript?: string;
+}) {
+  const [audioUrl, setAudioUrl] = React.useState<string | null>(null);
+  const [loading, setLoading] = React.useState(isStorageRef(data));
+
+  React.useEffect(() => {
+    let cancelled = false;
+
+    if (isStorageRef(data)) {
+      setLoading(true);
+      resolveAudioUrl(data, format).then((url) => {
+        if (!cancelled) {
+          setAudioUrl(url);
+          setLoading(false);
+        }
+      });
+    } else {
+      // Inline base64
+      const url = data.startsWith('data:') ? data : `data:audio/${format};base64,${data}`;
+      setAudioUrl(url);
+      setLoading(false);
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [data, format]);
+
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.5 }}>
+        <CircularProgress size={16} />
+        <Typography variant="caption">Loading audio...</Typography>
+      </Box>
+    );
+  }
+
+  if (!audioUrl) {
+    return (
+      <Typography variant="caption" color="error">
+        Failed to load audio
+      </Typography>
+    );
+  }
+
+  return (
+    <div className="audio-output">
+      <audio controls style={{ width: '100%' }} data-testid="audio-player">
+        <source src={audioUrl} type={`audio/${format}`} />
+        Your browser does not support the audio element.
+      </audio>
+      {transcript && (
+        <div className="transcript">
+          <strong>Transcript:</strong> {transcript}
+        </div>
+      )}
+    </div>
+  );
+}
 
 type CSSPropertiesWithCustomVars = React.CSSProperties & {
   [key: `--${string}`]: string | number;
@@ -281,20 +356,11 @@ function EvalOutputCell({
     );
   } else if (output.audio) {
     node = (
-      <div className="audio-output">
-        <audio controls style={{ width: '100%' }} data-testid="audio-player">
-          <source
-            src={`data:audio/${output.audio.format || 'mp3'};base64,${output.audio.data}`}
-            type={`audio/${output.audio.format || 'mp3'}`}
-          />
-          Your browser does not support the audio element.
-        </audio>
-        {output.audio.transcript && (
-          <div className="transcript">
-            <strong>Transcript:</strong> {output.audio.transcript}
-          </div>
-        )}
-      </div>
+      <AsyncAudioPlayer
+        data={output.audio.data}
+        format={output.audio.format || 'mp3'}
+        transcript={output.audio.transcript}
+      />
     );
   } else if ((prettifyJson || renderMarkdown) && !showDiffs) {
     // When both prettifyJson and renderMarkdown are enabled,
@@ -756,17 +822,10 @@ function EvalOutputCell({
       {/* Show response audio from redteam history if available (target's audio response) */}
       {responseAudio?.data && (
         <div className="response-audio" style={{ marginBottom: '8px' }}>
-          <audio
-            controls
-            style={{ width: '100%', height: '32px' }}
-            data-testid="response-audio-player"
-          >
-            <source
-              src={`data:audio/${responseAudio.format || 'mp3'};base64,${responseAudio.data}`}
-              type={`audio/${responseAudio.format || 'mp3'}`}
-            />
-            Your browser does not support the audio element.
-          </audio>
+          <AsyncAudioPlayer
+            data={responseAudio.data}
+            format={responseAudio.format || 'mp3'}
+          />
         </div>
       )}
       <div style={contentStyle}>

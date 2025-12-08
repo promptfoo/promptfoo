@@ -8,6 +8,7 @@ import { hashPrompt } from '../prompts/utils';
 import { type EvaluateResult } from '../types/index';
 import { isApiProvider, isProviderOptions } from '../types/providers';
 import { safeJsonStringify } from '../util/json';
+import { sanitizeResultForStorage } from '../util/sanitizeMediaForStorage';
 import { getCurrentTimestamp } from '../util/time';
 
 import {
@@ -80,15 +81,30 @@ export default class EvalResult {
       testCase,
     } = result;
 
+    // Sanitize media data (replace large base64 with storage refs) before storing
+    const preSanitizeTestCase = {
+      ...testCase,
+      ...(testCase.provider && {
+        provider: sanitizeProvider(testCase.provider),
+      }),
+    };
+    
+    const sanitized = await sanitizeResultForStorage({
+      testCase: preSanitizeTestCase,
+      response: result.response || null,
+      evalId,
+    });
+    
+    // Log if sanitization changed anything
+    const testCaseChanged = sanitized.testCase !== preSanitizeTestCase;
+    if (testCaseChanged) {
+      console.log('[EvalResult] Media sanitization applied to result');
+    }
+
     const args = {
       id: randomUUID(),
       evalId,
-      testCase: {
-        ...testCase,
-        ...(testCase.provider && {
-          provider: sanitizeProvider(testCase.provider),
-        }),
-      },
+      testCase: sanitized.testCase,
       promptIdx: result.promptIdx,
       testIdx: result.testIdx,
       prompt,
@@ -96,7 +112,7 @@ export default class EvalResult {
       error: error?.toString(),
       success,
       score: score == null ? 0 : score,
-      response: result.response || null,
+      response: sanitized.response,
       gradingResult: gradingResult || null,
       namedScores,
       provider: sanitizeProvider(provider),

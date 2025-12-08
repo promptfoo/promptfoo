@@ -33,6 +33,7 @@ import invariant from '../util/invariant';
 import { BrowserBehavior, BrowserBehaviorNames, openBrowser } from '../util/server';
 import { configsRouter } from './routes/configs';
 import { evalRouter } from './routes/eval';
+import { mediaRouter } from './routes/media';
 import { modelAuditRouter } from './routes/modelAudit';
 import { providersRouter } from './routes/providers';
 import { redteamRouter } from './routes/redteam';
@@ -230,6 +231,7 @@ export function createApp() {
   });
 
   app.use('/api/eval', evalRouter);
+  app.use('/api/media', mediaRouter);
   app.use('/api/providers', providersRouter);
   app.use('/api/redteam', redteamRouter);
   app.use('/api/user', userRouter);
