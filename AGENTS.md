@@ -343,7 +343,9 @@ Always follow this workflow:
    gh pr create --title "Your PR Title" --body "PR description"
    ```
 
-7. **Wait for review and CI checks** before merging
+7. **Check CI status** with `gh pr checks <PR_NUMBER>` (never use `--watch` - it blocks indefinitely)
+
+8. **Wait for review and CI checks** before merging
 
 ## Pull Request Titles
 
