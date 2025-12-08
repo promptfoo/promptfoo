@@ -9,8 +9,7 @@
       "changelog-path": "CHANGELOG.md",
       "extra-files": ["package.json"],
       "bump-minor-pre-major": true,
-      "bump-patch-for-minor-pre-major": true,
-      "release-name": "${version}"
+      "bump-patch-for-minor-pre-major": true
     }
   }
 }
