@@ -1,12 +1,13 @@
+import { vi, type Mock } from 'vitest';
 import { selectProvider } from '../../../../src/redteam/commands/recon/providers';
 
 // Mock the envars module
-jest.mock('../../../../src/envars', () => ({
-  getEnvString: jest.fn(),
+vi.mock('../../../../src/envars', () => ({
+  getEnvString: vi.fn(),
 }));
 
 import { getEnvString } from '../../../../src/envars';
-const mockedGetEnvString = getEnvString as jest.Mock;
+const mockedGetEnvString = getEnvString as Mock;
 
 describe('selectProvider', () => {
   beforeEach(() => {
@@ -14,7 +15,7 @@ describe('selectProvider', () => {
   });
 
   afterEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   it('should select OpenAI when OPENAI_API_KEY is set', () => {

@@ -1,9 +1,10 @@
 import * as fs from 'fs';
+import { vi } from 'vitest';
 import { createScratchpad } from '../../../../src/redteam/commands/recon/scratchpad';
 
 describe('createScratchpad', () => {
   afterEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   it('should create temp directory and notes file', () => {

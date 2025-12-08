@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 import {
   applicationDefinitionToPurpose,
   buildRedteamConfig,
@@ -9,7 +10,7 @@ import type { ReconResult } from '../../../../src/redteam/commands/recon/types';
 
 describe('applicationDefinitionToPurpose', () => {
   afterEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   it('should generate empty string for empty result', () => {
@@ -89,7 +90,7 @@ describe('applicationDefinitionToPurpose', () => {
 
 describe('buildRedteamConfig', () => {
   afterEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   it('should generate valid config with minimal result', () => {
@@ -356,7 +357,7 @@ describe('buildRedteamConfig', () => {
 
 describe('isValidPlugin', () => {
   afterEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   it('should return true for valid base plugins', () => {
@@ -399,7 +400,7 @@ describe('isValidPlugin', () => {
 
 describe('filterValidPlugins', () => {
   afterEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   it('should return only valid plugins', () => {

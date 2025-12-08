@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 import {
   buildReconPrompt,
   DEFAULT_EXCLUSIONS,
@@ -5,7 +6,7 @@ import {
 
 describe('buildReconPrompt', () => {
   afterEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   it('should include scratchpad path in prompt', () => {
