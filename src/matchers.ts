@@ -1276,7 +1276,8 @@ export async function matchesContextRecall(
   let numerator = 0;
 
   for (const sentence of sentences) {
-    const isAttributed = sentence.includes(CONTEXT_RECALL_ATTRIBUTED_TOKEN);
+    // Case-insensitive check for attribution - handles [ATTRIBUTED], [Attributed], etc.
+    const isAttributed = sentence.toLowerCase().includes(attributedTokenLower);
     if (isAttributed) {
       numerator++;
     }
