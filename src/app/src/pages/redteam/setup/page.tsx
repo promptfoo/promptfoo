@@ -522,6 +522,10 @@ export default function RedTeamSetupPage() {
         }
       }
 
+      // Check if this is a recon-generated config with structured metadata
+      const isReconConfig =
+        yamlConfig.metadata?.version === 1 && yamlConfig.metadata?.source === 'recon-cli';
+
       // Map the YAML structure to our expected Config format
       const mappedConfig: Config = {
         description: yamlConfig.description || 'My Red Team Configuration',
@@ -535,7 +539,6 @@ export default function RedTeamSetupPage() {
         maxConcurrency: yamlConfig.redteam?.maxConcurrency || REDTEAM_DEFAULTS.MAX_CONCURRENCY,
         applicationDefinition: {
           purpose: yamlConfig.redteam?.purpose || '',
-          // We could potentially parse these from redteam.purpose if it follows a specific format.
           redteamUser: '',
           accessToData: '',
           forbiddenData: '',
@@ -545,8 +548,51 @@ export default function RedTeamSetupPage() {
         },
       };
 
+      // Import structured applicationDefinition from recon metadata if available
+      if (isReconConfig && yamlConfig.metadata?.applicationDefinition) {
+        const reconAppDef = yamlConfig.metadata.applicationDefinition;
+        mappedConfig.applicationDefinition = {
+          ...mappedConfig.applicationDefinition,
+          purpose: reconAppDef.purpose || mappedConfig.applicationDefinition.purpose,
+          features: reconAppDef.features,
+          industry: reconAppDef.industry,
+          systemPrompt: reconAppDef.systemPrompt,
+          hasAccessTo: reconAppDef.hasAccessTo,
+          doesNotHaveAccessTo: reconAppDef.doesNotHaveAccessTo,
+          userTypes: reconAppDef.userTypes,
+          securityRequirements: reconAppDef.securityRequirements,
+          sensitiveDataTypes: reconAppDef.sensitiveDataTypes,
+          exampleIdentifiers: reconAppDef.exampleIdentifiers,
+          criticalActions: reconAppDef.criticalActions,
+          forbiddenTopics: reconAppDef.forbiddenTopics,
+          attackConstraints: reconAppDef.attackConstraints,
+          competitors: reconAppDef.competitors,
+          connectedSystems:
+            reconAppDef.connectedSystems || mappedConfig.applicationDefinition.connectedSystems,
+          redteamUser: reconAppDef.redteamUser || mappedConfig.applicationDefinition.redteamUser,
+        };
+
+        // Set stateful flag from recon context if applicable
+        if (yamlConfig.metadata?.reconContext?.stateful) {
+          if (typeof target === 'object') {
+            target.config = { ...target.config, stateful: true };
+            mappedConfig.target = target;
+          }
+        }
+
+        // Import entities from recon context if not already set from redteam config
+        if (!mappedConfig.entities?.length && yamlConfig.metadata?.reconContext?.entities?.length) {
+          mappedConfig.entities = yamlConfig.metadata.reconContext.entities;
+        }
+      }
+
       setFullConfig(mappedConfig);
-      toast.showToast('Configuration loaded successfully', 'success');
+      toast.showToast(
+        isReconConfig
+          ? 'Recon configuration imported successfully'
+          : 'Configuration loaded successfully',
+        'success',
+      );
       setLoadDialogOpen(false);
     } catch (error) {
       console.error('Failed to load configuration file', error);

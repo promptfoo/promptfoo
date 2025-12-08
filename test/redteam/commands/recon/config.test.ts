@@ -2,7 +2,11 @@ import { vi } from 'vitest';
 import {
   applicationDefinitionToPurpose,
   buildRedteamConfig,
+  buildApplicationDefinition,
+  buildReconContext,
+  buildReconMetadata,
   isValidPlugin,
+  isValueMeaningful,
   filterValidPlugins,
   SUGGESTED_PLUGIN_LIST,
 } from '../../../../src/redteam/commands/recon/config';
@@ -441,5 +445,284 @@ describe('SUGGESTED_PLUGIN_LIST', () => {
     expect(SUGGESTED_PLUGIN_LIST).toContain('sql-injection');
     expect(SUGGESTED_PLUGIN_LIST).toContain('prompt-extraction');
     expect(SUGGESTED_PLUGIN_LIST).toContain('harmful:violent-crime');
+  });
+});
+
+describe('isValueMeaningful', () => {
+  it('should return false for undefined', () => {
+    expect(isValueMeaningful(undefined)).toBe(false);
+  });
+
+  it('should return false for empty string', () => {
+    expect(isValueMeaningful('')).toBe(false);
+    expect(isValueMeaningful('   ')).toBe(false);
+  });
+
+  it('should return false for placeholder values', () => {
+    expect(isValueMeaningful('none')).toBe(false);
+    expect(isValueMeaningful('N/A')).toBe(false);
+    expect(isValueMeaningful('NA')).toBe(false);
+    expect(isValueMeaningful('Not specified')).toBe(false);
+    expect(isValueMeaningful('not mentioned')).toBe(false);
+    expect(isValueMeaningful('None mentioned')).toBe(false);
+    expect(isValueMeaningful('No formal policies')).toBe(false);
+  });
+
+  it('should return true for meaningful values', () => {
+    expect(isValueMeaningful('Healthcare')).toBe(true);
+    expect(isValueMeaningful('Patient data, SSN, medical records')).toBe(true);
+    expect(isValueMeaningful('A medical assistant application')).toBe(true);
+  });
+});
+
+describe('buildApplicationDefinition', () => {
+  it('should copy meaningful fields from ReconResult', () => {
+    const result: ReconResult = {
+      purpose: 'Test app',
+      features: 'Feature A, Feature B',
+      industry: 'Healthcare',
+    };
+    const def = buildApplicationDefinition(result);
+
+    expect(def.purpose).toBe('Test app');
+    expect(def.features).toBe('Feature A, Feature B');
+    expect(def.industry).toBe('Healthcare');
+  });
+
+  it('should skip placeholder values', () => {
+    const result: ReconResult = {
+      purpose: 'Test app',
+      features: 'Not specified',
+      industry: 'None mentioned',
+    };
+    const def = buildApplicationDefinition(result);
+
+    expect(def.purpose).toBe('Test app');
+    expect(def.features).toBeUndefined();
+    expect(def.industry).toBeUndefined();
+  });
+
+  it('should generate hasAccessTo from discoveredTools when missing', () => {
+    const result: ReconResult = {
+      purpose: 'Test app',
+      discoveredTools: [
+        { name: 'searchUsers', description: 'Search for users' },
+        { name: 'getProfile', description: 'Get user profile' },
+      ],
+    };
+    const def = buildApplicationDefinition(result);
+
+    expect(def.hasAccessTo).toContain('searchUsers');
+    expect(def.hasAccessTo).toContain('getProfile');
+  });
+
+  it('should not override existing hasAccessTo with discoveredTools', () => {
+    const result: ReconResult = {
+      purpose: 'Test app',
+      hasAccessTo: 'Custom database access',
+      discoveredTools: [{ name: 'searchUsers', description: 'Search for users' }],
+    };
+    const def = buildApplicationDefinition(result);
+
+    expect(def.hasAccessTo).toBe('Custom database access');
+    expect(def.hasAccessTo).not.toContain('searchUsers');
+  });
+
+  it('should include all applicationDefinition fields when present', () => {
+    const result: ReconResult = {
+      purpose: 'Medical assistant',
+      features: 'Patient lookup, appointment scheduling',
+      industry: 'Healthcare',
+      systemPrompt: 'You are a medical assistant.',
+      hasAccessTo: 'Patient records database',
+      doesNotHaveAccessTo: 'Billing system',
+      userTypes: 'Doctors, nurses, patients',
+      sensitiveDataTypes: 'PHI, SSN, medical history',
+      criticalActions: 'Prescribe medication',
+      forbiddenTopics: 'Legal advice',
+      connectedSystems: 'Epic EHR, lab systems',
+    };
+    const def = buildApplicationDefinition(result);
+
+    expect(def.purpose).toBe('Medical assistant');
+    expect(def.features).toBe('Patient lookup, appointment scheduling');
+    expect(def.industry).toBe('Healthcare');
+    expect(def.systemPrompt).toBe('You are a medical assistant.');
+    expect(def.hasAccessTo).toBe('Patient records database');
+    expect(def.doesNotHaveAccessTo).toBe('Billing system');
+    expect(def.userTypes).toBe('Doctors, nurses, patients');
+    expect(def.sensitiveDataTypes).toBe('PHI, SSN, medical history');
+    expect(def.criticalActions).toBe('Prescribe medication');
+    expect(def.forbiddenTopics).toBe('Legal advice');
+    expect(def.connectedSystems).toBe('Epic EHR, lab systems');
+  });
+});
+
+describe('buildReconContext', () => {
+  it('should include stateful flag when defined', () => {
+    const result: ReconResult = { purpose: 'Test', stateful: true };
+    const context = buildReconContext(result);
+    expect(context.stateful).toBe(true);
+  });
+
+  it('should include discoveredTools', () => {
+    const result: ReconResult = {
+      purpose: 'Test',
+      discoveredTools: [
+        { name: 'search', description: 'Search docs', parameters: '{query: string}' },
+        { name: 'fetch', description: 'Fetch data' },
+      ],
+    };
+    const context = buildReconContext(result);
+
+    expect(context.discoveredTools).toHaveLength(2);
+    expect(context.discoveredTools![0]).toEqual({
+      name: 'search',
+      description: 'Search docs',
+      parameters: '{query: string}',
+    });
+    expect(context.discoveredTools![1]).toEqual({
+      name: 'fetch',
+      description: 'Fetch data',
+      parameters: undefined,
+    });
+  });
+
+  it('should include securityNotes', () => {
+    const result: ReconResult = {
+      purpose: 'Test',
+      securityNotes: ['Uses plaintext credentials', 'No rate limiting'],
+    };
+    const context = buildReconContext(result);
+
+    expect(context.securityNotes).toEqual(['Uses plaintext credentials', 'No rate limiting']);
+  });
+
+  it('should include keyFiles', () => {
+    const result: ReconResult = {
+      purpose: 'Test',
+      keyFiles: ['src/agent.ts', 'src/tools.ts'],
+    };
+    const context = buildReconContext(result);
+
+    expect(context.keyFiles).toEqual(['src/agent.ts', 'src/tools.ts']);
+  });
+
+  it('should include suggestedPlugins', () => {
+    const result: ReconResult = {
+      purpose: 'Test',
+      suggestedPlugins: ['pii:direct', 'sql-injection'],
+    };
+    const context = buildReconContext(result);
+
+    expect(context.suggestedPlugins).toEqual(['pii:direct', 'sql-injection']);
+  });
+
+  it('should include entities', () => {
+    const result: ReconResult = {
+      purpose: 'Test',
+      entities: ['Acme Corp', 'ProductX'],
+    };
+    const context = buildReconContext(result);
+
+    expect(context.entities).toEqual(['Acme Corp', 'ProductX']);
+  });
+
+  it('should return empty context for minimal result', () => {
+    const result: ReconResult = { purpose: 'Test' };
+    const context = buildReconContext(result);
+
+    expect(context.stateful).toBeUndefined();
+    expect(context.discoveredTools).toBeUndefined();
+    expect(context.securityNotes).toBeUndefined();
+    expect(context.keyFiles).toBeUndefined();
+    expect(context.suggestedPlugins).toBeUndefined();
+    expect(context.entities).toBeUndefined();
+  });
+});
+
+describe('buildReconMetadata', () => {
+  it('should include version and source', () => {
+    const result: ReconResult = { purpose: 'Test' };
+    const meta = buildReconMetadata(result, '/path/to/code');
+
+    expect(meta.version).toBe(1);
+    expect(meta.source).toBe('recon-cli');
+  });
+
+  it('should include scannedDirectory', () => {
+    const result: ReconResult = { purpose: 'Test' };
+    const meta = buildReconMetadata(result, '/path/to/code');
+
+    expect(meta.scannedDirectory).toBe('/path/to/code');
+  });
+
+  it('should include timestamp in ISO format', () => {
+    const result: ReconResult = { purpose: 'Test' };
+    const meta = buildReconMetadata(result, '/path');
+
+    expect(meta.generatedAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
+  });
+
+  it('should include applicationDefinition', () => {
+    const result: ReconResult = {
+      purpose: 'Medical app',
+      industry: 'Healthcare',
+    };
+    const meta = buildReconMetadata(result, '/path');
+
+    expect(meta.applicationDefinition.purpose).toBe('Medical app');
+    expect(meta.applicationDefinition.industry).toBe('Healthcare');
+  });
+
+  it('should include reconContext', () => {
+    const result: ReconResult = {
+      purpose: 'Test',
+      stateful: true,
+      entities: ['Acme'],
+    };
+    const meta = buildReconMetadata(result, '/path');
+
+    expect(meta.reconContext.stateful).toBe(true);
+    expect(meta.reconContext.entities).toEqual(['Acme']);
+  });
+});
+
+describe('buildRedteamConfig with metadata', () => {
+  it('should include metadata when scannedDirectory is provided', () => {
+    const result: ReconResult = { purpose: 'Test app' };
+    const config = buildRedteamConfig(result, '/path/to/code');
+
+    expect(config.metadata).toBeDefined();
+    expect(config.metadata?.version).toBe(1);
+    expect(config.metadata?.source).toBe('recon-cli');
+    expect(config.metadata?.scannedDirectory).toBe('/path/to/code');
+    expect(config.metadata?.applicationDefinition?.purpose).toBe('Test app');
+  });
+
+  it('should not include metadata when scannedDirectory is not provided', () => {
+    const result: ReconResult = { purpose: 'Test app' };
+    const config = buildRedteamConfig(result);
+
+    expect(config.metadata).toBeUndefined();
+  });
+
+  it('should preserve all existing config functionality with metadata', () => {
+    const result: ReconResult = {
+      purpose: 'Test app',
+      entities: ['Entity1'],
+      stateful: true,
+    };
+    const config = buildRedteamConfig(result, '/path');
+
+    // Verify existing functionality works
+    expect(config.description).toContain('Test app');
+    expect(config.redteam?.entities).toEqual(['Entity1']);
+    expect(config.providers).toBeDefined();
+    expect(config.prompts).toEqual(['{{prompt}}']);
+
+    // And metadata is included
+    expect(config.metadata).toBeDefined();
+    expect(config.metadata?.reconContext?.stateful).toBe(true);
   });
 });

@@ -10,6 +10,7 @@ import {
   INSURANCE_PLUGINS,
   ECOMMERCE_PLUGINS,
 } from '../../constants/plugins';
+import type { ReconMetadata, ReconApplicationDefinition, ReconContext } from './metadata';
 import type { ReconResult } from './types';
 
 /**
@@ -149,7 +150,7 @@ export function filterValidPlugins(suggestedPlugins: string[]): string[] {
 /**
  * Checks if a field value is meaningful (not empty or a placeholder)
  */
-function isValueMeaningful(value: string | undefined): boolean {
+export function isValueMeaningful(value: string | undefined): boolean {
   if (!value) {
     return false;
   }
@@ -167,6 +168,128 @@ function isValueMeaningful(value: string | undefined): boolean {
     return false;
   }
   return true;
+}
+
+/**
+ * Formats discovered tools as a string for the hasAccessTo field
+ */
+function formatToolsForAccessDescription(
+  tools: ReconResult['discoveredTools'],
+): string | undefined {
+  if (!tools || tools.length === 0) {
+    return undefined;
+  }
+
+  // Limit tools to prevent overly verbose output
+  const MAX_TOOLS = 20;
+  const toolsToInclude = tools.slice(0, MAX_TOOLS);
+
+  const lines = toolsToInclude.map((tool) => {
+    let line = `- ${tool.name}`;
+    if (tool.description) {
+      line += `: ${tool.description}`;
+    }
+    return line;
+  });
+
+  if (tools.length > MAX_TOOLS) {
+    lines.push(`... and ${tools.length - MAX_TOOLS} more tools`);
+  }
+
+  return lines.join('\n');
+}
+
+/**
+ * Builds structured applicationDefinition from ReconResult
+ * This preserves the structured data for UI import
+ */
+export function buildApplicationDefinition(result: ReconResult): ReconApplicationDefinition {
+  const def: ReconApplicationDefinition = {};
+
+  // Fields that map directly from ReconResult to ApplicationDefinition
+  const fieldsToCopy: (keyof ReconApplicationDefinition)[] = [
+    'purpose',
+    'features',
+    'industry',
+    'systemPrompt',
+    'hasAccessTo',
+    'doesNotHaveAccessTo',
+    'userTypes',
+    'securityRequirements',
+    'sensitiveDataTypes',
+    'exampleIdentifiers',
+    'criticalActions',
+    'forbiddenTopics',
+    'attackConstraints',
+    'competitors',
+    'connectedSystems',
+    'redteamUser',
+  ];
+
+  for (const field of fieldsToCopy) {
+    const value = result[field as keyof ReconResult] as string | undefined;
+    if (isValueMeaningful(value)) {
+      def[field] = value;
+    }
+  }
+
+  // If hasAccessTo is empty but we have discovered tools, generate from tools
+  if (!def.hasAccessTo && result.discoveredTools?.length) {
+    def.hasAccessTo = formatToolsForAccessDescription(result.discoveredTools);
+  }
+
+  return def;
+}
+
+/**
+ * Builds recon context with additional information beyond ApplicationDefinition
+ */
+export function buildReconContext(result: ReconResult): ReconContext {
+  const context: ReconContext = {};
+
+  if (result.stateful !== undefined) {
+    context.stateful = result.stateful;
+  }
+
+  if (result.discoveredTools?.length) {
+    context.discoveredTools = result.discoveredTools.map((t) => ({
+      name: t.name,
+      description: t.description,
+      parameters: t.parameters,
+    }));
+  }
+
+  if (result.securityNotes?.length) {
+    context.securityNotes = result.securityNotes;
+  }
+
+  if (result.keyFiles?.length) {
+    context.keyFiles = result.keyFiles;
+  }
+
+  if (result.suggestedPlugins?.length) {
+    context.suggestedPlugins = result.suggestedPlugins;
+  }
+
+  if (result.entities?.length) {
+    context.entities = result.entities;
+  }
+
+  return context;
+}
+
+/**
+ * Builds complete recon metadata for UI import
+ */
+export function buildReconMetadata(result: ReconResult, scannedDirectory: string): ReconMetadata {
+  return {
+    version: 1,
+    source: 'recon-cli',
+    generatedAt: new Date().toISOString(),
+    scannedDirectory,
+    applicationDefinition: buildApplicationDefinition(result),
+    reconContext: buildReconContext(result),
+  };
 }
 
 /**
@@ -473,8 +596,15 @@ function buildStrategies(
 
 /**
  * Builds a promptfoo redteam config from recon results
+ *
+ * @param result - The recon analysis result
+ * @param scannedDirectory - Optional directory path; when provided, includes metadata for UI import
+ * @returns Partial config with optional metadata for UI integration
  */
-export function buildRedteamConfig(result: ReconResult): Partial<UnifiedConfig> {
+export function buildRedteamConfig(
+  result: ReconResult,
+  scannedDirectory?: string,
+): Partial<UnifiedConfig> {
   const purpose = applicationDefinitionToPurpose(result);
   const plugins = suggestPluginsFromFindings(result);
   const strategies = buildStrategies(result.stateful ?? false);
@@ -513,6 +643,11 @@ export function buildRedteamConfig(result: ReconResult): Partial<UnifiedConfig> 
   // Add entities if discovered
   if (result.entities && result.entities.length > 0) {
     config.redteam!.entities = result.entities;
+  }
+
+  // Add metadata for UI import when scannedDirectory is provided
+  if (scannedDirectory) {
+    config.metadata = buildReconMetadata(result, scannedDirectory);
   }
 
   return config;
