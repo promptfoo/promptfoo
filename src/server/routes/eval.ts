@@ -734,3 +734,64 @@ evalRouter.post('/:id/copy', async (req: Request, res: Response): Promise<void> 
     res.status(500).json({ error: 'Failed to copy evaluation' });
   }
 });
+
+// Serve voice audio files
+evalRouter.get('/:id/audio/:runId/:filename', async (req: Request, res: Response): Promise<void> => {
+  const { id, runId, filename } = req.params;
+
+  try {
+    // Validate filename to prevent directory traversal
+    if (filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+      res.status(400).json({ error: 'Invalid filename' });
+      return;
+    }
+
+    // Validate file extension
+    if (!filename.endsWith('.wav')) {
+      res.status(400).json({ error: 'Only WAV files are supported' });
+      return;
+    }
+
+    // Verify eval exists
+    const eval_ = await Eval.findById(id);
+    if (!eval_) {
+      res.status(404).json({ error: 'Evaluation not found' });
+      return;
+    }
+
+    // Construct file path - voice-runs are stored relative to cwd
+    const { existsSync } = await import('fs');
+    const { join } = await import('path');
+
+    // Voice-runs are stored relative to the current working directory by default
+    const voiceRunsDir = join(process.cwd(), 'voice-runs', runId);
+    const filePath = join(voiceRunsDir, filename);
+
+    // Check if file exists
+    if (!existsSync(filePath)) {
+      logger.warn({
+        message: 'Audio file not found',
+        evalId: id,
+        runId,
+        filename,
+        filePath,
+      });
+      res.status(404).json({ error: 'Audio file not found' });
+      return;
+    }
+
+    // Send the file
+    res.setHeader('Content-Type', 'audio/wav');
+    res.setHeader('Cache-Control', 'public, max-age=3600'); // Cache for 1 hour
+    res.sendFile(filePath);
+  } catch (error) {
+    logger.error({
+      message: 'Failed to serve audio file',
+      error,
+      evalId: id,
+      runId: req.params.runId,
+      filename: req.params.filename,
+    });
+    res.status(500).json({ error: 'Failed to serve audio file' });
+  }
+});

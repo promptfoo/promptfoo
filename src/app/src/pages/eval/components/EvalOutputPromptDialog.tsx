@@ -388,12 +388,20 @@ export default function EvalOutputPromptDialog({
     metadata &&
     Object.keys(metadata).filter((key) => !HIDDEN_METADATA_KEYS.includes(key)).length > 0;
 
+  // Check for voice transcript data
+  const hasVoiceTranscript =
+    metadata?.voice &&
+    (metadata.voice.transcript || (metadata.voice.turns && metadata.voice.turns.length > 0));
+
   const visibleTabs: string[] = ['prompt-output'];
   if (hasEvaluationData) {
     visibleTabs.push('evaluation');
   }
   if (hasMessagesData) {
     visibleTabs.push('messages');
+  }
+  if (hasVoiceTranscript) {
+    visibleTabs.push('transcript');
   }
   if (hasMetadata) {
     visibleTabs.push('metadata');
@@ -467,6 +475,7 @@ export default function EvalOutputPromptDialog({
           <Tab label={hasOutputContent ? 'Prompt & Output' : 'Prompt'} />
           {hasEvaluationData && <Tab label="Evaluation" />}
           {hasMessagesData && <Tab label="Messages" />}
+          {hasVoiceTranscript && <Tab label="Transcript" />}
           {hasMetadata && <Tab label="Metadata" />}
           {hasTracesData && <Tab label="Traces" />}
         </Tabs>
@@ -527,6 +536,92 @@ export default function EvalOutputPromptDialog({
                 <Box mt={parsedMessages.length > 0 ? 3 : 0}>
                   <ChatMessages messages={redteamHistoryMessages} />
                 </Box>
+              )}
+            </Box>
+          )}
+
+          {/* Transcript Panel */}
+          {finalTabName === 'transcript' && metadata?.voice && (
+            <Box>
+              <Typography variant="subtitle2" sx={subtitleTypographySx}>
+                Voice Conversation Transcript
+              </Typography>
+              {metadata.voice.turns && metadata.voice.turns.length > 0 ? (
+                <Paper
+                  elevation={0}
+                  sx={{
+                    bgcolor: 'background.default',
+                    p: 2,
+                    borderRadius: 1,
+                    maxHeight: 600,
+                    overflow: 'auto',
+                  }}
+                >
+                  {metadata.voice.turns.map((turn: any, index: number) => (
+                    <Box
+                      key={index}
+                      sx={{
+                        mb: 2,
+                        pb: 2,
+                        borderBottom:
+                          index < metadata.voice.turns.length - 1
+                            ? '1px solid'
+                            : 'none',
+                        borderColor: 'divider',
+                      }}
+                    >
+                      <Typography
+                        variant="caption"
+                        sx={{ fontWeight: 'bold', color: 'text.secondary' }}
+                      >
+                        Turn {turn.turn}
+                      </Typography>
+                      {turn.attackerText && (
+                        <Box sx={{ mt: 1 }}>
+                          <Typography
+                            variant="body2"
+                            sx={{ fontWeight: 'bold', color: 'primary.main' }}
+                          >
+                            Attacker:
+                          </Typography>
+                          <Typography variant="body2" sx={textContentTypographySx}>
+                            {turn.attackerText}
+                          </Typography>
+                        </Box>
+                      )}
+                      {turn.targetText && (
+                        <Box sx={{ mt: 1 }}>
+                          <Typography
+                            variant="body2"
+                            sx={{ fontWeight: 'bold', color: 'secondary.main' }}
+                          >
+                            Target:
+                          </Typography>
+                          <Typography variant="body2" sx={textContentTypographySx}>
+                            {turn.targetText}
+                          </Typography>
+                        </Box>
+                      )}
+                    </Box>
+                  ))}
+                </Paper>
+              ) : (
+                metadata.voice.transcript && (
+                  <Paper
+                    elevation={0}
+                    sx={{
+                      bgcolor: 'background.default',
+                      p: 2,
+                      borderRadius: 1,
+                      maxHeight: 600,
+                      overflow: 'auto',
+                    }}
+                  >
+                    <Typography variant="body2" sx={textContentTypographySx}>
+                      {metadata.voice.transcript}
+                    </Typography>
+                  </Paper>
+                )
               )}
             </Box>
           )}

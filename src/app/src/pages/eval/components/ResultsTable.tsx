@@ -625,10 +625,47 @@ function ResultsTable({
                 // Get first output for file metadata check
                 const output = row.outputs && row.outputs.length > 0 ? row.outputs[0] : null;
 
+                // Check for voice conversation audio
+                const voiceMetadata = output?.metadata?.voice;
+                const hasVoiceAudio =
+                  voiceMetadata &&
+                  voiceMetadata.runId &&
+                  voiceMetadata.conversationInterleavedAudioPath;
+
                 const fileMetadata = output?.metadata?.[FILE_METADATA_KEY] as
                   | Record<string, { path: string; type: string; format?: string }>
                   | undefined;
                 const isMediaFile = fileMetadata && fileMetadata[varName];
+
+                // Render voice conversation audio player for the first variable column
+                if (hasVoiceAudio && idx === 0 && evalId) {
+                  const audioUrl = `/api/eval/${evalId}/audio/${voiceMetadata.runId}/conversation-full.wav`;
+                  return (
+                    <div className="cell">
+                      <div style={{ marginBottom: '8px' }}>
+                        <audio
+                          controls
+                          preload="metadata"
+                          style={{ maxWidth: '100%', height: '32px' }}
+                        >
+                          <source src={audioUrl} type="audio/wav" />
+                          Your browser does not support the audio element.
+                        </audio>
+                      </div>
+                      <div style={{ fontSize: '0.9em' }}>
+                        {typeof value === 'object' ? (
+                          <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                            {JSON.stringify(value, null, 2)}
+                          </div>
+                        ) : (
+                          <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                            {String(value)}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                }
 
                 if (isMediaFile && typeof value === 'string') {
                   // Handle various media types

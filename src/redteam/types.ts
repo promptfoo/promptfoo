@@ -198,7 +198,7 @@ export interface RedteamFileConfig extends CommonOptions {
   voice?: {
     targetProvider?: string;
     attackerProvider?: string;
-    attackerKind?: 'tts' | 'provider';
+    attackerKind?: 'tts' | 'provider' | 'audio-to-audio';
     turnCount?: number;
     targetPrompt?: string;
     attackerPromptPath?: string;

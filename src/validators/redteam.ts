@@ -168,7 +168,7 @@ export const RedteamStrategySchema = z.union([
 const VoiceConfigSchema = z.object({
   targetProvider: z.string().optional(),
   attackerProvider: z.string().optional(),
-  attackerKind: z.enum(['tts', 'provider']).optional(),
+  attackerKind: z.enum(['tts', 'provider', 'audio-to-audio']).optional(),
   turnCount: z.number().int().positive().optional(),
   targetPrompt: z.string().optional(),
   attackerPromptPath: z.string().optional(),

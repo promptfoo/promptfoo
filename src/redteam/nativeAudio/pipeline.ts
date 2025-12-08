@@ -81,6 +81,8 @@ export const runNativeAudioPipeline = async ({
         (voice.speechProvider === 'local-liquid' ? 'tts' : ('provider' as const)),
       speechProvider: voice.speechProvider || 'openai',
       targetPrompt: voice.targetPrompt,
+      targetVoice: (voice as any).targetVoice,
+      attackerVoice: (voice as any).attackerVoice,
       attackerPromptPath: voice.attackerPromptPath ? resolve(voice.attackerPromptPath) : undefined,
       pluginExamplesPath: voice.pluginExamplesPath ? resolve(voice.pluginExamplesPath) : undefined,
       pluginId,
@@ -138,7 +140,7 @@ export const runNativeAudioPipeline = async ({
       // Keep original vars including the base attack prompt
       vars: sourceTest.vars || {},
       // Output should be the target's responses, not the attack prompt
-      providerOutput: aggregatedTargetTexts.join(' '),
+      providerOutput: aggregatedTargetTexts.join('\n\n'),
       metadata: {
         ...(sourceTest.metadata || {}),
         voice: {
@@ -146,7 +148,7 @@ export const runNativeAudioPipeline = async ({
           runDir: result.artifacts.runDir,
           turns: turnsWithTranscripts,
           transcript: conversationTranscript,
-          aggregatedTargetText: aggregatedTargetTexts.join(' '),
+          aggregatedTargetText: aggregatedTargetTexts.join('\n\n'),
           conversationAttackerAudioPath: result.conversationAudioPaths?.attacker,
           conversationTargetAudioPath: result.conversationAudioPaths?.target,
           conversationInterleavedAudioPath: result.conversationAudioPaths?.interleaved,

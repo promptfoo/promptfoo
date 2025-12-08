@@ -1,6 +1,6 @@
 export type ProviderName = 'openai-realtime' | 'dry-run';
 
-export type AttackerKind = 'tts' | 'provider';
+export type AttackerKind = 'tts' | 'provider' | 'audio-to-audio';
 
 export type EscalationLevel = 'gentle' | 'moderate' | 'aggressive' | 'forceful';
 
@@ -26,7 +26,7 @@ export interface AttackerPromptConfig {
 }
 
 export interface TranscriptSegment {
-  role: 'attacker' | 'target';
+  role: 'attacker' | 'target' | 'coaching';
   text: string;
   turn: number;
   timestampMs: number;
@@ -45,9 +45,10 @@ export interface RunConfig {
   targetProvider: ProviderName;
   attackerProvider?: ProviderName;
   attackerKind: AttackerKind;
-  speechProvider?: 'openai' | 'local-liquid';
   speechProvider: 'local-liquid' | 'openai' | 'dry-run';
   targetPrompt?: string;
+  attackerVoice?: string;
+  targetVoice?: string;
   attackerPromptPath?: string;
   pluginExamplesPath?: string;
   pluginId?: string;

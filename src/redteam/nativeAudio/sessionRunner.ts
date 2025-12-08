@@ -1,16 +1,19 @@
 import { randomBytes } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+
 import logger from '../../logger';
-import { concatenateWav, ensureWav, interleaveConversationAudio } from './audio';
 import { ProviderAttackGenerator, TtsAttackGenerator } from './attackGenerators';
+import { concatenateWav, ensureWav, interleaveConversationAudio } from './audio';
+import { generateAttackerSystemPrompt, planAttackText } from './planner';
+import { AttackerRealtimeProvider } from './providers/attackerRealtimeProvider';
 import { DryRunProvider } from './providers/dryRunProvider';
 import { OpenAiRealtimeProvider } from './providers/openaiRealtimeProvider';
+
 import type { ProviderAdapter } from './providers/provider';
-import { planAttackText } from './planner';
 import type {
-  AttackTurn,
   AttackerPromptConfig,
+  AttackTurn,
   ProviderEvent,
   RunArtifacts,
   RunConfig,
@@ -22,6 +25,7 @@ const selectProvider = (
   provider: RunConfig['targetProvider'],
   dryRun: boolean,
   targetPrompt?: string,
+  voice?: string,
 ): ProviderAdapter => {
   if (dryRun || provider === 'dry-run') {
     return new DryRunProvider();
@@ -30,6 +34,7 @@ const selectProvider = (
     return new OpenAiRealtimeProvider({
       apiKey: process.env.OPENAI_API_KEY,
       instructions: targetPrompt,
+      voice: voice || 'alloy',
     });
   }
   throw new Error(`Provider ${provider} is not implemented`);
@@ -87,11 +92,217 @@ export class SessionRunner {
       deps.runConfig.targetProvider,
       Boolean(deps.runConfig.dryRun),
       deps.runConfig.targetPrompt,
+      deps.runConfig.targetVoice,
     );
+  }
+
+  /**
+   * Run an audio-to-audio conversation where both attacker and target use Realtime API
+   * and have a natural bidirectional audio conversation
+   */
+  private async runAudioToAudioConversation(): Promise<AudioRunResult> {
+    const { runConfig, baseTurn } = this.deps;
+
+    // Generate comprehensive system prompt for the attacker
+    const attackerSystemPrompt = await generateAttackerSystemPrompt({
+      basePrompt: baseTurn.prompt,
+      pluginId: baseTurn.pluginId,
+      targetInfo: runConfig.targetPrompt,
+    });
+
+    logger.info({
+      message: 'Starting audio-to-audio conversation',
+      runId: runConfig.runId,
+      attackerSystemPrompt: attackerSystemPrompt.substring(0, 200) + '...',
+    });
+
+    // Create attacker provider
+    const attackerProvider = new AttackerRealtimeProvider({
+      apiKey: process.env.OPENAI_API_KEY,
+      systemPrompt: attackerSystemPrompt,
+      voice: runConfig.attackerVoice || 'alloy',
+    });
+
+    // Target provider is already created in constructor
+    const targetProvider = this.provider;
+
+    const attackerEvents: ProviderEvent[] = [];
+    const targetEvents: ProviderEvent[] = [];
+
+    // Set up attacker audio and transcript handlers
+    attackerProvider.onModelTranscript((text, turn) => {
+      const segment: TranscriptSegment = {
+        role: 'attacker',
+        text,
+        turn,
+        timestampMs: Date.now(),
+      };
+      this.transcriptLog.push(segment);
+      attackerEvents.push({
+        type: 'transcript',
+        message: text,
+        turn,
+        timestampMs: Date.now(),
+      });
+      this.trackTurn(turn, { attackerText: text });
+    });
+
+    attackerProvider.onModelAudio((audio, turn) => {
+      const wav = ensureWav(audio);
+      const filename = join(this.artifacts.runDir, `turn-${turn}-attacker.wav`);
+      writeFileSync(filename, wav);
+      this.attackerAudioPaths.push(filename);
+      attackerEvents.push({
+        type: 'audio',
+        data: { bytes: wav.length },
+        turn,
+        timestampMs: Date.now(),
+      });
+      this.trackTurn(turn, { attackerAudioPath: filename });
+    });
+
+    // Set up target audio and transcript handlers
+    targetProvider.onModelTranscript((text, turn) => {
+      const segment: TranscriptSegment = {
+        role: 'target',
+        text,
+        turn,
+        timestampMs: Date.now(),
+      };
+      this.transcriptLog.push(segment);
+      targetEvents.push({
+        type: 'transcript',
+        message: text,
+        turn,
+        timestampMs: Date.now(),
+      });
+      this.trackTurn(turn, { targetText: text });
+    });
+
+    targetProvider.onModelAudio((audio, turn) => {
+      const wav = ensureWav(audio);
+      const filename = join(this.artifacts.runDir, `turn-${turn}-target.wav`);
+      writeFileSync(filename, wav);
+      this.targetAudioPaths.push(filename);
+      targetEvents.push({
+        type: 'audio',
+        data: { bytes: wav.length },
+        turn,
+        timestampMs: Date.now(),
+      });
+      this.trackTurn(turn, { targetAudioPath: filename });
+    });
+
+    // Connect both providers
+    await Promise.all([
+      attackerProvider.connect(`${runConfig.runId}-attacker`),
+      targetProvider.connect(`${runConfig.runId}-target`),
+    ]);
+
+    const maxTurns = runConfig.turnCount || 12;
+
+    // Run the conversation: attacker and target exchange audio
+    for (let turnNumber = 1; turnNumber <= maxTurns; turnNumber++) {
+      logger.info({
+        message: 'Audio-to-audio turn starting',
+        turn: turnNumber,
+        maxTurns,
+      });
+
+      // 1. Generate attack TEXT using chat completion (like TTS mode)
+      const transcriptSoFar = this.transcriptLog
+        .filter((t) => t.role !== 'coaching')
+        .map((t) => `[${t.role}] ${t.text}`)
+        .join('\n');
+      const attackText = await planAttackText({
+        basePrompt: baseTurn.prompt,
+        transcriptSoFar,
+        pluginId: baseTurn.pluginId,
+        turnNumber,
+        maxTurns,
+      });
+
+      // Log coaching to transcript (for visibility)
+      this.transcriptLog.push({
+        role: 'coaching',
+        text: `[Coaching for turn ${turnNumber}] ${attackText}`,
+        turn: turnNumber,
+        timestampMs: Date.now(),
+      });
+
+      logger.info({
+        message: 'Generated attack text for attacker to read',
+        turn: turnNumber,
+        attackText: attackText.substring(0, 100) + (attackText.length > 100 ? '...' : ''),
+      });
+
+      // 2. Send attack text as user input to attacker (not coaching)
+      await attackerProvider.sendTextInput(attackText, turnNumber);
+
+      // Drain attacker events
+      this.providerEvents.push(...attackerProvider.drainEvents());
+
+      // 3. Send attacker's audio to target
+      const attackerPath = this.attackerAudioPaths[turnNumber - 1];
+      if (attackerPath) {
+        const attackerAudio = readFileSync(attackerPath);
+        await targetProvider.sendUserAudio(attackerAudio, turnNumber);
+        await targetProvider.completeTurn(turnNumber);
+      }
+
+      // Drain target events
+      this.providerEvents.push(...targetProvider.drainEvents());
+
+      logger.info({
+        message: 'Audio-to-audio turn completed',
+        turn: turnNumber,
+        attackerText: this.transcriptLog
+          .filter((s) => s.role === 'attacker' && s.turn === turnNumber)
+          .map((s) => s.text)
+          .join(''),
+        targetText: this.transcriptLog
+          .filter((s) => s.role === 'target' && s.turn === turnNumber)
+          .map((s) => s.text)
+          .join(''),
+      });
+    }
+
+    // Close both providers
+    await Promise.all([attackerProvider.close(), targetProvider.close()]);
+
+    // Drain any remaining events
+    this.providerEvents.push(...attackerProvider.drainEvents());
+    this.providerEvents.push(...targetProvider.drainEvents());
+
+    this.finalizeTurns();
+    const conversationAudioPaths = this.concatenateConversationAudio();
+    this.writeArtifacts();
+
+    logger.info({
+      message: 'Audio-to-audio conversation completed',
+      runId: runConfig.runId,
+      turns: this.turnResults.length,
+      transcriptSegments: this.transcriptLog.length,
+    });
+
+    return {
+      transcript: this.transcriptLog,
+      turns: this.turnResults,
+      providerEvents: this.providerEvents,
+      artifacts: this.artifacts,
+      conversationAudioPaths,
+    };
   }
 
   async run(): Promise<AudioRunResult> {
     const { runConfig } = this.deps;
+
+    // Route to audio-to-audio mode if configured
+    if (runConfig.attackerKind === 'audio-to-audio') {
+      return this.runAudioToAudioConversation();
+    }
+
+    // Otherwise, run the original turn-by-turn mode
     const targetEvents: ProviderEvent[] = [];
 
     this.provider.onModelTranscript((text, turn) => {

@@ -29,6 +29,12 @@ if (process.env.NODE_ENV === 'development') {
 export default defineConfig({
   server: {
     port: 3000,
+    proxy: {
+      '/api': {
+        target: `http://localhost:${API_PORT}`,
+        changeOrigin: true,
+      },
+    },
   },
   base: process.env.VITE_PUBLIC_BASENAME || '/',
   plugins: [
