@@ -45,6 +45,19 @@ import type {
 // Type for Google API errors - using 'any' to avoid gaxios dependency
 type GaxiosError = any;
 
+function getVertexApiHost(
+  region: string,
+  configApiHost?: string,
+  envOverrides?: EnvOverrides,
+): string {
+  return (
+    configApiHost ||
+    envOverrides?.VERTEX_API_HOST ||
+    getEnvString('VERTEX_API_HOST') ||
+    (region === 'global' ? 'aiplatform.googleapis.com' : `${region}-aiplatform.googleapis.com`)
+  );
+}
+
 class VertexGenericProvider implements ApiProvider {
   modelName: string;
 
@@ -70,13 +83,8 @@ class VertexGenericProvider implements ApiProvider {
     return `[Google Vertex Provider ${this.modelName}]`;
   }
 
-  getApiHost(): string | undefined {
-    return (
-      this.config.apiHost ||
-      this.env?.VERTEX_API_HOST ||
-      getEnvString('VERTEX_API_HOST') ||
-      `${this.getRegion()}-aiplatform.googleapis.com`
-    );
+  getApiHost(): string {
+    return getVertexApiHost(this.getRegion(), this.config.apiHost, this.env);
   }
 
   async getProjectId(): Promise<string> {
@@ -1009,6 +1017,10 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
     return this.config.apiVersion || 'v1';
   }
 
+  getApiHost(): string {
+    return getVertexApiHost(this.getRegion(), this.config.apiHost, this.env);
+  }
+
   async getProjectId(): Promise<string> {
     return await resolveProjectId(this.config, this.env);
   }
@@ -1030,7 +1042,7 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
     try {
       const client = await this.getClientWithCredentials();
       const projectId = await this.getProjectId();
-      const url = `https://${this.getRegion()}-aiplatform.googleapis.com/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/google/models/${
+      const url = `https://${this.getApiHost()}/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/google/models/${
         this.modelName
       }:predict`;
       const res = await client.request<any>({

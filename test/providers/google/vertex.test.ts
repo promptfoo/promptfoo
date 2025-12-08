@@ -2259,4 +2259,39 @@ describe('VertexChatProvider.callClaudeApi parameter naming', () => {
       );
     });
   });
+
+  describe('getApiHost', () => {
+    it('should return global endpoint without region prefix for region: global', () => {
+      const provider = new VertexChatProvider('gemini-pro', { config: { region: 'global' } });
+      expect(provider.getApiHost()).toBe('aiplatform.googleapis.com');
+    });
+
+    it('should return regional endpoint for non-global regions', () => {
+      const provider = new VertexChatProvider('gemini-pro', { config: { region: 'us-central1' } });
+      expect(provider.getApiHost()).toBe('us-central1-aiplatform.googleapis.com');
+    });
+
+    it('should use custom apiHost over default', () => {
+      const provider = new VertexChatProvider('gemini-pro', {
+        config: { region: 'global', apiHost: 'custom.example.com' },
+      });
+      expect(provider.getApiHost()).toBe('custom.example.com');
+    });
+
+    it('should use VERTEX_API_HOST from env override', () => {
+      const provider = new VertexChatProvider('gemini-pro', {
+        config: { region: 'global' },
+        env: { VERTEX_API_HOST: 'env.example.com' },
+      });
+      expect(provider.getApiHost()).toBe('env.example.com');
+    });
+
+    it('should prioritize configApiHost over env override', () => {
+      const provider = new VertexChatProvider('gemini-pro', {
+        config: { region: 'global', apiHost: 'config.example.com' },
+        env: { VERTEX_API_HOST: 'env.example.com' },
+      });
+      expect(provider.getApiHost()).toBe('config.example.com');
+    });
+  });
 });
