@@ -527,9 +527,12 @@ export function renderVarsInObject<T>(obj: T, vars?: Record<string, string | obj
     return obj;
   }
   if (typeof obj === 'string') {
-    // Check if the entire string is a simple variable reference like "{{ varname }}" or "{{ varname | dump | safe }}"
-    // This allows object variables to be passed through directly instead of being converted to "[object Object]"
-    const simpleVarMatch = obj.match(/^\{\{\s*(\w+)(?:\s*\|\s*[\w\s|]+)?\s*\}\}$/);
+    // Check if the entire string is a simple variable reference with only pass-through filters.
+    // Only bypass Nunjucks for:
+    // 1. Simple variable references like "{{ varname }}"
+    // 2. Variables with dump/safe filters like "{{ varname | dump | safe }}"
+    // Other filters (length, first, join, etc.) must still go through Nunjucks.
+    const simpleVarMatch = obj.match(/^\{\{\s*(\w+)((?:\s*\|\s*(?:dump|safe))*)\s*\}\}$/);
     if (simpleVarMatch) {
       const varName = simpleVarMatch[1];
       const varValue = vars[varName];

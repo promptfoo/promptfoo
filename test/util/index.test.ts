@@ -1387,6 +1387,32 @@ describe('renderVarsInObject', () => {
       // Should render normally (as [object Object]) since it's not a pure variable reference
       expect(rendered).toBe('prefix [object Object] suffix');
     });
+
+    it('should still apply non-pass-through filters via Nunjucks', async () => {
+      // Filters like length, first, join should NOT bypass Nunjucks
+      const tools = [1, 2, 3, 4, 5];
+      const obj = '{{ tools | length }}';
+      const vars = { tools };
+      const rendered = renderVarsInObject(obj, vars);
+      // Should render the length (5) not the array itself
+      expect(rendered).toBe('5');
+    });
+
+    it('should still apply first filter via Nunjucks', async () => {
+      const items = ['apple', 'banana', 'cherry'];
+      const obj = '{{ items | first }}';
+      const vars = { items };
+      const rendered = renderVarsInObject(obj, vars);
+      expect(rendered).toBe('apple');
+    });
+
+    it('should still apply join filter via Nunjucks', async () => {
+      const items = ['a', 'b', 'c'];
+      const obj = '{{ items | join(", ") }}';
+      const vars = { items };
+      const rendered = renderVarsInObject(obj, vars);
+      expect(rendered).toBe('a, b, c');
+    });
   });
 });
 
