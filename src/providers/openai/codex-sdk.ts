@@ -1,12 +1,11 @@
 import crypto from 'crypto';
 import fs from 'fs';
-import { createRequire } from 'node:module';
 import path from 'path';
 
 import dedent from 'dedent';
 import cliState from '../../cliState';
 import { getEnvString } from '../../envars';
-import { getDirectory, importModule } from '../../esm';
+import { getDirectory, importModule, resolvePackageEntryPoint } from '../../esm';
 import logger from '../../logger';
 
 import type {
@@ -158,39 +157,13 @@ export interface OpenAICodexSDKConfig {
   enable_streaming?: boolean;
 }
 
-/**
- * Helper to resolve the path to @openai/codex-sdk from a given base directory.
- * Handles ESM-only packages that don't work with require.resolve().
- */
-function resolveCodexSDKPath(baseDir: string): string | null {
-  // The SDK's ESM entry point
-  const esmEntryPoint = path.join(
-    baseDir,
-    'node_modules',
-    '@openai',
-    'codex-sdk',
-    'dist',
-    'index.js',
-  );
-
-  // Check if the ESM entry point exists
-  if (fs.existsSync(esmEntryPoint)) {
-    return esmEntryPoint;
-  }
-
-  // Try using createRequire for packages that support CommonJS resolution
-  try {
-    const resolveFrom = path.join(baseDir, 'package.json');
-    const require = createRequire(resolveFrom);
-    return require.resolve('@openai/codex-sdk');
-  } catch {
-    return null;
-  }
-}
+const CODEX_SDK_PACKAGE = '@openai/codex-sdk';
 
 /**
- * Helper to load the OpenAI Codex SDK ESM module
- * Uses importModule utility which handles ESM loading in CommonJS environments
+ * Helper to load the OpenAI Codex SDK ESM module.
+ *
+ * Uses the shared resolvePackageEntryPoint utility which handles ESM-only packages
+ * with restrictive exports fields.
  *
  * Resolution order:
  * 1. Promptfoo's own node_modules (for when SDK is installed with promptfoo)
@@ -200,60 +173,53 @@ function resolveCodexSDKPath(baseDir: string): string | null {
 async function loadCodexSDK(): Promise<any> {
   const errors: string[] = [];
 
-  // Try promptfoo's installation directory first
-  // This handles the common case where the SDK is installed as a dependency of promptfoo
+  // Build list of directories to search
+  const searchDirs: Array<{ name: string; path: string }> = [];
+
+  // 1. Promptfoo's installation directory
   try {
     const promptfooDir = getDirectory();
     // getDirectory() returns the 'src' directory, go up one level to get project root
     const promptfooRoot = path.resolve(promptfooDir, '..');
-    const codexPath = resolveCodexSDKPath(promptfooRoot);
-    if (codexPath) {
-      logger.debug(`Resolved @openai/codex-sdk from promptfoo installation: ${codexPath}`);
-      return await importModule(codexPath);
-    }
-    throw new Error('Package not found in promptfoo node_modules');
-  } catch (err) {
-    errors.push(`Promptfoo installation: ${err instanceof Error ? err.message : String(err)}`);
-    logger.debug(`Failed to load @openai/codex-sdk from promptfoo installation: ${err}`);
+    searchDirs.push({ name: 'Promptfoo installation', path: promptfooRoot });
+  } catch {
+    // getDirectory() may fail in unusual environments
   }
 
-  // Try user's project directory (cliState.basePath)
+  // 2. User's project directory (cliState.basePath)
   if (cliState.basePath && path.isAbsolute(cliState.basePath)) {
-    try {
-      const codexPath = resolveCodexSDKPath(cliState.basePath);
-      if (codexPath) {
-        logger.debug(`Resolved @openai/codex-sdk from user project: ${codexPath}`);
-        return await importModule(codexPath);
-      }
-      throw new Error('Package not found in user project node_modules');
-    } catch (err) {
-      errors.push(`User project (${cliState.basePath}): ${err instanceof Error ? err.message : String(err)}`);
-      logger.debug(`Failed to load @openai/codex-sdk from user project: ${err}`);
-    }
+    searchDirs.push({ name: `User project (${cliState.basePath})`, path: cliState.basePath });
   }
 
-  // Try current working directory as fallback
-  try {
-    const codexPath = resolveCodexSDKPath(process.cwd());
+  // 3. Current working directory
+  searchDirs.push({ name: 'Current directory', path: process.cwd() });
+
+  // Try each directory in order
+  for (const { name, path: dir } of searchDirs) {
+    const codexPath = resolvePackageEntryPoint(CODEX_SDK_PACKAGE, dir);
     if (codexPath) {
-      logger.debug(`Resolved @openai/codex-sdk from cwd: ${codexPath}`);
-      return await importModule(codexPath);
+      try {
+        logger.debug(`Resolved ${CODEX_SDK_PACKAGE} from ${name}: ${codexPath}`);
+        return await importModule(codexPath);
+      } catch (err) {
+        errors.push(`${name}: ${err instanceof Error ? err.message : String(err)}`);
+        logger.debug(`Failed to load ${CODEX_SDK_PACKAGE} from ${name}: ${err}`);
+      }
+    } else {
+      errors.push(`${name}: Package not found in node_modules`);
+      logger.debug(`${CODEX_SDK_PACKAGE} not found in ${name}`);
     }
-    throw new Error('Package not found in current directory node_modules');
-  } catch (err) {
-    errors.push(`Current directory: ${err instanceof Error ? err.message : String(err)}`);
-    logger.debug(`Failed to load @openai/codex-sdk from cwd: ${err}`);
   }
 
   // All resolution attempts failed
   logger.error(`Failed to load OpenAI Codex SDK. Tried locations:\n${errors.join('\n')}`);
   throw new Error(
-    dedent`The @openai/codex-sdk package is required but not installed.
+    dedent`The ${CODEX_SDK_PACKAGE} package is required but not installed.
 
     This package may have a proprietary license and is not installed by default.
 
     To use the OpenAI Codex SDK provider, install it with:
-      npm install @openai/codex-sdk
+      npm install ${CODEX_SDK_PACKAGE}
 
     Requires Node.js 18+.
 

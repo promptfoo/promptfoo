@@ -77,6 +77,92 @@ export function clearWrapperDirCache(): void {
   }
 }
 
+/**
+ * Resolves the entry point path for an npm package, handling ESM-only packages.
+ *
+ * This function handles packages with restrictive `exports` fields that don't
+ * expose `package.json` or provide a CommonJS entry point. It tries:
+ *
+ * 1. Standard `require.resolve()` for packages with CommonJS exports
+ * 2. Direct file path resolution for ESM-only packages by reading the
+ *    `exports['.'].import` or `module` field from package.json
+ *
+ * @param packageName - The npm package name (e.g., '@openai/codex-sdk')
+ * @param baseDir - The directory to resolve from (should contain node_modules)
+ * @returns The absolute path to the package entry point, or null if not found
+ *
+ * @example
+ * ```typescript
+ * // Resolve from current directory
+ * const codexPath = resolvePackageEntryPoint('@openai/codex-sdk', process.cwd());
+ * if (codexPath) {
+ *   const module = await importModule(codexPath);
+ * }
+ * ```
+ */
+export function resolvePackageEntryPoint(packageName: string, baseDir: string): string | null {
+  // Try standard require.resolve() first - works for packages with CommonJS exports
+  try {
+    const require = createRequire(path.join(baseDir, 'package.json'));
+    return require.resolve(packageName, { paths: [baseDir] });
+  } catch {
+    // Package either doesn't exist or is ESM-only
+  }
+
+  // For ESM-only packages, resolve package.json directly by path construction
+  // This bypasses the exports field which may block access to package.json
+  const packageJsonPath = path.join(
+    baseDir,
+    'node_modules',
+    ...packageName.split('/'),
+    'package.json',
+  );
+
+  if (!fs.existsSync(packageJsonPath)) {
+    return null;
+  }
+
+  try {
+    const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
+    const packageDir = path.dirname(packageJsonPath);
+
+    // Check exports field for ESM entry point
+    const exports = packageJson.exports;
+    if (exports?.['.']?.import) {
+      const entryPoint = path.join(packageDir, exports['.'].import);
+      if (fs.existsSync(entryPoint)) {
+        return entryPoint;
+      }
+    }
+
+    // Fall back to "module" field (older ESM convention)
+    if (packageJson.module) {
+      const entryPoint = path.join(packageDir, packageJson.module);
+      if (fs.existsSync(entryPoint)) {
+        return entryPoint;
+      }
+    }
+
+    // Fall back to "main" field
+    if (packageJson.main) {
+      const entryPoint = path.join(packageDir, packageJson.main);
+      if (fs.existsSync(entryPoint)) {
+        return entryPoint;
+      }
+    }
+
+    // Default to index.js if nothing specified
+    const defaultEntry = path.join(packageDir, 'index.js');
+    if (fs.existsSync(defaultEntry)) {
+      return defaultEntry;
+    }
+  } catch {
+    // Failed to parse package.json
+  }
+
+  return null;
+}
+
 // Global variable defined by tsup at build time
 // undefined in development (tsx) and Jest tests
 declare const BUILD_FORMAT: 'esm' | 'cjs' | undefined;

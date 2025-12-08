@@ -77,7 +77,7 @@ Specify which OpenAI model to use for code generation:
 providers:
   - id: openai:codex-sdk
     config:
-      model: gpt-5.1-codex
+      model: codex # Or any supported model
 
 prompts:
   - 'Write a TypeScript function that validates email addresses'
@@ -92,7 +92,6 @@ providers:
   - id: openai:codex-sdk
     config:
       working_dir: ./src
-      model: gpt-5.1-codex
 
 prompts:
   - 'Review the codebase and suggest improvements'
@@ -110,7 +109,6 @@ providers:
     config:
       working_dir: ./temp-workspace
       skip_git_repo_check: true
-      model: gpt-5.1-codex
 
 prompts:
   - 'Generate a README file for this project'
@@ -164,60 +162,32 @@ The `approval_policy` parameter controls when user approval is required:
 
 ## Models
 
-As of v0.65.0, **Codex Max is the default model**. You can explicitly specify a different model:
+By default, the SDK uses the latest Codex Max model. You can explicitly specify a different model:
 
 ```yaml
 providers:
   - id: openai:codex-sdk
     config:
-      model: gpt-5.1-codex-mini # Use mini for faster/cheaper evals
+      model: codex-mini # Use mini for faster/cheaper evals
 ```
 
-Supported models include:
+The SDK supports various OpenAI models including:
 
-**GPT-5.1 Codex Models (Recommended)**
+- **Codex models** - Optimized for code generation (default, mini, and max variants)
+- **GPT models** - General-purpose models (GPT-4o, GPT-4, etc.)
+- **Reasoning models** - Enhanced reasoning capabilities (o1, o3, etc.)
 
-- `gpt-5.1-codex-max` - Default model with enhanced reasoning for complex tasks
-- `gpt-5.1-codex` - Primary model for code generation
-- `gpt-5.1-codex-mini` - Cost-efficient variant for simpler tasks
-
-**GPT-5 Models**
-
-- `gpt-5-codex` - Previous generation codex model
-- `gpt-5-codex-mini` - Cost-efficient previous generation
-- `gpt-5` - GPT-5 base model
-
-**GPT-4 Models**
-
-- `gpt-4o` - GPT-4 Omni
-- `gpt-4o-mini` - GPT-4 variant
-- `gpt-4-turbo` - GPT-4 Turbo
-- `gpt-4` - GPT-4 base
-
-**Reasoning Models**
-
-- `o3-mini` - Mini reasoning model
-- `o1` - Reasoning model
-- `o1-mini` - Mini reasoning model
+Refer to [OpenAI's model documentation](https://platform.openai.com/docs/models) for the latest available models and their capabilities.
 
 ### Mini Models
 
-For faster or lower-cost evals, use mini models:
+For faster or lower-cost evals, use mini model variants:
 
 ```yaml
 providers:
   - id: openai:codex-sdk
     config:
-      model: gpt-5.1-codex-mini
-```
-
-Or reasoning-optimized models:
-
-```yaml
-providers:
-  - id: openai:codex-sdk
-    config:
-      model: o3-mini
+      model: codex-mini
 ```
 
 ## Thread Management
@@ -267,7 +237,6 @@ The Codex SDK supports JSON schema output. Specify an `output_schema` to get str
 providers:
   - id: openai:codex-sdk
     config:
-      model: gpt-5.1-codex
       output_schema:
         type: object
         properties:
@@ -316,7 +285,6 @@ providers:
   - id: openai:codex-sdk
     config:
       enable_streaming: true
-      model: gpt-5.1-codex
 ```
 
 When streaming is enabled, the provider processes events like `item.completed` and `turn.completed` to build the final response.
@@ -408,7 +376,6 @@ providers:
         - ./tests
         - ./config
         - ./shared-libs
-      model: gpt-5.1-codex
 ```
 
 This is useful when the agent needs to read files from multiple locations, such as test files, configuration, or shared libraries.
