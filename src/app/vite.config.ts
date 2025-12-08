@@ -77,7 +77,7 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     setupFiles: ['./src/setupTests.ts'],
-    globals: true,
+    globals: false,
     // Enable CSS processing for MUI X v8
     css: true,
     // Force vitest to transform MUI packages including CSS imports
