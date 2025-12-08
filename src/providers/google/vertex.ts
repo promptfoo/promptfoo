@@ -5,9 +5,9 @@ import cliState from '../../cliState';
 import { getEnvString } from '../../envars';
 import { importModule } from '../../esm';
 import logger from '../../logger';
-import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util/index';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { isJavascriptFile } from '../../util/fileExtensions';
+import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util/index';
 import { isValidJson } from '../../util/json';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToGoogle } from '../mcp/transform';
@@ -23,6 +23,7 @@ import {
   resolveProjectId,
 } from './util';
 
+import type { EnvOverrides } from '../../types/env';
 import type {
   ApiEmbeddingProvider,
   ApiProvider,
@@ -32,7 +33,6 @@ import type {
   ProviderResponse,
   TokenUsage,
 } from '../../types/index';
-import type { EnvOverrides } from '../../types/env';
 import type { ClaudeRequest, ClaudeResponse, CompletionOptions } from './types';
 import type {
   GeminiApiResponse,
@@ -419,7 +419,7 @@ export class VertexChatProvider extends VertexGenericProvider {
           const code = errorDetails.code;
           const message = errorDetails.message;
           const status = errorDetails.status;
-          logger.debug(`Gemini API error:\n${JSON.stringify(errorDetails)}`);
+          logger.error(`Gemini API error:\n${JSON.stringify(errorDetails)}`);
           return {
             error: `API call error: Status ${status}, Code ${code}, Message:\n\n${message}`,
           };
@@ -498,8 +498,15 @@ export class VertexChatProvider extends VertexGenericProvider {
           }
 
           const candidate = getCandidate(datum);
-          if (candidate.finishReason && candidate.finishReason === 'SAFETY') {
-            const finishReason = 'Content was blocked due to safety settings.';
+          const safetyFinishReasons = [
+            'SAFETY',
+            'PROHIBITED_CONTENT',
+            'RECITATION',
+            'BLOCKLIST',
+            'SPII',
+          ];
+          if (candidate.finishReason && safetyFinishReasons.includes(candidate.finishReason)) {
+            const finishReason = `Content was blocked due to safety settings with finish reason: ${candidate.finishReason}.`;
             const tokenUsage = {
               total: datum.usageMetadata?.totalTokenCount || 0,
               prompt: datum.usageMetadata?.promptTokenCount || 0,
@@ -517,7 +524,20 @@ export class VertexChatProvider extends VertexGenericProvider {
               return { output: finishReason, tokenUsage, guardrails };
             }
             return { error: finishReason, guardrails };
+          } else if (candidate.finishReason && candidate.finishReason === 'MAX_TOKENS') {
+            // Concatenate the text generated so far before returning
+            if (candidate.content?.parts) {
+              output = mergeParts(output, formatCandidateContents(candidate));
+            }
+            logger.error(
+              `Gemini API error due to finish reason: ${candidate.finishReason}. ${datum.usageMetadata?.candidatesTokenCount || 0} total tokens used. ${JSON.stringify(data)}`,
+            );
+            return {
+              // Prompt and thinking tokens are not included in the token limit
+              error: `Gemini API error due to reaching maximum token limit. ${datum.usageMetadata?.candidatesTokenCount || 0} tokens used. Output generated: ${output || ''}`,
+            };
           } else if (candidate.finishReason && candidate.finishReason !== 'STOP') {
+            logger.error(`Gemini API error due to finish reason: ${candidate.finishReason}.`);
             // e.g. MALFORMED_FUNCTION_CALL
             return {
               error: `Finish reason ${candidate.finishReason}: ${JSON.stringify(data)}`,
