@@ -1,3 +1,4 @@
+import * as fs from 'fs';
 import path from 'path';
 
 import { loadFromJavaScriptFile } from './assertions/utils';
@@ -497,19 +498,27 @@ async function loadRubricPrompt(
     return defaultPrompt;
   }
 
-  if (
-    typeof rubricPrompt === 'string' &&
-    rubricPrompt.startsWith('file://') &&
-    isJavascriptFile(rubricPrompt)
-  ) {
+  if (typeof rubricPrompt === 'string' && rubricPrompt.startsWith('file://')) {
     const basePath = cliState.basePath || '';
     let filePath = rubricPrompt.slice('file://'.length);
 
-    const [pathPart, functionName] = filePath.split(':');
-    filePath = path.resolve(basePath, pathPart);
-    rubricPrompt = await loadFromJavaScriptFile(filePath, functionName, []);
+    if (isJavascriptFile(rubricPrompt)) {
+      const [pathPart, functionName] = filePath.split(':');
+      filePath = path.resolve(basePath, pathPart);
+      rubricPrompt = await loadFromJavaScriptFile(filePath, functionName, []);
+    } else {
+      // For non-JS files (including .json, .yaml, .txt), load as raw text
+      // to allow Nunjucks templating before JSON/YAML parsing.
+      // This fixes the issue where .json files with Nunjucks templates
+      // would fail to parse before rendering.
+      const resolvedPath = path.resolve(basePath, filePath);
+      if (!fs.existsSync(resolvedPath)) {
+        throw new Error(`File does not exist: ${resolvedPath}`);
+      }
+      rubricPrompt = fs.readFileSync(resolvedPath, 'utf8');
+    }
   } else {
-    // Load from external file if needed
+    // Load from external file if needed (for non file:// references)
     rubricPrompt = maybeLoadFromExternalFile(rubricPrompt);
   }
 
