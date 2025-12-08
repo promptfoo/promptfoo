@@ -21,16 +21,12 @@ export default defineConfig({
     // When a fork dies or is recycled, the OS fully reclaims its memory.
     // Worker threads share memory with the main process and can leak.
     pool: 'forks',
-    poolOptions: {
-      forks: {
-        maxForks,
-        minForks: 2,
-        isolate: true, // Each test file gets a clean environment
-        execArgv: [
-          '--max-old-space-size=3072', // 3GB per worker - generous but bounded
-        ],
-      },
-    },
+    // Vitest 4: poolOptions are now top-level
+    maxWorkers: maxForks,
+    isolate: true, // Each test file gets a clean environment
+    execArgv: [
+      '--max-old-space-size=3072', // 3GB per worker - generous but bounded
+    ],
 
     // Timeouts to prevent stuck tests from hanging forever
     testTimeout: 30_000, // 30s per test

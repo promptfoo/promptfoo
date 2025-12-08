@@ -99,16 +99,12 @@ export default defineConfig({
     // Memory leak prevention settings
     // Use forks (child processes) instead of threads for better memory isolation
     pool: 'forks',
-    poolOptions: {
-      forks: {
-        maxForks,
-        minForks: 1,
-        isolate: true, // Each test file gets a clean environment
-        execArgv: [
-          '--max-old-space-size=2048', // 2GB per worker for frontend tests
-        ],
-      },
-    },
+    // Vitest 4: poolOptions are now top-level
+    maxWorkers: maxForks,
+    isolate: true, // Each test file gets a clean environment
+    execArgv: [
+      '--max-old-space-size=2048', // 2GB per worker for frontend tests
+    ],
 
     // Timeouts to prevent stuck tests from hanging forever
     testTimeout: 30_000, // 30s per test
