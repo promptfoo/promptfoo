@@ -1336,13 +1336,41 @@ providers:
 
 ## Streaming Responses
 
-Promptfoo can call HTTP targets that stream responses (for example, Server-Sent Events or chunked JSON). However, streaming is usually not recommended:
+HTTP streaming allows servers to send responses incrementally as data becomes available, rather than waiting to send a complete response all at once. This is commonly used for LLM APIs to provide real-time token generation, where text appears progressively as the model generates it. Streaming can include both final output text and intermediate reasoning or thinking tokens, depending on the model's capabilities.
 
-- Evals wait for the full response before scoring, so progressive tokens are not surfaced
-- Streaming formats vary widely and often require custom parsing logic in `transformResponse`
-- Overall test duration is typically similar to non-streaming requests
+Streaming responses typically use one of these formats:
 
-If you still need to evaluate a streaming endpoint, parse and reconstruct the final text inside `transformResponse`. For SSE-style responses, you can accumulate `delta` chunks from each `data:` line:
+- **Server-Sent Events (SSE)**: Text-based protocol where each line starts with `data: ` followed by JSON. Common in OpenAI and similar APIs.
+- **Chunked JSON**: Multiple JSON objects sent sequentially, often separated by newlines or delimiters.
+- **HTTP chunked transfer encoding**: Standard HTTP mechanism for streaming arbitrary data.
+
+Promptfoo offers full support for HTTP targets that stream responses in these formats. WebSocket requests are also supported via the [WebSocket Provider](./websocket.md). However, synchronous REST/HTTP requests are often preferable for the following reasons:
+
+- Streaming formats vary widely and often require custom parsing logic in `transformResponse`.
+- Evals wait for the full response before scoring, so progressive tokens may not be surfaced.
+- Overall test duration is typically similar to non-streaming requests, so streaming does not provide a performance benefit.
+
+If you need to evaluate a streaming endpoint, you will need to configure the `transformResponse` function to parse and reconstruct the final text. For SSE-style responses, you can accumulate chunks from each `data:` line. The logic for extracting each line and determining when the response is complete may vary based on the event types and semantics used by your specific application/provider.
+
+**Example streaming response format:**
+
+A typical Server-Sent Events (SSE) streaming response from OpenAI or similar APIs looks like this:
+
+```
+data: {"type":"response.created","response":{"id":"resp_abc123"}}
+
+data: {"type":"response.output_text.delta","delta":"The"}
+
+data: {"type":"response.output_text.delta","delta":" quick"}
+
+data: {"type":"response.output_text.delta","delta":" brown"}
+
+data: {"type":"response.output_text.delta","delta":" fox"}
+
+data: {"type":"response.completed","response_id":"resp_abc123"}
+```
+
+Each line starts with `data: ` followed by a JSON object. The parser extracts text from `response.output_text.delta` events and concatenates the `delta` values to reconstruct the full response.
 
 ```yaml
 providers:
@@ -1371,6 +1399,8 @@ providers:
           return out.trim();
         }
 ```
+
+This parser would extract `"The quick brown fox"` from the example response above.
 
 ## Reference
 
