@@ -170,6 +170,7 @@ export function maybeCoerceToGeminiFormat(
   // Handle native Gemini format with system_instruction
   if (
     typeof contents === 'object' &&
+    contents !== null &&
     !Array.isArray(contents) &&
     'system_instruction' in contents
   ) {
@@ -246,7 +247,7 @@ export function maybeCoerceToGeminiFormat(
       }
     });
     coerced = true;
-  } else if (typeof contents === 'object' && 'parts' in contents) {
+  } else if (typeof contents === 'object' && contents !== null && 'parts' in contents) {
     // This might be a single content object
     coercedContents = [contents as z.infer<typeof ContentSchema>];
     coerced = true;
@@ -254,6 +255,8 @@ export function maybeCoerceToGeminiFormat(
     logger.warn(`Unknown format for Gemini: ${JSON.stringify(contents)}`);
     // Ensure we always return an array, even for unknown formats
     // This prevents "contents.map is not a function" errors downstream
+    // For arrays that don't match known formats, we still return them as-is
+    // since they're already arrays and won't cause .map() errors
     const fallbackContents: GeminiFormat = Array.isArray(contents) ? contents : [];
     return { contents: fallbackContents, coerced: false, systemInstruction: undefined };
   }
