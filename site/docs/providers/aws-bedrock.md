@@ -649,6 +649,61 @@ config:
   top_p: 0.9
 ```
 
+#### Llama 3.2 Vision
+
+Llama 3.2 Vision models (`us.meta.llama3-2-11b-instruct-v1:0`, `us.meta.llama3-2-90b-instruct-v1:0`) support image inputs. You can use them with either the legacy InvokeModel API or the Converse API:
+
+**Using InvokeModel API (legacy):**
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: bedrock:us.meta.llama3-2-11b-instruct-v1:0
+    config:
+      region: us-east-1
+      max_gen_len: 256
+
+prompts:
+  - file://llama_vision_prompt.json
+
+tests:
+  - vars:
+      image: file://path/to/image.jpg
+```
+
+```json title="llama_vision_prompt.json"
+[
+  {
+    "role": "user",
+    "content": [
+      {
+        "type": "image",
+        "source": {
+          "type": "base64",
+          "media_type": "image/jpeg",
+          "data": "{{image}}"
+        }
+      },
+      {
+        "type": "text",
+        "text": "What is in this image?"
+      }
+    ]
+  }
+]
+```
+
+**Using Converse API:**
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: bedrock:converse:us.meta.llama3-2-11b-instruct-v1:0
+    config:
+      region: us-east-1
+      maxTokens: 256
+```
+
+The Converse API uses the same prompt format shown above for [Nova Vision](#nova-vision-capabilities).
+
 ### Cohere Models
 
 For Cohere models (e.g., `cohere.command-text-v14`), you can use the following configuration options:
@@ -901,7 +956,14 @@ tests:
 
 ## Multimodal Capabilities
 
-Some Bedrock models, like Amazon Nova, support multimodal inputs including images and text. To use these capabilities, you'll need to structure your prompts to include both the image data and text content.
+Several Bedrock models support multimodal inputs including images and text:
+
+- **Amazon Nova** - Supports images and videos
+- **Llama 3.2 Vision** - Supports images (11B and 90B variants)
+- **Claude 3+** - Supports images (via Converse API)
+- **Pixtral Large** - Supports images (via Converse API)
+
+To use these capabilities, structure your prompts to include both image data and text content.
 
 ### Nova Vision Capabilities
 
