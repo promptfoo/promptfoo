@@ -42,7 +42,7 @@ vi.mock('../../src/telemetry', () => ({
     record: vi.fn(),
   },
 }));
-vi.mock('../../src/evaluatorHelpers', () => ({
+vi.mock('../../src/util/file', () => ({
   getMimeTypeFromExtension: vi.fn().mockReturnValue('image/jpeg'),
   detectMimeFromBase64: vi.fn().mockReturnValue(null),
   extractTextFromPDF: vi.fn().mockResolvedValue('PDF text content'),

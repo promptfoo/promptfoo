@@ -4,14 +4,10 @@ import path from 'path';
 import yaml from 'js-yaml';
 import { getEnvBool } from '../envars';
 import { importModule } from '../esm';
-import {
-  detectMimeFromBase64,
-  extractTextFromPDF,
-  getMimeTypeFromExtension,
-} from '../evaluatorHelpers';
 import logger from '../logger';
 import { runPython } from '../python/pythonUtils';
 import telemetry from '../telemetry';
+import { detectMimeFromBase64, extractTextFromPDF, getMimeTypeFromExtension } from './file';
 import { isAudioFile, isImageFile, isJavascriptFile, isVideoFile } from './fileExtensions';
 import { parseFileUrl } from './functions/loadFunction';
 
