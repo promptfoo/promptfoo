@@ -1,4 +1,4 @@
-description: "Bug demo - JSON rubric template"
+description: 'Bug demo - JSON rubric template'
 
 prompts:
   - 'summarize this form value in 10 words: {{ form }}'
