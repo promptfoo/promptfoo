@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 
 import { clearCache } from '../../src/cache';
-import { importModule, getDirectory } from '../../src/esm';
+import { importModule } from '../../src/esm';
 import logger from '../../src/logger';
 import { OpenAICodexSDKProvider } from '../../src/providers/openai/codex-sdk';
 

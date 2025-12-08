@@ -124,26 +124,26 @@ Skipping the Git check removes a safety guard. Use with caution and consider ver
 
 ## Supported Parameters
 
-| Parameter                 | Type     | Description                                           | Default               |
-| ------------------------- | -------- | ----------------------------------------------------- | --------------------- |
-| `apiKey`                  | string   | OpenAI API key                                        | Environment variable  |
-| `base_url`                | string   | Custom base URL for API requests (for proxies)        | None                  |
-| `working_dir`             | string   | Directory for Codex to operate in                     | Current directory     |
-| `additional_directories`  | string[] | Additional directories the agent can access           | None                  |
-| `model`                   | string   | Model to use                                          | Codex Max (default)   |
-| `sandbox_mode`            | string   | Sandbox access level (see below)                      | `workspace-write`     |
-| `model_reasoning_effort`  | string   | Reasoning intensity: low, medium, high, xhigh         | SDK default           |
-| `network_access_enabled`  | boolean  | Allow network requests                                | false                 |
-| `web_search_enabled`      | boolean  | Allow web search                                      | false                 |
-| `approval_policy`         | string   | When to require approval (see below)                  | SDK default           |
-| `skip_git_repo_check`     | boolean  | Skip Git repository validation                        | false                 |
-| `codex_path_override`     | string   | Custom path to codex binary                           | None                  |
-| `thread_id`               | string   | Resume existing thread from ~/.codex/sessions         | None (creates new)    |
-| `persist_threads`         | boolean  | Keep threads alive between calls                      | false                 |
-| `thread_pool_size`        | number   | Max concurrent threads (when persist_threads)         | 1                     |
-| `output_schema`           | object   | JSON schema for structured responses                  | None                  |
-| `cli_env`                 | object   | Custom environment variables for Codex CLI            | Inherits from process |
-| `enable_streaming`        | boolean  | Enable streaming events                               | false                 |
+| Parameter                | Type     | Description                                    | Default               |
+| ------------------------ | -------- | ---------------------------------------------- | --------------------- |
+| `apiKey`                 | string   | OpenAI API key                                 | Environment variable  |
+| `base_url`               | string   | Custom base URL for API requests (for proxies) | None                  |
+| `working_dir`            | string   | Directory for Codex to operate in              | Current directory     |
+| `additional_directories` | string[] | Additional directories the agent can access    | None                  |
+| `model`                  | string   | Model to use                                   | Codex Max (default)   |
+| `sandbox_mode`           | string   | Sandbox access level (see below)               | `workspace-write`     |
+| `model_reasoning_effort` | string   | Reasoning intensity: low, medium, high, xhigh  | SDK default           |
+| `network_access_enabled` | boolean  | Allow network requests                         | false                 |
+| `web_search_enabled`     | boolean  | Allow web search                               | false                 |
+| `approval_policy`        | string   | When to require approval (see below)           | SDK default           |
+| `skip_git_repo_check`    | boolean  | Skip Git repository validation                 | false                 |
+| `codex_path_override`    | string   | Custom path to codex binary                    | None                  |
+| `thread_id`              | string   | Resume existing thread from ~/.codex/sessions  | None (creates new)    |
+| `persist_threads`        | boolean  | Keep threads alive between calls               | false                 |
+| `thread_pool_size`       | number   | Max concurrent threads (when persist_threads)  | 1                     |
+| `output_schema`          | object   | JSON schema for structured responses           | None                  |
+| `cli_env`                | object   | Custom environment variables for Codex CLI     | Inherits from process |
+| `enable_streaming`       | boolean  | Enable streaming events                        | false                 |
 
 ### Sandbox Modes
 
