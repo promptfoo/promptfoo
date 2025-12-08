@@ -113,6 +113,55 @@ vi.mock('../src/util/transform', () => ({
   transform: vi.fn(),
 }));
 
+// Mock fileReference module with an implementation that resolves file:// references
+const mockFileContents = new Map<string, string>();
+vi.mock('../src/util/fileReference', () => ({
+  processConfigFileReferences: vi.fn(async (config: any, basePath: string = '') => {
+    if (!config) {
+      return config;
+    }
+    if (typeof config === 'string' && config.startsWith('file://')) {
+      const filePath = config.replace('file://', '');
+      return mockFileContents.get(filePath) ?? config;
+    }
+    if (Array.isArray(config)) {
+      const result = [];
+      for (const item of config) {
+        if (typeof item === 'string' && item.startsWith('file://')) {
+          const filePath = item.replace('file://', '');
+          result.push(mockFileContents.get(filePath) ?? item);
+        } else if (typeof item === 'object' && item !== null) {
+          const { processConfigFileReferences } = await import('../src/util/fileReference');
+          result.push(await processConfigFileReferences(item, basePath));
+        } else {
+          result.push(item);
+        }
+      }
+      return result;
+    }
+    if (typeof config === 'object' && config !== null) {
+      const result: Record<string, any> = {};
+      for (const [key, value] of Object.entries(config)) {
+        if (typeof value === 'string' && value.startsWith('file://')) {
+          const filePath = value.replace('file://', '');
+          result[key] = mockFileContents.get(filePath) ?? value;
+        } else if (typeof value === 'object' && value !== null) {
+          const { processConfigFileReferences } = await import('../src/util/fileReference');
+          result[key] = await processConfigFileReferences(value, basePath);
+        } else {
+          result[key] = value;
+        }
+      }
+      return result;
+    }
+    return config;
+  }),
+  loadFileReference: vi.fn(async (fileRef: string, _basePath: string = '') => {
+    const filePath = fileRef.replace('file://', '');
+    return mockFileContents.get(filePath) ?? fileRef;
+  }),
+}));
+
 const mockApiProvider: ApiProvider = {
   id: function id() {
     return 'test-provider';
@@ -353,7 +402,9 @@ describe('renderPrompt', () => {
   });
 
   it('should load file:// references in nested vars objects', async () => {
-    const prompt = toPrompt('Test prompt with {{ reporting_period.current.period }} and {{ reporting_period.previous.report }}');
+    const prompt = toPrompt(
+      'Test prompt with {{ reporting_period.current.period }} and {{ reporting_period.previous.report }}',
+    );
     const vars = {
       reporting_period: {
         current: {
@@ -367,11 +418,12 @@ describe('renderPrompt', () => {
     };
     const evaluateOptions = {};
 
-    vi.spyOn(fs.promises, 'readFile').mockResolvedValueOnce('This is the report content' as any);
+    mockFileContents.set('test_nested_report.txt', 'This is the report content');
 
     const renderedPrompt = await renderPrompt(prompt, vars, evaluateOptions);
 
     expect(renderedPrompt).toBe('Test prompt with 2023-12-31 and This is the report content');
+    mockFileContents.clear();
   });
 
   it('should load file:// references in deeply nested vars objects', async () => {
@@ -387,11 +439,12 @@ describe('renderPrompt', () => {
     };
     const evaluateOptions = {};
 
-    vi.spyOn(fs.promises, 'readFile').mockResolvedValueOnce('Deep nested content' as any);
+    mockFileContents.set('test_deep_data.txt', 'Deep nested content');
 
     const renderedPrompt = await renderPrompt(prompt, vars, evaluateOptions);
 
     expect(renderedPrompt).toBe('Data: Deep nested content');
+    mockFileContents.clear();
   });
 
   it('should load file:// references in arrays within nested vars', async () => {
@@ -401,13 +454,13 @@ describe('renderPrompt', () => {
     };
     const evaluateOptions = {};
 
-    vi.spyOn(fs.promises, 'readFile')
-      .mockResolvedValueOnce('Content 1' as any)
-      .mockResolvedValueOnce('Content 2' as any);
+    mockFileContents.set('test_item1.txt', 'Content 1');
+    mockFileContents.set('test_item2.txt', 'Content 2');
 
     const renderedPrompt = await renderPrompt(prompt, vars, evaluateOptions);
 
     expect(renderedPrompt).toBe('Items: Content 1, Content 2');
+    mockFileContents.clear();
   });
 
   describe('with PROMPTFOO_DISABLE_TEMPLATING', () => {

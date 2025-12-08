@@ -151,7 +151,7 @@ export function collectFileMetadata(vars: Record<string, string | object>): File
  * @param extension File extension (with or without dot)
  * @returns MIME type string (defaults to image/jpeg for unknown formats)
  */
-function getMimeTypeFromExtension(extension: string): string {
+export function getMimeTypeFromExtension(extension: string): string {
   const normalizedExt = extension.toLowerCase().replace(/^\./, '');
   const mimeTypes: Record<string, string> = {
     jpg: 'image/jpeg',
@@ -186,7 +186,7 @@ function getMimeTypeFromExtension(extension: string): string {
  * @param base64Data Base64 encoded image data
  * @returns MIME type string or null if format cannot be detected
  */
-function detectMimeFromBase64(base64Data: string): string | null {
+export function detectMimeFromBase64(base64Data: string): string | null {
   // Check magic numbers at the start of base64 data
   if (base64Data.startsWith('/9j/')) {
     return 'image/jpeg';
@@ -231,9 +231,16 @@ export async function renderPrompt(
 
   let basePrompt = prompt.raw;
 
-  // First, recursively process any file:// references in nested objects
+  // First, recursively process any file:// references in nested objects (not top-level strings)
+  // Top-level strings are handled by the loop below which has special handling for JS/Python with args
   const basePath = cliState.basePath || '';
-  vars = await processConfigFileReferences(vars, path.resolve(process.cwd(), basePath));
+  const resolvedBasePath = path.resolve(process.cwd(), basePath);
+  for (const [varName, value] of Object.entries(vars)) {
+    if (typeof value === 'object' && value !== null) {
+      // Only process nested objects - top-level strings are handled below
+      vars[varName] = await processConfigFileReferences(value, resolvedBasePath);
+    }
+  }
 
   // Load files - handle special cases for top-level JS/Python scripts with arguments
   for (const [varName, value] of Object.entries(vars)) {
