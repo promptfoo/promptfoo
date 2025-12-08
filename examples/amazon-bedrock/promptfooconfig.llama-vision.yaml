@@ -2,6 +2,7 @@
 description: 'Bedrock Llama 3.2 Vision'
 
 # This example uses the InvokeModel API with Anthropic-style message format.
+# Note: Only Llama 3.2 11B and 90B support vision. The 1B and 3B variants are text-only.
 # For Converse API, see promptfooconfig.converse-images.yaml (uses different image format)
 
 prompts:

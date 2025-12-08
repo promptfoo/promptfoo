@@ -728,10 +728,16 @@ export const getLlamaModelHandler = (version: LlamaVersion) => {
           finalPrompt = formatPromptLlama3Instruct(messages as LlamaMessage[], modelName);
           break;
         case LlamaVersion.V3_2: {
-          // Llama 3.2 Vision models support images via InvokeModel API
-          const result = formatPromptLlama32Vision(messages as LlamaMessage[]);
-          finalPrompt = result.prompt;
-          images = result.images;
+          // Only Llama 3.2 11B and 90B support vision; 1B and 3B are text-only
+          const isVisionCapable = modelName && (/11b/i.test(modelName) || /90b/i.test(modelName));
+          if (isVisionCapable) {
+            const result = formatPromptLlama32Vision(messages as LlamaMessage[]);
+            finalPrompt = result.prompt;
+            images = result.images;
+          } else {
+            // Text-only Llama 3.2 models (1B, 3B) use standard Llama 3 formatting
+            finalPrompt = formatPromptLlama3Instruct(messages as LlamaMessage[], modelName);
+          }
           break;
         }
         case LlamaVersion.V4:

@@ -1524,7 +1524,7 @@ Hello<|eot|><|header_start|>assistant<|header_end|>`;
   });
 
   describe('getLlamaModelHandler LLAMA3_2 with images', () => {
-    it('should include images array in params when multimodal content provided', async () => {
+    it('should include images array in params when multimodal content provided (11B)', async () => {
       const handler = getLlamaModelHandler(LlamaVersion.V3_2);
       const prompt = JSON.stringify([
         {
@@ -1535,7 +1535,12 @@ Hello<|eot|><|header_start|>assistant<|header_end|>`;
           ],
         },
       ]);
-      const params = await handler.params({}, prompt, undefined, 'test-model');
+      const params = await handler.params(
+        {},
+        prompt,
+        undefined,
+        'us.meta.llama3-2-11b-instruct-v1:0',
+      );
       expect(params.images).toEqual(['testImageData']);
       expect(params.prompt).toContain('<|image|>');
       expect(params.prompt).toContain('What is in this image?');
@@ -1544,12 +1549,17 @@ Hello<|eot|><|header_start|>assistant<|header_end|>`;
     it('should not include images array when no images in content', async () => {
       const handler = getLlamaModelHandler(LlamaVersion.V3_2);
       const prompt = JSON.stringify([{ role: 'user', content: 'Just text' }]);
-      const params = await handler.params({}, prompt, undefined, 'test-model');
+      const params = await handler.params(
+        {},
+        prompt,
+        undefined,
+        'us.meta.llama3-2-11b-instruct-v1:0',
+      );
       expect(params.images).toBeUndefined();
       expect(params.prompt).toContain('Just text');
     });
 
-    it('should handle image_url format in LLAMA3_2', async () => {
+    it('should handle image_url format in LLAMA3_2 (90B)', async () => {
       const handler = getLlamaModelHandler(LlamaVersion.V3_2);
       const prompt = JSON.stringify([
         {
@@ -1560,9 +1570,45 @@ Hello<|eot|><|header_start|>assistant<|header_end|>`;
           ],
         },
       ]);
-      const params = await handler.params({}, prompt, undefined, 'test-model');
+      const params = await handler.params(
+        {},
+        prompt,
+        undefined,
+        'us.meta.llama3-2-90b-instruct-v1:0',
+      );
       expect(params.images).toEqual(['pngData']);
       expect(params.prompt).toContain('<|image|>');
+    });
+
+    it('should use text-only formatting for 1B and 3B models', async () => {
+      const handler = getLlamaModelHandler(LlamaVersion.V3_2);
+      const prompt = JSON.stringify([{ role: 'user', content: 'Just text' }]);
+      const params = await handler.params(
+        {},
+        prompt,
+        undefined,
+        'us.meta.llama3-2-3b-instruct-v1:0',
+      );
+      expect(params.images).toBeUndefined();
+      expect(params.prompt).toContain('Just text');
+      // Should use Llama 3 formatting, not vision formatting
+      expect(params.prompt).not.toContain('<|image|>');
+    });
+
+    it('should throw error when images are provided to 1B/3B text-only models', async () => {
+      const handler = getLlamaModelHandler(LlamaVersion.V3_2);
+      const prompt = JSON.stringify([
+        {
+          role: 'user',
+          content: [
+            { type: 'image', source: { bytes: 'testImageData' } },
+            { type: 'text', text: 'What is in this image?' },
+          ],
+        },
+      ]);
+      await expect(
+        handler.params({}, prompt, undefined, 'us.meta.llama3-2-3b-instruct-v1:0'),
+      ).rejects.toThrow(/Multimodal content \(images\) detected/);
     });
   });
 
