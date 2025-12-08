@@ -10,6 +10,7 @@ import {
   CONTEXT_FAITHFULNESS_NLI_STATEMENTS,
   CONTEXT_RECALL,
   CONTEXT_RECALL_ATTRIBUTED_TOKEN,
+  CONTEXT_RECALL_NOT_ATTRIBUTED_TOKEN,
   CONTEXT_RELEVANCE,
   CONTEXT_RELEVANCE_BAD,
   DEFAULT_GRADING_PROMPT,
@@ -1260,7 +1261,17 @@ export async function matchesContextRecall(
   }
 
   invariant(typeof resp.output === 'string', 'context-recall produced malformed response');
-  const sentences = splitIntoSentences(resp.output);
+
+  // Filter to only include lines that contain attribution markers.
+  // This handles cases where LLMs add preamble text before the classification list.
+  // See: https://github.com/promptfoo/promptfoo/issues/1506
+  const attributedTokenLower = CONTEXT_RECALL_ATTRIBUTED_TOKEN.toLowerCase();
+  const notAttributedTokenLower = CONTEXT_RECALL_NOT_ATTRIBUTED_TOKEN.toLowerCase();
+  const sentences = splitIntoSentences(resp.output).filter((line) => {
+    const lowerLine = line.toLowerCase();
+    return lowerLine.includes(attributedTokenLower) || lowerLine.includes(notAttributedTokenLower);
+  });
+
   const sentenceAttributions: { sentence: string; attributed: boolean }[] = [];
   let numerator = 0;
 
