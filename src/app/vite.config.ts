@@ -1,5 +1,6 @@
 /// <reference types="vitest" />
 
+import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'node:url';
 
@@ -9,6 +10,10 @@ import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vitest/config';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
 import packageJson from '../../package.json' with { type: 'json' };
+
+// Calculate max forks for test parallelization
+const cpuCount = os.cpus().length;
+const maxForks = Math.max(cpuCount - 2, 2);
 
 const API_PORT = process.env.API_PORT || '15500';
 
@@ -90,6 +95,31 @@ export default defineConfig({
     alias: {
       'punycode/': 'punycode',
     },
+
+    // Memory leak prevention settings
+    // Use forks (child processes) instead of threads for better memory isolation
+    pool: 'forks',
+    poolOptions: {
+      forks: {
+        maxForks,
+        minForks: 1,
+        isolate: true, // Each test file gets a clean environment
+        execArgv: [
+          '--max-old-space-size=2048', // 2GB per worker for frontend tests
+        ],
+      },
+    },
+
+    // Timeouts to prevent stuck tests from hanging forever
+    testTimeout: 30_000, // 30s per test
+    hookTimeout: 30_000, // 30s for beforeAll/afterAll hooks
+    teardownTimeout: 10_000, // 10s for cleanup
+
+    // Limit concurrent tests within each worker to prevent memory spikes
+    maxConcurrency: 5,
+
+    // Fail fast on first error in CI
+    bail: process.env.CI ? 1 : 0,
     // Suppress known MUI and React Testing Library warnings that don't indicate real problems
     onConsoleLog(log: string, type: 'stdout' | 'stderr'): false | undefined {
       if (type === 'stderr') {

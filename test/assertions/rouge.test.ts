@@ -1,4 +1,4 @@
-import { vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as rouge from 'js-rouge';
 import { handleRougeScore } from '../../src/assertions/rouge';
 

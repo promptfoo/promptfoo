@@ -12,7 +12,7 @@ export default defineConfig({
     },
     environment: 'node',
     exclude: ['**/*.integration.test.ts', '**/node_modules/**'],
-    globals: true,
+    globals: false,
     include: ['test/**/*.test.ts'],
     root: '.',
     setupFiles: ['./vitest.setup.ts'],
