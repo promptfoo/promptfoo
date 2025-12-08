@@ -1,11 +1,12 @@
 import crypto from 'crypto';
 import fs from 'fs';
+import { createRequire } from 'node:module';
 import path from 'path';
 
 import dedent from 'dedent';
 import cliState from '../../cliState';
 import { getEnvString } from '../../envars';
-import { importModule } from '../../esm';
+import { getDirectory, importModule } from '../../esm';
 import logger from '../../logger';
 
 import type {
@@ -36,8 +37,34 @@ import type { EnvOverrides } from '../../types/env';
  * - With thread_id: Resumes specific thread from ~/.codex/sessions
  */
 
+/**
+ * Sandbox mode for Codex execution.
+ * Controls what level of access the agent has to the filesystem.
+ */
+export type SandboxMode = 'read-only' | 'workspace-write' | 'danger-full-access';
+
+/**
+ * Model reasoning effort level.
+ * Controls how much reasoning the model should use.
+ */
+export type ModelReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh';
+
+/**
+ * Approval policy for Codex operations.
+ * Controls when user approval is required.
+ */
+export type ApprovalPolicy = 'never' | 'on-request' | 'on-failure' | 'untrusted';
+
 export interface OpenAICodexSDKConfig {
+  /**
+   * OpenAI API key
+   */
   apiKey?: string;
+
+  /**
+   * Custom base URL for API requests (useful for proxies or custom endpoints)
+   */
+  base_url?: string;
 
   /**
    * Working directory for Codex to operate in
@@ -62,25 +89,49 @@ export interface OpenAICodexSDKConfig {
   codex_path_override?: string;
 
   /**
-   * Model to use (e.g., 'gpt-5.1-codex', 'gpt-4o', 'o3-mini')
+   * Model to use (e.g., 'codex-max', 'gpt-4o', 'o3-mini')
+   * As of v0.65.0, Codex Max is the default model.
    */
   model?: string;
 
   /**
-   * Fallback model if primary model fails
+   * Sandbox mode for execution environment.
+   * - 'read-only': Agent can only read files (safest)
+   * - 'workspace-write': Agent can write to working directory (default)
+   * - 'danger-full-access': Agent has full filesystem access (use with caution)
    */
-  fallback_model?: string;
+  sandbox_mode?: SandboxMode;
 
   /**
-   * Maximum tokens for response
+   * Model reasoning effort level.
+   * Controls how much reasoning the model should use for complex tasks.
+   * - 'minimal': Least reasoning, fastest responses
+   * - 'low': Light reasoning
+   * - 'medium': Balanced reasoning
+   * - 'high': Most thorough reasoning
    */
-  max_tokens?: number;
+  model_reasoning_effort?: ModelReasoningEffort;
 
   /**
-   * Maximum tokens for tool output (default: 10000)
-   * Controls how much output from tool calls is included in the context.
+   * Enable network access for the agent.
+   * When true, allows the agent to make network requests.
    */
-  tool_output_token_limit?: number;
+  network_access_enabled?: boolean;
+
+  /**
+   * Enable web search capability.
+   * When true, allows the agent to perform web searches.
+   */
+  web_search_enabled?: boolean;
+
+  /**
+   * Approval policy for operations.
+   * - 'never': Never require approval
+   * - 'on-request': Require approval when requested
+   * - 'on-failure': Require approval after failures
+   * - 'untrusted': Require approval for untrusted operations
+   */
+  approval_policy?: ApprovalPolicy;
 
   /**
    * Thread management
@@ -102,57 +153,112 @@ export interface OpenAICodexSDKConfig {
   cli_env?: Record<string, string>;
 
   /**
-   * Custom system instructions
-   */
-  system_prompt?: string;
-
-  /**
    * Enable streaming events (default: false for simplicity)
    */
   enable_streaming?: boolean;
 }
 
 /**
+ * Helper to resolve the path to @openai/codex-sdk from a given base directory.
+ * Handles ESM-only packages that don't work with require.resolve().
+ */
+function resolveCodexSDKPath(baseDir: string): string | null {
+  // The SDK's ESM entry point
+  const esmEntryPoint = path.join(
+    baseDir,
+    'node_modules',
+    '@openai',
+    'codex-sdk',
+    'dist',
+    'index.js',
+  );
+
+  // Check if the ESM entry point exists
+  if (fs.existsSync(esmEntryPoint)) {
+    return esmEntryPoint;
+  }
+
+  // Try using createRequire for packages that support CommonJS resolution
+  try {
+    const resolveFrom = path.join(baseDir, 'package.json');
+    const require = createRequire(resolveFrom);
+    return require.resolve('@openai/codex-sdk');
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Helper to load the OpenAI Codex SDK ESM module
  * Uses importModule utility which handles ESM loading in CommonJS environments
+ *
+ * Resolution order:
+ * 1. Promptfoo's own node_modules (for when SDK is installed with promptfoo)
+ * 2. User's project node_modules (cliState.basePath)
+ * 3. Current working directory
  */
 async function loadCodexSDK(): Promise<any> {
+  const errors: string[] = [];
+
+  // Try promptfoo's installation directory first
+  // This handles the common case where the SDK is installed as a dependency of promptfoo
   try {
-    // Resolve the package path, then use importModule to load it
-    // The SDK is ESM-only, so we need the importModule utility which uses dynamic-import.cjs
-    const basePath =
-      cliState.basePath && path.isAbsolute(cliState.basePath) ? cliState.basePath : process.cwd();
-
-    // The package only exports ESM, so we construct the direct path
-    // The SDK is installed in node_modules/@openai/codex-sdk/dist/index.js
-    const modulePath = path.join(
-      basePath,
-      'node_modules',
-      '@openai',
-      'codex-sdk',
-      'dist',
-      'index.js',
-    );
-
-    return await importModule(modulePath);
-  } catch (err) {
-    logger.error(`Failed to load OpenAI Codex SDK: ${err}`);
-    if ((err as any).stack) {
-      logger.error((err as any).stack);
+    const promptfooDir = getDirectory();
+    // getDirectory() returns the 'src' directory, go up one level to get project root
+    const promptfooRoot = path.resolve(promptfooDir, '..');
+    const codexPath = resolveCodexSDKPath(promptfooRoot);
+    if (codexPath) {
+      logger.debug(`Resolved @openai/codex-sdk from promptfoo installation: ${codexPath}`);
+      return await importModule(codexPath);
     }
-    throw new Error(
-      dedent`The @openai/codex-sdk package is required but not installed.
-
-      This package may have a proprietary license and is not installed by default.
-
-      To use the OpenAI Codex SDK provider, install it with:
-        npm install @openai/codex-sdk
-
-      Requires Node.js 18+.
-
-      For more information, see: https://www.promptfoo.dev/docs/providers/openai-codex-sdk/`,
-    );
+    throw new Error('Package not found in promptfoo node_modules');
+  } catch (err) {
+    errors.push(`Promptfoo installation: ${err instanceof Error ? err.message : String(err)}`);
+    logger.debug(`Failed to load @openai/codex-sdk from promptfoo installation: ${err}`);
   }
+
+  // Try user's project directory (cliState.basePath)
+  if (cliState.basePath && path.isAbsolute(cliState.basePath)) {
+    try {
+      const codexPath = resolveCodexSDKPath(cliState.basePath);
+      if (codexPath) {
+        logger.debug(`Resolved @openai/codex-sdk from user project: ${codexPath}`);
+        return await importModule(codexPath);
+      }
+      throw new Error('Package not found in user project node_modules');
+    } catch (err) {
+      errors.push(`User project (${cliState.basePath}): ${err instanceof Error ? err.message : String(err)}`);
+      logger.debug(`Failed to load @openai/codex-sdk from user project: ${err}`);
+    }
+  }
+
+  // Try current working directory as fallback
+  try {
+    const codexPath = resolveCodexSDKPath(process.cwd());
+    if (codexPath) {
+      logger.debug(`Resolved @openai/codex-sdk from cwd: ${codexPath}`);
+      return await importModule(codexPath);
+    }
+    throw new Error('Package not found in current directory node_modules');
+  } catch (err) {
+    errors.push(`Current directory: ${err instanceof Error ? err.message : String(err)}`);
+    logger.debug(`Failed to load @openai/codex-sdk from cwd: ${err}`);
+  }
+
+  // All resolution attempts failed
+  logger.error(`Failed to load OpenAI Codex SDK. Tried locations:\n${errors.join('\n')}`);
+  throw new Error(
+    dedent`The @openai/codex-sdk package is required but not installed.
+
+    This package may have a proprietary license and is not installed by default.
+
+    To use the OpenAI Codex SDK provider, install it with:
+      npm install @openai/codex-sdk
+
+    Requires Node.js 18+.
+
+    For more information, see: https://www.promptfoo.dev/docs/providers/openai-codex-sdk/`,
+  );
 }
 
 // Pricing per 1M tokens (as of November 2025)
@@ -219,15 +325,6 @@ export class OpenAICodexSDKProvider implements ApiProvider {
 
     if (this.config.model && !OpenAICodexSDKProvider.OPENAI_MODELS.includes(this.config.model)) {
       logger.warn(`Using unknown model for OpenAI Codex SDK: ${this.config.model}`);
-    }
-
-    if (
-      this.config.fallback_model &&
-      !OpenAICodexSDKProvider.OPENAI_MODELS.includes(this.config.fallback_model)
-    ) {
-      logger.warn(
-        `Using unknown model for OpenAI Codex SDK fallback: ${this.config.fallback_model}`,
-      );
     }
   }
 
@@ -345,7 +442,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       }
     }
 
-    // Create new thread
+    // Create new thread with all ThreadOptions
     const thread = this.codexInstance!.startThread({
       workingDirectory: config.working_dir,
       skipGitRepoCheck: config.skip_git_repo_check ?? false,
@@ -353,6 +450,17 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       ...(config.additional_directories?.length
         ? { additionalDirectories: config.additional_directories }
         : {}),
+      ...(config.sandbox_mode ? { sandboxMode: config.sandbox_mode } : {}),
+      ...(config.model_reasoning_effort
+        ? { modelReasoningEffort: config.model_reasoning_effort }
+        : {}),
+      ...(config.network_access_enabled !== undefined
+        ? { networkAccessEnabled: config.network_access_enabled }
+        : {}),
+      ...(config.web_search_enabled !== undefined
+        ? { webSearchEnabled: config.web_search_enabled }
+        : {}),
+      ...(config.approval_policy ? { approvalPolicy: config.approval_policy } : {}),
     });
 
     if (config.persist_threads && cacheKey) {
@@ -408,7 +516,11 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       additional_directories: config.additional_directories,
       model: config.model,
       output_schema: config.output_schema,
-      tool_output_token_limit: config.tool_output_token_limit,
+      sandbox_mode: config.sandbox_mode,
+      model_reasoning_effort: config.model_reasoning_effort,
+      network_access_enabled: config.network_access_enabled,
+      web_search_enabled: config.web_search_enabled,
+      approval_policy: config.approval_policy,
       prompt,
     };
 
@@ -456,6 +568,8 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       this.codexInstance = new this.codexModule.Codex({
         env,
         ...(config.codex_path_override ? { codexPathOverride: config.codex_path_override } : {}),
+        ...(config.base_url ? { baseUrl: config.base_url } : {}),
+        ...(this.apiKey ? { apiKey: this.apiKey } : {}),
       });
     }
 
@@ -463,13 +577,14 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     const cacheKey = this.generateCacheKey(config, prompt);
     const thread = await this.getOrCreateThread(config, cacheKey);
 
-    // Prepare run options
+    // Prepare run options (TurnOptions)
     const runOptions: any = {};
     if (config.output_schema) {
       runOptions.outputSchema = config.output_schema;
     }
-    if (config.tool_output_token_limit !== undefined) {
-      runOptions.toolOutputTokenLimit = config.tool_output_token_limit;
+    // Pass abort signal to SDK
+    if (callOptions?.abortSignal) {
+      runOptions.signal = callOptions.abortSignal;
     }
 
     // Execute turn

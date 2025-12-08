@@ -124,43 +124,61 @@ Skipping the Git check removes a safety guard. Use with caution and consider ver
 
 ## Supported Parameters
 
-| Parameter                 | Type     | Description                                   | Default               |
-| ------------------------- | -------- | --------------------------------------------- | --------------------- |
-| `apiKey`                  | string   | OpenAI API key                                | Environment variable  |
-| `working_dir`             | string   | Directory for Codex to operate in             | Current directory     |
-| `additional_directories`  | string[] | Additional directories the agent can access   | None                  |
-| `model`                   | string   | Primary model to use                          | Codex SDK default     |
-| `fallback_model`          | string   | Fallback model if primary fails               | None                  |
-| `max_tokens`              | number   | Maximum tokens for response                   | Codex SDK default     |
-| `tool_output_token_limit` | number   | Maximum tokens for tool output                | 10000                 |
-| `skip_git_repo_check`     | boolean  | Skip Git repository validation                | false                 |
-| `codex_path_override`     | string   | Custom path to codex binary                   | None                  |
-| `thread_id`               | string   | Resume existing thread from ~/.codex/sessions | None (creates new)    |
-| `persist_threads`         | boolean  | Keep threads alive between calls              | false                 |
-| `thread_pool_size`        | number   | Max concurrent threads (when persist_threads) | 1                     |
-| `output_schema`           | object   | JSON schema for structured responses          | None                  |
-| `cli_env`                 | object   | Custom environment variables for Codex CLI    | Inherits from process |
-| `system_prompt`           | string   | Custom system instructions                    | None                  |
-| `enable_streaming`        | boolean  | Enable streaming events                       | false                 |
+| Parameter                 | Type     | Description                                           | Default               |
+| ------------------------- | -------- | ----------------------------------------------------- | --------------------- |
+| `apiKey`                  | string   | OpenAI API key                                        | Environment variable  |
+| `base_url`                | string   | Custom base URL for API requests (for proxies)        | None                  |
+| `working_dir`             | string   | Directory for Codex to operate in                     | Current directory     |
+| `additional_directories`  | string[] | Additional directories the agent can access           | None                  |
+| `model`                   | string   | Model to use                                          | Codex Max (default)   |
+| `sandbox_mode`            | string   | Sandbox access level (see below)                      | `workspace-write`     |
+| `model_reasoning_effort`  | string   | Reasoning intensity: low, medium, high, xhigh         | SDK default           |
+| `network_access_enabled`  | boolean  | Allow network requests                                | false                 |
+| `web_search_enabled`      | boolean  | Allow web search                                      | false                 |
+| `approval_policy`         | string   | When to require approval (see below)                  | SDK default           |
+| `skip_git_repo_check`     | boolean  | Skip Git repository validation                        | false                 |
+| `codex_path_override`     | string   | Custom path to codex binary                           | None                  |
+| `thread_id`               | string   | Resume existing thread from ~/.codex/sessions         | None (creates new)    |
+| `persist_threads`         | boolean  | Keep threads alive between calls                      | false                 |
+| `thread_pool_size`        | number   | Max concurrent threads (when persist_threads)         | 1                     |
+| `output_schema`           | object   | JSON schema for structured responses                  | None                  |
+| `cli_env`                 | object   | Custom environment variables for Codex CLI            | Inherits from process |
+| `enable_streaming`        | boolean  | Enable streaming events                               | false                 |
+
+### Sandbox Modes
+
+The `sandbox_mode` parameter controls filesystem access:
+
+- `read-only` - Agent can only read files (safest)
+- `workspace-write` - Agent can write to working directory (default)
+- `danger-full-access` - Agent has full filesystem access (use with caution)
+
+### Approval Policies
+
+The `approval_policy` parameter controls when user approval is required:
+
+- `never` - Never require approval
+- `on-request` - Require approval when requested
+- `on-failure` - Require approval after failures
+- `untrusted` - Require approval for untrusted operations
 
 ## Models
 
-The Codex SDK supports OpenAI models. Use `gpt-5.1-codex` for code generation tasks:
+As of v0.65.0, **Codex Max is the default model**. You can explicitly specify a different model:
 
 ```yaml
 providers:
   - id: openai:codex-sdk
     config:
-      model: gpt-5.1-codex
-      fallback_model: gpt-5
+      model: gpt-5.1-codex-mini # Use mini for faster/cheaper evals
 ```
 
 Supported models include:
 
 **GPT-5.1 Codex Models (Recommended)**
 
-- `gpt-5.1-codex` - Primary model for code generation (recommended)
-- `gpt-5.1-codex-max` - Frontier model with enhanced reasoning for complex tasks
+- `gpt-5.1-codex-max` - Default model with enhanced reasoning for complex tasks
+- `gpt-5.1-codex` - Primary model for code generation
 - `gpt-5.1-codex-mini` - Cost-efficient variant for simpler tasks
 
 **GPT-5 Models**
@@ -324,6 +342,59 @@ providers:
       skip_git_repo_check: true
 ```
 
+## Sandbox Mode
+
+Control the level of filesystem access for the agent:
+
+```yaml
+providers:
+  - id: openai:codex-sdk
+    config:
+      sandbox_mode: read-only # Safest - agent can only read files
+```
+
+Available modes:
+
+- `read-only` - Agent can only read files, no modifications allowed
+- `workspace-write` - Agent can write to the working directory (default)
+- `danger-full-access` - Full filesystem access (use with extreme caution)
+
+## Web Search and Network Access
+
+Enable the agent to search the web or make network requests:
+
+```yaml
+providers:
+  - id: openai:codex-sdk
+    config:
+      web_search_enabled: true # Allow web searches
+      network_access_enabled: true # Allow network requests
+```
+
+:::warning
+
+Enabling network access allows the agent to make arbitrary HTTP requests. Use with caution and only in trusted environments.
+
+:::
+
+## Model Reasoning Effort
+
+Control how much reasoning the model uses:
+
+```yaml
+providers:
+  - id: openai:codex-sdk
+    config:
+      model_reasoning_effort: high # Thorough reasoning for complex tasks
+```
+
+Available levels:
+
+- `low` - Light reasoning, faster responses
+- `medium` - Balanced (default)
+- `high` - Thorough reasoning for complex tasks
+- `xhigh` - Maximum reasoning for the most complex tasks
+
 ## Additional Directories
 
 Allow the Codex agent to access directories beyond the main working directory:
@@ -341,20 +412,6 @@ providers:
 ```
 
 This is useful when the agent needs to read files from multiple locations, such as test files, configuration, or shared libraries.
-
-## Tool Output Token Limit
-
-Control how much output from tool calls is included in the context:
-
-```yaml
-providers:
-  - id: openai:codex-sdk
-    config:
-      tool_output_token_limit: 20000 # Increase from default 10000
-      model: gpt-5.1-codex
-```
-
-Higher limits allow more tool output but consume more context tokens.
 
 ## Custom Environment Variables
 
@@ -391,7 +448,10 @@ This provider automatically caches responses based on:
 - Additional directories (if specified)
 - Model name
 - Output schema (if specified)
-- Tool output token limit (if specified)
+- Sandbox mode (if specified)
+- Model reasoning effort (if specified)
+- Network/web search settings (if specified)
+- Approval policy (if specified)
 
 To disable caching globally:
 
@@ -412,15 +472,14 @@ tests:
 
 ### Multi-File Code Review
 
-Review multiple files in a codebase:
+Review multiple files in a codebase with enhanced reasoning:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
   - id: openai:codex-sdk
     config:
       working_dir: ./src
-      model: gpt-5.1-codex
-      max_tokens: 4000
+      model_reasoning_effort: high # Use thorough reasoning for code review
 
 prompts:
   - 'Review all TypeScript files in this directory and identify:

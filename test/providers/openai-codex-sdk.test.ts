@@ -1,8 +1,9 @@
 import { MockInstance, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import fs from 'fs';
+import path from 'path';
 
 import { clearCache } from '../../src/cache';
-import { importModule } from '../../src/esm';
+import { importModule, getDirectory } from '../../src/esm';
 import logger from '../../src/logger';
 import { OpenAICodexSDKProvider } from '../../src/providers/openai/codex-sdk';
 
@@ -35,11 +36,39 @@ const mockCodexSDK = {
   Thread: vi.fn(),
 };
 
+// Create a mock require function that has a resolve method
+const createMockRequire = () => {
+  const mockRequire = (moduleName: string) => {
+    if (moduleName === '@openai/codex-sdk') {
+      return mockCodexSDK;
+    }
+    throw new Error(`Cannot find module '${moduleName}'`);
+  };
+  mockRequire.resolve = (moduleName: string) => {
+    if (moduleName === '@openai/codex-sdk') {
+      return '/mocked/path/to/codex-sdk/dist/index.js';
+    }
+    throw new Error(`Cannot find module '${moduleName}'`);
+  };
+  return mockRequire;
+};
+
 // Mock the ESM loader to return our mock SDK
 vi.mock('../../src/esm', async (importOriginal) => {
   return {
     ...(await importOriginal()),
     importModule: vi.fn(),
+    // Mock getDirectory to return a path within the project
+    getDirectory: vi.fn().mockReturnValue(path.join(process.cwd(), 'src', 'providers', 'openai')),
+  };
+});
+
+// Mock createRequire to return a mock require function with resolve method
+vi.mock('node:module', async (importOriginal) => {
+  const original = await importOriginal<typeof import('node:module')>();
+  return {
+    ...original,
+    createRequire: vi.fn().mockImplementation(() => createMockRequire()),
   };
 });
 
@@ -128,23 +157,11 @@ describe('OpenAICodexSDKProvider', () => {
       warnSpy.mockRestore();
     });
 
-    it('should warn about unknown fallback model', () => {
-      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
-
-      new OpenAICodexSDKProvider({ config: { fallback_model: 'unknown-fallback' } });
-
-      expect(warnSpy).toHaveBeenCalledWith(
-        'Using unknown model for OpenAI Codex SDK fallback: unknown-fallback',
-      );
-
-      warnSpy.mockRestore();
-    });
-
     it('should not warn about known OpenAI models', () => {
       const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
 
       new OpenAICodexSDKProvider({ config: { model: 'gpt-4o' } });
-      new OpenAICodexSDKProvider({ config: { fallback_model: 'o3-mini' } });
+      new OpenAICodexSDKProvider({ config: { model: 'o3-mini' } });
 
       expect(warnSpy).not.toHaveBeenCalled();
 
@@ -157,7 +174,7 @@ describe('OpenAICodexSDKProvider', () => {
       new OpenAICodexSDKProvider({ config: { model: 'gpt-5.1-codex' } });
       new OpenAICodexSDKProvider({ config: { model: 'gpt-5.1-codex-max' } });
       new OpenAICodexSDKProvider({ config: { model: 'gpt-5.1-codex-mini' } });
-      new OpenAICodexSDKProvider({ config: { fallback_model: 'gpt-5-codex' } });
+      new OpenAICodexSDKProvider({ config: { model: 'gpt-5-codex' } });
 
       expect(warnSpy).not.toHaveBeenCalled();
 
@@ -459,45 +476,8 @@ describe('OpenAICodexSDKProvider', () => {
       });
     });
 
-    describe('tool_output_token_limit', () => {
-      it('should pass tool_output_token_limit to run options', async () => {
-        mockRun.mockResolvedValue(createMockResponse('Response'));
-
-        const provider = new OpenAICodexSDKProvider({
-          config: {
-            tool_output_token_limit: 20000,
-          },
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
-
-        await provider.callApi('Test prompt');
-
-        expect(mockRun).toHaveBeenCalledWith('Test prompt', {
-          toolOutputTokenLimit: 20000,
-        });
-      });
-
-      it('should combine tool_output_token_limit with output_schema', async () => {
-        const schema = { type: 'object' };
-        mockRun.mockResolvedValue(createMockResponse('{}'));
-
-        const provider = new OpenAICodexSDKProvider({
-          config: {
-            output_schema: schema,
-            tool_output_token_limit: 15000,
-          },
-          env: { OPENAI_API_KEY: 'test-api-key' },
-        });
-
-        await provider.callApi('Test prompt');
-
-        expect(mockRun).toHaveBeenCalledWith('Test prompt', {
-          outputSchema: schema,
-          toolOutputTokenLimit: 15000,
-        });
-      });
-
-      it('should not include toolOutputTokenLimit when not specified', async () => {
+    describe('run options', () => {
+      it('should pass empty run options by default', async () => {
         mockRun.mockResolvedValue(createMockResponse('Response'));
 
         const provider = new OpenAICodexSDKProvider({
@@ -507,6 +487,45 @@ describe('OpenAICodexSDKProvider', () => {
         await provider.callApi('Test prompt');
 
         expect(mockRun).toHaveBeenCalledWith('Test prompt', {});
+      });
+
+      it('should pass abort signal to run options', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+
+        const provider = new OpenAICodexSDKProvider({
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        const abortController = new AbortController();
+        await provider.callApi('Test prompt', undefined, {
+          abortSignal: abortController.signal,
+        });
+
+        expect(mockRun).toHaveBeenCalledWith('Test prompt', {
+          signal: abortController.signal,
+        });
+      });
+
+      it('should combine output_schema with abort signal', async () => {
+        const schema = { type: 'object' };
+        mockRun.mockResolvedValue(createMockResponse('{}'));
+
+        const provider = new OpenAICodexSDKProvider({
+          config: {
+            output_schema: schema,
+          },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        const abortController = new AbortController();
+        await provider.callApi('Test prompt', undefined, {
+          abortSignal: abortController.signal,
+        });
+
+        expect(mockRun).toHaveBeenCalledWith('Test prompt', {
+          outputSchema: schema,
+          signal: abortController.signal,
+        });
       });
     });
 
@@ -766,6 +785,7 @@ describe('OpenAICodexSDKProvider', () => {
             OPENAI_API_KEY: 'test-api-key',
             CODEX_API_KEY: 'test-api-key',
           }),
+          apiKey: 'test-api-key',
         });
       });
 
@@ -788,6 +808,7 @@ describe('OpenAICodexSDKProvider', () => {
             CUSTOM_VAR: 'custom-value',
             OPENAI_API_KEY: 'test-api-key',
           }),
+          apiKey: 'test-api-key',
         });
       });
 
@@ -806,6 +827,26 @@ describe('OpenAICodexSDKProvider', () => {
         expect(MockCodex).toHaveBeenCalledWith({
           env: expect.any(Object),
           codexPathOverride: '/custom/path/to/codex',
+          apiKey: 'test-api-key',
+        });
+      });
+
+      it('should handle base_url', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+
+        const provider = new OpenAICodexSDKProvider({
+          config: {
+            base_url: 'https://custom.api.endpoint.com',
+          },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Test prompt');
+
+        expect(MockCodex).toHaveBeenCalledWith({
+          env: expect.any(Object),
+          baseUrl: 'https://custom.api.endpoint.com',
+          apiKey: 'test-api-key',
         });
       });
     });
@@ -867,6 +908,7 @@ describe('OpenAICodexSDKProvider', () => {
             OPENAI_API_KEY: 'config-key',
             CODEX_API_KEY: 'config-key',
           }),
+          apiKey: 'config-key',
         });
       });
 
@@ -884,6 +926,7 @@ describe('OpenAICodexSDKProvider', () => {
             OPENAI_API_KEY: 'codex-env-key',
             CODEX_API_KEY: 'codex-env-key',
           }),
+          apiKey: 'codex-env-key',
         });
       });
     });
