@@ -470,7 +470,6 @@ Generate structured bug reports from code:
 providers:
   - id: openai:codex-sdk
     config:
-      model: gpt-5.1-codex
       working_dir: ./test-code
       output_schema:
         type: object
@@ -510,7 +509,6 @@ Use persistent threads for multi-turn conversations:
 providers:
   - id: openai:codex-sdk
     config:
-      model: gpt-5.1-codex
       persist_threads: true
       thread_pool_size: 1
 
@@ -535,7 +533,7 @@ Both providers support code operations, but have different features:
 ### OpenAI Codex SDK
 
 - **Best for**: Code generation, structured output, reasoning tasks
-- **Features**: JSON schema support, thread persistence, gpt-5.1-codex model
+- **Features**: JSON schema support, thread persistence, Codex models
 - **Thread management**: Built-in pooling and resumption
 - **Working directory**: Git repository validation
 - **Configuration**: Focused on code tasks

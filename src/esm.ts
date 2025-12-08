@@ -78,14 +78,38 @@ export function clearWrapperDirCache(): void {
 }
 
 /**
- * Resolves the entry point path for an npm package, handling ESM-only packages.
+ * Resolves the entry point path for an npm package, handling ESM-only packages
+ * with restrictive `exports` fields.
  *
- * This function handles packages with restrictive `exports` fields that don't
- * expose `package.json` or provide a CommonJS entry point. It tries:
+ * ## Why this function exists
  *
- * 1. Standard `require.resolve()` for packages with CommonJS exports
- * 2. Direct file path resolution for ESM-only packages by reading the
- *    `exports['.'].import` or `module` field from package.json
+ * Some ESM-only packages (like `@openai/codex-sdk`) have restrictive `exports` fields:
+ *
+ * ```json
+ * {
+ *   "type": "module",
+ *   "exports": {
+ *     ".": { "import": "./dist/index.js" }
+ *   }
+ * }
+ * ```
+ *
+ * This causes two problems with Node.js's `require.resolve()`:
+ *
+ * 1. **No CommonJS entry point**: `require.resolve('@openai/codex-sdk')` fails with
+ *    "No exports main defined" because there's no `"require"` or `"default"` condition.
+ *
+ * 2. **Blocked package.json access**: `require.resolve('@openai/codex-sdk/package.json')`
+ *    fails with "Package subpath './package.json' is not defined by exports" because
+ *    the exports field doesn't expose it.
+ *
+ * ## Solution
+ *
+ * This function works around these limitations by:
+ * 1. First trying standard `require.resolve()` (works for CommonJS and dual-mode packages)
+ * 2. If that fails, manually constructing the path to `node_modules/{package}/package.json`
+ * 3. Reading the package.json directly from the filesystem (bypassing exports restrictions)
+ * 4. Parsing the exports field to find the ESM entry point
  *
  * @param packageName - The npm package name (e.g., '@openai/codex-sdk')
  * @param baseDir - The directory to resolve from (should contain node_modules)

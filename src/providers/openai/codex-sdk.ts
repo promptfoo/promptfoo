@@ -89,7 +89,7 @@ export interface OpenAICodexSDKConfig {
 
   /**
    * Model to use (e.g., 'codex-max', 'gpt-4o', 'o3-mini')
-   * As of v0.65.0, Codex Max is the default model.
+   * The SDK uses Codex Max as the default model.
    */
   model?: string;
 
@@ -104,10 +104,10 @@ export interface OpenAICodexSDKConfig {
   /**
    * Model reasoning effort level.
    * Controls how much reasoning the model should use for complex tasks.
-   * - 'minimal': Least reasoning, fastest responses
-   * - 'low': Light reasoning
-   * - 'medium': Balanced reasoning
-   * - 'high': Most thorough reasoning
+   * - 'low': Light reasoning, faster responses
+   * - 'medium': Balanced reasoning (default)
+   * - 'high': Thorough reasoning for complex tasks
+   * - 'xhigh': Maximum reasoning for the most complex tasks
    */
   model_reasoning_effort?: ModelReasoningEffort;
 
