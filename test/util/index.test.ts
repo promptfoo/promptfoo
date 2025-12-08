@@ -1291,6 +1291,103 @@ describe('renderVarsInObject', () => {
       },
     });
   });
+
+  // Tests for object variable substitution (GitHub issue #2266)
+  describe('object variable substitution', () => {
+    it('should directly substitute object variables with simple {{ varname }} syntax', async () => {
+      const schema = {
+        type: 'object',
+        properties: {
+          location: { type: 'string', description: 'The city and state' },
+        },
+        required: ['location'],
+      };
+      const obj = '{{ schema }}';
+      const vars = { schema };
+      const rendered = renderVarsInObject(obj, vars);
+      expect(rendered).toEqual(schema);
+    });
+
+    it('should directly substitute object variables with filters like {{ varname | dump | safe }}', async () => {
+      const schema = {
+        type: 'object',
+        properties: {
+          name: { type: 'string' },
+        },
+      };
+      const obj = '{{ schema | dump | safe }}';
+      const vars = { schema };
+      const rendered = renderVarsInObject(obj, vars);
+      expect(rendered).toEqual(schema);
+    });
+
+    it('should directly substitute array variables', async () => {
+      const tools = [
+        { type: 'function', function: { name: 'get_weather' } },
+        { type: 'function', function: { name: 'get_time' } },
+      ];
+      const obj = '{{ tools }}';
+      const vars = { tools };
+      const rendered = renderVarsInObject(obj, vars);
+      expect(rendered).toEqual(tools);
+    });
+
+    it('should still render string variables normally', async () => {
+      const obj = '{{ name }}';
+      const vars = { name: 'John' };
+      const rendered = renderVarsInObject(obj, vars);
+      expect(rendered).toBe('John');
+    });
+
+    it('should not automatically parse JSON strings', async () => {
+      // JSON strings should remain strings unless they're simple variable references
+      const obj = '{"key": "value", "number": 42}';
+      const vars = {};
+      const rendered = renderVarsInObject(obj, vars);
+      expect(rendered).toBe('{"key": "value", "number": 42}');
+    });
+
+    it('should handle object substitution in nested structures', async () => {
+      const schema = { type: 'object', properties: {} };
+      const obj = {
+        config: {
+          tools: [
+            {
+              type: 'function',
+              function: {
+                name: 'test',
+                parameters: '{{ schema }}',
+              },
+            },
+          ],
+        },
+      };
+      const vars = { schema };
+      const rendered = renderVarsInObject(obj, vars);
+      expect(rendered).toEqual({
+        config: {
+          tools: [
+            {
+              type: 'function',
+              function: {
+                name: 'test',
+                parameters: schema,
+              },
+            },
+          ],
+        },
+      });
+    });
+
+    it('should not substitute object when template is part of larger string', async () => {
+      const schema = { type: 'object' };
+      const obj = 'prefix {{ schema }} suffix';
+      const vars = { schema };
+      const rendered = renderVarsInObject(obj, vars);
+      // Should render normally (as [object Object]) since it's not a pure variable reference
+      expect(rendered).toBe('prefix [object Object] suffix');
+    });
+  });
 });
 
 describe('renderEnvOnlyInObject', () => {

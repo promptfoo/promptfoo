@@ -527,6 +527,19 @@ export function renderVarsInObject<T>(obj: T, vars?: Record<string, string | obj
     return obj;
   }
   if (typeof obj === 'string') {
+    // Check if the entire string is a simple variable reference like "{{ varname }}" or "{{ varname | dump | safe }}"
+    // This allows object variables to be passed through directly instead of being converted to "[object Object]"
+    const simpleVarMatch = obj.match(/^\{\{\s*(\w+)(?:\s*\|\s*[\w\s|]+)?\s*\}\}$/);
+    if (simpleVarMatch) {
+      const varName = simpleVarMatch[1];
+      const varValue = vars[varName];
+      // If the variable is an object (not a string), return it directly
+      // This enables passing schemas and other complex objects through templates
+      if (varValue !== undefined && typeof varValue === 'object' && varValue !== null) {
+        return varValue as unknown as T;
+      }
+    }
+
     const nunjucksEngine = getNunjucksEngine();
     return nunjucksEngine.renderString(obj, vars) as unknown as T;
   }
