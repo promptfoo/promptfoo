@@ -88,6 +88,8 @@ jobs:
   docker:
     if: needs.release-please.outputs.release_created
     needs: [publish-npm, release-please]
+    permissions:
+      contents: read
     uses: ./.github/workflows/docker.yml
     with:
       tag_name: ${{ needs.release-please.outputs.tag_name }}
