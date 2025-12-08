@@ -28,7 +28,8 @@ import { LLAMA_GUARD_REPLICATE_PROVIDER } from './redteam/constants';
 import { shouldGenerateRemote } from './redteam/remoteGeneration';
 import { doRemoteGrading } from './remoteGrading';
 import { doRemoteScoringWithPi } from './remoteScoring';
-import { maybeLoadFromExternalFile } from './util/file';
+import { getNunjucksEngineForFilePath, maybeLoadFromExternalFile } from './util/file';
+import { parseFileUrl } from './util/functions/loadFunction';
 import { isJavascriptFile } from './util/fileExtensions';
 import invariant from './util/invariant';
 import { extractFirstJsonObject, extractJsonObjects } from './util/json';
@@ -500,18 +501,22 @@ export async function loadRubricPrompt(
 
   if (typeof rubricPrompt === 'string' && rubricPrompt.startsWith('file://')) {
     const basePath = cliState.basePath || '';
-    let filePath = rubricPrompt.slice('file://'.length);
 
-    if (isJavascriptFile(rubricPrompt)) {
-      const [pathPart, functionName] = filePath.split(':');
-      filePath = path.resolve(basePath, pathPart);
-      rubricPrompt = await loadFromJavaScriptFile(filePath, functionName, []);
+    // Render Nunjucks templates in the file path (e.g., file://{{ env.RUBRIC_PATH }}/rubric.json)
+    const renderedFilePath = getNunjucksEngineForFilePath().renderString(rubricPrompt, {});
+
+    // Parse the file URL to extract file path and function name
+    // This handles colon splitting correctly, including Windows drive letters and :functionName suffix
+    const { filePath, functionName } = parseFileUrl(renderedFilePath);
+    const resolvedPath = path.resolve(basePath, filePath);
+
+    if (isJavascriptFile(filePath)) {
+      rubricPrompt = await loadFromJavaScriptFile(resolvedPath, functionName, []);
     } else {
       // For non-JS files (including .json, .yaml, .txt), load as raw text
       // to allow Nunjucks templating before JSON/YAML parsing.
       // This fixes the issue where .json files with Nunjucks templates
       // would fail to parse before rendering.
-      const resolvedPath = path.resolve(basePath, filePath);
       if (!fs.existsSync(resolvedPath)) {
         throw new Error(`File does not exist: ${resolvedPath}`);
       }
