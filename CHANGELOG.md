@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.120.1](https://github.com/promptfoo/promptfoo/compare/0.120.0...0.120.1) (2025-12-08)
+
+
+### Features
+
+* **providers:** update claude-agent-sdk to ^0.1.60 with betas and dontAsk support ([#6557](https://github.com/promptfoo/promptfoo/issues/6557)) ([cc3d857](https://github.com/promptfoo/promptfoo/commit/cc3d85763606facb615965ad9288c33650e01512))
+
+
+### Bug Fixes
+
+* **ci:** trigger Docker build from release-please workflow ([#6572](https://github.com/promptfoo/promptfoo/issues/6572)) ([6b17908](https://github.com/promptfoo/promptfoo/commit/6b17908e5875eb7baed1e66a4f6a650413ca9ef7))
+* improved differentiation between parsing json and non-json chat messages ([#6568](https://github.com/promptfoo/promptfoo/issues/6568)) ([3776606](https://github.com/promptfoo/promptfoo/commit/377660659ac6cd52a58f3ee1cb687a5bbb2ece23))
+* use correct drizzle migrations path for npm/npx installs ([#6573](https://github.com/promptfoo/promptfoo/issues/6573)) ([3e4fa81](https://github.com/promptfoo/promptfoo/commit/3e4fa814882e34d7606dd256e34789559213feca))
+
 ## [0.120.0](https://github.com/promptfoo/promptfoo/compare/0.119.14...0.120.0) (2025-12-08)
 
 ### Features
