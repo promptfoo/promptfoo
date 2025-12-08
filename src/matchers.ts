@@ -487,7 +487,7 @@ export async function matchesClassification(
   };
 }
 
-async function loadRubricPrompt(
+export async function loadRubricPrompt(
   rubricPrompt: string | object | undefined,
   defaultPrompt: string,
 ): Promise<string> {
@@ -1447,14 +1447,17 @@ export async function matchesContextFaithfulness(
   if (grading?.rubricPrompt) {
     invariant(Array.isArray(grading.rubricPrompt), 'rubricPrompt must be an array');
   }
-  const longformPrompt: string =
-    (typeof grading?.rubricPrompt?.[0] === 'string'
+  // Load rubric prompts using loadRubricPrompt to support file:// references with templates
+  const rawLongformPrompt =
+    typeof grading?.rubricPrompt?.[0] === 'string'
       ? grading?.rubricPrompt?.[0]
-      : grading?.rubricPrompt?.[0].content) || CONTEXT_FAITHFULNESS_LONGFORM;
-  const nliPrompt: string =
-    (typeof grading?.rubricPrompt?.[1] === 'string'
+      : grading?.rubricPrompt?.[0]?.content;
+  const rawNliPrompt =
+    typeof grading?.rubricPrompt?.[1] === 'string'
       ? grading?.rubricPrompt?.[1]
-      : grading?.rubricPrompt?.[1].content) || CONTEXT_FAITHFULNESS_NLI_STATEMENTS;
+      : grading?.rubricPrompt?.[1]?.content;
+  const longformPrompt = await loadRubricPrompt(rawLongformPrompt, CONTEXT_FAITHFULNESS_LONGFORM);
+  const nliPrompt = await loadRubricPrompt(rawNliPrompt, CONTEXT_FAITHFULNESS_NLI_STATEMENTS);
 
   let promptText = await renderLlmRubricPrompt(longformPrompt, {
     question: query,
