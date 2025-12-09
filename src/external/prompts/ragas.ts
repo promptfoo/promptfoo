@@ -25,6 +25,7 @@ classification:
 `;
 
 export const CONTEXT_RECALL_ATTRIBUTED_TOKEN = '[Attributed]';
+export const CONTEXT_RECALL_NOT_ATTRIBUTED_TOKEN = '[Not Attributed]';
 
 export const CONTEXT_RELEVANCE = `Please extract relevant sentences from the provided context that is absolutely required answer the following query. If no relevant sentences are found, or if you believe the query cannot be answered from the given context, return the phrase "Insufficient Information".  While extracting candidate sentences you're not allowed to make any changes to sentences from given context.
 

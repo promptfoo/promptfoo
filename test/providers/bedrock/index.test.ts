@@ -375,6 +375,17 @@ describe('AwsBedrockGenericProvider', () => {
       expect((provider.config as any).inferenceModelType).toBe('nova');
     });
 
+    it('should handle inference profile ARN with nova2 model type', async () => {
+      const arnModelName =
+        'arn:aws:bedrock:us-east-1:123456789012:inference-profile/nova2-inference';
+      const config: any = { inferenceModelType: 'nova2' };
+
+      const provider = new AwsBedrockCompletionProvider(arnModelName, { config });
+
+      expect(provider.modelName).toBe(arnModelName);
+      expect((provider.config as any).inferenceModelType).toBe('nova2');
+    });
+
     it('should handle inference profile ARN with llama model type', async () => {
       const arnModelName =
         'arn:aws:bedrock:us-east-1:123456789012:inference-profile/llama-inference';
@@ -2542,6 +2553,22 @@ describe('AWS_BEDROCK_MODELS mapping', () => {
     expect(AWS_BEDROCK_MODELS['us-gov.anthropic.claude-3-haiku-20240307-v1:0']).toBe(
       BEDROCK_MODEL.CLAUDE_MESSAGES,
     );
+  });
+
+  it('should map Nova 2 models correctly', async () => {
+    // Base model ID
+    expect(AWS_BEDROCK_MODELS['amazon.nova-2-lite-v1:0']).toBe(BEDROCK_MODEL.AMAZON_NOVA_2);
+
+    // Regional model IDs
+    expect(AWS_BEDROCK_MODELS['us.amazon.nova-2-lite-v1:0']).toBe(BEDROCK_MODEL.AMAZON_NOVA_2);
+    expect(AWS_BEDROCK_MODELS['eu.amazon.nova-2-lite-v1:0']).toBe(BEDROCK_MODEL.AMAZON_NOVA_2);
+    expect(AWS_BEDROCK_MODELS['apac.amazon.nova-2-lite-v1:0']).toBe(BEDROCK_MODEL.AMAZON_NOVA_2);
+
+    // Global cross-region inference
+    expect(AWS_BEDROCK_MODELS['global.amazon.nova-2-lite-v1:0']).toBe(BEDROCK_MODEL.AMAZON_NOVA_2);
+
+    // Note: Nova 2 Sonic uses bidirectional streaming API like Nova Sonic v1,
+    // so it's handled separately via NovaSonicProvider in registry.ts
   });
 });
 
