@@ -17,9 +17,9 @@ In practice, upgrades often change refusal behavior, instruction-following, and 
 
 ## A real example
 
-We tested a customer's agent after upgrading from GPT-4o to GPT-4.1. Their **prompt-injection resistance** dropped from **94% to 71%** on the same harness.
+We tested a customer's agent after upgrading from GPT-4o to GPT-4.1. Their **prompt-injection resistance** dropped from **94% to 71%** on our eval harness.
 
-GPT-4.1 is [explicitly optimized](https://openai.com/index/gpt-4-1/) for stronger instruction following, which can improve capability while hurting injection resistance.
+GPT-4.1 is [trained to follow instructions](https://openai.com/index/gpt-4-1/) more closely and literally, which can improve capability while hurting injection resistance.
 
 - **What changed:** the newer model followed embedded instructions more literally.
 - **What failed:** indirect injection via retrieved documents.
@@ -54,9 +54,9 @@ Model protections help, but they are not your security boundary. If your agent h
 
 Even within one vendor, updates change the balance between helpfulness, refusal, and instruction-following.
 
-- **GPT-5 safe-completions** optimize "[helpfulness within safety constraints](https://openai.com/index/gpt-5-safe-completions/)," especially for dual-use prompts. That changes refusal style and edge-case handling.
-- **Anthropic Constitutional Classifiers** [reduce jailbreak success](https://www.anthropic.com/news/constitutional-classifiers) from 86% to 4.4% in their automated evaluations. But their Feb 3–10, 2025 public demo still produced a universal jailbreak on days 6–7.
-- **Gemini safety settings** are [configurable](https://ai.google.dev/gemini-api/docs/safety-settings), and defaults vary. Newer stable GA models default to `BLOCK_NONE`; older models default to `BLOCK_SOME`. Civic Integrity has stricter handling and cannot be adjusted.
+- **GPT-5 safe-completion** optimizes "[helpfulness within safety constraints](https://openai.com/index/gpt-5-safe-completions/)," especially for dual-use prompts. That changes refusal style and edge-case handling.
+- **Anthropic Constitutional Classifiers** [reduce jailbreak success](https://www.anthropic.com/news/constitutional-classifiers) from 86% to 4.4% in their automated evaluations. But a universal jailbreak was found during their Feb 3–10, 2025 public demo (days 6–7).
+- **Gemini safety settings** are [configurable](https://ai.google.dev/gemini-api/docs/safety-settings), and defaults vary by model and surface. If you don't set thresholds, newer stable GA models default to `BLOCK_NONE` while others default to `BLOCK_MEDIUM_AND_ABOVE`. Civic Integrity has different defaults depending on model and product.
 
 Newer models are not automatically safer. If you assume safety "transfers" across upgrades, you will ship regressions.
 
@@ -66,7 +66,7 @@ Each family has different sharp edges. Your tests need to match them.
 
 ### OpenAI (GPT-5 and reasoning models)
 
-GPT-5's "safe completions" approach stays helpful on ambiguous, dual-use prompts by offering safer partial answers or alternatives instead of binary comply/refuse.
+GPT-5's "safe-completion" approach stays helpful on ambiguous, dual-use prompts by offering safer partial answers or alternatives instead of binary comply/refuse.
 
 **What to test when migrating:** borderline dual-use prompts, refusal style changes, and whether "helpful alternatives" accidentally trigger tools.
 
@@ -92,7 +92,7 @@ Anthropic's safety work emphasizes multi-turn and agentic risks (prompt injectio
 
 Open weights are powerful for privacy and cost. The tradeoff: **safety is optional and easy to remove**.
 
-The [BadLlama paper](https://arxiv.org/abs/2407.01376) removed Llama 3 8B safety tuning in ~1 minute on a single A100 (under $0.50). An adapter under 100MB can strip guardrails from any copy. A free Colab path works in ~30 minutes.
+[BadLlama](https://arxiv.org/abs/2407.01376) shows you can strip Llama 3 8B safety in ~1 minute (or ~5 minutes with standard fine-tuning on a single A100, under $0.50). The paper also demonstrates a sub-100MB adapter and a free Colab path (~30 minutes).
 
 If you deploy open models, treat model-level safety as a feature you implement, monitor, and continuously verify.
 
@@ -306,7 +306,7 @@ tests:
 
 | Migration | Key Risk | What to do |
 |-----------|----------|------------|
-| GPT-4o → GPT-5 | Safe-completion changes refusal style and dual-use behavior | Re-test dual-use prompts; verify partial-answer behavior |
+| GPT-4o → GPT-5 | Safe-completion changes refusal style and dual-use handling | Re-test dual-use prompts; verify partial-answer behavior |
 | GPT-4o → GPT-4.1 | Stronger instruction-following can hurt injection resistance | Re-test indirect injection and tool-abuse cases |
 | GPT-4o → o1/o3/o4-mini | Reasoning models behave differently from chat models | Re-test multi-turn and tool-use scenarios |
 | Claude → GPT-5 | Different multi-turn and agentic behavior | Add multi-turn guardrails; tighten tool gates |
