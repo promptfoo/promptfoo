@@ -707,11 +707,18 @@ export async function resolveConfigs(
   // Extract commandLineOptions from either explicit config files or default config
   let commandLineOptions = fileConfig.commandLineOptions || defaultConfig.commandLineOptions;
 
-  // Resolve relative envPath against the config file directory
-  if (commandLineOptions?.envPath && !path.isAbsolute(commandLineOptions.envPath) && basePath) {
+  // Resolve relative envPath(s) against the config file directory
+  if (commandLineOptions?.envPath && basePath) {
+    const envPaths = Array.isArray(commandLineOptions.envPath)
+      ? commandLineOptions.envPath
+      : [commandLineOptions.envPath];
+
+    const resolvedPaths = envPaths.map((p) => (path.isAbsolute(p) ? p : path.resolve(basePath, p)));
+
     commandLineOptions = {
       ...commandLineOptions,
-      envPath: path.resolve(basePath, commandLineOptions.envPath),
+      // Keep as single string if only one path, array otherwise
+      envPath: resolvedPaths.length === 1 ? resolvedPaths[0] : resolvedPaths,
     };
   }
 
