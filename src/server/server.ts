@@ -9,7 +9,12 @@ import path from 'node:path';
 
 import express from 'express';
 import { Server as SocketIOServer } from 'socket.io';
+
 import { fromError } from 'zod-validation-error';
+
+import { setSocketIO } from './socket';
+// Re-export for backward compatibility
+export { emitJobUpdate, getSocketIO } from './socket';
 import { getDefaultPort, VERSION } from '../constants';
 import { setupSignalWatcher } from '../database/signal';
 import { getDirectory } from '../esm';
@@ -35,7 +40,7 @@ import { configsRouter } from './routes/configs';
 import { evalRouter } from './routes/eval';
 import { modelAuditRouter } from './routes/modelAudit';
 import { providersRouter } from './routes/providers';
-import { redteamRouter } from './routes/redteam';
+import { redteamRouter, stopJobCleanupInterval } from './routes/redteam';
 import { tracesRouter } from './routes/traces';
 import { userRouter } from './routes/user';
 import versionRouter from './routes/version';
@@ -287,6 +292,9 @@ export async function startServer(
     },
   });
 
+  // Store the io instance globally for use in routes
+  setSocketIO(io);
+
   await runDbMigrations();
 
   const watcher = setupSignalWatcher(async () => {
@@ -304,6 +312,18 @@ export async function startServer(
 
   io.on('connection', async (socket) => {
     socket.emit('init', await Eval.latest());
+
+    // Handle job subscription
+    socket.on('job:subscribe', (jobId: string) => {
+      logger.debug(`Client ${socket.id} subscribed to job ${jobId}`);
+      socket.join(`job:${jobId}`);
+    });
+
+    // Handle job unsubscription
+    socket.on('job:unsubscribe', (jobId: string) => {
+      logger.debug(`Client ${socket.id} unsubscribed from job ${jobId}`);
+      socket.leave(`job:${jobId}`);
+    });
   });
 
   // Return a Promise that only resolves when the server shuts down
@@ -333,6 +353,9 @@ export async function startServer(
 
       // Close the file watcher first to stop monitoring
       watcher.close();
+
+      // Stop the redteam job cleanup interval to prevent memory leaks
+      stopJobCleanupInterval();
 
       // Set a timeout in case connections don't close gracefully
       const SHUTDOWN_TIMEOUT_MS = 5000;
