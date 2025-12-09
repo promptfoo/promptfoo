@@ -178,6 +178,7 @@ interface EvalOutputPromptDialogProps {
   prompt: string;
   provider?: string;
   output?: string;
+  reasoning?: string;
   gradingResults?: GradingResult[];
   metadata?: Record<string, any>;
   evaluationId?: string;
@@ -199,6 +200,7 @@ export default function EvalOutputPromptDialog({
   prompt,
   provider,
   output,
+  reasoning,
   gradingResults,
   metadata,
   evaluationId,
@@ -364,7 +366,7 @@ export default function EvalOutputPromptDialog({
   const citationsData = metadata?.citations;
 
   const hasOutputContent = Boolean(
-    output || replayOutput || metadata?.redteamFinalPrompt || citationsData,
+    output || replayOutput || metadata?.redteamFinalPrompt || citationsData || reasoning,
   );
 
   const redteamHistoryMessages = (metadata?.redteamHistory || metadata?.redteamTreeHistory || [])
@@ -513,6 +515,7 @@ export default function EvalOutputPromptDialog({
                   output={output}
                   replayOutput={replayOutput}
                   redteamFinalPrompt={metadata?.redteamFinalPrompt}
+                  reasoning={reasoning}
                   copiedFields={copiedFields}
                   hoveredElement={hoveredElement}
                   onCopy={copyFieldToClipboard}

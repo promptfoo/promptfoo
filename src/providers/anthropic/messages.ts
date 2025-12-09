@@ -12,6 +12,7 @@ import { AnthropicGenericProvider } from './generic';
 import {
   ANTHROPIC_MODELS,
   calculateAnthropicCost,
+  extractReasoningFromMessage,
   getTokenUsage,
   outputFromMessage,
   parseMessages,
@@ -185,6 +186,11 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
           const parsedCachedResponse = JSON.parse(cachedResponse) as Anthropic.Messages.Message;
           const finishReason = normalizeFinishReason(parsedCachedResponse.stop_reason);
           let output = outputFromMessage(parsedCachedResponse, config.showThinking ?? true);
+          // Only extract reasoning if showThinking is not explicitly false
+          const reasoning =
+            config.showThinking !== false
+              ? extractReasoningFromMessage(parsedCachedResponse)
+              : undefined;
 
           // Handle structured JSON output parsing
           if (processedOutputFormat?.type === 'json_schema' && typeof output === 'string') {
@@ -205,6 +211,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
               parsedCachedResponse.usage?.input_tokens,
               parsedCachedResponse.usage?.output_tokens,
             ),
+            ...(reasoning && { reasoning }),
           };
         } catch {
           // Could be an old cache item, which was just the text content from TextBlock.
@@ -237,6 +244,9 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
 
         const finishReason = normalizeFinishReason(finalMessage.stop_reason);
         let output = outputFromMessage(finalMessage, config.showThinking ?? true);
+        // Only extract reasoning if showThinking is not explicitly false
+        const reasoning =
+          config.showThinking !== false ? extractReasoningFromMessage(finalMessage) : undefined;
 
         // Handle structured JSON output parsing
         if (processedOutputFormat?.type === 'json_schema' && typeof output === 'string') {
@@ -257,6 +267,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
             finalMessage.usage?.input_tokens,
             finalMessage.usage?.output_tokens,
           ),
+          ...(reasoning && { reasoning }),
         };
       } else {
         // Handle non-streaming request
@@ -275,6 +286,9 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
 
         const finishReason = normalizeFinishReason(response.stop_reason);
         let output = outputFromMessage(response, config.showThinking ?? true);
+        // Only extract reasoning if showThinking is not explicitly false
+        const reasoning =
+          config.showThinking !== false ? extractReasoningFromMessage(response) : undefined;
 
         // Handle structured JSON output parsing
         if (processedOutputFormat?.type === 'json_schema' && typeof output === 'string') {
@@ -295,6 +309,7 @@ export class AnthropicMessagesProvider extends AnthropicGenericProvider {
             response.usage?.input_tokens,
             response.usage?.output_tokens,
           ),
+          ...(reasoning && { reasoning }),
         };
       }
     } catch (err) {

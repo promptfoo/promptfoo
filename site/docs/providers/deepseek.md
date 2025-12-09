@@ -90,24 +90,18 @@ tests:
 
 ### Controlling Reasoning Output
 
-The DeepSeek-R1 model (deepseek-reasoner) includes detailed reasoning steps in its output. You can control whether this reasoning content is shown using the `showThinking` parameter:
+The DeepSeek-R1 model (deepseek-reasoner) includes detailed reasoning steps in its output. You can control whether this reasoning content is included using the `showThinking` parameter:
 
 ```yaml
 providers:
   - id: deepseek:deepseek-reasoner
     config:
-      showThinking: false # Hide reasoning content from output
+      showThinking: false # Hide reasoning content from response
 ```
 
-When `showThinking` is set to `true` (default), the output includes both reasoning and the final answer in a standardized format:
+When `showThinking` is set to `true` (default), reasoning content is returned in the response's `reasoning` field and displayed in the UI's Reasoning panel separately from the main output.
 
-```
-Thinking: <reasoning content>
-
-<final answer>
-```
-
-When set to `false`, only the final answer is included in the output. This is useful when you want better reasoning quality but don't want to expose the reasoning process to end users or in your assertions.
+When set to `false`, reasoning content is not included in the response. This is useful when you want better reasoning quality but don't want to expose the reasoning process to end users or in your assertions.
 
 See our [complete example](https://github.com/promptfoo/promptfoo/tree/main/examples/deepseek-r1-vs-openai-o1) that benchmarks it against OpenAI's o1 model on the MMLU reasoning tasks.
 

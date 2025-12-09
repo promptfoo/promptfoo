@@ -92,9 +92,17 @@ describe('OpenRouter', () => {
 
         const result = await provider.callApi('Analyze text and provide summary with XML tags');
 
-        // Should include both thinking and content when showThinking is true (default)
-        const expectedOutput = `Thinking: I need to analyze the given text and provide a summary in the requested format. The text states that "The quick brown fox jumps over the lazy dog" is a pangram that contains all letters of the alphabet. Let me format this according to the XML structure requested.\n\n<transcript>The sentence is a pangram containing all alphabet letters.</transcript>\n<confidence>green</confidence>`;
-        expect(result.output).toBe(expectedOutput);
+        // Reasoning goes to separate field, NOT prepended to output (no double-write)
+        expect(result.output).toBe(
+          '<transcript>The sentence is a pangram containing all alphabet letters.</transcript>\n<confidence>green</confidence>',
+        );
+        expect(result.reasoning).toEqual([
+          {
+            type: 'reasoning',
+            content:
+              'I need to analyze the given text and provide a summary in the requested format. The text states that "The quick brown fox jumps over the lazy dog" is a pangram that contains all letters of the alphabet. Let me format this according to the XML structure requested.',
+          },
+        ]);
         expect(result.tokenUsage).toEqual({ total: 50, prompt: 20, completion: 30 });
       });
 
@@ -157,8 +165,11 @@ describe('OpenRouter', () => {
 
         const result = await provider.callApi('Test prompt');
 
-        // Should show reasoning when content is null
-        expect(result.output).toBe('This is the thinking process for the response.');
+        // Output is empty when no content, reasoning goes to separate field only (no double-write)
+        expect(result.output).toBe('');
+        expect(result.reasoning).toEqual([
+          { type: 'reasoning', content: 'This is the thinking process for the response.' },
+        ]);
         expect(result.tokenUsage).toEqual({ total: 50, prompt: 20, completion: 30 });
       });
 
@@ -186,10 +197,11 @@ describe('OpenRouter', () => {
 
         const result = await nonGeminiProvider.callApi('Test prompt');
 
-        // All models now handle reasoning field when present
-        const expectedOutput =
-          'Thinking: Thinking about the best way to respond to this query\n\nRegular response with reasoning';
-        expect(result.output).toBe(expectedOutput);
+        // Reasoning goes to separate field, NOT prepended to output (no double-write)
+        expect(result.output).toBe('Regular response with reasoning');
+        expect(result.reasoning).toEqual([
+          { type: 'reasoning', content: 'Thinking about the best way to respond to this query' },
+        ]);
         expect(result.tokenUsage).toEqual({ total: 30, prompt: 10, completion: 20 });
       });
 

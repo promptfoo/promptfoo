@@ -111,8 +111,15 @@ describe('ResponsesProcessor', () => {
 
       const result = await processor.processResponseOutput(mockData, {}, false);
 
-      expect(result.output).toContain('Reasoning: Step 1: Analyze the problem');
-      expect(result.output).toContain('Step 2: Find the solution');
+      // Reasoning should be stored separately, not in output
+      expect(result.reasoning).toEqual([
+        {
+          type: 'reasoning',
+          content: 'Step 1: Analyze the problem\nStep 2: Find the solution',
+        },
+      ]);
+      // Output should be empty since there's no message content
+      expect(result.output).toBe('');
     });
 
     it('should process web search calls', async () => {
@@ -235,7 +242,14 @@ describe('ResponsesProcessor', () => {
 
       const result = await processor.processResponseOutput(mockData, {}, false);
 
-      expect(result.output).toContain('Reasoning: Let me think about this');
+      // Reasoning should be stored separately
+      expect(result.reasoning).toEqual([
+        {
+          type: 'reasoning',
+          content: 'Let me think about this...',
+        },
+      ]);
+      // Output should contain only the non-reasoning content
       expect(result.output).toContain('Function result');
       expect(result.output).toContain('Here is the result');
     });

@@ -600,6 +600,7 @@ ProviderResponse is an object that represents the response from a provider. It i
 interface ProviderResponse {
   error?: string;
   output?: string | object;
+  reasoning?: ReasoningContent[]; // reasoning/thinking content from models with extended reasoning
   metadata?: object;
   tokenUsage?: Partial<{
     total: number;
@@ -610,10 +611,28 @@ interface ProviderResponse {
   cached?: boolean;
   cost?: number; // required for cost assertion (see /docs/configuration/expected-outputs/deterministic#cost)
   logProbs?: number[]; // required for perplexity assertion (see /docs/configuration/expected-outputs/deterministic#perplexity)
+  latencyMs?: number; // response latency in milliseconds
   isRefusal?: boolean; // the provider has explicitly refused to generate a response (see /docs/configuration/expected-outputs/deterministic#is-refusal)
   guardrails?: GuardrailResponse;
 }
 ```
+
+### ReasoningContent
+
+ReasoningContent represents reasoning/thinking content from models that support extended reasoning (e.g., Claude with extended thinking, OpenAI o1, DeepSeek-R1). The content is stored separately from the main output and displayed in the UI's Reasoning panel.
+
+```typescript
+type ReasoningContent =
+  | { type: 'thinking'; thinking: string; signature?: string }
+  | { type: 'redacted_thinking'; data: string }
+  | { type: 'reasoning'; content: string }
+  | { type: 'thought'; thinking: string };
+```
+
+- `thinking` - Claude extended thinking blocks with cryptographic signature
+- `redacted_thinking` - Encrypted thinking content flagged by safety systems
+- `reasoning` - Generic reasoning content (OpenRouter, Gemini)
+- `thought` - OpenAI o1 reasoning content
 
 ### ProviderEmbeddingResponse
 

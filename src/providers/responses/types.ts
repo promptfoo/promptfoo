@@ -1,3 +1,4 @@
+import type { ReasoningContent } from '../../types/providers';
 import type { FunctionCallbackHandler } from '../functionCallbackUtils';
 
 export interface ProcessorConfig {
@@ -23,4 +24,5 @@ export interface ProcessedOutput {
   refusal: string;
   isRefusal: boolean;
   annotations?: any[];
+  reasoning?: ReasoningContent[];
 }

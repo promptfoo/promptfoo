@@ -381,7 +381,7 @@ Example response with thinking enabled:
 
 #### Controlling Thinking Output
 
-By default, thinking content is included in the response output. You can control this behavior using the `showThinking` parameter:
+By default, thinking content is included in the response's `reasoning` field and displayed in the UI's Reasoning panel separately from the main output. You can control this behavior using the `showThinking` parameter:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
@@ -390,10 +390,10 @@ providers:
       thinking:
         type: 'enabled'
         budget_tokens: 16000
-      showThinking: false # Exclude thinking content from the output
+      showThinking: false # Exclude thinking content from the response
 ```
 
-When `showThinking` is set to `false`, the thinking content will be excluded from the output, and only the final response will be returned. This is useful when you want to use thinking for better reasoning but don't want to expose the thinking process to end users.
+When `showThinking` is set to `false`, the thinking content will not be included in the response. This is useful when you want to use thinking for better reasoning but don't want to expose the thinking process to end users.
 
 #### Redacted Thinking
 
