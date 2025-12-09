@@ -4,6 +4,31 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.120.2](https://github.com/promptfoo/promptfoo/compare/0.120.1...0.120.2) (2025-12-09)
+
+### Features
+
+- **assertions:** tool calling f1 score ([#6548](https://github.com/promptfoo/promptfoo/issues/6548)) ([1327195](https://github.com/promptfoo/promptfoo/commit/13271958b5a48b7d26586daf5f06d98bcdf4d063))
+- **providers:** add Amazon Nova 2 model support with reasoning capabilities ([#6531](https://github.com/promptfoo/promptfoo/issues/6531)) ([3a99c2b](https://github.com/promptfoo/promptfoo/commit/3a99c2b54598274d42f0f404694a0526aa57cec0))
+- **providers:** add Llama 3.2 Vision support for Bedrock InvokeModel API ([#6555](https://github.com/promptfoo/promptfoo/issues/6555)) ([9b78f61](https://github.com/promptfoo/promptfoo/commit/9b78f61653ab7a1f4435299710e505c60c1dd474))
+- **redteam:** add job persistence for browser-based evaluations ([#6529](https://github.com/promptfoo/promptfoo/issues/6529)) ([35f2e9f](https://github.com/promptfoo/promptfoo/commit/35f2e9f1a5b0c57c934c8f94d2ee5cdad27f844c))
+- **redteam:** Adding authentication options for HTTP provider ([#6515](https://github.com/promptfoo/promptfoo/issues/6515)) ([df90497](https://github.com/promptfoo/promptfoo/commit/df90497fbfc688cef89a29b85d2dcd38755835b7))
+- **tracing:** add protobuf support for OTLP trace ingestion ([#6540](https://github.com/promptfoo/promptfoo/issues/6540)) ([d83837e](https://github.com/promptfoo/promptfoo/commit/d83837efb0e2be44c3e84378206be435f003d6c1))
+
+### Bug Fixes
+
+- **assertions:** filter preamble text in context-recall parser ([#6566](https://github.com/promptfoo/promptfoo/issues/6566)) ([01e5bf0](https://github.com/promptfoo/promptfoo/commit/01e5bf021728a0e80daf5effdd97d539639e5775))
+- **assertions:** improve is-sql error messages for whitelist violations ([#6565](https://github.com/promptfoo/promptfoo/issues/6565)) ([43bd7d6](https://github.com/promptfoo/promptfoo/commit/43bd7d6d7a0fa8dd546b365b77f96dc66e811bd8))
+- **ci:** rename GitHub releases to remove v prefix ([#6574](https://github.com/promptfoo/promptfoo/issues/6574)) ([16a31eb](https://github.com/promptfoo/promptfoo/commit/16a31ebb639251db73053df938fd64baad4825cd))
+- **cli:** show CLI UI during model scan by using temp file for JSON output ([#6524](https://github.com/promptfoo/promptfoo/issues/6524)) ([f50456b](https://github.com/promptfoo/promptfoo/commit/f50456b6d2cfef2c8f1989d26f6814c9633575a4))
+- fix parsing empty contents for gemini providers ([#6580](https://github.com/promptfoo/promptfoo/issues/6580)) ([ddff9b9](https://github.com/promptfoo/promptfoo/commit/ddff9b9b49c9abebddae9127800a06d8507dd99d))
+- making guardrails fall back to false when undefined to simplify configuring successful responses ([#6582](https://github.com/promptfoo/promptfoo/issues/6582)) ([ee698e4](https://github.com/promptfoo/promptfoo/commit/ee698e41003992af0623a6fa4f07f1688ccaf80a))
+- **redteam:** fix prompt-injection strategy data.json loading in ESM build ([#6583](https://github.com/promptfoo/promptfoo/issues/6583)) ([ae373dc](https://github.com/promptfoo/promptfoo/commit/ae373dcf1c8e0f0b7e4a4978d339df0ab9b8f263))
+- updating guardrail detection for vertex provider ([#6581](https://github.com/promptfoo/promptfoo/issues/6581)) ([3c10f64](https://github.com/promptfoo/promptfoo/commit/3c10f648bf709bf62d934f7090da9c8ea969948d))
+- **webui:** add missing vitest imports to test files ([#6577](https://github.com/promptfoo/promptfoo/issues/6577)) ([8c2afa0](https://github.com/promptfoo/promptfoo/commit/8c2afa023db80a4926abb2ab80a8c03de108ebfe))
+- **webui:** display provider errors in eval results fail reason carousel ([#6552](https://github.com/promptfoo/promptfoo/issues/6552)) ([b43f225](https://github.com/promptfoo/promptfoo/commit/b43f225ad07eefc9af7e3cae17bcd362dba4383f))
+- **webui:** handle object outputs in eval prompt dialog ([#6556](https://github.com/promptfoo/promptfoo/issues/6556)) ([c2a3441](https://github.com/promptfoo/promptfoo/commit/c2a34418eb640c6c46ff2bc1cf5ff5ad954b0199))
+
 ## [0.120.1](https://github.com/promptfoo/promptfoo/compare/0.120.0...0.120.1) (2025-12-08)
 
 ### Features
