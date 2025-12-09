@@ -504,6 +504,7 @@ export class VertexChatProvider extends VertexGenericProvider {
             'RECITATION',
             'BLOCKLIST',
             'SPII',
+            'IMAGE_SAFETY',
           ];
           if (candidate.finishReason && safetyFinishReasons.includes(candidate.finishReason)) {
             const finishReason = `Content was blocked due to safety settings with finish reason: ${candidate.finishReason}.`;
@@ -529,12 +530,20 @@ export class VertexChatProvider extends VertexGenericProvider {
             if (candidate.content?.parts) {
               output = mergeParts(output, formatCandidateContents(candidate));
             }
-            logger.error(
-              `Gemini API error due to finish reason: ${candidate.finishReason}. ${datum.usageMetadata?.candidatesTokenCount || 0} total tokens used. ${JSON.stringify(data)}`,
-            );
+            const outputTokens = datum.usageMetadata?.candidatesTokenCount || 0;
+            const outputStr = typeof output === 'string' ? output : JSON.stringify(output);
+            const truncatedOutput =
+              outputStr && outputStr.length > 500
+                ? `${outputStr.slice(0, 500)}... (truncated)`
+                : outputStr || '';
+            logger.error(`Gemini API: MAX_TOKENS reached`, {
+              finishReason: candidate.finishReason,
+              outputTokens,
+              totalTokens: datum.usageMetadata?.totalTokenCount || 0,
+            });
             return {
               // Prompt and thinking tokens are not included in the token limit
-              error: `Gemini API error due to reaching maximum token limit. ${datum.usageMetadata?.candidatesTokenCount || 0} tokens used. Output generated: ${output || ''}`,
+              error: `Gemini API error due to reaching maximum token limit. ${outputTokens} output tokens used. Output generated: ${truncatedOutput}`,
             };
           } else if (candidate.finishReason && candidate.finishReason !== 'STOP') {
             logger.error(`Gemini API error due to finish reason: ${candidate.finishReason}.`);

@@ -1388,6 +1388,154 @@ describe('VertexChatProvider.callGeminiApi', () => {
         reason: 'Content was blocked due to safety settings with finish reason: SAFETY.',
       });
     });
+
+    it.each([
+      'PROHIBITED_CONTENT',
+      'RECITATION',
+      'BLOCKLIST',
+      'SPII',
+      'IMAGE_SAFETY',
+    ])('should handle %s finishReason with guardrails response', async (finishReason) => {
+      const provider = new VertexChatProvider('gemini-pro', {
+        config: {},
+      });
+
+      const mockResponse = {
+        data: [
+          {
+            candidates: [
+              {
+                content: { parts: [{ text: 'partial response' }] },
+                finishReason,
+              },
+            ],
+            usageMetadata: {
+              totalTokenCount: 10,
+              promptTokenCount: 5,
+              candidatesTokenCount: 5,
+            },
+          },
+        ],
+      };
+
+      const mockRequest = vi.fn().mockResolvedValue(mockResponse);
+
+      vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+        client: {
+          request: mockRequest,
+        } as unknown as JSONClient,
+        projectId: 'test-project-id',
+      });
+
+      vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
+        return creds;
+      });
+      vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
+
+      const response = await provider.callGeminiApi('test prompt');
+
+      expect(response.error).toBe(
+        `Content was blocked due to safety settings with finish reason: ${finishReason}.`,
+      );
+      expect(response.guardrails).toEqual({
+        flagged: true,
+        flaggedInput: false,
+        flaggedOutput: true,
+        reason: `Content was blocked due to safety settings with finish reason: ${finishReason}.`,
+      });
+    });
+
+    it('should handle MAX_TOKENS finishReason with truncated output', async () => {
+      const provider = new VertexChatProvider('gemini-pro', {
+        config: {},
+      });
+
+      const longOutput = 'A'.repeat(600);
+      const mockResponse = {
+        data: [
+          {
+            candidates: [
+              {
+                content: { parts: [{ text: longOutput }] },
+                finishReason: 'MAX_TOKENS',
+              },
+            ],
+            usageMetadata: {
+              totalTokenCount: 1100,
+              promptTokenCount: 100,
+              candidatesTokenCount: 1000,
+            },
+          },
+        ],
+      };
+
+      const mockRequest = vi.fn().mockResolvedValue(mockResponse);
+
+      vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+        client: {
+          request: mockRequest,
+        } as unknown as JSONClient,
+        projectId: 'test-project-id',
+      });
+
+      vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
+        return creds;
+      });
+      vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
+
+      const response = await provider.callGeminiApi('test prompt');
+
+      expect(response.error).toContain('Gemini API error due to reaching maximum token limit');
+      expect(response.error).toContain('1000 output tokens used');
+      expect(response.error).toContain('... (truncated)');
+      expect(response.guardrails).toBeUndefined();
+    });
+
+    it('should handle MAX_TOKENS finishReason with short output (no truncation)', async () => {
+      const provider = new VertexChatProvider('gemini-pro', {
+        config: {},
+      });
+
+      const shortOutput = 'Short response';
+      const mockResponse = {
+        data: [
+          {
+            candidates: [
+              {
+                content: { parts: [{ text: shortOutput }] },
+                finishReason: 'MAX_TOKENS',
+              },
+            ],
+            usageMetadata: {
+              totalTokenCount: 110,
+              promptTokenCount: 100,
+              candidatesTokenCount: 10,
+            },
+          },
+        ],
+      };
+
+      const mockRequest = vi.fn().mockResolvedValue(mockResponse);
+
+      vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+        client: {
+          request: mockRequest,
+        } as unknown as JSONClient,
+        projectId: 'test-project-id',
+      });
+
+      vi.spyOn(vertexUtil, 'loadCredentials').mockImplementation(function (creds) {
+        return creds;
+      });
+      vi.spyOn(vertexUtil, 'resolveProjectId').mockResolvedValue('test-project-id');
+
+      const response = await provider.callGeminiApi('test prompt');
+
+      expect(response.error).toBe(
+        'Gemini API error due to reaching maximum token limit. 10 output tokens used. Output generated: Short response',
+      );
+      expect(response.error).not.toContain('truncated');
+    });
   });
 });
 
