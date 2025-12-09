@@ -102,6 +102,14 @@ You have two options when writing results to a Google Sheet:
 
 This behavior helps prevent accidental data overwrites while keeping your evaluation results organized within the same Google Sheets document.
 
+### Output Format
+
+Results are written with columns for test variables followed by prompt outputs. Prompt columns include the provider in the header using the format `[provider] prompt-label`. For example, with two providers testing the same prompt:
+
+| language | input       | [openai:gpt-5] Translate | [anthropic:claude-4.5-sonnet] Translate |
+| -------- | ----------- | ------------------------ | --------------------------------------- |
+| French   | Hello world | Bonjour le monde         | Bonjour monde                           |
+
 ## Using Custom Providers for Model-Graded Metrics
 
 When using Google Sheets for test cases, you can still use custom providers for model-graded metrics
