@@ -489,6 +489,7 @@ export const BaseAssertionTypesSchema = z.enum([
   'similar:dot',
   'similar:euclidean',
   'starts-with',
+  'tool-call-f1',
   'trace-error-spans',
   'trace-span-count',
   'trace-span-duration',

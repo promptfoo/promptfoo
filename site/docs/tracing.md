@@ -133,7 +133,19 @@ tracing:
       enabled: true # Required to start the OTLP receiver
       # port: 4318   # Optional - defaults to 4318 (standard OTLP HTTP port)
       # host: '0.0.0.0'  # Optional - defaults to '0.0.0.0'
+      # acceptFormats: ['json', 'protobuf']  # Optional - defaults to both
 ```
+
+### Supported Formats
+
+Promptfoo's OTLP receiver accepts traces in both **JSON** and **protobuf** formats:
+
+| Format   | Content-Type             | Use Case                                        |
+| -------- | ------------------------ | ----------------------------------------------- |
+| JSON     | `application/json`       | JavaScript/TypeScript (default)                 |
+| Protobuf | `application/x-protobuf` | Python (default), Go, Java, and other languages |
+
+Protobuf is more efficient for serialization and produces smaller payloads. Python's OpenTelemetry SDK uses protobuf by default.
 
 ### Environment Variables
 
@@ -185,7 +197,13 @@ Key points:
 
 ### Python
 
-For complete provider implementation details, see the [Python Provider documentation](/docs/providers/python/).
+For complete provider implementation details, see the [Python Provider documentation](/docs/providers/python/). For a working example with protobuf tracing, see the [Python OpenTelemetry tracing example](https://github.com/promptfoo/promptfoo/tree/main/examples/opentelemetry-tracing-python).
+
+:::note
+
+Python's `opentelemetry-exporter-otlp-proto-http` package uses **protobuf format** by default (`application/x-protobuf`), which is more efficient than JSON.
+
+:::
 
 ```python
 from opentelemetry import trace
@@ -194,7 +212,7 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 
-# Setup
+# Setup - uses protobuf format by default
 provider = TracerProvider()
 exporter = OTLPSpanExporter(endpoint="http://localhost:4318/v1/traces")
 provider.add_span_processor(SimpleSpanProcessor(exporter))
@@ -543,7 +561,8 @@ For more details on red team testing with tracing, see [How to Red Team LLM Agen
 
 ## Next Steps
 
-- Explore the [OpenTelemetry tracing example](https://github.com/promptfoo/promptfoo/tree/main/examples/opentelemetry-tracing)
+- Explore the [OpenTelemetry tracing example (JavaScript)](https://github.com/promptfoo/promptfoo/tree/main/examples/opentelemetry-tracing)
+- Explore the [OpenTelemetry tracing example (Python)](https://github.com/promptfoo/promptfoo/tree/main/examples/opentelemetry-tracing-python) - uses protobuf format
 - Try the [red team tracing example](https://github.com/promptfoo/promptfoo/tree/main/examples/redteam-tracing-example)
 - Set up forwarding to your observability platform
 - Add custom instrumentation for your use case

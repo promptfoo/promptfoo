@@ -863,6 +863,121 @@ describe('matchesLlmRubric', () => {
     });
   });
 
+  it('should load rubric prompt from JSON file with Nunjucks templates', async () => {
+    // This test verifies the fix for issue #2961:
+    // JSON files with Nunjucks templates should be loaded as raw text first,
+    // allowing template rendering before JSON parsing.
+    const mockJsonFilePath = path.join('path', 'to', 'rubric.json');
+    const mockJsonContent = `[
+  {%- set system_prompt -%}
+  Evaluate the response
+  {%- endset -%}
+  { "role": "system", "content": {{ system_prompt | dump }} },
+  { "role": "user", "content": "Output: {{ output }}" }
+]`;
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue(mockJsonContent);
+
+    const rubric = 'Test rubric';
+    const llmOutput = 'Test output';
+    const grading = {
+      rubricPrompt: `file://${mockJsonFilePath}`,
+      provider: {
+        id: () => 'test-provider',
+        callApi: vi.fn().mockResolvedValue({
+          output: JSON.stringify({ pass: true, score: 1, reason: 'Test passed' }),
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        }),
+      },
+    };
+
+    const result = await matchesLlmRubric(rubric, llmOutput, grading);
+
+    expect(mockExistsSync).toHaveBeenCalledWith(
+      expect.stringContaining(path.join('path', 'to', 'rubric.json')),
+    );
+    expect(mockReadFileSync).toHaveBeenCalledWith(
+      expect.stringContaining(path.join('path', 'to', 'rubric.json')),
+      'utf8',
+    );
+    // Verify the template was rendered - the Nunjucks set block should be processed
+    expect(grading.provider.callApi).toHaveBeenCalledWith(
+      expect.stringContaining('Evaluate the response'),
+      expect.anything(),
+    );
+    expect(grading.provider.callApi).toHaveBeenCalledWith(
+      expect.stringContaining('Test output'),
+      expect.anything(),
+    );
+    expect(result).toEqual({
+      pass: true,
+      score: 1,
+      reason: 'Test passed',
+      tokensUsed: {
+        total: 10,
+        prompt: 5,
+        completion: 5,
+        cached: 0,
+        completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
+        numRequests: 0,
+      },
+    });
+  });
+
+  it('should load rubric prompt from YAML file with Nunjucks templates', async () => {
+    const mockYamlFilePath = path.join('path', 'to', 'rubric.yaml');
+    const mockYamlContent = `{%- set system_prompt -%}
+Evaluate the response
+{%- endset -%}
+- role: system
+  content: {{ system_prompt }}
+- role: user
+  content: "Output: {{ output }}"`;
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue(mockYamlContent);
+
+    const rubric = 'Test rubric';
+    const llmOutput = 'Test output';
+    const grading = {
+      rubricPrompt: `file://${mockYamlFilePath}`,
+      provider: {
+        id: () => 'test-provider',
+        callApi: vi.fn().mockResolvedValue({
+          output: JSON.stringify({ pass: true, score: 1, reason: 'Test passed' }),
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+        }),
+      },
+    };
+
+    const result = await matchesLlmRubric(rubric, llmOutput, grading);
+
+    expect(mockExistsSync).toHaveBeenCalledWith(
+      expect.stringContaining(path.join('path', 'to', 'rubric.yaml')),
+    );
+    expect(mockReadFileSync).toHaveBeenCalledWith(
+      expect.stringContaining(path.join('path', 'to', 'rubric.yaml')),
+      'utf8',
+    );
+    // Verify the template was rendered
+    expect(grading.provider.callApi).toHaveBeenCalledWith(
+      expect.stringContaining('Evaluate the response'),
+      expect.anything(),
+    );
+    expect(result).toEqual({
+      pass: true,
+      score: 1,
+      reason: 'Test passed',
+      tokensUsed: {
+        total: 10,
+        prompt: 5,
+        completion: 5,
+        cached: 0,
+        completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
+        numRequests: 0,
+      },
+    });
+  });
+
   it('should load rubric prompt from js file when specified', async () => {
     const filePath = path.join('path', 'to', 'external', 'file.js');
     const mockImportModule = vi.mocked(importModule);

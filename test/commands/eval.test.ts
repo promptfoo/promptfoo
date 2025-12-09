@@ -331,7 +331,7 @@ describe('evalCommand', () => {
 
     await doEval(cmdObj, defaultConfig, defaultConfigPath, {});
 
-    expect(loadApiProvider).toHaveBeenCalledWith('test-grader');
+    expect(loadApiProvider).toHaveBeenCalledWith('test-grader', expect.objectContaining({}));
   });
 
   it('should handle repeat option', async () => {

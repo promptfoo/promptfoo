@@ -145,7 +145,7 @@ function CreateDropdown({
     scheduleClose();
   };
 
-  const isActive = ['/setup', '/redteam/setup'].some((route) =>
+  const isActive = ['/setup', '/redteam/setup', '/model-audit/setup'].some((route) =>
     location.pathname.startsWith(route),
   );
 
@@ -159,6 +159,11 @@ function CreateDropdown({
       href: '/redteam/setup',
       label: 'Red Team',
       description: 'Set up security testing scenarios',
+    },
+    {
+      href: '/model-audit/setup',
+      label: 'Model Audit',
+      description: 'Configure and run a model security scan',
     },
   ];
 

@@ -17,6 +17,7 @@ Note: Using pipe (|) delimiter to avoid conflicts with Windows drive letters (C:
 
 import asyncio
 import importlib.util
+import inspect
 import json
 import os
 import sys
@@ -105,7 +106,7 @@ def get_callable(module, method_name):
 
 def call_method(method_callable, args):
     """Call the method, handling both sync and async functions."""
-    if asyncio.iscoroutinefunction(method_callable):
+    if inspect.iscoroutinefunction(method_callable):
         return asyncio.run(method_callable(*args))
     else:
         return method_callable(*args)

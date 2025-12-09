@@ -18,6 +18,7 @@
     "moduleDetection": "force",
     "noEmit": true,
     "jsx": "react-jsx",
+    "types": ["vitest/globals", "@testing-library/jest-dom", "vite/client", "node"],
 
     /* Linting */
     "strict": true,

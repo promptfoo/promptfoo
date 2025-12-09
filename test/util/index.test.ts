@@ -454,6 +454,92 @@ describe('util', () => {
 
       expect(googleSheets.writeCsvToGoogleSheet).toHaveBeenCalledTimes(1);
     });
+
+    it('writes Google Sheets output with provider in column headers', async () => {
+      const outputPath = 'https://docs.google.com/spreadsheets/d/1234567890/edit#gid=0';
+
+      const eval_ = new Eval({});
+      await eval_.addPrompts([{ raw: 'prompt1', label: 'First Prompt', provider: 'openai:gpt-4' }]);
+      eval_.setVars(['input']);
+
+      const result: EvaluateResult = {
+        success: true,
+        failureReason: ResultFailureReason.NONE,
+        score: 1.0,
+        namedScores: {},
+        latencyMs: 100,
+        provider: { id: 'openai:gpt-4' },
+        prompt: { raw: 'prompt1', label: 'First Prompt' },
+        response: { output: 'Test output' },
+        vars: { input: 'test input' },
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: { vars: { input: 'test input' } },
+        promptId: 'prompt1',
+      };
+      await eval_.addResult(result);
+
+      await writeOutput(outputPath, eval_, null);
+
+      expect(googleSheets.writeCsvToGoogleSheet).toHaveBeenCalledTimes(1);
+      const rows = vi.mocked(googleSheets.writeCsvToGoogleSheet).mock.calls[0][0];
+      expect(rows.length).toBeGreaterThan(0);
+
+      const columnKeys = Object.keys(rows[0]);
+      expect(columnKeys).toContain('[openai:gpt-4] First Prompt');
+    });
+
+    it('writes Google Sheets output with multiple providers in column headers', async () => {
+      const outputPath = 'https://docs.google.com/spreadsheets/d/1234567890/edit#gid=0';
+
+      const eval_ = new Eval({});
+      await eval_.addPrompts([
+        { raw: 'prompt1', label: 'Test Prompt', provider: 'openai:gpt-4' },
+        { raw: 'prompt1', label: 'Test Prompt', provider: 'anthropic:claude-3' },
+      ]);
+      eval_.setVars(['input']);
+
+      await eval_.addResult({
+        success: true,
+        failureReason: ResultFailureReason.NONE,
+        score: 1.0,
+        namedScores: {},
+        latencyMs: 100,
+        provider: { id: 'openai:gpt-4' },
+        prompt: { raw: 'prompt1', label: 'Test Prompt' },
+        response: { output: 'GPT-4 output' },
+        vars: { input: 'test input' },
+        promptIdx: 0,
+        testIdx: 0,
+        testCase: { vars: { input: 'test input' } },
+        promptId: 'prompt1',
+      });
+      await eval_.addResult({
+        success: true,
+        failureReason: ResultFailureReason.NONE,
+        score: 0.8,
+        namedScores: {},
+        latencyMs: 150,
+        provider: { id: 'anthropic:claude-3' },
+        prompt: { raw: 'prompt1', label: 'Test Prompt' },
+        response: { output: 'Claude output' },
+        vars: { input: 'test input' },
+        promptIdx: 1,
+        testIdx: 0,
+        testCase: { vars: { input: 'test input' } },
+        promptId: 'prompt1',
+      });
+
+      await writeOutput(outputPath, eval_, null);
+
+      expect(googleSheets.writeCsvToGoogleSheet).toHaveBeenCalledTimes(1);
+      const rows = vi.mocked(googleSheets.writeCsvToGoogleSheet).mock.calls[0][0];
+      expect(rows.length).toBeGreaterThan(0);
+
+      const columnKeys = Object.keys(rows[0]);
+      expect(columnKeys).toContain('[openai:gpt-4] Test Prompt');
+      expect(columnKeys).toContain('[anthropic:claude-3] Test Prompt');
+    });
   });
 
   describe('readOutput', () => {

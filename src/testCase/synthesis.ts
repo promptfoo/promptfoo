@@ -1,4 +1,5 @@
 import dedent from 'dedent';
+import cliState from '../cliState';
 import logger from '../logger';
 import { loadApiProvider } from '../providers/index';
 import { getDefaultProviders } from '../providers/defaults';
@@ -128,7 +129,7 @@ export async function synthesize({
   if (typeof provider === 'undefined') {
     providerModel = (await getDefaultProviders()).synthesizeProvider;
   } else {
-    providerModel = await loadApiProvider(provider);
+    providerModel = await loadApiProvider(provider, { basePath: cliState.basePath });
   }
 
   const personasPrompt = generatePersonasPrompt(prompts, numPersonas);
