@@ -102,7 +102,7 @@ Anthropic's safety work emphasizes multi-turn and agentic risks (prompt injectio
 
 Open weights are powerful for privacy and cost. The tradeoff: **safety is optional and easy to remove**.
 
-The [BadLlama paper](https://arxiv.org/abs/2407.01376) removed Llama 3 8B safety tuning in ~1 minute on a single A100 (<$0.50). A <100MB adapter can strip guardrails from any copy. A free Colab path works in ~30 minutes.
+The [BadLlama paper](https://arxiv.org/abs/2407.01376) removed Llama 3 8B safety tuning in ~1 minute on a single A100 (under $0.50). An adapter under 100MB can strip guardrails from any copy. A free Colab path works in ~30 minutes.
 
 If you deploy open models, treat model-level safety as a feature you implement, monitor, and continuously verify.
 
