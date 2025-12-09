@@ -227,7 +227,7 @@
     "sharp": "^0.34.5"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.71.0",
+    "@anthropic-ai/sdk": "^0.71.1",
     "@apidevtools/json-schema-ref-parser": "^15.0.0",
     "@googleapis/sheets": "^12.0.0",
     "@inquirer/checkbox": "^5.0.1",
