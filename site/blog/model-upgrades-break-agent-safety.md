@@ -15,16 +15,6 @@ In practice, upgrades often change refusal behavior, instruction-following, and 
 
 <!-- truncate -->
 
-:::note Who this is for
-This guide is for engineers building **agentic applications**: tools, RAG, long-running workflows, and multi-turn conversations.
-
-If you're a **coding-assistant user** (Cursor, Claude Code), your best defenses are least-privilege permissions, isolated sandboxes, and not pasting secrets into chats.
-:::
-
-:::note Disclosure
-I work at Promptfoo. We build evals and red teaming tools for LLM apps. Everything below is implementable with or without Promptfoo.
-:::
-
 ## A real example
 
 We tested a customer's agent after upgrading from GPT-4o to GPT-4.1. Their **prompt-injection resistance** dropped from **94% to 71%** on the same harness.
