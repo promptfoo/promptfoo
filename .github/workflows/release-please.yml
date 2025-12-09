@@ -30,7 +30,7 @@ jobs:
         run: |
           TAG_NAME="${{ steps.release.outputs.tag_name }}"
           echo "Renaming release to: $TAG_NAME"
-          gh release edit "$TAG_NAME" --title "$TAG_NAME"
+          gh release edit "$TAG_NAME" --title "$TAG_NAME" --repo ${{ github.repository }}
 
       # Format CHANGELOG.md after release-please creates/updates the PR
       - uses: actions/checkout@v4
