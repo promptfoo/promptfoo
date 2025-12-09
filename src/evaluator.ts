@@ -280,6 +280,7 @@ export async function runEval({
   provider,
   prompt, // raw prompt
   test,
+  testSuite,
   delay,
   nunjucksFilters: filters,
   evaluateOptions,
@@ -360,7 +361,13 @@ export async function runEval({
       logger.debug(`Provider type: ${activeProvider.id()}`);
 
       // Generate trace context if tracing is enabled
-      traceContext = await generateTraceContextIfNeeded(test, evaluateOptions, testIdx, promptIdx);
+      traceContext = await generateTraceContextIfNeeded(
+        test,
+        evaluateOptions,
+        testIdx,
+        promptIdx,
+        testSuite,
+      );
 
       const callApiContext: any = {
         // Always included
@@ -1073,6 +1080,7 @@ class Evaluator {
                   ...prompt,
                   raw: prependToPrompt + prompt.raw + appendToPrompt,
                 },
+                testSuite,
                 test: (() => {
                   const baseTest = {
                     ...testCase,

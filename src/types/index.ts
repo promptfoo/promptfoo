@@ -144,6 +144,7 @@ export interface RunEvalOptions {
   delay: number;
 
   test: AtomicTestCase;
+  testSuite?: TestSuite;
   nunjucksFilters?: NunjucksFilterMap;
   evaluateOptions?: EvaluateOptions;
 

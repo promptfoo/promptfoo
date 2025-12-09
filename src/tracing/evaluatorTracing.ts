@@ -66,7 +66,7 @@ export async function startOtlpReceiverIfNeeded(testSuite: TestSuite): Promise<v
       logger.debug('[EvaluatorTracing] Tracing configuration detected, starting OTLP receiver');
       const { startOTLPReceiver } = await import('./otlpReceiver');
       const port = testSuite.tracing.otlp.http.port || 4318;
-      const host = testSuite.tracing.otlp.http.host || '0.0.0.0';
+      const host = testSuite.tracing.otlp.http.host || '127.0.0.1';
       logger.debug(`[EvaluatorTracing] Starting OTLP receiver on ${host}:${port}`);
       await startOTLPReceiver(port, host);
       otlpReceiverStarted = true;
@@ -108,12 +108,21 @@ export async function stopOtlpReceiverIfNeeded(): Promise<void> {
 
 /**
  * Check if tracing is enabled for a test case
+ *
+ * Tracing is enabled if any of the following are true:
+ * 1. Test case metadata has `tracingEnabled: true`
+ * 2. TestSuite YAML config has `tracing.enabled: true`
+ * 3. Environment variable `PROMPTFOO_TRACING_ENABLED` is set to true
  */
-export function isTracingEnabled(test: TestCase, _testSuite?: TestSuite): boolean {
-  const result =
-    test.metadata?.tracingEnabled === true || getEnvBool('PROMPTFOO_TRACING_ENABLED', false);
+export function isTracingEnabled(test: TestCase, testSuite?: TestSuite): boolean {
+  const metadataEnabled = test.metadata?.tracingEnabled === true;
+  const yamlConfigEnabled = testSuite?.tracing?.enabled === true;
+  const envEnabled = getEnvBool('PROMPTFOO_TRACING_ENABLED', false);
+
+  const result = metadataEnabled || yamlConfigEnabled || envEnabled;
+
   logger.debug(
-    `[EvaluatorTracing] isTracingEnabled check: test.metadata?.tracingEnabled=${test.metadata?.tracingEnabled}, env=${getEnvBool('PROMPTFOO_TRACING_ENABLED', false)}, result=${result}`,
+    `[EvaluatorTracing] isTracingEnabled check: metadata=${metadataEnabled}, yamlConfig=${yamlConfigEnabled}, env=${envEnabled}, result=${result}`,
   );
   return result;
 }
@@ -126,12 +135,13 @@ export async function generateTraceContextIfNeeded(
   evaluateOptions: any,
   testIdx: number,
   promptIdx: number,
+  testSuite?: TestSuite,
 ): Promise<{
   traceparent?: string;
   evaluationId?: string;
   testCaseId?: string;
 } | null> {
-  const tracingEnabled = isTracingEnabled(test);
+  const tracingEnabled = isTracingEnabled(test, testSuite);
 
   if (tracingEnabled) {
     logger.debug('[EvaluatorTracing] Tracing enabled for test case');

@@ -64,6 +64,33 @@ export const PromptfooAttributes = {
 const MAX_BODY_LENGTH = 4096;
 
 /**
+ * Patterns to redact from request/response bodies for security.
+ * These patterns match common API key and secret formats.
+ */
+const SENSITIVE_PATTERNS: Array<{ pattern: RegExp; replacement: string }> = [
+  // API keys with common prefixes (allow hyphens/underscores for keys like sk-proj-...)
+  { pattern: /\b(sk-[a-zA-Z0-9_-]{20,})/g, replacement: '<REDACTED_API_KEY>' },
+  { pattern: /\b(pk-[a-zA-Z0-9_-]{20,})/g, replacement: '<REDACTED_API_KEY>' },
+  { pattern: /\b(api[_-]?key["']?\s*[:=]\s*["']?)([a-zA-Z0-9_-]{16,})/gi, replacement: '$1<REDACTED>' },
+  { pattern: /\b(secret["']?\s*[:=]\s*["']?)([a-zA-Z0-9_-]{16,})/gi, replacement: '$1<REDACTED>' },
+  { pattern: /\b(token["']?\s*[:=]\s*["']?)([a-zA-Z0-9_-]{16,})/gi, replacement: '$1<REDACTED>' },
+  { pattern: /\b(password["']?\s*[:=]\s*["']?)([^\s"',}{]+)/gi, replacement: '$1<REDACTED>' },
+  // Authorization headers
+  { pattern: /(Authorization["']?\s*[:=]\s*["']?)(Bearer\s+)?([a-zA-Z0-9_.-]{16,})/gi, replacement: '$1$2<REDACTED>' },
+  // AWS credentials
+  { pattern: /\b(AKIA[A-Z0-9]{16})/g, replacement: '<REDACTED_AWS_KEY>' },
+  { pattern: /\b([a-zA-Z0-9/+=]{40})/g, replacement: (match) => {
+    // Only redact if it looks like a base64-encoded secret (not normal text)
+    if (/^[A-Za-z0-9+/=]{40}$/.test(match) && match.includes('/')) {
+      return '<REDACTED_SECRET>';
+    }
+    return match;
+  }},
+  // Generic long alphanumeric strings that look like secrets (64+ chars)
+  { pattern: /\b[a-f0-9]{64,}\b/gi, replacement: '<REDACTED_HASH>' },
+];
+
+/**
  * Context for creating a GenAI span.
  * Contains all the information needed to properly annotate the span.
  */
@@ -96,6 +123,9 @@ export interface GenAISpanContext {
 
   // Request body (will be truncated to MAX_BODY_LENGTH)
   requestBody?: string;
+
+  /** Whether to sanitize sensitive data (API keys, secrets) from bodies. Defaults to false. */
+  sanitizeBodies?: boolean;
 }
 
 /**
@@ -182,7 +212,7 @@ export async function withGenAISpan<T>(
       // Set response attributes if extractor provided
       if (resultExtractor) {
         const result = resultExtractor(value);
-        setGenAIResponseAttributes(span, result);
+        setGenAIResponseAttributes(span, result, ctx.sanitizeBodies);
       }
 
       span.setStatus({ code: SpanStatusCode.OK });
@@ -262,22 +292,46 @@ function buildRequestAttributes(ctx: GenAISpanContext): Attributes {
     attrs[PromptfooAttributes.PROMPT_LABEL] = ctx.promptLabel;
   }
 
-  // Request body (truncated)
+  // Request body (truncated, optionally sanitized)
   if (ctx.requestBody) {
-    attrs[PromptfooAttributes.REQUEST_BODY] = truncateBody(ctx.requestBody);
+    attrs[PromptfooAttributes.REQUEST_BODY] = truncateBody(ctx.requestBody, ctx.sanitizeBodies);
   }
 
   return attrs;
 }
 
 /**
- * Truncate a body string to MAX_BODY_LENGTH, adding an indicator if truncated.
+ * Sanitize sensitive data from a body string.
+ * Redacts API keys, secrets, tokens, and other sensitive patterns.
  */
-function truncateBody(body: string): string {
-  if (body.length <= MAX_BODY_LENGTH) {
-    return body;
+function sanitizeBody(body: string): string {
+  let sanitized = body;
+  for (const { pattern, replacement } of SENSITIVE_PATTERNS) {
+    if (typeof replacement === 'function') {
+      sanitized = sanitized.replace(pattern, replacement);
+    } else {
+      sanitized = sanitized.replace(pattern, replacement);
+    }
   }
-  return body.slice(0, MAX_BODY_LENGTH - 13) + '... [truncated]';
+  return sanitized;
+}
+
+/**
+ * Truncate a body string to MAX_BODY_LENGTH.
+ * Optionally sanitizes sensitive data first if sanitize=true.
+ *
+ * @param body - The body string to process
+ * @param sanitize - Whether to sanitize sensitive data (defaults to false)
+ */
+function truncateBody(body: string, sanitize: boolean = false): string {
+  // Sanitize sensitive data if requested
+  const processed = sanitize ? sanitizeBody(body) : body;
+
+  // Then truncate if needed
+  if (processed.length <= MAX_BODY_LENGTH) {
+    return processed;
+  }
+  return processed.slice(0, MAX_BODY_LENGTH - 13) + '... [truncated]';
 }
 
 /**
@@ -285,8 +339,13 @@ function truncateBody(body: string): string {
  *
  * @param span - The span to update
  * @param result - The result data containing token usage and response metadata
+ * @param sanitize - Whether to sanitize sensitive data from response body (defaults to false)
  */
-export function setGenAIResponseAttributes(span: Span, result: GenAISpanResult): void {
+export function setGenAIResponseAttributes(
+  span: Span,
+  result: GenAISpanResult,
+  sanitize: boolean = false,
+): void {
   // Token usage
   if (result.tokenUsage) {
     const usage = result.tokenUsage;
@@ -343,7 +402,7 @@ export function setGenAIResponseAttributes(span: Span, result: GenAISpanResult):
     span.setAttribute(PromptfooAttributes.CACHE_HIT, result.cacheHit);
   }
   if (result.responseBody) {
-    span.setAttribute(PromptfooAttributes.RESPONSE_BODY, truncateBody(result.responseBody));
+    span.setAttribute(PromptfooAttributes.RESPONSE_BODY, truncateBody(result.responseBody, sanitize));
   }
 }
 

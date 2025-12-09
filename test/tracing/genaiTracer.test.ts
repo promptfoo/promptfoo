@@ -338,4 +338,94 @@ describe('genaiTracer', () => {
       expect(spanId).toBe('mock-span-id-12345678');
     });
   });
+
+  describe('body sanitization', () => {
+    const baseContext: GenAISpanContext = {
+      system: 'openai',
+      operationName: 'chat',
+      model: 'gpt-4',
+      providerId: 'openai:gpt-4',
+      sanitizeBodies: true, // Enable sanitization for these tests
+    };
+
+    it('should redact OpenAI API keys from request body', async () => {
+      const contextWithBody = {
+        ...baseContext,
+        requestBody: '{"api_key": "sk-proj-abcdefghij1234567890abcdefghij1234567890"}',
+      };
+
+      await withGenAISpan(contextWithBody, async () => 'result');
+
+      // Check the attributes passed to startActiveSpan
+      const call = mockTracer.startActiveSpan.mock.calls[0];
+      const options = call[1];
+      const requestBodyAttr = options.attributes[PromptfooAttributes.REQUEST_BODY];
+      expect(requestBodyAttr).toBeDefined();
+      expect(requestBodyAttr).toContain('<REDACTED_API_KEY>');
+      expect(requestBodyAttr).not.toContain('sk-proj-');
+    });
+
+    it('should redact Authorization headers from request body', async () => {
+      const contextWithBody = {
+        ...baseContext,
+        requestBody: '{"Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"}',
+      };
+
+      await withGenAISpan(contextWithBody, async () => 'result');
+
+      const call = mockTracer.startActiveSpan.mock.calls[0];
+      const options = call[1];
+      const requestBodyAttr = options.attributes[PromptfooAttributes.REQUEST_BODY];
+      expect(requestBodyAttr).toBeDefined();
+      expect(requestBodyAttr).toContain('<REDACTED>');
+      expect(requestBodyAttr).not.toContain('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9');
+    });
+
+    it('should redact AWS access keys from request body', async () => {
+      const contextWithBody = {
+        ...baseContext,
+        requestBody: '{"credentials": "AKIAIOSFODNN7EXAMPLE"}',
+      };
+
+      await withGenAISpan(contextWithBody, async () => 'result');
+
+      const call = mockTracer.startActiveSpan.mock.calls[0];
+      const options = call[1];
+      const requestBodyAttr = options.attributes[PromptfooAttributes.REQUEST_BODY];
+      expect(requestBodyAttr).toBeDefined();
+      expect(requestBodyAttr).toContain('<REDACTED_AWS_KEY>');
+      expect(requestBodyAttr).not.toContain('AKIAIOSFODNN7EXAMPLE');
+    });
+
+    it('should redact password fields from request body', async () => {
+      const contextWithBody = {
+        ...baseContext,
+        requestBody: '{"password": "supersecret123"}',
+      };
+
+      await withGenAISpan(contextWithBody, async () => 'result');
+
+      const call = mockTracer.startActiveSpan.mock.calls[0];
+      const options = call[1];
+      const requestBodyAttr = options.attributes[PromptfooAttributes.REQUEST_BODY];
+      expect(requestBodyAttr).toBeDefined();
+      expect(requestBodyAttr).toContain('<REDACTED>');
+      expect(requestBodyAttr).not.toContain('supersecret123');
+    });
+
+    it('should redact response body sensitive data', async () => {
+      const resultExtractor = vi.fn(() => ({
+        responseBody: '{"token": "secret-token-value-12345678901234567890"}',
+      }));
+
+      await withGenAISpan(baseContext, async () => 'result', resultExtractor);
+
+      const responseBodyCall = mockSpan.setAttribute.mock.calls.find(
+        (call) => call[0] === PromptfooAttributes.RESPONSE_BODY,
+      );
+      expect(responseBodyCall).toBeDefined();
+      expect(responseBodyCall![1]).toContain('<REDACTED>');
+      expect(responseBodyCall![1]).not.toContain('secret-token-value-12345678901234567890');
+    });
+  });
 });
