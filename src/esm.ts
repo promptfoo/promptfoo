@@ -151,11 +151,43 @@ export function resolvePackageEntryPoint(packageName: string, baseDir: string): 
     const packageDir = path.dirname(packageJsonPath);
 
     // Check exports field for ESM entry point
+    // Handle various exports field formats:
+    // 1. Direct string: "exports": "./index.js"
+    // 2. Shorthand object: "exports": { ".": "./index.js" }
+    // 3. Conditional with import: "exports": { ".": { "import": "./index.js" } }
+    // 4. Conditional with default: "exports": { ".": { "default": "./index.js" } }
     const exports = packageJson.exports;
-    if (exports?.['.']?.import) {
-      const entryPoint = path.join(packageDir, exports['.'].import);
-      if (fs.existsSync(entryPoint)) {
-        return entryPoint;
+    if (exports) {
+      // Handle direct string exports
+      if (typeof exports === 'string') {
+        const entryPoint = path.join(packageDir, exports);
+        if (fs.existsSync(entryPoint)) {
+          return entryPoint;
+        }
+      }
+
+      // Handle exports['.'] being a string
+      if (typeof exports['.'] === 'string') {
+        const entryPoint = path.join(packageDir, exports['.']);
+        if (fs.existsSync(entryPoint)) {
+          return entryPoint;
+        }
+      }
+
+      // Handle exports['.'].import (ESM conditional export)
+      if (exports['.']?.import) {
+        const entryPoint = path.join(packageDir, exports['.'].import);
+        if (fs.existsSync(entryPoint)) {
+          return entryPoint;
+        }
+      }
+
+      // Handle exports['.'].default (fallback conditional export)
+      if (exports['.']?.default) {
+        const entryPoint = path.join(packageDir, exports['.'].default);
+        if (fs.existsSync(entryPoint)) {
+          return entryPoint;
+        }
       }
     }
 
