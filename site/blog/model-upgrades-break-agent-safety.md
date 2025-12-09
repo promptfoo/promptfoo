@@ -1,7 +1,7 @@
 ---
 title: Your model upgrade just broke your agent's safety
 description: LLM safety varies wildly between model families and even between versions. What agent developers need to know before their next upgrade.
-image: /img/blog/model-upgrades-break-agent-safety/header.png
+image: /img/blog/model-upgrades-break-agent-safety/header.jpg
 keywords:
   [
     LLM safety,
