@@ -113,8 +113,13 @@ function hasErrorsInResults(results: ModelAuditScanResults): boolean {
 
 /**
  * Check if exit code indicates a process error (signal termination or crash).
- * Exit codes > 1 typically indicate fatal errors (e.g., 2 = crash, 128+ = signal).
- * Exit codes 0 and 1 are considered valid scan completions (success / issues found).
+ *
+ * modelaudit exit codes:
+ * - 0: Scan completed successfully, no security issues found
+ * - 1: Scan completed successfully, security issues were found (NOT an error)
+ * - 2+: Fatal errors (e.g., invalid arguments, crash, signal termination)
+ *
+ * This differs from standard Unix conventions where exit 1 = general failure.
  */
 function isProcessError(code: number | null): code is number {
   return code !== null && code > 1;
