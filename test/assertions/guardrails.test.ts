@@ -49,6 +49,26 @@ describe('handleGuardrail', () => {
     });
   });
 
+  it('should default flagged to false when undefined', async () => {
+    const params: AssertionParams = {
+      ...defaultParams,
+      providerResponse: {
+        guardrails: {
+          // flagged is intentionally undefined
+        },
+        output: 'test output',
+      },
+    };
+
+    const result = await handleGuardrails(params);
+    expect(result).toEqual({
+      pass: true,
+      score: 1,
+      reason: 'Content passed safety checks',
+      assertion: baseAssertion,
+    });
+  });
+
   it('should fail when content is flagged', async () => {
     const params: AssertionParams = {
       ...defaultParams,
