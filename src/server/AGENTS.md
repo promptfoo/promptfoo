@@ -10,7 +10,7 @@ Express-based HTTP + WebSocket server for the web UI.
 
 ## Directory Structure
 
-```
+```plaintext
 src/server/
 ├── index.ts       # Entry point
 ├── server.ts      # Express app setup

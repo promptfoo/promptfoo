@@ -29,7 +29,7 @@ The evaluator (`src/evaluator.ts`) manages provider lifecycle. After evaluation 
 
 ## Logging
 
-See `docs/logging.md` - use logger with object context (auto-sanitized).
+See `docs/agents/logging.md` - use logger with object context (auto-sanitized).
 
 ## Common Patterns
 
@@ -43,16 +43,10 @@ See `docs/logging.md` - use logger with object context (auto-sanitized).
 
 Every provider needs tests in `test/providers/`:
 
-- Mock API responses using `jest.mock` or `vi.mock`
+- Mock API responses using `vi.mock`
 - Test success AND error cases
 - Test rate limits, timeouts, invalid configs
-
-Run tests (check vitest.config.ts for migrated tests):
-
-```bash
-npx vitest run test/providers/my-provider  # If migrated to Vitest
-npx jest test/providers/my-provider        # If still using Jest
-```
+- Run with: `npx vitest run test/providers/my-provider`
 
 ## Adding a Provider
 

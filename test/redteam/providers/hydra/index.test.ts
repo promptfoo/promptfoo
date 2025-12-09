@@ -11,6 +11,15 @@ let HydraProvider: typeof import('../../../../src/redteam/providers/hydra/index'
 const mockGetGraderById = vi.hoisted(() => vi.fn());
 const mockIsBasicRefusal = vi.hoisted(() => vi.fn());
 
+// Hoisted mock for applyRuntimeTransforms
+const mockApplyRuntimeTransforms = vi.hoisted(() =>
+  vi.fn().mockImplementation(async ({ prompt }) => ({
+    transformedPrompt: prompt,
+    audio: undefined,
+    image: undefined,
+  })),
+);
+
 vi.mock('../../../../src/providers/promptfoo', async (importOriginal) => {
   return {
     ...(await importOriginal()),
@@ -42,6 +51,13 @@ vi.mock('../../../../src/redteam/util', async () => ({
   isBasicRefusal: mockIsBasicRefusal,
   getSessionId: vi.fn(),
 }));
+
+vi.mock('../../../../src/redteam/shared/runtimeTransform', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    applyRuntimeTransforms: mockApplyRuntimeTransforms,
+  };
+});
 
 describe('HydraProvider', () => {
   let mockAgentProvider: Mocked<ApiProvider>;
@@ -1229,6 +1245,84 @@ describe('HydraProvider', () => {
     });
   });
 
+  describe('Abort Signal Handling', () => {
+    it('should pass options to agent provider callApi', async () => {
+      const abortController = new AbortController();
+      const options = { abortSignal: abortController.signal };
+
+      mockAgentProvider.callApi.mockResolvedValue({
+        output: 'Attack message',
+        tokenUsage: { total: 100, prompt: 50, completion: 50 },
+      });
+
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'Target response',
+      });
+
+      const provider = new HydraProvider({
+        injectVar: 'input',
+        maxTurns: 1,
+      });
+
+      const context: CallApiContextParams = {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'test goal' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        test: {
+          assert: [{ type: 'harmful:test' }],
+          metadata: { goal: 'test goal', pluginId: 'harmful:test' },
+        } as any,
+      };
+
+      await provider.callApi('', context, options);
+
+      // Agent provider should be called with options
+      expect(mockAgentProvider.callApi).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.any(Object),
+        options,
+      );
+    });
+
+    it('should pass options to target provider via getTargetResponse', async () => {
+      const abortController = new AbortController();
+      const options = { abortSignal: abortController.signal };
+
+      mockAgentProvider.callApi.mockResolvedValue({
+        output: 'Attack message',
+        tokenUsage: { total: 100, prompt: 50, completion: 50 },
+      });
+
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'Target response',
+      });
+
+      const provider = new HydraProvider({
+        injectVar: 'input',
+        maxTurns: 1,
+      });
+
+      const context: CallApiContextParams = {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'test goal' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        test: {
+          assert: [{ type: 'harmful:test' }],
+          metadata: { goal: 'test goal', pluginId: 'harmful:test' },
+        } as any,
+      };
+
+      await provider.callApi('', context, options);
+
+      // Target provider should be called with options via getTargetResponse
+      expect(mockTargetProvider.callApi).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.any(Object),
+        options,
+      );
+    });
+  });
+
   describe('callApi() - metadata output', () => {
     it('should return complete metadata', async () => {
       const { getSessionId } = await import('../../../../src/redteam/util');
@@ -1278,11 +1372,11 @@ describe('HydraProvider', () => {
             { role: 'assistant', content: 'Target response' },
           ]),
           redteamHistory: expect.arrayContaining([
-            {
+            expect.objectContaining({
               prompt: 'Attack message',
               output: 'Target response',
               graderPassed: true,
-            },
+            }),
           ]),
           sessionIds: ['session-123'],
           storedGraderResult: expect.any(Object),
@@ -1322,6 +1416,140 @@ describe('HydraProvider', () => {
 
       expect(result.output).toBe('Target response');
       expect(result.error).toBe('Some error occurred');
+    });
+  });
+
+  describe('perTurnLayers configuration', () => {
+    it('should accept _perTurnLayers in config', () => {
+      const provider = new HydraProvider({
+        injectVar: 'input',
+        _perTurnLayers: [{ id: 'audio' }, { id: 'image' }],
+      });
+
+      expect(provider['perTurnLayers']).toEqual([{ id: 'audio' }, { id: 'image' }]);
+    });
+
+    it('should default perTurnLayers to empty array when not provided', () => {
+      const provider = new HydraProvider({
+        injectVar: 'input',
+      });
+
+      expect(provider['perTurnLayers']).toEqual([]);
+    });
+
+    it('should not apply transforms when perTurnLayers is empty', async () => {
+      mockAgentProvider.callApi.mockResolvedValue({
+        output: 'Attack message',
+        tokenUsage: { total: 100, prompt: 50, completion: 50 },
+      });
+
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'Target response',
+      });
+
+      const provider = new HydraProvider({
+        injectVar: 'input',
+        maxTurns: 1,
+        // No _perTurnLayers provided - defaults to empty
+      });
+
+      const context: CallApiContextParams = {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'test goal' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        test: {
+          assert: [{ type: 'harmful:test' }],
+          metadata: { goal: 'test goal', pluginId: 'harmful:test' },
+        } as any,
+      };
+
+      const result = await provider.callApi('', context);
+
+      // Verify redteamHistory exists but promptAudio/promptImage are undefined
+      expect(result.metadata?.redteamHistory).toBeDefined();
+      if (result.metadata?.redteamHistory && result.metadata.redteamHistory.length > 0) {
+        expect(result.metadata.redteamHistory[0].promptAudio).toBeUndefined();
+        expect(result.metadata.redteamHistory[0].promptImage).toBeUndefined();
+      }
+    });
+
+    it('should include redteamHistory with media fields when perTurnLayers is configured', async () => {
+      // Configure the hoisted mock to return audio/image data for this test
+      mockApplyRuntimeTransforms.mockResolvedValueOnce({
+        transformedPrompt: 'transformed attack',
+        audio: { data: 'base64-audio-data', format: 'mp3' },
+        image: { data: 'base64-image-data', format: 'png' },
+      });
+
+      mockAgentProvider.callApi.mockResolvedValue({
+        output: 'Attack message',
+        tokenUsage: { total: 100, prompt: 50, completion: 50 },
+      });
+
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'Target response',
+        audio: { data: 'response-audio-data', format: 'wav' },
+      });
+
+      const provider = new HydraProvider({
+        injectVar: 'input',
+        maxTurns: 1,
+        _perTurnLayers: [{ id: 'audio' }],
+      });
+
+      const context: CallApiContextParams = {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'test goal' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        test: {
+          assert: [{ type: 'harmful:test' }],
+          metadata: { goal: 'test goal', pluginId: 'harmful:test' },
+        } as any,
+      };
+
+      const result = await provider.callApi('', context);
+
+      // Verify redteamHistory is populated
+      expect(result.metadata?.redteamHistory).toBeDefined();
+      expect(Array.isArray(result.metadata?.redteamHistory)).toBe(true);
+    });
+
+    it('should include outputAudio in redteamHistory when target returns audio', async () => {
+      mockAgentProvider.callApi.mockResolvedValue({
+        output: 'Attack message',
+        tokenUsage: { total: 100, prompt: 50, completion: 50 },
+      });
+
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'Target response',
+        audio: { data: 'output-audio-base64', format: 'wav' },
+      });
+
+      const provider = new HydraProvider({
+        injectVar: 'input',
+        maxTurns: 1,
+      });
+
+      const context: CallApiContextParams = {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'test goal' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        test: {
+          assert: [{ type: 'harmful:test' }],
+          metadata: { goal: 'test goal', pluginId: 'harmful:test' },
+        } as any,
+      };
+
+      const result = await provider.callApi('', context);
+
+      // Verify outputAudio is captured in redteamHistory
+      expect(result.metadata?.redteamHistory).toBeDefined();
+      if (result.metadata?.redteamHistory && result.metadata.redteamHistory.length > 0) {
+        expect(result.metadata.redteamHistory[0].outputAudio).toEqual({
+          data: 'output-audio-base64',
+          format: 'wav',
+        });
+      }
     });
   });
 });

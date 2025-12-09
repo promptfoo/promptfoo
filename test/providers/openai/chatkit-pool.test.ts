@@ -11,6 +11,7 @@ const mockPage = vi.hoisted(() => ({
 const mockContext = vi.hoisted(() => ({
   newPage: vi.fn().mockResolvedValue(mockPage),
   close: vi.fn().mockResolvedValue(undefined),
+  setDefaultTimeout: vi.fn(),
 }));
 
 const mockBrowser = vi.hoisted(() => ({

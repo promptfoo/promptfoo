@@ -4,24 +4,24 @@ PR titles follow Conventional Commits format. They become squash-merge commit me
 
 ## Format
 
-```
+```plaintext
 <type>(<scope>): <description>
 <type>(<scope>)!: <description>  # Breaking changes
 ```
 
 ## Types
 
-| Type | Use For |
-|------|---------|
-| `feat` | New feature or capability |
-| `fix` | Bug fix |
-| `chore` | Maintenance, upgrades, non-breaking refactors |
-| `refactor` | Code refactoring without behavior change |
-| `docs` | Documentation only |
-| `test` | Test additions or changes |
-| `ci` | CI/CD changes |
-| `revert` | Revert previous change |
-| `perf` | Performance improvement |
+| Type       | Use For                                       |
+| ---------- | --------------------------------------------- |
+| `feat`     | New feature or capability                     |
+| `fix`      | Bug fix                                       |
+| `chore`    | Maintenance, upgrades, non-breaking refactors |
+| `refactor` | Code refactoring without behavior change      |
+| `docs`     | Documentation only                            |
+| `test`     | Test additions or changes                     |
+| `ci`       | CI/CD changes                                 |
+| `revert`   | Revert previous change                        |
+| `perf`     | Performance improvement                       |
 
 **Breaking changes:** Add `!` after scope: `feat(api)!:`, `chore(deps)!:`
 
@@ -69,13 +69,15 @@ For generic/cross-cutting changes: `chore: bump version 0.119.11`
 This applies even if the change is only in UI, CLI, docs, examples, or server endpoints.
 
 ❌ **Wrong:**
-```
+
+```plaintext
 fix(webui): fix Basic strategy checkbox in red team setup
 feat(cli): add redteam validate command
 ```
 
 ✅ **Correct:**
-```
+
+```plaintext
 fix(redteam): fix Basic strategy checkbox in setup UI
 feat(redteam): add validate target CLI command
 ```
@@ -84,7 +86,7 @@ feat(redteam): add validate target CLI command
 
 ## Decision Tree
 
-```
+```plaintext
 1. Is this redteam-related? → Use (redteam)
 2. Is it another feature domain? → Use that scope
 3. Is it localized to one product area? → Use that scope
@@ -100,7 +102,8 @@ feat(redteam): add validate target CLI command
 ## Examples
 
 ✅ **Good:**
-```
+
+```plaintext
 feat(redteam): add FERPA compliance plugin
 fix(providers): support function providers in assertions
 feat(webui): add eval results filter permalinking
@@ -111,7 +114,8 @@ chore: bump version 0.119.11
 ```
 
 ❌ **Bad:**
-```
+
+```plaintext
 feat: add new redteam thing      # Missing (redteam) scope
 fix(webui): red team checkbox    # Should be fix(redteam)
 chore(webui): update dependency  # Should be chore(deps)

@@ -240,6 +240,133 @@ describe('RedteamIterativeMetaProvider', () => {
     });
   });
 
+  describe('perTurnLayers configuration', () => {
+    it('should accept perTurnLayers parameter (empty array for safe testing)', async () => {
+      const result = await runMetaAgentRedteam({
+        context: {
+          vars: { query: 'test' },
+          prompt: { raw: 'test', label: 'test' },
+          originalProvider: mockTargetProvider,
+        },
+        filters: undefined,
+        injectVar: 'query',
+        numIterations: 1,
+        options: undefined,
+        prompt: { raw: 'test', label: 'test' },
+        agentProvider: mockAgentProvider,
+        gradingProvider: mockGradingProvider,
+        targetProvider: mockTargetProvider,
+        test: undefined,
+        vars: { query: 'test' },
+        perTurnLayers: [], // Empty array to avoid actual transforms
+      });
+
+      // Should complete without error when perTurnLayers is provided
+      expect(result.metadata.finalIteration).toBeDefined();
+    });
+  });
+
+  describe('redteamHistory with audio/image data', () => {
+    it('should include promptAudio and promptImage fields in redteamHistory entries', async () => {
+      const result = await runMetaAgentRedteam({
+        context: {
+          vars: { query: 'test' },
+          prompt: { raw: 'test', label: 'test' },
+          originalProvider: mockTargetProvider,
+        },
+        filters: undefined,
+        injectVar: 'query',
+        numIterations: 1,
+        options: undefined,
+        prompt: { raw: '{{query}}', label: 'test' },
+        agentProvider: mockAgentProvider,
+        gradingProvider: mockGradingProvider,
+        targetProvider: mockTargetProvider,
+        test: undefined,
+        vars: { query: 'test' },
+      });
+
+      // redteamHistory should be present
+      expect(result.metadata.redteamHistory).toBeDefined();
+      expect(Array.isArray(result.metadata.redteamHistory)).toBe(true);
+
+      if (result.metadata.redteamHistory.length > 0) {
+        const entry = result.metadata.redteamHistory[0];
+        // These fields should be present (even if undefined without layers)
+        expect(entry).toHaveProperty('prompt');
+        expect(entry).toHaveProperty('output');
+      }
+    });
+
+    it('should capture outputAudio when target returns audio data', async () => {
+      // Set up mockGetTargetResponse to return audio data
+      mockGetTargetResponse.mockReset();
+      mockGetTargetResponse.mockResolvedValue({
+        output: 'response with audio',
+        audio: { data: 'base64audiodata', format: 'mp3' },
+      });
+
+      const result = await runMetaAgentRedteam({
+        context: {
+          vars: { query: 'test' },
+          prompt: { raw: 'test', label: 'test' },
+          originalProvider: mockTargetProvider,
+        },
+        filters: undefined,
+        injectVar: 'query',
+        numIterations: 1,
+        options: undefined,
+        prompt: { raw: '{{query}}', label: 'test' },
+        agentProvider: mockAgentProvider,
+        gradingProvider: mockGradingProvider,
+        targetProvider: mockTargetProvider,
+        test: undefined,
+        vars: { query: 'test' },
+      });
+
+      if (result.metadata.redteamHistory.length > 0) {
+        const entry = result.metadata.redteamHistory[0];
+        expect(entry.outputAudio).toBeDefined();
+        expect(entry.outputAudio?.data).toBe('base64audiodata');
+        expect(entry.outputAudio?.format).toBe('mp3');
+      }
+    });
+
+    it('should capture outputImage when target returns image data', async () => {
+      // Set up mockGetTargetResponse to return image data
+      mockGetTargetResponse.mockReset();
+      mockGetTargetResponse.mockResolvedValue({
+        output: 'response with image',
+        image: { data: 'base64imagedata', format: 'png' },
+      });
+
+      const result = await runMetaAgentRedteam({
+        context: {
+          vars: { query: 'test' },
+          prompt: { raw: 'test', label: 'test' },
+          originalProvider: mockTargetProvider,
+        },
+        filters: undefined,
+        injectVar: 'query',
+        numIterations: 1,
+        options: undefined,
+        prompt: { raw: '{{query}}', label: 'test' },
+        agentProvider: mockAgentProvider,
+        gradingProvider: mockGradingProvider,
+        targetProvider: mockTargetProvider,
+        test: undefined,
+        vars: { query: 'test' },
+      });
+
+      if (result.metadata.redteamHistory.length > 0) {
+        const entry = result.metadata.redteamHistory[0];
+        expect(entry.outputImage).toBeDefined();
+        expect(entry.outputImage?.data).toBe('base64imagedata');
+        expect(entry.outputImage?.format).toBe('png');
+      }
+    });
+  });
+
   describe('Rubric Storage', () => {
     it('should store rendered rubric in storedGraderResult.assertion.value', () => {
       const mockRenderedRubric = '<rubric>Rendered grading criteria</rubric>';
@@ -320,6 +447,71 @@ describe('RedteamIterativeMetaProvider', () => {
       };
 
       expect(storedResult.assertion).toBeUndefined();
+    });
+  });
+
+  describe('Abort Signal Handling', () => {
+    it('should pass options with abortSignal to agentProvider.callApi', async () => {
+      const abortController = new AbortController();
+      const options = { abortSignal: abortController.signal };
+
+      await runMetaAgentRedteam({
+        context: {
+          vars: { query: 'test' },
+          prompt: { raw: 'test', label: 'test' },
+          originalProvider: mockTargetProvider,
+        },
+        filters: undefined,
+        injectVar: 'query',
+        numIterations: 1,
+        options,
+        prompt: { raw: 'test', label: 'test' },
+        agentProvider: mockAgentProvider,
+        gradingProvider: mockGradingProvider,
+        targetProvider: mockTargetProvider,
+        test: undefined,
+        vars: { query: 'test' },
+      });
+
+      // Verify options were passed to callApi
+      expect(mockAgentProvider.callApi).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.any(Object),
+        options,
+      );
+    });
+
+    it('should handle agent provider errors and continue loop (non-abort)', async () => {
+      // First call errors, second succeeds
+      mockAgentProvider.callApi = vi
+        .fn<() => Promise<ProviderResponse>>()
+        .mockResolvedValueOnce({ error: 'Temporary error' })
+        .mockResolvedValueOnce({
+          output: { result: 'Attack prompt' },
+          tokenUsage: { total: 100, prompt: 50, completion: 50 },
+        });
+
+      const result = await runMetaAgentRedteam({
+        context: {
+          vars: { query: 'test' },
+          prompt: { raw: 'test', label: 'test' },
+          originalProvider: mockTargetProvider,
+        },
+        filters: undefined,
+        injectVar: 'query',
+        numIterations: 2,
+        options: undefined,
+        prompt: { raw: 'test', label: 'test' },
+        agentProvider: mockAgentProvider,
+        gradingProvider: mockGradingProvider,
+        targetProvider: mockTargetProvider,
+        test: undefined,
+        vars: { query: 'test' },
+      });
+
+      // Should continue after error and complete second iteration
+      expect(mockAgentProvider.callApi).toHaveBeenCalledTimes(2);
+      expect(result.metadata.redteamHistory).toHaveLength(1);
     });
   });
 

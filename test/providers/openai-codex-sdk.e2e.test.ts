@@ -1,7 +1,7 @@
 /**
  * End-to-End tests for OpenAI Codex SDK Provider
  * These tests use the real @openai/codex-sdk package (must be installed)
- * Run with: OPENAI_API_KEY=... npx jest openai-codex-sdk.e2e --runInBand
+ * Run with: OPENAI_API_KEY=... npx vitest run openai-codex-sdk.e2e
  */
 
 import { beforeAll, describe, expect, it, vi } from 'vitest';

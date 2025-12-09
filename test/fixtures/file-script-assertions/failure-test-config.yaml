@@ -12,7 +12,7 @@ tests:
       prompt: 'wrong value'
     assert:
       - type: equals
-        value: file://rubric-generator.js:knownValue
+        value: file://rubric-generator.cjs:knownValue
 
   # Test 2: contains failure - should show script output in error
   - description: 'contains failure shows script output in error message'
@@ -20,7 +20,7 @@ tests:
       prompt: 'no match here'
     assert:
       - type: contains
-        value: file://rubric-generator.js:knownValue
+        value: file://rubric-generator.cjs:knownValue
 
   # Test 3: starts-with failure
   - description: 'starts-with failure shows script output'
@@ -28,4 +28,4 @@ tests:
       prompt: 'different start'
     assert:
       - type: starts-with
-        value: file://rubric-generator.js:knownValue
+        value: file://rubric-generator.cjs:knownValue

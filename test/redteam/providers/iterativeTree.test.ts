@@ -317,6 +317,73 @@ describe('RedteamIterativeProvider', () => {
     });
   });
 
+  describe('Abort Signal Handling', () => {
+    let mockRedteamProvider: Mocked<ApiProvider>;
+
+    beforeEach(() => {
+      mockRedteamProvider = {
+        id: vi.fn().mockReturnValue('mock-provider'),
+        callApi: vi.fn(),
+      } as unknown as Mocked<ApiProvider>;
+    });
+
+    it('should re-throw AbortError from evaluateResponse and not swallow it', async () => {
+      const abortError = new Error('The operation was aborted');
+      abortError.name = 'AbortError';
+
+      // Mock callApi to throw AbortError
+      mockRedteamProvider.callApi.mockRejectedValue(abortError);
+
+      await expect(
+        evaluateResponse(mockRedteamProvider, 'Judge prompt', 'Response', 'Best', false),
+      ).rejects.toThrow('The operation was aborted');
+    });
+
+    it('should re-throw AbortError from getNewPrompt primary parse failure', async () => {
+      const abortError = new Error('The operation was aborted');
+      abortError.name = 'AbortError';
+
+      // Mock callApi to throw AbortError
+      mockRedteamProvider.callApi.mockRejectedValue(abortError);
+
+      await expect(getNewPrompt(mockRedteamProvider, [])).rejects.toThrow(
+        'The operation was aborted',
+      );
+    });
+
+    it('should handle non-AbortError parse failures gracefully in evaluateResponse', async () => {
+      // Return unparseable output - should return default score
+      mockRedteamProvider.callApi.mockResolvedValue({
+        output: 'not valid json at all',
+      });
+
+      const result = await evaluateResponse(
+        mockRedteamProvider,
+        'Judge prompt',
+        'Response',
+        'Best',
+        false,
+      );
+
+      // Should return default score instead of throwing
+      expect(result.score).toBe(1);
+      expect(result.explanation).toBe('Failed to parse judge response');
+    });
+
+    it('should handle non-AbortError parse failures gracefully in getNewPrompt', async () => {
+      // Return unparseable output - should skip turn gracefully
+      mockRedteamProvider.callApi.mockResolvedValue({
+        output: 'definitely not JSON',
+      });
+
+      const result = await getNewPrompt(mockRedteamProvider, []);
+
+      // Should return skip marker instead of throwing
+      expect(result.improvement).toBe('parse failure – skipping turn');
+      expect(result.prompt).toBe('');
+    });
+  });
+
   describe('updateRedteamHistory', () => {
     it('should create a new history entry with correct content', () => {
       const targetResponse = 'Test response';
@@ -1424,3 +1491,8 @@ describe('Token Counting', () => {
     expect(elapsed).toBeGreaterThanOrEqual(90); // Allow for 10ms variance
   });
 });
+
+// Note: Tests for perTurnLayers in iterativeTree are covered by testing through
+// the RedteamIterativeTreeProvider class, not exposed internal functions.
+// The TreeSearchOutput interface already supports promptAudio, promptImage,
+// outputAudio, and outputImage fields which are populated when perTurnLayers is configured.

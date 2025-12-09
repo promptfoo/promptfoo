@@ -14,7 +14,7 @@ The object is **auto-sanitized** - sensitive fields are automatically redacted.
 
 - **Security**: Prevents accidental exposure of secrets in logs
 - **Consistency**: Structured logs are easier to search and analyze
-- **Safety**: Redteam test content may contain harmful/sensitive data
+- **Safety**: Red team test content may contain harmful/sensitive data
 
 ## Correct Usage
 
@@ -60,22 +60,13 @@ const sanitizedConfig = sanitizeObject(providerConfig, {
 
 Field names containing (case-insensitive, works with `-`, `_`, camelCase):
 
-| Category | Fields |
-|----------|--------|
-| Passwords | `password`, `passwd`, `pwd`, `pass`, `passphrase` |
-| API Keys | `apiKey`, `api_key`, `token`, `accessToken`, `refreshToken`, `bearerToken` |
-| Secrets | `secret`, `clientSecret`, `webhookSecret` |
-| Headers | `authorization`, `cookie`, `x-api-key`, `x-auth-token` |
-| Certificates | `privateKey`, `certificatePassword`, `keystorePassword` |
-| Signatures | `signature`, `sig`, `signingKey` |
+| Category     | Fields                                                                     |
+| ------------ | -------------------------------------------------------------------------- |
+| Passwords    | `password`, `passwd`, `pwd`, `pass`, `passphrase`                          |
+| API Keys     | `apiKey`, `api_key`, `token`, `accessToken`, `refreshToken`, `bearerToken` |
+| Secrets      | `secret`, `clientSecret`, `webhookSecret`                                  |
+| Headers      | `authorization`, `cookie`, `x-api-key`, `x-auth-token`                     |
+| Certificates | `privateKey`, `certificatePassword`, `keystorePassword`                    |
+| Signatures   | `signature`, `sig`, `signingKey`                                           |
 
 See `src/util/sanitizer.ts` for the complete list.
-
-## When to Sanitize
-
-Always sanitize when logging:
-- HTTP request/response headers
-- Request/response bodies
-- Configuration objects
-- Query parameters
-- Error details containing request data

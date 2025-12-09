@@ -8,6 +8,7 @@
 4. **NEVER** use `--amend` or `--force` without explicit approval
 
 **Forbidden commands:**
+
 - `git push origin main`
 - `git merge feature-branch` while on main
 - Any direct commits to main
@@ -64,7 +65,6 @@ Wait for CI checks to pass and code review approval before merging.
 
 ## Key Points
 
-- **Push after every commit** to ensure work is saved remotely
 - **Never blindly `git add .`** - there may be unrelated files
 - **Always sync with main** before creating PR to avoid conflicts
 - **Don't edit CHANGELOG.md** - it's auto-generated

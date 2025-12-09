@@ -42,7 +42,7 @@ Avoid legacy patterns like class components, legacy context, or string refs.
 
 ## Directory Structure
 
-```
+```plaintext
 src/app/src/
 ├── components/    # Reusable UI components
 ├── pages/         # Route pages

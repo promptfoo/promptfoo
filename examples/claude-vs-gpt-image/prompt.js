@@ -65,6 +65,22 @@ async function formatImagePrompt(context) {
       },
     ];
   }
+  if (context.provider.id.startsWith('google:gemini')) {
+    const image = await getImageBase64(context.vars.image_url);
+    return [
+      {
+        parts: [
+          {
+            inline_data: {
+              mime_type: image.mediaType,
+              data: image.base64,
+            },
+          },
+          { text: systemPrompt },
+        ],
+      },
+    ];
+  }
   // We can use the label if provided in the config.
   if (context.provider.label === 'custom label for gpt-4.1') {
     return [

@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Test trace UI visualization
+description: OpenTelemetry tracing with trace-based assertions
 
 providers:
   - file://provider-simple-traced.js

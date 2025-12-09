@@ -40,6 +40,8 @@ npm run local -- eval --max-concurrency 1  # Correct
 npm run local eval --max-concurrency 1     # Wrong - flags go to npm
 ```
 
+**Don't run `npm run local -- view`** unless explicitly asked. Assume the user already has `npm run dev` running in a separate terminal.
+
 **Before committing:** `npm run l && npm run f`
 
 ## Running Evaluations
@@ -96,12 +98,10 @@ git checkout -b feature/your-branch-name    # New branch for changes
 # Make changes...
 git add <specific-files>                    # Never blindly add everything
 git commit -m "type(scope): description"    # Conventional commit format
-git push -u origin feature/your-branch-name # Push after each commit
+git push -u origin feature/your-branch-name # Push branch to remote
 ```
 
 **Conventional commit types:** `feat`, `fix`, `chore`, `docs`, `test`, `refactor`
-
-**Push after every commit** to ensure work is saved remotely.
 
 See `docs/agents/git-workflow.md` for full workflow.
 See `docs/agents/pr-conventions.md` for PR title format and scope selection.
@@ -116,9 +116,9 @@ Use the logger with object context (auto-sanitized). See `docs/agents/logging.md
 
 ## Testing
 
-- **Vitest** is the preferred test framework for new tests
+- **Vitest** is the test framework for all tests
 - Frontend tests (`src/app/`): Always use Vitest
-- Legacy tests in `test/`: Jest (migrating to Vitest)
+- Backend tests (`test/`): Vitest with globals enabled
 
 See `test/AGENTS.md` for testing patterns.
 

@@ -34,6 +34,7 @@ function buildMockEval(): Partial<Eval> {
     getTraces: vi.fn().mockResolvedValue([]),
     id: randomUUID(),
     getResultsCount: vi.fn().mockResolvedValue(2),
+    getTotalResultRowCount: vi.fn().mockResolvedValue(2),
     fetchResultsBatched: vi.fn().mockImplementation(() => {
       const iterator = {
         called: false,

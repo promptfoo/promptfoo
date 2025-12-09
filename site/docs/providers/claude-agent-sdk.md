@@ -123,33 +123,34 @@ prompts:
 
 ## Supported Parameters
 
-| Parameter                  | Type     | Description                                                                    | Default                  |
-| -------------------------- | -------- | ------------------------------------------------------------------------------ | ------------------------ |
-| `apiKey`                   | string   | Anthropic API key                                                              | Environment variable     |
-| `working_dir`              | string   | Directory for file operations                                                  | Temporary directory      |
-| `model`                    | string   | Primary model to use (passed to Claude Agent SDK)                              | Claude Agent SDK default |
-| `fallback_model`           | string   | Fallback model if primary fails                                                | Claude Agent SDK default |
-| `max_turns`                | number   | Maximum conversation turns                                                     | Claude Agent SDK default |
-| `max_thinking_tokens`      | number   | Maximum tokens for thinking                                                    | Claude Agent SDK default |
-| `max_budget_usd`           | number   | Maximum cost budget in USD for the agent execution                             | None                     |
-| `permission_mode`          | string   | File access permissions: `default`, `plan`, `acceptEdits`, `bypassPermissions` | `default`                |
-| `custom_system_prompt`     | string   | Replace default system prompt                                                  | None                     |
-| `append_system_prompt`     | string   | Append to default system prompt                                                | None                     |
-| `custom_allowed_tools`     | string[] | Replace default allowed tools                                                  | None                     |
-| `append_allowed_tools`     | string[] | Add to default allowed tools                                                   | None                     |
-| `allow_all_tools`          | boolean  | Allow all available tools                                                      | false                    |
-| `disallowed_tools`         | string[] | Tools to explicitly block (overrides allowed)                                  | None                     |
-| `additional_directories`   | string[] | Additional directories the agent can access (beyond working_dir)               | None                     |
-| `mcp`                      | object   | MCP server configuration                                                       | None                     |
-| `strict_mcp_config`        | boolean  | Only allow configured MCP servers                                              | true                     |
-| `setting_sources`          | string[] | Where SDK looks for settings, CLAUDE.md, and slash commands                    | None (disabled)          |
-| `output_format`            | object   | Structured output configuration with JSON schema                               | None                     |
-| `agents`                   | object   | Programmatic agent definitions for custom subagents                            | None                     |
-| `hooks`                    | object   | Event hooks for intercepting tool calls and other events                       | None                     |
-| `include_partial_messages` | boolean  | Include partial/streaming messages in response                                 | false                    |
-| `resume`                   | string   | Resume from a specific session ID                                              | None                     |
-| `fork_session`             | boolean  | Fork from an existing session instead of continuing                            | false                    |
-| `continue`                 | boolean  | Continue an existing session                                                   | false                    |
+| Parameter                  | Type     | Description                                                                       | Default                  |
+| -------------------------- | -------- | --------------------------------------------------------------------------------- | ------------------------ |
+| `apiKey`                   | string   | Anthropic API key                                                                 | Environment variable     |
+| `working_dir`              | string   | Directory for file operations                                                     | Temporary directory      |
+| `model`                    | string   | Primary model to use (passed to Claude Agent SDK)                                 | Claude Agent SDK default |
+| `fallback_model`           | string   | Fallback model if primary fails                                                   | Claude Agent SDK default |
+| `max_turns`                | number   | Maximum conversation turns                                                        | Claude Agent SDK default |
+| `max_thinking_tokens`      | number   | Maximum tokens for thinking                                                       | Claude Agent SDK default |
+| `max_budget_usd`           | number   | Maximum cost budget in USD for the agent execution                                | None                     |
+| `permission_mode`          | string   | Permission mode: `default`, `plan`, `acceptEdits`, `bypassPermissions`, `dontAsk` | `default`                |
+| `betas`                    | string[] | Enable beta features (e.g., `['context-1m-2025-08-07']` for 1M context)           | None                     |
+| `custom_system_prompt`     | string   | Replace default system prompt                                                     | None                     |
+| `append_system_prompt`     | string   | Append to default system prompt                                                   | None                     |
+| `custom_allowed_tools`     | string[] | Replace default allowed tools                                                     | None                     |
+| `append_allowed_tools`     | string[] | Add to default allowed tools                                                      | None                     |
+| `allow_all_tools`          | boolean  | Allow all available tools                                                         | false                    |
+| `disallowed_tools`         | string[] | Tools to explicitly block (overrides allowed)                                     | None                     |
+| `additional_directories`   | string[] | Additional directories the agent can access (beyond working_dir)                  | None                     |
+| `mcp`                      | object   | MCP server configuration                                                          | None                     |
+| `strict_mcp_config`        | boolean  | Only allow configured MCP servers                                                 | true                     |
+| `setting_sources`          | string[] | Where SDK looks for settings, CLAUDE.md, and slash commands                       | None (disabled)          |
+| `output_format`            | object   | Structured output configuration with JSON schema                                  | None                     |
+| `agents`                   | object   | Programmatic agent definitions for custom subagents                               | None                     |
+| `hooks`                    | object   | Event hooks for intercepting tool calls and other events                          | None                     |
+| `include_partial_messages` | boolean  | Include partial/streaming messages in response                                    | false                    |
+| `resume`                   | string   | Resume from a specific session ID                                                 | None                     |
+| `fork_session`             | boolean  | Fork from an existing session instead of continuing                               | false                    |
+| `continue`                 | boolean  | Continue an existing session                                                      | false                    |
 
 ## Models
 
@@ -160,7 +161,7 @@ providers:
   - id: anthropic:claude-agent-sdk
     config:
       model: claude-opus-4-1-20250805
-      fallback_model: claude-sonnet-4-20250514
+      fallback_model: claude-sonnet-4-5-20250929
 ```
 
 Claude Agent SDK also supports a number of [model aliases](https://docs.claude.com/en/docs/claude-code/model-config#model-aliases), which can also be used in the configuration.
@@ -200,12 +201,13 @@ By default, when a `working_dir` is specified, Claude Agent SDK has access to th
 
 Control Claude Agent SDK's permissions for modifying files and running system commands:
 
-| Mode                | Description              |
-| ------------------- | ------------------------ |
-| `default`           | Standard permissions     |
-| `plan`              | Planning mode            |
-| `acceptEdits`       | Allow file modifications |
-| `bypassPermissions` | No restrictions          |
+| Mode                | Description                                            |
+| ------------------- | ------------------------------------------------------ |
+| `default`           | Standard permissions                                   |
+| `plan`              | Planning mode                                          |
+| `acceptEdits`       | Allow file modifications                               |
+| `bypassPermissions` | No restrictions                                        |
+| `dontAsk`           | Deny permissions that aren't pre-approved (no prompts) |
 
 ### Tool Configuration
 
@@ -354,6 +356,26 @@ providers:
 ```
 
 Session IDs are returned in the response and can be used to continue conversations across eval runs.
+
+## Beta Features
+
+Enable experimental features using the `betas` parameter:
+
+```yaml
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      betas:
+        - context-1m-2025-08-07
+```
+
+Currently available betas:
+
+| Beta                    | Description                                        |
+| ----------------------- | -------------------------------------------------- |
+| `context-1m-2025-08-07` | Enable 1M token context window (Sonnet 4/4.5 only) |
+
+See the [Anthropic beta headers documentation](https://docs.anthropic.com/en/api/beta-headers) for more information.
 
 ## Programmatic Agents
 

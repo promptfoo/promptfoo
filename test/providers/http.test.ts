@@ -4,14 +4,14 @@ import path from 'path';
 
 import dedent from 'dedent';
 import {
-  vi,
-  describe,
-  it,
-  expect,
-  beforeEach,
-  afterEach,
   afterAll,
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
   type MockInstance,
+  vi,
 } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
 import cliState from '../../src/cliState';
@@ -108,10 +108,10 @@ beforeEach(() => {
   vi.mocked(maybeLoadFromExternalFile).mockReset();
   vi.mocked(maybeLoadConfigFromExternalFile).mockReset();
   vi.mocked(fetchWithCache).mockResolvedValue(undefined as any);
-  vi.mocked(maybeLoadFromExternalFile).mockImplementation(function (input) {
+  vi.mocked(maybeLoadFromExternalFile).mockImplementation(function (input: unknown) {
     return input;
   });
-  vi.mocked(maybeLoadConfigFromExternalFile).mockImplementation(function (input) {
+  vi.mocked(maybeLoadConfigFromExternalFile).mockImplementation(function (input: unknown) {
     return input;
   });
 });
@@ -946,6 +946,61 @@ describe('HttpProvider', () => {
 
         // Should return the boolean value
         expect(result).toBe(true);
+      });
+
+      it('should preserve numeric strings as strings in object bodies', () => {
+        // This simulates the case where YAML has session: '1234'
+        // The string should remain a string, not be converted to a number
+        const body = {
+          messages: '{{prompt}}',
+          session: '1234',
+        };
+        const vars = { prompt: 'test prompt' };
+        const result = processJsonBody(body, vars);
+
+        // session should remain a string, not be converted to number
+        expect(result).toEqual({
+          messages: 'test prompt',
+          session: '1234', // Should be string, not number
+        });
+        expect(typeof (result as Record<string, any>).session).toBe('string');
+      });
+
+      it('should preserve boolean-like strings as strings', () => {
+        const body = {
+          flag: 'true',
+          enabled: 'false',
+        };
+        const vars = {};
+        const result = processJsonBody(body, vars);
+
+        // Should remain strings, not be converted to booleans
+        expect(result).toEqual({
+          flag: 'true',
+          enabled: 'false',
+        });
+        expect(typeof (result as Record<string, any>).flag).toBe('string');
+        expect(typeof (result as Record<string, any>).enabled).toBe('string');
+      });
+
+      it('should still parse JSON objects and arrays', () => {
+        // JSON objects and arrays should still be parsed
+        const body = {
+          config: '{"key": "value"}',
+          items: '["a", "b"]',
+          session: '1234', // Should stay as string
+        };
+        const vars = {};
+        const result = processJsonBody(body, vars);
+
+        expect(result).toEqual({
+          config: { key: 'value' }, // Parsed to object
+          items: ['a', 'b'], // Parsed to array
+          session: '1234', // Remains as string
+        });
+        expect(typeof (result as Record<string, any>).config).toBe('object');
+        expect(Array.isArray((result as Record<string, any>).items)).toBe(true);
+        expect(typeof (result as Record<string, any>).session).toBe('string');
       });
 
       it('should handle complex nested JSON with control characters', () => {
@@ -5175,6 +5230,108 @@ describe('HttpProvider - Sanitization', () => {
       expect(sanitizeUrl(null as any)).toBeNull();
       expect(sanitizeUrl(undefined as any)).toBeUndefined();
     });
+  });
+});
+
+describe('HttpProvider - Abort Signal Handling', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should pass abortSignal to fetchWithCache', async () => {
+    const provider = new HttpProvider('http://example.com/api', {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: { key: '{{ prompt }}' },
+      },
+    });
+
+    const abortController = new AbortController();
+    const mockResponse = {
+      data: JSON.stringify({ result: 'response text' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('test prompt', undefined, { abortSignal: abortController.signal });
+
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ signal: abortController.signal }),
+      expect.any(Number),
+      expect.any(String),
+      undefined,
+      undefined,
+    );
+  });
+
+  it('should pass abortSignal to fetchWithCache in raw request mode', async () => {
+    const rawRequest = dedent`
+      POST /api HTTP/1.1
+      Host: example.com
+      Content-Type: application/json
+
+      {"key": "{{ prompt }}"}
+    `;
+
+    const provider = new HttpProvider('http://example.com', {
+      config: {
+        request: rawRequest,
+      },
+    });
+
+    const abortController = new AbortController();
+    const mockResponse = {
+      data: JSON.stringify({ result: 'response text' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('test prompt', undefined, { abortSignal: abortController.signal });
+
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ signal: abortController.signal }),
+      expect.any(Number),
+      expect.any(String),
+      undefined,
+      undefined,
+    );
+  });
+
+  it('should work without abortSignal (backwards compatibility)', async () => {
+    const provider = new HttpProvider('http://example.com/api', {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: { key: '{{ prompt }}' },
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'response text' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    // Call without options parameter
+    await provider.callApi('test prompt');
+
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.not.objectContaining({ signal: expect.anything() }),
+      expect.any(Number),
+      expect.any(String),
+      undefined,
+      undefined,
+    );
   });
 });
 

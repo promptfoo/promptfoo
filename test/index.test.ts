@@ -80,6 +80,7 @@ describe('index.ts exports', () => {
     'isApiProvider',
     'isGradingResult',
     'isProviderOptions',
+    'isResultFailureReason',
     'loadApiProvider',
     'redteam',
   ];

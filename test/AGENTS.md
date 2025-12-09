@@ -1,33 +1,25 @@
 # Test Suite
 
-**Vitest is the preferred framework for new tests.** Legacy tests use Jest and are being migrated.
-
-## Framework Choice
-
-| Location           | Framework  | When to Use                        |
-| ------------------ | ---------- | ---------------------------------- |
-| `src/app/`         | **Vitest** | All frontend tests                 |
-| `test/` (new)      | **Vitest** | Preferred for new test files       |
-| `test/` (existing) | Jest       | When modifying existing Jest tests |
+**What this is:** Vitest-based test suite for core promptfoo functionality.
 
 ## Running Tests
 
 ```bash
-npm test                              # Run all tests
-npm run test:app                      # Frontend tests (Vitest)
-npx vitest run path/to/test           # Run specific Vitest test
-npx jest path/to/test --coverage      # Run specific Jest test
+# Run all tests
+npm test
+
+# Run specific test file
+npx vitest run providers/openai
+
+# Run tests matching pattern
+npx vitest run -t "should handle errors"
+
+# Run in watch mode
+npm run test:watch
+
+# Run integration tests
+npm run test:integration
 ```
-
-## Writing Tests
-
-**Reference files:**
-
-- **Vitest (frontend)**: `src/app/src/hooks/usePageMeta.test.ts` - explicit imports
-- **Vitest (backend)**: `test/assertions/contains.test.ts` - uses globals (no imports needed)
-- **Jest (legacy)**: `test/providers/openai/completion.test.ts`
-
-Backend Vitest tests use `globals: true` so `describe`, `it`, `expect`, `vi` are available without imports.
 
 ## Critical Rules
 
@@ -36,12 +28,44 @@ Backend Vitest tests use `globals: true` so `describe`, `it`, `expect`, `vi` are
 - **ALWAYS** clean up mocks in `afterEach`
 - **ALWAYS** use `--randomize` to ensure test independence
 
+## Writing Tests
+
+**Reference files:**
+
+- **Vitest (frontend)**: `src/app/src/hooks/usePageMeta.test.ts` - explicit imports
+- **Vitest (backend)**: `test/assertions/contains.test.ts` - uses globals (no imports needed)
+
+Backend Vitest tests use `globals: true` so `describe`, `it`, `expect`, `vi` are available without imports.
+
+```typescript
+import { vi } from 'vitest';
+
+afterEach(() => {
+  vi.resetAllMocks(); // Prevents test pollution
+});
+```
+
 ## Directory Structure
 
 Tests mirror `src/` structure:
 
 - `test/providers/` → `src/providers/`
 - `test/redteam/` → `src/redteam/`
+
+## Mocking
+
+```typescript
+import { vi } from 'vitest';
+
+vi.mock('axios');
+const axiosMock = vi.mocked(axios);
+axiosMock.post.mockResolvedValue({ data: { result: 'success' } });
+```
+
+- Use Vitest's mocking utilities (`vi.mock`, `vi.fn`, `vi.spyOn`)
+- Prefer shallow mocking over deep mocking
+- Mock external dependencies but not the code being tested
+- Reset mocks between tests to prevent test pollution
 
 ## Provider Testing
 
@@ -52,4 +76,19 @@ Every provider needs tests covering:
 3. Configuration validation
 4. Token usage tracking
 
-See `test/providers/openai.test.ts` for reference.
+See `test/providers/openai-codex-sdk.test.ts` for reference patterns.
+
+## Test Configuration
+
+- Config: `vitest.config.ts` (main tests) and `vitest.integration.config.ts` (integration tests)
+- Setup: `vitest.setup.ts`
+- Globals enabled: `describe`, `it`, `expect`, `beforeEach`, `afterEach` available without imports
+- For mocking utilities, import from `vitest`: `import { vi } from 'vitest'`
+
+## Best Practices
+
+- Ensure all tests are independent and can run in any order
+- Clean up any test data or mocks after each test
+- Run the full test suite before committing changes
+- Test failures should be deterministic
+- For database tests, use in-memory instances or proper test fixtures

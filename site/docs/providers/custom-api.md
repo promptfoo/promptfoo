@@ -58,7 +58,7 @@ module.exports = class OpenAIProvider {
           Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
         },
         body: JSON.stringify({
-          model: this.config?.model || 'gpt-4.1-mini',
+          model: this.config?.model || 'gpt-5-mini',
           messages: [{ role: 'user', content: prompt }],
           max_tokens: this.config?.max_tokens || 1024,
           temperature: this.config?.temperature || 0,
@@ -150,7 +150,7 @@ module.exports = class TwoStageProvider {
           Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
         },
         body: JSON.stringify({
-          model: 'gpt-4.1-mini',
+          model: 'gpt-5-mini',
           messages: [{ role: 'user', content: prompt }],
         }),
       },
@@ -279,7 +279,7 @@ providers:
   - id: file://./myProvider.mjs # ES6 modules
     label: 'My Custom API' # Display name in UI
     config:
-      model: 'gpt-4.1'
+      model: 'gpt-5'
       temperature: 0.7
       max_tokens: 2000
       custom_parameter: 'custom value'

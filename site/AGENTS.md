@@ -26,7 +26,7 @@ find site/docs -name "*keyword*"
 ## Terminology
 
 - Use "eval" not "evaluation" in commands
-- "Promptfoo" (capital) at sentence start, "promptfoo" in code
+- "Promptfoo" when referring to the company or product, "promptfoo" when referring to the CLI command or in code
 
 ## Front Matter (Required)
 
