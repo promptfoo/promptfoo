@@ -229,6 +229,12 @@ export class VLGuardDatasetManager extends ImageDatasetManager<VLGuardInput> {
         headers,
       });
 
+      if (response.status === 401 || response.status === 403) {
+        throw new Error(
+          `VLGuard dataset requires access approval. Please visit https://huggingface.co/datasets/ys-zong/VLGuard and accept the usage terms, then ensure HF_TOKEN is set.`,
+        );
+      }
+
       if (response.status < 200 || response.status >= 300) {
         throw new Error(`Failed to fetch VLGuard metadata: ${response.statusText}`);
       }
@@ -348,6 +354,12 @@ export class VLGuardDatasetManager extends ImageDatasetManager<VLGuardInput> {
           headers,
         });
 
+        if (response.status === 401 || response.status === 403) {
+          throw new Error(
+            `VLGuard dataset requires access approval. Please visit https://huggingface.co/datasets/ys-zong/VLGuard and accept the usage terms, then ensure HF_TOKEN is set.`,
+          );
+        }
+
         if (response.status < 200 || response.status >= 300) {
           logger.warn(
             `[vlguard] Failed to fetch images at offset ${offset}: ${response.statusText}`,
@@ -369,6 +381,13 @@ export class VLGuardDatasetManager extends ImageDatasetManager<VLGuardInput> {
           `[vlguard] Fetched image URLs batch ${Math.floor(offset / PAGE_SIZE) + 1}/${Math.ceil(totalRows / PAGE_SIZE)}`,
         );
       } catch (error) {
+        // Re-throw authorization errors so they propagate with the helpful message
+        if (
+          error instanceof Error &&
+          error.message.includes('VLGuard dataset requires access approval')
+        ) {
+          throw error;
+        }
         logger.warn(
           `[vlguard] Error fetching images at offset ${offset}: ${error instanceof Error ? error.message : String(error)}`,
         );

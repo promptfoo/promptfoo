@@ -237,7 +237,7 @@ export async function fetchWithRetries(
     try {
       response = await fetchWithTimeout(url, options, timeout);
 
-      if (getEnvBool('PROMPTFOO_RETRY_5XX') && response.status >= 500 && response.status < 600) {
+      if (getEnvBool('PROMPTFOO_RETRY_5XX', true) && response.status >= 500 && response.status < 600) {
         throw new Error(`Internal Server Error: ${response.status} ${response.statusText}`);
       }
 
