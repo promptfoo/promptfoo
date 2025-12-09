@@ -86,7 +86,7 @@ Set default values for command-line options. These defaults will be used unless 
 | **Basic Configuration**  |          |                                                                                                                       |
 | description              | string   | Description of what your LLM is trying to do                                                                          |
 | config                   | string[] | Path(s) to configuration files                                                                                        |
-| envPath                  | string   | Path to .env file to load environment variables from                                                                  |
+| envPath                  | string \| string[] | Path(s) to .env file(s). When multiple files are specified, later files override earlier values.       |
 | **Input Files**          |          |                                                                                                                       |
 | prompts                  | string[] | One or more paths to [prompt files](/docs/configuration/prompts)                                                      |
 | providers                | string[] | One or more [LLM provider](/docs/providers) identifiers                                                               |
@@ -141,7 +141,9 @@ tests: tests.csv
 
 # Set default command-line options
 commandLineOptions:
-  envPath: .env.local # Load environment variables from custom .env file
+  envPath: # Load from multiple .env files (later overrides earlier)
+    - .env
+    - .env.local
   maxConcurrency: 10
   repeat: 3
   delay: 1000

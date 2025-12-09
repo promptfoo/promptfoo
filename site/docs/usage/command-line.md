@@ -53,11 +53,25 @@ The `promptfoo` command line utility supports the following subcommands:
 
 Most commands support the following common options:
 
-| Option                          | Description       |
-| ------------------------------- | ----------------- |
-| `--env-file, --env-path <path>` | Path to .env file |
-| `-v, --verbose`                 | Show debug logs   |
-| `--help`                        | Display help      |
+| Option                              | Description                                                                        |
+| ----------------------------------- | ---------------------------------------------------------------------------------- |
+| `--env-file, --env-path <paths...>` | Path(s) to .env file(s). Supports comma-separated or repeated flags.               |
+| `-v, --verbose`                     | Show debug logs                                                                    |
+| `--help`                            | Display help                                                                       |
+
+### Multiple Environment Files
+
+You can load multiple `.env` files. Later files override values from earlier ones:
+
+```bash
+# Comma-separated
+promptfoo eval --env-file .env,.env.local
+
+# Repeated flags
+promptfoo eval --env-file .env --env-file .env.local
+```
+
+All specified files must exist or an error is thrown.
 
 ## `promptfoo eval`
 
