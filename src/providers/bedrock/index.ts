@@ -455,11 +455,191 @@ export type LlamaVersion = (typeof LlamaVersion)[keyof typeof LlamaVersion];
 
 export interface LlamaMessage {
   role: 'system' | 'user' | 'assistant';
-  content: string;
+  content: string | LlamaContentBlock[];
+}
+
+export interface LlamaContentBlock {
+  type?: string;
+  text?: string;
+  image?: unknown;
+  image_url?: unknown;
+  source?: {
+    type?: string;
+    media_type?: string;
+    data?: string;
+    bytes?: string | Buffer;
+  };
+  url?: string;
+  [key: string]: unknown;
+}
+
+/**
+ * Result of extracting text and images from message content.
+ */
+export interface ExtractedContent {
+  /** Text content with <|image|> tokens inserted where images appear */
+  text: string;
+  /** Array of base64-encoded images in order of appearance */
+  images: string[];
+}
+
+/**
+ * Extracts base64 image data from an image block.
+ * Handles multiple formats: data URL, source.bytes, source.data, image_url.url
+ */
+function extractImageData(block: LlamaContentBlock): string | null {
+  // Handle image_url format (OpenAI-compatible)
+  const imageUrl =
+    (block.image_url as { url?: string })?.url || (block.type === 'image_url' && block.url);
+  if (typeof imageUrl === 'string' && imageUrl.startsWith('data:')) {
+    const matches = imageUrl.match(/^data:image\/[^;]+;base64,(.+)$/);
+    if (matches) {
+      return matches[1];
+    }
+  }
+
+  // Handle direct image object or block.image
+  const imageData = (block.image as LlamaContentBlock) || block;
+
+  // Try source.bytes (Bedrock native format)
+  if (imageData.source?.bytes) {
+    const rawBytes = imageData.source.bytes;
+    if (typeof rawBytes === 'string') {
+      // Check for data URL format
+      if (rawBytes.startsWith('data:')) {
+        const matches = rawBytes.match(/^data:image\/[^;]+;base64,(.+)$/);
+        if (matches) {
+          return matches[1];
+        }
+      }
+      // Assume raw base64 string
+      return rawBytes;
+    } else if (Buffer.isBuffer(rawBytes)) {
+      return rawBytes.toString('base64');
+    }
+  }
+
+  // Try source.data (Anthropic format)
+  if (imageData.source?.data) {
+    const data = imageData.source.data;
+    // Check if it's a data URL and extract base64
+    if (data.startsWith('data:')) {
+      const matches = data.match(/^data:image\/[^;]+;base64,(.+)$/);
+      if (matches) {
+        return matches[1];
+      }
+    }
+    return data;
+  }
+
+  return null;
+}
+
+/**
+ * Extracts text and images from message content for Llama 3.2 Vision.
+ * Returns text with <|image|> tokens at image positions, plus base64 images array.
+ *
+ * @param content - The message content (string or array of content blocks)
+ * @returns ExtractedContent with text (including image tokens) and images array
+ */
+export function extractTextAndImages(content: string | LlamaContentBlock[]): ExtractedContent {
+  if (typeof content === 'string') {
+    return { text: content.trim(), images: [] };
+  }
+
+  if (Array.isArray(content)) {
+    const parts: string[] = [];
+    const images: string[] = [];
+
+    for (const block of content) {
+      if (typeof block === 'string') {
+        parts.push(block);
+      } else if (block.type === 'text' && block.text) {
+        parts.push(block.text);
+      } else if (block.text && !block.type) {
+        parts.push(block.text);
+      } else if (
+        block.type === 'image' ||
+        block.type === 'image_url' ||
+        block.image ||
+        block.image_url
+      ) {
+        const imageData = extractImageData(block);
+        if (imageData) {
+          images.push(imageData);
+          parts.push('<|image|>');
+        }
+      }
+    }
+
+    return { text: parts.join('').trim(), images };
+  }
+
+  return { text: String(content).trim(), images: [] };
+}
+
+/**
+ * Extracts text content from a message, handling both string and array formats.
+ * Throws an error if the content contains non-text items (images, etc.) since
+ * the legacy InvokeModel API doesn't support multimodal content.
+ *
+ * @param content - The message content (string or array of content blocks)
+ * @param modelName - The model name for error messaging
+ * @returns The extracted text content as a string
+ * @throws Error if multimodal content is detected
+ */
+export function extractTextContent(
+  content: string | LlamaContentBlock[],
+  modelName?: string,
+): string {
+  // If it's already a string, return it directly
+  if (typeof content === 'string') {
+    return content.trim();
+  }
+
+  // If it's an array, extract text parts and check for non-text content
+  if (Array.isArray(content)) {
+    const textParts: string[] = [];
+    let hasNonTextContent = false;
+
+    for (const block of content) {
+      if (typeof block === 'string') {
+        textParts.push(block);
+      } else if (block.type === 'text' && block.text) {
+        textParts.push(block.text);
+      } else if (block.text && !block.type) {
+        // Handle {text: "..."} without type field
+        textParts.push(block.text);
+      } else if (
+        block.type === 'image' ||
+        block.type === 'image_url' ||
+        block.image ||
+        block.image_url
+      ) {
+        hasNonTextContent = true;
+      }
+    }
+
+    if (hasNonTextContent) {
+      const modelInfo = modelName ? ` (${modelName})` : '';
+      throw new Error(
+        `Multimodal content (images) detected but the legacy Bedrock Llama provider${modelInfo} ` +
+          `does not support images. Please use the Converse API provider instead:\n\n` +
+          `  Change: bedrock:${modelName || '<model-id>'}\n` +
+          `  To:     bedrock:converse:${modelName || '<model-id>'}\n\n` +
+          `The Converse API supports multimodal content for vision-capable models like Llama 3.2 11B/90B.`,
+      );
+    }
+
+    return textParts.join(' ').trim();
+  }
+
+  // Fallback: convert to string
+  return String(content).trim();
 }
 
 // see https://github.com/meta-llama/llama/blob/main/llama/generation.py#L284-L395
-export const formatPromptLlama2Chat = (messages: LlamaMessage[]): string => {
+export const formatPromptLlama2Chat = (messages: LlamaMessage[], modelName?: string): string => {
   if (messages.length === 0) {
     return '';
   }
@@ -469,29 +649,30 @@ export const formatPromptLlama2Chat = (messages: LlamaMessage[]): string => {
 
   for (let i = 0; i < messages.length; i++) {
     const message = messages[i];
+    const textContent = extractTextContent(message.content, modelName);
 
     switch (message.role) {
       case 'system':
         if (!systemMessageIncluded) {
-          formattedPrompt += `[INST] <<SYS>>\n${message.content.trim()}\n<</SYS>>\n\n`;
+          formattedPrompt += `[INST] <<SYS>>\n${textContent}\n<</SYS>>\n\n`;
           systemMessageIncluded = true;
         }
         break;
 
       case 'user':
         if (i === 0 && !systemMessageIncluded) {
-          formattedPrompt += `[INST] ${message.content.trim()} [/INST]`;
+          formattedPrompt += `[INST] ${textContent} [/INST]`;
         } else if (i === 0 && systemMessageIncluded) {
-          formattedPrompt += `${message.content.trim()} [/INST]`;
+          formattedPrompt += `${textContent} [/INST]`;
         } else if (i > 0 && messages[i - 1].role === 'assistant') {
-          formattedPrompt += `<s>[INST] ${message.content.trim()} [/INST]`;
+          formattedPrompt += `<s>[INST] ${textContent} [/INST]`;
         } else {
-          formattedPrompt += `${message.content.trim()} [/INST]`;
+          formattedPrompt += `${textContent} [/INST]`;
         }
         break;
 
       case 'assistant':
-        formattedPrompt += ` ${message.content.trim()} </s>`;
+        formattedPrompt += ` ${textContent} </s>`;
         break;
 
       default:
@@ -502,28 +683,59 @@ export const formatPromptLlama2Chat = (messages: LlamaMessage[]): string => {
   return formattedPrompt;
 };
 
-export const formatPromptLlama3Instruct = (messages: LlamaMessage[]): string => {
+export const formatPromptLlama3Instruct = (
+  messages: LlamaMessage[],
+  modelName?: string,
+): string => {
   let formattedPrompt = '<|begin_of_text|>';
 
   for (const message of messages) {
+    const textContent = extractTextContent(message.content, modelName);
     formattedPrompt += dedent`
       <|start_header_id|>${message.role}<|end_header_id|>
 
-      ${message.content.trim()}<|eot_id|>`;
+      ${textContent}<|eot_id|>`;
   }
 
   formattedPrompt += '<|start_header_id|>assistant<|end_header_id|>';
   return formattedPrompt;
 };
 
+/**
+ * Formats a Llama 3.2 Vision prompt with images.
+ * Extracts images from messages and inserts <|image|> tokens at appropriate positions.
+ *
+ * @param messages - Array of chat messages
+ * @returns Object containing the formatted prompt and array of base64 images
+ */
+export const formatPromptLlama32Vision = (
+  messages: LlamaMessage[],
+): { prompt: string; images: string[] } => {
+  let formattedPrompt = '<|begin_of_text|>';
+  const allImages: string[] = [];
+
+  for (const message of messages) {
+    const { text, images } = extractTextAndImages(message.content);
+    allImages.push(...images);
+    formattedPrompt += dedent`
+      <|start_header_id|>${message.role}<|end_header_id|>
+
+      ${text}<|eot_id|>`;
+  }
+
+  formattedPrompt += '<|start_header_id|>assistant<|end_header_id|>';
+  return { prompt: formattedPrompt, images: allImages };
+};
+
 // Llama 4 format uses different tags
-export const formatPromptLlama4 = (messages: LlamaMessage[]): string => {
+export const formatPromptLlama4 = (messages: LlamaMessage[], modelName?: string): string => {
   let formattedPrompt = '<|begin_of_text|>';
 
   for (const message of messages) {
+    const textContent = extractTextContent(message.content, modelName);
     formattedPrompt += dedent`<|header_start|>${message.role}<|header_end|>
 
-${message.content.trim()}<|eot|>`;
+${textContent}<|eot|>`;
   }
 
   // Add assistant header for completion
@@ -550,31 +762,57 @@ export const getLlamaModelHandler = (version: LlamaVersion) => {
       config: BedrockLlamaGenerationOptions,
       prompt: string,
       _stop?: string[],
-      _modelName?: string,
+      modelName?: string,
     ) => {
       const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
 
       let finalPrompt: string;
+      let images: string[] = [];
+
       switch (version) {
         case LlamaVersion.V2:
-          finalPrompt = formatPromptLlama2Chat(messages as LlamaMessage[]);
+          finalPrompt = formatPromptLlama2Chat(messages as LlamaMessage[], modelName);
           break;
         case LlamaVersion.V3:
         case LlamaVersion.V3_1:
-        case LlamaVersion.V3_2:
         case LlamaVersion.V3_3:
-          finalPrompt = formatPromptLlama3Instruct(messages as LlamaMessage[]);
+          finalPrompt = formatPromptLlama3Instruct(messages as LlamaMessage[], modelName);
           break;
+        case LlamaVersion.V3_2: {
+          // Only Llama 3.2 11B and 90B support vision; 1B and 3B are text-only
+          const isVisionCapable = modelName && (/11b/i.test(modelName) || /90b/i.test(modelName));
+          if (isVisionCapable) {
+            const result = formatPromptLlama32Vision(messages as LlamaMessage[]);
+            finalPrompt = result.prompt;
+            images = result.images;
+          } else {
+            // Text-only Llama 3.2 models (1B, 3B) use standard Llama 3 formatting
+            finalPrompt = formatPromptLlama3Instruct(messages as LlamaMessage[], modelName);
+          }
+          break;
+        }
         case LlamaVersion.V4:
-          finalPrompt = formatPromptLlama4(messages as LlamaMessage[]);
+          finalPrompt = formatPromptLlama4(messages as LlamaMessage[], modelName);
           break;
         default:
           throw new Error(`Unsupported LLAMA version: ${version}`);
       }
-      const params: { prompt: string; temperature?: number; top_p?: number; max_gen_len?: number } =
-        {
-          prompt: finalPrompt,
-        };
+
+      const params: {
+        prompt: string;
+        images?: string[];
+        temperature?: number;
+        top_p?: number;
+        max_gen_len?: number;
+      } = {
+        prompt: finalPrompt,
+      };
+
+      // Add images array for Llama 3.2 Vision models
+      if (images.length > 0) {
+        params.images = images;
+      }
+
       addConfigParam(
         params,
         'temperature',
