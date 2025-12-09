@@ -1202,6 +1202,41 @@ export interface OutputFile {
   metadata?: OutputMetadata;
 }
 
+// Job error tracking
+export interface JobError {
+  type: 'rate_limit' | 'timeout' | 'target_error' | 'grader_error' | 'validation' | 'unknown';
+  message: string;
+  timestamp: number;
+  count: number; // For deduplication
+}
+
+// Job metrics during evaluation
+export interface JobMetrics {
+  testPassCount: number;
+  testFailCount: number;
+  testErrorCount: number;
+  tokenUsage: {
+    total: number;
+    prompt: number;
+    completion: number;
+    numRequests: number;
+  };
+  totalLatencyMs: number;
+}
+
+// Job generation summary (after test generation phase)
+export interface JobGenerationSummary {
+  testCaseCount: number;
+  pluginCount: number;
+  strategyCount: number;
+}
+
+// Job completion summary (after evaluation phase)
+export interface JobCompletionSummary {
+  vulnerabilitiesFound: number;
+  topCategories: Array<{ name: string; count: number }>;
+}
+
 // Live eval job state
 export interface Job {
   evalId: string | null;
@@ -1210,6 +1245,15 @@ export interface Job {
   total: number;
   result: EvaluateSummaryV3 | EvaluateSummaryV2 | null;
   logs: string[];
+
+  // Enhanced fields for rich progress tracking
+  phase?: 'initializing' | 'generating' | 'evaluating' | 'complete' | 'error';
+  phaseDetail?: string; // e.g., "Generating tests for pii..."
+  startedAt?: number;
+  metrics?: JobMetrics;
+  errors?: JobError[];
+  generation?: JobGenerationSummary;
+  summary?: JobCompletionSummary;
 }
 
 // used for writing eval results

@@ -34,6 +34,111 @@ import {
   getPluginConfigurationError,
   RemoteGenerationDisabledError,
 } from '../services/redteamTestCaseGenerationService';
+import { emitJobUpdate } from '../socket';
+import {
+  addJobError,
+  createInitialMetrics,
+  detectErrorFromLog,
+  detectPhaseFromLog,
+} from '../utils/jobProgress';
+import type { Job } from '../../types';
+
+/**
+ * Emit job update via WebSocket (throttled to avoid flooding)
+ */
+const lastEmitTime = new Map<string, number>();
+const EMIT_THROTTLE_MS = 500; // Emit at most every 500ms per job
+
+function emitThrottledJobUpdate(jobId: string, job: Job): void {
+  const now = Date.now();
+  const lastTime = lastEmitTime.get(jobId) || 0;
+
+  if (now - lastTime >= EMIT_THROTTLE_MS) {
+    lastEmitTime.set(jobId, now);
+    emitJobUpdate(jobId, 'job:update', {
+      status: job.status,
+      progress: job.progress,
+      total: job.total,
+      phase: job.phase,
+      phaseDetail: job.phaseDetail,
+      startedAt: job.startedAt,
+      metrics: job.metrics,
+      errors: job.errors,
+      logs: job.logs.slice(-50), // Only send last 50 log lines via socket
+    });
+  }
+}
+
+/**
+ * Clean up throttle tracking for a job
+ */
+function cleanupJobThrottling(jobId: string): void {
+  lastEmitTime.delete(jobId);
+}
+
+/**
+ * Emit job completion via WebSocket (always sent immediately)
+ */
+function emitJobComplete(jobId: string, job: Job): void {
+  cleanupJobThrottling(jobId);
+  emitJobUpdate(jobId, 'job:complete', {
+    status: job.status,
+    evalId: job.evalId,
+    phase: job.phase,
+    phaseDetail: job.phaseDetail,
+    metrics: job.metrics,
+    errors: job.errors,
+    summary: job.summary,
+  });
+}
+
+/**
+ * Clean up old completed/errored jobs from evalJobs map
+ * Jobs older than JOB_RETENTION_MS are removed to prevent memory leaks
+ */
+const JOB_RETENTION_MS = 30 * 60 * 1000; // 30 minutes
+
+function cleanupOldJobs(): void {
+  const now = Date.now();
+  for (const [jobId, job] of evalJobs.entries()) {
+    // Only clean up completed or errored jobs
+    if (job.status === 'complete' || job.status === 'error') {
+      const jobAge = job.startedAt ? now - job.startedAt : 0;
+      if (jobAge > JOB_RETENTION_MS) {
+        evalJobs.delete(jobId);
+        cleanupJobThrottling(jobId);
+        logger.debug(`Cleaned up old job: ${jobId}`);
+      }
+    }
+  }
+}
+
+// Run cleanup periodically (every 5 minutes)
+let cleanupIntervalId: ReturnType<typeof setInterval> | null = null;
+
+/**
+ * Start the job cleanup interval
+ * Called when server starts
+ */
+export function startJobCleanupInterval(): void {
+  if (!cleanupIntervalId) {
+    cleanupIntervalId = setInterval(cleanupOldJobs, 5 * 60 * 1000);
+  }
+}
+
+/**
+ * Stop the job cleanup interval
+ * Should be called on server shutdown to prevent memory leaks
+ */
+export function stopJobCleanupInterval(): void {
+  if (cleanupIntervalId) {
+    clearInterval(cleanupIntervalId);
+    cleanupIntervalId = null;
+  }
+}
+
+// Start cleanup interval on module load
+startJobCleanupInterval();
 
 export const redteamRouter = Router();
 
@@ -234,15 +339,22 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
   currentJobId = id;
   currentAbortController = new AbortController();
 
-  // Initialize job status with empty logs array
-  evalJobs.set(id, {
+  // Initialize job status with enhanced fields
+  const job: Job = {
     evalId: null,
     status: 'in-progress',
     progress: 0,
     total: 0,
     result: null,
     logs: [],
-  });
+    // Enhanced fields
+    phase: 'initializing',
+    phaseDetail: 'Starting red team evaluation...',
+    startedAt: Date.now(),
+    metrics: createInitialMetrics(),
+    errors: [],
+  };
+  evalJobs.set(id, job);
 
   // Set web UI mode
   cliState.webUI = true;
@@ -262,6 +374,44 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
         const job = evalJobs.get(id);
         if (job) {
           job.logs.push(message);
+
+          // Detect phase changes from log messages
+          const phaseInfo = detectPhaseFromLog(message, job.phase);
+          if (phaseInfo) {
+            job.phase = phaseInfo.phase;
+            if (phaseInfo.detail) {
+              job.phaseDetail = phaseInfo.detail;
+            }
+          }
+
+          // Detect and track errors from log messages
+          const errorInfo = detectErrorFromLog(message);
+          if (errorInfo) {
+            addJobError(job, errorInfo.type, errorInfo.message);
+          }
+
+          // Emit throttled update via WebSocket
+          emitThrottledJobUpdate(id, job);
+        }
+      }
+    },
+    progressCallback: (
+      progress: number,
+      total: number,
+      _index: number | string,
+      _evalStep: any,
+      _metrics: any,
+    ) => {
+      if (currentJobId === id) {
+        const job = evalJobs.get(id);
+        if (job) {
+          job.progress = progress;
+          job.total = total;
+          job.phase = 'evaluating';
+          job.phaseDetail = `Evaluating probe ${progress}/${total}...`;
+
+          // Emit throttled update via WebSocket
+          emitThrottledJobUpdate(id, job);
         }
       }
     },
@@ -274,6 +424,78 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
         job.status = 'complete';
         job.result = summary;
         job.evalId = evalResult?.id ?? null;
+        job.phase = 'complete';
+        job.phaseDetail = 'Evaluation complete';
+
+        // Populate metrics from results
+        if (summary && summary.results) {
+          const results = summary.results;
+          let passCount = 0;
+          let failCount = 0;
+          let errorCount = 0;
+          let totalLatencyMs = 0;
+
+          // Count pass/fail/error from results and aggregate latency
+          for (const result of results) {
+            if (result.error) {
+              errorCount++;
+            } else if (result.success) {
+              passCount++;
+            } else {
+              failCount++;
+            }
+            // Aggregate latency from individual results
+            if (result.latencyMs) {
+              totalLatencyMs += result.latencyMs;
+            }
+          }
+
+          if (job.metrics) {
+            job.metrics.testPassCount = passCount;
+            job.metrics.testFailCount = failCount;
+            job.metrics.testErrorCount = errorCount;
+            job.metrics.totalLatencyMs = totalLatencyMs;
+
+            // Get aggregated token usage from stats if available
+            if ('stats' in summary && summary.stats?.tokenUsage) {
+              const tokenUsage = summary.stats.tokenUsage;
+              job.metrics.tokenUsage = {
+                total: tokenUsage.total ?? 0,
+                prompt: tokenUsage.prompt ?? 0,
+                completion: tokenUsage.completion ?? 0,
+                numRequests: tokenUsage.numRequests ?? results.length,
+              };
+            }
+          }
+
+          // Calculate top categories for vulnerabilities (failed tests)
+          const categoryCount: Record<string, number> = {};
+          for (const result of results) {
+            if (!result.success && !result.error) {
+              // This is a vulnerability (failed test)
+              const pluginId =
+                (result.vars as Record<string, unknown>)?.pluginId ||
+                (result as unknown as Record<string, unknown>).pluginId ||
+                'unknown';
+              const category = String(pluginId);
+              categoryCount[category] = (categoryCount[category] || 0) + 1;
+            }
+          }
+
+          // Sort by count and take top 5
+          const topCategories = Object.entries(categoryCount)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 5)
+            .map(([name, count]) => ({ name, count }));
+
+          job.summary = {
+            vulnerabilitiesFound: failCount,
+            topCategories,
+          };
+        }
+
+        // Emit completion via WebSocket
+        emitJobComplete(id, job);
       }
       if (currentJobId === id) {
         cliState.webUI = false;
@@ -286,10 +508,16 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
       const job = evalJobs.get(id);
       if (job && currentJobId === id) {
         job.status = 'error';
+        job.phase = 'error';
+        job.phaseDetail = 'Evaluation failed';
         job.logs.push(`Error: ${error.message}`);
         if (error.stack) {
           job.logs.push(`Stack trace: ${error.stack}`);
         }
+        addJobError(job, 'unknown', error.message);
+
+        // Emit error via WebSocket and cleanup
+        emitJobComplete(id, job);
       }
       if (currentJobId === id) {
         cliState.webUI = false;

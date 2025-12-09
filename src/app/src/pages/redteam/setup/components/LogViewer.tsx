@@ -36,13 +36,13 @@ export function LogViewer({ logs }: LogViewerProps) {
   const ansiConverter = useMemo(
     () =>
       new Convert({
-        fg: theme.palette.mode === 'dark' ? '#fff' : '#000',
-        bg: theme.palette.mode === 'dark' ? '#1e1e1e' : '#fff',
+        fg: theme.palette.text.primary,
+        bg: theme.palette.background.paper,
         newline: true,
         escapeXML: true,
         stream: false,
       }),
-    [theme.palette.mode],
+    [theme.palette.text.primary, theme.palette.background.paper],
   );
 
   const convertAnsiToHtml = useCallback(
@@ -56,6 +56,11 @@ export function LogViewer({ logs }: LogViewerProps) {
     },
     [ansiConverter],
   );
+
+  // Memoize converted HTML to prevent re-conversion on every render
+  const convertedLogsHtml = useMemo(() => {
+    return logs.map((log) => convertAnsiToHtml(log)).join('<br/>');
+  }, [logs, convertAnsiToHtml]);
 
   // Auto-scroll effect
   useEffect(() => {
@@ -145,7 +150,7 @@ export function LogViewer({ logs }: LogViewerProps) {
         sx={{
           p: 2,
           overflow: 'auto',
-          backgroundColor: theme.palette.mode === 'dark' ? '#1e1e1e' : '#f5f5f5',
+          backgroundColor: theme.palette.background.default,
           fontFamily: 'monospace',
           fontSize: '0.875rem',
           overflowX: 'auto',
@@ -161,16 +166,16 @@ export function LogViewer({ logs }: LogViewerProps) {
             overflowX: 'visible',
             minWidth: 'max-content',
             '& span': {
-              color: theme.palette.mode === 'dark' ? 'inherit' : undefined,
+              color: 'inherit',
             },
           }}
           dangerouslySetInnerHTML={{
-            __html: logs.map((log) => convertAnsiToHtml(log)).join('<br/>'),
+            __html: convertedLogsHtml,
           }}
         />
       </Paper>
     ),
-    [logs, convertAnsiToHtml, theme.palette.mode],
+    [convertedLogsHtml, theme.palette.background.default],
   );
 
   return (
@@ -194,7 +199,7 @@ export function LogViewer({ logs }: LogViewerProps) {
         <LogContent
           containerRef={logsContainerRef}
           onScroll={handleScroll}
-          sx={{ maxHeight: '600px' }}
+          sx={{ maxHeight: 'min(600px, 60vh)', minHeight: '200px' }}
         />
         {showScrollButton && !isFullscreen && (
           <Fab
