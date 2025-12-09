@@ -122,7 +122,7 @@ export abstract class ImageDatasetPluginBase<
       );
     } catch (error) {
       const errorMessage = `Failed to generate tests: ${error instanceof Error ? error.message : String(error)}`;
-      logger.error(`[${this.getLogPrefix()}] ${errorMessage}`);
+      logger.warn(`[${this.getLogPrefix()}] ${errorMessage}`);
       return [];
     }
   }

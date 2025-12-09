@@ -315,8 +315,8 @@ describe('VLGuardPlugin', () => {
       const plugin = new VLGuardPlugin(mockProvider, 'test purpose', 'image', { split: 'train' });
       await plugin.generateTests(5);
 
-      // Should log error with helpful message about gated dataset access
-      expect(logger.error).toHaveBeenCalledWith(
+      // Should log warning with helpful message about gated dataset access
+      expect(logger.warn).toHaveBeenCalledWith(
         expect.stringContaining('VLGuard dataset requires access approval'),
       );
       expect(logger.error).toHaveBeenCalledWith(
@@ -349,8 +349,8 @@ describe('VLGuardPlugin', () => {
       const plugin = new VLGuardPlugin(mockProvider, 'test purpose', 'image', { split: 'train' });
       await plugin.generateTests(5);
 
-      // Should log error with helpful message about gated dataset access
-      expect(logger.error).toHaveBeenCalledWith(
+      // Should log warning with helpful message about gated dataset access
+      expect(logger.warn).toHaveBeenCalledWith(
         expect.stringContaining('VLGuard dataset requires access approval'),
       );
     });
