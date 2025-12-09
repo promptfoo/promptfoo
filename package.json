@@ -283,6 +283,7 @@
     "ora": "^9.0.0",
     "pem": "^1.15.1",
     "posthog-node": "^5.14.0",
+    "protobufjs": "^7.5.4",
     "proxy-agent": "^6.5.0",
     "proxy-from-env": "^1.1.0",
     "python-shell": "^5.0.0",

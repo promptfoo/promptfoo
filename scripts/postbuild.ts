@@ -145,6 +145,17 @@ function getDrizzleTask(): CopyTask {
 }
 
 /**
+ * Get the proto files copy task for OTLP protobuf support.
+ */
+function getProtoTask(): CopyTask {
+  return {
+    src: path.join(SRC, 'tracing', 'proto'),
+    dest: path.join(DIST, 'src', 'tracing', 'proto'),
+    recursive: true,
+  };
+}
+
+/**
  * Generate copy tasks for redteam data files.
  * These are JSON fixtures loaded at runtime by redteam strategies.
  */
@@ -244,6 +255,7 @@ export function postbuild(): PostbuildResult {
     ...getHtmlFiles(),
     ...getWrapperTasks(),
     getDrizzleTask(),
+    getProtoTask(),
     ...getRedteamDataTasks(),
   ];
 
