@@ -118,8 +118,9 @@ export interface ClaudeCodeOptions {
 
   /**
    * User can set more dangerous 'acceptEdits' or 'bypassPermissions' if they know what they're doing,
+   * - 'dontAsk' mode denies permissions that aren't pre-approved without prompting
    */
-  permission_mode?: 'default' | 'plan' | 'acceptEdits' | 'bypassPermissions';
+  permission_mode?: 'default' | 'plan' | 'acceptEdits' | 'bypassPermissions' | 'dontAsk';
 
   /**
    * User can set a custom system prompt, or append to the default Claude Agent SDK system prompt
@@ -209,6 +210,14 @@ export interface ClaudeCodeOptions {
    * Useful for debugging or when you need to see intermediate outputs.
    */
   include_partial_messages?: boolean;
+
+  /**
+   * Enable beta features. Currently supports:
+   * - 'context-1m-2025-08-07' - Enable 1M token context window (Sonnet 4/4.5 only)
+   *
+   * @see https://docs.anthropic.com/en/api/beta-headers
+   */
+  betas?: 'context-1m-2025-08-07'[];
 }
 
 export class ClaudeCodeSDKProvider implements ApiProvider {
@@ -373,6 +382,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       outputFormat: config.output_format,
       hooks: config.hooks,
       includePartialMessages: config.include_partial_messages,
+      betas: config.betas,
       env,
     };
 

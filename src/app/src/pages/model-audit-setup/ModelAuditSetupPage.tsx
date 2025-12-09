@@ -1,5 +1,7 @@
-import { useEffect } from 'react';
+import { useCallback, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 
+import { MODEL_AUDIT_ROUTES } from '@app/constants/routes';
 import { callApi } from '@app/utils/api';
 import {
   CheckCircle as CheckCircleIcon,
@@ -11,39 +13,33 @@ import {
   Box,
   CircularProgress,
   Container,
-  Fade,
   IconButton,
   Link,
   Paper,
   Stack,
-  Tab,
-  Tabs,
   Tooltip,
   Typography,
 } from '@mui/material';
-import AdvancedOptionsDialog from './components/AdvancedOptionsDialog';
-import ConfigurationTab from './components/ConfigurationTab';
-import HistoryTab from './components/HistoryTab';
-import ResultsTab from './components/ResultsTab';
-import ScannedFilesDialog from './components/ScannedFilesDialog';
-import { useModelAuditStore } from './store';
+import AdvancedOptionsDialog from '../model-audit/components/AdvancedOptionsDialog';
+import ConfigurationTab from '../model-audit/components/ConfigurationTab';
+import ResultsTab from '../model-audit/components/ResultsTab';
+import ScannedFilesDialog from '../model-audit/components/ScannedFilesDialog';
+import { useModelAuditConfigStore, useModelAuditHistoryStore } from '../model-audit/stores';
 
-import type { ScanResult } from './ModelAudit.types';
+import type { ScanResult } from '../model-audit/ModelAudit.types';
 
-export default function ModelAudit() {
+export default function ModelAuditSetupPage() {
+  const navigate = useNavigate();
+
   const {
-    // State
     paths,
     scanOptions,
     isScanning,
     scanResults,
     error,
     installationStatus,
-    activeTab,
     showFilesDialog,
     showOptionsDialog,
-
-    // Actions
     setPaths,
     removePath,
     setScanOptions,
@@ -51,20 +47,19 @@ export default function ModelAudit() {
     setScanResults,
     setError,
     checkInstallation,
-    setActiveTab,
     setShowFilesDialog,
     setShowOptionsDialog,
     addRecentScan,
-    fetchHistoricalScans,
-  } = useModelAuditStore();
+  } = useModelAuditConfigStore();
+
+  const { fetchHistoricalScans } = useModelAuditHistoryStore();
 
   useEffect(() => {
-    useModelAuditStore.persist.rehydrate();
-    // Check installation status immediately after rehydration
+    useModelAuditConfigStore.persist.rehydrate();
     checkInstallation();
-  }, []); // Remove checkInstallation dependency to avoid potential issues
+  }, [checkInstallation]);
 
-  const handleScan = async () => {
+  const handleScan = useCallback(async () => {
     setIsScanning(true);
     setError(null);
 
@@ -88,12 +83,16 @@ export default function ModelAudit() {
       }
 
       setScanResults(data);
-      setActiveTab(1); // Switch to Results tab
-      addRecentScan(paths); // Add to recent scans
+      addRecentScan(paths);
 
       // Refresh history to include the new scan if it was persisted
       if (data.persisted) {
         fetchHistoricalScans();
+        // Navigate to the result page if we have an audit ID
+        if (data.auditId) {
+          navigate(MODEL_AUDIT_ROUTES.DETAIL(data.auditId));
+          return;
+        }
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred';
@@ -101,14 +100,26 @@ export default function ModelAudit() {
     } finally {
       setIsScanning(false);
     }
-  };
+  }, [
+    paths,
+    scanOptions,
+    setIsScanning,
+    setError,
+    setScanResults,
+    addRecentScan,
+    fetchHistoricalScans,
+    navigate,
+  ]);
 
-  const handleRemovePath = (index: number) => {
-    const pathToRemove = paths[index];
-    if (pathToRemove) {
-      removePath(pathToRemove.path);
-    }
-  };
+  const handleRemovePath = useCallback(
+    (index: number) => {
+      const pathToRemove = paths[index];
+      if (pathToRemove) {
+        removePath(pathToRemove.path);
+      }
+    },
+    [paths, removePath],
+  );
 
   return (
     <Box
@@ -124,10 +135,10 @@ export default function ModelAudit() {
           <Stack direction="row" alignItems="center" mb={4}>
             <Box>
               <Typography variant="h4" gutterBottom fontWeight="bold">
-                Model Audit
+                Model Audit Setup
               </Typography>
               <Typography variant="body1" color="text.secondary">
-                Scan ML models for security vulnerabilities.{' '}
+                Configure and run a security scan on ML models.{' '}
                 <Link href="https://www.promptfoo.dev/docs/model-audit/" target="_blank">
                   Learn more
                 </Link>
@@ -168,55 +179,40 @@ export default function ModelAudit() {
             </Box>
           </Stack>
 
-          <Tabs value={activeTab} onChange={(_, newValue) => setActiveTab(newValue)}>
-            <Tab label="Configuration" />
-            <Tab label="Results" disabled={!scanResults} />
-            <Tab label="History" />
-          </Tabs>
-
           {error && (
-            <Alert severity="error" sx={{ mt: 2 }} onClose={() => setError(null)}>
+            <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>
               {error}
             </Alert>
           )}
 
-          <Box sx={{ mt: 3 }}>
-            <Fade in={activeTab === 0} unmountOnExit>
-              <Box>
-                <ConfigurationTab
-                  paths={paths}
-                  isScanning={isScanning}
-                  onAddPath={(path) => {
-                    setPaths([...paths, path]);
-                  }}
-                  onRemovePath={handleRemovePath}
-                  onShowOptions={() => setShowOptionsDialog(true)}
-                  onScan={handleScan}
-                  error={error}
-                  onClearError={() => setError(null)}
-                  currentWorkingDir={installationStatus.cwd || ''}
-                  installationStatus={installationStatus}
-                />
-              </Box>
-            </Fade>
+          <ConfigurationTab
+            paths={paths}
+            isScanning={isScanning}
+            onAddPath={(path) => {
+              setPaths([...paths, path]);
+            }}
+            onRemovePath={handleRemovePath}
+            onShowOptions={() => setShowOptionsDialog(true)}
+            onScan={handleScan}
+            error={error}
+            onClearError={() => setError(null)}
+            currentWorkingDir={installationStatus.cwd || ''}
+            installationStatus={installationStatus}
+            onRetryInstallationCheck={checkInstallation}
+          />
 
-            <Fade in={activeTab === 1} unmountOnExit>
-              <Box>
-                {scanResults && (
-                  <ResultsTab
-                    scanResults={scanResults}
-                    onShowFilesDialog={() => setShowFilesDialog(true)}
-                  />
-                )}
-              </Box>
-            </Fade>
-
-            <Fade in={activeTab === 2} unmountOnExit>
-              <Box>
-                <HistoryTab />
-              </Box>
-            </Fade>
-          </Box>
+          {/* Show inline results if scan completed but wasn't persisted */}
+          {scanResults && (
+            <Box sx={{ mt: 4 }}>
+              <Typography variant="h5" gutterBottom fontWeight={600}>
+                Scan Results
+              </Typography>
+              <ResultsTab
+                scanResults={scanResults}
+                onShowFilesDialog={() => setShowFilesDialog(true)}
+              />
+            </Box>
+          )}
         </Paper>
 
         <AdvancedOptionsDialog

@@ -1,3 +1,4 @@
+import * as fs from 'fs';
 import path from 'path';
 
 import { loadFromJavaScriptFile } from './assertions/utils';
@@ -10,6 +11,7 @@ import {
   CONTEXT_FAITHFULNESS_NLI_STATEMENTS,
   CONTEXT_RECALL,
   CONTEXT_RECALL_ATTRIBUTED_TOKEN,
+  CONTEXT_RECALL_NOT_ATTRIBUTED_TOKEN,
   CONTEXT_RELEVANCE,
   CONTEXT_RELEVANCE_BAD,
   DEFAULT_GRADING_PROMPT,
@@ -27,7 +29,8 @@ import { LLAMA_GUARD_REPLICATE_PROVIDER } from './redteam/constants';
 import { shouldGenerateRemote } from './redteam/remoteGeneration';
 import { doRemoteGrading } from './remoteGrading';
 import { doRemoteScoringWithPi } from './remoteScoring';
-import { maybeLoadFromExternalFile } from './util/file';
+import { getNunjucksEngineForFilePath, maybeLoadFromExternalFile } from './util/file';
+import { parseFileUrl } from './util/functions/loadFunction';
 import { isJavascriptFile } from './util/fileExtensions';
 import invariant from './util/invariant';
 import { extractFirstJsonObject, extractJsonObjects } from './util/json';
@@ -124,8 +127,10 @@ async function loadFromProviderOptions(provider: ProviderOptions) {
     `Provider must be an object, but received an array: ${JSON.stringify(provider)}`,
   );
   invariant(provider.id, 'Provider supplied to assertion must have an id');
-  // TODO(ian): set basepath if invoked from filesystem config
-  return loadApiProvider(provider.id, { options: provider as ProviderOptions });
+  return loadApiProvider(provider.id, {
+    options: provider as ProviderOptions,
+    basePath: cliState.basePath,
+  });
 }
 
 export async function getGradingProvider(
@@ -136,7 +141,7 @@ export async function getGradingProvider(
   let finalProvider: ApiProvider | null;
   if (typeof provider === 'string') {
     // Defined as a string
-    finalProvider = await loadApiProvider(provider);
+    finalProvider = await loadApiProvider(provider, { basePath: cliState.basePath });
   } else if (typeof provider === 'object' && typeof (provider as ApiProvider).id === 'function') {
     // Defined as an ApiProvider interface
     finalProvider = provider as ApiProvider;
@@ -484,7 +489,7 @@ export async function matchesClassification(
   };
 }
 
-async function loadRubricPrompt(
+export async function loadRubricPrompt(
   rubricPrompt: string | object | undefined,
   defaultPrompt: string,
 ): Promise<string> {
@@ -495,19 +500,31 @@ async function loadRubricPrompt(
     return defaultPrompt;
   }
 
-  if (
-    typeof rubricPrompt === 'string' &&
-    rubricPrompt.startsWith('file://') &&
-    isJavascriptFile(rubricPrompt)
-  ) {
+  if (typeof rubricPrompt === 'string' && rubricPrompt.startsWith('file://')) {
     const basePath = cliState.basePath || '';
-    let filePath = rubricPrompt.slice('file://'.length);
 
-    const [pathPart, functionName] = filePath.split(':');
-    filePath = path.resolve(basePath, pathPart);
-    rubricPrompt = await loadFromJavaScriptFile(filePath, functionName, []);
+    // Render Nunjucks templates in the file path (e.g., file://{{ env.RUBRIC_PATH }}/rubric.json)
+    const renderedFilePath = getNunjucksEngineForFilePath().renderString(rubricPrompt, {});
+
+    // Parse the file URL to extract file path and function name
+    // This handles colon splitting correctly, including Windows drive letters and :functionName suffix
+    const { filePath, functionName } = parseFileUrl(renderedFilePath);
+    const resolvedPath = path.resolve(basePath, filePath);
+
+    if (isJavascriptFile(filePath)) {
+      rubricPrompt = await loadFromJavaScriptFile(resolvedPath, functionName, []);
+    } else {
+      // For non-JS files (including .json, .yaml, .txt), load as raw text
+      // to allow Nunjucks templating before JSON/YAML parsing.
+      // This fixes the issue where .json files with Nunjucks templates
+      // would fail to parse before rendering.
+      if (!fs.existsSync(resolvedPath)) {
+        throw new Error(`File does not exist: ${resolvedPath}`);
+      }
+      rubricPrompt = fs.readFileSync(resolvedPath, 'utf8');
+    }
   } else {
-    // Load from external file if needed
+    // Load from external file if needed (for non file:// references)
     rubricPrompt = maybeLoadFromExternalFile(rubricPrompt);
   }
 
@@ -1258,12 +1275,23 @@ export async function matchesContextRecall(
   }
 
   invariant(typeof resp.output === 'string', 'context-recall produced malformed response');
-  const sentences = splitIntoSentences(resp.output);
+
+  // Filter to only include lines that contain attribution markers.
+  // This handles cases where LLMs add preamble text before the classification list.
+  // See: https://github.com/promptfoo/promptfoo/issues/1506
+  const attributedTokenLower = CONTEXT_RECALL_ATTRIBUTED_TOKEN.toLowerCase();
+  const notAttributedTokenLower = CONTEXT_RECALL_NOT_ATTRIBUTED_TOKEN.toLowerCase();
+  const sentences = splitIntoSentences(resp.output).filter((line) => {
+    const lowerLine = line.toLowerCase();
+    return lowerLine.includes(attributedTokenLower) || lowerLine.includes(notAttributedTokenLower);
+  });
+
   const sentenceAttributions: { sentence: string; attributed: boolean }[] = [];
   let numerator = 0;
 
   for (const sentence of sentences) {
-    const isAttributed = sentence.includes(CONTEXT_RECALL_ATTRIBUTED_TOKEN);
+    // Case-insensitive check for attribution - handles [ATTRIBUTED], [Attributed], etc.
+    const isAttributed = sentence.toLowerCase().includes(attributedTokenLower);
     if (isAttributed) {
       numerator++;
     }
@@ -1436,14 +1464,17 @@ export async function matchesContextFaithfulness(
   if (grading?.rubricPrompt) {
     invariant(Array.isArray(grading.rubricPrompt), 'rubricPrompt must be an array');
   }
-  const longformPrompt: string =
-    (typeof grading?.rubricPrompt?.[0] === 'string'
+  // Load rubric prompts using loadRubricPrompt to support file:// references with templates
+  const rawLongformPrompt =
+    typeof grading?.rubricPrompt?.[0] === 'string'
       ? grading?.rubricPrompt?.[0]
-      : grading?.rubricPrompt?.[0].content) || CONTEXT_FAITHFULNESS_LONGFORM;
-  const nliPrompt: string =
-    (typeof grading?.rubricPrompt?.[1] === 'string'
+      : grading?.rubricPrompt?.[0]?.content;
+  const rawNliPrompt =
+    typeof grading?.rubricPrompt?.[1] === 'string'
       ? grading?.rubricPrompt?.[1]
-      : grading?.rubricPrompt?.[1].content) || CONTEXT_FAITHFULNESS_NLI_STATEMENTS;
+      : grading?.rubricPrompt?.[1]?.content;
+  const longformPrompt = await loadRubricPrompt(rawLongformPrompt, CONTEXT_FAITHFULNESS_LONGFORM);
+  const nliPrompt = await loadRubricPrompt(rawNliPrompt, CONTEXT_FAITHFULNESS_NLI_STATEMENTS);
 
   let promptText = await renderLlmRubricPrompt(longformPrompt, {
     question: query,

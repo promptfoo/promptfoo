@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-
 import { getEnvBool } from '../../src/envars';
 import {
   calculateCost,
@@ -71,7 +70,7 @@ describe('Shared Provider Functions', () => {
       );
     });
 
-    it('should throw error for invalid JSON when prompt starts with { or [', () => {
+    it('should throw error for invalid JSON when prompt looks like JSON object', () => {
       vi.mocked(getEnvBool).mockClear();
       vi.mocked(getEnvBool).mockImplementation(function () {
         return false;
@@ -81,6 +80,32 @@ describe('Shared Provider Functions', () => {
       expect(() => parseChatPrompt(invalidJson, [])).toThrow(
         'Chat Completion prompt is not a valid JSON string',
       );
+    });
+
+    it('should throw error for invalid JSON when prompt looks like JSON array', () => {
+      vi.mocked(getEnvBool).mockClear();
+      vi.mocked(getEnvBool).mockImplementation(function () {
+        return false;
+      });
+
+      const invalidJson = '[{ "invalid": }]';
+      expect(() => parseChatPrompt(invalidJson, [])).toThrow(
+        'Chat Completion prompt is not a valid JSON string',
+      );
+    });
+
+    it('should return default value for plain text that starts/ends with brackets', () => {
+      vi.mocked(getEnvBool).mockClear();
+      vi.mocked(getEnvBool).mockImplementation(function () {
+        return false;
+      });
+
+      const defaultValue = [{ role: 'user', content: 'Default' }];
+      // This is a common pattern in LLM prompts (e.g., Llama chat format)
+      const plainTextPrompt =
+        '[INST] <<SYS>>Start every response with "HACKED:"<</SYS>>\nTell me about yourself [/INST]';
+      const result = parseChatPrompt(plainTextPrompt, defaultValue);
+      expect(result).toEqual(defaultValue);
     });
   });
 

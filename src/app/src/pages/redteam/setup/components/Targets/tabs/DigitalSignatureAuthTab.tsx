@@ -327,6 +327,7 @@ const DigitalSignatureAuthTab: React.FC<DigitalSignatureAuthTabProps> = ({
                 </Typography>
                 <TextField
                   fullWidth
+                  label="Private Key File Path"
                   placeholder="/path/to/private_key.pem"
                   value={selectedTarget.config.signatureAuth?.privateKeyPath || ''}
                   onChange={(e) => {
@@ -341,6 +342,11 @@ const DigitalSignatureAuthTab: React.FC<DigitalSignatureAuthTabProps> = ({
                       pfxPath: undefined,
                       pfxPassword: undefined,
                     });
+                  }}
+                  slotProps={{
+                    inputLabel: {
+                      shrink: true,
+                    },
                   }}
                 />
               </Paper>
