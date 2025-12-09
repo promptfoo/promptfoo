@@ -21,36 +21,29 @@ npm run test:watch
 npm run test:integration
 ```
 
-## Critical Test Requirements
+## Critical Rules
 
-**NEVER:**
+- **NEVER** increase test timeouts - fix the slow test
+- **NEVER** use `.only()` or `.skip()` in committed code
+- **ALWAYS** clean up mocks in `afterEach`
+- **ALWAYS** use `--randomize` to ensure test independence
 
-- Increase test timeouts - fix the slow test instead
-- Use `.only()` or `.skip()` in committed code
-- Run watch mode in CI
+## Writing Tests
 
-## Project-Specific Testing Rules
+**Reference files:**
 
-**Mock cleanup is mandatory:**
+- **Vitest (frontend)**: `src/app/src/hooks/usePageMeta.test.ts` - explicit imports
+- **Vitest (backend)**: `test/assertions/contains.test.ts` - uses globals (no imports needed)
+
+Backend Vitest tests use `globals: true` so `describe`, `it`, `expect`, `vi` are available without imports.
 
 ```typescript
+import { vi } from 'vitest';
+
 afterEach(() => {
   vi.resetAllMocks(); // Prevents test pollution
 });
 ```
-
-**Test entire objects, not individual fields:**
-
-```typescript
-// Good
-expect(result).toEqual({ id: 1, name: 'test', active: true });
-
-// Avoid
-expect(result.id).toEqual(1);
-expect(result.name).toEqual('test');
-```
-
-**Mock minimally** - Only mock external dependencies (APIs, databases), not code under test.
 
 ## Directory Structure
 
@@ -58,27 +51,8 @@ Tests mirror `src/` structure:
 
 - `test/providers/` → `src/providers/`
 - `test/redteam/` → `src/redteam/`
-- etc.
 
-## Writing Tests
-
-### Organize with describe/it blocks
-
-```typescript
-describe('OpenAI Provider', () => {
-  describe('chat completion', () => {
-    it('should handle normal input correctly', () => {
-      // test code
-    });
-
-    it('should handle edge cases', () => {
-      // test code
-    });
-  });
-});
-```
-
-### Mocking
+## Mocking
 
 ```typescript
 import { vi } from 'vitest';
@@ -97,12 +71,12 @@ axiosMock.post.mockResolvedValue({ data: { result: 'success' } });
 
 Every provider needs tests covering:
 
-1. Success case (normal API response)
+1. Success case
 2. Error cases (4xx, 5xx, rate limits)
 3. Configuration validation
 4. Token usage tracking
 
-See `test/providers/openai.test.ts` for reference patterns.
+See `test/providers/openai-codex-sdk.test.ts` for reference patterns.
 
 ## Test Configuration
 
