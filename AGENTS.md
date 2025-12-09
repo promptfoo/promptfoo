@@ -91,6 +91,8 @@ npm run local -- eval -c path/to/config.yaml
 
 This ensures you're testing with your current changes instead of the installed version.
 
+**Don't run `npm run local -- view`** unless explicitly asked. Assume the user already has `npm run dev` running in a separate terminal. The `view` command serves static production builds without hot reload, while the dev server at http://localhost:3000 provides HMR for faster iteration.
+
 **Important:** Always use `--` before additional flags when using `npm run local`:
 
 ```bash
@@ -343,7 +345,7 @@ Always follow this workflow:
    gh pr create --title "Your PR Title" --body "PR description"
    ```
 
-7. **Wait for review and CI checks** before merging
+7. **Check CI status** with `gh pr checks <PR_NUMBER>` (never use `--watch` - it blocks indefinitely)
 
 ## Pull Request Titles
 

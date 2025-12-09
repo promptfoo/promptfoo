@@ -70,7 +70,7 @@ describe('migrate', () => {
 
       expect(mockMigrate).toHaveBeenCalledTimes(1);
       expect(mockMigrate).toHaveBeenCalledWith(mockDb, {
-        migrationsFolder: path.join('/project/', 'drizzle'),
+        migrationsFolder: path.join('/project/', 'dist', 'drizzle'),
       });
     });
 
