@@ -11,7 +11,7 @@ import Box from '@mui/material/Box';
 import Divider from '@mui/material/Divider';
 import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
-import DigitalSignatureAuthTab from './tabs/DigitalSignatureAuthTab';
+import AuthorizationTab from './tabs/AuthorizationTab';
 import HttpStatusCodeTab from './tabs/HttpStatusCodeTab';
 import RequestTransformTab from './tabs/RequestTransformTab';
 import SessionsTab from './tabs/SessionsTab';
@@ -19,12 +19,12 @@ import TlsHttpsConfigTab from './tabs/TlsHttpsConfigTab';
 import TokenEstimationTab from './tabs/TokenEstimationTab';
 import type { ProviderOptions } from '@promptfoo/types';
 
-// Tab indices to prevent bugs and improve maintainability
+// Enum for tab indices to prevent bugs and improve maintainability
 const TabIndex = {
   SessionManagement: 0,
-  RequestTransform: 1,
-  TokenEstimation: 2,
-  DigitalSignatureAuth: 3,
+  Authorization: 1,
+  RequestTransform: 2,
+  TokenEstimation: 3,
   TlsHttpsConfig: 4,
   HttpStatusCode: 5,
 } as const;
@@ -92,9 +92,9 @@ const HttpAdvancedConfiguration: React.FC<HttpAdvancedConfigurationProps> = ({
             scrollButtons="auto"
           >
             <Tab label="Session Management" {...a11yProps(TabIndex.SessionManagement)} />
+            <Tab label="Authorization" {...a11yProps(TabIndex.Authorization)} />
             <Tab label="Request Transform" {...a11yProps(TabIndex.RequestTransform)} />
             <Tab label="Token Estimation" {...a11yProps(TabIndex.TokenEstimation)} />
-            <Tab label="Digital Signature Auth" {...a11yProps(TabIndex.DigitalSignatureAuth)} />
             <Tab label="TLS/HTTPS Config" {...a11yProps(TabIndex.TlsHttpsConfig)} />
             <Tab label="HTTP Status Code" {...a11yProps(TabIndex.HttpStatusCode)} />
           </Tabs>
@@ -106,6 +106,14 @@ const HttpAdvancedConfiguration: React.FC<HttpAdvancedConfigurationProps> = ({
             selectedTarget={selectedTarget}
             updateCustomTarget={updateCustomTarget}
             onTestComplete={onSessionTested}
+          />
+        </TabPanel>
+
+        {/* Authorization Tab */}
+        <TabPanel value={activeTab} index={TabIndex.Authorization}>
+          <AuthorizationTab
+            selectedTarget={selectedTarget}
+            updateCustomTarget={updateCustomTarget}
           />
         </TabPanel>
 
@@ -121,14 +129,6 @@ const HttpAdvancedConfiguration: React.FC<HttpAdvancedConfigurationProps> = ({
         {/* Token Estimation Tab */}
         <TabPanel value={activeTab} index={TabIndex.TokenEstimation}>
           <TokenEstimationTab
-            selectedTarget={selectedTarget}
-            updateCustomTarget={updateCustomTarget}
-          />
-        </TabPanel>
-
-        {/* Digital Signature Authentication Tab */}
-        <TabPanel value={activeTab} index={TabIndex.DigitalSignatureAuth}>
-          <DigitalSignatureAuthTab
             selectedTarget={selectedTarget}
             updateCustomTarget={updateCustomTarget}
           />

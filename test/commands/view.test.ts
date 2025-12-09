@@ -3,7 +3,6 @@ import { Command } from 'commander';
 import { viewCommand } from '../../src/commands/view';
 import { getDefaultPort } from '../../src/constants';
 import { startServer } from '../../src/server/server';
-import telemetry from '../../src/telemetry';
 import { setupEnv } from '../../src/util/index';
 import { setConfigDirectoryPath } from '../../src/util/config/manage';
 import { BrowserBehavior } from '../../src/util/server';
@@ -15,7 +14,6 @@ vi.mock('../../src/util/config/manage', () => ({
   readConfigs: vi.fn(),
 }));
 vi.mock('../../src/server/server');
-vi.mock('../../src/telemetry');
 vi.mock('../../src/util');
 
 describe('viewCommand', () => {
@@ -95,17 +93,6 @@ describe('viewCommand', () => {
     expect(setupEnv).toHaveBeenCalledWith('.env.test');
   });
 
-  it('should record telemetry when command is used', async () => {
-    viewCommand(program);
-    const viewCmd = program.commands[0];
-
-    await viewCmd.parseAsync(['node', 'test']);
-
-    expect(telemetry.record).toHaveBeenCalledWith('command_used', {
-      name: 'view',
-    });
-  });
-
   it('should handle both --yes and --no options with --yes taking precedence', async () => {
     viewCommand(program);
     const viewCmd = program.commands[0];
@@ -144,9 +131,6 @@ describe('viewCommand', () => {
     expect(setConfigDirectoryPath).toHaveBeenCalledWith('mydir');
     expect(setupEnv).toHaveBeenCalledWith('.env.foo');
     expect(startServer).toHaveBeenCalledWith(9876, BrowserBehavior.OPEN);
-    expect(telemetry.record).toHaveBeenCalledWith('command_used', {
-      name: 'view',
-    });
   });
 
   it('should pass undefined directory if not provided', async () => {

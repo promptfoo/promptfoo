@@ -282,6 +282,15 @@
           }
         }
       }
+    },
+    {
+      "includes": ["test/fixtures/rubric-json-template/**/*.json"],
+      "linter": {
+        "enabled": false
+      },
+      "formatter": {
+        "enabled": false
+      }
     }
   ]
 }

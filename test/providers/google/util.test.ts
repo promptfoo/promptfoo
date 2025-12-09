@@ -427,17 +427,74 @@ describe('util', () => {
       });
     });
 
-    it('should handle unknown format', () => {
+    it('should handle unknown format and return empty array for non-array input', () => {
       const input = { unknown: 'format' };
       const result = maybeCoerceToGeminiFormat(input);
       expect(result).toEqual({
-        contents: input,
+        contents: [],
         coerced: false,
         systemInstruction: undefined,
       });
       expect(logger.warn).toHaveBeenCalledWith(
         `Unknown format for Gemini: ${JSON.stringify(input)}`,
       );
+    });
+
+    it('should handle null input and return empty array', () => {
+      const input = null;
+      const result = maybeCoerceToGeminiFormat(input);
+      expect(result).toEqual({
+        contents: [],
+        coerced: false,
+        systemInstruction: undefined,
+      });
+      expect(logger.warn).toHaveBeenCalledWith(`Unknown format for Gemini: null`);
+    });
+
+    it('should handle undefined input and return empty array', () => {
+      const input = undefined;
+      const result = maybeCoerceToGeminiFormat(input);
+      expect(result).toEqual({
+        contents: [],
+        coerced: false,
+        systemInstruction: undefined,
+      });
+      expect(logger.warn).toHaveBeenCalledWith(`Unknown format for Gemini: undefined`);
+    });
+
+    it('should handle number input and return empty array', () => {
+      const input = 42;
+      const result = maybeCoerceToGeminiFormat(input);
+      expect(result).toEqual({
+        contents: [],
+        coerced: false,
+        systemInstruction: undefined,
+      });
+      expect(logger.warn).toHaveBeenCalledWith(`Unknown format for Gemini: 42`);
+    });
+
+    it('should handle boolean input and return empty array', () => {
+      const input = true;
+      const result = maybeCoerceToGeminiFormat(input);
+      expect(result).toEqual({
+        contents: [],
+        coerced: false,
+        systemInstruction: undefined,
+      });
+      expect(logger.warn).toHaveBeenCalledWith(`Unknown format for Gemini: true`);
+    });
+
+    it('should handle array input in unknown format path and return array as-is', () => {
+      // Arrays that don't match known formats are still arrays, so they're returned as-is
+      // This is safe because arrays won't cause .map() errors downstream
+      const input = [1, 2, 3];
+      const result = maybeCoerceToGeminiFormat(input);
+      expect(result).toEqual({
+        contents: [1, 2, 3],
+        coerced: false,
+        systemInstruction: undefined,
+      });
+      expect(logger.warn).toHaveBeenCalledWith(`Unknown format for Gemini: [1,2,3]`);
     });
 
     it('should handle OpenAI chat format with mixed content types', () => {
@@ -649,12 +706,12 @@ describe('util', () => {
       });
     });
 
-    it('should log a warning and return the input for unknown formats', () => {
+    it('should log a warning and return empty array for unknown non-array formats', () => {
       const loggerSpy = vi.spyOn(logger, 'warn');
       const input = { unknownFormat: 'test' };
       const result = maybeCoerceToGeminiFormat(input);
       expect(result).toEqual({
-        contents: input,
+        contents: [],
         coerced: false,
         systemInstruction: undefined,
       });
@@ -1797,6 +1854,37 @@ describe('util', () => {
             },
           });
         });
+      });
+    });
+
+    describe('edge cases for contents array handling', () => {
+      it('should handle empty contents array', () => {
+        const prompt = JSON.stringify([]);
+        const { contents } = geminiFormatAndSystemInstructions(prompt);
+        expect(Array.isArray(contents)).toBe(true);
+        expect(contents).toEqual([]);
+      });
+
+      it('should handle malformed prompt that results in empty array gracefully', () => {
+        // This tests the defensive guard in processImagesInContents
+        // by ensuring the function doesn't crash even with edge cases
+        const prompt = 'invalid json that cannot be parsed';
+        // parseChatPrompt will handle this and return a default format
+        const { contents } = geminiFormatAndSystemInstructions(prompt);
+        expect(Array.isArray(contents)).toBe(true);
+        // Should have at least one element with the prompt text
+        expect(contents.length).toBeGreaterThan(0);
+      });
+
+      it('should handle empty array with contextVars without error', () => {
+        const prompt = JSON.stringify([]);
+        const contextVars = {
+          image1:
+            '/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/2wBDAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwA/8A/9k=',
+        };
+        const { contents } = geminiFormatAndSystemInstructions(prompt, contextVars);
+        expect(Array.isArray(contents)).toBe(true);
+        expect(contents).toEqual([]);
       });
     });
   });

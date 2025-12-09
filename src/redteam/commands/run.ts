@@ -51,9 +51,6 @@ export function redteamRunCommand(program: Command) {
     .option('-t, --target <id>', 'Cloud provider target ID to run the scan on')
     .action(async (opts: RedteamRunOptions) => {
       setupEnv(opts.envPath);
-      telemetry.record('command_used', {
-        name: 'redteam run',
-      });
       telemetry.record('redteam run', {});
 
       if (opts.config && UUID_REGEX.test(opts.config)) {

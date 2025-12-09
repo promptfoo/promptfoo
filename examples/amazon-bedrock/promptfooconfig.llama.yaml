@@ -1,11 +1,14 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: 'Bedrock Llama Eval'
+description: 'Bedrock Llama Text Models'
+
+# For Llama 3.2 Vision models, see promptfooconfig.llama-vision.yaml
+
 prompts:
   - 'Translate to {{language}}: {{input}}'
 
 providers:
   - id: bedrock:us.meta.llama3-2-3b-instruct-v1:0
-    label: llama3.3 70b
+    label: Llama 3.2 3B
     config:
       region: us-west-2
 

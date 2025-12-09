@@ -6,7 +6,6 @@ import { disableCache } from '../cache';
 import cliState from '../cliState';
 import logger from '../logger';
 import { loadApiProvider, loadApiProviders } from '../providers/index';
-import telemetry from '../telemetry';
 import { TestSuiteSchema, UnifiedConfigSchema } from '../types/index';
 import { getProviderFromCloud } from '../util/cloud';
 import { resolveConfigs } from '../util/config/load';
@@ -347,7 +346,6 @@ export function validateCommand(
       'Path to configuration file. Automatically loads promptfooconfig.yaml',
     )
     .action(async (opts: ValidateOptions) => {
-      telemetry.record('command_used', { name: 'validate' });
       await doValidate(opts, defaultConfig, defaultConfigPath);
     });
 
@@ -358,7 +356,6 @@ export function validateCommand(
     .option('-t, --target <id>', 'Provider ID or cloud UUID to test')
     .option('-c, --config <path>', 'Path to configuration file to test all providers')
     .action(async (opts: ValidateTargetOptions) => {
-      telemetry.record('command_used', { name: 'validate_target' });
       await doValidateTarget(opts, defaultConfig);
     });
 }

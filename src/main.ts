@@ -7,6 +7,7 @@ import { getGlobalDispatcher } from 'undici';
 import { VERSION } from './version';
 import { checkNodeVersion } from './checkNodeVersion';
 import cliState from './cliState';
+import telemetry from './telemetry';
 import { codeScansCommand } from './codeScan/index';
 import { authCommand } from './commands/auth';
 import { cacheCommand } from './commands/cache';
@@ -39,7 +40,6 @@ import { redteamReportCommand } from './redteam/commands/report';
 import { redteamRunCommand } from './redteam/commands/run';
 import { redteamSetupCommand } from './redteam/commands/setup';
 import { simbaCommand } from './redteam/commands/simba';
-import telemetry from './telemetry';
 import { checkForUpdates } from './updates';
 import { loadDefaultConfig } from './util/config/default';
 import { printErrorInformation } from './util/errors/index';
@@ -72,7 +72,28 @@ export function isMainModule(importMetaUrl: string, processArgv1: string | undef
 }
 
 /**
- * Adds verbose and env-file options to all commands recursively
+ * Gets the full command path by traversing the parent chain.
+ * e.g., "auth teams list" instead of just "list"
+ */
+function getCommandPath(command: Command): string {
+  const parts: string[] = [];
+  let current: Command | null = command;
+
+  while (current) {
+    const name = current.name();
+    // Skip the root 'promptfoo' command
+    if (name && name !== 'promptfoo') {
+      parts.unshift(name);
+    }
+    current = current.parent as Command | null;
+  }
+
+  return parts.join(' ');
+}
+
+/**
+ * Adds verbose and env-file options to all commands recursively,
+ * and automatically records telemetry for all command invocations.
  */
 export function addCommonOptionsRecursively(command: Command) {
   const hasVerboseOption = command.options.some(
@@ -99,6 +120,12 @@ export function addCommonOptionsRecursively(command: Command) {
     if (envPath) {
       setupEnv(envPath);
       logger.debug(`Loading environment from ${envPath}`);
+    }
+
+    // Automatically record telemetry for all commands
+    const commandName = getCommandPath(thisCommand);
+    if (commandName) {
+      telemetry.record('command_used', { name: commandName });
     }
   });
 

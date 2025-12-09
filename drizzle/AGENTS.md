@@ -37,6 +37,8 @@ Default: `~/.promptfoo/promptfoo.db` (SQLite file)
 
 Override with `PROMPTFOO_DB_PATH` env var.
 
+**NEVER delete the database.** You may read from it but deletion destroys user data.
+
 ## SQLite Limitations
 
 **Cannot drop columns** - SQLite doesn't support `ALTER TABLE DROP COLUMN`.

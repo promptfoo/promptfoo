@@ -309,7 +309,7 @@ export const OPENAI_CHAT_MODELS = [
       output: 2 / 1e6,
     },
   })),
-  ...['gpt-5.1-codex'].map((model) => ({
+  ...['gpt-5.1-codex', 'gpt-5.1-codex-max'].map((model) => ({
     id: model,
     cost: {
       input: 1.25 / 1e6,

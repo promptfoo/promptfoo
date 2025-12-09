@@ -7,7 +7,7 @@ import Button from '@mui/material/Button';
 import { alpha, styled } from '@mui/material/styles';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import { SIDEBAR_WIDTH } from '../page';
+import { SIDEBAR_WIDTH } from '../constants';
 
 interface PageWrapperProps {
   title: string;

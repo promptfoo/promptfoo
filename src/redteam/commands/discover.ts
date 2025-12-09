@@ -320,9 +320,6 @@ export function discoverCommand(
       }
 
       // Record telemetry:
-      telemetry.record('command_used', {
-        name: `redteam ${COMMAND}`,
-      });
       telemetry.record('redteam discover', {});
 
       let config: UnifiedConfig | null = null;

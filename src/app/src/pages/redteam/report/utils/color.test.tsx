@@ -1,5 +1,6 @@
 import { createAppTheme } from '@app/components/PageShell';
 import { Severity } from '@promptfoo/redteam/constants';
+import { describe, expect, it } from 'vitest';
 import { getProgressColor, getSeverityColor } from './color';
 
 describe('getSeverityColor', () => {
