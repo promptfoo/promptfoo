@@ -92,9 +92,7 @@ trace.set_tracer_provider(provider)
 tracer = trace.get_tracer("my-python-provider")
 ```
 
-:::note
-This example uses `SimpleSpanProcessor` for synchronous, immediate export. This ensures spans are sent before the provider returns. For production use with higher throughput, consider `BatchSpanProcessor`, but be sure to call `processor.force_flush()` before returning from your provider.
-:::
+> **Note:** This example uses `SimpleSpanProcessor` for synchronous, immediate export. This ensures spans are sent before the provider returns. For production use with higher throughput, consider `BatchSpanProcessor`, but be sure to call `processor.force_flush()` before returning from your provider.
 
 ### 2. Parse Trace Context
 

@@ -58,6 +58,7 @@ describe('Protobuf decoding', () => {
   });
 
   afterEach(() => {
+    vi.resetAllMocks();
     vi.restoreAllMocks();
   });
 

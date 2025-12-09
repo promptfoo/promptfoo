@@ -107,6 +107,7 @@ describe('OTLPReceiver', () => {
   });
 
   afterEach(() => {
+    vi.resetAllMocks();
     vi.restoreAllMocks();
   });
 
