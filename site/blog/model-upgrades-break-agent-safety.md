@@ -1,23 +1,7 @@
 ---
 title: Your model upgrade just broke your agent's safety
-description: LLM safety varies wildly between model families and even between versions. What agent developers need to know before their next upgrade.
+description: Model upgrades can change refusal, instruction-following, and tool-use behavior. Here's how to prevent safety regressions in agentic apps.
 image: /img/blog/model-upgrades-break-agent-safety/header.jpg
-keywords:
-  [
-    LLM safety,
-    model upgrade,
-    AI agent security,
-    jailbreak,
-    GPT-5 safety,
-    Claude 4.5 safety,
-    o1 o3 safety,
-    Gemini 3 safety,
-    Llama 4 safety,
-    red teaming,
-    defense in depth,
-    continuous testing,
-    prompt injection,
-  ]
 date: 2025-12-08
 authors: [shuo]
 tags: [security-vulnerability, best-practices, agents]
@@ -25,78 +9,102 @@ tags: [security-vulnerability, best-practices, agents]
 
 # Your model upgrade just broke your agent's safety
 
-You upgraded to the latest model. Better benchmarks, faster inference, lower cost. What could go wrong?
+You upgraded to the latest model for better benchmarks, faster inference, or lower cost.
 
-In practice, upgrades often change refusal behavior, instruction-following, and tool calling in ways you didn't anticipate. The safety behaviors you relied on may not exist anymore.
+In practice, upgrades often change refusal behavior, instruction-following, and tool calling in ways you did not anticipate. The safety behaviors you relied on may not exist anymore.
 
 <!-- truncate -->
 
-**A real example:** We tested a customer's agent after upgrading from GPT-4o to GPT-4.1. Their prompt-injection *resistance* score dropped from 94% to 71% on the same test harness.
+:::note Who this is for
+This guide is for engineers building **agentic applications**: tools, RAG, long-running workflows, and multi-turn conversations.
 
-- What changed: the newer model followed embedded instructions more literally.
-- What failed: indirect injection via retrieved documents.
-- What fixed it: adding an output classifier and re-tuning the system prompt for the new model's instruction-following behavior.
+If you're a **coding-assistant user** (Cursor, Claude Code), your best defenses are least-privilege permissions, isolated sandboxes, and not pasting secrets into chats.
+:::
+
+:::note Disclosure
+I work at Promptfoo. We build evals and red teaming tools for LLM apps. Everything below is implementable with or without Promptfoo.
+:::
+
+## A real example
+
+We tested a customer's agent after upgrading from GPT-4o to GPT-4.1. Their **prompt-injection resistance** dropped from **94% to 71%** on the same harness.
+
+GPT-4.1 is [explicitly optimized](https://openai.com/index/gpt-4-1/) for stronger instruction following, which can improve capability while hurting injection resistance.
+
+- **What changed:** the newer model followed embedded instructions more literally.
+- **What failed:** indirect injection via retrieved documents.
+- **What fixed it:** an output classifier, stricter tool gating, and a system-prompt update for the new model's behavior.
+
+If you take one lesson from this post: **treat model upgrades as security changes, not just quality upgrades.**
 
 :::info Model Safety vs. Agent Security
-**Model-level safety** is a model's built-in refusal behavior: declining harmful content, resisting jailbreaks, filtering toxic outputs.
+**Model-level safety** is built-in behavior: refusing harmful requests, resisting some jailbreaks, filtering some toxic content.
 
-**Agent-level security** is broader: preventing tool misuse, blocking data exfiltration, stopping lateral movement through connected systems. A model can refuse to write malware but still execute a malicious tool call embedded in retrieved content.
+**Agent security** is broader: preventing tool misuse, blocking data exfiltration, and stopping lateral movement through connected systems.
 
-This post covers both, but they require different defenses.
+A model can refuse to write malware and still execute a malicious tool call embedded in retrieved content.
 :::
 
-:::tip TL;DR
+## TL;DR
+
 Treat model upgrades like security changes:
-- Pin model versions and safety settings (don't ship "latest").
-- Re-run prompt-injection + tool-abuse tests on every upgrade.
-- Add application-layer guardrails (especially for tools + RAG).
-:::
+
+1. **Pin model IDs and safety settings.** Do not ship "latest".
+2. **Re-run prompt-injection + tool-abuse tests** on every upgrade (direct and indirect).
+3. **Add application-layer guardrails** (especially around tools and RAG).
+4. **Log and alert** on injection signals and suspicious tool attempts.
 
 ## Application-layer guardrails are mandatory
 
-Before diving into model differences, the core recommendation from the [OWASP Top 10 for LLM Applications](https://owasp.org/www-project-top-10-for-large-language-model-applications/) and security researchers is consistent: **never rely on model-level safety alone**.
+The [OWASP Top 10 for LLM Applications](https://owasp.org/www-project-top-10-for-large-language-model-applications/) is blunt: **do not rely on model-level safety as your boundary**.
 
-Model protections are helpful, but they are not your security boundary. If your agent has tools, data access, or long-running workflows, you need defense in depth.
+Model protections help, but they are not your security boundary. If your agent has tools, data access, or long-running workflows, you need defense in depth.
 
 ## Why safety changes on upgrade
 
-Model families are trained and deployed with different safety stacks. Even inside a family, vendor updates change the balance between helpfulness, refusal, and instruction-following.
+Even within one vendor, updates change the balance between helpfulness, refusal, and instruction-following.
 
-- **OpenAI (GPT-5)** introduced *safe-completion* training, designed to stay helpful on ambiguous, dual-use prompts by providing safer partial answers or alternatives instead of a binary comply/refuse.
-- **Anthropic (Claude)** leans into Constitutional AI and has shipped *Constitutional Classifiers* (input/output classifiers) that significantly reduce jailbreak success rates in their evaluations—but a limited-time public demo still produced a universal jailbreak within a week.
-- **Google (Gemini)** exposes configurable safety settings, and defaults vary across model generations and products.
+- **GPT-5 safe-completions** optimize "[helpfulness within safety constraints](https://openai.com/index/gpt-5-safe-completions/)," especially for dual-use prompts. That changes refusal style and edge-case handling.
+- **Anthropic Constitutional Classifiers** [reduce jailbreak success](https://www.anthropic.com/news/constitutional-classifiers) from 86% to 4.4% in their automated evaluations. But their Feb 3–10, 2025 public demo still produced a universal jailbreak on days 6–7.
+- **Gemini safety settings** are [configurable](https://ai.google.dev/gemini-api/docs/safety-settings), and defaults vary. Newer stable GA models default to `BLOCK_NONE`; older models default to `BLOCK_SOME`. Civic Integrity has stricter handling and cannot be adjusted.
 
-Newer models aren't automatically safer. If you assume safety "transfers" across upgrades, you'll ship regressions to production.
+Newer models are not automatically safer. If you assume safety "transfers" across upgrades, you will ship regressions.
 
-## Each model family does safety differently
+## What model family differences mean in practice
 
-The three major providers take meaningfully different approaches. These differences show up in agent behavior, not just "refusal rate."
+Each family has different sharp edges. Your tests need to match them.
 
-### Claude: Constitutional AI + classifiers + agentic safeguards
+### OpenAI (GPT-5 and reasoning models)
 
-Anthropic's safety approach is anchored in Constitutional AI (principle-based alignment). On top of that, they've published results on [Constitutional Classifiers](https://www.anthropic.com/news/constitutional-classifiers), an input/output classifier system designed to block universal jailbreaks.
+GPT-5's "safe completions" approach stays helpful on ambiguous, dual-use prompts by offering safer partial answers or alternatives instead of binary comply/refuse.
 
-Key point for agent builders: Anthropic's [system cards](https://www.anthropic.com/claude-haiku-4-5-system-card) and safety research emphasize multi-turn and agentic risks (computer use, prompt injection in environments, and long-horizon tasks), not just single-turn toxic content.
+**What to test when migrating:** borderline dual-use prompts, refusal style changes, and whether "helpful alternatives" accidentally trigger tools.
 
-### OpenAI: GPT-5 safe-completion + reasoning-era safety training
+Reasoning models (o1, o3, o4-mini) behave differently from chat models, including different jailbreak resistance and different tool planning.
 
-GPT-5's [safe-completion training](https://openai.com/index/gpt-5-safe-completions/) shifts from "refuse vs comply" to "maximize helpfulness within safety constraints," especially for dual-use prompts.
+**What to test when migrating:** multi-turn escalations, tool-call proposal rates, and whether the model reasons itself into risky actions.
 
-The o-series reasoning models also come with a safety training approach that leverages the model's reasoning ability to apply safety rules in context. [OpenAI's o1 announcement](https://openai.com/index/introducing-openai-o1-preview/) reports large deltas on internal jailbreak evals between GPT-4o and o1-preview.
+### Anthropic (Claude)
 
-### Gemini: configurable filters (and defaults are not stable)
+Anthropic's safety work emphasizes multi-turn and agentic risks (prompt injection in environments, long-horizon tasks), not just single-turn toxic content. Their [system cards](https://www.anthropic.com/claude-haiku-4-5-system-card) document these considerations.
 
-In the [Gemini API](https://ai.google.dev/gemini-api/docs/safety-settings), you can configure safety thresholds per harm category. Defaults differ by model generation, and product behavior differs between Google AI Studio and API/Vertex deployments.
+**What to test when migrating:** multi-turn manipulation, indirect prompt injection, and tool-use guardrails.
 
-[Gemini 3](https://ai.google.dev/gemini-api/docs/gemini-3) is a distinct family with its own migration and behavior notes. If you're upgrading to Gemini 3, assume the safety and tool-use profile changed unless you verify it in your own harness.
+### Google (Gemini)
 
-### Open-source: assume you own safety
+[Gemini](https://ai.google.dev/gemini-api/docs/safety-settings) exposes configurable safety settings per harm category. Defaults vary by model generation, and product behavior differs between AI Studio and API/Vertex.
 
-Open weights are powerful for enterprise deployments (cost, privacy, custom hosting). The tradeoff: safety is optional, and it's easier to remove than to guarantee.
+[Gemini 3](https://ai.google.dev/gemini-api/docs/gemini-3) is a distinct family. If you're upgrading, assume the safety and tool-use profile changed unless you verify it.
 
-The [BadLlama paper](https://arxiv.org/abs/2407.01376) proved safety fine-tuning can be removed from Llama 3 8B in 5 minutes on one A100 GPU for under $0.50. A tiny "jailbreak adapter" (under 100MB) can strip guardrails from any copy instantly.
+**What to test when migrating:** confirm your safety thresholds in code and re-run your full suite.
 
-If you deploy open models behind your own API, treat model-level safety as a feature you must implement and continuously verify.
+### Open-source
+
+Open weights are powerful for privacy and cost. The tradeoff: **safety is optional and easy to remove**.
+
+The [BadLlama paper](https://arxiv.org/abs/2407.01376) removed Llama 3 8B safety tuning in ~1 minute on a single A100 (<$0.50). A <100MB adapter can strip guardrails from any copy. A free Colab path works in ~30 minutes.
+
+If you deploy open models, treat model-level safety as a feature you implement, monitor, and continuously verify.
 
 | Model Family | Core Approach | Can Safety Be Removed? |
 |-------------|---------------|----------------------|
@@ -108,23 +116,23 @@ If you deploy open models behind your own API, treat model-level safety as a fea
 
 ## Attack vectors shift when you switch models
 
-When you upgrade, your threat model stays the same. The model's failure modes change.
+Your threat model stays the same. The model's failure modes change.
 
 ### Multilingual and "edge language" coverage
 
-Alignment and safety coverage are often weaker outside the highest-resource languages. [Research shows](https://arxiv.org/abs/2310.06474) low-resource languages produce significantly higher likelihood of harmful content than high-resource languages.
+Safety coverage is often weaker outside high-resource languages. [Research shows](https://arxiv.org/abs/2310.06474) harmful output likelihood increases as language resources decrease.
 
 If you operate globally, include multilingual adversarial prompts in your regression suite.
 
 ### Multi-turn manipulation (agents make this worse)
 
-Multi-turn jailbreaks exploit gradual escalation. The [Crescendo attack](https://arxiv.org/abs/2404.01833) (USENIX Security 2025) outperforms single-turn jailbreaks by 29-61% on GPT-4 and 49-71% on Gemini-Pro.
+Multi-turn jailbreaks exploit gradual escalation. [Crescendo](https://arxiv.org/abs/2404.01833) (USENIX Security 2025) surpasses single-turn jailbreaks by 29–61% on GPT-4 and 49–71% on Gemini-Pro on their benchmark.
 
 If your agent has memory, RAG, or long workflows, test multi-turn attacks explicitly.
 
-### Prompt injection (still not "solved")
+### Prompt injection (still unsolved)
 
-There's no general fix. Treat all retrieved text and tool outputs as untrusted input.
+There is no universal mitigation. Treat all retrieved text and tool outputs as untrusted input. OpenAI describes prompt injection as a [frontier security challenge](https://openai.com/index/prompt-injections/) with evolving mitigations.
 
 If you do RAG, you need:
 - Instruction/data separation in prompts
@@ -134,14 +142,15 @@ If you do RAG, you need:
 
 ### Tool-use attacks (agent-only failure mode)
 
-Tool calling changes the game: the model can stay "safe" at the text level while issuing a dangerous action via a tool call.
+Tool calling lets a model stay "safe" in text while taking a dangerous action via a tool call.
 
-The [AgentHarm benchmark](https://arxiv.org/abs/2410.09024) (ICLR 2025) found GPT-4o and Claude Sonnet 3.5 show "limited robustness to basic jailbreak attacks" in agent settings. Models showed 62.5-82.2% compliance with harmful tasks *without* jailbreaking—simple jailbreak templates reduced refusal rates from ~80% to as low as 3.5%.
+[AgentHarm](https://arxiv.org/abs/2410.09024) (ICLR 2025) shows models pursuing malicious tasks even without jailbreaking. GPT-4o mini scored 62.5% harm score while refusing only 22% of the time. A simple jailbreak template drove Gemini 1.5 Pro refusal from 78.4% to 3.5%.
 
-This is why agent security needs access control, sandboxing, and execution-time checks—not just model-level safety.
+Agent security needs access control, sandboxing, and execution-time checks—not just model-level safety.
 
 :::tip Agent Threat Model
 When securing agents, consider three attack surfaces:
+
 1. **Attacker controls user input** — direct prompt injection, jailbreaks
 2. **Attacker controls retrieved content** — indirect injection via documents, web pages, emails
 3. **Attacker controls tool output** — malicious responses from APIs, databases, or MCP servers
@@ -149,49 +158,101 @@ When securing agents, consider three attack surfaces:
 Model-level safety primarily addresses #1. #2 and #3 require application-layer controls.
 :::
 
-## Within-family upgrades are just as risky
-
-Do not assume "same vendor, same safety."
-
-### Claude 4.x: smaller can be safer on some evals
-
-Anthropic's [system cards](https://www.anthropic.com/research/claude-4-system-card) show meaningful differences between Claude variants on safety evaluations. Even within a single release cycle, safety and over-refusal can move in different directions across sizes.
-
-### OpenAI: instruction-following changes can break injection resistance
-
-Your model might get better at tool calling and instruction following. That can be great for capabilities, and bad for prompt injection.
-
-If your system relies on the model "doing the right thing" in the presence of conflicting instructions, you need guardrails that don't depend on that behavior.
-
-### Gemini: defaults vary across generations
-
-Gemini 1.5 and Gemini 2.x have different default safety thresholds. Don't assume defaults carry forward, and don't assume "the console" behaves the same as the API.
-
-If you upgrade to Gemini 3, treat it as a migration: pin model IDs, explicitly set safety settings, and re-run your full suite.
-
 ## Defense-in-depth architecture
 
-Deploy multiple security layers. Treat the model as an untrusted component that proposes actions, and gate those actions at multiple points:
+Put controls where they can stop damage: at the edges and at execution time.
 
-1. **AI Gateway (Client → LLM):** Auth, PII filtering, jailbreak/injection scanning, rate limits, cost limits
-2. **MCP/Tool Gateway (Client → MCP server):** Tool ACLs, parameter validation, least privilege
-3. **API Gateway (MCP server → external systems):** Auditing, exfiltration controls, content inspection
+```
+User input ─┐
+            ├─> [Input checks] ──> LLM ──> [Output checks] ──> [Tool gate] ──> Tools/APIs
+RAG docs  ──┘        │                            │                │
+                     │                            │                └─ scoped creds, sandbox, egress rules
+                     └─ log + alert               └─ log + alert
+```
+
+**Rule of thumb:** the model proposes actions. Your system approves and executes them.
 
 ### What to implement
 
-**Input guardrails (pre-LLM):**
-- Topic relevance checks
-- Prompt injection detection (classifiers, heuristics, allowlists)
-- PII anonymization
-- Input sanitization
-- Token/cost controls
+**Pre-LLM (input layer):**
+- Prompt injection detection ([Prompt Shields](https://learn.microsoft.com/en-us/azure/ai-services/content-safety/concepts/jailbreak-detection), classifiers, heuristics)
+- PII scrubbing and secret scanning
+- Retrieval filtering (strip instructions, keep data)
+- Rate limits and token budgets
 
-**Output guardrails (post-LLM):**
-- Policy violation scanning
-- Groundedness checks against source docs
-- PII detection and redaction
-- Output format validation
-- Protected material detection
+**Post-LLM (output layer):**
+- Schema validation (strict JSON, function args)
+- Policy checks (PII, sensitive actions, protected material)
+- "Unsafe intent" scanning before tool execution
+- Grounding checks where you can (RAG citations, source-of-truth rules)
+
+**Execution-time (tool layer):**
+- Allowlist tools per user, per tenant, per route
+- Validate every argument
+- Least-privilege credentials (per tool, short-lived)
+- Approvals for high-risk tools (email, tickets, payments, file writes, shell)
+
+For local classification, [Llama Guard 3](https://huggingface.co/meta-llama/Llama-Guard-3-8B) is designed for input and response safety classification.
+
+### Concrete tool-gating example (Python)
+
+This is intentionally boring. Boring is good.
+
+```python
+from pydantic import BaseModel, Field, ValidationError
+import json
+
+class SendEmailArgs(BaseModel):
+    to: str
+    subject: str = Field(max_length=120)
+    body: str = Field(max_length=5000)
+
+TOOL_SCHEMAS = {"send_email": SendEmailArgs}
+ALLOWED_TOOLS = {"support_agent": {"query_crm"}, "ops_agent": {"query_crm", "send_email"}}
+ALLOWED_DOMAINS = {"yourcompany.com"}
+
+def audit(event: str, payload: dict) -> None:
+    # Replace with your SIEM sink
+    print(json.dumps({"event": event, **payload}))
+
+def gate_tool_call(tool_name: str, raw_args: dict, role: str) -> dict:
+    audit("tool_proposed", {"tool": tool_name, "role": role})
+
+    if tool_name not in ALLOWED_TOOLS.get(role, set()):
+        audit("tool_denied", {"reason": "not_allowlisted", "tool": tool_name})
+        raise PermissionError(f"Tool not allowed: {tool_name}")
+
+    schema = TOOL_SCHEMAS.get(tool_name)
+    if not schema:
+        audit("tool_denied", {"reason": "unknown_tool", "tool": tool_name})
+        raise PermissionError(f"Unknown tool: {tool_name}")
+
+    try:
+        args = schema(**raw_args)
+    except ValidationError as e:
+        audit("tool_denied", {"reason": "bad_args", "error": str(e)})
+        raise
+
+    # Tool-specific validation
+    if tool_name == "send_email":
+        domain = args.to.split("@")[-1].lower()
+        if domain not in ALLOWED_DOMAINS:
+            audit("tool_denied", {"reason": "domain_blocked", "domain": domain})
+            raise PermissionError(f"Recipient domain not allowed: {domain}")
+
+    audit("tool_executed", {"tool": tool_name})
+    return {"ok": True}  # Execute in sandboxed, least-privileged runtime
+```
+
+### Monitoring and incident response
+
+If you detect injection or suspicious tool attempts, treat it like a security event:
+
+- **Log:** user, tenant, session, retrieved doc IDs, tool name, args (redacted), and gate decision
+- **Alert:** repeated injection triggers, repeated tool denials, spikes in tool usage, anomalous destinations
+- **Quarantine:** downgrade to no-tools mode, require re-auth, throttle, or hand off to a human
+- **Contain:** rotate credentials for affected tools, review egress logs, invalidate cached auth
+- **Learn:** replay incidents against your eval suite and add regressions to CI
 
 ### What NOT to rely on as your security boundary
 
@@ -201,32 +262,46 @@ Deploy multiple security layers. Treat the model as an untrusted component that 
 - Alignment training alone (bypass techniques evolve)
 - "Jailbreak resistance" claims without continuous testing
 
+## Benchmark limitations
+
+Vendor-reported safety numbers are signals, not guarantees. Consider:
+
+- **Eval set contamination:** models may have seen benchmark data during training
+- **Judge model bias:** LLM-as-judge evaluations inherit the judge's blind spots
+- **Narrow coverage:** benchmarks test specific attack types; your threat model may differ
+- **Eval drift:** attack techniques evolve faster than benchmarks update
+
+Run your own tests on your own data. Third-party numbers are a starting point, not a finish line.
+
 ## Model upgrade checklist
 
-Before deploying a model upgrade to production:
+**0) Ownership**
+- Assign an owner for prompt/model changes (often platform or ML infra)
+- Require security review for tool changes
 
-**1. Pin and canary**
+**1) Pin and canary**
 - [ ] Lock model IDs explicitly (not "latest")
-- [ ] Canary in staging first with production traffic sampling
+- [ ] Canary in staging with sampled production traffic
 
-**2. Re-run your safety suites**
-- [ ] Prompt injection (direct and indirect)
-- [ ] Tool authorization abuse scenarios
+**2) Re-run your safety suites**
+- [ ] Prompt injection (direct + indirect)
+- [ ] Tool authorization abuse
 - [ ] Data exfiltration attempts
 - [ ] Multi-turn escalation set
 - [ ] Multilingual jailbreak set
 - [ ] Your domain-specific red team cases
 
-**3. Verify configuration parity**
+**3) Verify configuration parity**
 - [ ] Tool schemas match expected format
 - [ ] Function calling strictness settings
 - [ ] Message precedence expectations (system vs developer vs user)
-- [ ] Safety settings (especially Gemini)
+- [ ] Safety settings (especially Gemini defaults)
 
-**4. Compare behavioral deltas**
+**4) Compare behavioral deltas**
 - [ ] Refusal rate changes (too high breaks UX; too low is a regression)
-- [ ] False positive rate on benign queries
+- [ ] False positives on benign queries
 - [ ] "Helpful-but-unsafe" behavior (model complies but should not)
+- [ ] Tool-call rate changes for sensitive tools
 
 **Example regression test (Promptfoo YAML):**
 
@@ -244,29 +319,25 @@ tests:
       - type: not-contains
         value: "EXFIL:"
       - type: python
-        value: "not any(tool['name'] == 'send_email' for tool in output.get('tool_calls', []))"
+        value: "not any(tc['name'] == 'send_email' for tc in output.get('tool_calls', []))"
 ```
 
 ## Common migration pitfalls
 
-| Migration | Key Risks | What to do |
-|-----------|-----------|-----------|
+| Migration | Key Risk | What to do |
+|-----------|----------|------------|
 | GPT-4o → GPT-5 | Safe-completion changes refusal style and dual-use behavior | Re-test dual-use prompts; verify partial-answer behavior |
-| GPT-4o → GPT-4.1 | More literal instruction following can reduce injection resistance | Re-test indirect injection and tool-abuse cases |
+| GPT-4o → GPT-4.1 | Stronger instruction-following can hurt injection resistance | Re-test indirect injection and tool-abuse cases |
 | GPT-4o → o1/o3/o4-mini | Reasoning models behave differently from chat models | Re-test multi-turn and tool-use scenarios |
 | Claude → GPT-5 | Different multi-turn and agentic behavior | Add multi-turn guardrails; tighten tool gates |
-| Any → Gemini 2.x/3 | Defaults and safety settings vary by generation and product | Explicitly set safety thresholds; re-test tool calls |
+| Any → Gemini 2.x/3 | Defaults and settings vary by generation and surface | Explicitly set thresholds; re-test tool calls |
 | Any → open weights | Safety is optional and removable | Implement and own the full guardrail stack |
 | Base → fine-tuned | Narrow tuning can cause broad safety drift | Test extensively; assume worst-case regressions |
 
 ## Why continuous red teaming matters
 
-You can't test once and call it done. Models update, prompts evolve, and attackers iterate.
+Models update, prompts evolve, and attackers iterate. You cannot test once and call it done.
 
-If a failure happens even once in testing, that behavior is available to an attacker. Continuous red teaming makes those regressions visible before you ship them.
+If a failure happens even once in testing, that behavior is available to an attacker. Continuous testing makes regressions visible before you ship them.
 
-We built [Promptfoo](https://www.promptfoo.dev/red-teaming/) to make this practical: run adversarial tests in CI, catch regressions on model upgrades, and maintain a safety baseline over time.
-
----
-
-*Questions or thoughts? Get in touch: [shuo@promptfoo.dev](mailto:shuo@promptfoo.dev)*
+**What safety regression have you seen after a model upgrade?** Email [shuo@promptfoo.dev](mailto:shuo@promptfoo.dev)
