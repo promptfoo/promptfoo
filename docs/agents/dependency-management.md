@@ -48,6 +48,7 @@ npx npm-check-updates --target latest
 ## Workspaces
 
 The project has three npm workspaces:
+
 - Root (`/`)
 - Site (`/site`)
 - App (`/src/app`)
