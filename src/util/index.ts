@@ -324,10 +324,42 @@ export function printBorder() {
   logger.info(border);
 }
 
-export function setupEnv(envPath: string | undefined) {
+/**
+ * Load environment variables from .env file(s).
+ * @param envPath - Single path, array of paths, or undefined for default .env loading.
+ *                  When paths are explicitly specified, all files must exist or an error is thrown.
+ *                  When multiple files are provided, later files override values from earlier files.
+ */
+export function setupEnv(envPath: string | string[] | undefined) {
   if (envPath) {
-    logger.info(`Loading environment variables from ${envPath}`);
-    dotenv.config({ path: envPath, override: true, quiet: true });
+    // Normalize to array
+    const paths = Array.isArray(envPath) ? envPath : [envPath];
+
+    // Filter out empty strings
+    const validPaths = paths.filter((p) => p && p.trim().length > 0);
+
+    if (validPaths.length === 0) {
+      dotenv.config({ quiet: true });
+      return;
+    }
+
+    // Validate all files exist before loading
+    for (const p of validPaths) {
+      if (!fs.existsSync(p)) {
+        throw new Error(`Environment file not found: ${p}`);
+      }
+    }
+
+    // Log files being loaded
+    if (validPaths.length === 1) {
+      logger.info(`Loading environment variables from ${validPaths[0]}`);
+    } else {
+      logger.info(`Loading environment variables from: ${validPaths.join(', ')}`);
+    }
+
+    // dotenv v16+ supports array of paths
+    // Files are loaded in order, later files override earlier values with override:true
+    dotenv.config({ path: validPaths, override: true, quiet: true });
   } else {
     dotenv.config({ quiet: true });
   }
