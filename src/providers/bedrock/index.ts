@@ -26,6 +26,7 @@ export const coerceStrToNum = (value: string | number | undefined): number | und
 export type BedrockModelFamily =
   | 'claude'
   | 'nova'
+  | 'nova2'
   | 'llama'
   | 'llama2'
   | 'llama3'
@@ -312,6 +313,56 @@ export interface BedrockAmazonNovaSonicGenerationOptions extends BedrockOptions 
       };
     }[];
     toolChoice?: 'any' | 'auto' | string; // Tool name
+  };
+}
+
+/**
+ * Configuration options for Amazon Nova 2 models with extended thinking (reasoning) support.
+ * Nova 2 Lite supports reasoningConfig with maxReasoningEffort levels.
+ */
+export interface BedrockAmazonNova2GenerationOptions extends BedrockOptions {
+  interfaceConfig?: {
+    max_new_tokens?: number;
+    temperature?: number;
+    top_p?: number;
+    top_k?: number;
+    stopSequences?: string[];
+  };
+  /**
+   * Reasoning configuration for Nova 2 models.
+   * Enables extended thinking with controllable effort levels.
+   */
+  reasoningConfig?: {
+    type: 'enabled' | 'disabled';
+    /** Controls reasoning depth: 'low', 'medium', 'high' */
+    maxReasoningEffort?: 'low' | 'medium' | 'high';
+  };
+  toolConfig?: {
+    tools?: {
+      toolSpec: {
+        name: string;
+        description?: string;
+        inputSchema: {
+          json: {
+            type: 'object';
+            properties: {
+              [propertyName: string]: {
+                description: string;
+                type: string;
+              };
+            };
+            required: string[];
+          };
+        };
+      };
+    }[];
+    toolChoice?: {
+      any?: any;
+      auto?: any;
+      tool?: {
+        name: string;
+      };
+    };
   };
 }
 
@@ -710,6 +761,159 @@ export const BEDROCK_MODEL = {
       return params;
     },
     output: (_config: BedrockOptions, responseJson: any) => novaOutputFromMessage(responseJson),
+    tokenUsage: (responseJson: any, _promptText: string): TokenUsage => {
+      const usage = responseJson?.usage;
+      if (!usage) {
+        return {
+          prompt: undefined,
+          completion: undefined,
+          total: undefined,
+          numRequests: 1,
+        };
+      }
+
+      return {
+        prompt: coerceStrToNum(usage.inputTokens),
+        completion: coerceStrToNum(usage.outputTokens),
+        total: coerceStrToNum(usage.totalTokens),
+        numRequests: 1,
+      };
+    },
+  },
+  /**
+   * Amazon Nova 2 model handler with extended thinking (reasoning) support.
+   * Supports reasoningConfig with maxReasoningEffort levels: low, medium, high.
+   */
+  AMAZON_NOVA_2: {
+    params: async (
+      config: BedrockAmazonNova2GenerationOptions,
+      prompt: string,
+      _stop?: string[],
+      _modelName?: string,
+    ) => {
+      let messages;
+      let systemPrompt;
+      try {
+        const parsed = JSON.parse(prompt);
+        if (Array.isArray(parsed)) {
+          messages = parsed
+            .map((msg) => ({
+              role: msg.role,
+              content: Array.isArray(msg.content) ? msg.content : [{ text: msg.content }],
+            }))
+            .filter((msg) => msg.role !== 'system');
+          const systemMessage = parsed.find((msg) => msg.role === 'system');
+          if (systemMessage) {
+            systemPrompt = [{ text: systemMessage.content }];
+          }
+        } else {
+          const { system, extractedMessages } = novaParseMessages(prompt);
+          messages = extractedMessages;
+          if (system) {
+            systemPrompt = [{ text: system }];
+          }
+        }
+      } catch {
+        const { system, extractedMessages } = novaParseMessages(prompt);
+        messages = extractedMessages;
+        if (system) {
+          systemPrompt = [{ text: system }];
+        }
+      }
+
+      const params: any = { messages };
+      if (systemPrompt) {
+        addConfigParam(params, 'system', systemPrompt, undefined, undefined);
+      }
+
+      // When reasoningConfig is enabled with 'high' effort, maxTokens and temperature must be unset
+      // For other reasoning modes, only temperature must be unset
+      const reasoningEnabled = config.reasoningConfig?.type === 'enabled';
+      const isHighEffort = config.reasoningConfig?.maxReasoningEffort === 'high';
+
+      // Build inferenceConfig, excluding parameters that conflict with reasoning mode
+      const inferenceConfig: any = {};
+
+      // Copy allowed parameters from interfaceConfig
+      if (config.interfaceConfig) {
+        const {
+          max_new_tokens: _maxTokens,
+          temperature: _temp,
+          ...otherParams
+        } = config.interfaceConfig;
+        Object.assign(inferenceConfig, otherParams);
+      }
+
+      // Only add max_new_tokens if not using high effort reasoning
+      if (!(reasoningEnabled && isHighEffort)) {
+        addConfigParam(
+          inferenceConfig,
+          'max_new_tokens',
+          config?.interfaceConfig?.max_new_tokens,
+          getEnvInt('AWS_BEDROCK_MAX_TOKENS'),
+          undefined,
+        );
+      }
+
+      // Only add temperature if reasoning is disabled
+      if (!reasoningEnabled) {
+        addConfigParam(
+          inferenceConfig,
+          'temperature',
+          config?.interfaceConfig?.temperature,
+          getEnvFloat('AWS_BEDROCK_TEMPERATURE'),
+          0,
+        );
+      }
+
+      addConfigParam(params, 'inferenceConfig', inferenceConfig, undefined, undefined);
+      addConfigParam(params, 'toolConfig', config.toolConfig, undefined, undefined);
+
+      // Add reasoningConfig for Nova 2 extended thinking
+      if (config.reasoningConfig) {
+        addConfigParam(params, 'reasoningConfig', config.reasoningConfig, undefined, undefined);
+      }
+
+      return params;
+    },
+    output: (config: BedrockAmazonNova2GenerationOptions, responseJson: any) => {
+      // Handle reasoningContent blocks in Nova 2 responses
+      const content = responseJson.output?.message?.content;
+      if (!content || !Array.isArray(content)) {
+        return novaOutputFromMessage(responseJson);
+      }
+
+      const hasToolUse = content.some((block: any) => block.toolUse?.toolUseId);
+      if (hasToolUse) {
+        return content
+          .map((block: any) => {
+            if (block.text) {
+              return null; // Filter out text blocks when tool use is present
+            }
+            return JSON.stringify(block.toolUse);
+          })
+          .filter((block: any) => block)
+          .join('\n\n');
+      }
+
+      // Process content blocks, handling both text and reasoningContent
+      const parts: string[] = [];
+      const showThinking = config.showThinking !== false;
+
+      for (const block of content) {
+        if (block.reasoningContent && showThinking) {
+          // Handle reasoning content from Nova 2 extended thinking
+          const reasoningText = block.reasoningContent?.reasoningText?.text;
+          if (reasoningText) {
+            parts.push(`<thinking>\n${reasoningText}\n</thinking>`);
+          }
+        } else if (block.text) {
+          parts.push(block.text);
+        }
+      }
+
+      return parts.join('\n\n');
+    },
     tokenUsage: (responseJson: any, _promptText: string): TokenUsage => {
       const usage = responseJson?.usage;
       if (!usage) {
@@ -1537,6 +1741,9 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'amazon.nova-micro-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
   'amazon.nova-pro-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
   'amazon.nova-premier-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
+  // Nova 2 models with extended thinking support
+  'amazon.nova-2-lite-v1:0': BEDROCK_MODEL.AMAZON_NOVA_2,
+  'amazon.nova-2-sonic-v1:0': BEDROCK_MODEL.AMAZON_NOVA, // Sonic uses bidirectional streaming API
   'amazon.titan-text-express-v1': BEDROCK_MODEL.TITAN_TEXT,
   'amazon.titan-text-lite-v1': BEDROCK_MODEL.TITAN_TEXT,
   'amazon.titan-text-premier-v1:0': BEDROCK_MODEL.TITAN_TEXT,
@@ -1582,6 +1789,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'apac.amazon.nova-micro-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
   'apac.amazon.nova-pro-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
   'apac.amazon.nova-premier-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
+  'apac.amazon.nova-2-lite-v1:0': BEDROCK_MODEL.AMAZON_NOVA_2,
   'apac.anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'apac.anthropic.claude-opus-4-1-20250805-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -1597,6 +1805,7 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'eu.amazon.nova-micro-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
   'eu.amazon.nova-pro-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
   'eu.amazon.nova-premier-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
+  'eu.amazon.nova-2-lite-v1:0': BEDROCK_MODEL.AMAZON_NOVA_2,
   'eu.anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-3-7-sonnet-20250219-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'eu.anthropic.claude-3-haiku-20240307-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -1619,6 +1828,8 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'us.amazon.nova-micro-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
   'us.amazon.nova-pro-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
   'us.amazon.nova-premier-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
+  'us.amazon.nova-2-lite-v1:0': BEDROCK_MODEL.AMAZON_NOVA_2,
+  'us.amazon.nova-2-sonic-v1:0': BEDROCK_MODEL.AMAZON_NOVA,
   'us.anthropic.claude-3-5-haiku-20241022-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-3-5-sonnet-20240620-v1:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
   'us.anthropic.claude-3-5-sonnet-20241022-v2:0': BEDROCK_MODEL.CLAUDE_MESSAGES,
@@ -1652,6 +1863,9 @@ export const AWS_BEDROCK_MODELS: Record<string, IBedrockModel> = {
   'qwen.qwen3-coder-30b-a3b-v1:0': BEDROCK_MODEL.QWEN,
   'qwen.qwen3-235b-a22b-2507-v1:0': BEDROCK_MODEL.QWEN,
   'qwen.qwen3-32b-v1:0': BEDROCK_MODEL.QWEN,
+
+  // Global cross-region inference models (Nova 2)
+  'global.amazon.nova-2-lite-v1:0': BEDROCK_MODEL.AMAZON_NOVA_2,
 };
 
 // See https://docs.aws.amazon.com/bedrock/latest/userguide/model-ids.html
@@ -1664,7 +1878,7 @@ function getHandlerForModel(modelName: string, config?: BedrockInvokeModelOption
     if (!inferenceModelType) {
       throw new Error(
         'Inference profile requires inferenceModelType to be specified in config. ' +
-          'Options: claude, nova, llama (defaults to v4), llama2, llama3, llama3.1, llama3.2, llama3.3, llama4, mistral, cohere, ai21, titan, deepseek, openai, qwen',
+          'Options: claude, nova, nova2, llama (defaults to v4), llama2, llama3, llama3.1, llama3.2, llama3.3, llama4, mistral, cohere, ai21, titan, deepseek, openai, qwen',
       );
     }
 
@@ -1706,6 +1920,8 @@ function getHandlerForModel(modelName: string, config?: BedrockInvokeModelOption
         return BEDROCK_MODEL.OPENAI;
       case 'qwen':
         return BEDROCK_MODEL.QWEN;
+      case 'nova2':
+        return BEDROCK_MODEL.AMAZON_NOVA_2;
       default:
         throw new Error(`Unknown inference model type: ${inferenceModelType}`);
     }
@@ -1718,6 +1934,9 @@ function getHandlerForModel(modelName: string, config?: BedrockInvokeModelOption
   }
   if (modelName.startsWith('ai21.')) {
     return BEDROCK_MODEL.AI21;
+  }
+  if (modelName.includes('amazon.nova-2')) {
+    return BEDROCK_MODEL.AMAZON_NOVA_2;
   }
   if (modelName.includes('amazon.nova')) {
     return BEDROCK_MODEL.AMAZON_NOVA;
