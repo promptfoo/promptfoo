@@ -33,12 +33,12 @@ import ChatMessages, {
   type LoadingMessage,
   type Message,
 } from '@app/pages/eval/components/ChatMessages';
-import {
-  type GeneratedTestCase,
-  type TargetResponse,
-  type TargetPlugin,
-  type TargetStrategy,
-} from './TestCaseGenerationProvider';
+import type {
+  GeneratedTestCase,
+  TargetResponse,
+  TargetPlugin,
+  TargetStrategy,
+} from './testCaseGenerationTypes';
 
 interface TestCaseDialogProps {
   open: boolean;

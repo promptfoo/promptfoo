@@ -197,12 +197,13 @@ GPT-5.1 is OpenAI's newest flagship model, part of the GPT-5 model family. It ex
 
 #### Available Models
 
-| Model         | Description                                        | Best For                                    |
-| ------------- | -------------------------------------------------- | ------------------------------------------- |
-| gpt-5.1       | Latest flagship model                              | Complex reasoning and broad world knowledge |
-| gpt-5.1-mini  | Cost-optimized reasoning                           | Balanced speed, cost, and capability        |
-| gpt-5.1-nano  | High-throughput model                              | Simple instruction-following tasks          |
-| gpt-5.1-codex | Specialized for coding tasks in Codex environments | Agentic coding workflows                    |
+| Model             | Description                                        | Best For                                    |
+| ----------------- | -------------------------------------------------- | ------------------------------------------- |
+| gpt-5.1           | Latest flagship model                              | Complex reasoning and broad world knowledge |
+| gpt-5.1-mini      | Cost-optimized reasoning                           | Balanced speed, cost, and capability        |
+| gpt-5.1-nano      | High-throughput model                              | Simple instruction-following tasks          |
+| gpt-5.1-codex     | Specialized for coding tasks in Codex environments | Agentic coding workflows                    |
+| gpt-5.1-codex-max | Frontier agentic coding model with compaction      | Long-running coding tasks and refactors     |
 
 #### Key Features
 
@@ -255,6 +256,63 @@ GPT-5.1 with default settings (`none` reasoning) is designed as a drop-in replac
 - Improved instruction-following and output formatting
 
 For tasks requiring reasoning, start with `medium` effort and increase to `high` if needed.
+
+### GPT-5.1-Codex-Max
+
+GPT-5.1-Codex-Max is OpenAI's frontier agentic coding model, built on an updated foundational reasoning model trained on agentic tasks across software engineering, math, research, and more. It's designed for long-running, detailed coding work.
+
+#### Key Capabilities
+
+- **Compaction**: First model natively trained to operate across multiple context windows through compaction, coherently working over millions of tokens in a single task
+- **Long-running tasks**: Supports project-scale refactors, deep debugging sessions, and multi-hour agent loops
+- **Token efficiency**: 30% fewer thinking tokens compared to GPT-5.1-Codex at the same reasoning effort level
+- **Windows support**: First model trained to operate in Windows environments
+- **Improved collaboration**: Better performance as a coding partner in CLI environments
+
+#### Usage Examples
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:responses:gpt-5.1-codex-max
+    config:
+      reasoning:
+        effort: 'medium' # Recommended for most tasks
+      max_output_tokens: 25000 # Reserve space for reasoning and outputs
+```
+
+For latency-insensitive tasks requiring maximum quality:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:responses:gpt-5.1-codex-max
+    config:
+      reasoning:
+        effort: 'xhigh' # Extra high reasoning for best results
+      max_output_tokens: 40000
+```
+
+:::warning
+GPT-5.1-Codex-Max is only available through the Responses API (`openai:responses:`). It does not work with the Chat Completions API (`openai:chat:`).
+:::
+
+#### Reasoning Effort Levels
+
+- **`low`**: Minimal reasoning for straightforward tasks
+- **`medium`**: Balanced reasoning, recommended as daily driver
+- **`high`**: Maximum reasoning for complex problem-solving
+- **`xhigh`**: Extra high reasoning for non-latency-sensitive tasks requiring best results
+
+#### Best Practices
+
+- Use for agentic coding tasks in Codex or Codex-like environments
+- Reserve at least 25,000 tokens for reasoning and outputs when starting
+- Start with `medium` reasoning effort for most tasks
+- Use `xhigh` effort only for complex tasks where latency is not a concern
+- Review agent work before deploying to production
+
+:::note
+GPT-5.1-Codex-Max is recommended for use only in agentic coding environments and is not a general-purpose model like GPT-5.1.
+:::
 
 ### Reasoning Models (o1, o3, o3-pro, o3-mini, o4-mini)
 
