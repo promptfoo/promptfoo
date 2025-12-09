@@ -359,7 +359,9 @@ export function setupEnv(envPath: string | string[] | undefined) {
 
     // dotenv v16+ supports array of paths
     // Files are loaded in order, later files override earlier values with override:true
-    dotenv.config({ path: validPaths, override: true, quiet: true });
+    // Pass single string when only one path for backward compatibility
+    const pathArg = validPaths.length === 1 ? validPaths[0] : validPaths;
+    dotenv.config({ path: pathArg, override: true, quiet: true });
   } else {
     dotenv.config({ quiet: true });
   }
