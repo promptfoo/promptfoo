@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
+import { MODEL_AUDIT_ROUTES } from '@app/constants/routes';
 import { formatDataGridDate } from '@app/utils/date';
 import {
   Add as AddIcon,
@@ -107,13 +108,13 @@ export default function ModelAuditHistory() {
 
   const handleRowClick = useCallback(
     (params: { row: HistoricalScan }) => {
-      navigate(`/model-audit/${params.row.id}`);
+      navigate(MODEL_AUDIT_ROUTES.DETAIL(params.row.id));
     },
     [navigate],
   );
 
   const handleNewScan = useCallback(() => {
-    navigate('/model-audit/setup');
+    navigate(MODEL_AUDIT_ROUTES.SETUP);
   }, [navigate]);
 
   const handleDelete = useCallback(async () => {

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 
+import { MODEL_AUDIT_ROUTES } from '@app/constants/routes';
 import { callApi } from '@app/utils/api';
 import { formatDataGridDate } from '@app/utils/date';
 import {
@@ -107,10 +108,10 @@ export default function ModelAuditResultLatestPage() {
             {error}
           </Alert>
           <Stack direction="row" spacing={2}>
-            <Button component={RouterLink} to="/model-audit/setup" variant="contained">
+            <Button component={RouterLink} to={MODEL_AUDIT_ROUTES.SETUP} variant="contained">
               Go to Setup
             </Button>
-            <Button component={RouterLink} to="/model-audits" variant="outlined">
+            <Button component={RouterLink} to={MODEL_AUDIT_ROUTES.LIST} variant="outlined">
               View History
             </Button>
           </Stack>
@@ -150,7 +151,7 @@ export default function ModelAuditResultLatestPage() {
             </Typography>
             <Button
               component={RouterLink}
-              to="/model-audit/setup"
+              to={MODEL_AUDIT_ROUTES.SETUP}
               variant="contained"
               size="large"
               startIcon={<AddIcon />}
@@ -195,7 +196,7 @@ export default function ModelAuditResultLatestPage() {
             <Stack direction="row" spacing={2}>
               <Button
                 component={RouterLink}
-                to="/model-audit/setup"
+                to={MODEL_AUDIT_ROUTES.SETUP}
                 variant="contained"
                 startIcon={<AddIcon />}
               >
@@ -203,7 +204,7 @@ export default function ModelAuditResultLatestPage() {
               </Button>
               <Button
                 component={RouterLink}
-                to="/model-audits"
+                to={MODEL_AUDIT_ROUTES.LIST}
                 variant="outlined"
                 startIcon={<HistoryIcon />}
               >

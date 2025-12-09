@@ -1,6 +1,7 @@
 import { useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 
+import { MODEL_AUDIT_ROUTES } from '@app/constants/routes';
 import { callApi } from '@app/utils/api';
 import {
   CheckCircle as CheckCircleIcon,
@@ -89,7 +90,7 @@ export default function ModelAuditSetupPage() {
         fetchHistoricalScans();
         // Navigate to the result page if we have an audit ID
         if (data.auditId) {
-          navigate(`/model-audit/${data.auditId}`);
+          navigate(MODEL_AUDIT_ROUTES.DETAIL(data.auditId));
           return;
         }
       }

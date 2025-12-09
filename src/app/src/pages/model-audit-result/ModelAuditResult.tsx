@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
 
+import { MODEL_AUDIT_ROUTES } from '@app/constants/routes';
 import { formatDataGridDate } from '@app/utils/date';
 import {
   ArrowBack as ArrowBackIcon,
@@ -98,7 +99,7 @@ export default function ModelAuditResult() {
     try {
       await deleteHistoricalScan(id);
       setDeleteDialogOpen(false);
-      navigate('/model-audits');
+      navigate(MODEL_AUDIT_ROUTES.LIST);
     } catch (err) {
       console.error('Failed to delete scan:', err);
     } finally {
@@ -159,13 +160,13 @@ export default function ModelAuditResult() {
           <Stack direction="row" spacing={2}>
             <Button
               component={RouterLink}
-              to="/model-audits"
+              to={MODEL_AUDIT_ROUTES.LIST}
               variant="contained"
               startIcon={<ArrowBackIcon />}
             >
               Back to History
             </Button>
-            <Button component={RouterLink} to="/model-audit/setup" variant="outlined">
+            <Button component={RouterLink} to={MODEL_AUDIT_ROUTES.SETUP} variant="outlined">
               New Scan
             </Button>
           </Stack>
@@ -187,10 +188,20 @@ export default function ModelAuditResult() {
         <Paper elevation={0} sx={{ p: { xs: 3, md: 5 }, mb: 4 }}>
           {/* Breadcrumbs */}
           <Breadcrumbs sx={{ mb: 3 }}>
-            <Link component={RouterLink} to="/model-audit" underline="hover" color="inherit">
+            <Link
+              component={RouterLink}
+              to={MODEL_AUDIT_ROUTES.ROOT}
+              underline="hover"
+              color="inherit"
+            >
               Model Audit
             </Link>
-            <Link component={RouterLink} to="/model-audits" underline="hover" color="inherit">
+            <Link
+              component={RouterLink}
+              to={MODEL_AUDIT_ROUTES.LIST}
+              underline="hover"
+              color="inherit"
+            >
               History
             </Link>
             <Typography color="text.primary">{scan.name || scan.id.slice(0, 8)}</Typography>
@@ -233,7 +244,7 @@ export default function ModelAuditResult() {
               </Button>
               <Button
                 component={RouterLink}
-                to="/model-audits"
+                to={MODEL_AUDIT_ROUTES.LIST}
                 variant="outlined"
                 size="small"
                 startIcon={<HistoryIcon />}
