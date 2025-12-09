@@ -1,5 +1,3 @@
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-
 /**
  * Tool annotation hints per MCP spec 2025-03-26
  * These help AI agents understand tool behavior for better decision making
@@ -219,28 +217,4 @@ export function initializeToolRegistry(): void {
   for (const tool of TOOL_DEFINITIONS) {
     toolRegistry.register(tool);
   }
-}
-
-/**
- * Helper to create tool with annotations
- * This wraps the MCP server.tool() call to include annotations
- */
-export function registerToolWithAnnotations(
-  server: McpServer,
-  name: string,
-  schema: Record<string, unknown>,
-  handler: (args: any) => Promise<any>,
-): void {
-  // Get metadata for documentation (stored in registry for resource generation)
-  const _metadata = toolRegistry.get(name);
-
-  // MCP SDK's tool() method accepts annotations in the schema object
-  // Per MCP spec 2025-03-26, annotations are passed alongside the schema
-  const schemaWithAnnotations = {
-    ...schema,
-    // Note: The MCP SDK may handle annotations differently
-    // For now, we store them in the registry for documentation
-  };
-
-  server.tool(name, schemaWithAnnotations, handler);
 }

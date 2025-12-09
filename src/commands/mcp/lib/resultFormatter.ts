@@ -106,8 +106,8 @@ function formatSingleResult(
         : truncateText(JSON.stringify(result.response.output), maxTextLength);
   }
 
-  // Format prompt raw text
-  const promptRaw = result.prompt.raw ? truncateText(result.prompt.raw, 100) : '';
+  // Format prompt raw text safely
+  const promptRaw = result.prompt?.raw ? truncateText(result.prompt.raw, 100) : '';
 
   // Format assertions if present
   let assertions: FormattedEvalResult['assertions'] = null;
@@ -135,12 +135,12 @@ function formatSingleResult(
       vars: result.vars,
     },
     prompt: {
-      label: result.prompt.label,
+      label: result.prompt?.label,
       raw: promptRaw,
     },
     provider: {
-      id: result.provider.id,
-      label: result.provider.label,
+      id: result.provider?.id ?? 'unknown',
+      label: result.provider?.label,
     },
     response: {
       output: outputText,
