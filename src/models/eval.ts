@@ -11,7 +11,6 @@ import {
   evalsToDatasetsTable,
   evalsToPromptsTable,
   evalsToTagsTable,
-  modelAuditsTable,
   promptsTable,
   tagsTable,
 } from '../database/tables';
@@ -51,7 +50,7 @@ import {
 } from './evalPerformance';
 import EvalResult from './evalResult';
 
-import type { EvalResultsFilterMode, EvalType, TraceData } from '../types';
+import type { EvalResultsFilterMode, TraceData } from '../types/index';
 
 /**
  * Database query result type interfaces
@@ -1427,161 +1426,9 @@ export async function getEvalSummaries(
       isRedteam: result.isRedteam,
       passRate: testRunCount > 0 ? (passCount / testRunCount) * 100 : 0,
       label: result.description ? `${result.description} (${result.evalId})` : result.evalId,
-      type: result.isRedteam ? 'redteam' : 'eval',
       providers: deserializedProviders,
       attackSuccessRate:
         type === 'redteam' ? calculateAttackSuccessRate(testRunCount, failCount) : undefined,
     };
   });
-}
-
-export async function getModelAuditSummaries(): Promise<EvalSummary[]> {
-  const db = getDb();
-
-  const results = db
-    .select({
-      id: modelAuditsTable.id,
-      createdAt: modelAuditsTable.createdAt,
-      name: modelAuditsTable.name,
-      modelPath: modelAuditsTable.modelPath,
-      hasErrors: modelAuditsTable.hasErrors,
-      totalChecks: modelAuditsTable.totalChecks,
-      passedChecks: modelAuditsTable.passedChecks,
-      failedChecks: modelAuditsTable.failedChecks,
-    })
-    .from(modelAuditsTable)
-    .orderBy(desc(modelAuditsTable.createdAt))
-    .all();
-
-  return results.map((result) => {
-    const passRate =
-      result.totalChecks && result.passedChecks
-        ? (result.passedChecks / result.totalChecks) * 100
-        : 0;
-
-    const scanName = result.name || `Model Audit ${result.id.slice(-8)}`;
-    const description = `${scanName} - ${result.modelPath}`;
-
-    return {
-      evalId: result.id,
-      createdAt: result.createdAt,
-      description: description,
-      numTests: result.totalChecks || 0,
-      datasetId: null, // Model audits don't have datasets
-      isRedteam: false, // For backward compatibility
-      type: 'modelaudit' as const,
-      passRate: passRate,
-      label: scanName,
-      providers: [], // Model audits don't have providers
-    };
-  });
-}
-
-export async function getAllEvalSummaries(datasetId?: string): Promise<EvalSummary[]> {
-  const [evalSummaries, modelAuditSummaries] = await Promise.all([
-    getEvalSummaries(datasetId),
-    getModelAuditSummaries(),
-  ]);
-
-  // Combine and sort by creation date (most recent first)
-  return [...evalSummaries, ...modelAuditSummaries].sort((a, b) => b.createdAt - a.createdAt);
-}
-
-export async function getPaginatedEvalSummaries({
-  limit = 50,
-  offset = 0,
-  search,
-  sort = 'createdAt',
-  order = 'desc',
-  datasetId,
-  focusedEvalId,
-  type,
-}: {
-  limit?: number;
-  offset?: number;
-  search?: string;
-  sort?: 'createdAt' | 'description' | 'passRate' | 'numTests' | 'type';
-  order?: 'asc' | 'desc';
-  datasetId?: string;
-  focusedEvalId?: string;
-  type?: EvalType;
-}): Promise<{ data: EvalSummary[]; total: number }> {
-  // Handle focusedEvalId for Phase 1 compatibility
-  let effectiveDatasetId = datasetId;
-  if (focusedEvalId && !datasetId) {
-    const db = getDb();
-    const focusedEvalDataset = db
-      .select({ datasetId: evalsToDatasetsTable.datasetId })
-      .from(evalsTable)
-      .leftJoin(evalsToDatasetsTable, eq(evalsTable.id, evalsToDatasetsTable.evalId))
-      .where(eq(evalsTable.id, focusedEvalId))
-      .get();
-
-    effectiveDatasetId = focusedEvalDataset?.datasetId || undefined;
-  }
-
-  // Get all summaries (unified approach for model audit integration)
-  let allSummaries = await getAllEvalSummaries(effectiveDatasetId);
-
-  // Apply type filter
-  if (type) {
-    allSummaries = allSummaries.filter((summary) => {
-      const summaryType = summary.type || (summary.isRedteam ? 'redteam' : 'eval');
-      return summaryType === type;
-    });
-  }
-
-  // Apply search filter
-  if (search) {
-    const searchLower = search.toLowerCase();
-    allSummaries = allSummaries.filter(
-      (summary) =>
-        summary.evalId.toLowerCase().includes(searchLower) ||
-        (summary.description && summary.description.toLowerCase().includes(searchLower)) ||
-        summary.label.toLowerCase().includes(searchLower),
-    );
-  }
-
-  // Apply sorting
-  allSummaries.sort((a, b) => {
-    let aVal: any, bVal: any;
-
-    switch (sort) {
-      case 'description':
-        aVal = a.description || '';
-        bVal = b.description || '';
-        break;
-      case 'passRate':
-        aVal = a.passRate;
-        bVal = b.passRate;
-        break;
-      case 'numTests':
-        aVal = a.numTests;
-        bVal = b.numTests;
-        break;
-      case 'type':
-        aVal = a.type || (a.isRedteam ? 'redteam' : 'eval');
-        bVal = b.type || (b.isRedteam ? 'redteam' : 'eval');
-        break;
-      case 'createdAt':
-      default:
-        aVal = a.createdAt;
-        bVal = b.createdAt;
-        break;
-    }
-
-    if (order === 'asc') {
-      return aVal < bVal ? -1 : aVal > bVal ? 1 : 0;
-    } else {
-      return aVal > bVal ? -1 : aVal < bVal ? 1 : 0;
-    }
-  });
-
-  const total = allSummaries.length;
-  const paginatedData = allSummaries.slice(offset, offset + limit);
-
-  return {
-    data: paginatedData,
-    total,
-  };
 }

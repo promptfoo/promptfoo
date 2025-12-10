@@ -16,7 +16,7 @@ import { getDirectory } from '../esm';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import { runDbMigrations } from '../migrate';
-import Eval, { getAllEvalSummaries, getPaginatedEvalSummaries } from '../models/eval';
+import Eval, { getEvalSummaries } from '../models/eval';
 import { getRemoteHealthUrl } from '../redteam/remoteGeneration';
 import { createShareableUrl, determineShareDomain, stripAuthFromUrl } from '../share';
 import telemetry, { TelemetryEventSchema } from '../telemetry';
@@ -42,7 +42,7 @@ import versionRouter from './routes/version';
 import type { Request, Response } from 'express';
 
 import type { Prompt, PromptWithMetadata, TestCase, TestSuite } from '../index';
-import type { EvalSummary, EvalQueryParams, PaginatedEvalResponse, EvalType } from '../types';
+import type { EvalSummary } from '../types/index';
 
 // Prompts cache
 let allPrompts: PromptWithMetadata[] | null = null;
@@ -111,77 +111,25 @@ export function createApp() {
   });
 
   /**
-   * Fetches summaries of all evals, with optional pagination, filtering, and sorting.
-   * Supports model audits, redteam, and regular evals with unified API.
+   * Fetches summaries of all evals, optionally for a given dataset.
    */
   app.get(
     '/api/results',
     async (
-      req: Request<{}, {}, {}, EvalQueryParams>,
-      res: Response<PaginatedEvalResponse | { data: EvalSummary[] }>,
+      req: Request<
+        {},
+        {},
+        {},
+        { datasetId?: string; type?: 'redteam' | 'eval'; includeProviders?: boolean }
+      >,
+      res: Response<{ data: EvalSummary[] }>,
     ): Promise<void> => {
-      const { limit, offset, search, sort, order, datasetId, focusedEvalId, type } = req.query;
-
-      // Validate and sanitize query params - enhanced for model audit support
-      const allowedSorts = new Set([
-        'createdAt',
-        'description',
-        'passRate',
-        'numTests',
-        'type',
-      ] as const);
-      const allowedOrders = new Set(['asc', 'desc'] as const);
-      const allowedTypes = new Set(['eval', 'redteam', 'modelaudit'] as const);
-
-      const safeSort = allowedSorts.has(sort as any)
-        ? (sort as 'createdAt' | 'description' | 'passRate' | 'numTests' | 'type')
-        : undefined;
-      const safeOrder = allowedOrders.has(order as any) ? (order as 'asc' | 'desc') : undefined;
-      const safeType = allowedTypes.has(type as any) ? (type as EvalType) : undefined;
-      const safeLimit = Number.isFinite(Number(limit))
-        ? Math.max(1, Math.min(100, Number(limit)))
-        : undefined;
-      const safeOffset = Number.isFinite(Number(offset)) ? Math.max(0, Number(offset)) : undefined;
-
-      // Check if any pagination/filtering parameters are provided
-      const paginationParams = [
-        'limit',
-        'offset',
-        'search',
-        'sort',
-        'order',
-        'datasetId',
-        'focusedEvalId',
-        'type',
-      ];
-      const isPaginationRequest = paginationParams.some(
-        (param) => req.query[param as keyof EvalQueryParams] !== undefined,
+      const previousResults = await getEvalSummaries(
+        req.query.datasetId,
+        req.query.type,
+        req.query.includeProviders,
       );
-
-      if (isPaginationRequest) {
-        // Use new pagination API with enhanced parameters
-        const result = await getPaginatedEvalSummaries({
-          limit: safeLimit,
-          offset: safeOffset,
-          search,
-          sort: safeSort,
-          order: safeOrder,
-          datasetId,
-          focusedEvalId,
-          type: safeType,
-        });
-
-        res.json({
-          data: result.data,
-          total: result.total,
-          limit: safeLimit ?? 50,
-          offset: safeOffset ?? 0,
-        });
-      } else {
-        // Legacy API - maintain backward compatibility
-        const previousResults = await getAllEvalSummaries(datasetId);
-        res.json({ data: previousResults });
-      }
+      res.json({ data: previousResults });
     },
   );
 
