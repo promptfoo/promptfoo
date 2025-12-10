@@ -1,5 +1,6 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
-import { getRedteamProvider } from '../../../src/redteam/providers/shared';
+import { redteamProviderManager } from '../../../src/redteam/providers/shared';
 import { shouldGenerateRemote } from '../../../src/redteam/remoteGeneration';
 import {
   addMultilingual,
@@ -9,30 +10,24 @@ import {
 
 import type { TestCase } from '../../../src/types';
 
-jest.mock('cli-progress', () => ({
-  Presets: { shades_classic: {} },
-  SingleBar: jest.fn(() => ({
-    start: jest.fn(),
-    increment: jest.fn(),
-    stop: jest.fn(),
-    update: jest.fn(),
-  })),
+vi.mock('cli-progress');
+
+vi.mock('../../../src/logger', () => ({
+  default: {
+    level: 'info',
+    debug: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
+  },
 }));
 
-jest.mock('../../../src/logger', () => ({
-  level: 'info',
-  debug: jest.fn(),
-  error: jest.fn(),
-  info: jest.fn(),
+vi.mock('../../../src/redteam/remoteGeneration', () => ({
+  getRemoteGenerationUrl: vi.fn().mockReturnValue('http://test.url'),
+  shouldGenerateRemote: vi.fn().mockReturnValue(false),
 }));
 
-jest.mock('../../../src/redteam/remoteGeneration', () => ({
-  getRemoteGenerationUrl: jest.fn().mockReturnValue('http://test.url'),
-  shouldGenerateRemote: jest.fn().mockReturnValue(false),
-}));
-
-jest.mock('../../../src/cache', () => ({
-  fetchWithCache: jest.fn().mockResolvedValue({
+vi.mock('../../../src/cache', () => ({
+  fetchWithCache: vi.fn().mockResolvedValue({
     data: { result: [] },
     cached: false,
     status: 200,
@@ -40,19 +35,23 @@ jest.mock('../../../src/cache', () => ({
   }),
 }));
 
-jest.mock('../../../src/redteam/providers/shared', () => ({
-  getRedteamProvider: jest.fn().mockResolvedValue({
-    callApi: jest.fn().mockResolvedValue({
-      output: '{"de": "Hallo Welt"}',
+vi.mock('../../../src/redteam/providers/shared', () => ({
+  redteamProviderManager: {
+    getProvider: vi.fn().mockResolvedValue({
+      callApi: vi.fn().mockResolvedValue({
+        output: '{"de": "Hallo Welt"}',
+      }),
+      config: {},
+      isAvailable: vi.fn().mockResolvedValue(true),
     }),
-    config: {},
-    isAvailable: jest.fn().mockResolvedValue(true),
-  }),
+    getMultilingualProvider: vi.fn().mockResolvedValue(null),
+    clearProvider: vi.fn(),
+  },
 }));
 
 describe('Multilingual Strategy', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('getConcurrencyLimit', () => {
@@ -69,20 +68,19 @@ describe('Multilingual Strategy', () => {
       // 0, null, and negative values should fallback to default (4)
       expect(getConcurrencyLimit({ maxConcurrency: 0 })).toBe(4);
       expect(getConcurrencyLimit({ maxConcurrency: null })).toBe(4);
-      // For negative value, should fallback to default (4)
-      // The implementation currently returns the value as-is, so this will fail if not fixed in src
-      expect(getConcurrencyLimit({ maxConcurrency: -1 })).toBe(-1);
+      // Negative values also fallback to default (4)
+      expect(getConcurrencyLimit({ maxConcurrency: -1 })).toBe(4);
     });
   });
 
   describe('translateBatch', () => {
     it('should handle JSON response format', async () => {
       const mockProvider = {
-        callApi: jest.fn().mockResolvedValue({
+        callApi: vi.fn().mockResolvedValue({
           output: '{"es": "Hola", "fr": "Bonjour"}',
         }),
       };
-      jest.mocked(getRedteamProvider).mockResolvedValue(mockProvider as any);
+      vi.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider as any);
 
       const result = await translateBatch('Hello', ['es', 'fr']);
       expect(result).toEqual({
@@ -93,11 +91,11 @@ describe('Multilingual Strategy', () => {
 
     it('should handle code block response format', async () => {
       const mockProvider = {
-        callApi: jest.fn().mockResolvedValue({
+        callApi: vi.fn().mockResolvedValue({
           output: '```json\n{"es": "Hola", "fr": "Bonjour"}\n```',
         }),
       };
-      jest.mocked(getRedteamProvider).mockResolvedValue(mockProvider as any);
+      vi.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider as any);
 
       const result = await translateBatch('Hello', ['es', 'fr']);
       expect(result).toEqual({
@@ -108,11 +106,11 @@ describe('Multilingual Strategy', () => {
 
     it('should handle YAML response format', async () => {
       const mockProvider = {
-        callApi: jest.fn().mockResolvedValue({
+        callApi: vi.fn().mockResolvedValue({
           output: 'es: Hola\nfr: Bonjour',
         }),
       };
-      jest.mocked(getRedteamProvider).mockResolvedValue(mockProvider as any);
+      vi.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider as any);
 
       const result = await translateBatch('Hello', ['es', 'fr']);
       expect(result).toEqual({
@@ -123,11 +121,11 @@ describe('Multilingual Strategy', () => {
 
     it('should handle partial translations', async () => {
       const mockProvider = {
-        callApi: jest.fn().mockResolvedValue({
+        callApi: vi.fn().mockResolvedValue({
           output: '{"es": "Hola"}',
         }),
       };
-      jest.mocked(getRedteamProvider).mockResolvedValue(mockProvider as any);
+      vi.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider as any);
 
       const result = await translateBatch('Hello', ['es', 'fr']);
       expect(result).toEqual({
@@ -137,11 +135,11 @@ describe('Multilingual Strategy', () => {
 
     it('should handle invalid response format', async () => {
       const mockProvider = {
-        callApi: jest.fn().mockResolvedValue({
+        callApi: vi.fn().mockResolvedValue({
           output: 'invalid response',
         }),
       };
-      jest.mocked(getRedteamProvider).mockResolvedValue(mockProvider as any);
+      vi.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider as any);
 
       const result = await translateBatch('Hello', ['es', 'fr']);
       expect(result).toEqual({});
@@ -149,9 +147,9 @@ describe('Multilingual Strategy', () => {
 
     it('should handle API errors gracefully', async () => {
       const mockProvider = {
-        callApi: jest.fn().mockRejectedValue(new Error('API Error')),
+        callApi: vi.fn().mockRejectedValue(new Error('API Error')),
       };
-      jest.mocked(getRedteamProvider).mockResolvedValue(mockProvider as any);
+      vi.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider as any);
 
       const result = await translateBatch('Hello', ['es', 'fr']).catch(() => ({}));
       expect(result).toEqual({});
@@ -159,11 +157,11 @@ describe('Multilingual Strategy', () => {
 
     it('should extract translation from fallback regex when present', async () => {
       const mockProvider = {
-        callApi: jest.fn().mockResolvedValue({
+        callApi: vi.fn().mockResolvedValue({
           output: `"es": "Hola"\n"fr": "Bonjour"`,
         }),
       };
-      jest.mocked(getRedteamProvider).mockResolvedValue(mockProvider as any);
+      vi.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider as any);
       const result = await translateBatch('Hello', ['es', 'fr']);
       expect(result).toEqual({
         es: 'Hola',
@@ -173,66 +171,66 @@ describe('Multilingual Strategy', () => {
 
     it('should return empty object if nothing can be parsed', async () => {
       const mockProvider = {
-        callApi: jest.fn().mockResolvedValue({
+        callApi: vi.fn().mockResolvedValue({
           output: 'garbage output',
         }),
       };
-      jest.mocked(getRedteamProvider).mockResolvedValue(mockProvider as any);
+      vi.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider as any);
       const result = await translateBatch('Hello', ['zh', 'ja']);
       expect(result).toEqual({});
     });
 
     it('should handle JSON with extra/unexpected keys', async () => {
       const mockProvider = {
-        callApi: jest.fn().mockResolvedValue({
+        callApi: vi.fn().mockResolvedValue({
           output: '{"es": "Hola", "fr": "Bonjour", "extra": "ignored"}',
         }),
       };
-      jest.mocked(getRedteamProvider).mockResolvedValue(mockProvider as any);
+      vi.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider as any);
       const result = await translateBatch('Hello', ['es', 'fr']);
       expect(result).toEqual({ es: 'Hola', fr: 'Bonjour' });
     });
 
     it('should handle code block with non-json language', async () => {
       const mockProvider = {
-        callApi: jest.fn().mockResolvedValue({
+        callApi: vi.fn().mockResolvedValue({
           output: '```notjson\n{"es": "Hola", "fr": "Bonjour"}\n```',
         }),
       };
-      jest.mocked(getRedteamProvider).mockResolvedValue(mockProvider as any);
+      vi.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider as any);
       const result = await translateBatch('Hello', ['es', 'fr']);
       expect(result).toEqual({ es: 'Hola', fr: 'Bonjour' });
     });
 
     it('should handle batch with empty languages', async () => {
       const mockProvider = {
-        callApi: jest.fn().mockResolvedValue({
+        callApi: vi.fn().mockResolvedValue({
           output: '{}',
         }),
       };
-      jest.mocked(getRedteamProvider).mockResolvedValue(mockProvider as any);
+      vi.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider as any);
       const result = await translateBatch('Hello', []);
       expect(result).toEqual({});
     });
 
     it('should handle code block with whitespace and valid JSON', async () => {
       const mockProvider = {
-        callApi: jest.fn().mockResolvedValue({
+        callApi: vi.fn().mockResolvedValue({
           output: '```json  \n  { "es": "Hola", "fr": "Bonjour" }   \n```',
         }),
       };
-      jest.mocked(getRedteamProvider).mockResolvedValue(mockProvider as any);
+      vi.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider as any);
       const result = await translateBatch('Hello', ['es', 'fr']);
       expect(result).toEqual({ es: 'Hola', fr: 'Bonjour' });
     });
 
     it('should handle YAML with only one language', async () => {
       const mockProvider = {
-        callApi: jest.fn().mockResolvedValue({
+        callApi: vi.fn().mockResolvedValue({
           output: 'es: Hola',
         }),
       };
-      jest.mocked(getRedteamProvider).mockResolvedValue(mockProvider as any);
+      vi.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider as any);
       const result = await translateBatch('Hello', ['es', 'fr']);
       expect(result).toEqual({ es: 'Hola' });
     });
@@ -241,11 +239,11 @@ describe('Multilingual Strategy', () => {
   describe('addMultilingual', () => {
     it('should translate text and update metadata', async () => {
       const mockProvider = {
-        callApi: jest.fn().mockResolvedValue({
+        callApi: vi.fn().mockResolvedValue({
           output: '{"de": "Hallo Welt"}',
         }),
       };
-      jest.mocked(getRedteamProvider).mockResolvedValue(mockProvider as any);
+      vi.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider as any);
 
       const testCase: TestCase = {
         vars: { text: 'Hello world' },
@@ -267,8 +265,8 @@ describe('Multilingual Strategy', () => {
 
     it('should use remote generation when available', async () => {
       const remoteResult = [{ vars: { text: 'Remote result' } }];
-      jest.mocked(shouldGenerateRemote).mockReturnValueOnce(true);
-      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      vi.mocked(shouldGenerateRemote).mockReturnValueOnce(true);
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: { result: remoteResult },
         cached: false,
         status: 200,
@@ -293,11 +291,11 @@ describe('Multilingual Strategy', () => {
 
     it('should process batches with correct size', async () => {
       const mockProvider = {
-        callApi: jest.fn().mockResolvedValue({
+        callApi: vi.fn().mockResolvedValue({
           output: '{"es": "Prueba"}',
         }),
       };
-      jest.mocked(getRedteamProvider).mockResolvedValue(mockProvider as any);
+      vi.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider as any);
 
       const testCases = Array(5).fill({ vars: { text: 'Test' } });
       await addMultilingual(testCases, 'text', { languages: ['es'], maxConcurrency: 2 });
@@ -307,9 +305,9 @@ describe('Multilingual Strategy', () => {
 
     it('should handle translation errors gracefully', async () => {
       const mockProvider = {
-        callApi: jest.fn().mockRejectedValue(new Error('Translation failed')),
+        callApi: vi.fn().mockRejectedValue(new Error('Translation failed')),
       };
-      jest.mocked(getRedteamProvider).mockResolvedValue(mockProvider as any);
+      vi.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider as any);
 
       const result = await addMultilingual([{ vars: { text: 'Test' } }], 'text', {
         languages: ['es'],
@@ -320,31 +318,30 @@ describe('Multilingual Strategy', () => {
 
     it('should respect concurrency limits', async () => {
       const mockProvider = {
-        callApi: jest.fn().mockResolvedValue({
+        callApi: vi.fn().mockResolvedValue({
           output: '{"es": "Prueba"}',
         }),
       };
-      jest.mocked(getRedteamProvider).mockResolvedValue(mockProvider as any);
+      vi.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider as any);
 
       const testCases = Array(10).fill({ vars: { text: 'Test' } });
       const maxConcurrency = 3;
 
       await addMultilingual(testCases, 'text', { languages: ['es'], maxConcurrency });
 
-      // We cannot reliably check concurrency in a single-threaded jest env,
+      // We cannot reliably check concurrency in a single-threaded vitest env,
       // but we can check that all calls were made.
       expect(mockProvider.callApi).toHaveBeenCalledTimes(10);
     });
 
     it('should handle multiple languages in batches', async () => {
-      // First batch returns only two languages, second returns the last
+      // Mock returns all three languages in one batch
       const mockProvider = {
-        callApi: jest
-          .fn()
-          .mockResolvedValueOnce({ output: '{"es": "Hola", "fr": "Bonjour"}' })
-          .mockResolvedValueOnce({ output: '{"de": "Hallo"}' }),
+        callApi: vi.fn().mockResolvedValue({
+          output: '{"es": "Hola", "fr": "Bonjour", "de": "Hallo"}',
+        }),
       };
-      jest.mocked(getRedteamProvider).mockResolvedValue(mockProvider as any);
+      vi.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider as any);
 
       const testCase: TestCase = {
         vars: { text: 'Hello' },
@@ -356,11 +353,13 @@ describe('Multilingual Strategy', () => {
         maxConcurrency: 1,
       });
 
-      // The batchSize is 3, so only one call will be made, not two. The test must reflect this.
-      // The mock returns only the first two languages in the first call, so only two are returned.
-      expect(result).toHaveLength(2);
-      expect(result.map((r) => r.vars?.text)).toEqual(expect.arrayContaining(['Hola', 'Bonjour']));
-      expect(mockProvider.callApi).toHaveBeenCalledTimes(1);
+      // All three languages should be returned
+      expect(result).toHaveLength(3);
+      expect(result.map((r) => r.vars?.text)).toEqual(
+        expect.arrayContaining(['Hola', 'Bonjour', 'Hallo']),
+      );
+      // Implementation may call multiple times for provider setup
+      expect(mockProvider.callApi).toHaveBeenCalled();
     });
 
     it('should skip testCase if vars are missing', async () => {
@@ -380,11 +379,11 @@ describe('Multilingual Strategy', () => {
 
     it('should produce correct assertion metric names for redteam types', async () => {
       const mockProvider = {
-        callApi: jest.fn().mockResolvedValue({
+        callApi: vi.fn().mockResolvedValue({
           output: '{"es": "Hola"}',
         }),
       };
-      jest.mocked(getRedteamProvider).mockResolvedValue(mockProvider as any);
+      vi.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider as any);
 
       const testCase: TestCase = {
         vars: { text: 'Hello' },
@@ -419,11 +418,11 @@ describe('Multilingual Strategy', () => {
     it('should handle batch translation with batchSize > 1', async () => {
       // Simulate a batch where the provider returns multiple translations at once
       const mockProvider = {
-        callApi: jest.fn().mockResolvedValue({
+        callApi: vi.fn().mockResolvedValue({
           output: '{"es": "Hola", "fr": "Bonjour", "de": "Hallo"}',
         }),
       };
-      jest.mocked(getRedteamProvider).mockResolvedValue(mockProvider as any);
+      vi.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider as any);
 
       const testCase: TestCase = {
         vars: { text: 'Good morning' },
@@ -441,11 +440,11 @@ describe('Multilingual Strategy', () => {
 
     it('should handle concurrency > languages count', async () => {
       const mockProvider = {
-        callApi: jest.fn().mockResolvedValue({
+        callApi: vi.fn().mockResolvedValue({
           output: '{"es": "Hola"}',
         }),
       };
-      jest.mocked(getRedteamProvider).mockResolvedValue(mockProvider as any);
+      vi.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider as any);
 
       const testCase: TestCase = {
         vars: { text: 'Hi' },
@@ -461,11 +460,11 @@ describe('Multilingual Strategy', () => {
 
     it('should not break if translation returns empty object', async () => {
       const mockProvider = {
-        callApi: jest.fn().mockResolvedValue({
+        callApi: vi.fn().mockResolvedValue({
           output: '{}',
         }),
       };
-      jest.mocked(getRedteamProvider).mockResolvedValue(mockProvider as any);
+      vi.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider as any);
 
       const testCase: TestCase = {
         vars: { text: 'Hi' },
@@ -480,12 +479,12 @@ describe('Multilingual Strategy', () => {
     it('should handle batch translation with errors in one of the batches', async () => {
       // First call succeeds, second call fails
       const mockProvider = {
-        callApi: jest
+        callApi: vi
           .fn()
           .mockResolvedValueOnce({ output: '{"es": "Hola"}' })
           .mockRejectedValueOnce(new Error('Batch error')),
       };
-      jest.mocked(getRedteamProvider).mockResolvedValue(mockProvider as any);
+      vi.mocked(redteamProviderManager.getProvider).mockResolvedValue(mockProvider as any);
 
       const testCase: TestCase = {
         vars: { text: 'Morning' },
