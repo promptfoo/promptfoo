@@ -24,6 +24,10 @@ describe('Model Audit Routes', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // Reset mock implementations to ensure test isolation when tests run in random order.
+    // vi.clearAllMocks() only clears call history, not mockResolvedValue/mockReturnValue.
+    mockedCheckModelAuditInstalled.mockReset();
+    mockedSpawn.mockReset();
     app = createApp();
   });
 
