@@ -77,6 +77,9 @@ vi.mock('../../../src/providers/openai/chat', () => ({
 vi.mock('../../../src/providers/index', () => ({
   loadApiProviders: mockLoadApiProviders,
 }));
+vi.mock('../../../src/providers/defaults', () => ({
+  getDefaultProviders: vi.fn().mockResolvedValue({}),
+}));
 
 const mockedSleep = vi.mocked(sleep);
 const mockedLoadApiProviders = mockLoadApiProviders;

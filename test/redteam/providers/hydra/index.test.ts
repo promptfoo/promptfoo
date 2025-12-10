@@ -177,8 +177,8 @@ describe('HydraProvider', () => {
 
       expect(PromptfooChatCompletionProvider).toHaveBeenCalledWith({
         task: 'hydra-decision',
-        jsonOnly: true,
-        preferSmallModel: false,
+        enforceJson: true,
+        preferSmall: false,
       });
     });
   });

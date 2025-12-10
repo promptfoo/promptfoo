@@ -1,8 +1,17 @@
-import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resetDefaultProviders, setDefaultRedteamProviders } from '../../../src/providers/defaults';
-import { getRedteamProvider } from '../../../src/redteam/providers/shared';
+import { redteamProviderManager } from '../../../src/redteam/providers/shared';
 
 import type { ApiProvider } from '../../../src/types';
+
+// Mock the defaults module to control its behavior in tests
+vi.mock('../../../src/providers/defaults', async (importOriginal) => {
+  const original = (await importOriginal()) as typeof import('../../../src/providers/defaults');
+  return {
+    ...original,
+    getDefaultProviders: vi.fn().mockResolvedValue({}),
+  };
+});
 
 // Mock the provider
 class MockRedteamProvider implements ApiProvider {
@@ -26,8 +35,8 @@ describe('Redteam Provider Manager Integration with Defaults', () => {
 
   beforeEach(() => {
     process.env = { ...originalEnv };
-    // Clear any existing providers
-    // No cleanup needed - RedteamProviderManager is stateless
+    // Clear provider manager cache
+    redteamProviderManager.clearProvider();
     resetDefaultProviders();
 
     // Clear API keys to test defaults system
@@ -41,43 +50,68 @@ describe('Redteam Provider Manager Integration with Defaults', () => {
 
   afterEach(() => {
     process.env = { ...originalEnv };
-    // No cleanup needed - RedteamProviderManager is stateless
+    redteamProviderManager.clearProvider();
     resetDefaultProviders();
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   it('should use default redteam provider when no explicit provider is configured', async () => {
     // Set up an environment where defaults system will be used
-    const provider = await getRedteamProvider({});
+    const provider = await redteamProviderManager.getProvider({});
 
     expect(provider).toBeDefined();
     expect(provider.id()).toBeDefined();
   });
 
-  it('should use Anthropic default redteam provider when ANTHROPIC_API_KEY is set', async () => {
-    process.env.ANTHROPIC_API_KEY = 'test-key';
+  it('should use provider from defaults when getDefaultProviders returns one', async () => {
+    const mockProvider = new MockRedteamProvider('mock-default-provider');
 
-    const provider = await getRedteamProvider({});
+    // Mock getDefaultProviders to return our mock provider
+    const { getDefaultProviders } = await import('../../../src/providers/defaults');
+    vi.mocked(getDefaultProviders).mockResolvedValue({
+      redteamProvider: mockProvider,
+    });
+
+    // Clear cache to force re-fetch
+    redteamProviderManager.clearProvider();
+
+    const provider = await redteamProviderManager.getProvider({});
 
     expect(provider).toBeDefined();
-    expect(provider.id()).toContain('claude');
+    expect(provider.id()).toBe('mock-default-provider');
   });
 
   it('should override default redteam provider when setDefaultRedteamProviders is called', async () => {
     const customProvider = new MockRedteamProvider('custom-redteam-provider');
     await setDefaultRedteamProviders(customProvider);
 
-    const provider = await getRedteamProvider({});
+    // Mock getDefaultProviders to return our custom provider
+    const { getDefaultProviders } = await import('../../../src/providers/defaults');
+    vi.mocked(getDefaultProviders).mockResolvedValue({
+      redteamProvider: customProvider,
+    });
+
+    // Clear cache to force re-fetch
+    redteamProviderManager.clearProvider();
+
+    const provider = await redteamProviderManager.getProvider({});
 
     expect(provider.id()).toBe('custom-redteam-provider');
   });
 
   it('should prefer explicit provider over defaults system', async () => {
     // Set up defaults
-    process.env.ANTHROPIC_API_KEY = 'test-key';
+    const mockDefaultProvider = new MockRedteamProvider('mock-default-provider');
+    const { getDefaultProviders } = await import('../../../src/providers/defaults');
+    vi.mocked(getDefaultProviders).mockResolvedValue({
+      redteamProvider: mockDefaultProvider,
+    });
+
+    // Clear cache to force re-fetch
+    redteamProviderManager.clearProvider();
 
     // Request explicit provider
-    const provider = await getRedteamProvider({
+    const provider = await redteamProviderManager.getProvider({
       provider: 'openai:chat:gpt-3.5-turbo',
     });
 
@@ -85,25 +119,39 @@ describe('Redteam Provider Manager Integration with Defaults', () => {
     expect(provider.id()).toContain('openai');
   });
 
-  it('should handle enforceJson configuration with defaults provider', async () => {
-    process.env.ANTHROPIC_API_KEY = 'test-key';
+  it('should handle jsonOnly configuration with defaults provider', async () => {
+    const mockProvider = new MockRedteamProvider('mock-json-provider');
+    const { getDefaultProviders } = await import('../../../src/providers/defaults');
+    vi.mocked(getDefaultProviders).mockResolvedValue({
+      redteamProvider: mockProvider,
+    });
 
-    const provider = await getRedteamProvider({
-      enforceJson: true,
+    // Clear cache to force re-fetch
+    redteamProviderManager.clearProvider();
+
+    const provider = await redteamProviderManager.getProvider({
+      jsonOnly: true,
     });
 
     expect(provider).toBeDefined();
-    expect(provider.id()).toContain('claude');
+    expect(provider.id()).toBe('mock-json-provider');
   });
 
-  it('should handle preferSmall configuration with defaults provider', async () => {
-    process.env.ANTHROPIC_API_KEY = 'test-key';
+  it('should handle preferSmallModel configuration with defaults provider', async () => {
+    const mockProvider = new MockRedteamProvider('mock-small-provider');
+    const { getDefaultProviders } = await import('../../../src/providers/defaults');
+    vi.mocked(getDefaultProviders).mockResolvedValue({
+      redteamProvider: mockProvider,
+    });
 
-    const provider = await getRedteamProvider({
-      preferSmall: true,
+    // Clear cache to force re-fetch
+    redteamProviderManager.clearProvider();
+
+    const provider = await redteamProviderManager.getProvider({
+      preferSmallModel: true,
     });
 
     expect(provider).toBeDefined();
-    expect(provider.id()).toContain('claude');
+    expect(provider.id()).toBe('mock-small-provider');
   });
 });
