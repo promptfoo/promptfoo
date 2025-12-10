@@ -26,7 +26,9 @@ npm run test:integration
 - **NEVER** increase test timeouts - fix the slow test
 - **NEVER** use `.only()` or `.skip()` in committed code
 - **ALWAYS** clean up mocks in `afterEach`
-- **ALWAYS** use `--randomize` to ensure test independence
+- Tests run in **random order by default** (configured in vitest.config.ts)
+  - Use `--sequence.shuffle=false` to disable when debugging specific failures
+  - Use `--sequence.seed=12345` to reproduce a specific order
 
 ## Writing Tests
 
@@ -66,6 +68,19 @@ axiosMock.post.mockResolvedValue({ data: { result: 'success' } });
 - Prefer shallow mocking over deep mocking
 - Mock external dependencies but not the code being tested
 - Reset mocks between tests to prevent test pollution
+
+**Critical: Mock Isolation**
+
+`vi.clearAllMocks()` only clears call history, NOT mock implementations. Use `mockReset()` for full isolation:
+
+```typescript
+beforeEach(() => {
+  vi.clearAllMocks();           // Clears .mock.calls and .mock.results
+  vi.mocked(myMock).mockReset(); // Also clears mockReturnValue/mockResolvedValue
+});
+```
+
+For `vi.hoisted()` mocks or mocks with `mockReturnValue()`, you MUST call `mockReset()` in `beforeEach` to ensure test isolation when tests run in random order.
 
 ## Provider Testing
 

@@ -1647,9 +1647,17 @@ describe('resolveConfigs', () => {
 });
 
 describe('readConfig', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
     vi.restoreAllMocks();
+
+    // Reset path.parse to use actual implementation (other tests may have mocked it)
+    const actualPath = await vi.importActual<typeof import('path')>('path');
+    vi.mocked(path.parse).mockImplementation((filePath: string) => actualPath.parse(filePath));
+
+    // Reset mockDereference to pass-through (other tests may have queued mockResolvedValueOnce)
+    mockDereference.mockReset();
+    mockDereference.mockImplementation((config: object) => Promise.resolve(config));
   });
 
   afterEach(() => {
