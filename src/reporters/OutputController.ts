@@ -23,10 +23,7 @@ export class OutputController {
   /**
    * Set callbacks for status management during flush
    */
-  setStatusCallbacks(
-    clearStatus: (() => void) | null,
-    reprintStatus: (() => void) | null,
-  ): void {
+  setStatusCallbacks(clearStatus: (() => void) | null, reprintStatus: (() => void) | null): void {
     this.clearStatusCallback = clearStatus;
     this.reprintStatusCallback = reprintStatus;
   }

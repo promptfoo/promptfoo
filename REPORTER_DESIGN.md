@@ -1,6 +1,7 @@
 # Jest-like Reporter System for Promptfoo
 
 ## Goal
+
 Add a pluggable reporter system similar to Jest that displays real-time test results with pass/fail indicators, inline errors, grouping by plugin/strategy for red team scans, and a progress bar with running stats.
 
 ---
@@ -10,36 +11,41 @@ Add a pluggable reporter system similar to Jest that displays real-time test res
 When implementing, refer to these Jest resources:
 
 ### Jest Reporter Configuration
+
 - **Config docs**: https://jestjs.io/docs/configuration#reporters-arraymodulename--modulename-options
 - **Source types**: https://github.com/jestjs/jest/blob/main/packages/jest-reporters/src/types.ts
 - **DefaultReporter**: https://github.com/jestjs/jest/blob/main/packages/jest-reporters/src/DefaultReporter.ts
 - **BaseReporter**: https://github.com/jestjs/jest/blob/main/packages/jest-reporters/src/BaseReporter.ts
 
 ### Jest Reporter Interface (from types.ts)
+
 ```typescript
 interface Reporter {
   onRunStart?(results: AggregatedResult, options: ReporterOnStartOptions): void | Promise<void>;
   onTestStart?(test: Test): void | Promise<void>;
   onTestCaseResult?(test: Test, testCaseResult: TestCaseResult): void | Promise<void>;
-  onTestResult?(test: Test, testResult: TestResult, results: AggregatedResult): void | Promise<void>;
+  onTestResult?(
+    test: Test,
+    testResult: TestResult,
+    results: AggregatedResult,
+  ): void | Promise<void>;
   onRunComplete?(testContexts: Set<TestContext>, results: AggregatedResult): void | Promise<void>;
   getLastError?(): Error | void;
 }
 ```
 
 ### Jest Config Format
+
 ```javascript
 // String format
-reporters: ['default', 'jest-junit']
+reporters: ['default', 'jest-junit'];
 
 // Tuple format with options
-reporters: [
-  'default',
-  ['jest-junit', { outputDirectory: 'reports' }]
-]
+reporters: ['default', ['jest-junit', { outputDirectory: 'reports' }]];
 ```
 
 ### Jest Built-in Reporters
+
 - `default` - Verbose output with progress
 - `summary` - Final summary only
 - `github-actions` - GitHub Actions annotations
@@ -49,6 +55,7 @@ reporters: [
 ## Example Output
 
 **Red team evaluation:**
+
 ```
 Prompt Injection
   ✓ Basic prompt injection attempt [openai:gpt-4o] (234ms)
@@ -66,6 +73,7 @@ Harmful Content (Base64)
 ```
 
 **Standard evaluation:**
+
 ```
 ✓ Should respond with greeting [openai:gpt-4o] (156ms)
 ✓ Should handle empty input [openai:gpt-4o] (134ms)
@@ -81,6 +89,7 @@ Harmful Content (Base64)
 ## Current Logging Architecture (Important Context)
 
 ### How Logging Works Now (`src/logger.ts`)
+
 - **Winston logger** with multiple transports:
   - **Console transport**: Level controlled by `LOG_LEVEL` env or `--verbose` flag (default: 'info')
   - **Debug file transport**: Captures ALL levels to `~/.promptfoo/logs/promptfoo-debug-*.log`
@@ -91,10 +100,13 @@ Harmful Content (Base64)
 - **No console buffering**: Console output can interleave with progress bar
 
 ### The Problem
+
 When debug logging is enabled (`--verbose`) or providers emit output, it can corrupt the progress bar display because there's no console output buffering.
 
 ### Jest's Solution (from DefaultReporter.ts)
+
 Jest intercepts stdout/stderr with `__wrapStdio()`:
+
 1. Replaces `process.stdout.write` with buffering function
 2. Collects output chunks in an array
 3. Debounces stdout flush (100ms), stderr flushes immediately
@@ -102,6 +114,7 @@ Jest intercepts stdout/stderr with `__wrapStdio()`:
 5. Uses synchronized update blocks to prevent flickering
 
 ### Our Approach
+
 - **Only buffer console output** - File transports continue writing immediately
 - **Respect `--verbose` flag** - When verbose, show debug logs to console (after buffering/flush)
 - **File logs are unaffected** - They already write immediately via Winston file transports
@@ -149,6 +162,7 @@ class OutputController {
 ```
 
 **Key behaviors:**
+
 - **Only affects console output** - File transports (debug.log, error.log) write immediately and are unaffected
 - stdout is debounced (100ms) to batch output
 - stderr flushes immediately (errors shouldn't be lost)
@@ -208,8 +222,8 @@ Main reporter with Jest-like output:
 
 ```typescript
 export interface DefaultReporterOptions {
-  showErrors?: boolean;      // Show errors inline (default: true)
-  showGrouping?: boolean;    // Group by plugin/strategy for redteam (default: true)
+  showErrors?: boolean; // Show errors inline (default: true)
+  showGrouping?: boolean; // Group by plugin/strategy for redteam (default: true)
   showProgressBar?: boolean; // Show progress bar (default: true in TTY)
 }
 
@@ -246,6 +260,7 @@ export class DefaultReporter implements Reporter {
 ```
 
 **Display format:**
+
 - `✓` (green) for pass
 - `✗` (red) for fail
 - `✗` (yellow) for error
@@ -266,11 +281,13 @@ export class SilentReporter implements Reporter {
 export class JsonReporter implements Reporter {
   onTestResult(context: TestResultContext): void {
     // Output NDJSON to stdout
-    console.log(JSON.stringify({
-      type: 'test-result',
-      success: context.result.success,
-      // ... other fields
-    }));
+    console.log(
+      JSON.stringify({
+        type: 'test-result',
+        success: context.result.success,
+        // ... other fields
+      }),
+    );
   }
 }
 ```
@@ -299,11 +316,11 @@ export { SummaryReporter } from './SummaryReporter';
 export { OutputController } from './OutputController';
 
 const builtInReporters: Record<string, new (options?: any) => Reporter> = {
-  'default': DefaultReporter,
-  'verbose': DefaultReporter,  // alias
-  'silent': SilentReporter,
-  'json': JsonReporter,
-  'summary': SummaryReporter,
+  default: DefaultReporter,
+  verbose: DefaultReporter, // alias
+  silent: SilentReporter,
+  json: JsonReporter,
+  summary: SummaryReporter,
 };
 
 export async function loadReporter(config: ReporterConfig): Promise<Reporter>;
@@ -324,6 +341,7 @@ export class ReporterManager {
 **Modify: `src/types/index.ts`**
 
 Add to `EvaluateOptionsSchema` (~line 167):
+
 ```typescript
 reporters: z.array(
   z.union([
@@ -383,6 +401,7 @@ await this.reporterManager.onRunComplete({
 **Modify: `src/commands/eval.ts`**
 
 Pass reporters config to evaluate():
+
 ```typescript
 const evaluateOptions: EvaluateOptions = {
   // ... existing options ...
@@ -395,6 +414,7 @@ const evaluateOptions: EvaluateOptions = {
 **Modify: `src/reporters/DefaultReporter.ts`**
 
 Detect CI and adjust behavior:
+
 ```typescript
 constructor(options: DefaultReporterOptions = {}) {
   const isTTY = process.stdout.isTTY && !isCI();
@@ -410,33 +430,33 @@ constructor(options: DefaultReporterOptions = {}) {
 
 ## Files to Create
 
-| File | Purpose |
-|------|---------|
-| `src/reporters/types.ts` | Reporter interface and context types |
+| File                                | Purpose                                  |
+| ----------------------------------- | ---------------------------------------- |
+| `src/reporters/types.ts`            | Reporter interface and context types     |
 | `src/reporters/OutputController.ts` | stdout/stderr buffering for clean output |
-| `src/reporters/DefaultReporter.ts` | Jest-like verbose reporter with progress |
-| `src/reporters/SilentReporter.ts` | No-op reporter |
-| `src/reporters/JsonReporter.ts` | NDJSON output reporter |
-| `src/reporters/SummaryReporter.ts` | Summary-only reporter |
-| `src/reporters/index.ts` | Reporter manager, loading, and exports |
+| `src/reporters/DefaultReporter.ts`  | Jest-like verbose reporter with progress |
+| `src/reporters/SilentReporter.ts`   | No-op reporter                           |
+| `src/reporters/JsonReporter.ts`     | NDJSON output reporter                   |
+| `src/reporters/SummaryReporter.ts`  | Summary-only reporter                    |
+| `src/reporters/index.ts`            | Reporter manager, loading, and exports   |
 
 ## Files to Modify
 
-| File | Changes |
-|------|---------|
-| `src/types/index.ts` | Add `reporters` to EvaluateOptionsSchema |
-| `src/evaluator.ts` | Replace ProgressBarManager with ReporterManager |
-| `src/commands/eval.ts` | Pass reporters config to evaluate() |
+| File                   | Changes                                         |
+| ---------------------- | ----------------------------------------------- |
+| `src/types/index.ts`   | Add `reporters` to EvaluateOptionsSchema        |
+| `src/evaluator.ts`     | Replace ProgressBarManager with ReporterManager |
+| `src/commands/eval.ts` | Pass reporters config to evaluate()             |
 
 ## Key Integration Points
 
-| Location | Purpose |
-|----------|---------|
-| `src/evaluator.ts:1234` | After `addResult` - call `onTestResult` |
-| `src/evaluator.ts:1289-1296` | Pass/fail/error counts updated |
-| `src/evaluator.ts:1316-1317` | Current progress callback location |
-| `src/evaluator.ts:1437` | Progress bar setup - replace with reporter init |
-| `src/redteam/constants/metadata.ts:195` | `displayNameOverrides` for plugin names |
+| Location                                | Purpose                                         |
+| --------------------------------------- | ----------------------------------------------- |
+| `src/evaluator.ts:1234`                 | After `addResult` - call `onTestResult`         |
+| `src/evaluator.ts:1289-1296`            | Pass/fail/error counts updated                  |
+| `src/evaluator.ts:1316-1317`            | Current progress callback location              |
+| `src/evaluator.ts:1437`                 | Progress bar setup - replace with reporter init |
+| `src/redteam/constants/metadata.ts:195` | `displayNameOverrides` for plugin names         |
 
 ## Default Behavior
 
@@ -480,16 +500,19 @@ evaluateOptions:
 ## Logging Behavior (Critical)
 
 ### What OutputController Does
+
 - **Intercepts**: `process.stdout.write` and `process.stderr.write` (console output only)
 - **Buffers**: Console output to prevent corruption of progress display
 - **Flushes**: Buffered output periodically (100ms debounce for stdout, immediate for stderr)
 
 ### What OutputController Does NOT Affect
+
 - **File logging**: Winston file transports write directly to files, not through stdout/stderr
 - **Log levels**: The `--verbose` flag still controls what gets logged
 - **Debug/error log files**: Continue writing immediately to `~/.promptfoo/logs/`
 
 ### --verbose Flag Behavior
+
 ```
 Without --verbose (default):
   Console: info, warn, error
@@ -503,6 +526,7 @@ With --verbose:
 ```
 
 ### Log File Locations
+
 - Debug log: `~/.promptfoo/logs/promptfoo-debug-{timestamp}.log`
 - Error log: `~/.promptfoo/logs/promptfoo-error-{timestamp}.log`
 - Controlled by: `PROMPTFOO_LOG_DIR` env var

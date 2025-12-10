@@ -1800,6 +1800,7 @@ export class HttpProvider implements ApiProvider {
       ...(context?.vars || {}),
       prompt,
     } as Record<string, any>;
+    logger.error(`[HTTP Provider]: callApi invoked with prompt: ${prompt}`);
 
     if (this.config.auth?.type === 'oauth') {
       await this.refreshOAuthTokenIfNeeded(vars);

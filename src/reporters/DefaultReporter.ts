@@ -1,17 +1,11 @@
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
-
 import { isCI } from '../envars';
 import { ResultFailureReason } from '../types/index';
 import { OutputController } from './OutputController';
-
 import type { SingleBar } from 'cli-progress';
-import type {
-  EvalSummaryContext,
-  Reporter,
-  RunStartContext,
-  TestResultContext,
-} from './types';
+
+import type { EvalSummaryContext, Reporter, RunStartContext, TestResultContext } from './types';
 
 /**
  * Options for the DefaultReporter
@@ -115,14 +109,19 @@ export class DefaultReporter implements Reporter {
     // Determine grouping key for redteam
     let groupKey: string | null = null;
     if (this.isRedteam && this.options.showGrouping) {
-      const pluginId = evalStep.test.metadata?.pluginId as string | undefined;
-      const strategyId = evalStep.test.metadata?.strategyId as string | undefined;
+      // Check multiple locations for pluginId/strategyId
+      const pluginId = (evalStep.test.metadata?.pluginId ||
+        result.testCase?.metadata?.pluginId ||
+        result.metadata?.pluginId) as string | undefined;
+      const strategyId = (evalStep.test.metadata?.strategyId ||
+        result.testCase?.metadata?.strategyId ||
+        result.metadata?.strategyId) as string | undefined;
 
       if (pluginId || strategyId) {
         const pluginName = pluginId ? this.getDisplayName(pluginId) : '';
-        const strategyName = strategyId ? this.getDisplayName(strategyId) : '';
+        const strategyName = strategyId ? this.getDisplayName(strategyId) : 'Baseline Testing';
 
-        if (pluginName && strategyName && strategyName !== 'Baseline Testing') {
+        if (pluginName && strategyName) {
           groupKey = `${pluginName} (${strategyName})`;
         } else {
           groupKey = pluginName || strategyName || null;
@@ -164,21 +163,46 @@ export class DefaultReporter implements Reporter {
     }
 
     // Print test result line
-    const icon = result.success
-      ? chalk.green('✓')
-      : isError
-        ? chalk.yellow('✗')
-        : chalk.red('✗');
+    const icon = result.success ? chalk.green('✓') : isError ? chalk.yellow('✗') : chalk.red('✗');
 
-    const description =
-      result.testCase.description || this.formatVars(evalStep.test.vars) || `Test ${context.index + 1}`;
+    // For redteam tests, show plugin/strategy info; otherwise show description or vars
+    let description: string;
+    if (this.isRedteam) {
+      // Check multiple locations for pluginId/strategyId
+      const pluginId = (evalStep.test.metadata?.pluginId ||
+        result.testCase?.metadata?.pluginId ||
+        result.metadata?.pluginId) as string | undefined;
+      const strategyId = (evalStep.test.metadata?.strategyId ||
+        result.testCase?.metadata?.strategyId ||
+        result.metadata?.strategyId) as string | undefined;
+      const pluginName = pluginId ? this.getDisplayName(pluginId) : undefined;
+      const strategyName = strategyId ? this.getDisplayName(strategyId) : 'Baseline Testing';
+
+      if (pluginName && strategyName) {
+        description = `${pluginName} (${strategyName})`;
+      } else if (pluginName) {
+        description = pluginName;
+      } else if (strategyName) {
+        description = strategyName;
+      } else {
+        description = result.testCase.description || `Test ${context.index + 1}`;
+      }
+    } else {
+      description =
+        result.testCase.description ||
+        this.formatVars(evalStep.test.vars) ||
+        `Test ${context.index + 1}`;
+    }
 
     const provider = evalStep.provider.label || evalStep.provider.id();
     const latency = result.latencyMs ? chalk.gray(`(${result.latencyMs}ms)`) : '';
+    const testCount = chalk.dim(`[${context.completed}/${context.total}]`);
 
     // Indent based on whether we're showing groups
     const indent = this.options.showGrouping && this.isRedteam && groupKey ? '  ' : '';
-    this.write(`${indent}${icon} ${description} ${chalk.dim(`[${provider}]`)} ${latency}\n`);
+    this.write(
+      `${indent}${icon} ${testCount} ${description} ${chalk.dim(`[${provider}]`)} ${latency}\n`,
+    );
 
     // Show error inline if configured
     if (!result.success && this.options.showErrors && result.error) {
@@ -194,27 +218,28 @@ export class DefaultReporter implements Reporter {
   }
 
   onRunComplete(_context: EvalSummaryContext): void {
-    // Clear progress bar before final output
-    this.clearStatus();
-
     // Print final group summary if any
     if (this.currentGroup) {
+      this.clearStatus();
       this.printGroupSummary(this.currentGroup);
     }
 
-    // Stop progress bar
+    // Stop progress bar - this prints a final newline to preserve output
     if (this.progressBar) {
+      // Clear the progress bar line
+      this.clearStatus();
+      // Print the final progress bar state on its own line (won't be overwritten)
       this.progressBar.stop();
       this.progressBar = null;
     }
 
-    // Stop output capture
+    // Stop output capture - flushes any remaining buffered output
     if (this.options.captureOutput) {
       this.outputController.stopCapture();
     }
 
-    // Print a blank line for spacing
-    this.write('\n');
+    // Print a blank line for spacing before subsequent output (sharing, etc.)
+    process.stdout.write('\n');
   }
 
   /**

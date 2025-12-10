@@ -69,7 +69,7 @@ export interface Reporter {
   onRunComplete?(context: EvalSummaryContext): void | Promise<void>;
 
   /** Optional method to retrieve any error that occurred during reporting */
-  getLastError?(): Error | void;
+  getLastError?(): Error | undefined;
 }
 
 /**

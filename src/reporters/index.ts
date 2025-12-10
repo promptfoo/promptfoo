@@ -3,6 +3,7 @@ import path from 'path';
 import { importModule } from '../esm';
 import logger from '../logger';
 import { DefaultReporter } from './DefaultReporter';
+import { ProgressBarReporter } from './ProgressBarReporter';
 import { SilentReporter } from './SilentReporter';
 import { SummaryReporter } from './SummaryReporter';
 
@@ -16,6 +17,7 @@ import type {
 
 export * from './types';
 export { DefaultReporter } from './DefaultReporter';
+export { ProgressBarReporter } from './ProgressBarReporter';
 export { SilentReporter } from './SilentReporter';
 export { SummaryReporter } from './SummaryReporter';
 export { OutputController } from './OutputController';
@@ -28,6 +30,8 @@ const builtInReporters: Record<string, new (options?: Record<string, unknown>) =
   verbose: DefaultReporter, // alias
   silent: SilentReporter,
   summary: SummaryReporter,
+  progressbar: ProgressBarReporter,
+  progress: ProgressBarReporter, // alias
 };
 
 /**
@@ -60,7 +64,10 @@ export async function loadReporter(config: ReporterConfig): Promise<Reporter> {
   if (name.startsWith('file://')) {
     const filePath = name.slice('file://'.length);
     const [modulePath, funcName] = filePath.includes(':')
-      ? [filePath.substring(0, filePath.lastIndexOf(':')), filePath.substring(filePath.lastIndexOf(':') + 1)]
+      ? [
+          filePath.substring(0, filePath.lastIndexOf(':')),
+          filePath.substring(filePath.lastIndexOf(':') + 1),
+        ]
       : [filePath, undefined];
 
     const resolvedPath = path.resolve(modulePath);
@@ -69,11 +76,12 @@ export async function loadReporter(config: ReporterConfig): Promise<Reporter> {
     // Module can export a class, function, or instance
     if (typeof mod === 'function') {
       // Check if it's a class (has prototype with reporter methods)
-      if (mod.prototype && (
-        typeof mod.prototype.onRunStart === 'function' ||
-        typeof mod.prototype.onTestResult === 'function' ||
-        typeof mod.prototype.onRunComplete === 'function'
-      )) {
+      if (
+        mod.prototype &&
+        (typeof mod.prototype.onRunStart === 'function' ||
+          typeof mod.prototype.onTestResult === 'function' ||
+          typeof mod.prototype.onRunComplete === 'function')
+      ) {
         return new mod(options);
       }
       // Factory function
@@ -163,7 +171,7 @@ export class ReporterManager {
   /**
    * Get any errors from reporters
    */
-  getLastError(): Error | void {
+  getLastError(): Error | undefined {
     for (const reporter of this.reporters) {
       const error = reporter.getLastError?.();
       if (error) {

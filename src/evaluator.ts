@@ -960,7 +960,7 @@ class Evaluator {
                 evaluateOptions: options,
                 conversations: this.conversations,
                 registers: this.registers,
-                isRedteam: testSuite.redteam != null,
+                isRedteam: this.options.isRedteam ?? false,
                 concurrency,
                 abortSignal: options.abortSignal,
               });
@@ -1320,7 +1320,7 @@ class Evaluator {
       await this.reporterManager.onRunStart({
         totalTests: runEvalOptions.length,
         concurrency,
-        isRedteam: testSuite.redteam != null,
+        isRedteam: this.options.isRedteam ?? false,
       });
     }
 
@@ -1599,7 +1599,7 @@ class Evaluator {
         errors: this.stats.errors,
         passRate: totalTests > 0 ? (this.stats.successes / totalTests) * 100 : 0,
         durationMs: Date.now() - startTime,
-        isRedteam: testSuite.redteam != null,
+        isRedteam: this.options.isRedteam ?? false,
       });
     }
 
