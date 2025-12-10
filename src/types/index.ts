@@ -78,6 +78,9 @@ export const CommandLineOptionsSchema = z.object({
   retryErrors: z.boolean().optional(),
 
   envPath: z.string().optional(),
+
+  // Reporter options
+  reporter: z.array(z.string()).optional(),
 });
 
 export type CommandLineOptions = z.infer<typeof CommandLineOptionsSchema>;
@@ -203,6 +206,25 @@ const EvaluateOptionsSchema = z.object({
    */
   maxEvalTimeMs: z.number().optional(),
   isRedteam: z.boolean().optional(),
+  /**
+   * Reporter configuration. Reporters receive test results as they complete.
+   * Can be a string (reporter name), a file path ('file://./my-reporter.ts'),
+   * or an array of [reporter, options] for configuration.
+   * Multiple reporters can be specified.
+   *
+   * Built-in reporters: 'default', 'silent', 'summary'
+   *
+   * @example
+   * ```yaml
+   * reporters:
+   *   - default
+   *   - [summary, { showDuration: true }]
+   *   - file://./my-reporter.ts
+   * ```
+   */
+  reporters: z
+    .array(z.union([z.string(), z.tuple([z.string(), z.record(z.string(), z.any())])]))
+    .optional(),
 });
 export type EvaluateOptions = z.infer<typeof EvaluateOptionsSchema> & { abortSignal?: AbortSignal };
 
