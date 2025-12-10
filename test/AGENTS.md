@@ -75,7 +75,7 @@ axiosMock.post.mockResolvedValue({ data: { result: 'success' } });
 
 ```typescript
 beforeEach(() => {
-  vi.clearAllMocks();           // Clears .mock.calls and .mock.results
+  vi.clearAllMocks(); // Clears .mock.calls and .mock.results
   vi.mocked(myMock).mockReset(); // Also clears mockReturnValue/mockResolvedValue
 });
 ```
