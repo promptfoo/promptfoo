@@ -40,6 +40,7 @@ vi.mock('../../src/esm', async (importOriginal) => {
   return {
     ...(await importOriginal()),
     importModule: vi.fn(),
+    resolvePackageEntryPoint: vi.fn(() => '@openai/codex-sdk'),
   };
 });
 

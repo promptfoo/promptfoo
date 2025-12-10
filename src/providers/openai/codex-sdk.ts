@@ -5,7 +5,7 @@ import path from 'path';
 import dedent from 'dedent';
 import cliState from '../../cliState';
 import { getEnvString } from '../../envars';
-import { importModule } from '../../esm';
+import { importModule, resolvePackageEntryPoint } from '../../esm';
 import logger from '../../logger';
 
 import type {
@@ -19,8 +19,7 @@ import type { EnvOverrides } from '../../types/env';
 /**
  * OpenAI Codex SDK Provider
  *
- * This provider requires the @openai/codex-sdk package, which may have a
- * proprietary license and is not installed by default. Users must install it separately:
+ * This provider requires the @openai/codex-sdk package to be installed separately:
  *   npm install @openai/codex-sdk
  *
  * Key features:
@@ -114,41 +113,43 @@ export interface OpenAICodexSDKConfig {
 
 /**
  * Helper to load the OpenAI Codex SDK ESM module
- * Uses importModule utility which handles ESM loading in CommonJS environments
+ * Uses resolvePackageEntryPoint to handle ESM-only packages with restrictive exports
  */
 async function loadCodexSDK(): Promise<any> {
-  try {
-    // Resolve the package path, then use importModule to load it
-    // The SDK is ESM-only, so we need the importModule utility which uses dynamic-import.cjs
-    const basePath =
-      cliState.basePath && path.isAbsolute(cliState.basePath) ? cliState.basePath : process.cwd();
+  const basePath =
+    cliState.basePath && path.isAbsolute(cliState.basePath) ? cliState.basePath : process.cwd();
 
-    // The package only exports ESM, so we construct the direct path
-    // The SDK is installed in node_modules/@openai/codex-sdk/dist/index.js
-    const modulePath = path.join(
-      basePath,
-      'node_modules',
-      '@openai',
-      'codex-sdk',
-      'dist',
-      'index.js',
+  const codexPath = resolvePackageEntryPoint('@openai/codex-sdk', basePath);
+
+  if (!codexPath) {
+    throw new Error(
+      dedent`The @openai/codex-sdk package is required but not installed.
+
+      To use the OpenAI Codex SDK provider, install it with:
+        npm install @openai/codex-sdk
+
+      Requires Node.js 18+.
+
+      For more information, see: https://www.promptfoo.dev/docs/providers/openai-codex-sdk/`,
     );
+  }
 
-    return await importModule(modulePath);
+  try {
+    return await importModule(codexPath);
   } catch (err) {
     logger.error(`Failed to load OpenAI Codex SDK: ${err}`);
     if ((err as any).stack) {
       logger.error((err as any).stack);
     }
     throw new Error(
-      dedent`The @openai/codex-sdk package is required but not installed.
+      dedent`Failed to load @openai/codex-sdk.
 
-      This package may have a proprietary license and is not installed by default.
+      The package was found but could not be loaded. This may be due to:
+      - Incompatible Node.js version (requires Node.js 18+)
+      - Corrupted installation
 
-      To use the OpenAI Codex SDK provider, install it with:
+      Try reinstalling:
         npm install @openai/codex-sdk
-
-      Requires Node.js 18+.
 
       For more information, see: https://www.promptfoo.dev/docs/providers/openai-codex-sdk/`,
     );

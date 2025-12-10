@@ -1,4 +1,3 @@
-import { createRequire } from 'node:module';
 import crypto from 'crypto';
 import fs from 'fs';
 import os from 'os';
@@ -8,7 +7,7 @@ import dedent from 'dedent';
 import { getCache, isCacheEnabled } from '../cache';
 import cliState from '../cliState';
 import { getEnvString } from '../envars';
-import { importModule } from '../esm';
+import { importModule, resolvePackageEntryPoint } from '../esm';
 import logger from '../logger';
 import { ANTHROPIC_MODELS } from './anthropic/util';
 import { transformMCPConfigToClaudeCode } from './mcp/transform';
@@ -33,8 +32,7 @@ import type { EnvOverrides } from '../types/env';
 /**
  * Claude Agent SDK Provider
  *
- * This provider requires the @anthropic-ai/claude-agent-sdk package, which has a
- * proprietary license and is not installed by default. Users must install it separately:
+ * This provider requires the @anthropic-ai/claude-agent-sdk package to be installed separately:
  *   npm install @anthropic-ai/claude-agent-sdk
  *
  * Two default configurations:
@@ -64,17 +62,26 @@ export const CLAUDE_CODE_MODEL_ALIASES = [
 
 /**
  * Helper to load the Claude Agent SDK ESM module
- * Uses the same pattern as other providers for resolving npm packages
+ * Uses resolvePackageEntryPoint to handle ESM-only packages with restrictive exports
  */
 async function loadClaudeCodeSDK(): Promise<typeof import('@anthropic-ai/claude-agent-sdk')> {
+  const basePath =
+    cliState.basePath && path.isAbsolute(cliState.basePath) ? cliState.basePath : process.cwd();
+
+  const claudeCodePath = resolvePackageEntryPoint('@anthropic-ai/claude-agent-sdk', basePath);
+
+  if (!claudeCodePath) {
+    throw new Error(
+      dedent`The @anthropic-ai/claude-agent-sdk package is required but not installed.
+
+      To use the Claude Agent SDK provider, install it with:
+        npm install @anthropic-ai/claude-agent-sdk
+
+      For more information, see: https://www.promptfoo.dev/docs/providers/claude-agent-sdk/`,
+    );
+  }
+
   try {
-    // Use a file path for createRequire to ensure proper module resolution
-    // createRequire needs an absolute path, not a relative one
-    const basePath =
-      cliState.basePath && path.isAbsolute(cliState.basePath) ? cliState.basePath : process.cwd();
-    const resolveFrom = path.join(basePath, 'package.json');
-    const require = createRequire(resolveFrom);
-    const claudeCodePath = require.resolve('@anthropic-ai/claude-agent-sdk');
     return importModule(claudeCodePath);
   } catch (err) {
     logger.error(`Failed to load Claude Agent SDK: ${err}`);
@@ -82,11 +89,13 @@ async function loadClaudeCodeSDK(): Promise<typeof import('@anthropic-ai/claude-
       logger.error((err as any).stack);
     }
     throw new Error(
-      dedent`The @anthropic-ai/claude-agent-sdk package is required but not installed.
+      dedent`Failed to load @anthropic-ai/claude-agent-sdk.
 
-      This package has a proprietary license and is not installed by default.
+      The package was found but could not be loaded. This may be due to:
+      - Incompatible Node.js version (requires Node.js 20+)
+      - Corrupted installation
 
-      To use the Claude Agent SDK provider, install it with:
+      Try reinstalling:
         npm install @anthropic-ai/claude-agent-sdk
 
       For more information, see: https://www.promptfoo.dev/docs/providers/claude-agent-sdk/`,
