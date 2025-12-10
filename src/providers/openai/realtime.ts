@@ -663,6 +663,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
                   prompt: usage?.input_tokens || 0,
                   completion: usage?.output_tokens || 0,
                   cached: 0,
+                  numRequests: 1,
                 },
                 cached: false,
                 metadata: {
@@ -1339,6 +1340,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
                   prompt: usage?.input_tokens || 0,
                   completion: usage?.output_tokens || 0,
                   cached: 0,
+                  numRequests: 1,
                 },
                 cached: false,
                 metadata: {
@@ -1550,6 +1552,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
           prompt: _usage?.prompt_tokens || 0,
           completion: _usage?.completion_tokens || 0,
           cached: 0,
+          numRequests: 1,
         },
         cached: false,
         metadata: {
