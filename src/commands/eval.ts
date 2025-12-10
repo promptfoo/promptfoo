@@ -36,6 +36,7 @@ import { filterProviders } from './eval/filterProviders';
 import { filterTests } from './eval/filterTests';
 import { deleteErrorResults, getErrorResultIds, recalculatePromptMetrics } from './retry';
 import { notCloudEnabledShareInstructions } from './share';
+import { initInkEval, shouldUseInkUI } from '../ui/evalRunner';
 import type { Command } from 'commander';
 
 import type {
@@ -512,12 +513,60 @@ export async function doEval(
     */
 
     // Run the evaluation!!!!!!
-    const ret = await evaluate(testSuite, evalRecord, {
-      ...options,
-      eventSource: 'cli',
-      abortSignal: evaluateOptions.abortSignal,
-      isRedteam: Boolean(config.redteam),
-    });
+    let ret: Eval;
+    const useInkUI = shouldUseInkUI();
+
+    if (useInkUI) {
+      // Use Ink-based interactive UI
+      logger.debug('Using Ink UI for evaluation');
+      const inkResult = await initInkEval({
+        title: config.description || 'Evaluation',
+        evaluateOptions: {
+          ...options,
+          eventSource: 'cli',
+          abortSignal: evaluateOptions.abortSignal,
+          isRedteam: Boolean(config.redteam),
+        },
+        testSuite,
+        onCancel: () => {
+          logger.info('Evaluation cancelled by user');
+        },
+      });
+
+      try {
+        // Initialize UI with total tests and providers
+        const totalTests = testSuite.tests?.length ?? 0;
+        const providerIds = testSuite.providers.map((p) =>
+          typeof p === 'string' ? p : p.label || p.id?.() || 'unknown',
+        );
+        inkResult.controller.init(totalTests, providerIds);
+        inkResult.controller.start();
+
+        // Run evaluation with Ink progress callback
+        ret = await evaluate(testSuite, evalRecord, inkResult.evaluateOptions);
+
+        // Get final stats
+        const results = await evalRecord.getResults();
+        const passed = results.filter((r) => r.success).length;
+        const failed = results.filter((r) => !r.success && !r.error).length;
+        const errors = results.filter((r) => r.error).length;
+
+        inkResult.controller.complete({ passed, failed, errors });
+
+        // Give a moment for UI to show completion
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      } finally {
+        inkResult.cleanup();
+      }
+    } else {
+      // Use standard CLI output
+      ret = await evaluate(testSuite, evalRecord, {
+        ...options,
+        eventSource: 'cli',
+        abortSignal: evaluateOptions.abortSignal,
+        isRedteam: Boolean(config.redteam),
+      });
+    }
 
     // Cleanup signal handler
     /*
