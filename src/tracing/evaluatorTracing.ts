@@ -10,6 +10,15 @@ import type { TestCase, TestSuite } from '../types/index';
 let otlpReceiverStarted = false;
 
 /**
+ * Reset module state (for testing purposes).
+ * This should be called between test runs to ensure clean state.
+ */
+export function resetTracingState(): void {
+  otlpReceiverStarted = false;
+  logger.debug('[EvaluatorTracing] Tracing state reset');
+}
+
+/**
  * Generate a 16-byte trace ID
  */
 export function generateTraceId(): string {

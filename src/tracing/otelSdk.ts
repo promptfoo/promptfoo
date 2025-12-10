@@ -178,11 +178,15 @@ function setupShutdownHandlers(): void {
   };
 
   // Create handler functions so we can remove them later if needed
+  // Note: Signal handlers are synchronous, but we use void to suppress
+  // the unhandled promise warning while still allowing async completion.
+  // The shutdown will complete before process exit because we're not
+  // calling process.exit() - we let Node.js exit naturally after async work.
   handlers.sigTermHandler = () => {
-    shutdown('SIGTERM');
+    void shutdown('SIGTERM');
   };
   handlers.sigIntHandler = () => {
-    shutdown('SIGINT');
+    void shutdown('SIGINT');
   };
   handlers.beforeExitHandler = async () => {
     await flushOtel();

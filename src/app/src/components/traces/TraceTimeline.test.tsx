@@ -20,9 +20,7 @@ describe('TraceTimeline', () => {
     );
   };
 
-  // Timestamps in tests are in nanoseconds (1ms = 1e6 ns)
-  const MS_TO_NS = 1e6;
-
+  // Timestamps are stored in milliseconds (Unix epoch ms)
   it('should render trace details and hierarchical spans for a valid trace', () => {
     const mockTrace: TraceData = {
       traceId: 'trace-happy-path-123',
@@ -34,20 +32,20 @@ describe('TraceTimeline', () => {
           spanId: 'child-1',
           parentSpanId: 'root-1',
           name: 'Child Span',
-          startTime: 100 * MS_TO_NS,
-          endTime: 300 * MS_TO_NS,
+          startTime: 100,
+          endTime: 300,
         },
         {
           spanId: 'root-1',
           name: 'Parent Span',
           startTime: 0,
-          endTime: 500 * MS_TO_NS,
+          endTime: 500,
         },
         {
           spanId: 'root-2',
           name: 'Another Root Span',
-          startTime: 600 * MS_TO_NS,
-          endTime: 800 * MS_TO_NS,
+          startTime: 600,
+          endTime: 800,
         },
       ],
     };
@@ -81,8 +79,8 @@ describe('TraceTimeline', () => {
   });
 
   it('should display a tooltip with formatted duration, start time, and end time when hovering over a span', async () => {
-    // Use a real timestamp: 2023-03-15 12:00:00 UTC = 1678881600000 ms = 1678881600000000000 ns
-    const baseTime = 1678881600000 * MS_TO_NS;
+    // Use a real timestamp: 2023-03-15 12:00:00 UTC = 1678881600000 ms
+    const baseTime = 1678881600000;
     const mockTrace: TraceData = {
       traceId: 'trace-tooltip-123',
       evaluationId: 'test-evaluation-id',
@@ -93,7 +91,7 @@ describe('TraceTimeline', () => {
           spanId: 'span-1',
           name: 'Test Span',
           startTime: baseTime,
-          endTime: baseTime + 1500 * MS_TO_NS, // 1.5 seconds later
+          endTime: baseTime + 1500, // 1.5 seconds later
         },
       ],
     };
@@ -131,19 +129,19 @@ describe('TraceTimeline', () => {
           spanId: 'span-1',
           name: 'Span A',
           startTime: 0,
-          endTime: 200 * MS_TO_NS,
+          endTime: 200,
         },
         {
           spanId: 'span-2',
           name: 'Span B',
           startTime: 0,
-          endTime: 500 * MS_TO_NS,
+          endTime: 500,
         },
         {
           spanId: 'span-3',
           name: 'Span C',
           startTime: 0,
-          endTime: 100 * MS_TO_NS,
+          endTime: 100,
         },
       ],
     };
@@ -165,7 +163,7 @@ describe('TraceTimeline', () => {
         {
           spanId: 'span-1',
           startTime: 0,
-          endTime: 200 * MS_TO_NS,
+          endTime: 200,
           name: 'span-1',
         },
       ],
@@ -187,7 +185,7 @@ describe('TraceTimeline', () => {
           spanId: 'span-with-attrs',
           name: 'Span with Attributes',
           startTime: 0,
-          endTime: 100 * MS_TO_NS,
+          endTime: 100,
           attributes: {
             'http.method': 'GET',
             'http.url': 'https://example.com',
@@ -222,7 +220,7 @@ describe('TraceTimeline', () => {
           spanId: 'error-span',
           name: 'Error Span',
           startTime: 0,
-          endTime: 500 * MS_TO_NS,
+          endTime: 500,
           statusCode: 2,
         },
       ],
@@ -253,7 +251,7 @@ describe('TraceTimeline', () => {
           spanId: 'success-span',
           name: 'Success Span',
           startTime: 0,
-          endTime: 500 * MS_TO_NS,
+          endTime: 500,
           statusCode: 1,
         },
       ],
@@ -277,8 +275,8 @@ describe('TraceTimeline', () => {
         {
           spanId: 'invalid-time-span',
           name: 'Invalid Time Span',
-          startTime: 200 * MS_TO_NS,
-          endTime: 100 * MS_TO_NS,
+          startTime: 200,
+          endTime: 100,
         },
       ],
     };
@@ -299,14 +297,14 @@ describe('TraceTimeline', () => {
         {
           spanId: 'span-1',
           name: 'Span A',
-          startTime: 100 * MS_TO_NS,
-          endTime: 100 * MS_TO_NS,
+          startTime: 100,
+          endTime: 100,
         },
         {
           spanId: 'span-2',
           name: 'Span B',
-          startTime: 100 * MS_TO_NS,
-          endTime: 100 * MS_TO_NS,
+          startTime: 100,
+          endTime: 100,
         },
       ],
     };
@@ -331,7 +329,7 @@ describe('TraceTimeline', () => {
           parentSpanId: 'non-existent-parent',
           name: 'Orphan Span',
           startTime: 0,
-          endTime: 200 * MS_TO_NS,
+          endTime: 200,
         },
       ],
     };
@@ -354,13 +352,13 @@ describe('TraceTimeline', () => {
           spanId: 'normal-span',
           name: 'Normal Span',
           startTime: 0,
-          endTime: 1000 * MS_TO_NS,
+          endTime: 1000,
         },
         {
           spanId: 'extreme-span',
           name: 'Extreme Span',
-          startTime: 10000000 * MS_TO_NS,
-          endTime: 10001000 * MS_TO_NS,
+          startTime: 10000000,
+          endTime: 10001000,
         },
       ],
     };

@@ -28,7 +28,7 @@ describe('LocalSpanExporter', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockAddSpans.mockResolvedValue(undefined);
+    mockAddSpans.mockResolvedValue({ stored: true });
     exporter = new LocalSpanExporter();
   });
 
@@ -147,7 +147,7 @@ describe('LocalSpanExporter', () => {
       );
     });
 
-    it('should convert span times to nanoseconds', async () => {
+    it('should convert span times to milliseconds', async () => {
       const span = createMockSpan({
         startTime: [100, 500000000], // 100.5 seconds
         endTime: [101, 750000000], // 101.75 seconds
@@ -160,8 +160,9 @@ describe('LocalSpanExporter', () => {
         expect.any(String),
         [
           expect.objectContaining({
-            startTime: 100 * 1e9 + 500000000, // 100500000000 ns
-            endTime: 101 * 1e9 + 750000000, // 101750000000 ns
+            // Milliseconds: seconds * 1000 + nanoseconds / 1_000_000
+            startTime: 100 * 1e3 + 500000000 / 1e6, // 100500 ms
+            endTime: 101 * 1e3 + 750000000 / 1e6, // 101750 ms
           }),
         ],
         expect.any(Object),
@@ -252,7 +253,7 @@ describe('LocalSpanExporter', () => {
 
       mockAddSpans
         .mockRejectedValueOnce(new Error('First trace failed'))
-        .mockResolvedValueOnce(undefined);
+        .mockResolvedValueOnce({ stored: true });
 
       // Even with one failure, we still attempt all exports
       const _result = await exportSpans([span1, span2]);

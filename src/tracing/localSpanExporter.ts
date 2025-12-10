@@ -68,15 +68,21 @@ export class LocalSpanExporter implements SpanExporter {
     for (const [traceId, spanDataList] of spansByTrace) {
       try {
         // First try to add spans normally (if trace exists)
-        await traceStore.addSpans(traceId, spanDataList, { skipTraceCheck: false });
-        logger.debug(`[LocalSpanExporter] Added ${spanDataList.length} spans to trace ${traceId}`);
+        const result = await traceStore.addSpans(traceId, spanDataList, { skipTraceCheck: false });
+        if (result.stored) {
+          logger.debug(`[LocalSpanExporter] Added ${spanDataList.length} spans to trace ${traceId}`);
+        } else {
+          // Trace doesn't exist - these spans are from grading calls or other internal
+          // operations that weren't initiated through the evaluation tracing flow.
+          logger.debug(
+            `[LocalSpanExporter] Skipping ${spanDataList.length} spans for orphan trace ${traceId}: ${result.reason}`,
+          );
+        }
       } catch (error) {
-        // If foreign key constraint fails, the trace doesn't exist
-        // These spans are from grading calls or other internal operations
-        // that weren't initiated through the evaluation tracing flow.
-        // Just log at debug level and skip - these spans aren't tied to an eval.
+        // Handle unexpected errors (e.g., database connection issues)
         const errorMessage = error instanceof Error ? error.message : String(error);
-        if (errorMessage.includes('FOREIGN KEY') || errorMessage.includes('Trace')) {
+        if (errorMessage.includes('FOREIGN KEY')) {
+          // Foreign key constraint - trace was deleted between check and insert
           logger.debug(
             `[LocalSpanExporter] Skipping ${spanDataList.length} spans for orphan trace ${traceId}`,
           );
@@ -99,16 +105,17 @@ export class LocalSpanExporter implements SpanExporter {
   private convertSpan(span: ReadableSpan): SpanData {
     const spanContext = span.spanContext();
 
-    // Convert OTEL hrtime (seconds, nanoseconds) to nanosecond timestamp
-    const startTimeNs = span.startTime[0] * 1e9 + span.startTime[1];
-    const endTimeNs = span.endTime[0] * 1e9 + span.endTime[1];
+    // Convert OTEL hrtime (seconds, nanoseconds) to milliseconds for consistency
+    // with OTLPReceiver which also stores times in milliseconds
+    const startTimeMs = span.startTime[0] * 1e3 + span.startTime[1] / 1e6;
+    const endTimeMs = span.endTime[0] * 1e3 + span.endTime[1] / 1e6;
 
     return {
       spanId: spanContext.spanId,
       parentSpanId: span.parentSpanId || undefined,
       name: span.name,
-      startTime: startTimeNs,
-      endTime: endTimeNs,
+      startTime: startTimeMs,
+      endTime: endTimeMs,
       attributes: this.convertAttributes(span.attributes),
       statusCode: span.status.code,
       statusMessage: span.status.message,

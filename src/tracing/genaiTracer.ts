@@ -67,7 +67,7 @@ const MAX_BODY_LENGTH = 4096;
  * Patterns to redact from request/response bodies for security.
  * These patterns match common API key and secret formats.
  */
-const SENSITIVE_PATTERNS: Array<{ pattern: RegExp; replacement: string }> = [
+const SENSITIVE_PATTERNS: Array<{ pattern: RegExp; replacement: string | ((match: string) => string) }> = [
   // API keys with common prefixes (allow hyphens/underscores for keys like sk-proj-...)
   { pattern: /\b(sk-[a-zA-Z0-9_-]{20,})/g, replacement: '<REDACTED_API_KEY>' },
   { pattern: /\b(pk-[a-zA-Z0-9_-]{20,})/g, replacement: '<REDACTED_API_KEY>' },

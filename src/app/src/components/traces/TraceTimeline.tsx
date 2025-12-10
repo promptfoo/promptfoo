@@ -35,9 +35,9 @@ const getSpanStatus = (statusCode?: number): { color: string; label: string } =>
   return { color: 'default', label: 'UNSET' };
 };
 
-// Duration values from OTEL are in nanoseconds
-const formatDuration = (nanoseconds: number): string => {
-  const milliseconds = nanoseconds / 1e6;
+// Duration values are stored in milliseconds (both LocalSpanExporter and OTLPReceiver
+// convert to milliseconds before storing in the database)
+const formatDuration = (milliseconds: number): string => {
   if (milliseconds < 1) {
     return `<1ms`;
   } else if (milliseconds < 1000) {
@@ -47,11 +47,9 @@ const formatDuration = (nanoseconds: number): string => {
   }
 };
 
-// Timestamps from OTEL are in nanoseconds, convert to milliseconds for display
-const nsToMs = (ns: number): number => ns / 1e6;
-
-const formatTimestamp = (ns: number): string => {
-  const date = new Date(nsToMs(ns));
+// Timestamps are stored in milliseconds (Unix epoch ms)
+const formatTimestamp = (ms: number): string => {
+  const date = new Date(ms);
   return date.toISOString();
 };
 
