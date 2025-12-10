@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 
 import yaml from 'js-yaml';
-import { vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../src/cliState';
 import { CLOUD_PROVIDER_PREFIX } from '../src/constants';
 import { loadApiProvider, loadApiProviders } from '../src/providers/index';

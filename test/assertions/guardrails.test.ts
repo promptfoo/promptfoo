@@ -1,6 +1,7 @@
 import { handleGuardrails } from '../../src/assertions/guardrails';
 
 import type { AssertionParams, AtomicTestCase } from '../../src/types/index';
+import { describe, expect, it } from 'vitest';
 
 describe('handleGuardrail', () => {
   const baseAssertion = {

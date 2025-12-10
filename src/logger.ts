@@ -453,10 +453,6 @@ export async function logRequestResponse(options: {
  * Should be called during graceful shutdown to prevent event loop hanging
  *
  * IMPORTANT: All logging should be done BEFORE calling this function
- *
- * Note: Winston's 'flush' and 'finish' events are unreliable (fire before actual flush).
- * We use a short timeout to let Winston flush its internal buffer before removing transports.
- * See: https://github.com/winstonjs/winston/issues/1504
  */
 export async function closeLogger(): Promise<void> {
   // Set shutdown flag FIRST to prevent new writes during cleanup
@@ -470,10 +466,17 @@ export async function closeLogger(): Promise<void> {
       return;
     }
 
-    // Wait briefly for Winston to flush its internal write buffer
-    // This prevents "write after end" errors when remove() triggers stream closure
-    // 100ms is sufficient for Winston to complete pending async writes
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    // Wait for all file transports to finish flushing
+    // Winston 3.19.0+ properly waits for file writes to complete before emitting 'finish'
+    await Promise.all(
+      fileTransports.map(
+        (transport) =>
+          new Promise<void>((resolve) => {
+            transport.once('finish', resolve);
+            transport.end();
+          }),
+      ),
+    );
 
     // Remove transports to allow process to exit (prevents event loop hanging)
     for (const transport of fileTransports) {

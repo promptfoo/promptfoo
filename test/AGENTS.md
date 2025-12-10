@@ -33,12 +33,12 @@ npm run test:integration
 **Reference files:**
 
 - **Vitest (frontend)**: `src/app/src/hooks/usePageMeta.test.ts` - explicit imports
-- **Vitest (backend)**: `test/assertions/contains.test.ts` - uses globals (no imports needed)
+- **Vitest (backend)**: `test/assertions/contains.test.ts` - explicit imports
 
-Backend Vitest tests use `globals: true` so `describe`, `it`, `expect`, `vi` are available without imports.
+All tests require explicit imports from vitest:
 
 ```typescript
-import { vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 afterEach(() => {
   vi.resetAllMocks(); // Prevents test pollution
@@ -82,8 +82,8 @@ See `test/providers/openai-codex-sdk.test.ts` for reference patterns.
 
 - Config: `vitest.config.ts` (main tests) and `vitest.integration.config.ts` (integration tests)
 - Setup: `vitest.setup.ts`
-- Globals enabled: `describe`, `it`, `expect`, `beforeEach`, `afterEach` available without imports
-- For mocking utilities, import from `vitest`: `import { vi } from 'vitest'`
+- Globals disabled: All test utilities must be explicitly imported from `vitest`
+- Import `describe`, `it`, `expect`, `beforeEach`, `afterEach`, `vi` from `vitest`
 
 ## Best Practices
 
