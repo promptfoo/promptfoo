@@ -1375,7 +1375,6 @@ Third line`;
       expect((result.messages[0].content![0] as any).toolResult).toBeDefined();
       expect((result.messages[0].content![0] as any).toolResult.content).toHaveLength(2);
     });
-
   });
 
   describe('tool configuration - edge cases', () => {

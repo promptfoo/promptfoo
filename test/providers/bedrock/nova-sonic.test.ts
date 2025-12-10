@@ -532,7 +532,9 @@ describe('categorizeError', () => {
     const result = categorizeError(error);
 
     expect(result.type).toBe('api');
-    expect(result.message).toBe('AWS authentication error. Check your credentials and permissions.');
+    expect(result.message).toBe(
+      'AWS authentication error. Check your credentials and permissions.',
+    );
   });
 
   it('should categorize API/auth errors (credential)', () => {

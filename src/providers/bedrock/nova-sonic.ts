@@ -37,11 +37,7 @@ export function categorizeError(error: unknown): NovaSonicError {
       originalError: err,
     };
   }
-  if (
-    message.includes('timeout') ||
-    message.includes('timed out') ||
-    message.includes('aborted')
-  ) {
+  if (message.includes('timeout') || message.includes('timed out') || message.includes('aborted')) {
     return {
       type: 'timeout',
       message: 'Request timed out. The operation took too long to complete.',
