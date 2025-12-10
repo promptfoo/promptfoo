@@ -1,8 +1,10 @@
 import fs from 'node:fs';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import vm from 'node:vm';
-import { createRequire } from 'node:module';
+
+import { resolveModulePath } from 'exsolve';
 
 import logger from './logger';
 import { safeResolve } from './util/pathUtils';
@@ -94,22 +96,18 @@ export function clearWrapperDirCache(): void {
  * }
  * ```
  *
- * This causes two problems with Node.js's `require.resolve()`:
- *
- * 1. **No CommonJS entry point**: `require.resolve('@openai/codex-sdk')` fails with
- *    "No exports main defined" because there's no `"require"` or `"default"` condition.
- *
- * 2. **Blocked package.json access**: `require.resolve('@openai/codex-sdk/package.json')`
- *    fails with "Package subpath './package.json' is not defined by exports" because
- *    the exports field doesn't expose it.
+ * This causes problems with Node.js's `require.resolve()`:
+ * - `require.resolve('@openai/codex-sdk')` fails with "No exports main defined"
+ *   because there's no `"require"` or `"default"` condition.
  *
  * ## Solution
  *
- * This function works around these limitations by:
- * 1. First trying standard `require.resolve()` (works for CommonJS and dual-mode packages)
- * 2. If that fails, manually constructing the path to `node_modules/{package}/package.json`
- * 3. Reading the package.json directly from the filesystem (bypassing exports restrictions)
- * 4. Parsing the exports field to find the ESM entry point
+ * This function uses `exsolve` which implements Node's ESM resolution algorithm,
+ * correctly handling all `exports` field variations:
+ * - Direct string exports: `"exports": "./index.js"`
+ * - Shorthand object: `"exports": { ".": "./index.js" }`
+ * - Conditional exports: `"exports": { ".": { "import": "./index.js" } }`
+ * - Nested conditionals, array fallbacks, pattern exports, etc.
  *
  * @param packageName - The npm package name (e.g., '@openai/codex-sdk')
  * @param baseDir - The directory to resolve from (should contain node_modules)
@@ -125,98 +123,19 @@ export function clearWrapperDirCache(): void {
  * ```
  */
 export function resolvePackageEntryPoint(packageName: string, baseDir: string): string | null {
-  // Try standard require.resolve() first - works for packages with CommonJS exports
-  try {
-    const require = createRequire(path.join(baseDir, 'package.json'));
-    return require.resolve(packageName, { paths: [baseDir] });
-  } catch {
-    // Package either doesn't exist or is ESM-only
-  }
+  // Use exsolve which implements Node's ESM resolution algorithm
+  // The `from` URL tells exsolve where to start looking for node_modules
+  const from = pathToFileURL(path.join(baseDir, 'package.json')).href;
 
-  // For ESM-only packages, resolve package.json directly by path construction
-  // This bypasses the exports field which may block access to package.json
-  const packageJsonPath = path.join(
-    baseDir,
-    'node_modules',
-    ...packageName.split('/'),
-    'package.json',
-  );
+  const resolved = resolveModulePath(packageName, {
+    from,
+    // Conditions in priority order: Node.js-specific, ESM, CommonJS, default fallback
+    conditions: ['node', 'import', 'require', 'default'],
+    // Return undefined instead of throwing when package not found
+    try: true,
+  });
 
-  if (!fs.existsSync(packageJsonPath)) {
-    return null;
-  }
-
-  try {
-    const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
-    const packageDir = path.dirname(packageJsonPath);
-
-    // Check exports field for ESM entry point
-    // Handle various exports field formats:
-    // 1. Direct string: "exports": "./index.js"
-    // 2. Shorthand object: "exports": { ".": "./index.js" }
-    // 3. Conditional with import: "exports": { ".": { "import": "./index.js" } }
-    // 4. Conditional with default: "exports": { ".": { "default": "./index.js" } }
-    const exports = packageJson.exports;
-    if (exports) {
-      // Handle direct string exports
-      if (typeof exports === 'string') {
-        const entryPoint = path.join(packageDir, exports);
-        if (fs.existsSync(entryPoint)) {
-          return entryPoint;
-        }
-      }
-
-      // Handle exports['.'] being a string
-      if (typeof exports['.'] === 'string') {
-        const entryPoint = path.join(packageDir, exports['.']);
-        if (fs.existsSync(entryPoint)) {
-          return entryPoint;
-        }
-      }
-
-      // Handle exports['.'].import (ESM conditional export)
-      if (exports['.']?.import) {
-        const entryPoint = path.join(packageDir, exports['.'].import);
-        if (fs.existsSync(entryPoint)) {
-          return entryPoint;
-        }
-      }
-
-      // Handle exports['.'].default (fallback conditional export)
-      if (exports['.']?.default) {
-        const entryPoint = path.join(packageDir, exports['.'].default);
-        if (fs.existsSync(entryPoint)) {
-          return entryPoint;
-        }
-      }
-    }
-
-    // Fall back to "module" field (older ESM convention)
-    if (packageJson.module) {
-      const entryPoint = path.join(packageDir, packageJson.module);
-      if (fs.existsSync(entryPoint)) {
-        return entryPoint;
-      }
-    }
-
-    // Fall back to "main" field
-    if (packageJson.main) {
-      const entryPoint = path.join(packageDir, packageJson.main);
-      if (fs.existsSync(entryPoint)) {
-        return entryPoint;
-      }
-    }
-
-    // Default to index.js if nothing specified
-    const defaultEntry = path.join(packageDir, 'index.js');
-    if (fs.existsSync(defaultEntry)) {
-      return defaultEntry;
-    }
-  } catch {
-    // Failed to parse package.json
-  }
-
-  return null;
+  return resolved ?? null;
 }
 
 // Global variable defined by tsup at build time

@@ -228,7 +228,7 @@ describe('ESM utilities', () => {
       );
     });
 
-    it('resolves package with module field', () => {
+    it('resolves package with main field', () => {
       const result = resolvePackageEntryPoint('@test/module-field-pkg', mockPackagesDir);
 
       expect(result).toBe(
