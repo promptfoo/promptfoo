@@ -698,9 +698,12 @@ export async function resolveConfigs(
     tracing: config.tracing,
   };
 
-  if (testSuite.tests) {
-    validateAssertions(testSuite.tests);
-  }
+  // Validate assertions in tests and defaultTest using Zod schema
+  // Note: defaultTest can be a string (file://) reference, so only pass if it's an object
+  validateAssertions(
+    testSuite.tests || [],
+    typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined,
+  );
 
   cliState.config = config;
 
