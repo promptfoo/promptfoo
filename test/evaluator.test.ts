@@ -32,6 +32,8 @@ vi.mock('../src/util/transform', () => ({
     OUTPUT: 'output',
     VARS: 'vars',
   },
+  // Provide a process shim for ESM compatibility in inline JavaScript code
+  getProcessShim: vi.fn().mockReturnValue(process),
   transform: vi.fn().mockImplementation(async (code, input, context, _skipWrap, _inputType) => {
     if (typeof code === 'string' && code.includes('vars.transformed = true')) {
       return { ...input, transformed: true };
