@@ -289,12 +289,14 @@ export class ElevenLabsTTSProvider implements ApiProvider {
     characters: number,
     latency: number,
   ): ProviderResponse {
-    // Track cost
-    const cost = this.costTracker.trackTTS(characters, {
-      voiceId: this.config.voiceId,
-      modelId: this.config.modelId,
-      cacheHit,
-    });
+    // Track cost only for non-cached responses
+    const cost = !cacheHit
+      ? this.costTracker.trackTTS(characters, {
+          voiceId: this.config.voiceId,
+          modelId: this.config.modelId,
+          cacheHit,
+        })
+      : undefined;
 
     return {
       output: `Generated ${characters} characters of speech`,
@@ -408,7 +410,7 @@ export class ElevenLabsTTSProvider implements ApiProvider {
       const wsClient = await createStreamingConnection(apiKey, this.config.voiceId, streamConfig);
 
       // Handle streaming
-      const session = await handleStreamingTTS(wsClient, prompt);
+      const session = await handleStreamingTTS(wsClient, prompt, undefined, startTime);
 
       // Close connection
       wsClient.close();

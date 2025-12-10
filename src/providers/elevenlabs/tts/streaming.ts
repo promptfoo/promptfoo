@@ -54,14 +54,15 @@ export async function handleStreamingTTS(
   client: ElevenLabsWebSocketClient,
   text: string,
   onChunk?: (chunk: StreamingChunk) => void,
+  startTime?: number,
 ): Promise<StreamingSession> {
-  const startTime = Date.now();
+  const sessionStart = startTime ?? Date.now();
   const session: StreamingSession = {
     client,
     chunks: [],
     alignments: [],
     errors: [],
-    startTime,
+    startTime: sessionStart,
   };
 
   return new Promise((resolve, reject) => {

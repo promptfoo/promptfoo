@@ -1,4 +1,4 @@
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# yaml-language-server: $schema=../../site/static/config-schema.json
 description: ElevenLabs Forced Alignment - Subtitle generation
 
 # Alignment uses audio files + transcripts - pass via vars

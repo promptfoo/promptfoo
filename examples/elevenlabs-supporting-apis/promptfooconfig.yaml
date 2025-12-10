@@ -1,4 +1,4 @@
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# yaml-language-server: $schema=../../site/static/config-schema.json
 description: ElevenLabs Supporting APIs reference
 # NOTE: This is a reference/documentation example showing API configuration patterns.
 # For working examples, see individual provider directories (elevenlabs-isolation, elevenlabs-alignment, etc.)

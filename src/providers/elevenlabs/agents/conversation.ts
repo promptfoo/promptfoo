@@ -156,7 +156,7 @@ export function buildSimulationRequest(
 
       toolMockConfig[toolName] = {
         default_return_value: returnValue,
-        default_is_error: !!mockConfig.error,
+        default_is_error: Boolean(mockConfig.error),
       };
     }
 

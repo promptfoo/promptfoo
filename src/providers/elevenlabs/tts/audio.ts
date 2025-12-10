@@ -1,4 +1,4 @@
-import fs from 'fs';
+import { promises as fs } from 'fs';
 import path from 'path';
 import type { AudioData } from '../types';
 import type { OutputFormat } from './types';
@@ -32,20 +32,29 @@ export async function saveAudioFile(
   outputPath: string,
   filename?: string,
 ): Promise<string> {
-  // Ensure output directory exists
-  if (!fs.existsSync(outputPath)) {
-    fs.mkdirSync(outputPath, { recursive: true });
+  await fs.mkdir(outputPath, { recursive: true });
+
+  const rawFilename = filename || `audio-${Date.now()}.${audioData.format}`;
+  const sanitized = path.basename(rawFilename).replace(/[\\/]/g, '').replace(/\0/g, '').trim();
+
+  if (!sanitized || sanitized === '.' || sanitized === '..') {
+    throw new Error('Invalid filename for audio output');
   }
 
-  // Generate filename if not provided
-  const rawFilename = filename || `audio-${Date.now()}.${audioData.format}`;
-  // Sanitize filename to prevent path traversal attacks
-  const finalFilename = path.basename(rawFilename);
-  const fullPath = path.join(outputPath, finalFilename);
+  const expectedExtension = `.${audioData.format}`;
+  const existingExtension = path.extname(sanitized);
+  const baseName = existingExtension ? sanitized.slice(0, -existingExtension.length) : sanitized;
+  if (!baseName) {
+    throw new Error('Invalid filename for audio output');
+  }
+  const finalFilename =
+    existingExtension.toLowerCase() === expectedExtension.toLowerCase()
+      ? sanitized
+      : `${baseName}${expectedExtension}`;
 
-  // Decode base64 and write to file
+  const fullPath = path.join(outputPath, finalFilename);
   const buffer = Buffer.from(audioData.data, 'base64');
-  fs.writeFileSync(fullPath, buffer);
+  await fs.writeFile(fullPath, buffer);
 
   logger.debug('[ElevenLabs Audio] Saved audio file', {
     path: fullPath,
@@ -75,14 +84,6 @@ function getFileExtension(format: OutputFormat): string {
  * This is a rough approximation
  */
 function estimateDuration(sizeBytes: number, format: OutputFormat): number {
-  let bitrate = 128000; // Default 128 kbps
-
-  // Parse bitrate from format string
-  const match = format.match(/(\d+)$/);
-  if (match) {
-    bitrate = parseInt(match[1]) * 1000;
-  }
-
   // For PCM formats, use sample rate to calculate duration
   if (format.startsWith('pcm_')) {
     const sampleRateMatch = format.match(/pcm_(\d+)/);
@@ -104,6 +105,14 @@ function estimateDuration(sizeBytes: number, format: OutputFormat): number {
       const bytesPerSecond = sampleRate;
       return (sizeBytes / bytesPerSecond) * 1000; // Convert to milliseconds
     }
+  }
+
+  let bitrate = 128000; // Default 128 kbps
+
+  // Parse bitrate from format string (e.g., mp3_44100_128)
+  const match = format.match(/(\d+)$/);
+  if (match) {
+    bitrate = parseInt(match[1]) * 1000;
   }
 
   // For MP3, use bitrate

@@ -1,4 +1,4 @@
-# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# yaml-language-server: $schema=../../site/static/config-schema.json
 description: ElevenLabs Speech-to-Text (STT) - Transcription accuracy testing
 
 # STT uses audio files as inputs - pass via vars

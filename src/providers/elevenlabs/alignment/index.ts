@@ -212,53 +212,25 @@ export class ElevenLabsAlignmentProvider implements ApiProvider {
    * Format as WebVTT subtitle format
    */
   private formatAsVTT(response: AlignmentResponse): string {
-    const lines: string[] = ['WEBVTT', ''];
+    // Start with a valid VTT header and blank line
+    const vttLines: string[] = ['WEBVTT', ''];
 
+    // Reuse the SRT formatter and convert to valid VTT:
+    // - Drop numeric cue indices
+    // - Convert timestamp commas to dots
     if (!response.words || response.words.length === 0) {
-      return lines.join('\n');
+      return vttLines.join('\n');
     }
 
-    let subtitleNumber = 1;
+    const srtContent = this.formatAsSRT(response);
+    const convertedLines = srtContent
+      .split('\n')
+      .filter((line) => !/^\s*\d+\s*$/.test(line))
+      .map((line) => (line.includes('-->') ? line.replace(/,/g, '.') : line));
 
-    for (let i = 0; i < response.words.length; i++) {
-      const word = response.words[i];
-      const nextWord = response.words[i + 1];
+    vttLines.push(...convertedLines);
 
-      // Group words into subtitle chunks (max 10 words or 2 seconds)
-      const chunkWords: (typeof word)[] = [word];
-      let j = i + 1;
-
-      while (
-        j < response.words.length &&
-        chunkWords.length < 10 &&
-        response.words[j].start - word.start < 2.0
-      ) {
-        chunkWords.push(response.words[j]);
-        j++;
-      }
-
-      // Format timestamp
-      const start = this.formatVTTTimestamp(word.start);
-      const end = this.formatVTTTimestamp(
-        nextWord ? nextWord.start : chunkWords[chunkWords.length - 1].end,
-      );
-
-      // Add subtitle entry
-      lines.push(`${subtitleNumber}`);
-      lines.push(`${start} --> ${end}`);
-      lines.push(
-        chunkWords
-          .map((w) => w.text.trim())
-          .filter((t) => t)
-          .join(' '),
-      );
-      lines.push(''); // Empty line between entries
-
-      subtitleNumber++;
-      i = j - 1;
-    }
-
-    return lines.join('\n');
+    return vttLines.join('\n');
   }
 
   /**

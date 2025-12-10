@@ -9,7 +9,7 @@ export interface WebSocketClientConfig {
 }
 
 export interface StreamingMessage {
-  type: 'audio' | 'alignment' | 'flush' | 'error';
+  type: 'audio' | 'alignment' | 'flush' | 'error' | 'unknown';
   data?: any;
 }
 
@@ -105,7 +105,7 @@ export class ElevenLabsWebSocketClient {
 
     // Remove previous handler to prevent multiple listeners
     if (this.messageHandler) {
-      this.ws.off('message', this.messageHandler);
+      this.ws.removeListener('message', this.messageHandler);
     }
 
     // Create and store new handler
@@ -129,9 +129,12 @@ export class ElevenLabsWebSocketClient {
             data: parsed.error,
           });
         } else {
-          // Unknown message type - log for debugging
           logger.debug('[ElevenLabs WebSocket] Received unknown message type', {
             keys: Object.keys(parsed),
+          });
+          callback({
+            type: 'unknown',
+            data: parsed,
           });
         }
       } catch (error) {
@@ -148,7 +151,7 @@ export class ElevenLabsWebSocketClient {
     if (this.ws) {
       // Remove message handler to prevent memory leaks
       if (this.messageHandler) {
-        this.ws.off('message', this.messageHandler);
+        this.ws.removeListener('message', this.messageHandler);
         this.messageHandler = null;
       }
       this.ws.close();
