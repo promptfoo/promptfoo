@@ -44,20 +44,20 @@ Adds missing fields to `toJSON()`: `author`, `checks`, `issues`
 
 ### 4. Test Coverage (New)
 
-| File | Purpose | Lines |
-|------|---------|-------|
-| `App.test.tsx` | Route testing for model audit pages | +168 |
-| `Navigation.test.tsx` | NavLink active states, dropdown behavior | +~100 net |
-| `page.test.tsx` (4 files) | Page component tests | +103 total |
-| `ConfigurationTab.test.tsx` | Configuration tab tests | +79 |
+| File                        | Purpose                                  | Lines      |
+| --------------------------- | ---------------------------------------- | ---------- |
+| `App.test.tsx`              | Route testing for model audit pages      | +168       |
+| `Navigation.test.tsx`       | NavLink active states, dropdown behavior | +~100 net  |
+| `page.test.tsx` (4 files)   | Page component tests                     | +103 total |
+| `ConfigurationTab.test.tsx` | Configuration tab tests                  | +79        |
 
 ### 5. Test Improvements (Modified)
 
-| File | Change |
-|------|--------|
+| File                             | Change                        |
+| -------------------------------- | ----------------------------- |
 | `AdvancedOptionsDialog.test.tsx` | Reformatted, updated patterns |
-| `testutils.tsx` | Added helper utilities |
-| `PathSelector.tsx` | Minor refactor |
+| `testutils.tsx`                  | Added helper utilities        |
+| `PathSelector.tsx`               | Minor refactor                |
 
 ---
 
@@ -79,18 +79,19 @@ The cleanup removed **448 lines** of problematic code:
 
 ## Risk Assessment
 
-| Change | Risk | Reason |
-|--------|------|--------|
-| Navigation.tsx | Low | UI-only, well-tested |
-| share.ts URL fix | Low | Simple string change |
-| modelAudit.ts toJSON | Low | Additive, no breaking changes |
-| Test files | None | Tests only |
+| Change               | Risk | Reason                        |
+| -------------------- | ---- | ----------------------------- |
+| Navigation.tsx       | Low  | UI-only, well-tested          |
+| share.ts URL fix     | Low  | Simple string change          |
+| modelAudit.ts toJSON | Low  | Additive, no breaking changes |
+| Test files           | None | Tests only                    |
 
 ---
 
 ## PR is Ready
 
 The PR is now clean and focused. It builds successfully and adds:
+
 - Better navigation UX for Model Audit
 - Comprehensive test coverage for the multi-page architecture
 - URL fix for sharing

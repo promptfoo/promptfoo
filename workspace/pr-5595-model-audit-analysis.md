@@ -25,13 +25,13 @@ This PR represents a comprehensive architectural transformation of the Model Aud
 
 The PR transforms Model Audit from a single `/model-audit` endpoint to a multi-page architecture:
 
-| Route | Page Component | Purpose |
-|-------|----------------|---------|
-| `/model-audit` | `ModelAuditResultLatestPage` | Dashboard showing latest scan results |
-| `/model-audit/setup` | `ModelAuditSetupPage` | Configuration and scan execution |
-| `/model-audit/history` | `ModelAuditHistoryPage` | Paginated list of all historical scans |
-| `/model-audit/history/:id` | `ModelAuditResultPage` | Detailed view of a specific scan |
-| `/model-audit/:id` | `ModelAuditResultPage` | Alias for result detail (cleaner URLs) |
+| Route                      | Page Component               | Purpose                                |
+| -------------------------- | ---------------------------- | -------------------------------------- |
+| `/model-audit`             | `ModelAuditResultLatestPage` | Dashboard showing latest scan results  |
+| `/model-audit/setup`       | `ModelAuditSetupPage`        | Configuration and scan execution       |
+| `/model-audit/history`     | `ModelAuditHistoryPage`      | Paginated list of all historical scans |
+| `/model-audit/history/:id` | `ModelAuditResultPage`       | Detailed view of a specific scan       |
+| `/model-audit/:id`         | `ModelAuditResultPage`       | Alias for result detail (cleaner URLs) |
 
 **Code Reference:** `src/app/src/App.tsx:74-114`
 
@@ -75,9 +75,11 @@ if (href === '/model-audit') {
 The PR decouples the monolithic `useModelAuditStore` into two focused stores:
 
 #### `useModelAuditConfigStore` - Configuration & Scan State
+
 **File:** `src/app/src/pages/model-audit/stores/useModelAuditConfigStore.ts`
 
 **Responsibilities:**
+
 - Recent scans history (persisted to localStorage)
 - Current scan configuration (paths, options)
 - Scan execution state (isScanning, results, error)
@@ -85,6 +87,7 @@ The PR decouples the monolithic `useModelAuditStore` into two focused stores:
 - UI dialog state
 
 **Key Features:**
+
 - **Persistence:** Uses Zustand's `persist` middleware with localStorage
 - **Migration:** Handles migration from old `model-audit-store` to new `model-audit-config-store`
 - **Request Deduplication:** Singleton promise pattern for installation checks
@@ -103,15 +106,17 @@ export const useModelAuditConfigStore = create<ModelAuditConfigState>()(
       name: 'model-audit-config-store',
       version: 2,
       skipHydration: true, // Prevents SSR issues
-    }
-  )
+    },
+  ),
 );
 ```
 
 #### `useModelAuditHistoryStore` - History & DataGrid State
+
 **File:** `src/app/src/pages/model-audit/stores/useModelAuditHistoryStore.ts`
 
 **Responsibilities:**
+
 - Historical scans data
 - DataGrid pagination state (pageSize, currentPage)
 - Sort model management
@@ -120,6 +125,7 @@ export const useModelAuditConfigStore = create<ModelAuditConfigState>()(
 - Async data fetching
 
 **Key Features:**
+
 - **Server-Side State Sync:** Manages pagination/sort/search state that maps to API parameters
 - **Transient State:** No persistence - fetches fresh data on mount
 - **Query Building:** Constructs API query parameters from state
@@ -137,7 +143,7 @@ fetchHistoricalScans: async () => {
     params.set('order', sortModel[0].sort);
   }
   // ... fetch and update state
-}
+};
 ```
 
 ### 2.2 State Flow Diagram
@@ -197,6 +203,7 @@ fetchHistoricalScans: async () => {
 **Purpose:** Configuration hub for setting up and executing model security scans.
 
 **Features:**
+
 - Breadcrumb navigation back to `/model-audit`
 - Installation status indicator (Ready/Not Installed/Checking)
 - Path configuration with the existing `ConfigurationTab` component
@@ -205,6 +212,7 @@ fetchHistoricalScans: async () => {
 - Automatic navigation to results after persisted scan completion
 
 **Key UX Flow:**
+
 ```
 User configures paths → Clicks "Scan" → isScanning=true →
 API POST /scan → Response with auditId →
@@ -238,12 +246,14 @@ const handleScan = async () => {
 **Purpose:** Dashboard landing page showing the most recent scan results.
 
 **Features:**
+
 - Empty state with CTAs to setup and history
 - Latest scan display with summary
 - Quick access to "New Scan" and "View History"
 - Link to detailed view
 
 **API Strategy:**
+
 1. Try dedicated `/scans/latest` endpoint
 2. Fallback to `/scans?limit=1` if latest endpoint unavailable
 3. Handle 204 No Content for empty state
@@ -277,12 +287,14 @@ try {
 **Purpose:** Paginated, searchable, sortable list of all historical scans using MUI X DataGrid.
 
 **Features:**
+
 - **Custom Toolbar:** Columns, Filter, Density, Export buttons + QuickFilter search
 - **Responsive Design:** Mobile-optimized column visibility and kebab menu
 - **Server-Side Operations:** Pagination, sorting, filtering all handled server-side
 - **Rich Cell Rendering:** Status chips, issue counts, check statistics
 
 **DataGrid Configuration:**
+
 ```typescript
 <DataGrid
   paginationMode="server"
@@ -318,6 +330,7 @@ try {
 **Purpose:** Detailed view of a specific scan result with full actions.
 
 **Features:**
+
 - Breadcrumb navigation: Model Audit > History > [Scan Name]
 - Scan metadata display (Created, Model Path, Author, Checks)
 - Action buttons: Download JSON, Refresh, Delete
@@ -325,6 +338,7 @@ try {
 - AbortController integration for all async operations
 
 **Memory Safety:**
+
 ```typescript
 useEffect(() => {
   const abortController = new AbortController();
@@ -346,15 +360,15 @@ useEffect(() => {
 
 **Router:** `src/server/routes/modelAudit.ts`
 
-| Method | Endpoint | Purpose | Schema |
-|--------|----------|---------|--------|
-| GET | `/check-installed` | Check ModelAudit CLI availability | `ZCheckInstalledResponse` |
-| POST | `/check-path` | Validate path existence and type | `ZCheckPathRequest/Response` |
-| POST | `/scan` | Execute a new security scan | `ZScanRequest/Response` |
-| GET | `/scans` | List scans with pagination | `ZScansQuery/Response` |
-| GET | `/scans/latest` | Get most recent scan | `ScanRecord` |
-| GET | `/scans/:id` | Get specific scan details | `ScanRecord` |
-| DELETE | `/scans/:id` | Delete a scan | `ZDeleteResponse` |
+| Method | Endpoint           | Purpose                           | Schema                       |
+| ------ | ------------------ | --------------------------------- | ---------------------------- |
+| GET    | `/check-installed` | Check ModelAudit CLI availability | `ZCheckInstalledResponse`    |
+| POST   | `/check-path`      | Validate path existence and type  | `ZCheckPathRequest/Response` |
+| POST   | `/scan`            | Execute a new security scan       | `ZScanRequest/Response`      |
+| GET    | `/scans`           | List scans with pagination        | `ZScansQuery/Response`       |
+| GET    | `/scans/latest`    | Get most recent scan              | `ScanRecord`                 |
+| GET    | `/scans/:id`       | Get specific scan details         | `ScanRecord`                 |
+| DELETE | `/scans/:id`       | Delete a scan                     | `ZDeleteResponse`            |
 
 ### 4.2 Zod Schema Contracts
 
@@ -377,7 +391,11 @@ export const ZScanRequest = z.object({
   paths: z.array(z.string().min(1)).min(1),
   options: z.object({
     blacklist: z.array(z.string()),
-    timeout: z.number().int().positive().max(24 * 3600),
+    timeout: z
+      .number()
+      .int()
+      .positive()
+      .max(24 * 3600),
     verbose: z.boolean().optional(),
     maxSize: z.string().optional(),
     name: z.string().optional(),
@@ -450,7 +468,7 @@ type Eval = {
   description: string | null;
   evalId: string;
   isRedteam: number; // Legacy field for backward compatibility
-  type?: EvalType;   // New unified type field
+  type?: EvalType; // New unified type field
   label: string;
   numTests: number;
   passRate: number;
@@ -462,15 +480,18 @@ type Eval = {
 The EvalsDataGrid now intelligently routes based on type:
 
 ```typescript
-const handleCellClick = useCallback((params) => {
-  const evalType = params.row.type || (params.row.isRedteam === 1 ? 'redteam' : 'eval');
+const handleCellClick = useCallback(
+  (params) => {
+    const evalType = params.row.type || (params.row.isRedteam === 1 ? 'redteam' : 'eval');
 
-  if (evalType === 'modelaudit') {
-    navigate(`/model-audit/${params.row.evalId}`);
-  } else {
-    onEvalSelected(params.row.evalId);
-  }
-}, [navigate, onEvalSelected]);
+    if (evalType === 'modelaudit') {
+      navigate(`/model-audit/${params.row.evalId}`);
+    } else {
+      onEvalSelected(params.row.evalId);
+    }
+  },
+  [navigate, onEvalSelected],
+);
 ```
 
 ### 5.3 Visual Type Differentiation
@@ -497,21 +518,27 @@ const getTypeColor = (type: EvalType) => {
 ### 6.1 Mobile Optimizations
 
 **Column Visibility:**
+
 ```typescript
-const columnVisibilityModel = useMemo(() => ({
-  createdAt: !isMobile,
-  modelPath: !isMobile,
-  issues: !isMobile,
-  checks: !isTablet,
-}), [isMobile, isTablet]);
+const columnVisibilityModel = useMemo(
+  () => ({
+    createdAt: !isMobile,
+    modelPath: !isMobile,
+    issues: !isMobile,
+    checks: !isTablet,
+  }),
+  [isMobile, isTablet],
+);
 ```
 
 **Toolbar Adaptation:**
+
 - Desktop: Full button row (Columns, Filter, Density, Export)
 - Mobile: Kebab menu containing all toolbar actions
 
 **Touch Targets:**
 All interactive elements meet 44px minimum touch target size:
+
 ```typescript
 <IconButton sx={{ minWidth: 44, minHeight: 44 }} ... />
 ```
@@ -519,6 +546,7 @@ All interactive elements meet 44px minimum touch target size:
 ### 6.2 Safe Area Handling
 
 For devices with notches:
+
 ```typescript
 <Box sx={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
 ```
@@ -532,6 +560,7 @@ For devices with notches:
 **File:** `src/app/src/pages/evals/components/EvalsDataGrid.tsx`
 
 The file contains unresolved merge conflict markers:
+
 ```typescript
 <<<<<<< HEAD
 import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -542,6 +571,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 ```
 
 And:
+
 ```typescript
 <<<<<<< HEAD
             quickFilterValue,
@@ -557,6 +587,7 @@ And:
 ### 7.2 Skipped Tests
 
 The PR temporarily skips several tests pending architecture updates:
+
 - App routing tests (Router-in-Router issues)
 - Navigation active state tests
 - Model audit history tests (DataGrid config updates)
@@ -568,21 +599,21 @@ The PR temporarily skips several tests pending architecture updates:
 
 ## 8. Feature Areas Summary
 
-| Feature Area | Components | Status |
-|--------------|------------|--------|
-| **Multi-Page Routing** | App.tsx, Navigation.tsx | Complete |
-| **Store Architecture** | ConfigStore, HistoryStore | Complete |
-| **Setup Page** | ModelAuditSetupPage | Complete |
-| **Latest Results Page** | ModelAuditResultLatestPage | Complete |
-| **History Page** | ModelAuditHistory | Complete |
-| **Result Detail Page** | ModelAuditResult | Complete |
-| **Server-Side Pagination** | modelAudit.ts routes | Complete |
-| **API Contracts** | modelAudit.schemas.ts | Complete |
-| **Type Unification** | EvalsDataGrid integration | Complete (has conflicts) |
-| **Navigation Integration** | CreateDropdown, NavLink | Complete |
-| **Responsive Design** | All pages | Complete |
-| **Telemetry** | All API endpoints | Complete |
-| **Test Coverage** | Multiple test files | Partial (some skipped) |
+| Feature Area               | Components                 | Status                   |
+| -------------------------- | -------------------------- | ------------------------ |
+| **Multi-Page Routing**     | App.tsx, Navigation.tsx    | Complete                 |
+| **Store Architecture**     | ConfigStore, HistoryStore  | Complete                 |
+| **Setup Page**             | ModelAuditSetupPage        | Complete                 |
+| **Latest Results Page**    | ModelAuditResultLatestPage | Complete                 |
+| **History Page**           | ModelAuditHistory          | Complete                 |
+| **Result Detail Page**     | ModelAuditResult           | Complete                 |
+| **Server-Side Pagination** | modelAudit.ts routes       | Complete                 |
+| **API Contracts**          | modelAudit.schemas.ts      | Complete                 |
+| **Type Unification**       | EvalsDataGrid integration  | Complete (has conflicts) |
+| **Navigation Integration** | CreateDropdown, NavLink    | Complete                 |
+| **Responsive Design**      | All pages                  | Complete                 |
+| **Telemetry**              | All API endpoints          | Complete                 |
+| **Test Coverage**          | Multiple test files        | Partial (some skipped)   |
 
 ---
 
@@ -601,6 +632,7 @@ The PR temporarily skips several tests pending architecture updates:
 PR #5595 represents a significant maturation of the Model Audit feature. The architectural decisions - particularly the store split and server-side pagination - position the feature for enterprise-scale usage. The unified type system elegantly integrates Model Audit into the existing eval ecosystem without requiring breaking changes.
 
 The implementation demonstrates strong attention to:
+
 - **Separation of concerns** (stores, pages, components)
 - **Performance** (server-side pagination, debounced search)
 - **Type safety** (Zod schemas, TypeScript interfaces)
