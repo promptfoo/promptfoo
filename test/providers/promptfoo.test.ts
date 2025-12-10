@@ -1,8 +1,5 @@
-<<<<<<< HEAD
-import { getEnvString } from '../../src/envars';
-=======
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getEnvBool, getEnvString } from '../../src/envars';
->>>>>>> origin/main
 import { getUserEmail } from '../../src/globalConfig/accounts';
 import {
   PromptfooChatCompletionProvider,
@@ -12,27 +9,37 @@ import {
 } from '../../src/providers/promptfoo';
 import { fetchWithRetries } from '../../src/util/fetch/index';
 
-jest.mock('../../src/cache');
-jest.mock('../../src/envars');
-jest.mock('../../src/util/fetch/index.ts');
-jest.mock('../../src/globalConfig/accounts');
-jest.mock('../../src/globalConfig/cloud', () => ({
-  CloudConfig: class {
-    isEnabled() {
-      return false;
-    }
-    getApiHost() {
-      return 'https://api.promptfoo.app';
-    }
-  },
-}));
+vi.mock('../../src/cache');
+vi.mock('../../src/envars');
+vi.mock('../../src/util/fetch/index.ts');
+vi.mock('../../src/globalConfig/accounts');
+vi.mock('../../src/globalConfig/cloud', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+
+    CloudConfig: class {
+      isEnabled() {
+        return false;
+      }
+      getApiHost() {
+        return 'https://api.promptfoo.app';
+      }
+    },
+  };
+});
 
 describe('PromptfooHarmfulCompletionProvider', () => {
   beforeEach(() => {
-    jest.resetAllMocks();
-    jest.mocked(getUserEmail).mockReturnValue('test@example.com');
-    jest.mocked(getEnvString).mockReturnValue('');
-    jest.mocked(getEnvBool).mockReturnValue(false);
+    vi.resetAllMocks();
+    vi.mocked(getUserEmail).mockImplementation(function () {
+      return 'test@example.com';
+    });
+    vi.mocked(getEnvString).mockImplementation(function () {
+      return '';
+    });
+    vi.mocked(getEnvBool).mockImplementation(function () {
+      return false;
+    });
   });
 
   const options = {
@@ -41,7 +48,11 @@ describe('PromptfooHarmfulCompletionProvider', () => {
     purpose: 'test-purpose',
   };
 
-  const provider = new PromptfooHarmfulCompletionProvider(options);
+  let provider: PromptfooHarmfulCompletionProvider;
+
+  beforeEach(() => {
+    provider = new PromptfooHarmfulCompletionProvider(options);
+  });
 
   it('should initialize with correct options', () => {
     expect(provider.harmCategory).toBe(options.harmCategory);
@@ -64,7 +75,7 @@ describe('PromptfooHarmfulCompletionProvider', () => {
       status: 200,
       statusText: 'OK',
     });
-    jest.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
+    vi.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
 
     const result = await provider.callApi('test prompt');
 
@@ -79,7 +90,7 @@ describe('PromptfooHarmfulCompletionProvider', () => {
         statusText: 'OK',
       },
     );
-    jest.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
+    vi.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
 
     const result = await provider.callApi('test prompt');
 
@@ -91,7 +102,7 @@ describe('PromptfooHarmfulCompletionProvider', () => {
       status: 200,
       statusText: 'OK',
     });
-    jest.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
+    vi.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
 
     const result = await provider.callApi('test prompt');
 
@@ -103,7 +114,7 @@ describe('PromptfooHarmfulCompletionProvider', () => {
       status: 400,
       statusText: 'Bad Request',
     });
-    jest.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
+    vi.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
 
     const result = await provider.callApi('test prompt');
 
@@ -111,9 +122,9 @@ describe('PromptfooHarmfulCompletionProvider', () => {
   });
 
   it('should return error when PROMPTFOO_DISABLE_REMOTE_GENERATION is set', async () => {
-    jest
-      .mocked(getEnvBool)
-      .mockImplementation((key: string) => key === 'PROMPTFOO_DISABLE_REMOTE_GENERATION');
+    vi.mocked(getEnvBool).mockImplementation(function (key: string) {
+      return key === 'PROMPTFOO_DISABLE_REMOTE_GENERATION';
+    });
 
     const result = await provider.callApi('test prompt');
 
@@ -124,9 +135,9 @@ describe('PromptfooHarmfulCompletionProvider', () => {
   });
 
   it('should return error when PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION is set', async () => {
-    jest
-      .mocked(getEnvBool)
-      .mockImplementation((key: string) => key === 'PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION');
+    vi.mocked(getEnvBool).mockImplementation(function (key: string) {
+      return key === 'PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION';
+    });
 
     const result = await provider.callApi('test prompt');
 
@@ -134,14 +145,46 @@ describe('PromptfooHarmfulCompletionProvider', () => {
     expect(result.error).toContain('Harmful content generation requires');
     expect(fetchWithRetries).not.toHaveBeenCalled();
   });
+
+  it('should pass abortSignal to fetchWithRetries', async () => {
+    const abortController = new AbortController();
+    const mockResponse = new Response(JSON.stringify({ output: 'test output' }), {
+      status: 200,
+      statusText: 'OK',
+    });
+    vi.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
+
+    await provider.callApi('test prompt', undefined, { abortSignal: abortController.signal });
+
+    expect(fetchWithRetries).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ signal: abortController.signal }),
+      expect.any(Number),
+      expect.any(Number),
+    );
+  });
+
+  it('should re-throw AbortError and not swallow it', async () => {
+    const abortError = new Error('The operation was aborted');
+    abortError.name = 'AbortError';
+    vi.mocked(fetchWithRetries).mockRejectedValue(abortError);
+
+    await expect(provider.callApi('test prompt')).rejects.toThrow('The operation was aborted');
+  });
 });
 
 describe('PromptfooChatCompletionProvider', () => {
   beforeEach(() => {
-    jest.resetAllMocks();
-    jest.mocked(getUserEmail).mockReturnValue('test@example.com');
-    jest.mocked(getEnvString).mockReturnValue('');
-    jest.mocked(getEnvBool).mockReturnValue(false);
+    vi.resetAllMocks();
+    vi.mocked(getUserEmail).mockImplementation(function () {
+      return 'test@example.com';
+    });
+    vi.mocked(getEnvString).mockImplementation(function () {
+      return '';
+    });
+    vi.mocked(getEnvBool).mockImplementation(function () {
+      return false;
+    });
   });
 
   const options = {
@@ -150,7 +193,11 @@ describe('PromptfooChatCompletionProvider', () => {
     task: 'crescendo' as const,
   };
 
-  const provider = new PromptfooChatCompletionProvider(options);
+  let provider: PromptfooChatCompletionProvider;
+
+  beforeEach(() => {
+    provider = new PromptfooChatCompletionProvider(options);
+  });
 
   it('should return correct id', () => {
     expect(provider.id()).toBe('promptfoo:chatcompletion');
@@ -171,7 +218,7 @@ describe('PromptfooChatCompletionProvider', () => {
         statusText: 'OK',
       },
     );
-    jest.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
+    vi.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
 
     const result = await provider.callApi('test prompt');
 
@@ -191,7 +238,7 @@ describe('PromptfooChatCompletionProvider', () => {
         statusText: 'OK',
       },
     );
-    jest.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
+    vi.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
 
     const result = await provider.callApi('test prompt');
 
@@ -199,7 +246,7 @@ describe('PromptfooChatCompletionProvider', () => {
   });
 
   it('should handle API error', async () => {
-    jest.mocked(fetchWithRetries).mockRejectedValue(new Error('API Error'));
+    vi.mocked(fetchWithRetries).mockRejectedValue(new Error('API Error'));
 
     const result = await provider.callApi('test prompt');
 
@@ -207,9 +254,9 @@ describe('PromptfooChatCompletionProvider', () => {
   });
 
   it('should return error when PROMPTFOO_DISABLE_REMOTE_GENERATION is set', async () => {
-    jest
-      .mocked(getEnvBool)
-      .mockImplementation((key: string) => key === 'PROMPTFOO_DISABLE_REMOTE_GENERATION');
+    vi.mocked(getEnvBool).mockImplementation(function (key: string) {
+      return key === 'PROMPTFOO_DISABLE_REMOTE_GENERATION';
+    });
 
     const result = await provider.callApi('test prompt');
 
@@ -220,9 +267,9 @@ describe('PromptfooChatCompletionProvider', () => {
   });
 
   it('should return error when PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION is set', async () => {
-    jest
-      .mocked(getEnvBool)
-      .mockImplementation((key: string) => key === 'PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION');
+    vi.mocked(getEnvBool).mockImplementation(function (key: string) {
+      return key === 'PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION';
+    });
 
     const result = await provider.callApi('test prompt');
 
@@ -230,13 +277,47 @@ describe('PromptfooChatCompletionProvider', () => {
     expect(result.error).toContain('This red team strategy requires');
     expect(fetchWithRetries).not.toHaveBeenCalled();
   });
+
+  it('should pass abortSignal to fetchWithRetries', async () => {
+    const abortController = new AbortController();
+    const mockResponse = new Response(
+      JSON.stringify({
+        result: 'test result',
+        tokenUsage: { total: 100 },
+      }),
+      {
+        status: 200,
+        statusText: 'OK',
+      },
+    );
+    vi.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
+
+    await provider.callApi('test prompt', undefined, { abortSignal: abortController.signal });
+
+    // Verify the signal was passed in the options object
+    expect(fetchWithRetries).toHaveBeenCalled();
+    const callArgs = vi.mocked(fetchWithRetries).mock.calls[0];
+    expect(callArgs[1]).toHaveProperty('signal', abortController.signal);
+  });
+
+  it('should re-throw AbortError and not swallow it', async () => {
+    const abortError = new Error('The operation was aborted');
+    abortError.name = 'AbortError';
+    vi.mocked(fetchWithRetries).mockRejectedValue(abortError);
+
+    await expect(provider.callApi('test prompt')).rejects.toThrow('The operation was aborted');
+  });
 });
 
 describe('PromptfooSimulatedUserProvider', () => {
   beforeEach(() => {
-    jest.resetAllMocks();
-    jest.mocked(getUserEmail).mockReturnValue('test@example.com');
-    jest.mocked(getEnvBool).mockReturnValue(false);
+    vi.resetAllMocks();
+    vi.mocked(getUserEmail).mockImplementation(function () {
+      return 'test@example.com';
+    });
+    vi.mocked(getEnvBool).mockImplementation(function () {
+      return false;
+    });
   });
 
   const options = {
@@ -244,7 +325,11 @@ describe('PromptfooSimulatedUserProvider', () => {
     instructions: 'test instructions',
   };
 
-  const provider = new PromptfooSimulatedUserProvider(options, 'test-id');
+  let provider: PromptfooSimulatedUserProvider;
+
+  beforeEach(() => {
+    provider = new PromptfooSimulatedUserProvider(options, 'test-id');
+  });
 
   it('should return correct id', () => {
     expect(provider.id()).toBe('test-agent');
@@ -270,7 +355,7 @@ describe('PromptfooSimulatedUserProvider', () => {
         statusText: 'OK',
       },
     );
-    jest.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
+    vi.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
 
     const result = await provider.callApi(JSON.stringify([{ role: 'user', content: 'hello' }]));
 
@@ -285,7 +370,7 @@ describe('PromptfooSimulatedUserProvider', () => {
       status: 400,
       statusText: 'Bad Request',
     });
-    jest.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
+    vi.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
 
     const result = await provider.callApi(JSON.stringify([{ role: 'user', content: 'hello' }]));
 
@@ -293,7 +378,7 @@ describe('PromptfooSimulatedUserProvider', () => {
   });
 
   it('should handle API call exception', async () => {
-    jest.mocked(fetchWithRetries).mockRejectedValue(new Error('Network Error'));
+    vi.mocked(fetchWithRetries).mockRejectedValue(new Error('Network Error'));
 
     const result = await provider.callApi(JSON.stringify([{ role: 'user', content: 'hello' }]));
 
@@ -302,9 +387,9 @@ describe('PromptfooSimulatedUserProvider', () => {
 
   it('should return error when PROMPTFOO_DISABLE_REMOTE_GENERATION is set for regular task', async () => {
     const regularProvider = new PromptfooSimulatedUserProvider({}, 'tau');
-    jest
-      .mocked(getEnvBool)
-      .mockImplementation((key: string) => key === 'PROMPTFOO_DISABLE_REMOTE_GENERATION');
+    vi.mocked(getEnvBool).mockImplementation(function (key: string) {
+      return key === 'PROMPTFOO_DISABLE_REMOTE_GENERATION';
+    });
 
     const result = await regularProvider.callApi(
       JSON.stringify([{ role: 'user', content: 'hello' }]),
@@ -318,9 +403,9 @@ describe('PromptfooSimulatedUserProvider', () => {
 
   it('should NOT be disabled when PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION is set for regular task', async () => {
     const regularProvider = new PromptfooSimulatedUserProvider({}, 'tau');
-    jest
-      .mocked(getEnvBool)
-      .mockImplementation((key: string) => key === 'PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION');
+    vi.mocked(getEnvBool).mockImplementation(function (key: string) {
+      return key === 'PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION';
+    });
 
     const mockResponse = new Response(
       JSON.stringify({
@@ -332,7 +417,7 @@ describe('PromptfooSimulatedUserProvider', () => {
         statusText: 'OK',
       },
     );
-    jest.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
+    vi.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
 
     const result = await regularProvider.callApi(
       JSON.stringify([{ role: 'user', content: 'hello' }]),
@@ -345,9 +430,9 @@ describe('PromptfooSimulatedUserProvider', () => {
 
   it('should return error when PROMPTFOO_DISABLE_REMOTE_GENERATION is set for redteam task', async () => {
     const redteamProvider = new PromptfooSimulatedUserProvider({}, REDTEAM_SIMULATED_USER_TASK_ID);
-    jest
-      .mocked(getEnvBool)
-      .mockImplementation((key: string) => key === 'PROMPTFOO_DISABLE_REMOTE_GENERATION');
+    vi.mocked(getEnvBool).mockImplementation(function (key: string) {
+      return key === 'PROMPTFOO_DISABLE_REMOTE_GENERATION';
+    });
 
     const result = await redteamProvider.callApi(
       JSON.stringify([{ role: 'user', content: 'hello' }]),
@@ -362,9 +447,9 @@ describe('PromptfooSimulatedUserProvider', () => {
 
   it('should return error when PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION is set for redteam task', async () => {
     const redteamProvider = new PromptfooSimulatedUserProvider({}, REDTEAM_SIMULATED_USER_TASK_ID);
-    jest
-      .mocked(getEnvBool)
-      .mockImplementation((key: string) => key === 'PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION');
+    vi.mocked(getEnvBool).mockImplementation(function (key: string) {
+      return key === 'PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION';
+    });
 
     const result = await redteamProvider.callApi(
       JSON.stringify([{ role: 'user', content: 'hello' }]),
@@ -384,9 +469,9 @@ describe('PromptfooSimulatedUserProvider', () => {
     const redteamProvider = new PromptfooSimulatedUserProvider({}, REDTEAM_SIMULATED_USER_TASK_ID);
 
     // Set only the redteam-specific flag
-    jest
-      .mocked(getEnvBool)
-      .mockImplementation((key: string) => key === 'PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION');
+    vi.mocked(getEnvBool).mockImplementation(function (key: string) {
+      return key === 'PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION';
+    });
 
     const mockResponse = new Response(
       JSON.stringify({
@@ -398,7 +483,7 @@ describe('PromptfooSimulatedUserProvider', () => {
         statusText: 'OK',
       },
     );
-    jest.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
+    vi.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
 
     // Regular task should work
     const regularResult = await regularProvider.callApi(
@@ -409,7 +494,7 @@ describe('PromptfooSimulatedUserProvider', () => {
     expect(fetchWithRetries).toHaveBeenCalled();
 
     // Reset fetch mock
-    jest.mocked(fetchWithRetries).mockClear();
+    vi.mocked(fetchWithRetries).mockClear();
 
     // Redteam task should be blocked
     const redteamResult = await redteamProvider.callApi(
@@ -417,5 +502,39 @@ describe('PromptfooSimulatedUserProvider', () => {
     );
     expect(redteamResult.error).toContain('Remote generation is disabled');
     expect(fetchWithRetries).not.toHaveBeenCalled();
+  });
+
+  it('should pass abortSignal to fetchWithRetries', async () => {
+    const abortController = new AbortController();
+    const mockResponse = new Response(
+      JSON.stringify({
+        result: 'test result',
+        tokenUsage: { total: 100 },
+      }),
+      {
+        status: 200,
+        statusText: 'OK',
+      },
+    );
+    vi.mocked(fetchWithRetries).mockResolvedValue(mockResponse);
+
+    await provider.callApi(JSON.stringify([{ role: 'user', content: 'hello' }]), undefined, {
+      abortSignal: abortController.signal,
+    });
+
+    // Verify the signal was passed in the options object
+    expect(fetchWithRetries).toHaveBeenCalled();
+    const callArgs = vi.mocked(fetchWithRetries).mock.calls[0];
+    expect(callArgs[1]).toHaveProperty('signal', abortController.signal);
+  });
+
+  it('should re-throw AbortError and not swallow it', async () => {
+    const abortError = new Error('The operation was aborted');
+    abortError.name = 'AbortError';
+    vi.mocked(fetchWithRetries).mockRejectedValue(abortError);
+
+    await expect(
+      provider.callApi(JSON.stringify([{ role: 'user', content: 'hello' }])),
+    ).rejects.toThrow('The operation was aborted');
   });
 });

@@ -763,6 +763,18 @@ class Evaluator {
     const rowsWithSelectBestAssertion = new Set<number>();
     const rowsWithMaxScoreAssertion = new Set<number>();
 
+    // Ensure defaultTest has a usable structure before extensions run.
+    // This allows extensions to safely do `context.suite.defaultTest.assert.push(...)`
+    // without needing defensive checks for undefined values.
+    if (testSuite.extensions?.length) {
+      if (!testSuite.defaultTest) {
+        testSuite.defaultTest = {};
+      }
+      if (!testSuite.defaultTest.assert) {
+        testSuite.defaultTest.assert = [];
+      }
+    }
+
     const beforeAllOut = await runExtensionHook(testSuite.extensions, 'beforeAll', {
       suite: testSuite,
     });

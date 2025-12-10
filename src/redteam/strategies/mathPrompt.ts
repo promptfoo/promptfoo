@@ -7,7 +7,7 @@ import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import invariant from '../../util/invariant';
 import { extractFirstJsonObject } from '../../util/json';
-import { getRedteamProvider } from '../providers/shared';
+import { redteamProviderManager } from '../providers/shared';
 import { getRemoteGenerationUrl, shouldGenerateRemote } from '../remoteGeneration';
 
 import type { TestCase } from '../../types/index';
@@ -96,9 +96,9 @@ export async function generateMathPrompt(
 }
 
 export async function encodeMathPrompt(text: string, concept: string): Promise<string> {
-  const redteamProvider = await getRedteamProvider({
-    enforceJson: true,
-    preferSmall: true,
+  const redteamProvider = await redteamProviderManager.getProvider({
+    jsonOnly: true,
+    preferSmallModel: true,
   });
   const examplePrompt = EXAMPLES[Math.floor(Math.random() * EXAMPLES.length)];
 

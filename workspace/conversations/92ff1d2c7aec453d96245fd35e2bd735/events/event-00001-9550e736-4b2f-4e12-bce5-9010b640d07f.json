@@ -1,0 +1,17 @@
+{
+  "kind": "MessageEvent",
+  "id": "9550e736-4b2f-4e12-bce5-9010b640d07f",
+  "timestamp": "2025-12-06T13:48:30.955909",
+  "source": "user",
+  "llm_message": {
+    "role": "user",
+    "content": [{ "cache_prompt": false, "type": "text", "text": "Print hello world using echo" }],
+    "cache_enabled": false,
+    "vision_enabled": false,
+    "function_calling_enabled": false,
+    "force_string_serializer": false,
+    "thinking_blocks": []
+  },
+  "activated_skills": [],
+  "extended_content": []
+}

@@ -104,7 +104,7 @@ tests:
       prompt: 'SCRIPT_OUTPUT_12345'
     assert:
       - type: llm-rubric
-        value: file://rubric-generator.js:knownValue
+        value: file://rubric-generator.cjs:knownValue
 
   # Test 11: llm-rubric with JS file:// - dynamic based on context
   - description: 'llm-rubric with JS script using context vars'
@@ -113,7 +113,7 @@ tests:
       topic: 'machine learning'
     assert:
       - type: llm-rubric
-        value: file://rubric-generator.js:rubric
+        value: file://rubric-generator.cjs:rubric
 
   # Test 12: llm-rubric with JS file:// - object return
   - description: 'llm-rubric with JS script returning object'
@@ -121,7 +121,7 @@ tests:
       prompt: 'Test response'
     assert:
       - type: llm-rubric
-        value: file://rubric-generator.js:rubricObject
+        value: file://rubric-generator.cjs:rubricObject
 
   # Test 13: llm-rubric with Python file://
   - description: 'llm-rubric with Python script'
@@ -151,11 +151,11 @@ tests:
       prompt: 'SCRIPT_OUTPUT_12345 is the answer'
     assert:
       - type: contains
-        value: file://rubric-generator.js:knownValue
+        value: file://rubric-generator.cjs:knownValue
       - type: contains
         value: 'answer'
       - type: starts-with
-        value: file://rubric-generator.js:knownValue
+        value: file://rubric-generator.cjs:knownValue
 
   # Test 16: llm-rubric alongside other assertions
   - description: 'llm-rubric with other assertion types'
@@ -163,7 +163,7 @@ tests:
       prompt: 'The result is SCRIPT_OUTPUT_12345'
     assert:
       - type: llm-rubric
-        value: file://rubric-generator.js:knownValue
+        value: file://rubric-generator.cjs:knownValue
       - type: contains
         value: 'result'
       - type: regex
@@ -179,7 +179,7 @@ tests:
       prompt: 'SCRIPT_OUTPUT_12345'
     assert:
       - type: equals
-        value: file://rubric-generator.js:knownValue
+        value: file://rubric-generator.cjs:knownValue
 
   # Test 18: contains with file://
   - description: 'contains with JS file:// script'
@@ -187,7 +187,7 @@ tests:
       prompt: 'Result: SCRIPT_OUTPUT_12345'
     assert:
       - type: contains
-        value: file://rubric-generator.js:knownValue
+        value: file://rubric-generator.cjs:knownValue
 
   # Test 19: regex with file:// (dynamic pattern)
   - description: 'regex with file:// script generating pattern'
@@ -196,7 +196,7 @@ tests:
       pattern: "\\d{5}"
     assert:
       - type: regex
-        value: file://rubric-generator.js:getPattern
+        value: file://rubric-generator.cjs:getPattern
 
   # Test 20: starts-with with file://
   - description: 'starts-with with file:// script'
@@ -204,7 +204,7 @@ tests:
       prompt: 'SCRIPT_OUTPUT_12345 begins here'
     assert:
       - type: starts-with
-        value: file://rubric-generator.js:knownValue
+        value: file://rubric-generator.cjs:knownValue
 
   # Test 21: icontains with file://
   - description: 'icontains (case insensitive) with file:// script'
@@ -212,7 +212,7 @@ tests:
       prompt: 'script_output_12345 lowercase'
     assert:
       - type: icontains
-        value: file://rubric-generator.js:knownValue
+        value: file://rubric-generator.cjs:knownValue
 
   # Test 22: not-contains with file://
   - description: 'not-contains with file:// script'
@@ -220,7 +220,7 @@ tests:
       prompt: 'This has something else'
     assert:
       - type: not-contains
-        value: file://rubric-generator.js:knownValue
+        value: file://rubric-generator.cjs:knownValue
 
   # Test 23: contains-all with file:// returning array
   - description: 'contains-all with file:// array return'
@@ -228,7 +228,7 @@ tests:
       prompt: 'Has reference one and reference two'
     assert:
       - type: contains-all
-        value: file://rubric-generator.js:referenceArray
+        value: file://rubric-generator.cjs:referenceArray
 
   # Test 24: contains with file:// numeric return
   - description: 'contains with file:// numeric return'
@@ -236,7 +236,7 @@ tests:
       prompt: 'The answer is 42'
     assert:
       - type: contains
-        value: file://rubric-generator.js:numericValue
+        value: file://rubric-generator.cjs:numericValue
 
   # ===========================================
   # EDGE CASES
@@ -248,7 +248,7 @@ tests:
       prompt: ''
     assert:
       - type: equals
-        value: file://rubric-generator.js:emptyValue
+        value: file://rubric-generator.cjs:emptyValue
 
   # Test 26: Nunjucks template in direct value
   - description: 'llm-rubric with nunjucks template'
@@ -279,7 +279,7 @@ tests:
       prompt: 'contains expected keyword'
     assert:
       - type: javascript
-        value: file://rubric-generator.js:gradingFunction
+        value: file://rubric-generator.cjs:gradingFunction
 
   # Test 29: javascript assertion inline (regression test)
   - description: 'javascript assertion inline (regression test)'

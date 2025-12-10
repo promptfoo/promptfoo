@@ -2,11 +2,6 @@ import { Router } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import cliState from '../../cliState';
 import logger from '../../logger';
-<<<<<<< HEAD
-import { REDTEAM_MODEL } from '../../redteam/constants';
-import { Plugins } from '../../redteam/plugins';
-import { getRedteamProvider } from '../../redteam/providers/shared';
-=======
 import {
   REDTEAM_MODEL,
   ALL_PLUGINS,
@@ -18,7 +13,6 @@ import {
 } from '../../redteam/constants';
 import { PluginFactory, Plugins } from '../../redteam/plugins/index';
 import { redteamProviderManager } from '../../redteam/providers/shared';
->>>>>>> origin/main
 import { getRemoteGenerationUrl } from '../../redteam/remoteGeneration';
 import { doRedteamRun } from '../../redteam/shared';
 import { Strategies } from '../../redteam/strategies/index';
@@ -106,14 +100,7 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
     const injectVar = 'query';
 
     // Get the red team provider
-<<<<<<< HEAD
-    const redteamProvider = await getRedteamProvider({
-      provider: config?.provider || REDTEAM_MODEL,
-      enforceJson: false,
-    });
-=======
     const redteamProvider = await redteamProviderManager.getProvider({ provider: REDTEAM_MODEL });
->>>>>>> origin/main
 
     const testCases = await pluginFactory.action({
       provider: redteamProvider,

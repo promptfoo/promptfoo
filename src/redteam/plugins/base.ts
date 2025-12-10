@@ -2,18 +2,7 @@ import dedent from 'dedent';
 
 import logger from '../../logger';
 import { matchesLlmRubric } from '../../matchers';
-<<<<<<< HEAD
-import { maybeLoadToolsFromExternalFile } from '../../util';
-import { retryWithDeduplication, sampleArray } from '../../util/generation';
-import invariant from '../../util/invariant';
-import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
-import { sleep } from '../../util/time';
-import { getRedteamProvider } from '../providers/shared';
-import { getShortPluginId, isBasicRefusal, isEmptyResponse, removePrefix } from '../util';
-
-=======
 import type { TraceContextData } from '../../tracing/traceContext';
->>>>>>> origin/main
 import type {
   ApiProvider,
   Assertion,
@@ -500,25 +489,9 @@ export abstract class RedteamGraderBase {
 
     const grade = (await matchesLlmRubric(finalRubric, llmOutput, {
       ...test.options,
-<<<<<<< HEAD
-      provider: await getRedteamProvider({
-        provider:
-          // First try loading the provider from defaultTest, otherwise fall back to the default red team provider.
-          (typeof cliState.config?.defaultTest === 'object' &&
-            cliState.config?.defaultTest?.provider) ||
-          (typeof cliState.config?.defaultTest === 'object' &&
-            cliState.config?.defaultTest?.options?.provider?.text) ||
-          (typeof cliState.config?.defaultTest === 'object' &&
-            cliState.config?.defaultTest?.options?.provider) ||
-          undefined,
-        enforceJson: true,
-      }),
-    });
-=======
       provider: await redteamProviderManager.getGradingProvider({ jsonOnly: true }),
     })) as GradingResult;
 
->>>>>>> origin/main
     logger.debug(`Redteam grading result for ${this.id}: - ${JSON.stringify(grade)}`);
 
     let suggestions: ResultSuggestion[] | undefined;

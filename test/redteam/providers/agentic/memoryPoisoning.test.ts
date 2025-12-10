@@ -1,25 +1,25 @@
+import { Mocked, MockInstance, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryPoisoningProvider } from '../../../../src/redteam/providers/agentic/memoryPoisoning';
-
 import type { ApiProvider, CallApiContextParams } from '../../../../src/types/providers';
 
 describe('MemoryPoisoningProvider', () => {
   let provider: MemoryPoisoningProvider;
-  let mockTargetProvider: jest.Mocked<ApiProvider>;
-  let mockFetch: jest.SpyInstance;
+  let mockTargetProvider: Mocked<ApiProvider>;
+  let mockFetch: MockInstance;
 
   beforeEach(() => {
     provider = new MemoryPoisoningProvider({});
 
     mockTargetProvider = {
-      id: jest.fn(),
-      callApi: jest.fn(),
+      id: vi.fn(),
+      callApi: vi.fn(),
     };
 
-    mockFetch = jest.spyOn(global, 'fetch').mockImplementation();
+    mockFetch = vi.spyOn(global, 'fetch').mockImplementation(() => Promise.resolve(new Response()));
   });
 
   afterEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   it('should have correct ID', () => {
@@ -121,9 +121,10 @@ describe('MemoryPoisoningProvider', () => {
     expect(context.test?.metadata?.scenario).toEqual(scenario);
 
     expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(3);
-    expect(mockTargetProvider.callApi).toHaveBeenCalledWith('memory text', context);
-    expect(mockTargetProvider.callApi).toHaveBeenCalledWith('test prompt', context);
-    expect(mockTargetProvider.callApi).toHaveBeenCalledWith('follow up text', context);
+    // Third argument is options (undefined when not provided)
+    expect(mockTargetProvider.callApi).toHaveBeenCalledWith('memory text', context, undefined);
+    expect(mockTargetProvider.callApi).toHaveBeenCalledWith('test prompt', context, undefined);
+    expect(mockTargetProvider.callApi).toHaveBeenCalledWith('follow up text', context, undefined);
   });
 
   it('should handle errors during execution', async () => {
@@ -141,5 +142,125 @@ describe('MemoryPoisoningProvider', () => {
     };
 
     await expect(provider.callApi('test', context)).rejects.toThrow('Network error');
+  });
+
+  describe('Abort Signal Handling', () => {
+    it('should pass abortSignal to fetchWithProxy (scenario generation)', async () => {
+      const abortController = new AbortController();
+      const options = { abortSignal: abortController.signal };
+
+      const scenario = {
+        memory: 'memory text',
+        followUp: 'follow up text',
+      };
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(scenario),
+      } as Response);
+
+      mockTargetProvider.callApi
+        .mockResolvedValueOnce({ output: 'memory response' })
+        .mockResolvedValueOnce({ output: 'test response' })
+        .mockResolvedValueOnce({ output: 'follow up response' });
+
+      const context: CallApiContextParams = {
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+        vars: {},
+        originalProvider: mockTargetProvider,
+        test: {
+          metadata: {
+            purpose: 'test purpose',
+          },
+        },
+      };
+
+      await provider.callApi('test prompt', context, options);
+
+      // Verify fetch was called with a signal in the options (fetchWithProxy combines signals internally)
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.any(Object),
+          body: expect.any(String),
+          signal: expect.any(Object), // The abort signal is passed in options.signal
+        }),
+      );
+    });
+
+    it('should pass options to target provider callApi calls', async () => {
+      const abortController = new AbortController();
+      const options = { abortSignal: abortController.signal };
+
+      const scenario = {
+        memory: 'memory text',
+        followUp: 'follow up text',
+      };
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(scenario),
+      } as Response);
+
+      mockTargetProvider.callApi
+        .mockResolvedValueOnce({ output: 'memory response' })
+        .mockResolvedValueOnce({ output: 'test response' })
+        .mockResolvedValueOnce({ output: 'follow up response' });
+
+      const context: CallApiContextParams = {
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+        vars: {},
+        originalProvider: mockTargetProvider,
+        test: {
+          metadata: {
+            purpose: 'test purpose',
+          },
+        },
+      };
+
+      await provider.callApi('test prompt', context, options);
+
+      // All three target provider calls should receive the options
+      expect(mockTargetProvider.callApi).toHaveBeenCalledTimes(3);
+      expect(mockTargetProvider.callApi).toHaveBeenNthCalledWith(
+        1,
+        'memory text',
+        context,
+        options,
+      );
+      expect(mockTargetProvider.callApi).toHaveBeenNthCalledWith(
+        2,
+        'test prompt',
+        context,
+        options,
+      );
+      expect(mockTargetProvider.callApi).toHaveBeenNthCalledWith(
+        3,
+        'follow up text',
+        context,
+        options,
+      );
+    });
+
+    it('should re-throw AbortError and not swallow it', async () => {
+      const abortError = new Error('The operation was aborted');
+      abortError.name = 'AbortError';
+
+      mockFetch.mockRejectedValueOnce(abortError);
+
+      const context: CallApiContextParams = {
+        prompt: { raw: 'test', display: 'test', label: 'test' },
+        vars: {},
+        originalProvider: mockTargetProvider,
+        test: {
+          metadata: {
+            purpose: 'test purpose',
+          },
+        },
+      };
+
+      await expect(provider.callApi('test', context)).rejects.toThrow('The operation was aborted');
+    });
   });
 });

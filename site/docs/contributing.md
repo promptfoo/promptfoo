@@ -42,8 +42,10 @@ We particularly welcome contributions in the following areas:
    3.1. Setup locally
 
    ```bash
-   # We recommend using the Node.js version specified in the .nvmrc file (ensure node >= 20)
+   # Use the Node.js version specified in .nvmrc (node >= 20 required)
    nvm use
+
+   # Install dependencies (npm, pnpm, or yarn all work)
    npm install
    ```
 
@@ -130,7 +132,7 @@ Don't hesitate to ask for help. We're here to support you. If you're worried abo
 
 ### Running Tests
 
-We use Jest for testing. To run the test suite:
+We use both Vitest and Jest. To run the test suite:
 
 ```bash
 npm test
@@ -142,33 +144,28 @@ To run tests in watch mode:
 npm run test:watch
 ```
 
-You can also run specific tests with (see [jest documentation](https://jestjs.io/docs/cli#jest-regexfortestfiles)):
+You can also run specific tests with:
 
 ```bash
+# Vitest
+npx vitest [pattern]
+
+# Jest
 npx jest [pattern]
 
 # Example:
 # Runs all provider tests
-npx jest providers
+npx vitest providers
 ```
 
 ### Writing Tests
 
 When writing tests, please:
 
-- Run the test suite you modified with the `--randomize` flag to ensure your mocks setup and teardown are not affecting other tests.
-
-  ```bash
-  # Run specific test file with randomization
-  npx jest path/to/your/test.test.ts --randomize
-
-  # Run all tests in a directory with randomization
-  npm run test -- --testPathPattern="test/providers" --randomize
-  ```
-
+- **Use Vitest for new test files.** When modifying existing files, use whichever framework that file uses.
 - Ensure proper test isolation by:
   - Using `beforeEach` and `afterEach` to set up and clean up mocks
-  - Calling `jest.clearAllMocks()` or `jest.restoreAllMocks()` as appropriate
+  - Calling `vi.clearAllMocks()` or `vi.restoreAllMocks()` for Vitest (or `jest.clearAllMocks()` for Jest)
   - Avoiding shared state between tests
 - Check the coverage report to ensure your changes are covered.
 - Avoid adding additional logs to the console.
@@ -438,78 +435,21 @@ You can view the contents of each of these tables by running `npx drizzle-kit st
    npm run db:migrate
    ```
 
-### Release Steps
+### Release Process
 
-Note: releases are only issued by maintainers. If you need to to release a new version quickly please send a message on [Discord](https://discord.gg/promptfoo).
+This project uses [release-please](https://github.com/googleapis/release-please) for automated releases:
 
-As a maintainer, when you are ready to release a new version:
+1. Merge PRs to main with conventional commit messages
+2. release-please creates/updates a release PR with changelog entries, version bumps, and updated `package.json`
+3. When merged, a GitHub release is created and the npm package is published
 
-1. From main, run `npm version <minor|patch>`. We do not increment the major version per our adoption of [0ver](https://0ver.org/). This will automatically:
-   - Pull latest changes from main branch
-   - Update `package.json`, `package-lock.json` and `CITATION.cff` with the new version
-   - Create a new branch named `chore/bump-version-<new-version>`
-   - Create a pull request titled `"chore: bump version <new-version>"`
-
-   When creating a new release version, please follow these guidelines:
-   - Patch will bump the version by `0.0.1` and is used for bug fixes and minor features
-   - Minor will bump the version by `0.1.0` and is used for major features and breaking changes
-
-   To determine the appropriate release type, review the changes between the latest release and main branch by visiting ([example](https://github.com/promptfoo/promptfoo/compare/0.103.13...main)):
-
-   ```
-   https://github.com/promptfoo/promptfoo/compare/[latest-version]...main
-   ```
-
-2. Once your PR is approved and landed, a version tag will be created automatically by a GitHub Action. After the version tag has been created, generate a [new release](https://github.com/promptfoo/promptfoo/releases/new) based on the tagged version.
-
-3. Update `CHANGELOG.md`:
-   - Move all entries from `## [Unreleased]` to a new version section
-   - Format: `## [X.Y.Z] - YYYY-MM-DD`
-   - Keep entries organized by category (Added, Changed, Fixed, etc.)
-   - The release notes will be based on these changelog entries
-
-4. Cleanup the release notes. You can look at [this](https://github.com/promptfoo/promptfoo/releases/tag/0.103.13) release as an example
-   - Break up each PR in the release into one of the following 5 sections (as applicable)
-     - New Features
-     - Bug Fixes
-     - Chores
-     - Docs
-     - Dependencies
-   - Sort the lines in each section alphabetically
-   - Ensure that the author of the PR is correctly cited
-
-5. A GitHub Action should automatically publish the package to npm. If it does not, please publish manually.
+For urgent releases, contact maintainers on [Discord](https://discord.gg/promptfoo).
 
 ## Changelog
 
-All PRs should include an entry in `CHANGELOG.md` under the `## [Unreleased]` section. This is enforced by a GitHub Action.
+**Do not manually edit `CHANGELOG.md`.** release-please generates entries from conventional commit messages.
 
-We follow the [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format with these categories:
-
-- **Added**: New features
-- **Changed**: Changes to existing functionality
-- **Fixed**: Bug fixes
-- **Dependencies**: Dependency updates
-- **Documentation**: Documentation changes
-- **Tests**: Test changes
-
-### Entry Format
-
-```markdown
-- feat(providers): add new provider for XYZ (#1234)
-- fix(evaluator): correct scoring for edge case (#1235)
-```
-
-Each entry must include the PR number and use a conventional commit prefix.
-
-### Bypass Labels
-
-PRs can skip the changelog requirement with these labels:
-
-- `no-changelog` - For exceptional cases (automated bot PRs, reverts)
-- `dependencies` - For automated dependency updates (Dependabot, Renovate)
-
-If the GitHub Action reminds you to update the changelog, either add an entry or apply an appropriate label.
+Use [Conventional Commits](https://www.conventionalcommits.org/) format for PR titles (they become squash-merge commit messages).
 
 ## Getting Help
 

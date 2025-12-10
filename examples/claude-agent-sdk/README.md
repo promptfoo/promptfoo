@@ -88,6 +88,22 @@ This example shows Claude Agent SDK integration with:
 (cd mcp && promptfoo eval)
 ```
 
+### Structured Output
+
+This example demonstrates Claude Agent SDK's structured output feature, which returns validated JSON that conforms to a schema. It includes:
+
+- **JSON schema validation**: Define expected output structure with types, enums, and required fields
+- **Code analysis task**: Agent analyzes a Python function for bugs
+- **Assertion testing**: Validates that output matches expected schema and contains correct analysis
+
+**Location**: `./structured-output/`
+
+**Usage**:
+
+```bash
+(cd structured-output && promptfoo eval)
+```
+
 ### Cyber Espionage Red Team
 
 This example demonstrates testing AI agents against cyber espionage attack patterns based on Anthropic's ["Disrupting AI Espionage"](https://www.anthropic.com/news/disrupting-AI-espionage) blog post. It includes:

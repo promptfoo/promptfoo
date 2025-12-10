@@ -1,5 +1,6 @@
 import * as os from 'os';
 import * as path from 'path';
+import fs from 'fs';
 
 import { getEnvString } from '../../envars';
 
@@ -15,7 +16,6 @@ export function getConfigDirectoryPath(createIfNotExists: boolean = false): stri
   // Only perform filesystem operations in Node.js environment
   if (createIfNotExists && isNodeEnvironment) {
     try {
-      const fs = require('fs');
       if (!fs.existsSync(p)) {
         fs.mkdirSync(p, { recursive: true });
       }

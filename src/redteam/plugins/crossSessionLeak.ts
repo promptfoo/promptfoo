@@ -3,7 +3,7 @@ import logger from '../../logger';
 import { extractJsonObjects } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { MULTI_TURN_STRATEGIES } from '../constants/strategies';
-import { getRedteamProvider } from '../providers/shared';
+import { redteamProviderManager } from '../providers/shared';
 import { getShortPluginId } from '../util';
 import { RedteamGraderBase, RedteamPluginBase, type RedteamGradingContext } from './base';
 
@@ -88,9 +88,9 @@ export class CrossSessionLeakPlugin extends RedteamPluginBase {
       n,
     });
     const finalTemplate = RedteamPluginBase.appendModifiers(renderedTemplate, this.config);
-    const provider = await getRedteamProvider({
+    const provider = await redteamProviderManager.getProvider({
       provider: this.provider,
-      enforceJson: true,
+      jsonOnly: true,
     });
 
     const { output, error } = await provider.callApi(finalTemplate);

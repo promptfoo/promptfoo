@@ -2,12 +2,12 @@
 sidebar_position: 2
 sidebar_label: Reference
 title: Configuration Reference - Complete API Documentation
-description: Comprehensive reference for all promptfoo configuration options, properties, and settings. Complete API documentation for eval setup.
+description: Comprehensive reference for all promptfoo configuration options, properties, and settings. Complete API documentation for evaluation setup.
 keywords:
   [
     promptfoo reference,
     configuration API,
-    eval options,
+    evaluation options,
     provider settings,
     test configuration,
     assertion types,
@@ -22,110 +22,109 @@ Here is the main structure of the promptfoo configuration file:
 
 ### Config
 
-| Property                        | Type                                                                                             | Required | Description                                                                                                                                                                                                 |
-| ------------------------------- | ------------------------------------------------------------------------------------------------ | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| description                     | string                                                                                           | No       | Optional description of what your LLM is trying to do                                                                                                                                                       |
-| tags                            | Record\<string, string\>                                                                         | No       | Optional tags to describe the test suite (e.g. `env: production`, `application: chatbot`)                                                                                                                   |
-| providers                       | string \| string[] \| [Record\<string, ProviderOptions\>](#provideroptions) \| ProviderOptions[] | Yes      | One or more [LLM APIs](/docs/providers) to use                                                                                                                                                              |
-| prompts                         | string \| string[]                                                                               | Yes      | One or more prompts to load                                                                                                                                                                                 |
-| tests                           | string \| [Test Case](#test-case)[]                                                              | Yes      | Path to a test file, OR list of LLM prompt variations (aka "test case")                                                                                                                                     |
-| defaultTest                     | string \| Partial [Test Case](#test-case)                                                        | No       | Sets the default properties for each test case. Can be an inline object or a `file://` path to an external YAML/JSON file.                                                                                  |
-| redteam                         | object                                                                                           | No       | Configuration for red team test generation. See [Red Team Configuration](/docs/red-team/configuration) for details.                                                                                         |
-| outputPath                      | string                                                                                           | No       | Where to write output. Writes to console/web viewer if not set.                                                                                                                                             |
-| evaluateOptions.maxConcurrency  | number                                                                                           | No       | Maximum number of concurrent requests. Defaults to 4                                                                                                                                                        |
-| evaluateOptions.repeat          | number                                                                                           | No       | Number of times to run each test case . Defaults to 1                                                                                                                                                       |
-| evaluateOptions.delay           | number                                                                                           | No       | Force the test runner to wait after each API call (milliseconds)                                                                                                                                            |
-| evaluateOptions.showProgressBar | boolean                                                                                          | No       | Whether to display the progress bar                                                                                                                                                                         |
-| evaluateOptions.cache           | boolean                                                                                          | No       | Whether to use disk cache for results (default: true)                                                                                                                                                       |
-| evaluateOptions.timeoutMs       | number                                                                                           | No       | Timeout in milliseconds for each individual test case/provider API call. When reached, that specific test is marked as an error. Default is 0 (no timeout).                                                 |
-| evaluateOptions.maxEvalTimeMs   | number                                                                                           | No       | Maximum total runtime in milliseconds for the entire eval process. When reached, all remaining tests are marked as errors and the eval ends. Default is 0 (no limit).                                       |
-| extensions                      | string[]                                                                                         | No       | List of extension files to load. Each extension is a file path with a function name. Can be Python (.py) or JavaScript (.js) files. Supported hooks are 'beforeAll', 'afterAll', 'beforeEach', 'afterEach'. |
-| env                             | Record\<string, string \| number \| boolean\>                                                    | No       | Environment variables to set for the test run. These values will override existing environment variables. Can be used to set API keys and other configuration values needed by providers.                   |
-| commandLineOptions              | [CommandLineOptions](#commandlineoptions)                                                        | No       | Default values for command-line options. These values will be used unless overridden by actual command-line arguments.                                                                                      |
+| Property                        | Type                                                                                             | Required | Description                                                                                                                                                                                                                     |
+| ------------------------------- | ------------------------------------------------------------------------------------------------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| description                     | string                                                                                           | No       | Optional description of what your LLM is trying to do                                                                                                                                                                           |
+| tags                            | Record\<string, string\>                                                                         | No       | Optional tags to describe the test suite (e.g. `env: production`, `application: chatbot`)                                                                                                                                       |
+| providers                       | string \| string[] \| [Record\<string, ProviderOptions\>](#provideroptions) \| ProviderOptions[] | Yes      | One or more [LLM APIs](/docs/providers) to use                                                                                                                                                                                  |
+| prompts                         | string \| string[]                                                                               | Yes      | One or more [prompts](/docs/configuration/prompts) to load                                                                                                                                                                      |
+| tests                           | string \| [Test Case](#test-case)[]                                                              | Yes      | Path to a [test file](/docs/configuration/test-cases), OR list of LLM prompt variations (aka "test case")                                                                                                                       |
+| defaultTest                     | string \| Partial [Test Case](#test-case)                                                        | No       | Sets the [default properties](/docs/configuration/guide#default-test-cases) for each test case. Can be an inline object or a `file://` path to an external YAML/JSON file.                                                      |
+| outputPath                      | string                                                                                           | No       | Where to write output. Writes to console/web viewer if not set. See [output formats](/docs/configuration/outputs).                                                                                                              |
+| evaluateOptions.maxConcurrency  | number                                                                                           | No       | Maximum number of concurrent requests. Defaults to 4                                                                                                                                                                            |
+| evaluateOptions.repeat          | number                                                                                           | No       | Number of times to run each test case. Defaults to 1                                                                                                                                                                            |
+| evaluateOptions.delay           | number                                                                                           | No       | Force the test runner to wait after each API call (milliseconds)                                                                                                                                                                |
+| evaluateOptions.showProgressBar | boolean                                                                                          | No       | Whether to display the progress bar                                                                                                                                                                                             |
+| evaluateOptions.cache           | boolean                                                                                          | No       | Whether to use disk [cache](/docs/configuration/caching) for results (default: true)                                                                                                                                            |
+| evaluateOptions.timeoutMs       | number                                                                                           | No       | Timeout in milliseconds for each individual test case/provider API call. When reached, that specific test is marked as an error. Default is 0 (no timeout).                                                                     |
+| evaluateOptions.maxEvalTimeMs   | number                                                                                           | No       | Maximum total runtime in milliseconds for the entire evaluation process. When reached, all remaining tests are marked as errors and the evaluation ends. Default is 0 (no limit).                                               |
+| extensions                      | string[]                                                                                         | No       | List of [extension files](#extension-hooks) to load. Each extension is a file path with a function name. Can be Python (.py) or JavaScript (.js) files. Supported hooks are 'beforeAll', 'afterAll', 'beforeEach', 'afterEach'. |
+| env                             | Record\<string, string \| number \| boolean\>                                                    | No       | Environment variables to set for the test run. These values will override existing environment variables. Can be used to set API keys and other configuration values needed by providers.                                       |
+| commandLineOptions              | [CommandLineOptions](#commandlineoptions)                                                        | No       | Default values for command-line options. These values will be used unless overridden by actual command-line arguments.                                                                                                          |
 
 ### Test Case
 
 A test case represents a single example input that is fed into all prompts and providers.
 
-| Property              | Type                                                            | Required | Description                                                                                                                                 |
-| --------------------- | --------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| description           | string                                                          | No       | Description of what you're testing                                                                                                          |
-| vars                  | Record\<string, string \| string[] \| object \| any\> \| string | No       | Key-value pairs to substitute in the prompt. If `vars` is a plain string, it will be treated as a YAML filepath to load a var mapping from. |
-| provider              | string \| ProviderOptions \| ApiProvider                        | No       | Override the default provider for this specific test case                                                                                   |
-| assert                | [Assertion](#assertion)[]                                       | No       | List of automatic checks to run on the LLM output                                                                                           |
-| threshold             | number                                                          | No       | Test will fail if the combined score of assertions is less than this number                                                                 |
-| metadata              | Record\<string, string \| string[] \| any\>                     | No       | Additional metadata to include with the test case, useful for filtering or grouping results                                                 |
-| options               | Object                                                          | No       | Additional configuration settings for the test case                                                                                         |
-| options.transformVars | string                                                          | No       | A filepath (js or py) or JavaScript snippet that runs on the vars before they are substituted into the prompt                               |
-| options.transform     | string                                                          | No       | A filepath (js or py) or JavaScript snippet that runs on LLM output before any assertions                                                   |
-| options.prefix        | string                                                          | No       | Text to prepend to the prompt                                                                                                               |
-| options.suffix        | string                                                          | No       | Text to append to the prompt                                                                                                                |
-| options.provider      | string                                                          | No       | The API provider to use for LLM rubric grading                                                                                              |
-| options.runSerially   | boolean                                                         | No       | If true, run this test case without concurrency regardless of global settings                                                               |
-| options.storeOutputAs | string                                                          | No       | The output of this test will be stored as a variable, which can be used in subsequent tests                                                 |
-| options.rubricPrompt  | string \| string[]                                              | No       | Model-graded LLM prompt                                                                                                                     |
+| Property              | Type                                                            | Required | Description                                                                                                                                                                                                                            |
+| --------------------- | --------------------------------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| description           | string                                                          | No       | Description of what you're testing                                                                                                                                                                                                     |
+| vars                  | Record\<string, string \| string[] \| object \| any\> \| string | No       | Key-value pairs to substitute in the prompt. If `vars` is a plain string, it will be treated as a YAML filepath to load a var mapping from. See [Test Case Configuration](/docs/configuration/test-cases) for loading vars from files. |
+| provider              | string \| ProviderOptions \| ApiProvider                        | No       | Override the default [provider](/docs/providers) for this specific test case                                                                                                                                                           |
+| assert                | [Assertion](#assertion)[]                                       | No       | List of automatic checks to run on the LLM output. See [assertions & metrics](/docs/configuration/expected-outputs) for all available types.                                                                                           |
+| threshold             | number                                                          | No       | Test will fail if the combined score of assertions is less than this number                                                                                                                                                            |
+| metadata              | Record\<string, string \| string[] \| any\>                     | No       | Additional metadata to include with the test case, useful for [filtering](/docs/configuration/test-cases#metadata-in-csv) or grouping results                                                                                          |
+| options               | Object                                                          | No       | Additional configuration settings for the test case                                                                                                                                                                                    |
+| options.transformVars | string                                                          | No       | A filepath (js or py) or JavaScript snippet that runs on the vars before they are substituted into the prompt. See [transforming input variables](/docs/configuration/guide#transforming-input-variables).                             |
+| options.transform     | string                                                          | No       | A filepath (js or py) or JavaScript snippet that runs on LLM output before any assertions. See [transforming outputs](/docs/configuration/guide#transforming-outputs).                                                                 |
+| options.prefix        | string                                                          | No       | Text to prepend to the prompt                                                                                                                                                                                                          |
+| options.suffix        | string                                                          | No       | Text to append to the prompt                                                                                                                                                                                                           |
+| options.provider      | string                                                          | No       | The API provider to use for [model-graded](/docs/configuration/expected-outputs/model-graded) assertion grading                                                                                                                        |
+| options.runSerially   | boolean                                                         | No       | If true, run this test case without concurrency regardless of global settings                                                                                                                                                          |
+| options.storeOutputAs | string                                                          | No       | The output of this test will be stored as a variable, which can be used in subsequent tests. See [multi-turn conversations](/docs/configuration/chat#using-storeoutputas).                                                             |
+| options.rubricPrompt  | string \| string[]                                              | No       | Custom prompt for [model-graded](/docs/configuration/expected-outputs/model-graded) assertions                                                                                                                                         |
 
 ### Assertion
 
 More details on using assertions, including examples [here](/docs/configuration/expected-outputs).
 
-| Property         | Type   | Required | Description                                                                                                                                                                                                                                                                            |
-| ---------------- | ------ | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| type             | string | Yes      | Type of assertion                                                                                                                                                                                                                                                                      |
-| value            | string | No       | The expected value, if applicable                                                                                                                                                                                                                                                      |
-| threshold        | number | No       | The threshold value, applicable only to certain types such as `similar`, `cost`, `javascript`, `python`                                                                                                                                                                                |
-| provider         | string | No       | Some assertions (type = similar, llm-rubric, model-graded-\*) require an [LLM provider](/docs/providers)                                                                                                                                                                               |
-| metric           | string | No       | The label for this result. Assertions with the same `metric` will be aggregated together                                                                                                                                                                                               |
-| contextTransform | string | No       | Javascript expression to dynamically construct context for [context-based assertions](/docs/configuration/expected-outputs/model-graded#context-based). See [Context Transform](/docs/configuration/expected-outputs/model-graded#dynamically-via-context-transform) for more details. |
+| Property         | Type   | Required | Description                                                                                                                                                                                                                                                                                                          |
+| ---------------- | ------ | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| type             | string | Yes      | Type of assertion. See [assertion types](/docs/configuration/expected-outputs#assertion-types) for all available types.                                                                                                                                                                                              |
+| value            | string | No       | The expected value, if applicable                                                                                                                                                                                                                                                                                    |
+| threshold        | number | No       | The threshold value, applicable only to certain types such as [`similar`](/docs/configuration/expected-outputs/similar), [`cost`](/docs/configuration/expected-outputs/deterministic#cost), [`javascript`](/docs/configuration/expected-outputs/javascript), [`python`](/docs/configuration/expected-outputs/python) |
+| provider         | string | No       | Some assertions (type = [`similar`](/docs/configuration/expected-outputs/similar), [`llm-rubric`](/docs/configuration/expected-outputs/model-graded/llm-rubric), [model-graded-\*](/docs/configuration/expected-outputs/model-graded)) require an [LLM provider](/docs/providers)                                    |
+| metric           | string | No       | The label for this result. Assertions with the same `metric` will be aggregated together. See [named metrics](/docs/configuration/expected-outputs#defining-named-metrics).                                                                                                                                          |
+| contextTransform | string | No       | Javascript expression to dynamically construct context for [context-based assertions](/docs/configuration/expected-outputs/model-graded#context-based). See [Context Transform](/docs/configuration/expected-outputs/model-graded#dynamically-via-context-transform) for more details.                               |
 
 ### CommandLineOptions
 
 Set default values for command-line options. These defaults will be used unless overridden by command-line arguments.
 
-| Property                 | Type     | Description                                                                     |
-| ------------------------ | -------- | ------------------------------------------------------------------------------- |
-| **Basic Configuration**  |          |                                                                                 |
-| description              | string   | Description of what your LLM is trying to do                                    |
-| config                   | string[] | Path(s) to configuration files                                                  |
-| envPath                  | string   | Path to .env file to load environment variables from                            |
-| **Input Files**          |          |                                                                                 |
-| prompts                  | string[] | One or more paths to prompt files                                               |
-| providers                | string[] | One or more LLM provider identifiers                                            |
-| tests                    | string   | Path to CSV file with test cases                                                |
-| vars                     | string   | Path to CSV file with test variables                                            |
-| assertions               | string   | Path to assertions file                                                         |
-| modelOutputs             | string   | Path to JSON file containing model outputs                                      |
-| **Prompt Modifications** |          |                                                                                 |
-| promptPrefix             | string   | Text to prepend to every prompt                                                 |
-| promptSuffix             | string   | Text to append to every prompt                                                  |
-| generateSuggestions      | boolean  | Generate new prompts and append them to the prompt list                         |
-| **Test Execution**       |          |                                                                                 |
-| maxConcurrency           | number   | Maximum number of concurrent requests                                           |
-| repeat                   | number   | Number of times to run each test case                                           |
-| delay                    | number   | Delay between API calls in milliseconds                                         |
-| grader                   | string   | Model that will grade outputs                                                   |
-| var                      | object   | Set test variables as key-value pairs (e.g. `{key1: 'value1', key2: 'value2'}`) |
-| **Filtering**            |          |                                                                                 |
-| filterPattern            | string   | Only run tests whose description matches the regular expression pattern         |
-| filterProviders          | string   | Only run tests with providers matching this regex                               |
-| filterTargets            | string   | Only run tests with targets matching this regex (alias for filterProviders)     |
-| filterFirstN             | number   | Only run the first N test cases                                                 |
-| filterSample             | number   | Run a random sample of N test cases                                             |
-| filterMetadata           | string   | Only run tests matching metadata filter (JSON format)                           |
-| filterErrorsOnly         | string   | Only run tests that resulted in errors (expects previous output path)           |
-| filterFailing            | string   | Only run tests that failed assertions (expects previous output path)            |
-| **Output & Display**     |          |                                                                                 |
-| output                   | string[] | Output file paths (csv, txt, json, yaml, yml, html)                             |
-| table                    | boolean  | Show output table (default: true, disable with --no-table)                      |
-| tableCellMaxLength       | number   | Maximum length of table cells in console output                                 |
-| progressBar              | boolean  | Whether to display progress bar during eval                                     |
-| verbose                  | boolean  | Enable verbose output                                                           |
-| share                    | boolean  | Whether to create a shareable URL                                               |
-| **Caching & Storage**    |          |                                                                                 |
-| cache                    | boolean  | Whether to use disk cache for results (default: true)                           |
-| write                    | boolean  | Whether to write results to promptfoo directory (default: true)                 |
-| **Other Options**        |          |                                                                                 |
-| watch                    | boolean  | Whether to watch for config changes and re-run automatically                    |
+| Property                 | Type     | Description                                                                                                           |
+| ------------------------ | -------- | --------------------------------------------------------------------------------------------------------------------- |
+| **Basic Configuration**  |          |                                                                                                                       |
+| description              | string   | Description of what your LLM is trying to do                                                                          |
+| config                   | string[] | Path(s) to configuration files                                                                                        |
+| envPath                  | string   | Path to .env file to load environment variables from                                                                  |
+| **Input Files**          |          |                                                                                                                       |
+| prompts                  | string[] | One or more paths to [prompt files](/docs/configuration/prompts)                                                      |
+| providers                | string[] | One or more [LLM provider](/docs/providers) identifiers                                                               |
+| tests                    | string   | Path to CSV file with [test cases](/docs/configuration/test-cases)                                                    |
+| vars                     | string   | Path to CSV file with test variables                                                                                  |
+| assertions               | string   | Path to [assertions](/docs/configuration/expected-outputs) file                                                       |
+| modelOutputs             | string   | Path to JSON file containing model outputs                                                                            |
+| **Prompt Modifications** |          |                                                                                                                       |
+| promptPrefix             | string   | Text to prepend to every prompt                                                                                       |
+| promptSuffix             | string   | Text to append to every prompt                                                                                        |
+| generateSuggestions      | boolean  | Generate new prompts and append them to the prompt list                                                               |
+| **Test Execution**       |          |                                                                                                                       |
+| maxConcurrency           | number   | Maximum number of concurrent requests                                                                                 |
+| repeat                   | number   | Number of times to run each test case                                                                                 |
+| delay                    | number   | Delay between API calls in milliseconds                                                                               |
+| grader                   | string   | [Provider](/docs/providers) that will grade [model-graded](/docs/configuration/expected-outputs/model-graded) outputs |
+| var                      | object   | Set test variables as key-value pairs (e.g. `{key1: 'value1', key2: 'value2'}`)                                       |
+| **Filtering**            |          |                                                                                                                       |
+| filterPattern            | string   | Only run tests whose description matches the regular expression pattern                                               |
+| filterProviders          | string   | Only run tests with providers matching this regex                                                                     |
+| filterTargets            | string   | Only run tests with targets matching this regex (alias for filterProviders)                                           |
+| filterFirstN             | number   | Only run the first N test cases                                                                                       |
+| filterSample             | number   | Run a random sample of N test cases                                                                                   |
+| filterMetadata           | string   | Only run tests matching metadata filter (JSON format)                                                                 |
+| filterErrorsOnly         | string   | Only run tests that resulted in errors (expects previous output path)                                                 |
+| filterFailing            | string   | Only run tests that failed assertions (expects previous output path)                                                  |
+| **Output & Display**     |          |                                                                                                                       |
+| output                   | string[] | [Output file](/docs/configuration/outputs) paths (csv, txt, json, yaml, yml, html)                                    |
+| table                    | boolean  | Show output table (default: true, disable with --no-table)                                                            |
+| tableCellMaxLength       | number   | Maximum length of table cells in console output                                                                       |
+| progressBar              | boolean  | Whether to display progress bar during evaluation                                                                     |
+| verbose                  | boolean  | Enable verbose output                                                                                                 |
+| share                    | boolean  | Whether to create a shareable URL                                                                                     |
+| **Caching & Storage**    |          |                                                                                                                       |
+| cache                    | boolean  | Whether to use disk [cache](/docs/configuration/caching) for results (default: true)                                  |
+| write                    | boolean  | Whether to write results to promptfoo directory (default: true)                                                       |
+| **Other Options**        |          |                                                                                                                       |
+| watch                    | boolean  | Whether to watch for config changes and re-run automatically                                                          |
 
 #### Example
 
@@ -136,7 +135,7 @@ prompts:
   - prompt2.txt
 
 providers:
-  - openai:gpt-4
+  - openai:gpt-5
 
 tests: tests.csv
 
@@ -147,7 +146,7 @@ commandLineOptions:
   repeat: 3
   delay: 1000
   verbose: true
-  grader: openai:gpt-4o-mini
+  grader: openai:gpt-5-mini
   table: true
   cache: false
   tableCellMaxLength: 100
@@ -179,7 +178,7 @@ npx promptfoo eval --max-concurrency 5
 
 ### AssertionValueFunctionContext
 
-When using JavaScript or Python assertions, your function receives a context object with the following interface:
+When using [JavaScript](/docs/configuration/expected-outputs/javascript) or [Python](/docs/configuration/expected-outputs/python) assertions, your function receives a context object with the following interface:
 
 ```typescript
 interface AssertionValueFunctionContext {
@@ -189,7 +188,7 @@ interface AssertionValueFunctionContext {
   // Test case variables
   vars: Record<string, string | object>;
 
-  // The complete test case
+  // The complete test case (see #test-case)
   test: AtomicTestCase;
 
   // Log probabilities from the LLM response, if available
@@ -198,10 +197,10 @@ interface AssertionValueFunctionContext {
   // Configuration passed to the assertion
   config?: Record<string, any>;
 
-  // The provider that generated the response
+  // The provider that generated the response (see /docs/providers)
   provider: ApiProvider | undefined;
 
-  // The complete provider response
+  // The complete provider response (see #providerresponse)
   providerResponse: ProviderResponse | undefined;
 }
 ```
@@ -439,28 +438,28 @@ async function extensionHook(hookName, context) {
 module.exports = extensionHook;
 ```
 
-These hooks provide powerful extensibility to your promptfoo evals, allowing you to implement custom logic for setup, teardown, logging, or integration with other systems. The extension function receives the `hookName` and a `context` object, which contains relevant data for each hook type. You can use this information to perform actions specific to each stage of the eval process.
+These hooks provide powerful extensibility to your promptfoo evaluations, allowing you to implement custom logic for setup, teardown, logging, or integration with other systems. The extension function receives the `hookName` and a `context` object, which contains relevant data for each hook type. You can use this information to perform actions specific to each stage of the evaluation process.
 
-The beforeAll and beforeEach hooks may mutate specific properties of their respective `context` arguments in order to modify eval state. To persist these changes, the hook must return the modified context.
+The beforeAll and beforeEach hooks may mutate specific properties of their respective `context` arguments in order to modify evaluation state. To persist these changes, the hook must return the modified context.
 
 #### beforeAll
 
 | Property                          | Type                       | Description                                                                                |
 | --------------------------------- | -------------------------- | ------------------------------------------------------------------------------------------ |
-| `context.suite.prompts`           | `Prompt[]`                 | The prompts to be evaluated.                                                               |
-| `context.suite.providerPromptMap` | `Record<string, Prompt[]>` | A map of provider IDs to prompts.                                                          |
-| `context.suite.tests`             | `TestCase[]`               | The test cases to be evaluated.                                                            |
-| `context.suite.scenarios`         | `Scenario[]`               | The scenarios to be evaluated.                                                             |
-| `context.suite.defaultTest`       | `TestCase`                 | The default test case to be evaluated.                                                     |
-| `context.suite.nunjucksFilters`   | `Record<string, FilePath>` | A map of Nunjucks filters.                                                                 |
+| `context.suite.prompts`           | [`Prompt[]`](#prompt)      | The prompts to be evaluated.                                                               |
+| `context.suite.providerPromptMap` | `Record<string, Prompt[]>` | A map of provider IDs to [prompts](#prompt).                                               |
+| `context.suite.tests`             | [`TestCase[]`](#test-case) | The test cases to be evaluated.                                                            |
+| `context.suite.scenarios`         | [`Scenario[]`](#scenario)  | The [scenarios](/docs/configuration/scenarios) to be evaluated.                            |
+| `context.suite.defaultTest`       | [`TestCase`](#test-case)   | The default test case to be evaluated.                                                     |
+| `context.suite.nunjucksFilters`   | `Record<string, FilePath>` | A map of [Nunjucks](https://mozilla.github.io/nunjucks/) filters.                          |
 | `context.suite.derivedMetrics`    | `Record<string, string>`   | A map of [derived metrics](/docs/configuration/expected-outputs#creating-derived-metrics). |
-| `context.suite.redteam`           | `Redteam[]`                | The red team to be evaluated.                                                              |
+| `context.suite.redteam`           | `Redteam[]`                | The [red team](/docs/red-team) configuration to be evaluated.                              |
 
 #### beforeEach
 
-| Property       | Type       | Description                    |
-| -------------- | ---------- | ------------------------------ |
-| `context.test` | `TestCase` | The test case to be evaluated. |
+| Property       | Type                     | Description                    |
+| -------------- | ------------------------ | ------------------------------ |
+| `context.test` | [`TestCase`](#test-case) | The test case to be evaluated. |
 
 ## Provider-related types
 
@@ -479,7 +478,7 @@ interface GuardrailResponse {
 
 ## Transformation Pipeline
 
-Understanding the transformation pipeline is crucial for complex evaluations, especially for RAG systems which require [context-based assertions](/docs/configuration/expected-outputs/model-graded). Here's how transforms are applied:
+Understanding the transformation pipeline is crucial for complex evaluations, especially for [RAG systems](/docs/guides/evaluate-rag) which require [context-based assertions](/docs/configuration/expected-outputs/model-graded#context-based). Here's how transforms are applied:
 
 ### Execution Flow
 
@@ -584,7 +583,8 @@ interface ProviderOptions {
   // List of prompt display strings
   prompts?: string[];
 
-  // Transform the output, either with inline Javascript or external py/js script (see `Transforms`)
+  // Transform the output, either with inline Javascript or external py/js script
+  // See /docs/configuration/guide#transforming-outputs
   transform?: string;
 
   // Sleep this long before each request
@@ -608,9 +608,9 @@ interface ProviderResponse {
     cached?: number;
   }>;
   cached?: boolean;
-  cost?: number; // required for cost assertion
-  logProbs?: number[]; // required for perplexity assertion
-  isRefusal?: boolean; // the provider has explicitly refused to generate a response
+  cost?: number; // required for cost assertion (see /docs/configuration/expected-outputs/deterministic#cost)
+  logProbs?: number[]; // required for perplexity assertion (see /docs/configuration/expected-outputs/deterministic#perplexity)
+  isRefusal?: boolean; // the provider has explicitly refused to generate a response (see /docs/configuration/expected-outputs/deterministic#is-refusal)
   guardrails?: GuardrailResponse;
 }
 ```
@@ -636,7 +636,7 @@ interface TestSuiteConfig {
   // Optional description of what you're trying to test
   description?: string;
 
-  // One or more LLM APIs to use, for example: openai:gpt-4.1-mini, openai:gpt-4.1, localai:chat:vicuna
+  // One or more LLM APIs to use, for example: openai:gpt-5-mini, openai:gpt-5 localai:chat:vicuna
   providers: ProviderId | ProviderFunction | (ProviderId | ProviderOptionsMap | ProviderOptions)[];
 
   // One or more prompts
@@ -675,7 +675,7 @@ interface TestSuiteConfig {
 
 ### UnifiedConfig
 
-UnifiedConfig is an object that includes the test suite configuration, eval options, and command line options. It is used to hold the complete configuration for the eval.
+UnifiedConfig is an object that includes the test suite configuration, evaluation options, and command line options. It is used to hold the complete configuration for the evaluation.
 
 ```typescript
 interface UnifiedConfig extends TestSuiteConfiguration {

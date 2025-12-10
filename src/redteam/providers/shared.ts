@@ -3,7 +3,9 @@ import { randomUUID } from 'crypto';
 import cliState from '../../cliState';
 import { getEnvBool } from '../../envars';
 import logger from '../../logger';
+import { OpenAiChatCompletionProvider } from '../../providers/openai/chat';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
+import type { TraceContextData } from '../../tracing/traceContext';
 import {
   type ApiProvider,
   type CallApiContextParams,
@@ -11,85 +13,23 @@ import {
   type EvaluateResult,
   type GuardrailResponse,
   isApiProvider,
+  isProviderOptions,
   type RedteamFileConfig,
   type TokenUsage,
 } from '../../types/index';
-import type { TraceContextData } from '../../tracing/traceContext';
 import invariant from '../../util/invariant';
 import { safeJsonStringify } from '../../util/json';
 import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
-import { type TransformContext, TransformInputType, transform } from '../../util/transform';
-import { getEnvFloat } from '../../envars';
-import { OpenAiChatCompletionProvider } from '../../providers/openai/chat';
+import { transform, type TransformContext, TransformInputType } from '../../util/transform';
+import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
 
-// Hardcoded fallback constants (inline to reduce dependencies)
-const ATTACKER_MODEL = 'gpt-4.1-2025-04-14';
-const ATTACKER_MODEL_SMALL = 'gpt-4o-mini';
-const REDTEAM_TEMPERATURE = getEnvFloat('PROMPTFOO_JAILBREAK_TEMPERATURE') || 0.7;
-
-/**
- * Gets a redteam provider optimized for adversarial input generation.
- * Uses the defaults system with automatic credential detection and fallbacks.
- *
- * @param options Configuration options
- * @param options.provider - Optional explicit provider override
- * @param options.enforceJson - Whether to enforce JSON output (default: true for redteam use)
- * @param options.preferSmall - Whether to prefer smaller/faster models for simple tasks
- * @returns Promise resolving to configured ApiProvider instance
- */
-export async function getRedteamProvider({
+async function loadRedteamProvider({
   provider,
-  enforceJson = true,
-  preferSmall = false,
+  jsonOnly = false,
+  preferSmallModel = false,
 }: {
   provider?: RedteamFileConfig['provider'];
-<<<<<<< HEAD
-  enforceJson?: boolean;
-  preferSmall?: boolean;
-} = {}): Promise<ApiProvider> {
-  let baseProvider: ApiProvider;
-
-  // Check for explicit provider override (from config or parameter)
-  const explicitProvider = provider || cliState.config?.redteam?.provider;
-
-  if (explicitProvider) {
-    if (isApiProvider(explicitProvider)) {
-      logger.debug(`[RedteamProvider] Using explicit provider: ${explicitProvider.id()}`);
-      baseProvider = explicitProvider;
-    } else {
-      logger.debug(
-        `[RedteamProvider] Loading explicit provider: ${JSON.stringify(explicitProvider)}`,
-      );
-      const { loadApiProviders } = await import('../../providers');
-      baseProvider = (await loadApiProviders([explicitProvider]))[0];
-    }
-  } else {
-    // Use defaults system as primary source (handles all credential detection and fallbacks)
-    try {
-      const { getDefaultProviders } = await import('../../providers/defaults');
-      const defaultProviders = await getDefaultProviders();
-      if (defaultProviders.redteamProvider) {
-        logger.debug(
-          `[RedteamProvider] Using defaults provider: ${defaultProviders.redteamProvider.id()}`,
-        );
-        baseProvider = defaultProviders.redteamProvider;
-      } else {
-        throw new Error('No redteam provider available from defaults system');
-      }
-    } catch (error) {
-      // Final fallback - prefer small model for efficiency
-      const fallbackModel = preferSmall ? ATTACKER_MODEL_SMALL : ATTACKER_MODEL;
-      logger.warn(
-        `[RedteamProvider] Defaults system unavailable: ${(error as Error).message}. ` +
-          `Using OpenAI fallback: ${fallbackModel}. Requires OPENAI_API_KEY.`,
-      );
-      baseProvider = new OpenAiChatCompletionProvider(fallbackModel, {
-        config: { temperature: REDTEAM_TEMPERATURE },
-      });
-    }
-  }
-=======
   jsonOnly?: boolean;
   preferSmallModel?: boolean;
 } = {}) {
@@ -104,14 +44,31 @@ export async function getRedteamProvider({
     // Async import to avoid circular dependency
     ret = (await loadApiProvidersModule.loadApiProviders([redteamProvider]))[0];
   } else {
-    const defaultModel = preferSmallModel ? ATTACKER_MODEL_SMALL : ATTACKER_MODEL;
-    logger.debug(`Using default redteam provider: ${defaultModel}`);
-    ret = new OpenAiChatCompletionProvider(defaultModel, {
-      config: {
-        temperature: TEMPERATURE,
-        response_format: jsonOnly ? { type: 'json_object' } : undefined,
-      },
-    });
+    // No explicit provider - check defaults system for credential-based selection
+    try {
+      const { getDefaultProviders } = await import('../../providers/defaults');
+      const defaults = await getDefaultProviders();
+      if (defaults.redteamProvider) {
+        logger.debug(
+          `[loadRedteamProvider] Using redteam provider from defaults: ${defaults.redteamProvider.id()}`,
+        );
+        ret = defaults.redteamProvider;
+      }
+    } catch {
+      // Defaults system unavailable, fall through to OpenAI fallback
+    }
+
+    // Fall back to OpenAI if no defaults provider
+    if (!ret) {
+      const defaultModel = preferSmallModel ? ATTACKER_MODEL_SMALL : ATTACKER_MODEL;
+      logger.debug(`Using default redteam provider: ${defaultModel}`);
+      ret = new OpenAiChatCompletionProvider(defaultModel, {
+        config: {
+          temperature: TEMPERATURE,
+          response_format: jsonOnly ? { type: 'json_object' } : undefined,
+        },
+      });
+    }
   }
   return ret;
 }
@@ -223,41 +180,8 @@ class RedteamProviderManager {
     return undefined;
   }
 }
->>>>>>> origin/main
 
-  // Apply redteam-specific configuration inline (no need for separate function)
-  if (!baseProvider) {
-    throw new Error('Provider cannot be null or undefined');
-  }
-
-  if (typeof baseProvider.id !== 'function') {
-    throw new Error(
-      `Invalid provider: missing id() method. Provider: ${JSON.stringify(baseProvider)}`,
-    );
-  }
-
-  // Create adapted provider that inherits from original but allows config override
-  const adaptedProvider = Object.create(baseProvider);
-  Object.assign(adaptedProvider, baseProvider);
-
-  // Set up config with redteam-specific values
-  adaptedProvider.config = {
-    ...(baseProvider.config && typeof baseProvider.config === 'object' ? baseProvider.config : {}),
-  };
-
-  // Apply redteam configuration - JSON by default for structured outputs
-  if (enforceJson) {
-    adaptedProvider.config.response_format = { type: 'json_object' };
-  }
-
-  // Apply temperature if not already set
-  if (adaptedProvider.config.temperature === undefined) {
-    adaptedProvider.config.temperature = REDTEAM_TEMPERATURE;
-  }
-
-  logger.debug(`[RedteamProvider] Loaded provider: ${adaptedProvider.id()}`);
-  return adaptedProvider;
-}
+export const redteamProviderManager = new RedteamProviderManager();
 
 export type TargetResponse = {
   output: string;
@@ -267,6 +191,15 @@ export type TargetResponse = {
   guardrails?: GuardrailResponse;
   traceContext?: TraceContextData | null;
   traceSummary?: string;
+  audio?: {
+    data?: string;
+    transcript?: string;
+    format?: string;
+  };
+  image?: {
+    data?: string;
+    format?: string;
+  };
 };
 
 /**
@@ -286,6 +219,10 @@ export async function getTargetResponse(
   try {
     targetRespRaw = await targetProvider.callApi(targetPrompt, context, options);
   } catch (error) {
+    // Re-throw abort errors to properly cancel the operation
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw error;
+    }
     return { output: '', error: (error as Error).message, tokenUsage: { numRequests: 1 } };
   }
   if (!targetRespRaw.cached && targetProvider.delay && targetProvider.delay > 0) {
@@ -308,6 +245,7 @@ export async function getTargetResponse(
       sessionId: targetRespRaw.sessionId,
       tokenUsage,
       guardrails: targetRespRaw.guardrails,
+      audio: targetRespRaw.audio,
     };
   }
 
@@ -322,6 +260,7 @@ export async function getTargetResponse(
       sessionId: targetRespRaw.sessionId,
       tokenUsage,
       guardrails: targetRespRaw.guardrails,
+      audio: targetRespRaw.audio,
     };
   }
 
@@ -597,6 +536,10 @@ export async function tryUnblocking({
       };
     }
   } catch (error) {
+    // Re-throw abort errors to properly cancel the operation
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw error;
+    }
     logger.error(`[Unblocking] Error in unblocking flow: ${error}`);
     return { success: false };
   }

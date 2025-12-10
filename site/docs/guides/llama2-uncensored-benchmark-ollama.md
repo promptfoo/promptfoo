@@ -40,7 +40,7 @@ Now let's start editing `promptfooconfig.yaml`. First, we'll add the list of mod
 providers:
   - ollama:llama2
   - ollama:llama2-uncensored
-  - openai:gpt-4.1-mini
+  - openai:gpt-5-mini
 ```
 
 These [providers](/docs/providers) reference the built-in Ollama models.
@@ -83,7 +83,7 @@ providers:
   - id: ollama:llama2-uncensored
     prompts:
       - llama_prompt
-  - id: openai:gpt-4.1-mini
+  - id: openai:gpt-5-mini
     prompts:
       - openai_prompt
 ```
@@ -130,7 +130,7 @@ providers:
   - id: ollama:llama2-uncensored
     prompts:
     - llama_prompt
-  - id: openai:gpt-4.1-mini
+  - id: openai:gpt-5-mini
     prompts:
     - openai_prompt
 ```
@@ -186,7 +186,7 @@ providers:
   - id: ollama:llama2-uncensored
     prompts:
     - llama_prompt
-  - id: openai:gpt-4.1-mini
+  - id: openai:gpt-5-mini
     prompts:
     - openai_prompt
 ```

@@ -4,30 +4,11 @@ import { getEnvInt } from '../../envars';
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
-<<<<<<< HEAD
-import invariant from '../../util/invariant';
-import { extractFirstJsonObject, safeJsonStringify } from '../../util/json';
-import { getNunjucksEngine } from '../../util/templates';
-import { sleep } from '../../util/time';
-import { TokenUsageTracker } from '../../util/tokenUsage';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
-import { shouldGenerateRemote } from '../remoteGeneration';
 import {
-  ATTACKER_SYSTEM_PROMPT,
-  CLOUD_ATTACKER_SYSTEM_PROMPT,
-  JUDGE_SYSTEM_PROMPT,
-  ON_TOPIC_SYSTEM_PROMPT,
-} from './prompts';
-import {
-  checkPenalizedPhrases,
-  createIterationContext,
-  getRedteamProvider,
-  getTargetResponse,
-  type TargetResponse,
-} from './shared';
-
-=======
->>>>>>> origin/main
+  extractTraceIdFromTraceparent,
+  fetchTraceContext,
+  type TraceContextData,
+} from '../../tracing/traceContext';
 import type {
   ApiProvider,
   AtomicTestCase,
@@ -47,6 +28,13 @@ import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { shouldGenerateRemote } from '../remoteGeneration';
+import {
+  applyRuntimeTransforms,
+  type LayerConfig,
+  type MediaData,
+  type TransformResult,
+} from '../shared/runtimeTransform';
+import { Strategies } from '../strategies';
 import { getSessionId } from '../util';
 import {
   ATTACKER_SYSTEM_PROMPT,
@@ -60,11 +48,6 @@ import {
   redteamProviderManager,
   type TargetResponse,
 } from './shared';
-import {
-  extractTraceIdFromTraceparent,
-  fetchTraceContext,
-  type TraceContextData,
-} from '../../tracing/traceContext';
 import { formatTraceForMetadata, formatTraceSummary } from './traceFormatting';
 import { resolveTracingOptions } from './tracingOptions';
 
@@ -97,7 +80,11 @@ interface IterativeMetadata {
   stopReason: StopReason;
   redteamHistory: {
     prompt: string;
+    promptAudio?: MediaData;
+    promptImage?: MediaData;
     output: string;
+    outputAudio?: MediaData;
+    outputImage?: MediaData;
     score: number;
     graderPassed: boolean | undefined;
     guardrails: GuardrailResponse | undefined;
@@ -121,6 +108,7 @@ export async function runRedteamConversation({
   test,
   vars,
   excludeTargetOutputFromAgenticAttackGeneration,
+  perTurnLayers = [],
 }: {
   context?: CallApiContextParams;
   filters: NunjucksFilterMap | undefined;
@@ -134,6 +122,7 @@ export async function runRedteamConversation({
   test?: AtomicTestCase;
   vars: Record<string, string | object>;
   excludeTargetOutputFromAgenticAttackGeneration: boolean;
+  perTurnLayers?: LayerConfig[];
 }): Promise<{
   output: string;
   metadata: IterativeMetadata;
@@ -197,7 +186,11 @@ export async function runRedteamConversation({
 
   const previousOutputs: {
     prompt: string;
+    promptAudio?: MediaData;
+    promptImage?: MediaData;
     output: string;
+    outputAudio?: MediaData;
+    outputImage?: MediaData;
     score: number;
     graderPassed: boolean | undefined;
     guardrails: GuardrailResponse | undefined;
@@ -236,13 +229,17 @@ export async function runRedteamConversation({
     const redteamBody = JSON.stringify(redteamHistory);
 
     // Get new prompt
-    const redteamResp = await redteamProvider.callApi(redteamBody, {
-      prompt: {
-        raw: redteamBody,
-        label: 'history',
+    const redteamResp = await redteamProvider.callApi(
+      redteamBody,
+      {
+        prompt: {
+          raw: redteamBody,
+          label: 'history',
+        },
+        vars: {},
       },
-      vars: {},
-    });
+      options,
+    );
     TokenUsageTracker.getInstance().trackUsage(redteamProvider.id(), redteamResp.tokenUsage);
     if (redteamProvider.delay) {
       logger.debug(`[Iterative] Sleeping for ${redteamProvider.delay}ms`);
@@ -267,6 +264,10 @@ export async function runRedteamConversation({
         improvement = parsed.improvement;
         newInjectVar = parsed.prompt;
       } catch (err) {
+        // Re-throw abort errors to properly cancel the operation
+        if (err instanceof Error && err.name === 'AbortError') {
+          throw err;
+        }
         logger.info(`[Iterative] ${i + 1}/${numIterations} - Failed to parse response`, {
           error: err,
           response: redteamResp,
@@ -288,11 +289,49 @@ export async function runRedteamConversation({
     // Update the application prompt with the new injection.
     logger.debug(`[Iterative] New injectVar: ${newInjectVar}, improvement: ${improvement}`);
 
+    // ═══════════════════════════════════════════════════════════════════════
+    // Apply per-turn layer transforms if configured (e.g., audio, base64)
+    // This enables: layer: { steps: [jailbreak, audio] }
+    // For single-turn iterative, we just transform the attack and send directly
+    // ═══════════════════════════════════════════════════════════════════════
+    let lastTransformResult: TransformResult | undefined;
+    let finalInjectVar = newInjectVar;
+    if (perTurnLayers.length > 0) {
+      logger.debug('[Iterative] Applying per-turn transforms', {
+        iteration: i + 1,
+        layers: perTurnLayers.map((l) => (typeof l === 'string' ? l : l.id)),
+      });
+      lastTransformResult = await applyRuntimeTransforms(
+        newInjectVar,
+        injectVar,
+        perTurnLayers,
+        Strategies,
+      );
+
+      if (lastTransformResult.error) {
+        logger.warn('[Iterative] Transform failed, skipping iteration', {
+          iteration: i + 1,
+          error: lastTransformResult.error,
+        });
+        continue;
+      }
+
+      // For single-turn iterative, send transformed content directly
+      finalInjectVar = lastTransformResult.prompt;
+      logger.debug('[Iterative] Per-turn transforms applied', {
+        iteration: i + 1,
+        originalLength: newInjectVar.length,
+        transformedLength: finalInjectVar.length,
+        hasAudio: !!lastTransformResult.audio,
+        hasImage: !!lastTransformResult.image,
+      });
+    }
+
     targetPrompt = await renderPrompt(
       prompt,
       {
         ...iterationVars,
-        [injectVar]: newInjectVar,
+        [injectVar]: finalInjectVar,
       },
       filters,
       targetProvider,
@@ -431,13 +470,17 @@ export async function runRedteamConversation({
         `,
       },
     ]);
-    const judgeResp = await gradingProvider.callApi(judgeBody, {
-      prompt: {
-        raw: judgeBody,
-        label: 'judge',
+    const judgeResp = await gradingProvider.callApi(
+      judgeBody,
+      {
+        prompt: {
+          raw: judgeBody,
+          label: 'judge',
+        },
+        vars: {},
       },
-      vars: {},
-    });
+      options,
+    );
 
     TokenUsageTracker.getInstance().trackUsage(gradingProvider.id(), judgeResp.tokenUsage);
     if (gradingProvider.delay) {
@@ -547,6 +590,10 @@ export async function runRedteamConversation({
         // We'll break after the token usage tracking and previousOutputs.push
       }
     } catch (err) {
+      // Re-throw abort errors to properly cancel the operation
+      if (err instanceof Error && err.name === 'AbortError') {
+        throw err;
+      }
       logger.info('[Iterative] Failed to parse judge response, likely refusal', {
         error: err,
         response: judgeResp,
@@ -555,8 +602,19 @@ export async function runRedteamConversation({
     }
 
     previousOutputs.push({
-      prompt: targetPrompt,
+      prompt: newInjectVar, // Original text for transcript
+      promptAudio: lastTransformResult?.audio,
+      promptImage: lastTransformResult?.image,
       output: targetResponse.output,
+      // Only include audio/image if data is present
+      outputAudio:
+        targetResponse.audio?.data && targetResponse.audio?.format
+          ? { data: targetResponse.audio.data, format: targetResponse.audio.format }
+          : undefined,
+      outputImage:
+        targetResponse.image?.data && targetResponse.image?.format
+          ? { data: targetResponse.image.data, format: targetResponse.image.format }
+          : undefined,
       score: currentScore,
       graderPassed: storedGraderResult?.pass,
       guardrails: targetResponse.guardrails,
@@ -599,6 +657,8 @@ class RedteamIterativeProvider implements ApiProvider {
   private readonly numIterations: number;
   private readonly excludeTargetOutputFromAgenticAttackGeneration: boolean;
   private readonly gradingProvider: RedteamFileConfig['provider'];
+  private readonly perTurnLayers: LayerConfig[];
+
   constructor(readonly config: Record<string, string | object>) {
     logger.debug('[Iterative] Constructor config', { config });
     invariant(typeof config.injectVar === 'string', 'Expected injectVar to be set');
@@ -609,6 +669,7 @@ class RedteamIterativeProvider implements ApiProvider {
     this.excludeTargetOutputFromAgenticAttackGeneration = Boolean(
       config.excludeTargetOutputFromAgenticAttackGeneration,
     );
+    this.perTurnLayers = (config._perTurnLayers as LayerConfig[]) ?? [];
 
     // Redteam provider can be set from the config.
 
@@ -649,17 +710,18 @@ class RedteamIterativeProvider implements ApiProvider {
       prompt: context.prompt,
       filters: context.filters,
       vars: context.vars,
-      redteamProvider: await getRedteamProvider({
+      redteamProvider: await redteamProviderManager.getProvider({
         provider: this.redteamProvider,
-        enforceJson: true,
+        jsonOnly: true,
       }),
-      gradingProvider: await getRedteamProvider({
+      gradingProvider: await redteamProviderManager.getProvider({
         provider: this.gradingProvider,
-        enforceJson: true,
+        jsonOnly: true,
       }),
       targetProvider: context.originalProvider,
       injectVar: this.injectVar,
       numIterations: this.numIterations,
+      perTurnLayers: this.perTurnLayers,
       context,
       options,
       test: context.test,

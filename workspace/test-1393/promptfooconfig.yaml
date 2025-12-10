@@ -1,0 +1,26 @@
+# Test config to verify Gemini as LLM grader (issue #1393)
+# This tests using google:gemini-2.0-flash as the grading provider for llm-rubric assertions
+
+description: 'Test Gemini as LLM grader for issue #1393'
+
+providers:
+  - echo # Simple echo provider to test the grader itself
+
+prompts:
+  - 'Tell me about {{topic}}'
+
+defaultTest:
+  options:
+    provider: google:gemini-2.0-flash
+
+tests:
+  - vars:
+      topic: New York City
+    assert:
+      - type: llm-rubric
+        value: 'The output should be related to the topic: {{topic}}'
+  - vars:
+      topic: Python programming
+    assert:
+      - type: llm-rubric
+        value: 'The output should be related to the topic: {{topic}}'

@@ -36,7 +36,7 @@ The red team configuration uses the following YAML structure:
 
 ```yaml
 targets:
-  - id: openai:gpt-4.1
+  - id: openai:gpt-5
     label: customer-service-agent
 
 redteam:
@@ -57,7 +57,7 @@ redteam:
 | `injectVar`                  | `string`                  | Variable to inject adversarial inputs into                               | Inferred from prompts           |
 | `numTests`                   | `number`                  | Default number of tests to generate per plugin                           | 5                               |
 | `plugins`                    | `Array<string\|object>`   | Plugins to use for red team generation                                   | `default`                       |
-| `provider` or `targets`      | `string\|ProviderOptions` | Endpoint or AI model provider for generating adversarial inputs          | `openai:gpt-4.1`                |
+| `provider` or `targets`      | `string\|ProviderOptions` | Endpoint or AI model provider for generating adversarial inputs          | `openai:gpt-5`                  |
 | `purpose`                    | `string`                  | Description of prompt templates' purpose to guide adversarial generation | Inferred from prompts           |
 | `strategies`                 | `Array<string\|object>`   | Strategies to apply to other plugins                                     | `jailbreak`, `prompt-injection` |
 | `language`                   | `string\|string[]`        | Language(s) for generated tests (applies to all plugins/strategies)      | English                         |
@@ -608,9 +608,6 @@ redteam:
   language: 'German'
 ```
 
-<<<<<<< HEAD
-## Attack Generation Provider
-=======
 #### Multiple Languages
 
 Test across multiple languages using an array. This is particularly valuable for identifying safety vulnerabilities, as [research](https://arxiv.org/abs/2307.02477) shows that many LLMs have weaker safety protections in non-English languages:
@@ -637,7 +634,6 @@ Testing in "low-resource" languages (languages with less training data) often re
 :::
 
 ## Providers
->>>>>>> origin/main
 
 The `redteam.provider` field allows you to specify a provider configuration for the "attacker" model, i.e., the model that generates adversarial inputs. By default, Promptfoo automatically selects a powerful model based on the environment variables you have set.
 
@@ -669,14 +665,11 @@ Your choice of attack provider is critical to the quality of your red team tests
 
 ### How attacks are generated
 
-<<<<<<< HEAD
-By default, Promptfoo automatically selects a provider based on your configured API keys (see the table above).
-If no API keys are configured:
-=======
-By default, Promptfoo uses your local OpenAI key for redteam attack generation and grading. If you do not have a key, Promptfoo will automatically proxy requests to our API for generation and grading. The eval of your target model is always performed locally.
+By default, Promptfoo automatically selects a provider based on your configured API keys (see the table above). If you do not have a key, Promptfoo will automatically proxy requests to our API for generation and grading. The eval of your target model is always performed locally.
 
 The `redteam.provider` configuration controls both attack generation and grading. For details on configuring grading behavior, see [Configuring the Grader](/docs/red-team/troubleshooting/grading-results/).
->>>>>>> origin/main
+
+If no API keys are configured:
 
 - When remote generation is enabled (default), Promptfoo uses the remote generation service for supported plugins/strategies.
 - When remote generation is disabled, you must set `redteam.provider` explicitly or supply an API key. If `OPENAI_API_KEY` is present, the hardcoded fallback is OpenAI's `gpt-4.1-2025-04-14`.
@@ -689,10 +682,10 @@ Some plugins and strategies may require specific provider configurations or API 
 
 ### Changing the model
 
-To use the `openai:chat:gpt-4.1-mini` model, override the provider on the command line:
+To use a different model like `openai:chat:gpt-5-mini`, you can override the provider on the command line:
 
 ```sh
-npx promptfoo@latest redteam generate --provider openai:chat:gpt-4.1-mini
+npx promptfoo@latest redteam generate --provider openai:chat:gpt-5-mini
 ```
 
 Or in the config:
@@ -700,7 +693,7 @@ Or in the config:
 ```yaml
 redteam:
   provider:
-    id: openai:chat:gpt-4.1-mini
+    id: openai:chat:gpt-5-mini
     # Optional config
     config:
       temperature: 0.5
@@ -719,11 +712,7 @@ Some providers, such as Anthropic, may restrict accounts that generate harmful t
 
 ### Remote Generation
 
-<<<<<<< HEAD
 By default, Promptfoo uses a remote service for generating adversarial inputs. This service is optimized for high-quality, diverse test cases. However, you can disable this feature and fall back to local generation by setting the `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION` environment variable to `true`.
-=======
-By default, promptfoo uses a remote service for generating adversarial inputs. This service is optimized for high-quality, diverse test cases. However, you can disable this feature and fall back to local generation by setting the `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION` environment variable to `true`.
->>>>>>> origin/main
 
 :::info Cloud Users
 If you're logged into Promptfoo Cloud, remote generation is preferred by default to ensure you benefit from cloud features and the latest improvements. You can still opt-out by setting `PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=true`.
@@ -904,7 +893,7 @@ You can set up the provider in several ways:
 
    ```yaml
    redteam:
-     provider: 'openai:gpt-4'
+     provider: 'openai:gpt-5'
    ```
 
 2. As an object with additional configuration:
@@ -912,7 +901,7 @@ You can set up the provider in several ways:
    ```yaml
    redteam:
      provider:
-       id: 'openai:gpt-4'
+       id: 'openai:gpt-5'
        config:
          temperature: 0.7
          max_tokens: 150
@@ -941,7 +930,7 @@ Configuration values can be set in multiple ways, with the following precedence 
 
    ```yaml
    redteam:
-     provider: openai:gpt-4.1
+     provider: openai:gpt-5
      numTests: 5
    env:
      OPENAI_API_KEY: your-key-here
@@ -984,7 +973,7 @@ redteam:
 redteam:
   injectVar: 'user_input'
   purpose: 'Evaluate chatbot safety and robustness'
-  provider: 'openai:chat:gpt-4.1'
+  provider: 'openai:chat:gpt-5'
   language: ['en', 'fr', 'es', 'de'] # Test in multiple languages
   numTests: 20
   testGenerationInstructions: |

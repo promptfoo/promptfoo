@@ -1,14 +1,13 @@
+import * as fs from 'fs';
+
 import async from 'async';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import Table from 'cli-table3';
-import * as fs from 'fs';
 import yaml from 'js-yaml';
-
 import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import logger, { getLogLevel } from '../logger';
-import type { TestCase, TestCaseWithPlugin } from '../types/index';
 import { checkRemoteHealth } from '../util/apiHealth';
 import invariant from '../util/invariant';
 import { extractVariablesFromTemplates } from '../util/templates';
@@ -33,17 +32,15 @@ import {
 import { extractEntities } from './extraction/entities';
 import { extractSystemPurpose } from './extraction/purpose';
 import { CustomPlugin } from './plugins/custom';
-<<<<<<< HEAD
-import { getRedteamProvider } from './providers/shared';
-=======
 import { Plugins } from './plugins/index';
 import { redteamProviderManager } from './providers/shared';
->>>>>>> origin/main
 import { getRemoteHealthUrl, shouldGenerateRemote } from './remoteGeneration';
 import { loadStrategy, Strategies, validateStrategies } from './strategies/index';
 import { pluginMatchesStrategyTargets } from './strategies/util';
-import type { RedteamPluginObject, RedteamStrategyObject, SynthesizeOptions } from './types';
 import { extractGoalFromPrompt, getShortPluginId } from './util';
+
+import type { TestCase, TestCaseWithPlugin } from '../types/index';
+import type { RedteamPluginObject, RedteamStrategyObject, SynthesizeOptions } from './types';
 
 function getPolicyText(metadata: TestCase['metadata'] | undefined): string | undefined {
   if (!metadata || metadata.policy === undefined || metadata.policy === null) {
@@ -204,7 +201,10 @@ const formatTestCount = (numTests: number, strategy: boolean): string =>
  * @param test - The test case to get language from.
  * @returns The language string or undefined if not found.
  */
-function getLanguageForTestCase(test: TestCase): string | undefined {
+function getLanguageForTestCase(test: TestCase | undefined): string | undefined {
+  if (!test) {
+    return undefined;
+  }
   return test.metadata?.language || test.metadata?.modifiers?.language;
 }
 
@@ -310,7 +310,7 @@ async function applyStrategies(
       pluginMatchesStrategyTargets(t, strategy.id, targetPlugins),
     );
 
-    const strategyTestCases: TestCase[] = await strategyAction(
+    const strategyTestCases: (TestCase | undefined)[] = await strategyAction(
       applicableTestCases,
       injectVar,
       {
@@ -602,20 +602,29 @@ export async function synthesize({
   });
 
   // Deduplicate strategies by a key. For most strategies, the key is the id.
-  // For 'layer', include the ordered step ids in the key so different layers are preserved.
+  // For 'layer', use label if provided, otherwise include the ordered step ids.
   const seen = new Set<string>();
   const keyForStrategy = (s: (typeof strategies)[number]): string => {
-    if (s.id === 'layer' && s.config && Array.isArray((s as any).config.steps)) {
-      const steps = ((s as any).config.steps as any[]).map((st) =>
-        typeof st === 'string' ? st : st?.id,
-      );
-      return `layer:${steps.join('->')}`;
+    if (s.id === 'layer' && s.config) {
+      const config = s.config as Record<string, unknown>;
+      // If label is provided, use it for uniqueness (allows multiple layer strategies)
+      if (typeof config.label === 'string' && config.label.trim()) {
+        return `layer/${config.label}`;
+      }
+      // Otherwise use steps for uniqueness
+      if (Array.isArray(config.steps)) {
+        const steps = (config.steps as Array<string | { id?: string }>).map((st) =>
+          typeof st === 'string' ? st : (st?.id ?? 'unknown'),
+        );
+        return `layer:${steps.join('->')}`;
+      }
     }
     return s.id;
   };
   strategies = expandedStrategies.filter((strategy) => {
     const key = keyForStrategy(strategy);
     if (seen.has(key)) {
+      logger.debug(`[Synthesize] Skipping duplicate strategy: ${key}`);
       return false;
     }
     seen.add(key);
@@ -624,9 +633,6 @@ export async function synthesize({
 
   validateStrategies(strategies);
 
-<<<<<<< HEAD
-  const redteamProvider = await getRedteamProvider({ provider, enforceJson: false });
-=======
   // If any language-disallowed strategies are present, force language to English only
   const hasLanguageDisallowedStrategy = strategies.some((s) => isLanguageDisallowedStrategy(s.id));
   if (hasLanguageDisallowedStrategy && language) {
@@ -636,7 +642,6 @@ export async function synthesize({
       `[Language Override] Detected language-disallowed strategy (audio/video/image/layer/math-prompt). Forcing language to 'en' (was: ${originalLanguage})`,
     );
   }
->>>>>>> origin/main
 
   const redteamProvider = await redteamProviderManager.getProvider({
     provider,

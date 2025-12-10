@@ -1,0 +1,109 @@
+{
+  "id": "92ff1d2c-7aec-453d-9624-5fd35e2bd735",
+  "agent": {
+    "kind": "Agent",
+    "llm": {
+      "model": "openai/gpt-4o-mini",
+      "api_key": "**********",
+      "openrouter_site_url": "https://docs.all-hands.dev/",
+      "openrouter_app_name": "OpenHands",
+      "num_retries": 5,
+      "retry_multiplier": 8.0,
+      "retry_min_wait": 8,
+      "retry_max_wait": 64,
+      "max_message_chars": 30000,
+      "temperature": 0.0,
+      "top_p": 1.0,
+      "max_input_tokens": 128000,
+      "max_output_tokens": 16384,
+      "drop_params": true,
+      "modify_params": true,
+      "disable_stop_word": false,
+      "caching_prompt": true,
+      "log_completions": false,
+      "log_completions_folder": "logs/completions",
+      "native_tool_calling": true,
+      "reasoning_effort": "high",
+      "enable_encrypted_reasoning": false,
+      "extended_thinking_budget": 200000,
+      "usage_id": "default",
+      "litellm_extra_body": {},
+      "OVERRIDE_ON_SERIALIZE": ["api_key", "aws_access_key_id", "aws_secret_access_key"]
+    },
+    "tools": [{ "name": "bash", "params": {} }, { "name": "file_editor", "params": {} }],
+    "mcp_config": {},
+    "system_prompt_filename": "system_prompt.j2",
+    "system_prompt_kwargs": {}
+  },
+  "workspace": { "kind": "LocalWorkspace", "working_dir": "/tmp" },
+  "persistence_dir": "workspace/conversations/92ff1d2c7aec453d96245fd35e2bd735",
+  "max_iterations": 3,
+  "stuck_detection": true,
+  "execution_status": "finished",
+  "confirmation_policy": { "kind": "NeverConfirm" },
+  "activated_knowledge_skills": [],
+  "stats": {
+    "usage_to_metrics": {
+      "default": {
+        "model_name": "openai/gpt-4o-mini",
+        "accumulated_cost": 0.0009103499999999999,
+        "accumulated_token_usage": {
+          "model": "openai/gpt-4o-mini",
+          "prompt_tokens": 7841,
+          "completion_tokens": 37,
+          "cache_read_tokens": 3840,
+          "cache_write_tokens": 0,
+          "reasoning_tokens": 0,
+          "context_window": 0,
+          "per_turn_token": 3975,
+          "response_id": ""
+        },
+        "costs": [
+          {
+            "model": "openai/gpt-4o-mini",
+            "cost": 0.0005939999999999999,
+            "timestamp": 1765057713.107423
+          },
+          { "model": "openai/gpt-4o-mini", "cost": 0.00031635, "timestamp": 1765057714.004653 }
+        ],
+        "response_latencies": [
+          {
+            "model": "openai/gpt-4o-mini",
+            "latency": 2.148005962371826,
+            "response_id": "chatcmpl-CjuQi79BOSrQqQYjIpLYBo6hzixFP"
+          },
+          {
+            "model": "openai/gpt-4o-mini",
+            "latency": 0.8678209781646729,
+            "response_id": "chatcmpl-CjuQj1BO1HABvyB5uRrLZW3LsJoPM"
+          }
+        ],
+        "token_usages": [
+          {
+            "model": "openai/gpt-4o-mini",
+            "prompt_tokens": 3884,
+            "completion_tokens": 19,
+            "cache_read_tokens": 0,
+            "cache_write_tokens": 0,
+            "reasoning_tokens": 0,
+            "context_window": 0,
+            "per_turn_token": 3903,
+            "response_id": "chatcmpl-CjuQi79BOSrQqQYjIpLYBo6hzixFP"
+          },
+          {
+            "model": "openai/gpt-4o-mini",
+            "prompt_tokens": 3957,
+            "completion_tokens": 18,
+            "cache_read_tokens": 3840,
+            "cache_write_tokens": 0,
+            "reasoning_tokens": 0,
+            "context_window": 0,
+            "per_turn_token": 3975,
+            "response_id": "chatcmpl-CjuQj1BO1HABvyB5uRrLZW3LsJoPM"
+          }
+        ]
+      }
+    }
+  },
+  "secret_registry": { "secret_sources": {} }
+}

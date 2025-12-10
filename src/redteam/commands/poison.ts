@@ -187,9 +187,6 @@ export function poisonCommand(program: Command) {
     .option('--env-file, --env-path <path>', 'Path to .env file')
     .action(async (documents: DocumentLike[], opts: Omit<PoisonOptions, 'documents'>) => {
       setupEnv(opts.envPath);
-      telemetry.record('command_used', {
-        name: 'redteam poison',
-      });
       telemetry.record('redteam poison', {});
 
       try {

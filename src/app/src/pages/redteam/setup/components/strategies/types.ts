@@ -39,7 +39,7 @@ export const STRATEGY_PRESETS: Record<PresetId, StrategyPreset> = {
   [PRESET_IDS.MEDIUM]: {
     name: 'Medium',
     description: 'Recommended strategies for moderate coverage',
-    strategies: ['jailbreak:composite', 'jailbreak', 'jailbreak:hydra', 'jailbreak:meta'] as const,
+    strategies: ['basic', 'jailbreak', 'jailbreak:hydra', 'jailbreak:meta'] as const,
     options: {
       multiTurn: {
         label: 'My target application is conversational (multi-turn)',
@@ -51,11 +51,11 @@ export const STRATEGY_PRESETS: Record<PresetId, StrategyPreset> = {
     name: 'Large',
     description: 'A larger set of strategies for a more comprehensive redteam.',
     strategies: [
+      'basic',
       'jailbreak',
       'jailbreak:hydra',
       'jailbreak:meta',
       'jailbreak:tree',
-      'jailbreak:composite',
     ] as const,
     options: {
       multiTurn: {

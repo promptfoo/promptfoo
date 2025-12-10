@@ -108,6 +108,23 @@ const llmRubricProviderFactory = createLazyProvider(
   (env?: EnvOverrides) => new AnthropicLlmRubricProvider(DEFAULT_ANTHROPIC_MODEL, { env }),
 );
 
+// Web Search Provider with web_search tool
+const webSearchProviderFactory = createLazyProvider(
+  (env?: EnvOverrides) =>
+    new AnthropicMessagesProvider(DEFAULT_ANTHROPIC_MODEL, {
+      env,
+      config: {
+        tools: [
+          {
+            type: 'web_search_20250305',
+            name: 'web_search',
+            max_uses: 5,
+          } as any,
+        ],
+      },
+    }),
+);
+
 const redteamProviderFactory = createLazyProvider(
   (env?: EnvOverrides) =>
     new AnthropicMessagesProvider(DEFAULT_ANTHROPIC_MODEL, {
@@ -130,11 +147,13 @@ export function getAnthropicProviders(
   | 'llmRubricProvider'
   | 'suggestionsProvider'
   | 'synthesizeProvider'
+  | 'webSearchProvider'
   | 'redteamProvider'
 > {
   // Get providers with the provided environment variables
   const gradingProvider = gradingProviderFactory.getInstance(env);
   const llmRubricProvider = llmRubricProviderFactory.getInstance(env);
+  const webSearchProvider = webSearchProviderFactory.getInstance(env);
   const redteamProvider = redteamProviderFactory.getInstance(env);
 
   return {
@@ -143,6 +162,7 @@ export function getAnthropicProviders(
     llmRubricProvider,
     suggestionsProvider: gradingProvider,
     synthesizeProvider: gradingProvider,
+    webSearchProvider,
     redteamProvider,
   };
 }

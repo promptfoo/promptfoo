@@ -1,0 +1,19 @@
+# Test for issue #1781 - evaluateOptions with custom filename
+# This file is intentionally NOT named promptfooconfig.yaml
+
+evaluateOptions:
+  repeat: 3
+  cache: false
+  maxConcurrency: 1
+
+providers:
+  - echo
+
+prompts:
+  - 'Hello, test!'
+
+tests:
+  - vars:
+      input: 'test1'
+  - vars:
+      input: 'test2'
