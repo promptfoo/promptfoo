@@ -290,13 +290,13 @@ export class ElevenLabsTTSProvider implements ApiProvider {
     latency: number,
   ): ProviderResponse {
     // Track cost only for non-cached responses
-    const cost = !cacheHit
-      ? this.costTracker.trackTTS(characters, {
+    const cost = cacheHit
+      ? undefined
+      : this.costTracker.trackTTS(characters, {
           voiceId: this.config.voiceId,
           modelId: this.config.modelId,
           cacheHit,
-        })
-      : undefined;
+        });
 
     return {
       output: `Generated ${characters} characters of speech`,
