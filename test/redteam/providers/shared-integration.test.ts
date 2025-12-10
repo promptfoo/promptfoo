@@ -119,7 +119,10 @@ describe('Redteam Provider Manager Integration with Defaults', () => {
     expect(provider.id()).toContain('openai');
   });
 
-  it('should handle jsonOnly configuration with defaults provider', async () => {
+  it('should bypass defaults and use OpenAI when jsonOnly is requested', async () => {
+    // When jsonOnly is requested, we bypass the defaults system to ensure
+    // the JSON response_format is properly applied (defaults providers don't
+    // have JSON mode enabled by default)
     const mockProvider = new MockRedteamProvider('mock-json-provider');
     const { getDefaultProviders } = await import('../../../src/providers/defaults');
     vi.mocked(getDefaultProviders).mockResolvedValue({
@@ -134,10 +137,13 @@ describe('Redteam Provider Manager Integration with Defaults', () => {
     });
 
     expect(provider).toBeDefined();
-    expect(provider.id()).toBe('mock-json-provider');
+    // Should use OpenAI with JSON mode, not the defaults provider
+    expect(provider.id()).toContain('openai');
   });
 
-  it('should handle preferSmallModel configuration with defaults provider', async () => {
+  it('should bypass defaults and use OpenAI when preferSmallModel is requested', async () => {
+    // When preferSmallModel is requested, we bypass the defaults system to ensure
+    // the small model variant is used (defaults providers use a single model)
     const mockProvider = new MockRedteamProvider('mock-small-provider');
     const { getDefaultProviders } = await import('../../../src/providers/defaults');
     vi.mocked(getDefaultProviders).mockResolvedValue({
@@ -152,6 +158,8 @@ describe('Redteam Provider Manager Integration with Defaults', () => {
     });
 
     expect(provider).toBeDefined();
-    expect(provider.id()).toBe('mock-small-provider');
+    // Should use OpenAI small model, not the defaults provider
+    expect(provider.id()).toContain('openai');
+    expect(provider.id()).toContain('mini');
   });
 });

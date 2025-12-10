@@ -45,23 +45,30 @@ async function loadRedteamProvider({
     ret = (await loadApiProvidersModule.loadApiProviders([redteamProvider]))[0];
   } else {
     // No explicit provider - check defaults system for credential-based selection
-    try {
-      const { getDefaultProviders } = await import('../../providers/defaults');
-      const defaults = await getDefaultProviders();
-      if (defaults.redteamProvider) {
-        logger.debug(
-          `[loadRedteamProvider] Using redteam provider from defaults: ${defaults.redteamProvider.id()}`,
-        );
-        ret = defaults.redteamProvider;
+    // Only use defaults for the base case (no jsonOnly, no preferSmallModel)
+    // This ensures jsonOnly/preferSmallModel options are properly applied
+    if (!jsonOnly && !preferSmallModel) {
+      try {
+        const { getDefaultProviders } = await import('../../providers/defaults');
+        const defaults = await getDefaultProviders();
+        if (defaults.redteamProvider) {
+          logger.debug(
+            `[loadRedteamProvider] Using redteam provider from defaults: ${defaults.redteamProvider.id()}`,
+          );
+          ret = defaults.redteamProvider;
+        }
+      } catch {
+        // Defaults system unavailable, fall through to OpenAI fallback
       }
-    } catch {
-      // Defaults system unavailable, fall through to OpenAI fallback
     }
 
-    // Fall back to OpenAI if no defaults provider
+    // Fall back to OpenAI if no defaults provider or if jsonOnly/preferSmallModel requested
     if (!ret) {
       const defaultModel = preferSmallModel ? ATTACKER_MODEL_SMALL : ATTACKER_MODEL;
-      logger.debug(`Using default redteam provider: ${defaultModel}`);
+      logger.debug(`Using default redteam provider: ${defaultModel}`, {
+        jsonOnly,
+        preferSmallModel,
+      });
       ret = new OpenAiChatCompletionProvider(defaultModel, {
         config: {
           temperature: TEMPERATURE,
