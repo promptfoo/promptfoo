@@ -337,6 +337,9 @@ describe('evaluator', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // Reset runExtensionHook to default implementation (other tests may have overridden it)
+    vi.mocked(runExtensionHook).mockReset();
+    vi.mocked(runExtensionHook).mockImplementation((_extensions, _hookName, context) => context);
     // Reset cliState for each test to ensure clean state
     cliState.resume = false;
     cliState.basePath = '';
