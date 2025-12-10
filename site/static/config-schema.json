@@ -162,6 +162,9 @@
                             "DOCKER_MODEL_RUNNER_API_KEY": {
                               "type": "string"
                             },
+                            "ELEVENLABS_API_KEY": {
+                              "type": "string"
+                            },
                             "FAL_KEY": {
                               "type": "string"
                             },

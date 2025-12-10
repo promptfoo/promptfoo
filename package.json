@@ -2,7 +2,7 @@
   "name": "promptfoo",
   "description": "LLM eval & testing toolkit",
   "author": "Ian Webster",
-  "version": "0.120.2",
+  "version": "0.120.3",
   "license": "MIT",
   "type": "module",
   "repository": {
@@ -30,8 +30,7 @@
     "!dist/**/*.map"
   ],
   "engines": {
-    "node": ">=20.0.0",
-    "npm": ">=10.0.0 <11.0.0 || >=11.6.4"
+    "node": ">=20.0.0"
   },
   "bin": {
     "promptfoo": "dist/src/main.js",
@@ -125,7 +124,7 @@
     "@azure/openai-assistants": "^1.0.0-beta.6",
     "@biomejs/biome": "^2.3.8",
     "@fal-ai/client": "^1.7.2",
-    "@ibm-cloud/watsonx-ai": "^1.7.4",
+    "@ibm-cloud/watsonx-ai": "^1.7.5",
     "@ibm-generative-ai/node-sdk": "^3.2.4",
     "@smithy/types": "^4.9.0",
     "@types/async": "^3.2.25",
@@ -200,7 +199,7 @@
     "@biomejs/cli-linux-x64-musl": "2.3.8",
     "@biomejs/cli-win32-x64": "2.3.8",
     "@fal-ai/client": "^1.7.2",
-    "@ibm-cloud/watsonx-ai": "^1.7.4",
+    "@ibm-cloud/watsonx-ai": "^1.7.5",
     "@ibm-generative-ai/node-sdk": "^3.2.4",
     "@openai/codex-sdk": "^0.64.0",
     "@playwright/browser-chromium": "^1.57.0",
