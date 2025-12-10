@@ -65,6 +65,14 @@ export interface BedrockConverseOptions extends BedrockOptions {
     budget_tokens: number;
   };
 
+  // Reasoning configuration (Amazon Nova 2 models)
+  // Note: When reasoning is enabled, temperature/topP/topK must NOT be set
+  // When maxReasoningEffort is 'high', maxTokens must also NOT be set
+  reasoningConfig?: {
+    type: 'enabled' | 'disabled';
+    maxReasoningEffort?: 'low' | 'medium' | 'high';
+  };
+
   // Performance configuration
   performanceConfig?: {
     latency: 'standard' | 'optimized';
@@ -137,6 +145,8 @@ const BEDROCK_CONVERSE_PRICING: Record<string, { input: number; output: number }
   'amazon.nova-lite': { input: 0.06, output: 0.24 },
   'amazon.nova-pro': { input: 0.8, output: 3.2 },
   'amazon.nova-premier': { input: 2.5, output: 10 },
+  // Amazon Nova 2 (reasoning models) - pricing estimated, verify at aws.amazon.com/bedrock/pricing
+  'amazon.nova-2-lite': { input: 0.15, output: 0.6 },
   // Amazon Titan Text
   'amazon.titan-text-lite': { input: 0.15, output: 0.2 },
   'amazon.titan-text-express': { input: 0.8, output: 1.6 },
@@ -582,6 +592,12 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
         provider: 'bedrock_converse',
       });
     }
+    if (this.config.reasoningConfig?.type === 'enabled') {
+      telemetry.record('feature_used', {
+        feature: 'nova2_reasoning',
+        provider: 'bedrock_converse',
+      });
+    }
     if (this.config.tools) {
       telemetry.record('feature_used', {
         feature: 'tool_use',
@@ -707,18 +723,27 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
 
   /**
    * Build the inference configuration from options
+   *
+   * Handles Amazon Nova 2 reasoning constraints:
+   * - When reasoningConfig.type === 'enabled': temperature/topP must NOT be set
+   * - When maxReasoningEffort === 'high': maxTokens must also NOT be set
    */
   private buildInferenceConfig(): InferenceConfiguration | undefined {
-    const maxTokens =
+    // Check reasoning mode constraints for Nova 2 models
+    const reasoningEnabled = this.config.reasoningConfig?.type === 'enabled';
+    const isHighEffort = this.config.reasoningConfig?.maxReasoningEffort === 'high';
+
+    // Get potential values
+    const maxTokensValue =
       this.config.maxTokens ||
       this.config.max_tokens ||
       getEnvInt('AWS_BEDROCK_MAX_TOKENS') ||
       undefined;
 
-    const temperature =
+    const temperatureValue =
       this.config.temperature ?? getEnvFloat('AWS_BEDROCK_TEMPERATURE') ?? undefined;
 
-    const topP = this.config.topP || this.config.top_p || getEnvFloat('AWS_BEDROCK_TOP_P');
+    const topPValue = this.config.topP || this.config.top_p || getEnvFloat('AWS_BEDROCK_TOP_P');
 
     let stopSequences = this.config.stopSequences || this.config.stop;
     if (!stopSequences) {
@@ -731,6 +756,13 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
         }
       }
     }
+
+    // Apply reasoning constraints:
+    // - maxTokens: only include if NOT (reasoning enabled AND high effort)
+    // - temperature/topP: only include if reasoning is NOT enabled
+    const maxTokens = reasoningEnabled && isHighEffort ? undefined : maxTokensValue;
+    const temperature = reasoningEnabled ? undefined : temperatureValue;
+    const topP = reasoningEnabled ? undefined : topPValue;
 
     // Only return config if at least one field is set
     if (
@@ -793,7 +825,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
   }
 
   /**
-   * Build additional model request fields (including thinking config)
+   * Build additional model request fields (including thinking config and reasoningConfig)
    */
   private buildAdditionalModelRequestFields(): DocumentType | undefined {
     const fields: Record<string, unknown> = {
@@ -803,6 +835,11 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
     // Add thinking configuration for Claude models
     if (this.config.thinking) {
       fields.thinking = this.config.thinking;
+    }
+
+    // Add reasoning configuration for Amazon Nova 2 models
+    if (this.config.reasoningConfig) {
+      fields.reasoningConfig = this.config.reasoningConfig;
     }
 
     return Object.keys(fields).length > 0 ? (fields as DocumentType) : undefined;

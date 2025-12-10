@@ -4,7 +4,6 @@ import { isNonInteractive } from '../envars';
 import { getUserEmail, setUserEmail } from '../globalConfig/accounts';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
-import telemetry from '../telemetry';
 import {
   canCreateTargets,
   getDefaultTeam,
@@ -32,9 +31,6 @@ export function authCommand(program: Command) {
     .action(async (cmdObj: { orgId: string; host: string; apiKey: string }) => {
       let token: string | undefined;
       const apiHost = cmdObj.host || cloudConfig.getApiHost();
-      telemetry.record('command_used', {
-        name: 'auth login',
-      });
 
       try {
         if (cmdObj.apiKey) {
@@ -190,10 +186,6 @@ export function authCommand(program: Command) {
             `Could not determine current team: ${teamError instanceof Error ? teamError.message : String(teamError)}`,
           );
         }
-
-        telemetry.record('command_used', {
-          name: 'auth whoami',
-        });
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         logger.error(`Failed to get user info: ${errorMessage}`);
@@ -221,9 +213,6 @@ export function authCommand(program: Command) {
           const canCreate = await canCreateTargets(team.id);
           logger.info(chalk.green(`Can create targets for team ${team.name}: ${canCreate}`));
         }
-        telemetry.record('command_used', {
-          name: 'auth can-create-targets',
-        });
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         logger.error(`Failed to check if user can create targets: ${errorMessage}`);
@@ -269,10 +258,6 @@ export function authCommand(program: Command) {
             logger.info(`\nCurrent team: ${chalk.green(currentTeam.name)}`);
           }
         }
-
-        telemetry.record('command_used', {
-          name: 'auth teams list',
-        });
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         logger.error(`Failed to list teams: ${errorMessage}`);
@@ -307,10 +292,6 @@ export function authCommand(program: Command) {
           const team = await resolveTeamId();
           logger.info(`Current team: ${chalk.green(team.name)} ${chalk.dim('(default)')}`);
         }
-
-        telemetry.record('command_used', {
-          name: 'auth teams current',
-        });
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         logger.error(`Failed to get current team: ${errorMessage}`);
@@ -335,10 +316,6 @@ export function authCommand(program: Command) {
         cloudConfig.setCurrentTeamId(team.id, team.organizationId);
 
         logger.info(chalk.green(`Switched to team: ${team.name}`));
-
-        telemetry.record('command_used', {
-          name: 'auth teams set',
-        });
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         logger.error(`Failed to set team: ${errorMessage}`);

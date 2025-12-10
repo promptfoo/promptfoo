@@ -6,7 +6,6 @@
  * - HTML template files (all *.html in src/)
  * - Python/Go/Ruby wrapper scripts for custom providers
  * - Drizzle ORM migration files
- * - Redteam data files (JSON fixtures)
  * - ESM package.json marker
  * - CLI executable permissions
  *
@@ -45,12 +44,6 @@ const WRAPPER_FILES: Record<WrapperType, string[]> = {
  * Files/patterns to exclude when copying the drizzle directory.
  */
 const DRIZZLE_EXCLUDE_PATTERNS = ['.md', 'CLAUDE', 'AGENTS'];
-
-/**
- * Redteam data files that need to be copied to dist.
- * These are JSON fixtures used at runtime by redteam strategies.
- */
-const REDTEAM_DATA_FILES = ['redteam/strategies/promptInjections/data.json'];
 
 /**
  * Critical build outputs that must exist for the build to be valid.
@@ -145,14 +138,14 @@ function getDrizzleTask(): CopyTask {
 }
 
 /**
- * Generate copy tasks for redteam data files.
- * These are JSON fixtures loaded at runtime by redteam strategies.
+ * Get the proto files copy task for OTLP protobuf support.
  */
-function getRedteamDataTasks(): CopyTask[] {
-  return REDTEAM_DATA_FILES.map((file) => ({
-    src: path.join(SRC, file),
-    dest: path.join(DIST, 'src', file),
-  }));
+function getProtoTask(): CopyTask {
+  return {
+    src: path.join(SRC, 'tracing', 'proto'),
+    dest: path.join(DIST, 'src', 'tracing', 'proto'),
+    recursive: true,
+  };
 }
 
 /**
@@ -240,12 +233,7 @@ export function postbuild(): PostbuildResult {
   }
 
   // Gather all copy tasks
-  const copyTasks = [
-    ...getHtmlFiles(),
-    ...getWrapperTasks(),
-    getDrizzleTask(),
-    ...getRedteamDataTasks(),
-  ];
+  const copyTasks = [...getHtmlFiles(), ...getWrapperTasks(), getDrizzleTask(), getProtoTask()];
 
   // Clean destinations to prevent stale files
   cleanDestinations(copyTasks);

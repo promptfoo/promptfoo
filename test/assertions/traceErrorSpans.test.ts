@@ -2,6 +2,7 @@ import { handleTraceErrorSpans } from '../../src/assertions/traceErrorSpans';
 
 import type { ApiProvider, AssertionParams, AtomicTestCase } from '../../src/types/index';
 import type { TraceData } from '../../src/types/tracing';
+import { describe, expect, it } from 'vitest';
 
 const mockProvider: ApiProvider = {
   id: () => 'mock',
