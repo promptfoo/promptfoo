@@ -105,7 +105,7 @@ import { createSnowflakeProvider } from './snowflake';
 import { createTogetherAiProvider } from './togetherai';
 import { createTrueFoundryProvider } from './truefoundry';
 import { VoyageEmbeddingProvider } from './voyage';
-import { WatsonXProvider } from './watsonx';
+import { WatsonXChatProvider, WatsonXProvider } from './watsonx';
 import { WebhookProvider } from './webhook';
 import { WebSocketProvider } from './websocket';
 import { createXAIProvider } from './xai/chat';
@@ -1114,6 +1114,15 @@ export const providerMap: ProviderFactory[] = [
       _context: LoadApiProviderContext,
     ) => {
       const splits = providerPath.split(':');
+      const modelType = splits[1];
+
+      // Support watsonx:chat:<model> for chat API
+      if (modelType === 'chat') {
+        const modelName = splits.slice(2).join(':');
+        return new WatsonXChatProvider(modelName, providerOptions);
+      }
+
+      // Default: watsonx:<model> for text generation
       const modelName = splits.slice(1).join(':');
       return new WatsonXProvider(modelName, providerOptions);
     },
