@@ -1,246 +1,255 @@
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
-import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom';
-import { describe, expect, it, vi } from 'vitest';
+import { createTheme, ThemeProvider } from '@mui/material/styles';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { useModelAuditHistoryStore } from '../model-audit/stores';
 import ModelAuditResult from './ModelAuditResult';
-import { callApi } from '@app/utils/api';
 
-vi.mock('@app/utils/api');
+vi.mock('../model-audit/stores');
 
-vi.mock('react-router-dom', async () => {
-  const actual = await vi.importActual('react-router-dom');
-  return {
-    ...actual,
-    useNavigate: vi.fn(),
-  };
-});
-
-vi.mock('@app/pages/model-audit/components/ResultsTab', () => ({
-  default: ({ scanResults }: { scanResults: any }) => (
+// Mock the child components
+vi.mock('../model-audit/components/ResultsTab', () => ({
+  default: ({ scanResults }: { scanResults: unknown }) => (
     <div data-testid="results-tab">
-      <span>Issues found: {scanResults?.issues?.length || 0}</span>
+      <span>Results: {scanResults ? 'present' : 'none'}</span>
     </div>
   ),
 }));
 
-vi.mock('@mui/material', async () => {
-  const actual = await vi.importActual('@mui/material');
+vi.mock('../model-audit/components/ScannedFilesDialog', () => ({
+  default: () => <div data-testid="files-dialog" />,
+}));
+
+vi.mock('../model-audit/components/ModelAuditSkeleton', () => ({
+  ResultPageSkeleton: () => <div data-testid="loading-skeleton" />,
+}));
+
+const theme = createTheme();
+
+const mockNavigate = vi.fn();
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual('react-router-dom');
   return {
     ...actual,
-    useMediaQuery: vi.fn(() => true),
-    useTheme: vi.fn(() => ({
-      breakpoints: {
-        down: vi.fn(() => true),
-      },
-    })),
+    useNavigate: () => mockNavigate,
   };
 });
 
+const createMockScan = (id: string, name: string) => ({
+  id,
+  createdAt: Date.now(),
+  updatedAt: Date.now(),
+  name,
+  modelPath: '/test/model.bin',
+  hasErrors: false,
+  results: {
+    path: '/test',
+    success: true,
+    issues: [],
+  },
+  totalChecks: 5,
+  passedChecks: 5,
+  failedChecks: 0,
+  metadata: {
+    originalPaths: ['/test/model.bin'],
+  },
+});
+
 describe('ModelAuditResult', () => {
-  const mockCallApi = vi.mocked(callApi);
-  const mockNavigate = vi.fn();
-  vi.mocked(useNavigate).mockReturnValue(mockNavigate);
+  const mockUseHistoryStore = vi.mocked(useModelAuditHistoryStore);
+  const mockFetchScanById = vi.fn();
+  const mockDeleteHistoricalScan = vi.fn();
 
-  // Mock URL.createObjectURL
-  const mockCreateObjectURL = vi.fn(() => 'mock-url');
-  const mockRevokeObjectURL = vi.fn();
-  global.URL.createObjectURL = mockCreateObjectURL;
-  global.URL.revokeObjectURL = mockRevokeObjectURL;
+  const getDefaultHistoryState = () => ({
+    historicalScans: [],
+    isLoadingHistory: false,
+    historyError: null,
+    totalCount: 0,
+    pageSize: 25,
+    currentPage: 0,
+    sortModel: [{ field: 'createdAt', sort: 'desc' as const }],
+    searchQuery: '',
+    fetchHistoricalScans: vi.fn(),
+    fetchScanById: mockFetchScanById,
+    deleteHistoricalScan: mockDeleteHistoricalScan,
+    setPageSize: vi.fn(),
+    setCurrentPage: vi.fn(),
+    setSortModel: vi.fn(),
+    setSearchQuery: vi.fn(),
+    resetFilters: vi.fn(),
+  });
 
-  const scan = {
-    id: '1',
-    name: 'Scan 1',
-    author: 'Test Author',
-    modelPath: '/path/to/model1',
-    createdAt: Date.now(),
-    results: { issues: [{}, {}] },
-    hasErrors: true,
-    totalChecks: 10,
-    passedChecks: 8,
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUseHistoryStore.mockReturnValue(getDefaultHistoryState() as any);
+  });
+
+  const renderComponent = (scanId: string = 'test-scan-id') => {
+    return render(
+      <MemoryRouter initialEntries={[`/model-audit/${scanId}`]}>
+        <ThemeProvider theme={theme}>
+          <Routes>
+            <Route path="/model-audit/:id" element={<ModelAuditResult />} />
+          </Routes>
+        </ThemeProvider>
+      </MemoryRouter>,
+    );
   };
 
-  it('displays loading state initially', () => {
-    render(
-      <MemoryRouter initialEntries={['/scans/1']}>
-        <Routes>
-          <Route path="/scans/:id" element={<ModelAuditResult />} />
-        </Routes>
-      </MemoryRouter>,
-    );
-    expect(screen.getByText('Loading scan details...')).toBeInTheDocument();
+  it('should show loading state initially', () => {
+    mockFetchScanById.mockImplementation(() => new Promise(() => {})); // Never resolves
+
+    renderComponent();
+
+    expect(screen.getByTestId('loading-skeleton')).toBeInTheDocument();
   });
 
-  it('displays scan result when data is loaded', async () => {
-    mockCallApi.mockResolvedValue({ ok: true, json: () => Promise.resolve(scan) } as Response);
-    render(
-      <MemoryRouter initialEntries={['/scans/1']}>
-        <Routes>
-          <Route path="/scans/:id" element={<ModelAuditResult />} />
-        </Routes>
-      </MemoryRouter>,
-    );
+  it('should fetch scan by ID on mount', async () => {
+    const mockScan = createMockScan('test-scan-id', 'Test Scan');
+    mockFetchScanById.mockResolvedValue(mockScan);
+
+    renderComponent('test-scan-id');
+
     await waitFor(() => {
-      // Target the main heading specifically (h5 element in mobile mode due to mock)
-      expect(screen.getByRole('heading', { level: 5, name: 'Scan 1' })).toBeInTheDocument();
-      expect(screen.getByText('Test Author')).toBeInTheDocument();
-      expect(screen.getByText('8 / 10')).toBeInTheDocument();
-      expect(screen.getByTestId('results-tab')).toBeInTheDocument();
+      expect(mockFetchScanById).toHaveBeenCalledWith('test-scan-id', expect.any(AbortSignal));
     });
   });
 
-  it('displays error state when API call fails', async () => {
-    mockCallApi.mockRejectedValue(new Error('API Error'));
-    render(
-      <MemoryRouter initialEntries={['/scans/1']}>
-        <Routes>
-          <Route path="/scans/:id" element={<ModelAuditResult />} />
-        </Routes>
-      </MemoryRouter>,
-    );
+  it('should display scan details when loaded', async () => {
+    const mockScan = createMockScan('test-scan-id', 'My Test Scan');
+    mockFetchScanById.mockResolvedValue(mockScan);
+
+    renderComponent('test-scan-id');
+
+    // Wait for loading to complete
     await waitFor(() => {
-      expect(screen.getByText('API Error')).toBeInTheDocument();
+      expect(screen.queryByTestId('loading-skeleton')).not.toBeInTheDocument();
+    });
+
+    // Now check for the scan name (use heading role since it's an h4)
+    expect(screen.getByRole('heading', { name: 'My Test Scan' })).toBeInTheDocument();
+    expect(screen.getByTestId('results-tab')).toBeInTheDocument();
+  });
+
+  it('should display error when scan not found', async () => {
+    mockFetchScanById.mockResolvedValue(null);
+
+    renderComponent('nonexistent');
+
+    await waitFor(() => {
+      expect(screen.getByText('Scan not found')).toBeInTheDocument();
     });
   });
 
-  it('displays not found state when scan does not exist', async () => {
-    mockCallApi.mockResolvedValue({
-      ok: false,
-      status: 404,
-      json: () => Promise.resolve({}),
-    } as Response);
-    render(
-      <MemoryRouter initialEntries={['/scans/1']}>
-        <Routes>
-          <Route path="/scans/:id" element={<ModelAuditResult />} />
-        </Routes>
-      </MemoryRouter>,
-    );
+  it('should display model path in scan details', async () => {
+    const mockScan = createMockScan('test-scan-id', 'Test Scan');
+    mockFetchScanById.mockResolvedValue(mockScan);
+
+    renderComponent('test-scan-id');
+
     await waitFor(() => {
-      // The component throws an error which is caught and displayed
-      expect(screen.getByText('Failed to fetch scan details')).toBeInTheDocument();
+      expect(screen.getByText('/test/model.bin')).toBeInTheDocument();
     });
   });
 
-  it('handles delete button click', async () => {
-    mockCallApi.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve(scan) } as Response);
-    mockCallApi.mockResolvedValueOnce({ ok: true } as Response);
-    render(
-      <MemoryRouter initialEntries={['/scans/1']}>
-        <Routes>
-          <Route path="/scans/:id" element={<ModelAuditResult />} />
-        </Routes>
-      </MemoryRouter>,
-    );
+  it('should show clean status when no errors', async () => {
+    const mockScan = createMockScan('test-scan-id', 'Test Scan');
+    mockScan.hasErrors = false;
+    mockFetchScanById.mockResolvedValue(mockScan);
+
+    renderComponent('test-scan-id');
+
     await waitFor(() => {
-      fireEvent.click(screen.getByLabelText('Delete scan permanently'));
-    });
-    await waitFor(() => {
-      expect(mockCallApi).toHaveBeenCalledWith(
-        '/model-audit/scans/1',
-        expect.objectContaining({ method: 'DELETE' }),
-      );
-      expect(mockNavigate).toHaveBeenCalledWith('/model-audit/history');
+      expect(screen.getByText('Clean')).toBeInTheDocument();
     });
   });
 
-  it('handles delete operation fails', async () => {
-    mockCallApi.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve(scan) } as Response);
-    mockCallApi.mockRejectedValueOnce(new Error('Failed to delete scan from API'));
+  it('should show issues found status when has errors', async () => {
+    const mockScan = createMockScan('test-scan-id', 'Test Scan');
+    mockScan.hasErrors = true;
+    mockFetchScanById.mockResolvedValue(mockScan);
 
-    render(
-      <MemoryRouter initialEntries={['/scans/1']}>
-        <Routes>
-          <Route path="/scans/:id" element={<ModelAuditResult />} />
-        </Routes>
-      </MemoryRouter>,
-    );
+    renderComponent('test-scan-id');
 
     await waitFor(() => {
-      fireEvent.click(screen.getByLabelText('Delete scan permanently'));
-    });
-
-    await waitFor(() => {
-      expect(screen.getByText('Failed to delete scan from API')).toBeInTheDocument();
+      expect(screen.getByText('Issues Found')).toBeInTheDocument();
     });
   });
 
-  it('handles download button click', async () => {
-    mockCallApi.mockResolvedValue({ ok: true, json: () => Promise.resolve(scan) } as Response);
-    render(
-      <MemoryRouter initialEntries={['/scans/1']}>
-        <Routes>
-          <Route path="/scans/:id" element={<ModelAuditResult />} />
-        </Routes>
-      </MemoryRouter>,
-    );
+  it('should open delete confirmation dialog when delete is clicked', async () => {
+    const user = userEvent.setup();
+    const mockScan = createMockScan('test-scan-id', 'Test Scan');
+    mockFetchScanById.mockResolvedValue(mockScan);
+
+    renderComponent('test-scan-id');
+
+    // Wait for loading to complete
     await waitFor(() => {
-      fireEvent.click(screen.getByLabelText('Download scan results as JSON'));
+      expect(screen.queryByTestId('loading-skeleton')).not.toBeInTheDocument();
     });
-    // Just verify the URL methods were called - DOM manipulation can be unreliable in tests
-    expect(mockCreateObjectURL).toHaveBeenCalled();
-    expect(mockRevokeObjectURL).toHaveBeenCalled();
+
+    // Find and click the Delete button
+    const deleteButton = screen.getByRole('button', { name: /Delete/i });
+    await user.click(deleteButton);
+
+    expect(screen.getByText('Delete Scan?')).toBeInTheDocument();
+    expect(
+      screen.getByText('Are you sure you want to delete this scan? This action cannot be undone.'),
+    ).toBeInTheDocument();
   });
 
-  it('handles refresh button click', async () => {
-    const reload = vi.fn();
-    Object.defineProperty(window, 'location', {
-      value: { reload },
-      writable: true,
-    });
-    mockCallApi.mockResolvedValue({ ok: true, json: () => Promise.resolve(scan) } as Response);
-    render(
-      <MemoryRouter initialEntries={['/scans/1']}>
-        <Routes>
-          <Route path="/scans/:id" element={<ModelAuditResult />} />
-        </Routes>
-      </MemoryRouter>,
-    );
-    await waitFor(() => {
-      fireEvent.click(screen.getByLabelText('Refresh scan details'));
-    });
-    expect(reload).toHaveBeenCalled();
-  });
+  it('should delete scan and navigate to history when confirmed', async () => {
+    const user = userEvent.setup();
+    const mockScan = createMockScan('test-scan-id', 'Test Scan');
+    mockFetchScanById.mockResolvedValue(mockScan);
+    mockDeleteHistoricalScan.mockResolvedValue(undefined);
 
-  it('renders correctly when optional data is missing', async () => {
-    const partialScan = { ...scan, author: null, totalChecks: null, passedChecks: null };
-    mockCallApi.mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve(partialScan),
-    } as Response);
-    render(
-      <MemoryRouter initialEntries={['/scans/1']}>
-        <Routes>
-          <Route path="/scans/:id" element={<ModelAuditResult />} />
-        </Routes>
-      </MemoryRouter>,
-    );
+    renderComponent('test-scan-id');
+
+    // Wait for loading to complete
     await waitFor(() => {
-      // Target the main heading specifically (h5 element in mobile mode due to mock)
-      expect(screen.getByRole('heading', { level: 5, name: 'Scan 1' })).toBeInTheDocument();
-      expect(screen.queryByText('Test Author')).not.toBeInTheDocument();
-      expect(screen.queryByText('8 / 10')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('loading-skeleton')).not.toBeInTheDocument();
+    });
+
+    // Open delete dialog
+    const deleteButton = screen.getByRole('button', { name: /Delete/i });
+    await user.click(deleteButton);
+
+    // Wait for dialog to appear
+    await waitFor(() => {
+      expect(screen.getByText('Delete Scan?')).toBeInTheDocument();
+    });
+
+    // Get all delete buttons and find the one in the dialog (MuiButton-containedError)
+    const deleteButtons = screen.getAllByRole('button', { name: /Delete/i });
+    const confirmButton = deleteButtons.find(
+      (btn) => btn.className.includes('contained') || btn.getAttribute('variant') === 'contained',
+    );
+    await user.click(confirmButton || deleteButtons[deleteButtons.length - 1]);
+
+    await waitFor(() => {
+      expect(mockDeleteHistoricalScan).toHaveBeenCalledWith('test-scan-id');
+      expect(mockNavigate).toHaveBeenCalledWith('/model-audits');
     });
   });
 
-  it('displays an error message when download fails', async () => {
-    mockCallApi.mockResolvedValue({ ok: true, json: () => Promise.resolve(scan) } as Response);
-    mockCreateObjectURL.mockImplementation(() => {
-      throw new Error('Failed to create object URL');
-    });
+  it('should have breadcrumb navigation', async () => {
+    const mockScan = createMockScan('test-scan-id', 'Test Scan');
+    mockFetchScanById.mockResolvedValue(mockScan);
 
-    render(
-      <MemoryRouter initialEntries={['/scans/1']}>
-        <Routes>
-          <Route path="/scans/:id" element={<ModelAuditResult />} />
-        </Routes>
-      </MemoryRouter>,
-    );
+    renderComponent('test-scan-id');
 
+    // Wait for loading to complete
     await waitFor(() => {
-      fireEvent.click(screen.getByLabelText('Download scan results as JSON'));
+      expect(screen.queryByTestId('loading-skeleton')).not.toBeInTheDocument();
     });
 
-    await waitFor(() => {
-      expect(screen.getByText('Failed to download scan results')).toBeInTheDocument();
-    });
+    // Check for breadcrumb links
+    const links = screen.getAllByRole('link');
+    const modelAuditLink = links.find((link) => link.textContent === 'Model Audit');
+    const historyLink = links.find((link) => link.textContent === 'History');
+    expect(modelAuditLink).toBeInTheDocument();
+    expect(historyLink).toBeInTheDocument();
   });
 });

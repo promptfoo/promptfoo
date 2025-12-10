@@ -11,7 +11,7 @@ import type { Socket } from 'socket.io-client';
 
 import cliState from '../../cliState';
 import logger, { getLogLevel } from '../../logger';
-import type { PullRequestContext } from '../../types/codeScan';
+import type { PullRequestContext, ScanResponse } from '../../types/codeScan';
 import type { Config } from '../config/schema';
 import {
   loadConfigOrDefault,
@@ -207,7 +207,12 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
     // Check if there are no files to scan
     if (includedFiles.length === 0) {
       const msg = 'No files to scan';
-      if (showSpinner && spinner) {
+
+      // In JSON mode, output a proper JSON response for programmatic consumption
+      if (options.json) {
+        const response: ScanResponse = { success: true, comments: [], review: msg };
+        logger.info(JSON.stringify(response, null, 2));
+      } else if (showSpinner && spinner) {
         spinner.succeed(msg);
       } else {
         logger.info(msg);

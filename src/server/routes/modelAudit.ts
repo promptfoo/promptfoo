@@ -3,135 +3,52 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
-import { Router, type Request, type Response } from 'express';
-
-// Type definitions for error responses
-interface ErrorResponse {
-  error: string;
-  originalError?: string;
-  suggestion?: string;
-  debug?: Record<string, unknown>;
-  type?: string;
-  details?: unknown;
-  exitCode?: number | null;
-  stderr?: string;
-  stdout?: string;
-  parseError?: string;
-  output?: string;
-}
-
+import { Router } from 'express';
 import { checkModelAuditInstalled } from '../../commands/modelScan';
 import logger from '../../logger';
 import ModelAudit from '../../models/modelAudit';
 import telemetry from '../../telemetry';
 import { parseModelAuditArgs } from '../../util/modelAuditCliParser';
+import type { Request, Response } from 'express';
+
 import type { ModelAuditScanResults } from '../../types/modelAudit';
-import {
-  ZCheckPathRequest,
-  ZCheckPathResponse,
-  ZScanRequest,
-  ZScansQuery,
-  ZScansResponse,
-  ZDeleteResponse,
-  ZCheckInstalledResponse,
-} from './modelAudit.schemas';
-
-// Path normalization helper - expands ~ and converts to absolute paths
-function validateAndNormalizePath(
-  inputPath: string,
-  baseDir: string = process.cwd(),
-): { valid: boolean; normalizedPath: string; error?: string } {
-  try {
-    // Handle home directory expansion
-    let expandedPath = inputPath;
-    if (expandedPath.startsWith('~/')) {
-      expandedPath = path.join(os.homedir(), expandedPath.slice(2));
-    }
-
-    // Resolve to absolute path
-    const absolutePath = path.isAbsolute(expandedPath)
-      ? path.resolve(expandedPath)
-      : path.resolve(baseDir, expandedPath);
-
-    // Normalize to remove any ../ or ./ components
-    const normalizedPath = path.normalize(absolutePath);
-
-    return { valid: true, normalizedPath };
-  } catch (error) {
-    return { valid: false, normalizedPath: '', error: `Path normalization error: ${error}` };
-  }
-}
-
-// Helper to conditionally include debug info (only in development or when DEBUG_MODEL_AUDIT is set)
-const includeDebugInfo = (debugInfo: Record<string, any>) => {
-  if (process.env.NODE_ENV === 'development' || process.env.DEBUG_MODEL_AUDIT === 'true') {
-    // In development, sanitize sensitive paths but include debug info
-    const sanitizedInfo = { ...debugInfo };
-    if (sanitizedInfo.cwd) {
-      // Replace absolute paths with relative ones for security
-      sanitizedInfo.cwd = sanitizedInfo.cwd.replace(process.env.HOME || '', '~');
-    }
-    if (sanitizedInfo.args && Array.isArray(sanitizedInfo.args)) {
-      // Truncate very long arguments
-      sanitizedInfo.args = sanitizedInfo.args.map((arg: string) =>
-        arg.length > 1000 ? arg.substring(0, 1000) + '...' : arg,
-      );
-    }
-    return sanitizedInfo;
-  }
-  return undefined;
-};
 
 export const modelAuditRouter = Router();
 
 // Check if modelaudit is installed
 modelAuditRouter.get('/check-installed', async (_req: Request, res: Response): Promise<void> => {
   try {
-    // Track the check installation action
-    telemetry.record('webui_api', {
-      event: 'model_audit_check_installed',
-    });
-
     // First try to check if the modelaudit CLI is available
-    const installed = await checkModelAuditInstalled();
-    const response = ZCheckInstalledResponse.parse({ installed, cwd: process.cwd() });
-    res.json(response);
+    const { installed, version } = await checkModelAuditInstalled();
+    res.json({ installed, version, cwd: process.cwd() });
   } catch {
-    const response = ZCheckInstalledResponse.parse({ installed: false, cwd: process.cwd() });
-    res.json(response);
+    res.json({ installed: false, version: null, cwd: process.cwd() });
   }
 });
 
 // Check path type
 modelAuditRouter.post('/check-path', async (req: Request, res: Response): Promise<void> => {
   try {
-    // Track the check path action
-    telemetry.record('webui_api', {
-      event: 'model_audit_check_path',
-    });
+    const { path: inputPath } = req.body;
 
-    // Validate request body
-    const bodyResult = ZCheckPathRequest.safeParse(req.body);
-    if (!bodyResult.success) {
-      res.status(400).json({ error: 'Invalid request body', details: bodyResult.error.errors });
+    if (!inputPath) {
+      res.status(400).json({ error: 'No path provided' });
       return;
     }
 
-    const { path: inputPath } = bodyResult.data;
-
-    // Validate and normalize path
-    const validation = validateAndNormalizePath(inputPath);
-    if (!validation.valid) {
-      res.status(400).json({ error: validation.error || 'Invalid path' });
-      return;
+    // Handle home directory expansion
+    let expandedPath = inputPath;
+    if (expandedPath.startsWith('~/')) {
+      expandedPath = path.join(os.homedir(), expandedPath.slice(2));
     }
 
-    const absolutePath = validation.normalizedPath;
+    const absolutePath = path.isAbsolute(expandedPath)
+      ? expandedPath
+      : path.resolve(process.cwd(), expandedPath);
 
     // Check if path exists
     if (!fs.existsSync(absolutePath)) {
-      const response = ZCheckPathResponse.parse({ exists: false, type: 'unknown' });
-      res.json(response);
+      res.json({ exists: false, type: null });
       return;
     }
 
@@ -139,13 +56,12 @@ modelAuditRouter.post('/check-path', async (req: Request, res: Response): Promis
     const stats = fs.statSync(absolutePath);
     const type = stats.isDirectory() ? 'directory' : 'file';
 
-    const response = ZCheckPathResponse.parse({
+    res.json({
       exists: true,
       type,
+      absolutePath,
       name: path.basename(absolutePath),
     });
-
-    res.json(response);
   } catch (error) {
     logger.error(`Error checking path: ${error}`);
     res.status(500).json({ error: String(error) });
@@ -155,17 +71,15 @@ modelAuditRouter.post('/check-path', async (req: Request, res: Response): Promis
 // Run model scan
 modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void> => {
   try {
-    // Validate request body
-    const bodyResult = ZScanRequest.safeParse(req.body);
-    if (!bodyResult.success) {
-      res.status(400).json({ error: 'Invalid request body', details: bodyResult.error.errors });
+    const { paths, options = {} } = req.body;
+
+    if (!paths || !Array.isArray(paths) || paths.length === 0) {
+      res.status(400).json({ error: 'No paths provided' });
       return;
     }
 
-    const { paths, options } = bodyResult.data;
-
     // Check if modelaudit is installed
-    const installed = await checkModelAuditInstalled();
+    const { installed } = await checkModelAuditInstalled();
     if (!installed) {
       res.status(400).json({
         error: 'ModelAudit is not installed. Please install it using: pip install modelaudit',
@@ -181,18 +95,21 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
         continue;
       }
 
-      // Validate and normalize path
-      const validation = validateAndNormalizePath(inputPath);
-      if (!validation.valid) {
-        res.status(400).json({ error: validation.error || `Invalid path: ${inputPath}` });
-        return;
+      // Handle home directory expansion
+      let expandedPath = inputPath;
+      if (expandedPath.startsWith('~/')) {
+        expandedPath = path.join(os.homedir(), expandedPath.slice(2));
       }
 
-      const absolutePath = validation.normalizedPath;
+      const absolutePath = path.isAbsolute(expandedPath)
+        ? expandedPath
+        : path.resolve(process.cwd(), expandedPath);
 
       // Check if path exists
       if (!fs.existsSync(absolutePath)) {
-        res.status(400).json({ error: `Path does not exist: ${inputPath}` });
+        res
+          .status(400)
+          .json({ error: `Path does not exist: ${inputPath} (resolved to: ${absolutePath})` });
         return;
       }
 
@@ -227,7 +144,7 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
       pathCount: paths.length,
       hasBlacklist: options.blacklist?.length > 0,
       timeout: options.timeout,
-      verbose: options.verbose ?? false,
+      verbose: options.verbose,
       persist,
     });
 
@@ -235,6 +152,31 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
     const modelAudit = spawn('modelaudit', args);
     let stdout = '';
     let stderr = '';
+    let responded = false; // Prevent double-response
+
+    // Helper to safely send response (prevents double-response if both error and close fire)
+    const safeRespond = (statusCode: number, body: object) => {
+      if (responded) {
+        return;
+      }
+      responded = true;
+      res.status(statusCode).json(body);
+    };
+
+    // Clean up child process if client disconnects
+    const cleanup = () => {
+      if (!modelAudit.killed) {
+        logger.debug('Client disconnected, killing modelaudit process');
+        modelAudit.kill('SIGTERM');
+      }
+    };
+
+    // Handle client disconnect (request abort)
+    req.on('close', () => {
+      if (!responded) {
+        cleanup();
+      }
+    });
 
     modelAudit.stdout.on('data', (data) => {
       stdout += data.toString();
@@ -258,27 +200,24 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
         suggestion = 'Check that modelaudit is executable and you have the necessary permissions';
       }
 
-      const response: ErrorResponse = {
+      safeRespond(500, {
         error: errorMessage,
         originalError: error.message,
         suggestion: suggestion,
-      };
-
-      const debugInfo = includeDebugInfo({
-        command: 'modelaudit',
-        args: args,
-        paths: resolvedPaths,
-        cwd: process.cwd(),
+        debug: {
+          command: 'modelaudit',
+          args: args,
+          paths: resolvedPaths,
+          cwd: process.cwd(),
+        },
       });
-
-      if (debugInfo) {
-        response.debug = debugInfo;
-      }
-
-      res.status(500).json(response);
     });
 
     modelAudit.on('close', async (code) => {
+      // If client already disconnected, don't process results
+      if (responded) {
+        return;
+      }
       // ModelAudit returns exit code 1 when it finds issues, which is expected
       if (code !== null && code !== 0 && code !== 1) {
         logger.error(`Model scan process exited with code ${code}`);
@@ -370,52 +309,38 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
           }
         }
 
-        const response: ErrorResponse = {
+        safeRespond(500, {
           error: errorMessage,
           exitCode: code,
           stderr: stderr || undefined,
           stdout: stdout || undefined,
           ...errorDetails,
-        };
-
-        const debugInfo = includeDebugInfo({
-          command: 'modelaudit',
-          args: args,
-          paths: resolvedPaths,
-          cwd: process.cwd(),
+          debug: {
+            command: 'modelaudit',
+            args: args,
+            paths: resolvedPaths,
+            cwd: process.cwd(),
+          },
         });
-
-        if (debugInfo) {
-          response.debug = debugInfo;
-        }
-
-        res.status(500).json(response);
         return;
       }
 
       try {
         const jsonOutput = stdout.trim();
         if (!jsonOutput) {
-          const response: ErrorResponse = {
+          safeRespond(500, {
             error: 'No output received from model scan',
             stderr: stderr || undefined,
             suggestion:
               'The scan may have failed silently. Check that the model files are valid and accessible.',
-          };
-
-          const debugInfo = includeDebugInfo({
-            command: 'modelaudit',
-            args: args,
-            paths: resolvedPaths,
-            cwd: process.cwd(),
-            exitCode: code,
+            debug: {
+              command: 'modelaudit',
+              args: args,
+              paths: resolvedPaths,
+              cwd: process.cwd(),
+              exitCode: code,
+            },
           });
-
-          if (debugInfo) {
-            response.debug = debugInfo;
-          }
-
-          res.status(500).json(response);
           return;
         }
 
@@ -424,28 +349,21 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
           scanResults = JSON.parse(jsonOutput);
         } catch (parseError) {
           logger.error(`Failed to parse model scan output: ${parseError}`);
-          const response: ErrorResponse = {
+          safeRespond(500, {
             error: 'Failed to parse scan results - invalid JSON output',
             parseError: String(parseError),
             output: jsonOutput.substring(0, 1000), // Include first 1000 chars for debugging
             stderr: stderr || undefined,
             suggestion:
               'The model scan may have produced invalid output. Check the raw output for error messages.',
-          };
-
-          const debugInfo = includeDebugInfo({
-            command: 'modelaudit',
-            args: args,
-            paths: resolvedPaths,
-            cwd: process.cwd(),
-            exitCode: code,
+            debug: {
+              command: 'modelaudit',
+              args: args,
+              paths: resolvedPaths,
+              cwd: process.cwd(),
+              exitCode: code,
+            },
           });
-
-          if (debugInfo) {
-            response.debug = debugInfo;
-          }
-
-          res.status(500).json(response);
           return;
         }
 
@@ -455,7 +373,7 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
           try {
             const audit = await ModelAudit.create({
               name: options.name || `API scan ${new Date().toISOString()}`,
-              author: options.author || undefined,
+              author: options.author || null,
               modelPath: resolvedPaths.join(', '),
               results: {
                 ...scanResults,
@@ -467,7 +385,8 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
                 options: {
                   blacklist: options.blacklist,
                   timeout: options.timeout,
-                  maxSize: options.maxSize,
+                  maxFileSize: options.maxFileSize,
+                  maxTotalSize: options.maxTotalSize,
                   verbose: options.verbose,
                 },
               },
@@ -481,7 +400,7 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
         }
 
         // Return the scan results along with audit ID if saved
-        res.json({
+        safeRespond(200, {
           ...scanResults,
           rawOutput: jsonOutput, // Include the raw output from the scanner
           ...(auditId && { auditId }),
@@ -489,7 +408,7 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
         });
       } catch (error) {
         logger.error(`Error processing model scan results: ${error}`);
-        res.status(500).json({
+        safeRespond(500, {
           error: 'Error processing scan results',
           details: String(error),
         });
@@ -501,78 +420,68 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
   }
 });
 
-// Get all model scans
+// Valid sort fields and order values for the /scans endpoint
+const VALID_SORT_FIELDS = ['createdAt', 'name', 'modelPath'] as const;
+const VALID_SORT_ORDERS = ['asc', 'desc'] as const;
+type SortField = (typeof VALID_SORT_FIELDS)[number];
+type SortOrder = (typeof VALID_SORT_ORDERS)[number];
+
+// Get all model scans with pagination support
 modelAuditRouter.get('/scans', async (req: Request, res: Response): Promise<void> => {
   try {
-    // Track the list scans action
-    telemetry.record('webui_api', {
-      event: 'model_audit_list_scans',
-    });
+    const limit = Math.min(Math.max(1, parseInt(req.query.limit as string) || 100), 100);
+    const offset = Math.max(0, parseInt(req.query.offset as string) || 0);
+    const sortParam = (req.query.sort as string) || 'createdAt';
+    const orderParam = (req.query.order as string) || 'desc';
+    const search = req.query.search as string | undefined;
 
-    // Parse and validate query parameters
-    const queryResult = ZScansQuery.safeParse(req.query);
-    if (!queryResult.success) {
-      res
-        .status(400)
-        .json({ error: 'Invalid query parameters', details: queryResult.error.errors });
-      return;
-    }
+    // Validate sort field against allowlist
+    const sort: SortField = VALID_SORT_FIELDS.includes(sortParam as SortField)
+      ? (sortParam as SortField)
+      : 'createdAt';
 
-    const { limit, offset, search, sort, order } = queryResult.data;
+    // Validate order against allowlist
+    const order: SortOrder = VALID_SORT_ORDERS.includes(orderParam as SortOrder)
+      ? (orderParam as SortOrder)
+      : 'desc';
 
-    // Use server-side pagination, search, and sorting for proper performance
-    const { audits, total } = await ModelAudit.getManyWithPagination({
-      limit,
-      offset,
-      search,
-      sort,
-      order,
-    });
+    const audits = await ModelAudit.getMany(limit, offset, sort, order, search);
+    const total = await ModelAudit.count(search);
 
-    const response = ZScansResponse.parse({
+    res.json({
       scans: audits.map((audit) => audit.toJSON()),
       total,
+      limit,
+      offset,
     });
-
-    res.json(response);
   } catch (error) {
     logger.error(`Error fetching model audits: ${error}`);
     res.status(500).json({ error: String(error) });
   }
 });
 
-// Get latest model scan
+// IMPORTANT: /scans/latest must be defined BEFORE /scans/:id to prevent
+// "latest" from being matched as an :id parameter
+// Get the latest/most recent model scan
 modelAuditRouter.get('/scans/latest', async (_req: Request, res: Response): Promise<void> => {
   try {
-    // Track the get latest scan action
-    telemetry.record('webui_api', {
-      event: 'model_audit_get_latest',
-    });
+    const audits = await ModelAudit.getMany(1, 0, 'createdAt', 'desc');
 
-    const latest = await ModelAudit.latest();
-
-    if (!latest) {
-      // Return 204 No Content when no scans exist
-      res.status(204).send();
+    if (audits.length === 0) {
+      res.status(404).json({ error: 'No scans found' });
       return;
     }
 
-    res.json(latest.toJSON());
+    res.json(audits[0].toJSON());
   } catch (error) {
     logger.error(`Error fetching latest model audit: ${error}`);
     res.status(500).json({ error: String(error) });
   }
 });
 
-// Get specific model scan by ID
+// Get specific model scan by ID (must be after /scans/latest)
 modelAuditRouter.get('/scans/:id', async (req: Request, res: Response): Promise<void> => {
   try {
-    // Track the get scan by ID action
-    telemetry.record('webui_api', {
-      event: 'model_audit_get_scan',
-      scanId: req.params.id,
-    });
-
     const audit = await ModelAudit.findById(req.params.id);
 
     if (!audit) {
@@ -590,12 +499,6 @@ modelAuditRouter.get('/scans/:id', async (req: Request, res: Response): Promise<
 // Delete model scan
 modelAuditRouter.delete('/scans/:id', async (req: Request, res: Response): Promise<void> => {
   try {
-    // Track the delete scan action
-    telemetry.record('webui_api', {
-      event: 'model_audit_delete_scan',
-      scanId: req.params.id,
-    });
-
     const audit = await ModelAudit.findById(req.params.id);
 
     if (!audit) {
@@ -604,13 +507,7 @@ modelAuditRouter.delete('/scans/:id', async (req: Request, res: Response): Promi
     }
 
     await audit.delete();
-
-    const response = ZDeleteResponse.parse({
-      success: true,
-      message: 'Model scan deleted successfully',
-    });
-
-    res.json(response);
+    res.json({ success: true, message: 'Model scan deleted successfully' });
   } catch (error) {
     logger.error(`Error deleting model audit: ${error}`);
     res.status(500).json({ error: String(error) });

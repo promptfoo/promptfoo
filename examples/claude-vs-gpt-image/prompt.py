@@ -1,7 +1,6 @@
 import base64
 import typing
-
-import requests
+from urllib.request import urlopen
 
 
 # Type definitions for improved code readability
@@ -11,7 +10,7 @@ class Vars(typing.TypedDict):
 
 class Provider(typing.TypedDict):
     id: str
-    label: str | None
+    label: typing.Optional[str]
 
 
 class PromptFunctionContext(typing.TypedDict):
@@ -19,7 +18,7 @@ class PromptFunctionContext(typing.TypedDict):
     provider: Provider
 
 
-def get_image_base64(image_url: str) -> str:
+def get_image_base64(image_url: str) -> tuple[str, str]:
     """
     Fetch an image from a URL and convert it to a base64-encoded string.
 
@@ -27,10 +26,11 @@ def get_image_base64(image_url: str) -> str:
         image_url (str): The URL of the image to fetch.
 
     Returns:
-        str: The base64-encoded image data.
+        tuple[str, str]: The base64-encoded image data and media type.
     """
-    response = requests.get(image_url)
-    return base64.b64encode(response.content).decode("utf-8")
+    with urlopen(image_url) as response:
+        media_type = response.headers.get("Content-Type", "image/jpeg").split(";")[0]
+        return base64.b64encode(response.read()).decode("utf-8"), media_type
 
 
 # System prompt for image description task
@@ -53,10 +53,13 @@ def format_image_prompt(context: PromptFunctionContext) -> list[dict[str, typing
     Raises:
         ValueError: If an unsupported provider is specified.
     """
+    provider_id = context["provider"]["id"]
     if (
-        context["provider"]["id"].startswith("bedrock:anthropic")
-        or context["provider"]["id"] == "anthropic:claude-3-5-sonnet-20241022"
+        provider_id.startswith("bedrock:anthropic")
+        or provider_id.startswith("bedrock:us.anthropic")
+        or provider_id.startswith("anthropic:")
     ):
+        image_data, media_type = get_image_base64(context["vars"]["image_url"])
         return [
             {"role": "system", "content": system_prompt},
             {
@@ -66,12 +69,27 @@ def format_image_prompt(context: PromptFunctionContext) -> list[dict[str, typing
                         "type": "image",
                         "source": {
                             "type": "base64",
-                            "media_type": "image/jpeg",
-                            "data": get_image_base64(context["vars"]["image_url"]),
+                            "media_type": media_type,
+                            "data": image_data,
                         },
                     }
                 ],
             },
+        ]
+    if provider_id.startswith("google:gemini"):
+        image_data, media_type = get_image_base64(context["vars"]["image_url"])
+        return [
+            {
+                "parts": [
+                    {
+                        "inline_data": {
+                            "mime_type": media_type,
+                            "data": image_data,
+                        }
+                    },
+                    {"text": system_prompt},
+                ]
+            }
         ]
     # label might not exist
     if context["provider"].get("label") == "custom label for gpt-4.1":

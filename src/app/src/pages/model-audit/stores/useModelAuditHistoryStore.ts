@@ -1,91 +1,75 @@
 import { callApi } from '@app/utils/api';
 import { create } from 'zustand';
 
-import type { ScanResult } from '../ModelAudit.types';
+import type { HistoricalScan } from '../ModelAudit.types';
 
-// History-related types
-export interface HistoricalScan {
-  id: string;
-  createdAt: number;
-  updatedAt: number;
-  name?: string | null;
-  author?: string | null;
-  modelPath: string;
-  modelType?: string | null;
-  results: ScanResult;
-  hasErrors: boolean;
-  totalChecks?: number | null;
-  passedChecks?: number | null;
-  failedChecks?: number | null;
-  metadata?: Record<string, any> | null;
+// Re-export types for convenience
+export type { HistoricalScan };
+
+interface SortModel {
+  field: string;
+  sort: 'asc' | 'desc';
 }
 
 interface ModelAuditHistoryState {
-  // History state
+  // History data
   historicalScans: HistoricalScan[];
   isLoadingHistory: boolean;
   historyError: string | null;
+  totalCount: number;
 
-  // DataGrid state
+  // DataGrid pagination/filtering state
   pageSize: number;
   currentPage: number;
-  sortModel: Array<{ field: string; sort: 'asc' | 'desc' }>;
-  filterModel: any;
+  sortModel: SortModel[];
   searchQuery: string;
 
-  // Actions - History
-  fetchHistoricalScans: () => Promise<void>;
+  // Actions
+  fetchHistoricalScans: (signal?: AbortSignal) => Promise<void>;
+  fetchScanById: (id: string, signal?: AbortSignal) => Promise<HistoricalScan | null>;
   deleteHistoricalScan: (id: string) => Promise<void>;
-
-  // Actions - DataGrid state
-  setPageSize: (pageSize: number) => void;
+  setPageSize: (size: number) => void;
   setCurrentPage: (page: number) => void;
-  setSortModel: (sortModel: Array<{ field: string; sort: 'asc' | 'desc' }>) => void;
-  setFilterModel: (filterModel: any) => void;
+  setSortModel: (model: SortModel[]) => void;
   setSearchQuery: (query: string) => void;
-
-  // Reset state
-  resetHistoryState: () => void;
+  resetFilters: () => void;
 }
+
+const DEFAULT_PAGE_SIZE = 25;
 
 export const useModelAuditHistoryStore = create<ModelAuditHistoryState>()((set, get) => ({
   // Initial state
   historicalScans: [],
   isLoadingHistory: false,
   historyError: null,
-  pageSize: 50,
+  totalCount: 0,
+  pageSize: DEFAULT_PAGE_SIZE,
   currentPage: 0,
   sortModel: [{ field: 'createdAt', sort: 'desc' }],
-  filterModel: {},
   searchQuery: '',
 
-  // Actions - History
-  fetchHistoricalScans: async () => {
-    const { pageSize, currentPage, sortModel, searchQuery } = get();
+  // Actions
+  fetchHistoricalScans: async (signal?: AbortSignal) => {
     set({ isLoadingHistory: true, historyError: null });
 
     try {
-      // Build query parameters (normalize negative values)
-      const normalizedPageSize = Math.max(0, pageSize);
-      const normalizedCurrentPage = Math.max(0, currentPage);
+      const { pageSize, currentPage, sortModel, searchQuery } = get();
+      const offset = currentPage * pageSize;
+      const sort = sortModel[0]?.field || 'createdAt';
+      const order = sortModel[0]?.sort || 'desc';
+
       const params = new URLSearchParams({
-        limit: normalizedPageSize.toString(),
-        offset: (normalizedCurrentPage * normalizedPageSize).toString(),
+        limit: pageSize.toString(),
+        offset: offset.toString(),
+        sort,
+        order,
       });
 
-      if (searchQuery.trim()) {
-        params.set('search', searchQuery.trim());
+      if (searchQuery) {
+        params.append('search', searchQuery);
       }
 
-      if (sortModel.length > 0) {
-        const sort = sortModel[0];
-        params.set('sort', sort.field);
-        params.set('order', sort.sort);
-      }
-
-      const response = await callApi(`/model-audit/scans?${params.toString()}`, {
-        cache: 'no-store',
-      });
+      const response = await callApi(`/model-audit/scans?${params.toString()}`, { signal });
       if (!response.ok) {
         throw new Error('Failed to fetch historical scans');
       }
@@ -93,9 +77,14 @@ export const useModelAuditHistoryStore = create<ModelAuditHistoryState>()((set, 
       const data = await response.json();
       set({
         historicalScans: data.scans || [],
+        totalCount: data.total || data.scans?.length || 0,
         isLoadingHistory: false,
       });
     } catch (error) {
+      // Don't set error state if request was aborted
+      if (error instanceof Error && error.name === 'AbortError') {
+        return;
+      }
       const errorMessage = error instanceof Error ? error.message : 'Failed to fetch history';
       set({
         isLoadingHistory: false,
@@ -104,7 +93,38 @@ export const useModelAuditHistoryStore = create<ModelAuditHistoryState>()((set, 
     }
   },
 
+  fetchScanById: async (id: string, signal?: AbortSignal) => {
+    try {
+      const response = await callApi(`/model-audit/scans/${id}`, { signal });
+      if (!response.ok) {
+        if (response.status === 404) {
+          return null;
+        }
+        throw new Error('Failed to fetch scan');
+      }
+      return await response.json();
+    } catch (error) {
+      // Re-throw AbortError so caller can handle it appropriately
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw error;
+      }
+      throw error;
+    }
+  },
+
   deleteHistoricalScan: async (id: string) => {
+    // Optimistic delete: remove from UI immediately
+    const previousScans = get().historicalScans;
+    const previousCount = get().totalCount;
+    const scanToDelete = previousScans.find((scan) => scan.id === id);
+
+    // Optimistically update UI
+    set((state) => ({
+      historicalScans: state.historicalScans.filter((scan) => scan.id !== id),
+      totalCount: Math.max(0, state.totalCount - 1),
+      historyError: null,
+    }));
+
     try {
       const response = await callApi(`/model-audit/scans/${id}`, {
         method: 'DELETE',
@@ -113,34 +133,42 @@ export const useModelAuditHistoryStore = create<ModelAuditHistoryState>()((set, 
       if (!response.ok) {
         throw new Error('Failed to delete scan');
       }
-
-      // Remove from local state
-      set((state) => ({
-        historicalScans: state.historicalScans.filter((scan) => scan.id !== id),
-      }));
     } catch (error) {
+      // Revert optimistic update on failure
+      if (scanToDelete) {
+        set({
+          historicalScans: previousScans,
+          totalCount: previousCount,
+        });
+      }
       const errorMessage = error instanceof Error ? error.message : 'Failed to delete scan';
       set({ historyError: errorMessage });
       throw error;
     }
   },
 
-  // Actions - DataGrid state
-  setPageSize: (pageSize) => set({ pageSize }),
-  setCurrentPage: (currentPage) => set({ currentPage }),
-  setSortModel: (sortModel) => set({ sortModel }),
-  setFilterModel: (filterModel) => set({ filterModel }),
-  setSearchQuery: (searchQuery) => set({ searchQuery }),
+  setPageSize: (pageSize) => {
+    set({ pageSize, currentPage: 0 });
+  },
 
-  // Reset state
-  resetHistoryState: () =>
+  setCurrentPage: (currentPage) => {
+    set({ currentPage });
+  },
+
+  setSortModel: (sortModel) => {
+    set({ sortModel, currentPage: 0 });
+  },
+
+  setSearchQuery: (searchQuery) => {
+    set({ searchQuery, currentPage: 0 });
+  },
+
+  resetFilters: () => {
     set({
-      historicalScans: [],
-      isLoadingHistory: false,
-      historyError: null,
-      pageSize: 50,
+      pageSize: DEFAULT_PAGE_SIZE,
       currentPage: 0,
+      sortModel: [{ field: 'createdAt', sort: 'desc' }],
       searchQuery: '',
-      filterModel: {},
-    }),
+    });
+  },
 }));

@@ -79,10 +79,12 @@ export function maybeLoadFromExternalFile(
     return renderedFilePath;
   }
 
-  // In vars contexts, preserve file:// glob patterns for test case expansion
-  // This prevents premature glob expansion that should be handled by generateVarCombinations
-  if (context === 'vars' && hasMagic(renderedFilePath)) {
-    logger.debug(`Preserving glob pattern in vars context: ${renderedFilePath}`);
+  // In vars contexts, preserve all file:// references for test case expansion
+  // This prevents premature file loading - JS/Python files should be executed at runtime
+  // by renderPrompt in evaluatorHelpers.ts, and glob patterns should be expanded by
+  // generateVarCombinations in evaluator.ts
+  if (context === 'vars') {
+    logger.debug(`Preserving file reference in vars context: ${renderedFilePath}`);
     return renderedFilePath;
   }
 

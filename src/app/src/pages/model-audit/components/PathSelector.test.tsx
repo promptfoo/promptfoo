@@ -22,10 +22,8 @@ describe('PathSelector', () => {
     mockUseModelAuditConfigStore.mockReturnValue({
       recentScans: [],
       clearRecentScans: vi.fn(),
-      addRecentScan: vi.fn(),
-      removeRecentScan: vi.fn(),
-      getRecentScans: () => [],
-    });
+      removeRecentPath: vi.fn(),
+    } as any);
   });
 
   describe('handleAddPath', () => {
@@ -219,10 +217,8 @@ describe('PathSelector', () => {
         { id: '4', paths: [{ path: 'path4', type: 'file', name: 'file4' }], timestamp: 4 },
       ],
       clearRecentScans: clearRecentScansMock,
-      addRecentScan: vi.fn(),
-      removeRecentScan: vi.fn(),
-      getRecentScans: () => [],
-    });
+      removeRecentPath: vi.fn(),
+    } as any);
 
     render(
       <ThemeProvider theme={theme}>
@@ -242,10 +238,8 @@ describe('PathSelector', () => {
         { id: '1', paths: [{ path: 'path1', type: 'file', name: 'file1' }], timestamp: 1 },
       ],
       clearRecentScans: vi.fn(),
-      addRecentScan: vi.fn(),
-      removeRecentScan: vi.fn(),
-      getRecentScans: () => [],
-    });
+      removeRecentPath: vi.fn(),
+    } as any);
 
     render(
       <ThemeProvider theme={theme}>

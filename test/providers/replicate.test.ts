@@ -1,3 +1,4 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { disableCache, enableCache, fetchWithCache } from '../../src/cache';
 import {
   DefaultModerationProvider,
@@ -6,15 +7,15 @@ import {
   ReplicateProvider,
 } from '../../src/providers/replicate';
 
-jest.mock('../../src/cache');
+vi.mock('../../src/cache');
 
-const mockedFetchWithCache = jest.mocked(fetchWithCache);
+const mockedFetchWithCache = vi.mocked(fetchWithCache);
 
 describe('ReplicateProvider', () => {
   const mockApiKey = 'test-api-key';
 
   beforeEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
     disableCache();
   });
 
@@ -206,7 +207,7 @@ describe('ReplicateModerationProvider', () => {
   const mockApiKey = 'test-api-key';
 
   beforeEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
     disableCache();
   });
 
@@ -381,7 +382,7 @@ describe('ReplicateImageProvider', () => {
   const mockApiKey = 'test-api-key';
 
   beforeEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
     disableCache();
   });
 

@@ -2,24 +2,19 @@ import { callApi } from '@app/utils/api';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
-import type { ScanOptions, ScanPath, ScanResult } from '../ModelAudit.types';
+import type {
+  InstallationStatus,
+  RecentScan,
+  ScanOptions,
+  ScanPath,
+  ScanResult,
+} from '../ModelAudit.types';
 
-interface RecentScan {
-  id: string;
-  paths: ScanPath[];
-  timestamp: number;
-  label?: string;
-}
-
-interface InstallationStatus {
-  checking: boolean;
-  installed: boolean | null;
-  error: string | null;
-  cwd: string | null;
-}
+// Re-export types for convenience
+export type { InstallationStatus, RecentScan };
 
 interface ModelAuditConfigState {
-  // Recent scans
+  // Recent scans (persisted)
   recentScans: RecentScan[];
 
   // Current scan configuration
@@ -54,6 +49,7 @@ interface ModelAuditConfigState {
   setIsScanning: (isScanning: boolean) => void;
   setScanResults: (results: ScanResult | null) => void;
   setError: (error: string | null) => void;
+  clearScanState: () => void;
 
   // Actions - Installation status
   setInstallationStatus: (status: Partial<InstallationStatus>) => void;
@@ -156,6 +152,7 @@ export const useModelAuditConfigStore = create<ModelAuditConfigState>()(
       setIsScanning: (isScanning) => set({ isScanning }),
       setScanResults: (scanResults) => set({ scanResults, error: null }),
       setError: (error) => set({ error }),
+      clearScanState: () => set({ scanResults: null, error: null, isScanning: false }),
 
       // Actions - Installation status
       setInstallationStatus: (status) => {
@@ -196,6 +193,8 @@ export const useModelAuditConfigStore = create<ModelAuditConfigState>()(
             return { installed: data.installed, cwd: data.cwd || '' };
           })
           .catch((error) => {
+            console.error('Error checking ModelAudit installation:', error);
+
             // Update with error
             set({
               installationStatus: {
@@ -225,42 +224,44 @@ export const useModelAuditConfigStore = create<ModelAuditConfigState>()(
     }),
     {
       name: 'model-audit-config-store',
-      version: 2,
+      version: 1,
       skipHydration: true,
-      migrate: (persistedState: any, version: number) => {
-        // Handle migration from old 'model-audit-store' (version 0) to new 'model-audit-config-store' (version 2)
-        if (version === 0 || version === 1) {
-          // Try to load data from the old store name if it exists
-          try {
-            const oldStoreData = localStorage.getItem('model-audit-store');
-            if (oldStoreData) {
-              const parsed = JSON.parse(oldStoreData);
-              const oldState = parsed.state || {};
-
-              // Merge old state with persisted state, preserving new structure
-              return {
-                ...persistedState,
-                recentScans: oldState.recentScans || persistedState?.recentScans || [],
-                scanOptions: oldState.scanOptions ||
-                  persistedState?.scanOptions || {
-                    blacklist: [],
-                    timeout: 3600,
-                  },
-              };
-            }
-          } catch (error) {
-            // If migration fails, just use the persisted state
-            console.warn('Failed to migrate from old model-audit-store:', error);
-          }
-        }
-        return persistedState;
-      },
       partialize: (state) => ({
         // Only persist these fields
         recentScans: state.recentScans,
         scanOptions: state.scanOptions,
       }),
       storage: createJSONStorage(() => localStorage),
+      // Migrate data from old store if it exists
+      migrate: (persistedState, version) => {
+        if (version === 0 || !persistedState) {
+          // Check for old store data and migrate it
+          const oldStoreKey = 'model-audit-store';
+          const oldStoreData = localStorage.getItem(oldStoreKey);
+          if (oldStoreData) {
+            try {
+              const parsed = JSON.parse(oldStoreData);
+              const oldState = parsed.state || {};
+
+              // Merge old data with persisted state
+              const migratedState = {
+                ...(persistedState || {}),
+                recentScans: oldState.recentScans || [],
+                scanOptions: oldState.scanOptions || DEFAULT_SCAN_OPTIONS,
+              };
+
+              // Clean up old store after successful migration
+              localStorage.removeItem(oldStoreKey);
+              console.info('[ModelAuditConfigStore] Migrated data from old store');
+
+              return migratedState as typeof persistedState;
+            } catch (e) {
+              console.warn('[ModelAuditConfigStore] Failed to migrate from old store:', e);
+            }
+          }
+        }
+        return persistedState as typeof persistedState;
+      },
     },
   ),
 );

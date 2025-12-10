@@ -1,6 +1,7 @@
-import { useEffect } from 'react';
+import { useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 
+import { MODEL_AUDIT_ROUTES } from '@app/constants/routes';
 import { callApi } from '@app/utils/api';
 import {
   CheckCircle as CheckCircleIcon,
@@ -10,7 +11,6 @@ import {
 import {
   Alert,
   Box,
-  Breadcrumbs,
   CircularProgress,
   Container,
   IconButton,
@@ -20,19 +20,18 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material';
-import { Link as RouterLink } from 'react-router-dom';
-
 import AdvancedOptionsDialog from '../model-audit/components/AdvancedOptionsDialog';
 import ConfigurationTab from '../model-audit/components/ConfigurationTab';
+import ResultsTab from '../model-audit/components/ResultsTab';
 import ScannedFilesDialog from '../model-audit/components/ScannedFilesDialog';
-import { useModelAuditConfigStore } from '../model-audit/stores';
+import { useModelAuditConfigStore, useModelAuditHistoryStore } from '../model-audit/stores';
 
 import type { ScanResult } from '../model-audit/ModelAudit.types';
 
 export default function ModelAuditSetupPage() {
   const navigate = useNavigate();
+
   const {
-    // State
     paths,
     scanOptions,
     isScanning,
@@ -41,8 +40,6 @@ export default function ModelAuditSetupPage() {
     installationStatus,
     showFilesDialog,
     showOptionsDialog,
-
-    // Actions
     setPaths,
     removePath,
     setScanOptions,
@@ -55,19 +52,14 @@ export default function ModelAuditSetupPage() {
     addRecentScan,
   } = useModelAuditConfigStore();
 
+  const { fetchHistoricalScans } = useModelAuditHistoryStore();
+
   useEffect(() => {
     useModelAuditConfigStore.persist.rehydrate();
-    // Check installation status immediately after rehydration
     checkInstallation();
   }, [checkInstallation]);
 
-  const handleScan = async () => {
-    // Validate that at least one path is selected
-    if (paths.length === 0) {
-      setError('Please add at least one path to scan.');
-      return;
-    }
-
+  const handleScan = useCallback(async () => {
     setIsScanning(true);
     setError(null);
 
@@ -91,11 +83,16 @@ export default function ModelAuditSetupPage() {
       }
 
       setScanResults(data);
-      addRecentScan(paths); // Add to recent scans
+      addRecentScan(paths);
 
-      // If scan was persisted, navigate to the result page
-      if (data.persisted && data.auditId) {
-        navigate(`/model-audit/history/${data.auditId}`);
+      // Refresh history to include the new scan if it was persisted
+      if (data.persisted) {
+        fetchHistoricalScans();
+        // Navigate to the result page if we have an audit ID
+        if (data.auditId) {
+          navigate(MODEL_AUDIT_ROUTES.DETAIL(data.auditId));
+          return;
+        }
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred';
@@ -103,14 +100,26 @@ export default function ModelAuditSetupPage() {
     } finally {
       setIsScanning(false);
     }
-  };
+  }, [
+    paths,
+    scanOptions,
+    setIsScanning,
+    setError,
+    setScanResults,
+    addRecentScan,
+    fetchHistoricalScans,
+    navigate,
+  ]);
 
-  const handleRemovePath = (index: number) => {
-    const pathToRemove = paths[index];
-    if (pathToRemove) {
-      removePath(pathToRemove.path);
-    }
-  };
+  const handleRemovePath = useCallback(
+    (index: number) => {
+      const pathToRemove = paths[index];
+      if (pathToRemove) {
+        removePath(pathToRemove.path);
+      }
+    },
+    [paths, removePath],
+  );
 
   return (
     <Box
@@ -123,23 +132,13 @@ export default function ModelAuditSetupPage() {
     >
       <Container maxWidth="xl">
         <Paper elevation={0} sx={{ p: { xs: 3, md: 5 }, mb: 4 }}>
-          {/* Breadcrumb Navigation */}
-          <Box sx={{ mb: 3 }}>
-            <Breadcrumbs aria-label="breadcrumb">
-              <Link component={RouterLink} to="/model-audit" underline="hover" color="inherit">
-                Model Audit
-              </Link>
-              <Typography color="text.primary">Setup</Typography>
-            </Breadcrumbs>
-          </Box>
-
           <Stack direction="row" alignItems="center" mb={4}>
             <Box>
               <Typography variant="h4" gutterBottom fontWeight="bold">
                 Model Audit Setup
               </Typography>
               <Typography variant="body1" color="text.secondary">
-                Configure and run a model security scan.{' '}
+                Configure and run a security scan on ML models.{' '}
                 <Link href="https://www.promptfoo.dev/docs/model-audit/" target="_blank">
                   Learn more
                 </Link>
@@ -186,21 +185,6 @@ export default function ModelAuditSetupPage() {
             </Alert>
           )}
 
-          {/* Non-persisted results display */}
-          {scanResults && !scanResults.persisted && (
-            <Alert severity="info" sx={{ mb: 3 }}>
-              <Box>
-                <Typography variant="subtitle2" gutterBottom>
-                  Scan completed successfully!
-                </Typography>
-                <Typography variant="body2">
-                  The scan results are displayed below. To save results for later viewing, enable
-                  persistence in your configuration.
-                </Typography>
-              </Box>
-            </Alert>
-          )}
-
           <ConfigurationTab
             paths={paths}
             isScanning={isScanning}
@@ -214,26 +198,38 @@ export default function ModelAuditSetupPage() {
             onClearError={() => setError(null)}
             currentWorkingDir={installationStatus.cwd || ''}
             installationStatus={installationStatus}
-            scanResults={scanResults}
-            onShowFilesDialog={() => setShowFilesDialog(true)}
+            onRetryInstallationCheck={checkInstallation}
           />
 
-          <AdvancedOptionsDialog
-            open={showOptionsDialog}
-            onClose={() => setShowOptionsDialog(false)}
-            scanOptions={scanOptions}
-            onOptionsChange={setScanOptions}
-          />
-
+          {/* Show inline results if scan completed but wasn't persisted */}
           {scanResults && (
-            <ScannedFilesDialog
-              open={showFilesDialog}
-              onClose={() => setShowFilesDialog(false)}
-              scanResults={scanResults}
-              paths={paths}
-            />
+            <Box sx={{ mt: 4 }}>
+              <Typography variant="h5" gutterBottom fontWeight={600}>
+                Scan Results
+              </Typography>
+              <ResultsTab
+                scanResults={scanResults}
+                onShowFilesDialog={() => setShowFilesDialog(true)}
+              />
+            </Box>
           )}
         </Paper>
+
+        <AdvancedOptionsDialog
+          open={showOptionsDialog}
+          onClose={() => setShowOptionsDialog(false)}
+          scanOptions={scanOptions}
+          onOptionsChange={setScanOptions}
+        />
+
+        {scanResults && (
+          <ScannedFilesDialog
+            open={showFilesDialog}
+            onClose={() => setShowFilesDialog(false)}
+            scanResults={scanResults}
+            paths={paths}
+          />
+        )}
       </Container>
     </Box>
   );

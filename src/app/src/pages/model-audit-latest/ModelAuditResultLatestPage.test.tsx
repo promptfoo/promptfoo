@@ -1,147 +1,168 @@
+import { callApi } from '@app/utils/api';
+import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ModelAuditResultLatestPage from './ModelAuditResultLatestPage';
-import { callApi } from '@app/utils/api';
 
 vi.mock('@app/utils/api');
 
+// Mock the child components
 vi.mock('../model-audit/components/ResultsTab', () => ({
-  default: ({ scanResults }: { scanResults: any }) => (
+  default: ({ scanResults }: { scanResults: unknown }) => (
     <div data-testid="results-tab">
-      <span>Issues found: {scanResults?.issues?.length || 0}</span>
+      <span>Results: {scanResults ? 'present' : 'none'}</span>
     </div>
   ),
 }));
 
+vi.mock('../model-audit/components/ScannedFilesDialog', () => ({
+  default: () => <div data-testid="files-dialog" />,
+}));
+
+vi.mock('../model-audit/components/ModelAuditSkeleton', () => ({
+  LatestScanSkeleton: () => <div data-testid="loading-skeleton" />,
+}));
+
+const theme = createTheme();
+
+const createMockScan = (id: string, name: string) => ({
+  id,
+  createdAt: Date.now(),
+  updatedAt: Date.now(),
+  name,
+  modelPath: '/test/model.bin',
+  hasErrors: false,
+  results: {
+    path: '/test',
+    success: true,
+    issues: [],
+  },
+  totalChecks: 5,
+  passedChecks: 5,
+  failedChecks: 0,
+  metadata: {
+    originalPaths: ['/test/model.bin'],
+  },
+});
+
 describe('ModelAuditResultLatestPage', () => {
   const mockCallApi = vi.mocked(callApi);
 
-  const latestScan = {
-    id: 'latest',
-    name: 'Latest Scan',
-    modelPath: '/path/to/latest/model',
-    createdAt: Date.now(),
-    results: { issues: [{}] },
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  const renderComponent = () => {
+    return render(
+      <MemoryRouter>
+        <ThemeProvider theme={theme}>
+          <ModelAuditResultLatestPage />
+        </ThemeProvider>
+      </MemoryRouter>,
+    );
   };
 
-  const fallbackScan = {
-    id: 'fallback',
-    name: 'Fallback Scan',
-    modelPath: '/path/to/fallback/model',
-    createdAt: Date.now() - 1000,
-    results: { issues: [] },
-  };
+  it('should show loading state initially', () => {
+    mockCallApi.mockImplementation(() => new Promise(() => {})); // Never resolves
 
-  it('displays loading state initially', () => {
-    mockCallApi.mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve(latestScan),
-    } as Response);
-    render(
-      <MemoryRouter>
-        <ModelAuditResultLatestPage />
-      </MemoryRouter>,
-    );
-    expect(screen.getByText('Loading latest scan...')).toBeInTheDocument();
+    renderComponent();
+
+    expect(screen.getByTestId('loading-skeleton')).toBeInTheDocument();
   });
 
-  it('fetches and displays the latest scan via the primary endpoint', async () => {
-    mockCallApi.mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve(latestScan),
-    } as Response);
-    render(
-      <MemoryRouter>
-        <ModelAuditResultLatestPage />
-      </MemoryRouter>,
-    );
-    await waitFor(() => {
-      expect(
-        screen.getByRole('heading', { level: 4, name: 'Latest Scan Results' }),
-      ).toBeInTheDocument();
-      expect(screen.getByText('Latest Scan • /path/to/latest/model')).toBeInTheDocument();
-      expect(mockCallApi).toHaveBeenCalledWith('/model-audit/scans/latest', expect.any(Object));
-    });
-  });
-
-  it('displays empty state when primary endpoint returns 204', async () => {
-    mockCallApi.mockResolvedValue({ ok: true, status: 204 } as Response);
-    render(
-      <MemoryRouter>
-        <ModelAuditResultLatestPage />
-      </MemoryRouter>,
-    );
-    await waitFor(() => {
-      expect(screen.getByText('No scans found')).toBeInTheDocument();
-    });
-  });
-
-  it('uses fallback endpoint when primary fails', async () => {
-    mockCallApi.mockRejectedValueOnce(new Error('Primary endpoint failed'));
+  it('should show empty state when no scans exist', async () => {
     mockCallApi.mockResolvedValueOnce({
       ok: true,
-      json: () => Promise.resolve({ scans: [fallbackScan] }),
+      json: () => Promise.resolve({ scans: [], total: 0 }),
     } as Response);
-    render(
-      <MemoryRouter>
-        <ModelAuditResultLatestPage />
-      </MemoryRouter>,
-    );
+
+    renderComponent();
+
     await waitFor(() => {
-      expect(
-        screen.getByRole('heading', { level: 4, name: 'Latest Scan Results' }),
-      ).toBeInTheDocument();
-      expect(screen.getByText('Fallback Scan • /path/to/fallback/model')).toBeInTheDocument();
-      expect(mockCallApi).toHaveBeenCalledWith('/model-audit/scans/latest', expect.any(Object));
-      expect(mockCallApi).toHaveBeenCalledWith('/model-audit/scans?limit=1', expect.any(Object));
+      expect(screen.getByText('No Model Scans Yet')).toBeInTheDocument();
     });
+
+    expect(screen.getByText('Run Your First Scan')).toBeInTheDocument();
   });
 
-  it('displays empty state when fallback returns no scans', async () => {
-    mockCallApi.mockRejectedValueOnce(new Error('Primary endpoint failed'));
+  it('should display latest scan when available', async () => {
+    const mockScan = createMockScan('latest-scan', 'Latest Security Scan');
+
     mockCallApi.mockResolvedValueOnce({
       ok: true,
-      json: () => Promise.resolve({ scans: [] }),
+      json: () => Promise.resolve({ scans: [mockScan], total: 1 }),
     } as Response);
-    render(
-      <MemoryRouter>
-        <ModelAuditResultLatestPage />
-      </MemoryRouter>,
-    );
+
+    renderComponent();
+
     await waitFor(() => {
-      expect(screen.getByText('No scans found')).toBeInTheDocument();
+      expect(screen.getByText('Latest Scan Results')).toBeInTheDocument();
+    });
+
+    // The scan name is combined with date, so use regex
+    expect(screen.getByText(/Latest Security Scan/)).toBeInTheDocument();
+    expect(screen.getByTestId('results-tab')).toBeInTheDocument();
+  });
+
+  it('should have navigation buttons', async () => {
+    const mockScan = createMockScan('latest-scan', 'Test Scan');
+
+    mockCallApi.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ scans: [mockScan], total: 1 }),
+    } as Response);
+
+    renderComponent();
+
+    await waitFor(() => {
+      expect(screen.getByText('New Scan')).toBeInTheDocument();
+      expect(screen.getByText('View History')).toBeInTheDocument();
     });
   });
 
-  it('displays error state when both endpoints fail', async () => {
-    mockCallApi.mockRejectedValue(new Error('API Error'));
-    render(
-      <MemoryRouter>
-        <ModelAuditResultLatestPage />
-      </MemoryRouter>,
-    );
+  it('should show error state on fetch failure', async () => {
+    mockCallApi.mockResolvedValueOnce({
+      ok: false,
+    } as Response);
+
+    renderComponent();
+
     await waitFor(() => {
-      expect(screen.getByText('API Error')).toBeInTheDocument();
+      expect(screen.getByText('Failed to fetch latest scan')).toBeInTheDocument();
     });
   });
 
-  it('renders correct links in the empty state', async () => {
-    mockCallApi.mockResolvedValue({ ok: true, status: 204 } as Response);
-    render(
-      <MemoryRouter>
-        <ModelAuditResultLatestPage />
-      </MemoryRouter>,
-    );
+  it('should link to setup page from empty state', async () => {
+    mockCallApi.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ scans: [], total: 0 }),
+    } as Response);
+
+    renderComponent();
+
     await waitFor(() => {
-      expect(screen.getByText('Start a Scan').closest('a')).toHaveAttribute(
-        'href',
-        '/model-audit/setup',
-      );
-      expect(screen.getByText('View History').closest('a')).toHaveAttribute(
-        'href',
-        '/model-audit/history',
-      );
+      expect(screen.getByText('Run Your First Scan')).toBeInTheDocument();
+    });
+
+    const setupLink = screen.getByText('Run Your First Scan').closest('a');
+    expect(setupLink).toHaveAttribute('href', '/model-audit/setup');
+  });
+
+  it('should display scan name or default title', async () => {
+    const mockScan = createMockScan('latest-scan', '');
+    (mockScan as { name: string | null }).name = null;
+
+    mockCallApi.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ scans: [mockScan], total: 1 }),
+    } as Response);
+
+    renderComponent();
+
+    await waitFor(() => {
+      // The text is combined with date, so use regex
+      expect(screen.getByText(/Model Security Scan/)).toBeInTheDocument();
     });
   });
 });

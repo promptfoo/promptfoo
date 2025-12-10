@@ -1,299 +1,356 @@
-import { act, renderHook } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { useModelAuditHistoryStore } from './useModelAuditHistoryStore';
 import { callApi } from '@app/utils/api';
+import { act, renderHook, waitFor } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { useModelAuditHistoryStore } from './useModelAuditHistoryStore';
 
 vi.mock('@app/utils/api');
 
+const mockCallApi = vi.mocked(callApi);
+
+const createMockScan = (id: string, name: string) => ({
+  id,
+  createdAt: Date.now(),
+  updatedAt: Date.now(),
+  name,
+  modelPath: '/test/model.bin',
+  hasErrors: false,
+  results: {
+    path: '/test',
+    success: true,
+    issues: [],
+  },
+  totalChecks: 5,
+  passedChecks: 5,
+  failedChecks: 0,
+});
+
 describe('useModelAuditHistoryStore', () => {
-  const mockCallApi = vi.mocked(callApi);
-
-  const mockScans = [
-    {
-      id: '1',
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-      modelPath: '/path/to/model1',
-      results: {
-        issues: [],
-        path: '/path/to/model1',
-        success: true,
-      },
-      hasErrors: false,
-    },
-    {
-      id: '2',
-      createdAt: Date.now() - 1000,
-      updatedAt: Date.now() - 1000,
-      modelPath: '/path/to/model2',
-      results: {
-        issues: [],
-        path: '/path/to/model2',
-        success: false,
-      },
-      hasErrors: true,
-    },
-  ];
-
   beforeEach(() => {
-    act(() => {
-      useModelAuditHistoryStore.setState(useModelAuditHistoryStore.getInitialState());
+    vi.clearAllMocks();
+    // Reset store state between tests
+    useModelAuditHistoryStore.setState({
+      historicalScans: [],
+      isLoadingHistory: false,
+      historyError: null,
+      totalCount: 0,
+      pageSize: 25,
+      currentPage: 0,
+      sortModel: [{ field: 'createdAt', sort: 'desc' }],
+      searchQuery: '',
     });
   });
 
-  it('should fetch historical scans successfully', async () => {
-    mockCallApi.mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ scans: mockScans }),
-    } as Response);
+  describe('fetchHistoricalScans', () => {
+    it('should fetch historical scans', async () => {
+      const mockScans = [createMockScan('1', 'Scan 1'), createMockScan('2', 'Scan 2')];
 
-    const { result } = renderHook(() => useModelAuditHistoryStore());
-
-    await act(async () => {
-      await result.current.fetchHistoricalScans();
-    });
-
-    expect(result.current.historicalScans).toEqual(mockScans);
-    expect(result.current.isLoadingHistory).toBe(false);
-    expect(result.current.historyError).toBeNull();
-  });
-
-  it('should handle fetch historical scans failure', async () => {
-    mockCallApi.mockRejectedValue(new Error('Failed to fetch'));
-
-    const { result } = renderHook(() => useModelAuditHistoryStore());
-
-    await act(async () => {
-      await result.current.fetchHistoricalScans();
-    });
-
-    expect(result.current.historicalScans).toEqual([]);
-    expect(result.current.isLoadingHistory).toBe(false);
-    expect(result.current.historyError).toBe('Failed to fetch');
-  });
-
-  it('should delete a historical scan successfully', async () => {
-    mockCallApi.mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.resolve({ scans: mockScans }),
-    } as Response);
-    mockCallApi.mockResolvedValueOnce({ ok: true } as Response);
-
-    const { result } = renderHook(() => useModelAuditHistoryStore());
-
-    await act(async () => {
-      await result.current.fetchHistoricalScans();
-    });
-
-    expect(result.current.historicalScans).toEqual(mockScans);
-
-    await act(async () => {
-      await result.current.deleteHistoricalScan('1');
-    });
-
-    expect(result.current.historicalScans).toEqual([mockScans[1]]);
-  });
-
-  it('should handle delete historical scan failure', async () => {
-    mockCallApi.mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.resolve({ scans: mockScans }),
-    } as Response);
-    mockCallApi.mockRejectedValueOnce(new Error('Failed to delete'));
-
-    const { result } = renderHook(() => useModelAuditHistoryStore());
-
-    await act(async () => {
-      await result.current.fetchHistoricalScans();
-    });
-
-    await act(async () => {
-      await expect(result.current.deleteHistoricalScan('1')).rejects.toThrow('Failed to delete');
-    });
-
-    expect(result.current.historicalScans).toEqual(mockScans); // Should not be deleted from state
-    expect(result.current.historyError).toBe('Failed to delete');
-  });
-
-  it('should handle search queries with special characters by encoding them', async () => {
-    const searchQuery = 'test&query=with?special characters';
-    const encodedSearchQuery = encodeURIComponent(searchQuery);
-
-    mockCallApi.mockImplementation((url: string) => {
-      expect(url).toContain(`search=${encodedSearchQuery}`);
-      return Promise.resolve({
+      mockCallApi.mockResolvedValueOnce({
         ok: true,
-        json: () => Promise.resolve({ scans: mockScans }),
+        json: () => Promise.resolve({ scans: mockScans, total: 2 }),
       } as Response);
+
+      const { result } = renderHook(() => useModelAuditHistoryStore());
+
+      await act(async () => {
+        await result.current.fetchHistoricalScans();
+      });
+
+      await waitFor(() => {
+        expect(result.current.historicalScans).toHaveLength(2);
+        expect(result.current.totalCount).toBe(2);
+        expect(result.current.isLoadingHistory).toBe(false);
+      });
     });
 
-    const { result } = renderHook(() => useModelAuditHistoryStore());
+    it('should handle fetch error', async () => {
+      mockCallApi.mockResolvedValueOnce({
+        ok: false,
+      } as Response);
 
-    act(() => {
-      result.current.setSearchQuery(searchQuery);
+      const { result } = renderHook(() => useModelAuditHistoryStore());
+
+      await act(async () => {
+        await result.current.fetchHistoricalScans();
+      });
+
+      await waitFor(() => {
+        expect(result.current.historyError).toBe('Failed to fetch historical scans');
+        expect(result.current.isLoadingHistory).toBe(false);
+      });
     });
 
-    await act(async () => {
-      await result.current.fetchHistoricalScans();
-    });
-  });
+    it('should ignore abort errors', async () => {
+      const abortError = new Error('Aborted');
+      abortError.name = 'AbortError';
+      mockCallApi.mockRejectedValueOnce(abortError);
 
-  it('should handle API responses with malformed scan objects', async () => {
-    const malformedScan = {
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-      modelPath: '/path/to/model1',
-      results: {
-        issues: [],
-        path: '/path/to/model1',
-        success: true,
-      },
-      hasErrors: false,
-      id: 'generated-id',
-    };
+      const { result } = renderHook(() => useModelAuditHistoryStore());
 
-    mockCallApi.mockResolvedValue({
-      ok: true,
-      json: () =>
-        Promise.resolve({
-          scans: [malformedScan],
-        }),
-    } as Response);
+      await act(async () => {
+        await result.current.fetchHistoricalScans();
+      });
 
-    const { result } = renderHook(() => useModelAuditHistoryStore());
-
-    await act(async () => {
-      await result.current.fetchHistoricalScans();
+      // Should not set error for abort
+      expect(result.current.historyError).toBeNull();
     });
 
-    expect(result.current.historicalScans).toEqual([malformedScan]);
-    expect(result.current.isLoadingHistory).toBe(false);
-    expect(result.current.historyError).toBeNull();
-  });
-
-  it('should handle delete non-existent historical scan gracefully', async () => {
-    mockCallApi.mockResolvedValue({ ok: true } as Response);
-
-    const { result } = renderHook(() => useModelAuditHistoryStore());
-
-    await act(async () => {
-      useModelAuditHistoryStore.setState({ historicalScans: mockScans });
-    });
-
-    const initialScans = result.current.historicalScans;
-
-    await act(async () => {
-      await result.current.deleteHistoricalScan('3');
-    });
-
-    expect(result.current.historicalScans).toEqual(initialScans);
-    expect(result.current.historyError).toBeNull();
-  });
-
-  it('should handle non-JSON API responses', async () => {
-    mockCallApi.mockResolvedValue({
-      ok: true,
-      json: () => Promise.reject(new Error('Unexpected token < in JSON at position 0')),
-    } as Response);
-
-    const { result } = renderHook(() => useModelAuditHistoryStore());
-
-    await act(async () => {
-      await result.current.fetchHistoricalScans();
-    });
-
-    expect(result.current.historicalScans).toEqual([]);
-    expect(result.current.isLoadingHistory).toBe(false);
-    expect(result.current.historyError).toBe('Unexpected token < in JSON at position 0');
-  });
-
-  it('should handle negative pageSize and currentPage by normalizing the values', async () => {
-    let calledWithNegativeValues = false;
-    mockCallApi.mockImplementation(async (path: string) => {
-      const url = new URL(`http://localhost${path}`);
-      const limit = parseInt(url.searchParams.get('limit') || '0');
-      const offset = parseInt(url.searchParams.get('offset') || '0');
-
-      if (limit < 0 || offset < 0) {
-        calledWithNegativeValues = true;
-      }
-
-      return {
+    it('should include search query in request', async () => {
+      mockCallApi.mockResolvedValueOnce({
         ok: true,
-        json: () => Promise.resolve({ scans: mockScans }),
-      } as Response;
+        json: () => Promise.resolve({ scans: [], total: 0 }),
+      } as Response);
+
+      const { result } = renderHook(() => useModelAuditHistoryStore());
+
+      act(() => {
+        result.current.setSearchQuery('test query');
+      });
+
+      await act(async () => {
+        await result.current.fetchHistoricalScans();
+      });
+
+      expect(mockCallApi).toHaveBeenCalledWith(
+        expect.stringContaining('search=test+query'),
+        expect.any(Object),
+      );
     });
 
-    const { result } = renderHook(() => useModelAuditHistoryStore());
+    it('should include pagination params in request', async () => {
+      mockCallApi.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ scans: [], total: 0 }),
+      } as Response);
 
-    act(() => {
-      result.current.setPageSize(-25);
-      result.current.setCurrentPage(-1);
+      const { result } = renderHook(() => useModelAuditHistoryStore());
+
+      act(() => {
+        result.current.setPageSize(50);
+        result.current.setCurrentPage(2);
+      });
+
+      await act(async () => {
+        await result.current.fetchHistoricalScans();
+      });
+
+      expect(mockCallApi).toHaveBeenCalledWith(
+        expect.stringContaining('limit=50'),
+        expect.any(Object),
+      );
+      expect(mockCallApi).toHaveBeenCalledWith(
+        expect.stringContaining('offset=100'),
+        expect.any(Object),
+      );
     });
-
-    await act(async () => {
-      await result.current.fetchHistoricalScans();
-    });
-
-    expect(calledWithNegativeValues).toBe(false);
-    expect(mockCallApi).toHaveBeenCalled();
   });
 
-  it('should set page size', () => {
-    const { result } = renderHook(() => useModelAuditHistoryStore());
-    act(() => {
-      result.current.setPageSize(25);
+  describe('fetchScanById', () => {
+    it('should fetch a single scan by ID', async () => {
+      const mockScan = createMockScan('123', 'Test Scan');
+
+      mockCallApi.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockScan),
+      } as Response);
+
+      const { result } = renderHook(() => useModelAuditHistoryStore());
+
+      let fetchedScan;
+      await act(async () => {
+        fetchedScan = await result.current.fetchScanById('123');
+      });
+
+      expect(fetchedScan).toEqual(mockScan);
     });
-    expect(result.current.pageSize).toBe(25);
+
+    it('should return null for 404', async () => {
+      mockCallApi.mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+      } as Response);
+
+      const { result } = renderHook(() => useModelAuditHistoryStore());
+
+      let fetchedScan;
+      await act(async () => {
+        fetchedScan = await result.current.fetchScanById('nonexistent');
+      });
+
+      expect(fetchedScan).toBeNull();
+    });
+
+    it('should re-throw AbortError for caller to handle', async () => {
+      const abortError = new Error('Aborted');
+      abortError.name = 'AbortError';
+      mockCallApi.mockRejectedValueOnce(abortError);
+
+      const { result } = renderHook(() => useModelAuditHistoryStore());
+
+      // AbortError should be re-thrown so caller can handle it appropriately
+      await expect(result.current.fetchScanById('123')).rejects.toThrow('Aborted');
+    });
+
+    it('should handle IDs with special characters', async () => {
+      const scanId = 'scan-abc-2025-12-06T10:30:45';
+      const mockScan = createMockScan(scanId, 'Test Scan');
+
+      mockCallApi.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve(mockScan),
+      } as Response);
+
+      const { result } = renderHook(() => useModelAuditHistoryStore());
+
+      await act(async () => {
+        await result.current.fetchScanById(scanId);
+      });
+
+      // IDs are passed directly - colons are valid in URL paths per RFC 3986
+      expect(mockCallApi).toHaveBeenCalledWith(`/model-audit/scans/${scanId}`, expect.any(Object));
+    });
   });
 
-  it('should set current page', () => {
-    const { result } = renderHook(() => useModelAuditHistoryStore());
-    act(() => {
-      result.current.setCurrentPage(1);
+  describe('deleteHistoricalScan', () => {
+    it('should delete a scan and update local state', async () => {
+      const mockScans = [createMockScan('1', 'Scan 1'), createMockScan('2', 'Scan 2')];
+
+      // First set up some initial state
+      useModelAuditHistoryStore.setState({
+        historicalScans: mockScans,
+        totalCount: 2,
+      });
+
+      mockCallApi.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ success: true }),
+      } as Response);
+
+      const { result } = renderHook(() => useModelAuditHistoryStore());
+
+      await act(async () => {
+        await result.current.deleteHistoricalScan('1');
+      });
+
+      expect(result.current.historicalScans).toHaveLength(1);
+      expect(result.current.historicalScans[0].id).toBe('2');
+      expect(result.current.totalCount).toBe(1);
     });
-    expect(result.current.currentPage).toBe(1);
+
+    it('should handle delete error and rollback state', async () => {
+      const mockScans = [createMockScan('1', 'Scan 1'), createMockScan('2', 'Scan 2')];
+
+      // Set up initial state with scans
+      useModelAuditHistoryStore.setState({
+        historicalScans: mockScans,
+        totalCount: 2,
+      });
+
+      mockCallApi.mockResolvedValueOnce({
+        ok: false,
+      } as Response);
+
+      const { result } = renderHook(() => useModelAuditHistoryStore());
+
+      // Verify initial state
+      expect(result.current.historicalScans).toHaveLength(2);
+      expect(result.current.totalCount).toBe(2);
+
+      let thrownError: Error | undefined;
+      await act(async () => {
+        try {
+          await result.current.deleteHistoricalScan('1');
+        } catch (error) {
+          thrownError = error as Error;
+        }
+      });
+
+      expect(thrownError).toBeDefined();
+      expect(thrownError!.message).toBe('Failed to delete scan');
+      expect(result.current.historyError).toBe('Failed to delete scan');
+
+      // Verify rollback: scans should be restored after failed delete
+      expect(result.current.historicalScans).toHaveLength(2);
+      expect(result.current.historicalScans[0].id).toBe('1');
+      expect(result.current.totalCount).toBe(2);
+    });
   });
 
-  it('should set sort model', () => {
-    const { result } = renderHook(() => useModelAuditHistoryStore());
-    const sortModel = [{ field: 'name', sort: 'asc' as const }];
-    act(() => {
-      result.current.setSortModel(sortModel);
-    });
-    expect(result.current.sortModel).toEqual(sortModel);
-  });
+  describe('pagination and filtering', () => {
+    it('should set page size and reset page', () => {
+      const { result } = renderHook(() => useModelAuditHistoryStore());
 
-  it('should set filter model', () => {
-    const { result } = renderHook(() => useModelAuditHistoryStore());
-    const filterModel = { items: [{ field: 'name', operator: 'contains', value: 'test' }] };
-    act(() => {
-      result.current.setFilterModel(filterModel);
-    });
-    expect(result.current.filterModel).toEqual(filterModel);
-  });
+      act(() => {
+        result.current.setCurrentPage(5);
+      });
 
-  it('should set search query', () => {
-    const { result } = renderHook(() => useModelAuditHistoryStore());
-    act(() => {
-      result.current.setSearchQuery('query');
-    });
-    expect(result.current.searchQuery).toBe('query');
-  });
+      expect(result.current.currentPage).toBe(5);
 
-  it('should reset history state', () => {
-    const { result } = renderHook(() => useModelAuditHistoryStore());
-    act(() => {
-      result.current.setPageSize(25);
-      result.current.setCurrentPage(1);
-      result.current.setSearchQuery('query');
-      result.current.resetHistoryState();
+      act(() => {
+        result.current.setPageSize(50);
+      });
+
+      expect(result.current.pageSize).toBe(50);
+      expect(result.current.currentPage).toBe(0); // Reset to first page
     });
-    expect(result.current.pageSize).toBe(50);
-    expect(result.current.currentPage).toBe(0);
-    expect(result.current.searchQuery).toBe('');
-    expect(result.current.historicalScans).toEqual([]);
-    expect(result.current.isLoadingHistory).toBe(false);
-    expect(result.current.historyError).toBeNull();
+
+    it('should set current page', () => {
+      const { result } = renderHook(() => useModelAuditHistoryStore());
+
+      act(() => {
+        result.current.setCurrentPage(3);
+      });
+
+      expect(result.current.currentPage).toBe(3);
+    });
+
+    it('should set sort model and reset page', () => {
+      const { result } = renderHook(() => useModelAuditHistoryStore());
+
+      act(() => {
+        result.current.setCurrentPage(5);
+      });
+
+      act(() => {
+        result.current.setSortModel([{ field: 'name', sort: 'asc' }]);
+      });
+
+      expect(result.current.sortModel).toEqual([{ field: 'name', sort: 'asc' }]);
+      expect(result.current.currentPage).toBe(0); // Reset to first page
+    });
+
+    it('should set search query and reset page', () => {
+      const { result } = renderHook(() => useModelAuditHistoryStore());
+
+      act(() => {
+        result.current.setCurrentPage(5);
+      });
+
+      act(() => {
+        result.current.setSearchQuery('test');
+      });
+
+      expect(result.current.searchQuery).toBe('test');
+      expect(result.current.currentPage).toBe(0); // Reset to first page
+    });
+
+    it('should reset all filters', () => {
+      const { result } = renderHook(() => useModelAuditHistoryStore());
+
+      act(() => {
+        result.current.setPageSize(100);
+        result.current.setCurrentPage(5);
+        result.current.setSortModel([{ field: 'name', sort: 'asc' }]);
+        result.current.setSearchQuery('test');
+      });
+
+      act(() => {
+        result.current.resetFilters();
+      });
+
+      expect(result.current.pageSize).toBe(25);
+      expect(result.current.currentPage).toBe(0);
+      expect(result.current.sortModel).toEqual([{ field: 'createdAt', sort: 'desc' }]);
+      expect(result.current.searchQuery).toBe('');
+    });
   });
 });

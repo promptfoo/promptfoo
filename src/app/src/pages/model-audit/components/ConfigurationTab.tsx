@@ -7,10 +7,10 @@ import CircularProgress from '@mui/material/CircularProgress';
 import Stack from '@mui/material/Stack';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
+import InstallationGuide from './InstallationGuide';
 import PathSelector from './PathSelector';
-import ResultsTab from './ResultsTab';
 
-import type { ScanPath, ScanResult } from '../ModelAudit.types';
+import type { ScanPath } from '../ModelAudit.types';
 
 interface ConfigurationTabProps {
   paths: ScanPath[];
@@ -25,9 +25,9 @@ interface ConfigurationTabProps {
   installationStatus?: {
     checking: boolean;
     installed: boolean | null;
+    error?: string | null;
   };
-  scanResults?: ScanResult | null;
-  onShowFilesDialog?: () => void;
+  onRetryInstallationCheck?: () => void;
 }
 
 export default function ConfigurationTab({
@@ -41,15 +41,14 @@ export default function ConfigurationTab({
   onClearError,
   currentWorkingDir,
   installationStatus,
-  scanResults,
-  onShowFilesDialog,
+  onRetryInstallationCheck,
 }: ConfigurationTabProps) {
   const isCheckingInstallation = installationStatus?.checking ?? false;
   const isNotInstalled = installationStatus?.installed === false;
   const installationUnknown = installationStatus?.installed === null;
+  const installationError = installationStatus?.error ?? null;
 
-  const scanButtonDisabled =
-    isScanning || paths.length === 0 || isCheckingInstallation || isNotInstalled;
+  const scanButtonDisabled = isScanning || paths.length === 0 || isCheckingInstallation;
 
   const getScanButtonText = () => {
     if (isScanning) {
@@ -130,20 +129,17 @@ export default function ConfigurationTab({
             {error}
           </Alert>
         )}
-      </Box>
 
-      {/* Display non-persisted scan results inline */}
-      {scanResults && !scanResults.persisted && (
-        <Box sx={{ mt: 4 }}>
-          <Typography variant="h5" fontWeight={600} sx={{ mb: 2 }}>
-            Scan Results
-          </Typography>
-          <ResultsTab
-            scanResults={scanResults}
-            onShowFilesDialog={onShowFilesDialog || (() => {})}
-          />
-        </Box>
-      )}
+        {isNotInstalled && onRetryInstallationCheck && (
+          <Box sx={{ mt: 3 }}>
+            <InstallationGuide
+              onRetryCheck={onRetryInstallationCheck}
+              isChecking={isCheckingInstallation}
+              error={installationError}
+            />
+          </Box>
+        )}
+      </Box>
     </Box>
   );
 }

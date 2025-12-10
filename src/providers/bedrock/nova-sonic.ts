@@ -9,7 +9,8 @@ import { firstValueFrom, Subject } from 'rxjs';
 import { take } from 'rxjs/operators';
 import logger from '../../logger';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
-import { AwsBedrockGenericProvider, type BedrockAmazonNovaSonicGenerationOptions } from '.';
+import { AwsBedrockGenericProvider } from './base';
+import type { BedrockAmazonNovaSonicGenerationOptions } from '.';
 
 import type {
   ApiProvider,

@@ -1,21 +1,17 @@
 {
-  "name": "promptfoo-opentelemetry-example",
+  "name": "@promptfoo/opentelemetry-tracing-example",
   "version": "1.0.0",
-  "description": "Example of using OpenTelemetry tracing with Promptfoo",
+  "private": true,
+  "description": "OpenTelemetry tracing integration with Promptfoo evaluations",
   "scripts": {
     "eval": "promptfoo eval",
-    "install-deps": "npm install"
+    "view": "promptfoo view"
   },
   "dependencies": {
     "@opentelemetry/api": "^1.9.0",
-    "@opentelemetry/sdk-trace-node": "^2.2.0",
-    "@opentelemetry/exporter-trace-otlp-http": "^0.208.0",
-    "@opentelemetry/sdk-trace-base": "^2.2.0",
-    "@opentelemetry/resources": "^2.2.0",
-    "@opentelemetry/semantic-conventions": "^1.38.0"
-  },
-  "devDependencies": {
-    "@types/node": "^24.10.1",
-    "typescript": "^5.9.3"
+    "@opentelemetry/sdk-trace-node": "^2.0.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.200.0",
+    "@opentelemetry/resources": "^2.0.0",
+    "@opentelemetry/semantic-conventions": "^1.28.0"
   }
 }
