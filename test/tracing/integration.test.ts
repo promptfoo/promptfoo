@@ -2,6 +2,17 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 
 import type { EvaluateTestSuite } from '../../src/types/index';
 
+// Mock the trace store to avoid database dependency in tests
+vi.mock('../../src/tracing/store', () => ({
+  getTraceStore: vi.fn(() => ({
+    createTrace: vi.fn().mockResolvedValue(undefined),
+    addSpans: vi.fn().mockResolvedValue(undefined),
+    getTracesByEvaluation: vi.fn().mockResolvedValue([]),
+    getTrace: vi.fn().mockResolvedValue(null),
+  })),
+  TraceStore: vi.fn(),
+}));
+
 // Define the mock provider class
 class MockTracedProviderInstance {
   id() {
@@ -83,7 +94,7 @@ describe('OpenTelemetry Tracing Integration', () => {
           http: {
             enabled: true,
             port: 4318,
-            host: '0.0.0.0',
+            host: '127.0.0.1',
             acceptFormats: ['json'],
           },
         },
