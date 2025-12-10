@@ -20,13 +20,13 @@ import type {
 } from '../../types/providers';
 
 // Error categorization for Nova Sonic (added for better error handling)
-interface NovaSonicError {
+export interface NovaSonicError {
   type: 'connection' | 'timeout' | 'api' | 'parsing' | 'session' | 'unknown';
   message: string;
   originalError?: Error;
 }
 
-function categorizeError(error: unknown): NovaSonicError {
+export function categorizeError(error: unknown): NovaSonicError {
   const err = error instanceof Error ? error : new Error(String(error));
   const message = err.message.toLowerCase();
 
