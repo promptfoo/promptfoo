@@ -397,9 +397,14 @@ export class VertexChatProvider extends VertexGenericProvider {
       try {
         const client = await this.getClientWithCredentials();
         const projectId = await this.getProjectId();
+        // Default to non-streaming (generateContent) since:
+        // 1. Model Armor floor settings only work with non-streaming endpoint
+        // 2. Promptfoo collects full responses for evaluation anyway
+        // Set streaming: true to use streamGenerateContent if needed
+        const endpoint = config.streaming === true ? 'streamGenerateContent' : 'generateContent';
         const url = `https://${this.getApiHost()}/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/${this.getPublisher()}/models/${
           this.modelName
-        }:streamGenerateContent`;
+        }:${endpoint}`;
         const res = await client.request({
           url,
           method: 'POST',
@@ -431,14 +436,17 @@ export class VertexChatProvider extends VertexGenericProvider {
       }
 
       try {
-        const dataWithError = data as GeminiErrorResponse[];
+        // Normalize response: non-streaming returns single object, streaming returns array
+        const normalizedData = Array.isArray(data) ? data : [data];
+
+        const dataWithError = normalizedData as GeminiErrorResponse[];
         const error = dataWithError[0]?.error;
         if (error) {
           return {
             error: `Error ${error.code}: ${error.message}`,
           };
         }
-        const dataWithResponse = data as GeminiResponseData[];
+        const dataWithResponse = normalizedData as GeminiResponseData[];
         let output;
         for (const datum of dataWithResponse) {
           // Check for blockReason first (before getCandidate) since blocked responses have no candidates
@@ -463,26 +471,13 @@ export class VertexChatProvider extends VertexGenericProvider {
               reason: blockReasonMessage,
             };
 
-            if (cliState.config?.redteam) {
-              // Refusals are not errors during redteams, they're actually successes.
-              return {
-                output: blockReasonMessage,
-                tokenUsage,
-                guardrails,
-                metadata: {
-                  modelArmor: isModelArmor
-                    ? {
-                        blockReason: datum.promptFeedback.blockReason,
-                        ...(datum.promptFeedback.blockReasonMessage && {
-                          blockReasonMessage: datum.promptFeedback.blockReasonMessage,
-                        }),
-                      }
-                    : undefined,
-                },
-              };
-            }
+            // Return as output (not error) so guardrails assertions can evaluate the block:
+            // - In redteam mode: refusals are successes (model correctly refused harmful content)
+            // - In non-redteam mode: allows guardrails/not-guardrails assertions to run
+            // The guardrails object (flagged=true) indicates the block, metadata has details
             return {
-              error: blockReasonMessage,
+              output: blockReasonMessage,
+              tokenUsage,
               guardrails,
               metadata: {
                 modelArmor: isModelArmor
