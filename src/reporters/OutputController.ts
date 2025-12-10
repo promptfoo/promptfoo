@@ -16,6 +16,9 @@ export class OutputController {
   private flushTimeout: NodeJS.Timeout | null = null;
   private readonly FLUSH_DEBOUNCE_MS = 100;
 
+  // When true, suppresses auto-flush - output is only flushed on demand
+  private suppressAutoFlush: boolean = false;
+
   // Callbacks for clearing/reprinting status during flush
   private clearStatusCallback: (() => void) | null = null;
   private reprintStatusCallback: (() => void) | null = null;
@@ -26,6 +29,14 @@ export class OutputController {
   setStatusCallbacks(clearStatus: (() => void) | null, reprintStatus: (() => void) | null): void {
     this.clearStatusCallback = clearStatus;
     this.reprintStatusCallback = reprintStatus;
+  }
+
+  /**
+   * Set whether to suppress auto-flush.
+   * When true, buffered output will only be flushed on demand via getBufferedOutput() or forceFlush().
+   */
+  setSuppressAutoFlush(suppress: boolean): void {
+    this.suppressAutoFlush = suppress;
   }
 
   /**
@@ -63,7 +74,7 @@ export class OutputController {
       return true;
     }) as typeof process.stdout.write;
 
-    // Replace stderr.write - flush immediately (errors shouldn't be lost)
+    // Replace stderr.write - flush immediately unless suppressed
     process.stderr.write = ((
       chunk: string | Uint8Array,
       encodingOrCallback?: BufferEncoding | ((err?: Error) => void),
@@ -71,8 +82,10 @@ export class OutputController {
     ): boolean => {
       const str = typeof chunk === 'string' ? chunk : chunk.toString();
       this.stderrBuffer.push(str);
-      // Flush stderr immediately - errors shouldn't wait
-      this.flushStderr();
+      // Flush stderr immediately unless auto-flush is suppressed
+      if (!this.suppressAutoFlush) {
+        this.flushStderr();
+      }
 
       // Handle callback
       const cb = typeof encodingOrCallback === 'function' ? encodingOrCallback : callback;
@@ -117,6 +130,10 @@ export class OutputController {
    * Schedule a debounced flush of stdout buffer.
    */
   private scheduleFlush(): void {
+    if (this.suppressAutoFlush) {
+      return; // Auto-flush is suppressed
+    }
+
     if (this.flushTimeout) {
       return; // Already scheduled
     }
@@ -201,6 +218,28 @@ export class OutputController {
     } else {
       process.stderr.write(data);
     }
+  }
+
+  /**
+   * Get and clear buffered output.
+   * Returns combined stdout and stderr content, then clears the buffers.
+   */
+  getBufferedOutput(): string {
+    const stdout = this.stdoutBuffer.join('');
+    const stderr = this.stderrBuffer.join('');
+    this.stdoutBuffer = [];
+    this.stderrBuffer = [];
+
+    // Combine stderr and stdout, with stderr taking precedence for visibility
+    const combined = stderr + stdout;
+    return combined.trim();
+  }
+
+  /**
+   * Check if there is any buffered output.
+   */
+  hasBufferedOutput(): boolean {
+    return this.stdoutBuffer.length > 0 || this.stderrBuffer.length > 0;
   }
 
   /**

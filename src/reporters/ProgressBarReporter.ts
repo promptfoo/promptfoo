@@ -2,6 +2,7 @@ import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 
 import { isCI } from '../envars';
+import { ResultFailureReason } from '../types/index';
 
 import type { SingleBar } from 'cli-progress';
 import type { EvalSummaryContext, Reporter, RunStartContext, TestResultContext } from './types';
@@ -12,34 +13,6 @@ import type { EvalSummaryContext, Reporter, RunStartContext, TestResultContext }
 export interface ProgressBarReporterOptions {
   /** Show progress bar (default: true in TTY, false in CI) */
   showProgressBar?: boolean;
-}
-
-/**
- * Safely formats variables for display in progress bars.
- * Handles extremely large variables that could cause RangeError crashes.
- */
-function formatVarsForDisplay(
-  vars: Record<string, unknown> | undefined,
-  maxLength: number,
-): string {
-  if (!vars || Object.keys(vars).length === 0) {
-    return '';
-  }
-
-  try {
-    const formatted = Object.entries(vars)
-      .map(([key, value]) => {
-        const valueStr = String(value).slice(0, 100);
-        return `${key}=${valueStr}`;
-      })
-      .join(' ')
-      .replace(/\n/g, ' ')
-      .slice(0, maxLength);
-
-    return formatted;
-  } catch {
-    return '[vars unavailable]';
-  }
 }
 
 /**
@@ -60,7 +33,8 @@ export class ProgressBarReporter implements Reporter {
   private options: Required<ProgressBarReporterOptions>;
   private progressBar: SingleBar | null = null;
   private totalTests = 0;
-  private completedCount = 0;
+  private passCount = 0;
+  private failCount = 0;
   private errorCount = 0;
 
   constructor(options: ProgressBarReporterOptions = {}) {
@@ -73,67 +47,56 @@ export class ProgressBarReporter implements Reporter {
 
   onRunStart(context: RunStartContext): void {
     this.totalTests = context.totalTests;
-    this.completedCount = 0;
+    this.passCount = 0;
+    this.failCount = 0;
     this.errorCount = 0;
 
     if (!this.options.showProgressBar) {
       return;
     }
 
-    // Create progress bar with legacy format
+    // Create progress bar with pass/fail/error counts like DefaultReporter
     this.progressBar = new cliProgress.SingleBar(
       {
-        format: (options, params, payload) => {
-          const barsize = options.barsize ?? 40;
-          const barCompleteString = options.barCompleteString ?? '=';
-          const barIncompleteString = options.barIncompleteString ?? '-';
-
-          const bar = barCompleteString.substring(0, Math.round(params.progress * barsize));
-          const spaces = barIncompleteString.substring(0, barsize - bar.length);
-          const percentage = Math.round(params.progress * 100);
-
-          // Only show errors if count > 0
-          const errorsText = payload.errors > 0 ? ` (errors: ${payload.errors})` : '';
-
-          return `Evaluating [${bar}${spaces}] ${percentage}% | ${params.value}/${params.total}${errorsText} | ${payload.provider} ${payload.prompt} ${payload.vars}`;
-        },
+        format: `{bar} {percentage}% | {value}/{total} | ${chalk.green('{pass} pass')} | ${chalk.red('{fail} fail')} | ${chalk.yellow('{error} error')}`,
         hideCursor: true,
         gracefulExit: true,
+        barsize: 30,
       },
       cliProgress.Presets.shades_classic,
     );
 
     this.progressBar.start(this.totalTests, 0, {
-      provider: '',
-      prompt: '',
-      vars: '',
-      errors: 0,
+      pass: 0,
+      fail: 0,
+      error: 0,
     });
+
+    // Print newline so log output appears below the progress bar
+    process.stdout.write('\n');
   }
 
   onTestResult(context: TestResultContext): void {
-    const { result, evalStep, metrics } = context;
+    const { result } = context;
 
-    this.completedCount++;
-
-    // Track errors
-    if (result.error) {
-      this.errorCount = metrics?.testErrorCount ?? this.errorCount + 1;
+    // Track pass/fail/error counts
+    const isError = result.failureReason === ResultFailureReason.ERROR;
+    if (result.success) {
+      this.passCount++;
+    } else if (isError) {
+      this.errorCount++;
+    } else {
+      this.failCount++;
     }
 
     if (!this.progressBar) {
       return;
     }
 
-    const provider = evalStep.provider.label || evalStep.provider.id();
-    const prompt = `"${evalStep.prompt.raw.slice(0, 10).replace(/\n/g, ' ')}"`;
-    const vars = formatVarsForDisplay(evalStep.test.vars, 10);
-
     this.progressBar.increment({
-      provider,
-      prompt: prompt || '""',
-      vars: vars || '',
-      errors: this.errorCount,
+      pass: this.passCount,
+      fail: this.failCount,
+      error: this.errorCount,
     });
   }
 

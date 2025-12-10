@@ -315,6 +315,12 @@ export interface EvaluateResult {
   cost?: number;
   metadata?: Record<string, any>;
   tokenUsage?: Required<TokenUsage>;
+  /** Captured log messages during test execution */
+  logs?: Array<{
+    level: 'debug' | 'info' | 'warn' | 'error';
+    message: string;
+    timestamp: number;
+  }>;
 }
 
 export interface EvaluateTableOutput {

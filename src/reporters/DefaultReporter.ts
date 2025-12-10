@@ -13,8 +13,6 @@ import type { EvalSummaryContext, Reporter, RunStartContext, TestResultContext }
 export interface DefaultReporterOptions {
   /** Show errors inline (default: true) */
   showErrors?: boolean;
-  /** Group by plugin/strategy for redteam (default: true) */
-  showGrouping?: boolean;
   /** Show progress bar (default: true in TTY, false in CI) */
   showProgressBar?: boolean;
   /** Capture and buffer console output to prevent display corruption (default: true in TTY) */
@@ -29,7 +27,6 @@ export interface DefaultReporterOptions {
  * - Test description or vars
  * - Provider name and latency
  * - Inline error display
- * - Grouping by plugin/strategy for redteam scans
  * - Progress bar with running pass/fail/error counts
  *
  * @see https://github.com/jestjs/jest/blob/main/packages/jest-reporters/src/DefaultReporter.ts
@@ -39,10 +36,6 @@ export class DefaultReporter implements Reporter {
   private outputController: OutputController;
   private progressBar: SingleBar | null = null;
   private isRedteam: boolean = false;
-
-  // Tracking for grouping
-  private currentGroup: string | null = null;
-  private groupResults: Map<string, { pass: number; fail: number; error: number }> = new Map();
 
   // Stats
   private passCount = 0;
@@ -55,7 +48,6 @@ export class DefaultReporter implements Reporter {
 
     this.options = {
       showErrors: options.showErrors ?? true,
-      showGrouping: options.showGrouping ?? true,
       showProgressBar: options.showProgressBar ?? isTTY,
       captureOutput: options.captureOutput ?? isTTY,
     };
@@ -69,17 +61,21 @@ export class DefaultReporter implements Reporter {
     this.failCount = 0;
     this.errorCount = 0;
     this.totalTests = context.totalTests;
-    this.groupResults.clear();
-    this.currentGroup = null;
 
     // Start output capture if enabled
     if (this.options.captureOutput) {
       this.outputController.startCapture();
+      // Suppress auto-flush - we'll display buffered output with each test result
+      this.outputController.setSuppressAutoFlush(true);
       this.outputController.setStatusCallbacks(
         () => this.clearStatus(),
         () => this.reprintStatus(),
       );
     }
+
+    // Print initial "Running tests..." message
+    const testType = this.isRedteam ? 'red team' : '';
+    process.stdout.write(chalk.dim(`\nRunning ${context.totalTests} ${testType} tests...\n\n`));
 
     // Initialize progress bar
     if (this.options.showProgressBar) {
@@ -106,60 +102,14 @@ export class DefaultReporter implements Reporter {
     // Clear progress bar line before printing test result
     this.clearStatus();
 
-    // Determine grouping key for redteam
-    let groupKey: string | null = null;
-    if (this.isRedteam && this.options.showGrouping) {
-      // Check multiple locations for pluginId/strategyId
-      const pluginId = (evalStep.test.metadata?.pluginId ||
-        result.testCase?.metadata?.pluginId ||
-        result.metadata?.pluginId) as string | undefined;
-      const strategyId = (evalStep.test.metadata?.strategyId ||
-        result.testCase?.metadata?.strategyId ||
-        result.metadata?.strategyId) as string | undefined;
-
-      if (pluginId || strategyId) {
-        const pluginName = pluginId ? this.getDisplayName(pluginId) : '';
-        const strategyName = strategyId ? this.getDisplayName(strategyId) : 'Baseline Testing';
-
-        if (pluginName && strategyName) {
-          groupKey = `${pluginName} (${strategyName})`;
-        } else {
-          groupKey = pluginName || strategyName || null;
-        }
-      }
-    }
-
-    // Print group header if changed
-    if (groupKey && groupKey !== this.currentGroup) {
-      // Print summary for previous group
-      if (this.currentGroup) {
-        this.printGroupSummary(this.currentGroup);
-      }
-      this.currentGroup = groupKey;
-      this.write(`\n${chalk.bold(groupKey)}\n`);
-      this.groupResults.set(groupKey, { pass: 0, fail: 0, error: 0 });
-    }
-
     // Update stats
     const isError = result.failureReason === ResultFailureReason.ERROR;
     if (result.success) {
       this.passCount++;
-      if (groupKey) {
-        const group = this.groupResults.get(groupKey)!;
-        group.pass++;
-      }
     } else if (isError) {
       this.errorCount++;
-      if (groupKey) {
-        const group = this.groupResults.get(groupKey)!;
-        group.error++;
-      }
     } else {
       this.failCount++;
-      if (groupKey) {
-        const group = this.groupResults.get(groupKey)!;
-        group.fail++;
-      }
     }
 
     // Print test result line
@@ -176,7 +126,7 @@ export class DefaultReporter implements Reporter {
         result.testCase?.metadata?.strategyId ||
         result.metadata?.strategyId) as string | undefined;
       const pluginName = pluginId ? this.getDisplayName(pluginId) : undefined;
-      const strategyName = strategyId ? this.getDisplayName(strategyId) : 'Baseline Testing';
+      const strategyName = strategyId ? this.getDisplayName(strategyId) : 'Baseline';
 
       if (pluginName && strategyName) {
         description = `${pluginName} (${strategyName})`;
@@ -198,18 +148,39 @@ export class DefaultReporter implements Reporter {
     const latency = result.latencyMs ? chalk.gray(`(${result.latencyMs}ms)`) : '';
     const testCount = chalk.dim(`[${context.completed}/${context.total}]`);
 
-    // Indent based on whether we're showing groups
-    const indent = this.options.showGrouping && this.isRedteam && groupKey ? '  ' : '';
-    this.write(
-      `${indent}${icon} ${testCount} ${description} ${chalk.dim(`[${provider}]`)} ${latency}\n`,
-    );
+    this.write(`${icon} ${testCount} ${description} ${chalk.dim(`[${provider}]`)} ${latency}\n`);
 
-    // Show error inline if configured
+    // Show failure/error reason inline if configured
     if (!result.success && this.options.showErrors && result.error) {
-      const errorIndent = indent + '    ';
+      const label = isError ? 'Error:' : 'Failure:';
       const errorLines = result.error.split('\n').slice(0, 3); // Limit error lines
-      for (const line of errorLines) {
-        this.write(chalk.red(`${errorIndent}${line}\n`));
+      this.write(chalk.red(`    ${label} ${errorLines[0]}\n`));
+      for (const line of errorLines.slice(1)) {
+        this.write(chalk.red(`    ${line}\n`));
+      }
+    }
+
+    // Show captured logs for all tests
+    if (result.logs && result.logs.length > 0) {
+      this.write(chalk.dim('    Logs:\n'));
+      // Show last 10 entries to keep output manageable
+      for (const log of result.logs.slice(-10)) {
+        const levelColor = log.level === 'error' ? chalk.red : chalk.yellow;
+        const firstLine = log.message.split('\n')[0].slice(0, 100);
+        this.write(chalk.dim(`      ${levelColor(`[${log.level}]`)} ${firstLine}\n`));
+      }
+    }
+
+    // Show any buffered logger output that occurred during this test
+    if (this.options.captureOutput && this.outputController.hasBufferedOutput()) {
+      const bufferedOutput = this.outputController.getBufferedOutput();
+      if (bufferedOutput) {
+        // Indent and dim the logger output to distinguish it from test results
+        const indentedOutput = bufferedOutput
+          .split('\n')
+          .map((line) => chalk.dim(`    ${line}`))
+          .join('\n');
+        this.write(`${indentedOutput}\n`);
       }
     }
 
@@ -218,12 +189,6 @@ export class DefaultReporter implements Reporter {
   }
 
   onRunComplete(_context: EvalSummaryContext): void {
-    // Print final group summary if any
-    if (this.currentGroup) {
-      this.clearStatus();
-      this.printGroupSummary(this.currentGroup);
-    }
-
     // Stop progress bar - this prints a final newline to preserve output
     if (this.progressBar) {
       // Clear the progress bar line
@@ -262,19 +227,6 @@ export class DefaultReporter implements Reporter {
         fail: this.failCount,
         error: this.errorCount,
       });
-    }
-  }
-
-  /**
-   * Print summary for a group
-   */
-  private printGroupSummary(groupKey: string): void {
-    const group = this.groupResults.get(groupKey);
-    if (group) {
-      const total = group.pass + group.fail + group.error;
-      const passRate = total > 0 ? ((group.pass / total) * 100).toFixed(0) : '0';
-      const indent = this.options.showGrouping && this.isRedteam ? '  ' : '';
-      this.write(chalk.dim(`${indent}(${group.pass}/${total} passed, ${passRate}%)\n`));
     }
   }
 

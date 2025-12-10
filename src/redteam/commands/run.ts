@@ -45,6 +45,11 @@ export function redteamRunCommand(program: Command) {
     .option('--force', 'Force generation even if no changes are detected', false)
     .option('--no-progress-bar', 'Do not show progress bar')
     .option(
+      '-r, --reporter <reporter>',
+      'Reporter to use: default, summary, progress, silent',
+      'default',
+    )
+    .option(
       '--filter-providers, --filter-targets <providers>',
       'Only run tests with these providers (regex match)',
     )
