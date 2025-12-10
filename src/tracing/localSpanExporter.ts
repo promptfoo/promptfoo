@@ -70,7 +70,9 @@ export class LocalSpanExporter implements SpanExporter {
         // First try to add spans normally (if trace exists)
         const result = await traceStore.addSpans(traceId, spanDataList, { skipTraceCheck: false });
         if (result.stored) {
-          logger.debug(`[LocalSpanExporter] Added ${spanDataList.length} spans to trace ${traceId}`);
+          logger.debug(
+            `[LocalSpanExporter] Added ${spanDataList.length} spans to trace ${traceId}`,
+          );
         } else {
           // Trace doesn't exist - these spans are from grading calls or other internal
           // operations that weren't initiated through the evaluation tracing flow.

@@ -67,25 +67,37 @@ const MAX_BODY_LENGTH = 4096;
  * Patterns to redact from request/response bodies for security.
  * These patterns match common API key and secret formats.
  */
-const SENSITIVE_PATTERNS: Array<{ pattern: RegExp; replacement: string | ((match: string) => string) }> = [
+const SENSITIVE_PATTERNS: Array<{
+  pattern: RegExp;
+  replacement: string | ((match: string) => string);
+}> = [
   // API keys with common prefixes (allow hyphens/underscores for keys like sk-proj-...)
   { pattern: /\b(sk-[a-zA-Z0-9_-]{20,})/g, replacement: '<REDACTED_API_KEY>' },
   { pattern: /\b(pk-[a-zA-Z0-9_-]{20,})/g, replacement: '<REDACTED_API_KEY>' },
-  { pattern: /\b(api[_-]?key["']?\s*[:=]\s*["']?)([a-zA-Z0-9_-]{16,})/gi, replacement: '$1<REDACTED>' },
+  {
+    pattern: /\b(api[_-]?key["']?\s*[:=]\s*["']?)([a-zA-Z0-9_-]{16,})/gi,
+    replacement: '$1<REDACTED>',
+  },
   { pattern: /\b(secret["']?\s*[:=]\s*["']?)([a-zA-Z0-9_-]{16,})/gi, replacement: '$1<REDACTED>' },
   { pattern: /\b(token["']?\s*[:=]\s*["']?)([a-zA-Z0-9_-]{16,})/gi, replacement: '$1<REDACTED>' },
   { pattern: /\b(password["']?\s*[:=]\s*["']?)([^\s"',}{]+)/gi, replacement: '$1<REDACTED>' },
   // Authorization headers
-  { pattern: /(Authorization["']?\s*[:=]\s*["']?)(Bearer\s+)?([a-zA-Z0-9_.-]{16,})/gi, replacement: '$1$2<REDACTED>' },
+  {
+    pattern: /(Authorization["']?\s*[:=]\s*["']?)(Bearer\s+)?([a-zA-Z0-9_.-]{16,})/gi,
+    replacement: '$1$2<REDACTED>',
+  },
   // AWS credentials
   { pattern: /\b(AKIA[A-Z0-9]{16})/g, replacement: '<REDACTED_AWS_KEY>' },
-  { pattern: /\b([a-zA-Z0-9/+=]{40})/g, replacement: (match) => {
-    // Only redact if it looks like a base64-encoded secret (not normal text)
-    if (/^[A-Za-z0-9+/=]{40}$/.test(match) && match.includes('/')) {
-      return '<REDACTED_SECRET>';
-    }
-    return match;
-  }},
+  {
+    pattern: /\b([a-zA-Z0-9/+=]{40})/g,
+    replacement: (match) => {
+      // Only redact if it looks like a base64-encoded secret (not normal text)
+      if (/^[A-Za-z0-9+/=]{40}$/.test(match) && match.includes('/')) {
+        return '<REDACTED_SECRET>';
+      }
+      return match;
+    },
+  },
   // Generic long alphanumeric strings that look like secrets (64+ chars)
   { pattern: /\b[a-f0-9]{64,}\b/gi, replacement: '<REDACTED_HASH>' },
 ];
@@ -402,7 +414,10 @@ export function setGenAIResponseAttributes(
     span.setAttribute(PromptfooAttributes.CACHE_HIT, result.cacheHit);
   }
   if (result.responseBody) {
-    span.setAttribute(PromptfooAttributes.RESPONSE_BODY, truncateBody(result.responseBody, sanitize));
+    span.setAttribute(
+      PromptfooAttributes.RESPONSE_BODY,
+      truncateBody(result.responseBody, sanitize),
+    );
   }
 }
 
