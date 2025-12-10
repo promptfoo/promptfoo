@@ -1,9 +1,7 @@
 import chalk from 'chalk';
-import cliProgress from 'cli-progress';
 import { isCI } from '../envars';
 import { ResultFailureReason } from '../types/index';
 import { OutputController } from './OutputController';
-import type { SingleBar } from 'cli-progress';
 
 import type { EvalSummaryContext, Reporter, RunStartContext, TestResultContext } from './types';
 
@@ -13,28 +11,27 @@ import type { EvalSummaryContext, Reporter, RunStartContext, TestResultContext }
 export interface DefaultReporterOptions {
   /** Show errors inline (default: true) */
   showErrors?: boolean;
-  /** Show progress bar (default: true in TTY, false in CI) */
-  showProgressBar?: boolean;
+  /** Show running status line (default: true in TTY, false in CI) */
+  showStatus?: boolean;
   /** Capture and buffer console output to prevent display corruption (default: true in TTY) */
   captureOutput?: boolean;
 }
 
 /**
- * DefaultReporter - Jest-like verbose reporter with progress bar
+ * DefaultReporter - Jest-like verbose reporter
  *
  * Displays real-time test results with:
  * - Pass/fail indicators (✓/✗)
  * - Test description or vars
  * - Provider name and latency
  * - Inline error display
- * - Progress bar with running pass/fail/error counts
+ * - Running status indicator
  *
  * @see https://github.com/jestjs/jest/blob/main/packages/jest-reporters/src/DefaultReporter.ts
  */
 export class DefaultReporter implements Reporter {
   private options: Required<DefaultReporterOptions>;
   private outputController: OutputController;
-  private progressBar: SingleBar | null = null;
   private isRedteam: boolean = false;
 
   // Stats
@@ -48,7 +45,7 @@ export class DefaultReporter implements Reporter {
 
     this.options = {
       showErrors: options.showErrors ?? true,
-      showProgressBar: options.showProgressBar ?? isTTY,
+      showStatus: options.showStatus ?? isTTY,
       captureOutput: options.captureOutput ?? isTTY,
     };
 
@@ -73,26 +70,13 @@ export class DefaultReporter implements Reporter {
       );
     }
 
-    // Print initial "Running tests..." message
-    const testType = this.isRedteam ? 'red team' : '';
-    process.stdout.write(chalk.dim(`\nRunning ${context.totalTests} ${testType} tests...\n\n`));
+    // Print initial header
+    const testType = this.isRedteam ? 'red team ' : '';
+    process.stdout.write(chalk.dim(`\nRunning ${context.totalTests} ${testType}tests...\n\n`));
 
-    // Initialize progress bar
-    if (this.options.showProgressBar) {
-      this.progressBar = new cliProgress.SingleBar(
-        {
-          format: `{bar} {percentage}% | {value}/{total} | ${chalk.green('{pass} pass')} | ${chalk.red('{fail} fail')} | ${chalk.yellow('{error} error')}`,
-          hideCursor: true,
-          clearOnComplete: false,
-          barsize: 30,
-        },
-        cliProgress.Presets.shades_classic,
-      );
-      this.progressBar.start(context.totalTests, 0, {
-        pass: 0,
-        fail: 0,
-        error: 0,
-      });
+    // Print initial status line (will be cleared/replaced as tests complete)
+    if (this.options.showStatus) {
+      process.stdout.write(chalk.dim(`Running test 1 of ${this.totalTests}...\n`));
     }
   }
 
@@ -165,10 +149,34 @@ export class DefaultReporter implements Reporter {
       this.write(chalk.dim('    Logs:\n'));
       // Show last 10 entries to keep output manageable
       for (const log of result.logs.slice(-10)) {
-        const levelColor = log.level === 'error' ? chalk.red : chalk.yellow;
-        const firstLine = log.message.split('\n')[0].slice(0, 100);
-        this.write(chalk.dim(`      ${levelColor(`[${log.level}]`)} ${firstLine}\n`));
+        // Indent all lines of the message
+        const lines = log.message.split('\n');
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i];
+          if (log.level === 'error') {
+            // Errors are bright red, not dimmed
+            if (i === 0) {
+              this.write(`      ${chalk.red.bold(`[${log.level}]`)} ${chalk.red(line)}\n`);
+            } else {
+              this.write(`      ${chalk.red('         ' + line)}\n`);
+            }
+          } else if (log.level === 'warn') {
+            if (i === 0) {
+              this.write(`      ${chalk.yellow(`[${log.level}]`)} ${chalk.dim(line)}\n`);
+            } else {
+              this.write(chalk.dim(`               ${line}\n`));
+            }
+          } else {
+            if (i === 0) {
+              this.write(chalk.dim(`      [${log.level}] ${line}\n`));
+            } else {
+              this.write(chalk.dim(`              ${line}\n`));
+            }
+          }
+        }
       }
+      // Add blank line after logs for visual separation from progress bar
+      this.write('\n');
     }
 
     // Show any buffered logger output that occurred during this test
@@ -184,49 +192,46 @@ export class DefaultReporter implements Reporter {
       }
     }
 
-    // Reprint progress bar
+    // Reprint progress bar at bottom
     this.reprintStatus();
   }
 
-  onRunComplete(_context: EvalSummaryContext): void {
-    // Stop progress bar - this prints a final newline to preserve output
-    if (this.progressBar) {
-      // Clear the progress bar line
-      this.clearStatus();
-      // Print the final progress bar state on its own line (won't be overwritten)
-      this.progressBar.stop();
-      this.progressBar = null;
-    }
+  onRunComplete(context: EvalSummaryContext): void {
+    // Clear status line
+    this.clearStatus();
 
     // Stop output capture - flushes any remaining buffered output
     if (this.options.captureOutput) {
       this.outputController.stopCapture();
     }
 
-    // Print a blank line for spacing before subsequent output (sharing, etc.)
-    process.stdout.write('\n');
+    // Print summary
+    process.stdout.write(
+      `\n${chalk.green(`${context.successes} passed`)}, ` +
+        `${chalk.red(`${context.failures} failed`)}, ` +
+        `${chalk.yellow(`${context.errors} errors`)} ` +
+        `(${context.successes + context.failures + context.errors} total)\n\n`,
+    );
   }
 
   /**
-   * Clear the progress bar status line
+   * Clear the status line
    */
   private clearStatus(): void {
-    if (this.progressBar && this.options.showProgressBar) {
-      // Move cursor to beginning of line and clear it
-      this.outputController.writeToStdout('\r\x1b[K');
+    if (this.options.showStatus) {
+      // Move cursor up one line, go to beginning, and clear the line
+      this.outputController.writeToStdout('\x1b[1A\r\x1b[K');
     }
   }
 
   /**
-   * Reprint the progress bar status
+   * Print the current status line
    */
   private reprintStatus(): void {
-    if (this.progressBar && this.options.showProgressBar) {
-      this.progressBar.update(this.passCount + this.failCount + this.errorCount, {
-        pass: this.passCount,
-        fail: this.failCount,
-        error: this.errorCount,
-      });
+    if (this.options.showStatus) {
+      const completed = this.passCount + this.failCount + this.errorCount;
+      const status = chalk.dim(`Running test ${completed + 1} of ${this.totalTests}...`);
+      this.outputController.writeToStdout(`${status}\n`);
     }
   }
 

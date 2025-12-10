@@ -419,11 +419,12 @@ const MAX_CHILD_LOG_ENTRIES = 50;
 
 /**
  * Creates a child logger method that captures logs to a buffer
+ * and also logs normally to Winston (file transports, console).
  */
 function createChildLogMethod(
   level: keyof typeof LOG_LEVELS,
   logBuffer: TestLogEntry[],
-  metadata: { testIdx: number; promptIdx: number },
+  _metadata: { testIdx: number; promptIdx: number },
 ): (message: string, context?: SanitizedLogContext) => void {
   return (message: string, context?: SanitizedLogContext) => {
     if (isLoggerShuttingDown) {
