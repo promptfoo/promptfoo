@@ -29,11 +29,7 @@ import { shouldGenerateRemote } from '../../remoteGeneration';
 import { textToAudio } from '../../strategies/simpleAudio';
 import type { AudioGradingConfig, BaseRedteamMetadata } from '../../types';
 import { isBasicRefusal } from '../../util';
-import {
-  redteamProviderManager,
-  type TargetResponse,
-  getTargetResponse,
-} from '../shared';
+import { redteamProviderManager, type TargetResponse, getTargetResponse } from '../shared';
 
 const DEFAULT_MAX_TURNS = 8;
 const DEFAULT_MAX_BACKTRACKS = 5;
