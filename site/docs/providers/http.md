@@ -993,64 +993,45 @@ providers:
 
 ## Authentication
 
-The HTTP provider supports OAuth 2.0 and Basic authentication methods.
+The HTTP provider supports multiple authentication methods to securely connect to your APIs. These methods are designed to support generation and refreshing of short-lived credentials like JWT tokens using common authentication patterns. For specialized cases, custom hooks or custom providers may be used.
 
-### OAuth 2.0
+### Bearer Token
 
-OAuth 2.0 authentication supports both **Client Credentials** and **Username/Password** (Resource Owner Password Credentials) grant types.
-
-#### Client Credentials Grant
-
-Use this grant type for server-to-server authentication:
+For APIs that accept a static bearer token:
 
 ```yaml
 providers:
   - id: https
     config:
       url: 'https://api.example.com/v1/chat'
-      method: 'POST'
       body:
         prompt: '{{prompt}}'
       auth:
-        type: oauth
-        grantType: client_credentials
-        tokenUrl: 'https://auth.example.com/oauth/token'
-        clientId: 'your-client-id'
-        clientSecret: 'your-client-secret'
-        scopes:
-          - read
-          - write
+        type: bearer
+        token: '{{env.API_TOKEN}}'
 ```
 
-#### Username/Password Grant
+The provider adds an `Authorization: Bearer <token>` header to each request.
 
-Use this grant type when authenticating with user credentials:
+### API Key
+
+For APIs that use API key authentication, you can place the key in either a header or query parameter:
 
 ```yaml
 providers:
   - id: https
     config:
       url: 'https://api.example.com/v1/chat'
-      method: 'POST'
       body:
         prompt: '{{prompt}}'
       auth:
-        type: oauth
-        grantType: password
-        tokenUrl: 'https://auth.example.com/oauth/token'
-        clientId: 'your-client-id'
-        clientSecret: 'your-client-secret'
-        username: 'user@example.com'
-        password: 'your-password'
-        scopes:
-          - read
+        type: api_key
+        keyName: 'X-API-Key'
+        value: '{{env.API_KEY}}'
+        placement: header # or 'query'
 ```
 
-The provider will automatically:
-
-- Request an access token from the specified `tokenUrl`
-- Cache the token and refresh it when it expires (with a 60-second buffer)
-- Add the token to requests as an `Authorization: Bearer <token>` header
+When `placement` is `header`, the key is added as a request header. When `placement` is `query`, it's appended as a URL query parameter.
 
 ### Basic Authentication
 
@@ -1061,16 +1042,241 @@ providers:
   - id: https
     config:
       url: 'https://api.example.com/v1/chat'
-      method: 'POST'
       body:
         prompt: '{{prompt}}'
       auth:
         type: basic
-        username: 'your-username'
-        password: 'your-password'
+        username: '{{env.API_USERNAME}}'
+        password: '{{env.API_PASSWORD}}'
 ```
 
-The provider will automatically encode credentials and add them as an `Authorization: Basic <credentials>` header.
+The provider automatically Base64-encodes credentials and adds them as an `Authorization: Basic <credentials>` header.
+
+### OAuth 2.0
+
+OAuth 2.0 authentication supports both **Client Credentials** and **Password** (Resource Owner Password Credentials) grant types.
+
+The HTTP provider handles the OAuth 2.0 flow by automatically interacting with your identity provider's token endpoint. When a request is made, the provider:
+
+1. Checks if a valid access token exists in cache
+2. If no token exists or the token is expired, requests a new access token from the `tokenUrl` endpoint
+3. Sends the appropriate grant type parameters (client credentials or password) to the token endpoint
+4. Receives and caches the access token from the identity provider's response
+5. Adds the token to subsequent API requests as an `Authorization: Bearer <token>` header
+
+The provider automatically manages token refresh by monitoring token expiration. Tokens are refreshed proactively with a 60-second buffer before expiry to prevent authentication failures. If a token expires, the provider immediately requests a new one and retries the original request.
+
+#### Client Credentials Grant
+
+Use this grant type for server-to-server authentication:
+
+```yaml
+providers:
+  - id: https
+    config:
+      url: 'https://api.example.com/v1/chat'
+      body:
+        prompt: '{{prompt}}'
+      auth:
+        type: oauth
+        grantType: client_credentials
+        tokenUrl: 'https://auth.example.com/oauth/token'
+        clientId: '{{env.OAUTH_CLIENT_ID}}'
+        clientSecret: '{{env.OAUTH_CLIENT_SECRET}}'
+        scopes:
+          - read
+          - write
+```
+
+#### Password Grant
+
+Use this grant type when authenticating with user credentials:
+
+```yaml
+providers:
+  - id: https
+    config:
+      url: 'https://api.example.com/v1/chat'
+      body:
+        prompt: '{{prompt}}'
+      auth:
+        type: oauth
+        grantType: password
+        tokenUrl: 'https://auth.example.com/oauth/token'
+        clientId: '{{env.OAUTH_CLIENT_ID}}'
+        clientSecret: '{{env.OAUTH_CLIENT_SECRET}}'
+        username: '{{env.OAUTH_USERNAME}}'
+        password: '{{env.OAUTH_PASSWORD}}'
+        scopes:
+          - read
+```
+
+#### Token Management
+
+The provider automatically manages the OAuth token lifecycle:
+
+- **Initial token request**: On the first API call, the provider sends a POST request to the `tokenUrl` with the appropriate grant type parameters
+- **Token caching**: Access tokens are cached in memory to avoid unnecessary token requests
+- **Proactive refresh**: Tokens are refreshed 60 seconds before expiration to prevent authentication failures during long-running evaluations
+- **Automatic retry**: If a token expires during a request, the provider automatically requests a new token and retries the original request
+- **Request header injection**: Valid tokens are automatically added to all API requests as `Authorization: Bearer <token>` headers
+
+The token endpoint must return a JSON response with an `access_token` field. If the response includes an `expires_in` field (token lifetime in seconds), the provider uses it to determine when to refresh the token. Otherwise, tokens are refreshed on each evaluation run.
+
+### Digital Signature Authentication
+
+For APIs requiring cryptographic request signing, the HTTP provider supports digital signatures with PEM, JKS (Java KeyStore), and PFX certificate formats. The private key is **never sent to Promptfoo** and remains stored locally.
+
+#### Basic Usage (PEM)
+
+```yaml
+providers:
+  - id: https
+    config:
+      url: 'https://api.example.com/v1'
+      headers:
+        'x-signature': '{{signature}}'
+        'x-timestamp': '{{signatureTimestamp}}'
+      signatureAuth:
+        type: pem
+        privateKeyPath: '/path/to/private.key'
+        clientId: 'your-client-id'
+```
+
+When signature authentication is enabled, these template variables below become available. Your configuration likely depends on embedding these into a specific header or other part of the request in order to complete the authentication flow.
+
+- `{{signature}}`: The generated signature (base64-encoded)
+- `{{signatureTimestamp}}`: Unix timestamp when the signature was generated
+
+#### Certificate Formats
+
+**PEM Certificates:**
+
+```yaml
+signatureAuth:
+  type: pem
+  privateKeyPath: '/path/to/private.key' # Path to PEM file
+  # OR inline key:
+  # privateKey: '-----BEGIN PRIVATE KEY-----\n...'
+  clientId: 'your-client-id'
+```
+
+**JKS (Java KeyStore):**
+
+```yaml
+signatureAuth:
+  type: jks
+  keystorePath: '/path/to/keystore.jks'
+  keystorePassword: '{{env.JKS_PASSWORD}}' # Or use PROMPTFOO_JKS_PASSWORD env var
+  keyAlias: 'your-key-alias' # Optional: uses first available if not specified
+  clientId: 'your-client-id'
+```
+
+**PFX (PKCS#12):**
+
+```yaml
+signatureAuth:
+  type: pfx
+  pfxPath: '/path/to/certificate.pfx'
+  pfxPassword: '{{env.PFX_PASSWORD}}' # Or use PROMPTFOO_PFX_PASSWORD env var
+  clientId: 'your-client-id'
+  # OR use separate certificate and key files:
+  # certPath: '/path/to/certificate.crt'
+  # keyPath: '/path/to/private.key'
+```
+
+#### Full Configuration Example
+
+```yaml
+providers:
+  - id: https
+    config:
+      url: 'https://api.example.com/v1'
+      headers:
+        'x-signature': '{{signature}}'
+        'x-timestamp': '{{signatureTimestamp}}'
+        'x-client-id': 'your-client-id'
+      signatureAuth:
+        type: pem
+        privateKeyPath: '/path/to/private.key'
+        clientId: 'your-client-id'
+        signatureValidityMs: 300000 # 5 minutes (default)
+        signatureAlgorithm: 'SHA256' # Default
+        signatureDataTemplate: '{{clientId}}{{timestamp}}\n'
+        signatureRefreshBufferMs: 30000 # Optional custom refresh buffer
+```
+
+:::info Dependencies
+
+- **JKS support** requires the `jks-js` package: `npm install jks-js`
+- **PFX support** requires the `pem` package: `npm install pem`
+
+:::
+
+### Authentication Options Reference
+
+#### Bearer Token Options
+
+| Option | Type   | Required | Description        |
+| ------ | ------ | -------- | ------------------ |
+| type   | string | Yes      | Must be `'bearer'` |
+| token  | string | Yes      | The bearer token   |
+
+#### API Key Options
+
+| Option    | Type   | Required | Description                                     |
+| --------- | ------ | -------- | ----------------------------------------------- |
+| type      | string | Yes      | Must be `'api_key'`                             |
+| keyName   | string | Yes      | Name of the header or query parameter           |
+| value     | string | Yes      | The API key value                               |
+| placement | string | Yes      | Where to place the key: `'header'` or `'query'` |
+
+#### Basic Auth Options
+
+| Option   | Type   | Required | Description       |
+| -------- | ------ | -------- | ----------------- |
+| type     | string | Yes      | Must be `'basic'` |
+| username | string | Yes      | Username          |
+| password | string | Yes      | Password          |
+
+#### OAuth 2.0 Options
+
+| Option       | Type     | Required                 | Description                            |
+| ------------ | -------- | ------------------------ | -------------------------------------- |
+| type         | string   | Yes                      | Must be `'oauth'`                      |
+| grantType    | string   | Yes                      | `'client_credentials'` or `'password'` |
+| tokenUrl     | string   | Yes                      | OAuth token endpoint URL               |
+| clientId     | string   | Yes (client_credentials) | OAuth client ID                        |
+| clientSecret | string   | Yes (client_credentials) | OAuth client secret                    |
+| username     | string   | Yes (password grant)     | Username for password grant            |
+| password     | string   | Yes (password grant)     | Password for password grant            |
+| scopes       | string[] | No                       | OAuth scopes to request                |
+
+#### Digital Signature Options
+
+| Option                   | Type   | Required | Default                       | Description                                            |
+| ------------------------ | ------ | -------- | ----------------------------- | ------------------------------------------------------ |
+| type                     | string | No       | `'pem'`                       | Certificate type: `'pem'`, `'jks'`, or `'pfx'`         |
+| clientId                 | string | Yes      | -                             | Client identifier for signature generation             |
+| privateKeyPath           | string | No\*     | -                             | Path to PEM private key file (PEM only)                |
+| privateKey               | string | No\*     | -                             | Inline PEM private key string (PEM only)               |
+| keystorePath             | string | No\*     | -                             | Path to JKS keystore file (JKS only)                   |
+| keystorePassword         | string | No       | -                             | JKS password (or use `PROMPTFOO_JKS_PASSWORD` env var) |
+| keyAlias                 | string | No       | First available               | JKS key alias (JKS only)                               |
+| pfxPath                  | string | No\*     | -                             | Path to PFX certificate file (PFX only)                |
+| pfxPassword              | string | No       | -                             | PFX password (or use `PROMPTFOO_PFX_PASSWORD` env var) |
+| certPath                 | string | No\*     | -                             | Path to certificate file (PFX alternative)             |
+| keyPath                  | string | No\*     | -                             | Path to private key file (PFX alternative)             |
+| signatureValidityMs      | number | No       | 300000                        | Signature validity period in milliseconds              |
+| signatureAlgorithm       | string | No       | `'SHA256'`                    | Signature algorithm (any Node.js crypto supported)     |
+| signatureDataTemplate    | string | No       | `'{{clientId}}{{timestamp}}'` | Template for data to sign (`\n` = newline)             |
+| signatureRefreshBufferMs | number | No       | 10% of validityMs             | Buffer time before expiry to refresh                   |
+
+\* Requirements by certificate type:
+
+- **PEM**: Either `privateKeyPath` or `privateKey` required
+- **JKS**: `keystorePath` required
+- **PFX**: Either `pfxPath` or both `certPath` and `keyPath` required
 
 ## Session management
 
@@ -1170,151 +1376,6 @@ providers:
       body:
         user_message: '{{prompt}}'
 ```
-
-## Digital Signature Authentication
-
-The HTTP provider supports digital signature authentication with multiple certificate formats. This feature allows you to:
-
-- Automatically generate cryptographic signatures for requests
-- Manage signature expiration and refresh
-- Customize header names and signature formats
-- Configure different signature algorithms
-- Support for PEM, JKS (Java KeyStore), and PFX (Personal Information Exchange) certificate formats
-
-The current implementation uses asymmetric key cryptography (RSA by default), but the configuration is algorithm-agnostic. In either case, the private key is **never sent to Promptfoo** and will always be stored locally on your system either in your `promptfooconfig.yaml` file or on a local path that the configuration file references.
-
-### Basic Usage (PEM)
-
-```yaml
-providers:
-  - id: https
-    config:
-      url: 'https://api.example.com/v1'
-      method: 'POST'
-      headers:
-        'x-signature': '{{signature}}'
-        'x-timestamp': '{{signatureTimestamp}}'
-      signatureAuth:
-        type: 'pem'
-        privateKeyPath: '/path/to/private.key'
-        clientId: 'your-client-id'
-```
-
-### Certificate Format Support
-
-The HTTP provider supports three certificate formats:
-
-#### PEM Certificates
-
-```yaml
-signatureAuth:
-  type: 'pem'
-  privateKeyPath: '/path/to/private.key' # Path to PEM private key file
-  # OR
-  privateKey: '-----BEGIN PRIVATE KEY-----\n...' # Direct key string
-```
-
-#### JKS (Java KeyStore) Certificates
-
-```yaml
-signatureAuth:
-  type: 'jks'
-  keystorePath: '/path/to/keystore.jks'
-  keystorePassword: 'your-keystore-password' # Optional: can use PROMPTFOO_JKS_PASSWORD env var
-  keyAlias: 'your-key-alias' # Optional: uses first available alias if not specified
-```
-
-#### PFX (Personal Information Exchange) Certificates
-
-```yaml
-signatureAuth:
-  type: 'pfx'
-  pfxPath: '/path/to/certificate.pfx'
-  pfxPassword: 'your-pfx-password' # Optional: can use PROMPTFOO_PFX_PASSWORD env var
-  # OR use separate certificate and key files
-  certPath: '/path/to/certificate.crt'
-  keyPath: '/path/to/private.key'
-```
-
-### Full Configuration
-
-```yaml
-providers:
-  - id: https
-    config:
-      url: 'https://api.example.com/v1'
-      headers:
-        'x-signature': '{{signature}}'
-        'x-timestamp': '{{signatureTimestamp}}'
-        'x-client-id': 'your-client-id'
-      signatureAuth:
-        # Certificate type (pem, jks, or pfx)
-        type: 'pem'
-
-        # PEM options
-        privateKeyPath: '/path/to/private.key' # Path to key file
-        # privateKey: '-----BEGIN PRIVATE KEY-----\n...'  # Or direct key string
-
-        # JKS options
-        # keystorePath: '/path/to/keystore.jks'
-        # keystorePassword: 'password'  # Optional: can use PROMPTFOO_JKS_PASSWORD
-        # keyAlias: 'alias'  # Optional: uses first available if not specified
-
-        # PFX options
-        # pfxPath: '/path/to/certificate.pfx'
-        # pfxPassword: 'password'  # Optional: can use PROMPTFOO_PFX_PASSWORD
-        # certPath: '/path/to/certificate.crt'  # Alternative to pfxPath
-        # keyPath: '/path/to/private.key'       # Alternative to pfxPath
-
-        clientId: 'your-client-id'
-
-        # Optional fields with defaults shown
-        signatureValidityMs: 300000 # 5 minutes
-        signatureAlgorithm: 'SHA256'
-        signatureDataTemplate: '{{clientId}}{{timestamp}}\n' # \n is interpreted as a newline character
-        signatureRefreshBufferMs: 30000 # Optional: custom refresh buffer
-```
-
-:::note
-You can use environment variables throughout your HTTP provider configuration using the `{{env.VARIABLE_NAME}}` syntax.
-:::
-
-:::info Dependencies
-
-- **JKS support** requires the `jks-js` package: `npm install jks-js`
-- **PFX support** requires the `pem` package: `npm install pem`
-  :::
-
-When signature authentication is enabled, the following variables are available for use in headers or other templated fields:
-
-- `signature`: The generated signature string (base64 encoded)
-- `signatureTimestamp`: The Unix timestamp when the signature was generated
-
-### Signature Auth Options
-
-| Option                   | Type   | Required | Default                             | Description                                                                                                           |
-| ------------------------ | ------ | -------- | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| type                     | string | No       | 'pem'                               | Certificate type: 'pem', 'jks', or 'pfx'                                                                              |
-| privateKeyPath           | string | No\*     | -                                   | Path to the PEM private key file used for signing (PEM type only)                                                     |
-| privateKey               | string | No\*     | -                                   | PEM private key string (if not using privateKeyPath, PEM type only)                                                   |
-| keystorePath             | string | No\*     | -                                   | Path to the JKS keystore file (JKS type only)                                                                         |
-| keystorePassword         | string | No       | -                                   | JKS keystore password (JKS type only, can use PROMPTFOO_JKS_PASSWORD env var)                                         |
-| keyAlias                 | string | No       | First available alias               | JKS key alias to use (JKS type only)                                                                                  |
-| pfxPath                  | string | No\*     | -                                   | Path to the PFX certificate file (PFX type only)                                                                      |
-| pfxPassword              | string | No       | -                                   | PFX certificate password (PFX type only, can use PROMPTFOO_PFX_PASSWORD env var)                                      |
-| certPath                 | string | No\*     | -                                   | Path to the certificate file (PFX type only, alternative to pfxPath)                                                  |
-| keyPath                  | string | No\*     | -                                   | Path to the private key file (PFX type only, alternative to pfxPath)                                                  |
-| clientId                 | string | Yes      | -                                   | Client identifier used in signature generation                                                                        |
-| signatureValidityMs      | number | No       | 300000                              | Validity period of the signature in milliseconds                                                                      |
-| signatureAlgorithm       | string | No       | 'SHA256'                            | Signature algorithm to use (any supported by Node.js crypto)                                                          |
-| signatureDataTemplate    | string | No       | '\{\{clientId\}\}\{\{timestamp\}\}' | Template for formatting the data to be signed. Note: `\n` in the template will be interpreted as a newline character. |
-| signatureRefreshBufferMs | number | No       | 10% of validityMs                   | Buffer time before expiry to refresh signature                                                                        |
-
-\* Requirements depend on certificate type:
-
-- **PEM**: Either `privateKeyPath` or `privateKey` must be provided
-- **JKS**: `keystorePath` must be provided
-- **PFX**: Either `pfxPath` or both `certPath` and `keyPath` must be provided
 
 ## Request Retries
 
@@ -1419,34 +1480,9 @@ Supported config options:
 | tokenEstimation   | object                  | Configuration for optional token usage estimation. See Token Estimation section above for details.                                                                                  |
 | maxRetries        | number                  | Maximum number of retry attempts for failed requests. Defaults to 4.                                                                                                                |
 | validateStatus    | Function                | A function that takes a status code and returns a boolean indicating if the response should be treated as successful. By default, accepts all status codes.                         |
-| signatureAuth     | object                  | Configuration for digital signature authentication. See Signature Auth Options below.                                                                                               |
+| auth              | object                  | Authentication configuration (bearer, api_key, basic, or oauth). See [Authentication](#authentication) section.                                                                     |
+| signatureAuth     | object                  | Digital signature authentication configuration. See [Digital Signature Authentication](#digital-signature-authentication) section.                                                  |
 | tls               | object                  | Configuration for TLS/HTTPS connections including client certificates, CA certificates, and cipher settings. See TLS Configuration Options above.                                   |
-
-### Signature Auth Options
-
-| Option                   | Type   | Required | Default                             | Description                                                                                                           |
-| ------------------------ | ------ | -------- | ----------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| type                     | string | No       | 'pem'                               | Certificate type: 'pem', 'jks', or 'pfx'                                                                              |
-| privateKeyPath           | string | No\*     | -                                   | Path to the PEM private key file used for signing (PEM type only)                                                     |
-| privateKey               | string | No\*     | -                                   | PEM private key string (if not using privateKeyPath, PEM type only)                                                   |
-| keystorePath             | string | No\*     | -                                   | Path to the JKS keystore file (JKS type only)                                                                         |
-| keystorePassword         | string | No       | -                                   | JKS keystore password (JKS type only, can use PROMPTFOO_JKS_PASSWORD env var)                                         |
-| keyAlias                 | string | No       | First available alias               | JKS key alias to use (JKS type only)                                                                                  |
-| pfxPath                  | string | No\*     | -                                   | Path to the PFX certificate file (PFX type only)                                                                      |
-| pfxPassword              | string | No       | -                                   | PFX certificate password (PFX type only, can use PROMPTFOO_PFX_PASSWORD env var)                                      |
-| certPath                 | string | No\*     | -                                   | Path to the certificate file (PFX type only, alternative to pfxPath)                                                  |
-| keyPath                  | string | No\*     | -                                   | Path to the private key file (PFX type only, alternative to pfxPath)                                                  |
-| clientId                 | string | Yes      | -                                   | Client identifier used in signature generation                                                                        |
-| signatureValidityMs      | number | No       | 300000                              | Validity period of the signature in milliseconds                                                                      |
-| signatureAlgorithm       | string | No       | 'SHA256'                            | Signature algorithm to use (any supported by Node.js crypto)                                                          |
-| signatureDataTemplate    | string | No       | '\{\{clientId\}\}\{\{timestamp\}\}' | Template for formatting the data to be signed. Note: `\n` in the template will be interpreted as a newline character. |
-| signatureRefreshBufferMs | number | No       | 10% of validityMs                   | Buffer time before expiry to refresh signature                                                                        |
-
-\* Requirements depend on certificate type:
-
-- **PEM**: Either `privateKeyPath` or `privateKey` must be provided
-- **JKS**: `keystorePath` must be provided
-- **PFX**: Either `pfxPath` or both `certPath` and `keyPath` must be provided
 
 In addition to a full URL, the provider `id` field accepts `http` or `https` as values.
 
