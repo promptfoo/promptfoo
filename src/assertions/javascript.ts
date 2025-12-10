@@ -4,6 +4,45 @@ import { getProcessShim } from '../util/transform';
 
 import type { AssertionParams } from '../types/index';
 
+/**
+ * Builds a function body from a single-line JavaScript assertion.
+ *
+ * Handles the case where assertions start with variable declarations (const/let/var).
+ * For these, we inject `return` before the final expression instead of prepending it,
+ * which would create invalid syntax like `return const x = 1`.
+ *
+ * @example
+ * // Simple expression - prepend return
+ * "output === 'test'" → "return output === 'test'"
+ *
+ * @example
+ * // Declaration with final expression - inject return before expression
+ * "const s = JSON.parse(output).score; s > 0.5" → "const s = JSON.parse(output).score; return s > 0.5"
+ */
+export function buildFunctionBody(code: string): string {
+  // Remove trailing semicolons and whitespace for consistent handling
+  const trimmed = code.trim().replace(/;+\s*$/, '');
+
+  // Check if the assertion starts with a variable declaration
+  if (/^(const|let|var)\s/.test(trimmed)) {
+    // Find the last semicolon to split statements from final expression
+    const lastSemiIndex = trimmed.lastIndexOf(';');
+    if (lastSemiIndex !== -1) {
+      const statements = trimmed.slice(0, lastSemiIndex + 1);
+      const expression = trimmed.slice(lastSemiIndex + 1).trim();
+      if (expression) {
+        // Inject return before the final expression
+        return `${statements} return ${expression}`;
+      }
+    }
+    // No semicolon or no final expression - use as-is (will likely error or return undefined)
+    return trimmed;
+  }
+
+  // Simple expression - prepend return
+  return `return ${trimmed}`;
+}
+
 const validateResult = async (result: any): Promise<boolean | number | GradingResult> => {
   result = await Promise.resolve(result);
   if (typeof result === 'boolean' || typeof result === 'number' || isGradingResult(result)) {
@@ -57,7 +96,11 @@ export const handleJavascript = async ({
 
     let result: boolean | number | GradingResult;
     if (typeof valueFromScript === 'undefined') {
-      const functionBody = renderedValue.includes('\n') ? renderedValue : `return ${renderedValue}`;
+      // Multiline assertions use the value as-is (user controls returns)
+      // Single-line assertions get processed to handle variable declarations
+      const functionBody = renderedValue.includes('\n')
+        ? renderedValue
+        : buildFunctionBody(renderedValue);
       // Pass process shim for ESM compatibility - allows process.mainModule.require to work
       const customFunction = new Function('output', 'context', 'process', functionBody);
       result = await validateResult(
