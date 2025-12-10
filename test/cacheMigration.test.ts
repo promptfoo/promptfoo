@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { runMigration, shouldRunMigration } from '../src/cacheMigration';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 describe('Cache Migration from v4 to v7', () => {
   let testCacheDir: string;

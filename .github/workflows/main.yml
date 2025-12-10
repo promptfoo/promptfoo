@@ -47,10 +47,10 @@ jobs:
         if: matrix.node == '24.x'
         run: npm install -g npm@latest
 
-      - name: Use Python 3.13
+      - name: Use Python 3.14
         uses: actions/setup-python@v6
         with:
-          python-version: 3.13
+          python-version: 3.14
 
       - name: Use Ruby 3.3
         uses: ruby/setup-ruby@v1
@@ -215,7 +215,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: [3.9, 3.13]
+        python-version: [3.9, 3.14]
     steps:
       - name: Checkout repo
         uses: actions/checkout@v5
@@ -311,10 +311,10 @@ jobs:
       - name: Upgrade npm
         run: npm install -g npm@latest
 
-      - name: Use Python 3.13
+      - name: Use Python 3.14
         uses: actions/setup-python@v6
         with:
-          python-version: 3.13
+          python-version: 3.14
 
       - name: Use Ruby 3.3
         uses: ruby/setup-ruby@v1

@@ -57,17 +57,16 @@ async def test_async_function(arg1, arg2):
     return arg1 * arg2
 """
         script_path = self.create_temp_script(script_content)
+
+        # Create a real async function to avoid MagicMock + inspect recursion issues
+        async def fake_async(*args):
+            return 12
+
         with patch("importlib.util.spec_from_file_location") as mock_spec:
-            mock_module = MagicMock()
-            mock_module.test_async_function = MagicMock()
-            mock_module.test_async_function.return_value = 12
             mock_spec.return_value.loader.exec_module.side_effect = lambda m: setattr(
-                m, "test_async_function", mock_module.test_async_function
+                m, "test_async_function", fake_async
             )
-            with (
-                patch("asyncio.iscoroutinefunction", return_value=True),
-                patch("asyncio.run", return_value=12),
-            ):
+            with patch("asyncio.run", return_value=12):
                 result = wrapper.call_method(script_path, "test_async_function", 3, 4)
                 self.assertEqual(result, 12)
 
