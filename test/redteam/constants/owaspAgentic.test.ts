@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest';
 import {
   OWASP_AGENTIC_NAMES,
   OWASP_AGENTIC_REDTEAM_MAPPING,
