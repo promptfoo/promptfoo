@@ -11,7 +11,12 @@ import type { TableRowData } from '../../../../src/ui/components/table/types';
  */
 function createMockRow(
   index: number,
-  cells: Array<{ status: 'pass' | 'fail' | 'error' | null; score?: number }>,
+  cells: Array<{
+    status: 'pass' | 'fail' | 'error' | null;
+    score?: number;
+    cost?: number;
+    latencyMs?: number;
+  }>,
 ): TableRowData {
   return {
     index,
@@ -25,8 +30,8 @@ function createMockRow(
         text: `Cell ${i}`,
         pass: cell.status === 'pass',
         score: cell.score ?? (cell.status === 'pass' ? 1 : 0),
-        cost: 0.01,
-        latencyMs: 100,
+        cost: cell.cost ?? 0.01,
+        latencyMs: cell.latencyMs ?? 100,
         provider: 'test-provider',
         failureReason: cell.status === 'error' ? 2 : cell.status === 'fail' ? 1 : 0,
         namedScores: {},
@@ -50,6 +55,8 @@ describe('calculateSummaryStats', () => {
     expect(stats.errorCount).toBe(0);
     expect(stats.totalTests).toBe(0);
     expect(stats.avgScore).toBeNull();
+    expect(stats.totalCost).toBe(0);
+    expect(stats.avgLatencyMs).toBeNull();
   });
 
   it('counts passes correctly', () => {
@@ -77,9 +84,7 @@ describe('calculateSummaryStats', () => {
   });
 
   it('counts errors correctly', () => {
-    const rows = [
-      createMockRow(0, [{ status: 'error' }, { status: 'error' }]),
-    ];
+    const rows = [createMockRow(0, [{ status: 'error' }, { status: 'error' }])];
     const stats = calculateSummaryStats(rows);
     expect(stats.passCount).toBe(0);
     expect(stats.failCount).toBe(0);
@@ -101,9 +106,7 @@ describe('calculateSummaryStats', () => {
   });
 
   it('ignores null status', () => {
-    const rows = [
-      createMockRow(0, [{ status: 'pass' }, { status: null }]),
-    ];
+    const rows = [createMockRow(0, [{ status: 'pass' }, { status: null }])];
     const stats = calculateSummaryStats(rows);
     expect(stats.passCount).toBe(1);
     expect(stats.failCount).toBe(0);
@@ -114,7 +117,10 @@ describe('calculateSummaryStats', () => {
   describe('average score calculation', () => {
     it('calculates average score correctly', () => {
       const rows = [
-        createMockRow(0, [{ status: 'pass', score: 0.8 }, { status: 'pass', score: 1.0 }]),
+        createMockRow(0, [
+          { status: 'pass', score: 0.8 },
+          { status: 'pass', score: 1.0 },
+        ]),
         createMockRow(1, [{ status: 'pass', score: 0.6 }]),
       ];
       const stats = calculateSummaryStats(rows);
@@ -124,7 +130,10 @@ describe('calculateSummaryStats', () => {
 
     it('handles scores of zero', () => {
       const rows = [
-        createMockRow(0, [{ status: 'fail', score: 0 }, { status: 'pass', score: 1.0 }]),
+        createMockRow(0, [
+          { status: 'fail', score: 0 },
+          { status: 'pass', score: 1.0 },
+        ]),
       ];
       const stats = calculateSummaryStats(rows);
       // (0 + 1.0) / 2 = 0.5
@@ -219,6 +228,189 @@ describe('calculateSummaryStats', () => {
       expect(stats.totalTests).toBe(3);
       // (1.0 + 0.3 + 0.8) / 3 = 0.7
       expect(stats.avgScore).toBeCloseTo(0.7, 5);
+    });
+  });
+
+  describe('total cost calculation', () => {
+    it('sums costs correctly', () => {
+      const rows = [
+        createMockRow(0, [
+          { status: 'pass', cost: 0.05 },
+          { status: 'pass', cost: 0.1 },
+        ]),
+        createMockRow(1, [{ status: 'pass', cost: 0.15 }]),
+      ];
+      const stats = calculateSummaryStats(rows);
+      // 0.05 + 0.10 + 0.15 = 0.30
+      expect(stats.totalCost).toBeCloseTo(0.3, 5);
+    });
+
+    it('returns 0 for empty rows', () => {
+      const stats = calculateSummaryStats([]);
+      expect(stats.totalCost).toBe(0);
+    });
+
+    it('ignores zero costs', () => {
+      const rows = [
+        createMockRow(0, [
+          { status: 'pass', cost: 0.1 },
+          { status: 'pass', cost: 0 },
+        ]),
+      ];
+      const stats = calculateSummaryStats(rows);
+      expect(stats.totalCost).toBeCloseTo(0.1, 5);
+    });
+
+    it('handles missing cost data', () => {
+      // Create row without output
+      const row: TableRowData = {
+        index: 0,
+        testIdx: 0,
+        cells: [
+          {
+            content: 'test',
+            displayContent: 'test',
+            status: 'pass',
+            isTruncated: false,
+            // No output property
+          },
+        ],
+        originalRow: {
+          vars: [],
+          outputs: [],
+          testIdx: 0,
+        },
+      };
+      const stats = calculateSummaryStats([row]);
+      expect(stats.totalCost).toBe(0);
+    });
+
+    it('accumulates cost from multiple providers', () => {
+      const rows = [
+        createMockRow(0, [
+          { status: 'pass', cost: 0.01 },
+          { status: 'pass', cost: 0.02 },
+          { status: 'fail', cost: 0.03 },
+        ]),
+        createMockRow(1, [
+          { status: 'pass', cost: 0.04 },
+          { status: 'pass', cost: 0.05 },
+          { status: 'pass', cost: 0.06 },
+        ]),
+      ];
+      const stats = calculateSummaryStats(rows);
+      // 0.01 + 0.02 + 0.03 + 0.04 + 0.05 + 0.06 = 0.21
+      expect(stats.totalCost).toBeCloseTo(0.21, 5);
+    });
+  });
+
+  describe('average latency calculation', () => {
+    it('calculates average latency correctly', () => {
+      const rows = [
+        createMockRow(0, [
+          { status: 'pass', latencyMs: 100 },
+          { status: 'pass', latencyMs: 200 },
+        ]),
+        createMockRow(1, [{ status: 'pass', latencyMs: 300 }]),
+      ];
+      const stats = calculateSummaryStats(rows);
+      // (100 + 200 + 300) / 3 = 200
+      expect(stats.avgLatencyMs).toBeCloseTo(200, 5);
+    });
+
+    it('returns null for empty rows', () => {
+      const stats = calculateSummaryStats([]);
+      expect(stats.avgLatencyMs).toBeNull();
+    });
+
+    it('ignores zero latency values', () => {
+      const rows = [
+        createMockRow(0, [
+          { status: 'pass', latencyMs: 100 },
+          { status: 'pass', latencyMs: 0 },
+        ]),
+      ];
+      const stats = calculateSummaryStats(rows);
+      // Only counts the 100ms value
+      expect(stats.avgLatencyMs).toBeCloseTo(100, 5);
+    });
+
+    it('handles missing latency data', () => {
+      // Create row without output
+      const row: TableRowData = {
+        index: 0,
+        testIdx: 0,
+        cells: [
+          {
+            content: 'test',
+            displayContent: 'test',
+            status: 'pass',
+            isTruncated: false,
+            // No output property
+          },
+        ],
+        originalRow: {
+          vars: [],
+          outputs: [],
+          testIdx: 0,
+        },
+      };
+      const stats = calculateSummaryStats([row]);
+      expect(stats.avgLatencyMs).toBeNull();
+    });
+
+    it('calculates average latency from multiple providers', () => {
+      const rows = [
+        createMockRow(0, [
+          { status: 'pass', latencyMs: 500 },
+          { status: 'pass', latencyMs: 1000 },
+          { status: 'fail', latencyMs: 1500 },
+        ]),
+      ];
+      const stats = calculateSummaryStats(rows);
+      // (500 + 1000 + 1500) / 3 = 1000
+      expect(stats.avgLatencyMs).toBeCloseTo(1000, 5);
+    });
+
+    it('handles mixed valid and invalid latency values', () => {
+      const rows = [
+        createMockRow(0, [
+          { status: 'pass', latencyMs: 200 },
+          { status: 'pass', latencyMs: 0 }, // Ignored
+          { status: 'pass', latencyMs: 400 },
+        ]),
+      ];
+      const stats = calculateSummaryStats(rows);
+      // (200 + 400) / 2 = 300
+      expect(stats.avgLatencyMs).toBeCloseTo(300, 5);
+    });
+  });
+
+  describe('combined metrics in realistic scenarios', () => {
+    it('calculates all metrics for a typical eval result', () => {
+      const rows = [
+        createMockRow(0, [
+          { status: 'pass', score: 1.0, cost: 0.05, latencyMs: 500 },
+          { status: 'pass', score: 0.9, cost: 0.08, latencyMs: 600 },
+        ]),
+        createMockRow(1, [
+          { status: 'fail', score: 0.3, cost: 0.04, latencyMs: 400 },
+          { status: 'error', score: 0, cost: 0.02, latencyMs: 100 },
+        ]),
+      ];
+
+      const stats = calculateSummaryStats(rows);
+
+      expect(stats.passCount).toBe(2);
+      expect(stats.failCount).toBe(1);
+      expect(stats.errorCount).toBe(1);
+      expect(stats.totalTests).toBe(4);
+      // (1.0 + 0.9 + 0.3 + 0) / 4 = 0.55
+      expect(stats.avgScore).toBeCloseTo(0.55, 5);
+      // 0.05 + 0.08 + 0.04 + 0.02 = 0.19
+      expect(stats.totalCost).toBeCloseTo(0.19, 5);
+      // (500 + 600 + 400 + 100) / 4 = 400
+      expect(stats.avgLatencyMs).toBeCloseTo(400, 5);
     });
   });
 });

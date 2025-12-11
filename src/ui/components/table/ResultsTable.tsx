@@ -13,6 +13,7 @@
 import { Box, Text } from 'ink';
 import { useEffect, useMemo } from 'react';
 import { isRawModeSupported } from '../../hooks/useKeypress';
+import { formatCost, formatLatency } from '../../utils/format';
 import { CellDetailOverlay, VarDetailOverlay } from './CellDetailOverlay';
 import { CommandInput } from './CommandInput';
 import { filterRows, getFilterModeLabel, hasActiveFilter, parseSearchQuery } from './filterUtils';
@@ -212,12 +213,17 @@ export function calculateSummaryStats(rows: TableRowData[]): {
   errorCount: number;
   totalTests: number;
   avgScore: number | null;
+  totalCost: number;
+  avgLatencyMs: number | null;
 } {
   let passCount = 0;
   let failCount = 0;
   let errorCount = 0;
   let totalScore = 0;
   let scoreCount = 0;
+  let totalCost = 0;
+  let totalLatency = 0;
+  let latencyCount = 0;
 
   for (const row of rows) {
     for (const cell of row.cells) {
@@ -234,6 +240,17 @@ export function calculateSummaryStats(rows: TableRowData[]): {
         totalScore += cell.output.score;
         scoreCount++;
       }
+
+      // Accumulate cost (include all costs, even zero)
+      if (cell.output?.cost !== undefined && cell.output.cost > 0) {
+        totalCost += cell.output.cost;
+      }
+
+      // Accumulate latency for average calculation
+      if (cell.output?.latencyMs !== undefined && cell.output.latencyMs > 0) {
+        totalLatency += cell.output.latencyMs;
+        latencyCount++;
+      }
     }
   }
 
@@ -243,6 +260,8 @@ export function calculateSummaryStats(rows: TableRowData[]): {
     errorCount,
     totalTests: passCount + failCount + errorCount,
     avgScore: scoreCount > 0 ? totalScore / scoreCount : null,
+    totalCost,
+    avgLatencyMs: latencyCount > 0 ? totalLatency / latencyCount : null,
   };
 }
 
@@ -286,6 +305,20 @@ function SummaryStatsFooter({ rows, isFiltered }: { rows: TableRowData[]; isFilt
           <Text color={stats.avgScore >= 0.8 ? 'green' : stats.avgScore >= 0.5 ? 'yellow' : 'red'}>
             {(stats.avgScore * 100).toFixed(1)}%
           </Text>
+        </>
+      )}
+      {stats.totalCost > 0 && (
+        <>
+          <Text dimColor> │ </Text>
+          <Text dimColor>Cost: </Text>
+          <Text>{formatCost(stats.totalCost)}</Text>
+        </>
+      )}
+      {stats.avgLatencyMs !== null && (
+        <>
+          <Text dimColor> │ </Text>
+          <Text dimColor>Avg latency: </Text>
+          <Text>{formatLatency(stats.avgLatencyMs)}</Text>
         </>
       )}
     </Box>
