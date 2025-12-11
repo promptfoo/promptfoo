@@ -8,7 +8,6 @@
  */
 
 import { Text } from 'ink';
-import React from 'react';
 import type { CellStatus, StatusBadgeProps } from './types';
 
 /**

@@ -40,8 +40,8 @@ tests:
     assert:
       - type: contains-any
         value:
-          - "4"
-          - "four"
+          - '4'
+          - 'four'
       - type: llm-rubric
         value: The response provides the correct answer to the math question
 
@@ -52,7 +52,7 @@ tests:
       - type: contains
         value: blue
       - type: contains
-        value: XYZNONEXISTENT  # This will fail
+        value: XYZNONEXISTENT # This will fail
 
   # Test 4: Should pass - LLM graded
   - vars:
@@ -99,6 +99,6 @@ tests:
       - type: llm-rubric
         value: Lists exactly three prime numbers, all under 10
       - type: contains
-        value: "2"
+        value: '2'
       - type: contains
-        value: "NOTANUMBER"  # Will fail
+        value: 'NOTANUMBER' # Will fail

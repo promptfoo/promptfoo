@@ -27,23 +27,23 @@ The existing `generateTable` function uses `cli-table3` with:
 ```typescript
 interface EvaluateTable {
   head: {
-    prompts: CompletedPrompt[];  // { label, provider, id, raw, display }
-    vars: string[];              // Variable column names
+    prompts: CompletedPrompt[]; // { label, provider, id, raw, display }
+    vars: string[]; // Variable column names
   };
-  body: EvaluateTableRow[];      // Array of rows
+  body: EvaluateTableRow[]; // Array of rows
 }
 
 interface EvaluateTableRow {
-  outputs: EvaluateTableOutput[];  // One per prompt
-  vars: string[];                   // Variable values as strings
+  outputs: EvaluateTableOutput[]; // One per prompt
+  vars: string[]; // Variable values as strings
   test: AtomicTestCase;
   testIdx: number;
 }
 
 interface EvaluateTableOutput {
   pass: boolean;
-  failureReason: ResultFailureReason;  // ASSERT | UNKNOWN | NONE
-  text: string;                        // The LLM output
+  failureReason: ResultFailureReason; // ASSERT | UNKNOWN | NONE
+  text: string; // The LLM output
   score: number;
   latencyMs: number;
   cost: number;
@@ -54,6 +54,7 @@ interface EvaluateTableOutput {
 ### Usage Context
 
 The table is displayed:
+
 1. After evaluation completes (if `--table` flag is set)
 2. When `<500` total tests (performance consideration)
 3. In non-debug log level
@@ -64,13 +65,13 @@ The table is displayed:
 
 ### Primary Goals
 
-| Goal | Description | Priority |
-|------|-------------|----------|
-| **Visual Polish** | Colored PASS/FAIL/ERROR badges, better alignment | High |
-| **Responsive** | Adapt to terminal width, handle narrow terminals | High |
-| **Scrollable** | Support viewing more than 25 rows interactively | Medium |
-| **Testable** | Unit-testable with ink-testing-library | High |
-| **Keyboard Nav** | Arrow keys to navigate, Enter to expand cell | Medium |
+| Goal              | Description                                      | Priority |
+| ----------------- | ------------------------------------------------ | -------- |
+| **Visual Polish** | Colored PASS/FAIL/ERROR badges, better alignment | High     |
+| **Responsive**    | Adapt to terminal width, handle narrow terminals | High     |
+| **Scrollable**    | Support viewing more than 25 rows interactively  | Medium   |
+| **Testable**      | Unit-testable with ink-testing-library           | High     |
+| **Keyboard Nav**  | Arrow keys to navigate, Enter to expand cell     | Medium   |
 
 ### Non-Goals
 
@@ -103,10 +104,10 @@ src/ui/components/
 ```tsx
 interface ResultsTableProps {
   data: EvaluateTable;
-  maxRows?: number;           // Default: 25
-  maxCellLength?: number;     // Default: 250
-  showIndex?: boolean;        // Show row numbers
-  interactive?: boolean;      // Enable keyboard navigation
+  maxRows?: number; // Default: 25
+  maxCellLength?: number; // Default: 250
+  showIndex?: boolean; // Show row numbers
+  interactive?: boolean; // Enable keyboard navigation
   onRowSelect?: (row: EvaluateTableRow) => void;
 }
 ```
@@ -159,7 +160,7 @@ function calculateColumnWidths(
   terminalWidth: number,
   varCount: number,
   promptCount: number,
-  showIndex: boolean
+  showIndex: boolean,
 ): { indexWidth: number; varWidths: number[]; outputWidths: number[] } {
   const totalColumns = (showIndex ? 1 : 0) + varCount + promptCount;
   const borderOverhead = totalColumns + 1; // '|' separators
@@ -175,12 +176,12 @@ function calculateColumnWidths(
 
 ### Responsive Breakpoints
 
-| Terminal Width | Behavior |
-|----------------|----------|
-| `< 60` | Show warning, single-column mode (stacked view) |
-| `60-100` | Compact mode: truncate aggressively, fewer columns |
-| `100-160` | Normal mode: balanced column widths |
-| `> 160` | Wide mode: generous cell widths |
+| Terminal Width | Behavior                                           |
+| -------------- | -------------------------------------------------- |
+| `< 60`         | Show warning, single-column mode (stacked view)    |
+| `60-100`       | Compact mode: truncate aggressively, fewer columns |
+| `100-160`      | Normal mode: balanced column widths                |
+| `> 160`        | Wide mode: generous cell widths                    |
 
 ### Compact Mode (Narrow Terminals)
 
@@ -204,15 +205,15 @@ When terminal is too narrow for columns, show a stacked card view:
 
 ### Keyboard Navigation
 
-| Key | Action |
-|-----|--------|
-| `↑` / `↓` | Navigate rows |
-| `←` / `→` | Navigate cells horizontally |
-| `Enter` | Expand selected cell (show full content) |
-| `Escape` | Collapse expanded cell / exit table |
-| `q` | Exit table view |
-| `g` / `G` | Go to first/last row |
-| `Page Up/Down` | Jump 10 rows |
+| Key            | Action                                   |
+| -------------- | ---------------------------------------- |
+| `↑` / `↓`      | Navigate rows                            |
+| `←` / `→`      | Navigate cells horizontally              |
+| `Enter`        | Expand selected cell (show full content) |
+| `Escape`       | Collapse expanded cell / exit table      |
+| `q`            | Exit table view                          |
+| `g` / `G`      | Go to first/last row                     |
+| `Page Up/Down` | Jump 10 rows                             |
 
 ### Row Selection State
 
@@ -221,7 +222,7 @@ interface TableState {
   selectedRow: number;
   selectedCol: number;
   expandedCell: { row: number; col: number } | null;
-  scrollOffset: number;  // For virtual scrolling
+  scrollOffset: number; // For virtual scrolling
 }
 ```
 
@@ -262,7 +263,7 @@ For tables with many rows, implement virtual scrolling:
 function useVirtualScroll(
   totalRows: number,
   visibleRows: number,
-  selectedRow: number
+  selectedRow: number,
 ): { startIndex: number; endIndex: number } {
   // Only render rows that are visible
   // Keep a buffer of 2-3 rows above/below viewport
@@ -276,12 +277,10 @@ For performance, use `<Static>` for rows that have scrolled past:
 ```tsx
 <Box flexDirection="column">
   {/* Static: Rows that have scrolled past */}
-  <Static items={pastRows}>
-    {row => <TableRow key={row.testIdx} {...row} />}
-  </Static>
+  <Static items={pastRows}>{(row) => <TableRow key={row.testIdx} {...row} />}</Static>
 
   {/* Dynamic: Currently visible rows */}
-  {visibleRows.map(row => (
+  {visibleRows.map((row) => (
     <TableRow key={row.testIdx} {...row} isVisible />
   ))}
 </Box>
@@ -345,7 +344,11 @@ export function StatusBadge({ pass, failureReason }: StatusBadgeProps) {
     return <Text color="red">[FAIL]</Text>;
   }
 
-  return <Text color="red" bold>[ERROR]</Text>;
+  return (
+    <Text color="red" bold>
+      [ERROR]
+    </Text>
+  );
 }
 ```
 
@@ -364,18 +367,11 @@ interface TableCellProps {
   isSelected?: boolean;
 }
 
-export function TableCell({
-  content,
-  width,
-  align = 'left',
-  status,
-  isSelected,
-}: TableCellProps) {
+export function TableCell({ content, width, align = 'left', status, isSelected }: TableCellProps) {
   const displayContent = truncate(content.replace(/\n/g, ' '), width);
 
-  const textColor = status === 'pass' ? 'green'
-                  : status === 'fail' || status === 'error' ? 'red'
-                  : undefined;
+  const textColor =
+    status === 'pass' ? 'green' : status === 'fail' || status === 'error' ? 'red' : undefined;
 
   return (
     <Box
@@ -383,10 +379,7 @@ export function TableCell({
       borderStyle={isSelected ? 'single' : undefined}
       borderColor={isSelected ? 'cyan' : undefined}
     >
-      <Text
-        color={textColor}
-        wrap="truncate"
-      >
+      <Text color={textColor} wrap="truncate">
         {displayContent}
       </Text>
     </Box>
@@ -406,43 +399,49 @@ interface TableNavigationState {
   expandedCell: { row: number; col: number } | null;
 }
 
-export function useTableNavigation(
-  rowCount: number,
-  colCount: number,
-  isActive: boolean
-) {
+export function useTableNavigation(rowCount: number, colCount: number, isActive: boolean) {
   const [state, setState] = useState<TableNavigationState>({
     selectedRow: 0,
     selectedCol: 0,
     expandedCell: null,
   });
 
-  useKeypress({
-    onUp: () => setState(s => ({
-      ...s,
-      selectedRow: Math.max(0, s.selectedRow - 1)
-    })),
-    onDown: () => setState(s => ({
-      ...s,
-      selectedRow: Math.min(rowCount - 1, s.selectedRow + 1)
-    })),
-    onLeft: () => setState(s => ({
-      ...s,
-      selectedCol: Math.max(0, s.selectedCol - 1)
-    })),
-    onRight: () => setState(s => ({
-      ...s,
-      selectedCol: Math.min(colCount - 1, s.selectedCol + 1)
-    })),
-    onEnter: () => setState(s => ({
-      ...s,
-      expandedCell: s.expandedCell ? null : {
-        row: s.selectedRow,
-        col: s.selectedCol
-      },
-    })),
-    onEscape: () => setState(s => ({ ...s, expandedCell: null })),
-  }, isActive);
+  useKeypress(
+    {
+      onUp: () =>
+        setState((s) => ({
+          ...s,
+          selectedRow: Math.max(0, s.selectedRow - 1),
+        })),
+      onDown: () =>
+        setState((s) => ({
+          ...s,
+          selectedRow: Math.min(rowCount - 1, s.selectedRow + 1),
+        })),
+      onLeft: () =>
+        setState((s) => ({
+          ...s,
+          selectedCol: Math.max(0, s.selectedCol - 1),
+        })),
+      onRight: () =>
+        setState((s) => ({
+          ...s,
+          selectedCol: Math.min(colCount - 1, s.selectedCol + 1),
+        })),
+      onEnter: () =>
+        setState((s) => ({
+          ...s,
+          expandedCell: s.expandedCell
+            ? null
+            : {
+                row: s.selectedRow,
+                col: s.selectedCol,
+              },
+        })),
+      onEscape: () => setState((s) => ({ ...s, expandedCell: null })),
+    },
+    isActive,
+  );
 
   return state;
 }
@@ -522,6 +521,7 @@ it('matches snapshot for standard table', () => {
 ### Backward Compatibility
 
 Keep `cli-table3` for:
+
 - Non-interactive mode (`!process.stdout.isTTY`)
 - Piped output (`| less`, `> file.txt`)
 - `--no-interactive` flag
@@ -531,10 +531,7 @@ Keep `cli-table3` for:
 ```typescript
 function shouldUseInkTable(): boolean {
   return (
-    process.stdout.isTTY &&
-    !process.env.CI &&
-    !cmdObj.noInteractive &&
-    getLogLevel() !== 'debug'
+    process.stdout.isTTY && !process.env.CI && !cmdObj.noInteractive && getLogLevel() !== 'debug'
   );
 }
 ```

@@ -10,10 +10,9 @@
  */
 
 import { Box, Text } from 'ink';
-import React from 'react';
 import { StatusBadge, StatusIndicator } from './StatusBadge';
 import { IndexCell, TableCell, TextCell } from './TableCell';
-import type { TableColumn, TableRowData, TableRowProps } from './types';
+import type { TableRowData, TableRowProps } from './types';
 
 /**
  * Separator between columns.

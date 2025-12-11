@@ -3,6 +3,7 @@
 ## Executive Summary
 
 This plan extends the Ink CLI UI to surface detailed, real-time metrics **per provider/service**, including:
+
 - Pass/fail/error rates (test cases)
 - Request counts (distinct from test cases)
 - Token usage (from `TokenUsageTracker`)
@@ -14,6 +15,7 @@ This plan extends the Ink CLI UI to surface detailed, real-time metrics **per pr
 ### Existing Infrastructure
 
 **TokenUsageTracker** (`src/util/tokenUsage.ts`):
+
 ```typescript
 class TokenUsageTracker {
   private providersMap: Map<string, TokenUsage>;
@@ -26,6 +28,7 @@ class TokenUsageTracker {
 ```
 
 **TokenUsage** (`src/types/shared.ts`):
+
 ```typescript
 interface TokenUsage {
   prompt?: number;
@@ -39,6 +42,7 @@ interface TokenUsage {
 ```
 
 **Progress Callback** (in `src/evaluator.ts`):
+
 ```typescript
 progressCallback(
   completed: number,      // Tests completed
@@ -50,6 +54,7 @@ progressCallback(
 ```
 
 **PromptMetrics** (`src/types/index.ts`):
+
 ```typescript
 interface PromptMetrics {
   score: number;
@@ -66,12 +71,13 @@ interface PromptMetrics {
 ```
 
 **EvaluateResult** (`src/types/index.ts`):
+
 ```typescript
 interface EvaluateResult {
   provider: Pick<ProviderOptions, 'id' | 'label'>;
   success: boolean;
   error?: string | null;
-  failureReason: ResultFailureReason;  // NONE, ASSERT, ERROR
+  failureReason: ResultFailureReason; // NONE, ASSERT, ERROR
   latencyMs: number;
   cost?: number;
   tokenUsage?: Required<TokenUsage>;
@@ -81,11 +87,11 @@ interface EvaluateResult {
 
 ### Key Distinction: Test Cases vs Requests
 
-| Concept | Description | Source |
-|---------|-------------|--------|
-| **Test Case** | One prompt + vars combination | `runEvalOptions.length` |
-| **Request** | API call to provider | `TokenUsage.numRequests` |
-| **Cached** | Requests served from cache | `TokenUsage.cached` (tokens) |
+| Concept       | Description                   | Source                       |
+| ------------- | ----------------------------- | ---------------------------- |
+| **Test Case** | One prompt + vars combination | `runEvalOptions.length`      |
+| **Request**   | API call to provider          | `TokenUsage.numRequests`     |
+| **Cached**    | Requests served from cache    | `TokenUsage.cached` (tokens) |
 
 A single test case can generate multiple requests (retries, conversations, tool calls).
 
@@ -100,17 +106,17 @@ interface ProviderMetrics {
 
   // Test case metrics
   testCases: {
-    total: number;       // Assigned test cases for this provider
-    completed: number;   // Completed test cases
-    passed: number;      // Tests that passed all assertions
-    failed: number;      // Tests that failed assertions
-    errors: number;      // Tests with errors (timeout, API error)
+    total: number; // Assigned test cases for this provider
+    completed: number; // Completed test cases
+    passed: number; // Tests that passed all assertions
+    failed: number; // Tests that failed assertions
+    errors: number; // Tests with errors (timeout, API error)
   };
 
   // Request metrics (from TokenUsageTracker)
   requests: {
-    total: number;       // Total API requests made
-    cached: number;      // Requests with cached responses
+    total: number; // Total API requests made
+    cached: number; // Requests with cached responses
     cacheHitRate: number; // cached / total as percentage
   };
 
@@ -120,23 +126,23 @@ interface ProviderMetrics {
     completion: number;
     cached: number;
     total: number;
-    assertions: number;  // Tokens used by model-graded assertions
+    assertions: number; // Tokens used by model-graded assertions
   };
 
   // Cost metrics
   cost: {
-    current: number;     // Cost so far
-    estimated: number;   // Projected final cost
+    current: number; // Cost so far
+    estimated: number; // Projected final cost
   };
 
   // Latency metrics
   latency: {
-    totalMs: number;     // Sum of all latencies
-    count: number;       // Number of measurements
-    avgMs: number;       // totalMs / count
+    totalMs: number; // Sum of all latencies
+    count: number; // Number of measurements
+    avgMs: number; // totalMs / count
     minMs: number;
     maxMs: number;
-    samples: number[];   // Last 100 samples for percentiles
+    samples: number[]; // Last 100 samples for percentiles
   };
 
   // Status
@@ -187,11 +193,13 @@ interface EvalMetricsSummary {
 ### Option A: Extend EvalContext (Recommended)
 
 **Pros:**
+
 - Minimal new code
 - Reuses existing React state management
 - Single source of truth in UI
 
 **Cons:**
+
 - Tightly couples metrics to UI
 - Polling required for `TokenUsageTracker` data
 
@@ -388,14 +396,14 @@ import { TokenUsageTracker } from '../util/tokenUsage';
 
 export function createProgressCallback(
   dispatch: React.Dispatch<EvalAction>,
-  options?: { lastResult?: EvaluateResult }
+  options?: { lastResult?: EvaluateResult },
 ) {
   return (
     completed: number,
     total: number,
     index: number,
     evalStep: RunEvalOptions | undefined,
-    metrics: PromptMetrics | undefined
+    metrics: PromptMetrics | undefined,
   ) => {
     // Extract provider info
     const providerId = evalStep?.provider?.id?.() || 'unknown';
@@ -408,7 +416,7 @@ export function createProgressCallback(
     if (tokenUsage) {
       dispatch({
         type: 'UPDATE_TOKEN_METRICS',
-        payload: { providerId, tokenUsage }
+        payload: { providerId, tokenUsage },
       });
     }
 
@@ -421,7 +429,7 @@ export function createProgressCallback(
         provider: providerId,
         providerLabel,
         // ... other fields
-      }
+      },
     });
   };
 }
@@ -442,7 +450,7 @@ export function useTokenMetrics(
   dispatch: React.Dispatch<EvalAction>,
   providerIds: string[],
   isRunning: boolean,
-  pollIntervalMs: number = 500
+  pollIntervalMs: number = 500,
 ) {
   const pollTokenUsage = useCallback(() => {
     const tracker = TokenUsageTracker.getInstance();
@@ -452,7 +460,7 @@ export function useTokenMetrics(
       if (usage) {
         dispatch({
           type: 'UPDATE_TOKEN_METRICS',
-          payload: { providerId, tokenUsage: usage }
+          payload: { providerId, tokenUsage: usage },
         });
       }
     }
@@ -487,7 +495,7 @@ export function EvalScreen() {
     dispatch,
     state.providerOrder,
     state.phase === 'evaluating',
-    500 // Poll every 500ms
+    500, // Poll every 500ms
   );
 
   // ... rest of component
@@ -518,25 +526,36 @@ export function ProviderDashboard() {
 
       {/* Header row */}
       <Box>
-        <Box width={20}><Text dimColor>Provider</Text></Box>
-        <Box width={14}><Text dimColor>Progress</Text></Box>
-        <Box width={12}><Text dimColor>Pass/Fail</Text></Box>
-        <Box width={10}><Text dimColor>Requests</Text></Box>
-        <Box width={10}><Text dimColor>Tokens</Text></Box>
-        <Box width={8}><Text dimColor>Cost</Text></Box>
-        <Box width={8}><Text dimColor>Avg Lat</Text></Box>
+        <Box width={20}>
+          <Text dimColor>Provider</Text>
+        </Box>
+        <Box width={14}>
+          <Text dimColor>Progress</Text>
+        </Box>
+        <Box width={12}>
+          <Text dimColor>Pass/Fail</Text>
+        </Box>
+        <Box width={10}>
+          <Text dimColor>Requests</Text>
+        </Box>
+        <Box width={10}>
+          <Text dimColor>Tokens</Text>
+        </Box>
+        <Box width={8}>
+          <Text dimColor>Cost</Text>
+        </Box>
+        <Box width={8}>
+          <Text dimColor>Avg Lat</Text>
+        </Box>
       </Box>
 
       {/* Provider rows */}
-      {providerOrder.map(id => {
+      {providerOrder.map((id) => {
         const p = providers[id];
         const { testCases, requests, tokens, cost, latency } = p;
-        const passRate = testCases.completed > 0
-          ? Math.round((testCases.passed / testCases.completed) * 100)
-          : 0;
-        const avgLatency = latency.count > 0
-          ? latency.totalMs / latency.count
-          : 0;
+        const passRate =
+          testCases.completed > 0 ? Math.round((testCases.passed / testCases.completed) * 100) : 0;
+        const avgLatency = latency.count > 0 ? latency.totalMs / latency.count : 0;
 
         return (
           <Box key={id}>
@@ -569,9 +588,7 @@ export function ProviderDashboard() {
             {/* Requests */}
             <Box width={10}>
               <Text>{requests.total}</Text>
-              {requests.cached > 0 && (
-                <Text dimColor> ({requests.cached})</Text>
-              )}
+              {requests.cached > 0 && <Text dimColor> ({requests.cached})</Text>}
             </Box>
 
             {/* Tokens */}
@@ -618,22 +635,22 @@ export function MetricsSummary() {
     totalTokens,
     totalCost,
     elapsedMs,
-    estimatedRemainingMs
+    estimatedRemainingMs,
   } = state;
 
-  const passRate = completedTests > 0
-    ? Math.round((passedTests / completedTests) * 100)
-    : 0;
-  const cacheRate = totalRequests > 0
-    ? Math.round((cachedRequests / totalRequests) * 100)
-    : 0;
+  const passRate = completedTests > 0 ? Math.round((passedTests / completedTests) * 100) : 0;
+  const cacheRate = totalRequests > 0 ? Math.round((cachedRequests / totalRequests) * 100) : 0;
 
   return (
     <Box flexDirection="column" paddingY={1}>
       {/* Test summary */}
       <Box gap={2}>
-        <Text>Tests: {completedTests}/{totalTests} ({Math.round(completedTests/totalTests*100)}%)</Text>
-        <Text color="green">Pass: {passedTests} ({passRate}%)</Text>
+        <Text>
+          Tests: {completedTests}/{totalTests} ({Math.round((completedTests / totalTests) * 100)}%)
+        </Text>
+        <Text color="green">
+          Pass: {passedTests} ({passRate}%)
+        </Text>
         <Text color="red">Fail: {failedTests}</Text>
         {errorCount > 0 && <Text color="yellow">Error: {errorCount}</Text>}
       </Box>
@@ -641,7 +658,11 @@ export function MetricsSummary() {
       {/* Request/Token summary */}
       <Box gap={2}>
         <Text>Requests: {totalRequests}</Text>
-        {cachedRequests > 0 && <Text dimColor>({cachedRequests} cached, {cacheRate}%)</Text>}
+        {cachedRequests > 0 && (
+          <Text dimColor>
+            ({cachedRequests} cached, {cacheRate}%)
+          </Text>
+        )}
         <Text>Tokens: {formatTokens(totalTokens)}</Text>
         <Text>Cost: {formatCost(totalCost)}</Text>
       </Box>
@@ -676,7 +697,7 @@ export function createProgressCallback(dispatch: React.Dispatch<EvalAction>) {
     total: number,
     index: number,
     evalStep: RunEvalOptions | undefined,
-    metrics: PromptMetrics | undefined
+    metrics: PromptMetrics | undefined,
   ) => {
     if (!evalStep || !metrics) return;
 
@@ -704,7 +725,7 @@ export function createProgressCallback(dispatch: React.Dispatch<EvalAction>) {
           error,
           latencyMs: deltaLatency,
           cost: deltaCost,
-        }
+        },
       });
     }
 
@@ -751,20 +772,20 @@ promptfoo eval ─────────────────────�
 
 ### New Files
 
-| File | Purpose |
-|------|---------|
-| `src/ui/hooks/useTokenMetrics.ts` | Hook to poll TokenUsageTracker |
-| `src/ui/components/eval/ProviderDashboard.tsx` | Provider metrics table |
-| `src/ui/components/eval/MetricsSummary.tsx` | Aggregate metrics summary |
-| `src/ui/utils/format.ts` | Formatting utilities for tokens, cost, duration |
+| File                                           | Purpose                                         |
+| ---------------------------------------------- | ----------------------------------------------- |
+| `src/ui/hooks/useTokenMetrics.ts`              | Hook to poll TokenUsageTracker                  |
+| `src/ui/components/eval/ProviderDashboard.tsx` | Provider metrics table                          |
+| `src/ui/components/eval/MetricsSummary.tsx`    | Aggregate metrics summary                       |
+| `src/ui/utils/format.ts`                       | Formatting utilities for tokens, cost, duration |
 
 ### Modified Files
 
-| File | Changes |
-|------|---------|
-| `src/ui/contexts/EvalContext.tsx` | Extended ProviderMetrics, new actions |
-| `src/ui/evalBridge.ts` | Delta tracking, TokenUsageTracker integration |
-| `src/ui/components/eval/EvalScreen.tsx` | Add ProviderDashboard, MetricsSummary |
+| File                                    | Changes                                       |
+| --------------------------------------- | --------------------------------------------- |
+| `src/ui/contexts/EvalContext.tsx`       | Extended ProviderMetrics, new actions         |
+| `src/ui/evalBridge.ts`                  | Delta tracking, TokenUsageTracker integration |
+| `src/ui/components/eval/EvalScreen.tsx` | Add ProviderDashboard, MetricsSummary         |
 
 ## Testing Strategy
 
@@ -817,7 +838,7 @@ promptfoo eval ─────────────────────�
 
 3. **Provider ID normalization:** The evaluator uses `provider.id()` which may include constructor name in parens. Should we normalize for display?
 
-4. **Cost estimation:** How to estimate final cost mid-eval? Use (currentCost / completedTests) * totalTests?
+4. **Cost estimation:** How to estimate final cost mid-eval? Use (currentCost / completedTests) \* totalTests?
 
 ## Success Criteria
 

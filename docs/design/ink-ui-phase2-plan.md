@@ -13,16 +13,19 @@ This document outlines the next phase of improvements to the Ink-based CLI UI, f
 **Problem**: Errors (API failures, timeouts) are not visually distinct from test failures (assertion failures). Users can't quickly tell if tests failed due to bad prompts or infrastructure issues.
 
 **Current State**:
+
 ```
 │ ● error-provider    [████░░░░] 4/8  0✓ 4✗     -    -    174ms │
 ```
 
 **Proposed State**:
+
 ```
 │ ✗ error-provider    [████░░░░] 4/8  0✓ 0✗ 4⚠   -    -    174ms │
 ```
 
 **Implementation**:
+
 1. Add `errors` count separate from `failed` in the Pass/Fail column
 2. Use distinct icon: `⚠` (warning) or `!` for errors in yellow/orange
 3. Update column header: "Pass/Fail" → "Results" or "P/F/E"
@@ -37,6 +40,7 @@ This document outlines the next phase of improvements to the Ink-based CLI UI, f
    - `!` red = has both errors and failures
 
 **Files to modify**:
+
 - `src/ui/components/eval/EvalScreen.tsx` - ProviderRow component
 - `src/ui/contexts/EvalContext.tsx` - ensure error tracking is separate
 
@@ -47,6 +51,7 @@ This document outlines the next phase of improvements to the Ink-based CLI UI, f
 **Problem**: Users can't see debug logs during evaluation without restarting with different flags. Debug information is valuable for troubleshooting.
 
 **Proposed Behavior**:
+
 - Press `v` to toggle verbose mode on/off
 - When enabled, show a log panel below the provider table
 - Display last N log lines (configurable, default 10)
@@ -54,6 +59,7 @@ This document outlines the next phase of improvements to the Ink-based CLI UI, f
 - Filter levels: in verbose mode show DEBUG+, otherwise only WARN+
 
 **UI Layout with Verbose Mode**:
+
 ```
 ╭──────────────────────────────────────────────────────────────────────────────╮
 │ Evaluation Title                                            ⠋ Running (5.2s) │
@@ -75,6 +81,7 @@ This document outlines the next phase of improvements to the Ink-based CLI UI, f
 ```
 
 **Implementation**:
+
 1. Add `showVerbose` state to EvalContext
 2. Add `logs: LogEntry[]` array to state (ring buffer, max 100 entries)
 3. Create `LogPanel` component with scrollable log display
@@ -83,6 +90,7 @@ This document outlines the next phase of improvements to the Ink-based CLI UI, f
 6. Update help text to show 'v' shortcut
 
 **Files to create/modify**:
+
 - `src/ui/components/eval/LogPanel.tsx` (new)
 - `src/ui/components/eval/EvalScreen.tsx` - add LogPanel, key handler
 - `src/ui/contexts/EvalContext.tsx` - add log state, TOGGLE_VERBOSE action
@@ -98,6 +106,7 @@ This document outlines the next phase of improvements to the Ink-based CLI UI, f
 Create a custom Winston transport that routes logs to the Ink UI when active.
 
 **Architecture**:
+
 ```
 ┌─────────────┐     ┌──────────────────┐     ┌─────────────────┐
 │   logger    │────▶│  InkUITransport  │────▶│  EvalContext    │
@@ -112,6 +121,7 @@ Create a custom Winston transport that routes logs to the Ink UI when active.
 ```
 
 **Implementation**:
+
 1. Create `InkUITransport` class extending `Transport`
 2. Transport writes to a shared buffer/callback
 3. On Ink UI init, register the transport with logger
@@ -122,6 +132,7 @@ Create a custom Winston transport that routes logs to the Ink UI when active.
 6. Suppress duplicate "Cache is disabled" type messages
 
 **Log Entry Structure**:
+
 ```typescript
 interface LogEntry {
   level: 'debug' | 'info' | 'warn' | 'error';
@@ -132,6 +143,7 @@ interface LogEntry {
 ```
 
 **Files to create/modify**:
+
 - `src/ui/utils/InkUITransport.ts` (new)
 - `src/ui/evalRunner.tsx` - register/unregister transport
 - `src/ui/contexts/EvalContext.tsx` - ADD_LOG action
@@ -146,11 +158,13 @@ interface LogEntry {
 **Problem**: Users don't know what keyboard shortcuts are available.
 
 **Proposed UI**:
+
 ```
 │ Press: q quit · v verbose · e errors · ↑↓ scroll · Enter details            │
 ```
 
 **Implementation**:
+
 - Add `HelpBar` component
 - Show contextually relevant shortcuts
 - Dim/subtle styling to not distract
@@ -163,11 +177,13 @@ interface LogEntry {
 **Problem**: Users can't see what's currently being evaluated. The UI feels static during long-running tests.
 
 **Proposed UI**:
+
 ```
 │ Current: gpt-4o-mini › "What is the capital of France?" › contains...       │
 ```
 
 **Implementation**:
+
 - Show current provider, truncated prompt/vars, current assertion
 - Update in real-time as tests progress
 - Helps users understand where time is being spent
@@ -179,11 +195,13 @@ interface LogEntry {
 **Problem**: Users don't know how long the evaluation will take.
 
 **Proposed UI**:
+
 ```
 │ Evaluation Title                              ⠋ Running (5.2s) ~2m remaining │
 ```
 
 **Implementation**:
+
 - Calculate average time per test from completed tests
 - Estimate remaining time: `avg_time * remaining_tests / concurrency`
 - Only show after 3+ tests complete (need data for estimate)
@@ -196,12 +214,14 @@ interface LogEntry {
 **Problem**: Hard to spot slow or expensive tests at a glance.
 
 **Proposed Behavior**:
+
 - Highlight latency in yellow if > 2x average
 - Highlight latency in red if > 5x average
 - Highlight cost in yellow if > expected threshold
 - Show provider health indicator if error rate > 20%
 
 **Implementation**:
+
 - Calculate running averages
 - Apply color based on thresholds
 - Add subtle warning icons for problematic providers
@@ -213,6 +233,7 @@ interface LogEntry {
 **Problem**: Users must wait for completion or use separate tools to see why tests failed.
 
 **Proposed Behavior**:
+
 - Press `f` to show/hide failure details panel
 - Shows last 3-5 failures with:
   - Provider name
@@ -221,6 +242,7 @@ interface LogEntry {
   - Brief reason
 
 **UI Layout**:
+
 ```
 │ ┌─ Recent Failures ─────────────────────────────────────────────────────────┐ │
 │ │ ✗ gpt-4o-mini | vars: {question: "What color..."} | contains "XYZNONEX…" │ │
@@ -237,6 +259,7 @@ interface LogEntry {
 **Problem**: On smaller terminals, the UI may be too tall or wide.
 
 **Proposed Behavior**:
+
 - Auto-detect terminal size and switch to compact mode if needed
 - Press `c` to manually toggle compact mode
 - Compact mode:
@@ -252,12 +275,14 @@ interface LogEntry {
 **Problem**: Hard to quickly see if a provider is experiencing issues.
 
 **Proposed UI**:
+
 ```
 │ ⚠ error-provider    [████░░░░] 4/8  0✓ 0✗ 4⚠   -    -    -     │
 │   └─ 100% error rate - API returning 404                        │
 ```
 
 **Implementation**:
+
 - Show inline warning if error rate > 50%
 - Show rate limit indicator if detected
 - Collapse details after a few seconds to save space
@@ -295,17 +320,20 @@ interface LogEntry {
 ## Implementation Order
 
 ### Phase 2a (Core - This Sprint)
+
 1. [ ] 1.1 - Distinct error state display
 2. [ ] 1.3 - Logger capture (InkUITransport)
 3. [ ] 1.2 - Verbose mode toggle
 4. [ ] 2.1 - Help bar
 
 ### Phase 2b (Enhanced UX)
+
 5. [ ] 2.2 - Real-time activity feed
 6. [ ] 2.5 - Failure details quick view
 7. [ ] 2.3 - ETA estimate
 
 ### Phase 2c (Polish)
+
 8. [ ] 2.4 - Performance highlighting
 9. [ ] 2.6 - Compact mode toggle
 10. [ ] 2.7 - Provider health indicators
@@ -316,17 +344,21 @@ interface LogEntry {
 ## Technical Considerations
 
 ### State Management
+
 The EvalContext is already handling significant state. Consider:
+
 - Using separate contexts for UI preferences vs evaluation data
 - Memoizing expensive computations (averages, ETAs)
 - Debouncing rapid state updates
 
 ### Performance
+
 - Log capture should be efficient (avoid string concatenation)
 - UI updates should be batched where possible
 - Consider using `useDeferredValue` for non-critical updates
 
 ### Testing
+
 - Add tests for new keyboard handlers
 - Add tests for log filtering logic
 - Add visual regression tests if possible

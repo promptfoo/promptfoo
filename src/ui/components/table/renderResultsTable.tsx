@@ -6,7 +6,6 @@
  */
 
 import { render } from 'ink';
-import React from 'react';
 import type { EvaluateTable } from '../../../types';
 import { isRawModeSupported } from '../../hooks/useKeypress';
 import { ResultsTable, StaticResultsTable } from './ResultsTable';
@@ -83,11 +82,7 @@ export async function renderResultsTable(
           onExit={handleExit}
         />
       ) : (
-        <StaticResultsTable
-          data={data}
-          maxRows={maxRows}
-          maxCellLength={maxCellLength}
-        />
+        <StaticResultsTable data={data} maxRows={maxRows} maxCellLength={maxCellLength} />
       ),
       {
         exitOnCtrlC: false,
@@ -131,11 +126,7 @@ export function createResultsTableInstance(
         onExit={onExit}
       />
     ) : (
-      <StaticResultsTable
-        data={data}
-        maxRows={maxRows}
-        maxCellLength={maxCellLength}
-      />
+      <StaticResultsTable data={data} maxRows={maxRows} maxCellLength={maxCellLength} />
     ),
     {
       exitOnCtrlC: false,

@@ -3,6 +3,7 @@
 ## Current State
 
 The current Ink UI provides:
+
 - Title and phase indicator
 - Progress bar with percentage
 - Provider status with spinner
@@ -157,19 +158,21 @@ promptfoo eval ─────────────────────�
 **What**: Show estimated time remaining based on actual performance.
 
 **How**:
+
 - Track rolling average of test completion times
 - Account for provider-specific latencies
 - Adjust for parallelism (concurrency setting)
 - Show confidence interval for estimates
 
 **Implementation**:
+
 ```typescript
 interface ProgressEstimation {
-  remaining: number;           // Remaining tests
-  avgDuration: number;         // Rolling average (last 10 tests)
-  concurrency: number;         // Current parallelism
-  estimatedRemaining: number;  // Calculated ETA in ms
-  confidence: 'high' | 'medium' | 'low';  // Based on variance
+  remaining: number; // Remaining tests
+  avgDuration: number; // Rolling average (last 10 tests)
+  concurrency: number; // Current parallelism
+  estimatedRemaining: number; // Calculated ETA in ms
+  confidence: 'high' | 'medium' | 'low'; // Based on variance
 }
 ```
 
@@ -178,12 +181,14 @@ interface ProgressEstimation {
 **What**: Show test results as they complete, not just a count.
 
 **How**:
+
 - Maintain a sliding window of recent results (last 5-10)
 - Show pass/fail status, key assertion info, timing
 - Highlight failures prominently
 - Allow scrolling through history
 
 **Display**:
+
 ```
 Recent Results:
   ✓ #42  "password reset"     gpt-4    1.1s   contains ✓
@@ -197,6 +202,7 @@ Recent Results:
 **What**: Real-time metrics per provider.
 
 **Metrics to track**:
+
 - Progress (completed/total)
 - Average latency
 - Cost accumulated
@@ -204,6 +210,7 @@ Recent Results:
 - Current status (running/complete/error)
 
 **Display**:
+
 ```
 Providers:
   openai:gpt-4        [████████░░]  80%   avg: 1.2s   $0.35
@@ -218,6 +225,7 @@ Providers:
 **Why**: Helps identify systematic issues (e.g., all cost assertions failing).
 
 **Display**:
+
 ```
 Assertions:
   contains     [████████████████████]  100%   45/45
@@ -230,6 +238,7 @@ Assertions:
 **What**: Surface issues proactively as they're detected.
 
 **Warning types**:
+
 - High latency detected (>2x average)
 - Rate limiting detected
 - Empty responses
@@ -238,6 +247,7 @@ Assertions:
 - Cache miss rate high
 
 **Display**:
+
 ```
 ⚠ Warnings:
   • Rate limiting detected on openai:gpt-4, backing off 5s
@@ -263,6 +273,7 @@ Assertions:
 **What**: Real-time cost and token usage display.
 
 **Display**:
+
 ```
 Cost:  $0.45 spent · ~$0.90 estimated total
        12,450 prompt tokens · 3,200 completion tokens
@@ -274,6 +285,7 @@ Cost:  $0.45 spent · ~$0.90 estimated total
 **What**: Show distinct phases of evaluation.
 
 **Phases**:
+
 1. Loading config
 2. Initializing providers
 3. Running tests
@@ -281,6 +293,7 @@ Cost:  $0.45 spent · ~$0.90 estimated total
 5. Generating report
 
 **Display**:
+
 ```
 Phase 3/5: Running tests
   [████████████████░░░░░░░░]  65%
@@ -291,18 +304,22 @@ Phase 3/5: Running tests
 ## Adaptive Detail Levels
 
 ### Quiet Mode (`--quiet`)
+
 ```
 Running evaluation...
 ████████████████████░░░░░░░░░░░░░░░░░░░░  50%  25/50
 ```
 
 ### Normal Mode (default)
+
 Full compact view with progress, stats, cost.
 
 ### Verbose Mode (`-v` or press 'v')
+
 Expanded view with providers, recent results, assertions.
 
 ### Debug Mode (`--debug` or press 'd')
+
 Everything plus request/response logging.
 
 ---
@@ -337,18 +354,21 @@ For CI environments, output milestone-based updates:
 ## Implementation Plan
 
 ### Phase 1: Core Improvements (This PR)
+
 - [ ] Add ETA estimation
 - [ ] Add live test result count (pass/fail/error breakdown)
 - [ ] Improve completion summary
 - [ ] Add cost/token display
 
 ### Phase 2: Enhanced Feedback
+
 - [ ] Provider performance dashboard
 - [ ] Recent results stream
 - [ ] Assertion breakdown
 - [ ] Interactive key bindings
 
 ### Phase 3: Advanced Features
+
 - [ ] Intelligent warnings
 - [ ] Comparison view for multi-provider
 - [ ] Timeline/history view
@@ -359,21 +379,25 @@ For CI environments, output milestone-based updates:
 ## Technical Considerations
 
 ### Performance
+
 - Batch UI updates (max 10 updates/sec)
 - Use requestAnimationFrame equivalent for smooth animation
 - Don't block evaluation on UI rendering
 
 ### Memory
+
 - Keep only sliding window of recent results in memory
 - Stream results to disk, not UI state
 - Limit error storage to first N errors
 
 ### Responsiveness
+
 - UI updates should be async
 - Never await UI operations in eval loop
 - Use message passing for thread safety
 
 ### Accessibility
+
 - Support `NO_COLOR` environment variable
 - Provide text alternatives for progress bars
 - Ensure screen reader compatibility

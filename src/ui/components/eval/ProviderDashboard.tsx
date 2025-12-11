@@ -6,7 +6,6 @@
  */
 
 import { Box, Text } from 'ink';
-import React from 'react';
 import { useEvalState, type ProviderMetrics } from '../../contexts/EvalContext';
 import {
   formatAvgLatency,
@@ -155,9 +154,7 @@ export function ProviderDashboard() {
         if (!provider) {
           return null;
         }
-        return (
-          <ProviderRow key={id} provider={provider} isActive={currentProvider === id} />
-        );
+        return <ProviderRow key={id} provider={provider} isActive={currentProvider === id} />;
       })}
     </Box>
   );
@@ -183,32 +180,23 @@ export function ProviderSummaryCompact() {
           return null;
         }
         const isActive = currentProvider === id;
-        const passRate = p.testCases.completed > 0
-          ? formatPercent(p.testCases.passed, p.testCases.completed)
-          : '0%';
+        const passRate =
+          p.testCases.completed > 0
+            ? formatPercent(p.testCases.passed, p.testCases.completed)
+            : '0%';
 
         return (
           <Box key={id}>
-            <Text color={isActive ? 'cyan' : 'gray'}>
-              {isActive ? '▶ ' : '  '}
-            </Text>
-            <Text color={isActive ? 'cyan' : undefined}>
-              {truncate(p.label, 20)}
-            </Text>
+            <Text color={isActive ? 'cyan' : 'gray'}>{isActive ? '▶ ' : '  '}</Text>
+            <Text color={isActive ? 'cyan' : undefined}>{truncate(p.label, 20)}</Text>
             <Text>: </Text>
             <Text color="green">{p.testCases.passed}</Text>
             <Text>/</Text>
             <Text color="red">{p.testCases.failed}</Text>
             <Text> ({passRate})</Text>
-            {p.requests.total > 0 && (
-              <Text dimColor> · {p.requests.total} reqs</Text>
-            )}
-            {p.tokens.total > 0 && (
-              <Text dimColor> · {formatTokens(p.tokens.total)}</Text>
-            )}
-            {p.cost > 0 && (
-              <Text dimColor> · {formatCost(p.cost)}</Text>
-            )}
+            {p.requests.total > 0 && <Text dimColor> · {p.requests.total} reqs</Text>}
+            {p.tokens.total > 0 && <Text dimColor> · {formatTokens(p.tokens.total)}</Text>}
+            {p.cost > 0 && <Text dimColor> · {formatCost(p.cost)}</Text>}
           </Box>
         );
       })}

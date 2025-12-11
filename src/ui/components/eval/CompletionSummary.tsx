@@ -6,7 +6,6 @@
  */
 
 import { Box, Text } from 'ink';
-import React from 'react';
 import { useEvalState } from '../../contexts/EvalContext';
 import { formatDuration } from '../../utils/format';
 
@@ -246,7 +245,10 @@ export interface CompletionSummaryProps {
   showTokenUsage?: boolean;
 }
 
-export function CompletionSummary({ shareUrl: propShareUrl, showTokenUsage = true }: CompletionSummaryProps) {
+export function CompletionSummary({
+  shareUrl: propShareUrl,
+  showTokenUsage = true,
+}: CompletionSummaryProps) {
   const { phase, shareUrl: stateShareUrl } = useEvalState();
   const shareUrl = propShareUrl || stateShareUrl;
 

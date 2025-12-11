@@ -25,13 +25,13 @@ npx promptfoo@latest init --example ink-ui-test
 
 ## Test scenarios
 
-| Test | Expected Result |
-|------|-----------------|
-| Capital of France | Pass |
-| Math (2+2) | Pass |
-| Sky color | Fail (impossible assertion) |
-| Photosynthesis | Pass (LLM graded) |
-| Water wet | Fail (contradictory rubric) |
-| Hello greeting | Pass |
-| Romeo and Juliet | Pass (factuality) |
-| Prime numbers | Partial fail |
+| Test              | Expected Result             |
+| ----------------- | --------------------------- |
+| Capital of France | Pass                        |
+| Math (2+2)        | Pass                        |
+| Sky color         | Fail (impossible assertion) |
+| Photosynthesis    | Pass (LLM graded)           |
+| Water wet         | Fail (contradictory rubric) |
+| Hello greeting    | Pass                        |
+| Romeo and Juliet  | Pass (factuality)           |
+| Prime numbers     | Partial fail                |

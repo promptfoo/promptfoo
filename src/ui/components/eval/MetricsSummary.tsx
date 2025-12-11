@@ -5,15 +5,8 @@
  */
 
 import { Box, Text } from 'ink';
-import React from 'react';
 import { useEvalState } from '../../contexts/EvalContext';
-import {
-  formatCost,
-  formatDuration,
-  formatPercent,
-  formatRate,
-  formatTokens,
-} from '../../utils/format';
+import { formatCost, formatDuration, formatPercent, formatTokens } from '../../utils/format';
 
 /**
  * MetricsSummary component.
@@ -47,8 +40,7 @@ export function MetricsSummary() {
   // Calculate rates
   const passRate = completedTests > 0 ? formatPercent(passedTests, completedTests) : '0%';
   const progressPercent = totalTests > 0 ? formatPercent(completedTests, totalTests) : '0%';
-  const cacheHitRate =
-    totalRequests > 0 ? Math.round((cachedRequests / totalRequests) * 100) : 0;
+  const cacheHitRate = totalRequests > 0 ? Math.round((cachedRequests / totalRequests) * 100) : 0;
 
   // Estimate remaining time based on average time per test
   let estimatedRemaining = estimatedRemainingMs;
@@ -171,9 +163,7 @@ export function MetricsDetail() {
         tokenPercent: totalTokens > 0 ? (p.tokens.total / totalTokens) * 100 : 0,
         requestPercent: totalRequests > 0 ? (p.requests.total / totalRequests) * 100 : 0,
         passRate:
-          p.testCases.completed > 0
-            ? (p.testCases.passed / p.testCases.completed) * 100
-            : 0,
+          p.testCases.completed > 0 ? (p.testCases.passed / p.testCases.completed) * 100 : 0,
       };
     })
     .filter(Boolean);

@@ -53,7 +53,7 @@ describe('Format Utilities', () => {
 
     it('should format costs over $1 with 2 decimal places', () => {
       expect(formatCost(1.23)).toBe('$1.23');
-      expect(formatCost(5.00)).toBe('$5.00');
+      expect(formatCost(5.0)).toBe('$5.00');
       expect(formatCost(9.99)).toBe('$9.99');
     });
 

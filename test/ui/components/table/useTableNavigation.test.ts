@@ -9,7 +9,9 @@ import type { TableNavigationState, FilterMode } from '../../../../src/ui/compon
 /**
  * Helper to create a default navigation state.
  */
-function createNavigationState(overrides: Partial<TableNavigationState> = {}): TableNavigationState {
+function createNavigationState(
+  overrides: Partial<TableNavigationState> = {},
+): TableNavigationState {
   return {
     selectedRow: 0,
     selectedCol: 0,

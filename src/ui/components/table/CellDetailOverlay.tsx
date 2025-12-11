@@ -9,12 +9,12 @@
  */
 
 import { Box, Text } from 'ink';
-import React, { useEffect } from 'react';
+import { useEffect } from 'react';
 import { isRawModeSupported } from '../../hooks/useKeypress';
 import { useTerminalSize } from '../../hooks/useTerminalSize';
 import { formatCost, formatLatency } from '../../utils/format';
 import { StatusBadge } from './StatusBadge';
-import type { CellDetailOverlayProps, TableColumn } from './types';
+import type { CellDetailOverlayProps } from './types';
 
 /**
  * Divider line component.
@@ -59,9 +59,9 @@ export function CellDetailOverlay({
   rowData,
   varNames,
   onNavigate,
-  onClose,
+  onClose: _onClose,
 }: CellDetailOverlayProps) {
-  const { width, height } = useTerminalSize();
+  const { width } = useTerminalSize();
   const output = cellData.output;
 
   // Calculate content area
@@ -124,19 +124,14 @@ export function CellDetailOverlay({
       {/* Header */}
       <Box justifyContent="space-between">
         <Text bold>Cell Details</Text>
-        <Text dimColor>
-          {onNavigate && '←↑↓→ nav | '}[q] close
-        </Text>
+        <Text dimColor>{onNavigate && '←↑↓→ nav | '}[q] close</Text>
       </Box>
 
       <Divider width={contentWidth} char="═" />
 
       {/* Metadata Section */}
       <Box flexDirection="column" marginTop={1}>
-        <MetadataRow
-          label="Status"
-          value={<StatusBadge status={cellData.status} />}
-        />
+        <MetadataRow label="Status" value={<StatusBadge status={cellData.status} />} />
 
         {output?.provider && <MetadataRow label="Provider" value={output.provider} />}
 
@@ -199,7 +194,6 @@ export function CellDetailOverlay({
           </Box>
         </>
       )}
-
     </Box>
   );
 }
@@ -239,7 +233,9 @@ function AssertionRow({ result, isLast }: { result: any; isLast: boolean }) {
       </Box>
       {result.reason && (
         <Box marginLeft={2}>
-          <Text dimColor wrap="wrap">{result.reason}</Text>
+          <Text dimColor wrap="wrap">
+            {result.reason}
+          </Text>
         </Box>
       )}
       {result.score !== undefined && result.score !== 1 && result.score !== 0 && (
@@ -303,7 +299,12 @@ export interface VarDetailOverlayProps {
 /**
  * VarDetailOverlay - Overlay for viewing full variable content with navigation.
  */
-export function VarDetailOverlay({ varName, content, onNavigate, onClose }: VarDetailOverlayProps) {
+export function VarDetailOverlay({
+  varName,
+  content,
+  onNavigate,
+  onClose: _onClose,
+}: VarDetailOverlayProps) {
   const { width } = useTerminalSize();
   const boxWidth = Math.min(width - 4, 100);
 
@@ -362,9 +363,7 @@ export function VarDetailOverlay({ varName, content, onNavigate, onClose }: VarD
     >
       <Box justifyContent="space-between">
         <Text bold>{varName}</Text>
-        <Text dimColor>
-          {onNavigate && '←↑↓→ nav | '}[q] close
-        </Text>
+        <Text dimColor>{onNavigate && '←↑↓→ nav | '}[q] close</Text>
       </Box>
       <Box marginTop={1}>
         <Text wrap="wrap">{content || '(empty)'}</Text>
@@ -376,7 +375,13 @@ export function VarDetailOverlay({ varName, content, onNavigate, onClose }: VarD
 /**
  * Minimal cell detail view (for very narrow terminals).
  */
-export function MinimalCellDetail({ cellData, onClose }: { cellData: any; onClose: () => void }) {
+export function MinimalCellDetail({
+  cellData,
+  onClose: _onClose,
+}: {
+  cellData: any;
+  onClose: () => void;
+}) {
   return (
     <Box flexDirection="column" borderStyle="single" borderColor="cyan" paddingX={1}>
       <Box justifyContent="space-between">

@@ -76,11 +76,7 @@ function LogEntryRow({
 
   return (
     <Box>
-      {showTimestamp && (
-        <Text dimColor>
-          {formatTimestamp(entry.timestamp)}{' '}
-        </Text>
-      )}
+      {showTimestamp && <Text dimColor>{formatTimestamp(entry.timestamp)} </Text>}
       <Text color={levelColor}>[{levelLabel}]</Text>
       <Text> {truncateMessage(entry.message, maxMessageLength)}</Text>
     </Box>
@@ -137,13 +133,7 @@ export function LogPanel({
   }
 
   return (
-    <Box
-      flexDirection="column"
-      borderStyle="single"
-      borderColor="gray"
-      paddingX={1}
-      marginTop={1}
-    >
+    <Box flexDirection="column" borderStyle="single" borderColor="gray" paddingX={1} marginTop={1}>
       <Box>
         <Text dimColor>
           Logs {verbose ? '(verbose)' : '(warnings/errors only)'} - {displayLogs.length} entries

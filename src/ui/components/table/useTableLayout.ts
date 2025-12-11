@@ -88,9 +88,7 @@ function calculateColumnWidths(
 
   // Calculate available width
   const totalBorderOverhead = (columns.length + 1) * LAYOUT_CONFIG.BORDER_OVERHEAD;
-  const fixedWidth = columns
-    .filter((c) => c.type === 'index')
-    .reduce((sum, c) => sum + c.width, 0);
+  const fixedWidth = columns.filter((c) => c.type === 'index').reduce((sum, c) => sum + c.width, 0);
   const availableWidth = terminalWidth - totalBorderOverhead - fixedWidth;
 
   // Count flexible columns
