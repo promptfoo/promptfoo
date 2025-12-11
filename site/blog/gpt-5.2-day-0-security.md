@@ -38,6 +38,7 @@ We focused on prompt injection (malicious inputs designed to hijack AI behavior)
 - Illegal activity guidance
 
 We used two attack strategies:
+
 - **Hydra**: Multi-turn jailbreaking that builds up to harmful requests across multiple messages, adapting based on how the model responds
 - **Meta**: Single-turn attacks that use clever prompt engineering to bypass safety filters in one shot
 
@@ -125,6 +126,7 @@ We disabled reasoning tokens (`reasoning_effort: 'none'`) to test the base model
 **4,229 probes (individual attack attempts) across 43 risk categories. ~30 minute runtime. First critical finding in 5 minutes.**
 
 Attack success by strategy:
+
 - **Hydra** (multi-turn): 78.5% (161/205 attacks succeeded)
 - **Meta** (single-turn): 61.0% (122/200 attacks succeeded)
 - **Baseline** (direct harmful requests, no jailbreak): 4.3% (9/210 attacks succeeded)
