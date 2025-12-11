@@ -1,7 +1,7 @@
 ---
 title: LLM as a Judge
 sidebar_label: LLM as a Judge
-description: Use LLM judges to evaluate model outputs with custom rubrics, multi-judge voting, and bias mitigation
+description: Guide to LLM-as-a-judge evaluation covering custom rubrics, multi-judge voting, bias mitigation, prompt injection defense, and production operational patterns.
 keywords:
   [
     llm as a judge,
@@ -45,11 +45,13 @@ npx promptfoo eval
 npx promptfoo view
 ```
 
-**Common mistakes to avoid:**
+:::note Common mistakes to avoid
 
 - Missing `threshold` (scores don't affect pass/fail without it)
 - Vague rubrics (add scoring anchors)
 - Using the same model as judge and system under test
+
+:::
 
 ## How it works
 
@@ -60,7 +62,7 @@ Four components:
 3. **Judge prompt**: Full instruction the judge model receives
 4. **Judge model**: The LLM that evaluates
 
-```
+```text
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
 │  Your System    │────▶│  Candidate      │────▶│  Judge Model    │
 │  (SUT)          │     │  Output         │     │  + Judge Prompt │
@@ -156,7 +158,7 @@ A judge prompt has two parts:
 
 Promptfoo's default judge prompt (simplified):
 
-```
+```text
 System: You are grading output according to a rubric. If the rubric
 is satisfied, the output passes. Return JSON: {reason, pass, score}
 
@@ -245,12 +247,16 @@ tests:
 
 ## The pass vs. score gotcha
 
+:::danger Common mistake
+
 This is the most common mistake:
 
 - **`pass`**: Boolean from the judge (defaults to `true` if omitted)
 - **`score`**: Numeric (0.0-1.0), doesn't affect pass/fail **unless you set `threshold`**
 
-Without `threshold`, `{pass: true, score: 0}` **passes**:
+Without `threshold`, `{pass: true, score: 0}` **passes**.
+
+:::
 
 ```yaml
 # ❌ Always passes even with score: 0
@@ -484,7 +490,11 @@ To maintain consistency:
 
 ## Security: prompt injection
 
+:::warning
+
 The candidate output is untrusted input to your judge. Attackers can craft outputs that manipulate scores.
+
+:::
 
 ### Defensive patterns
 
