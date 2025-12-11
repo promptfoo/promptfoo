@@ -142,7 +142,7 @@
     "@types/pdf-parse": "^1.1.5",
     "@types/pem": "^1.14.4",
     "@types/proxy-from-env": "^1.0.4",
-    "@types/react": "^19.2.7",
+    "@types/react": "19.2.7",
     "@types/semver": "^7.7.1",
     "@types/source-map-support": "^0.5.10",
     "@types/supertest": "^6.0.3",
