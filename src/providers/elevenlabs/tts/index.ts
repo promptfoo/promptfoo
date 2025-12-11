@@ -278,6 +278,7 @@ export class ElevenLabsTTSProvider implements ApiProvider {
           total: prompt.length,
           prompt: prompt.length,
           completion: 0,
+          numRequests: 1,
         },
       };
     }
@@ -310,6 +311,7 @@ export class ElevenLabsTTSProvider implements ApiProvider {
         prompt: characters,
         completion: 0,
         cached: cacheHit ? characters : undefined,
+        numRequests: 1,
       },
       cost,
       metadata: {
@@ -462,6 +464,7 @@ export class ElevenLabsTTSProvider implements ApiProvider {
           total: prompt.length,
           prompt: prompt.length,
           completion: 0,
+          numRequests: 1,
         },
         cost,
         metadata: {
@@ -486,6 +489,7 @@ export class ElevenLabsTTSProvider implements ApiProvider {
           total: prompt.length,
           prompt: prompt.length,
           completion: 0,
+          numRequests: 1,
         },
       };
     }
