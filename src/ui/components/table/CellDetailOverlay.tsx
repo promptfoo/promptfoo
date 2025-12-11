@@ -287,6 +287,93 @@ function AssertionResults({ gradingResult }: { gradingResult: any }) {
 }
 
 /**
+ * Props for VarDetailOverlay component.
+ */
+export interface VarDetailOverlayProps {
+  /** Variable name */
+  varName: string;
+  /** Variable content */
+  content: string;
+  /** Handler for navigating to adjacent cells */
+  onNavigate?: (direction: 'up' | 'down' | 'left' | 'right') => void;
+  /** Handler to close the overlay */
+  onClose: () => void;
+}
+
+/**
+ * VarDetailOverlay - Overlay for viewing full variable content with navigation.
+ */
+export function VarDetailOverlay({ varName, content, onNavigate, onClose }: VarDetailOverlayProps) {
+  const { width } = useTerminalSize();
+  const boxWidth = Math.min(width - 4, 100);
+
+  // Handle keyboard navigation within detail view
+  useEffect(() => {
+    if (!isRawModeSupported() || !onNavigate) {
+      return;
+    }
+
+    const handleInput = (data: Buffer) => {
+      const key = data.toString();
+
+      // Handle escape sequences for arrow keys
+      if (key === '\x1b[A') {
+        onNavigate('up');
+      } else if (key === '\x1b[B') {
+        onNavigate('down');
+      } else if (key === '\x1b[C') {
+        onNavigate('right');
+      } else if (key === '\x1b[D') {
+        onNavigate('left');
+      } else {
+        // Handle vim-style navigation
+        const lowerKey = key.toLowerCase();
+        switch (lowerKey) {
+          case 'k':
+            onNavigate('up');
+            break;
+          case 'j':
+            onNavigate('down');
+            break;
+          case 'l':
+            onNavigate('right');
+            break;
+          case 'h':
+            onNavigate('left');
+            break;
+        }
+      }
+    };
+
+    process.stdin.on('data', handleInput);
+    return () => {
+      process.stdin.off('data', handleInput);
+    };
+  }, [onNavigate]);
+
+  return (
+    <Box
+      flexDirection="column"
+      borderStyle="round"
+      borderColor="cyan"
+      paddingX={1}
+      paddingY={1}
+      width={boxWidth}
+    >
+      <Box justifyContent="space-between">
+        <Text bold>{varName}</Text>
+        <Text dimColor>
+          {onNavigate && '←↑↓→ nav | '}[q] close
+        </Text>
+      </Box>
+      <Box marginTop={1}>
+        <Text wrap="wrap">{content || '(empty)'}</Text>
+      </Box>
+    </Box>
+  );
+}
+
+/**
  * Minimal cell detail view (for very narrow terminals).
  */
 export function MinimalCellDetail({ cellData, onClose }: { cellData: any; onClose: () => void }) {

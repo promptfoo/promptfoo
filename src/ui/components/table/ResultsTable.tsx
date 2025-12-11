@@ -13,7 +13,7 @@
 import { Box, Text } from 'ink';
 import { useEffect, useMemo } from 'react';
 import { isRawModeSupported } from '../../hooks/useKeypress';
-import { CellDetailOverlay } from './CellDetailOverlay';
+import { CellDetailOverlay, VarDetailOverlay } from './CellDetailOverlay';
 import { CommandInput } from './CommandInput';
 import { filterRows, getFilterModeLabel, hasActiveFilter } from './filterUtils';
 import { SearchInput } from './SearchInput';
@@ -278,26 +278,20 @@ export function ResultsTable({
     const rowData = filteredRows[row];
     const column = layout.columns[col];
 
-    // Handle var column expansion - show full content in a simple overlay
+    // Handle var column expansion - show full content with navigation
     if (column.type === 'var' && rowData) {
       const varIdx = layout.columns.filter((c, i) => c.type === 'var' && i < col).length;
       const varContent = rowData.originalRow.vars[varIdx] || '';
+      const varName = data.head.vars[varIdx] || column.header;
       return (
-        <Box
-          flexDirection="column"
-          borderStyle="round"
-          borderColor="cyan"
-          paddingX={1}
-          paddingY={1}
-        >
-          <Box justifyContent="space-between">
-            <Text bold>{column.header}</Text>
-            <Text dimColor>[q]</Text>
-          </Box>
-          <Box marginTop={1}>
-            <Text wrap="wrap">{varContent || '(empty)'}</Text>
-          </Box>
-        </Box>
+        <VarDetailOverlay
+          varName={varName}
+          content={varContent}
+          onNavigate={(direction) => {
+            navigation.dispatch({ type: 'NAVIGATE_EXPANDED', direction });
+          }}
+          onClose={() => navigation.dispatch({ type: 'CLOSE_EXPAND' })}
+        />
       );
     }
 
