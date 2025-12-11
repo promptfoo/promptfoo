@@ -245,24 +245,6 @@ function SummaryLine() {
 }
 
 /**
- * Share URL display.
- */
-function ShareUrlDisplay() {
-  const { shareUrl } = useEvalState();
-
-  if (!shareUrl) {
-    return null;
-  }
-
-  return (
-    <Box marginTop={1}>
-      <Text color="green">✔ </Text>
-      <Text color="cyan">{shareUrl}</Text>
-    </Box>
-  );
-}
-
-/**
  * Error summary (compact).
  */
 function ErrorDisplay() {
@@ -428,21 +410,33 @@ export function EvalScreen({
 
       {/* Share context - show org/team and sharing status */}
       {shareContext && (
-        <Box>
+        <Box flexDirection="column">
           {state.sharingStatus === 'completed' && state.shareUrl ? (
             <>
-              <Text color="green">✔ Shared: </Text>
-              <Text color="cyan">{state.shareUrl}</Text>
+              <Box>
+                <Text color="green">✔ </Text>
+                <Text dimColor>Shared to </Text>
+                <Text color="cyan">{shareContext.organizationName}</Text>
+                {shareContext.teamName && (
+                  <>
+                    <Text dimColor> › </Text>
+                    <Text color="cyan">{shareContext.teamName}</Text>
+                  </>
+                )}
+              </Box>
+              <Box marginLeft={2}>
+                <Text color="cyan">{state.shareUrl}</Text>
+              </Box>
             </>
           ) : state.sharingStatus === 'failed' ? (
             <Text color="red">✗ Share failed</Text>
           ) : (
-            <>
-              <Text dimColor>Sharing to: </Text>
+            <Box>
+              <Text dimColor>Sharing to </Text>
               <Text color="cyan">{shareContext.organizationName}</Text>
               {shareContext.teamName && (
                 <>
-                  <Text dimColor> {'>'} </Text>
+                  <Text dimColor> › </Text>
                   <Text color="cyan">{shareContext.teamName}</Text>
                 </>
               )}
@@ -452,7 +446,7 @@ export function EvalScreen({
                   <Spinner type="dots" color="cyan" />
                 </>
               )}
-            </>
+            </Box>
           )}
         </Box>
       )}
@@ -484,9 +478,6 @@ export function EvalScreen({
 
       {/* Summary line */}
       <SummaryLine />
-
-      {/* Share URL */}
-      <ShareUrlDisplay />
 
       {/* Errors */}
       <ErrorDisplay />
