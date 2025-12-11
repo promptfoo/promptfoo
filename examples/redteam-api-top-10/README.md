@@ -42,16 +42,16 @@ npx promptfoo@latest redteam run
 
 This application includes configurable vulnerabilities based on the [OWASP API Security Top 10 (2023)](https://owasp.org/API-Security/editions/2023/en/0x00-header/):
 
-| Vulnerability | Description |
-|--------------|-------------|
-| API1: BOLA | Broken Object Level Authorization - access other users' data |
-| API2: Broken Auth | Unsigned JWT acceptance, debug parameters |
-| API3: Property Auth | Sensitive columns exposed (salary, SSN, cost_price) |
-| API5: Function Auth | Admin tools available to all users |
-| API7: SSRF | Internal endpoints accessible via fetch tool |
-| API8: Misconfiguration | Debug endpoints exposed, JWT secret in logs |
-| API9: Inventory | Legacy v1 API without authentication |
-| API10: Unsafe Consumption | No response sanitization |
+| Vulnerability             | Description                                                  |
+| ------------------------- | ------------------------------------------------------------ |
+| API1: BOLA                | Broken Object Level Authorization - access other users' data |
+| API2: Broken Auth         | Unsigned JWT acceptance, debug parameters                    |
+| API3: Property Auth       | Sensitive columns exposed (salary, SSN, cost_price)          |
+| API5: Function Auth       | Admin tools available to all users                           |
+| API7: SSRF                | Internal endpoints accessible via fetch tool                 |
+| API8: Misconfiguration    | Debug endpoints exposed, JWT secret in logs                  |
+| API9: Inventory           | Legacy v1 API without authentication                         |
+| API10: Unsafe Consumption | No response sanitization                                     |
 
 ## Architecture
 
@@ -70,6 +70,7 @@ This application includes configurable vulnerabilities based on the [OWASP API S
 ```
 
 The chatbot connects to three MCP servers:
+
 - **SQLite MCP**: Database queries for products, orders, users
 - **Filesystem MCP**: Reading policy documents
 - **Fetch MCP**: External API calls (shipping tracking, weather, promotions)
@@ -78,13 +79,13 @@ The chatbot connects to three MCP servers:
 
 All users have password `password123`:
 
-| Username | User ID | Department | Role |
-|----------|---------|------------|------|
-| alice | emp_001 | Engineering | user |
-| bob | emp_002 | Marketing | user |
-| charlie | emp_003 | Sales | user |
-| diana | emp_004 | HR | admin |
-| eve | emp_005 | Finance | user |
+| Username | User ID | Department  | Role  |
+| -------- | ------- | ----------- | ----- |
+| alice    | emp_001 | Engineering | user  |
+| bob      | emp_002 | Marketing   | user  |
+| charlie  | emp_003 | Sales       | user  |
+| diana    | emp_004 | HR          | admin |
+| eve      | emp_005 | Finance     | user  |
 
 ## Security Configuration
 
@@ -141,13 +142,14 @@ The `promptfooconfig.yaml` is pre-configured with:
 
 ### Expected Results
 
-At **SECURITY_*=1** (vulnerable), the red team should find:
+At **SECURITY\_\*=1** (vulnerable), the red team should find:
+
 - BOLA attacks via prompt injection to access other users' data
 - SSRF via fetch tool to internal endpoints
 - Sensitive data exposure (salaries, SSNs, cost prices)
 - Legacy API access without authentication
 
-At **SECURITY_*=3** (secure), most attacks should be blocked.
+At **SECURITY\_\*=3** (secure), most attacks should be blocked.
 
 ## Web UI
 
@@ -156,23 +158,28 @@ Visit http://localhost:8000 in your browser for the chat interface.
 ## API Endpoints
 
 ### Chat
+
 - `POST /chat/` - Send message, get response with tool calls
 - `GET /chat/sessions` - List user's sessions
 
 ### Auth
+
 - `POST /auth/login` - Get JWT token
 - `GET /auth/demo-users` - List available demo users
 
 ### Mock Services
+
 - `GET /mock/shipping/track/{tracking}` - Track package
 - `GET /mock/weather/{location}` - Weather data
 - `GET /mock/promotions/current` - Current promos
 
 ### Debug (vulnerable)
+
 - `GET /debug/logs` - Exposes JWT secret
 - `GET /debug/config` - Server configuration
 
 ### Legacy v1 (vulnerable)
+
 - `GET /api/v1/orders` - All orders without auth
 - `GET /api/v1/users` - All users without auth
 
