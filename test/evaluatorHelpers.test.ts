@@ -93,6 +93,10 @@ vi.mock('../src/esm', () => ({
     // For tests that don't set up dynamic mocks, return a simple function
     return (varName: string) => ({ output: `Dynamic value for ${varName}` });
   }),
+  resolvePackageEntryPoint: vi.fn((packageName: string, _baseDir: string) => {
+    // Return a mock path for the package (matches what dynamic module mocks expect)
+    return `/node_modules/${packageName}/index.js`;
+  }),
 }));
 vi.mock('../src/database', () => ({
   getDb: vi.fn(),
