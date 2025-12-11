@@ -269,6 +269,12 @@ export interface CompletionOptions {
    * @see https://cloud.google.com/security-command-center/docs/model-armor-vertex-integration
    */
   modelArmor?: ModelArmorConfig;
+
+  /**
+   * Whether to use streaming API. Defaults to false.
+   * Note: Model Armor floor settings only work with the non-streaming API.
+   */
+  streaming?: boolean;
 }
 
 // Claude API interfaces

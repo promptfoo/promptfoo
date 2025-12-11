@@ -248,7 +248,11 @@ Model Armor policies can be applied at two levels:
 
 - **Floor settings** define minimum protections at the organization, folder, or project scope. These apply automatically and ensure baseline security even if templates are misconfigured.
 
-If floor settings are in "inspect only" mode, violations are logged but not blocked. For guaranteed blocking in tests, configure floor settings to "inspect and block" or use the sanitization API directly.
+### Configuring Floor Settings for Blocking
+
+For floor settings to actually block content (not just log violations), set enforcement type to "Inspect and block" in [GCP Console → Security → Model Armor → Floor Settings](https://console.cloud.google.com/security/model-armor/floor-settings).
+
+Floor settings apply project-wide to all Vertex AI calls, regardless of whether `modelArmor` templates are configured.
 
 For more details, see the [Model Armor floor settings documentation](https://cloud.google.com/security-command-center/docs/set-up-model-armor-floor-settings).
 
