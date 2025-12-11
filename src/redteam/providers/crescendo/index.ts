@@ -988,6 +988,7 @@ export class CrescendoProvider implements ApiProvider {
       },
       options,
     );
+    TokenUsageTracker.getInstance().trackUsage(scoringProvider.id(), refusalResponse.tokenUsage);
     if (scoringProvider.delay) {
       logger.debug(`[Crescendo] Sleeping for ${scoringProvider.delay}ms`);
       await sleep(scoringProvider.delay);
