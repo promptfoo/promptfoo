@@ -213,13 +213,10 @@ List available log files in the logs directory.
 ### Examples
 
 ```sh
-# View most recent log file
+# View most recent log file (or current session's log if run during a CLI session)
 promptfoo logs
 
-# View the current session's debug log
-promptfoo logs
-
-# View last 50 lines of most recent log
+# View last 50 lines
 promptfoo logs -n 50
 
 # View first 20 lines
@@ -231,7 +228,7 @@ promptfoo logs -f
 # List all available log files
 promptfoo logs --list
 
-# View a specific log file (by name or partial match)
+# View a specific log file by name or partial match
 promptfoo logs promptfoo-debug-2024-01-15_10-30-00.log
 promptfoo logs 2024-01-15
 
