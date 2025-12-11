@@ -339,6 +339,9 @@ describe('evaluator', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // Reset runExtensionHook to default implementation (other tests may have overridden it)
+    vi.mocked(runExtensionHook).mockReset();
+    vi.mocked(runExtensionHook).mockImplementation((_extensions, _hookName, context) => context);
     // Reset cliState for each test to ensure clean state
     cliState.resume = false;
     cliState.basePath = '';
@@ -4032,6 +4035,9 @@ describe('evaluator defaultTest merging', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // Reset runExtensionHook to default implementation (other tests may have overridden it)
+    vi.mocked(runExtensionHook).mockReset();
+    vi.mocked(runExtensionHook).mockImplementation((_extensions, _hookName, context) => context);
   });
 
   it('should merge defaultTest.options.provider with test case options', async () => {
@@ -4144,6 +4150,9 @@ describe('Evaluator with external defaultTest', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // Reset runExtensionHook to default implementation (other tests may have overridden it)
+    vi.mocked(runExtensionHook).mockReset();
+    vi.mocked(runExtensionHook).mockImplementation((_extensions, _hookName, context) => context);
   });
 
   it('should handle string defaultTest gracefully', async () => {
@@ -4364,6 +4373,9 @@ describe('defaultTest normalization for extensions', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // Reset runExtensionHook to default implementation (other tests may have overridden it)
+    vi.mocked(runExtensionHook).mockReset();
+    vi.mocked(runExtensionHook).mockImplementation((_extensions, _hookName, context) => context);
   });
 
   it('should initialize defaultTest when undefined and extensions are present', async () => {
