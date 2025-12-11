@@ -83,15 +83,15 @@
     "chokidar": "5.0.0",
     "whatwg-url": "15.1.0",
     "esbuild": "0.27.1",
-    "react": "19.2.1",
-    "react-dom": "19.2.1",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
     "react-is": "^19.0.0",
     "*": {
       "whatwg-url": "15.1.0",
       "chokidar": "5.0.0",
       "esbuild": "0.27.1",
-      "react": "19.2.1",
-      "react-dom": "19.2.1"
+      "react": "19.2.3",
+      "react-dom": "19.2.3"
     },
     "gaxios": "^7.0.0",
     "https-proxy-agent": "^7.0.0",
