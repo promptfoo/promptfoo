@@ -18,8 +18,18 @@ import {
   formatAvgLatency,
   truncate,
 } from '../../utils/format';
+import { setInkUITransportLevel } from '../../utils/InkUITransport';
+import { HelpBar } from './HelpBar';
+import { LogPanel } from './LogPanel';
 import { ProgressBar } from '../shared/ProgressBar';
 import { Spinner } from '../shared/Spinner';
+
+export interface ShareContext {
+  /** Organization name (from cloud config) */
+  organizationName: string;
+  /** Team name if applicable */
+  teamName?: string;
+}
 
 export interface EvalScreenProps {
   /** Title for the evaluation */
@@ -30,14 +40,16 @@ export interface EvalScreenProps {
   onExit?: () => void;
   /** Whether to show keyboard shortcuts help */
   showHelp?: boolean;
+  /** Share context (org/team) if sharing is enabled */
+  shareContext?: ShareContext | null;
 }
 
 // Column widths for consistent alignment
 const COL_WIDTH = {
   status: 2,
-  provider: 24,
+  provider: 22,
   progress: 14,
-  results: 12,
+  results: 15, // Increased to fit pass/fail/error counts
   tokens: 10,
   cost: 9,
   latency: 7,
@@ -57,7 +69,7 @@ function TableHeader() {
         <Text dimColor>Progress</Text>
       </Box>
       <Box width={COL_WIDTH.results} marginLeft={2}>
-        <Text dimColor>Pass/Fail</Text>
+        <Text dimColor>Results</Text>
       </Box>
       <Box width={COL_WIDTH.tokens}>
         <Text dimColor>Tokens</Text>
@@ -97,21 +109,29 @@ function ProviderRow({
       ? Math.min(100, Math.round((testCases.completed / testCases.total) * 100))
       : 0;
 
-  // Status indicator
-  const statusIcon =
-    status === 'completed' ? (
-      <Text color="green">✓</Text>
-    ) : status === 'error' ? (
-      <Text color="red">✗</Text>
-    ) : isActive ? (
-      <Text color="cyan">●</Text>
-    ) : (
-      <Text dimColor>○</Text>
-    );
+  // Status indicator - differentiate between failures and errors
+  // ✓ green = completed with all passes
+  // ✗ red = has failures (assertion failures)
+  // ⚠ yellow = has only errors (API/infrastructure errors), no failures
+  // ● cyan = currently running
+  // ○ dim = pending
+  const hasFailures = testCases.failed > 0;
+  const hasErrors = testCases.errors > 0;
 
-  // Pass/fail display - show passed ✓ and failed ✗ counts clearly
-  const hasFailures = testCases.failed > 0 || testCases.errors > 0;
-  const failCount = testCases.failed + testCases.errors;
+  let statusIcon: React.ReactNode;
+  if (status === 'completed' || status === 'error') {
+    if (hasFailures) {
+      statusIcon = <Text color="red">✗</Text>;
+    } else if (hasErrors) {
+      statusIcon = <Text color="yellow">⚠</Text>;
+    } else {
+      statusIcon = <Text color="green">✓</Text>;
+    }
+  } else if (isActive) {
+    statusIcon = <Text color="cyan">●</Text>;
+  } else {
+    statusIcon = <Text dimColor>○</Text>;
+  }
 
   return (
     <Box>
@@ -132,14 +152,24 @@ function ProviderRow({
           showPercentage={false}
           color={status === 'completed' ? 'green' : 'cyan'}
         />
-        <Text dimColor> {testCases.completed}/{testCases.total}</Text>
+        <Text dimColor>
+          {' '}
+          {testCases.completed}/{testCases.total}
+        </Text>
       </Box>
 
-      {/* Pass/fail counts - marginLeft adds gap after progress column */}
+      {/* Pass/fail/error counts - marginLeft adds gap after progress column */}
       <Box width={COL_WIDTH.results} marginLeft={2}>
+        {/* Passes - always show */}
         <Text color="green">{testCases.passed}✓</Text>
-        {hasFailures && <Text color="red"> {failCount}✗</Text>}
-        {!hasFailures && testCases.completed > 0 && <Text dimColor> {failCount}✗</Text>}
+        {/* Failures - red if any, dim otherwise */}
+        {hasFailures ? (
+          <Text color="red"> {testCases.failed}✗</Text>
+        ) : (
+          testCases.completed > 0 && <Text dimColor> 0✗</Text>
+        )}
+        {/* Errors - yellow/orange if any, hide if zero */}
+        {hasErrors && <Text color="yellow"> {testCases.errors}⚠</Text>}
       </Box>
 
       {/* Tokens */}
@@ -168,26 +198,39 @@ function SummaryLine() {
     passedTests,
     failedTests,
     errorCount,
+    totalTests,
     totalTokens,
     promptTokens,
     completionTokens,
     totalCost,
     elapsedMs,
+    logs,
+    showVerbose,
   } = useEvalState();
 
-  const total = passedTests + failedTests + errorCount;
   const tokenDisplay = totalTokens || promptTokens + completionTokens;
+
+  // Count log warnings (warn level only, not errors since those are shown separately)
+  const logWarningCount = logs.filter((log) => log.level === 'warn').length;
 
   return (
     <Box marginTop={1}>
       {/* Pass count with color */}
-      <Text color={passedTests === total ? 'green' : failedTests > 0 ? 'yellow' : 'white'}>
-        {passedTests}/{total} passed
+      <Text color={passedTests === totalTests ? 'green' : failedTests > 0 ? 'yellow' : 'white'}>
+        {passedTests}/{totalTests} passed
       </Text>
 
       {failedTests > 0 && <Text color="red"> · {failedTests} failed</Text>}
 
-      {errorCount > 0 && <Text color="red"> · {errorCount} errors</Text>}
+      {errorCount > 0 && <Text color="yellow"> · {errorCount} errors</Text>}
+
+      {/* Log warnings indicator - only show if not in verbose mode (verbose shows the panel) */}
+      {logWarningCount > 0 && !showVerbose && (
+        <Text color="yellow">
+          {' '}
+          · ⚠ {logWarningCount} warning{logWarningCount > 1 ? 's' : ''}
+        </Text>
+      )}
 
       {/* Tokens */}
       {tokenDisplay > 0 && <Text dimColor> · {formatTokens(tokenDisplay)} tokens</Text>}
@@ -270,7 +313,13 @@ const PHASE_LABELS: Record<string, string> = {
   error: 'Error',
 };
 
-export function EvalScreen({ title, onComplete, onExit, showHelp = true }: EvalScreenProps) {
+export function EvalScreen({
+  title,
+  onComplete,
+  onExit,
+  showHelp = true,
+  shareContext,
+}: EvalScreenProps) {
   const { exit } = useApp();
   const { state, dispatch, isComplete, isRunning } = useEval();
   // Note: isCompact could be used for responsive layout in future
@@ -309,6 +358,15 @@ export function EvalScreen({ title, onComplete, onExit, showHelp = true }: EvalS
         case 'e':
           dispatch({ type: 'TOGGLE_ERROR_DETAILS' });
           break;
+        case 'v':
+          // Toggle verbose mode and update transport log level
+          dispatch({ type: 'TOGGLE_VERBOSE' });
+          // When toggling verbose, also update the log capture level
+          // We'll read the new state from the next render, so we check current state
+          // If currently NOT verbose, we're toggling TO verbose (debug level)
+          // If currently verbose, we're toggling OFF verbose (warn level)
+          setInkUITransportLevel(state.showVerbose ? 'warn' : 'debug');
+          break;
       }
     };
 
@@ -316,7 +374,7 @@ export function EvalScreen({ title, onComplete, onExit, showHelp = true }: EvalS
     return () => {
       process.stdin.off('data', handleInput);
     };
-  }, [dispatch, exit, onExit, isRawModeSupported]);
+  }, [dispatch, exit, onExit, isRawModeSupported, state.showVerbose]);
 
   // Update elapsed time while running
   useEffect(() => {
@@ -350,7 +408,7 @@ export function EvalScreen({ title, onComplete, onExit, showHelp = true }: EvalS
       paddingX={1}
       paddingY={0}
     >
-      {/* Header: Title + Status */}
+      {/* Header: Title + Status + Concurrency */}
       <Box>
         <Text bold>{title || 'Evaluation'}</Text>
         <Box flexGrow={1} />
@@ -360,7 +418,41 @@ export function EvalScreen({ title, onComplete, onExit, showHelp = true }: EvalS
           {PHASE_LABELS[state.phase] || state.phase}
         </Text>
         {state.elapsedMs > 0 && <Text dimColor> ({formatDuration(state.elapsedMs)})</Text>}
+        {state.concurrency > 1 && <Text dimColor> ×{state.concurrency}</Text>}
       </Box>
+
+      {/* Share context - show org/team and sharing status */}
+      {shareContext && (
+        <Box>
+          {state.sharingStatus === 'completed' && state.shareUrl ? (
+            <>
+              <Text color="green">✔ Shared: </Text>
+              <Text color="cyan">{state.shareUrl}</Text>
+            </>
+          ) : state.sharingStatus === 'failed' ? (
+            <>
+              <Text color="red">✗ Share failed</Text>
+            </>
+          ) : (
+            <>
+              <Text dimColor>Sharing to: </Text>
+              <Text color="cyan">{shareContext.organizationName}</Text>
+              {shareContext.teamName && (
+                <>
+                  <Text dimColor> {'>'} </Text>
+                  <Text color="cyan">{shareContext.teamName}</Text>
+                </>
+              )}
+              {state.sharingStatus === 'sharing' && (
+                <>
+                  <Text dimColor> </Text>
+                  <Spinner type="dots" color="cyan" />
+                </>
+              )}
+            </>
+          )}
+        </Box>
+      )}
 
       {/* Provider table */}
       {state.providerOrder.length > 0 && (
@@ -396,20 +488,21 @@ export function EvalScreen({ title, onComplete, onExit, showHelp = true }: EvalS
       {/* Errors */}
       <ErrorDisplay />
 
-      {/* Help text - only when running and raw mode supported */}
-      {showHelp && !isComplete && isRawModeSupported && (
-        <Box marginTop={1}>
-          <Text dimColor>Press </Text>
-          <Text color="cyan">q</Text>
-          <Text dimColor> to quit</Text>
-          {state.errorCount > 0 && (
-            <>
-              <Text dimColor>, </Text>
-              <Text color="cyan">e</Text>
-              <Text dimColor> for errors</Text>
-            </>
-          )}
-        </Box>
+      {/* Log Panel - shown in verbose mode */}
+      {state.showVerbose && state.logs.length > 0 && (
+        <LogPanel logs={state.logs} maxLines={10} verbose={state.showVerbose} />
+      )}
+
+      {/* Help bar - only during active evaluation, hidden on completion to avoid
+          confusion during transition to results table which has different shortcuts */}
+      {showHelp && isRawModeSupported && !isComplete && (
+        <HelpBar
+          isComplete={isComplete}
+          showVerbose={state.showVerbose}
+          hasErrors={state.errorCount > 0}
+          showErrorDetails={state.showErrorDetails}
+          logWarningCount={state.logs.filter((log) => log.level === 'warn').length}
+        />
       )}
     </Box>
   );

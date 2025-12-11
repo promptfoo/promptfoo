@@ -11,12 +11,18 @@
  */
 
 import { Box, Text } from 'ink';
-import React, { useMemo } from 'react';
+import { useMemo } from 'react';
 import { isRawModeSupported } from '../../hooks/useKeypress';
 import { CellDetailOverlay } from './CellDetailOverlay';
 import { TableHeader } from './TableHeader';
 import { TableRow } from './TableRow';
-import { getCellStatus, type EvaluateTable, type ResultsTableProps, type TableCellData, type TableRowData } from './types';
+import {
+  getCellStatus,
+  type EvaluateTable,
+  type ResultsTableProps,
+  type TableCellData,
+  type TableRowData,
+} from './types';
 import { useTableLayout } from './useTableLayout';
 import { useTableNavigation, getVisibleRowRange } from './useTableNavigation';
 
@@ -42,10 +48,7 @@ function truncateText(text: string, maxLength: number): { text: string; truncate
 /**
  * Process raw table data into renderable row data.
  */
-function processTableData(
-  data: EvaluateTable,
-  maxCellLength: number,
-): TableRowData[] {
+function processTableData(data: EvaluateTable, maxCellLength: number): TableRowData[] {
   return data.body.map((row, index) => {
     // Process output cells
     const cells: TableCellData[] = row.outputs.map((output) => {
@@ -81,18 +84,14 @@ function HelpText({ isCompact }: { isCompact: boolean }) {
   if (isCompact) {
     return (
       <Box marginTop={1}>
-        <Text dimColor>
-          ↑↓ navigate | Enter expand | q quit
-        </Text>
+        <Text dimColor>↑↓ navigate | Enter expand | q quit</Text>
       </Box>
     );
   }
 
   return (
     <Box marginTop={1} flexDirection="column">
-      <Text dimColor>
-        ↑↓←→/hjkl navigate | Enter expand | g/G first/last | q quit
-      </Text>
+      <Text dimColor>↑↓←→/hjkl navigate | Enter expand | g/G first/last | q quit</Text>
     </Box>
   );
 }
@@ -144,10 +143,7 @@ export function ResultsTable({
   });
 
   // Process data for rendering
-  const processedRows = useMemo(
-    () => processTableData(data, maxCellLength),
-    [data, maxCellLength],
-  );
+  const processedRows = useMemo(() => processTableData(data, maxCellLength), [data, maxCellLength]);
 
   // Set up keyboard navigation
   const isInteractive = interactive && isRawModeSupported();
@@ -157,7 +153,7 @@ export function ResultsTable({
     visibleRows: layout.visibleRowCount,
     isActive: isInteractive && !layout.isCompact,
     onExit,
-    onExpand: (row, col) => {
+    onExpand: (row, _col) => {
       if (onRowSelect && processedRows[row]) {
         onRowSelect(processedRows[row].originalRow, row);
       }
@@ -189,7 +185,35 @@ export function ResultsTable({
     const rowData = processedRows[row];
     const column = layout.columns[col];
 
-    // Find the appropriate cell data
+    // Handle var column expansion - show full content in a simple overlay
+    if (column.type === 'var' && rowData) {
+      const varIdx = layout.columns.filter((c, i) => c.type === 'var' && i < col).length;
+      const varContent = rowData.originalRow.vars[varIdx] || '';
+      return (
+        <Box
+          flexDirection="column"
+          borderStyle="round"
+          borderColor="cyan"
+          paddingX={1}
+          paddingY={1}
+        >
+          <Box justifyContent="space-between">
+            <Text bold>{column.header}</Text>
+            <Text dimColor>[Esc] Close</Text>
+          </Box>
+          <Box marginTop={1}>
+            <Text wrap="wrap">{varContent || '(empty)'}</Text>
+          </Box>
+        </Box>
+      );
+    }
+
+    // Handle index column - no expansion needed, close immediately
+    if (column.type === 'index') {
+      navigation.dispatch({ type: 'CLOSE_EXPAND' });
+    }
+
+    // Find the appropriate cell data for output columns
     let cellData: TableCellData | undefined;
     if (column.type === 'output') {
       const outputIdx = layout.columns.filter((c, i) => c.type === 'output' && i < col).length;
@@ -223,9 +247,7 @@ export function ResultsTable({
           />
         ))}
         {processedRows.length > visibleEnd && (
-          <Text dimColor>
-            ... {processedRows.length - visibleEnd} more rows
-          </Text>
+          <Text dimColor>... {processedRows.length - visibleEnd} more rows</Text>
         )}
         <HelpText isCompact={true} />
       </Box>
@@ -243,7 +265,9 @@ export function ResultsTable({
           rowData={rowData}
           columns={layout.columns}
           isSelected={navigation.selectedRow === rowData.index}
-          selectedCol={navigation.selectedRow === rowData.index ? navigation.selectedCol : undefined}
+          selectedCol={
+            navigation.selectedRow === rowData.index ? navigation.selectedCol : undefined
+          }
         />
       ))}
 
@@ -251,7 +275,8 @@ export function ResultsTable({
       {processedRows.length > visibleEnd && (
         <Box marginTop={1}>
           <Text dimColor>
-            ... {processedRows.length - visibleEnd} more row{processedRows.length - visibleEnd !== 1 ? 's' : ''} not shown
+            ... {processedRows.length - visibleEnd} more row
+            {processedRows.length - visibleEnd !== 1 ? 's' : ''} not shown
           </Text>
         </Box>
       )}
@@ -285,12 +310,7 @@ export function StaticResultsTable({
   maxCellLength?: number;
 }) {
   return (
-    <ResultsTable
-      data={data}
-      maxRows={maxRows}
-      maxCellLength={maxCellLength}
-      interactive={false}
-    />
+    <ResultsTable data={data} maxRows={maxRows} maxCellLength={maxCellLength} interactive={false} />
   );
 }
 

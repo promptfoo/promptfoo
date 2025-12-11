@@ -10,6 +10,18 @@ import type { EvaluateOptions, PromptMetrics, RunEvalOptions, TestSuite } from '
 import { EvalApp } from './EvalApp';
 import { extractProviderIds, type EvalUIController } from './evalBridge';
 import { renderInteractive, shouldUseInteractiveUI, type RenderResult } from './render';
+import {
+  registerInkUITransport,
+  unregisterInkUITransport,
+  type InkUITransport,
+} from './utils/InkUITransport';
+
+export interface ShareContext {
+  /** Organization name (from cloud config) */
+  organizationName: string;
+  /** Team name if applicable */
+  teamName?: string;
+}
 
 export interface EvalRunnerOptions {
   /** Title for the evaluation UI */
@@ -22,6 +34,8 @@ export interface EvalRunnerOptions {
   testSuite: TestSuite;
   /** Callback for when user cancels via UI */
   onCancel?: () => void;
+  /** Share context (org/team) if sharing is enabled */
+  shareContext?: ShareContext | null;
 }
 
 export interface InkEvalResult {
@@ -68,7 +82,7 @@ export interface InkEvalResult {
  * ```
  */
 export async function initInkEval(options: EvalRunnerOptions): Promise<InkEvalResult> {
-  const { title, showHelp = true, evaluateOptions, testSuite, onCancel } = options;
+  const { title, showHelp = true, evaluateOptions, testSuite, onCancel, shareContext } = options;
 
   // Extract provider IDs for UI
   const _providerIds = extractProviderIds(
@@ -96,6 +110,7 @@ export async function initInkEval(options: EvalRunnerOptions): Promise<InkEvalRe
     <EvalApp
       title={title}
       showHelp={showHelp}
+      shareContext={shareContext}
       onController={(c) => {
         controller = c;
         resolveController!(c);
@@ -115,6 +130,22 @@ export async function initInkEval(options: EvalRunnerOptions): Promise<InkEvalRe
 
   // Wait for controller to be available
   controller = await controllerPromise;
+
+  // Register logger transport to capture logs in the UI
+  // The transport calls controller.addLog for each log entry
+  let inkTransport: InkUITransport | null = null;
+  try {
+    inkTransport = registerInkUITransport(
+      logger,
+      (entry) => {
+        controller?.addLog(entry);
+      },
+      'warn', // Default to warn level - verbose mode will change this to debug
+    );
+  } catch (err) {
+    // Log transport registration failure but continue without it
+    logger.debug('Failed to register InkUI log transport', { error: err });
+  }
 
   // Create modified evaluate options with Ink progress callback
   const originalCallback = evaluateOptions.progressCallback;
@@ -149,6 +180,14 @@ export async function initInkEval(options: EvalRunnerOptions): Promise<InkEvalRe
 
   // Cleanup function
   const cleanup = () => {
+    // Unregister the logger transport first
+    if (inkTransport) {
+      try {
+        unregisterInkUITransport(logger);
+      } catch {
+        // Ignore cleanup errors
+      }
+    }
     renderResult.cleanup();
   };
 

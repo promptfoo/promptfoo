@@ -8,7 +8,7 @@
 import type { EvaluateOptions, PromptMetrics, RunEvalOptions } from '../types/index';
 import type { TokenUsage } from '../types/shared';
 import { TokenUsageTracker } from '../util/tokenUsage';
-import type { EvalAction, TokenMetricsPayload } from './contexts/EvalContext';
+import type { EvalAction, LogEntry, SharingStatus, TokenMetricsPayload } from './contexts/EvalContext';
 
 /**
  * State for tracking deltas between progress callbacks for a single prompt.
@@ -282,6 +282,8 @@ export interface EvalUIController {
     message: string,
     vars?: Record<string, unknown>,
   ) => void;
+  /** Add a log entry (for verbose mode) */
+  addLog: (entry: LogEntry) => void;
   /** Mark evaluation as complete */
   complete: (summary: { passed: number; failed: number; errors: number }) => void;
   /** Mark evaluation as errored */
@@ -290,6 +292,8 @@ export interface EvalUIController {
   setPhase: (phase: 'loading' | 'evaluating' | 'grading' | 'completed' | 'error') => void;
   /** Set the share URL */
   setShareUrl: (url: string) => void;
+  /** Set the sharing status (for background sharing progress) */
+  setSharingStatus: (status: SharingStatus, url?: string) => void;
 }
 
 /**
@@ -319,6 +323,10 @@ export function createEvalUIController(dispatch: React.Dispatch<EvalAction>): Ev
       dispatch({ type: 'ADD_ERROR', payload: { provider, prompt, message, vars } });
     },
 
+    addLog: (entry: LogEntry) => {
+      dispatch({ type: 'ADD_LOG', payload: entry });
+    },
+
     complete: (summary: { passed: number; failed: number; errors: number }) => {
       dispatch({ type: 'COMPLETE', payload: summary });
     },
@@ -333,6 +341,10 @@ export function createEvalUIController(dispatch: React.Dispatch<EvalAction>): Ev
 
     setShareUrl: (url: string) => {
       dispatch({ type: 'SET_SHARE_URL', payload: url });
+    },
+
+    setSharingStatus: (status: SharingStatus, url?: string) => {
+      dispatch({ type: 'SET_SHARING_STATUS', payload: { status, url } });
     },
   };
 }

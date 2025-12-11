@@ -22,7 +22,7 @@ import { generateTable } from '../table';
 import telemetry from '../telemetry';
 import { CommandLineOptionsSchema, OutputFileExtension, TestSuiteSchema } from '../types/index';
 import { isApiProvider } from '../types/providers';
-import { checkCloudPermissions } from '../util/cloud';
+import { checkCloudPermissions, getOrgContext } from '../util/cloud';
 import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
 import { resolveConfigs } from '../util/config/load';
 import { maybeLoadFromExternalFile } from '../util/file';
@@ -538,10 +538,22 @@ export async function doEval(
     let ret: Eval;
     const useInkUI = shouldUseInkUI();
 
+    // Track pending share for display after table (shared across Ink UI and table display)
+    let pendingInkShare: Promise<string | null> | null = null;
+
     if (useInkUI) {
       // Use Ink-based interactive UI
       logger.debug('Using Ink UI for evaluation');
       cliState.inkUI = true;
+
+      // Determine if sharing is enabled and fetch org context if so
+      let shareContext: { organizationName: string; teamName?: string } | null = null;
+      const willShare =
+        config.sharing !== undefined ? Boolean(config.sharing) : cloudConfig.isEnabled();
+      if (willShare && isSharingEnabled(evalRecord)) {
+        shareContext = await getOrgContext();
+      }
+
       const inkResult = await initInkEval({
         title: config.description || 'Evaluation',
         evaluateOptions: {
@@ -553,6 +565,7 @@ export async function doEval(
           isRedteam: Boolean(config.redteam),
         },
         testSuite,
+        shareContext,
         onCancel: () => {
           logger.info('Evaluation cancelled by user');
         },
@@ -581,7 +594,7 @@ export async function doEval(
 
         inkResult.controller.complete({ passed, failed, errors });
 
-        // Handle sharing in Ink UI mode (before cleanup so we can show URL)
+        // Determine if we should share
         let wantsToShareInk: boolean;
         if (config.sharing !== undefined) {
           wantsToShareInk = Boolean(config.sharing);
@@ -589,18 +602,48 @@ export async function doEval(
           wantsToShareInk = cloudConfig.isEnabled();
         }
         const canShareInk = isSharingEnabled(evalRecord);
-        if (wantsToShareInk && canShareInk) {
-          const shareUrl = await createShareableUrl(evalRecord);
-          if (shareUrl) {
-            evalRecord.shared = true;
-            inkResult.controller.setShareUrl(shareUrl);
-            // Give a moment for UI to show share URL
-            await new Promise((resolve) => setTimeout(resolve, 500));
-          }
-        }
 
-        // Give a moment for UI to show completion
-        await new Promise((resolve) => setTimeout(resolve, 500));
+        // Start sharing and wait briefly for it to complete
+        // If sharing is fast, user sees URL before transition
+        // If sharing is slow, transition anyway and show URL after table closes
+        if (wantsToShareInk && canShareInk) {
+          // Update UI to show sharing in progress
+          inkResult.controller.setSharingStatus('sharing');
+
+          // Start sharing
+          pendingInkShare = createShareableUrl(evalRecord, false, { silent: true });
+
+          // Wait briefly for sharing to complete (allows quick shares to show URL)
+          // If it takes longer, we transition anyway - URL shown after table closes
+          const QUICK_SHARE_TIMEOUT_MS = 3000; // 3 second window for quick shares
+          const quickTimeout = new Promise<'timeout'>((resolve) =>
+            setTimeout(() => resolve('timeout'), QUICK_SHARE_TIMEOUT_MS),
+          );
+
+          const result = await Promise.race([
+            pendingInkShare.then((url) => ({ type: 'url' as const, url })),
+            pendingInkShare.catch((err) => ({ type: 'error' as const, err })),
+            quickTimeout,
+          ]);
+
+          if (result === 'timeout') {
+            // Sharing still in progress - continue to table, URL shown after
+            logger.debug('Sharing in progress, transitioning to results table');
+          } else if (result.type === 'url' && result.url) {
+            // Sharing completed quickly - show URL
+            inkResult.controller.setSharingStatus('completed', result.url);
+            evalRecord.shared = true;
+            // Brief pause to let user see the URL
+            await new Promise((resolve) => setTimeout(resolve, 800));
+          } else {
+            // Error or null result
+            inkResult.controller.setSharingStatus('failed');
+            logger.debug(`Share failed or returned null`);
+          }
+        } else {
+          // Brief pause for UI to show completion state when not sharing
+          await new Promise((resolve) => setTimeout(resolve, 200));
+        }
       } finally {
         inkResult.cleanup();
         cliState.inkUI = false;
@@ -666,9 +709,9 @@ export async function doEval(
     logger.debug(`Wants to share: ${wantsToShare}`);
     logger.debug(`Can share eval: ${canShareEval}`);
 
-    // Skip sharing if already shared in Ink UI mode
+    // Skip sharing if already shared or if sharing is already in progress (Ink UI background share)
     const shareableUrl =
-      wantsToShare && canShareEval && !evalRecord.shared
+      wantsToShare && canShareEval && !evalRecord.shared && !pendingInkShare
         ? await createShareableUrl(evalRecord)
         : null;
 
@@ -711,6 +754,19 @@ export async function doEval(
             logger.debug('Results table closed');
           },
         });
+
+        // Show share URL (sharing happened in background while table was displayed)
+        if (pendingInkShare) {
+          try {
+            const shareUrl = await pendingInkShare;
+            if (shareUrl && !evalRecord.shared) {
+              evalRecord.shared = true;
+              logger.info(`${chalk.green('✔')} Shared: ${chalk.cyan(shareUrl)}`);
+            }
+          } catch (err) {
+            logger.debug(`Share failed: ${err}`);
+          }
+        }
       } else {
         // Use ASCII table for non-Ink UI mode
         const outputTable = generateTable(table);
@@ -730,6 +786,19 @@ export async function doEval(
 
     if (totalTests >= 500 && !useInkUI) {
       logger.info('Skipping table output because there are more than 500 tests.');
+    }
+
+    // Show share URL if Ink UI was used but table wasn't displayed
+    if (pendingInkShare && !evalRecord.shared) {
+      try {
+        const shareUrl = await pendingInkShare;
+        if (shareUrl) {
+          evalRecord.shared = true;
+          logger.info(`\n${chalk.green('✔')} Shared: ${chalk.cyan(shareUrl)}`);
+        }
+      } catch (err) {
+        logger.debug(`Share failed: ${err}`);
+      }
     }
 
     const { outputPath } = config;

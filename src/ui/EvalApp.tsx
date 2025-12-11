@@ -10,6 +10,13 @@ import { EvalProvider, useEval } from './contexts/EvalContext';
 import { UIProvider } from './contexts/UIContext';
 import { createEvalUIController, type EvalUIController } from './evalBridge';
 
+export interface ShareContext {
+  /** Organization name (from cloud config) */
+  organizationName: string;
+  /** Team name if applicable */
+  teamName?: string;
+}
+
 export interface EvalAppProps {
   /** Title for the evaluation */
   title?: string;
@@ -25,6 +32,8 @@ export interface EvalAppProps {
   providers?: string[];
   /** Whether to show keyboard shortcuts help */
   showHelp?: boolean;
+  /** Share context (org/team) if sharing is enabled */
+  shareContext?: ShareContext | null;
 }
 
 /**
@@ -38,6 +47,7 @@ function EvalAppInner({
   totalTests = 0,
   providers = [],
   showHelp,
+  shareContext,
 }: EvalAppProps) {
   const { dispatch, init } = useEval();
 
@@ -56,7 +66,15 @@ function EvalAppInner({
     }
   }, [totalTests, providers, init]);
 
-  return <EvalScreen title={title} onComplete={onComplete} onExit={onExit} showHelp={showHelp} />;
+  return (
+    <EvalScreen
+      title={title}
+      onComplete={onComplete}
+      onExit={onExit}
+      showHelp={showHelp}
+      shareContext={shareContext}
+    />
+  );
 }
 
 /**

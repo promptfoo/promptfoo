@@ -10,7 +10,7 @@
  * - Q to quit table view
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { isRawModeSupported, useKeypress } from '../../hooks/useKeypress';
 import type { TableNavigationState } from './types';
 
@@ -43,17 +43,14 @@ function navigationReducer(
   switch (action.type) {
     case 'MOVE_UP': {
       const newRow = Math.max(0, state.selectedRow - 1);
-      const newOffset =
-        newRow < state.scrollOffset ? newRow : Math.min(state.scrollOffset, newRow);
+      const newOffset = newRow < state.scrollOffset ? newRow : Math.min(state.scrollOffset, newRow);
       return { ...state, selectedRow: newRow, scrollOffset: newOffset };
     }
 
     case 'MOVE_DOWN': {
       const newRow = Math.min(rowCount - 1, state.selectedRow + 1);
       const newOffset =
-        newRow >= state.scrollOffset + visibleRows
-          ? newRow - visibleRows + 1
-          : state.scrollOffset;
+        newRow >= state.scrollOffset + visibleRows ? newRow - visibleRows + 1 : state.scrollOffset;
       return { ...state, selectedRow: newRow, scrollOffset: newOffset };
     }
 
@@ -143,6 +140,12 @@ export function useTableNavigation({
     scrollOffset: 0,
   });
 
+  // Keep ref for latest state to avoid stale closures in keypress handler
+  const stateRef = useRef(state);
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
+
   const bounds = { rowCount, colCount, visibleRows };
 
   const dispatch = useCallback(
@@ -196,7 +199,7 @@ export function useTableNavigation({
           dispatch({ type: 'TOGGLE_EXPAND' });
           return;
         case 'escape':
-          if (state.expandedCell) {
+          if (stateRef.current.expandedCell) {
             dispatch({ type: 'CLOSE_EXPAND' });
           } else if (onExit) {
             onExit();
@@ -205,10 +208,12 @@ export function useTableNavigation({
       }
 
       // Letter keys (vim bindings and shortcuts)
+      // Use ref to get latest state and avoid stale closure issues
+      const currentState = stateRef.current;
       const lowerKey = key.toLowerCase();
       switch (lowerKey) {
         case 'q':
-          if (!state.expandedCell && onExit) {
+          if (!currentState.expandedCell && onExit) {
             onExit();
           }
           break;

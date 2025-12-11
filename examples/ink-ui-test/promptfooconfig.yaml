@@ -1,0 +1,104 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Ink UI comprehensive test - errors, failures, and LLM grading
+
+prompts:
+  - |
+    You are a helpful assistant. Answer the following question concisely.
+
+    Question: {{question}}
+
+providers:
+  # Working provider
+  - id: openai:gpt-4o-mini
+    label: gpt-4o-mini
+
+  # Another working provider for comparison
+  - id: openai:gpt-3.5-turbo
+    label: gpt-3.5-turbo
+
+  # Provider that will throw errors (invalid model)
+  - id: openai:gpt-nonexistent-model-xyz
+    label: error-provider
+
+defaultTest:
+  options:
+    provider: openai:gpt-4o-mini
+
+tests:
+  # Test 1: Should pass - simple factual question
+  - vars:
+      question: What is the capital of France?
+    assert:
+      - type: contains
+        value: Paris
+      - type: llm-rubric
+        value: The response correctly identifies Paris as the capital of France
+
+  # Test 2: Should pass - math question
+  - vars:
+      question: What is 2 + 2?
+    assert:
+      - type: contains-any
+        value:
+          - "4"
+          - "four"
+      - type: llm-rubric
+        value: The response provides the correct answer to the math question
+
+  # Test 3: Will FAIL - impossible assertion
+  - vars:
+      question: What color is the sky on a clear day?
+    assert:
+      - type: contains
+        value: blue
+      - type: contains
+        value: XYZNONEXISTENT  # This will fail
+
+  # Test 4: Should pass - LLM graded
+  - vars:
+      question: Explain photosynthesis in one sentence.
+    assert:
+      - type: llm-rubric
+        value: |
+          The response should mention:
+          1. Plants or leaves
+          2. Sunlight or light energy
+          3. Converting to food/energy or producing oxygen
+
+  # Test 5: Will FAIL - contradictory assertion
+  - vars:
+      question: Is water wet?
+    assert:
+      - type: llm-rubric
+        value: The response must claim that water is completely dry and not wet at all
+
+  # Test 6: Should pass - length check
+  - vars:
+      question: Say hello in exactly 3 words.
+    assert:
+      - type: javascript
+        value: output.split(/\s+/).length <= 10
+      - type: llm-rubric
+        value: The response is a brief greeting
+
+  # Test 7: LLM factuality check
+  - vars:
+      question: Who wrote Romeo and Juliet?
+    assert:
+      - type: factuality
+        value: William Shakespeare wrote Romeo and Juliet
+      - type: contains-any
+        value:
+          - Shakespeare
+          - William
+
+  # Test 8: Will partially fail - strict requirements
+  - vars:
+      question: List exactly 3 prime numbers under 10.
+    assert:
+      - type: llm-rubric
+        value: Lists exactly three prime numbers, all under 10
+      - type: contains
+        value: "2"
+      - type: contains
+        value: "NOTANUMBER"  # Will fail

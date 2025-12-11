@@ -7,6 +7,11 @@
 
 import React, { createContext, useCallback, useContext, useMemo, useReducer } from 'react';
 
+import type { LogEntry } from '../utils/InkUITransport';
+
+// Re-export LogEntry for consumers
+export type { LogEntry } from '../utils/InkUITransport';
+
 // Types for provider metrics tracking
 export interface ProviderMetrics {
   id: string;
@@ -66,6 +71,9 @@ export interface EvalError {
   vars?: Record<string, unknown>;
 }
 
+// Sharing status type
+export type SharingStatus = 'idle' | 'sharing' | 'completed' | 'failed';
+
 // Main state interface
 export interface EvalState {
   // Overall progress
@@ -76,7 +84,8 @@ export interface EvalState {
   failedTests: number;
   errorCount: number;
 
-  // Share URL (if evaluation was shared)
+  // Sharing state
+  sharingStatus: SharingStatus;
   shareUrl?: string;
 
   // Aggregate request metrics (distinct from test cases)
@@ -127,6 +136,11 @@ export interface EvalState {
   // Configuration
   showProviderDetails: boolean;
   showErrorDetails: boolean;
+
+  // Verbose mode / log capture
+  showVerbose: boolean;
+  logs: LogEntry[];
+  maxLogsToShow: number;
 }
 
 // Token usage type for updates
@@ -210,7 +224,11 @@ export type EvalAction =
         reasoning: number;
       };
     }
-  | { type: 'SET_SHARE_URL'; payload: string };
+  | { type: 'SET_SHARE_URL'; payload: string }
+  | { type: 'SET_SHARING_STATUS'; payload: { status: SharingStatus; url?: string } }
+  | { type: 'TOGGLE_VERBOSE' }
+  | { type: 'ADD_LOG'; payload: LogEntry }
+  | { type: 'CLEAR_LOGS' };
 
 // Helper to create empty provider metrics
 function createEmptyProviderMetrics(id: string, label?: string): ProviderMetrics {
@@ -234,6 +252,8 @@ const initialState: EvalState = {
   passedTests: 0,
   failedTests: 0,
   errorCount: 0,
+  // Sharing state
+  sharingStatus: 'idle',
   // Aggregate request metrics
   totalRequests: 0,
   cachedRequests: 0,
@@ -263,6 +283,10 @@ const initialState: EvalState = {
   maxErrorsToShow: 5,
   showProviderDetails: true,
   showErrorDetails: false,
+  // Verbose mode / log capture
+  showVerbose: false,
+  logs: [],
+  maxLogsToShow: 100,
 };
 
 // Reducer function
@@ -481,13 +505,9 @@ function evalReducer(state: EvalState, action: EvalAction): EvalState {
         status: isProviderComplete ? (hasErrors ? 'error' : 'completed') : 'running',
       };
 
-      // Update aggregate metrics
+      // Update provider metrics only - aggregate counts are handled by PROGRESS action
       return {
         ...state,
-        passedTests: state.passedTests + (passed ? 1 : 0),
-        failedTests: state.failedTests + (failed ? 1 : 0),
-        errorCount: state.errorCount + (error ? 1 : 0),
-        completedTests: state.completedTests + 1,
         totalCost: state.totalCost + cost,
         providers: {
           ...state.providers,
@@ -623,6 +643,37 @@ function evalReducer(state: EvalState, action: EvalAction): EvalState {
       return {
         ...state,
         shareUrl: action.payload,
+      };
+
+    case 'SET_SHARING_STATUS':
+      return {
+        ...state,
+        sharingStatus: action.payload.status,
+        shareUrl: action.payload.url ?? state.shareUrl,
+      };
+
+    case 'TOGGLE_VERBOSE':
+      return {
+        ...state,
+        showVerbose: !state.showVerbose,
+      };
+
+    case 'ADD_LOG': {
+      // Ring buffer - keep only the last maxLogsToShow entries
+      const newLogs = [...state.logs, action.payload];
+      if (newLogs.length > state.maxLogsToShow) {
+        newLogs.shift();
+      }
+      return {
+        ...state,
+        logs: newLogs,
+      };
+    }
+
+    case 'CLEAR_LOGS':
+      return {
+        ...state,
+        logs: [],
       };
 
     default:

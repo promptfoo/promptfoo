@@ -10,7 +10,6 @@
  */
 
 import { Box, Text } from 'ink';
-import React from 'react';
 import { StatusBadge, getStatusBadgeWidth } from './StatusBadge';
 import type { TableCellProps } from './types';
 
@@ -116,6 +115,8 @@ export function TableCell({ data, width, isSelected = false, showBadge = true }:
 
 /**
  * Simple text cell without status handling (for variable columns).
+ * Uses different highlight style than output cells (no inverse) to
+ * indicate different interaction behavior.
  */
 export function TextCell({
   content,
@@ -132,8 +133,14 @@ export function TextCell({
   const { text: displayText } = truncateText(normalized, width);
   const paddedText = padText(displayText, width);
 
+  // Note: No inverse for var cells - they're expandable but have simpler content
+  // This visually differentiates them from output cells which have full detail overlays
   return (
-    <Text color={isSelected ? 'cyan' : undefined} bold={isSelected} dimColor={dimColor}>
+    <Text
+      color={isSelected ? 'cyan' : undefined}
+      bold={isSelected}
+      dimColor={dimColor && !isSelected}
+    >
       {paddedText}
     </Text>
   );
@@ -141,11 +148,13 @@ export function TextCell({
 
 /**
  * Index cell with right-aligned number.
+ * Index cells are not expandable, so they always show as dimColor
+ * and don't get the selection highlight that other cells get.
  */
 export function IndexCell({
   index,
   width,
-  isSelected = false,
+  isSelected: _isSelected = false,
 }: {
   index: number;
   width: number;
@@ -154,11 +163,8 @@ export function IndexCell({
   const text = String(index + 1); // 1-based display
   const paddedText = padText(text, width, 'right');
 
-  return (
-    <Text color={isSelected ? 'cyan' : undefined} bold={isSelected} dimColor={!isSelected}>
-      {paddedText}
-    </Text>
-  );
+  // Index cells don't expand, so show minimal selection indicator
+  return <Text dimColor>{paddedText}</Text>;
 }
 
 export default TableCell;
