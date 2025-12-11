@@ -11,9 +11,10 @@
  */
 
 import { Box, Text } from 'ink';
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { isRawModeSupported } from '../../hooks/useKeypress';
 import { CellDetailOverlay } from './CellDetailOverlay';
+import { filterRows, getFilterModeLabel, hasActiveFilter } from './filterUtils';
 import { TableHeader } from './TableHeader';
 import { TableRow } from './TableRow';
 import {
@@ -21,6 +22,7 @@ import {
   type EvaluateTable,
   type ResultsTableProps,
   type TableCellData,
+  type TableFilterState,
   type TableRowData,
 } from './types';
 import { useTableLayout } from './useTableLayout';
@@ -84,14 +86,68 @@ function HelpText({ isCompact }: { isCompact: boolean }) {
   if (isCompact) {
     return (
       <Box marginTop={1}>
-        <Text dimColor>↑↓ navigate | Enter expand | q quit</Text>
+        <Text dimColor>↑↓ nav | Enter expand | a/p/f/e filter | q quit</Text>
       </Box>
     );
   }
 
   return (
     <Box marginTop={1} flexDirection="column">
-      <Text dimColor>↑↓←→/hjkl navigate | Enter expand | g/G first/last | q quit</Text>
+      <Text dimColor>
+        ↑↓←→/hjkl nav | Enter expand | g/G first/last |{' '}
+        <Text color="cyan">[a]</Text>ll <Text color="cyan">[p]</Text>ass{' '}
+        <Text color="cyan">[f]</Text>ail <Text color="cyan">[e]</Text>rr{' '}
+        <Text color="cyan">[d]</Text>iff | <Text color="cyan">/</Text> search | q quit
+      </Text>
+    </Box>
+  );
+}
+
+/**
+ * Filter status bar showing current filter and counts.
+ */
+function FilterStatusBar({
+  filterState,
+  filteredCount,
+  totalCount,
+}: {
+  filterState: TableFilterState;
+  filteredCount: number;
+  totalCount: number;
+}) {
+  const isFiltered = hasActiveFilter(filterState);
+
+  if (!isFiltered) {
+    return null;
+  }
+
+  const parts: string[] = [];
+
+  // Add filter mode if not 'all'
+  if (filterState.mode !== 'all') {
+    parts.push(getFilterModeLabel(filterState.mode));
+  }
+
+  // Add search query if present
+  if (filterState.searchQuery) {
+    parts.push(`"${filterState.searchQuery}"`);
+  }
+
+  // Add column filter count if present
+  if (filterState.columnFilters.length > 0) {
+    parts.push(`${filterState.columnFilters.length} filter${filterState.columnFilters.length > 1 ? 's' : ''}`);
+  }
+
+  const filterLabel = parts.join(' + ');
+
+  return (
+    <Box marginBottom={1}>
+      <Text color="yellow">Filter: </Text>
+      <Text color="cyan">{filterLabel}</Text>
+      <Text dimColor>
+        {' '}
+        ({filteredCount} of {totalCount})
+      </Text>
     </Box>
   );
 }
@@ -145,7 +201,7 @@ export function ResultsTable({
   // Process data for rendering
   const processedRows = useMemo(() => processTableData(data, maxCellLength), [data, maxCellLength]);
 
-  // Set up keyboard navigation
+  // Set up keyboard navigation (initially with full row count, will be adjusted after filtering)
   const isInteractive = interactive && isRawModeSupported();
   const navigation = useTableNavigation({
     rowCount: processedRows.length,
@@ -160,15 +216,28 @@ export function ResultsTable({
     },
   });
 
-  // Calculate visible row range
+  // Apply filters to rows
+  const filteredRows = useMemo(
+    () => filterRows(processedRows, navigation.filter),
+    [processedRows, navigation.filter],
+  );
+
+  // Clamp selection when filtered rows change
+  useEffect(() => {
+    if (filteredRows.length > 0) {
+      navigation.dispatch({ type: 'CLAMP_SELECTION', maxRow: filteredRows.length });
+    }
+  }, [filteredRows.length, navigation.dispatch]);
+
+  // Calculate visible row range based on filtered rows
   const { start: visibleStart, end: visibleEnd } = getVisibleRowRange(
     navigation.scrollOffset,
     layout.visibleRowCount,
-    processedRows.length,
+    filteredRows.length,
   );
 
-  // Get visible rows
-  const visibleRows = processedRows.slice(visibleStart, visibleEnd);
+  // Get visible rows from filtered set
+  const visibleRows = filteredRows.slice(visibleStart, visibleEnd);
 
   // Handle empty data
   if (data.body.length === 0) {
@@ -179,10 +248,30 @@ export function ResultsTable({
     );
   }
 
+  // Handle empty filtered results
+  if (filteredRows.length === 0 && hasActiveFilter(navigation.filter)) {
+    return (
+      <Box flexDirection="column" padding={1}>
+        <FilterStatusBar
+          filterState={navigation.filter}
+          filteredCount={0}
+          totalCount={processedRows.length}
+        />
+        <Text dimColor>No results match the current filter</Text>
+        <Box marginTop={1}>
+          <Text dimColor>Press </Text>
+          <Text color="cyan">a</Text>
+          <Text dimColor> to show all results</Text>
+        </Box>
+      </Box>
+    );
+  }
+
   // Render expanded cell overlay if active
   if (navigation.expandedCell) {
     const { row, col } = navigation.expandedCell;
-    const rowData = processedRows[row];
+    // Map filtered row index to the actual row data
+    const rowData = filteredRows[row];
     const column = layout.columns[col];
 
     // Handle var column expansion - show full content in a simple overlay
@@ -236,18 +325,23 @@ export function ResultsTable({
   if (layout.isCompact) {
     return (
       <Box flexDirection="column">
+        <FilterStatusBar
+          filterState={navigation.filter}
+          filteredCount={filteredRows.length}
+          totalCount={processedRows.length}
+        />
         <TableHeader columns={layout.columns} isCompact={true} />
-        {visibleRows.map((rowData) => (
+        {visibleRows.map((rowData, displayIdx) => (
           <TableRow
             key={rowData.testIdx}
             rowData={rowData}
             columns={layout.columns}
-            isSelected={navigation.selectedRow === rowData.index}
+            isSelected={navigation.selectedRow === visibleStart + displayIdx}
             isCompact={true}
           />
         ))}
-        {processedRows.length > visibleEnd && (
-          <Text dimColor>... {processedRows.length - visibleEnd} more rows</Text>
+        {filteredRows.length > visibleEnd && (
+          <Text dimColor>... {filteredRows.length - visibleEnd} more rows</Text>
         )}
         <HelpText isCompact={true} />
       </Box>
@@ -257,35 +351,44 @@ export function ResultsTable({
   // Standard table mode
   return (
     <Box flexDirection="column">
+      {/* Filter status bar */}
+      <FilterStatusBar
+        filterState={navigation.filter}
+        filteredCount={filteredRows.length}
+        totalCount={processedRows.length}
+      />
+
       <TableHeader columns={layout.columns} />
 
-      {visibleRows.map((rowData) => (
+      {visibleRows.map((rowData, displayIdx) => (
         <TableRow
           key={rowData.testIdx}
           rowData={rowData}
           columns={layout.columns}
-          isSelected={navigation.selectedRow === rowData.index}
+          isSelected={navigation.selectedRow === visibleStart + displayIdx}
           selectedCol={
-            navigation.selectedRow === rowData.index ? navigation.selectedCol : undefined
+            navigation.selectedRow === visibleStart + displayIdx
+              ? navigation.selectedCol
+              : undefined
           }
         />
       ))}
 
       {/* Show "more rows" indicator */}
-      {processedRows.length > visibleEnd && (
+      {filteredRows.length > visibleEnd && (
         <Box marginTop={1}>
           <Text dimColor>
-            ... {processedRows.length - visibleEnd} more row
-            {processedRows.length - visibleEnd !== 1 ? 's' : ''} not shown
+            ... {filteredRows.length - visibleEnd} more row
+            {filteredRows.length - visibleEnd !== 1 ? 's' : ''} not shown
           </Text>
         </Box>
       )}
 
       {/* Status bar */}
-      {isInteractive && processedRows.length > layout.visibleRowCount && (
+      {isInteractive && filteredRows.length > layout.visibleRowCount && (
         <StatusBar
           currentRow={navigation.selectedRow}
-          totalRows={processedRows.length}
+          totalRows={filteredRows.length}
           visibleStart={visibleStart}
           visibleEnd={visibleEnd}
         />

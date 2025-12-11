@@ -107,6 +107,46 @@ export interface TableLayout {
 }
 
 /**
+ * Filter mode for quick filtering results.
+ */
+export type FilterMode = 'all' | 'passes' | 'failures' | 'errors' | 'different';
+
+/**
+ * Column filter operator.
+ */
+export type FilterOperator = '=' | '!=' | '>' | '>=' | '<' | '<=' | '~' | '!~';
+
+/**
+ * Column filter configuration.
+ */
+export interface ColumnFilter {
+  /** Column to filter on */
+  column: string;
+  /** Filter operator */
+  operator: FilterOperator;
+  /** Filter value */
+  value: string | number;
+}
+
+/**
+ * Filter state for the table.
+ */
+export interface TableFilterState {
+  /** Quick filter mode */
+  mode: FilterMode;
+  /** Search query (null if not searching) */
+  searchQuery: string | null;
+  /** Whether search input is active */
+  isSearching: boolean;
+  /** Column filters */
+  columnFilters: ColumnFilter[];
+  /** Whether command input is active */
+  isCommandMode: boolean;
+  /** Current command input */
+  commandInput: string;
+}
+
+/**
  * Navigation state for interactive table.
  */
 export interface TableNavigationState {
@@ -118,6 +158,8 @@ export interface TableNavigationState {
   expandedCell: { row: number; col: number } | null;
   /** Scroll offset for virtual scrolling */
   scrollOffset: number;
+  /** Filter state */
+  filter: TableFilterState;
 }
 
 /**

@@ -8,11 +8,26 @@
  * - Enter to expand cell
  * - Q to close expanded cell or exit table
  * - Escape also closes expanded cell or exits
+ * - Quick filter modes (a/p/f/e/d)
+ * - Search filter (/)
+ * - Column filters (:filter command)
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { isRawModeSupported, useKeypress } from '../../hooks/useKeypress';
-import type { TableNavigationState } from './types';
+import type { FilterMode, TableFilterState, TableNavigationState } from './types';
+
+/**
+ * Default filter state.
+ */
+const DEFAULT_FILTER_STATE: TableFilterState = {
+  mode: 'all',
+  searchQuery: null,
+  isSearching: false,
+  columnFilters: [],
+  isCommandMode: false,
+  commandInput: '',
+};
 
 /**
  * Navigation action types.
@@ -28,7 +43,25 @@ type NavigationAction =
   | { type: 'GO_LAST' }
   | { type: 'TOGGLE_EXPAND' }
   | { type: 'CLOSE_EXPAND' }
-  | { type: 'SET_SCROLL'; offset: number };
+  | { type: 'SET_SCROLL'; offset: number }
+  // Filter actions
+  | { type: 'SET_FILTER_MODE'; mode: FilterMode }
+  | { type: 'START_SEARCH' }
+  | { type: 'UPDATE_SEARCH'; query: string }
+  | { type: 'APPLY_SEARCH' }
+  | { type: 'CANCEL_SEARCH' }
+  | { type: 'CLEAR_SEARCH' }
+  | { type: 'START_COMMAND' }
+  | { type: 'UPDATE_COMMAND'; input: string }
+  | { type: 'EXECUTE_COMMAND' }
+  | { type: 'CANCEL_COMMAND' }
+  | { type: 'CLEAR_FILTERS' }
+  | { type: 'CLAMP_SELECTION'; maxRow: number };
+
+/**
+ * Export NavigationAction for use in other components.
+ */
+export type { NavigationAction };
 
 /**
  * Reduce navigation state based on action.
@@ -97,6 +130,96 @@ function navigationReducer(
     case 'SET_SCROLL':
       return { ...state, scrollOffset: action.offset };
 
+    // Filter actions
+    case 'SET_FILTER_MODE':
+      // Reset selection when filter changes
+      return {
+        ...state,
+        selectedRow: 0,
+        scrollOffset: 0,
+        filter: { ...state.filter, mode: action.mode },
+      };
+
+    case 'START_SEARCH':
+      return {
+        ...state,
+        filter: { ...state.filter, isSearching: true, searchQuery: '' },
+      };
+
+    case 'UPDATE_SEARCH':
+      return {
+        ...state,
+        filter: { ...state.filter, searchQuery: action.query },
+      };
+
+    case 'APPLY_SEARCH':
+      // Apply search and reset selection
+      return {
+        ...state,
+        selectedRow: 0,
+        scrollOffset: 0,
+        filter: { ...state.filter, isSearching: false },
+      };
+
+    case 'CANCEL_SEARCH':
+      // Cancel without applying - restore previous query
+      return {
+        ...state,
+        filter: { ...state.filter, isSearching: false },
+      };
+
+    case 'CLEAR_SEARCH':
+      return {
+        ...state,
+        selectedRow: 0,
+        scrollOffset: 0,
+        filter: { ...state.filter, searchQuery: null, isSearching: false },
+      };
+
+    case 'START_COMMAND':
+      return {
+        ...state,
+        filter: { ...state.filter, isCommandMode: true, commandInput: '' },
+      };
+
+    case 'UPDATE_COMMAND':
+      return {
+        ...state,
+        filter: { ...state.filter, commandInput: action.input },
+      };
+
+    case 'EXECUTE_COMMAND':
+      // Command execution is handled outside the reducer
+      return {
+        ...state,
+        filter: { ...state.filter, isCommandMode: false, commandInput: '' },
+      };
+
+    case 'CANCEL_COMMAND':
+      return {
+        ...state,
+        filter: { ...state.filter, isCommandMode: false, commandInput: '' },
+      };
+
+    case 'CLEAR_FILTERS':
+      return {
+        ...state,
+        selectedRow: 0,
+        scrollOffset: 0,
+        filter: DEFAULT_FILTER_STATE,
+      };
+
+    case 'CLAMP_SELECTION': {
+      const maxValidRow = Math.max(0, action.maxRow - 1);
+      if (state.selectedRow <= maxValidRow) {
+        return state; // No change needed
+      }
+      // Clamp selection to valid range
+      const newRow = Math.min(state.selectedRow, maxValidRow);
+      const newOffset = Math.min(state.scrollOffset, Math.max(0, action.maxRow - visibleRows));
+      return { ...state, selectedRow: newRow, scrollOffset: newOffset };
+    }
+
     default:
       return state;
   }
@@ -138,6 +261,7 @@ export function useTableNavigation({
     selectedCol: 0,
     expandedCell: null,
     scrollOffset: 0,
+    filter: DEFAULT_FILTER_STATE,
   });
 
   // Keep ref for latest state to avoid stale closures in keypress handler
@@ -210,6 +334,12 @@ export function useTableNavigation({
       // Letter keys (vim bindings and shortcuts)
       // Use ref to get latest state and avoid stale closure issues
       const currentState = stateRef.current;
+
+      // Don't process letter keys when in search or command mode
+      if (currentState.filter.isSearching || currentState.filter.isCommandMode) {
+        return;
+      }
+
       const lowerKey = key.toLowerCase();
       switch (lowerKey) {
         case 'q':
@@ -238,6 +368,32 @@ export function useTableNavigation({
           break;
         case 'l':
           dispatch({ type: 'MOVE_RIGHT' });
+          break;
+        // Filter mode shortcuts
+        case 'a':
+          dispatch({ type: 'SET_FILTER_MODE', mode: 'all' });
+          break;
+        case 'p':
+          dispatch({ type: 'SET_FILTER_MODE', mode: 'passes' });
+          break;
+        case 'f':
+          dispatch({ type: 'SET_FILTER_MODE', mode: 'failures' });
+          break;
+        case 'e':
+          dispatch({ type: 'SET_FILTER_MODE', mode: 'errors' });
+          break;
+        case 'd':
+          dispatch({ type: 'SET_FILTER_MODE', mode: 'different' });
+          break;
+        // Search shortcut (vim-style)
+        case '/':
+          dispatch({ type: 'START_SEARCH' });
+          break;
+        // Clear search with 'n' when no search active (consistent with vim)
+        case 'n':
+          if (currentState.filter.searchQuery) {
+            // In future: cycle to next match
+          }
           break;
       }
     },
