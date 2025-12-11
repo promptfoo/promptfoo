@@ -314,6 +314,70 @@ GPT-5.1-Codex-Max is only available through the Responses API (`openai:responses
 GPT-5.1-Codex-Max is recommended for use only in agentic coding environments and is not a general-purpose model like GPT-5.1.
 :::
 
+### GPT-5.2
+
+GPT-5.2 is OpenAI's flagship model for coding and agentic tasks. It offers significant improvements in safety, instruction following, and reduced deception compared to GPT-5.1.
+
+#### Available Models
+
+| Model              | Description                           | Best For                           |
+| ------------------ | ------------------------------------- | ---------------------------------- |
+| gpt-5.2            | Flagship model for coding and agentic | Complex reasoning and coding tasks |
+| gpt-5.2-2025-12-11 | Snapshot version                      | Locked behavior for production     |
+
+#### Key Specifications
+
+- **Context window**: 400,000 tokens
+- **Max output tokens**: 128,000 tokens
+- **Reasoning support**: Full reasoning token support with configurable effort levels
+
+#### Usage Examples
+
+Standard usage:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:responses:gpt-5.2
+    config:
+      max_output_tokens: 4096
+```
+
+Fast, low-latency responses (no reasoning):
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:responses:gpt-5.2
+    config:
+      reasoning:
+        effort: 'none' # No reasoning tokens, fastest responses
+      max_output_tokens: 2048
+```
+
+Deep reasoning for complex tasks:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:responses:gpt-5.2
+    config:
+      reasoning:
+        effort: 'high' # Maximum reasoning for complex tasks
+      max_output_tokens: 8192
+```
+
+#### Key Improvements over GPT-5.1
+
+- **Reduced deception**: Significantly lower deception rates in production traffic
+- **Better safety compliance**: Improved cyber safety policy compliance
+- **Improved prompt injection resistance**: Enhanced robustness to known prompt injection attacks
+- **Enhanced sensitive topic handling**: Better performance on mental health and emotional reliance evaluations
+
+#### Reasoning Effort Levels
+
+- **`none`**: No reasoning tokens, fastest responses
+- **`low`**: Minimal reasoning for straightforward tasks
+- **`medium`**: Balanced reasoning for moderate complexity
+- **`high`**: Maximum reasoning for complex problem-solving
+
 ### Reasoning Models (o1, o3, o3-pro, o3-mini, o4-mini)
 
 Reasoning models, like `o1`, `o3`, `o3-pro`, `o3-mini`, and `o4-mini`, are large language models trained with reinforcement learning to perform complex reasoning. These models excel in complex problem-solving, coding, scientific reasoning, and multi-step planning for agentic workflows.
