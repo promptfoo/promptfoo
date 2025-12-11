@@ -65,7 +65,7 @@ def format_pdf_prompt(context: PromptFunctionContext) -> list[dict[str, typing.A
                     {
                         "type": "input_file",
                         "filename": "file.pdf",
-                        "file_data": f"data:application/pdf;base64,{file_data}",
+                        "file_data": f"data:{pdf_mime_type};base64,{file_data}",
                     }
                 ]
             }
