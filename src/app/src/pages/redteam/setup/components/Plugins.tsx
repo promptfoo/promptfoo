@@ -205,11 +205,16 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
   // Sync selectedPlugins to config after user interaction
   useEffect(() => {
     if (hasUserInteracted) {
+      // Get current plugins directly from store to avoid dependency cycle.
+      // Using getState() reads the current value without subscribing to changes,
+      // which prevents infinite update loops when updatePlugins modifies config.plugins.
+      const currentPlugins = useRedTeamConfig.getState().config.plugins;
+
       // Get policy and intent plugins from existing config
-      const policyPlugins = config.plugins.filter(
+      const policyPlugins = currentPlugins.filter(
         (p) => typeof p === 'object' && p.id === 'policy',
       );
-      const intentPlugins = config.plugins.filter(
+      const intentPlugins = currentPlugins.filter(
         (p) => typeof p === 'object' && p.id === 'intent',
       );
 
@@ -231,7 +236,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
       // Update the global config
       updatePlugins(allPlugins as Array<string | { id: string; config: any }>);
     }
-  }, [selectedPlugins, pluginConfig, hasUserInteracted, config.plugins, updatePlugins]);
+  }, [selectedPlugins, pluginConfig, hasUserInteracted, updatePlugins]);
 
   const handlePluginToggle = useCallback(
     (plugin: Plugin) => {

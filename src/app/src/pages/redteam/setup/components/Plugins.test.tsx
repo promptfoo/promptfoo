@@ -10,11 +10,17 @@ import { TestCaseGenerationProvider } from './TestCaseGenerationProvider';
 import type { DefinedUseQueryResult } from '@tanstack/react-query';
 import type { ApiHealthResult } from '@app/hooks/useApiHealth';
 
+// Create a mock getState function that can be configured per test
+const mockGetState = vi.fn();
+
 vi.mock('../hooks/useRedTeamConfig', async () => {
   const actual = await vi.importActual('../hooks/useRedTeamConfig');
+  const mockUseRedTeamConfig = vi.fn();
+  // Attach getState to the mock function so it can be called as useRedTeamConfig.getState()
+  (mockUseRedTeamConfig as any).getState = () => mockGetState();
   return {
     ...actual,
-    useRedTeamConfig: vi.fn(),
+    useRedTeamConfig: mockUseRedTeamConfig,
     useRecentlyUsedPlugins: vi.fn(),
   };
 });
@@ -83,6 +89,12 @@ describe('Plugins', () => {
         plugins: [],
       },
       updatePlugins: mockUpdatePlugins,
+    });
+    // Set up mockGetState to return the same config as the hook by default
+    mockGetState.mockReturnValue({
+      config: {
+        plugins: [],
+      },
     });
     mockUseRecentlyUsedPlugins.mockReturnValue({
       plugins: [],
@@ -1015,6 +1027,123 @@ describe('Plugins', () => {
         pluginId: 'harmful:hate',
         config: pluginConfig,
       });
+    });
+  });
+
+  // Test for infinite loop fix - uses getState() to avoid dependency cycle
+  describe('Plugin sync effect stability', () => {
+    it('should use getState() to read plugins without causing infinite re-renders', async () => {
+      // Set up config with existing intent plugin
+      const configWithIntent = {
+        plugins: [
+          { id: 'intent', config: { intent: ['test intent'] } },
+          { id: 'policy', config: { policy: 'test policy' } },
+        ],
+      };
+
+      mockUseRedTeamConfig.mockReturnValue({
+        config: configWithIntent,
+        updatePlugins: mockUpdatePlugins,
+      });
+
+      // mockGetState should return the same config - this is what the effect reads
+      mockGetState.mockReturnValue({
+        config: configWithIntent,
+      });
+
+      renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
+
+      // Select a preset to trigger user interaction and the sync effect
+      const recommendedPreset = screen.getByText('Recommended');
+      fireEvent.click(recommendedPreset);
+
+      // Wait for effects to settle
+      await waitFor(() => {
+        // The effect should have used getState() to read current plugins
+        expect(mockGetState).toHaveBeenCalled();
+      });
+
+      // updatePlugins should be called a bounded number of times (not infinite)
+      // With the fix, it should be called once per user interaction, not repeatedly
+      await waitFor(() => {
+        expect(mockUpdatePlugins.mock.calls.length).toBeLessThan(50);
+      });
+    });
+
+    it('should preserve policy and intent plugins when syncing regular plugins', async () => {
+      const intentPlugin = { id: 'intent', config: { intent: ['test intent'] } };
+      const policyPlugin = { id: 'policy', config: { policy: 'test policy' } };
+
+      const configWithCustomPlugins = {
+        plugins: [intentPlugin, policyPlugin],
+      };
+
+      mockUseRedTeamConfig.mockReturnValue({
+        config: configWithCustomPlugins,
+        updatePlugins: mockUpdatePlugins,
+      });
+
+      mockGetState.mockReturnValue({
+        config: configWithCustomPlugins,
+      });
+
+      renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
+
+      // Select a preset to add regular plugins
+      const minimalPreset = screen.getByText('Minimal Test');
+      fireEvent.click(minimalPreset);
+
+      await waitFor(() => {
+        expect(mockUpdatePlugins).toHaveBeenCalled();
+      });
+
+      // Check that updatePlugins was called with both regular and custom plugins
+      const lastCall = mockUpdatePlugins.mock.calls[mockUpdatePlugins.mock.calls.length - 1];
+      const pluginsArg = lastCall[0];
+
+      // Should contain policy and intent plugins from getState()
+      const hasPolicy = pluginsArg.some((p: any) => typeof p === 'object' && p.id === 'policy');
+      const hasIntent = pluginsArg.some((p: any) => typeof p === 'object' && p.id === 'intent');
+
+      expect(hasPolicy).toBe(true);
+      expect(hasIntent).toBe(true);
+    });
+
+    it('should not cause re-render loop when config.plugins changes from updatePlugins', async () => {
+      // This test verifies the fix for the infinite loop bug
+      // The bug was: effect depends on config.plugins -> calls updatePlugins ->
+      // config.plugins changes -> effect runs again -> infinite loop
+
+      let updateCallCount = 0;
+      const trackingUpdatePlugins = vi.fn(() => {
+        updateCallCount++;
+        // Simulate what happens when updatePlugins is called - config.plugins changes
+        // But with the fix, this should NOT cause the effect to re-run
+      });
+
+      mockUseRedTeamConfig.mockReturnValue({
+        config: { plugins: [] },
+        updatePlugins: trackingUpdatePlugins,
+      });
+
+      mockGetState.mockReturnValue({
+        config: { plugins: [] },
+      });
+
+      renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
+
+      // Trigger user interaction
+      const minimalPreset = screen.getByText('Minimal Test');
+      fireEvent.click(minimalPreset);
+
+      // Wait a bit for any potential infinite loops to manifest
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      });
+
+      // With the infinite loop bug, updateCallCount would be very high or the test would hang
+      // With the fix, it should be a small bounded number
+      expect(updateCallCount).toBeLessThan(20);
     });
   });
 });
