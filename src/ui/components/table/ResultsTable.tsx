@@ -15,6 +15,7 @@ import { useEffect, useMemo } from 'react';
 import { isRawModeSupported } from '../../hooks/useKeypress';
 import { CellDetailOverlay } from './CellDetailOverlay';
 import { filterRows, getFilterModeLabel, hasActiveFilter } from './filterUtils';
+import { SearchInput } from './SearchInput';
 import { TableHeader } from './TableHeader';
 import { TableRow } from './TableRow';
 import {
@@ -343,7 +344,17 @@ export function ResultsTable({
         {filteredRows.length > visibleEnd && (
           <Text dimColor>... {filteredRows.length - visibleEnd} more rows</Text>
         )}
-        <HelpText isCompact={true} />
+        {navigation.filter.isSearching ? (
+          <SearchInput
+            query={navigation.filter.searchQuery || ''}
+            isActive={navigation.filter.isSearching}
+            matchCount={filteredRows.length}
+            totalCount={processedRows.length}
+            dispatch={navigation.dispatch}
+          />
+        ) : (
+          <HelpText isCompact={true} />
+        )}
       </Box>
     );
   }
@@ -394,8 +405,19 @@ export function ResultsTable({
         />
       )}
 
-      {/* Help text */}
-      {isInteractive && <HelpText isCompact={false} />}
+      {/* Search input or help text */}
+      {isInteractive &&
+        (navigation.filter.isSearching ? (
+          <SearchInput
+            query={navigation.filter.searchQuery || ''}
+            isActive={navigation.filter.isSearching}
+            matchCount={filteredRows.length}
+            totalCount={processedRows.length}
+            dispatch={navigation.dispatch}
+          />
+        ) : (
+          <HelpText isCompact={false} />
+        ))}
     </Box>
   );
 }

@@ -220,6 +220,48 @@ describe('filterRows', () => {
       expect(result).toHaveLength(0);
     });
   });
+
+  describe('search state integration', () => {
+    it('filters correctly during active search', () => {
+      const filterState = createFilterState({
+        searchQuery: 'error',
+        isSearching: true, // Search is active
+      });
+      const result = filterRows(testRows, filterState);
+      expect(result).toHaveLength(1);
+      expect(result[0].index).toBe(2);
+    });
+
+    it('preserves original indices after search', () => {
+      const filterState = createFilterState({
+        searchQuery: 'fail',
+      });
+      const result = filterRows(testRows, filterState);
+      expect(result).toHaveLength(2);
+      // Original indices should be preserved
+      expect(result[0].index).toBe(1);
+      expect(result[1].index).toBe(4);
+    });
+
+    it('filters by partial match', () => {
+      const filterState = createFilterState({
+        searchQuery: 'res', // Partial match for 'result'
+      });
+      const result = filterRows(testRows, filterState);
+      // All rows contain 'res' in their content
+      expect(result).toHaveLength(5);
+    });
+
+    it('handles empty search query', () => {
+      const filterState = createFilterState({
+        searchQuery: '',
+        isSearching: true,
+      });
+      const result = filterRows(testRows, filterState);
+      // Empty query should match all (treated as null internally)
+      expect(result).toHaveLength(5);
+    });
+  });
 });
 
 describe('getFilterModeLabel', () => {

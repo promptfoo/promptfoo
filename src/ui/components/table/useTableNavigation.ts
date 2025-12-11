@@ -298,8 +298,27 @@ export function useTableNavigation({
   useKeypress(
     (keyInfo) => {
       const { name, key, shift } = keyInfo;
+      const currentState = stateRef.current;
 
-      // Navigation keys
+      // When in search mode, only handle escape to cancel
+      // (SearchInput handles other keys via useInput)
+      if (currentState.filter.isSearching) {
+        if (name === 'escape') {
+          dispatch({ type: 'CANCEL_SEARCH' });
+        }
+        // Don't process other keys - SearchInput handles them
+        return;
+      }
+
+      // When in command mode, only handle escape to cancel
+      if (currentState.filter.isCommandMode) {
+        if (name === 'escape') {
+          dispatch({ type: 'CANCEL_COMMAND' });
+        }
+        return;
+      }
+
+      // Navigation keys (only when not in search/command mode)
       switch (name) {
         case 'up':
           dispatch({ type: 'MOVE_UP' });
@@ -323,7 +342,7 @@ export function useTableNavigation({
           dispatch({ type: 'TOGGLE_EXPAND' });
           return;
         case 'escape':
-          if (stateRef.current.expandedCell) {
+          if (currentState.expandedCell) {
             dispatch({ type: 'CLOSE_EXPAND' });
           } else if (onExit) {
             onExit();
@@ -332,13 +351,6 @@ export function useTableNavigation({
       }
 
       // Letter keys (vim bindings and shortcuts)
-      // Use ref to get latest state and avoid stale closure issues
-      const currentState = stateRef.current;
-
-      // Don't process letter keys when in search or command mode
-      if (currentState.filter.isSearching || currentState.filter.isCommandMode) {
-        return;
-      }
 
       const lowerKey = key.toLowerCase();
       switch (lowerKey) {
