@@ -36,7 +36,6 @@ import { filterProviders } from './eval/filterProviders';
 import { filterTests } from './eval/filterTests';
 import { deleteErrorResults, getErrorResultIds, recalculatePromptMetrics } from './retry';
 import { notCloudEnabledShareInstructions } from './share';
-import { renderResultsTable } from '../ui/components/table/renderResultsTable';
 import { initInkEval, shouldUseInkUI } from '../ui/evalRunner';
 import type { Command } from 'commander';
 
@@ -603,50 +602,58 @@ export async function doEval(
         }
         const canShareInk = isSharingEnabled(evalRecord);
 
-        // Start sharing and wait briefly for it to complete
-        // If sharing is fast, user sees URL before transition
-        // If sharing is slow, transition anyway and show URL after table closes
+        // Start sharing in background (non-blocking)
         if (wantsToShareInk && canShareInk) {
           // Update UI to show sharing in progress
           inkResult.controller.setSharingStatus('sharing');
 
-          // Start sharing
+          // Start sharing in background - don't await
           pendingInkShare = createShareableUrl(evalRecord, false, { silent: true });
 
-          // Wait briefly for sharing to complete (allows quick shares to show URL)
-          // If it takes longer, we transition anyway - URL shown after table closes
-          const QUICK_SHARE_TIMEOUT_MS = 3000; // 3 second window for quick shares
-          const quickTimeout = new Promise<'timeout'>((resolve) =>
-            setTimeout(() => resolve('timeout'), QUICK_SHARE_TIMEOUT_MS),
-          );
+          // Handle share completion asynchronously - updates UI while table is visible
+          pendingInkShare
+            .then((url) => {
+              if (url) {
+                inkResult.controller.setSharingStatus('completed', url);
+                evalRecord.shared = true;
+              } else {
+                inkResult.controller.setSharingStatus('failed');
+              }
+            })
+            .catch((err) => {
+              logger.debug(`Share failed: ${err}`);
+              inkResult.controller.setSharingStatus('failed');
+            });
+        }
 
-          const result = await Promise.race([
-            pendingInkShare.then((url) => ({ type: 'url' as const, url })),
-            pendingInkShare.catch((err) => ({ type: 'error' as const, err })),
-            quickTimeout,
-          ]);
+        // Brief pause to show completion state
+        await new Promise((resolve) => setTimeout(resolve, 200));
 
-          if (result === 'timeout') {
-            // Sharing still in progress - continue to table, URL shown after
-            logger.debug('Sharing in progress, transitioning to results table');
-          } else if (result.type === 'url' && result.url) {
-            // Sharing completed quickly - show URL
-            inkResult.controller.setSharingStatus('completed', result.url);
-            evalRecord.shared = true;
-            // Brief pause to let user see the URL
-            await new Promise((resolve) => setTimeout(resolve, 800));
-          } else {
-            // Error or null result
-            inkResult.controller.setSharingStatus('failed');
-            logger.debug(`Share failed or returned null`);
+        // Transition to results table within the same Ink session
+        if (cmdObj.table && getLogLevel() !== 'debug') {
+          const table = await evalRecord.getTable();
+          if (table.body.length < 500) {
+            inkResult.controller.showResults(table);
+            // Wait for user to exit the results table
+            await inkResult.renderResult.waitUntilExit();
           }
-        } else {
-          // Brief pause for UI to show completion state when not sharing
-          await new Promise((resolve) => setTimeout(resolve, 200));
         }
       } finally {
         inkResult.cleanup();
         cliState.inkUI = false;
+      }
+
+      // Show share URL after table closes (if sharing was still in progress when user exited)
+      if (pendingInkShare && !evalRecord.shared) {
+        try {
+          const shareUrl = await pendingInkShare;
+          if (shareUrl) {
+            evalRecord.shared = true;
+            logger.info(`${chalk.green('✔')} Shared: ${chalk.cyan(shareUrl)}`);
+          }
+        } catch (err) {
+          logger.debug(`Share failed: ${err}`);
+        }
       }
     } else {
       // Use standard CLI output
@@ -741,40 +748,14 @@ export async function doEval(
     const totalTests = successes + failures + errors;
     const passRate = (successes / totalTests) * 100;
 
-    // Display results table
-    if (cmdObj.table && getLogLevel() !== 'debug' && totalTests < 500) {
+    // Display results table (non-Ink UI mode only - Ink UI handles table in unified session above)
+    if (!useInkUI && cmdObj.table && getLogLevel() !== 'debug' && totalTests < 500) {
       const table = await evalRecord.getTable();
-
-      if (useInkUI) {
-        // Use interactive Ink results table
-        await renderResultsTable(table, {
-          maxRows: 25,
-          maxCellLength: 250,
-          onExit: () => {
-            logger.debug('Results table closed');
-          },
-        });
-
-        // Show share URL (sharing happened in background while table was displayed)
-        if (pendingInkShare) {
-          try {
-            const shareUrl = await pendingInkShare;
-            if (shareUrl && !evalRecord.shared) {
-              evalRecord.shared = true;
-              logger.info(`${chalk.green('✔')} Shared: ${chalk.cyan(shareUrl)}`);
-            }
-          } catch (err) {
-            logger.debug(`Share failed: ${err}`);
-          }
-        }
-      } else {
-        // Use ASCII table for non-Ink UI mode
-        const outputTable = generateTable(table);
-        logger.info('\n' + outputTable.toString());
-        if (table.body.length > 25) {
-          const rowsLeft = table.body.length - 25;
-          logger.info(`... ${rowsLeft} more row${rowsLeft === 1 ? '' : 's'} not shown ...\n`);
-        }
+      const outputTable = generateTable(table);
+      logger.info('\n' + outputTable.toString());
+      if (table.body.length > 25) {
+        const rowsLeft = table.body.length - 25;
+        logger.info(`... ${rowsLeft} more row${rowsLeft === 1 ? '' : 's'} not shown ...\n`);
       }
     } else if (failures !== 0 && !useInkUI) {
       logger.debug(
@@ -786,19 +767,6 @@ export async function doEval(
 
     if (totalTests >= 500 && !useInkUI) {
       logger.info('Skipping table output because there are more than 500 tests.');
-    }
-
-    // Show share URL if Ink UI was used but table wasn't displayed
-    if (pendingInkShare && !evalRecord.shared) {
-      try {
-        const shareUrl = await pendingInkShare;
-        if (shareUrl) {
-          evalRecord.shared = true;
-          logger.info(`\n${chalk.green('✔')} Shared: ${chalk.cyan(shareUrl)}`);
-        }
-      } catch (err) {
-        logger.debug(`Share failed: ${err}`);
-      }
     }
 
     const { outputPath } = config;

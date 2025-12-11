@@ -7,6 +7,7 @@
 
 import React, { createContext, useCallback, useContext, useMemo, useReducer } from 'react';
 
+import type { EvaluateTable } from '../../types';
 import type { LogEntry } from '../utils/InkUITransport';
 
 // Re-export LogEntry for consumers
@@ -74,9 +75,15 @@ export interface EvalError {
 // Sharing status type
 export type SharingStatus = 'idle' | 'sharing' | 'completed' | 'failed';
 
+// Session phase - which view is currently shown
+export type SessionPhase = 'eval' | 'results';
+
 // Main state interface
 export interface EvalState {
-  // Overall progress
+  // Session phase - eval progress view or results table view
+  sessionPhase: SessionPhase;
+
+  // Overall eval progress
   phase: 'initializing' | 'loading' | 'evaluating' | 'grading' | 'completed' | 'error';
   totalTests: number;
   completedTests: number;
@@ -141,6 +148,9 @@ export interface EvalState {
   showVerbose: boolean;
   logs: LogEntry[];
   maxLogsToShow: number;
+
+  // Results table data (set when transitioning to results view)
+  tableData: EvaluateTable | null;
 }
 
 // Token usage type for updates
@@ -226,6 +236,8 @@ export type EvalAction =
     }
   | { type: 'SET_SHARE_URL'; payload: string }
   | { type: 'SET_SHARING_STATUS'; payload: { status: SharingStatus; url?: string } }
+  | { type: 'SET_SESSION_PHASE'; payload: SessionPhase }
+  | { type: 'SET_TABLE_DATA'; payload: EvaluateTable }
   | { type: 'TOGGLE_VERBOSE' }
   | { type: 'ADD_LOG'; payload: LogEntry }
   | { type: 'CLEAR_LOGS' };
@@ -246,6 +258,9 @@ function createEmptyProviderMetrics(id: string, label?: string): ProviderMetrics
 
 // Initial state
 const initialState: EvalState = {
+  // Session phase
+  sessionPhase: 'eval',
+  // Eval progress phase
   phase: 'initializing',
   totalTests: 0,
   completedTests: 0,
@@ -287,6 +302,8 @@ const initialState: EvalState = {
   showVerbose: false,
   logs: [],
   maxLogsToShow: 100,
+  // Results table data
+  tableData: null,
 };
 
 // Reducer function
@@ -650,6 +667,18 @@ function evalReducer(state: EvalState, action: EvalAction): EvalState {
         ...state,
         sharingStatus: action.payload.status,
         shareUrl: action.payload.url ?? state.shareUrl,
+      };
+
+    case 'SET_SESSION_PHASE':
+      return {
+        ...state,
+        sessionPhase: action.payload,
+      };
+
+    case 'SET_TABLE_DATA':
+      return {
+        ...state,
+        tableData: action.payload,
       };
 
     case 'TOGGLE_VERBOSE':

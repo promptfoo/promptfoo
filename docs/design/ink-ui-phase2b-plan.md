@@ -301,18 +301,36 @@ The transition from eval to table should feel like "zooming in" on the results:
 - ✅ Fixed duplicate sharing call (added `!pendingInkShare` check)
 - ✅ Org/team context displayed in Ink UI header
 - ✅ Progress bar suppressed in silent mode
+- ✅ **Unified session architecture** - Single Ink session for both eval and results
+
+### Unified Session Architecture
+The Ink UI now uses a single session that transitions from evaluation progress to results table, with a persistent sharing status header:
+
+**Key Changes:**
+1. `EvalApp.tsx` now conditionally renders `EvalScreen` OR `ResultsTable` based on `sessionPhase` state
+2. `SharingStatusHeader` component persists across both phases
+3. `EvalContext` manages `sessionPhase` ('eval' | 'results') and `tableData`
+4. `controller.showResults(table)` transitions from eval to results view
+5. No more separate `renderResultsTable()` call - everything stays in one Ink session
+6. `waitUntilExit()` is used to wait for user to close the results table
+
+**Benefits:**
+- Sharing status updates are visible in both eval and results phases
+- Smoother transition between phases (no Ink session teardown/restart)
+- Share URL appears immediately when available, even while viewing results
+- State is preserved across the transition
 
 ### Sharing Integration in Ink UI
 When sharing is enabled:
 1. Org context is fetched BEFORE the Ink UI renders
-2. "Sharing to: OrgName > TeamName" displays in the EvalScreen header
+2. "Sharing to: OrgName > TeamName" displays in the header (persists across phases)
 3. When eval completes:
    - Sharing status changes to 'sharing' (spinner appears)
    - Sharing starts in background (silent mode - no CLI progress bar)
-4. When sharing completes:
+4. When sharing completes (async, may happen while viewing results):
    - Status changes to 'completed' with URL: "✔ Shared: <url>"
    - Or 'failed' if error: "✗ Share failed"
-5. Results table displays immediately (no blocking)
+5. Results table displays immediately via `controller.showResults(table)`
 6. Share URL is also shown after user closes the results table (as backup)
 
 **Sharing Status States:**

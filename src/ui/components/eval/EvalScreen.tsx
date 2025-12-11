@@ -430,9 +430,7 @@ export function EvalScreen({
               <Text color="cyan">{state.shareUrl}</Text>
             </>
           ) : state.sharingStatus === 'failed' ? (
-            <>
-              <Text color="red">✗ Share failed</Text>
-            </>
+            <Text color="red">✗ Share failed</Text>
           ) : (
             <>
               <Text dimColor>Sharing to: </Text>

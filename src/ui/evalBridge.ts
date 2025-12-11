@@ -5,10 +5,16 @@
  * and the React state management in the Ink UI.
  */
 
-import type { EvaluateOptions, PromptMetrics, RunEvalOptions } from '../types/index';
+import type { EvaluateOptions, EvaluateTable, PromptMetrics, RunEvalOptions } from '../types/index';
 import type { TokenUsage } from '../types/shared';
 import { TokenUsageTracker } from '../util/tokenUsage';
-import type { EvalAction, LogEntry, SharingStatus, TokenMetricsPayload } from './contexts/EvalContext';
+import type {
+  EvalAction,
+  LogEntry,
+  SessionPhase,
+  SharingStatus,
+  TokenMetricsPayload,
+} from './contexts/EvalContext';
 
 /**
  * State for tracking deltas between progress callbacks for a single prompt.
@@ -294,6 +300,10 @@ export interface EvalUIController {
   setShareUrl: (url: string) => void;
   /** Set the sharing status (for background sharing progress) */
   setSharingStatus: (status: SharingStatus, url?: string) => void;
+  /** Set the session phase (transition between eval and results views) */
+  setSessionPhase: (phase: SessionPhase) => void;
+  /** Transition to results view with table data */
+  showResults: (tableData: EvaluateTable) => void;
 }
 
 /**
@@ -345,6 +355,15 @@ export function createEvalUIController(dispatch: React.Dispatch<EvalAction>): Ev
 
     setSharingStatus: (status: SharingStatus, url?: string) => {
       dispatch({ type: 'SET_SHARING_STATUS', payload: { status, url } });
+    },
+
+    setSessionPhase: (phase: SessionPhase) => {
+      dispatch({ type: 'SET_SESSION_PHASE', payload: phase });
+    },
+
+    showResults: (tableData: EvaluateTable) => {
+      dispatch({ type: 'SET_TABLE_DATA', payload: tableData });
+      dispatch({ type: 'SET_SESSION_PHASE', payload: 'results' });
     },
   };
 }
