@@ -204,6 +204,95 @@ function StatusBar({
 }
 
 /**
+ * Calculate summary statistics from rows.
+ */
+export function calculateSummaryStats(rows: TableRowData[]): {
+  passCount: number;
+  failCount: number;
+  errorCount: number;
+  totalTests: number;
+  avgScore: number | null;
+} {
+  let passCount = 0;
+  let failCount = 0;
+  let errorCount = 0;
+  let totalScore = 0;
+  let scoreCount = 0;
+
+  for (const row of rows) {
+    for (const cell of row.cells) {
+      if (cell.status === 'pass') {
+        passCount++;
+      } else if (cell.status === 'fail') {
+        failCount++;
+      } else if (cell.status === 'error') {
+        errorCount++;
+      }
+
+      // Calculate average score from output data
+      if (cell.output?.score !== undefined) {
+        totalScore += cell.output.score;
+        scoreCount++;
+      }
+    }
+  }
+
+  return {
+    passCount,
+    failCount,
+    errorCount,
+    totalTests: passCount + failCount + errorCount,
+    avgScore: scoreCount > 0 ? totalScore / scoreCount : null,
+  };
+}
+
+/**
+ * Summary statistics footer showing aggregate stats.
+ */
+function SummaryStatsFooter({ rows, isFiltered }: { rows: TableRowData[]; isFiltered: boolean }) {
+  const stats = useMemo(() => calculateSummaryStats(rows), [rows]);
+
+  // Only show if there are actual results
+  if (stats.totalTests === 0) {
+    return null;
+  }
+
+  const passRate =
+    stats.totalTests > 0 ? ((stats.passCount / stats.totalTests) * 100).toFixed(0) : '0';
+
+  return (
+    <Box marginTop={1} borderStyle="single" borderColor="gray" paddingX={1}>
+      <Text dimColor>{isFiltered ? 'Filtered' : 'Total'}: </Text>
+      <Text color="green">{stats.passCount}✓</Text>
+      <Text dimColor> </Text>
+      <Text color="red">{stats.failCount}✗</Text>
+      {stats.errorCount > 0 && (
+        <>
+          <Text dimColor> </Text>
+          <Text color="yellow">{stats.errorCount}⚠</Text>
+        </>
+      )}
+      <Text dimColor> │ </Text>
+      <Text dimColor>Pass rate: </Text>
+      <Text
+        color={parseInt(passRate) >= 80 ? 'green' : parseInt(passRate) >= 50 ? 'yellow' : 'red'}
+      >
+        {passRate}%
+      </Text>
+      {stats.avgScore !== null && (
+        <>
+          <Text dimColor> │ </Text>
+          <Text dimColor>Avg score: </Text>
+          <Text color={stats.avgScore >= 0.8 ? 'green' : stats.avgScore >= 0.5 ? 'yellow' : 'red'}>
+            {(stats.avgScore * 100).toFixed(1)}%
+          </Text>
+        </>
+      )}
+    </Box>
+  );
+}
+
+/**
  * Main ResultsTable component.
  */
 export function ResultsTable({
@@ -430,6 +519,9 @@ export function ResultsTable({
           visibleEnd={visibleEnd}
         />
       )}
+
+      {/* Summary statistics footer */}
+      <SummaryStatsFooter rows={filteredRows} isFiltered={hasActiveFilter(navigation.filter)} />
 
       {/* Search input, command input, or help text */}
       {isInteractive &&
