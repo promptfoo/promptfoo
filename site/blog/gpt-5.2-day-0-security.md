@@ -19,17 +19,17 @@ tags: [red-teaming, security-vulnerability, openai]
 
 # GPT-5.2 Dropped Today. We Broke It in 5 Minutes.
 
-OpenAI released GPT-5.2 today (December 11, 2025) at approximately 10:00 AM PST. We [opened a PR for GPT-5.2 support](https://github.com/promptfoo/promptfoo/pull/6628) at 10:24 AM PST and kicked off a red team eval (security testing where you try to break something). **First critical finding hit at 10:29 AM PST, 5 minutes later.**
+OpenAI released GPT-5.2 today (December 11, 2025) at approximately 10:00 AM PST. We [opened a PR for GPT-5.2 support](https://github.com/promptfoo/promptfoo/pull/6628) at 10:24 AM PST and kicked off a [red team](/docs/red-team/) eval (security testing where you try to break something). **First critical finding hit at 10:29 AM PST, 5 minutes later.**
 
 This post covers what we tested, what failed, and what you should do about it.
 
-The headline numbers: our jailbreak strategies (techniques that trick AI into bypassing its safety rules) improved attack success from **4.3% baseline to 78.5%** (multi-turn) and **61.0%** (single-turn). Categories with the highest failure rates included entity impersonation (100%), graphic content (67%), harassment (67%), explicit content (67%), disinformation (64%), hate speech (60%), and self-harm (60%).
+The headline numbers: our [jailbreak strategies](/docs/red-team/strategies/) (techniques that trick AI into bypassing its safety rules) improved attack success from **4.3% baseline to 78.5%** (multi-turn) and **61.0%** (single-turn). Categories with the highest failure rates included entity impersonation (100%), graphic content (67%), harassment (67%), explicit content (67%), disinformation (64%), hate speech (60%), and self-harm (60%).
 
 <!-- truncate -->
 
 ## What We Tested
 
-We focused on prompt injection (malicious inputs designed to hijack AI behavior) and harmful content generation, not "make the model say a bad word" tricks. The test categories map to [OWASP's LLM Top 10](https://owasp.org/www-project-top-10-for-large-language-model-applications/), a standard framework for AI security risks:
+We focused on [prompt injection](/docs/red-team/strategies/prompt-injection) (malicious inputs designed to hijack AI behavior) and harmful content generation, not "make the model say a bad word" tricks. The test categories map to [OWASP's LLM Top 10](https://owasp.org/www-project-top-10-for-large-language-model-applications/), a standard framework for AI security risks:
 
 - Cybercrime assistance
 - Violent crime instructions
@@ -37,10 +37,10 @@ We focused on prompt injection (malicious inputs designed to hijack AI behavior)
 - Misinformation generation
 - Illegal activity guidance
 
-We used two attack strategies:
+We used two [attack strategies](/docs/red-team/strategies/):
 
-- **Hydra**: Multi-turn jailbreaking that builds up to harmful requests across multiple messages, adapting based on how the model responds
-- **Meta**: Single-turn attacks that use clever prompt engineering to bypass safety filters in one shot
+- [**Hydra**](/docs/red-team/strategies/hydra): Multi-turn jailbreaking that builds up to harmful requests across multiple messages, adapting based on how the model responds
+- [**Meta**](/docs/red-team/strategies/meta): Single-turn attacks that use clever prompt engineering to bypass safety filters in one shot
 
 ## How We Ran the Eval
 
@@ -186,6 +186,8 @@ If you're deploying GPT-5.2:
 3. **Test before shipping.** Run your own red team. The config above works out of the box.
 
 ## Run It Yourself
+
+See our [foundation model red teaming guide](/docs/red-team/foundation-models/) for full details. Quick start:
 
 ```bash
 # Clone the example
