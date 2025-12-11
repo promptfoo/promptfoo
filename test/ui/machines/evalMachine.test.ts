@@ -203,7 +203,10 @@ describe('evalMachine', () => {
       actor.send({ type: 'INIT', providers: ['gpt-4'], totalTests: 5 });
       actor.send({ type: 'START' });
       actor.send({ type: 'COMPLETE', passed: 5, failed: 0, errors: 0 });
-      actor.send({ type: 'SHOW_RESULTS', tableData: { head: { prompts: [], vars: [] }, body: [] } });
+      actor.send({
+        type: 'SHOW_RESULTS',
+        tableData: { head: { prompts: [], vars: [] }, body: [] },
+      });
 
       expect(actor.getSnapshot().value).toBe('results');
       actor.stop();
@@ -310,6 +313,141 @@ describe('evalMachine', () => {
       expect(ctx.providers['gpt-4'].tokens.completion).toBe(50);
       expect(ctx.totalTokens).toBe(150);
       expect(ctx.totalRequests).toBe(5);
+      actor.stop();
+    });
+  });
+
+  describe('BATCH_PROGRESS event', () => {
+    it('should process multiple progress items in a single update', () => {
+      const actor = createActor(evalMachine);
+      actor.start();
+      actor.send({ type: 'INIT', providers: ['gpt-4', 'claude'], totalTests: 10 });
+      actor.send({ type: 'START' });
+
+      // Send a batch of progress items
+      actor.send({
+        type: 'BATCH_PROGRESS',
+        items: [
+          {
+            provider: 'gpt-4',
+            passedDelta: 1,
+            failedDelta: 0,
+            errorDelta: 0,
+            latencyMs: 100,
+            cost: 0.001,
+            completed: 1,
+            total: 10,
+          },
+          {
+            provider: 'claude',
+            passedDelta: 0,
+            failedDelta: 1,
+            errorDelta: 0,
+            latencyMs: 200,
+            cost: 0.002,
+            completed: 2,
+            total: 10,
+          },
+          {
+            provider: 'gpt-4',
+            passedDelta: 0,
+            failedDelta: 0,
+            errorDelta: 1,
+            latencyMs: 50,
+            cost: 0.0005,
+            completed: 3,
+            total: 10,
+          },
+        ],
+      });
+
+      const ctx = actor.getSnapshot().context;
+
+      // Verify aggregates
+      expect(ctx.passedTests).toBe(1);
+      expect(ctx.failedTests).toBe(1);
+      expect(ctx.errorCount).toBe(1);
+      expect(ctx.totalCost).toBeCloseTo(0.0035, 6);
+      expect(ctx.completedTests).toBe(3);
+
+      // Verify per-provider stats
+      expect(ctx.providers['gpt-4'].testCases.passed).toBe(1);
+      expect(ctx.providers['gpt-4'].testCases.errors).toBe(1);
+      expect(ctx.providers['gpt-4'].cost).toBeCloseTo(0.0015, 6);
+      expect(ctx.providers['gpt-4'].latency.count).toBe(2);
+
+      expect(ctx.providers['claude'].testCases.failed).toBe(1);
+      expect(ctx.providers['claude'].cost).toBeCloseTo(0.002, 6);
+      expect(ctx.providers['claude'].latency.count).toBe(1);
+      expect(ctx.providers['claude'].latency.totalMs).toBe(200);
+
+      actor.stop();
+    });
+
+    it('should accumulate cost correctly across multiple batches', () => {
+      const actor = createActor(evalMachine);
+      actor.start();
+      actor.send({ type: 'INIT', providers: ['gpt-4'], totalTests: 5 });
+      actor.send({ type: 'START' });
+
+      // First batch
+      actor.send({
+        type: 'BATCH_PROGRESS',
+        items: [
+          {
+            provider: 'gpt-4',
+            passedDelta: 1,
+            failedDelta: 0,
+            errorDelta: 0,
+            latencyMs: 100,
+            cost: 0.01,
+            completed: 1,
+            total: 5,
+          },
+        ],
+      });
+
+      // Second batch
+      actor.send({
+        type: 'BATCH_PROGRESS',
+        items: [
+          {
+            provider: 'gpt-4',
+            passedDelta: 1,
+            failedDelta: 0,
+            errorDelta: 0,
+            latencyMs: 150,
+            cost: 0.02,
+            completed: 2,
+            total: 5,
+          },
+        ],
+      });
+
+      const ctx = actor.getSnapshot().context;
+      expect(ctx.totalCost).toBeCloseTo(0.03, 6);
+      expect(ctx.providers['gpt-4'].cost).toBeCloseTo(0.03, 6);
+      expect(ctx.providers['gpt-4'].latency.totalMs).toBe(250);
+      expect(ctx.providers['gpt-4'].latency.count).toBe(2);
+      expect(ctx.providers['gpt-4'].latency.minMs).toBe(100);
+      expect(ctx.providers['gpt-4'].latency.maxMs).toBe(150);
+
+      actor.stop();
+    });
+
+    it('should handle empty batch gracefully', () => {
+      const actor = createActor(evalMachine);
+      actor.start();
+      actor.send({ type: 'INIT', providers: ['gpt-4'], totalTests: 5 });
+      actor.send({ type: 'START' });
+
+      const beforeCtx = actor.getSnapshot().context;
+      actor.send({ type: 'BATCH_PROGRESS', items: [] });
+      const afterCtx = actor.getSnapshot().context;
+
+      expect(afterCtx.passedTests).toBe(beforeCtx.passedTests);
+      expect(afterCtx.totalCost).toBe(beforeCtx.totalCost);
+
       actor.stop();
     });
   });

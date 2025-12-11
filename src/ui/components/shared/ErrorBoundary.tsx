@@ -53,9 +53,7 @@ function DefaultFallback({
       )}
 
       <Box marginTop={1}>
-        <Text dimColor>
-          The UI encountered an error. Your evaluation results are safe.
-        </Text>
+        <Text dimColor>The UI encountered an error. Your evaluation results are safe.</Text>
       </Box>
 
       <Box marginTop={1}>
@@ -94,11 +92,14 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo): void {
     // Log error details
-    logger.error(`[ErrorBoundary] UI error caught${this.props.componentName ? ` in ${this.props.componentName}` : ''}`, {
-      error: error.message,
-      stack: error.stack,
-      componentStack: errorInfo.componentStack,
-    });
+    logger.error(
+      `[ErrorBoundary] UI error caught${this.props.componentName ? ` in ${this.props.componentName}` : ''}`,
+      {
+        error: error.message,
+        stack: error.stack,
+        componentStack: errorInfo.componentStack,
+      },
+    );
 
     // Update state with error info
     this.setState({ errorInfo });
@@ -116,12 +117,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
         return this.props.fallback;
       }
 
-      return (
-        <DefaultFallback
-          error={this.state.error}
-          componentName={this.props.componentName}
-        />
-      );
+      return <DefaultFallback error={this.state.error} componentName={this.props.componentName} />;
     }
 
     return this.props.children;
@@ -140,7 +136,9 @@ export function withErrorBoundary<P extends object>(
   WrappedComponent: React.ComponentType<P>,
   componentName?: string,
 ): React.FC<P & { onBoundaryError?: (error: Error, errorInfo: React.ErrorInfo) => void }> {
-  const WithErrorBoundary: React.FC<P & { onBoundaryError?: (error: Error, errorInfo: React.ErrorInfo) => void }> = (props) => {
+  const WithErrorBoundary: React.FC<
+    P & { onBoundaryError?: (error: Error, errorInfo: React.ErrorInfo) => void }
+  > = (props) => {
     const { onBoundaryError, ...rest } = props;
     return (
       <ErrorBoundary componentName={componentName} onError={onBoundaryError}>

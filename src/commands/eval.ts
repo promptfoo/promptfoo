@@ -553,6 +553,9 @@ export async function doEval(
         shareContext = await getOrgContext();
       }
 
+      // Create abort controller for user cancellation via 'q' key
+      const inkAbortController = new AbortController();
+
       const inkResult = await initInkEval({
         title: config.description || 'Evaluation',
         evaluateOptions: {
@@ -560,13 +563,20 @@ export async function doEval(
           // Disable CLI progress bar - Ink UI has its own progress display
           showProgressBar: false,
           eventSource: 'cli',
-          abortSignal: evaluateOptions.abortSignal,
+          // Combine any existing abort signal with our UI abort controller
+          abortSignal: evaluateOptions.abortSignal
+            ? AbortSignal.any([evaluateOptions.abortSignal, inkAbortController.signal])
+            : inkAbortController.signal,
           isRedteam: Boolean(config.redteam),
         },
         testSuite,
         shareContext,
         onCancel: () => {
-          logger.info('Evaluation cancelled by user');
+          logger.debug('Evaluation cancelled by user - aborting');
+          inkAbortController.abort();
+          // Force exit since the evaluator may have pending async work
+          // Exit code 130 = 128 + SIGINT (2), standard for user cancellation
+          process.exit(130);
         },
       });
 
@@ -579,7 +589,7 @@ export async function doEval(
         const providerIds = testSuite.providers.map((p) =>
           typeof p === 'string' ? p : p.label || p.id?.() || 'unknown',
         );
-        inkResult.controller.init(totalTestsPerProvider, providerIds);
+        inkResult.controller.init(totalTestsPerProvider, providerIds, maxConcurrency);
         inkResult.controller.start();
 
         // Run evaluation with Ink progress callback
@@ -630,9 +640,11 @@ export async function doEval(
         await new Promise((resolve) => setTimeout(resolve, 200));
 
         // Transition to results table within the same Ink session
+        // Virtual scrolling handles large tables efficiently (only renders ~25 rows at a time)
+        // The 10,000 row limit is a safety bound for extremely large evals
         if (cmdObj.table && getLogLevel() !== 'debug') {
           const table = await evalRecord.getTable();
-          if (table.body.length < 500) {
+          if (table.body.length < 10000) {
             inkResult.controller.showResults(table);
             // Wait for user to exit the results table
             await inkResult.renderResult.waitUntilExit();
@@ -1153,9 +1165,14 @@ export function evalCommand(
     .option(
       '-j, --max-concurrency <number>',
       `Maximum number of concurrent API calls (default: ${DEFAULT_MAX_CONCURRENCY})`,
+      (val) => Number.parseInt(val, 10),
     )
-    .option('--repeat <number>', 'Number of times to run each test (default: 1)')
-    .option('--delay <number>', 'Delay between each test (in milliseconds) (default: 0)')
+    .option('--repeat <number>', 'Number of times to run each test (default: 1)', (val) =>
+      Number.parseInt(val, 10),
+    )
+    .option('--delay <number>', 'Delay between each test (in milliseconds) (default: 0)', (val) =>
+      Number.parseInt(val, 10),
+    )
     .option(
       '--no-cache',
       'Do not read or write results to disk cache',

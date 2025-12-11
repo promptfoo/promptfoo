@@ -480,8 +480,9 @@ export async function runEval({
     invariant(ret.tokenUsage, 'This is always defined, just doing this to shut TS up');
 
     // Track token usage at the provider level
+    // Use label (if available) to match state machine provider keys in Ink UI
     if (response.tokenUsage) {
-      const providerId = provider.id();
+      const providerId = provider.label || provider.id();
       const trackingId = provider.constructor?.name
         ? `${providerId} (${provider.constructor.name})`
         : providerId;

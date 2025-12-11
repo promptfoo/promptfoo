@@ -37,6 +37,13 @@ export interface ProviderMetrics {
     total: number;
     reasoning: number;
   };
+  gradingTokens: {
+    prompt: number;
+    completion: number;
+    cached: number;
+    total: number;
+    reasoning: number;
+  };
   cost: number;
   latency: {
     totalMs: number;
@@ -44,6 +51,8 @@ export interface ProviderMetrics {
     minMs: number;
     maxMs: number;
   };
+  /** Timestamp (ms) of last activity for this provider - used for multi-provider activity highlighting */
+  lastActivityMs: number;
   status: 'pending' | 'running' | 'completed' | 'error';
   currentTest?: string;
   lastError?: string;
@@ -157,7 +166,11 @@ export type EvalMachineEvent =
       passedDelta?: number;
       failedDelta?: number;
       errorDelta?: number;
+      // Merged from TEST_RESULT for efficiency (reduces dispatches per test)
+      latencyMs?: number;
+      cost?: number;
     }
+  // TEST_RESULT kept for backwards compatibility but PROGRESS should be preferred
   | {
       type: 'TEST_RESULT';
       providerId: string;
@@ -167,6 +180,20 @@ export type EvalMachineEvent =
       latencyMs?: number;
       cost?: number;
     }
+  // Batched progress updates for high-concurrency performance
+  | {
+      type: 'BATCH_PROGRESS';
+      items: Array<{
+        provider: string;
+        passedDelta: number;
+        failedDelta: number;
+        errorDelta: number;
+        latencyMs: number;
+        cost: number;
+        completed: number;
+        total: number;
+      }>;
+    }
   | {
       type: 'UPDATE_TOKENS';
       providerId: string;
@@ -174,6 +201,7 @@ export type EvalMachineEvent =
     }
   | {
       type: 'SET_GRADING_TOKENS';
+      providerId: string;
       tokens: GradingTokens;
     }
   | {
@@ -206,8 +234,10 @@ function createEmptyProviderMetrics(id: string): ProviderMetrics {
     testCases: { total: 0, completed: 0, passed: 0, failed: 0, errors: 0 },
     requests: { total: 0, cached: 0 },
     tokens: { prompt: 0, completion: 0, cached: 0, total: 0, reasoning: 0 },
+    gradingTokens: { prompt: 0, completion: 0, cached: 0, total: 0, reasoning: 0 },
     cost: 0,
     latency: { totalMs: 0, count: 0, minMs: Infinity, maxMs: 0 },
+    lastActivityMs: 0,
     status: 'pending',
   };
 }
@@ -292,31 +322,66 @@ export const evalMachine = setup({
       startTime: () => Date.now(),
     }),
 
-    // Update progress
+    // Update progress (merged with TEST_RESULT for efficiency - single dispatch per test)
     updateProgress: assign(({ context, event }) => {
       if (event.type !== 'PROGRESS') {
         return context;
       }
 
-      const { completed, total, provider, prompt, vars, passedDelta = 0, failedDelta = 0, errorDelta = 0 } = event;
+      const {
+        completed,
+        total,
+        provider,
+        prompt,
+        vars,
+        passedDelta = 0,
+        failedDelta = 0,
+        errorDelta = 0,
+        latencyMs = 0,
+        cost = 0,
+      } = event;
 
       // Update provider status if specified
       let providers = context.providers;
+      let totalCost = context.totalCost;
+      const now = Date.now();
+
       if (provider && providers[provider]) {
+        const currentProvider = providers[provider];
+        const currentLatency = currentProvider.latency;
+
+        // Update cost and latency along with test counts (merged from updateTestResult)
+        const newCost = currentProvider.cost + cost;
+        const newLatency =
+          latencyMs > 0
+            ? {
+                totalMs: currentLatency.totalMs + latencyMs,
+                count: currentLatency.count + 1,
+                minMs: Math.min(currentLatency.minMs, latencyMs),
+                maxMs: Math.max(currentLatency.maxMs, latencyMs),
+              }
+            : currentLatency;
+
         providers = {
           ...providers,
           [provider]: {
-            ...providers[provider],
+            ...currentProvider,
             status: 'running' as const,
+            lastActivityMs: now, // Track activity timestamp for multi-provider highlighting
+            cost: newCost,
+            latency: newLatency,
             testCases: {
-              ...providers[provider].testCases,
-              completed: providers[provider].testCases.completed + 1,
-              passed: providers[provider].testCases.passed + (passedDelta > 0 ? 1 : 0),
-              failed: providers[provider].testCases.failed + (failedDelta > 0 ? 1 : 0),
-              errors: providers[provider].testCases.errors + (errorDelta > 0 ? 1 : 0),
+              ...currentProvider.testCases,
+              completed: currentProvider.testCases.completed + 1,
+              passed: currentProvider.testCases.passed + (passedDelta > 0 ? 1 : 0),
+              failed: currentProvider.testCases.failed + (failedDelta > 0 ? 1 : 0),
+              errors: currentProvider.testCases.errors + (errorDelta > 0 ? 1 : 0),
             },
           },
         };
+
+        // Update total cost
+        totalCost += cost;
 
         // Check if provider is complete
         if (providers[provider].testCases.completed >= providers[provider].testCases.total) {
@@ -337,6 +402,7 @@ export const evalMachine = setup({
         passedTests: context.passedTests + passedDelta,
         failedTests: context.failedTests + failedDelta,
         errorCount: context.errorCount + errorDelta,
+        totalCost,
         currentProvider: provider ?? context.currentProvider,
         currentPrompt: prompt ?? context.currentPrompt,
         currentVars: vars ?? context.currentVars,
@@ -344,13 +410,114 @@ export const evalMachine = setup({
       };
     }),
 
-    // Update test result metrics
+    // Process batched progress updates efficiently
+    // All items in the batch are processed in a single state update
+    processBatchProgress: assign(({ context, event }) => {
+      if (event.type !== 'BATCH_PROGRESS') {
+        return context;
+      }
+
+      const { items } = event;
+      if (items.length === 0) {
+        return context;
+      }
+
+      // Accumulate changes across all items
+      let providers = context.providers;
+      let totalCost = context.totalCost;
+      let passedTests = context.passedTests;
+      let failedTests = context.failedTests;
+      let errorCount = context.errorCount;
+      let completedTests = context.completedTests;
+      let totalTests = context.totalTests;
+      const now = Date.now();
+
+      for (const item of items) {
+        const {
+          provider,
+          passedDelta,
+          failedDelta,
+          errorDelta,
+          latencyMs,
+          cost,
+          completed,
+          total,
+        } = item;
+
+        // Update aggregates
+        passedTests += passedDelta;
+        failedTests += failedDelta;
+        errorCount += errorDelta;
+        completedTests = Math.max(completedTests, completed);
+        totalTests = Math.max(totalTests, total);
+        totalCost += cost;
+
+        // Update provider if specified
+        if (provider && providers[provider]) {
+          const currentProvider = providers[provider];
+          const currentLatency = currentProvider.latency;
+
+          const newCost = currentProvider.cost + cost;
+          const newLatency =
+            latencyMs > 0
+              ? {
+                  totalMs: currentLatency.totalMs + latencyMs,
+                  count: currentLatency.count + 1,
+                  minMs: Math.min(currentLatency.minMs, latencyMs),
+                  maxMs: Math.max(currentLatency.maxMs, latencyMs),
+                }
+              : currentLatency;
+
+          providers = {
+            ...providers,
+            [provider]: {
+              ...currentProvider,
+              status: 'running' as const,
+              lastActivityMs: now,
+              cost: newCost,
+              latency: newLatency,
+              testCases: {
+                ...currentProvider.testCases,
+                completed: currentProvider.testCases.completed + 1,
+                passed: currentProvider.testCases.passed + (passedDelta > 0 ? 1 : 0),
+                failed: currentProvider.testCases.failed + (failedDelta > 0 ? 1 : 0),
+                errors: currentProvider.testCases.errors + (errorDelta > 0 ? 1 : 0),
+              },
+            },
+          };
+
+          // Check if provider is complete
+          if (providers[provider].testCases.completed >= providers[provider].testCases.total) {
+            providers = {
+              ...providers,
+              [provider]: {
+                ...providers[provider],
+                status: 'completed' as const,
+              },
+            };
+          }
+        }
+      }
+
+      return {
+        ...context,
+        completedTests,
+        totalTests,
+        passedTests,
+        failedTests,
+        errorCount,
+        totalCost,
+        providers,
+      };
+    }),
+
+    // Update test result metrics (cost and latency only - pass/fail/error counts are handled by updateProgress)
     updateTestResult: assign(({ context, event }) => {
       if (event.type !== 'TEST_RESULT') {
         return context;
       }
 
-      const { providerId, passed, failed, error, latencyMs, cost } = event;
+      const { providerId, latencyMs, cost } = event;
       const provider = context.providers[providerId];
 
       if (!provider) {
@@ -377,12 +544,6 @@ export const evalMachine = setup({
             ...provider,
             cost: provider.cost + (cost ?? 0),
             latency,
-            testCases: {
-              ...provider.testCases,
-              passed: provider.testCases.passed + (passed ? 1 : 0),
-              failed: provider.testCases.failed + (failed ? 1 : 0),
-              errors: provider.testCases.errors + (error ? 1 : 0),
-            },
           },
         },
       };
@@ -407,7 +568,8 @@ export const evalMachine = setup({
         promptTokens: context.promptTokens + tokens.prompt - provider.tokens.prompt,
         completionTokens: context.completionTokens + tokens.completion - provider.tokens.completion,
         cachedTokens: context.cachedTokens + tokens.cached - provider.tokens.cached,
-        reasoningTokens: context.reasoningTokens + (tokens.reasoning ?? 0) - provider.tokens.reasoning,
+        reasoningTokens:
+          context.reasoningTokens + (tokens.reasoning ?? 0) - provider.tokens.reasoning,
         totalRequests: context.totalRequests + tokens.numRequests - provider.requests.total,
         providers: {
           ...context.providers,
@@ -429,14 +591,44 @@ export const evalMachine = setup({
       };
     }),
 
-    // Set grading tokens
+    // Update grading tokens with delta calculation (similar to updateTokens)
     setGradingTokens: assign(({ context, event }) => {
       if (event.type !== 'SET_GRADING_TOKENS') {
         return context;
       }
+
+      const { providerId, tokens } = event;
+      const provider = context.providers[providerId];
+
+      if (!provider) {
+        return context;
+      }
+
+      // Delta calculation: new_total = current_total + (new_provider_value - old_provider_value)
+      const prevGrading = provider.gradingTokens;
+
       return {
         ...context,
-        gradingTokens: event.tokens,
+        gradingTokens: {
+          total: context.gradingTokens.total + tokens.total - prevGrading.total,
+          prompt: context.gradingTokens.prompt + tokens.prompt - prevGrading.prompt,
+          completion: context.gradingTokens.completion + tokens.completion - prevGrading.completion,
+          cached: context.gradingTokens.cached + tokens.cached - prevGrading.cached,
+          reasoning: context.gradingTokens.reasoning + tokens.reasoning - prevGrading.reasoning,
+        },
+        providers: {
+          ...context.providers,
+          [providerId]: {
+            ...provider,
+            gradingTokens: {
+              prompt: tokens.prompt,
+              completion: tokens.completion,
+              cached: tokens.cached,
+              total: tokens.total,
+              reasoning: tokens.reasoning,
+            },
+          },
+        },
       };
     }),
 
@@ -582,6 +774,9 @@ export const evalMachine = setup({
       on: {
         PROGRESS: {
           actions: 'updateProgress',
+        },
+        BATCH_PROGRESS: {
+          actions: 'processBatchProgress',
         },
         TEST_RESULT: {
           actions: 'updateTestResult',

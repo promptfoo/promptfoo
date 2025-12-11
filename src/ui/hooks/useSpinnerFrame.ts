@@ -45,7 +45,9 @@ export interface UseSpinnerFrameOptions {
  * ```
  */
 export function useSpinnerFrame(options: UseSpinnerFrameOptions = {}): string {
-  const { type = 'dots', frames: customFrames, interval = 80, active = true } = options;
+  // Default interval increased from 80ms to 120ms to reduce render frequency
+  // while maintaining smooth visual animation (8.3 fps vs 12.5 fps)
+  const { type = 'dots', frames: customFrames, interval = 120, active = true } = options;
 
   const frames = customFrames || SPINNER_FRAMES[type];
   const [frameIndex, setFrameIndex] = useState(0);

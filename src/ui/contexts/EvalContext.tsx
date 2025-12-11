@@ -111,7 +111,7 @@ export interface EvalState {
 // Action types for backwards compatibility with old reducer pattern
 // These get converted to XState events internally
 export type EvalAction =
-  | { type: 'INIT'; payload: { totalTests: number; providers: string[] } }
+  | { type: 'INIT'; payload: { totalTests: number; providers: string[]; concurrency?: number } }
   | { type: 'START' }
   | { type: 'SET_PHASE'; payload: EvalState['phase'] }
   | {
@@ -124,6 +124,25 @@ export type EvalAction =
         vars?: string;
         passed?: boolean;
         error?: string;
+        // Merged from TEST_RESULT for efficiency
+        latencyMs?: number;
+        cost?: number;
+      };
+    }
+  | {
+      // Batched progress updates for high-concurrency performance
+      // Multiple test completions are queued and flushed together
+      type: 'BATCH_PROGRESS';
+      payload: {
+        items: Array<{
+          provider: string;
+          passed: boolean;
+          error: boolean;
+          latencyMs: number;
+          cost: number;
+          completed: number;
+          total: number;
+        }>;
       };
     }
   | {
@@ -172,7 +191,7 @@ export type EvalAction =
   | { type: 'SET_CONCURRENCY'; payload: number }
   | {
       type: 'SET_GRADING_TOKENS';
-      payload: GradingTokens;
+      payload: { providerId: string; tokens: GradingTokens };
     }
   | { type: 'SET_SHARE_URL'; payload: string }
   | { type: 'SET_SHARING_STATUS'; payload: { status: SharingStatus; url?: string } }
@@ -244,13 +263,15 @@ function actionToEvent(action: EvalAction): EvalMachineEvent | null {
         type: 'INIT',
         providers: action.payload.providers,
         totalTests: action.payload.totalTests,
+        concurrency: action.payload.concurrency,
       };
 
     case 'START':
       return { type: 'START' };
 
     case 'PROGRESS': {
-      const { completed, total, provider, prompt, vars, passed, error } = action.payload;
+      const { completed, total, provider, prompt, vars, passed, error, latencyMs, cost } =
+        action.payload;
       return {
         type: 'PROGRESS',
         completed,
@@ -259,8 +280,31 @@ function actionToEvent(action: EvalAction): EvalMachineEvent | null {
         prompt,
         vars,
         passedDelta: passed === true ? 1 : 0,
-        failedDelta: passed === false ? 1 : 0,
+        // Fix: Only count as failure if not a pass AND not an error
+        // Previously errors were double-counted as both failures AND errors
+        failedDelta: passed === false && !error ? 1 : 0,
         errorDelta: error ? 1 : 0,
+        // Merged from TEST_RESULT for efficiency
+        latencyMs,
+        cost,
+      };
+    }
+
+    case 'BATCH_PROGRESS': {
+      // Convert batch items to XState format with delta calculations
+      const items = action.payload.items.map((item) => ({
+        provider: item.provider,
+        passedDelta: item.passed ? 1 : 0,
+        failedDelta: !item.passed && !item.error ? 1 : 0,
+        errorDelta: item.error ? 1 : 0,
+        latencyMs: item.latencyMs,
+        cost: item.cost,
+        completed: item.completed,
+        total: item.total,
+      }));
+      return {
+        type: 'BATCH_PROGRESS',
+        items,
       };
     }
 
@@ -285,7 +329,8 @@ function actionToEvent(action: EvalAction): EvalMachineEvent | null {
     case 'SET_GRADING_TOKENS':
       return {
         type: 'SET_GRADING_TOKENS',
-        tokens: action.payload,
+        providerId: action.payload.providerId,
+        tokens: action.payload.tokens,
       };
 
     case 'ADD_ERROR':

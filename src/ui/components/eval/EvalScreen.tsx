@@ -6,7 +6,7 @@
  */
 
 import { Box, Text, useApp } from 'ink';
-import { useEffect, useRef } from 'react';
+import React, { memo, useEffect, useRef, useState } from 'react';
 import { useEval, useEvalState } from '../../contexts/EvalContext';
 import { useCompactMode } from '../../contexts/UIContext';
 import { useNavigationKeys } from '../../hooks/useKeypress';
@@ -47,18 +47,32 @@ export interface EvalScreenProps {
 // Column widths for consistent alignment
 const COL_WIDTH = {
   status: 2,
-  provider: 22,
-  progress: 14,
-  results: 15, // Increased to fit pass/fail/error counts
-  tokens: 10,
-  cost: 9,
-  latency: 7,
+  provider: 20,
+  progress: 18, // Needs space for bar[8] + brackets[2] + space[1] + count[9] = 20, but we use shorter notation
+  results: 14,
+  tokens: 8,
+  cost: 8,
+  latency: 6,
 };
 
 /**
- * Table header row.
+ * Activity threshold in milliseconds.
+ * Providers with activity within this window are considered "active" and highlighted.
+ * This enables multi-provider activity highlighting with high concurrency.
  */
-function TableHeader() {
+const ACTIVITY_THRESHOLD_MS = 500;
+
+/**
+ * TICK interval during evaluation (ms).
+ * Faster = smoother activity indicators but more re-renders.
+ * 250ms provides smooth visual feedback without excessive CPU usage.
+ */
+const TICK_INTERVAL_MS = 250;
+
+/**
+ * Table header row (memoized - never changes).
+ */
+const TableHeader = memo(function TableHeader() {
   return (
     <Box>
       <Box width={COL_WIDTH.status} />
@@ -82,20 +96,12 @@ function TableHeader() {
       </Box>
     </Box>
   );
-}
+});
 
 /**
- * Single provider row with all metrics.
+ * Props for ProviderRow component.
  */
-function ProviderRow({
-  label,
-  testCases,
-  tokens,
-  cost,
-  latency,
-  status,
-  isActive,
-}: {
+interface ProviderRowProps {
   label: string;
   testCases: { total: number; completed: number; passed: number; failed: number; errors: number };
   tokens: { total: number };
@@ -103,92 +109,154 @@ function ProviderRow({
   latency: { totalMs: number; count: number };
   status: string;
   isActive: boolean;
-}) {
-  const progressPercent =
-    testCases.total > 0
-      ? Math.min(100, Math.round((testCases.completed / testCases.total) * 100))
-      : 0;
-
-  // Status indicator - differentiate between failures and errors
-  // ✓ green = completed with all passes
-  // ✗ red = has failures (assertion failures)
-  // ⚠ yellow = has only errors (API/infrastructure errors), no failures
-  // ● cyan = currently running
-  // ○ dim = pending
-  const hasFailures = testCases.failed > 0;
-  const hasErrors = testCases.errors > 0;
-
-  let statusIcon: React.ReactNode;
-  if (status === 'completed' || status === 'error') {
-    if (hasFailures) {
-      statusIcon = <Text color="red">✗</Text>;
-    } else if (hasErrors) {
-      statusIcon = <Text color="yellow">⚠</Text>;
-    } else {
-      statusIcon = <Text color="green">✓</Text>;
-    }
-  } else if (isActive) {
-    statusIcon = <Text color="cyan">●</Text>;
-  } else {
-    statusIcon = <Text dimColor>○</Text>;
-  }
-
-  return (
-    <Box>
-      {/* Status icon */}
-      <Box width={COL_WIDTH.status}>{statusIcon}</Box>
-
-      {/* Provider name */}
-      <Box width={COL_WIDTH.provider}>
-        <Text color={isActive ? 'cyan' : undefined}>{truncate(label, COL_WIDTH.provider - 2)}</Text>
-      </Box>
-
-      {/* Progress bar with percentage */}
-      <Box width={COL_WIDTH.progress}>
-        <ProgressBar
-          value={progressPercent}
-          max={100}
-          width={8}
-          showPercentage={false}
-          color={status === 'completed' ? 'green' : 'cyan'}
-        />
-        <Text dimColor>
-          {' '}
-          {testCases.completed}/{testCases.total}
-        </Text>
-      </Box>
-
-      {/* Pass/fail/error counts - marginLeft adds gap after progress column */}
-      <Box width={COL_WIDTH.results} marginLeft={2}>
-        {/* Passes - always show */}
-        <Text color="green">{testCases.passed}✓</Text>
-        {/* Failures - red if any, dim otherwise */}
-        {hasFailures ? (
-          <Text color="red"> {testCases.failed}✗</Text>
-        ) : (
-          testCases.completed > 0 && <Text dimColor> 0✗</Text>
-        )}
-        {/* Errors - yellow/orange if any, hide if zero */}
-        {hasErrors && <Text color="yellow"> {testCases.errors}⚠</Text>}
-      </Box>
-
-      {/* Tokens */}
-      <Box width={COL_WIDTH.tokens}>
-        <Text dimColor>{tokens.total > 0 ? formatTokens(tokens.total) : '-'}</Text>
-      </Box>
-
-      {/* Cost */}
-      <Box width={COL_WIDTH.cost}>
-        <Text dimColor>{cost > 0 ? formatCost(cost) : '-'}</Text>
-      </Box>
-
-      {/* Average latency */}
-      <Box width={COL_WIDTH.latency}>
-        <Text dimColor>{formatAvgLatency(latency.totalMs, latency.count)}</Text>
-      </Box>
-    </Box>
-  );
 }
+
+/**
+ * Single provider row with all metrics.
+ * Memoized to prevent unnecessary re-renders when props haven't changed.
+ */
+const ProviderRow = memo(
+  function ProviderRow({
+    label,
+    testCases,
+    tokens,
+    cost,
+    latency,
+    status,
+    isActive,
+  }: ProviderRowProps) {
+    const progressPercent =
+      testCases.total > 0
+        ? Math.min(100, Math.round((testCases.completed / testCases.total) * 100))
+        : 0;
+
+    // Status indicator - differentiate between failures and errors
+    // ✓ green = completed with all passes
+    // ✗ red = has failures (assertion failures)
+    // ⚠ yellow = has only errors (API/infrastructure errors), no failures
+    // ● cyan = currently running
+    // ○ dim = pending
+    const hasFailures = testCases.failed > 0;
+    const hasErrors = testCases.errors > 0;
+
+    let statusIcon: React.ReactNode;
+    if (status === 'completed' || status === 'error') {
+      if (hasFailures) {
+        statusIcon = <Text color="red">✗</Text>;
+      } else if (hasErrors) {
+        statusIcon = <Text color="yellow">⚠</Text>;
+      } else {
+        statusIcon = <Text color="green">✓</Text>;
+      }
+    } else if (isActive) {
+      statusIcon = <Text color="cyan">●</Text>;
+    } else {
+      statusIcon = <Text dimColor>○</Text>;
+    }
+
+    return (
+      <Box>
+        {/* Status icon */}
+        <Box width={COL_WIDTH.status}>{statusIcon}</Box>
+
+        {/* Provider name */}
+        <Box width={COL_WIDTH.provider}>
+          <Text color={isActive ? 'cyan' : undefined}>
+            {truncate(label, COL_WIDTH.provider - 2)}
+          </Text>
+        </Box>
+
+        {/* Progress bar with count */}
+        <Box width={COL_WIDTH.progress}>
+          <ProgressBar
+            value={progressPercent}
+            max={100}
+            width={6}
+            showPercentage={false}
+            color={status === 'completed' ? 'green' : 'cyan'}
+          />
+          <Text dimColor>
+            {' '}
+            {testCases.completed}/{testCases.total}
+          </Text>
+        </Box>
+
+        {/* Pass/fail/error counts - marginLeft adds gap after progress column */}
+        <Box width={COL_WIDTH.results} marginLeft={2}>
+          {/* Passes - always show */}
+          <Text color="green">{testCases.passed}✓</Text>
+          {/* Failures - red if any, dim otherwise */}
+          {hasFailures ? (
+            <Text color="red"> {testCases.failed}✗</Text>
+          ) : (
+            testCases.completed > 0 && <Text dimColor> 0✗</Text>
+          )}
+          {/* Errors - yellow/orange if any, hide if zero */}
+          {hasErrors && <Text color="yellow"> {testCases.errors}⚠</Text>}
+        </Box>
+
+        {/* Tokens */}
+        <Box width={COL_WIDTH.tokens}>
+          <Text dimColor>{tokens.total > 0 ? formatTokens(tokens.total) : '-'}</Text>
+        </Box>
+
+        {/* Cost */}
+        <Box width={COL_WIDTH.cost}>
+          <Text dimColor>{cost > 0 ? formatCost(cost) : '-'}</Text>
+        </Box>
+
+        {/* Average latency */}
+        <Box width={COL_WIDTH.latency}>
+          <Text dimColor>{formatAvgLatency(latency.totalMs, latency.count)}</Text>
+        </Box>
+      </Box>
+    );
+  },
+  // Custom comparison: only re-render if meaningful props changed
+  (prevProps, nextProps) => {
+    // Quick reference checks first
+    if (prevProps.label !== nextProps.label) {
+      return false;
+    }
+    if (prevProps.status !== nextProps.status) {
+      return false;
+    }
+    if (prevProps.isActive !== nextProps.isActive) {
+      return false;
+    }
+    if (prevProps.cost !== nextProps.cost) {
+      return false;
+    }
+
+    // Check testCases (most frequently changing)
+    const prevTC = prevProps.testCases;
+    const nextTC = nextProps.testCases;
+    if (
+      prevTC.total !== nextTC.total ||
+      prevTC.completed !== nextTC.completed ||
+      prevTC.passed !== nextTC.passed ||
+      prevTC.failed !== nextTC.failed ||
+      prevTC.errors !== nextTC.errors
+    ) {
+      return false;
+    }
+
+    // Check tokens
+    if (prevProps.tokens.total !== nextProps.tokens.total) {
+      return false;
+    }
+
+    // Check latency
+    if (
+      prevProps.latency.totalMs !== nextProps.latency.totalMs ||
+      prevProps.latency.count !== nextProps.latency.count
+    ) {
+      return false;
+    }
+
+    return true; // Props are equal, skip re-render
+  },
+);
 
 /**
  * Compact summary line showing aggregate stats.
@@ -319,6 +387,10 @@ export function EvalScreen({
   const completeCalled = useRef(false);
   const isRawModeSupported = process.stdin.isTTY && typeof process.stdin.setRawMode === 'function';
 
+  // Stabilized timestamp for activity detection - only updates on TICK
+  // This prevents spurious re-renders from other state changes (like spinner updates)
+  const [activityNow, setActivityNow] = useState(Date.now);
+
   // Check if we're in results phase - if so, ResultsTable handles keyboard input
   const inResultsPhase = state.sessionPhase === 'results';
 
@@ -373,7 +445,7 @@ export function EvalScreen({
     };
   }, [dispatch, exit, onExit, isRawModeSupported, state.showVerbose, inResultsPhase]);
 
-  // Update elapsed time while running
+  // Update elapsed time while running (also triggers activity indicator refresh)
   useEffect(() => {
     if (state.phase !== 'evaluating' && state.phase !== 'grading') {
       return;
@@ -381,7 +453,9 @@ export function EvalScreen({
 
     const timer = setInterval(() => {
       dispatch({ type: 'TICK' });
-    }, 1000);
+      // Update activity timestamp on each TICK for stable activity detection
+      setActivityNow(Date.now());
+    }, TICK_INTERVAL_MS);
 
     return () => clearInterval(timer);
   }, [state.phase, dispatch]);
@@ -393,9 +467,6 @@ export function EvalScreen({
       onComplete?.();
     }
   }, [isComplete, onComplete]);
-
-  // Get current provider for activity indicator
-  const currentProvider = state.currentProvider;
 
   return (
     <Box
@@ -470,6 +541,13 @@ export function EvalScreen({
             if (!provider) {
               return null;
             }
+            // Compute isActive based on timestamp - providers with recent activity are highlighted
+            // This enables multi-provider highlighting when running with high concurrency
+            // Uses activityNow (updated on TICK) to prevent spurious re-renders
+            const isActive =
+              provider.status === 'running' &&
+              provider.lastActivityMs > 0 &&
+              activityNow - provider.lastActivityMs < ACTIVITY_THRESHOLD_MS;
             return (
               <ProviderRow
                 key={id}
@@ -479,7 +557,7 @@ export function EvalScreen({
                 cost={provider.cost}
                 latency={provider.latency}
                 status={provider.status}
-                isActive={currentProvider === id}
+                isActive={isActive}
               />
             );
           })}
