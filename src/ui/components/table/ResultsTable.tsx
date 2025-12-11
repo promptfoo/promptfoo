@@ -429,6 +429,8 @@ export function ResultsTable({
         <VarDetailOverlay
           varName={varName}
           content={varContent}
+          rowIndex={rowData.index}
+          totalRows={filteredRows.length}
           onNavigate={(direction) => {
             navigation.dispatch({ type: 'NAVIGATE_EXPANDED', direction });
           }}
@@ -456,6 +458,7 @@ export function ResultsTable({
           column={column}
           rowData={rowData}
           varNames={data.head.vars}
+          totalRows={filteredRows.length}
           onNavigate={(direction) => {
             navigation.dispatch({ type: 'NAVIGATE_EXPANDED', direction });
           }}

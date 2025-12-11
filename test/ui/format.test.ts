@@ -8,6 +8,8 @@ import {
   formatRate,
   formatTokens,
   truncate,
+  calculateETA,
+  formatETA,
 } from '../../src/ui/utils/format';
 
 describe('Format Utilities', () => {
@@ -149,6 +151,73 @@ describe('Format Utilities', () => {
     it('should calculate and format average', () => {
       expect(formatAvgLatency(1000, 2)).toBe('500ms');
       expect(formatAvgLatency(5000, 5)).toBe('1.0s');
+    });
+  });
+
+  describe('calculateETA', () => {
+    it('should return null when completed is 0', () => {
+      expect(calculateETA(0, 100, 5000)).toBeNull();
+    });
+
+    it('should return null when total is 0', () => {
+      expect(calculateETA(50, 0, 5000)).toBeNull();
+    });
+
+    it('should return null when elapsed is 0', () => {
+      expect(calculateETA(50, 100, 0)).toBeNull();
+    });
+
+    it('should return 0 when completed equals total', () => {
+      expect(calculateETA(100, 100, 5000)).toBe(0);
+    });
+
+    it('should return 0 when completed exceeds total', () => {
+      expect(calculateETA(150, 100, 5000)).toBe(0);
+    });
+
+    it('should calculate ETA based on throughput', () => {
+      // 50 completed in 5000ms = 10ms per item
+      // 50 remaining = 500ms expected
+      const eta = calculateETA(50, 100, 5000);
+      expect(eta).toBe(5000); // 50 remaining at same rate
+    });
+
+    it('should calculate ETA for different progress rates', () => {
+      // 25 completed in 1000ms = 40ms per item
+      // 75 remaining = 3000ms expected
+      const eta = calculateETA(25, 100, 1000);
+      expect(eta).toBe(3000);
+    });
+
+    it('should return null for extremely long ETAs (over 24 hours)', () => {
+      // 1 completed in 1 hour = 24 hours for 24 more
+      // But 100 total would be 99 hours remaining - should return null
+      const eta = calculateETA(1, 100, 3600000); // 1 hour elapsed
+      expect(eta).toBeNull();
+    });
+  });
+
+  describe('formatETA', () => {
+    it('should return empty string for null', () => {
+      expect(formatETA(null)).toBe('');
+    });
+
+    it('should return empty string for 0', () => {
+      expect(formatETA(0)).toBe('');
+    });
+
+    it('should format seconds remaining', () => {
+      expect(formatETA(5000)).toBe('~5.0s left');
+      expect(formatETA(30000)).toBe('~30s left');
+    });
+
+    it('should format minutes remaining', () => {
+      expect(formatETA(90000)).toBe('~1m 30s left');
+      expect(formatETA(300000)).toBe('~5m left');
+    });
+
+    it('should format hours remaining', () => {
+      expect(formatETA(3660000)).toBe('~1h 1m left');
     });
   });
 });

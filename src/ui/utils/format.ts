@@ -160,3 +160,77 @@ export function formatAvgLatency(totalMs: number, count: number): string {
   }
   return formatLatency(totalMs / count);
 }
+
+/**
+ * Set the terminal title using ANSI escape sequences.
+ * Works on most modern terminals (iTerm2, Terminal.app, xterm, etc.)
+ *
+ * @param title - The title to display in the terminal tab/window
+ */
+export function setTerminalTitle(title: string): void {
+  // Only set title if we're in a TTY
+  if (process.stdout.isTTY) {
+    // \x1b]0; sets both icon name and window title
+    // \x07 is the bell character that terminates the sequence
+    process.stdout.write(`\x1b]0;${title}\x07`);
+  }
+}
+
+/**
+ * Clear the terminal title (reset to default).
+ */
+export function clearTerminalTitle(): void {
+  if (process.stdout.isTTY) {
+    // Setting an empty title restores the default
+    process.stdout.write('\x1b]0;\x07');
+  }
+}
+
+/**
+ * Calculate estimated time remaining based on progress.
+ *
+ * @param completed - Number of completed items
+ * @param total - Total number of items
+ * @param elapsedMs - Elapsed time in milliseconds
+ * @returns Estimated remaining time in milliseconds, or null if cannot calculate
+ */
+export function calculateETA(completed: number, total: number, elapsedMs: number): number | null {
+  // Need at least some progress and time elapsed to estimate
+  if (completed === 0 || elapsedMs === 0 || total === 0) {
+    return null;
+  }
+
+  // Don't show ETA if already complete
+  if (completed >= total) {
+    return 0;
+  }
+
+  // Calculate throughput and estimate remaining time
+  const throughput = completed / elapsedMs; // items per ms
+  const remaining = total - completed;
+  const etaMs = remaining / throughput;
+
+  // Only return ETA if it seems reasonable (not too long)
+  // Cap at 24 hours to avoid unrealistic estimates
+  if (etaMs > 24 * 60 * 60 * 1000) {
+    return null;
+  }
+
+  return etaMs;
+}
+
+/**
+ * Format ETA for display.
+ *
+ * @param etaMs - Estimated time remaining in milliseconds, or null
+ * @returns Formatted string (e.g., "~2m 30s left") or empty string if no ETA
+ */
+export function formatETA(etaMs: number | null): string {
+  if (etaMs === null) {
+    return '';
+  }
+  if (etaMs === 0) {
+    return '';
+  }
+  return `~${formatDuration(etaMs)} left`;
+}

@@ -195,39 +195,35 @@ export function navigationReducer(
         expandedCell: { row: state.selectedRow, col: state.selectedCol },
       };
 
-    case 'CLOSE_EXPAND':
-      return { ...state, expandedCell: null };
+    case 'CLOSE_EXPAND': {
+      // Center selected row in visible area when closing overlay
+      // This prevents jarring scroll jumps when returning to table view
+      const halfVisible = Math.floor(visibleRows / 2);
+      const idealOffset = state.selectedRow - halfVisible;
+      const maxOffset = Math.max(0, rowCount - visibleRows);
+      const newOffset = Math.max(0, Math.min(maxOffset, idealOffset));
+      return { ...state, expandedCell: null, scrollOffset: newOffset };
+    }
 
     case 'NAVIGATE_EXPANDED': {
       // Navigate while keeping detail view open
-      // Skip index column if present
+      // NOTE: scrollOffset is intentionally NOT updated here.
+      // The table is not visible during overlay mode, so tracking scroll is pointless.
+      // CLOSE_EXPAND will center the selected row when returning to table view.
       const maxCol = colCount - 1;
       const maxRow = rowCount - 1;
 
       let newRow = state.selectedRow;
       let newCol = state.selectedCol;
-      let newOffset = state.scrollOffset;
 
       switch (action.direction) {
         case 'up':
           // Wrap to last row if at first row
           newRow = state.selectedRow > 0 ? state.selectedRow - 1 : maxRow;
-          if (newRow < newOffset) {
-            newOffset = newRow;
-          } else if (newRow >= newOffset + visibleRows) {
-            // Wrapped to bottom, adjust scroll
-            newOffset = Math.max(0, newRow - visibleRows + 1);
-          }
           break;
         case 'down':
           // Wrap to first row if at last row
           newRow = state.selectedRow < maxRow ? state.selectedRow + 1 : 0;
-          if (newRow >= newOffset + visibleRows) {
-            newOffset = newRow - visibleRows + 1;
-          } else if (newRow < newOffset) {
-            // Wrapped to top, adjust scroll
-            newOffset = 0;
-          }
           break;
         case 'left':
           if (state.selectedCol > minCol) {
@@ -237,11 +233,6 @@ export function navigationReducer(
             // At leftmost valid column, wrap to last column of previous row
             newCol = maxCol;
             newRow = state.selectedRow > 0 ? state.selectedRow - 1 : maxRow;
-            if (newRow < newOffset) {
-              newOffset = newRow;
-            } else if (newRow >= newOffset + visibleRows) {
-              newOffset = Math.max(0, newRow - visibleRows + 1);
-            }
           }
           break;
         case 'right':
@@ -252,11 +243,6 @@ export function navigationReducer(
             // At rightmost column, wrap to first valid column of next row
             newCol = minCol;
             newRow = state.selectedRow < maxRow ? state.selectedRow + 1 : 0;
-            if (newRow >= newOffset + visibleRows) {
-              newOffset = newRow - visibleRows + 1;
-            } else if (newRow < newOffset) {
-              newOffset = 0;
-            }
           }
           break;
       }
@@ -265,7 +251,6 @@ export function navigationReducer(
         ...state,
         selectedRow: newRow,
         selectedCol: newCol,
-        scrollOffset: newOffset,
         expandedCell: { row: newRow, col: newCol },
       };
     }

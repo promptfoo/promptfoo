@@ -17,6 +17,10 @@ import {
   formatTokens,
   formatAvgLatency,
   truncate,
+  setTerminalTitle,
+  clearTerminalTitle,
+  calculateETA,
+  formatETA,
 } from '../../utils/format';
 import { setInkUITransportLevel } from '../../utils/InkUITransport';
 import { HelpBar } from './HelpBar';
@@ -460,6 +464,33 @@ export function EvalScreen({
     return () => clearInterval(timer);
   }, [state.phase, dispatch]);
 
+  // Calculate completed tests and ETA for display
+  const completedTests = state.passedTests + state.failedTests + state.errorCount;
+  const etaMs = calculateETA(completedTests, state.totalTests, state.elapsedMs);
+  const etaDisplay = formatETA(etaMs);
+
+  // Update terminal title with progress during evaluation
+  useEffect(() => {
+    if (state.phase !== 'evaluating' && state.phase !== 'grading') {
+      clearTerminalTitle();
+      return;
+    }
+
+    const percent =
+      state.totalTests > 0 ? Math.round((completedTests / state.totalTests) * 100) : 0;
+    const titleParts = [`promptfoo: ${completedTests}/${state.totalTests} (${percent}%)`];
+
+    // Add ETA to title if available
+    if (etaDisplay) {
+      titleParts.push(etaDisplay);
+    }
+
+    setTerminalTitle(titleParts.join(' - '));
+
+    // Clear title on unmount
+    return () => clearTerminalTitle();
+  }, [state.phase, completedTests, state.totalTests, etaDisplay]);
+
   // Call onComplete when done
   useEffect(() => {
     if (isComplete && !completeCalled.current) {
@@ -476,7 +507,7 @@ export function EvalScreen({
       paddingX={1}
       paddingY={0}
     >
-      {/* Header: Title + Status + Concurrency */}
+      {/* Header: Title + Status + Concurrency + ETA */}
       <Box>
         <Text bold>{title || 'Evaluation'}</Text>
         <Box flexGrow={1} />
@@ -487,6 +518,7 @@ export function EvalScreen({
         </Text>
         {state.elapsedMs > 0 && <Text dimColor> ({formatDuration(state.elapsedMs)})</Text>}
         {state.concurrency > 1 && <Text dimColor> ×{state.concurrency}</Text>}
+        {isRunning && etaDisplay && <Text color="yellow"> · {etaDisplay}</Text>}
       </Box>
 
       {/* Share context - show org/team and sharing status */}

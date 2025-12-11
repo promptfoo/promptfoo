@@ -248,6 +248,7 @@ export function CellDetailOverlay({
   column,
   rowData,
   varNames,
+  totalRows,
   onNavigate,
   onClose: _onClose,
 }: CellDetailOverlayProps) {
@@ -314,7 +315,10 @@ export function CellDetailOverlay({
       {/* Header */}
       <Box justifyContent="space-between">
         <Text bold>Cell Details</Text>
-        <Text dimColor>{onNavigate && '←↑↓→ nav | '}[q] close</Text>
+        <Text dimColor>
+          Row {rowData.index + 1}/{totalRows}
+          {onNavigate && ' | ←↑↓→ nav'} | [q] close
+        </Text>
       </Box>
 
       <Divider width={contentWidth} char="═" />
@@ -489,6 +493,10 @@ export interface VarDetailOverlayProps {
   varName: string;
   /** Variable content */
   content: string;
+  /** Current row index (0-based) */
+  rowIndex: number;
+  /** Total number of rows (for displaying position context) */
+  totalRows: number;
   /** Handler for navigating to adjacent cells */
   onNavigate?: (direction: 'up' | 'down' | 'left' | 'right') => void;
   /** Handler to close the overlay */
@@ -501,6 +509,8 @@ export interface VarDetailOverlayProps {
 export function VarDetailOverlay({
   varName,
   content,
+  rowIndex,
+  totalRows,
   onNavigate,
   onClose: _onClose,
 }: VarDetailOverlayProps) {
@@ -562,7 +572,10 @@ export function VarDetailOverlay({
     >
       <Box justifyContent="space-between">
         <Text bold>{varName}</Text>
-        <Text dimColor>{onNavigate && '←↑↓→ nav | '}[q] close</Text>
+        <Text dimColor>
+          Row {rowIndex + 1}/{totalRows}
+          {onNavigate && ' | ←↑↓→ nav'} | [q] close
+        </Text>
       </Box>
       <Box marginTop={1}>
         <Text wrap="wrap">{content || '(empty)'}</Text>

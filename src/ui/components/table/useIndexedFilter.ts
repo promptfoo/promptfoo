@@ -53,7 +53,9 @@ function buildFilterIndices(data: EvaluateTable): FilterIndices {
 
     row.outputs.forEach((output) => {
       const status = getCellStatus(output.pass, output.failureReason);
-      statusSet.add(status);
+      if (status) {
+        statusSet.add(status);
+      }
 
       if (status === 'pass') {
         hasPass = true;

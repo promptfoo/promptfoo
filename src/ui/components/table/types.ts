@@ -229,6 +229,8 @@ export interface CellDetailOverlayProps {
   rowData: TableRowData;
   /** Variable names from table head */
   varNames: string[];
+  /** Total number of rows (for displaying position context) */
+  totalRows: number;
   /** Handler for navigating to adjacent cells */
   onNavigate?: (direction: 'up' | 'down' | 'left' | 'right') => void;
   onClose: () => void;
