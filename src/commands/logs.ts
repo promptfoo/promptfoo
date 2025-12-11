@@ -235,7 +235,34 @@ export function logsCommand(program: Command) {
         },
       ) => {
         try {
+          // Validate --type option
+          const validTypes = ['debug', 'error', 'all'] as const;
+          if (!validTypes.includes(cmdObj.type as LogType)) {
+            logger.error(
+              `Invalid log type: ${cmdObj.type}. Must be one of: ${validTypes.join(', ')}`,
+            );
+            process.exitCode = 1;
+            return;
+          }
           const logType = cmdObj.type as LogType;
+
+          // Validate numeric options
+          if (cmdObj.lines) {
+            const lineCount = parseInt(cmdObj.lines, 10);
+            if (isNaN(lineCount) || lineCount <= 0) {
+              logger.error('--lines must be a positive number');
+              process.exitCode = 1;
+              return;
+            }
+          }
+          if (cmdObj.head) {
+            const headCount = parseInt(cmdObj.head, 10);
+            if (isNaN(headCount) || headCount <= 0) {
+              logger.error('--head must be a positive number');
+              process.exitCode = 1;
+              return;
+            }
+          }
 
           // Handle list mode
           if (cmdObj.list) {
@@ -306,6 +333,12 @@ export function logsCommand(program: Command) {
     .description('List available log files')
     .option('--type <type>', 'Log type: debug, error, or all', 'all')
     .action(async (cmdObj: { type: string }) => {
+      const validTypes = ['debug', 'error', 'all'] as const;
+      if (!validTypes.includes(cmdObj.type as LogType)) {
+        logger.error(`Invalid log type: ${cmdObj.type}. Must be one of: ${validTypes.join(', ')}`);
+        process.exitCode = 1;
+        return;
+      }
       await listLogFiles(cmdObj.type as LogType);
     });
 }

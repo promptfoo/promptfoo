@@ -18,9 +18,8 @@ export interface LogFileInfo {
  */
 export function getLogDirectory(): string {
   const configDir = getConfigDirectoryPath(true);
-  return getEnvString('PROMPTFOO_LOG_DIR')
-    ? path.resolve(getEnvString('PROMPTFOO_LOG_DIR')!)
-    : path.join(configDir, 'logs');
+  const customLogDir = getEnvString('PROMPTFOO_LOG_DIR');
+  return customLogDir ? path.resolve(customLogDir) : path.join(configDir, 'logs');
 }
 
 /**
@@ -49,7 +48,8 @@ export function getLogFiles(type: 'debug' | 'error' | 'all' = 'all'): LogFileInf
       .map((file): LogFileInfo => {
         const filePath = path.join(logDir, file);
         const stats = fs.statSync(filePath);
-        const logType: 'debug' | 'error' = file.includes('-debug-') ? 'debug' : 'error';
+        // Explicitly check for error type first, default to debug
+        const logType: 'debug' | 'error' = file.includes('-error-') ? 'error' : 'debug';
         return {
           name: file,
           path: filePath,
@@ -101,7 +101,7 @@ export function formatFileSize(bytes: number): string {
   if (bytes === 0) {
     return '0 B';
   }
-  const units = ['B', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(1024));
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
   return `${(bytes / Math.pow(1024, i)).toFixed(i > 0 ? 1 : 0)} ${units[i]}`;
 }

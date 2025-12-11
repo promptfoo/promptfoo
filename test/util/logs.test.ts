@@ -244,5 +244,14 @@ describe('util/logs', () => {
     it('formats gigabytes', () => {
       expect(formatFileSize(1024 * 1024 * 1024)).toBe('1.0 GB');
     });
+
+    it('formats terabytes', () => {
+      expect(formatFileSize(1024 * 1024 * 1024 * 1024)).toBe('1.0 TB');
+    });
+
+    it('handles very large files without overflow', () => {
+      // 10 PB - should cap at TB
+      expect(formatFileSize(10 * 1024 * 1024 * 1024 * 1024 * 1024)).toBe('10240.0 TB');
+    });
   });
 });
