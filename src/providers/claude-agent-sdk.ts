@@ -19,6 +19,7 @@ import type {
   HookEvent,
   Options as QueryOptions,
   OutputFormat,
+  SandboxSettings,
   SettingSource,
 } from '@anthropic-ai/claude-agent-sdk';
 
@@ -218,6 +219,84 @@ export interface ClaudeCodeOptions {
    * @see https://docs.anthropic.com/en/api/beta-headers
    */
   betas?: 'context-1m-2025-08-07'[];
+
+  /**
+   * Sandbox settings for command execution isolation.
+   * When enabled, commands are executed in a sandboxed environment that restricts
+   * filesystem and network access. This provides an additional security layer.
+   *
+   * @example Enable sandboxing with auto-allow
+   * ```yaml
+   * sandbox:
+   *   enabled: true
+   *   autoAllowBashIfSandboxed: true
+   * ```
+   *
+   * @example Configure network options
+   * ```yaml
+   * sandbox:
+   *   enabled: true
+   *   network:
+   *     allowLocalBinding: true
+   *     allowedDomains:
+   *       - api.example.com
+   * ```
+   *
+   * @see https://docs.anthropic.com/en/docs/claude-code/settings#sandbox-settings
+   */
+  sandbox?: SandboxSettings;
+
+  /**
+   * Must be set to true when using permission_mode: 'bypassPermissions'.
+   * This is a safety measure to ensure intentional bypassing of permissions.
+   */
+  allow_dangerously_skip_permissions?: boolean;
+
+  /**
+   * MCP tool name to use for permission prompts. When set, permission requests
+   * will be routed through this MCP tool instead of the default handler.
+   */
+  permission_prompt_tool_name?: string;
+
+  /**
+   * Callback for stderr output from the Claude Code process.
+   * Useful for debugging and logging.
+   *
+   * Note: This option is only available when using the provider programmatically,
+   * not via YAML config.
+   */
+  stderr?: (data: string) => void;
+
+  /**
+   * JavaScript runtime to use for executing Claude Code.
+   * Auto-detected if not specified.
+   */
+  executable?: 'bun' | 'deno' | 'node';
+
+  /**
+   * Additional arguments to pass to the JavaScript runtime executable.
+   */
+  executable_args?: string[];
+
+  /**
+   * Additional CLI arguments to pass to Claude Code.
+   * Keys are argument names (without --), values are argument values.
+   * Use null for boolean flags.
+   *
+   * @example
+   * ```yaml
+   * extra_args:
+   *   verbose: null  # Adds --verbose flag
+   *   timeout: "30"  # Adds --timeout 30
+   * ```
+   */
+  extra_args?: Record<string, string | null>;
+
+  /**
+   * Path to the Claude Code executable. Uses the built-in executable if not specified.
+   * Useful for testing with custom builds or specific versions.
+   */
+  path_to_claude_code_executable?: string;
 }
 
 export class ClaudeCodeSDKProvider implements ApiProvider {
@@ -328,6 +407,16 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       throw new Error('Cannot specify both custom_allowed_tools and append_allowed_tools');
     }
 
+    // Validate that bypassPermissions mode requires the safety flag
+    if (
+      config.permission_mode === 'bypassPermissions' &&
+      !config.allow_dangerously_skip_permissions
+    ) {
+      throw new Error(
+        "permission_mode 'bypassPermissions' requires allow_dangerously_skip_permissions: true as a safety measure",
+      );
+    }
+
     // De-dupe and sort allowed/disallowed tools for cache key consistency
     const defaultAllowedTools = config.working_dir ? FS_READONLY_ALLOWED_TOOLS : [];
 
@@ -355,7 +444,10 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
 
     // Just the keys we'll use to compute the cache key first
     // Lets us avoid unnecessary work and cleanup if there's a cache hit
-    const cacheKeyQueryOptions: Omit<QueryOptions, 'abortController' | 'mcpServers' | 'cwd'> = {
+    const cacheKeyQueryOptions: Omit<
+      QueryOptions,
+      'abortController' | 'mcpServers' | 'cwd' | 'stderr'
+    > = {
       maxTurns: config.max_turns,
       model: config.model,
       fallbackModel: config.fallback_model,
@@ -383,6 +475,15 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       hooks: config.hooks,
       includePartialMessages: config.include_partial_messages,
       betas: config.betas,
+      // New options
+      sandbox: config.sandbox,
+      allowDangerouslySkipPermissions: config.allow_dangerously_skip_permissions,
+      permissionPromptToolName: config.permission_prompt_tool_name,
+      executable: config.executable,
+      executableArgs: config.executable_args,
+      extraArgs: config.extra_args,
+      pathToClaudeCodeExecutable: config.path_to_claude_code_executable,
+      settingSources: config.setting_sources,
       env,
     };
 
@@ -479,6 +580,8 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       abortController,
       mcpServers,
       cwd: workingDir,
+      // stderr callback is not included in cache key since it's a function
+      stderr: config.stderr,
     };
     const queryParams = { prompt, options };
 
