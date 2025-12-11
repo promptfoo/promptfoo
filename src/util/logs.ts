@@ -1,0 +1,107 @@
+import fs from 'fs';
+import path from 'path';
+
+import { getEnvString } from '../envars';
+import logger from '../logger';
+import { getConfigDirectoryPath } from './config/manage';
+
+export interface LogFileInfo {
+  name: string;
+  path: string;
+  mtime: Date;
+  type: 'debug' | 'error';
+  size: number;
+}
+
+/**
+ * Gets the log directory path, respecting PROMPTFOO_LOG_DIR environment variable
+ */
+export function getLogDirectory(): string {
+  const configDir = getConfigDirectoryPath(true);
+  return getEnvString('PROMPTFOO_LOG_DIR')
+    ? path.resolve(getEnvString('PROMPTFOO_LOG_DIR')!)
+    : path.join(configDir, 'logs');
+}
+
+/**
+ * Gets all log files from the logs directory, sorted by modification time (newest first)
+ * @param type - Filter by log type: 'debug', 'error', or 'all'
+ */
+export function getLogFiles(type: 'debug' | 'error' | 'all' = 'all'): LogFileInfo[] {
+  const logDir = getLogDirectory();
+
+  if (!fs.existsSync(logDir)) {
+    return [];
+  }
+
+  try {
+    return fs
+      .readdirSync(logDir)
+      .filter((file) => {
+        if (!file.startsWith('promptfoo-') || !file.endsWith('.log')) {
+          return false;
+        }
+        if (type === 'all') {
+          return true;
+        }
+        return file.includes(`-${type}-`);
+      })
+      .map((file): LogFileInfo => {
+        const filePath = path.join(logDir, file);
+        const stats = fs.statSync(filePath);
+        const logType: 'debug' | 'error' = file.includes('-debug-') ? 'debug' : 'error';
+        return {
+          name: file,
+          path: filePath,
+          mtime: stats.mtime,
+          type: logType,
+          size: stats.size,
+        };
+      })
+      .sort((a, b) => b.mtime.getTime() - a.mtime.getTime());
+  } catch (error) {
+    logger.error(`Error reading log directory: ${error}`);
+    return [];
+  }
+}
+
+/**
+ * Finds a log file by identifier (full path, filename, or partial match)
+ * @param identifier - File path, name, or partial name to search for
+ * @param type - Log type to filter by
+ */
+export function findLogFile(
+  identifier: string,
+  type: 'debug' | 'error' | 'all' = 'all',
+): string | null {
+  // Check if it's a full path that exists
+  if (path.isAbsolute(identifier) && fs.existsSync(identifier)) {
+    return identifier;
+  }
+
+  const logDir = getLogDirectory();
+
+  // Check if it's a filename in the logs directory
+  const fullPath = path.join(logDir, identifier);
+  if (fs.existsSync(fullPath)) {
+    return fullPath;
+  }
+
+  // Try fuzzy matching (prefix/contains)
+  const files = getLogFiles(type);
+  const match = files.find((f) => f.name.includes(identifier) || f.name.startsWith(identifier));
+
+  return match?.path || null;
+}
+
+/**
+ * Formats a file size in bytes to a human-readable string
+ */
+export function formatFileSize(bytes: number): string {
+  if (bytes === 0) {
+    return '0 B';
+  }
+  const units = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(1024));
+  return `${(bytes / Math.pow(1024, i)).toFixed(i > 0 ? 1 : 0)} ${units[i]}`;
+}
