@@ -133,13 +133,41 @@ You can use the Azure Content Safety API for moderation. To set it up, you need 
 
 ### Setup
 
-First, set these environment variables:
+#### API Key Authentication
+
+Set these environment variables:
 
 ```bash
 AZURE_CONTENT_SAFETY_ENDPOINT=https://your-resource-name.cognitiveservices.azure.com
 AZURE_CONTENT_SAFETY_API_KEY=your-api-key
 AZURE_CONTENT_SAFETY_API_VERSION=2024-09-01  # Optional, defaults to this version
 ```
+
+#### Entra ID (Azure AD) Authentication
+
+For organizations using Azure AD/Entra ID, you can authenticate using client credentials:
+
+```bash
+AZURE_CONTENT_SAFETY_ENDPOINT=https://your-resource-name.cognitiveservices.azure.com
+AZURE_CLIENT_ID=your-client-id
+AZURE_CLIENT_SECRET=your-client-secret
+AZURE_TENANT_ID=your-tenant-id
+```
+
+Or enable Entra ID explicitly in your config:
+
+```yaml
+tests:
+  - assert:
+      - type: moderation
+        provider:
+          id: azure:moderation
+          config:
+            endpoint: https://your-resource-name.cognitiveservices.azure.com
+            useEntraIdAuth: true
+```
+
+You can also use Azure CLI authentication by running `az login` before running promptfoo.
 
 If `AZURE_CONTENT_SAFETY_ENDPOINT` is set, PromptFoo will automatically use the Azure Content Safety service for moderation instead of OpenAI's moderation API.
 
@@ -194,4 +222,56 @@ tests:
           config:
             blocklistNames: ['my-custom-blocklist', 'industry-terms']
             haltOnBlocklistHit: true
+```
+
+## Content Safety Assertion (Scorer-style)
+
+The `content-safety` assertion provides a scorer-style interface for Azure Content Safety, returning normalized scores (0-1) for each safety category. This is useful when you want detailed per-category metrics in your evaluation results.
+
+```yaml
+tests:
+  - vars:
+      input: 'Some content to test'
+    assert:
+      - type: content-safety
+        config:
+          endpoint: https://your-resource-name.cognitiveservices.azure.com
+          threshold: 0.3 # Fail if any category score exceeds 0.3
+```
+
+### Configuration Options
+
+| Option           | Description                                                               | Default                                      |
+| ---------------- | ------------------------------------------------------------------------- | -------------------------------------------- |
+| `endpoint`       | Azure Content Safety endpoint URL                                         | `AZURE_CONTENT_SAFETY_ENDPOINT` env          |
+| `apiKey`         | API key for authentication                                                | `AZURE_CONTENT_SAFETY_API_KEY` env           |
+| `threshold`      | Maximum allowed severity score (0-1)                                      | `0.5`                                        |
+| `categories`     | Array of categories to check                                              | `['Hate', 'SelfHarm', 'Sexual', 'Violence']` |
+| `outputType`     | Severity scale: `FourSeverityLevels` (0-3) or `EightSeverityLevels` (0-7) | `FourSeverityLevels`                         |
+| `useEntraIdAuth` | Enable Entra ID authentication                                            | `false`                                      |
+| `contentType`    | Type of content to analyze: `text` or `image`                             | `text`                                       |
+| `analyzePrompt`  | Also analyze the prompt in addition to output                             | `false`                                      |
+
+### Output
+
+The assertion returns:
+
+- **score**: Safety score (1 = completely safe, 0 = highest severity)
+- **namedScores**: Per-category scores with `content-safety/` prefix (e.g., `content-safety/hate`)
+- **metadata**: Raw Azure severity values and category breakdown
+
+### Image Moderation
+
+To analyze image outputs, set `contentType: 'image'`. The output can be a base64-encoded image or a URL:
+
+```yaml
+tests:
+  - vars:
+      image_prompt: 'Generate an image'
+    assert:
+      - type: content-safety
+        config:
+          endpoint: https://your-resource-name.cognitiveservices.azure.com
+          contentType: image
+          threshold: 0.3
 ```
