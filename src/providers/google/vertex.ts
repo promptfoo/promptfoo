@@ -268,6 +268,7 @@ export class VertexChatProvider extends VertexGenericProvider {
         total: data.usage.input_tokens + data.usage.output_tokens || 0,
         prompt: data.usage.input_tokens || 0,
         completion: data.usage.output_tokens || 0,
+        numRequests: 1,
       };
 
       const response = {
@@ -883,6 +884,7 @@ export class VertexChatProvider extends VertexGenericProvider {
         total: data.usage?.total_tokens || 0,
         prompt: data.usage?.prompt_tokens || 0,
         completion: data.usage?.completion_tokens || 0,
+        numRequests: 1,
       };
 
       const response = {
@@ -1089,6 +1091,7 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
         embedding,
         tokenUsage: {
           total: tokenCount,
+          numRequests: 1,
         },
       };
     } catch (err) {

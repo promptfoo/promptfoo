@@ -164,6 +164,7 @@ describe('ElevenLabsTTSProvider', () => {
         prompt: 11,
         completion: 0,
         cached: undefined,
+        numRequests: 1,
       });
     });
 

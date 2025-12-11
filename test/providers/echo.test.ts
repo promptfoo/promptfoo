@@ -69,6 +69,7 @@ describe('EchoProvider', () => {
         total: 0,
         prompt: 0,
         completion: 0,
+        numRequests: 1,
       });
     });
 
