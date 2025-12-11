@@ -201,9 +201,7 @@ describe('logs command', () => {
       await logsCmd?.parseAsync(['node', 'test']);
 
       expect(mockFs.readFileSync).toHaveBeenCalledWith(sessionLogPath, 'utf-8');
-      expect(logger.info).toHaveBeenCalledWith(
-        expect.stringContaining('current CLI session'),
-      );
+      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('current CLI session'));
     });
 
     it('should display specific file when provided', async () => {

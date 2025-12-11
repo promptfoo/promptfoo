@@ -182,7 +182,9 @@ describe('util/logs', () => {
 
       mockFs.existsSync.mockImplementation((p) => {
         // Return false for absolute path check, true for log directory path
-        if (p === filename) return false;
+        if (p === filename) {
+          return false;
+        }
         return p === expectedPath;
       });
 

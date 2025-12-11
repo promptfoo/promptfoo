@@ -9,13 +9,7 @@ import cliState from '../cliState';
 import logger from '../logger';
 import { wrapTable } from '../table';
 import { printBorder } from '../util/index';
-import {
-  findLogFile,
-  formatFileSize,
-  getLogDirectory,
-  getLogFiles,
-  type LogFileInfo,
-} from '../util/logs';
+import { findLogFile, formatFileSize, getLogDirectory, getLogFiles } from '../util/logs';
 
 type LogType = 'debug' | 'error' | 'all';
 
