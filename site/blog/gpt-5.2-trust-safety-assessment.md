@@ -19,6 +19,8 @@ tags: [red-teaming, security-vulnerability, openai]
 
 # GPT-5.2 Trust and Safety Assessment
 
+**GPT-5.2's safety training: 96% effective against direct attacks. 22% against ours.**
+
 OpenAI released GPT-5.2 today (December 11, 2025) at approximately 10:00 AM PST. We [opened a PR for GPT-5.2 support](https://github.com/promptfoo/promptfoo/pull/6628) at 10:24 AM PST and kicked off a [red team](/docs/red-team/) eval (security testing where you try to break something). **First critical finding hit at 10:29 AM PST, 5 minutes later.**
 
 This post covers what we tested, what failed, and what you should do about it.
