@@ -192,15 +192,16 @@ List various resources like evaluations, prompts, and datasets.
 
 View promptfoo log files directly from the command line.
 
-| Option              | Description                                | Default |
-| ------------------- | ------------------------------------------ | ------- |
-| `[file]`            | Log file to view (name, path, or partial)  | latest  |
-| `--type <type>`     | Log type: `debug`, `error`, or `all`       | `debug` |
-| `-n, --lines <num>` | Number of lines to display from end (tail) |         |
-| `--head <num>`      | Number of lines to display from start      |         |
-| `-f, --follow`      | Follow log file in real-time               | `false` |
-| `-l, --list`        | List available log files                   | `false` |
-| `--no-color`        | Disable syntax highlighting                |         |
+| Option                 | Description                                | Default |
+| ---------------------- | ------------------------------------------ | ------- |
+| `[file]`               | Log file to view (name, path, or partial)  | latest  |
+| `--type <type>`        | Log type: `debug`, `error`, or `all`       | `debug` |
+| `-n, --lines <num>`    | Number of lines to display from end (tail) |         |
+| `--head <num>`         | Number of lines to display from start      |         |
+| `-f, --follow`         | Follow log file in real-time               | `false` |
+| `-l, --list`           | List available log files                   | `false` |
+| `-g, --grep <pattern>` | Filter lines matching pattern (regex)      |         |
+| `--no-color`           | Disable syntax highlighting                |         |
 
 ### `promptfoo logs list`
 
@@ -234,6 +235,10 @@ promptfoo logs 2024-01-15
 
 # View error logs only
 promptfoo logs --type error
+
+# Filter logs by pattern (case-insensitive regex)
+promptfoo logs --grep "error|warn"
+promptfoo logs --grep "openai"
 ```
 
 Log files are stored in `~/.promptfoo/logs` by default. Set `PROMPTFOO_LOG_DIR` to use a custom directory.

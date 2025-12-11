@@ -76,6 +76,7 @@ describe('logs command', () => {
       expect(options?.find((o) => o.long === '--head')).toBeDefined();
       expect(options?.find((o) => o.long === '--follow')).toBeDefined();
       expect(options?.find((o) => o.long === '--list')).toBeDefined();
+      expect(options?.find((o) => o.long === '--grep')).toBeDefined();
       expect(options?.find((o) => o.long === '--no-color')).toBeDefined();
     });
 
@@ -309,6 +310,61 @@ describe('logs command', () => {
       await logsCmd?.parseAsync(['node', 'test']);
 
       expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('large'));
+    });
+
+    it('should filter output with --grep option', async () => {
+      const logContentWithErrors = `2024-01-01T10:00:00.000Z [INFO]: Starting application
+2024-01-01T10:00:01.000Z [ERROR]: Connection failed
+2024-01-01T10:00:02.000Z [INFO]: Retrying connection
+2024-01-01T10:00:03.000Z [ERROR]: Connection timeout`;
+
+      mockLogsUtil.getLogFiles.mockReturnValue([
+        {
+          name: 'test.log',
+          path: mockLogPath,
+          mtime: new Date(),
+          type: 'debug',
+          size: logContentWithErrors.length,
+        },
+      ]);
+      mockFs.statSync.mockReturnValue({
+        size: logContentWithErrors.length,
+        mtime: new Date(),
+      } as fs.Stats);
+      mockFs.readFileSync.mockReturnValue(logContentWithErrors);
+
+      const logsCmd = program.commands.find((c) => c.name() === 'logs');
+      await logsCmd?.parseAsync(['node', 'test', '--grep', 'ERROR']);
+
+      // Should have logged content containing ERROR lines
+      expect(logger.info).toHaveBeenCalled();
+      const calls = vi.mocked(logger.info).mock.calls;
+      const outputCall = calls.find((call) => String(call[0]).includes('Connection'));
+      expect(outputCall).toBeDefined();
+    });
+
+    it('should show message when grep finds no matches', async () => {
+      mockLogsUtil.getLogFiles.mockReturnValue([
+        {
+          name: 'test.log',
+          path: mockLogPath,
+          mtime: new Date(),
+          type: 'debug',
+          size: mockLogContent.length,
+        },
+      ]);
+      mockFs.statSync.mockReturnValue({
+        size: mockLogContent.length,
+        mtime: new Date(),
+      } as fs.Stats);
+      mockFs.readFileSync.mockReturnValue(mockLogContent);
+
+      const logsCmd = program.commands.find((c) => c.name() === 'logs');
+      await logsCmd?.parseAsync(['node', 'test', '--grep', 'NONEXISTENT_PATTERN']);
+
+      expect(logger.info).toHaveBeenCalledWith(
+        expect.stringContaining('No lines matching "NONEXISTENT_PATTERN" found'),
+      );
     });
   });
 

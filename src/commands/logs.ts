@@ -14,25 +14,31 @@ import { findLogFile, formatFileSize, getLogDirectory, getLogFiles } from '../ut
 type LogType = 'debug' | 'error' | 'all';
 
 /**
- * Applies syntax highlighting to log lines based on log level
+ * Applies syntax highlighting to log lines based on log level.
+ * Uses stateful coloring so multi-line entries (stack traces, JSON) stay colored.
  */
 function highlightLogLines(lines: string[], noColor: boolean): string {
   if (noColor) {
     return lines.join('\n');
   }
 
+  type ColorFn = (s: string) => string;
+  let currentColor: ColorFn = (s) => s;
+
   return lines
     .map((line) => {
+      // Check for log level tags to update color state
       if (line.includes('[ERROR]')) {
-        return chalk.red(line);
+        currentColor = chalk.red;
       } else if (line.includes('[WARN]')) {
-        return chalk.yellow(line);
+        currentColor = chalk.yellow;
       } else if (line.includes('[DEBUG]')) {
-        return chalk.cyan(line);
+        currentColor = chalk.cyan;
       } else if (line.includes('[INFO]')) {
-        return chalk.white(line);
+        currentColor = chalk.white;
       }
-      return line;
+      // Apply current color (persists for multi-line entries)
+      return currentColor(line);
     })
     .join('\n');
 }
@@ -59,6 +65,7 @@ function printLogHeader(logPath: string, isCurrentSession: boolean): void {
 interface PrintOptions {
   lines?: number;
   head?: number;
+  grep?: string;
   noColor: boolean;
   noHeader?: boolean;
 }
@@ -89,6 +96,17 @@ async function printLogContent(logPath: string, options: PrintOptions): Promise<
   // Remove trailing empty line if present
   if (lines[lines.length - 1] === '') {
     lines.pop();
+  }
+
+  // Apply grep filter if specified
+  if (options.grep) {
+    const pattern = new RegExp(options.grep, 'i');
+    lines = lines.filter((line) => pattern.test(line));
+
+    if (lines.length === 0) {
+      logger.info(chalk.gray(`No lines matching "${options.grep}" found.`));
+      return;
+    }
   }
 
   if (options.head) {
@@ -231,6 +249,7 @@ export function logsCommand(program: Command) {
     .option('--head <count>', 'Number of lines to display from start')
     .option('-f, --follow', 'Follow log file in real-time', false)
     .option('-l, --list', 'List available log files', false)
+    .option('-g, --grep <pattern>', 'Filter lines matching pattern (case-insensitive regex)')
     .option('--no-color', 'Disable syntax highlighting')
     .action(
       async (
@@ -241,6 +260,7 @@ export function logsCommand(program: Command) {
           head?: string;
           follow: boolean;
           list: boolean;
+          grep?: string;
           color: boolean;
         },
       ) => {
@@ -328,6 +348,7 @@ export function logsCommand(program: Command) {
           await printLogContent(logPath, {
             lines: cmdObj.lines ? parseInt(cmdObj.lines, 10) : undefined,
             head: cmdObj.head ? parseInt(cmdObj.head, 10) : undefined,
+            grep: cmdObj.grep,
             noColor: !cmdObj.color,
           });
         } catch (error) {
