@@ -147,9 +147,65 @@ describe('buildFunctionBody', () => {
     expect(buildFunctionBody('const x = 5;')).toBe('const x = 5');
   });
 
-  it('should handle semicolons inside strings', () => {
-    // lastIndexOf finds the statement separator, not the one in the string
+  it('should handle semicolons inside strings in declarations', () => {
+    // Semicolon in string within the declaration part (not the final expression)
     expect(buildFunctionBody('const s = "a;b"; s.length')).toBe('const s = "a;b"; return s.length');
+  });
+
+  it('should handle semicolons inside strings in final expression', () => {
+    // Critical edge case: semicolon in string is the LAST semicolon in the code
+    // This was the bug that caused silent failures
+    expect(buildFunctionBody('const s = output; s === "test;value"')).toBe(
+      'const s = output; return s === "test;value"',
+    );
+    expect(buildFunctionBody('const x = output; x.includes(";")')).toBe(
+      'const x = output; return x.includes(";")',
+    );
+    expect(buildFunctionBody('const x = output; x === "a;b;c"')).toBe(
+      'const x = output; return x === "a;b;c"',
+    );
+  });
+
+  it('should handle single-quoted strings with semicolons', () => {
+    expect(buildFunctionBody("const s = output; s === 'test;value'")).toBe(
+      "const s = output; return s === 'test;value'",
+    );
+    expect(buildFunctionBody("const s = 'a;b'; s.length")).toBe("const s = 'a;b'; return s.length");
+  });
+
+  it('should handle template literals with semicolons', () => {
+    expect(buildFunctionBody('const s = output; s === `test;value`')).toBe(
+      'const s = output; return s === `test;value`',
+    );
+    expect(buildFunctionBody('const s = `a;b`; s.length')).toBe('const s = `a;b`; return s.length');
+  });
+
+  it('should handle escaped quotes', () => {
+    // Escaped quote should not toggle quote state
+    expect(buildFunctionBody('const s = output; s === "test\\"with;quotes"')).toBe(
+      'const s = output; return s === "test\\"with;quotes"',
+    );
+    expect(buildFunctionBody("const s = output; s === 'test\\'with;quotes'")).toBe(
+      "const s = output; return s === 'test\\'with;quotes'",
+    );
+  });
+
+  it('should handle multiple escaped backslashes', () => {
+    // \\\\ is two escaped backslashes, so the quote after is NOT escaped
+    expect(buildFunctionBody('const s = "a\\\\"; s.length')).toBe(
+      'const s = "a\\\\"; return s.length',
+    );
+  });
+
+  it('should handle mixed quote types', () => {
+    // Single quotes inside double quotes
+    expect(buildFunctionBody('const s = output; s === "it\'s;here"')).toBe(
+      'const s = output; return s === "it\'s;here"',
+    );
+    // Double quotes inside single quotes
+    expect(buildFunctionBody('const s = output; s === \'say "hi;there"\'')).toBe(
+      'const s = output; return s === \'say "hi;there"\'',
+    );
   });
 
   it('should not modify expressions starting with const-like words', () => {
@@ -878,6 +934,77 @@ describe('JavaScript file references', () => {
         assertion,
         test: {} as AtomicTestCase,
         providerResponse: { output: 'test' },
+      });
+
+      expect(result.pass).toBe(true);
+    });
+
+    it('should handle semicolon in final expression string (critical edge case)', async () => {
+      // This is the critical bug fix test - semicolon in final expression's string
+      // was causing silent failures before because lastIndexOf(';') found the wrong semicolon
+      const assertion: Assertion = {
+        type: 'javascript',
+        value: 'const s = output; s === "test;value"',
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output: 'test;value' },
+      });
+
+      expect(result.pass).toBe(true);
+      expect(result.reason).toBe('Assertion passed');
+    });
+
+    it('should correctly evaluate includes() with semicolon argument', async () => {
+      const assertion: Assertion = {
+        type: 'javascript',
+        value: 'const x = output; x.includes(";")',
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output: 'hello;world' },
+      });
+
+      expect(result.pass).toBe(true);
+    });
+
+    it('should handle single quotes with semicolons in final expression', async () => {
+      const assertion: Assertion = {
+        type: 'javascript',
+        value: "const s = output; s === 'a;b;c'",
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output: 'a;b;c' },
+      });
+
+      expect(result.pass).toBe(true);
+    });
+
+    it('should handle template literals with semicolons in final expression', async () => {
+      const assertion: Assertion = {
+        type: 'javascript',
+        value: 'const s = output; s === `test;value`',
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output: 'test;value' },
       });
 
       expect(result.pass).toBe(true);

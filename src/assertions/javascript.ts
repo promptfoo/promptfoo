@@ -5,6 +5,61 @@ import { getProcessShim } from '../util/transform';
 import type { AssertionParams } from '../types/index';
 
 /**
+ * Checks if a character at the given index is escaped by backslashes.
+ * Handles multiple consecutive backslashes correctly (e.g., \\\\ is two escaped backslashes).
+ */
+function isCharEscaped(code: string, index: number): boolean {
+  let backslashCount = 0;
+  let i = index - 1;
+  while (i >= 0 && code[i] === '\\') {
+    backslashCount++;
+    i--;
+  }
+  return backslashCount % 2 === 1;
+}
+
+/**
+ * Finds the last semicolon that acts as a statement separator (not inside a string literal).
+ * Tracks quote state to skip semicolons inside single quotes, double quotes, and template literals.
+ *
+ * @returns The index of the last statement-level semicolon, or -1 if none found.
+ *
+ * @remarks
+ * Known limitations (use multiline format for these cases):
+ * - Does not handle semicolons inside regex literals (e.g., /;/)
+ * - Does not handle semicolons inside template literal expressions (e.g., `${a;b}`)
+ */
+function findLastStatementSemicolon(code: string): number {
+  let inSingleQuote = false;
+  let inDoubleQuote = false;
+  let inTemplate = false;
+  let lastSemiIndex = -1;
+
+  for (let i = 0; i < code.length; i++) {
+    const char = code[i];
+    const isEscaped = isCharEscaped(code, i);
+
+    // Toggle quote state for unescaped quote characters
+    if (!isEscaped) {
+      if (char === "'" && !inDoubleQuote && !inTemplate) {
+        inSingleQuote = !inSingleQuote;
+      } else if (char === '"' && !inSingleQuote && !inTemplate) {
+        inDoubleQuote = !inDoubleQuote;
+      } else if (char === '`' && !inSingleQuote && !inDoubleQuote) {
+        inTemplate = !inTemplate;
+      }
+    }
+
+    // Track semicolons only when outside all string contexts
+    if (char === ';' && !inSingleQuote && !inDoubleQuote && !inTemplate) {
+      lastSemiIndex = i;
+    }
+  }
+
+  return lastSemiIndex;
+}
+
+/**
  * Builds a function body from a single-line JavaScript assertion.
  *
  * Handles the case where assertions start with variable declarations (const/let/var).
@@ -18,6 +73,10 @@ import type { AssertionParams } from '../types/index';
  * @example
  * // Declaration with final expression - inject return before expression
  * "const s = JSON.parse(output).score; s > 0.5" → "const s = JSON.parse(output).score; return s > 0.5"
+ *
+ * @example
+ * // Semicolons in strings are handled correctly
+ * "const s = output; s === 'a;b'" → "const s = output; return s === 'a;b'"
  */
 export function buildFunctionBody(code: string): string {
   // Remove trailing semicolons and whitespace for consistent handling
@@ -25,8 +84,8 @@ export function buildFunctionBody(code: string): string {
 
   // Check if the assertion starts with a variable declaration
   if (/^(const|let|var)\s/.test(trimmed)) {
-    // Find the last semicolon to split statements from final expression
-    const lastSemiIndex = trimmed.lastIndexOf(';');
+    // Find the last semicolon that's actually a statement separator (not inside a string)
+    const lastSemiIndex = findLastStatementSemicolon(trimmed);
     if (lastSemiIndex !== -1) {
       const statements = trimmed.slice(0, lastSemiIndex + 1);
       const expression = trimmed.slice(lastSemiIndex + 1).trim();
