@@ -1,30 +1,26 @@
 /**
- * CommandInput - Input component for command-line style filters.
+ * CommandInput - Display component for command-line style filters.
+ *
+ * Note: All keyboard input is handled centrally in useTableNavigation
+ * to avoid timing issues with multiple useInput hooks.
  *
  * Features:
  * - Vim-style activation (:)
  * - Supports :filter column operator value commands
  * - Autocomplete suggestions for columns
- * - Enter to apply, Escape to cancel
  * - Error display for invalid commands
  */
 
-import { Box, Text, useInput } from 'ink';
-import { useEffect, useRef, useState } from 'react';
+import { Box, Text } from 'ink';
 import type { ColumnFilter, FilterOperator } from './types';
-import type { NavigationAction } from './useTableNavigation';
 
 export interface CommandInputProps {
   /** Current command input */
   input: string;
   /** Whether command mode is active */
   isActive: boolean;
-  /** Dispatch navigation actions */
-  dispatch: (action: NavigationAction) => void;
-  /** Callback when a filter is parsed and applied */
-  onFilterApply: (filter: ColumnFilter) => void;
-  /** Callback when filters are cleared */
-  onFilterClear: () => void;
+  /** Error message to display */
+  error?: string | null;
 }
 
 /**
@@ -114,89 +110,17 @@ export function parseFilterCommand(
 }
 
 /**
- * CommandInput component for filter commands.
+ * CommandInput component for displaying filter commands.
+ * Input handling is done in useTableNavigation.
  */
-export function CommandInput({
-  input,
-  isActive,
-  dispatch,
-  onFilterApply,
-  onFilterClear,
-}: CommandInputProps) {
-  const [localInput, setLocalInput] = useState(input || '');
-  const [error, setError] = useState<string | null>(null);
-  const inputRef = useRef<string>(localInput);
-
-  // Sync local input with prop changes
-  useEffect(() => {
-    setLocalInput(input || '');
-    inputRef.current = input || '';
-    setError(null);
-  }, [input]);
-
-  // Handle keyboard input when active
-  useInput(
-    (char, key) => {
-      if (!isActive) {
-        return;
-      }
-
-      // Handle special keys
-      if (key.return) {
-        // Parse and apply command
-        const result = parseFilterCommand(inputRef.current);
-
-        if ('clear' in result) {
-          onFilterClear();
-          dispatch({ type: 'EXECUTE_COMMAND' });
-          return;
-        }
-
-        if (result.error) {
-          setError(result.error);
-          return;
-        }
-
-        if (result.filter) {
-          onFilterApply(result.filter);
-          dispatch({ type: 'EXECUTE_COMMAND' });
-        }
-        return;
-      }
-
-      if (key.escape) {
-        dispatch({ type: 'CANCEL_COMMAND' });
-        return;
-      }
-
-      if (key.backspace || key.delete) {
-        const newInput = inputRef.current.slice(0, -1);
-        inputRef.current = newInput;
-        setLocalInput(newInput);
-        dispatch({ type: 'UPDATE_COMMAND', input: newInput });
-        setError(null);
-        return;
-      }
-
-      // Regular character input
-      if (char && !key.ctrl && !key.meta) {
-        const newInput = inputRef.current + char;
-        inputRef.current = newInput;
-        setLocalInput(newInput);
-        dispatch({ type: 'UPDATE_COMMAND', input: newInput });
-        setError(null);
-      }
-    },
-    { isActive },
-  );
-
+export function CommandInput({ input, isActive, error }: CommandInputProps) {
   if (!isActive) {
     return null;
   }
 
   // Generate autocomplete suggestions
   const getSuggestions = (): string[] => {
-    const trimmed = localInput.trim().toLowerCase();
+    const trimmed = input.trim().toLowerCase();
 
     // Suggest commands
     if (trimmed === '' || 'filter'.startsWith(trimmed)) {
@@ -232,7 +156,7 @@ export function CommandInput({
     <Box flexDirection="column" marginTop={1}>
       <Box>
         <Text color="yellow">:</Text>
-        <Text>{localInput}</Text>
+        <Text>{input}</Text>
         <Text color="gray">█</Text>
         <Text dimColor> [Enter] apply | [Esc] cancel</Text>
       </Box>

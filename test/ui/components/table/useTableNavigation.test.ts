@@ -22,6 +22,7 @@ function createNavigationState(overrides: Partial<TableNavigationState> = {}): T
       columnFilters: [],
       isCommandMode: false,
       commandInput: '',
+      commandError: null,
     },
     ...overrides,
   };
@@ -96,6 +97,7 @@ describe('TableNavigationState', () => {
           columnFilters: [],
           isCommandMode: false,
           commandInput: '',
+          commandError: null,
         },
       });
       expect(state.filter.mode).toBe('passes');
@@ -110,6 +112,7 @@ describe('TableNavigationState', () => {
           columnFilters: [],
           isCommandMode: false,
           commandInput: '',
+          commandError: null,
         },
       });
       expect(state.filter.searchQuery).toBe('test query');
@@ -124,6 +127,7 @@ describe('TableNavigationState', () => {
           columnFilters: [{ column: 'score', operator: '>', value: 0.5 }],
           isCommandMode: false,
           commandInput: '',
+          commandError: null,
         },
       });
       expect(state.filter.columnFilters).toHaveLength(1);
@@ -141,6 +145,7 @@ describe('TableNavigationState', () => {
             columnFilters: [],
             isCommandMode: false,
             commandInput: '',
+            commandError: null,
           },
         });
         expect(state.filter.mode).toBe(mode);

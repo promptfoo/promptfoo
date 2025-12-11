@@ -144,6 +144,8 @@ export interface TableFilterState {
   isCommandMode: boolean;
   /** Current command input */
   commandInput: string;
+  /** Command error message (null if no error) */
+  commandError: string | null;
 }
 
 /**

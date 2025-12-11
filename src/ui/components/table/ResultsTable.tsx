@@ -11,7 +11,7 @@
  */
 
 import { Box, Text } from 'ink';
-import { useCallback, useEffect, useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { isRawModeSupported } from '../../hooks/useKeypress';
 import { CellDetailOverlay } from './CellDetailOverlay';
 import { CommandInput } from './CommandInput';
@@ -21,7 +21,6 @@ import { TableHeader } from './TableHeader';
 import { TableRow } from './TableRow';
 import {
   getCellStatus,
-  type ColumnFilter,
   type EvaluateTable,
   type ResultsTableProps,
   type TableCellData,
@@ -234,18 +233,6 @@ export function ResultsTable({
     }
   }, [filteredRows.length, navigation.dispatch]);
 
-  // Callbacks for command input
-  const handleFilterApply = useCallback(
-    (filter: ColumnFilter) => {
-      navigation.dispatch({ type: 'ADD_COLUMN_FILTER', filter });
-    },
-    [navigation.dispatch],
-  );
-
-  const handleFilterClear = useCallback(() => {
-    navigation.dispatch({ type: 'CLEAR_COLUMN_FILTERS' });
-  }, [navigation.dispatch]);
-
   // Calculate visible row range based on filtered rows
   const { start: visibleStart, end: visibleEnd } = getVisibleRowRange(
     navigation.scrollOffset,
@@ -366,15 +353,12 @@ export function ResultsTable({
             isActive={navigation.filter.isSearching}
             matchCount={filteredRows.length}
             totalCount={processedRows.length}
-            dispatch={navigation.dispatch}
           />
         ) : navigation.filter.isCommandMode ? (
           <CommandInput
             input={navigation.filter.commandInput}
             isActive={navigation.filter.isCommandMode}
-            dispatch={navigation.dispatch}
-            onFilterApply={handleFilterApply}
-            onFilterClear={handleFilterClear}
+            error={navigation.filter.commandError}
           />
         ) : (
           <HelpText isCompact={true} />
@@ -437,15 +421,12 @@ export function ResultsTable({
             isActive={navigation.filter.isSearching}
             matchCount={filteredRows.length}
             totalCount={processedRows.length}
-            dispatch={navigation.dispatch}
           />
         ) : navigation.filter.isCommandMode ? (
           <CommandInput
             input={navigation.filter.commandInput}
             isActive={navigation.filter.isCommandMode}
-            dispatch={navigation.dispatch}
-            onFilterApply={handleFilterApply}
-            onFilterClear={handleFilterClear}
+            error={navigation.filter.commandError}
           />
         ) : (
           <HelpText isCompact={false} />

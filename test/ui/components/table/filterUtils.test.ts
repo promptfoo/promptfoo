@@ -58,6 +58,7 @@ function createFilterState(overrides: Partial<TableFilterState> = {}): TableFilt
     columnFilters: [],
     isCommandMode: false,
     commandInput: '',
+    commandError: null,
     ...overrides,
   };
 }

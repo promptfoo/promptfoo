@@ -95,7 +95,9 @@ function matchesColumnFilters(row: TableRowData, filters: ColumnFilter[]): boole
       return providers.some((p) => applyOperator(p, operator, value));
     } else if (column === 'status') {
       // Check cell status (pass, fail, error)
-      const statuses = row.cells.map((c) => c.status).filter(Boolean);
+      const statuses = row.cells
+        .map((c) => c.status)
+        .filter((s): s is NonNullable<typeof s> => s !== null);
       return statuses.some((s) => applyOperator(s, operator, value));
     } else if (column === 'output') {
       // Check output content

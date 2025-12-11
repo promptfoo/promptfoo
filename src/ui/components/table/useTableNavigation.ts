@@ -14,6 +14,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { parseFilterCommand } from './CommandInput';
 import { isRawModeSupported, useKeypress } from '../../hooks/useKeypress';
 import type { FilterMode, TableFilterState, TableNavigationState } from './types';
 
@@ -27,6 +28,7 @@ const DEFAULT_FILTER_STATE: TableFilterState = {
   columnFilters: [],
   isCommandMode: false,
   commandInput: '',
+  commandError: null,
 };
 
 /**
@@ -55,6 +57,7 @@ type NavigationAction =
   | { type: 'UPDATE_COMMAND'; input: string }
   | { type: 'EXECUTE_COMMAND' }
   | { type: 'CANCEL_COMMAND' }
+  | { type: 'SET_COMMAND_ERROR'; error: string }
   | { type: 'CLEAR_FILTERS' }
   | {
       type: 'ADD_COLUMN_FILTER';
@@ -199,7 +202,7 @@ function navigationReducer(
     case 'UPDATE_COMMAND':
       return {
         ...state,
-        filter: { ...state.filter, commandInput: action.input },
+        filter: { ...state.filter, commandInput: action.input, commandError: null },
       };
 
     case 'EXECUTE_COMMAND':
@@ -212,7 +215,13 @@ function navigationReducer(
     case 'CANCEL_COMMAND':
       return {
         ...state,
-        filter: { ...state.filter, isCommandMode: false, commandInput: '' },
+        filter: { ...state.filter, isCommandMode: false, commandInput: '', commandError: null },
+      };
+
+    case 'SET_COMMAND_ERROR':
+      return {
+        ...state,
+        filter: { ...state.filter, commandError: action.error },
       };
 
     case 'CLEAR_FILTERS':
@@ -345,23 +354,71 @@ export function useTableNavigation({
   // Keyboard handling
   useKeypress(
     (keyInfo) => {
-      const { name, key, shift } = keyInfo;
+      const { name, key, shift, ctrl, meta } = keyInfo;
       const currentState = stateRef.current;
 
-      // When in search mode, only handle escape to cancel
-      // (SearchInput handles other keys via useInput)
+      // When in search mode, handle all input here (not in SearchInput)
+      // This avoids timing issues with multiple useInput hooks
       if (currentState.filter.isSearching) {
         if (name === 'escape') {
           dispatch({ type: 'CANCEL_SEARCH' });
+          return;
         }
-        // Don't process other keys - SearchInput handles them
+        if (name === 'return') {
+          dispatch({ type: 'APPLY_SEARCH' });
+          return;
+        }
+        if (name === 'backspace' || name === 'delete') {
+          const currentQuery = currentState.filter.searchQuery || '';
+          dispatch({ type: 'UPDATE_SEARCH', query: currentQuery.slice(0, -1) });
+          return;
+        }
+        // Regular character input - add to search query
+        // key is the character typed (from Ink's useInput)
+        if (key && key.length === 1 && !ctrl && !meta) {
+          const currentQuery = currentState.filter.searchQuery || '';
+          dispatch({ type: 'UPDATE_SEARCH', query: currentQuery + key });
+        }
         return;
       }
 
-      // When in command mode, only handle escape to cancel
+      // When in command mode, handle all input here (not in CommandInput)
+      // This avoids timing issues with multiple useInput hooks
       if (currentState.filter.isCommandMode) {
         if (name === 'escape') {
           dispatch({ type: 'CANCEL_COMMAND' });
+          return;
+        }
+        if (name === 'return') {
+          // Parse the command and apply the filter
+          const result = parseFilterCommand(currentState.filter.commandInput);
+
+          if ('clear' in result) {
+            dispatch({ type: 'CLEAR_COLUMN_FILTERS' });
+            dispatch({ type: 'EXECUTE_COMMAND' });
+            return;
+          }
+
+          if ('error' in result && result.error) {
+            dispatch({ type: 'SET_COMMAND_ERROR', error: result.error });
+            return;
+          }
+
+          if ('filter' in result && result.filter) {
+            dispatch({ type: 'ADD_COLUMN_FILTER', filter: result.filter });
+            dispatch({ type: 'EXECUTE_COMMAND' });
+          }
+          return;
+        }
+        if (name === 'backspace' || name === 'delete') {
+          const currentInput = currentState.filter.commandInput || '';
+          dispatch({ type: 'UPDATE_COMMAND', input: currentInput.slice(0, -1) });
+          return;
+        }
+        // Regular character input - add to command
+        if (key && key.length === 1 && !ctrl && !meta) {
+          const currentInput = currentState.filter.commandInput || '';
+          dispatch({ type: 'UPDATE_COMMAND', input: currentInput + key });
         }
         return;
       }

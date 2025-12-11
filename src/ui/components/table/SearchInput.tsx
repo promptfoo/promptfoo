@@ -1,16 +1,16 @@
 /**
- * SearchInput - Input component for searching within the results table.
+ * SearchInput - Display component for the search query in the results table.
+ *
+ * Note: All keyboard input is handled centrally in useTableNavigation
+ * to avoid timing issues with multiple useInput hooks.
  *
  * Features:
  * - Vim-style activation (/)
- * - Real-time search as you type
- * - Enter to apply, Escape to cancel
+ * - Real-time search display
  * - Shows match count
  */
 
-import { Box, Text, useInput } from 'ink';
-import { useEffect, useRef, useState } from 'react';
-import type { NavigationAction } from './useTableNavigation';
+import { Box, Text } from 'ink';
 
 export interface SearchInputProps {
   /** Current search query */
@@ -21,69 +21,13 @@ export interface SearchInputProps {
   matchCount?: number;
   /** Total number of rows */
   totalCount?: number;
-  /** Dispatch navigation actions */
-  dispatch: (action: NavigationAction) => void;
 }
 
 /**
- * SearchInput component for filtering results.
+ * SearchInput component for displaying search query.
+ * Input handling is done in useTableNavigation.
  */
-export function SearchInput({
-  query,
-  isActive,
-  matchCount,
-  totalCount,
-  dispatch,
-}: SearchInputProps) {
-  const [localQuery, setLocalQuery] = useState(query || '');
-  const inputRef = useRef<string>(localQuery);
-
-  // Sync local query with prop changes
-  useEffect(() => {
-    setLocalQuery(query || '');
-    inputRef.current = query || '';
-  }, [query]);
-
-  // Handle keyboard input when active
-  useInput(
-    (input, key) => {
-      if (!isActive) {
-        return;
-      }
-
-      // Handle special keys
-      if (key.return) {
-        // Apply search and close input
-        dispatch({ type: 'APPLY_SEARCH' });
-        return;
-      }
-
-      if (key.escape) {
-        // Cancel search without applying
-        dispatch({ type: 'CANCEL_SEARCH' });
-        return;
-      }
-
-      if (key.backspace || key.delete) {
-        // Remove last character
-        const newQuery = inputRef.current.slice(0, -1);
-        inputRef.current = newQuery;
-        setLocalQuery(newQuery);
-        dispatch({ type: 'UPDATE_SEARCH', query: newQuery });
-        return;
-      }
-
-      // Regular character input
-      if (input && !key.ctrl && !key.meta) {
-        const newQuery = inputRef.current + input;
-        inputRef.current = newQuery;
-        setLocalQuery(newQuery);
-        dispatch({ type: 'UPDATE_SEARCH', query: newQuery });
-      }
-    },
-    { isActive },
-  );
-
+export function SearchInput({ query, isActive, matchCount, totalCount }: SearchInputProps) {
   if (!isActive) {
     return null;
   }
@@ -91,7 +35,7 @@ export function SearchInput({
   return (
     <Box marginTop={1}>
       <Text color="yellow">/</Text>
-      <Text>{localQuery}</Text>
+      <Text>{query}</Text>
       <Text color="gray">█</Text>
       {matchCount !== undefined && totalCount !== undefined && (
         <Text dimColor>
