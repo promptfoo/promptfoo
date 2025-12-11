@@ -97,11 +97,10 @@ function HelpText({ isCompact }: { isCompact: boolean }) {
   return (
     <Box marginTop={1} flexDirection="column">
       <Text dimColor>
-        ↑↓←→/hjkl nav | Enter expand | g/G first/last |{' '}
-        <Text color="cyan">[a]</Text>ll <Text color="cyan">[p]</Text>ass{' '}
-        <Text color="cyan">[f]</Text>ail <Text color="cyan">[e]</Text>rr{' '}
-        <Text color="cyan">[d]</Text>iff | <Text color="cyan">/</Text> search |{' '}
-        <Text color="cyan">:</Text> filter | q quit
+        ↑↓←→/hjkl nav | Enter expand | g/G first/last | <Text color="cyan">[a]</Text>ll{' '}
+        <Text color="cyan">[p]</Text>ass <Text color="cyan">[f]</Text>ail{' '}
+        <Text color="cyan">[e]</Text>rr <Text color="cyan">[d]</Text>iff |{' '}
+        <Text color="cyan">/</Text> search | <Text color="cyan">:</Text> filter | q quit
       </Text>
     </Box>
   );
@@ -139,7 +138,9 @@ function FilterStatusBar({
 
   // Add column filter count if present
   if (filterState.columnFilters.length > 0) {
-    parts.push(`${filterState.columnFilters.length} filter${filterState.columnFilters.length > 1 ? 's' : ''}`);
+    parts.push(
+      `${filterState.columnFilters.length} filter${filterState.columnFilters.length > 1 ? 's' : ''}`,
+    );
   }
 
   const filterLabel = parts.join(' + ');

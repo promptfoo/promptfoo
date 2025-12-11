@@ -56,7 +56,10 @@ type NavigationAction =
   | { type: 'EXECUTE_COMMAND' }
   | { type: 'CANCEL_COMMAND' }
   | { type: 'CLEAR_FILTERS' }
-  | { type: 'ADD_COLUMN_FILTER'; filter: { column: string; operator: string; value: string | number } }
+  | {
+      type: 'ADD_COLUMN_FILTER';
+      filter: { column: string; operator: string; value: string | number };
+    }
   | { type: 'CLEAR_COLUMN_FILTERS' }
   | { type: 'CLAMP_SELECTION'; maxRow: number };
 
@@ -135,6 +138,15 @@ function navigationReducer(
     // Filter actions
     case 'SET_FILTER_MODE':
       // Reset selection when filter changes
+      // When setting to 'all', also clear search and column filters for easy reset
+      if (action.mode === 'all') {
+        return {
+          ...state,
+          selectedRow: 0,
+          scrollOffset: 0,
+          filter: DEFAULT_FILTER_STATE,
+        };
+      }
       return {
         ...state,
         selectedRow: 0,
@@ -220,7 +232,11 @@ function navigationReducer(
           ...state.filter,
           columnFilters: [
             ...state.filter.columnFilters,
-            action.filter as { column: string; operator: '=' | '!=' | '>' | '>=' | '<' | '<=' | '~' | '!~'; value: string | number },
+            action.filter as {
+              column: string;
+              operator: '=' | '!=' | '>' | '>=' | '<' | '<=' | '~' | '!~';
+              value: string | number;
+            },
           ],
         },
       };
@@ -301,7 +317,12 @@ export function useTableNavigation({
 
   const dispatch = useCallback(
     (action: NavigationAction) => {
-      setState((prev) => navigationReducer(prev, action, bounds));
+      setState((prev) => {
+        const newState = navigationReducer(prev, action, bounds);
+        // Update ref synchronously to avoid race conditions with rapid key presses
+        stateRef.current = newState;
+        return newState;
+      });
 
       // Handle expand callback
       if (action.type === 'TOGGLE_EXPAND' && !state.expandedCell && onExpand) {

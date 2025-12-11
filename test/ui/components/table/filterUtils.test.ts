@@ -8,10 +8,7 @@ import {
   getFilterModeLabel,
   hasActiveFilter,
 } from '../../../../src/ui/components/table/filterUtils';
-import type {
-  TableFilterState,
-  TableRowData,
-} from '../../../../src/ui/components/table/types';
+import type { TableFilterState, TableRowData } from '../../../../src/ui/components/table/types';
 
 /**
  * Create a mock row for testing.
@@ -110,9 +107,7 @@ describe('filterRows', () => {
     });
 
     it('does not include errors as failures', () => {
-      const rows = [
-        createMockRow(0, [{ content: 'error', status: 'error' }]),
-      ];
+      const rows = [createMockRow(0, [{ content: 'error', status: 'error' }])];
       const filterState = createFilterState({ mode: 'failures' });
       const result = filterRows(rows, filterState);
       expect(result).toHaveLength(0);
@@ -163,9 +158,7 @@ describe('filterRows', () => {
     });
 
     it('returns empty for single-provider results', () => {
-      const singleProviderRows = [
-        createMockRow(0, [{ content: 'only one', status: 'pass' }]),
-      ];
+      const singleProviderRows = [createMockRow(0, [{ content: 'only one', status: 'pass' }])];
       const filterState = createFilterState({ mode: 'different' });
       const result = filterRows(singleProviderRows, filterState);
       expect(result).toHaveLength(0);
@@ -303,7 +296,8 @@ describe('column filters', () => {
             cost: outputProps.cost ?? 0.01,
             latencyMs: outputProps.latencyMs ?? 100,
             provider: outputProps.provider ?? 'test-provider',
-            failureReason: outputProps.status === 'error' ? 2 : outputProps.status === 'fail' ? 1 : 0,
+            failureReason:
+              outputProps.status === 'error' ? 2 : outputProps.status === 'fail' ? 1 : 0,
             namedScores: {},
             id: `row-${index}`,
             tokenUsage: {},
@@ -319,10 +313,38 @@ describe('column filters', () => {
   }
 
   const columnFilterRows: TableRowData[] = [
-    createRowWithOutput(0, { content: 'Good result', status: 'pass', score: 0.9, cost: 0.005, latencyMs: 50, provider: 'openai' }),
-    createRowWithOutput(1, { content: 'Bad result', status: 'fail', score: 0.3, cost: 0.01, latencyMs: 200, provider: 'anthropic' }),
-    createRowWithOutput(2, { content: 'Error occurred', status: 'error', score: 0, cost: 0.02, latencyMs: 500, provider: 'openai' }),
-    createRowWithOutput(3, { content: 'Medium result', status: 'pass', score: 0.6, cost: 0.015, latencyMs: 150, provider: 'google' }),
+    createRowWithOutput(0, {
+      content: 'Good result',
+      status: 'pass',
+      score: 0.9,
+      cost: 0.005,
+      latencyMs: 50,
+      provider: 'openai',
+    }),
+    createRowWithOutput(1, {
+      content: 'Bad result',
+      status: 'fail',
+      score: 0.3,
+      cost: 0.01,
+      latencyMs: 200,
+      provider: 'anthropic',
+    }),
+    createRowWithOutput(2, {
+      content: 'Error occurred',
+      status: 'error',
+      score: 0,
+      cost: 0.02,
+      latencyMs: 500,
+      provider: 'openai',
+    }),
+    createRowWithOutput(3, {
+      content: 'Medium result',
+      status: 'pass',
+      score: 0.6,
+      cost: 0.015,
+      latencyMs: 150,
+      provider: 'google',
+    }),
   ];
 
   describe('score filter', () => {
