@@ -3,11 +3,82 @@
  *
  * Provides functions to filter rows based on:
  * - Quick filter modes (all, passes, failures, errors, different)
- * - Search queries
+ * - Search queries (supports regex with /pattern/ syntax)
  * - Column filters
  */
 
 import type { ColumnFilter, FilterMode, TableFilterState, TableRowData } from './types';
+
+/**
+ * Parse a search query to determine if it's a regex pattern.
+ * Regex patterns are wrapped in forward slashes: /pattern/flags
+ *
+ * @returns Object with isRegex flag and the pattern/flags or null if invalid regex
+ */
+export function parseSearchQuery(query: string): {
+  isRegex: boolean;
+  pattern: string;
+  flags: string;
+  regex: RegExp | null;
+  error: string | null;
+} {
+  // Check for regex syntax: /pattern/ or /pattern/flags
+  // Allow any characters after the trailing slash for flags (will validate later)
+  const regexMatch = query.match(/^\/(.+)\/([a-zA-Z]*)$/);
+
+  if (!regexMatch) {
+    // Not a regex pattern, use as literal search
+    return {
+      isRegex: false,
+      pattern: query,
+      flags: 'i', // case-insensitive by default for literal search
+      regex: null,
+      error: null,
+    };
+  }
+
+  const [, pattern, flags] = regexMatch;
+  // For regex, respect user's flags - no default (empty string = case-sensitive)
+
+  try {
+    const regex = new RegExp(pattern, flags);
+    return {
+      isRegex: true,
+      pattern,
+      flags,
+      regex,
+      error: null,
+    };
+  } catch (err) {
+    // Invalid regex - return error info for display
+    return {
+      isRegex: true,
+      pattern,
+      flags,
+      regex: null,
+      error: err instanceof Error ? err.message : 'Invalid regex pattern',
+    };
+  }
+}
+
+/**
+ * Test if a string matches a search query (supports regex).
+ */
+export function matchesQuery(
+  content: string,
+  query: string,
+  parsedQuery?: ReturnType<typeof parseSearchQuery>,
+): boolean {
+  const parsed = parsedQuery || parseSearchQuery(query);
+
+  if (parsed.isRegex && parsed.regex) {
+    // Use regex matching
+    return parsed.regex.test(content);
+  }
+
+  // Fall back to case-insensitive substring matching
+  return content.toLowerCase().includes(parsed.pattern.toLowerCase());
+}
 
 /**
  * Check if a row passes the quick filter mode.
@@ -44,20 +115,27 @@ function matchesFilterMode(row: TableRowData, mode: FilterMode): boolean {
 
 /**
  * Check if a row matches the search query.
+ * Supports regex patterns with /pattern/flags syntax.
  */
 function matchesSearchQuery(row: TableRowData, query: string | null): boolean {
   if (!query) {
     return true;
   }
 
-  const lowerQuery = query.toLowerCase();
+  // Parse the query once for efficiency
+  const parsedQuery = parseSearchQuery(query);
+
+  // If regex is invalid, no matches (user will see error indicator)
+  if (parsedQuery.isRegex && parsedQuery.error) {
+    return false;
+  }
 
   // Check output cells
-  const matchesOutput = row.cells.some((cell) => cell.content.toLowerCase().includes(lowerQuery));
+  const matchesOutput = row.cells.some((cell) => matchesQuery(cell.content, query, parsedQuery));
 
   // Check variable cells
   const matchesVars = row.originalRow.vars.some(
-    (v) => v && String(v).toLowerCase().includes(lowerQuery),
+    (v) => v && matchesQuery(String(v), query, parsedQuery),
   );
 
   return matchesOutput || matchesVars;

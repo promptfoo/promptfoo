@@ -15,7 +15,7 @@ import { useEffect, useMemo } from 'react';
 import { isRawModeSupported } from '../../hooks/useKeypress';
 import { CellDetailOverlay, VarDetailOverlay } from './CellDetailOverlay';
 import { CommandInput } from './CommandInput';
-import { filterRows, getFilterModeLabel, hasActiveFilter } from './filterUtils';
+import { filterRows, getFilterModeLabel, hasActiveFilter, parseSearchQuery } from './filterUtils';
 import { SearchInput } from './SearchInput';
 import { TableHeader } from './TableHeader';
 import { TableRow } from './TableRow';
@@ -127,16 +127,15 @@ function FilterStatusBar({
     return null;
   }
 
+  // Parse search query to check for regex errors
+  const parsedSearch = filterState.searchQuery ? parseSearchQuery(filterState.searchQuery) : null;
+  const hasRegexError = parsedSearch?.isRegex && parsedSearch?.error;
+
   const parts: string[] = [];
 
   // Add filter mode if not 'all'
   if (filterState.mode !== 'all') {
     parts.push(getFilterModeLabel(filterState.mode));
-  }
-
-  // Add search query if present
-  if (filterState.searchQuery) {
-    parts.push(`"${filterState.searchQuery}"`);
   }
 
   // Add column filter count if present
@@ -149,13 +148,29 @@ function FilterStatusBar({
   const filterLabel = parts.join(' + ');
 
   return (
-    <Box marginBottom={1}>
-      <Text color="yellow">Filter: </Text>
-      <Text color="cyan">{filterLabel}</Text>
-      <Text dimColor>
-        {' '}
-        ({filteredCount} of {totalCount})
-      </Text>
+    <Box flexDirection="column" marginBottom={1}>
+      <Box>
+        <Text color="yellow">Filter: </Text>
+        {filterLabel && <Text color="cyan">{filterLabel}</Text>}
+        {filterLabel && filterState.searchQuery && <Text color="cyan"> + </Text>}
+        {filterState.searchQuery &&
+          (parsedSearch?.isRegex ? (
+            <Text color={hasRegexError ? 'red' : 'magenta'}>
+              /{parsedSearch.pattern}/{parsedSearch.flags}
+            </Text>
+          ) : (
+            <Text color="cyan">"{filterState.searchQuery}"</Text>
+          ))}
+        <Text dimColor>
+          {' '}
+          ({filteredCount} of {totalCount})
+        </Text>
+      </Box>
+      {hasRegexError && (
+        <Box>
+          <Text color="red">⚠ Invalid regex: {parsedSearch?.error}</Text>
+        </Box>
+      )}
     </Box>
   );
 }

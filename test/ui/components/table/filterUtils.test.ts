@@ -7,6 +7,8 @@ import {
   filterRows,
   getFilterModeLabel,
   hasActiveFilter,
+  parseSearchQuery,
+  matchesQuery,
 } from '../../../../src/ui/components/table/filterUtils';
 import type { TableFilterState, TableRowData } from '../../../../src/ui/components/table/types';
 
@@ -541,5 +543,206 @@ describe('hasActiveFilter', () => {
       searchQuery: 'error',
     });
     expect(hasActiveFilter(filterState)).toBe(true);
+  });
+});
+
+describe('parseSearchQuery', () => {
+  describe('literal search queries', () => {
+    it('parses plain text as literal search', () => {
+      const result = parseSearchQuery('hello world');
+      expect(result.isRegex).toBe(false);
+      expect(result.pattern).toBe('hello world');
+      expect(result.regex).toBeNull();
+      expect(result.error).toBeNull();
+    });
+
+    it('handles empty string', () => {
+      const result = parseSearchQuery('');
+      expect(result.isRegex).toBe(false);
+      expect(result.pattern).toBe('');
+    });
+
+    it('treats single slash as literal', () => {
+      const result = parseSearchQuery('/hello');
+      expect(result.isRegex).toBe(false);
+      expect(result.pattern).toBe('/hello');
+    });
+
+    it('treats text with embedded slashes as literal', () => {
+      const result = parseSearchQuery('path/to/file');
+      expect(result.isRegex).toBe(false);
+      expect(result.pattern).toBe('path/to/file');
+    });
+  });
+
+  describe('regex patterns', () => {
+    it('parses valid regex pattern', () => {
+      const result = parseSearchQuery('/hello/');
+      expect(result.isRegex).toBe(true);
+      expect(result.pattern).toBe('hello');
+      expect(result.regex).not.toBeNull();
+      expect(result.error).toBeNull();
+    });
+
+    it('parses regex with flags', () => {
+      const result = parseSearchQuery('/hello/gi');
+      expect(result.isRegex).toBe(true);
+      expect(result.pattern).toBe('hello');
+      expect(result.flags).toBe('gi');
+      expect(result.regex).not.toBeNull();
+    });
+
+    it('regex without flags is case-sensitive', () => {
+      const result = parseSearchQuery('/hello/');
+      expect(result.flags).toBe(''); // Empty = case-sensitive
+    });
+
+    it('parses complex regex patterns', () => {
+      const result = parseSearchQuery('/\\d{3}-\\d{4}/');
+      expect(result.isRegex).toBe(true);
+      expect(result.pattern).toBe('\\d{3}-\\d{4}');
+      expect(result.regex).not.toBeNull();
+    });
+
+    it('parses regex with special characters', () => {
+      const result = parseSearchQuery('/error|fail|timeout/i');
+      expect(result.isRegex).toBe(true);
+      expect(result.pattern).toBe('error|fail|timeout');
+      expect(result.regex).not.toBeNull();
+    });
+  });
+
+  describe('invalid regex patterns', () => {
+    it('returns error for invalid regex', () => {
+      const result = parseSearchQuery('/[invalid/');
+      expect(result.isRegex).toBe(true);
+      expect(result.regex).toBeNull();
+      expect(result.error).not.toBeNull();
+    });
+
+    it('returns error for unbalanced parentheses', () => {
+      const result = parseSearchQuery('/(unclosed/');
+      expect(result.isRegex).toBe(true);
+      expect(result.regex).toBeNull();
+      expect(result.error).not.toBeNull();
+    });
+
+    it('returns error for invalid flags', () => {
+      const result = parseSearchQuery('/hello/xyz');
+      expect(result.isRegex).toBe(true);
+      expect(result.regex).toBeNull();
+      expect(result.error).not.toBeNull();
+    });
+  });
+});
+
+describe('matchesQuery', () => {
+  describe('literal matching', () => {
+    it('matches case-insensitively by default', () => {
+      expect(matchesQuery('Hello World', 'hello')).toBe(true);
+      expect(matchesQuery('Hello World', 'WORLD')).toBe(true);
+    });
+
+    it('matches substring', () => {
+      expect(matchesQuery('The quick brown fox', 'quick')).toBe(true);
+      expect(matchesQuery('The quick brown fox', 'slow')).toBe(false);
+    });
+
+    it('handles empty content', () => {
+      expect(matchesQuery('', 'test')).toBe(false);
+    });
+  });
+
+  describe('regex matching', () => {
+    it('matches with regex pattern', () => {
+      expect(matchesQuery('Error 404 Not Found', '/\\d{3}/')).toBe(true);
+      expect(matchesQuery('No numbers here', '/\\d{3}/')).toBe(false);
+    });
+
+    it('matches email pattern', () => {
+      const emailRegex = '/[a-z]+@[a-z]+\\.[a-z]+/i';
+      expect(matchesQuery('Contact: test@example.com for info', emailRegex)).toBe(true);
+      expect(matchesQuery('No email here', emailRegex)).toBe(false);
+    });
+
+    it('matches alternatives', () => {
+      expect(matchesQuery('This is an error', '/error|warning|info/')).toBe(true);
+      expect(matchesQuery('This is a warning', '/error|warning|info/')).toBe(true);
+      expect(matchesQuery('This is success', '/error|warning|info/')).toBe(false);
+    });
+
+    it('returns false for invalid regex', () => {
+      expect(matchesQuery('test content', '/[invalid/')).toBe(false);
+    });
+  });
+});
+
+describe('regex search integration', () => {
+  // Create test rows for regex filtering
+  const regexTestRows: TableRowData[] = [
+    createMockRow(
+      0,
+      [{ content: 'Success: all tests passed', status: 'pass' }],
+      ['user@email.com'],
+    ),
+    createMockRow(
+      1,
+      [{ content: 'Error: API rate limit (429)', status: 'error' }],
+      ['admin@test.org'],
+    ),
+    createMockRow(2, [{ content: 'Failed: assertion mismatch', status: 'fail' }], ['plain text']),
+    createMockRow(
+      3,
+      [{ content: 'Timeout after 30000ms', status: 'error' }],
+      ['timeout@example.net'],
+    ),
+  ];
+
+  it('filters with regex in content', () => {
+    const filterState = createFilterState({ searchQuery: '/Error|Failed/i' });
+    const result = filterRows(regexTestRows, filterState);
+    expect(result).toHaveLength(2);
+    expect(result.map((r) => r.index)).toEqual([1, 2]);
+  });
+
+  it('filters with numeric regex pattern', () => {
+    const filterState = createFilterState({ searchQuery: '/\\d{3,}/' });
+    const result = filterRows(regexTestRows, filterState);
+    expect(result).toHaveLength(2); // 429 and 30000
+    expect(result.map((r) => r.index)).toEqual([1, 3]);
+  });
+
+  it('filters by email pattern in variables', () => {
+    const filterState = createFilterState({ searchQuery: '/@.*\\.(com|org|net)/' });
+    const result = filterRows(regexTestRows, filterState);
+    expect(result).toHaveLength(3); // All rows with email addresses
+  });
+
+  it('returns empty for invalid regex', () => {
+    const filterState = createFilterState({ searchQuery: '/[unclosed/' });
+    const result = filterRows(regexTestRows, filterState);
+    expect(result).toHaveLength(0);
+  });
+
+  it('combines regex with mode filter', () => {
+    const filterState = createFilterState({
+      mode: 'errors',
+      searchQuery: '/rate limit/',
+    });
+    const result = filterRows(regexTestRows, filterState);
+    expect(result).toHaveLength(1);
+    expect(result[0].index).toBe(1);
+  });
+
+  it('handles case-sensitive flag', () => {
+    // Without case-insensitive flag, should match exact case
+    const filterState = createFilterState({ searchQuery: '/ERROR/' });
+    const result = filterRows(regexTestRows, filterState);
+    expect(result).toHaveLength(0); // No exact match for 'ERROR'
+
+    // With case-insensitive flag
+    const filterState2 = createFilterState({ searchQuery: '/ERROR/i' });
+    const result2 = filterRows(regexTestRows, filterState2);
+    expect(result2).toHaveLength(1);
   });
 });
