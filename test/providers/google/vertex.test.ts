@@ -1647,6 +1647,7 @@ describe('VertexChatProvider.callLlamaApi', () => {
         total: 35,
         prompt: 15,
         completion: 20,
+        numRequests: 1,
       },
     });
 
