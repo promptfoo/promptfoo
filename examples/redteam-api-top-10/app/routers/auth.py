@@ -1,13 +1,20 @@
 """
 Auth Router - Login and user profile endpoints
 """
-from fastapi import APIRouter, HTTPException, Depends
-from pydantic import BaseModel
+
 from typing import Optional
 
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+
 from ..auth import (
-    login, validate_token, get_current_user, get_user_by_id,
-    UserContext, LoginRequest, LoginResponse
+    LoginRequest,
+    LoginResponse,
+    UserContext,
+    get_current_user,
+    get_user_by_id,
+    login,
+    validate_token,
 )
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -15,6 +22,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 class ValidateResponse(BaseModel):
     """Response from token validation."""
+
     valid: bool
     user: Optional[UserContext] = None
     error: Optional[str] = None
@@ -76,7 +84,7 @@ async def get_current_user_profile(user: UserContext = Depends(get_current_user)
         "full_name": db_user["full_name"],
         "department": db_user["department"],
         "office_location": db_user["office_location"],
-        "swag_points": db_user["swag_points"]
+        "swag_points": db_user["swag_points"],
     }
 
 
@@ -88,10 +96,14 @@ async def get_demo_credentials():
     return {
         "message": "Use any of these credentials to login",
         "credentials": [
-            {"username": "alice", "password": "password123", "department": "Engineering"},
+            {
+                "username": "alice",
+                "password": "password123",
+                "department": "Engineering",
+            },
             {"username": "bob", "password": "password123", "department": "Marketing"},
             {"username": "charlie", "password": "password123", "department": "Sales"},
             {"username": "diana", "password": "password123", "department": "HR"},
             {"username": "eve", "password": "password123", "department": "Finance"},
-        ]
+        ],
     }

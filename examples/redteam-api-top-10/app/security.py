@@ -4,22 +4,24 @@ Centralized security validation based on environment configuration.
 This module provides security checks for the OWASP API Security Top 10 vulnerabilities.
 Security levels: 1 = Weak (exploitable), 2 = Medium (bypassable), 3 = Strong (secure)
 """
+
 import re
-from typing import Tuple, List, Optional
+from typing import List, Optional, Tuple
+
 from .config import (
-    SECURITY_BOLA,
-    SECURITY_AUTH,
-    SECURITY_PROPERTY_AUTH,
-    SECURITY_FUNCTION_AUTH,
-    SECURITY_SSRF,
-    SECURITY_MISCONFIGURATION,
-    SECURITY_INVENTORY,
-    SECURITY_UNSAFE_CONSUMPTION,
-    SSRF_BLACKLIST,
-    SSRF_WHITELIST,
-    SENSITIVE_COLUMNS,
     ADMIN_TOOLS,
     PROMPT_DIFFICULTY,
+    SECURITY_AUTH,
+    SECURITY_BOLA,
+    SECURITY_FUNCTION_AUTH,
+    SECURITY_INVENTORY,
+    SECURITY_MISCONFIGURATION,
+    SECURITY_PROPERTY_AUTH,
+    SECURITY_SSRF,
+    SECURITY_UNSAFE_CONSUMPTION,
+    SENSITIVE_COLUMNS,
+    SSRF_BLACKLIST,
+    SSRF_WHITELIST,
 )
 
 # All demo user IDs for BOLA blacklist filtering
@@ -42,7 +44,7 @@ def validate_sql_query(query: str, user_id: str) -> Tuple[bool, str, Optional[st
     if SECURITY_BOLA == 3:
         # Level 3: Strong - Auto-wrap queries with user_id filter
         # Only apply to SELECT queries on orders table
-        if "from orders" in query_lower and not "where user_id" in query_lower:
+        if "from orders" in query_lower and "where user_id" not in query_lower:
             # Inject user_id filter
             if "where" in query_lower:
                 # Add to existing WHERE
@@ -50,7 +52,7 @@ def validate_sql_query(query: str, user_id: str) -> Tuple[bool, str, Optional[st
                     r"(where\s+)",
                     f"WHERE user_id = '{user_id}' AND ",
                     query,
-                    flags=re.IGNORECASE
+                    flags=re.IGNORECASE,
                 )
             else:
                 # Add WHERE clause
@@ -58,7 +60,7 @@ def validate_sql_query(query: str, user_id: str) -> Tuple[bool, str, Optional[st
                     r"(from\s+orders)",
                     f"FROM orders WHERE user_id = '{user_id}'",
                     query,
-                    flags=re.IGNORECASE
+                    flags=re.IGNORECASE,
                 )
             return True, modified, None
         return True, query, None
@@ -68,7 +70,11 @@ def validate_sql_query(query: str, user_id: str) -> Tuple[bool, str, Optional[st
         other_users = [uid for uid in ALL_USER_IDS if uid != user_id]
         for other_id in other_users:
             if other_id in query_lower:
-                return False, query, f"Access denied: Cannot query data for user '{other_id}'"
+                return (
+                    False,
+                    query,
+                    f"Access denied: Cannot query data for user '{other_id}'",
+                )
         return True, query, None
 
     else:
@@ -93,7 +99,10 @@ def validate_url(url: str) -> Tuple[bool, Optional[str]]:
         # Level 3: Strong - Whitelist only
         if any(url.startswith(allowed) for allowed in SSRF_WHITELIST):
             return True, None
-        return False, f"URL not in allowed list. Only these URLs are permitted: {SSRF_WHITELIST}"
+        return (
+            False,
+            f"URL not in allowed list. Only these URLs are permitted: {SSRF_WHITELIST}",
+        )
 
     elif SECURITY_SSRF == 2:
         # Level 2: Medium - Blacklist (but has bypasses like 0.0.0.0, [::1], etc.)
@@ -135,7 +144,11 @@ def filter_sensitive_columns(query: str, table: str) -> Tuple[bool, str, Optiona
     elif SECURITY_PROPERTY_AUTH == 2:
         # Level 2: Medium - Block SELECT * on tables with sensitive data
         if sensitive and "select *" in query_lower and table in query_lower:
-            return False, query, f"SELECT * not allowed on {table} table. Specify columns explicitly."
+            return (
+                False,
+                query,
+                f"SELECT * not allowed on {table} table. Specify columns explicitly.",
+            )
         return True, query, None
 
     else:
@@ -206,8 +219,10 @@ def sanitize_external_response(response: str) -> str:
     if SECURITY_UNSAFE_CONSUMPTION == 3:
         # Level 3: Sanitize response
         # Remove potential XSS, script tags, etc.
-        sanitized = re.sub(r'<script[^>]*>.*?</script>', '', response, flags=re.IGNORECASE | re.DOTALL)
-        sanitized = re.sub(r'javascript:', '', sanitized, flags=re.IGNORECASE)
+        sanitized = re.sub(
+            r"<script[^>]*>.*?</script>", "", response, flags=re.IGNORECASE | re.DOTALL
+        )
+        sanitized = re.sub(r"javascript:", "", sanitized, flags=re.IGNORECASE)
         return sanitized
     # Level 1 & 2: Return unsanitized
     return response
@@ -218,11 +233,29 @@ def get_security_status() -> dict:
     return {
         "BOLA": {"level": SECURITY_BOLA, "name": "Broken Object Level Authorization"},
         "AUTH": {"level": SECURITY_AUTH, "name": "Broken Authentication"},
-        "PROPERTY_AUTH": {"level": SECURITY_PROPERTY_AUTH, "name": "Broken Object Property Level Authorization"},
-        "FUNCTION_AUTH": {"level": SECURITY_FUNCTION_AUTH, "name": "Broken Function Level Authorization"},
+        "PROPERTY_AUTH": {
+            "level": SECURITY_PROPERTY_AUTH,
+            "name": "Broken Object Property Level Authorization",
+        },
+        "FUNCTION_AUTH": {
+            "level": SECURITY_FUNCTION_AUTH,
+            "name": "Broken Function Level Authorization",
+        },
         "SSRF": {"level": SECURITY_SSRF, "name": "Server Side Request Forgery"},
-        "MISCONFIGURATION": {"level": SECURITY_MISCONFIGURATION, "name": "Security Misconfiguration"},
-        "INVENTORY": {"level": SECURITY_INVENTORY, "name": "Improper Inventory Management"},
-        "UNSAFE_CONSUMPTION": {"level": SECURITY_UNSAFE_CONSUMPTION, "name": "Unsafe Consumption of APIs"},
-        "PROMPT_DIFFICULTY": {"level": PROMPT_DIFFICULTY, "name": "System Prompt Difficulty (easy/hard)"},
+        "MISCONFIGURATION": {
+            "level": SECURITY_MISCONFIGURATION,
+            "name": "Security Misconfiguration",
+        },
+        "INVENTORY": {
+            "level": SECURITY_INVENTORY,
+            "name": "Improper Inventory Management",
+        },
+        "UNSAFE_CONSUMPTION": {
+            "level": SECURITY_UNSAFE_CONSUMPTION,
+            "name": "Unsafe Consumption of APIs",
+        },
+        "PROMPT_DIFFICULTY": {
+            "level": PROMPT_DIFFICULTY,
+            "name": "System Prompt Difficulty (easy/hard)",
+        },
     }

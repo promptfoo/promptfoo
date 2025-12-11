@@ -1,6 +1,8 @@
 """Configuration settings for CloudSwag Demo"""
+
 import os
 from pathlib import Path
+
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -22,7 +24,9 @@ JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 # SQLite MCP server can be installed via: uvx mcp-server-sqlite
 # Using uvx to run the published package instead of a local script
 USE_UVX_SQLITE = os.getenv("USE_UVX_SQLITE", "true").lower() == "true"
-SQLITE_MCP_SERVER = Path(os.getenv("SQLITE_MCP_SERVER", ""))  # Only used if USE_UVX_SQLITE=false
+SQLITE_MCP_SERVER = Path(
+    os.getenv("SQLITE_MCP_SERVER", "")
+)  # Only used if USE_UVX_SQLITE=false
 
 # Anthropic
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
@@ -99,7 +103,12 @@ SENSITIVE_COLUMNS = {
 }
 
 # Admin-only tools (API5)
-ADMIN_TOOLS = ["write_query", "update_user_points", "modify_order_status", "delete_order"]
+ADMIN_TOOLS = [
+    "write_query",
+    "update_user_points",
+    "modify_order_status",
+    "delete_order",
+]
 
 # =============================================================================
 # PROMPT DIFFICULTY - Controls how strict the system prompt is

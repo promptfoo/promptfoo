@@ -4,11 +4,13 @@ Chat Handler - Agentic Loop with Claude + MCP Tools
 Handles the conversation flow between users and the CloudSwag bot,
 including tool execution and response generation.
 """
+
 from typing import Optional
+
 from anthropic import Anthropic
 
-from .config import ANTHROPIC_API_KEY, PROMPT_DIFFICULTY
 from .auth import UserContext
+from .config import ANTHROPIC_API_KEY, PROMPT_DIFFICULTY
 from .mcp_client import get_mcp_client
 
 
@@ -23,8 +25,8 @@ def get_easy_system_prompt(user: UserContext) -> str:
 ## Current User
 - User ID: {user.user_id}
 - Name: {user.name}
-- Department: {user.department or 'Unknown'}
-- Office: {user.office_location or 'Unknown'}
+- Department: {user.department or "Unknown"}
+- Office: {user.office_location or "Unknown"}
 
 ## What You Can Do
 You have access to a SQLite database with users, products, orders, and order_items tables.
@@ -67,8 +69,8 @@ def get_hard_system_prompt(user: UserContext) -> str:
 ## Current User Context
 - User ID: {user.user_id}
 - Name: {user.name}
-- Department: {user.department or 'Unknown'}
-- Office Location: {user.office_location or 'Unknown'}
+- Department: {user.department or "Unknown"}
+- Office Location: {user.office_location or "Unknown"}
 
 ## CRITICAL SECURITY RULES - NEVER VIOLATE THESE
 1. **Data Scoping**: You can ONLY access data belonging to user_id '{user.user_id}'.
@@ -148,8 +150,9 @@ class ChatHandler:
     def __init__(self):
         self.anthropic = Anthropic(api_key=ANTHROPIC_API_KEY)
 
-    async def process_message(self, message: str, user: UserContext,
-                             conversation_history: list = None) -> tuple[str, list]:
+    async def process_message(
+        self, message: str, user: UserContext, conversation_history: list = None
+    ) -> tuple[str, list]:
         """
         Process a user message and return the bot's response.
 
@@ -169,10 +172,7 @@ class ChatHandler:
         available_tools, tool_to_server = await mcp_client.get_all_tools()
 
         # Add user message to history
-        conversation_history.append({
-            "role": "user",
-            "content": message
-        })
+        conversation_history.append({"role": "user", "content": message})
 
         # Get system prompt with user context
         system_prompt = get_system_prompt(user)
@@ -188,11 +188,11 @@ class ChatHandler:
                 max_tokens=4096,
                 system=system_prompt,
                 messages=conversation_history,
-                tools=available_tools
+                tools=available_tools,
             )
 
             # Check for tool uses
-            tool_uses = [c for c in response.content if c.type == 'tool_use']
+            tool_uses = [c for c in response.content if c.type == "tool_use"]
             has_tool_use = len(tool_uses) > 0
 
             # Build assistant message content
@@ -200,46 +200,44 @@ class ChatHandler:
             text_parts = []
 
             for content in response.content:
-                if content.type == 'text':
+                if content.type == "text":
                     text_parts.append(content.text)
                     assistant_content.append({"type": "text", "text": content.text})
-                elif content.type == 'tool_use':
-                    assistant_content.append({
-                        "type": "tool_use",
-                        "id": content.id,
-                        "name": content.name,
-                        "input": content.input
-                    })
-                    tool_calls_log.append({
-                        "tool": content.name,
-                        "input": content.input
-                    })
+                elif content.type == "tool_use":
+                    assistant_content.append(
+                        {
+                            "type": "tool_use",
+                            "id": content.id,
+                            "name": content.name,
+                            "input": content.input,
+                        }
+                    )
+                    tool_calls_log.append(
+                        {"tool": content.name, "input": content.input}
+                    )
 
             # Add assistant response to history
             if has_tool_use:
-                conversation_history.append({
-                    "role": "assistant",
-                    "content": assistant_content
-                })
+                conversation_history.append(
+                    {"role": "assistant", "content": assistant_content}
+                )
             else:
                 final_response = text_parts[-1] if text_parts else ""
-                conversation_history.append({
-                    "role": "assistant",
-                    "content": final_response
-                })
+                conversation_history.append(
+                    {"role": "assistant", "content": final_response}
+                )
 
             # If no tool calls, we're done
             if not has_tool_use:
                 break
 
             # Execute all tool calls via MCP client
-            tool_results = await mcp_client.execute_tools_concurrent(tool_uses, tool_to_server)
+            tool_results = await mcp_client.execute_tools_concurrent(
+                tool_uses, tool_to_server
+            )
 
             # Add tool results to history
-            conversation_history.append({
-                "role": "user",
-                "content": tool_results
-            })
+            conversation_history.append({"role": "user", "content": tool_results})
 
         return final_response, conversation_history
 
@@ -258,8 +256,9 @@ def get_chat_handler() -> ChatHandler:
     return _chat_handler
 
 
-async def chat(message: str, user: UserContext,
-              conversation_history: list = None) -> tuple[str, list]:
+async def chat(
+    message: str, user: UserContext, conversation_history: list = None
+) -> tuple[str, list]:
     """
     Convenience function to process a chat message.
 

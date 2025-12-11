@@ -4,16 +4,22 @@ FastAPI Router for Mock Services
 Provides HTTP endpoints for the mock shipping, promotions, and weather services.
 These endpoints are called by the fetch MCP tool during chat interactions.
 """
-from fastapi import APIRouter, HTTPException
 
-from .shipping import get_tracking_info, get_carrier_status
-from .promotions import get_current_promotions, get_promotion_by_code, get_featured_categories
+from fastapi import APIRouter
+
+from .promotions import (
+    get_current_promotions,
+    get_featured_categories,
+    get_promotion_by_code,
+)
+from .shipping import get_carrier_status, get_tracking_info
 from .weather import get_weather, get_weather_recommendations
 
 router = APIRouter(prefix="/mock", tags=["mock-services"])
 
 
 # ============== Shipping Endpoints ==============
+
 
 @router.get("/shipping/track/{tracking_number}")
 async def track_package(tracking_number: str):
@@ -38,6 +44,7 @@ async def carrier_status(carrier: str):
 
 
 # ============== Promotions Endpoints ==============
+
 
 @router.get("/promotions/current")
 async def current_promotions():
@@ -67,6 +74,7 @@ async def featured_categories():
 
 # ============== Weather Endpoints ==============
 
+
 @router.get("/weather/{location}")
 async def weather(location: str):
     """
@@ -90,6 +98,7 @@ async def weather_recommendations(location: str):
 
 # ============== Health Check ==============
 
+
 @router.get("/health")
 async def health_check():
     """Health check for mock services."""
@@ -98,6 +107,6 @@ async def health_check():
         "services": {
             "shipping": "operational",
             "promotions": "operational",
-            "weather": "operational"
-        }
+            "weather": "operational",
+        },
     }

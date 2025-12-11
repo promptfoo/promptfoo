@@ -4,23 +4,20 @@ CloudSwag Customer Service Bot - FastAPI Application
 Main entry point for the swag store demo.
 Demonstrates MCP tool integration with JWT-based session management.
 """
-import os
+
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+from mock_services.internal import router as internal_router
+from mock_services.router import router as mock_router
 
+from .config import ANTHROPIC_API_KEY, PROJECT_ROOT
 from .mcp_client import get_mcp_client, shutdown_mcp_client
 from .routers import auth, chat, products
-from .config import (
-    PROJECT_ROOT, ANTHROPIC_API_KEY,
-    SECURITY_MISCONFIGURATION, SECURITY_INVENTORY
-)
 from .security import get_security_status, is_debug_enabled, is_legacy_api_enabled
-from mock_services.router import router as mock_router
 
 
 @asynccontextmanager
@@ -37,7 +34,9 @@ async def lifespan(app: FastAPI):
     print("\nSecurity Configuration (OWASP API Top 10):")
     security_status = get_security_status()
     for key, info in security_status.items():
-        level_text = {1: "WEAK (vulnerable)", 2: "MEDIUM", 3: "STRONG (secure)"}.get(info["level"], "?")
+        level_text = {1: "WEAK (vulnerable)", 2: "MEDIUM", 3: "STRONG (secure)"}.get(
+            info["level"], "?"
+        )
         print(f"  {key}: Level {info['level']} - {level_text}")
 
     # Check for API key
@@ -74,7 +73,7 @@ app = FastAPI(
     title="CloudSwag Customer Service Bot",
     description="Demo application showcasing MCP tool integration for a swag store chatbot",
     version="1.0.0",
-    lifespan=lifespan
+    lifespan=lifespan,
 )
 
 # CORS middleware for web UI
@@ -95,15 +94,16 @@ app.include_router(mock_router)
 # Conditionally include debug router (API8: Security Misconfiguration)
 if is_debug_enabled():
     from .routers import debug
+
     app.include_router(debug.router)
 
 # Conditionally include legacy v1 router (API9: Improper Inventory Management)
 if is_legacy_api_enabled():
     from .routers import legacy
+
     app.include_router(legacy.router)
 
 # Include internal metadata endpoints (API7: SSRF demo target)
-from mock_services.internal import router as internal_router
 app.include_router(internal_router)
 
 # Static files for web UI
@@ -121,7 +121,7 @@ async def root():
     return {
         "message": "CloudSwag Customer Service Bot",
         "docs": "/docs",
-        "chat_ui": "/static/index.html"
+        "chat_ui": "/static/index.html",
     }
 
 
@@ -130,12 +130,14 @@ async def health_check():
     """Health check endpoint."""
     from .mcp_client import _mcp_client
 
-    mcp_status = "connected" if (_mcp_client and _mcp_client.is_connected) else "disconnected"
+    mcp_status = (
+        "connected" if (_mcp_client and _mcp_client.is_connected) else "disconnected"
+    )
 
     return {
         "status": "healthy",
         "mcp_servers": mcp_status,
-        "anthropic_configured": bool(ANTHROPIC_API_KEY)
+        "anthropic_configured": bool(ANTHROPIC_API_KEY),
     }
 
 
@@ -150,13 +152,13 @@ async def security_status():
         "levels": {
             1: "Weak (easily exploitable)",
             2: "Medium (bypassable with effort)",
-            3: "Strong (secure)"
+            3: "Strong (secure)",
         },
         "configuration": get_security_status(),
         "active_endpoints": {
             "debug": is_debug_enabled(),
-            "legacy_v1": is_legacy_api_enabled()
-        }
+            "legacy_v1": is_legacy_api_enabled(),
+        },
     }
 
 
@@ -171,25 +173,26 @@ async def api_info():
                 "POST /chat/": "Send a message to the bot",
                 "GET /chat/sessions": "List user's chat sessions",
                 "GET /chat/session/{id}/history": "Get session history",
-                "DELETE /chat/session/{id}": "Clear a session"
+                "DELETE /chat/session/{id}": "Clear a session",
             },
             "auth": {
                 "POST /auth/token": "Generate JWT token for demo user",
                 "POST /auth/validate": "Validate a token",
                 "GET /auth/demo-users": "List available demo users",
-                "GET /auth/demo-tokens": "Get JWT tokens for all demo users"
+                "GET /auth/demo-tokens": "Get JWT tokens for all demo users",
             },
             "mock_services": {
                 "GET /mock/shipping/track/{tracking}": "Track a package",
                 "GET /mock/promotions/current": "Get current promotions",
-                "GET /mock/weather/{location}": "Get weather data"
-            }
+                "GET /mock/weather/{location}": "Get weather data",
+            },
         },
         "demo_users": ["alice", "bob", "charlie", "diana", "eve"],
-        "hint": "In mock auth mode, use demo user names directly as tokens"
+        "hint": "In mock auth mode, use demo user names directly as tokens",
     }
 
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8000)

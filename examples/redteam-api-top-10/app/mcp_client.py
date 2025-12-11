@@ -4,15 +4,15 @@ MCP Client for CloudSwag Demo
 Adapted from mcp_tool_tutorial/mcp-client/client.py
 Connects to SQLite and Filesystem MCP servers for the swag store chatbot.
 """
+
 import asyncio
-from pathlib import Path
-from typing import Optional
 from contextlib import AsyncExitStack
+from typing import Optional
 
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
-from .config import SQLITE_MCP_SERVER, SWAG_DB_PATH, POLICIES_DIR, USE_UVX_SQLITE
+from .config import POLICIES_DIR, SQLITE_MCP_SERVER, SWAG_DB_PATH, USE_UVX_SQLITE
 
 
 class SwagMCPClient:
@@ -35,9 +35,13 @@ class SwagMCPClient:
                 if config["type"] == "stdio":
                     await self._connect_stdio(name, config["command"], config["args"])
                 elif config["type"] == "npx":
-                    await self._connect_npx(name, config["package"], config.get("args", []))
+                    await self._connect_npx(
+                        name, config["package"], config.get("args", [])
+                    )
                 elif config["type"] == "uvx":
-                    await self._connect_uvx(name, config["package"], config.get("args", []))
+                    await self._connect_uvx(
+                        name, config["package"], config.get("args", [])
+                    )
 
                 print(f"Connected to MCP server: {name}")
             except Exception as e:
@@ -58,44 +62,38 @@ class SwagMCPClient:
             configs["sqlite"] = {
                 "type": "uvx",
                 "package": "mcp-server-sqlite",
-                "args": ["--db-path", str(SWAG_DB_PATH)]
+                "args": ["--db-path", str(SWAG_DB_PATH)],
             }
         elif SQLITE_MCP_SERVER and SQLITE_MCP_SERVER.exists():
             configs["sqlite"] = {
                 "type": "stdio",
                 "command": "python",
-                "args": [str(SQLITE_MCP_SERVER), "--db-path", str(SWAG_DB_PATH)]
+                "args": [str(SQLITE_MCP_SERVER), "--db-path", str(SWAG_DB_PATH)],
             }
         else:
-            print(f"Warning: SQLite MCP server not configured. Set USE_UVX_SQLITE=true or provide SQLITE_MCP_SERVER path")
+            print(
+                "Warning: SQLite MCP server not configured. Set USE_UVX_SQLITE=true or provide SQLITE_MCP_SERVER path"
+            )
 
         # Filesystem MCP Server - for policy documents
         if POLICIES_DIR.exists():
             configs["filesystem"] = {
                 "type": "npx",
                 "package": "@modelcontextprotocol/server-filesystem",
-                "args": [str(POLICIES_DIR)]
+                "args": [str(POLICIES_DIR)],
             }
         else:
             print(f"Warning: Policies directory not found at {POLICIES_DIR}")
 
         # Fetch MCP Server - for external API calls (official MCP server)
         # https://github.com/modelcontextprotocol/servers/tree/main/src/fetch
-        configs["fetch"] = {
-            "type": "uvx",
-            "package": "mcp-server-fetch",
-            "args": []
-        }
+        configs["fetch"] = {"type": "uvx", "package": "mcp-server-fetch", "args": []}
 
         return configs
 
     async def _connect_stdio(self, name: str, command: str, args: list):
         """Connect to a stdio-based MCP server."""
-        server_params = StdioServerParameters(
-            command=command,
-            args=args,
-            env=None
-        )
+        server_params = StdioServerParameters(command=command, args=args, env=None)
 
         stdio_transport = await self.exit_stack.enter_async_context(
             stdio_client(server_params)
@@ -118,11 +116,7 @@ class SwagMCPClient:
         """Connect to an npx-based MCP server."""
         npx_args = ["-y", package] + args
 
-        server_params = StdioServerParameters(
-            command="npx",
-            args=npx_args,
-            env=None
-        )
+        server_params = StdioServerParameters(command="npx", args=npx_args, env=None)
 
         stdio_transport = await self.exit_stack.enter_async_context(
             stdio_client(server_params)
@@ -145,11 +139,7 @@ class SwagMCPClient:
         """Connect to a uvx-based MCP server (Python packages)."""
         uvx_args = [package] + args
 
-        server_params = StdioServerParameters(
-            command="uvx",
-            args=uvx_args,
-            env=None
-        )
+        server_params = StdioServerParameters(command="uvx", args=uvx_args, env=None)
 
         stdio_transport = await self.exit_stack.enter_async_context(
             stdio_client(server_params)
@@ -181,17 +171,20 @@ class SwagMCPClient:
         for server_name, session in self.sessions.items():
             response = await session.list_tools()
             for tool in response.tools:
-                available_tools.append({
-                    "name": tool.name,
-                    "description": tool.description,
-                    "input_schema": tool.inputSchema
-                })
+                available_tools.append(
+                    {
+                        "name": tool.name,
+                        "description": tool.description,
+                        "input_schema": tool.inputSchema,
+                    }
+                )
                 tool_to_server[tool.name] = server_name
 
         return available_tools, tool_to_server
 
-    async def execute_tool(self, tool_name: str, tool_args: dict, tool_id: str,
-                          tool_to_server: dict) -> dict:
+    async def execute_tool(
+        self, tool_name: str, tool_args: dict, tool_id: str, tool_to_server: dict
+    ) -> dict:
         """
         Execute a single tool call.
 
@@ -211,7 +204,7 @@ class SwagMCPClient:
                 "type": "tool_result",
                 "tool_use_id": tool_id,
                 "content": f"Error: Unknown tool '{tool_name}'",
-                "is_error": True
+                "is_error": True,
             }
 
         session = self.sessions.get(server_name)
@@ -220,7 +213,7 @@ class SwagMCPClient:
                 "type": "tool_result",
                 "tool_use_id": tool_id,
                 "content": f"Error: Server '{server_name}' not connected",
-                "is_error": True
+                "is_error": True,
             }
 
         try:
@@ -230,26 +223,28 @@ class SwagMCPClient:
             content_parts = []
             if result.content:
                 for item in result.content:
-                    if hasattr(item, 'text'):
+                    if hasattr(item, "text"):
                         content_parts.append(item.text)
 
-            content = "\n".join(content_parts) if content_parts else "Tool executed successfully"
+            content = (
+                "\n".join(content_parts)
+                if content_parts
+                else "Tool executed successfully"
+            )
 
-            return {
-                "type": "tool_result",
-                "tool_use_id": tool_id,
-                "content": content
-            }
+            return {"type": "tool_result", "tool_use_id": tool_id, "content": content}
 
         except Exception as e:
             return {
                 "type": "tool_result",
                 "tool_use_id": tool_id,
                 "content": f"Error executing {tool_name}: {str(e)}",
-                "is_error": True
+                "is_error": True,
             }
 
-    async def execute_tools_concurrent(self, tool_uses: list, tool_to_server: dict) -> list[dict]:
+    async def execute_tools_concurrent(
+        self, tool_uses: list, tool_to_server: dict
+    ) -> list[dict]:
         """
         Execute multiple tool calls concurrently.
 
@@ -266,7 +261,7 @@ class SwagMCPClient:
                 tool_name=tool_use.name,
                 tool_args=tool_use.input,
                 tool_id=tool_use.id,
-                tool_to_server=tool_to_server
+                tool_to_server=tool_to_server,
             )
             tasks.append(task)
 

@@ -4,8 +4,11 @@ Legacy v1 API - Deprecated endpoints that should have been removed.
 This demonstrates API9: Improper Inventory Management
 These endpoints exist without proper documentation and have weaker security.
 """
+
 import sqlite3
+
 from fastapi import APIRouter
+
 from ..config import SECURITY_INVENTORY, SWAG_DB_PATH
 
 router = APIRouter(prefix="/api/v1", tags=["legacy"])
@@ -26,7 +29,7 @@ async def list_all_orders_v1():
         return {
             "error": "This API version has been deprecated",
             "message": "Please use /api/orders instead",
-            "docs": "/docs#/products/list_orders_api_orders_get"
+            "docs": "/docs#/products/list_orders_api_orders_get",
         }
 
     conn = sqlite3.connect(SWAG_DB_PATH)
@@ -45,23 +48,25 @@ async def list_all_orders_v1():
 
         orders = []
         for row in rows:
-            orders.append({
-                "order_id": row[0],
-                "user_id": row[1],
-                "status": row[2],
-                "total_points": row[3],
-                "shipping_address": row[4],
-                "tracking_number": row[5],
-                "carrier": row[6],
-                "created_at": row[7],
-                "customer_name": row[8],
-                "customer_email": row[9]
-            })
+            orders.append(
+                {
+                    "order_id": row[0],
+                    "user_id": row[1],
+                    "status": row[2],
+                    "total_points": row[3],
+                    "shipping_address": row[4],
+                    "tracking_number": row[5],
+                    "carrier": row[6],
+                    "created_at": row[7],
+                    "customer_name": row[8],
+                    "customer_email": row[9],
+                }
+            )
 
         return {
             "warning": "DEPRECATED: This endpoint will be removed. Use /api/orders instead.",
             "orders": orders,
-            "total": len(orders)
+            "total": len(orders),
         }
 
     finally:
@@ -79,7 +84,7 @@ async def list_all_users_v1():
     if SECURITY_INVENTORY >= 3:
         return {
             "error": "This API version has been deprecated",
-            "message": "User listing is not available in the public API"
+            "message": "User listing is not available in the public API",
         }
 
     conn = sqlite3.connect(SWAG_DB_PATH)
@@ -94,19 +99,21 @@ async def list_all_users_v1():
 
         users = []
         for row in rows:
-            users.append({
-                "user_id": row[0],
-                "email": row[1],
-                "full_name": row[2],
-                "department": row[3],
-                "office_location": row[4],
-                "swag_points": row[5]
-            })
+            users.append(
+                {
+                    "user_id": row[0],
+                    "email": row[1],
+                    "full_name": row[2],
+                    "department": row[3],
+                    "office_location": row[4],
+                    "swag_points": row[5],
+                }
+            )
 
         return {
             "warning": "DEPRECATED: This endpoint exposes user data without authentication",
             "users": users,
-            "total": len(users)
+            "total": len(users),
         }
 
     finally:
@@ -124,7 +131,7 @@ async def list_products_internal_v1():
     if SECURITY_INVENTORY >= 3:
         return {
             "error": "This API version has been deprecated",
-            "message": "Use /api/products instead"
+            "message": "Use /api/products instead",
         }
 
     conn = sqlite3.connect(SWAG_DB_PATH)
@@ -142,25 +149,27 @@ async def list_products_internal_v1():
 
         products = []
         for row in rows:
-            products.append({
-                "product_id": row[0],
-                "name": row[1],
-                "category": row[2],
-                "description": row[3],
-                "price_points": row[4],
-                "size": row[5],
-                "color": row[6],
-                "stock_quantity": row[7],
-                # Internal data that should NOT be exposed:
-                "cost_price": row[8],
-                "profit_margin": row[9],
-                "supplier_id": row[10]
-            })
+            products.append(
+                {
+                    "product_id": row[0],
+                    "name": row[1],
+                    "category": row[2],
+                    "description": row[3],
+                    "price_points": row[4],
+                    "size": row[5],
+                    "color": row[6],
+                    "stock_quantity": row[7],
+                    # Internal data that should NOT be exposed:
+                    "cost_price": row[8],
+                    "profit_margin": row[9],
+                    "supplier_id": row[10],
+                }
+            )
 
         return {
             "warning": "DEPRECATED: Internal pricing data exposed - use /api/products",
             "products": products,
-            "total": len(products)
+            "total": len(products),
         }
 
     finally:
@@ -210,14 +219,14 @@ async def admin_stats_v1():
             "orders": {
                 "total": order_stats[0],
                 "total_points_spent": order_stats[1],
-                "by_status": status_breakdown
+                "by_status": status_breakdown,
             },
             "top_products": top_products,
             "users": {
                 "total": user_stats[0],
                 "total_points_balance": user_stats[1],
-                "average_salary": user_stats[2]  # SENSITIVE!
-            }
+                "average_salary": user_stats[2],  # SENSITIVE!
+            },
         }
 
     finally:
@@ -231,5 +240,5 @@ async def health_v1():
         "status": "ok",
         "version": "v1",
         "warning": "Use /health instead",
-        "deprecated": True
+        "deprecated": True,
     }

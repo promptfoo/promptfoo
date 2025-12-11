@@ -1,11 +1,13 @@
 """
 Chat Router - API endpoints for the CloudSwag chatbot
 """
-from fastapi import APIRouter, HTTPException, Depends
-from pydantic import BaseModel
-from typing import Optional, List
 
-from ..auth import get_current_user, UserContext, validate_token
+from typing import Optional
+
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
+
+from ..auth import UserContext, validate_token
 from ..chat_handler import chat
 from ..config import SECURITY_AUTH
 
@@ -19,6 +21,7 @@ _sessions: dict[str, list] = {}
 
 class ChatRequest(BaseModel):
     """Request body for chat messages."""
+
     message: str
     token: str  # JWT token or demo user name
     session_id: Optional[str] = None  # Optional session ID for conversation continuity
@@ -29,6 +32,7 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     """Response from chat endpoint."""
+
     response: str
     user_id: str
     user_name: str
@@ -37,6 +41,7 @@ class ChatResponse(BaseModel):
 
 class ToolCall(BaseModel):
     """Tool call information for debugging."""
+
     tool: str
     input: dict
 
@@ -78,7 +83,7 @@ async def send_message(request: ChatRequest):
             name=f"Override ({request.user_id_override})",
             email=None,
             department=None,
-            office_location=None
+            office_location=None,
         )
 
     # Get or create session
@@ -94,7 +99,7 @@ async def send_message(request: ChatRequest):
         response_text, updated_history = await chat(
             message=request.message,
             user=user,
-            conversation_history=conversation_history
+            conversation_history=conversation_history,
         )
 
         # Update session
@@ -104,7 +109,7 @@ async def send_message(request: ChatRequest):
             response=response_text,
             user_id=user.user_id,
             user_name=user.name,
-            session_id=session_id
+            session_id=session_id,
         )
 
     except Exception as e:
@@ -128,7 +133,9 @@ async def clear_session(session_id: str, token: str):
 
     # Check session belongs to user
     if not session_id.startswith(user.user_id):
-        raise HTTPException(status_code=403, detail="Cannot clear another user's session")
+        raise HTTPException(
+            status_code=403, detail="Cannot clear another user's session"
+        )
 
     if session_id in _sessions:
         del _sessions[session_id]
@@ -154,7 +161,9 @@ async def get_session_history(session_id: str, token: str):
 
     # Check session belongs to user
     if not session_id.startswith(user.user_id):
-        raise HTTPException(status_code=403, detail="Cannot view another user's session")
+        raise HTTPException(
+            status_code=403, detail="Cannot view another user's session"
+        )
 
     history = _sessions.get(session_id, [])
 
@@ -173,7 +182,7 @@ async def get_session_history(session_id: str, token: str):
     return {
         "session_id": session_id,
         "message_count": len(history),
-        "history": simplified
+        "history": simplified,
     }
 
 
@@ -195,12 +204,8 @@ async def list_user_sessions(token: str):
     user_sessions = []
     for session_id, history in _sessions.items():
         if session_id.startswith(user.user_id):
-            user_sessions.append({
-                "session_id": session_id,
-                "message_count": len(history)
-            })
+            user_sessions.append(
+                {"session_id": session_id, "message_count": len(history)}
+            )
 
-    return {
-        "user_id": user.user_id,
-        "sessions": user_sessions
-    }
+    return {"user_id": user.user_id, "sessions": user_sessions}

@@ -3,8 +3,8 @@ Mock Weather Service
 
 Provides weather data for user locations to enable product recommendations.
 """
+
 from datetime import datetime
-from typing import Optional
 
 # Mock weather data by city
 WEATHER_DATA = {
@@ -20,8 +20,8 @@ WEATHER_DATA = {
         "weather_tags": ["cold", "mild"],
         "recommendations": [
             "Perfect hoodie weather! Check out our CloudCo Zip Hoodie.",
-            "A warm coffee mug would be great for foggy mornings."
-        ]
+            "A warm coffee mug would be great for foggy mornings.",
+        ],
     },
     "new york, ny": {
         "city": "New York",
@@ -35,8 +35,8 @@ WEATHER_DATA = {
         "weather_tags": ["cold", "outdoor"],
         "recommendations": [
             "Definitely beanie weather! Our CloudCo Beanie will keep you warm.",
-            "Layer up with a hoodie under your coat."
-        ]
+            "Layer up with a hoodie under your coat.",
+        ],
     },
     "chicago, il": {
         "city": "Chicago",
@@ -51,8 +51,8 @@ WEATHER_DATA = {
         "recommendations": [
             "Bundle up! Our warmest hoodie is the CloudCo Zip Hoodie.",
             "Don't forget a beanie - you'll need it in that wind!",
-            "Hot coffee in a CloudCo mug is essential today."
-        ]
+            "Hot coffee in a CloudCo mug is essential today.",
+        ],
     },
     "austin, tx": {
         "city": "Austin",
@@ -67,8 +67,8 @@ WEATHER_DATA = {
         "recommendations": [
             "Perfect t-shirt weather! Check out our CloudCo Logo Tee.",
             "Don't forget your snapback for the sun!",
-            "Stay hydrated with our insulated water bottle."
-        ]
+            "Stay hydrated with our insulated water bottle.",
+        ],
     },
     "seattle, wa": {
         "city": "Seattle",
@@ -83,8 +83,8 @@ WEATHER_DATA = {
         "recommendations": [
             "Hoodie weather for sure! Stay warm and dry.",
             "A travel tumbler keeps your coffee warm between rain sprints.",
-            "Work from home? Our desk pad makes rainy days cozier."
-        ]
+            "Work from home? Our desk pad makes rainy days cozier.",
+        ],
     },
     # Default for unknown locations
     "default": {
@@ -99,9 +99,9 @@ WEATHER_DATA = {
         "weather_tags": ["mild"],
         "recommendations": [
             "A classic CloudCo Logo Tee works in any weather!",
-            "Can't go wrong with our versatile Travel Tumbler."
-        ]
-    }
+            "Can't go wrong with our versatile Travel Tumbler.",
+        ],
+    },
 }
 
 
@@ -139,7 +139,11 @@ def get_weather(location: str) -> dict:
             data = WEATHER_DATA[matched]
         else:
             data = WEATHER_DATA["default"]
-            data = {**data, "city": location, "note": "Weather data approximated for unknown location"}
+            data = {
+                **data,
+                "city": location,
+                "note": "Weather data approximated for unknown location",
+            }
 
     now = datetime.now()
 
@@ -156,7 +160,7 @@ def get_weather(location: str) -> dict:
         "forecast": data["forecast"],
         "weather_tags": data["weather_tags"],
         "product_recommendations": data["recommendations"],
-        "updated_at": now.strftime("%Y-%m-%d %H:%M:%S")
+        "updated_at": now.strftime("%Y-%m-%d %H:%M:%S"),
     }
 
 
@@ -177,7 +181,7 @@ def get_weather_recommendations(location: str) -> dict:
         "condition": weather["condition"],
         "temperature": weather["temperature"],
         "recommendations": weather["product_recommendations"],
-        "suggested_categories": get_categories_for_weather(weather["weather_tags"])
+        "suggested_categories": get_categories_for_weather(weather["weather_tags"]),
     }
 
 
@@ -189,7 +193,7 @@ def get_categories_for_weather(tags: list) -> list:
         "sunny": ["snapbacks", "water bottles"],
         "mild": ["t-shirts", "accessories"],
         "indoor": ["mugs", "mousepad", "stickers"],
-        "outdoor": ["backpack", "water bottles", "snapbacks"]
+        "outdoor": ["backpack", "water bottles", "snapbacks"],
     }
 
     categories = set()

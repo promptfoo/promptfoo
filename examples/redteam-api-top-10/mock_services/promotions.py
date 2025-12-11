@@ -3,8 +3,8 @@ Mock Promotions Service
 
 Provides current promotions, announcements, and deals for the swag store.
 """
+
 from datetime import datetime, timedelta
-from typing import List
 
 
 def get_current_promotions() -> dict:
@@ -18,12 +18,19 @@ def get_current_promotions() -> dict:
             "description": "Get 20% off all hoodies! Use code WARMUP at checkout.",
             "discount_type": "percentage",
             "discount_value": 20,
-            "applies_to": ["HOODIE-GRY-S", "HOODIE-GRY-M", "HOODIE-GRY-L", "HOODIE-GRY-XL", "HOODIE-NVY-M", "HOODIE-NVY-L"],
+            "applies_to": [
+                "HOODIE-GRY-S",
+                "HOODIE-GRY-M",
+                "HOODIE-GRY-L",
+                "HOODIE-GRY-XL",
+                "HOODIE-NVY-M",
+                "HOODIE-NVY-L",
+            ],
             "category": "apparel",
             "code": "WARMUP",
             "starts": (now - timedelta(days=5)).strftime("%Y-%m-%d"),
             "expires": (now + timedelta(days=20)).strftime("%Y-%m-%d"),
-            "active": True
+            "active": True,
         },
         {
             "id": "promo_sticker_bundle",
@@ -36,7 +43,7 @@ def get_current_promotions() -> dict:
             "code": None,  # Auto-applied
             "starts": (now - timedelta(days=30)).strftime("%Y-%m-%d"),
             "expires": (now + timedelta(days=60)).strftime("%Y-%m-%d"),
-            "active": True
+            "active": True,
         },
         {
             "id": "promo_new_arrival",
@@ -49,8 +56,8 @@ def get_current_promotions() -> dict:
             "code": None,
             "starts": (now - timedelta(days=7)).strftime("%Y-%m-%d"),
             "expires": (now + timedelta(days=30)).strftime("%Y-%m-%d"),
-            "active": True
-        }
+            "active": True,
+        },
     ]
 
     announcements = [
@@ -59,22 +66,22 @@ def get_current_promotions() -> dict:
             "title": "Q1 Points Refresh",
             "message": "Your quarterly 100 swag points will be credited on January 1st!",
             "priority": "info",
-            "date": (now + timedelta(days=22)).strftime("%Y-%m-%d")
+            "date": (now + timedelta(days=22)).strftime("%Y-%m-%d"),
         },
         {
             "id": "announce_extended_sizes",
             "title": "Extended Sizes Coming 2025",
             "message": "We heard you! Extended sizes (3XL-5XL) coming in Q2 2025.",
             "priority": "info",
-            "date": "2025-04-01"
+            "date": "2025-04-01",
         },
         {
             "id": "announce_eco_packaging",
             "title": "Now Using Eco-Friendly Packaging",
             "message": "All orders now ship in 100% recyclable, plastic-free packaging!",
             "priority": "success",
-            "date": (now - timedelta(days=14)).strftime("%Y-%m-%d")
-        }
+            "date": (now - timedelta(days=14)).strftime("%Y-%m-%d"),
+        },
     ]
 
     featured_items = [
@@ -82,27 +89,27 @@ def get_current_promotions() -> dict:
             "product_id": "HOODIE-GRY-M",
             "name": "CloudCo Zip Hoodie",
             "reason": "Best Seller",
-            "price_points": 50
+            "price_points": 50,
         },
         {
             "product_id": "TUMBLER-BLK-16",
             "name": "CloudCo Travel Tumbler",
             "reason": "Staff Pick",
-            "price_points": 25
+            "price_points": 25,
         },
         {
             "product_id": "STICKER-DEV-10PK",
             "name": "Developer Sticker Pack",
             "reason": "Most Popular",
-            "price_points": 10
-        }
+            "price_points": 10,
+        },
     ]
 
     return {
         "promotions": promotions,
         "announcements": announcements,
         "featured": featured_items,
-        "last_updated": now.strftime("%Y-%m-%d %H:%M:%S")
+        "last_updated": now.strftime("%Y-%m-%d %H:%M:%S"),
     }
 
 
@@ -112,15 +119,12 @@ def get_promotion_by_code(code: str) -> dict:
 
     for promo in promotions:
         if promo.get("code") and promo["code"].upper() == code.upper():
-            return {
-                "found": True,
-                "promotion": promo
-            }
+            return {"found": True, "promotion": promo}
 
     return {
         "found": False,
         "error": f"No promotion found with code '{code}'",
-        "hint": "Current valid codes: WARMUP"
+        "hint": "Current valid codes: WARMUP",
     }
 
 
@@ -131,17 +135,22 @@ def get_featured_categories() -> dict:
             {
                 "name": "Winter Essentials",
                 "description": "Stay warm with our hoodies and beanies",
-                "products": ["HOODIE-GRY-M", "HOODIE-NVY-M", "HAT-BEANIE-GRY", "MUG-WHT-12"]
+                "products": [
+                    "HOODIE-GRY-M",
+                    "HOODIE-NVY-M",
+                    "HAT-BEANIE-GRY",
+                    "MUG-WHT-12",
+                ],
             },
             {
                 "name": "Work From Home",
                 "description": "Upgrade your home office setup",
-                "products": ["MOUSEPAD-BLK", "MUG-BLK-12", "TUMBLER-BLK-16"]
+                "products": ["MOUSEPAD-BLK", "MUG-BLK-12", "TUMBLER-BLK-16"],
             },
             {
                 "name": "Laptop Essentials",
                 "description": "Stickers for your laptop, backpack for your laptop",
-                "products": ["STICKER-DEV-10PK", "STICKER-HOLO-3PK", "BACKPACK-BLK"]
-            }
+                "products": ["STICKER-DEV-10PK", "STICKER-HOLO-3PK", "BACKPACK-BLK"],
+            },
         ]
     }

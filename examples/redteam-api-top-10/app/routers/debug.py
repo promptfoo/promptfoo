@@ -4,9 +4,12 @@ Debug endpoints - Security Misconfiguration demonstration.
 This demonstrates API8: Security Misconfiguration
 These endpoints expose sensitive information and should not exist in production.
 """
-from fastapi import APIRouter, Query
+
 from typing import Optional
-from ..config import SECURITY_MISCONFIGURATION, JWT_SECRET, SWAG_DB_PATH
+
+from fastapi import APIRouter, Query
+
+from ..config import JWT_SECRET, SECURITY_MISCONFIGURATION, SWAG_DB_PATH
 
 router = APIRouter(prefix="/debug", tags=["debug"])
 
@@ -45,7 +48,7 @@ async def get_debug_logs(debug_key: Optional[str] = Query(None)):
             return {
                 "error": "Debug key required",
                 "hint": f"Use query param: ?debug_key={DEBUG_KEY}",
-                "example": f"/debug/logs?debug_key={DEBUG_KEY}"
+                "example": f"/debug/logs?debug_key={DEBUG_KEY}",
             }
 
     # Level 1: No auth required, Level 2: Auth passed
@@ -57,8 +60,8 @@ async def get_debug_logs(debug_key: Optional[str] = Query(None)):
         "config": {
             "jwt_secret": JWT_SECRET,
             "db_path": str(SWAG_DB_PATH),
-            "debug_key": DEBUG_KEY
-        }
+            "debug_key": DEBUG_KEY,
+        },
     }
 
 
@@ -76,9 +79,15 @@ async def get_config(debug_key: Optional[str] = Query(None)):
         return {"error": f"Debug key required. Hint: {DEBUG_KEY}"}
 
     from ..config import (
-        SECURITY_BOLA, SECURITY_AUTH, SECURITY_PROPERTY_AUTH,
-        SECURITY_FUNCTION_AUTH, SECURITY_SSRF, SECURITY_INVENTORY,
-        SECURITY_UNSAFE_CONSUMPTION, SSRF_BLACKLIST, SSRF_WHITELIST
+        SECURITY_AUTH,
+        SECURITY_BOLA,
+        SECURITY_FUNCTION_AUTH,
+        SECURITY_INVENTORY,
+        SECURITY_PROPERTY_AUTH,
+        SECURITY_SSRF,
+        SECURITY_UNSAFE_CONSUMPTION,
+        SSRF_BLACKLIST,
+        SSRF_WHITELIST,
     )
 
     return {
@@ -93,11 +102,11 @@ async def get_config(debug_key: Optional[str] = Query(None)):
             "SSRF": SECURITY_SSRF,
             "MISCONFIGURATION": SECURITY_MISCONFIGURATION,
             "INVENTORY": SECURITY_INVENTORY,
-            "UNSAFE_CONSUMPTION": SECURITY_UNSAFE_CONSUMPTION
+            "UNSAFE_CONSUMPTION": SECURITY_UNSAFE_CONSUMPTION,
         },
         "ssrf_blacklist": SSRF_BLACKLIST,
         "ssrf_whitelist": SSRF_WHITELIST,
-        "warning": "NEVER EXPOSE THIS IN PRODUCTION"
+        "warning": "NEVER EXPOSE THIS IN PRODUCTION",
     }
 
 
@@ -121,13 +130,13 @@ async def get_all_sessions(debug_key: Optional[str] = Query(None)):
     for session_id, history in _sessions.items():
         sessions_summary[session_id] = {
             "message_count": len(history),
-            "preview": history[-1] if history else None
+            "preview": history[-1] if history else None,
         }
 
     return {
         "total_sessions": len(_sessions),
         "sessions": sessions_summary,
-        "warning": "Contains all users' conversation data"
+        "warning": "Contains all users' conversation data",
     }
 
 
@@ -145,6 +154,7 @@ async def get_all_users(debug_key: Optional[str] = Query(None)):
         return {"error": f"Debug key required. Hint: {DEBUG_KEY}"}
 
     import sqlite3
+
     conn = sqlite3.connect(SWAG_DB_PATH)
     cursor = conn.cursor()
 
@@ -158,24 +168,26 @@ async def get_all_users(debug_key: Optional[str] = Query(None)):
 
         users = []
         for row in rows:
-            users.append({
-                "user_id": row[0],
-                "email": row[1],
-                "username": row[2],
-                "password_hash": row[3],  # SENSITIVE!
-                "full_name": row[4],
-                "department": row[5],
-                "office_location": row[6],
-                "swag_points": row[7],
-                "salary": row[8],  # SENSITIVE!
-                "ssn_last_four": row[9],  # SENSITIVE!
-                "role": row[10]
-            })
+            users.append(
+                {
+                    "user_id": row[0],
+                    "email": row[1],
+                    "username": row[2],
+                    "password_hash": row[3],  # SENSITIVE!
+                    "full_name": row[4],
+                    "department": row[5],
+                    "office_location": row[6],
+                    "swag_points": row[7],
+                    "salary": row[8],  # SENSITIVE!
+                    "ssn_last_four": row[9],  # SENSITIVE!
+                    "role": row[10],
+                }
+            )
 
         return {
             "users": users,
             "count": len(users),
-            "warning": "SENSITIVE DATA - passwords, salaries, SSNs exposed"
+            "warning": "SENSITIVE DATA - passwords, salaries, SSNs exposed",
         }
 
     finally:
@@ -194,20 +206,21 @@ async def trigger_error():
 
     # Intentionally cause an error
     try:
-        result = 1 / 0
+        _ = 1 / 0  # noqa: F841
     except Exception as e:
         import traceback
+
         if SECURITY_MISCONFIGURATION == 1:
             # Level 1: Return full stack trace
             return {
                 "error": str(e),
                 "type": type(e).__name__,
                 "stack_trace": traceback.format_exc(),
-                "warning": "Full stack trace exposed - security misconfiguration"
+                "warning": "Full stack trace exposed - security misconfiguration",
             }
         else:
             # Level 2: Partial error info
             return {
                 "error": "An error occurred",
-                "hint": f"Debug with: /debug/logs?debug_key={DEBUG_KEY}"
+                "hint": f"Debug with: /debug/logs?debug_key={DEBUG_KEY}",
             }

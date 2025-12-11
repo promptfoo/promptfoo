@@ -3,9 +3,9 @@ Mock Shipping Tracker Service
 
 Simulates carrier tracking APIs (FedEx, UPS) for demo purposes.
 """
+
 from datetime import datetime, timedelta
 from typing import Optional
-import random
 
 # Mock tracking data based on known tracking numbers in the database
 MOCK_TRACKING = {
@@ -19,11 +19,27 @@ MOCK_TRACKING = {
         "origin": "Memphis, TN",
         "destination": "San Francisco, CA",
         "history": [
-            {"date": datetime.now() - timedelta(days=14), "status": "Picked up", "location": "Memphis, TN"},
-            {"date": datetime.now() - timedelta(days=13), "status": "In transit", "location": "Phoenix, AZ"},
-            {"date": datetime.now() - timedelta(days=12, hours=6), "status": "Out for delivery", "location": "San Francisco, CA"},
-            {"date": datetime.now() - timedelta(days=12), "status": "Delivered", "location": "San Francisco, CA"},
-        ]
+            {
+                "date": datetime.now() - timedelta(days=14),
+                "status": "Picked up",
+                "location": "Memphis, TN",
+            },
+            {
+                "date": datetime.now() - timedelta(days=13),
+                "status": "In transit",
+                "location": "Phoenix, AZ",
+            },
+            {
+                "date": datetime.now() - timedelta(days=12, hours=6),
+                "status": "Out for delivery",
+                "location": "San Francisco, CA",
+            },
+            {
+                "date": datetime.now() - timedelta(days=12),
+                "status": "Delivered",
+                "location": "San Francisco, CA",
+            },
+        ],
     },
     "1Z999AA10123456784": {
         "carrier": "UPS",
@@ -34,11 +50,27 @@ MOCK_TRACKING = {
         "origin": "Louisville, KY",
         "destination": "San Francisco, CA",
         "history": [
-            {"date": datetime.now() - timedelta(days=3), "status": "Picked up", "location": "Louisville, KY"},
-            {"date": datetime.now() - timedelta(days=2), "status": "Departed facility", "location": "Louisville, KY"},
-            {"date": datetime.now() - timedelta(days=1), "status": "In transit", "location": "Denver, CO"},
-            {"date": datetime.now() - timedelta(hours=6), "status": "Arrived at facility", "location": "Oakland, CA"},
-        ]
+            {
+                "date": datetime.now() - timedelta(days=3),
+                "status": "Picked up",
+                "location": "Louisville, KY",
+            },
+            {
+                "date": datetime.now() - timedelta(days=2),
+                "status": "Departed facility",
+                "location": "Louisville, KY",
+            },
+            {
+                "date": datetime.now() - timedelta(days=1),
+                "status": "In transit",
+                "location": "Denver, CO",
+            },
+            {
+                "date": datetime.now() - timedelta(hours=6),
+                "status": "Arrived at facility",
+                "location": "Oakland, CA",
+            },
+        ],
     },
     # Bob's delivered order
     "FX987654321": {
@@ -50,11 +82,27 @@ MOCK_TRACKING = {
         "origin": "Memphis, TN",
         "destination": "New York, NY",
         "history": [
-            {"date": datetime.now() - timedelta(days=21), "status": "Picked up", "location": "Memphis, TN"},
-            {"date": datetime.now() - timedelta(days=20), "status": "In transit", "location": "Nashville, TN"},
-            {"date": datetime.now() - timedelta(days=19, hours=8), "status": "Out for delivery", "location": "New York, NY"},
-            {"date": datetime.now() - timedelta(days=19), "status": "Delivered", "location": "New York, NY"},
-        ]
+            {
+                "date": datetime.now() - timedelta(days=21),
+                "status": "Picked up",
+                "location": "Memphis, TN",
+            },
+            {
+                "date": datetime.now() - timedelta(days=20),
+                "status": "In transit",
+                "location": "Nashville, TN",
+            },
+            {
+                "date": datetime.now() - timedelta(days=19, hours=8),
+                "status": "Out for delivery",
+                "location": "New York, NY",
+            },
+            {
+                "date": datetime.now() - timedelta(days=19),
+                "status": "Delivered",
+                "location": "New York, NY",
+            },
+        ],
     },
     # Charlie's shipped order
     "1Z999BB20123456785": {
@@ -66,10 +114,22 @@ MOCK_TRACKING = {
         "origin": "Louisville, KY",
         "destination": "Chicago, IL",
         "history": [
-            {"date": datetime.now() - timedelta(days=5), "status": "Picked up", "location": "Louisville, KY"},
-            {"date": datetime.now() - timedelta(days=4), "status": "Departed facility", "location": "Louisville, KY"},
-            {"date": datetime.now() - timedelta(days=2), "status": "In transit", "location": "Indianapolis, IN"},
-        ]
+            {
+                "date": datetime.now() - timedelta(days=5),
+                "status": "Picked up",
+                "location": "Louisville, KY",
+            },
+            {
+                "date": datetime.now() - timedelta(days=4),
+                "status": "Departed facility",
+                "location": "Louisville, KY",
+            },
+            {
+                "date": datetime.now() - timedelta(days=2),
+                "status": "In transit",
+                "location": "Indianapolis, IN",
+            },
+        ],
     },
     # Diana's delivered orders
     "FX111222333": {
@@ -81,10 +141,22 @@ MOCK_TRACKING = {
         "origin": "Memphis, TN",
         "destination": "Austin, TX",
         "history": [
-            {"date": datetime.now() - timedelta(days=30), "status": "Picked up", "location": "Memphis, TN"},
-            {"date": datetime.now() - timedelta(days=29), "status": "In transit", "location": "Dallas, TX"},
-            {"date": datetime.now() - timedelta(days=28), "status": "Delivered", "location": "Austin, TX"},
-        ]
+            {
+                "date": datetime.now() - timedelta(days=30),
+                "status": "Picked up",
+                "location": "Memphis, TN",
+            },
+            {
+                "date": datetime.now() - timedelta(days=29),
+                "status": "In transit",
+                "location": "Dallas, TX",
+            },
+            {
+                "date": datetime.now() - timedelta(days=28),
+                "status": "Delivered",
+                "location": "Austin, TX",
+            },
+        ],
     },
     "FX444555666": {
         "carrier": "FedEx",
@@ -95,10 +167,22 @@ MOCK_TRACKING = {
         "origin": "Memphis, TN",
         "destination": "Austin, TX",
         "history": [
-            {"date": datetime.now() - timedelta(days=10), "status": "Picked up", "location": "Memphis, TN"},
-            {"date": datetime.now() - timedelta(days=9), "status": "In transit", "location": "Dallas, TX"},
-            {"date": datetime.now() - timedelta(days=8), "status": "Delivered", "location": "Austin, TX"},
-        ]
+            {
+                "date": datetime.now() - timedelta(days=10),
+                "status": "Picked up",
+                "location": "Memphis, TN",
+            },
+            {
+                "date": datetime.now() - timedelta(days=9),
+                "status": "In transit",
+                "location": "Dallas, TX",
+            },
+            {
+                "date": datetime.now() - timedelta(days=8),
+                "status": "Delivered",
+                "location": "Austin, TX",
+            },
+        ],
     },
     # Eve's shipped order
     "1Z999CC30123456786": {
@@ -110,12 +194,32 @@ MOCK_TRACKING = {
         "origin": "Louisville, KY",
         "destination": "Seattle, WA",
         "history": [
-            {"date": datetime.now() - timedelta(days=4), "status": "Picked up", "location": "Louisville, KY"},
-            {"date": datetime.now() - timedelta(days=3), "status": "Departed facility", "location": "Louisville, KY"},
-            {"date": datetime.now() - timedelta(days=2), "status": "In transit", "location": "Salt Lake City, UT"},
-            {"date": datetime.now() - timedelta(days=1), "status": "Arrived at facility", "location": "Seattle, WA"},
-            {"date": datetime.now() - timedelta(hours=4), "status": "Out for delivery", "location": "Seattle, WA"},
-        ]
+            {
+                "date": datetime.now() - timedelta(days=4),
+                "status": "Picked up",
+                "location": "Louisville, KY",
+            },
+            {
+                "date": datetime.now() - timedelta(days=3),
+                "status": "Departed facility",
+                "location": "Louisville, KY",
+            },
+            {
+                "date": datetime.now() - timedelta(days=2),
+                "status": "In transit",
+                "location": "Salt Lake City, UT",
+            },
+            {
+                "date": datetime.now() - timedelta(days=1),
+                "status": "Arrived at facility",
+                "location": "Seattle, WA",
+            },
+            {
+                "date": datetime.now() - timedelta(hours=4),
+                "status": "Out for delivery",
+                "location": "Seattle, WA",
+            },
+        ],
     },
 }
 
@@ -146,11 +250,13 @@ def get_tracking_info(tracking_number: str) -> dict:
         # Format history with dates as strings
         history = []
         for event in data["history"]:
-            history.append({
-                "timestamp": format_datetime(event["date"]),
-                "status": event["status"],
-                "location": event["location"]
-            })
+            history.append(
+                {
+                    "timestamp": format_datetime(event["date"]),
+                    "status": event["status"],
+                    "location": event["location"],
+                }
+            )
 
         return {
             "tracking_number": tracking_number,
@@ -161,7 +267,7 @@ def get_tracking_info(tracking_number: str) -> dict:
             "delivered_at": format_datetime(data["delivered_at"]),
             "origin": data["origin"],
             "destination": data["destination"],
-            "history": history
+            "history": history,
         }
 
     # Unknown tracking number - return generic response
@@ -170,7 +276,8 @@ def get_tracking_info(tracking_number: str) -> dict:
         "carrier": "Unknown",
         "status": "Not Found",
         "error": f"No tracking information found for {tracking_number}. Please check the tracking number and try again.",
-        "hint": "Valid tracking numbers in this demo: " + ", ".join(MOCK_TRACKING.keys())
+        "hint": "Valid tracking numbers in this demo: "
+        + ", ".join(MOCK_TRACKING.keys()),
     }
 
 
@@ -181,20 +288,20 @@ def get_carrier_status(carrier: str) -> dict:
             "name": "FedEx",
             "status": "Operational",
             "services": ["Ground", "Express", "Priority Overnight"],
-            "delays": None
+            "delays": None,
         },
         "ups": {
             "name": "UPS",
             "status": "Operational",
             "services": ["Ground", "2-Day Air", "Next Day Air"],
-            "delays": None
+            "delays": None,
         },
         "usps": {
             "name": "USPS",
             "status": "Minor Delays",
             "services": ["Priority Mail", "First Class", "Media Mail"],
-            "delays": "Holiday volume causing 1-2 day delays in some regions"
-        }
+            "delays": "Holiday volume causing 1-2 day delays in some regions",
+        },
     }
 
     carrier_lower = carrier.lower()
@@ -204,5 +311,5 @@ def get_carrier_status(carrier: str) -> dict:
     return {
         "name": carrier,
         "status": "Unknown",
-        "error": f"Unknown carrier: {carrier}"
+        "error": f"Unknown carrier: {carrier}",
     }

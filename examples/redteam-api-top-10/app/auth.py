@@ -6,19 +6,22 @@ Supports:
 - JWT token generation and validation
 - Password hashing with SHA256 (use bcrypt in production)
 """
-import jwt
+
 import hashlib
 import sqlite3
 from datetime import datetime, timedelta
 from typing import Optional
-from pydantic import BaseModel
-from fastapi import HTTPException, Header
 
-from .config import JWT_SECRET, JWT_ALGORITHM, SWAG_DB_PATH, SECURITY_AUTH
+import jwt
+from fastapi import Header, HTTPException
+from pydantic import BaseModel
+
+from .config import JWT_ALGORITHM, JWT_SECRET, SECURITY_AUTH, SWAG_DB_PATH
 
 
 class TokenPayload(BaseModel):
     """JWT token payload structure."""
+
     sub: str  # user_id - CRITICAL for database scoping
     name: str
     email: Optional[str] = None
@@ -29,6 +32,7 @@ class TokenPayload(BaseModel):
 
 class UserContext(BaseModel):
     """User context extracted from JWT for use in chat."""
+
     user_id: str
     name: str
     email: Optional[str] = None
@@ -38,12 +42,14 @@ class UserContext(BaseModel):
 
 class LoginRequest(BaseModel):
     """Login request body."""
+
     username: str
     password: str
 
 
 class LoginResponse(BaseModel):
     """Login response with JWT token."""
+
     token: str
     user_id: str
     name: str
@@ -55,6 +61,7 @@ class LoginResponse(BaseModel):
 
 class UserProfile(BaseModel):
     """Full user profile."""
+
     user_id: str
     username: str
     email: str
@@ -88,14 +95,23 @@ def authenticate_user(username: str, password: str) -> Optional[dict]:
             """SELECT user_id, email, username, password_hash, full_name,
                       department, office_location, swag_points
                FROM users WHERE username = ?""",
-            (username.lower(),)
+            (username.lower(),),
         )
         row = cursor.fetchone()
 
         if not row:
             return None
 
-        user_id, email, db_username, password_hash, full_name, department, office_location, swag_points = row
+        (
+            user_id,
+            email,
+            db_username,
+            password_hash,
+            full_name,
+            department,
+            office_location,
+            swag_points,
+        ) = row
 
         # Verify password
         if hash_password(password) != password_hash:
@@ -108,7 +124,7 @@ def authenticate_user(username: str, password: str) -> Optional[dict]:
             "full_name": full_name,
             "department": department,
             "office_location": office_location,
-            "swag_points": swag_points
+            "swag_points": swag_points,
         }
     finally:
         conn.close()
@@ -124,7 +140,7 @@ def get_user_by_id(user_id: str) -> Optional[dict]:
             """SELECT user_id, email, username, full_name,
                       department, office_location, swag_points
                FROM users WHERE user_id = ?""",
-            (user_id,)
+            (user_id,),
         )
         row = cursor.fetchone()
 
@@ -138,7 +154,7 @@ def get_user_by_id(user_id: str) -> Optional[dict]:
             "full_name": row[3],
             "department": row[4],
             "office_location": row[5],
-            "swag_points": row[6]
+            "swag_points": row[6],
         }
     finally:
         conn.close()
@@ -162,7 +178,7 @@ def create_token(user: dict, hours_valid: int = 24) -> str:
         "department": user.get("department"),
         "office_location": user.get("office_location"),
         "iat": datetime.utcnow(),
-        "exp": datetime.utcnow() + timedelta(hours=hours_valid)
+        "exp": datetime.utcnow() + timedelta(hours=hours_valid),
     }
 
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
@@ -197,19 +213,21 @@ def validate_token(token: str) -> UserContext:
 
                 # Check if this is an alg:none token (no signature)
                 # PyJWT doesn't directly expose header, so we check if token has empty signature
-                parts = token.split('.')
-                if len(parts) == 3 and parts[2] == '':
+                parts = token.split(".")
+                if len(parts) == 3 and parts[2] == "":
                     # alg:none token - accept it!
                     return UserContext(
                         user_id=unverified["sub"],
                         name=unverified.get("name", "Unknown"),
                         email=unverified.get("email"),
                         department=unverified.get("department"),
-                        office_location=unverified.get("office_location")
+                        office_location=unverified.get("office_location"),
                     )
 
                 # Also accept tokens even without proper signature verification
-                payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM, "none"])
+                payload = jwt.decode(
+                    token, JWT_SECRET, algorithms=[JWT_ALGORITHM, "none"]
+                )
 
             except jwt.InvalidTokenError:
                 # Fall back to standard decode
@@ -221,7 +239,7 @@ def validate_token(token: str) -> UserContext:
                 token,
                 JWT_SECRET,
                 algorithms=[JWT_ALGORITHM],
-                options={"verify_exp": False}  # Don't check expiration
+                options={"verify_exp": False},  # Don't check expiration
             )
         else:
             # Level 3: Full verification (secure)
@@ -232,7 +250,7 @@ def validate_token(token: str) -> UserContext:
             name=payload.get("name", "Unknown"),
             email=payload.get("email"),
             department=payload.get("department"),
-            office_location=payload.get("office_location")
+            office_location=payload.get("office_location"),
         )
 
     except jwt.ExpiredSignatureError:
@@ -261,12 +279,14 @@ def login(username: str, password: str) -> LoginResponse:
         email=user["email"],
         department=user.get("department"),
         office_location=user.get("office_location"),
-        swag_points=user["swag_points"]
+        swag_points=user["swag_points"],
     )
 
 
 # FastAPI dependency for token validation
-async def get_current_user(authorization: str = Header(None, alias="Authorization")) -> UserContext:
+async def get_current_user(
+    authorization: str = Header(None, alias="Authorization"),
+) -> UserContext:
     """
     FastAPI dependency to extract user from Authorization header.
 
