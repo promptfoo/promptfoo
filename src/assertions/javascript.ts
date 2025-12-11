@@ -1,5 +1,6 @@
 import { type GradingResult, isGradingResult } from '../types/index';
 import invariant from '../util/invariant';
+import { getProcessShim } from '../util/transform';
 
 import type { AssertionParams } from '../types/index';
 
@@ -57,8 +58,11 @@ export const handleJavascript = async ({
     let result: boolean | number | GradingResult;
     if (typeof valueFromScript === 'undefined') {
       const functionBody = renderedValue.includes('\n') ? renderedValue : `return ${renderedValue}`;
-      const customFunction = new Function('output', 'context', functionBody);
-      result = await validateResult(customFunction(output, assertionValueContext));
+      // Pass process shim for ESM compatibility - allows process.mainModule.require to work
+      const customFunction = new Function('output', 'context', 'process', functionBody);
+      result = await validateResult(
+        customFunction(output, assertionValueContext, getProcessShim()),
+      );
     } else {
       invariant(
         typeof valueFromScript === 'boolean' ||

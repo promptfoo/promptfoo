@@ -30,6 +30,7 @@ import {
   MCP_PLUGINS,
   MITRE_ATLAS_MAPPING,
   NIST_AI_RMF_MAPPING,
+  OWASP_AGENTIC_REDTEAM_MAPPING,
   OWASP_API_TOP_10_MAPPING,
   OWASP_LLM_RED_TEAM_MAPPING,
   OWASP_LLM_TOP_10_MAPPING,
@@ -174,6 +175,10 @@ export default function PluginsTab({
       {
         name: 'OWASP API Top 10',
         plugins: new Set(Object.values(OWASP_API_TOP_10_MAPPING).flatMap((v) => v.plugins)),
+      },
+      {
+        name: 'OWASP Agentic AI Top 10',
+        plugins: new Set(Object.values(OWASP_AGENTIC_REDTEAM_MAPPING).flatMap((v) => v.plugins)),
       },
       {
         name: 'MITRE',

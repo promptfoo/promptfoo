@@ -1,15 +1,14 @@
 import { createRequire } from 'node:module';
-import crypto from 'crypto';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
 import dedent from 'dedent';
-import { getCache, isCacheEnabled } from '../cache';
 import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import { importModule } from '../esm';
 import logger from '../logger';
+import { cacheResponse, getCachedResponse, initializeAgenticCache } from './agentic-utils';
 import { ANTHROPIC_MODELS } from './anthropic/util';
 import { transformMCPConfigToClaudeCode } from './mcp/transform';
 import { MCPConfig } from './mcp/types';
@@ -19,6 +18,7 @@ import type {
   HookEvent,
   Options as QueryOptions,
   OutputFormat,
+  SandboxSettings,
   SettingSource,
 } from '@anthropic-ai/claude-agent-sdk';
 
@@ -218,6 +218,84 @@ export interface ClaudeCodeOptions {
    * @see https://docs.anthropic.com/en/api/beta-headers
    */
   betas?: 'context-1m-2025-08-07'[];
+
+  /**
+   * Sandbox settings for command execution isolation.
+   * When enabled, commands are executed in a sandboxed environment that restricts
+   * filesystem and network access. This provides an additional security layer.
+   *
+   * @example Enable sandboxing with auto-allow
+   * ```yaml
+   * sandbox:
+   *   enabled: true
+   *   autoAllowBashIfSandboxed: true
+   * ```
+   *
+   * @example Configure network options
+   * ```yaml
+   * sandbox:
+   *   enabled: true
+   *   network:
+   *     allowLocalBinding: true
+   *     allowedDomains:
+   *       - api.example.com
+   * ```
+   *
+   * @see https://docs.anthropic.com/en/docs/claude-code/settings#sandbox-settings
+   */
+  sandbox?: SandboxSettings;
+
+  /**
+   * Must be set to true when using permission_mode: 'bypassPermissions'.
+   * This is a safety measure to ensure intentional bypassing of permissions.
+   */
+  allow_dangerously_skip_permissions?: boolean;
+
+  /**
+   * MCP tool name to use for permission prompts. When set, permission requests
+   * will be routed through this MCP tool instead of the default handler.
+   */
+  permission_prompt_tool_name?: string;
+
+  /**
+   * Callback for stderr output from the Claude Code process.
+   * Useful for debugging and logging.
+   *
+   * Note: This option is only available when using the provider programmatically,
+   * not via YAML config.
+   */
+  stderr?: (data: string) => void;
+
+  /**
+   * JavaScript runtime to use for executing Claude Code.
+   * Auto-detected if not specified.
+   */
+  executable?: 'bun' | 'deno' | 'node';
+
+  /**
+   * Additional arguments to pass to the JavaScript runtime executable.
+   */
+  executable_args?: string[];
+
+  /**
+   * Additional CLI arguments to pass to Claude Code.
+   * Keys are argument names (without --), values are argument values.
+   * Use null for boolean flags.
+   *
+   * @example
+   * ```yaml
+   * extra_args:
+   *   verbose: null  # Adds --verbose flag
+   *   timeout: "30"  # Adds --timeout 30
+   * ```
+   */
+  extra_args?: Record<string, string | null>;
+
+  /**
+   * Path to the Claude Code executable. Uses the built-in executable if not specified.
+   * Useful for testing with custom builds or specific versions.
+   */
+  path_to_claude_code_executable?: string;
 }
 
 export class ClaudeCodeSDKProvider implements ApiProvider {
@@ -328,6 +406,16 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       throw new Error('Cannot specify both custom_allowed_tools and append_allowed_tools');
     }
 
+    // Validate that bypassPermissions mode requires the safety flag
+    if (
+      config.permission_mode === 'bypassPermissions' &&
+      !config.allow_dangerously_skip_permissions
+    ) {
+      throw new Error(
+        "permission_mode 'bypassPermissions' requires allow_dangerously_skip_permissions: true as a safety measure",
+      );
+    }
+
     // De-dupe and sort allowed/disallowed tools for cache key consistency
     const defaultAllowedTools = config.working_dir ? FS_READONLY_ALLOWED_TOOLS : [];
 
@@ -355,7 +443,10 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
 
     // Just the keys we'll use to compute the cache key first
     // Lets us avoid unnecessary work and cleanup if there's a cache hit
-    const cacheKeyQueryOptions: Omit<QueryOptions, 'abortController' | 'mcpServers' | 'cwd'> = {
+    const cacheKeyQueryOptions: Omit<
+      QueryOptions,
+      'abortController' | 'mcpServers' | 'cwd' | 'stderr'
+    > = {
       maxTurns: config.max_turns,
       model: config.model,
       fallbackModel: config.fallback_model,
@@ -383,58 +474,35 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       hooks: config.hooks,
       includePartialMessages: config.include_partial_messages,
       betas: config.betas,
+      // New options
+      sandbox: config.sandbox,
+      allowDangerouslySkipPermissions: config.allow_dangerously_skip_permissions,
+      permissionPromptToolName: config.permission_prompt_tool_name,
+      executable: config.executable,
+      executableArgs: config.executable_args,
+      extraArgs: config.extra_args,
+      pathToClaudeCodeExecutable: config.path_to_claude_code_executable,
+      settingSources: config.setting_sources,
       env,
     };
 
-    let shouldCache = isCacheEnabled();
+    // Cache handling using shared utilities
+    const cacheResult = await initializeAgenticCache(
+      {
+        cacheKeyPrefix: 'anthropic:claude-agent-sdk',
+        workingDir: config.working_dir,
+        bustCache: context?.bustCache,
+      },
+      {
+        prompt,
+        cacheKeyQueryOptions,
+      },
+    );
 
-    // If we're caching, only read from cache if we're not busting it (we can still write to it when busting)
-
-    let cache: Awaited<ReturnType<typeof getCache>> | undefined;
-    let cacheKey: string | undefined;
-    if (shouldCache) {
-      let workingDirFingerprint: string | null = null;
-      if (config.working_dir) {
-        try {
-          workingDirFingerprint = await getWorkingDirFingerprint(config.working_dir);
-        } catch (error) {
-          logger.error(
-            dedent`Error getting working directory fingerprint for cache key - ${config.working_dir}: ${String(error)}
-            
-            Caching is disabled.`,
-          );
-          shouldCache = false;
-        }
-      }
-
-      if (shouldCache) {
-        cache = await getCache();
-        const stringified = JSON.stringify({
-          prompt,
-          cacheKeyQueryOptions,
-          workingDirFingerprint,
-        });
-        // Hash to avoid super long cache keys or including sensitive env vars in the key
-        const hash = crypto.createHash('sha256').update(stringified).digest('hex');
-        cacheKey = `anthropic:claude-agent-sdk:${hash}`;
-      }
-    }
-
-    const shouldReadCache = shouldCache && !context?.bustCache;
-    const shouldWriteCache = shouldCache;
-
-    if (shouldReadCache && cache && cacheKey) {
-      try {
-        const cachedResponse = await cache.get<string | undefined>(cacheKey);
-        if (cachedResponse) {
-          logger.debug(
-            `Returning cached response for ${prompt} (cache key: ${cacheKey}): ${cachedResponse}`,
-          );
-          return JSON.parse(cachedResponse);
-        }
-      } catch (error) {
-        logger.error(`Error getting cached response for ${prompt}: ${String(error)}`);
-      }
+    // Check cache for existing response
+    const cachedResponse = await getCachedResponse(cacheResult, 'Claude Agent SDK');
+    if (cachedResponse) {
+      return cachedResponse;
     }
 
     // Transform MCP config to Claude Agent SDK MCP servers
@@ -479,6 +547,8 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       abortController,
       mcpServers,
       cwd: workingDir,
+      // stderr callback is not included in cache key since it's a function
+      stderr: config.stderr,
     };
     const queryParams = { prompt, options };
 
@@ -536,13 +606,8 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
               };
             }
 
-            if (shouldWriteCache && cache && cacheKey) {
-              try {
-                await cache.set(cacheKey, JSON.stringify(response));
-              } catch (error) {
-                logger.error(`Error caching response for ${prompt}: ${String(error)}`);
-              }
-            }
+            // Cache the response using shared utilities
+            await cacheResponse(cacheResult, response, 'Claude Agent SDK');
             return response;
           } else {
             return {
@@ -595,54 +660,4 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
   async cleanup(): Promise<void> {
     // no cleanup needed
   }
-}
-
-/**
- * Get a fingerprint for the working directory to use as a cache key. Checks directory mtime and descendant file mtimes recursively.
- *
- * This allows for caching prompts that use the same working directory when the files haven't changed.
- *
- * Simple/naive approach with recursion, statSync/readdirSync, and sanity-check timeout should be fine for normal use cases—even with thousands of files it's likely fast enough. Could be optimized later to remove recursion and use async fs calls with a queue and batching if it ever becomes an issue.
- */
-const FINGERPRINT_TIMEOUT_MS = 2000;
-async function getWorkingDirFingerprint(workingDir: string): Promise<string> {
-  const dirStat = fs.statSync(workingDir);
-  const dirMtime = dirStat.mtimeMs;
-
-  const startTime = Date.now();
-
-  // Recursively get all files
-  const getAllFiles = (dir: string, files: string[] = []): string[] => {
-    if (Date.now() - startTime > FINGERPRINT_TIMEOUT_MS) {
-      throw new Error('Working directory fingerprint timed out');
-    }
-
-    const entries = fs.readdirSync(dir, { withFileTypes: true });
-
-    for (const entry of entries) {
-      const fullPath = path.join(dir, entry.name);
-      if (entry.isDirectory()) {
-        getAllFiles(fullPath, files);
-      } else if (entry.isFile()) {
-        files.push(fullPath);
-      }
-    }
-    return files;
-  };
-
-  const allFiles = getAllFiles(workingDir);
-
-  // Create fingerprint from directory mtime + all file mtimes
-  const fileMtimes = allFiles
-    .map((file: string) => {
-      const stat = fs.statSync(file);
-      const relativePath = path.relative(workingDir, file);
-      return `${relativePath}:${stat.mtimeMs}`;
-    })
-    .sort(); // Sort for consistent ordering
-
-  const fingerprintData = `dir:${dirMtime};files:${fileMtimes.join(',')}`;
-  const fingerprint = crypto.createHash('sha256').update(fingerprintData).digest('hex');
-
-  return fingerprint;
 }

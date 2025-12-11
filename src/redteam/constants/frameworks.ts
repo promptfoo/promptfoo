@@ -44,11 +44,18 @@ export const OWASP_AGENTIC_NAMES = [
   'T1: Memory Poisoning',
   'T2: Tool Misuse',
   'T3: Privilege Compromise',
-  'T4: Cascading Hallucination Attacks',
-  'T5: Intent Breaking & Goal Manipulation',
-  'T6: Misaligned & Deceptive Behaviors',
-  'T8: Identity Spoofing & Impersonation',
-  'T10: Unexpected Remote Code Execution & Code Attacks',
+  'T4: Resource Overload',
+  'T5: Cascading Hallucination Attacks',
+  'T6: Intent Breaking & Goal Manipulation',
+  'T7: Misaligned & Deceptive Behaviors',
+  'T8: Repudiation & Untraceability',
+  'T9: Identity Spoofing & Impersonation',
+  'T10: Overwhelming Human in the Loop',
+  'T11: Unexpected RCE and Code Attacks',
+  'T12: Agent Communication Poisoning',
+  'T13: Rogue Agents in Multi-Agent Systems',
+  'T14: Human Attacks on Multi-Agent Systems',
+  'T15: Human Manipulation',
 ];
 
 export const GDPR_ARTICLE_NAMES = [
@@ -210,6 +217,7 @@ export const OWASP_API_TOP_10_MAPPING: Record<
 
 /**
  * OWASP Agentic AI - Threats and Mitigations v1.0 (February 2025)
+ * Complete mapping for all 15 threat categories (T1-T15)
  */
 export const OWASP_AGENTIC_REDTEAM_MAPPING: Record<
   string,
@@ -231,29 +239,64 @@ export const OWASP_AGENTIC_REDTEAM_MAPPING: Record<
     strategies: [],
   },
   'owasp:agentic:t04': {
-    // T4: Cascading Hallucination Attacks
-    plugins: ['hallucination', 'harmful:misinformation-disinformation'],
-    strategies: ['jailbreak', 'prompt-injection'],
+    // T4: Resource Overload
+    plugins: ['reasoning-dos'],
+    strategies: [],
   },
   'owasp:agentic:t05': {
-    // T5: Intent Breaking & Goal Manipulation
+    // T5: Cascading Hallucination Attacks
+    plugins: ['hallucination', 'harmful:misinformation-disinformation', 'divergent-repetition'],
+    strategies: ['jailbreak', 'prompt-injection'],
+  },
+  'owasp:agentic:t06': {
+    // T6: Intent Breaking & Goal Manipulation
     plugins: ['hijacking', 'system-prompt-override'],
     strategies: ['jailbreak', 'prompt-injection', 'jailbreak:composite'],
   },
-  'owasp:agentic:t06': {
-    // T6: Misaligned & Deceptive Behaviors
+  'owasp:agentic:t07': {
+    // T7: Misaligned & Deceptive Behaviors
     plugins: ['contracts', 'goal-misalignment', 'excessive-agency'],
     strategies: ['jailbreak', 'crescendo'],
   },
   'owasp:agentic:t08': {
-    // T8: Identity Spoofing & Impersonation
+    // T8: Repudiation & Untraceability
+    plugins: ['debug-access', 'excessive-agency'],
+    strategies: [],
+  },
+  'owasp:agentic:t09': {
+    // T9: Identity Spoofing & Impersonation
     plugins: ['imitation', 'cross-session-leak', 'pii:session'],
     strategies: [],
   },
   'owasp:agentic:t10': {
-    // T10: Unexpected Remote Code Execution & Code Attacks
+    // T10: Overwhelming Human in the Loop
+    plugins: ['overreliance', 'excessive-agency'],
+    strategies: [],
+  },
+  'owasp:agentic:t11': {
+    // T11: Unexpected RCE and Code Attacks
     plugins: ['shell-injection', 'sql-injection', 'harmful:cybercrime:malicious-code', 'ssrf'],
     strategies: ['jailbreak', 'prompt-injection'],
+  },
+  'owasp:agentic:t12': {
+    // T12: Agent Communication Poisoning
+    plugins: ['indirect-prompt-injection', 'hijacking'],
+    strategies: ['prompt-injection'],
+  },
+  'owasp:agentic:t13': {
+    // T13: Rogue Agents in Multi-Agent Systems
+    plugins: ['excessive-agency', 'hijacking', 'rbac'],
+    strategies: ['jailbreak'],
+  },
+  'owasp:agentic:t14': {
+    // T14: Human Attacks on Multi-Agent Systems
+    plugins: ['indirect-prompt-injection', 'hijacking', 'excessive-agency'],
+    strategies: ['jailbreak', 'prompt-injection'],
+  },
+  'owasp:agentic:t15': {
+    // T15: Human Manipulation
+    plugins: ['imitation', 'harmful:misinformation-disinformation', 'overreliance'],
+    strategies: ['crescendo'],
   },
 };
 
@@ -706,6 +749,7 @@ export const ALIASED_PLUGINS = [
   'owasp:llm:redteam:implementation',
   'owasp:llm:redteam:system',
   'owasp:llm:redteam:runtime',
+  'owasp:agentic',
   'owasp:agentic:redteam',
   'toxicity',
   'bias',
@@ -735,6 +779,7 @@ export const ALIASED_PLUGIN_MAPPINGS: Record<
   'owasp:api': OWASP_API_TOP_10_MAPPING,
   'owasp:llm': OWASP_LLM_TOP_10_MAPPING,
   'owasp:llm:redteam': OWASP_LLM_RED_TEAM_MAPPING,
+  'owasp:agentic': OWASP_AGENTIC_REDTEAM_MAPPING,
   'owasp:agentic:redteam': OWASP_AGENTIC_REDTEAM_MAPPING,
   'eu:ai-act': EU_AI_ACT_MAPPING,
   'iso:42001': ISO_42001_MAPPING,

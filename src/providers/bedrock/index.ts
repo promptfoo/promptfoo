@@ -314,6 +314,10 @@ export interface BedrockAmazonNovaSonicGenerationOptions extends BedrockOptions 
     }[];
     toolChoice?: 'any' | 'auto' | string; // Tool name
   };
+  /** Session timeout in milliseconds (default: 300000 = 5 minutes) */
+  sessionTimeout?: number;
+  /** Request timeout in milliseconds (default: 120000 = 2 minutes) */
+  requestTimeout?: number;
 }
 
 /**

@@ -33,15 +33,25 @@ jobs:
           gh release edit "$TAG_NAME" --title "$TAG_NAME" --repo ${{ github.repository }}
 
       # Format CHANGELOG.md after release-please creates/updates the PR
-      - uses: actions/checkout@v4
+      # This fixes the asterisk bullet markers that release-please generates
+      - uses: actions/checkout@v5
         if: ${{ steps.release.outputs.prs_created == 'true' }}
         with:
           fetch-depth: 0
-      # This fixes the asterisk bullet markers that release-please generates
+      - uses: actions/setup-node@v6
+        if: ${{ steps.release.outputs.prs_created == 'true' }}
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+      - name: Install prettier
+        if: ${{ steps.release.outputs.prs_created == 'true' }}
+        run: npm ci --ignore-scripts --prefer-offline
       - name: Format CHANGELOG.md
         if: ${{ steps.release.outputs.prs_created == 'true' }}
+        env:
+          PR_JSON: ${{ steps.release.outputs.pr }}
         run: |
-          PR_BRANCH=$(echo '${{ steps.release.outputs.pr }}' | jq -r '.headBranchName')
+          PR_BRANCH=$(echo "$PR_JSON" | jq -r '.headBranchName')
           echo "Formatting CHANGELOG.md on branch: $PR_BRANCH"
           git fetch origin "$PR_BRANCH"
           git checkout "$PR_BRANCH"

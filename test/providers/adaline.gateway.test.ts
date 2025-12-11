@@ -121,6 +121,7 @@ describe('AdalineGatewayEmbeddingProvider', () => {
       tokenUsage: {
         total: 100,
         cached: 0,
+        numRequests: 1,
       },
     });
   });
@@ -142,6 +143,7 @@ describe('AdalineGatewayEmbeddingProvider', () => {
       tokenUsage: {
         total: 100,
         cached: 100,
+        numRequests: 1,
       },
     });
   });
@@ -190,6 +192,7 @@ describe('AdalineGatewayChatProvider', () => {
         prompt: 10,
         completion: 20,
         total: 30,
+        numRequests: 1,
       },
       cached: false,
       cost: expect.any(Number),
