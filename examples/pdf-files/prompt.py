@@ -4,11 +4,8 @@ import typing
 class Vars(typing.TypedDict):
     file_path: str 
 
-
 class Provider(typing.TypedDict):
     id: str
-
-
 
 class PromptFunctionContext(typing.TypedDict):
     vars: Vars
