@@ -9,17 +9,20 @@
  */
 
 import { Box, Text } from 'ink';
-import React from 'react';
+import React, { memo } from 'react';
 import type { TableColumn, TableHeaderProps } from './types';
 
 /**
  * Pad text to a specific width.
+ * Handles Unicode properly by using code points instead of UTF-16 code units.
  */
 function padText(text: string, width: number): string {
-  if (text.length >= width) {
-    return text.slice(0, width);
+  // Use spread operator to properly count code points, not code units
+  const codePoints = [...text];
+  if (codePoints.length >= width) {
+    return codePoints.slice(0, width).join('');
   }
-  return text + ' '.repeat(width - text.length);
+  return text + ' '.repeat(width - codePoints.length);
 }
 
 /**
@@ -55,8 +58,12 @@ function HeaderDivider({ totalWidth }: { totalWidth: number }) {
 
 /**
  * TableHeader component renders the column headers.
+ * Memoized since headers rarely change (only when columns change).
  */
-export function TableHeader({ columns, isCompact = false }: TableHeaderProps) {
+export const TableHeader = memo(function TableHeader({
+  columns,
+  isCompact = false,
+}: TableHeaderProps) {
   if (isCompact) {
     // In compact mode, show a simplified header
     return (
@@ -85,7 +92,7 @@ export function TableHeader({ columns, isCompact = false }: TableHeaderProps) {
       <HeaderDivider totalWidth={totalWidth} />
     </Box>
   );
-}
+});
 
 /**
  * Minimal header for very narrow terminals.

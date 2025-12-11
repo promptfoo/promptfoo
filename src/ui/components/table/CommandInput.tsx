@@ -34,9 +34,11 @@ const VALID_OPERATORS: FilterOperator[] = ['=', '!=', '>', '>=', '<', '<=', '~',
 const FILTERABLE_COLUMNS = ['score', 'cost', 'latency', 'provider', 'output', 'status'];
 
 /**
- * Parse a filter command string into a ColumnFilter.
+ * Parse a filter command string into a ColumnFilter or navigation command.
  *
  * Supported formats:
+ * - :50 (jump to row 50, 1-indexed)
+ * - :$ (jump to last row)
  * - :filter score > 0.5
  * - :filter cost < 0.01
  * - :filter latency > 1000
@@ -46,8 +48,27 @@ const FILTERABLE_COLUMNS = ['score', 'cost', 'latency', 'provider', 'output', 's
  */
 export function parseFilterCommand(
   input: string,
-): { filter: ColumnFilter; error: null } | { filter: null; error: string } | { clear: true } {
+):
+  | { filter: ColumnFilter; error: null }
+  | { filter: null; error: string }
+  | { clear: true }
+  | { goto: number }
+  | { gotoLast: true } {
   const trimmed = input.trim();
+
+  // Handle row jump: pure number (1-indexed for user, convert to 0-indexed)
+  if (/^\d+$/.test(trimmed)) {
+    const rowNum = parseInt(trimmed, 10);
+    if (rowNum < 1) {
+      return { filter: null, error: 'Row number must be at least 1' };
+    }
+    return { goto: rowNum - 1 }; // Convert to 0-indexed
+  }
+
+  // Handle :$ (jump to last row)
+  if (trimmed === '$') {
+    return { gotoLast: true };
+  }
 
   // Handle clear command
   if (trimmed === 'clear' || trimmed === 'reset') {
@@ -124,7 +145,12 @@ export function CommandInput({ input, isActive, error }: CommandInputProps) {
 
     // Suggest commands
     if (trimmed === '' || 'filter'.startsWith(trimmed)) {
-      return ['filter <column> <op> <value>', 'clear'];
+      return ['{row#} goto', 'filter <column> <op> <value>', 'clear'];
+    }
+
+    // If typing a number, show goto hint
+    if (/^\d+$/.test(trimmed)) {
+      return [`→ row ${trimmed}`];
     }
 
     // After 'filter ', suggest columns

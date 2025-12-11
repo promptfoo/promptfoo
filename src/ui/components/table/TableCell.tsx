@@ -10,6 +10,7 @@
  */
 
 import { Box, Text } from 'ink';
+import { memo } from 'react';
 import { StatusBadge, getStatusBadgeWidth } from './StatusBadge';
 import type { TableCellProps } from './types';
 
@@ -22,26 +23,34 @@ function normalizeContent(content: string): string {
 
 /**
  * Truncate text to fit within a given width.
+ * Handles Unicode properly by using code points instead of UTF-16 code units.
  */
 function truncateText(text: string, maxWidth: number): { text: string; truncated: boolean } {
-  if (text.length <= maxWidth) {
+  // Use spread operator to properly count code points, not code units
+  // This prevents cutting through surrogate pairs (emojis, etc.)
+  const codePoints = [...text];
+  if (codePoints.length <= maxWidth) {
     return { text, truncated: false };
   }
   if (maxWidth <= 3) {
     return { text: '...'.slice(0, maxWidth), truncated: true };
   }
-  return { text: text.slice(0, maxWidth - 1) + '\u2026', truncated: true }; // \u2026 = …
+  // Join code points back together to preserve multi-byte characters
+  return { text: codePoints.slice(0, maxWidth - 1).join('') + '…', truncated: true };
 }
 
 /**
  * Pad text to a specific width.
+ * Handles Unicode properly by using code points instead of UTF-16 code units.
  */
 function padText(text: string, width: number, align: 'left' | 'right' | 'center' = 'left'): string {
-  if (text.length >= width) {
+  // Use spread operator to properly count code points, not code units
+  const codePoints = [...text];
+  if (codePoints.length >= width) {
     return text;
   }
 
-  const padding = width - text.length;
+  const padding = width - codePoints.length;
 
   switch (align) {
     case 'right':
@@ -58,9 +67,15 @@ function padText(text: string, width: number, align: 'left' | 'right' | 'center'
 
 /**
  * TableCell component renders a single cell with optional status badge.
+ * Memoized to prevent re-renders when parent state changes but cell data is unchanged.
  */
-export function TableCell({ data, width, isSelected = false, showBadge = true }: TableCellProps) {
-  const { content, status, isTruncated } = data;
+export const TableCell = memo(function TableCell({
+  data,
+  width,
+  isSelected = false,
+  showBadge = true,
+}: TableCellProps) {
+  const { content, status } = data;
 
   // Normalize content (remove newlines)
   const normalized = normalizeContent(content);
@@ -108,17 +123,17 @@ export function TableCell({ data, width, isSelected = false, showBadge = true }:
       >
         {paddedText}
       </Text>
-      {isTruncated && !isSelected && <Text dimColor>\u2026</Text>}
     </Box>
   );
-}
+});
 
 /**
  * Simple text cell without status handling (for variable columns).
  * Uses different highlight style than output cells (no inverse) to
  * indicate different interaction behavior.
+ * Memoized to prevent re-renders when parent state changes but cell data is unchanged.
  */
-export function TextCell({
+export const TextCell = memo(function TextCell({
   content,
   width,
   isSelected = false,
@@ -144,14 +159,15 @@ export function TextCell({
       {paddedText}
     </Text>
   );
-}
+});
 
 /**
  * Index cell with right-aligned number.
  * Index cells are not expandable, so they always show as dimColor
  * and don't get the selection highlight that other cells get.
+ * Memoized since index rarely changes.
  */
-export function IndexCell({
+export const IndexCell = memo(function IndexCell({
   index,
   width,
   isSelected: _isSelected = false,
@@ -165,6 +181,6 @@ export function IndexCell({
 
   // Index cells don't expand, so show minimal selection indicator
   return <Text dimColor>{paddedText}</Text>;
-}
+});
 
 export default TableCell;

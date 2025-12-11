@@ -137,15 +137,18 @@ function calculateColumnWidths(
 
 /**
  * Process header text for display, truncating if needed.
+ * Handles Unicode properly by using code points instead of UTF-16 code units.
  */
 function processHeaderText(header: string, maxWidth: number): string {
-  if (header.length <= maxWidth) {
+  // Use spread operator to properly count code points, not code units
+  const codePoints = [...header];
+  if (codePoints.length <= maxWidth) {
     return header;
   }
   if (maxWidth <= 3) {
     return '...'.slice(0, maxWidth);
   }
-  return header.slice(0, maxWidth - 1) + '\u2026';
+  return codePoints.slice(0, maxWidth - 1).join('') + '…';
 }
 
 /**

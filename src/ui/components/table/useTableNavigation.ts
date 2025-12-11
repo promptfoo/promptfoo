@@ -1,16 +1,29 @@
 /**
  * useTableNavigation - Hook for keyboard navigation in the results table.
  *
- * Features:
- * - Arrow key navigation (row and column)
- * - Page up/down for quick scrolling
- * - Home/End for first/last row
- * - Enter to expand cell
- * - Q to close expanded cell or exit table
- * - Escape also closes expanded cell or exits
- * - Quick filter modes (a/p/f/e/d)
- * - Search filter (/)
- * - Column filters (:filter command)
+ * Navigation (shown in help - universally understood):
+ * - ↑↓←→: Move up/down/left/right
+ * - PageUp/PageDown: Full page navigation
+ * - Home/End: Jump to first/last row
+ *
+ * Navigation (hidden - for vim/less power users):
+ * - hjkl: Same as arrow keys
+ * - g/G: Jump to first/last row
+ * - Ctrl+d/u: Half page down/up
+ *
+ * Cell interaction:
+ * - Enter: Expand cell details
+ * - q: Close detail view or exit table
+ * - Escape: Close detail view or exit
+ *
+ * Filtering & Commands (:):
+ * - a/p/f/e/d: All/Pass/Fail/Error/Different filter modes
+ * - /: Start search
+ * - :: Enter command mode
+ *   - :50 → jump to row 50 (1-indexed)
+ *   - :$ → jump to last row
+ *   - :filter column op value → add column filter
+ *   - :clear → clear all filters
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -41,12 +54,19 @@ type NavigationAction =
   | { type: 'MOVE_RIGHT' }
   | { type: 'PAGE_UP' }
   | { type: 'PAGE_DOWN' }
+  | { type: 'HALF_PAGE_UP' }
+  | { type: 'HALF_PAGE_DOWN' }
   | { type: 'GO_FIRST' }
   | { type: 'GO_LAST' }
+  | { type: 'GO_FIRST_COL' }
+  | { type: 'GO_LAST_COL' }
+  | { type: 'GO_TO_ROW'; row: number }
   | { type: 'TOGGLE_EXPAND' }
   | { type: 'CLOSE_EXPAND' }
   | { type: 'NAVIGATE_EXPANDED'; direction: 'up' | 'down' | 'left' | 'right' }
   | { type: 'SET_SCROLL'; offset: number }
+  | { type: 'NEXT_MATCH' }
+  | { type: 'PREV_MATCH' }
   // Filter actions
   | { type: 'SET_FILTER_MODE'; mode: FilterMode }
   | { type: 'START_SEARCH' }
@@ -117,6 +137,21 @@ export function navigationReducer(
       return { ...state, selectedRow: newRow, scrollOffset: newOffset };
     }
 
+    case 'HALF_PAGE_UP': {
+      const halfPage = Math.max(1, Math.floor(visibleRows / 2));
+      const newRow = Math.max(0, state.selectedRow - halfPage);
+      const newOffset = Math.max(0, state.scrollOffset - halfPage);
+      return { ...state, selectedRow: newRow, scrollOffset: newOffset };
+    }
+
+    case 'HALF_PAGE_DOWN': {
+      const halfPage = Math.max(1, Math.floor(visibleRows / 2));
+      const newRow = Math.min(rowCount - 1, state.selectedRow + halfPage);
+      const maxOffset = Math.max(0, rowCount - visibleRows);
+      const newOffset = Math.min(maxOffset, state.scrollOffset + halfPage);
+      return { ...state, selectedRow: newRow, scrollOffset: newOffset };
+    }
+
     case 'GO_FIRST':
       return { ...state, selectedRow: 0, scrollOffset: 0 };
 
@@ -125,6 +160,31 @@ export function navigationReducer(
       const newOffset = Math.max(0, rowCount - visibleRows);
       return { ...state, selectedRow: newRow, scrollOffset: newOffset };
     }
+
+    case 'GO_FIRST_COL':
+      return { ...state, selectedCol: minCol };
+
+    case 'GO_LAST_COL':
+      return { ...state, selectedCol: colCount - 1 };
+
+    case 'GO_TO_ROW': {
+      // Clamp row to valid range
+      const targetRow = Math.max(0, Math.min(rowCount - 1, action.row));
+      // Calculate scroll offset to center the row if possible
+      const halfVisible = Math.floor(visibleRows / 2);
+      const idealOffset = targetRow - halfVisible;
+      const maxOffset = Math.max(0, rowCount - visibleRows);
+      const newOffset = Math.max(0, Math.min(maxOffset, idealOffset));
+      return { ...state, selectedRow: targetRow, scrollOffset: newOffset };
+    }
+
+    case 'NEXT_MATCH':
+      // Placeholder for search match navigation - handled in key handler
+      return state;
+
+    case 'PREV_MATCH':
+      // Placeholder for search match navigation - handled in key handler
+      return state;
 
     case 'TOGGLE_EXPAND':
       if (state.expandedCell) {
@@ -472,8 +532,22 @@ export function useTableNavigation({
           return;
         }
         if (name === 'return') {
-          // Parse the command and apply the filter
+          // Parse the command and apply the filter or navigation
           const result = parseFilterCommand(currentState.filter.commandInput);
+
+          // Handle row jump: :50 → go to row 50
+          if ('goto' in result) {
+            dispatch({ type: 'GO_TO_ROW', row: result.goto });
+            dispatch({ type: 'EXECUTE_COMMAND' });
+            return;
+          }
+
+          // Handle :$ → go to last row
+          if ('gotoLast' in result) {
+            dispatch({ type: 'GO_LAST' });
+            dispatch({ type: 'EXECUTE_COMMAND' });
+            return;
+          }
 
           if ('clear' in result) {
             dispatch({ type: 'CLEAR_COLUMN_FILTERS' });
@@ -506,6 +580,7 @@ export function useTableNavigation({
       }
 
       // Navigation keys (only when not in search/command mode)
+      // Arrow keys for universal accessibility
       switch (name) {
         case 'up':
           dispatch({ type: 'MOVE_UP' });
@@ -519,11 +594,17 @@ export function useTableNavigation({
         case 'right':
           dispatch({ type: 'MOVE_RIGHT' });
           return;
-        case 'pageUp':
+        case 'pageup':
           dispatch({ type: 'PAGE_UP' });
           return;
-        case 'pageDown':
+        case 'pagedown':
           dispatch({ type: 'PAGE_DOWN' });
+          return;
+        case 'home':
+          dispatch({ type: 'GO_FIRST' });
+          return;
+        case 'end':
+          dispatch({ type: 'GO_LAST' });
           return;
         case 'return':
           dispatch({ type: 'TOGGLE_EXPAND' });
@@ -537,25 +618,24 @@ export function useTableNavigation({
           return;
       }
 
-      // Letter keys (vim bindings and shortcuts)
-
+      // Get lowercase key for comparisons
       const lowerKey = key.toLowerCase();
+
+      // Ctrl key combinations for power users
+      if (ctrl) {
+        switch (lowerKey) {
+          case 'd':
+            dispatch({ type: 'HALF_PAGE_DOWN' });
+            return;
+          case 'u':
+            dispatch({ type: 'HALF_PAGE_UP' });
+            return;
+        }
+      }
+
+      // Letter keys (shortcuts)
       switch (lowerKey) {
-        case 'q':
-          // 'q' closes detail view if open, otherwise exits
-          if (currentState.expandedCell) {
-            dispatch({ type: 'CLOSE_EXPAND' });
-          } else if (onExit) {
-            onExit();
-          }
-          break;
-        case 'g':
-          if (shift) {
-            dispatch({ type: 'GO_LAST' });
-          } else {
-            dispatch({ type: 'GO_FIRST' });
-          }
-          break;
+        // Vim-style navigation (hidden alternatives to arrow keys)
         case 'j':
           dispatch({ type: 'MOVE_DOWN' });
           break;
@@ -568,6 +648,24 @@ export function useTableNavigation({
         case 'l':
           dispatch({ type: 'MOVE_RIGHT' });
           break;
+        case 'g':
+          // g = first row, G (shift+g) = last row
+          if (shift) {
+            dispatch({ type: 'GO_LAST' });
+          } else {
+            dispatch({ type: 'GO_FIRST' });
+          }
+          break;
+
+        // Quit
+        case 'q':
+          if (currentState.expandedCell) {
+            dispatch({ type: 'CLOSE_EXPAND' });
+          } else if (onExit) {
+            onExit();
+          }
+          break;
+
         // Filter mode shortcuts
         case 'a':
           dispatch({ type: 'SET_FILTER_MODE', mode: 'all' });
@@ -582,21 +680,20 @@ export function useTableNavigation({
           dispatch({ type: 'SET_FILTER_MODE', mode: 'errors' });
           break;
         case 'd':
-          dispatch({ type: 'SET_FILTER_MODE', mode: 'different' });
+          // Only filter if not ctrl (ctrl+d is half page down)
+          if (!ctrl) {
+            dispatch({ type: 'SET_FILTER_MODE', mode: 'different' });
+          }
           break;
-        // Search shortcut (vim-style)
+
+        // Search shortcut
         case '/':
           dispatch({ type: 'START_SEARCH' });
           break;
-        // Command mode shortcut (vim-style)
+
+        // Command mode shortcut
         case ':':
           dispatch({ type: 'START_COMMAND' });
-          break;
-        // Clear search with 'n' when no search active (consistent with vim)
-        case 'n':
-          if (currentState.filter.searchQuery) {
-            // In future: cycle to next match
-          }
           break;
       }
     },

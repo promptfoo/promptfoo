@@ -101,10 +101,10 @@ function HelpText({ isCompact }: { isCompact: boolean }) {
   return (
     <Box marginTop={1} flexDirection="column">
       <Text dimColor>
-        ↑↓←→/hjkl nav | Enter expand | g/G first/last | <Text color="cyan">[a]</Text>ll{' '}
-        <Text color="cyan">[p]</Text>ass <Text color="cyan">[f]</Text>ail{' '}
-        <Text color="cyan">[e]</Text>rr <Text color="cyan">[d]</Text>iff |{' '}
-        <Text color="cyan">/</Text> search | <Text color="cyan">:</Text> filter | q quit
+        ↑↓←→ nav | PgUp/Dn page | <Text color="cyan">[a]</Text>ll <Text color="cyan">[p]</Text>ass{' '}
+        <Text color="cyan">[f]</Text>ail <Text color="cyan">[e]</Text>rr{' '}
+        <Text color="cyan">[d]</Text>iff | <Text color="cyan">/</Text> search |{' '}
+        <Text color="cyan">:</Text> cmd | q quit
       </Text>
     </Box>
   );
