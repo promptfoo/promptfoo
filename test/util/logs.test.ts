@@ -45,14 +45,14 @@ describe('util/logs', () => {
       mockGetEnvString.mockReturnValue('');
 
       const result = getLogDirectory();
-      expect(result).toBe('/home/user/.promptfoo/logs');
+      expect(result).toBe(path.join('/home/user/.promptfoo', 'logs'));
     });
 
     it('respects PROMPTFOO_LOG_DIR environment variable', () => {
       mockGetEnvString.mockReturnValue('/custom/log/dir');
 
       const result = getLogDirectory();
-      expect(result).toBe('/custom/log/dir');
+      expect(result).toBe(path.resolve('/custom/log/dir'));
     });
   });
 
@@ -193,6 +193,7 @@ describe('util/logs', () => {
     });
 
     it('performs fuzzy matching on partial names', () => {
+      const logDir = path.join('/home/user/.promptfoo', 'logs');
       mockFs.readdirSync.mockReturnValue([
         'promptfoo-debug-2024-01-01_10-00-00.log',
         'promptfoo-debug-2024-01-02_10-00-00.log',
@@ -205,7 +206,7 @@ describe('util/logs', () => {
       // Make existsSync return false for direct paths to trigger fuzzy matching
       mockFs.existsSync.mockImplementation((p) => {
         const pStr = String(p);
-        return pStr === '/home/user/.promptfoo/logs';
+        return pStr === logDir;
       });
 
       const result = findLogFile('2024-01-01');
