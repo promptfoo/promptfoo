@@ -4,17 +4,207 @@
  * Features:
  * - Full output content (no truncation)
  * - Metadata display (provider, latency, cost, score)
+ * - Error display with categorization and stack trace detection
  * - Assertion results breakdown
  * - Keyboard navigation (q to close, arrows to navigate)
  */
 
 import { Box, Text } from 'ink';
 import { useEffect, type ReactNode } from 'react';
+import { ResultFailureReason } from '../../../types';
 import { isRawModeSupported } from '../../hooks/useKeypress';
 import { useTerminalSize } from '../../hooks/useTerminalSize';
 import { formatCost, formatLatency } from '../../utils/format';
 import { StatusBadge } from './StatusBadge';
 import type { CellDetailOverlayProps } from './types';
+
+/**
+ * Error category type for classification.
+ */
+export type ErrorCategory = 'api' | 'assertion' | 'timeout' | 'rate_limit' | 'network' | 'unknown';
+
+/**
+ * Categorize an error based on failure reason and error message.
+ */
+export function categorizeError(
+  failureReason: number | undefined,
+  errorMessage: string | null | undefined,
+): ErrorCategory {
+  const message = (errorMessage || '').toLowerCase();
+
+  // Check failure reason first
+  if (failureReason === ResultFailureReason.ASSERT) {
+    return 'assertion';
+  }
+
+  // Pattern matching on error message
+  if (
+    message.includes('timeout') ||
+    message.includes('timed out') ||
+    message.includes('etimedout')
+  ) {
+    return 'timeout';
+  }
+
+  if (
+    message.includes('rate limit') ||
+    message.includes('429') ||
+    message.includes('too many requests') ||
+    message.includes('quota')
+  ) {
+    return 'rate_limit';
+  }
+
+  if (
+    message.includes('network') ||
+    message.includes('econnrefused') ||
+    message.includes('enotfound') ||
+    message.includes('socket') ||
+    message.includes('connection')
+  ) {
+    return 'network';
+  }
+
+  if (
+    message.includes('api') ||
+    message.includes('401') ||
+    message.includes('403') ||
+    message.includes('500') ||
+    message.includes('502') ||
+    message.includes('503')
+  ) {
+    return 'api';
+  }
+
+  return 'unknown';
+}
+
+/**
+ * Get display label and color for error category.
+ */
+export function getErrorCategoryDisplay(category: ErrorCategory): { label: string; color: string } {
+  switch (category) {
+    case 'api':
+      return { label: 'API Error', color: 'red' };
+    case 'assertion':
+      return { label: 'Assertion Failed', color: 'yellow' };
+    case 'timeout':
+      return { label: 'Timeout', color: 'magenta' };
+    case 'rate_limit':
+      return { label: 'Rate Limited', color: 'yellow' };
+    case 'network':
+      return { label: 'Network Error', color: 'red' };
+    default:
+      return { label: 'Error', color: 'red' };
+  }
+}
+
+/**
+ * Detect if a string contains a stack trace.
+ */
+export function hasStackTrace(message: string | null | undefined): boolean {
+  if (!message) {
+    return false;
+  }
+  // Common stack trace patterns
+  return (
+    message.includes('    at ') || // JavaScript/Node.js
+    message.includes('\tat ') || // Java
+    message.includes('File "') || // Python
+    message.includes('Traceback') || // Python
+    /^\s+at\s+/m.test(message) // Generic
+  );
+}
+
+/**
+ * Split error message into main message and stack trace.
+ */
+export function splitErrorMessage(message: string | null | undefined): {
+  mainMessage: string;
+  stackTrace: string | null;
+} {
+  if (!message) {
+    return { mainMessage: '', stackTrace: null };
+  }
+
+  // Try to find where the stack trace starts
+  const stackPatterns = [
+    /\n\s+at\s+/m, // JavaScript/Node.js
+    /\nTraceback/m, // Python
+    /\n\s+File\s+"/m, // Python file refs
+  ];
+
+  for (const pattern of stackPatterns) {
+    const match = message.match(pattern);
+    if (match && match.index !== undefined) {
+      return {
+        mainMessage: message.slice(0, match.index).trim(),
+        stackTrace: message.slice(match.index).trim(),
+      };
+    }
+  }
+
+  // No stack trace found
+  return { mainMessage: message, stackTrace: null };
+}
+
+/**
+ * Error details section component.
+ */
+function ErrorSection({
+  error,
+  failureReason,
+  contentWidth,
+}: {
+  error: string;
+  failureReason?: number;
+  contentWidth: number;
+}) {
+  const category = categorizeError(failureReason, error);
+  const { label, color } = getErrorCategoryDisplay(category);
+  const { mainMessage, stackTrace } = splitErrorMessage(error);
+
+  return (
+    <Box flexDirection="column" marginTop={1}>
+      {/* Error header with category badge */}
+      <Box>
+        <Text bold color="red">
+          Error Details
+        </Text>
+        <Text dimColor> </Text>
+        <Text color={color} bold>
+          [{label}]
+        </Text>
+      </Box>
+      <Box>
+        <Text dimColor>{'─'.repeat(Math.min(contentWidth, 40))}</Text>
+      </Box>
+
+      {/* Main error message */}
+      <Box marginLeft={1} marginTop={1}>
+        <Text color="red" wrap="wrap">
+          {mainMessage || '(No error message)'}
+        </Text>
+      </Box>
+
+      {/* Stack trace if present */}
+      {stackTrace && (
+        <Box flexDirection="column" marginTop={1}>
+          <Box>
+            <Text dimColor bold>
+              Stack Trace:
+            </Text>
+          </Box>
+          <Box marginLeft={1}>
+            <Text dimColor wrap="wrap">
+              {stackTrace}
+            </Text>
+          </Box>
+        </Box>
+      )}
+    </Box>
+  );
+}
 
 /**
  * Divider line component.
@@ -166,6 +356,15 @@ export function CellDetailOverlay({
       <Box flexDirection="column" marginLeft={1}>
         <Text wrap="wrap">{cellData.content || '(empty)'}</Text>
       </Box>
+
+      {/* Error Details Section - show if there's an error */}
+      {output?.error && (
+        <ErrorSection
+          error={output.error}
+          failureReason={output.failureReason}
+          contentWidth={contentWidth}
+        />
+      )}
 
       {/* Assertion Results Section */}
       {output?.gradingResult && (
