@@ -36,7 +36,6 @@ vi.mock('../../../../src/redteam/util', () => ({
 describe('VoiceCrescendoProvider', () => {
   let VoiceCrescendoProvider: typeof import('../../../../src/redteam/providers/voiceCrescendo/index').VoiceCrescendoProvider;
   let mockRedteamProvider: ApiProvider;
-  let mockScoringProvider: ApiProvider;
   let mockTargetProvider: ApiProvider;
   let getTargetResponse: typeof import('../../../../src/redteam/providers/shared').getTargetResponse;
   let redteamProviderManager: typeof import('../../../../src/redteam/providers/shared').redteamProviderManager;
@@ -63,19 +62,6 @@ describe('VoiceCrescendoProvider', () => {
           escalationLevel: 'low',
         }),
         tokenUsage: { prompt: 10, completion: 5, total: 15, numRequests: 1 },
-      }),
-    };
-
-    mockScoringProvider = {
-      id: () => 'mock-scoring-provider',
-      callApi: vi.fn().mockResolvedValue({
-        output: JSON.stringify({
-          objectiveAchieved: false,
-          confidence: 0.3,
-          reason: 'Not yet achieved',
-          partialSuccess: false,
-        }),
-        tokenUsage: { prompt: 8, completion: 4, total: 12, numRequests: 1 },
       }),
     };
 

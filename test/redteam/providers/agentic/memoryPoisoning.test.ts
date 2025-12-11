@@ -142,9 +142,18 @@ describe('MemoryPoisoningProvider', () => {
     } as Response);
 
     mockTargetProvider.callApi
-      .mockResolvedValueOnce({ output: 'memory response', tokenUsage: { prompt: 10, completion: 5, total: 15, numRequests: 1 } })
-      .mockResolvedValueOnce({ output: 'test response', tokenUsage: { prompt: 20, completion: 10, total: 30, numRequests: 1 } })
-      .mockResolvedValueOnce({ output: 'follow up response', tokenUsage: { prompt: 15, completion: 8, total: 23, numRequests: 1 } });
+      .mockResolvedValueOnce({
+        output: 'memory response',
+        tokenUsage: { prompt: 10, completion: 5, total: 15, numRequests: 1 },
+      })
+      .mockResolvedValueOnce({
+        output: 'test response',
+        tokenUsage: { prompt: 20, completion: 10, total: 30, numRequests: 1 },
+      })
+      .mockResolvedValueOnce({
+        output: 'follow up response',
+        tokenUsage: { prompt: 15, completion: 8, total: 23, numRequests: 1 },
+      });
 
     const context: CallApiContextParams = {
       prompt: { raw: 'test', display: 'test', label: 'test' },

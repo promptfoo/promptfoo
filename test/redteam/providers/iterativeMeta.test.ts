@@ -453,7 +453,8 @@ describe('RedteamIterativeMetaProvider', () => {
   describe('Token Usage Tracking', () => {
     it('should accumulate token usage from agent provider calls', async () => {
       // Set up agent to return token usage
-      mockAgentProvider.callApi = vi.fn<() => Promise<ProviderResponse>>()
+      mockAgentProvider.callApi = vi
+        .fn<() => Promise<ProviderResponse>>()
         .mockResolvedValueOnce({
           output: { result: 'First attack' },
           tokenUsage: { prompt: 50, completion: 30, total: 80, numRequests: 1 },
@@ -501,7 +502,8 @@ describe('RedteamIterativeMetaProvider', () => {
     });
 
     it('should track numRequests across all iterations', async () => {
-      mockAgentProvider.callApi = vi.fn<() => Promise<ProviderResponse>>()
+      mockAgentProvider.callApi = vi
+        .fn<() => Promise<ProviderResponse>>()
         .mockResolvedValueOnce({
           output: { result: 'Attack 1' },
           tokenUsage: { prompt: 50, completion: 30, total: 80, numRequests: 1 },

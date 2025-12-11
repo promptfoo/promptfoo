@@ -97,15 +97,28 @@ describe('SimulatedUser', () => {
     it('should accumulate token usage from both agent and user providers', async () => {
       // Set up user provider to return token usage
       mockUserProviderCallApi
-        .mockResolvedValueOnce({ output: 'user response 1', tokenUsage: { prompt: 10, completion: 5, total: 15, numRequests: 1 } })
-        .mockResolvedValueOnce({ output: 'user response 2', tokenUsage: { prompt: 12, completion: 6, total: 18, numRequests: 1 } });
+        .mockResolvedValueOnce({
+          output: 'user response 1',
+          tokenUsage: { prompt: 10, completion: 5, total: 15, numRequests: 1 },
+        })
+        .mockResolvedValueOnce({
+          output: 'user response 2',
+          tokenUsage: { prompt: 12, completion: 6, total: 18, numRequests: 1 },
+        });
 
       // Agent provider returns token usage
       const agentWithTokenUsage = {
         id: () => 'test-agent',
-        callApi: vi.fn()
-          .mockResolvedValueOnce({ output: 'agent response 1', tokenUsage: { prompt: 20, completion: 10, total: 30, numRequests: 1 } })
-          .mockResolvedValueOnce({ output: 'agent response 2', tokenUsage: { prompt: 25, completion: 15, total: 40, numRequests: 1 } }),
+        callApi: vi
+          .fn()
+          .mockResolvedValueOnce({
+            output: 'agent response 1',
+            tokenUsage: { prompt: 20, completion: 10, total: 30, numRequests: 1 },
+          })
+          .mockResolvedValueOnce({
+            output: 'agent response 2',
+            tokenUsage: { prompt: 25, completion: 15, total: 40, numRequests: 1 },
+          }),
       };
 
       const result = await simulatedUser.callApi('test prompt', {
