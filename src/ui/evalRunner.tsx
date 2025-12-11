@@ -126,6 +126,11 @@ export async function initInkEval(options: EvalRunnerOptions): Promise<InkEvalRe
     {
       exitOnCtrlC: false,
       patchConsole: true,
+      // Route SIGINT/SIGTERM through the cancel path for proper cleanup
+      onSignal: (signal) => {
+        logger.debug(`Received ${signal} signal - triggering cancellation`);
+        onCancel?.();
+      },
     },
   );
 

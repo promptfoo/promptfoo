@@ -603,14 +603,32 @@ export async function doEval(
 
         inkResult.controller.complete({ passed, failed, errors });
 
-        // Determine if we should share
+        // Determine if we should share - mirror the same precedence logic used below
+        // IMPORTANT: Respect user opt-out via CLI flags and environment variables
         let wantsToShareInk: boolean;
-        if (config.sharing !== undefined) {
+        if (
+          cmdObj.share === false ||
+          cmdObj.noShare === true ||
+          getEnvBool('PROMPTFOO_DISABLE_SHARING')
+        ) {
+          // Explicit disable via CLI or env var takes highest priority
+          wantsToShareInk = false;
+        } else if (cmdObj.share === true) {
+          // Explicit enable via CLI
+          wantsToShareInk = true;
+        } else if (commandLineOptions?.share !== undefined) {
+          // Config file commandLineOptions.share (can be true or false)
+          wantsToShareInk = commandLineOptions.share;
+        } else if (config.sharing !== undefined) {
+          // Config file sharing setting (can be false, true, or object)
           wantsToShareInk = Boolean(config.sharing);
         } else {
+          // Default: auto-share when cloud is enabled
           wantsToShareInk = cloudConfig.isEnabled();
         }
         const canShareInk = isSharingEnabled(evalRecord);
+
+        logger.debug(`Ink UI - Wants to share: ${wantsToShareInk}, Can share: ${canShareInk}`);
 
         // Start sharing in background (non-blocking)
         if (wantsToShareInk && canShareInk) {

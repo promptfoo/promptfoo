@@ -30,6 +30,8 @@ export interface RenderOptions {
   patchConsole?: boolean;
   /** Debug mode - shows render times */
   debug?: boolean;
+  /** Callback invoked on SIGINT/SIGTERM before exit - use for cleanup/abort logic */
+  onSignal?: (signal: 'SIGINT' | 'SIGTERM') => void;
 }
 
 /**
@@ -122,7 +124,7 @@ export async function renderInteractive(
   element: ReactElement,
   options: RenderOptions = {},
 ): Promise<RenderResult> {
-  const { exitOnCtrlC = false, patchConsole = true, debug = false } = options;
+  const { exitOnCtrlC = false, patchConsole = true, debug = false, onSignal } = options;
 
   // Verify we're in a TTY environment
   if (!shouldUseInteractiveUI() && !isInteractiveUIForced()) {
@@ -152,22 +154,44 @@ export async function renderInteractive(
 
   // Set up cleanup handlers
   let isCleanedUp = false;
+
+  // Signal handlers with proper exit codes and cleanup
+  // Exit codes: 130 = 128 + SIGINT(2), 143 = 128 + SIGTERM(15)
+  const handleSigint = () => {
+    if (!isCleanedUp) {
+      isCleanedUp = true;
+      instance.unmount();
+    }
+    // Invoke callback for abort/cancel logic before exit
+    onSignal?.('SIGINT');
+    process.exit(130);
+  };
+
+  const handleSigterm = () => {
+    if (!isCleanedUp) {
+      isCleanedUp = true;
+      instance.unmount();
+    }
+    // Invoke callback for abort/cancel logic before exit
+    onSignal?.('SIGTERM');
+    process.exit(143);
+  };
+
+  process.once('SIGINT', handleSigint);
+  process.once('SIGTERM', handleSigterm);
+
   const cleanup = () => {
     if (isCleanedUp) {
       return;
     }
     isCleanedUp = true;
+
+    // Remove signal handlers to prevent memory leaks and double-handling
+    process.removeListener('SIGINT', handleSigint);
+    process.removeListener('SIGTERM', handleSigterm);
+
     instance.unmount();
   };
-
-  // Handle process signals for cleanup
-  const handleSignal = () => {
-    cleanup();
-    process.exit(0);
-  };
-
-  process.once('SIGINT', handleSignal);
-  process.once('SIGTERM', handleSignal);
 
   return {
     instance,
