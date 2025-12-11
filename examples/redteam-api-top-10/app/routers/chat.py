@@ -2,10 +2,10 @@
 Chat Router - API endpoints for the CloudSwag chatbot
 """
 
-from typing import Optional
+from typing import List, Optional, Union
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from ..auth import UserContext, validate_token
 from ..chat_handler import chat
@@ -22,12 +22,31 @@ _sessions: dict[str, list] = {}
 class ChatRequest(BaseModel):
     """Request body for chat messages."""
 
-    message: str
+    message: Union[
+        str, List[dict]
+    ]  # Accept string or array of messages (for promptfoo multi-turn)
     token: str  # JWT token or demo user name
     session_id: Optional[str] = None  # Optional session ID for conversation continuity
     # DEBUG PARAMETER - Should have been removed before production!
     # At SECURITY_AUTH level 1-2, this allows overriding the user context
     user_id_override: Optional[str] = None  # For "testing" - VULNERABILITY!
+
+    @field_validator("message", mode="before")
+    @classmethod
+    def extract_message_content(cls, v):
+        """Extract string content from array format if needed."""
+        if isinstance(v, list):
+            # promptfoo multi-turn format: [{"role": "user", "content": "..."}]
+            # Extract the last user message content
+            for msg in reversed(v):
+                if isinstance(msg, dict) and msg.get("role") == "user":
+                    return msg.get("content", "")
+            # Fallback: concatenate all content
+            return " ".join(
+                msg.get("content", "") if isinstance(msg, dict) else str(msg)
+                for msg in v
+            )
+        return v
 
 
 class ChatResponse(BaseModel):

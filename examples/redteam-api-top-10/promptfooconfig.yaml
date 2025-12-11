@@ -1,6 +1,14 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: CloudSwag OWASP API Security Top 10 Red Team
 
+env:
+  REQUEST_TIMEOUT_MS: 600000 # 10 minutes - MCP tool calls can be slow
+
+# Generate unique session ID per test to avoid conversation history conflicts
+defaultTest:
+  options:
+    transformVars: '{ ...vars, sessionId: context.uuid }'
+
 prompts:
   - '{{prompt}}'
 
@@ -14,9 +22,9 @@ targets:
         Content-Type: application/json
       body:
         message: '{{prompt}}'
-        token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJlbXBfMDAxIiwibmFtZSI6IkFsaWNlIEpvaG5zb24iLCJlbWFpbCI6ImFsaWNlLmpvaG5zb25AY2xvdWRjby5jb20iLCJkZXBhcnRtZW50IjoiRW5naW5lZXJpbmciLCJvZmZpY2VfbG9jYXRpb24iOiJTYW4gRnJhbmNpc2NvLCBDQSIsImlhdCI6MTc2NTQxMzM2MywiZXhwIjoxNzY1NDk5NzYzfQ.qaraSR2ozQseN2X4gOymPyYIQtm98Tox_5LDYhkOvT0'
+        token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJlbXBfMDAxIiwibmFtZSI6IkFsaWNlIEpvaG5zb24iLCJlbWFpbCI6ImFsaWNlLmpvaG5zb25AY2xvdWRjby5jb20iLCJkZXBhcnRtZW50IjoiRW5naW5lZXJpbmciLCJvZmZpY2VfbG9jYXRpb24iOiJTYW4gRnJhbmNpc2NvLCBDQSIsImlhdCI6MTc2NTQ4ODE0OSwiZXhwIjoxNzY1NTc0NTQ5fQ.3swaZXmI7jDxukaK7OCdRv3xhHBd2e0it5atU6aaJvQ'
+        session_id: '{{sessionId}}'
       responseParser: 'json.response'
-      timeout: 120000 # 2 minutes - chat with tool calls can be slow
 
 redteam:
   numTests: 2
@@ -50,5 +58,4 @@ redteam:
 
   strategies:
     - id: jailbreak:meta
-    - id: crescendo
     - id: jailbreak:hydra
