@@ -1043,7 +1043,7 @@ describe('Plugins', () => {
       // updatePlugins should be called a bounded number of times (not infinite)
       // With the normalized comparison fix, it should be called once per user interaction
       await waitFor(() => {
-        expect(mockUpdatePlugins.mock.calls.length).toBeLessThan(50);
+        expect(mockUpdatePlugins.mock.calls.length).toBeLessThan(5);
       });
     });
 
@@ -1111,8 +1111,8 @@ describe('Plugins', () => {
       });
 
       // With the infinite loop bug, updateCallCount would be very high or the test would hang
-      // With the normalized comparison fix, it should be a small bounded number
-      expect(updateCallCount).toBeLessThan(20);
+      // With the normalized comparison fix, it should be called at most once or twice
+      expect(updateCallCount).toBeLessThan(5);
     });
 
     it('should skip updatePlugins when normalized plugins are equal', async () => {

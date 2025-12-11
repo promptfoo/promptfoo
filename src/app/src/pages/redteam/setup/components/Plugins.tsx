@@ -38,6 +38,12 @@ interface PluginsProps {
 
 const PLUGINS_REQUIRING_CONFIG = ['indirect-prompt-injection', 'prompt-extraction'];
 
+// Normalize plugin to only meaningful properties for comparison.
+// This prevents false-positive changes when updatePlugins() merge logic
+// produces output with extra properties from existing plugins.
+const normalizePlugin = (p: string | { id: string; config?: unknown }) =>
+  typeof p === 'string' ? p : { id: p.id, ...(p.config ? { config: p.config } : {}) };
+
 const TITLE_BY_TAB: Record<number, string> = {
   0: 'Plugins',
   1: 'Custom Intents',
@@ -228,18 +234,11 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
       // Combine all plugins
       const allPlugins = [...regularPlugins, ...policyPlugins, ...intentPlugins];
 
-      // Normalize plugins for comparison to prevent infinite loops.
-      // updatePlugins() has merge logic that can produce output different from input
-      // (e.g., spreading existing plugin properties). By comparing normalized versions
-      // that only include meaningful properties (id and config), we ensure the effect
-      // only triggers updates when there's an actual semantic change.
-      const normalizePlugin = (p: string | { id: string; config?: unknown }) =>
-        typeof p === 'string' ? p : { id: p.id, ...(p.config ? { config: p.config } : {}) };
+      // Compare normalized plugins to prevent infinite loops from updatePlugins() merge logic
+      const normalizedCurrent = JSON.stringify(config.plugins.map(normalizePlugin));
+      const normalizedNew = JSON.stringify(allPlugins.map(normalizePlugin));
 
-      const normalizedCurrent = config.plugins.map(normalizePlugin);
-      const normalizedNew = allPlugins.map(normalizePlugin);
-
-      if (JSON.stringify(normalizedCurrent) !== JSON.stringify(normalizedNew)) {
+      if (normalizedCurrent !== normalizedNew) {
         updatePlugins(allPlugins as Array<string | { id: string; config: any }>);
       }
     }
