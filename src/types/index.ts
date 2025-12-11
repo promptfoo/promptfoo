@@ -304,10 +304,12 @@ export interface EvaluateTableOutput {
   metadata?: Record<string, any>;
   namedScores: Record<string, number>;
   pass: boolean;
+  pluginId?: string | null;
   prompt: string;
   provider?: string;
   response?: ProviderResponse;
   score: number;
+  strategyId?: string | null;
   testCase: AtomicTestCase;
   text: string;
   tokenUsage?: Partial<TokenUsage>;

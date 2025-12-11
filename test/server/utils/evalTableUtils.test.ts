@@ -657,6 +657,46 @@ describe('evalTableUtils', () => {
           expect(lines[1]).toBeDefined();
         }
       });
+
+      it('should support top-level pluginId and strategyId fields on EvaluateTableOutput', () => {
+        // This test validates that pluginId and strategyId can be used as top-level fields
+        // on EvaluateTableOutput, not just in metadata
+        const outputWithTopLevelIds: EvaluateTableOutput = {
+          id: 'test-id',
+          pass: true,
+          text: 'Test output',
+          prompt: 'Test prompt',
+          score: 1,
+          cost: 0,
+          latencyMs: 100,
+          namedScores: {},
+          failureReason: ResultFailureReason.NONE,
+          testCase: { vars: {} },
+          // Top-level fields (new)
+          pluginId: 'harmful:violent-crime',
+          strategyId: 'jailbreak',
+        };
+
+        // Verify the fields are accessible at the top level
+        expect(outputWithTopLevelIds.pluginId).toBe('harmful:violent-crime');
+        expect(outputWithTopLevelIds.strategyId).toBe('jailbreak');
+
+        // Verify the output can be used in a table
+        const tableWithTopLevelIds = {
+          ...mockTable,
+          body: [
+            {
+              ...mockTable.body[0],
+              outputs: [outputWithTopLevelIds],
+            },
+          ],
+        };
+
+        // Should not throw when generating CSV
+        const csv = evalTableToCsv(tableWithTopLevelIds, { isRedteam: true });
+        expect(csv).toBeDefined();
+        expect(csv.length).toBeGreaterThan(0);
+      });
     });
 
     describe('Edge cases and special characters', () => {
