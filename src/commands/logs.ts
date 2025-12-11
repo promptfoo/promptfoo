@@ -202,13 +202,23 @@ function resolveLogPath(file: string | undefined, type: LogType): string | null 
   }
 
   // Check if current session has a log file
-  const sessionLogFile = type === 'error' ? cliState.errorLogFile : cliState.debugLogFile;
-  if (sessionLogFile && fs.existsSync(sessionLogFile)) {
-    return sessionLogFile;
+  if (type === 'all') {
+    // Prefer debug log (contains all levels) but fall back to error log
+    if (cliState.debugLogFile && fs.existsSync(cliState.debugLogFile)) {
+      return cliState.debugLogFile;
+    }
+    if (cliState.errorLogFile && fs.existsSync(cliState.errorLogFile)) {
+      return cliState.errorLogFile;
+    }
+  } else {
+    const sessionLogFile = type === 'error' ? cliState.errorLogFile : cliState.debugLogFile;
+    if (sessionLogFile && fs.existsSync(sessionLogFile)) {
+      return sessionLogFile;
+    }
   }
 
-  // Fall back to most recent log file
-  const files = getLogFiles(type === 'all' ? 'debug' : type);
+  // Fall back to most recent log file of the requested type
+  const files = getLogFiles(type);
   return files.length > 0 ? files[0].path : null;
 }
 

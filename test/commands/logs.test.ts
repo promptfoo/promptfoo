@@ -128,6 +128,15 @@ describe('logs command', () => {
 
       expect(mockLogsUtil.getLogFiles).toHaveBeenCalledWith('error');
     });
+
+    it('should use all log types when --type all is specified', async () => {
+      mockLogsUtil.getLogFiles.mockReturnValue([]);
+
+      const logsCmd = program.commands.find((c) => c.name() === 'logs');
+      await logsCmd?.parseAsync(['node', 'test', '--list', '--type', 'all']);
+
+      expect(mockLogsUtil.getLogFiles).toHaveBeenCalledWith('all');
+    });
   });
 
   describe('viewing log files', () => {
