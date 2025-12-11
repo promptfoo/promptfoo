@@ -45,6 +45,7 @@ type NavigationAction =
   | { type: 'GO_LAST' }
   | { type: 'TOGGLE_EXPAND' }
   | { type: 'CLOSE_EXPAND' }
+  | { type: 'NAVIGATE_EXPANDED'; direction: 'up' | 'down' | 'left' | 'right' }
   | { type: 'SET_SCROLL'; offset: number }
   // Filter actions
   | { type: 'SET_FILTER_MODE'; mode: FilterMode }
@@ -134,6 +135,42 @@ function navigationReducer(
 
     case 'CLOSE_EXPAND':
       return { ...state, expandedCell: null };
+
+    case 'NAVIGATE_EXPANDED': {
+      // Navigate while keeping detail view open
+      let newRow = state.selectedRow;
+      let newCol = state.selectedCol;
+      let newOffset = state.scrollOffset;
+
+      switch (action.direction) {
+        case 'up':
+          newRow = Math.max(0, state.selectedRow - 1);
+          if (newRow < newOffset) {
+            newOffset = newRow;
+          }
+          break;
+        case 'down':
+          newRow = Math.min(rowCount - 1, state.selectedRow + 1);
+          if (newRow >= newOffset + visibleRows) {
+            newOffset = newRow - visibleRows + 1;
+          }
+          break;
+        case 'left':
+          newCol = Math.max(0, state.selectedCol - 1);
+          break;
+        case 'right':
+          newCol = Math.min(colCount - 1, state.selectedCol + 1);
+          break;
+      }
+
+      return {
+        ...state,
+        selectedRow: newRow,
+        selectedCol: newCol,
+        scrollOffset: newOffset,
+        expandedCell: { row: newRow, col: newCol },
+      };
+    }
 
     case 'SET_SCROLL':
       return { ...state, scrollOffset: action.offset };

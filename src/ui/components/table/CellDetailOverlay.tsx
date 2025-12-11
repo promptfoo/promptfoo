@@ -5,11 +5,12 @@
  * - Full output content (no truncation)
  * - Metadata display (provider, latency, cost, score)
  * - Assertion results breakdown
- * - Keyboard navigation (q to close)
+ * - Keyboard navigation (q to close, arrows to navigate)
  */
 
 import { Box, Text } from 'ink';
-import React from 'react';
+import React, { useEffect } from 'react';
+import { isRawModeSupported } from '../../hooks/useKeypress';
 import { useTerminalSize } from '../../hooks/useTerminalSize';
 import { formatCost, formatLatency } from '../../utils/format';
 import { StatusBadge } from './StatusBadge';
@@ -52,13 +53,64 @@ function SectionHeader({ title, width }: { title: string; width: number }) {
 /**
  * CellDetailOverlay shows full cell content and metadata.
  */
-export function CellDetailOverlay({ cellData, column, rowData, onClose }: CellDetailOverlayProps) {
+export function CellDetailOverlay({
+  cellData,
+  column,
+  rowData,
+  varNames,
+  onNavigate,
+  onClose,
+}: CellDetailOverlayProps) {
   const { width, height } = useTerminalSize();
   const output = cellData.output;
 
   // Calculate content area
   const boxWidth = Math.min(width - 4, 100);
   const contentWidth = boxWidth - 4; // Padding
+
+  // Handle keyboard navigation within detail view
+  useEffect(() => {
+    if (!isRawModeSupported() || !onNavigate) {
+      return;
+    }
+
+    const handleInput = (data: Buffer) => {
+      const key = data.toString();
+
+      // Handle escape sequences for arrow keys
+      if (key === '\x1b[A') {
+        onNavigate('up');
+      } else if (key === '\x1b[B') {
+        onNavigate('down');
+      } else if (key === '\x1b[C') {
+        onNavigate('right');
+      } else if (key === '\x1b[D') {
+        onNavigate('left');
+      } else {
+        // Handle vim-style navigation
+        const lowerKey = key.toLowerCase();
+        switch (lowerKey) {
+          case 'k':
+            onNavigate('up');
+            break;
+          case 'j':
+            onNavigate('down');
+            break;
+          case 'l':
+            onNavigate('right');
+            break;
+          case 'h':
+            onNavigate('left');
+            break;
+        }
+      }
+    };
+
+    process.stdin.on('data', handleInput);
+    return () => {
+      process.stdin.off('data', handleInput);
+    };
+  }, [onNavigate]);
 
   return (
     <Box
@@ -72,7 +124,9 @@ export function CellDetailOverlay({ cellData, column, rowData, onClose }: CellDe
       {/* Header */}
       <Box justifyContent="space-between">
         <Text bold>Cell Details</Text>
-        <Text dimColor>[q] close</Text>
+        <Text dimColor>
+          {onNavigate && '←↑↓→ nav | '}[q] close
+        </Text>
       </Box>
 
       <Divider width={contentWidth} char="═" />
@@ -133,16 +187,66 @@ export function CellDetailOverlay({ cellData, column, rowData, onClose }: CellDe
         <>
           <SectionHeader title="Variables" width={contentWidth} />
           <Box flexDirection="column" marginLeft={1}>
-            {rowData.originalRow.vars.map((varValue, idx) => (
-              <Box key={idx}>
-                <Text dimColor>var{idx + 1}: </Text>
-                <Text wrap="truncate-end">{varValue}</Text>
-              </Box>
-            ))}
+            {rowData.originalRow.vars.map((varValue, idx) => {
+              const varName = varNames[idx] || `var${idx + 1}`;
+              return (
+                <Box key={idx}>
+                  <Text dimColor>{varName}: </Text>
+                  <Text wrap="wrap">{varValue || '(empty)'}</Text>
+                </Box>
+              );
+            })}
           </Box>
         </>
       )}
 
+    </Box>
+  );
+}
+
+/**
+ * Format assertion type for display.
+ */
+function formatAssertionType(assertion: any): string {
+  if (!assertion) {
+    return 'assertion';
+  }
+  // Show the assertion type
+  let label = assertion.type || 'assertion';
+  // Add value context if available
+  if (assertion.value !== undefined) {
+    const valueStr =
+      typeof assertion.value === 'string'
+        ? assertion.value.length > 30
+          ? assertion.value.slice(0, 30) + '…'
+          : assertion.value
+        : String(assertion.value);
+    label += `: ${valueStr}`;
+  }
+  return label;
+}
+
+/**
+ * Single assertion result row.
+ */
+function AssertionRow({ result, isLast }: { result: any; isLast: boolean }) {
+  return (
+    <Box flexDirection="column" marginBottom={isLast ? 0 : 1}>
+      <Box>
+        <StatusBadge status={result.pass ? 'pass' : 'fail'} />
+        <Text> </Text>
+        <Text>{formatAssertionType(result.assertion)}</Text>
+      </Box>
+      {result.reason && (
+        <Box marginLeft={2}>
+          <Text dimColor wrap="wrap">{result.reason}</Text>
+        </Box>
+      )}
+      {result.score !== undefined && result.score !== 1 && result.score !== 0 && (
+        <Box marginLeft={2}>
+          <Text dimColor>Score: {(result.score * 100).toFixed(1)}%</Text>
+        </Box>
+      )}
     </Box>
   );
 }
@@ -156,42 +260,22 @@ function AssertionResults({ gradingResult }: { gradingResult: any }) {
     return <Text dimColor>No assertion details available</Text>;
   }
 
-  // If it's a simple pass/fail result
-  if (typeof gradingResult.pass === 'boolean') {
+  // Check for componentResults FIRST (multiple assertions)
+  // This takes priority because gradingResult may have both pass AND componentResults
+  if (gradingResult.componentResults && Array.isArray(gradingResult.componentResults)) {
+    const results = gradingResult.componentResults;
     return (
       <Box flexDirection="column">
-        <Box>
-          <StatusBadge status={gradingResult.pass ? 'pass' : 'fail'} />
-          {gradingResult.reason && (
-            <>
-              <Text> </Text>
-              <Text wrap="wrap">{gradingResult.reason}</Text>
-            </>
-          )}
-        </Box>
-        {gradingResult.score !== undefined && (
-          <Text dimColor>Score: {(gradingResult.score * 100).toFixed(1)}%</Text>
-        )}
+        {results.map((result: any, idx: number) => (
+          <AssertionRow key={idx} result={result} isLast={idx === results.length - 1} />
+        ))}
       </Box>
     );
   }
 
-  // If it has componentResults (multiple assertions)
-  if (gradingResult.componentResults && Array.isArray(gradingResult.componentResults)) {
-    return (
-      <Box flexDirection="column">
-        {gradingResult.componentResults.map((result: any, idx: number) => (
-          <Box key={idx} marginBottom={idx < gradingResult.componentResults.length - 1 ? 1 : 0}>
-            <StatusBadge status={result.pass ? 'pass' : 'fail'} />
-            <Text> </Text>
-            <Text wrap="wrap">{result.assertion?.type || 'assertion'}</Text>
-            {result.reason && (
-              <Text dimColor> - {result.reason}</Text>
-            )}
-          </Box>
-        ))}
-      </Box>
-    );
+  // If it's a simple pass/fail result (single assertion)
+  if (typeof gradingResult.pass === 'boolean') {
+    return <AssertionRow result={gradingResult} isLast={true} />;
   }
 
   // Fallback: show raw JSON

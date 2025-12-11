@@ -319,6 +319,10 @@ export function ResultsTable({
           cellData={cellData}
           column={column}
           rowData={rowData}
+          varNames={data.head.vars}
+          onNavigate={(direction) => {
+            navigation.dispatch({ type: 'NAVIGATE_EXPANDED', direction });
+          }}
           onClose={() => navigation.dispatch({ type: 'CLOSE_EXPAND' })}
         />
       );

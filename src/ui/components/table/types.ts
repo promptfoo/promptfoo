@@ -227,6 +227,10 @@ export interface CellDetailOverlayProps {
   cellData: TableCellData;
   column: TableColumn;
   rowData: TableRowData;
+  /** Variable names from table head */
+  varNames: string[];
+  /** Handler for navigating to adjacent cells */
+  onNavigate?: (direction: 'up' | 'down' | 'left' | 'right') => void;
   onClose: () => void;
 }
 
