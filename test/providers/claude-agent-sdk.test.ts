@@ -1045,6 +1045,193 @@ describe('ClaudeCodeSDKProvider', () => {
           });
         });
 
+        it('with sandbox configuration', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const sandbox = {
+            enabled: true,
+            autoAllowBashIfSandboxed: true,
+            network: {
+              allowedDomains: ['api.example.com'],
+              allowLocalBinding: true,
+            },
+          };
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              sandbox,
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              sandbox,
+            }),
+          });
+        });
+
+        it('with bypassPermissions mode requires allow_dangerously_skip_permissions', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          // Should fail without the safety flag
+          const provider1 = new ClaudeCodeSDKProvider({
+            config: {
+              permission_mode: 'bypassPermissions',
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+
+          await expect(provider1.callApi('Test prompt')).rejects.toThrow(
+            "permission_mode 'bypassPermissions' requires allow_dangerously_skip_permissions: true as a safety measure",
+          );
+
+          // Should succeed with the safety flag
+          const provider2 = new ClaudeCodeSDKProvider({
+            config: {
+              permission_mode: 'bypassPermissions',
+              allow_dangerously_skip_permissions: true,
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+
+          const result = await provider2.callApi('Test prompt');
+
+          expect(result.output).toBe('Response');
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              permissionMode: 'bypassPermissions',
+              allowDangerouslySkipPermissions: true,
+            }),
+          });
+        });
+
+        it('with permission_prompt_tool_name configuration', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              permission_prompt_tool_name: 'my-mcp-permission-tool',
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              permissionPromptToolName: 'my-mcp-permission-tool',
+            }),
+          });
+        });
+
+        it('with stderr callback configuration', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const stderrCallback = vi.fn();
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              stderr: stderrCallback,
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              stderr: stderrCallback,
+            }),
+          });
+        });
+
+        it('with executable and executable_args configuration', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              executable: 'bun',
+              executable_args: ['--smol'],
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              executable: 'bun',
+              executableArgs: ['--smol'],
+            }),
+          });
+        });
+
+        it('with extra_args configuration', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              extra_args: {
+                verbose: null, // Boolean flag
+                timeout: '30',
+              },
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              extraArgs: {
+                verbose: null,
+                timeout: '30',
+              },
+            }),
+          });
+        });
+
+        it('with path_to_claude_code_executable configuration', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              path_to_claude_code_executable: '/custom/path/to/claude-code',
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              pathToClaudeCodeExecutable: '/custom/path/to/claude-code',
+            }),
+          });
+        });
+
+        it('with setting_sources configuration', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              setting_sources: ['user', 'project', 'local'],
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              settingSources: ['user', 'project', 'local'],
+            }),
+          });
+        });
+
         it('with append system prompt', async () => {
           mockQuery.mockReturnValue(createMockResponse('Response'));
 
