@@ -99,14 +99,14 @@ Research shows LLM judges correlate with human preference, but they have biases 
 
 ### LLM-as-a-judge vs. other methods
 
-| Method | When to use | Promptfoo assertion |
-|--------|-------------|---------------------|
-| Deterministic | Format, exact matches | `contains`, `is-json`, `regex` |
-| Embedding similarity | Semantic similarity | [`similar`](/docs/configuration/expected-outputs/similar) |
-| LLM judge (pointwise) | Open-ended quality | `llm-rubric`, `g-eval` |
-| LLM judge (pairwise) | "Which is better" | [`select-best`](/docs/configuration/expected-outputs/model-graded/select-best) |
-| Aggregate scoring | Objective selection | [`max-score`](/docs/configuration/expected-outputs/model-graded/max-score) |
-| Human review | Calibration, edge cases | Manual |
+| Method                | When to use             | Promptfoo assertion                                                            |
+| --------------------- | ----------------------- | ------------------------------------------------------------------------------ |
+| Deterministic         | Format, exact matches   | `contains`, `is-json`, `regex`                                                 |
+| Embedding similarity  | Semantic similarity     | [`similar`](/docs/configuration/expected-outputs/similar)                      |
+| LLM judge (pointwise) | Open-ended quality      | `llm-rubric`, `g-eval`                                                         |
+| LLM judge (pairwise)  | "Which is better"       | [`select-best`](/docs/configuration/expected-outputs/model-graded/select-best) |
+| Aggregate scoring     | Objective selection     | [`max-score`](/docs/configuration/expected-outputs/model-graded/max-score)     |
+| Human review          | Calibration, edge cases | Manual                                                                         |
 
 Stack deterministic checks first, then add LLM judges:
 
@@ -124,13 +124,13 @@ assert:
 
 ## Promptfoo's model-graded assertions
 
-| Type | Purpose | Default model |
-|------|---------|---------------|
-| [`llm-rubric`](/docs/configuration/expected-outputs/model-graded/llm-rubric) | General rubric evaluation | Varies by API key |
-| [`g-eval`](/docs/configuration/expected-outputs/model-graded/g-eval) | Chain-of-thought scoring | `gpt-4.1-2025-04-14` |
-| [`factuality`](/docs/configuration/expected-outputs/model-graded/factuality) | Fact consistency | Varies by API key |
-| [`select-best`](/docs/configuration/expected-outputs/model-graded/select-best) | Pairwise comparison | Varies by API key |
-| [`search-rubric`](/docs/configuration/expected-outputs/model-graded/search-rubric) | Rubric + web search | Web-search-capable provider |
+| Type                                                                               | Purpose                   | Default model               |
+| ---------------------------------------------------------------------------------- | ------------------------- | --------------------------- |
+| [`llm-rubric`](/docs/configuration/expected-outputs/model-graded/llm-rubric)       | General rubric evaluation | Varies by API key           |
+| [`g-eval`](/docs/configuration/expected-outputs/model-graded/g-eval)               | Chain-of-thought scoring  | `gpt-4.1-2025-04-14`        |
+| [`factuality`](/docs/configuration/expected-outputs/model-graded/factuality)       | Fact consistency          | Varies by API key           |
+| [`select-best`](/docs/configuration/expected-outputs/model-graded/select-best)     | Pairwise comparison       | Varies by API key           |
+| [`search-rubric`](/docs/configuration/expected-outputs/model-graded/search-rubric) | Rubric + web search       | Web-search-capable provider |
 
 For `llm-rubric`, the default grader depends on available API keys: `gpt-5` (OpenAI), `claude-sonnet-4-5-20250929` (Anthropic), `gemini-2.5-pro` (Google), and others. See the [full list](/docs/configuration/expected-outputs/model-graded/llm-rubric#how-it-works).
 
@@ -141,12 +141,14 @@ The **judge prompt is the product**. The rubric is a variable inside it.
 A judge prompt has two parts:
 
 **System message:**
+
 - Role definition
 - Security boundaries (treat output as untrusted)
 - Scoring rules and anchors
 - Output schema (JSON with `reason`, `score`, `pass`)
 
 **User message:**
+
 - Original question or context (when relevant)
 - Candidate output to evaluate
 - Rubric criteria
@@ -210,7 +212,7 @@ defaultTest:
       id: openai:gpt-5
       config:
         # highlight-next-line
-        temperature: 0  # Set on the grader, not SUT
+        temperature: 0 # Set on the grader, not SUT
 ```
 
 The `rubricPrompt` supports:
@@ -375,7 +377,7 @@ tests:
     assert:
       - type: assert-set
         # highlight-next-line
-        threshold: 0.67  # 2 of 3 judges must pass
+        threshold: 0.67 # 2 of 3 judges must pass
         assert:
           - type: llm-rubric
             value: 'Explanation is accurate and accessible'
@@ -437,12 +439,12 @@ Track disagreements to calibrate your rubrics:
 
 ### Known biases
 
-| Bias | Description | Mitigation |
-|------|-------------|------------|
-| **Verbosity** | Prefers longer responses | Explicitly penalize unnecessary length |
-| **Position** | Prefers first/last in comparisons | Randomize order |
-| **Self-preference** | GPT prefers GPT outputs | Use different judge than SUT |
-| **Authority** | Swayed by confident tone | Focus rubric on content |
+| Bias                | Description                       | Mitigation                             |
+| ------------------- | --------------------------------- | -------------------------------------- |
+| **Verbosity**       | Prefers longer responses          | Explicitly penalize unnecessary length |
+| **Position**        | Prefers first/last in comparisons | Randomize order                        |
+| **Self-preference** | GPT prefers GPT outputs           | Use different judge than SUT           |
+| **Authority**       | Swayed by confident tone          | Focus rubric on content                |
 
 ### Reliability checklist
 
@@ -581,12 +583,12 @@ Cache location: `~/.promptfoo/cache` (14-day TTL)
 
 ### Grader model selection
 
-| Model | Reliability | Cost | Use for |
-|-------|-------------|------|---------|
-| `gpt-5` | High | Higher | Production, complex rubrics |
-| `gpt-5-mini` | Medium | Low | Development, simple checks |
-| `claude-sonnet-4-5-20250929` | High | Medium | Production |
-| `claude-haiku-3-5-20241022` | Medium | Low | High volume |
+| Model                        | Reliability | Cost   | Use for                     |
+| ---------------------------- | ----------- | ------ | --------------------------- |
+| `gpt-5`                      | High        | Higher | Production, complex rubrics |
+| `gpt-5-mini`                 | Medium      | Low    | Development, simple checks  |
+| `claude-sonnet-4-5-20250929` | High        | Medium | Production                  |
+| `claude-haiku-3-5-20241022`  | Medium      | Low    | High volume                 |
 
 Override:
 
