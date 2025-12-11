@@ -643,7 +643,7 @@ providers:
 
 ### Custom Token Counting
 
-For sophisticated token counting, implement it in your `transformResponse` function:
+For accurate token counting, implement it in your `transformResponse` function:
 
 ```yaml
 providers:
@@ -1245,12 +1245,15 @@ providers:
 | privateKeyPath           | string | No\*     | -                          | Path to PEM private key file (PEM only)                |
 | privateKey               | string | No\*     | -                          | Inline PEM private key string (PEM only)               |
 | keystorePath             | string | No\*     | -                          | Path to JKS keystore file (JKS only)                   |
+| keystoreContent          | string | No\*     | -                          | Base64-encoded JKS keystore content (JKS only)         |
 | keystorePassword         | string | No       | -                          | JKS password (or use `PROMPTFOO_JKS_PASSWORD` env var) |
 | keyAlias                 | string | No       | First available            | JKS key alias (JKS only)                               |
 | pfxPath                  | string | No\*     | -                          | Path to PFX certificate file (PFX only)                |
 | pfxPassword              | string | No       | -                          | PFX password (or use `PROMPTFOO_PFX_PASSWORD` env var) |
 | certPath                 | string | No\*     | -                          | Path to certificate file (PFX alternative)             |
 | keyPath                  | string | No\*     | -                          | Path to private key file (PFX alternative)             |
+| certContent              | string | No\*     | -                          | Base64-encoded certificate content (PFX alternative)   |
+| keyContent               | string | No\*     | -                          | Base64-encoded private key content (PFX alternative)   |
 | signatureValidityMs      | number | No       | 300000                     | Signature validity period in milliseconds              |
 | signatureAlgorithm       | string | No       | `'SHA256'`                 | Signature algorithm (any Node.js crypto supported)     |
 | signatureDataTemplate    | string | No       | `'{{signatureTimestamp}}'` | Template for data to sign (`\n` = newline)             |
@@ -1259,8 +1262,8 @@ providers:
 \* Requirements by certificate type:
 
 - **PEM**: Either `privateKeyPath` or `privateKey` required
-- **JKS**: `keystorePath` required
-- **PFX**: Either `pfxPath` or both `certPath` and `keyPath` required
+- **JKS**: Either `keystorePath` or `keystoreContent` required
+- **PFX**: Either `pfxPath`, or both `certPath` and `keyPath`, or both `certContent` and `keyContent` required
 
 ## Session management
 
