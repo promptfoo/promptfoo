@@ -1,15 +1,15 @@
 /**
  * Main application component for the evaluation UI.
  *
- * This component sets up the provider tree and renders the eval screen or results table.
- * The sharing status header persists across both phases.
+ * This component sets up the provider tree and renders both the eval screen
+ * and results table. When in results phase, both are visible with the eval
+ * summary box above the interactive results table.
  */
 
-import { Box, Text, useApp } from 'ink';
+import { Box, useApp } from 'ink';
 import { useEffect, useRef } from 'react';
 import { EvalScreen } from './components/eval/EvalScreen';
 import { ResultsTable } from './components/table/ResultsTable';
-import { Spinner } from './components/shared/Spinner';
 import { EvalProvider, useEval } from './contexts/EvalContext';
 import { UIProvider } from './contexts/UIContext';
 import { createEvalUIController, type EvalUIController } from './evalBridge';
@@ -38,47 +38,6 @@ export interface EvalAppProps {
   showHelp?: boolean;
   /** Share context (org/team) if sharing is enabled */
   shareContext?: ShareContext | null;
-}
-
-/**
- * Sharing status header component - persists across eval and results phases.
- */
-function SharingStatusHeader({ shareContext }: { shareContext?: ShareContext | null }) {
-  const { state } = useEval();
-
-  if (!shareContext) {
-    return null;
-  }
-
-  return (
-    <Box>
-      {state.sharingStatus === 'completed' && state.shareUrl ? (
-        <>
-          <Text color="green">✔ Shared: </Text>
-          <Text color="cyan">{state.shareUrl}</Text>
-        </>
-      ) : state.sharingStatus === 'failed' ? (
-        <Text color="red">✗ Share failed</Text>
-      ) : (
-        <>
-          <Text dimColor>Sharing to: </Text>
-          <Text color="cyan">{shareContext.organizationName}</Text>
-          {shareContext.teamName && (
-            <>
-              <Text dimColor> {'>'} </Text>
-              <Text color="cyan">{shareContext.teamName}</Text>
-            </>
-          )}
-          {state.sharingStatus === 'sharing' && (
-            <>
-              <Text dimColor> </Text>
-              <Spinner type="dots" color="cyan" />
-            </>
-          )}
-        </>
-      )}
-    </Box>
-  );
 }
 
 /**
@@ -120,35 +79,34 @@ function EvalAppInner({
     exit();
   };
 
-  // Render based on session phase
-  if (state.sessionPhase === 'results' && state.tableData) {
-    return (
-      <Box flexDirection="column">
-        {/* Persistent sharing status header */}
-        <SharingStatusHeader shareContext={shareContext} />
+  // Check if we're in results phase
+  const inResultsPhase = state.sessionPhase === 'results' && state.tableData;
 
-        {/* Results table */}
+  // Render both EvalScreen and ResultsTable (when in results phase)
+  // EvalScreen shows the summary box, ResultsTable shows detailed results below
+  return (
+    <Box flexDirection="column">
+      {/* Eval screen - always visible, shows summary when complete */}
+      <EvalScreen
+        title={title}
+        onComplete={onComplete}
+        onExit={inResultsPhase ? undefined : onExit} // Only handle exit in eval phase
+        showHelp={!inResultsPhase && showHelp} // Hide help bar when showing results table
+        shareContext={shareContext}
+      />
+
+      {/* Results table - shown when in results phase */}
+      {inResultsPhase && (
         <ResultsTable
-          data={state.tableData}
+          data={state.tableData!}
           maxRows={25}
           maxCellLength={250}
           showIndex={true}
           interactive={true}
           onExit={handleResultsExit}
         />
-      </Box>
-    );
-  }
-
-  // Eval phase - render EvalScreen
-  return (
-    <EvalScreen
-      title={title}
-      onComplete={onComplete}
-      onExit={onExit}
-      showHelp={showHelp}
-      shareContext={shareContext}
-    />
+      )}
+    </Box>
   );
 }
 

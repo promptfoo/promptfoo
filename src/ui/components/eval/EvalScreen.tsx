@@ -327,12 +327,16 @@ export function EvalScreen({
   const completeCalled = useRef(false);
   const isRawModeSupported = process.stdin.isTTY && typeof process.stdin.setRawMode === 'function';
 
+  // Check if we're in results phase - if so, ResultsTable handles keyboard input
+  const inResultsPhase = state.sessionPhase === 'results';
+
   // Poll TokenUsageTracker for real-time token metrics
   useTokenMetrics(dispatch, state.providerOrder, isRunning, 500);
 
-  // Handle keyboard input - only if raw mode is supported
+  // Handle keyboard input - only if raw mode is supported AND not in results phase
+  // When results table is shown, it handles all keyboard input
   useNavigationKeys(
-    isRawModeSupported
+    isRawModeSupported && !inResultsPhase
       ? {
           onEscape: () => {
             onExit?.();
@@ -342,9 +346,10 @@ export function EvalScreen({
       : {},
   );
 
-  // Handle additional key bindings - only if raw mode is supported
+  // Handle additional key bindings - only if raw mode is supported AND not in results phase
   useEffect(() => {
-    if (!isRawModeSupported) {
+    // Disable when in results phase - ResultsTable handles keyboard input
+    if (!isRawModeSupported || inResultsPhase) {
       return;
     }
 
@@ -374,7 +379,7 @@ export function EvalScreen({
     return () => {
       process.stdin.off('data', handleInput);
     };
-  }, [dispatch, exit, onExit, isRawModeSupported, state.showVerbose]);
+  }, [dispatch, exit, onExit, isRawModeSupported, state.showVerbose, inResultsPhase]);
 
   // Update elapsed time while running
   useEffect(() => {

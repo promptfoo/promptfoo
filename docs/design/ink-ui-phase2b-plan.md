@@ -304,19 +304,35 @@ The transition from eval to table should feel like "zooming in" on the results:
 - ✅ **Unified session architecture** - Single Ink session for both eval and results
 
 ### Unified Session Architecture
-The Ink UI now uses a single session that transitions from evaluation progress to results table, with a persistent sharing status header:
+The Ink UI now uses a single session that shows BOTH the eval summary box and results table together:
 
 **Key Changes:**
-1. `EvalApp.tsx` now conditionally renders `EvalScreen` OR `ResultsTable` based on `sessionPhase` state
-2. `SharingStatusHeader` component persists across both phases
+1. `EvalApp.tsx` always renders `EvalScreen`, and adds `ResultsTable` below when in results phase
+2. Both components are visible simultaneously - eval summary above, results table below
 3. `EvalContext` manages `sessionPhase` ('eval' | 'results') and `tableData`
-4. `controller.showResults(table)` transitions from eval to results view
+4. `controller.showResults(table)` transitions to show results table (EvalScreen stays visible)
 5. No more separate `renderResultsTable()` call - everything stays in one Ink session
 6. `waitUntilExit()` is used to wait for user to close the results table
+7. `EvalScreen` disables its keyboard handling when `sessionPhase === 'results'` (ResultsTable handles input)
+
+**Layout:**
+```
+╭─ Evaluation: My Test ─────────────────────────╮
+│ ✔ Shared: https://app.promptfoo.dev/eval/xyz │
+│ Provider │ Progress │ Results │ Tokens │ Cost │
+│ gpt-4    │ 10/10    │ 8/1/1   │ 50K    │ $0.05│
+│ Total: 50K tokens | $0.05 | 12.3s            │
+╰───────────────────────────────────────────────╯
+ # │ input    │ gpt-4 output │
+───┼──────────┼──────────────┤
+ 1 │ test1... │ ✔ response...│
+ 2 │ test2... │ ✗ response...│
+[↑↓] navigate | [Enter] expand | [q] quit
+```
 
 **Benefits:**
 - Sharing status updates are visible in both eval and results phases
-- Smoother transition between phases (no Ink session teardown/restart)
+- User sees full context: summary stats AND detailed results at same time
 - Share URL appears immediately when available, even while viewing results
 - State is preserved across the transition
 
