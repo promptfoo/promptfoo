@@ -17,6 +17,16 @@ import type {
 } from './contexts/EvalContext';
 
 /**
+ * Safely get the constructor name of an object (a JavaScript runtime property).
+ * TypeScript doesn't include this in type definitions, but all objects have it.
+ */
+function getConstructorName(obj: object): string | undefined {
+  // Access the prototype's constructor name safely
+  const proto = Object.getPrototypeOf(obj);
+  return proto?.constructor?.name;
+}
+
+/**
  * State for tracking deltas between progress callbacks for a single prompt.
  * The key insight is that metrics are tracked per-PROMPT (not per-provider),
  * so we need to track deltas at the prompt level to compute correct pass/fail counts.
@@ -122,15 +132,15 @@ export function createProgressCallback(
     }
 
     const providerId = evalStep.provider.label || evalStep.provider.id();
-    const promptIdx = (evalStep as { promptIdx?: number }).promptIdx ?? 0;
+    const promptIdx = evalStep.promptIdx;
     // Create a unique key for this provider+prompt combination
     const trackingKey = `${providerId}:${promptIdx}`;
 
     // The TokenUsageTracker uses a tracking ID that includes the constructor name
     // e.g., "openai:gpt-4o-mini (OpenAiGenericProvider)"
-    const provider = evalStep.provider as unknown as { constructor?: { name?: string } };
-    const tokenTrackingId = provider.constructor?.name
-      ? `${evalStep.provider.id()} (${provider.constructor.name})`
+    const constructorName = getConstructorName(evalStep.provider);
+    const tokenTrackingId = constructorName
+      ? `${evalStep.provider.id()} (${constructorName})`
       : evalStep.provider.id();
 
     const prompt =

@@ -1,76 +1,37 @@
 /**
- * EvalContext - State management for evaluation progress.
+ * EvalContext - State management for evaluation progress using XState.
  *
  * This context provides a central store for evaluation state that can be
- * accessed by all components in the eval UI tree.
+ * accessed by all components in the eval UI tree. It uses XState for
+ * predictable state transitions and explicit state modeling.
  */
 
-import React, { createContext, useCallback, useContext, useMemo, useReducer } from 'react';
+import { useMachine } from '@xstate/react';
+import React, { createContext, useCallback, useContext, useMemo } from 'react';
 
 import type { EvaluateTable } from '../../types';
+import {
+  evalMachine,
+  getEvalPhase,
+  getProgressPercent,
+  getSessionPhase,
+  isComplete as machineIsComplete,
+  isRunning as machineIsRunning,
+  type EvalError,
+  type EvalMachineContext,
+  type EvalMachineEvent,
+  type GradingTokens,
+  type ProviderMetrics,
+  type TokenMetricsPayload,
+} from '../machines/evalMachine';
 import type { LogEntry } from '../utils/InkUITransport';
 
-// Re-export LogEntry for consumers
+// Re-export types for consumers
 export type { LogEntry } from '../utils/InkUITransport';
-
-// Types for provider metrics tracking
-export interface ProviderMetrics {
-  id: string;
-  label: string;
-
-  // Test case metrics
-  testCases: {
-    total: number;
-    completed: number;
-    passed: number;
-    failed: number;
-    errors: number;
-  };
-
-  // Request metrics (from TokenUsageTracker)
-  requests: {
-    total: number;
-    cached: number;
-  };
-
-  // Token metrics (from TokenUsageTracker)
-  tokens: {
-    prompt: number;
-    completion: number;
-    cached: number;
-    total: number;
-    reasoning: number;
-  };
-
-  // Cost tracking
-  cost: number;
-
-  // Latency metrics
-  latency: {
-    totalMs: number;
-    count: number;
-    minMs: number;
-    maxMs: number;
-  };
-
-  // Status
-  status: 'pending' | 'running' | 'completed' | 'error';
-  currentTest?: string;
-  lastError?: string;
-}
+export type { EvalError, GradingTokens, ProviderMetrics, TokenMetricsPayload };
 
 // Backwards compatibility alias
 export type ProviderStatus = ProviderMetrics;
-
-// Types for error tracking
-export interface EvalError {
-  id: string;
-  provider: string;
-  prompt: string;
-  message: string;
-  timestamp: number;
-  vars?: Record<string, unknown>;
-}
 
 // Sharing status type
 export type SharingStatus = 'idle' | 'sharing' | 'completed' | 'failed';
@@ -78,7 +39,7 @@ export type SharingStatus = 'idle' | 'sharing' | 'completed' | 'failed';
 // Session phase - which view is currently shown
 export type SessionPhase = 'eval' | 'results';
 
-// Main state interface
+// Main state interface (backwards compatible with old reducer state)
 export interface EvalState {
   // Session phase - eval progress view or results table view
   sessionPhase: SessionPhase;
@@ -107,13 +68,7 @@ export interface EvalState {
   reasoningTokens: number;
 
   // Grading/assertion tokens (model-graded assertions)
-  gradingTokens: {
-    total: number;
-    prompt: number;
-    completion: number;
-    cached: number;
-    reasoning: number;
-  };
+  gradingTokens: GradingTokens;
 
   // Aggregate cost
   totalCost: number;
@@ -153,17 +108,8 @@ export interface EvalState {
   tableData: EvaluateTable | null;
 }
 
-// Token usage type for updates
-export interface TokenMetricsPayload {
-  prompt: number;
-  completion: number;
-  cached: number;
-  total: number;
-  numRequests: number;
-  reasoning?: number;
-}
-
-// Action types for the reducer
+// Action types for backwards compatibility with old reducer pattern
+// These get converted to XState events internally
 export type EvalAction =
   | { type: 'INIT'; payload: { totalTests: number; providers: string[] } }
   | { type: 'START' }
@@ -226,13 +172,7 @@ export type EvalAction =
   | { type: 'SET_CONCURRENCY'; payload: number }
   | {
       type: 'SET_GRADING_TOKENS';
-      payload: {
-        total: number;
-        prompt: number;
-        completion: number;
-        cached: number;
-        reasoning: number;
-      };
+      payload: GradingTokens;
     }
   | { type: 'SET_SHARE_URL'; payload: string }
   | { type: 'SET_SHARING_STATUS'; payload: { status: SharingStatus; url?: string } }
@@ -242,475 +182,198 @@ export type EvalAction =
   | { type: 'ADD_LOG'; payload: LogEntry }
   | { type: 'CLEAR_LOGS' };
 
-// Helper to create empty provider metrics
-function createEmptyProviderMetrics(id: string, label?: string): ProviderMetrics {
+// ============================================================================
+// State Conversion
+// ============================================================================
+
+/**
+ * Convert XState machine context to backwards-compatible EvalState.
+ */
+function machineContextToEvalState(
+  context: EvalMachineContext,
+  stateValue: string | object,
+  sharingStatus: SharingStatus,
+): EvalState {
   return {
-    id,
-    label: label || id,
-    testCases: { total: 0, completed: 0, passed: 0, failed: 0, errors: 0 },
-    requests: { total: 0, cached: 0 },
-    tokens: { prompt: 0, completion: 0, cached: 0, total: 0, reasoning: 0 },
-    cost: 0,
-    latency: { totalMs: 0, count: 0, minMs: Infinity, maxMs: 0 },
-    status: 'pending',
+    sessionPhase: getSessionPhase(stateValue),
+    phase: getEvalPhase(stateValue as string | { evaluating: string }),
+    totalTests: context.totalTests,
+    completedTests: context.completedTests,
+    passedTests: context.passedTests,
+    failedTests: context.failedTests,
+    errorCount: context.errorCount,
+    sharingStatus,
+    shareUrl: context.shareUrl,
+    totalRequests: context.totalRequests,
+    cachedRequests: context.cachedRequests,
+    totalTokens: context.totalTokens,
+    promptTokens: context.promptTokens,
+    completionTokens: context.completionTokens,
+    cachedTokens: context.cachedTokens,
+    reasoningTokens: context.reasoningTokens,
+    gradingTokens: context.gradingTokens,
+    totalCost: context.totalCost,
+    concurrency: context.concurrency,
+    providers: context.providers,
+    providerOrder: context.providerOrder,
+    currentProvider: context.currentProvider,
+    currentPrompt: context.currentPrompt,
+    currentVars: context.currentVars,
+    startTime: context.startTime,
+    endTime: context.endTime,
+    elapsedMs: context.elapsedMs,
+    estimatedRemainingMs: 0, // Calculate if needed
+    errors: context.errors.toArray(),
+    maxErrorsToShow: context.maxErrorsToShow,
+    showProviderDetails: true, // Not in machine, default to true
+    showErrorDetails: context.showErrorDetails,
+    showVerbose: context.showVerbose,
+    logs: context.logs.toArray(),
+    maxLogsToShow: context.maxLogsToShow,
+    tableData: context.tableData,
   };
 }
 
-// Initial state
-const initialState: EvalState = {
-  // Session phase
-  sessionPhase: 'eval',
-  // Eval progress phase
-  phase: 'initializing',
-  totalTests: 0,
-  completedTests: 0,
-  passedTests: 0,
-  failedTests: 0,
-  errorCount: 0,
-  // Sharing state
-  sharingStatus: 'idle',
-  // Aggregate request metrics
-  totalRequests: 0,
-  cachedRequests: 0,
-  // Aggregate token metrics
-  totalTokens: 0,
-  promptTokens: 0,
-  completionTokens: 0,
-  cachedTokens: 0,
-  reasoningTokens: 0,
-  // Grading tokens
-  gradingTokens: {
-    total: 0,
-    prompt: 0,
-    completion: 0,
-    cached: 0,
-    reasoning: 0,
-  },
-  // Aggregate cost
-  totalCost: 0,
-  // Concurrency
-  concurrency: 4,
-  providers: {},
-  providerOrder: [],
-  elapsedMs: 0,
-  estimatedRemainingMs: 0,
-  errors: [],
-  maxErrorsToShow: 5,
-  showProviderDetails: true,
-  showErrorDetails: false,
-  // Verbose mode / log capture
-  showVerbose: false,
-  logs: [],
-  maxLogsToShow: 100,
-  // Results table data
-  tableData: null,
-};
-
-// Reducer function
-function evalReducer(state: EvalState, action: EvalAction): EvalState {
+/**
+ * Convert old EvalAction to XState event.
+ */
+function actionToEvent(action: EvalAction): EvalMachineEvent | null {
   switch (action.type) {
-    case 'INIT': {
-      const providers: Record<string, ProviderMetrics> = {};
-      const numProviders = action.payload.providers.length;
-      // totalTests from eval.ts is the number of test CASES (testSuite.tests.length)
-      // Each provider runs ALL test cases, so per-provider total = totalTests
-      // (NOT divided by numProviders - that would be if we split tests across providers)
-      const testsPerProvider = action.payload.totalTests;
-
-      for (const id of action.payload.providers) {
-        const metrics = createEmptyProviderMetrics(id);
-        metrics.testCases.total = testsPerProvider;
-        providers[id] = metrics;
-      }
-
-      // Total results = test cases * providers
-      const totalResults = action.payload.totalTests * numProviders;
-
+    case 'INIT':
       return {
-        ...initialState,
-        totalTests: totalResults,
-        providers,
-        providerOrder: action.payload.providers,
-        phase: 'loading',
+        type: 'INIT',
+        providers: action.payload.providers,
+        totalTests: action.payload.totalTests,
       };
-    }
 
     case 'START':
-      return {
-        ...state,
-        phase: 'evaluating',
-        startTime: Date.now(),
-      };
-
-    case 'SET_PHASE':
-      return {
-        ...state,
-        phase: action.payload,
-      };
+      return { type: 'START' };
 
     case 'PROGRESS': {
       const { completed, total, provider, prompt, vars, passed, error } = action.payload;
-
-      let passedTests = state.passedTests;
-      let failedTests = state.failedTests;
-      let errorCount = state.errorCount;
-
-      if (passed === true) {
-        passedTests++;
-      } else if (passed === false) {
-        failedTests++;
-      }
-      if (error) {
-        errorCount++;
-      }
-
-      // Update provider status if provider specified
-      let providers = state.providers;
-
-      // Fix per-provider totals if they don't match the actual total from evaluator
-      // The evaluator passes total = tests × varCombinations × prompts × providers
-      // Per-provider total = total / numProviders
-      const numProviders = state.providerOrder.length;
-      if (numProviders > 0 && total > 0) {
-        const correctPerProviderTotal = Math.floor(total / numProviders);
-        // Check if any provider has a different total and needs updating
-        const firstProvider = state.providers[state.providerOrder[0]];
-        if (firstProvider && firstProvider.testCases.total !== correctPerProviderTotal) {
-          // Update all providers with the correct total AND fix completion status
-          const updatedProviders = { ...providers };
-          for (const id of state.providerOrder) {
-            if (updatedProviders[id]) {
-              const prov = updatedProviders[id];
-              const isComplete =
-                prov.testCases.completed >= correctPerProviderTotal && correctPerProviderTotal > 0;
-              const hasErrors = prov.testCases.errors > 0;
-              updatedProviders[id] = {
-                ...prov,
-                testCases: {
-                  ...prov.testCases,
-                  total: correctPerProviderTotal,
-                },
-                // Fix status if provider is actually complete now that we have correct total
-                status: isComplete ? (hasErrors ? 'error' : 'completed') : prov.status,
-              };
-            }
-          }
-          providers = updatedProviders;
-        }
-      }
-
-      // Also check if any provider just became complete (even without total correction)
-      // This handles the case where total was already correct but status wasn't updated
-      for (const id of state.providerOrder) {
-        if (providers[id] && providers[id].status === 'running') {
-          const prov = providers[id];
-          const isComplete =
-            prov.testCases.completed >= prov.testCases.total && prov.testCases.total > 0;
-          if (isComplete) {
-            const hasErrors = prov.testCases.errors > 0;
-            providers = {
-              ...providers,
-              [id]: {
-                ...prov,
-                status: hasErrors ? 'error' : 'completed',
-              },
-            };
-          }
-        }
-      }
-
-      if (provider && providers[provider]) {
-        // Only set to 'running' if not already completed
-        if (providers[provider].status !== 'completed' && providers[provider].status !== 'error') {
-          providers = {
-            ...providers,
-            [provider]: {
-              ...providers[provider],
-              status: 'running',
-              currentTest: vars,
-            },
-          };
-        }
-      }
-
       return {
-        ...state,
-        completedTests: completed,
-        totalTests: total,
-        passedTests,
-        failedTests,
-        errorCount,
-        currentProvider: provider,
-        currentPrompt: prompt,
-        currentVars: vars,
-        providers,
+        type: 'PROGRESS',
+        completed,
+        total,
+        provider,
+        prompt,
+        vars,
+        passedDelta: passed === true ? 1 : 0,
+        failedDelta: passed === false ? 1 : 0,
+        errorDelta: error ? 1 : 0,
       };
     }
 
-    case 'PROVIDER_UPDATE': {
-      const { providerId, ...updates } = action.payload;
-      const provider = state.providers[providerId];
-      if (!provider) {
-        return state;
-      }
-
-      const updatedProvider = { ...provider };
-      if (updates.completed !== undefined) {
-        updatedProvider.testCases = { ...provider.testCases, completed: updates.completed };
-      }
-      if (updates.total !== undefined) {
-        updatedProvider.testCases = { ...provider.testCases, total: updates.total };
-      }
-      if (updates.status) {
-        updatedProvider.status = updates.status;
-      }
-      if (updates.currentTest) {
-        updatedProvider.currentTest = updates.currentTest;
-      }
-      if (updates.error) {
-        updatedProvider.lastError = updates.error;
-        updatedProvider.testCases = {
-          ...updatedProvider.testCases,
-          errors: provider.testCases.errors + 1,
-        };
-      }
-
+    case 'TEST_RESULT':
       return {
-        ...state,
-        providers: {
-          ...state.providers,
-          [providerId]: updatedProvider,
-        },
-      };
-    }
-
-    case 'TEST_RESULT': {
-      const { providerId, passed, failed, error, latencyMs, cost } = action.payload;
-      let provider = state.providers[providerId];
-
-      // Create provider if it doesn't exist (can happen with dynamic providers)
-      if (!provider) {
-        provider = createEmptyProviderMetrics(providerId);
-      }
-
-      // Update provider metrics
-      const updatedTestCases = {
-        ...provider.testCases,
-        completed: provider.testCases.completed + 1,
-        passed: provider.testCases.passed + (passed ? 1 : 0),
-        failed: provider.testCases.failed + (failed ? 1 : 0),
-        errors: provider.testCases.errors + (error ? 1 : 0),
+        type: 'TEST_RESULT',
+        providerId: action.payload.providerId,
+        passed: action.payload.passed,
+        failed: action.payload.failed,
+        error: action.payload.error,
+        latencyMs: action.payload.latencyMs,
+        cost: action.payload.cost,
       };
 
-      const updatedLatency = {
-        totalMs: provider.latency.totalMs + latencyMs,
-        count: provider.latency.count + 1,
-        minMs: Math.min(provider.latency.minMs, latencyMs),
-        maxMs: Math.max(provider.latency.maxMs, latencyMs),
-      };
-
-      // Determine provider status - mark as completed when all tests are done
-      const isProviderComplete =
-        updatedTestCases.completed >= updatedTestCases.total && updatedTestCases.total > 0;
-      const hasErrors = updatedTestCases.errors > 0;
-
-      const updatedProvider: ProviderMetrics = {
-        ...provider,
-        testCases: updatedTestCases,
-        cost: provider.cost + cost,
-        latency: updatedLatency,
-        status: isProviderComplete ? (hasErrors ? 'error' : 'completed') : 'running',
-      };
-
-      // Update provider metrics only - aggregate counts are handled by PROGRESS action
+    case 'UPDATE_TOKEN_METRICS':
       return {
-        ...state,
-        totalCost: state.totalCost + cost,
-        providers: {
-          ...state.providers,
-          [providerId]: updatedProvider,
-        },
-      };
-    }
-
-    case 'UPDATE_TOKEN_METRICS': {
-      const { providerId, tokenUsage } = action.payload;
-      const provider = state.providers[providerId];
-
-      if (!provider) {
-        return state;
-      }
-
-      // Update provider token metrics
-      const updatedProvider: ProviderMetrics = {
-        ...provider,
-        tokens: {
-          prompt: tokenUsage.prompt,
-          completion: tokenUsage.completion,
-          cached: tokenUsage.cached,
-          total: tokenUsage.total,
-          reasoning: tokenUsage.reasoning ?? 0,
-        },
-        requests: {
-          total: tokenUsage.numRequests,
-          cached: provider.requests.cached, // Cached requests tracked separately if available
-        },
-      };
-
-      // Recalculate aggregate token metrics from all providers
-      let totalTokens = 0;
-      let promptTokens = 0;
-      let completionTokens = 0;
-      let cachedTokens = 0;
-      let reasoningTokens = 0;
-      let totalRequests = 0;
-
-      const updatedProviders = { ...state.providers, [providerId]: updatedProvider };
-      for (const p of Object.values(updatedProviders)) {
-        totalTokens += p.tokens.total;
-        promptTokens += p.tokens.prompt;
-        completionTokens += p.tokens.completion;
-        cachedTokens += p.tokens.cached;
-        reasoningTokens += p.tokens.reasoning;
-        totalRequests += p.requests.total;
-      }
-
-      return {
-        ...state,
-        providers: updatedProviders,
-        totalTokens,
-        promptTokens,
-        completionTokens,
-        cachedTokens,
-        reasoningTokens,
-        totalRequests,
-      };
-    }
-
-    case 'ADD_ERROR': {
-      const error: EvalError = {
-        id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        provider: action.payload.provider,
-        prompt: action.payload.prompt,
-        message: action.payload.message,
-        timestamp: Date.now(),
-        vars: action.payload.vars,
-      };
-
-      return {
-        ...state,
-        errors: [...state.errors.slice(-state.maxErrorsToShow + 1), error],
-        errorCount: state.errorCount + 1,
-      };
-    }
-
-    case 'COMPLETE': {
-      return {
-        ...state,
-        phase: 'completed',
-        endTime: Date.now(),
-        passedTests: action.payload?.passed ?? state.passedTests,
-        failedTests: action.payload?.failed ?? state.failedTests,
-        errorCount: action.payload?.errors ?? state.errorCount,
-      };
-    }
-
-    case 'ERROR':
-      return {
-        ...state,
-        phase: 'error',
-        endTime: Date.now(),
-      };
-
-    case 'TOGGLE_PROVIDER_DETAILS':
-      return {
-        ...state,
-        showProviderDetails: !state.showProviderDetails,
-      };
-
-    case 'TOGGLE_ERROR_DETAILS':
-      return {
-        ...state,
-        showErrorDetails: !state.showErrorDetails,
-      };
-
-    case 'TICK': {
-      if (!state.startTime) {
-        return state;
-      }
-      return {
-        ...state,
-        elapsedMs: Date.now() - state.startTime,
-      };
-    }
-
-    case 'SET_CONCURRENCY':
-      return {
-        ...state,
-        concurrency: action.payload,
+        type: 'UPDATE_TOKENS',
+        providerId: action.payload.providerId,
+        tokens: action.payload.tokenUsage,
       };
 
     case 'SET_GRADING_TOKENS':
       return {
-        ...state,
-        gradingTokens: action.payload,
+        type: 'SET_GRADING_TOKENS',
+        tokens: action.payload,
       };
 
-    case 'SET_SHARE_URL':
+    case 'ADD_ERROR':
       return {
-        ...state,
-        shareUrl: action.payload,
+        type: 'ADD_ERROR',
+        error: {
+          id: `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
+          provider: action.payload.provider,
+          prompt: action.payload.prompt,
+          message: action.payload.message,
+          timestamp: Date.now(),
+          vars: action.payload.vars,
+        },
       };
 
-    case 'SET_SHARING_STATUS':
+    case 'ADD_LOG':
       return {
-        ...state,
-        sharingStatus: action.payload.status,
-        shareUrl: action.payload.url ?? state.shareUrl,
+        type: 'ADD_LOG',
+        entry: action.payload,
       };
 
-    case 'SET_SESSION_PHASE':
+    case 'COMPLETE':
       return {
-        ...state,
-        sessionPhase: action.payload,
+        type: 'COMPLETE',
+        passed: action.payload?.passed ?? 0,
+        failed: action.payload?.failed ?? 0,
+        errors: action.payload?.errors ?? 0,
       };
 
-    case 'SET_TABLE_DATA':
+    case 'ERROR':
       return {
-        ...state,
-        tableData: action.payload,
+        type: 'FATAL_ERROR',
+        message: action.payload.message,
       };
 
     case 'TOGGLE_VERBOSE':
+      return { type: 'TOGGLE_VERBOSE' };
+
+    case 'TOGGLE_ERROR_DETAILS':
+      return { type: 'TOGGLE_ERROR_DETAILS' };
+
+    case 'TICK':
+      return { type: 'TICK' };
+
+    case 'SET_SHARE_URL':
       return {
-        ...state,
-        showVerbose: !state.showVerbose,
+        type: 'SET_SHARE_URL',
+        url: action.payload,
       };
 
-    case 'ADD_LOG': {
-      // Ring buffer - keep only the last maxLogsToShow entries
-      const newLogs = [...state.logs, action.payload];
-      if (newLogs.length > state.maxLogsToShow) {
-        newLogs.shift();
+    case 'SET_SHARING_STATUS':
+      if (action.payload.status === 'sharing') {
+        return { type: 'SHARING_STARTED' };
+      } else if (action.payload.status === 'completed') {
+        return { type: 'SHARING_COMPLETED', url: action.payload.url ?? '' };
+      } else if (action.payload.status === 'failed') {
+        return { type: 'SHARING_FAILED' };
       }
-      return {
-        ...state,
-        logs: newLogs,
-      };
-    }
+      return null;
 
-    case 'CLEAR_LOGS':
+    case 'SET_TABLE_DATA':
       return {
-        ...state,
-        logs: [],
+        type: 'SHOW_RESULTS',
+        tableData: action.payload,
       };
+
+    case 'SET_SESSION_PHASE':
+      // Session phase is controlled by SHOW_RESULTS transition
+      // If setting to 'results', we need table data to be set first
+      return null;
+
+    // These actions are not directly supported in the machine
+    case 'SET_PHASE':
+    case 'PROVIDER_UPDATE':
+    case 'SET_CONCURRENCY':
+    case 'TOGGLE_PROVIDER_DETAILS':
+    case 'CLEAR_LOGS':
+      return null;
 
     default:
-      return state;
+      return null;
   }
 }
 
-// Context types
+// ============================================================================
+// Context Types
+// ============================================================================
+
 interface EvalContextValue {
   state: EvalState;
   dispatch: React.Dispatch<EvalAction>;
@@ -747,26 +410,60 @@ interface EvalContextValue {
 // Create context
 const EvalContext = createContext<EvalContextValue | null>(null);
 
-// Provider component
+// ============================================================================
+// Provider Component
+// ============================================================================
+
 export interface EvalProviderProps {
   children: React.ReactNode;
   initialState?: Partial<EvalState>;
 }
 
-export function EvalProvider({ children, initialState: customInitialState }: EvalProviderProps) {
-  const [state, dispatch] = useReducer(
-    evalReducer,
-    customInitialState ? { ...initialState, ...customInitialState } : initialState,
+export function EvalProvider({ children }: EvalProviderProps) {
+  const [machineState, send] = useMachine(evalMachine);
+
+  // Track sharing status separately (machine has nested states for this)
+  const sharingStatus = useMemo<SharingStatus>(() => {
+    const stateValue = machineState.value;
+    if (typeof stateValue === 'object' && 'evaluating' in stateValue) {
+      if (stateValue.evaluating === 'sharing') {
+        return 'sharing';
+      }
+    }
+    if (machineState.context.shareUrl) {
+      return 'completed';
+    }
+    return 'idle';
+  }, [machineState.value, machineState.context.shareUrl]);
+
+  // Convert machine state to backwards-compatible EvalState
+  const state = useMemo(
+    () => machineContextToEvalState(machineState.context, machineState.value, sharingStatus),
+    [machineState.context, machineState.value, sharingStatus],
+  );
+
+  // Create dispatch adapter that converts old actions to XState events
+  const dispatch = useCallback(
+    (action: EvalAction) => {
+      const event = actionToEvent(action);
+      if (event) {
+        send(event);
+      }
+    },
+    [send],
   );
 
   // Helper action creators
-  const init = useCallback((totalTests: number, providers: string[]) => {
-    dispatch({ type: 'INIT', payload: { totalTests, providers } });
-  }, []);
+  const init = useCallback(
+    (totalTests: number, providers: string[]) => {
+      send({ type: 'INIT', totalTests, providers });
+    },
+    [send],
+  );
 
   const start = useCallback(() => {
-    dispatch({ type: 'START' });
-  }, []);
+    send({ type: 'START' });
+  }, [send]);
 
   const updateProgress = useCallback(
     (
@@ -780,35 +477,58 @@ export function EvalProvider({ children, initialState: customInitialState }: Eva
         error?: string;
       },
     ) => {
-      dispatch({
+      send({
         type: 'PROGRESS',
-        payload: { completed, total, ...options },
+        completed,
+        total,
+        provider: options?.provider,
+        prompt: options?.prompt,
+        vars: options?.vars,
+        passedDelta: options?.passed === true ? 1 : 0,
+        failedDelta: options?.passed === false ? 1 : 0,
+        errorDelta: options?.error ? 1 : 0,
       });
     },
-    [],
+    [send],
   );
 
   const addError = useCallback(
     (provider: string, prompt: string, message: string, vars?: Record<string, unknown>) => {
-      dispatch({ type: 'ADD_ERROR', payload: { provider, prompt, message, vars } });
+      send({
+        type: 'ADD_ERROR',
+        error: {
+          id: `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
+          provider,
+          prompt,
+          message,
+          timestamp: Date.now(),
+          vars,
+        },
+      });
     },
-    [],
+    [send],
   );
 
-  const complete = useCallback((summary?: { passed: number; failed: number; errors: number }) => {
-    dispatch({ type: 'COMPLETE', payload: summary });
-  }, []);
+  const complete = useCallback(
+    (summary?: { passed: number; failed: number; errors: number }) => {
+      send({
+        type: 'COMPLETE',
+        passed: summary?.passed ?? state.passedTests,
+        failed: summary?.failed ?? state.failedTests,
+        errors: summary?.errors ?? state.errorCount,
+      });
+    },
+    [send, state.passedTests, state.failedTests, state.errorCount],
+  );
 
   // Computed values
-  const progressPercent = useMemo(() => {
-    if (state.totalTests === 0) {
-      return 0;
-    }
-    return Math.round((state.completedTests / state.totalTests) * 100);
-  }, [state.completedTests, state.totalTests]);
+  const progressPercent = useMemo(
+    () => getProgressPercent(machineState.context),
+    [machineState.context],
+  );
 
-  const isRunning = state.phase === 'evaluating' || state.phase === 'grading';
-  const isComplete = state.phase === 'completed';
+  const isRunning = machineIsRunning(machineState.value);
+  const isComplete = machineIsComplete(machineState.value);
   const hasErrors = state.errorCount > 0;
 
   const value: EvalContextValue = {
@@ -828,7 +548,13 @@ export function EvalProvider({ children, initialState: customInitialState }: Eva
   return <EvalContext.Provider value={value}>{children}</EvalContext.Provider>;
 }
 
-// Hook for consuming the context
+// ============================================================================
+// Hooks
+// ============================================================================
+
+/**
+ * Hook for consuming the context.
+ */
 export function useEval(): EvalContextValue {
   const context = useContext(EvalContext);
   if (!context) {
@@ -837,13 +563,17 @@ export function useEval(): EvalContextValue {
   return context;
 }
 
-// Hook for just the state (no actions)
+/**
+ * Hook for just the state (no actions).
+ */
 export function useEvalState(): EvalState {
   const { state } = useEval();
   return state;
 }
 
-// Hook for just progress info
+/**
+ * Hook for just progress info.
+ */
 export function useEvalProgress() {
   const { state, progressPercent, isRunning, isComplete } = useEval();
   return {

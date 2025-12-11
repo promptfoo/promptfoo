@@ -185,54 +185,110 @@ describe('navigationReducer', () => {
 
   describe('NAVIGATE_EXPANDED - wrapping behavior', () => {
     it('wraps from first row to last row on up', () => {
-      const state = createNavigationState({ selectedRow: 0, selectedCol: 2, expandedCell: { row: 0, col: 2 } });
-      const result = navigationReducer(state, { type: 'NAVIGATE_EXPANDED', direction: 'up' }, defaultBounds);
+      const state = createNavigationState({
+        selectedRow: 0,
+        selectedCol: 2,
+        expandedCell: { row: 0, col: 2 },
+      });
+      const result = navigationReducer(
+        state,
+        { type: 'NAVIGATE_EXPANDED', direction: 'up' },
+        defaultBounds,
+      );
       expect(result.selectedRow).toBe(9); // Wrapped to last row
       expect(result.expandedCell).toEqual({ row: 9, col: 2 });
     });
 
     it('wraps from last row to first row on down', () => {
-      const state = createNavigationState({ selectedRow: 9, selectedCol: 2, expandedCell: { row: 9, col: 2 } });
-      const result = navigationReducer(state, { type: 'NAVIGATE_EXPANDED', direction: 'down' }, defaultBounds);
+      const state = createNavigationState({
+        selectedRow: 9,
+        selectedCol: 2,
+        expandedCell: { row: 9, col: 2 },
+      });
+      const result = navigationReducer(
+        state,
+        { type: 'NAVIGATE_EXPANDED', direction: 'down' },
+        defaultBounds,
+      );
       expect(result.selectedRow).toBe(0); // Wrapped to first row
       expect(result.expandedCell).toEqual({ row: 0, col: 2 });
     });
 
     it('wraps from first column to last column of previous row on left', () => {
-      const state = createNavigationState({ selectedRow: 5, selectedCol: 1, expandedCell: { row: 5, col: 1 } });
-      const result = navigationReducer(state, { type: 'NAVIGATE_EXPANDED', direction: 'left' }, defaultBounds);
+      const state = createNavigationState({
+        selectedRow: 5,
+        selectedCol: 1,
+        expandedCell: { row: 5, col: 1 },
+      });
+      const result = navigationReducer(
+        state,
+        { type: 'NAVIGATE_EXPANDED', direction: 'left' },
+        defaultBounds,
+      );
       expect(result.selectedRow).toBe(4); // Moved to previous row
       expect(result.selectedCol).toBe(4); // Wrapped to last column
       expect(result.expandedCell).toEqual({ row: 4, col: 4 });
     });
 
     it('wraps from last column to first valid column of next row on right', () => {
-      const state = createNavigationState({ selectedRow: 5, selectedCol: 4, expandedCell: { row: 5, col: 4 } });
-      const result = navigationReducer(state, { type: 'NAVIGATE_EXPANDED', direction: 'right' }, defaultBounds);
+      const state = createNavigationState({
+        selectedRow: 5,
+        selectedCol: 4,
+        expandedCell: { row: 5, col: 4 },
+      });
+      const result = navigationReducer(
+        state,
+        { type: 'NAVIGATE_EXPANDED', direction: 'right' },
+        defaultBounds,
+      );
       expect(result.selectedRow).toBe(6); // Moved to next row
       expect(result.selectedCol).toBe(1); // Wrapped to minCol
       expect(result.expandedCell).toEqual({ row: 6, col: 1 });
     });
 
     it('wraps around entire table from first cell', () => {
-      const state = createNavigationState({ selectedRow: 0, selectedCol: 1, expandedCell: { row: 0, col: 1 } });
-      const result = navigationReducer(state, { type: 'NAVIGATE_EXPANDED', direction: 'left' }, defaultBounds);
+      const state = createNavigationState({
+        selectedRow: 0,
+        selectedCol: 1,
+        expandedCell: { row: 0, col: 1 },
+      });
+      const result = navigationReducer(
+        state,
+        { type: 'NAVIGATE_EXPANDED', direction: 'left' },
+        defaultBounds,
+      );
       expect(result.selectedRow).toBe(9); // Wrapped to last row
       expect(result.selectedCol).toBe(4); // Last column
       expect(result.expandedCell).toEqual({ row: 9, col: 4 });
     });
 
     it('wraps around entire table from last cell', () => {
-      const state = createNavigationState({ selectedRow: 9, selectedCol: 4, expandedCell: { row: 9, col: 4 } });
-      const result = navigationReducer(state, { type: 'NAVIGATE_EXPANDED', direction: 'right' }, defaultBounds);
+      const state = createNavigationState({
+        selectedRow: 9,
+        selectedCol: 4,
+        expandedCell: { row: 9, col: 4 },
+      });
+      const result = navigationReducer(
+        state,
+        { type: 'NAVIGATE_EXPANDED', direction: 'right' },
+        defaultBounds,
+      );
       expect(result.selectedRow).toBe(0); // Wrapped to first row
       expect(result.selectedCol).toBe(1); // First valid column (minCol)
       expect(result.expandedCell).toEqual({ row: 0, col: 1 });
     });
 
     it('respects minCol=0 when no index column', () => {
-      const state = createNavigationState({ selectedRow: 5, selectedCol: 4, expandedCell: { row: 5, col: 4 } });
-      const result = navigationReducer(state, { type: 'NAVIGATE_EXPANDED', direction: 'right' }, boundsNoIndex);
+      const state = createNavigationState({
+        selectedRow: 5,
+        selectedCol: 4,
+        expandedCell: { row: 5, col: 4 },
+      });
+      const result = navigationReducer(
+        state,
+        { type: 'NAVIGATE_EXPANDED', direction: 'right' },
+        boundsNoIndex,
+      );
       expect(result.selectedRow).toBe(6);
       expect(result.selectedCol).toBe(0); // Wrapped to column 0
     });
@@ -263,15 +319,23 @@ describe('navigationReducer', () => {
 
     it('handles NAVIGATE_EXPANDED with single row (wraps to same row)', () => {
       const singleRowBounds = { rowCount: 1, colCount: 5, visibleRows: 1, minCol: 1 };
-      const state = createNavigationState({ selectedRow: 0, selectedCol: 2, expandedCell: { row: 0, col: 2 } });
+      const state = createNavigationState({
+        selectedRow: 0,
+        selectedCol: 2,
+        expandedCell: { row: 0, col: 2 },
+      });
 
-      const upResult = navigationReducer(state, { type: 'NAVIGATE_EXPANDED', direction: 'up' }, singleRowBounds);
+      const upResult = navigationReducer(
+        state,
+        { type: 'NAVIGATE_EXPANDED', direction: 'up' },
+        singleRowBounds,
+      );
       expect(upResult.selectedRow).toBe(0); // Wraps back to row 0
 
       const leftResult = navigationReducer(
         createNavigationState({ selectedRow: 0, selectedCol: 1, expandedCell: { row: 0, col: 1 } }),
         { type: 'NAVIGATE_EXPANDED', direction: 'left' },
-        singleRowBounds
+        singleRowBounds,
       );
       expect(leftResult.selectedRow).toBe(0); // Still row 0
       expect(leftResult.selectedCol).toBe(4); // Wrapped to last column

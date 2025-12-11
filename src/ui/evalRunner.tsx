@@ -118,7 +118,8 @@ export async function initInkEval(options: EvalRunnerOptions): Promise<InkEvalRe
       onComplete={() => {
         resolveComplete!();
       }}
-      onExit={() => {
+      onCancel={() => {
+        // Called when user exits DURING evaluation (actual cancellation)
         onCancel?.();
       }}
     />,

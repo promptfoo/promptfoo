@@ -240,6 +240,7 @@
     "@modelcontextprotocol/sdk": "^1.24.3",
     "@openai/agents": "^0.3.3",
     "@types/ws": "^8.18.1",
+    "@xstate/react": "^6.0.0",
     "ajv": "^8.17.1",
     "ajv-formats": "^3.0.1",
     "async": "^3.2.6",
@@ -301,6 +302,7 @@
     "uuid": "^13.0.0",
     "winston": "^3.19.0",
     "ws": "^8.18.3",
+    "xstate": "^5.25.0",
     "zod": "^3.25.76",
     "zod-validation-error": "^3.5.4"
   },

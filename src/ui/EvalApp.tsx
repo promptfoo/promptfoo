@@ -9,6 +9,7 @@
 import { Box, useApp } from 'ink';
 import { useEffect, useRef } from 'react';
 import { EvalScreen } from './components/eval/EvalScreen';
+import { ErrorBoundary } from './components/shared/ErrorBoundary';
 import { ResultsTable } from './components/table/ResultsTable';
 import { EvalProvider, useEval } from './contexts/EvalContext';
 import { UIProvider } from './contexts/UIContext';
@@ -26,7 +27,9 @@ export interface EvalAppProps {
   title?: string;
   /** Callback when evaluation completes */
   onComplete?: () => void;
-  /** Callback when user requests exit */
+  /** Callback when user cancels during evaluation (NOT called on normal exit after completion) */
+  onCancel?: () => void;
+  /** Callback when user requests exit (always called on exit, regardless of completion state) */
   onExit?: () => void;
   /** Callback to receive the UI controller for external updates */
   onController?: (controller: EvalUIController) => void;
@@ -46,6 +49,7 @@ export interface EvalAppProps {
 function EvalAppInner({
   title,
   onComplete,
+  onCancel,
   onExit,
   onController,
   totalTests = 0,
@@ -54,7 +58,7 @@ function EvalAppInner({
   shareContext,
 }: EvalAppProps) {
   const { exit } = useApp();
-  const { dispatch, init, state } = useEval();
+  const { dispatch, init, state, isComplete } = useEval();
   const controllerRef = useRef<EvalUIController | null>(null);
 
   // Create and expose the UI controller
@@ -73,8 +77,19 @@ function EvalAppInner({
     }
   }, [totalTests, providers, init]);
 
-  // Handle exit from results table
+  // Handle exit during evaluation (cancellation)
+  const handleEvalExit = () => {
+    // Only call onCancel if evaluation is not complete
+    if (!isComplete) {
+      onCancel?.();
+    }
+    onExit?.();
+    exit();
+  };
+
+  // Handle exit from results table (normal exit after completion)
   const handleResultsExit = () => {
+    // Don't call onCancel - evaluation completed successfully
     onExit?.();
     exit();
   };
@@ -90,7 +105,7 @@ function EvalAppInner({
       <EvalScreen
         title={title}
         onComplete={onComplete}
-        onExit={inResultsPhase ? undefined : onExit} // Only handle exit in eval phase
+        onExit={inResultsPhase ? undefined : handleEvalExit} // Only handle exit in eval phase
         showHelp={!inResultsPhase && showHelp} // Hide help bar when showing results table
         shareContext={shareContext}
       />
@@ -145,7 +160,9 @@ export function EvalApp(props: EvalAppProps) {
   return (
     <UIProvider>
       <EvalProvider>
-        <EvalAppInner {...props} />
+        <ErrorBoundary componentName="EvalApp">
+          <EvalAppInner {...props} />
+        </ErrorBoundary>
       </EvalProvider>
     </UIProvider>
   );

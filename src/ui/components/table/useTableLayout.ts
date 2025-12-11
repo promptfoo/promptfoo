@@ -10,7 +10,7 @@
 
 import { useMemo } from 'react';
 import { useTerminalSize } from '../../hooks/useTerminalSize';
-import type { EvaluateTable, TableColumn, TableLayout } from './types';
+import type { CompletedPrompt, EvaluateTable, TableColumn, TableLayout } from './types';
 
 /**
  * Layout configuration constants.
@@ -40,7 +40,7 @@ const LAYOUT_CONFIG = {
 function calculateColumnWidths(
   terminalWidth: number,
   varNames: string[],
-  prompts: Array<{ label: string; provider?: string }>,
+  prompts: CompletedPrompt[],
   showIndex: boolean,
 ): TableColumn[] {
   const columns: TableColumn[] = [];
@@ -82,7 +82,7 @@ function calculateColumnWidths(
       type: 'output',
       width: 0, // Will be calculated
       minWidth: LAYOUT_CONFIG.MIN_OUTPUT_WIDTH,
-      prompt: prompt as any,
+      prompt,
     });
   }
 

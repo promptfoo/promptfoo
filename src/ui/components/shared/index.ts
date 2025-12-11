@@ -34,3 +34,9 @@ export {
   type ErrorDisplayProps,
   type WarningListProps,
 } from './StatusMessage';
+
+export {
+  ErrorBoundary,
+  withErrorBoundary,
+  type ErrorBoundaryProps,
+} from './ErrorBoundary';
