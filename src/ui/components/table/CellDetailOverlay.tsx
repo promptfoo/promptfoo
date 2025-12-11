@@ -5,7 +5,7 @@
  * - Full output content (no truncation)
  * - Metadata display (provider, latency, cost, score)
  * - Assertion results breakdown
- * - Keyboard navigation (Escape to close)
+ * - Keyboard navigation (q to close)
  */
 
 import { Box, Text } from 'ink';
@@ -149,7 +149,7 @@ export function CellDetailOverlay({ cellData, column, rowData, onClose }: CellDe
       </Box>
       <Box justifyContent="center">
         <Text dimColor>Press </Text>
-        <Text bold>Escape</Text>
+        <Text bold>q</Text>
         <Text dimColor> to close</Text>
       </Box>
     </Box>

@@ -6,8 +6,8 @@
  * - Page up/down for quick scrolling
  * - Home/End for first/last row
  * - Enter to expand cell
- * - Escape to close expanded cell or exit
- * - Q to quit table view
+ * - Q to close expanded cell or exit table
+ * - Escape also closes expanded cell or exits
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -213,7 +213,10 @@ export function useTableNavigation({
       const lowerKey = key.toLowerCase();
       switch (lowerKey) {
         case 'q':
-          if (!currentState.expandedCell && onExit) {
+          // 'q' closes detail view if open, otherwise exits
+          if (currentState.expandedCell) {
+            dispatch({ type: 'CLOSE_EXPAND' });
+          } else if (onExit) {
             onExit();
           }
           break;
