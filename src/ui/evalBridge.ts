@@ -238,6 +238,23 @@ export function createProgressCallback(
       });
     }
 
+    // Extract and dispatch grading/assertion token usage from metrics
+    if (metrics?.tokenUsage?.assertions) {
+      const assertions = metrics.tokenUsage.assertions;
+      if (assertions.total && assertions.total > 0) {
+        dispatch({
+          type: 'SET_GRADING_TOKENS',
+          payload: {
+            total: assertions.total ?? 0,
+            prompt: assertions.prompt ?? 0,
+            completion: assertions.completion ?? 0,
+            cached: assertions.cached ?? 0,
+            reasoning: assertions.completionDetails?.reasoning ?? 0,
+          },
+        });
+      }
+    }
+
     // Dispatch basic progress update (for current activity display)
     dispatch({
       type: 'PROGRESS',

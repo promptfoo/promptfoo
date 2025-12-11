@@ -202,6 +202,7 @@ function SummaryLine() {
     totalTokens,
     promptTokens,
     completionTokens,
+    gradingTokens,
     totalCost,
     elapsedMs,
     logs,
@@ -209,6 +210,7 @@ function SummaryLine() {
   } = useEvalState();
 
   const tokenDisplay = totalTokens || promptTokens + completionTokens;
+  const hasGradingTokens = gradingTokens.total > 0;
 
   // Count log warnings (warn level only, not errors since those are shown separately)
   const logWarningCount = logs.filter((log) => log.level === 'warn').length;
@@ -232,8 +234,16 @@ function SummaryLine() {
         </Text>
       )}
 
-      {/* Tokens */}
-      {tokenDisplay > 0 && <Text dimColor> · {formatTokens(tokenDisplay)} tokens</Text>}
+      {/* Tokens - show eval tokens and grading tokens if present */}
+      {tokenDisplay > 0 && (
+        <Text dimColor>
+          {' '}
+          · {formatTokens(tokenDisplay)} tokens
+          {hasGradingTokens && (
+            <Text color="magenta"> (+{formatTokens(gradingTokens.total)} grading)</Text>
+          )}
+        </Text>
+      )}
 
       {/* Cost */}
       {totalCost > 0 && <Text dimColor> · {formatCost(totalCost)}</Text>}
