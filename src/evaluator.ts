@@ -327,10 +327,7 @@ export async function runEval({
     prompt: {
       raw: '',
       label: promptLabel,
-      config: {
-        ...prompt.config,
-        ...(test.options || {}), // Test-level options override prompt-level config
-      },
+      config: prompt.config,
     },
     vars,
   };
@@ -368,13 +365,7 @@ export async function runEval({
         vars,
 
         // Part of these may be removed in python and script providers, but every Javascript provider gets them
-        prompt: {
-          ...prompt,
-          config: {
-            ...prompt.config,
-            ...(test.options || {}), // Merge test-level options into prompt config
-          },
-        },
+        prompt,
         filters,
         originalProvider: provider,
         test,
@@ -779,7 +770,7 @@ class Evaluator {
       if (!testSuite.defaultTest) {
         testSuite.defaultTest = {};
       }
-      if (!testSuite.defaultTest.assert) {
+      if (typeof testSuite.defaultTest !== 'string' && !testSuite.defaultTest.assert) {
         testSuite.defaultTest.assert = [];
       }
     }

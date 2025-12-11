@@ -840,6 +840,39 @@ cd openai-responses
 npx promptfoo@latest eval -c promptfooconfig.external-format.yaml
 ```
 
+#### Per-test structured output
+
+You can use different JSON schemas for different test cases using the `test.options` field. This allows a single prompt to produce different structured output formats depending on the test:
+
+```yaml title="promptfooconfig.yaml"
+prompts:
+  - 'Answer this question: {{question}}'
+
+providers:
+  - openai:gpt-4.1-mini
+
+tests:
+  # Math problems use math schema
+  - vars:
+      question: 'What is 15 * 7?'
+    options:
+      response_format: file://./schemas/math-response-format.json
+    assert:
+      - type: javascript
+        value: output.answer === 105
+
+  # Comparison questions use comparison schema
+  - vars:
+      question: 'Compare apples and oranges'
+    options:
+      response_format: file://./schemas/comparison-response-format.json
+    assert:
+      - type: javascript
+        value: output.winner === 'item1' || output.winner === 'item2' || output.winner === 'tie'
+```
+
+Each schema file contains the complete `response_format` object. See the [per-test schema example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-structured-output/per-test-schema.yaml) for a full working configuration.
+
 ## Supported environment variables
 
 These OpenAI-related environment variables are supported:

@@ -295,6 +295,18 @@ export interface BaseRedteamMetadata {
 }
 
 /**
+ * Configuration for audio grading in voice-based red team attacks
+ */
+export interface AudioGradingConfig {
+  /** Whether to grade audio transcripts in addition to text responses */
+  transcriptGrading?: boolean;
+  /** Whether to grade audio quality and clarity */
+  audioQualityGrading?: boolean;
+  /** Custom grading criteria for audio responses */
+  customCriteria?: string[];
+}
+
+/**
  * Options for generating red team tests via the public API
  * This is a cleaner subset of RedteamCliGenerateOptions for external use
  */

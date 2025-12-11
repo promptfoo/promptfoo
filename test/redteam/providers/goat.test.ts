@@ -1295,7 +1295,7 @@ describe('RedteamGoatProvider', () => {
 
       const history = result.metadata?.redteamHistory;
       if (history && history.length > 0) {
-        const entry = history[0];
+        const entry = history[0] as any;
         // These fields should be undefined when no perTurnLayers are configured
         expect(entry.promptAudio).toBeUndefined();
         expect(entry.promptImage).toBeUndefined();
@@ -1321,7 +1321,7 @@ describe('RedteamGoatProvider', () => {
 
       const history = result.metadata?.redteamHistory;
       if (history && history.length > 0) {
-        const entry = history[0];
+        const entry = history[0] as any;
         expect(entry.outputAudio).toBeDefined();
         expect(entry.outputAudio?.data).toBe('base64audiodata');
         expect(entry.outputAudio?.format).toBe('mp3');

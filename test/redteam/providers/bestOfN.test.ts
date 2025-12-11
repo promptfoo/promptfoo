@@ -5,7 +5,7 @@ import { sanitizeProvider } from '../../../src/models/evalResult';
 import type { ApiProvider, CallApiContextParams } from '../../../src/types/index';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const mockFetchWithProxy = vi.fn<any>();
+const mockFetchWithProxy = vi.fn() as any;
 
 vi.mock('../../../src/util/fetch/index', () => ({
   fetchWithProxy: (...args: unknown[]) => mockFetchWithProxy(...args),

@@ -702,8 +702,7 @@
                               "suffix": {
                                 "type": "string"
                               }
-                            },
-                            "additionalProperties": true
+                            }
                           },
                           {
                             "type": "object",

@@ -694,6 +694,7 @@ export const TestCaseSchema = z.object({
     .optional(),
 
   // Additional configuration settings for the prompt
+  // Provider-specific options (like response_format, temperature) are passed through
   options: z
     .intersection(
       z.intersection(PromptConfigSchema, OutputConfigSchema),
@@ -709,6 +710,7 @@ export const TestCaseSchema = z.object({
         }),
       ),
     )
+    .and(z.record(z.unknown()))
     .optional(),
 
   // The required score for this test case.  If not provided, the test case is graded pass/fail.

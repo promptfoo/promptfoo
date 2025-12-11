@@ -70,12 +70,12 @@ describe('ElevenLabsAgentsProvider', () => {
     });
 
     it('should respect environment variable overrides', () => {
-      const env = { CUSTOM_API_KEY: 'custom-key' };
+      const env = { CUSTOM_API_KEY: 'custom-key' } as Record<string, string>;
       const provider = new ElevenLabsAgentsProvider('elevenlabs:agent', {
         config: {
           apiKeyEnvar: 'CUSTOM_API_KEY',
         },
-        env,
+        env: env as any,
       });
 
       expect(provider).toBeDefined();
@@ -181,15 +181,15 @@ describe('ElevenLabsAgentsProvider', () => {
 
       // Verify conversation data is present
       expect(result.metadata).toBeDefined();
-      expect(result.metadata.conversationHistory).toBeDefined();
-      expect(result.metadata.conversationHistory.length).toBe(4);
+      expect(result.metadata!.conversationHistory).toBeDefined();
+      expect(result.metadata!.conversationHistory.length).toBe(4);
 
       // Verify tool usage is tracked
-      expect(result.metadata.toolUsageAnalysis).toBeDefined();
-      expect(result.metadata.toolUsageAnalysis.totalCalls).toBe(1);
-      expect(result.metadata.toolUsageAnalysis.successfulCalls).toBe(1);
-      expect(result.metadata.toolUsageAnalysis.failedCalls).toBe(0);
-      expect(result.metadata.toolUsageAnalysis.callsByTool.get('get_weather')).toBe(1);
+      expect(result.metadata!.toolUsageAnalysis).toBeDefined();
+      expect(result.metadata!.toolUsageAnalysis.totalCalls).toBe(1);
+      expect(result.metadata!.toolUsageAnalysis.successfulCalls).toBe(1);
+      expect(result.metadata!.toolUsageAnalysis.failedCalls).toBe(0);
+      expect(result.metadata!.toolUsageAnalysis.callsByTool.get('get_weather')).toBe(1);
 
       // Verify LLM usage is tracked
       expect(result.tokenUsage).toEqual({
@@ -233,6 +233,7 @@ describe('ElevenLabsAgentsProvider', () => {
           },
         ],
         analysis: {
+          call_successful: true,
           evaluation_criteria_results: {
             Helpfulness: {
               criteria_id: 'Helpfulness',
@@ -260,12 +261,12 @@ describe('ElevenLabsAgentsProvider', () => {
       const result = await provider.callApi('Hello');
 
       // Verify evaluation results are present
-      expect(result.metadata.evaluationResults).toBeDefined();
-      expect(result.metadata.evaluationResults).toHaveLength(2);
-      expect(result.metadata.overallScore).toBeDefined();
+      expect(result.metadata!.evaluationResults).toBeDefined();
+      expect(result.metadata!.evaluationResults).toHaveLength(2);
+      expect(result.metadata!.overallScore).toBeDefined();
 
       // Find specific evaluation results
-      const helpfulnessResult = result.metadata.evaluationResults.find(
+      const helpfulnessResult = result.metadata!.evaluationResults.find(
         (r: any) => r.criterion === 'Helpfulness',
       );
       expect(helpfulnessResult).toEqual({
@@ -276,7 +277,7 @@ describe('ElevenLabsAgentsProvider', () => {
         evidence: undefined,
       });
 
-      const accuracyResult = result.metadata.evaluationResults.find(
+      const accuracyResult = result.metadata!.evaluationResults.find(
         (r: any) => r.criterion === 'Accuracy',
       );
       expect(accuracyResult).toEqual({
@@ -292,12 +293,11 @@ describe('ElevenLabsAgentsProvider', () => {
       const provider = new ElevenLabsAgentsProvider('elevenlabs:agent', {
         config: {
           agentId: 'test-agent-123',
-          toolMockConfig: [
-            {
-              name: 'get_weather',
+          toolMockConfig: {
+            get_weather: {
               mock_response: { temperature: 72, condition: 'sunny' },
             },
-          ],
+          },
         },
       });
 

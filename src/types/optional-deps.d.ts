@@ -16,3 +16,13 @@ declare module 'ibm-cloud-sdk-core' {
     constructor(config: { bearerToken: string });
   }
 }
+
+declare module 'istextorbinary' {
+  export interface EncodingOpts {
+    chunkLength?: number;
+    chunkBegin?: number;
+  }
+  export function isText(filename?: string | null, buffer?: Buffer | null): boolean | null;
+  export function isBinary(filename?: string | null, buffer?: Buffer | null): boolean | null;
+  export function getEncoding(buffer: Buffer | null, opts?: EncodingOpts): 'utf8' | 'binary' | null;
+}

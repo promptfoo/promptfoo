@@ -173,7 +173,7 @@ describe('ElevenLabsIsolationProvider', () => {
 
       const response = await provider.callApi('', {
         vars: { audioFile: '/path/to/audio.mp3' },
-      });
+      } as any);
 
       expect(response.error).toBeUndefined();
       expect(response.metadata?.sourceFile).toBe('/path/to/audio.mp3');

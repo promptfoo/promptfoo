@@ -1,3 +1,4 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runEval } from '../src/evaluator';
 import type { ApiProvider, Prompt, TestCase } from '../src/types/index';
 import { createEmptyTokenUsage } from '../src/util/tokenUsageUtils';
@@ -6,18 +7,22 @@ describe('Per-test configuration merging', () => {
   let mockProvider: ApiProvider;
   let mockPrompt: Prompt;
 
+  afterEach(() => {
+    vi.resetAllMocks();
+  });
+
   beforeEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
 
     // Mock provider that captures the config it receives
     mockProvider = {
-      id: jest.fn(() => 'test-provider'),
+      id: vi.fn(() => 'test-provider'),
       label: 'Test Provider',
       config: {
         temperature: 0.5,
         provider_field: 'provider_value',
       },
-      callApi: jest.fn(async (_prompt, context) => {
+      callApi: vi.fn(async (_prompt, context) => {
         // Return the config so we can verify it was merged correctly
         return {
           output: JSON.stringify({ received_config: context?.prompt?.config }),
@@ -38,7 +43,7 @@ describe('Per-test configuration merging', () => {
   });
 
   afterEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   it('should merge test.options into prompt.config', async () => {
@@ -61,7 +66,7 @@ describe('Per-test configuration merging', () => {
     });
 
     expect(mockProvider.callApi).toHaveBeenCalled();
-    const callArgs = (mockProvider.callApi as jest.Mock).mock.calls[0];
+    const callArgs = (mockProvider.callApi as ReturnType<typeof vi.fn>).mock.calls[0];
     const context = callArgs[1];
 
     // Verify config merge
@@ -92,7 +97,7 @@ describe('Per-test configuration merging', () => {
       isRedteam: false,
     });
 
-    const callArgs = (mockProvider.callApi as jest.Mock).mock.calls[0];
+    const callArgs = (mockProvider.callApi as ReturnType<typeof vi.fn>).mock.calls[0];
     const context = callArgs[1];
 
     // Test options should override prompt config
@@ -130,7 +135,7 @@ describe('Per-test configuration merging', () => {
       isRedteam: false,
     });
 
-    const callArgs = (mockProvider.callApi as jest.Mock).mock.calls[0];
+    const callArgs = (mockProvider.callApi as ReturnType<typeof vi.fn>).mock.calls[0];
     const context = callArgs[1];
 
     // Shallow merge: nested object is completely replaced
@@ -158,7 +163,7 @@ describe('Per-test configuration merging', () => {
       isRedteam: false,
     });
 
-    const callArgs = (mockProvider.callApi as jest.Mock).mock.calls[0];
+    const callArgs = (mockProvider.callApi as ReturnType<typeof vi.fn>).mock.calls[0];
     const context = callArgs[1];
 
     // Should use prompt config as-is
@@ -185,7 +190,7 @@ describe('Per-test configuration merging', () => {
       isRedteam: false,
     });
 
-    const callArgs = (mockProvider.callApi as jest.Mock).mock.calls[0];
+    const callArgs = (mockProvider.callApi as ReturnType<typeof vi.fn>).mock.calls[0];
     const context = callArgs[1];
 
     // Should use prompt config as-is
@@ -220,7 +225,7 @@ describe('Per-test configuration merging', () => {
       isRedteam: false,
     });
 
-    const callArgs = (mockProvider.callApi as jest.Mock).mock.calls[0];
+    const callArgs = (mockProvider.callApi as ReturnType<typeof vi.fn>).mock.calls[0];
     const context = callArgs[1];
 
     // All fields should be present
@@ -266,7 +271,7 @@ describe('Per-test configuration merging', () => {
       isRedteam: false,
     });
 
-    const callArgs = (mockProvider.callApi as jest.Mock).mock.calls[0];
+    const callArgs = (mockProvider.callApi as ReturnType<typeof vi.fn>).mock.calls[0];
     const context = callArgs[1];
 
     // Provider-specific field should be passed through
@@ -302,7 +307,7 @@ describe('Per-test configuration merging', () => {
       isRedteam: false,
     });
 
-    const callArgs = (mockProvider.callApi as jest.Mock).mock.calls[0];
+    const callArgs = (mockProvider.callApi as ReturnType<typeof vi.fn>).mock.calls[0];
     const context = callArgs[1];
 
     // Google-specific field should be passed through
@@ -333,7 +338,7 @@ describe('Per-test configuration merging', () => {
       isRedteam: false,
     });
 
-    const callArgs = (mockProvider.callApi as jest.Mock).mock.calls[0];
+    const callArgs = (mockProvider.callApi as ReturnType<typeof vi.fn>).mock.calls[0];
     const context = callArgs[1];
 
     // Fields should be in prompt.config
@@ -365,7 +370,7 @@ describe('Per-test configuration merging', () => {
       isRedteam: false,
     });
 
-    const callArgs = (mockProvider.callApi as jest.Mock).mock.calls[0];
+    const callArgs = (mockProvider.callApi as ReturnType<typeof vi.fn>).mock.calls[0];
     const context = callArgs[1];
 
     // All fields should be in merged config

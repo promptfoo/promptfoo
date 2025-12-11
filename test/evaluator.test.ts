@@ -2,7 +2,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { randomUUID } from 'crypto';
 import fs from 'fs';
 
-import glob from 'glob';
+import { glob } from 'glob';
 import cliState from '../src/cliState';
 import { DEFAULT_MAX_CONCURRENCY, FILE_METADATA_KEY } from '../src/constants';
 import {
@@ -12,7 +12,10 @@ import {
   isAllowedPrompt,
   runEval,
 } from '../src/evaluator';
-import { runExtensionHook } from '../src/evaluatorHelpers';
+import {
+  runExtensionHook,
+  type BeforeAllExtensionHookContext,
+} from '../src/evaluatorHelpers';
 import logger from '../src/logger';
 import { runDbMigrations } from '../src/migrate';
 import Eval from '../src/models/eval';
@@ -341,7 +344,7 @@ describe('evaluator', () => {
     vi.clearAllMocks();
     // Reset runExtensionHook to default implementation (other tests may have overridden it)
     vi.mocked(runExtensionHook).mockReset();
-    vi.mocked(runExtensionHook).mockImplementation((_extensions, _hookName, context) => context);
+    vi.mocked(runExtensionHook).mockImplementation(async (_extensions, _hookName, context) => context);
     // Reset cliState for each test to ensure clean state
     cliState.resume = false;
     cliState.basePath = '';
@@ -4037,7 +4040,7 @@ describe('evaluator defaultTest merging', () => {
     vi.clearAllMocks();
     // Reset runExtensionHook to default implementation (other tests may have overridden it)
     vi.mocked(runExtensionHook).mockReset();
-    vi.mocked(runExtensionHook).mockImplementation((_extensions, _hookName, context) => context);
+    vi.mocked(runExtensionHook).mockImplementation(async (_extensions, _hookName, context) => context);
   });
 
   it('should merge defaultTest.options.provider with test case options', async () => {
@@ -4152,7 +4155,7 @@ describe('Evaluator with external defaultTest', () => {
     vi.clearAllMocks();
     // Reset runExtensionHook to default implementation (other tests may have overridden it)
     vi.mocked(runExtensionHook).mockReset();
-    vi.mocked(runExtensionHook).mockImplementation((_extensions, _hookName, context) => context);
+    vi.mocked(runExtensionHook).mockImplementation(async (_extensions, _hookName, context) => context);
   });
 
   it('should handle string defaultTest gracefully', async () => {
@@ -4375,7 +4378,7 @@ describe('defaultTest normalization for extensions', () => {
     vi.clearAllMocks();
     // Reset runExtensionHook to default implementation (other tests may have overridden it)
     vi.mocked(runExtensionHook).mockReset();
-    vi.mocked(runExtensionHook).mockImplementation((_extensions, _hookName, context) => context);
+    vi.mocked(runExtensionHook).mockImplementation(async (_extensions, _hookName, context) => context);
   });
 
   it('should initialize defaultTest when undefined and extensions are present', async () => {
@@ -4385,7 +4388,7 @@ describe('defaultTest normalization for extensions', () => {
     const mockedRunExtensionHook = vi.mocked(runExtensionHook);
     mockedRunExtensionHook.mockImplementation(async (_extensions, hookName, context) => {
       if (hookName === 'beforeAll') {
-        capturedSuite = context.suite;
+        capturedSuite = (context as BeforeAllExtensionHookContext).suite;
       }
       return context;
     });
@@ -4413,7 +4416,7 @@ describe('defaultTest normalization for extensions', () => {
     const mockedRunExtensionHook = vi.mocked(runExtensionHook);
     mockedRunExtensionHook.mockImplementation(async (_extensions, hookName, context) => {
       if (hookName === 'beforeAll') {
-        capturedSuite = context.suite;
+        capturedSuite = (context as BeforeAllExtensionHookContext).suite;
       }
       return context;
     });
@@ -4433,9 +4436,10 @@ describe('defaultTest normalization for extensions', () => {
     await evaluate(testSuite, evalRecord, {});
 
     expect(capturedSuite).toBeDefined();
-    expect(capturedSuite!.defaultTest).toBeDefined();
-    expect(capturedSuite!.defaultTest!.vars).toEqual({ defaultVar: 'defaultValue' });
-    expect(capturedSuite!.defaultTest!.assert).toEqual([]);
+    const defaultTest = capturedSuite!.defaultTest;
+    expect(defaultTest).toBeDefined();
+    expect(typeof defaultTest !== 'string' && defaultTest!.vars).toEqual({ defaultVar: 'defaultValue' });
+    expect(typeof defaultTest !== 'string' && defaultTest!.assert).toEqual([]);
   });
 
   it('should preserve existing defaultTest.assert when extensions are present', async () => {
@@ -4445,7 +4449,7 @@ describe('defaultTest normalization for extensions', () => {
     const mockedRunExtensionHook = vi.mocked(runExtensionHook);
     mockedRunExtensionHook.mockImplementation(async (_extensions, hookName, context) => {
       if (hookName === 'beforeAll') {
-        capturedSuite = context.suite;
+        capturedSuite = (context as BeforeAllExtensionHookContext).suite;
       }
       return context;
     });
@@ -4469,8 +4473,9 @@ describe('defaultTest normalization for extensions', () => {
     await evaluate(testSuite, evalRecord, {});
 
     expect(capturedSuite).toBeDefined();
-    expect(capturedSuite!.defaultTest!.assert).toBe(existingAssertions); // Same reference
-    expect(capturedSuite!.defaultTest!.assert).toHaveLength(2);
+    const defaultTestForAssert = capturedSuite!.defaultTest;
+    expect(typeof defaultTestForAssert !== 'string' && defaultTestForAssert!.assert).toBe(existingAssertions); // Same reference
+    expect(typeof defaultTestForAssert !== 'string' && defaultTestForAssert!.assert).toHaveLength(2);
   });
 
   it('should not modify defaultTest when no extensions are present', async () => {
@@ -4504,7 +4509,11 @@ describe('defaultTest normalization for extensions', () => {
       if (hookName === 'beforeAll') {
         // Simulate what an extension would do - push to assert array
         // This should work because defaultTest.assert is guaranteed to be an array
-        context.suite.defaultTest!.assert!.push({ type: 'is-json' as const });
+        const suite = (context as BeforeAllExtensionHookContext).suite;
+        const defaultTest = suite.defaultTest;
+        if (typeof defaultTest !== 'string' && defaultTest?.assert) {
+          defaultTest.assert.push({ type: 'is-json' as const });
+        }
       }
       return context;
     });
