@@ -1,11 +1,11 @@
 ---
 sidebar_label: HuggingFace
-description: Configure HuggingFace's text classification, embedding, and NER models for LLM testing and evaluation tasks
+description: Configure HuggingFace's text classification, embedding, and NER models for LLM testing and eval tasks
 ---
 
 # HuggingFace
 
-promptfoo includes support for the [HuggingFace Inference Providers](https://huggingface.co/docs/inference-providers), for classification, embeddings, and other ML tasks, as well as [HuggingFace Datasets](https://huggingface.co/docs/datasets).
+Promptfoo includes support for the [HuggingFace Inference Providers](https://huggingface.co/docs/inference-providers), for classification, embeddings, and other ML tasks, as well as [HuggingFace Datasets](https://huggingface.co/docs/datasets).
 
 To run a model, specify the task type and model name. Supported task types include:
 
@@ -16,34 +16,36 @@ To run a model, specify the task type and model name. Supported task types inclu
 - `huggingface:text-generation:<model name>`
 
 :::note
+
 The HuggingFace serverless inference API (`hf-inference`) focuses primarily on CPU inference tasks like text classification, embeddings, and NER. For LLM text generation, consider using [Inference Endpoints](#inference-endpoints) or other providers like [Together AI](/docs/providers/togetherai), [Groq](/docs/providers/groq), or [OpenRouter](/docs/providers/openrouter) which offer HuggingFace models.
 
 Browse available models at [huggingface.co/models?inference_provider=hf-inference](https://huggingface.co/models?inference_provider=hf-inference).
+
 :::
 
 ## Examples
 
 Text classification for sentiment analysis:
 
-```
+```text
 huggingface:text-classification:cardiffnlp/twitter-roberta-base-sentiment-latest
 ```
 
 Prompt injection detection:
 
-```
+```text
 huggingface:text-classification:protectai/deberta-v3-base-prompt-injection
 ```
 
 Named entity recognition:
 
-```
+```text
 huggingface:token-classification:dslim/bert-base-NER
 ```
 
 Embeddings with sentence-transformers:
 
-```
+```yaml
 # Sentence similarity
 huggingface:sentence-similarity:sentence-transformers/all-MiniLM-L6-v2
 
