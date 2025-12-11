@@ -116,16 +116,20 @@ export function formatPercent(value: number, total: number): string {
 
 /**
  * Truncate a string to a maximum length with ellipsis.
+ * Handles Unicode properly by not cutting through multi-byte characters.
  *
  * @param str - String to truncate
  * @param maxLength - Maximum length including ellipsis
  * @returns Truncated string
  */
 export function truncate(str: string, maxLength: number): string {
-  if (str.length <= maxLength) {
+  // Use spread operator to properly split by code points, not code units
+  // This prevents cutting through surrogate pairs (emojis, etc.)
+  const codePoints = [...str];
+  if (codePoints.length <= maxLength) {
     return str;
   }
-  return str.slice(0, maxLength - 1) + '…';
+  return codePoints.slice(0, maxLength - 1).join('') + '…';
 }
 
 /**

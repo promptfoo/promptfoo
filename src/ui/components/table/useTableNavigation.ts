@@ -97,7 +97,8 @@ function navigationReducer(
     }
 
     case 'MOVE_LEFT':
-      return { ...state, selectedCol: Math.max(0, state.selectedCol - 1) };
+      // Minimum column is 1 (skip index column at 0)
+      return { ...state, selectedCol: Math.max(1, state.selectedCol - 1) };
 
     case 'MOVE_RIGHT':
       return { ...state, selectedCol: Math.min(colCount - 1, state.selectedCol + 1) };
@@ -138,28 +139,65 @@ function navigationReducer(
 
     case 'NAVIGATE_EXPANDED': {
       // Navigate while keeping detail view open
+      // Skip index column (column 0) - minimum selectable is column 1
+      const minCol = 1;
+      const maxCol = colCount - 1;
+      const maxRow = rowCount - 1;
+
       let newRow = state.selectedRow;
       let newCol = state.selectedCol;
       let newOffset = state.scrollOffset;
 
       switch (action.direction) {
         case 'up':
-          newRow = Math.max(0, state.selectedRow - 1);
+          // Wrap to last row if at first row
+          newRow = state.selectedRow > 0 ? state.selectedRow - 1 : maxRow;
           if (newRow < newOffset) {
             newOffset = newRow;
+          } else if (newRow >= newOffset + visibleRows) {
+            // Wrapped to bottom, adjust scroll
+            newOffset = Math.max(0, newRow - visibleRows + 1);
           }
           break;
         case 'down':
-          newRow = Math.min(rowCount - 1, state.selectedRow + 1);
+          // Wrap to first row if at last row
+          newRow = state.selectedRow < maxRow ? state.selectedRow + 1 : 0;
           if (newRow >= newOffset + visibleRows) {
             newOffset = newRow - visibleRows + 1;
+          } else if (newRow < newOffset) {
+            // Wrapped to top, adjust scroll
+            newOffset = 0;
           }
           break;
         case 'left':
-          newCol = Math.max(0, state.selectedCol - 1);
+          if (state.selectedCol > minCol) {
+            // Move left within row
+            newCol = state.selectedCol - 1;
+          } else {
+            // At leftmost valid column, wrap to last column of previous row
+            newCol = maxCol;
+            newRow = state.selectedRow > 0 ? state.selectedRow - 1 : maxRow;
+            if (newRow < newOffset) {
+              newOffset = newRow;
+            } else if (newRow >= newOffset + visibleRows) {
+              newOffset = Math.max(0, newRow - visibleRows + 1);
+            }
+          }
           break;
         case 'right':
-          newCol = Math.min(colCount - 1, state.selectedCol + 1);
+          if (state.selectedCol < maxCol) {
+            // Move right within row
+            newCol = state.selectedCol + 1;
+          } else {
+            // At rightmost column, wrap to first valid column of next row
+            newCol = minCol;
+            newRow = state.selectedRow < maxRow ? state.selectedRow + 1 : 0;
+            if (newRow >= newOffset + visibleRows) {
+              newOffset = newRow - visibleRows + 1;
+            } else if (newRow < newOffset) {
+              newOffset = 0;
+            }
+          }
           break;
       }
 
@@ -347,7 +385,7 @@ export function useTableNavigation({
 } {
   const [state, setState] = useState<TableNavigationState>({
     selectedRow: 0,
-    selectedCol: 0,
+    selectedCol: 1, // Start at column 1, skipping index column (0)
     expandedCell: null,
     scrollOffset: 0,
     filter: DEFAULT_FILTER_STATE,
@@ -383,7 +421,8 @@ export function useTableNavigation({
     setState((prev) => ({
       ...prev,
       selectedRow: Math.min(prev.selectedRow, Math.max(0, rowCount - 1)),
-      selectedCol: Math.min(prev.selectedCol, Math.max(0, colCount - 1)),
+      // Clamp column between 1 (skip index) and max column
+      selectedCol: Math.min(Math.max(prev.selectedCol, 1), Math.max(1, colCount - 1)),
       scrollOffset: Math.min(prev.scrollOffset, Math.max(0, rowCount - visibleRows)),
     }));
   }, [rowCount, colCount, visibleRows]);

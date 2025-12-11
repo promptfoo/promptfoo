@@ -40,13 +40,17 @@ const DEFAULTS = {
 
 /**
  * Truncate text to a maximum length.
+ * Handles Unicode properly by not cutting through multi-byte characters.
  */
 function truncateText(text: string, maxLength: number): { text: string; truncated: boolean } {
   const normalized = text.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
-  if (normalized.length <= maxLength) {
+  // Use spread operator to properly split by code points, not code units
+  // This prevents cutting through surrogate pairs (emojis, etc.)
+  const codePoints = [...normalized];
+  if (codePoints.length <= maxLength) {
     return { text: normalized, truncated: false };
   }
-  return { text: normalized.slice(0, maxLength - 1) + '\u2026', truncated: true };
+  return { text: codePoints.slice(0, maxLength - 1).join('') + '\u2026', truncated: true };
 }
 
 /**
