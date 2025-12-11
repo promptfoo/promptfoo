@@ -9,7 +9,7 @@
  */
 
 import { Box, Text } from 'ink';
-import { useEffect } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { isRawModeSupported } from '../../hooks/useKeypress';
 import { useTerminalSize } from '../../hooks/useTerminalSize';
 import { formatCost, formatLatency } from '../../utils/format';
@@ -27,7 +27,7 @@ function Divider({ width, char = '─' }: { width: number; char?: string }) {
 /**
  * Metadata row component.
  */
-function MetadataRow({ label, value }: { label: string; value: React.ReactNode }) {
+function MetadataRow({ label, value }: { label: string; value: ReactNode }) {
   return (
     <Box>
       <Text dimColor>{label}: </Text>

@@ -215,6 +215,7 @@ export function ResultsTable({
     rowCount: processedRows.length,
     colCount: layout.columns.length,
     visibleRows: layout.visibleRowCount,
+    hasIndexColumn: showIndex,
     isActive: isInteractive && !layout.isCompact,
     onExit,
     onExpand: (row, _col) => {

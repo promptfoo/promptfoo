@@ -74,13 +74,14 @@ export type { NavigationAction };
 
 /**
  * Reduce navigation state based on action.
+ * Exported for testing.
  */
-function navigationReducer(
+export function navigationReducer(
   state: TableNavigationState,
   action: NavigationAction,
-  bounds: { rowCount: number; colCount: number; visibleRows: number },
+  bounds: { rowCount: number; colCount: number; visibleRows: number; minCol: number },
 ): TableNavigationState {
-  const { rowCount, colCount, visibleRows } = bounds;
+  const { rowCount, colCount, visibleRows, minCol } = bounds;
 
   switch (action.type) {
     case 'MOVE_UP': {
@@ -97,8 +98,8 @@ function navigationReducer(
     }
 
     case 'MOVE_LEFT':
-      // Minimum column is 1 (skip index column at 0)
-      return { ...state, selectedCol: Math.max(1, state.selectedCol - 1) };
+      // Minimum column depends on whether there's an index column
+      return { ...state, selectedCol: Math.max(minCol, state.selectedCol - 1) };
 
     case 'MOVE_RIGHT':
       return { ...state, selectedCol: Math.min(colCount - 1, state.selectedCol + 1) };
@@ -139,8 +140,7 @@ function navigationReducer(
 
     case 'NAVIGATE_EXPANDED': {
       // Navigate while keeping detail view open
-      // Skip index column (column 0) - minimum selectable is column 1
-      const minCol = 1;
+      // Skip index column if present
       const maxCol = colCount - 1;
       const maxRow = rowCount - 1;
 
@@ -362,6 +362,8 @@ export interface UseTableNavigationOptions {
   colCount: number;
   /** Number of visible rows */
   visibleRows: number;
+  /** Whether there is an index column at position 0 (default: true) */
+  hasIndexColumn?: boolean;
   /** Whether navigation is active */
   isActive?: boolean;
   /** Callback when user wants to exit */
@@ -377,15 +379,19 @@ export function useTableNavigation({
   rowCount,
   colCount,
   visibleRows,
+  hasIndexColumn = true,
   isActive = true,
   onExit,
   onExpand,
 }: UseTableNavigationOptions): TableNavigationState & {
   dispatch: (action: NavigationAction) => void;
 } {
+  // Minimum column: skip index column (0) if present, otherwise start at 0
+  const minCol = hasIndexColumn ? 1 : 0;
+
   const [state, setState] = useState<TableNavigationState>({
     selectedRow: 0,
-    selectedCol: 1, // Start at column 1, skipping index column (0)
+    selectedCol: minCol, // Start at first data column
     expandedCell: null,
     scrollOffset: 0,
     filter: DEFAULT_FILTER_STATE,
@@ -397,7 +403,7 @@ export function useTableNavigation({
     stateRef.current = state;
   }, [state]);
 
-  const bounds = { rowCount, colCount, visibleRows };
+  const bounds = { rowCount, colCount, visibleRows, minCol };
 
   const dispatch = useCallback(
     (action: NavigationAction) => {
@@ -421,11 +427,11 @@ export function useTableNavigation({
     setState((prev) => ({
       ...prev,
       selectedRow: Math.min(prev.selectedRow, Math.max(0, rowCount - 1)),
-      // Clamp column between 1 (skip index) and max column
-      selectedCol: Math.min(Math.max(prev.selectedCol, 1), Math.max(1, colCount - 1)),
+      // Clamp column between minCol and max column
+      selectedCol: Math.min(Math.max(prev.selectedCol, minCol), Math.max(minCol, colCount - 1)),
       scrollOffset: Math.min(prev.scrollOffset, Math.max(0, rowCount - visibleRows)),
     }));
-  }, [rowCount, colCount, visibleRows]);
+  }, [rowCount, colCount, visibleRows, minCol]);
 
   // Keyboard handling
   useKeypress(

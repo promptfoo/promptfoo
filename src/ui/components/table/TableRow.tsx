@@ -10,6 +10,7 @@
  */
 
 import { Box, Text } from 'ink';
+import type { ReactNode } from 'react';
 import { StatusBadge, StatusIndicator } from './StatusBadge';
 import { IndexCell, TableCell, TextCell } from './TableCell';
 import type { TableRowData, TableRowProps } from './types';
@@ -43,7 +44,7 @@ export function TableRow({
       {columns.map((column, colIdx) => {
         const isCellSelected = isSelected && selectedCol === colIdx;
 
-        let cellContent: React.ReactNode;
+        let cellContent: ReactNode;
 
         switch (column.type) {
           case 'index':
@@ -81,10 +82,10 @@ export function TableRow({
         }
 
         return (
-          <React.Fragment key={column.id}>
+          <Box key={column.id} flexShrink={0}>
             {colIdx > 0 && <ColumnSeparator isSelected={isSelected} />}
             {cellContent}
-          </React.Fragment>
+          </Box>
         );
       })}
     </Box>
@@ -119,10 +120,10 @@ export function CompactRow({
         {/* Show summary status */}
         <Text> </Text>
         {cells.map((cell, i) => (
-          <React.Fragment key={i}>
-            {i > 0 && <Text> </Text>}
+          <Text key={i}>
+            {i > 0 && ' '}
             <StatusIndicator status={cell.status} />
-          </React.Fragment>
+          </Text>
         ))}
       </Box>
 
