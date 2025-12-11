@@ -85,6 +85,4 @@ def format_pdf_prompt(context: PromptFunctionContext) -> list[dict[str, typing.A
             }
         ]
 
-
-
     raise ValueError(f"Unsupported provider: {context['provider']}")
