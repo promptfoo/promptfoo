@@ -4,6 +4,26 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.120.4](https://github.com/promptfoo/promptfoo/compare/0.120.3...0.120.4) (2025-12-11)
+
+
+### Features
+
+* **providers:** add ElevenLabs provider integration ([#6022](https://github.com/promptfoo/promptfoo/issues/6022)) ([8d54faa](https://github.com/promptfoo/promptfoo/commit/8d54faa1c240e28557b1eb652c358a3f8eb4b0a2))
+* **providers:** add GPT-5.2 model support ([#6628](https://github.com/promptfoo/promptfoo/issues/6628)) ([b105980](https://github.com/promptfoo/promptfoo/commit/b105980f121d1b0ad8b0db95ff1d63e4d701f24d))
+* **providers:** add OpenCode SDK provider ([#6423](https://github.com/promptfoo/promptfoo/issues/6423)) ([ef8f227](https://github.com/promptfoo/promptfoo/commit/ef8f227bced68ce9f507abec0b4010445fda61e4))
+* **providers:** add streaming option for Vertex AI Model Armor support ([#6614](https://github.com/promptfoo/promptfoo/issues/6614)) ([aebd268](https://github.com/promptfoo/promptfoo/commit/aebd26879b87ca9a4a2a4e1d1e66bc22da6ff9fc))
+* **redteam:** complete OWASP Agentic AI T1-T15 threat mapping ([#6458](https://github.com/promptfoo/promptfoo/issues/6458)) ([24e3c2b](https://github.com/promptfoo/promptfoo/commit/24e3c2bf5b0bedf519588aec2a5352a7aef42260))
+
+
+### Bug Fixes
+
+* **ci:** format CHANGELOG.md and improve release-please formatting step ([#6610](https://github.com/promptfoo/promptfoo/issues/6610)) ([b89977c](https://github.com/promptfoo/promptfoo/commit/b89977cc78bee7072a8168df3edf3e50cf4b4c5b))
+* **deps:** update anthropic packages ([#6616](https://github.com/promptfoo/promptfoo/issues/6616)) ([645386b](https://github.com/promptfoo/promptfoo/commit/645386bf04b53bc980f53b0666bb75d34098c5f6))
+* **providers:** add numRequests tracking to all provider tokenUsage objects ([#6612](https://github.com/promptfoo/promptfoo/issues/6612)) ([d35bf7c](https://github.com/promptfoo/promptfoo/commit/d35bf7c15deb2b360bcadc52c3d4753e335e7ed3))
+* **providers:** update HuggingFace to use new inference API endpoint ([#6624](https://github.com/promptfoo/promptfoo/issues/6624)) ([57f118b](https://github.com/promptfoo/promptfoo/commit/57f118bc8c9d7aa48e6de1ace363d935b8de9f2e))
+* **redteam:** preserve BestOfNProvider config through database serialization ([#6598](https://github.com/promptfoo/promptfoo/issues/6598)) ([92adeba](https://github.com/promptfoo/promptfoo/commit/92adeba581063a7fd5c545a3b2aa6f243a0f4881))
+
 ## [0.120.3](https://github.com/promptfoo/promptfoo/compare/0.120.2...0.120.3) (2025-12-10)
 
 ### Features
