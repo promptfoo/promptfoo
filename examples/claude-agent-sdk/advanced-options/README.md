@@ -121,17 +121,17 @@ providers:
 
 ## All New Configuration Options
 
-| Option                              | Type                       | Description                                        |
-| ----------------------------------- | -------------------------- | -------------------------------------------------- |
-| `sandbox`                           | object                     | Sandbox settings for command execution isolation   |
-| `sandbox.enabled`                   | boolean                    | Enable sandboxed execution                         |
-| `sandbox.autoAllowBashIfSandboxed`  | boolean                    | Auto-allow bash when sandboxed                     |
-| `sandbox.network`                   | object                     | Network configuration for sandbox                  |
-| `sandbox.network.allowedDomains`    | string[]                   | Domains allowed for network access                 |
-| `sandbox.network.allowLocalBinding` | boolean                    | Allow binding to localhost                         |
-| `allow_dangerously_skip_permissions`| boolean                    | Required for `bypassPermissions` mode              |
-| `permission_prompt_tool_name`       | string                     | MCP tool for permission prompts                    |
-| `executable`                        | 'node' \| 'bun' \| 'deno'  | JavaScript runtime to use                          |
-| `executable_args`                   | string[]                   | Arguments for the runtime                          |
-| `extra_args`                        | Record<string, string\|null> | Additional CLI arguments                         |
-| `path_to_claude_code_executable`    | string                     | Path to Claude Code executable                     |
+| Option                               | Type                         | Description                                      |
+| ------------------------------------ | ---------------------------- | ------------------------------------------------ |
+| `sandbox`                            | object                       | Sandbox settings for command execution isolation |
+| `sandbox.enabled`                    | boolean                      | Enable sandboxed execution                       |
+| `sandbox.autoAllowBashIfSandboxed`   | boolean                      | Auto-allow bash when sandboxed                   |
+| `sandbox.network`                    | object                       | Network configuration for sandbox                |
+| `sandbox.network.allowedDomains`     | string[]                     | Domains allowed for network access               |
+| `sandbox.network.allowLocalBinding`  | boolean                      | Allow binding to localhost                       |
+| `allow_dangerously_skip_permissions` | boolean                      | Required for `bypassPermissions` mode            |
+| `permission_prompt_tool_name`        | string                       | MCP tool for permission prompts                  |
+| `executable`                         | 'node' \| 'bun' \| 'deno'    | JavaScript runtime to use                        |
+| `executable_args`                    | string[]                     | Arguments for the runtime                        |
+| `extra_args`                         | Record<string, string\|null> | Additional CLI arguments                         |
+| `path_to_claude_code_executable`     | string                       | Path to Claude Code executable                   |
