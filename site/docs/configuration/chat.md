@@ -231,9 +231,30 @@ When the `_conversation` variable is present, the eval will run single-threaded 
 
 ## Separating Chat Conversations
 
-When running multiple test files or test sequences, you may want to maintain conversation history between tests. This can be achieved by adding a `conversationId` to the test metadata:
+For a given provider and prompt, each unique `conversationId` maintains its own separate conversation history.
 
-```yaml title="test1.yaml"
+**Scenarios have isolated conversations by default.** Each scenario config entry automatically receives its own conversation history, so tests within one scenario won't leak into another:
+
+```yaml
+scenarios:
+  - config: [{}]
+    tests:
+      - vars: { question: 'Recommend a sci-fi book' }
+      - vars: { question: 'Tell me more about it' } # Gets history from first test
+  - config: [{}]
+    tests:
+      - vars: { question: 'Suggest a pasta recipe' } # Starts fresh, no book history
+      - vars: { question: 'How long does it take?' } # Gets history from recipe test only
+```
+
+**For regular tests (not in scenarios)**, if no `conversationId` is specified, all tests using the same provider and prompt will share a conversation history.
+
+### Using conversationId explicitly
+
+You can explicitly control conversation grouping by adding a `conversationId` to the test metadata:
+
+```yaml
+# test1.yaml
 - vars:
     question: 'Who founded Facebook?'
   metadata:
@@ -244,7 +265,8 @@ When running multiple test files or test sequences, you may want to maintain con
     conversationId: 'conversation1'
 ```
 
-```yaml title="test2.yaml"
+```yaml
+# test2.yaml
 - vars:
     question: 'Where is Yosemite National Park?'
   metadata:
@@ -255,7 +277,19 @@ When running multiple test files or test sequences, you may want to maintain con
     conversationId: 'conversation2'
 ```
 
-Each unique `conversationId` maintains its own separate conversation history. If no `conversationId` is specified, all tests using the same provider and prompt will share a conversation history.
+To share conversations across scenarios, set the same `conversationId` on tests in different scenarios:
+
+```yaml
+scenarios:
+  - config: [{}]
+    tests:
+      - vars: { question: 'Start conversation' }
+        metadata: { conversationId: 'shared' }
+  - config: [{}]
+    tests:
+      - vars: { question: 'Continue conversation' } # Gets history from first scenario
+        metadata: { conversationId: 'shared' }
+```
 
 ### Including JSON in prompt content
 
