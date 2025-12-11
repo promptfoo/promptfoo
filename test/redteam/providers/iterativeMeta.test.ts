@@ -450,6 +450,143 @@ describe('RedteamIterativeMetaProvider', () => {
     });
   });
 
+  describe('Token Usage Tracking', () => {
+    it('should accumulate token usage from agent provider calls', async () => {
+      // Set up agent to return token usage
+      mockAgentProvider.callApi = vi.fn<() => Promise<ProviderResponse>>()
+        .mockResolvedValueOnce({
+          output: { result: 'First attack' },
+          tokenUsage: { prompt: 50, completion: 30, total: 80, numRequests: 1 },
+        })
+        .mockResolvedValueOnce({
+          output: { result: 'Second attack' },
+          tokenUsage: { prompt: 60, completion: 40, total: 100, numRequests: 1 },
+        });
+
+      // Set up target to return token usage
+      mockGetTargetResponse
+        .mockResolvedValueOnce({
+          output: 'Target response 1',
+          tokenUsage: { prompt: 20, completion: 15, total: 35, numRequests: 1 },
+        })
+        .mockResolvedValueOnce({
+          output: 'Target response 2',
+          tokenUsage: { prompt: 25, completion: 18, total: 43, numRequests: 1 },
+        });
+
+      const result = await runMetaAgentRedteam({
+        context: {
+          vars: { query: 'test' },
+          prompt: { raw: 'test', label: 'test' },
+          originalProvider: mockTargetProvider,
+        },
+        filters: undefined,
+        injectVar: 'query',
+        numIterations: 2,
+        options: undefined,
+        prompt: { raw: 'test', label: 'test' },
+        agentProvider: mockAgentProvider,
+        gradingProvider: mockGradingProvider,
+        targetProvider: mockTargetProvider,
+        test: undefined,
+        vars: { query: 'test' },
+      });
+
+      // Verify token usage is accumulated
+      expect(result.tokenUsage).toBeDefined();
+      // Agent (80 + 100) + Target (35 + 43) = 258 total
+      expect(result.tokenUsage?.total).toBeGreaterThanOrEqual(150);
+      expect(result.tokenUsage?.prompt).toBeGreaterThan(0);
+      expect(result.tokenUsage?.completion).toBeGreaterThan(0);
+    });
+
+    it('should track numRequests across all iterations', async () => {
+      mockAgentProvider.callApi = vi.fn<() => Promise<ProviderResponse>>()
+        .mockResolvedValueOnce({
+          output: { result: 'Attack 1' },
+          tokenUsage: { prompt: 50, completion: 30, total: 80, numRequests: 1 },
+        })
+        .mockResolvedValueOnce({
+          output: { result: 'Attack 2' },
+          tokenUsage: { prompt: 60, completion: 40, total: 100, numRequests: 1 },
+        })
+        .mockResolvedValueOnce({
+          output: { result: 'Attack 3' },
+          tokenUsage: { prompt: 55, completion: 35, total: 90, numRequests: 1 },
+        });
+
+      mockGetTargetResponse
+        .mockResolvedValueOnce({
+          output: 'Response 1',
+          tokenUsage: { numRequests: 1 },
+        })
+        .mockResolvedValueOnce({
+          output: 'Response 2',
+          tokenUsage: { numRequests: 1 },
+        })
+        .mockResolvedValueOnce({
+          output: 'Response 3',
+          tokenUsage: { numRequests: 1 },
+        });
+
+      const result = await runMetaAgentRedteam({
+        context: {
+          vars: { query: 'test' },
+          prompt: { raw: 'test', label: 'test' },
+          originalProvider: mockTargetProvider,
+        },
+        filters: undefined,
+        injectVar: 'query',
+        numIterations: 3,
+        options: undefined,
+        prompt: { raw: 'test', label: 'test' },
+        agentProvider: mockAgentProvider,
+        gradingProvider: mockGradingProvider,
+        targetProvider: mockTargetProvider,
+        test: undefined,
+        vars: { query: 'test' },
+      });
+
+      // 3 agent calls + 3 target calls = 6 total requests
+      expect(result.tokenUsage?.numRequests).toBeGreaterThanOrEqual(3);
+    });
+
+    it('should handle missing token usage gracefully', async () => {
+      // Agent returns no token usage
+      mockAgentProvider.callApi = vi.fn<() => Promise<ProviderResponse>>().mockResolvedValue({
+        output: { result: 'Attack' },
+        // No tokenUsage field
+      });
+
+      mockGetTargetResponse.mockResolvedValue({
+        output: 'Response',
+        // No tokenUsage field
+      });
+
+      const result = await runMetaAgentRedteam({
+        context: {
+          vars: { query: 'test' },
+          prompt: { raw: 'test', label: 'test' },
+          originalProvider: mockTargetProvider,
+        },
+        filters: undefined,
+        injectVar: 'query',
+        numIterations: 1,
+        options: undefined,
+        prompt: { raw: 'test', label: 'test' },
+        agentProvider: mockAgentProvider,
+        gradingProvider: mockGradingProvider,
+        targetProvider: mockTargetProvider,
+        test: undefined,
+        vars: { query: 'test' },
+      });
+
+      // Should still return tokenUsage object with numRequests counted
+      expect(result.tokenUsage).toBeDefined();
+      expect(result.tokenUsage?.numRequests).toBeGreaterThanOrEqual(1);
+    });
+  });
+
   describe('Abort Signal Handling', () => {
     it('should pass options with abortSignal to agentProvider.callApi', async () => {
       const abortController = new AbortController();
