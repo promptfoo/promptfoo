@@ -2073,6 +2073,12 @@
             },
             "envPath": {
               "type": "string"
+            },
+            "extension": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             }
           },
           "additionalProperties": false

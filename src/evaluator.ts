@@ -1829,6 +1829,8 @@ class Evaluator {
       prompts: this.evalRecord.prompts,
       results: this.evalRecord.results,
       suite: testSuite,
+      evalId: this.evalRecord.id,
+      config: this.evalRecord.config,
     });
 
     // Calculate additional metrics for telemetry
