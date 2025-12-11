@@ -15,6 +15,13 @@ export {
   useKeyHeld,
   useNavigationKeys,
   useConfirmKey,
+  isRawModeSupported,
   type KeyInfo,
   type KeypressOptions,
 } from './useKeypress';
+
+export {
+  useTerminalSize,
+  getStaticTerminalSize,
+  type TerminalSize,
+} from './useTerminalSize';

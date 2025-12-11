@@ -4,7 +4,7 @@
  * This component sets up the provider tree and renders the eval screen.
  */
 
-import React, { useEffect } from 'react';
+import { useEffect } from 'react';
 import { EvalScreen } from './components/eval/EvalScreen';
 import { EvalProvider, useEval } from './contexts/EvalContext';
 import { UIProvider } from './contexts/UIContext';
@@ -39,7 +39,7 @@ function EvalAppInner({
   providers = [],
   showHelp,
 }: EvalAppProps) {
-  const { dispatch, init, start } = useEval();
+  const { dispatch, init } = useEval();
 
   // Create and expose the UI controller
   useEffect(() => {
@@ -56,14 +56,7 @@ function EvalAppInner({
     }
   }, [totalTests, providers, init]);
 
-  return (
-    <EvalScreen
-      title={title}
-      onComplete={onComplete}
-      onExit={onExit}
-      showHelp={showHelp}
-    />
-  );
+  return <EvalScreen title={title} onComplete={onComplete} onExit={onExit} showHelp={showHelp} />;
 }
 
 /**

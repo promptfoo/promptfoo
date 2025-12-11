@@ -6,7 +6,7 @@
  */
 
 import { useInput } from 'ink';
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 /**
  * Key information passed to keypress handlers.
@@ -35,7 +35,7 @@ export interface KeypressOptions {
  * Check if raw mode input is supported.
  * Raw mode is required for capturing keystrokes.
  */
-function isRawModeSupported(): boolean {
+export function isRawModeSupported(): boolean {
   return process.stdin.isTTY === true && typeof process.stdin.setRawMode === 'function';
 }
 
@@ -61,10 +61,7 @@ function isRawModeSupported(): boolean {
  * }
  * ```
  */
-export function useKeypress(
-  handler: (key: KeyInfo) => void,
-  options: KeypressOptions = {},
-): void {
+export function useKeypress(handler: (key: KeyInfo) => void, options: KeypressOptions = {}): void {
   const { isActive = true } = options;
 
   // Only activate input handling if raw mode is supported
@@ -151,14 +148,11 @@ function getKeyName(
 export function useKeyHeld(targetKey: string, options: KeypressOptions = {}): boolean {
   const [isHeld, setIsHeld] = useState(false);
 
-  useKeypress(
-    (key) => {
-      if (key.key === targetKey || key.name === targetKey) {
-        setIsHeld(true);
-      }
-    },
-    options,
-  );
+  useKeypress((key) => {
+    if (key.key === targetKey || key.name === targetKey) {
+      setIsHeld(true);
+    }
+  }, options);
 
   // Reset on any key up (simplified - Ink doesn't provide key up events)
   // In practice, we just set it and let it be managed by the component

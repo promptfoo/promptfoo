@@ -3,6 +3,7 @@ import { URL } from 'url';
 import input from '@inquirer/input';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
+import cliState from './cliState';
 import { getDefaultShareViewBaseUrl, getShareApiBaseUrl, getShareViewBaseUrl } from './constants';
 import { getEnvBool, getEnvInt, getEnvString, isCI } from './envars';
 import { getUserEmail, setUserEmail } from './globalConfig/accounts';
@@ -254,9 +255,10 @@ async function sendChunkedResults(evalRecord: Eval, url: string): Promise<string
   const totalResults = await evalRecord.getTotalResultRowCount();
   logger.debug(`Total results to share: ${totalResults}`);
 
-  // Setup progress bar only if not in verbose mode or CI
+  // Setup progress bar only if not in verbose mode, CI, or Ink UI mode
+  const isInkUI = Boolean(cliState.inkUI);
   let progressBar: cliProgress.SingleBar | null = null;
-  if (!isVerbose && !isCI()) {
+  if (!isVerbose && !isCI() && !isInkUI) {
     progressBar = new cliProgress.SingleBar(
       {
         format: 'Sharing | {bar} | {percentage}% | {value}/{total} results',
@@ -290,7 +292,7 @@ async function sendChunkedResults(evalRecord: Eval, url: string): Promise<string
 
           if (progressBar) {
             progressBar.increment(currentChunk.length);
-          } else {
+          } else if (!isInkUI) {
             logger.info(
               `Progress: ${totalSent}/${totalResults} results shared (${Math.round((totalSent / totalResults) * 100)}%)`,
             );
@@ -311,7 +313,7 @@ async function sendChunkedResults(evalRecord: Eval, url: string): Promise<string
 
       if (progressBar) {
         progressBar.increment(currentChunk.length);
-      } else {
+      } else if (!isInkUI) {
         logger.info(`Progress: ${totalSent}/${totalResults} results shared (100%)`);
       }
     }

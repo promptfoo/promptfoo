@@ -1,19 +1,25 @@
 /**
- * Main evaluation screen component.
+ * Main evaluation screen component - Consolidated single-box UI.
  *
  * This is the primary UI component for displaying evaluation progress.
- * It combines the header, progress, provider status, and error summary.
+ * It shows all information in a clean, consolidated view without duplication.
  */
 
-import { Box, Static, Text, useApp } from 'ink';
-import React, { useEffect, useRef } from 'react';
+import { Box, Text, useApp } from 'ink';
+import { useEffect, useRef } from 'react';
 import { useEval, useEvalState } from '../../contexts/EvalContext';
 import { useCompactMode } from '../../contexts/UIContext';
 import { useNavigationKeys } from '../../hooks/useKeypress';
-import { Badge, CountBadge } from '../shared/Badge';
-import { EvalHeader, EvalHeaderCompact } from './EvalHeader';
-import { ErrorSummary } from './ErrorSummary';
-import { ProviderStatusList, ProviderStatusSummary } from './ProviderStatusList';
+import { useTokenMetrics } from '../../hooks/useTokenMetrics';
+import {
+  formatCost,
+  formatDuration,
+  formatTokens,
+  formatAvgLatency,
+  truncate,
+} from '../../utils/format';
+import { ProgressBar } from '../shared/ProgressBar';
+import { Spinner } from '../shared/Spinner';
 
 export interface EvalScreenProps {
   /** Title for the evaluation */
@@ -26,121 +32,254 @@ export interface EvalScreenProps {
   showHelp?: boolean;
 }
 
+// Column widths for consistent alignment
+const COL_WIDTH = {
+  status: 2,
+  provider: 24,
+  progress: 14,
+  results: 12,
+  tokens: 10,
+  cost: 9,
+  latency: 7,
+};
+
 /**
- * Results summary displayed at completion.
+ * Table header row.
  */
-function ResultsSummary() {
-  const { passedTests, failedTests, errorCount, elapsedMs, phase } = useEvalState();
-
-  if (phase !== 'completed') {
-    return null;
-  }
-
-  const totalTests = passedTests + failedTests;
-  const passRate = totalTests > 0 ? Math.round((passedTests / totalTests) * 100) : 0;
-
-  const formatDuration = (ms: number): string => {
-    if (ms < 1000) {
-      return `${ms}ms`;
-    }
-    if (ms < 60000) {
-      return `${(ms / 1000).toFixed(1)}s`;
-    }
-    const minutes = Math.floor(ms / 60000);
-    const seconds = Math.round((ms % 60000) / 1000);
-    return `${minutes}m ${seconds}s`;
-  };
-
+function TableHeader() {
   return (
-    <Box flexDirection="column" marginTop={1} borderStyle="round" borderColor="green" padding={1}>
-      <Text bold color="green">
-        Evaluation Complete
-      </Text>
-      <Box marginTop={1}>
-        <Text>Results: </Text>
-        <Text color="green">{passedTests} passed</Text>
-        {failedTests > 0 && (
-          <>
-            <Text>, </Text>
-            <Text color="red">{failedTests} failed</Text>
-          </>
-        )}
-        {errorCount > 0 && (
-          <>
-            <Text>, </Text>
-            <Text color="red">{errorCount} errors</Text>
-          </>
-        )}
+    <Box>
+      <Box width={COL_WIDTH.status} />
+      <Box width={COL_WIDTH.provider}>
+        <Text dimColor>Provider</Text>
       </Box>
-      <Box>
-        <Text>Pass rate: </Text>
-        <Text color={passRate >= 70 ? 'green' : passRate >= 40 ? 'yellow' : 'red'}>{passRate}%</Text>
+      <Box width={COL_WIDTH.progress}>
+        <Text dimColor>Progress</Text>
       </Box>
-      <Box>
-        <Text dimColor>Duration: {formatDuration(elapsedMs)}</Text>
+      <Box width={COL_WIDTH.results} marginLeft={2}>
+        <Text dimColor>Pass/Fail</Text>
+      </Box>
+      <Box width={COL_WIDTH.tokens}>
+        <Text dimColor>Tokens</Text>
+      </Box>
+      <Box width={COL_WIDTH.cost}>
+        <Text dimColor>Cost</Text>
+      </Box>
+      <Box width={COL_WIDTH.latency}>
+        <Text dimColor>Avg</Text>
       </Box>
     </Box>
   );
 }
 
 /**
- * Current activity indicator.
+ * Single provider row with all metrics.
  */
-function CurrentActivity() {
-  const { currentProvider, currentPrompt, currentVars, phase } = useEvalState();
+function ProviderRow({
+  label,
+  testCases,
+  tokens,
+  cost,
+  latency,
+  status,
+  isActive,
+}: {
+  label: string;
+  testCases: { total: number; completed: number; passed: number; failed: number; errors: number };
+  tokens: { total: number };
+  cost: number;
+  latency: { totalMs: number; count: number };
+  status: string;
+  isActive: boolean;
+}) {
+  const progressPercent =
+    testCases.total > 0
+      ? Math.min(100, Math.round((testCases.completed / testCases.total) * 100))
+      : 0;
 
-  if (phase !== 'evaluating' && phase !== 'grading') {
+  // Status indicator
+  const statusIcon =
+    status === 'completed' ? (
+      <Text color="green">✓</Text>
+    ) : status === 'error' ? (
+      <Text color="red">✗</Text>
+    ) : isActive ? (
+      <Text color="cyan">●</Text>
+    ) : (
+      <Text dimColor>○</Text>
+    );
+
+  // Pass/fail display - show passed ✓ and failed ✗ counts clearly
+  const hasFailures = testCases.failed > 0 || testCases.errors > 0;
+  const failCount = testCases.failed + testCases.errors;
+
+  return (
+    <Box>
+      {/* Status icon */}
+      <Box width={COL_WIDTH.status}>{statusIcon}</Box>
+
+      {/* Provider name */}
+      <Box width={COL_WIDTH.provider}>
+        <Text color={isActive ? 'cyan' : undefined}>{truncate(label, COL_WIDTH.provider - 2)}</Text>
+      </Box>
+
+      {/* Progress bar with percentage */}
+      <Box width={COL_WIDTH.progress}>
+        <ProgressBar
+          value={progressPercent}
+          max={100}
+          width={8}
+          showPercentage={false}
+          color={status === 'completed' ? 'green' : 'cyan'}
+        />
+        <Text dimColor> {testCases.completed}/{testCases.total}</Text>
+      </Box>
+
+      {/* Pass/fail counts - marginLeft adds gap after progress column */}
+      <Box width={COL_WIDTH.results} marginLeft={2}>
+        <Text color="green">{testCases.passed}✓</Text>
+        {hasFailures && <Text color="red"> {failCount}✗</Text>}
+        {!hasFailures && testCases.completed > 0 && <Text dimColor> {failCount}✗</Text>}
+      </Box>
+
+      {/* Tokens */}
+      <Box width={COL_WIDTH.tokens}>
+        <Text dimColor>{tokens.total > 0 ? formatTokens(tokens.total) : '-'}</Text>
+      </Box>
+
+      {/* Cost */}
+      <Box width={COL_WIDTH.cost}>
+        <Text dimColor>{cost > 0 ? formatCost(cost) : '-'}</Text>
+      </Box>
+
+      {/* Average latency */}
+      <Box width={COL_WIDTH.latency}>
+        <Text dimColor>{formatAvgLatency(latency.totalMs, latency.count)}</Text>
+      </Box>
+    </Box>
+  );
+}
+
+/**
+ * Compact summary line showing aggregate stats.
+ */
+function SummaryLine() {
+  const {
+    passedTests,
+    failedTests,
+    errorCount,
+    totalTokens,
+    promptTokens,
+    completionTokens,
+    totalCost,
+    elapsedMs,
+  } = useEvalState();
+
+  const total = passedTests + failedTests + errorCount;
+  const tokenDisplay = totalTokens || promptTokens + completionTokens;
+
+  return (
+    <Box marginTop={1}>
+      {/* Pass count with color */}
+      <Text color={passedTests === total ? 'green' : failedTests > 0 ? 'yellow' : 'white'}>
+        {passedTests}/{total} passed
+      </Text>
+
+      {failedTests > 0 && <Text color="red"> · {failedTests} failed</Text>}
+
+      {errorCount > 0 && <Text color="red"> · {errorCount} errors</Text>}
+
+      {/* Tokens */}
+      {tokenDisplay > 0 && <Text dimColor> · {formatTokens(tokenDisplay)} tokens</Text>}
+
+      {/* Cost */}
+      {totalCost > 0 && <Text dimColor> · {formatCost(totalCost)}</Text>}
+
+      {/* Duration */}
+      <Text dimColor> · {formatDuration(elapsedMs)}</Text>
+    </Box>
+  );
+}
+
+/**
+ * Share URL display.
+ */
+function ShareUrlDisplay() {
+  const { shareUrl } = useEvalState();
+
+  if (!shareUrl) {
     return null;
   }
 
-  const truncate = (str: string | undefined, max: number): string => {
-    if (!str) {
-      return '';
-    }
-    return str.length > max ? str.slice(0, max - 3) + '...' : str;
-  };
+  return (
+    <Box marginTop={1}>
+      <Text color="green">✔ </Text>
+      <Text color="cyan">{shareUrl}</Text>
+    </Box>
+  );
+}
+
+/**
+ * Error summary (compact).
+ */
+function ErrorDisplay() {
+  const { errors, showErrorDetails, errorCount } = useEvalState();
+
+  if (errorCount === 0 || errors.length === 0) {
+    return null;
+  }
+
+  if (!showErrorDetails) {
+    return (
+      <Box marginTop={1}>
+        <Text color="red">
+          {errorCount} error{errorCount > 1 ? 's' : ''} occurred
+        </Text>
+        <Text dimColor> (press 'e' to show details)</Text>
+      </Box>
+    );
+  }
 
   return (
     <Box flexDirection="column" marginTop={1}>
-      <Text dimColor>Current:</Text>
-      <Box marginLeft={2}>
-        {currentProvider && <Text>Provider: {truncate(currentProvider, 30)}</Text>}
-        {currentPrompt && (
-          <Text dimColor> | Prompt: "{truncate(currentPrompt.replace(/\n/g, ' '), 20)}"</Text>
-        )}
-      </Box>
-      {currentVars && (
-        <Box marginLeft={2}>
-          <Text dimColor>Vars: {truncate(currentVars, 50)}</Text>
+      <Text color="red" bold>
+        Errors:
+      </Text>
+      {errors.slice(0, 3).map((error, i) => (
+        <Box key={i} marginLeft={1}>
+          <Text color="red">• </Text>
+          <Text dimColor>{truncate(error.provider, 20)}: </Text>
+          <Text>{truncate(error.message, 50)}</Text>
+        </Box>
+      ))}
+      {errors.length > 3 && (
+        <Box marginLeft={1}>
+          <Text dimColor>... and {errors.length - 3} more</Text>
         </Box>
       )}
     </Box>
   );
 }
 
-/**
- * Keyboard shortcuts help.
- */
-function KeyboardHelp() {
-  return (
-    <Box marginTop={1}>
-      <Text dimColor>Press </Text>
-      <Text color="cyan">q</Text>
-      <Text dimColor> to quit, </Text>
-      <Text color="cyan">p</Text>
-      <Text dimColor> to toggle provider details, </Text>
-      <Text color="cyan">e</Text>
-      <Text dimColor> to toggle error details</Text>
-    </Box>
-  );
-}
+const PHASE_LABELS: Record<string, string> = {
+  initializing: 'Initializing',
+  loading: 'Loading',
+  evaluating: 'Running',
+  grading: 'Grading',
+  completed: 'Complete',
+  error: 'Error',
+};
 
 export function EvalScreen({ title, onComplete, onExit, showHelp = true }: EvalScreenProps) {
   const { exit } = useApp();
-  const { state, dispatch, isComplete } = useEval();
-  const { isCompact } = useCompactMode();
+  const { state, dispatch, isComplete, isRunning } = useEval();
+  // Note: isCompact could be used for responsive layout in future
+  const _compactMode = useCompactMode();
   const completeCalled = useRef(false);
   const isRawModeSupported = process.stdin.isTTY && typeof process.stdin.setRawMode === 'function';
+
+  // Poll TokenUsageTracker for real-time token metrics
+  useTokenMetrics(dispatch, state.providerOrder, isRunning, 500);
 
   // Handle keyboard input - only if raw mode is supported
   useNavigationKeys(
@@ -166,9 +305,6 @@ export function EvalScreen({ title, onComplete, onExit, showHelp = true }: EvalS
         case 'q':
           onExit?.();
           exit();
-          break;
-        case 'p':
-          dispatch({ type: 'TOGGLE_PROVIDER_DETAILS' });
           break;
         case 'e':
           dispatch({ type: 'TOGGLE_ERROR_DETAILS' });
@@ -203,45 +339,78 @@ export function EvalScreen({ title, onComplete, onExit, showHelp = true }: EvalS
     }
   }, [isComplete, onComplete]);
 
-  // Compact layout for narrow terminals
-  if (isCompact) {
-    return (
-      <Box flexDirection="column">
-        <EvalHeaderCompact title={title} />
-        <ProviderStatusSummary />
-        {state.errorCount > 0 && (
-          <Text color="red">
-            {state.errorCount} error{state.errorCount > 1 ? 's' : ''}
-          </Text>
-        )}
-        {isComplete && <ResultsSummary />}
-      </Box>
-    );
-  }
+  // Get current provider for activity indicator
+  const currentProvider = state.currentProvider;
 
   return (
-    <Box flexDirection="column">
-      {/* Header with progress bar */}
-      <EvalHeader title={title} showTiming />
+    <Box
+      flexDirection="column"
+      borderStyle="round"
+      borderColor={isComplete ? 'green' : 'gray'}
+      paddingX={1}
+      paddingY={0}
+    >
+      {/* Header: Title + Status */}
+      <Box>
+        <Text bold>{title || 'Evaluation'}</Text>
+        <Box flexGrow={1} />
+        {isRunning && <Spinner type="dots" color="cyan" />}
+        <Text color={isComplete ? 'green' : 'cyan'}>
+          {' '}
+          {PHASE_LABELS[state.phase] || state.phase}
+        </Text>
+        {state.elapsedMs > 0 && <Text dimColor> ({formatDuration(state.elapsedMs)})</Text>}
+      </Box>
 
-      {/* Provider status */}
+      {/* Provider table */}
       {state.providerOrder.length > 0 && (
-        <Box marginTop={1}>
-          <ProviderStatusList maxItems={5} showDetails />
+        <Box flexDirection="column" marginTop={1}>
+          <TableHeader />
+          {state.providerOrder.map((id) => {
+            const provider = state.providers[id];
+            if (!provider) {
+              return null;
+            }
+            return (
+              <ProviderRow
+                key={id}
+                label={provider.label}
+                testCases={provider.testCases}
+                tokens={provider.tokens}
+                cost={provider.cost}
+                latency={provider.latency}
+                status={provider.status}
+                isActive={currentProvider === id}
+              />
+            );
+          })}
         </Box>
       )}
 
-      {/* Current activity */}
-      <CurrentActivity />
+      {/* Summary line */}
+      <SummaryLine />
 
-      {/* Error summary */}
-      <ErrorSummary maxErrors={3} />
+      {/* Share URL */}
+      <ShareUrlDisplay />
 
-      {/* Results summary (when complete) */}
-      <ResultsSummary />
+      {/* Errors */}
+      <ErrorDisplay />
 
-      {/* Keyboard help - only show if raw mode is supported */}
-      {showHelp && !isComplete && isRawModeSupported && <KeyboardHelp />}
+      {/* Help text - only when running and raw mode supported */}
+      {showHelp && !isComplete && isRawModeSupported && (
+        <Box marginTop={1}>
+          <Text dimColor>Press </Text>
+          <Text color="cyan">q</Text>
+          <Text dimColor> to quit</Text>
+          {state.errorCount > 0 && (
+            <>
+              <Text dimColor>, </Text>
+              <Text color="cyan">e</Text>
+              <Text dimColor> for errors</Text>
+            </>
+          )}
+        </Box>
+      )}
     </Box>
   );
 }

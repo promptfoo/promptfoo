@@ -13,7 +13,8 @@ export interface ProviderStatusItemProps {
 }
 
 function ProviderStatusItem({ provider, showDetails = true }: ProviderStatusItemProps) {
-  const { id, label, completed, total, errors, status, currentTest } = provider;
+  const { label, testCases, status, currentTest } = provider;
+  const { completed, total, errors } = testCases;
 
   // Status indicator
   let statusIcon: React.ReactNode;
@@ -44,7 +45,8 @@ function ProviderStatusItem({ provider, showDetails = true }: ProviderStatusItem
 
   // Truncate label if too long
   const maxLabelLength = 30;
-  const displayLabel = label.length > maxLabelLength ? label.slice(0, maxLabelLength - 3) + '...' : label;
+  const displayLabel =
+    label.length > maxLabelLength ? label.slice(0, maxLabelLength - 3) + '...' : label;
 
   return (
     <Box>
@@ -131,9 +133,7 @@ export function ProviderStatusList({
           showDetails={showDetails && showProviderDetails}
         />
       ))}
-      {hasMore && (
-        <Text dimColor>... and {displayProviders.length - maxItems} more</Text>
-      )}
+      {hasMore && <Text dimColor>... and {displayProviders.length - maxItems} more</Text>}
     </Box>
   );
 }

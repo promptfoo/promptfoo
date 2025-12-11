@@ -3,7 +3,6 @@
  */
 
 import { Box, Text } from 'ink';
-import React from 'react';
 import { useEvalState, type EvalError } from '../../contexts/EvalContext';
 
 export interface ErrorItemProps {

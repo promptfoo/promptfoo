@@ -10,6 +10,9 @@ interface CliState {
   // Indicates we're running in web UI mode
   webUI?: boolean;
 
+  // Indicates we're running in Ink interactive UI mode
+  inkUI?: boolean;
+
   // Indicates an evaluation is running in resume mode
   resume?: boolean;
 

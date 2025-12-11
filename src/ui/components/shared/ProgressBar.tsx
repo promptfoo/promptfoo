@@ -3,7 +3,7 @@
  */
 
 import { Box, Text, useStdout } from 'ink';
-import React, { useMemo } from 'react';
+import { useMemo } from 'react';
 
 export interface ProgressBarProps {
   /** Current progress value */

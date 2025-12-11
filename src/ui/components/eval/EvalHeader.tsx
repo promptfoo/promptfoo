@@ -3,7 +3,6 @@
  */
 
 import { Box, Text } from 'ink';
-import React, { useEffect, useState } from 'react';
 import { useEvalProgress } from '../../contexts/EvalContext';
 import { ProgressBar } from '../shared/ProgressBar';
 import { Spinner } from '../shared/Spinner';
@@ -37,7 +36,7 @@ const PHASE_LABELS: Record<string, string> = {
 };
 
 export function EvalHeader({ title = 'Evaluation', showTiming = true }: EvalHeaderProps) {
-  const { completed, total, percent, isRunning, isComplete, phase, elapsedMs } = useEvalProgress();
+  const { completed, total, isRunning, isComplete, phase, elapsedMs } = useEvalProgress();
 
   return (
     <Box flexDirection="column" marginBottom={1}>

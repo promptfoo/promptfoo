@@ -3,7 +3,6 @@
  */
 
 import { Text } from 'ink';
-import React from 'react';
 import { useSpinnerFrame, type SpinnerType } from '../../hooks/useSpinnerFrame';
 
 export interface SpinnerProps {

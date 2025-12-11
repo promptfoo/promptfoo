@@ -13,6 +13,7 @@ This document explores wrapping the promptfoo CLI with [Ink](https://github.com/
 ### Current Architecture
 
 The promptfoo CLI is built with:
+
 - **[Commander.js](https://github.com/tj/commander.js)** v14 - Command routing and argument parsing
 - **[Inquirer](https://github.com/SBoudrias/Inquirer.js)** v5-6 - Interactive prompts (select, confirm, checkbox, input, editor)
 - **[cli-progress](https://github.com/npkgz/cli-progress)** v3 - Progress bars (evaluation runs)
@@ -39,13 +40,13 @@ The promptfoo CLI is built with:
 
 ### Primary Goals
 
-| Goal | Description | Priority |
-|------|-------------|----------|
-| **Declarative UI** | React component model for terminal output | High |
-| **Real-time Updates** | Live progress, streaming output during evals | High |
-| **Consistent UX** | Unified component library across all commands | High |
-| **Testability** | Unit-testable UI components | Medium |
-| **Incremental Migration** | Adopt gradually, not big-bang rewrite | High |
+| Goal                      | Description                                   | Priority |
+| ------------------------- | --------------------------------------------- | -------- |
+| **Declarative UI**        | React component model for terminal output     | High     |
+| **Real-time Updates**     | Live progress, streaming output during evals  | High     |
+| **Consistent UX**         | Unified component library across all commands | High     |
+| **Testability**           | Unit-testable UI components                   | Medium   |
+| **Incremental Migration** | Adopt gradually, not big-bang rewrite         | High     |
 
 ### Non-Goals
 
@@ -190,12 +191,14 @@ export async function main() {
 ```
 
 **Non-interactive mode** (`src/ui/noninteractive/`):
+
 - Direct `process.stdout.write()` / `process.stderr.write()`
 - JSON streaming output for programmatic consumption
 - Handle EPIPE errors gracefully (piped output closed early)
 - Ctrl+C cancellation via readline keypress events
 
 This pattern ensures:
+
 - No Ink bundle loaded for CI/piped usage
 - Predictable output for scripting
 - Graceful degradation
@@ -236,6 +239,7 @@ const AppWrapper = () => (
 ```
 
 **Recommendation for promptfoo**: Start simpler with fewer contexts, expand as needed:
+
 - `EvalStateContext` - Evaluation progress/results
 - `ConfigContext` - CLI configuration
 - `UIContext` - Terminal dimensions, theme, etc.
@@ -252,9 +256,7 @@ export const MainContent = () => {
   return (
     <>
       {/* Static: Completed items that won't re-render */}
-      <Static items={history}>
-        {(item) => <HistoryItemDisplay key={item.id} item={item} />}
-      </Static>
+      <Static items={history}>{(item) => <HistoryItemDisplay key={item.id} item={item} />}</Static>
 
       {/* Dynamic: Currently streaming/pending items */}
       <Box flexDirection="column">
@@ -344,9 +346,9 @@ const MemoizedHistoryItemDisplay = memo(HistoryItemDisplay);
 const MemoizedAppHeader = memo(AppHeader);
 
 // In render
-{history.map((item) => (
-  <MemoizedHistoryItemDisplay key={item.id} item={item} />
-))}
+{
+  history.map((item) => <MemoizedHistoryItemDisplay key={item.id} item={item} />);
+}
 ```
 
 ---
@@ -418,6 +420,7 @@ src/ui/
 **Goal**: Establish infrastructure based on Gemini CLI patterns
 
 1. **Set up Ink infrastructure**
+
    ```bash
    npm install ink@5 ink-spinner react@19
    npm install -D ink-testing-library @types/react
@@ -435,6 +438,7 @@ src/ui/
    - ScrollableList (if needed for results)
 
 4. **Create integration helper**
+
    ```typescript
    // src/ui/render.ts
    export async function renderInteractive<P>(
@@ -491,21 +495,21 @@ src/ui/
 
 ### Technical Risks
 
-| Risk | Impact | Likelihood | Mitigation |
-|------|--------|------------|------------|
-| Performance regression | High | Low | Benchmark; use `<Static>`, memoization |
-| Terminal compatibility | Medium | Medium | Test on macOS, Linux, Windows Terminal, WSL |
-| ESM/CJS conflicts | Low | Low | Project already ESM |
-| Slow renders | Medium | Medium | Monitor with `onRender`, optimize hot paths |
-| Memory leaks | Medium | Low | Proper cleanup on unmount |
+| Risk                   | Impact | Likelihood | Mitigation                                  |
+| ---------------------- | ------ | ---------- | ------------------------------------------- |
+| Performance regression | High   | Low        | Benchmark; use `<Static>`, memoization      |
+| Terminal compatibility | Medium | Medium     | Test on macOS, Linux, Windows Terminal, WSL |
+| ESM/CJS conflicts      | Low    | Low        | Project already ESM                         |
+| Slow renders           | Medium | Medium     | Monitor with `onRender`, optimize hot paths |
+| Memory leaks           | Medium | Low        | Proper cleanup on unmount                   |
 
 ### Operational Risks
 
-| Risk | Impact | Likelihood | Mitigation |
-|------|--------|------------|------------|
-| Learning curve | Medium | High | Document patterns; reference Gemini CLI |
-| CI/CD breakage | High | Medium | Strict non-interactive mode separation |
-| Partial migration limbo | Medium | Medium | Clear phase boundaries |
+| Risk                    | Impact | Likelihood | Mitigation                              |
+| ----------------------- | ------ | ---------- | --------------------------------------- |
+| Learning curve          | Medium | High       | Document patterns; reference Gemini CLI |
+| CI/CD breakage          | High   | Medium     | Strict non-interactive mode separation  |
+| Partial migration limbo | Medium | Medium     | Clear phase boundaries                  |
 
 ---
 
@@ -637,11 +641,7 @@ export const DefaultAppLayout: React.FC = () => {
       <MainContent />
       <Box flexDirection="column" ref={uiState.mainControlsRef}>
         <Notifications />
-        {uiState.dialogsVisible ? (
-          <DialogManager />
-        ) : (
-          <Composer />
-        )}
+        {uiState.dialogsVisible ? <DialogManager /> : <Composer />}
         <ExitWarning />
       </Box>
     </Box>
@@ -662,11 +662,14 @@ export function TextInput({
 }: TextInputProps) {
   const { text, handleInput, visualCursor, viewportVisualLines } = buffer;
 
-  useKeypress((key) => {
-    if (key.name === 'escape') onCancel?.();
-    else if (key.name === 'return') onSubmit?.(text);
-    else handleInput(key);
-  }, { isActive: focus });
+  useKeypress(
+    (key) => {
+      if (key.name === 'escape') onCancel?.();
+      else if (key.name === 'return') onSubmit?.(text);
+      else handleInput(key);
+    },
+    { isActive: focus },
+  );
 
   if (text.length === 0 && placeholder) {
     return <Text color="gray">{placeholder}</Text>;

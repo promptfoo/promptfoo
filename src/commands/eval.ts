@@ -36,6 +36,7 @@ import { filterProviders } from './eval/filterProviders';
 import { filterTests } from './eval/filterTests';
 import { deleteErrorResults, getErrorResultIds, recalculatePromptMetrics } from './retry';
 import { notCloudEnabledShareInstructions } from './share';
+import { renderResultsTable } from '../ui/components/table/renderResultsTable';
 import { initInkEval, shouldUseInkUI } from '../ui/evalRunner';
 import type { Command } from 'commander';
 
@@ -192,7 +193,11 @@ export async function doEval(
         process.exitCode = 1;
         return new Eval({}, { persisted: false });
       }
-      logger.info(chalk.cyan(`Resuming evaluation ${resumeEval.id}...`));
+      // Check if Ink UI will be used (to suppress logger output that interferes with Ink)
+      const willUseInkUIResume = process.env.PROMPTFOO_INTERACTIVE_UI === 'true';
+      if (!willUseInkUIResume) {
+        logger.info(chalk.cyan(`Resuming evaluation ${resumeEval.id}...`));
+      }
       // Use the saved config as our base to ensure identical test ordering
       ({
         config,
@@ -225,7 +230,11 @@ export async function doEval(
         return new Eval({}, { persisted: false });
       }
 
-      logger.info('🔄 Retrying ERROR results from latest evaluation...');
+      // Check if Ink UI will be used (to suppress logger output that interferes with Ink)
+      const willUseInkUIRetry = process.env.PROMPTFOO_INTERACTIVE_UI === 'true';
+      if (!willUseInkUIRetry) {
+        logger.info('🔄 Retrying ERROR results from latest evaluation...');
+      }
 
       // Find the latest evaluation
       const latestEval = await Eval.latest();
@@ -238,11 +247,15 @@ export async function doEval(
       // Get all ERROR result IDs
       const errorResultIds = await getErrorResultIds(latestEval.id);
       if (errorResultIds.length === 0) {
-        logger.info('✅ No ERROR results found in the latest evaluation');
+        if (!willUseInkUIRetry) {
+          logger.info('✅ No ERROR results found in the latest evaluation');
+        }
         return latestEval;
       }
 
-      logger.info(`Found ${errorResultIds.length} ERROR results to retry`);
+      if (!willUseInkUIRetry) {
+        logger.info(`Found ${errorResultIds.length} ERROR results to retry`);
+      }
 
       // Delete the ERROR results so they will be re-evaluated when we run with resume
       await deleteErrorResults(errorResultIds);
@@ -250,9 +263,11 @@ export async function doEval(
       // Recalculate prompt metrics after deleting ERROR results to avoid double-counting
       await recalculatePromptMetrics(latestEval);
 
-      logger.info(
-        `🔄 Running evaluation with resume mode to retry ${errorResultIds.length} test cases...`,
-      );
+      if (!willUseInkUIRetry) {
+        logger.info(
+          `🔄 Running evaluation with resume mode to retry ${errorResultIds.length} test cases...`,
+        );
+      }
 
       // Set up for resume mode
       resumeEval = latestEval;
@@ -364,16 +379,23 @@ export async function doEval(
       delay = cmdObj.delay ?? commandLineOptions?.delay ?? evaluateOptions.delay ?? 0;
     }
 
+    // Check if Ink UI will be used (to suppress logger output that interferes with Ink)
+    const willUseInkUI = process.env.PROMPTFOO_INTERACTIVE_UI === 'true';
+
     if (cache === false || repeat > 1) {
-      logger.info('Cache is disabled.');
+      if (!willUseInkUI) {
+        logger.info('Cache is disabled.');
+      }
       disableCache();
     }
 
     if (delay > 0) {
       maxConcurrency = 1;
-      logger.info(
-        `Running at concurrency=1 because ${delay}ms delay was requested between API calls`,
-      );
+      if (!willUseInkUI) {
+        logger.info(
+          `Running at concurrency=1 because ${delay}ms delay was requested between API calls`,
+        );
+      }
     }
 
     // Apply filtering only when not resuming, to preserve test indices
@@ -519,10 +541,13 @@ export async function doEval(
     if (useInkUI) {
       // Use Ink-based interactive UI
       logger.debug('Using Ink UI for evaluation');
+      cliState.inkUI = true;
       const inkResult = await initInkEval({
         title: config.description || 'Evaluation',
         evaluateOptions: {
           ...options,
+          // Disable CLI progress bar - Ink UI has its own progress display
+          showProgressBar: false,
           eventSource: 'cli',
           abortSignal: evaluateOptions.abortSignal,
           isRedteam: Boolean(config.redteam),
@@ -535,11 +560,14 @@ export async function doEval(
 
       try {
         // Initialize UI with total tests and providers
-        const totalTests = testSuite.tests?.length ?? 0;
+        // Total test results = tests × prompts (each provider runs all combinations)
+        const numTests = testSuite.tests?.length ?? 0;
+        const numPrompts = testSuite.prompts?.length ?? 1;
+        const totalTestsPerProvider = numTests * numPrompts;
         const providerIds = testSuite.providers.map((p) =>
           typeof p === 'string' ? p : p.label || p.id?.() || 'unknown',
         );
-        inkResult.controller.init(totalTests, providerIds);
+        inkResult.controller.init(totalTestsPerProvider, providerIds);
         inkResult.controller.start();
 
         // Run evaluation with Ink progress callback
@@ -553,10 +581,29 @@ export async function doEval(
 
         inkResult.controller.complete({ passed, failed, errors });
 
+        // Handle sharing in Ink UI mode (before cleanup so we can show URL)
+        let wantsToShareInk: boolean;
+        if (config.sharing !== undefined) {
+          wantsToShareInk = Boolean(config.sharing);
+        } else {
+          wantsToShareInk = cloudConfig.isEnabled();
+        }
+        const canShareInk = isSharingEnabled(evalRecord);
+        if (wantsToShareInk && canShareInk) {
+          const shareUrl = await createShareableUrl(evalRecord);
+          if (shareUrl) {
+            evalRecord.shared = true;
+            inkResult.controller.setShareUrl(shareUrl);
+            // Give a moment for UI to show share URL
+            await new Promise((resolve) => setTimeout(resolve, 500));
+          }
+        }
+
         // Give a moment for UI to show completion
         await new Promise((resolve) => setTimeout(resolve, 500));
       } finally {
         inkResult.cleanup();
+        cliState.inkUI = false;
       }
     } else {
       // Use standard CLI output
@@ -619,7 +666,11 @@ export async function doEval(
     logger.debug(`Wants to share: ${wantsToShare}`);
     logger.debug(`Can share eval: ${canShareEval}`);
 
-    const shareableUrl = wantsToShare && canShareEval ? await createShareableUrl(evalRecord) : null;
+    // Skip sharing if already shared in Ink UI mode
+    const shareableUrl =
+      wantsToShare && canShareEval && !evalRecord.shared
+        ? await createShareableUrl(evalRecord)
+        : null;
 
     logger.debug(`Shareable URL: ${shareableUrl}`);
 
@@ -647,17 +698,29 @@ export async function doEval(
     const totalTests = successes + failures + errors;
     const passRate = (successes / totalTests) * 100;
 
+    // Display results table
     if (cmdObj.table && getLogLevel() !== 'debug' && totalTests < 500) {
       const table = await evalRecord.getTable();
-      // Output CLI table
-      const outputTable = generateTable(table);
 
-      logger.info('\n' + outputTable.toString());
-      if (table.body.length > 25) {
-        const rowsLeft = table.body.length - 25;
-        logger.info(`... ${rowsLeft} more row${rowsLeft === 1 ? '' : 's'} not shown ...\n`);
+      if (useInkUI) {
+        // Use interactive Ink results table
+        await renderResultsTable(table, {
+          maxRows: 25,
+          maxCellLength: 250,
+          onExit: () => {
+            logger.debug('Results table closed');
+          },
+        });
+      } else {
+        // Use ASCII table for non-Ink UI mode
+        const outputTable = generateTable(table);
+        logger.info('\n' + outputTable.toString());
+        if (table.body.length > 25) {
+          const rowsLeft = table.body.length - 25;
+          logger.info(`... ${rowsLeft} more row${rowsLeft === 1 ? '' : 's'} not shown ...\n`);
+        }
       }
-    } else if (failures !== 0) {
+    } else if (failures !== 0 && !useInkUI) {
       logger.debug(
         `At least one evaluation failure occurred. This might be caused by the underlying call to the provider, or a test failure. Context: \n${JSON.stringify(
           evalRecord.prompts,
@@ -665,7 +728,7 @@ export async function doEval(
       );
     }
 
-    if (totalTests >= 500) {
+    if (totalTests >= 500 && !useInkUI) {
       logger.info('Skipping table output because there are more than 500 tests.');
     }
 
@@ -677,41 +740,48 @@ export async function doEval(
     );
     if (paths.length) {
       await writeMultipleOutputs(paths, evalRecord, shareableUrl);
-      logger.info(chalk.yellow(`Writing output to ${paths.join(', ')}`));
+      if (!useInkUI) {
+        logger.info(chalk.yellow(`Writing output to ${paths.join(', ')}`));
+      }
     }
 
-    printBorder();
-    if (cmdObj.write) {
-      if (shareableUrl) {
-        logger.info(`${chalk.green('✔')} Evaluation complete: ${shareableUrl}`);
-      } else if (wantsToShare && !isSharingEnabled(evalRecord)) {
-        notCloudEnabledShareInstructions();
-      } else {
-        logger.info(`${chalk.green('✔')} Evaluation complete. ID: ${chalk.cyan(evalRecord.id)}\n`);
-        logger.info(
-          `» Run ${chalk.greenBright.bold('promptfoo view')} to use the local web viewer`,
-        );
-        if (cloudConfig.isEnabled()) {
-          logger.info(
-            `» Run ${chalk.greenBright.bold('promptfoo share')} to create a shareable URL`,
-          );
+    // Skip banner output in Ink UI mode - already shown in the interactive UI
+    if (!useInkUI) {
+      printBorder();
+      if (cmdObj.write) {
+        if (shareableUrl) {
+          logger.info(`${chalk.green('✔')} Evaluation complete: ${shareableUrl}`);
+        } else if (wantsToShare && !isSharingEnabled(evalRecord)) {
+          notCloudEnabledShareInstructions();
         } else {
           logger.info(
-            `» Do you want to share this with your team? Sign up for free at ${chalk.greenBright.bold('https://promptfoo.app')}`,
+            `${chalk.green('✔')} Evaluation complete. ID: ${chalk.cyan(evalRecord.id)}\n`,
+          );
+          logger.info(
+            `» Run ${chalk.greenBright.bold('promptfoo view')} to use the local web viewer`,
+          );
+          if (cloudConfig.isEnabled()) {
+            logger.info(
+              `» Run ${chalk.greenBright.bold('promptfoo share')} to create a shareable URL`,
+            );
+          } else {
+            logger.info(
+              `» Do you want to share this with your team? Sign up for free at ${chalk.greenBright.bold('https://promptfoo.app')}`,
+            );
+          }
+
+          logger.info(
+            `» This project needs your feedback. What's one thing we can improve? ${chalk.greenBright.bold(
+              'https://promptfoo.dev/feedback',
+            )}`,
           );
         }
-
-        logger.info(
-          `» This project needs your feedback. What's one thing we can improve? ${chalk.greenBright.bold(
-            'https://promptfoo.dev/feedback',
-          )}`,
-        );
+      } else {
+        logger.info(`${chalk.green('✔')} Evaluation complete`);
       }
-    } else {
-      logger.info(`${chalk.green('✔')} Evaluation complete`);
-    }
 
-    printBorder();
+      printBorder();
+    }
 
     // Format and display duration
     const duration = Math.round((Date.now() - startTime) / 1000);
@@ -720,141 +790,150 @@ export async function doEval(
     const isRedteam = Boolean(config.redteam);
     const tracker = TokenUsageTracker.getInstance();
 
-    // Handle token usage display
-    if (tokenUsage.total > 0 || (tokenUsage.prompt || 0) + (tokenUsage.completion || 0) > 0) {
-      const combinedTotal = (tokenUsage.prompt || 0) + (tokenUsage.completion || 0);
-      const evalTokens = {
-        prompt: tokenUsage.prompt || 0,
-        completion: tokenUsage.completion || 0,
-        total: tokenUsage.total || combinedTotal,
-        cached: tokenUsage.cached || 0,
-        completionDetails: tokenUsage.completionDetails || {
-          reasoning: 0,
-          acceptedPrediction: 0,
-          rejectedPrediction: 0,
-        },
-      };
+    // Skip token usage and final stats in Ink UI mode - already shown in the interactive UI
+    if (!useInkUI) {
+      // Handle token usage display
+      if (tokenUsage.total > 0 || (tokenUsage.prompt || 0) + (tokenUsage.completion || 0) > 0) {
+        const combinedTotal = (tokenUsage.prompt || 0) + (tokenUsage.completion || 0);
+        const evalTokens = {
+          prompt: tokenUsage.prompt || 0,
+          completion: tokenUsage.completion || 0,
+          total: tokenUsage.total || combinedTotal,
+          cached: tokenUsage.cached || 0,
+          completionDetails: tokenUsage.completionDetails || {
+            reasoning: 0,
+            acceptedPrediction: 0,
+            rejectedPrediction: 0,
+          },
+        };
 
-      logger.info(chalk.bold('Token Usage Summary:'));
+        logger.info(chalk.bold('Token Usage Summary:'));
 
-      if (isRedteam) {
+        if (isRedteam) {
+          logger.info(
+            `  ${chalk.cyan('Probes:')} ${chalk.white.bold(tokenUsage.numRequests.toLocaleString())}`,
+          );
+        }
+
+        // Eval tokens
+        logger.info(`\n  ${chalk.yellow.bold('Evaluation:')}`);
         logger.info(
-          `  ${chalk.cyan('Probes:')} ${chalk.white.bold(tokenUsage.numRequests.toLocaleString())}`,
+          `    ${chalk.gray('Total:')} ${chalk.white(evalTokens.total.toLocaleString())}`,
         );
-      }
-
-      // Eval tokens
-      logger.info(`\n  ${chalk.yellow.bold('Evaluation:')}`);
-      logger.info(`    ${chalk.gray('Total:')} ${chalk.white(evalTokens.total.toLocaleString())}`);
-      logger.info(
-        `    ${chalk.gray('Prompt:')} ${chalk.white(evalTokens.prompt.toLocaleString())}`,
-      );
-      logger.info(
-        `    ${chalk.gray('Completion:')} ${chalk.white(evalTokens.completion.toLocaleString())}`,
-      );
-      if (evalTokens.cached > 0) {
         logger.info(
-          `    ${chalk.gray('Cached:')} ${chalk.green(evalTokens.cached.toLocaleString())}`,
+          `    ${chalk.gray('Prompt:')} ${chalk.white(evalTokens.prompt.toLocaleString())}`,
         );
-      }
-      if (evalTokens.completionDetails?.reasoning && evalTokens.completionDetails.reasoning > 0) {
         logger.info(
-          `    ${chalk.gray('Reasoning:')} ${chalk.white(evalTokens.completionDetails.reasoning.toLocaleString())}`,
+          `    ${chalk.gray('Completion:')} ${chalk.white(evalTokens.completion.toLocaleString())}`,
         );
-      }
+        if (evalTokens.cached > 0) {
+          logger.info(
+            `    ${chalk.gray('Cached:')} ${chalk.green(evalTokens.cached.toLocaleString())}`,
+          );
+        }
+        if (evalTokens.completionDetails?.reasoning && evalTokens.completionDetails.reasoning > 0) {
+          logger.info(
+            `    ${chalk.gray('Reasoning:')} ${chalk.white(evalTokens.completionDetails.reasoning.toLocaleString())}`,
+          );
+        }
 
-      // Provider breakdown
+        // Provider breakdown
 
-      const providerIds = tracker.getProviderIds();
-      if (providerIds.length > 1) {
-        logger.info(`\n  ${chalk.cyan.bold('Provider Breakdown:')}`);
+        const providerIds = tracker.getProviderIds();
+        if (providerIds.length > 1) {
+          logger.info(`\n  ${chalk.cyan.bold('Provider Breakdown:')}`);
 
-        // Sort providers by total token usage (descending)
-        const sortedProviders = providerIds
-          .map((id) => ({ id, usage: tracker.getProviderUsage(id)! }))
-          .sort((a, b) => (b.usage.total || 0) - (a.usage.total || 0));
+          // Sort providers by total token usage (descending)
+          const sortedProviders = providerIds
+            .map((id) => ({ id, usage: tracker.getProviderUsage(id)! }))
+            .sort((a, b) => (b.usage.total || 0) - (a.usage.total || 0));
 
-        for (const { id, usage } of sortedProviders) {
-          if ((usage.total || 0) > 0 || (usage.prompt || 0) + (usage.completion || 0) > 0) {
-            const displayTotal = usage.total || (usage.prompt || 0) + (usage.completion || 0);
-            // Extract just the provider ID part (remove class name in parentheses)
-            const displayId = id.includes(' (') ? id.substring(0, id.indexOf(' (')) : id;
-            logger.info(
-              `    ${chalk.gray(displayId + ':')} ${chalk.white(displayTotal.toLocaleString())} (${usage.numRequests} requests)`,
-            );
+          for (const { id, usage } of sortedProviders) {
+            if ((usage.total || 0) > 0 || (usage.prompt || 0) + (usage.completion || 0) > 0) {
+              const displayTotal = usage.total || (usage.prompt || 0) + (usage.completion || 0);
+              // Extract just the provider ID part (remove class name in parentheses)
+              const displayId = id.includes(' (') ? id.substring(0, id.indexOf(' (')) : id;
+              logger.info(
+                `    ${chalk.gray(displayId + ':')} ${chalk.white(displayTotal.toLocaleString())} (${usage.numRequests} requests)`,
+              );
 
-            // Show breakdown if there are individual components
-            if (usage.prompt || usage.completion || usage.cached) {
-              const details = [];
-              if (usage.prompt) {
-                details.push(`${usage.prompt.toLocaleString()} prompt`);
-              }
-              if (usage.completion) {
-                details.push(`${usage.completion.toLocaleString()} completion`);
-              }
-              if (usage.cached) {
-                details.push(`${usage.cached.toLocaleString()} cached`);
-              }
-              if (usage.completionDetails?.reasoning) {
-                details.push(`${usage.completionDetails.reasoning.toLocaleString()} reasoning`);
-              }
-              if (details.length > 0) {
-                logger.info(`      ${chalk.dim('(' + details.join(', ') + ')')}`);
+              // Show breakdown if there are individual components
+              if (usage.prompt || usage.completion || usage.cached) {
+                const details = [];
+                if (usage.prompt) {
+                  details.push(`${usage.prompt.toLocaleString()} prompt`);
+                }
+                if (usage.completion) {
+                  details.push(`${usage.completion.toLocaleString()} completion`);
+                }
+                if (usage.cached) {
+                  details.push(`${usage.cached.toLocaleString()} cached`);
+                }
+                if (usage.completionDetails?.reasoning) {
+                  details.push(`${usage.completionDetails.reasoning.toLocaleString()} reasoning`);
+                }
+                if (details.length > 0) {
+                  logger.info(`      ${chalk.dim('(' + details.join(', ') + ')')}`);
+                }
               }
             }
           }
         }
-      }
 
-      // Grading tokens
-      if (tokenUsage.assertions && tokenUsage.assertions.total && tokenUsage.assertions.total > 0) {
-        logger.info(`\n  ${chalk.magenta.bold('Grading:')}`);
-        logger.info(
-          `    ${chalk.gray('Total:')} ${chalk.white(tokenUsage.assertions.total.toLocaleString())}`,
-        );
-        if (tokenUsage.assertions.prompt) {
-          logger.info(
-            `    ${chalk.gray('Prompt:')} ${chalk.white(tokenUsage.assertions.prompt.toLocaleString())}`,
-          );
-        }
-        if (tokenUsage.assertions.completion) {
-          logger.info(
-            `    ${chalk.gray('Completion:')} ${chalk.white(tokenUsage.assertions.completion.toLocaleString())}`,
-          );
-        }
-        if (tokenUsage.assertions.cached && tokenUsage.assertions.cached > 0) {
-          logger.info(
-            `    ${chalk.gray('Cached:')} ${chalk.green(tokenUsage.assertions.cached.toLocaleString())}`,
-          );
-        }
+        // Grading tokens
         if (
-          tokenUsage.assertions.completionDetails?.reasoning &&
-          tokenUsage.assertions.completionDetails.reasoning > 0
+          tokenUsage.assertions &&
+          tokenUsage.assertions.total &&
+          tokenUsage.assertions.total > 0
         ) {
+          logger.info(`\n  ${chalk.magenta.bold('Grading:')}`);
           logger.info(
-            `    ${chalk.gray('Reasoning:')} ${chalk.white(tokenUsage.assertions.completionDetails.reasoning.toLocaleString())}`,
+            `    ${chalk.gray('Total:')} ${chalk.white(tokenUsage.assertions.total.toLocaleString())}`,
           );
+          if (tokenUsage.assertions.prompt) {
+            logger.info(
+              `    ${chalk.gray('Prompt:')} ${chalk.white(tokenUsage.assertions.prompt.toLocaleString())}`,
+            );
+          }
+          if (tokenUsage.assertions.completion) {
+            logger.info(
+              `    ${chalk.gray('Completion:')} ${chalk.white(tokenUsage.assertions.completion.toLocaleString())}`,
+            );
+          }
+          if (tokenUsage.assertions.cached && tokenUsage.assertions.cached > 0) {
+            logger.info(
+              `    ${chalk.gray('Cached:')} ${chalk.green(tokenUsage.assertions.cached.toLocaleString())}`,
+            );
+          }
+          if (
+            tokenUsage.assertions.completionDetails?.reasoning &&
+            tokenUsage.assertions.completionDetails.reasoning > 0
+          ) {
+            logger.info(
+              `    ${chalk.gray('Reasoning:')} ${chalk.white(tokenUsage.assertions.completionDetails.reasoning.toLocaleString())}`,
+            );
+          }
         }
+
+        // Grand total
+        const grandTotal = evalTokens.total + (tokenUsage.assertions.total || 0);
+        logger.info(
+          `\n  ${chalk.blue.bold('Grand Total:')} ${chalk.white.bold(grandTotal.toLocaleString())} tokens`,
+        );
+        printBorder();
       }
 
-      // Grand total
-      const grandTotal = evalTokens.total + (tokenUsage.assertions.total || 0);
-      logger.info(
-        `\n  ${chalk.blue.bold('Grand Total:')} ${chalk.white.bold(grandTotal.toLocaleString())} tokens`,
-      );
+      logger.info(chalk.gray(`Duration: ${durationDisplay} (concurrency: ${maxConcurrency})`));
+      logger.info(chalk.green.bold(`Successes: ${successes}`));
+      logger.info(chalk.red.bold(`Failures: ${failures}`));
+      if (!Number.isNaN(errors)) {
+        logger.info(chalk.red.bold(`Errors: ${errors}`));
+      }
+      if (!Number.isNaN(passRate)) {
+        logger.info(chalk.blue.bold(`Pass Rate: ${passRate.toFixed(2)}%`));
+      }
       printBorder();
     }
-
-    logger.info(chalk.gray(`Duration: ${durationDisplay} (concurrency: ${maxConcurrency})`));
-    logger.info(chalk.green.bold(`Successes: ${successes}`));
-    logger.info(chalk.red.bold(`Failures: ${failures}`));
-    if (!Number.isNaN(errors)) {
-      logger.info(chalk.red.bold(`Errors: ${errors}`));
-    }
-    if (!Number.isNaN(passRate)) {
-      logger.info(chalk.blue.bold(`Pass Rate: ${passRate.toFixed(2)}%`));
-    }
-    printBorder();
 
     telemetry.record('command_used', {
       name: 'eval',

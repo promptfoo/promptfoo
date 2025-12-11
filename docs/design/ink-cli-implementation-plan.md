@@ -26,13 +26,13 @@
 
 ### Timeline Overview
 
-| Phase | Focus | Dependency |
-|-------|-------|------------|
-| Phase 0 | Infrastructure & POC | None |
-| Phase 1 | Eval Command | Phase 0 |
-| Phase 2 | Interactive Prompts | Phase 1 |
-| Phase 3 | Full Migration | Phase 2 |
-| Phase 4 | Cleanup & Polish | Phase 3 |
+| Phase   | Focus                | Dependency |
+| ------- | -------------------- | ---------- |
+| Phase 0 | Infrastructure & POC | None       |
+| Phase 1 | Eval Command         | Phase 0    |
+| Phase 2 | Interactive Prompts  | Phase 1    |
+| Phase 3 | Full Migration       | Phase 2    |
+| Phase 4 | Cleanup & Polish     | Phase 3    |
 
 ---
 
@@ -86,6 +86,7 @@ Ensure `tsdown` handles `.tsx` files in `src/ui/`:
 ```
 
 **Acceptance Criteria:**
+
 - [ ] `npm install` succeeds with new dependencies
 - [ ] TypeScript compiles `.tsx` files without errors
 - [ ] Build output includes compiled UI components
@@ -133,13 +134,13 @@ export interface RenderOptions {
  */
 export async function renderInteractive(
   element: ReactElement,
-  options: RenderOptions = {}
+  options: RenderOptions = {},
 ): Promise<{ waitUntilExit: () => Promise<void>; unmount: () => void }> {
   // Validate TTY before loading Ink
   if (!process.stdout.isTTY) {
     throw new Error(
       'Interactive mode requires a TTY. ' +
-      'Use --no-interactive or pipe to a file for non-interactive usage.'
+        'Use --no-interactive or pipe to a file for non-interactive usage.',
     );
   }
 
@@ -266,6 +267,7 @@ export class NonInteractiveProgress {
 ```
 
 **Acceptance Criteria:**
+
 - [ ] Directory structure created
 - [ ] `renderInteractive()` function works with simple Ink component
 - [ ] `shouldUseInteractiveUI()` correctly detects TTY/CI/env vars
@@ -424,6 +426,7 @@ export const EvalProgressPOC: React.FC<EvalProgressPOCProps> = ({ state }) => {
 ```
 
 **Acceptance Criteria:**
+
 - [ ] `ProgressBar` renders correctly with various values
 - [ ] `Spinner` animates smoothly
 - [ ] `EvalProgressPOC` displays all state fields
@@ -504,6 +507,7 @@ main().catch(console.error);
 ```
 
 **Acceptance Criteria:**
+
 - [ ] `npm run test:ink-poc` runs successfully
 - [ ] Progress bar updates in real-time
 - [ ] Spinner animates during progress
@@ -665,6 +669,7 @@ describe('EvalProgressPOC', () => {
 ```
 
 **Acceptance Criteria:**
+
 - [ ] All unit tests pass
 - [ ] Test coverage for core components > 80%
 - [ ] Tests run in CI environment
@@ -675,8 +680,9 @@ describe('EvalProgressPOC', () => {
 
 **0.6.1 Create UI Component Guidelines**
 
-```markdown
+````markdown
 <!-- src/ui/README.md -->
+
 # promptfoo CLI UI Components
 
 This directory contains React components for the interactive CLI UI,
@@ -692,6 +698,7 @@ built with [Ink](https://github.com/vadimdemedes/ink).
 ## Usage
 
 Interactive UI is automatically used when:
+
 1. stdout is a TTY
 2. Not running in CI
 3. `PROMPTFOO_DISABLE_INTERACTIVE_UI` is not set
@@ -708,7 +715,9 @@ Interactive UI is automatically used when:
 ```bash
 npm run test -- src/ui
 ```
-```
+````
+
+````
 
 **Acceptance Criteria:**
 - [ ] README.md documents architecture
@@ -905,9 +914,10 @@ export function useEvalDispatch(): React.Dispatch<EvalAction> {
   }
   return context;
 }
-```
+````
 
 **Acceptance Criteria:**
+
 - [ ] `EvalProvider` manages eval state
 - [ ] All action types update state correctly
 - [ ] Context hooks work as expected
@@ -1129,6 +1139,7 @@ export const ErrorSummary: React.FC<Props> = ({ results, maxErrors = 3 }) => {
 ```
 
 **Acceptance Criteria:**
+
 - [ ] `EvalScreen` displays all progress information
 - [ ] Provider status shows per-provider breakdown
 - [ ] Error summary shows recent errors
@@ -1254,6 +1265,7 @@ async function runEvalWithInkUI(config: EvalConfig, options: EvalOptions) {
 ```
 
 **Acceptance Criteria:**
+
 - [ ] `shouldUseInteractiveUI()` correctly selects UI mode
 - [ ] Ink UI displays during interactive eval
 - [ ] Legacy progress bar still works when Ink is disabled
@@ -1299,19 +1311,13 @@ export function shouldUseInteractiveUI(): boolean {
 
 ```typescript
 // src/commands/eval.ts
-evalCmd.option(
-  '--interactive-ui',
-  'Use interactive terminal UI (experimental)',
-  false
-);
+evalCmd.option('--interactive-ui', 'Use interactive terminal UI (experimental)', false);
 
-evalCmd.option(
-  '--no-interactive-ui',
-  'Disable interactive terminal UI',
-);
+evalCmd.option('--no-interactive-ui', 'Disable interactive terminal UI');
 ```
 
 **Acceptance Criteria:**
+
 - [ ] `PROMPTFOO_DISABLE_INTERACTIVE_UI=true` disables Ink
 - [ ] `PROMPTFOO_ENABLE_INTERACTIVE_UI=true` enables Ink
 - [ ] `--interactive-ui` flag works
@@ -1355,6 +1361,7 @@ describe('EvalScreen Integration', () => {
 ```
 
 **Acceptance Criteria:**
+
 - [ ] Unit tests for all new components
 - [ ] Integration tests for eval flow
 - [ ] Tests pass in CI
@@ -1698,6 +1705,7 @@ export function MultiSelect<T = string>({
 ```
 
 **Acceptance Criteria:**
+
 - [ ] `Select` supports keyboard navigation
 - [ ] `Confirm` supports Y/N and arrow keys
 - [ ] `TextInput` supports full text editing
@@ -1811,6 +1819,7 @@ export async function multiselect<T = string>(options: {
 ```
 
 **Acceptance Criteria:**
+
 - [ ] `select()` returns selected value
 - [ ] `confirm()` returns boolean
 - [ ] `input()` returns string with validation
@@ -1846,6 +1855,7 @@ export async function runInit() {
 ```
 
 **Acceptance Criteria:**
+
 - [ ] Init command works with Ink prompts
 - [ ] Init command works with Inquirer fallback
 - [ ] All prompts display correctly
@@ -1858,6 +1868,7 @@ export async function runInit() {
 Similar pattern to init command migration.
 
 **Acceptance Criteria:**
+
 - [ ] Redteam init works with Ink prompts
 - [ ] Complex multi-step flow works correctly
 - [ ] All options selectable
@@ -1968,13 +1979,13 @@ If issues arise during any phase:
 
 ## Success Metrics
 
-| Metric | Target |
-|--------|--------|
-| Eval progress renders | < 50ms per update |
-| Prompt response time | < 100ms input latency |
-| Test coverage | > 80% for UI code |
-| No regressions | All existing tests pass |
-| User feedback | Positive response to new UI |
+| Metric                | Target                      |
+| --------------------- | --------------------------- |
+| Eval progress renders | < 50ms per update           |
+| Prompt response time  | < 100ms input latency       |
+| Test coverage         | > 80% for UI code           |
+| No regressions        | All existing tests pass     |
+| User feedback         | Positive response to new UI |
 
 ---
 

@@ -135,7 +135,7 @@ export async function renderInteractive(
   const ink = await getInk();
 
   // Track render performance in debug mode
-  const onRender = debug
+  const _onRender = debug
     ? ({ renderTime }: { renderTime: number }) => {
         const SLOW_RENDER_MS = 200;
         if (renderTime > SLOW_RENDER_MS) {

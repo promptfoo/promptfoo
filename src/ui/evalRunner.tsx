@@ -5,10 +5,8 @@
  * It handles the lifecycle of rendering, progress updates, and cleanup.
  */
 
-import React from 'react';
 import logger from '../logger';
 import type { EvaluateOptions, PromptMetrics, RunEvalOptions, TestSuite } from '../types/index';
-import type Eval from '../models/eval';
 import { EvalApp } from './EvalApp';
 import { extractProviderIds, type EvalUIController } from './evalBridge';
 import { renderInteractive, shouldUseInteractiveUI, type RenderResult } from './render';
@@ -73,7 +71,7 @@ export async function initInkEval(options: EvalRunnerOptions): Promise<InkEvalRe
   const { title, showHelp = true, evaluateOptions, testSuite, onCancel } = options;
 
   // Extract provider IDs for UI
-  const providerIds = extractProviderIds(
+  const _providerIds = extractProviderIds(
     testSuite.providers.map((p) => ({
       id: () => (typeof p === 'string' ? p : p.id?.() || 'unknown'),
       label: typeof p === 'string' ? undefined : p.label,
@@ -89,7 +87,7 @@ export async function initInkEval(options: EvalRunnerOptions): Promise<InkEvalRe
 
   // Track completion
   let resolveComplete: () => void;
-  const completePromise = new Promise<void>((resolve) => {
+  const _completePromise = new Promise<void>((resolve) => {
     resolveComplete = resolve;
   });
 
@@ -138,7 +136,13 @@ export async function initInkEval(options: EvalRunnerOptions): Promise<InkEvalRe
       // Also call original callback if present
       // Note: The evaluator may pass undefined for evalStep during comparison steps
       if (originalCallback) {
-        originalCallback(completed, total, index, evalStep as RunEvalOptions, metrics as PromptMetrics);
+        originalCallback(
+          completed,
+          total,
+          index,
+          evalStep as RunEvalOptions,
+          metrics as PromptMetrics,
+        );
       }
     },
   };

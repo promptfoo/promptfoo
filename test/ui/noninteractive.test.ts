@@ -11,7 +11,7 @@ class MockWriteStream extends Writable {
   public isTTY = false;
   public columns = 80;
 
-  _write(chunk: Buffer | string, encoding: string, callback: () => void) {
+  _write(chunk: Buffer | string, _encoding: string, callback: () => void) {
     this.chunks.push(chunk.toString());
     callback();
   }
