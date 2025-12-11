@@ -49,6 +49,19 @@ export interface SanitizedLogContext {
 // Lazy source map support - only loaded when debug is enabled
 export let sourceMapSupportInitialized = false;
 
+// Shutdown state tracking - prevents writes once logger closure begins
+let isLoggerShuttingDown = false;
+
+// Setter for testing purposes
+export function setLoggerShuttingDown(value: boolean): void {
+  isLoggerShuttingDown = value;
+}
+
+// Getter for testing purposes
+export function getLoggerShuttingDown(): boolean {
+  return isLoggerShuttingDown;
+}
+
 export async function initializeSourceMapSupport(): Promise<void> {
   if (!sourceMapSupportInitialized) {
     try {
@@ -351,6 +364,11 @@ function createLogMethodWithContext(
   level: keyof typeof LOG_LEVELS,
 ): (message: string, context?: SanitizedLogContext) => void {
   return (message: string, context?: SanitizedLogContext) => {
+    // Prevent new writes once shutdown starts
+    if (isLoggerShuttingDown) {
+      return;
+    }
+
     if (!context) {
       internalLogger[level](message);
       return;
@@ -427,6 +445,46 @@ export async function logRequestResponse(options: {
     logMethod(sanitizeObject(logObject, { context: 'log object for structured logging' }));
   } else {
     logMethod(`Api Request`, logObject);
+  }
+}
+
+/**
+ * Close all file transports and cleanup logger resources
+ * Should be called during graceful shutdown to prevent event loop hanging
+ *
+ * IMPORTANT: All logging should be done BEFORE calling this function
+ */
+export async function closeLogger(): Promise<void> {
+  // Set shutdown flag FIRST to prevent new writes during cleanup
+  setLoggerShuttingDown(true);
+  try {
+    const fileTransports = winstonLogger.transports.filter(
+      (transport) => transport instanceof winston.transports.File,
+    );
+
+    if (fileTransports.length === 0) {
+      return;
+    }
+
+    // Wait for all file transports to finish flushing
+    // Winston 3.19.0+ properly waits for file writes to complete before emitting 'finish'
+    await Promise.all(
+      fileTransports.map(
+        (transport) =>
+          new Promise<void>((resolve) => {
+            transport.once('finish', resolve);
+            transport.end();
+          }),
+      ),
+    );
+
+    // Remove transports to allow process to exit (prevents event loop hanging)
+    for (const transport of fileTransports) {
+      winstonLogger.remove(transport);
+    }
+  } catch (error) {
+    // Can't use logger here since we're shutting it down
+    console.error(`Error closing logger: ${error}`);
   }
 }
 

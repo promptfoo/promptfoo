@@ -1,3 +1,4 @@
+import { MockInstance, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 
@@ -9,19 +10,23 @@ import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import EvalResult from '../../src/models/evalResult';
 
-jest.mock('../../src/logger', () => ({
-  debug: jest.fn(),
-  info: jest.fn(),
-  error: jest.fn(),
+vi.mock('../../src/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    error: vi.fn(),
+  },
 }));
 
-jest.mock('../../src/telemetry', () => ({
-  record: jest.fn(),
+vi.mock('../../src/telemetry', () => ({
+  default: {
+    record: vi.fn(),
+  },
 }));
 
 describe('importCommand', () => {
   let program: Command;
-  let mockExit: jest.SpyInstance;
+  let mockExit: MockInstance;
   let tempFilePath: string;
 
   beforeAll(async () => {
@@ -30,7 +35,9 @@ describe('importCommand', () => {
 
   beforeEach(async () => {
     program = new Command();
-    mockExit = jest.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    mockExit = vi.spyOn(process, 'exit').mockImplementation(function () {
+      return undefined as never;
+    });
 
     // Clear all tables before each test
     const db = getDb();
@@ -44,7 +51,7 @@ describe('importCommand', () => {
   });
 
   afterEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     // Clean up temp file if it exists
     if (tempFilePath && fs.existsSync(tempFilePath)) {

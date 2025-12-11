@@ -1,4 +1,5 @@
 import type { TestCase } from '../../../types/index';
+import data from './data';
 
 export async function addInjections(
   testCases: TestCase[],
@@ -7,7 +8,6 @@ export async function addInjections(
 ): Promise<TestCase[]> {
   const sampleSize = config.sample || 1;
   const harmfulOnly = config.harmfulOnly || false;
-  const data: string[] = (await import('./data.json')).default;
   const injections =
     sampleSize === 1
       ? // Take skeleton key (the first one) by default

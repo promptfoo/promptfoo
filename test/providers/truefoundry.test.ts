@@ -1,3 +1,5 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
 import { clearCache } from '../../src/cache';
 import {
   TrueFoundryEmbeddingProvider,
@@ -8,19 +10,22 @@ import * as fetchModule from '../../src/util/fetch/index';
 
 const TRUEFOUNDRY_API_BASE = 'https://llm-gateway.truefoundry.com';
 
-jest.mock('../../src/util', () => ({
-  maybeLoadFromExternalFile: jest.fn((x) => x),
-  renderVarsInObject: jest.fn((x) => x),
-}));
+vi.mock('../../src/util', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    maybeLoadFromExternalFile: vi.fn((x) => x),
+    renderVarsInObject: vi.fn((x) => x),
+  };
+});
 
-jest.mock('../../src/util/fetch/index.ts');
+vi.mock('../../src/util/fetch/index.ts');
 
 describe('TrueFoundry', () => {
-  const mockedFetchWithRetries = jest.mocked(fetchModule.fetchWithRetries);
+  const mockedFetchWithRetries = vi.mocked(fetchModule.fetchWithRetries);
 
   afterEach(async () => {
     await clearCache();
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('TrueFoundryProvider', () => {
@@ -214,6 +219,7 @@ describe('TrueFoundry', () => {
             total: 10,
             prompt: 5,
             completion: 5,
+            numRequests: 1,
           },
           cached: false,
           cost: undefined,
@@ -362,6 +368,7 @@ describe('TrueFoundry', () => {
           tokenUsage: {
             total: 10,
             cached: 10,
+            numRequests: 1,
           },
         });
         expect(cachedResult.latencyMs).toBeGreaterThanOrEqual(0);
@@ -502,6 +509,7 @@ describe('TrueFoundry', () => {
           total: 5,
           prompt: 5,
           completion: 0,
+          numRequests: 1,
         },
       });
       expect(result.latencyMs).toBeGreaterThanOrEqual(0);

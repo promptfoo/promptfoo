@@ -146,7 +146,7 @@ export async function writeOutput(
         csvRow[varName] = row.vars[index];
       });
       table.head.prompts.forEach((prompt, index) => {
-        csvRow[prompt.label] = outputToSimpleString(row.outputs[index]);
+        csvRow[`[${prompt.provider}] ${prompt.label}`] = outputToSimpleString(row.outputs[index]);
       });
       return csvRow;
     });

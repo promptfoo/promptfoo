@@ -309,7 +309,7 @@ export const OPENAI_CHAT_MODELS = [
       output: 2 / 1e6,
     },
   })),
-  ...['gpt-5.1-codex'].map((model) => ({
+  ...['gpt-5.1-codex', 'gpt-5.1-codex-max'].map((model) => ({
     id: model,
     cost: {
       input: 1.25 / 1e6,
@@ -572,12 +572,13 @@ export function failApiCall(err: any) {
 export function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
   if (data.usage) {
     if (cached) {
-      return { cached: data.usage.total_tokens, total: data.usage.total_tokens };
+      return { cached: data.usage.total_tokens, total: data.usage.total_tokens, numRequests: 1 };
     } else {
       return {
         total: data.usage.total_tokens,
         prompt: data.usage.prompt_tokens || 0,
         completion: data.usage.completion_tokens || 0,
+        numRequests: 1,
         ...(data.usage.completion_tokens_details
           ? {
               completionDetails: {

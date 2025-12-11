@@ -19,10 +19,10 @@ export const modelAuditRouter = Router();
 modelAuditRouter.get('/check-installed', async (_req: Request, res: Response): Promise<void> => {
   try {
     // First try to check if the modelaudit CLI is available
-    const installed = await checkModelAuditInstalled();
-    res.json({ installed, cwd: process.cwd() });
+    const { installed, version } = await checkModelAuditInstalled();
+    res.json({ installed, version, cwd: process.cwd() });
   } catch {
-    res.json({ installed: false, cwd: process.cwd() });
+    res.json({ installed: false, version: null, cwd: process.cwd() });
   }
 });
 
@@ -71,7 +71,7 @@ modelAuditRouter.post('/check-path', async (req: Request, res: Response): Promis
 // Run model scan
 modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { paths, options } = req.body;
+    const { paths, options = {} } = req.body;
 
     if (!paths || !Array.isArray(paths) || paths.length === 0) {
       res.status(400).json({ error: 'No paths provided' });
@@ -79,7 +79,7 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
     }
 
     // Check if modelaudit is installed
-    const installed = await checkModelAuditInstalled();
+    const { installed } = await checkModelAuditInstalled();
     if (!installed) {
       res.status(400).json({
         error: 'ModelAudit is not installed. Please install it using: pip install modelaudit',
@@ -152,6 +152,31 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
     const modelAudit = spawn('modelaudit', args);
     let stdout = '';
     let stderr = '';
+    let responded = false; // Prevent double-response
+
+    // Helper to safely send response (prevents double-response if both error and close fire)
+    const safeRespond = (statusCode: number, body: object) => {
+      if (responded) {
+        return;
+      }
+      responded = true;
+      res.status(statusCode).json(body);
+    };
+
+    // Clean up child process if client disconnects
+    const cleanup = () => {
+      if (!modelAudit.killed) {
+        logger.debug('Client disconnected, killing modelaudit process');
+        modelAudit.kill('SIGTERM');
+      }
+    };
+
+    // Handle client disconnect (request abort)
+    req.on('close', () => {
+      if (!responded) {
+        cleanup();
+      }
+    });
 
     modelAudit.stdout.on('data', (data) => {
       stdout += data.toString();
@@ -175,7 +200,7 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
         suggestion = 'Check that modelaudit is executable and you have the necessary permissions';
       }
 
-      res.status(500).json({
+      safeRespond(500, {
         error: errorMessage,
         originalError: error.message,
         suggestion: suggestion,
@@ -189,6 +214,10 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
     });
 
     modelAudit.on('close', async (code) => {
+      // If client already disconnected, don't process results
+      if (responded) {
+        return;
+      }
       // ModelAudit returns exit code 1 when it finds issues, which is expected
       if (code !== null && code !== 0 && code !== 1) {
         logger.error(`Model scan process exited with code ${code}`);
@@ -280,7 +309,7 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
           }
         }
 
-        res.status(500).json({
+        safeRespond(500, {
           error: errorMessage,
           exitCode: code,
           stderr: stderr || undefined,
@@ -299,7 +328,7 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
       try {
         const jsonOutput = stdout.trim();
         if (!jsonOutput) {
-          res.status(500).json({
+          safeRespond(500, {
             error: 'No output received from model scan',
             stderr: stderr || undefined,
             suggestion:
@@ -320,7 +349,7 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
           scanResults = JSON.parse(jsonOutput);
         } catch (parseError) {
           logger.error(`Failed to parse model scan output: ${parseError}`);
-          res.status(500).json({
+          safeRespond(500, {
             error: 'Failed to parse scan results - invalid JSON output',
             parseError: String(parseError),
             output: jsonOutput.substring(0, 1000), // Include first 1000 chars for debugging
@@ -371,7 +400,7 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
         }
 
         // Return the scan results along with audit ID if saved
-        res.json({
+        safeRespond(200, {
           ...scanResults,
           rawOutput: jsonOutput, // Include the raw output from the scanner
           ...(auditId && { auditId }),
@@ -379,7 +408,7 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
         });
       } catch (error) {
         logger.error(`Error processing model scan results: ${error}`);
-        res.status(500).json({
+        safeRespond(500, {
           error: 'Error processing scan results',
           details: String(error),
         });
@@ -391,15 +420,39 @@ modelAuditRouter.post('/scan', async (req: Request, res: Response): Promise<void
   }
 });
 
-// Get all model scans
+// Valid sort fields and order values for the /scans endpoint
+const VALID_SORT_FIELDS = ['createdAt', 'name', 'modelPath'] as const;
+const VALID_SORT_ORDERS = ['asc', 'desc'] as const;
+type SortField = (typeof VALID_SORT_FIELDS)[number];
+type SortOrder = (typeof VALID_SORT_ORDERS)[number];
+
+// Get all model scans with pagination support
 modelAuditRouter.get('/scans', async (req: Request, res: Response): Promise<void> => {
   try {
-    const limit = req.query.limit ? parseInt(req.query.limit as string) : 100;
-    const audits = await ModelAudit.getMany(limit);
+    const limit = Math.min(Math.max(1, parseInt(req.query.limit as string) || 100), 100);
+    const offset = Math.max(0, parseInt(req.query.offset as string) || 0);
+    const sortParam = (req.query.sort as string) || 'createdAt';
+    const orderParam = (req.query.order as string) || 'desc';
+    const search = req.query.search as string | undefined;
+
+    // Validate sort field against allowlist
+    const sort: SortField = VALID_SORT_FIELDS.includes(sortParam as SortField)
+      ? (sortParam as SortField)
+      : 'createdAt';
+
+    // Validate order against allowlist
+    const order: SortOrder = VALID_SORT_ORDERS.includes(orderParam as SortOrder)
+      ? (orderParam as SortOrder)
+      : 'desc';
+
+    const audits = await ModelAudit.getMany(limit, offset, sort, order, search);
+    const total = await ModelAudit.count(search);
 
     res.json({
       scans: audits.map((audit) => audit.toJSON()),
-      total: audits.length,
+      total,
+      limit,
+      offset,
     });
   } catch (error) {
     logger.error(`Error fetching model audits: ${error}`);
@@ -407,7 +460,26 @@ modelAuditRouter.get('/scans', async (req: Request, res: Response): Promise<void
   }
 });
 
-// Get specific model scan by ID
+// IMPORTANT: /scans/latest must be defined BEFORE /scans/:id to prevent
+// "latest" from being matched as an :id parameter
+// Get the latest/most recent model scan
+modelAuditRouter.get('/scans/latest', async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const audits = await ModelAudit.getMany(1, 0, 'createdAt', 'desc');
+
+    if (audits.length === 0) {
+      res.status(404).json({ error: 'No scans found' });
+      return;
+    }
+
+    res.json(audits[0].toJSON());
+  } catch (error) {
+    logger.error(`Error fetching latest model audit: ${error}`);
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+// Get specific model scan by ID (must be after /scans/latest)
 modelAuditRouter.get('/scans/:id', async (req: Request, res: Response): Promise<void> => {
   try {
     const audit = await ModelAudit.findById(req.params.id);

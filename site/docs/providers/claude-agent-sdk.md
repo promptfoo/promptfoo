@@ -123,24 +123,41 @@ prompts:
 
 ## Supported Parameters
 
-| Parameter              | Type     | Description                                                                    | Default                  |
-| ---------------------- | -------- | ------------------------------------------------------------------------------ | ------------------------ |
-| `apiKey`               | string   | Anthropic API key                                                              | Environment variable     |
-| `working_dir`          | string   | Directory for file operations                                                  | Temporary directory      |
-| `model`                | string   | Primary model to use (passed to Claude Agent SDK)                              | Claude Agent SDK default |
-| `fallback_model`       | string   | Fallback model if primary fails                                                | Claude Agent SDK default |
-| `max_turns`            | number   | Maximum conversation turns                                                     | Claude Agent SDK default |
-| `max_thinking_tokens`  | number   | Maximum tokens for thinking                                                    | Claude Agent SDK default |
-| `permission_mode`      | string   | File access permissions: `default`, `plan`, `acceptEdits`, `bypassPermissions` | `default`                |
-| `custom_system_prompt` | string   | Replace default system prompt                                                  | None                     |
-| `append_system_prompt` | string   | Append to default system prompt                                                | None                     |
-| `custom_allowed_tools` | string[] | Replace default allowed tools                                                  | None                     |
-| `append_allowed_tools` | string[] | Add to default allowed tools                                                   | None                     |
-| `allow_all_tools`      | boolean  | Allow all available tools                                                      | false                    |
-| `disallowed_tools`     | string[] | Tools to explicitly block (overrides allowed)                                  | None                     |
-| `mcp`                  | object   | MCP server configuration                                                       | None                     |
-| `strict_mcp_config`    | boolean  | Only allow configured MCP servers                                              | true                     |
-| `setting_sources`      | string[] | Where SDK looks for settings, CLAUDE.md, and slash commands                    | None (disabled)          |
+| Parameter                            | Type     | Description                                                                       | Default                  |
+| ------------------------------------ | -------- | --------------------------------------------------------------------------------- | ------------------------ |
+| `apiKey`                             | string   | Anthropic API key                                                                 | Environment variable     |
+| `working_dir`                        | string   | Directory for file operations                                                     | Temporary directory      |
+| `model`                              | string   | Primary model to use (passed to Claude Agent SDK)                                 | Claude Agent SDK default |
+| `fallback_model`                     | string   | Fallback model if primary fails                                                   | Claude Agent SDK default |
+| `max_turns`                          | number   | Maximum conversation turns                                                        | Claude Agent SDK default |
+| `max_thinking_tokens`                | number   | Maximum tokens for thinking                                                       | Claude Agent SDK default |
+| `max_budget_usd`                     | number   | Maximum cost budget in USD for the agent execution                                | None                     |
+| `permission_mode`                    | string   | Permission mode: `default`, `plan`, `acceptEdits`, `bypassPermissions`, `dontAsk` | `default`                |
+| `allow_dangerously_skip_permissions` | boolean  | Required safety flag when using `bypassPermissions` mode                          | false                    |
+| `betas`                              | string[] | Enable beta features (e.g., `['context-1m-2025-08-07']` for 1M context)           | None                     |
+| `custom_system_prompt`               | string   | Replace default system prompt                                                     | None                     |
+| `append_system_prompt`               | string   | Append to default system prompt                                                   | None                     |
+| `custom_allowed_tools`               | string[] | Replace default allowed tools                                                     | None                     |
+| `append_allowed_tools`               | string[] | Add to default allowed tools                                                      | None                     |
+| `allow_all_tools`                    | boolean  | Allow all available tools                                                         | false                    |
+| `disallowed_tools`                   | string[] | Tools to explicitly block (overrides allowed)                                     | None                     |
+| `additional_directories`             | string[] | Additional directories the agent can access (beyond working_dir)                  | None                     |
+| `mcp`                                | object   | MCP server configuration                                                          | None                     |
+| `strict_mcp_config`                  | boolean  | Only allow configured MCP servers                                                 | true                     |
+| `setting_sources`                    | string[] | Where SDK looks for settings, CLAUDE.md, and slash commands                       | None (disabled)          |
+| `output_format`                      | object   | Structured output configuration with JSON schema                                  | None                     |
+| `agents`                             | object   | Programmatic agent definitions for custom subagents                               | None                     |
+| `hooks`                              | object   | Event hooks for intercepting tool calls and other events                          | None                     |
+| `include_partial_messages`           | boolean  | Include partial/streaming messages in response                                    | false                    |
+| `resume`                             | string   | Resume from a specific session ID                                                 | None                     |
+| `fork_session`                       | boolean  | Fork from an existing session instead of continuing                               | false                    |
+| `continue`                           | boolean  | Continue an existing session                                                      | false                    |
+| `sandbox`                            | object   | Sandbox settings for command execution isolation                                  | None                     |
+| `permission_prompt_tool_name`        | string   | MCP tool name to use for permission prompts                                       | None                     |
+| `executable`                         | string   | JavaScript runtime: `node`, `bun`, or `deno`                                      | Auto-detected            |
+| `executable_args`                    | string[] | Arguments to pass to the JavaScript runtime                                       | None                     |
+| `extra_args`                         | object   | Additional CLI arguments (keys without `--`, values as strings or null for flags) | None                     |
+| `path_to_claude_code_executable`     | string   | Path to a custom Claude Code executable                                           | Built-in                 |
 
 ## Models
 
@@ -151,7 +168,7 @@ providers:
   - id: anthropic:claude-agent-sdk
     config:
       model: claude-opus-4-1-20250805
-      fallback_model: claude-sonnet-4-20250514
+      fallback_model: claude-sonnet-4-5-20250929
 ```
 
 Claude Agent SDK also supports a number of [model aliases](https://docs.claude.com/en/docs/claude-code/model-config#model-aliases), which can also be used in the configuration.
@@ -191,12 +208,26 @@ By default, when a `working_dir` is specified, Claude Agent SDK has access to th
 
 Control Claude Agent SDK's permissions for modifying files and running system commands:
 
-| Mode                | Description              |
-| ------------------- | ------------------------ |
-| `default`           | Standard permissions     |
-| `plan`              | Planning mode            |
-| `acceptEdits`       | Allow file modifications |
-| `bypassPermissions` | No restrictions          |
+| Mode                | Description                                                           |
+| ------------------- | --------------------------------------------------------------------- |
+| `default`           | Standard permissions                                                  |
+| `plan`              | Planning mode                                                         |
+| `acceptEdits`       | Allow file modifications                                              |
+| `bypassPermissions` | No restrictions (requires `allow_dangerously_skip_permissions: true`) |
+| `dontAsk`           | Deny permissions that aren't pre-approved (no prompts)                |
+
+:::warning
+Using `bypassPermissions` requires setting `allow_dangerously_skip_permissions: true` as a safety measure:
+
+```yaml
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      permission_mode: bypassPermissions
+      allow_dangerously_skip_permissions: true
+```
+
+:::
 
 ### Tool Configuration
 
@@ -275,6 +306,185 @@ Available values:
 - `project` - Project-level settings
 - `local` - Local directory settings
 
+## Budget Control
+
+Limit the maximum cost of an agent execution with `max_budget_usd`:
+
+```yaml
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      max_budget_usd: 0.50
+```
+
+The agent will stop execution if the cost exceeds the specified budget.
+
+## Additional Directories
+
+Grant the agent access to directories beyond the working directory:
+
+```yaml
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      working_dir: ./project
+      additional_directories:
+        - /shared/libs
+        - /data/models
+```
+
+## Structured Output
+
+Get validated JSON responses by specifying an output schema:
+
+```yaml
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      output_format:
+        type: json_schema
+        schema:
+          type: object
+          properties:
+            analysis:
+              type: string
+            confidence:
+              type: number
+          required: [analysis, confidence]
+```
+
+When `output_format` is configured, the response will include structured output that conforms to the schema. The structured output is available in:
+
+- `output` - The parsed structured output (when available)
+- `metadata.structuredOutput` - The raw structured output value
+
+## Session Management
+
+Continue or fork existing sessions for multi-turn interactions:
+
+```yaml
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      # Continue an existing session
+      resume: 'session-id-from-previous-run'
+      continue: true
+
+      # Or fork from an existing session
+      resume: 'session-id-to-fork'
+      fork_session: true
+```
+
+Session IDs are returned in the response and can be used to continue conversations across eval runs.
+
+## Beta Features
+
+Enable experimental features using the `betas` parameter:
+
+```yaml
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      betas:
+        - context-1m-2025-08-07
+```
+
+Currently available betas:
+
+| Beta                    | Description                                        |
+| ----------------------- | -------------------------------------------------- |
+| `context-1m-2025-08-07` | Enable 1M token context window (Sonnet 4/4.5 only) |
+
+See the [Anthropic beta headers documentation](https://docs.anthropic.com/en/api/beta-headers) for more information.
+
+## Sandbox Configuration
+
+Run commands in an isolated sandbox environment for additional security:
+
+```yaml
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      sandbox:
+        enabled: true
+        autoAllowBashIfSandboxed: true
+        network:
+          allowLocalBinding: true
+          allowedDomains:
+            - api.example.com
+```
+
+Available sandbox options:
+
+| Option                      | Type     | Description                             |
+| --------------------------- | -------- | --------------------------------------- |
+| `enabled`                   | boolean  | Enable sandboxed execution              |
+| `autoAllowBashIfSandboxed`  | boolean  | Auto-allow bash commands when sandboxed |
+| `allowUnsandboxedCommands`  | boolean  | Allow commands that can't be sandboxed  |
+| `network.allowedDomains`    | string[] | Domains allowed for network access      |
+| `network.allowLocalBinding` | boolean  | Allow binding to localhost              |
+| `network.allowUnixSockets`  | string[] | Unix sockets to allow                   |
+
+See the [Claude Code sandbox documentation](https://docs.anthropic.com/en/docs/claude-code/settings#sandbox-settings) for more details.
+
+## Advanced Runtime Configuration
+
+### JavaScript Runtime
+
+Specify which JavaScript runtime to use:
+
+```yaml
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      executable: bun # or 'node' or 'deno'
+      executable_args:
+        - '--smol'
+```
+
+### Extra CLI Arguments
+
+Pass additional arguments to Claude Code:
+
+```yaml
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      extra_args:
+        verbose: null # boolean flag (adds --verbose)
+        timeout: '30' # adds --timeout 30
+```
+
+### Custom Executable Path
+
+Use a specific Claude Code installation:
+
+```yaml
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      path_to_claude_code_executable: /custom/path/to/claude-code
+```
+
+## Programmatic Agents
+
+Define custom subagents with specific tools and permissions:
+
+```yaml
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      agents:
+        code-reviewer:
+          name: Code Reviewer
+          description: Reviews code for bugs and style issues
+          tools: [Read, Grep, Glob]
+        test-runner:
+          name: Test Runner
+          description: Runs tests and reports results
+          tools: [Bash, Read]
+```
+
 ## Caching Behavior
 
 This provider automatically caches responses, and will read from the cache if the prompt, configuration, and files in the working directory (if `working_dir` is set) are the same as a previous run.
@@ -310,6 +520,8 @@ Here are a few complete example implementations:
 - [Working directory](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-agent-sdk#working-directory) - Read-only access to a working directory
 - [Advanced editing](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-agent-sdk#advanced-editing) - File edits and working directory reset in an extension hook
 - [MCP integration](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-agent-sdk#mcp-integration) - Read-only MCP server integration with weather API
+- [Structured output](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-agent-sdk#structured-output) - JSON schema validation for agent responses
+- [Advanced options](https://github.com/promptfoo/promptfoo/tree/main/examples/claude-agent-sdk#advanced-options) - Sandbox, runtime configuration, and CLI arguments
 
 ## See Also
 

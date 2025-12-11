@@ -53,9 +53,10 @@ import type { RedteamStrategy } from '@promptfoo/types';
 import './page.css';
 
 import type { Config, RedteamUITarget } from './types';
+import { SIDEBAR_WIDTH, NAVBAR_HEIGHT } from './constants';
 
-export const SIDEBAR_WIDTH = 240;
-const NAVBAR_HEIGHT = 64;
+// Re-export for backward compatibility
+export { SIDEBAR_WIDTH };
 
 const StyledTabs = styled(Tabs)(({ theme }) => ({
   '& .MuiTabs-indicator': {
