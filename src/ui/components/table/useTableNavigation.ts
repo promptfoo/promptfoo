@@ -56,6 +56,8 @@ type NavigationAction =
   | { type: 'EXECUTE_COMMAND' }
   | { type: 'CANCEL_COMMAND' }
   | { type: 'CLEAR_FILTERS' }
+  | { type: 'ADD_COLUMN_FILTER'; filter: { column: string; operator: string; value: string | number } }
+  | { type: 'CLEAR_COLUMN_FILTERS' }
   | { type: 'CLAMP_SELECTION'; maxRow: number };
 
 /**
@@ -207,6 +209,31 @@ function navigationReducer(
         selectedRow: 0,
         scrollOffset: 0,
         filter: DEFAULT_FILTER_STATE,
+      };
+
+    case 'ADD_COLUMN_FILTER':
+      return {
+        ...state,
+        selectedRow: 0,
+        scrollOffset: 0,
+        filter: {
+          ...state.filter,
+          columnFilters: [
+            ...state.filter.columnFilters,
+            action.filter as { column: string; operator: '=' | '!=' | '>' | '>=' | '<' | '<=' | '~' | '!~'; value: string | number },
+          ],
+        },
+      };
+
+    case 'CLEAR_COLUMN_FILTERS':
+      return {
+        ...state,
+        selectedRow: 0,
+        scrollOffset: 0,
+        filter: {
+          ...state.filter,
+          columnFilters: [],
+        },
       };
 
     case 'CLAMP_SELECTION': {
@@ -400,6 +427,10 @@ export function useTableNavigation({
         // Search shortcut (vim-style)
         case '/':
           dispatch({ type: 'START_SEARCH' });
+          break;
+        // Command mode shortcut (vim-style)
+        case ':':
+          dispatch({ type: 'START_COMMAND' });
           break;
         // Clear search with 'n' when no search active (consistent with vim)
         case 'n':

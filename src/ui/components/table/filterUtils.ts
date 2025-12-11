@@ -93,6 +93,14 @@ function matchesColumnFilters(row: TableRowData, filters: ColumnFilter[]): boole
       // Check if any provider matches
       const providers = row.cells.map((c) => c.output?.provider).filter(Boolean);
       return providers.some((p) => applyOperator(p, operator, value));
+    } else if (column === 'status') {
+      // Check cell status (pass, fail, error)
+      const statuses = row.cells.map((c) => c.status).filter(Boolean);
+      return statuses.some((s) => applyOperator(s, operator, value));
+    } else if (column === 'output') {
+      // Check output content
+      const outputs = row.cells.map((c) => c.content);
+      return outputs.some((o) => applyOperator(o, operator, value));
     } else if (column.startsWith('var:')) {
       // Variable filter
       const varName = column.slice(4);

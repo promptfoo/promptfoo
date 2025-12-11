@@ -274,6 +274,221 @@ describe('getFilterModeLabel', () => {
   });
 });
 
+describe('column filters', () => {
+  // Create rows with various output properties for testing
+  function createRowWithOutput(
+    index: number,
+    outputProps: {
+      content: string;
+      status: 'pass' | 'fail' | 'error' | null;
+      score?: number;
+      cost?: number;
+      latencyMs?: number;
+      provider?: string;
+    },
+  ): TableRowData {
+    return {
+      index,
+      testIdx: index,
+      cells: [
+        {
+          content: outputProps.content,
+          displayContent: outputProps.content,
+          status: outputProps.status,
+          isTruncated: false,
+          output: {
+            text: outputProps.content,
+            pass: outputProps.status === 'pass',
+            score: outputProps.score ?? (outputProps.status === 'pass' ? 1 : 0),
+            cost: outputProps.cost ?? 0.01,
+            latencyMs: outputProps.latencyMs ?? 100,
+            provider: outputProps.provider ?? 'test-provider',
+            failureReason: outputProps.status === 'error' ? 2 : outputProps.status === 'fail' ? 1 : 0,
+            namedScores: {},
+            id: `row-${index}`,
+            tokenUsage: {},
+          },
+        },
+      ],
+      originalRow: {
+        vars: [],
+        outputs: [],
+        testIdx: index,
+      },
+    };
+  }
+
+  const columnFilterRows: TableRowData[] = [
+    createRowWithOutput(0, { content: 'Good result', status: 'pass', score: 0.9, cost: 0.005, latencyMs: 50, provider: 'openai' }),
+    createRowWithOutput(1, { content: 'Bad result', status: 'fail', score: 0.3, cost: 0.01, latencyMs: 200, provider: 'anthropic' }),
+    createRowWithOutput(2, { content: 'Error occurred', status: 'error', score: 0, cost: 0.02, latencyMs: 500, provider: 'openai' }),
+    createRowWithOutput(3, { content: 'Medium result', status: 'pass', score: 0.6, cost: 0.015, latencyMs: 150, provider: 'google' }),
+  ];
+
+  describe('score filter', () => {
+    it('filters by score > value', () => {
+      const filterState = createFilterState({
+        columnFilters: [{ column: 'score', operator: '>', value: 0.5 }],
+      });
+      const result = filterRows(columnFilterRows, filterState);
+      expect(result).toHaveLength(2);
+      expect(result.map((r) => r.index)).toEqual([0, 3]);
+    });
+
+    it('filters by score < value', () => {
+      const filterState = createFilterState({
+        columnFilters: [{ column: 'score', operator: '<', value: 0.5 }],
+      });
+      const result = filterRows(columnFilterRows, filterState);
+      expect(result).toHaveLength(2);
+      expect(result.map((r) => r.index)).toEqual([1, 2]);
+    });
+
+    it('filters by score >= value', () => {
+      const filterState = createFilterState({
+        columnFilters: [{ column: 'score', operator: '>=', value: 0.6 }],
+      });
+      const result = filterRows(columnFilterRows, filterState);
+      expect(result).toHaveLength(2);
+      expect(result.map((r) => r.index)).toEqual([0, 3]);
+    });
+  });
+
+  describe('cost filter', () => {
+    it('filters by cost > value', () => {
+      const filterState = createFilterState({
+        columnFilters: [{ column: 'cost', operator: '>', value: 0.01 }],
+      });
+      const result = filterRows(columnFilterRows, filterState);
+      expect(result).toHaveLength(2);
+      expect(result.map((r) => r.index)).toEqual([2, 3]);
+    });
+  });
+
+  describe('latency filter', () => {
+    it('filters by latency > value', () => {
+      const filterState = createFilterState({
+        columnFilters: [{ column: 'latency', operator: '>', value: 100 }],
+      });
+      const result = filterRows(columnFilterRows, filterState);
+      expect(result).toHaveLength(3);
+      expect(result.map((r) => r.index)).toEqual([1, 2, 3]);
+    });
+  });
+
+  describe('provider filter', () => {
+    it('filters by provider = value', () => {
+      const filterState = createFilterState({
+        columnFilters: [{ column: 'provider', operator: '=', value: 'openai' }],
+      });
+      const result = filterRows(columnFilterRows, filterState);
+      expect(result).toHaveLength(2);
+      expect(result.map((r) => r.index)).toEqual([0, 2]);
+    });
+
+    it('filters by provider ~ value (contains)', () => {
+      const filterState = createFilterState({
+        columnFilters: [{ column: 'provider', operator: '~', value: 'open' }],
+      });
+      const result = filterRows(columnFilterRows, filterState);
+      expect(result).toHaveLength(2);
+      expect(result.map((r) => r.index)).toEqual([0, 2]);
+    });
+
+    it('filters by provider != value', () => {
+      const filterState = createFilterState({
+        columnFilters: [{ column: 'provider', operator: '!=', value: 'openai' }],
+      });
+      const result = filterRows(columnFilterRows, filterState);
+      expect(result).toHaveLength(2);
+      expect(result.map((r) => r.index)).toEqual([1, 3]);
+    });
+  });
+
+  describe('status filter', () => {
+    it('filters by status = pass', () => {
+      const filterState = createFilterState({
+        columnFilters: [{ column: 'status', operator: '=', value: 'pass' }],
+      });
+      const result = filterRows(columnFilterRows, filterState);
+      expect(result).toHaveLength(2);
+      expect(result.map((r) => r.index)).toEqual([0, 3]);
+    });
+
+    it('filters by status = fail', () => {
+      const filterState = createFilterState({
+        columnFilters: [{ column: 'status', operator: '=', value: 'fail' }],
+      });
+      const result = filterRows(columnFilterRows, filterState);
+      expect(result).toHaveLength(1);
+      expect(result[0].index).toBe(1);
+    });
+
+    it('filters by status = error', () => {
+      const filterState = createFilterState({
+        columnFilters: [{ column: 'status', operator: '=', value: 'error' }],
+      });
+      const result = filterRows(columnFilterRows, filterState);
+      expect(result).toHaveLength(1);
+      expect(result[0].index).toBe(2);
+    });
+  });
+
+  describe('output filter', () => {
+    it('filters by output content contains', () => {
+      const filterState = createFilterState({
+        columnFilters: [{ column: 'output', operator: '~', value: 'result' }],
+      });
+      const result = filterRows(columnFilterRows, filterState);
+      expect(result).toHaveLength(3);
+      expect(result.map((r) => r.index)).toEqual([0, 1, 3]);
+    });
+
+    it('filters by output content does not contain', () => {
+      const filterState = createFilterState({
+        columnFilters: [{ column: 'output', operator: '!~', value: 'Error' }],
+      });
+      const result = filterRows(columnFilterRows, filterState);
+      expect(result).toHaveLength(3);
+      expect(result.map((r) => r.index)).toEqual([0, 1, 3]);
+    });
+  });
+
+  describe('multiple column filters', () => {
+    it('applies all column filters with AND logic', () => {
+      const filterState = createFilterState({
+        columnFilters: [
+          { column: 'score', operator: '>', value: 0.5 },
+          { column: 'provider', operator: '=', value: 'openai' },
+        ],
+      });
+      const result = filterRows(columnFilterRows, filterState);
+      expect(result).toHaveLength(1);
+      expect(result[0].index).toBe(0);
+    });
+
+    it('combines with mode filter', () => {
+      const filterState = createFilterState({
+        mode: 'passes',
+        columnFilters: [{ column: 'score', operator: '>', value: 0.8 }],
+      });
+      const result = filterRows(columnFilterRows, filterState);
+      expect(result).toHaveLength(1);
+      expect(result[0].index).toBe(0);
+    });
+
+    it('combines with search query', () => {
+      const filterState = createFilterState({
+        searchQuery: 'result',
+        columnFilters: [{ column: 'score', operator: '<', value: 0.5 }],
+      });
+      const result = filterRows(columnFilterRows, filterState);
+      expect(result).toHaveLength(1);
+      expect(result[0].index).toBe(1);
+    });
+  });
+});
+
 describe('hasActiveFilter', () => {
   it('returns false for default state', () => {
     const filterState = createFilterState();

@@ -11,15 +11,17 @@
  */
 
 import { Box, Text } from 'ink';
-import { useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { isRawModeSupported } from '../../hooks/useKeypress';
 import { CellDetailOverlay } from './CellDetailOverlay';
+import { CommandInput } from './CommandInput';
 import { filterRows, getFilterModeLabel, hasActiveFilter } from './filterUtils';
 import { SearchInput } from './SearchInput';
 import { TableHeader } from './TableHeader';
 import { TableRow } from './TableRow';
 import {
   getCellStatus,
+  type ColumnFilter,
   type EvaluateTable,
   type ResultsTableProps,
   type TableCellData,
@@ -98,7 +100,8 @@ function HelpText({ isCompact }: { isCompact: boolean }) {
         ↑↓←→/hjkl nav | Enter expand | g/G first/last |{' '}
         <Text color="cyan">[a]</Text>ll <Text color="cyan">[p]</Text>ass{' '}
         <Text color="cyan">[f]</Text>ail <Text color="cyan">[e]</Text>rr{' '}
-        <Text color="cyan">[d]</Text>iff | <Text color="cyan">/</Text> search | q quit
+        <Text color="cyan">[d]</Text>iff | <Text color="cyan">/</Text> search |{' '}
+        <Text color="cyan">:</Text> filter | q quit
       </Text>
     </Box>
   );
@@ -230,6 +233,18 @@ export function ResultsTable({
     }
   }, [filteredRows.length, navigation.dispatch]);
 
+  // Callbacks for command input
+  const handleFilterApply = useCallback(
+    (filter: ColumnFilter) => {
+      navigation.dispatch({ type: 'ADD_COLUMN_FILTER', filter });
+    },
+    [navigation.dispatch],
+  );
+
+  const handleFilterClear = useCallback(() => {
+    navigation.dispatch({ type: 'CLEAR_COLUMN_FILTERS' });
+  }, [navigation.dispatch]);
+
   // Calculate visible row range based on filtered rows
   const { start: visibleStart, end: visibleEnd } = getVisibleRowRange(
     navigation.scrollOffset,
@@ -352,6 +367,14 @@ export function ResultsTable({
             totalCount={processedRows.length}
             dispatch={navigation.dispatch}
           />
+        ) : navigation.filter.isCommandMode ? (
+          <CommandInput
+            input={navigation.filter.commandInput}
+            isActive={navigation.filter.isCommandMode}
+            dispatch={navigation.dispatch}
+            onFilterApply={handleFilterApply}
+            onFilterClear={handleFilterClear}
+          />
         ) : (
           <HelpText isCompact={true} />
         )}
@@ -405,7 +428,7 @@ export function ResultsTable({
         />
       )}
 
-      {/* Search input or help text */}
+      {/* Search input, command input, or help text */}
       {isInteractive &&
         (navigation.filter.isSearching ? (
           <SearchInput
@@ -414,6 +437,14 @@ export function ResultsTable({
             matchCount={filteredRows.length}
             totalCount={processedRows.length}
             dispatch={navigation.dispatch}
+          />
+        ) : navigation.filter.isCommandMode ? (
+          <CommandInput
+            input={navigation.filter.commandInput}
+            isActive={navigation.filter.isCommandMode}
+            dispatch={navigation.dispatch}
+            onFilterApply={handleFilterApply}
+            onFilterClear={handleFilterClear}
           />
         ) : (
           <HelpText isCompact={false} />
