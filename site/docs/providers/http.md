@@ -993,7 +993,7 @@ providers:
 
 ## Authentication
 
-The HTTP provider supports multiple authentication methods to securely connect to your APIs. These methods are designed to support generation and refreshing of short-lived credentials like JWT tokens using common authentication patterns. For specialized cases, custom hooks or custom providers may be used.
+The HTTP provider supports multiple authentication methods. For specialized cases, use custom hooks or custom providers.
 
 ### Bearer Token
 
@@ -1050,21 +1050,20 @@ providers:
         password: '{{env.API_PASSWORD}}'
 ```
 
-The provider automatically Base64-encodes credentials and adds them as an `Authorization: Basic <credentials>` header.
+The provider Base64-encodes credentials and adds an `Authorization: Basic <credentials>` header.
 
 ### OAuth 2.0
 
-OAuth 2.0 authentication supports both **Client Credentials** and **Password** (Resource Owner Password Credentials) grant types.
+OAuth 2.0 authentication supports **Client Credentials** and **Password** (Resource Owner Password Credentials) grant types.
 
-The HTTP provider handles the OAuth 2.0 flow by automatically interacting with your identity provider's token endpoint. When a request is made, the provider:
+When a request is made, the provider:
 
 1. Checks if a valid access token exists in cache
-2. If no token exists or the token is expired, requests a new access token from the `tokenUrl` endpoint
-3. Sends the appropriate grant type parameters (client credentials or password) to the token endpoint
-4. Receives and caches the access token from the identity provider's response
-5. Adds the token to subsequent API requests as an `Authorization: Bearer <token>` header
+2. If no token exists or is expired, requests a new one from `tokenUrl`
+3. Caches the access token
+4. Adds the token to API requests as an `Authorization: Bearer <token>` header
 
-The provider automatically manages token refresh by monitoring token expiration. Tokens are refreshed proactively with a 60-second buffer before expiry to prevent authentication failures. If a token expires, the provider immediately requests a new one and retries the original request.
+Tokens are refreshed proactively with a 60-second buffer before expiry.
 
 #### Client Credentials Grant
 
@@ -1111,17 +1110,9 @@ providers:
           - read
 ```
 
-#### Token Management
+#### Token Endpoint Requirements
 
-The provider automatically manages the OAuth token lifecycle:
-
-- **Initial token request**: On the first API call, the provider sends a POST request to the `tokenUrl` with the appropriate grant type parameters
-- **Token caching**: Access tokens are cached in memory to avoid unnecessary token requests
-- **Proactive refresh**: Tokens are refreshed 60 seconds before expiration to prevent authentication failures during long-running evaluations
-- **Automatic retry**: If a token expires during a request, the provider automatically requests a new token and retries the original request
-- **Request header injection**: Valid tokens are automatically added to all API requests as `Authorization: Bearer <token>` headers
-
-The token endpoint must return a JSON response with an `access_token` field. If the response includes an `expires_in` field (token lifetime in seconds), the provider uses it to determine when to refresh the token. Otherwise, tokens are refreshed on each evaluation run.
+The token endpoint must return a JSON response with an `access_token` field. If `expires_in` (lifetime in seconds) is included, the provider uses it to schedule refresh. Otherwise, a 1-hour default is used.
 
 ### Digital Signature Authentication
 
@@ -1140,10 +1131,9 @@ providers:
       signatureAuth:
         type: pem
         privateKeyPath: '/path/to/private.key'
-        clientId: 'your-client-id'
 ```
 
-When signature authentication is enabled, these template variables below become available. Your configuration likely depends on embedding these into a specific header or other part of the request in order to complete the authentication flow.
+When signature authentication is enabled, these template variables become available for use in headers or body:
 
 - `{{signature}}`: The generated signature (base64-encoded)
 - `{{signatureTimestamp}}`: Unix timestamp when the signature was generated
@@ -1158,7 +1148,6 @@ signatureAuth:
   privateKeyPath: '/path/to/private.key' # Path to PEM file
   # OR inline key:
   # privateKey: '-----BEGIN PRIVATE KEY-----\n...'
-  clientId: 'your-client-id'
 ```
 
 **JKS (Java KeyStore):**
@@ -1169,7 +1158,6 @@ signatureAuth:
   keystorePath: '/path/to/keystore.jks'
   keystorePassword: '{{env.JKS_PASSWORD}}' # Or use PROMPTFOO_JKS_PASSWORD env var
   keyAlias: 'your-key-alias' # Optional: uses first available if not specified
-  clientId: 'your-client-id'
 ```
 
 **PFX (PKCS#12):**
@@ -1179,7 +1167,6 @@ signatureAuth:
   type: pfx
   pfxPath: '/path/to/certificate.pfx'
   pfxPassword: '{{env.PFX_PASSWORD}}' # Or use PROMPTFOO_PFX_PASSWORD env var
-  clientId: 'your-client-id'
   # OR use separate certificate and key files:
   # certPath: '/path/to/certificate.crt'
   # keyPath: '/path/to/private.key'
@@ -1195,14 +1182,12 @@ providers:
       headers:
         'x-signature': '{{signature}}'
         'x-timestamp': '{{signatureTimestamp}}'
-        'x-client-id': 'your-client-id'
       signatureAuth:
         type: pem
         privateKeyPath: '/path/to/private.key'
-        clientId: 'your-client-id'
         signatureValidityMs: 300000 # 5 minutes (default)
         signatureAlgorithm: 'SHA256' # Default
-        signatureDataTemplate: '{{clientId}}{{timestamp}}\n'
+        signatureDataTemplate: '{{signatureTimestamp}}' # Default; customize as needed
         signatureRefreshBufferMs: 30000 # Optional custom refresh buffer
 ```
 
@@ -1241,36 +1226,35 @@ providers:
 
 #### OAuth 2.0 Options
 
-| Option       | Type     | Required                 | Description                            |
-| ------------ | -------- | ------------------------ | -------------------------------------- |
-| type         | string   | Yes                      | Must be `'oauth'`                      |
-| grantType    | string   | Yes                      | `'client_credentials'` or `'password'` |
-| tokenUrl     | string   | Yes                      | OAuth token endpoint URL               |
-| clientId     | string   | Yes (client_credentials) | OAuth client ID                        |
-| clientSecret | string   | Yes (client_credentials) | OAuth client secret                    |
-| username     | string   | Yes (password grant)     | Username for password grant            |
-| password     | string   | Yes (password grant)     | Password for password grant            |
-| scopes       | string[] | No                       | OAuth scopes to request                |
+| Option       | Type     | Required                                | Description                            |
+| ------------ | -------- | --------------------------------------- | -------------------------------------- |
+| type         | string   | Yes                                     | Must be `'oauth'`                      |
+| grantType    | string   | Yes                                     | `'client_credentials'` or `'password'` |
+| tokenUrl     | string   | Yes                                     | OAuth token endpoint URL               |
+| clientId     | string   | Yes (client_credentials), No (password) | OAuth client ID                        |
+| clientSecret | string   | Yes (client_credentials), No (password) | OAuth client secret                    |
+| username     | string   | Yes (password grant)                    | Username for password grant            |
+| password     | string   | Yes (password grant)                    | Password for password grant            |
+| scopes       | string[] | No                                      | OAuth scopes to request                |
 
 #### Digital Signature Options
 
-| Option                   | Type   | Required | Default                       | Description                                            |
-| ------------------------ | ------ | -------- | ----------------------------- | ------------------------------------------------------ |
-| type                     | string | No       | `'pem'`                       | Certificate type: `'pem'`, `'jks'`, or `'pfx'`         |
-| clientId                 | string | Yes      | -                             | Client identifier for signature generation             |
-| privateKeyPath           | string | No\*     | -                             | Path to PEM private key file (PEM only)                |
-| privateKey               | string | No\*     | -                             | Inline PEM private key string (PEM only)               |
-| keystorePath             | string | No\*     | -                             | Path to JKS keystore file (JKS only)                   |
-| keystorePassword         | string | No       | -                             | JKS password (or use `PROMPTFOO_JKS_PASSWORD` env var) |
-| keyAlias                 | string | No       | First available               | JKS key alias (JKS only)                               |
-| pfxPath                  | string | No\*     | -                             | Path to PFX certificate file (PFX only)                |
-| pfxPassword              | string | No       | -                             | PFX password (or use `PROMPTFOO_PFX_PASSWORD` env var) |
-| certPath                 | string | No\*     | -                             | Path to certificate file (PFX alternative)             |
-| keyPath                  | string | No\*     | -                             | Path to private key file (PFX alternative)             |
-| signatureValidityMs      | number | No       | 300000                        | Signature validity period in milliseconds              |
-| signatureAlgorithm       | string | No       | `'SHA256'`                    | Signature algorithm (any Node.js crypto supported)     |
-| signatureDataTemplate    | string | No       | `'{{clientId}}{{timestamp}}'` | Template for data to sign (`\n` = newline)             |
-| signatureRefreshBufferMs | number | No       | 10% of validityMs             | Buffer time before expiry to refresh                   |
+| Option                   | Type   | Required | Default                    | Description                                            |
+| ------------------------ | ------ | -------- | -------------------------- | ------------------------------------------------------ |
+| type                     | string | No       | `'pem'`                    | Certificate type: `'pem'`, `'jks'`, or `'pfx'`         |
+| privateKeyPath           | string | No\*     | -                          | Path to PEM private key file (PEM only)                |
+| privateKey               | string | No\*     | -                          | Inline PEM private key string (PEM only)               |
+| keystorePath             | string | No\*     | -                          | Path to JKS keystore file (JKS only)                   |
+| keystorePassword         | string | No       | -                          | JKS password (or use `PROMPTFOO_JKS_PASSWORD` env var) |
+| keyAlias                 | string | No       | First available            | JKS key alias (JKS only)                               |
+| pfxPath                  | string | No\*     | -                          | Path to PFX certificate file (PFX only)                |
+| pfxPassword              | string | No       | -                          | PFX password (or use `PROMPTFOO_PFX_PASSWORD` env var) |
+| certPath                 | string | No\*     | -                          | Path to certificate file (PFX alternative)             |
+| keyPath                  | string | No\*     | -                          | Path to private key file (PFX alternative)             |
+| signatureValidityMs      | number | No       | 300000                     | Signature validity period in milliseconds              |
+| signatureAlgorithm       | string | No       | `'SHA256'`                 | Signature algorithm (any Node.js crypto supported)     |
+| signatureDataTemplate    | string | No       | `'{{signatureTimestamp}}'` | Template for data to sign (`\n` = newline)             |
+| signatureRefreshBufferMs | number | No       | 10% of validityMs          | Buffer time before expiry to refresh                   |
 
 \* Requirements by certificate type:
 
