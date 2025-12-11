@@ -330,15 +330,40 @@ GPT-5.2 is OpenAI's flagship model for coding and agentic tasks. It offers signi
 - **Context window**: 400,000 tokens
 - **Max output tokens**: 128,000 tokens
 - **Reasoning support**: Full reasoning token support with configurable effort levels
+- **Pricing**: $1.75 per 1M input tokens, $14 per 1M output tokens
 
 #### Usage Examples
 
-Standard usage:
+GPT-5.2 is available via both the Chat Completions API and Responses API:
+
+**Chat Completions API:**
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:chat:gpt-5.2
+    config:
+      max_completion_tokens: 4096
+
+  # With reasoning effort
+  - id: openai:chat:gpt-5.2
+    config:
+      reasoning_effort: 'medium'
+      max_completion_tokens: 4096
+```
+
+**Responses API:**
 
 ```yaml title="promptfooconfig.yaml"
 providers:
   - id: openai:responses:gpt-5.2
     config:
+      max_output_tokens: 4096
+
+  # With reasoning effort (nested format)
+  - id: openai:responses:gpt-5.2
+    config:
+      reasoning:
+        effort: 'medium'
       max_output_tokens: 4096
 ```
 
@@ -346,22 +371,18 @@ Fast, low-latency responses (no reasoning):
 
 ```yaml title="promptfooconfig.yaml"
 providers:
+  # Chat API
+  - id: openai:chat:gpt-5.2
+    config:
+      reasoning_effort: 'none'
+      max_completion_tokens: 2048
+
+  # Responses API
   - id: openai:responses:gpt-5.2
     config:
       reasoning:
-        effort: 'none' # No reasoning tokens, fastest responses
+        effort: 'none'
       max_output_tokens: 2048
-```
-
-Deep reasoning for complex tasks:
-
-```yaml title="promptfooconfig.yaml"
-providers:
-  - id: openai:responses:gpt-5.2
-    config:
-      reasoning:
-        effort: 'high' # Maximum reasoning for complex tasks
-      max_output_tokens: 8192
 ```
 
 #### Key Improvements over GPT-5.1
