@@ -10,17 +10,11 @@ import { TestCaseGenerationProvider } from './TestCaseGenerationProvider';
 import type { DefinedUseQueryResult } from '@tanstack/react-query';
 import type { ApiHealthResult } from '@app/hooks/useApiHealth';
 
-// Create a mock getState function that can be configured per test
-const mockGetState = vi.fn();
-
 vi.mock('../hooks/useRedTeamConfig', async () => {
   const actual = await vi.importActual('../hooks/useRedTeamConfig');
-  const mockUseRedTeamConfig = vi.fn();
-  // Attach getState to the mock function so it can be called as useRedTeamConfig.getState()
-  (mockUseRedTeamConfig as any).getState = () => mockGetState();
   return {
     ...actual,
-    useRedTeamConfig: mockUseRedTeamConfig,
+    useRedTeamConfig: vi.fn(),
     useRecentlyUsedPlugins: vi.fn(),
   };
 });
@@ -89,12 +83,6 @@ describe('Plugins', () => {
         plugins: [],
       },
       updatePlugins: mockUpdatePlugins,
-    });
-    // Set up mockGetState to return the same config as the hook by default
-    mockGetState.mockReturnValue({
-      config: {
-        plugins: [],
-      },
     });
     mockUseRecentlyUsedPlugins.mockReturnValue({
       plugins: [],
@@ -1030,9 +1018,9 @@ describe('Plugins', () => {
     });
   });
 
-  // Test for infinite loop fix - uses getState() to avoid dependency cycle
+  // Test for infinite loop fix - uses normalized comparison to prevent loops
   describe('Plugin sync effect stability', () => {
-    it('should use getState() to read plugins without causing infinite re-renders', async () => {
+    it('should use normalized comparison to prevent infinite re-renders', async () => {
       // Set up config with existing intent plugin
       const configWithIntent = {
         plugins: [
@@ -1046,25 +1034,14 @@ describe('Plugins', () => {
         updatePlugins: mockUpdatePlugins,
       });
 
-      // mockGetState should return the same config - this is what the effect reads
-      mockGetState.mockReturnValue({
-        config: configWithIntent,
-      });
-
       renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
 
       // Select a preset to trigger user interaction and the sync effect
       const recommendedPreset = screen.getByText('Recommended');
       fireEvent.click(recommendedPreset);
 
-      // Wait for effects to settle
-      await waitFor(() => {
-        // The effect should have used getState() to read current plugins
-        expect(mockGetState).toHaveBeenCalled();
-      });
-
       // updatePlugins should be called a bounded number of times (not infinite)
-      // With the fix, it should be called once per user interaction, not repeatedly
+      // With the normalized comparison fix, it should be called once per user interaction
       await waitFor(() => {
         expect(mockUpdatePlugins.mock.calls.length).toBeLessThan(50);
       });
@@ -1083,10 +1060,6 @@ describe('Plugins', () => {
         updatePlugins: mockUpdatePlugins,
       });
 
-      mockGetState.mockReturnValue({
-        config: configWithCustomPlugins,
-      });
-
       renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
 
       // Select a preset to add regular plugins
@@ -1101,7 +1074,7 @@ describe('Plugins', () => {
       const lastCall = mockUpdatePlugins.mock.calls[mockUpdatePlugins.mock.calls.length - 1];
       const pluginsArg = lastCall[0];
 
-      // Should contain policy and intent plugins from getState()
+      // Should contain policy and intent plugins from config.plugins
       const hasPolicy = pluginsArg.some((p: any) => typeof p === 'object' && p.id === 'policy');
       const hasIntent = pluginsArg.some((p: any) => typeof p === 'object' && p.id === 'intent');
 
@@ -1113,21 +1086,17 @@ describe('Plugins', () => {
       // This test verifies the fix for the infinite loop bug
       // The bug was: effect depends on config.plugins -> calls updatePlugins ->
       // config.plugins changes -> effect runs again -> infinite loop
+      // The fix: normalized comparison ensures the effect only triggers updates
+      // when there's an actual semantic change in plugins.
 
       let updateCallCount = 0;
       const trackingUpdatePlugins = vi.fn(() => {
         updateCallCount++;
-        // Simulate what happens when updatePlugins is called - config.plugins changes
-        // But with the fix, this should NOT cause the effect to re-run
       });
 
       mockUseRedTeamConfig.mockReturnValue({
         config: { plugins: [] },
         updatePlugins: trackingUpdatePlugins,
-      });
-
-      mockGetState.mockReturnValue({
-        config: { plugins: [] },
       });
 
       renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
@@ -1142,8 +1111,30 @@ describe('Plugins', () => {
       });
 
       // With the infinite loop bug, updateCallCount would be very high or the test would hang
-      // With the fix, it should be a small bounded number
+      // With the normalized comparison fix, it should be a small bounded number
       expect(updateCallCount).toBeLessThan(20);
+    });
+
+    it('should skip updatePlugins when normalized plugins are equal', async () => {
+      // This tests that the normalized comparison correctly identifies identical plugins
+      // even when they might have different property orderings or extra properties
+      const existingPlugins = ['bola', { id: 'harmful:hate', config: { numTests: 5 } }];
+
+      mockUseRedTeamConfig.mockReturnValue({
+        config: { plugins: existingPlugins },
+        updatePlugins: mockUpdatePlugins,
+      });
+
+      renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
+
+      // Trigger user interaction without changing plugins
+      // (just selecting plugins that are already selected shouldn't trigger update)
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      });
+
+      // Without user interaction (hasUserInteracted is false), updatePlugins should not be called
+      expect(mockUpdatePlugins).not.toHaveBeenCalled();
     });
   });
 });

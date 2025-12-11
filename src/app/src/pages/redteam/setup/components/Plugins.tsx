@@ -205,16 +205,11 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
   // Sync selectedPlugins to config after user interaction
   useEffect(() => {
     if (hasUserInteracted) {
-      // Get current plugins directly from store to avoid dependency cycle.
-      // Using getState() reads the current value without subscribing to changes,
-      // which prevents infinite update loops when updatePlugins modifies config.plugins.
-      const currentPlugins = useRedTeamConfig.getState().config.plugins;
-
       // Get policy and intent plugins from existing config
-      const policyPlugins = currentPlugins.filter(
+      const policyPlugins = config.plugins.filter(
         (p) => typeof p === 'object' && p.id === 'policy',
       );
-      const intentPlugins = currentPlugins.filter(
+      const intentPlugins = config.plugins.filter(
         (p) => typeof p === 'object' && p.id === 'intent',
       );
 
@@ -233,10 +228,22 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
       // Combine all plugins
       const allPlugins = [...regularPlugins, ...policyPlugins, ...intentPlugins];
 
-      // Update the global config
-      updatePlugins(allPlugins as Array<string | { id: string; config: any }>);
+      // Normalize plugins for comparison to prevent infinite loops.
+      // updatePlugins() has merge logic that can produce output different from input
+      // (e.g., spreading existing plugin properties). By comparing normalized versions
+      // that only include meaningful properties (id and config), we ensure the effect
+      // only triggers updates when there's an actual semantic change.
+      const normalizePlugin = (p: string | { id: string; config?: unknown }) =>
+        typeof p === 'string' ? p : { id: p.id, ...(p.config ? { config: p.config } : {}) };
+
+      const normalizedCurrent = config.plugins.map(normalizePlugin);
+      const normalizedNew = allPlugins.map(normalizePlugin);
+
+      if (JSON.stringify(normalizedCurrent) !== JSON.stringify(normalizedNew)) {
+        updatePlugins(allPlugins as Array<string | { id: string; config: any }>);
+      }
     }
-  }, [selectedPlugins, pluginConfig, hasUserInteracted, updatePlugins]);
+  }, [selectedPlugins, pluginConfig, hasUserInteracted, config.plugins, updatePlugins]);
 
   const handlePluginToggle = useCallback(
     (plugin: Plugin) => {
