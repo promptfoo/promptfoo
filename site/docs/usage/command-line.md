@@ -53,11 +53,11 @@ The `promptfoo` command line utility supports the following subcommands:
 
 Most commands support the following common options:
 
-| Option                              | Description                                                          |
-| ----------------------------------- | -------------------------------------------------------------------- |
+| Option                              | Description                                       |
+| ----------------------------------- | ------------------------------------------------- |
 | `--env-file, --env-path <paths...>` | Path(s) to .env file(s). Supports multiple files. |
-| `-v, --verbose`                     | Show debug logs                                                      |
-| `--help`                            | Display help                                                         |
+| `-v, --verbose`                     | Show debug logs                                   |
+| `--help`                            | Display help                                      |
 
 ### Multiple Environment Files
 

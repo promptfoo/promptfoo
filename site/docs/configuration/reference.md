@@ -81,50 +81,50 @@ More details on using assertions, including examples [here](/docs/configuration/
 
 Set default values for command-line options. These defaults will be used unless overridden by command-line arguments.
 
-| Property                 | Type     | Description                                                                                                           |
-| ------------------------ | -------- | --------------------------------------------------------------------------------------------------------------------- |
-| **Basic Configuration**  |          |                                                                                                                       |
-| description              | string   | Description of what your LLM is trying to do                                                                          |
-| config                   | string[] | Path(s) to configuration files                                                                                        |
-| envPath                  | string \| string[] | Path(s) to .env file(s). When multiple files are specified, later files override earlier values.       |
-| **Input Files**          |          |                                                                                                                       |
-| prompts                  | string[] | One or more paths to [prompt files](/docs/configuration/prompts)                                                      |
-| providers                | string[] | One or more [LLM provider](/docs/providers) identifiers                                                               |
-| tests                    | string   | Path to CSV file with [test cases](/docs/configuration/test-cases)                                                    |
-| vars                     | string   | Path to CSV file with test variables                                                                                  |
-| assertions               | string   | Path to [assertions](/docs/configuration/expected-outputs) file                                                       |
-| modelOutputs             | string   | Path to JSON file containing model outputs                                                                            |
-| **Prompt Modifications** |          |                                                                                                                       |
-| promptPrefix             | string   | Text to prepend to every prompt                                                                                       |
-| promptSuffix             | string   | Text to append to every prompt                                                                                        |
-| generateSuggestions      | boolean  | Generate new prompts and append them to the prompt list                                                               |
-| **Test Execution**       |          |                                                                                                                       |
-| maxConcurrency           | number   | Maximum number of concurrent requests                                                                                 |
-| repeat                   | number   | Number of times to run each test case                                                                                 |
-| delay                    | number   | Delay between API calls in milliseconds                                                                               |
-| grader                   | string   | [Provider](/docs/providers) that will grade [model-graded](/docs/configuration/expected-outputs/model-graded) outputs |
-| var                      | object   | Set test variables as key-value pairs (e.g. `{key1: 'value1', key2: 'value2'}`)                                       |
-| **Filtering**            |          |                                                                                                                       |
-| filterPattern            | string   | Only run tests whose description matches the regular expression pattern                                               |
-| filterProviders          | string   | Only run tests with providers matching this regex                                                                     |
-| filterTargets            | string   | Only run tests with targets matching this regex (alias for filterProviders)                                           |
-| filterFirstN             | number   | Only run the first N test cases                                                                                       |
-| filterSample             | number   | Run a random sample of N test cases                                                                                   |
-| filterMetadata           | string   | Only run tests matching metadata filter (JSON format)                                                                 |
-| filterErrorsOnly         | string   | Only run tests that resulted in errors (expects previous output path)                                                 |
-| filterFailing            | string   | Only run tests that failed assertions (expects previous output path)                                                  |
-| **Output & Display**     |          |                                                                                                                       |
-| output                   | string[] | [Output file](/docs/configuration/outputs) paths (csv, txt, json, yaml, yml, html)                                    |
-| table                    | boolean  | Show output table (default: true, disable with --no-table)                                                            |
-| tableCellMaxLength       | number   | Maximum length of table cells in console output                                                                       |
-| progressBar              | boolean  | Whether to display progress bar during evaluation                                                                     |
-| verbose                  | boolean  | Enable verbose output                                                                                                 |
-| share                    | boolean  | Whether to create a shareable URL                                                                                     |
-| **Caching & Storage**    |          |                                                                                                                       |
-| cache                    | boolean  | Whether to use disk [cache](/docs/configuration/caching) for results (default: true)                                  |
-| write                    | boolean  | Whether to write results to promptfoo directory (default: true)                                                       |
-| **Other Options**        |          |                                                                                                                       |
-| watch                    | boolean  | Whether to watch for config changes and re-run automatically                                                          |
+| Property                 | Type               | Description                                                                                                           |
+| ------------------------ | ------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| **Basic Configuration**  |                    |                                                                                                                       |
+| description              | string             | Description of what your LLM is trying to do                                                                          |
+| config                   | string[]           | Path(s) to configuration files                                                                                        |
+| envPath                  | string \| string[] | Path(s) to .env file(s). When multiple files are specified, later files override earlier values.                      |
+| **Input Files**          |                    |                                                                                                                       |
+| prompts                  | string[]           | One or more paths to [prompt files](/docs/configuration/prompts)                                                      |
+| providers                | string[]           | One or more [LLM provider](/docs/providers) identifiers                                                               |
+| tests                    | string             | Path to CSV file with [test cases](/docs/configuration/test-cases)                                                    |
+| vars                     | string             | Path to CSV file with test variables                                                                                  |
+| assertions               | string             | Path to [assertions](/docs/configuration/expected-outputs) file                                                       |
+| modelOutputs             | string             | Path to JSON file containing model outputs                                                                            |
+| **Prompt Modifications** |                    |                                                                                                                       |
+| promptPrefix             | string             | Text to prepend to every prompt                                                                                       |
+| promptSuffix             | string             | Text to append to every prompt                                                                                        |
+| generateSuggestions      | boolean            | Generate new prompts and append them to the prompt list                                                               |
+| **Test Execution**       |                    |                                                                                                                       |
+| maxConcurrency           | number             | Maximum number of concurrent requests                                                                                 |
+| repeat                   | number             | Number of times to run each test case                                                                                 |
+| delay                    | number             | Delay between API calls in milliseconds                                                                               |
+| grader                   | string             | [Provider](/docs/providers) that will grade [model-graded](/docs/configuration/expected-outputs/model-graded) outputs |
+| var                      | object             | Set test variables as key-value pairs (e.g. `{key1: 'value1', key2: 'value2'}`)                                       |
+| **Filtering**            |                    |                                                                                                                       |
+| filterPattern            | string             | Only run tests whose description matches the regular expression pattern                                               |
+| filterProviders          | string             | Only run tests with providers matching this regex                                                                     |
+| filterTargets            | string             | Only run tests with targets matching this regex (alias for filterProviders)                                           |
+| filterFirstN             | number             | Only run the first N test cases                                                                                       |
+| filterSample             | number             | Run a random sample of N test cases                                                                                   |
+| filterMetadata           | string             | Only run tests matching metadata filter (JSON format)                                                                 |
+| filterErrorsOnly         | string             | Only run tests that resulted in errors (expects previous output path)                                                 |
+| filterFailing            | string             | Only run tests that failed assertions (expects previous output path)                                                  |
+| **Output & Display**     |                    |                                                                                                                       |
+| output                   | string[]           | [Output file](/docs/configuration/outputs) paths (csv, txt, json, yaml, yml, html)                                    |
+| table                    | boolean            | Show output table (default: true, disable with --no-table)                                                            |
+| tableCellMaxLength       | number             | Maximum length of table cells in console output                                                                       |
+| progressBar              | boolean            | Whether to display progress bar during evaluation                                                                     |
+| verbose                  | boolean            | Enable verbose output                                                                                                 |
+| share                    | boolean            | Whether to create a shareable URL                                                                                     |
+| **Caching & Storage**    |                    |                                                                                                                       |
+| cache                    | boolean            | Whether to use disk [cache](/docs/configuration/caching) for results (default: true)                                  |
+| write                    | boolean            | Whether to write results to promptfoo directory (default: true)                                                       |
+| **Other Options**        |                    |                                                                                                                       |
+| watch                    | boolean            | Whether to watch for config changes and re-run automatically                                                          |
 
 #### Example
 

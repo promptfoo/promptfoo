@@ -1185,6 +1185,28 @@ describe('setupEnv', () => {
 
       expect(dotenvConfigSpy).toHaveBeenCalledWith({ quiet: true });
     });
+
+    it('should expand comma-separated values within array elements', () => {
+      // This simulates what Commander passes when using --env-file .env,.env.local
+      setupEnv(['.env,.env.local']);
+
+      expect(dotenvConfigSpy).toHaveBeenCalledTimes(1);
+      expect(dotenvConfigSpy).toHaveBeenCalledWith({
+        path: ['.env', '.env.local'],
+        override: true,
+        quiet: true,
+      });
+    });
+
+    it('should handle mixed array with some comma-separated and some individual paths', () => {
+      setupEnv(['.env,.env.local', '.env.production']);
+
+      expect(dotenvConfigSpy).toHaveBeenCalledWith({
+        path: ['.env', '.env.local', '.env.production'],
+        override: true,
+        quiet: true,
+      });
+    });
   });
 });
 

@@ -332,35 +332,35 @@ export function printBorder() {
  */
 export function setupEnv(envPath: string | string[] | undefined) {
   if (envPath) {
-    // Normalize to array
-    const paths = Array.isArray(envPath) ? envPath : [envPath];
+    // Normalize to array and expand comma-separated values
+    const rawPaths = Array.isArray(envPath) ? envPath : [envPath];
+    const paths = rawPaths
+      .flatMap((p) => (p.includes(',') ? p.split(',').map((s) => s.trim()) : p.trim()))
+      .filter((p) => p.length > 0);
 
-    // Filter out empty strings
-    const validPaths = paths.filter((p) => p && p.trim().length > 0);
-
-    if (validPaths.length === 0) {
+    if (paths.length === 0) {
       dotenv.config({ quiet: true });
       return;
     }
 
     // Validate all files exist before loading
-    for (const p of validPaths) {
+    for (const p of paths) {
       if (!fs.existsSync(p)) {
         throw new Error(`Environment file not found: ${p}`);
       }
     }
 
     // Log files being loaded
-    if (validPaths.length === 1) {
-      logger.info(`Loading environment variables from ${validPaths[0]}`);
+    if (paths.length === 1) {
+      logger.info(`Loading environment variables from ${paths[0]}`);
     } else {
-      logger.info(`Loading environment variables from: ${validPaths.join(', ')}`);
+      logger.info(`Loading environment variables from: ${paths.join(', ')}`);
     }
 
     // dotenv v16+ supports array of paths
     // Files are loaded in order, later files override earlier values with override:true
     // Pass single string when only one path for backward compatibility
-    const pathArg = validPaths.length === 1 ? validPaths[0] : validPaths;
+    const pathArg = paths.length === 1 ? paths[0] : paths;
     dotenv.config({ path: pathArg, override: true, quiet: true });
   } else {
     dotenv.config({ quiet: true });
