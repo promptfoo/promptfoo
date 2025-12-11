@@ -72,7 +72,7 @@ export function CellDetailOverlay({ cellData, column, rowData, onClose }: CellDe
       {/* Header */}
       <Box justifyContent="space-between">
         <Text bold>Cell Details</Text>
-        <Text dimColor>[Esc] Close</Text>
+        <Text dimColor>[q] close</Text>
       </Box>
 
       <Divider width={contentWidth} char="═" />
@@ -143,15 +143,6 @@ export function CellDetailOverlay({ cellData, column, rowData, onClose }: CellDe
         </>
       )}
 
-      {/* Footer */}
-      <Box marginTop={1}>
-        <Divider width={contentWidth} />
-      </Box>
-      <Box justifyContent="center">
-        <Text dimColor>Press </Text>
-        <Text bold>q</Text>
-        <Text dimColor> to close</Text>
-      </Box>
     </Box>
   );
 }
@@ -219,7 +210,7 @@ export function MinimalCellDetail({ cellData, onClose }: { cellData: any; onClos
     <Box flexDirection="column" borderStyle="single" borderColor="cyan" paddingX={1}>
       <Box justifyContent="space-between">
         <StatusBadge status={cellData.status} />
-        <Text dimColor>[Esc]</Text>
+        <Text dimColor>[q]</Text>
       </Box>
       <Text wrap="wrap">{cellData.content}</Text>
     </Box>

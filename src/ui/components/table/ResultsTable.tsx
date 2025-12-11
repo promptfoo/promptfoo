@@ -292,7 +292,7 @@ export function ResultsTable({
         >
           <Box justifyContent="space-between">
             <Text bold>{column.header}</Text>
-            <Text dimColor>[Esc] Close</Text>
+            <Text dimColor>[q]</Text>
           </Box>
           <Box marginTop={1}>
             <Text wrap="wrap">{varContent || '(empty)'}</Text>
