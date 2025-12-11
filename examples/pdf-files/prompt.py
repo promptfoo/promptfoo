@@ -1,15 +1,19 @@
 import base64
 import typing
 
+
 class Vars(typing.TypedDict):
-    file_path: str 
+    file_path: str
+
 
 class Provider(typing.TypedDict):
     id: str
 
+
 class PromptFunctionContext(typing.TypedDict):
     vars: Vars
     provider: Provider
+
 
 def get_file_base64(local_file_path: str, mime_type: str) -> str:
     """
@@ -22,10 +26,12 @@ def get_file_base64(local_file_path: str, mime_type: str) -> str:
     Returns:
         str: The base64-encoded file data.
     """
-    with open(local_file_path, 'rb') as f:
+    with open(local_file_path, "rb") as f:
         return base64.b64encode(f.read()).decode("utf-8")
 
+
 system_prompt = "Count the number of diagrams on this page"
+
 
 def format_pdf_prompt(context: PromptFunctionContext) -> list[dict[str, typing.Any]]:
     """
@@ -45,7 +51,7 @@ def format_pdf_prompt(context: PromptFunctionContext) -> list[dict[str, typing.A
                     {
                         "type": "document",
                         "source": {
-                            "type": "base64", 
+                            "type": "base64",
                             "media_type": pdf_mime_type,
                             "data": file_data,
                         },
@@ -67,8 +73,8 @@ def format_pdf_prompt(context: PromptFunctionContext) -> list[dict[str, typing.A
                         "filename": "file.pdf",
                         "file_data": f"data:{pdf_mime_type};base64,{file_data}",
                     }
-                ]
-            }
+                ],
+            },
         ]
     if provider_id.startswith("google:"):
         return [
