@@ -146,6 +146,7 @@ describe('Snowflake Cortex Provider', () => {
           total: 10,
           prompt: 5,
           completion: 5,
+          numRequests: 1,
         },
         cached: false,
         cost: undefined,
