@@ -22,8 +22,8 @@ jobs:
       - uses: actions/create-github-app-token@v2
         id: app-token
         with:
-          app-id: ${{ vars.PROMPTFOO_APP_ID }}
-          private-key: ${{ secrets.PROMPTFOO_APP_PRIVATE_KEY }}
+          app-id: ${{ vars.PROMPTFOOBOT_APP_ID }}
+          private-key: ${{ secrets.PROMPTFOOBOT_APP_PRIVATE_KEY }}
 
       - uses: googleapis/release-please-action@v4
         id: release
