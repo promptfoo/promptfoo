@@ -47,6 +47,13 @@ describe('RedteamIterativeProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
+    // Reset hoisted mocks to ensure test isolation
+    // mockReset clears both call history AND mock implementations
+    mockGetProvider.mockReset();
+    mockGetTargetResponse.mockReset();
+    mockCheckPenalizedPhrases.mockReset();
+    mockGetGraderById.mockReset();
+
     mockRedteamProvider = {
       id: vi.fn().mockReturnValue('mock-redteam'),
       callApi: vi

@@ -1496,6 +1496,27 @@ describe('doGenerateRedteam', () => {
 describe('doGenerateRedteam with external defaultTest', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+
+    // Reset resolveConfigs with default implementation (tests depend on this being set)
+    vi.mocked(configModule.resolveConfigs).mockReset();
+    vi.mocked(configModule.resolveConfigs).mockResolvedValue({
+      basePath: '/mock/path',
+      testSuite: {
+        providers: [
+          {
+            id: () => 'test-provider',
+            callApi: vi.fn().mockResolvedValue({ output: 'test output' }),
+            cleanup: vi.fn().mockResolvedValue(undefined),
+          },
+        ],
+        prompts: [],
+        tests: [],
+      },
+      config: {
+        redteam: {},
+      },
+    });
+
     vi.mocked(fs.existsSync).mockImplementation(function () {
       return false;
     });
