@@ -129,23 +129,10 @@ describe('OpenAICodexSDKProvider', () => {
       warnSpy.mockRestore();
     });
 
-    it('should warn about unknown fallback model', () => {
-      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
-
-      new OpenAICodexSDKProvider({ config: { fallback_model: 'unknown-fallback' } });
-
-      expect(warnSpy).toHaveBeenCalledWith(
-        'Using unknown model for OpenAI Codex SDK fallback: unknown-fallback',
-      );
-
-      warnSpy.mockRestore();
-    });
-
     it('should not warn about known OpenAI models', () => {
       const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
 
       new OpenAICodexSDKProvider({ config: { model: 'gpt-4o' } });
-      new OpenAICodexSDKProvider({ config: { fallback_model: 'o3-mini' } });
 
       expect(warnSpy).not.toHaveBeenCalled();
 
@@ -158,7 +145,6 @@ describe('OpenAICodexSDKProvider', () => {
       new OpenAICodexSDKProvider({ config: { model: 'gpt-5.1-codex' } });
       new OpenAICodexSDKProvider({ config: { model: 'gpt-5.1-codex-max' } });
       new OpenAICodexSDKProvider({ config: { model: 'gpt-5.1-codex-mini' } });
-      new OpenAICodexSDKProvider({ config: { fallback_model: 'gpt-5-codex' } });
 
       expect(warnSpy).not.toHaveBeenCalled();
 

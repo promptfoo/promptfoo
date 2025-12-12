@@ -264,15 +264,6 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     if (this.config.model && !OpenAICodexSDKProvider.OPENAI_MODELS.includes(this.config.model)) {
       logger.warn(`Using unknown model for OpenAI Codex SDK: ${this.config.model}`);
     }
-
-    if (
-      this.config.fallback_model &&
-      !OpenAICodexSDKProvider.OPENAI_MODELS.includes(this.config.fallback_model)
-    ) {
-      logger.warn(
-        `Using unknown model for OpenAI Codex SDK fallback: ${this.config.fallback_model}`,
-      );
-    }
   }
 
   id(): string {
