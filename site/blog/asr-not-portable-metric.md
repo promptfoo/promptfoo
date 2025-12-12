@@ -217,32 +217,7 @@ If two papers pick different automation defaults, the leaderboard mostly measure
 8. What **aggregation** (micro vs macro across categories)?
 9. What's the **baseline ASR with no jailbreak**?
 
-If a paper doesn't answer these, treat the ASR as directional, not comparable.
-
----
-
-## How to report ASR so others can reproduce it
-
-When you publish red team results, include this information:
-
-```markdown
-## Evaluation Details
-
-**Target**: [model name] + [system prompt hash or description]
-**Prompt set**: [name] v[version], labeled against [policy] ([revision date])
-**Threat model**: K=[attempts], early_stop=[yes/no], adaptive=[yes/no]
-**Generator**: [attack method] + [key params]
-**Judge**: [model] + [rubric summary] + [calibration method if any]
-
-## Metrics
-
-- ASR: X% (K=Y)
-- Median attempts-to-success: Z
-- Cost per success: $W
-- Baseline ASR (no attack): B%
-```
-
-This turns your ASR into a reproducible measurement instead of an opaque number.
+If a paper doesn't answer these, treat the ASR as directional, not comparable. If you're publishing your own results, answer these same questions in your methodology.
 
 ---
 
