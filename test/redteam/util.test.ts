@@ -7,6 +7,7 @@ import {
   isBasicRefusal,
   isEmptyResponse,
   normalizeApostrophes,
+  parseGeneratedPromptsWithInputs,
   removePrefix,
 } from '../../src/redteam/util';
 import type { CallApiContextParams, ProviderResponse } from '../../src/types/index';
@@ -683,5 +684,189 @@ describe('getSessionId', () => {
       expect(() => getSessionId(response, undefined)).not.toThrow();
       expect(getSessionId(response, undefined)).toBe(unicodeSessionId);
     });
+  });
+});
+describe('parseGeneratedPromptsWithInputs', () => {
+  it('should parse prompts with inputs', () => {
+    const output = `Prompt: Test prompt 1
+user_id: user_123
+role: admin
+
+Prompt: Test prompt 2
+user_id: user_456
+role: moderator`;
+
+    const result = parseGeneratedPromptsWithInputs(output, ['user_id', 'role']);
+
+    expect(result).toEqual([
+      { prompt: 'Test prompt 1', inputs: { user_id: 'user_123', role: 'admin' } },
+      { prompt: 'Test prompt 2', inputs: { user_id: 'user_456', role: 'moderator' } },
+    ]);
+  });
+
+  it('should handle missing input values gracefully', () => {
+    const output = `Prompt: Test prompt 1
+user_id: user_123
+
+Prompt: Test prompt 2
+role: moderator`;
+
+    const result = parseGeneratedPromptsWithInputs(output, ['user_id', 'role']);
+
+    expect(result[0].inputs).toEqual({ user_id: 'user_123' });
+    expect(result[1].inputs).toEqual({ role: 'moderator' });
+  });
+
+  it('should work without inputs (backwards compat)', () => {
+    const output = `Prompt: Test prompt 1
+
+Prompt: Test prompt 2`;
+
+    const result = parseGeneratedPromptsWithInputs(output, []);
+
+    expect(result).toEqual([
+      { prompt: 'Test prompt 1', inputs: {} },
+      { prompt: 'Test prompt 2', inputs: {} },
+    ]);
+  });
+
+  it('should handle prompts without blank line separator', () => {
+    const output = `Prompt: Test prompt 1
+user_id: user_123
+role: admin
+Prompt: Test prompt 2
+user_id: user_456
+role: moderator`;
+
+    const result = parseGeneratedPromptsWithInputs(output, ['user_id', 'role']);
+
+    expect(result.length).toBeGreaterThan(0);
+    expect(result[0].prompt).toBe('Test prompt 1');
+    expect(result[0].inputs).toEqual({ user_id: 'user_123', role: 'admin' });
+  });
+
+  it('should handle numbered prompts', () => {
+    const output = `Prompt 1: Test prompt 1
+user_id: user_123
+
+Prompt 2: Test prompt 2
+user_id: user_456`;
+
+    const result = parseGeneratedPromptsWithInputs(output, ['user_id']);
+
+    expect(result).toEqual([
+      { prompt: 'Test prompt 1', inputs: { user_id: 'user_123' } },
+      { prompt: 'Test prompt 2', inputs: { user_id: 'user_456' } },
+    ]);
+  });
+
+  it('should ignore unknown input keys', () => {
+    const output = `Prompt: Test prompt 1
+user_id: user_123
+unknown_field: should be ignored
+role: admin`;
+
+    const result = parseGeneratedPromptsWithInputs(output, ['user_id', 'role']);
+
+    expect(result).toEqual([
+      { prompt: 'Test prompt 1', inputs: { user_id: 'user_123', role: 'admin' } },
+    ]);
+  });
+
+  it('should handle case-insensitive input key matching', () => {
+    const output = `Prompt: Test prompt 1
+USER_ID: user_123
+ROLE: admin`;
+
+    const result = parseGeneratedPromptsWithInputs(output, ['user_id', 'role']);
+
+    expect(result).toEqual([
+      { prompt: 'Test prompt 1', inputs: { user_id: 'user_123', role: 'admin' } },
+    ]);
+  });
+
+  it('should handle empty output', () => {
+    const output = '';
+    const result = parseGeneratedPromptsWithInputs(output, ['user_id']);
+
+    expect(result).toEqual([]);
+  });
+
+  it('should handle output with no prompts', () => {
+    const output = `user_id: user_123
+role: admin`;
+
+    const result = parseGeneratedPromptsWithInputs(output, ['user_id', 'role']);
+
+    expect(result).toEqual([]);
+  });
+
+  it('should trim whitespace from prompts and input values', () => {
+    const output = `Prompt:   Test prompt with spaces   
+user_id:   user_123   
+role:   admin   `;
+
+    const result = parseGeneratedPromptsWithInputs(output, ['user_id', 'role']);
+
+    expect(result).toEqual([
+      { prompt: 'Test prompt with spaces', inputs: { user_id: 'user_123', role: 'admin' } },
+    ]);
+  });
+
+  it('should handle multiline prompt content', () => {
+    const output = `Prompt: This is a test prompt
+that spans multiple lines
+user_id: user_123
+role: admin`;
+
+    const result = parseGeneratedPromptsWithInputs(output, ['user_id', 'role']);
+
+    // The parser should capture the first line as the prompt
+    expect(result.length).toBe(1);
+    expect(result[0].prompt).toBe('This is a test prompt');
+    expect(result[0].inputs).toEqual({ user_id: 'user_123', role: 'admin' });
+  });
+
+  it('should handle input values with colons', () => {
+    const output = `Prompt: Test prompt
+url: https://example.com:8080`;
+
+    const result = parseGeneratedPromptsWithInputs(output, ['url']);
+
+    expect(result).toEqual([
+      { prompt: 'Test prompt', inputs: { url: 'https://example.com:8080' } },
+    ]);
+  });
+
+  it('should save last test case without trailing blank line', () => {
+    const output = `Prompt: First prompt
+user_id: user_1
+
+Prompt: Last prompt
+user_id: user_2`;
+
+    const result = parseGeneratedPromptsWithInputs(output, ['user_id']);
+
+    expect(result).toEqual([
+      { prompt: 'First prompt', inputs: { user_id: 'user_1' } },
+      { prompt: 'Last prompt', inputs: { user_id: 'user_2' } },
+    ]);
+  });
+
+  it('should handle inputs appearing in different order', () => {
+    const output = `Prompt: Test prompt 1
+role: admin
+user_id: user_123
+
+Prompt: Test prompt 2
+user_id: user_456
+role: moderator`;
+
+    const result = parseGeneratedPromptsWithInputs(output, ['user_id', 'role']);
+
+    expect(result).toEqual([
+      { prompt: 'Test prompt 1', inputs: { role: 'admin', user_id: 'user_123' } },
+      { prompt: 'Test prompt 2', inputs: { user_id: 'user_456', role: 'moderator' } },
+    ]);
   });
 });

@@ -135,7 +135,14 @@ function createPluginFactory<T extends PluginConfig>(
   return {
     key,
     validate: validate as ((config: PluginConfig) => void) | undefined,
-    action: async ({ provider, purpose, injectVar, n, delayMs, config }: PluginActionParams) => {
+    action: async ({
+      provider,
+      purpose,
+      injectVar,
+      n,
+      delayMs,
+      config,
+    }: PluginActionParams) => {
       if ((PluginClass as any).canGenerateRemote === false || !shouldGenerateRemote()) {
         logger.debug(`Using local redteam generation for ${key}`);
         return new PluginClass(provider, purpose, injectVar, config as T).generateTests(n, delayMs);

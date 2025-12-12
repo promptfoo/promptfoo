@@ -144,6 +144,8 @@ export async function getPiiLeakTestsForCategory(
     throw new Error(`Category ${categoryKey} not found`);
   }
 
+  const inputs = config?.inputs;
+
   const nunjucks = getNunjucksEngine();
   const promptTemplate = nunjucks.renderString(
     generatePiiLeak(config?.examples || [category.examples]),
@@ -154,9 +156,10 @@ export async function getPiiLeakTestsForCategory(
     },
   );
 
-  const promptTemplateWithModifiers = RedteamPluginBase.appendModifiers(
-    promptTemplate,
-    config ?? {},
+  let promptTemplateWithModifiers = RedteamPluginBase.appendModifiers(promptTemplate, config ?? {});
+  promptTemplateWithModifiers = RedteamPluginBase.appendInputsInstructions(
+    promptTemplateWithModifiers,
+    inputs,
   );
 
   const piiLeakPrompts = await provider.callApi(promptTemplateWithModifiers);
@@ -169,6 +172,30 @@ export async function getPiiLeakTestsForCategory(
     return [];
   }
 
+  // Use new parser if inputs are present
+  if (inputs && Object.keys(inputs).length > 0) {
+    const { parseGeneratedPromptsWithInputs } = await import('../util');
+    const parsedWithInputs = parseGeneratedPromptsWithInputs(generatedPrompts, Object.keys(inputs));
+    return parsedWithInputs.map((item) => ({
+      vars: {
+        [injectVar]: item.prompt,
+        ...(item.inputs || {}),
+      },
+      assert: [
+        {
+          type: PLUGIN_ID,
+          metric: 'PIILeak',
+        },
+      ],
+      metadata: {
+        ...(item.inputs && Object.keys(item.inputs).length > 0
+          ? { generatedInputs: Object.keys(item.inputs) }
+          : {}),
+      },
+    }));
+  }
+
+  // Legacy parsing for backwards compatibility
   const prompts = generatedPrompts
     .split('\n')
     .filter((line) => line.includes('Prompt:'))

@@ -12,7 +12,69 @@ import type { CallApiContextParams, ProviderResponse, RunEvalOptions } from '../
  * Normalizes different types of apostrophes to a standard single quote
  */
 export function normalizeApostrophes(str: string): string {
-  return str.replace(/['′’']/g, "'");
+  return str.replace(/['′'']/g, "'");
+}
+
+/**
+ * Parses the LLM response of generated prompts with custom input variables.
+ * Extracts both the prompt and the generated values for each input variable.
+ *
+ * @param output - The LLM response containing prompts and input values.
+ * @param inputKeys - Array of input variable names to extract.
+ * @returns An array of objects with prompt and inputs.
+ */
+export function parseGeneratedPromptsWithInputs(
+  output: string,
+  inputKeys: string[] = [],
+): Array<{ prompt: string; inputs: Record<string, string> }> {
+  const testCases: Array<{ prompt: string; inputs: Record<string, string> }> = [];
+  const lines = output.split('\n');
+
+  let currentPrompt: string | null = null;
+  let currentInputs: Record<string, string> = {};
+
+  for (const line of lines) {
+    const trimmedLine = line.trim();
+
+    // Match "Prompt: ..." or "Prompt N: ..." (case-insensitive)
+    const promptMatch = trimmedLine.match(/^Prompt(?:\s+\d+)?:\s*(.+)$/i);
+    if (promptMatch) {
+      // Save previous test case if exists
+      if (currentPrompt !== null) {
+        testCases.push({ prompt: currentPrompt, inputs: currentInputs });
+      }
+
+      currentPrompt = promptMatch[1].trim();
+      currentInputs = {};
+      continue;
+    }
+
+    // Match input variables: "var_name: value"
+    if (currentPrompt !== null && trimmedLine) {
+      for (const inputKey of inputKeys) {
+        // Case-insensitive match for input key
+        const inputMatch = trimmedLine.match(new RegExp(`^${inputKey}:\\s*(.+)$`, 'i'));
+        if (inputMatch) {
+          currentInputs[inputKey] = inputMatch[1].trim();
+          break;
+        }
+      }
+    }
+
+    // Empty line signals end of test case
+    if (trimmedLine === '' && currentPrompt !== null) {
+      testCases.push({ prompt: currentPrompt, inputs: currentInputs });
+      currentPrompt = null;
+      currentInputs = {};
+    }
+  }
+
+  // Save last test case if it exists
+  if (currentPrompt !== null) {
+    testCases.push({ prompt: currentPrompt, inputs: currentInputs });
+  }
+
+  return testCases;
 }
 
 const REFUSAL_PREFIXES = [

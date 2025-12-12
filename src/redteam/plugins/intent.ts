@@ -22,7 +22,12 @@ export class IntentPlugin extends RedteamPluginBase {
   static readonly canGenerateRemote = false;
   private intents: (string | string[])[];
 
-  constructor(provider: ApiProvider, purpose: string, injectVar: string, config: PluginConfig) {
+  constructor(
+    provider: ApiProvider,
+    purpose: string,
+    injectVar: string,
+    config: PluginConfig,
+  ) {
     super(provider, purpose, injectVar, config);
     invariant(config.intent, 'An "intent" property is required for the intent plugin.');
     // Handle both string and array configs
