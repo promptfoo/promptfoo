@@ -318,6 +318,11 @@ export async function runEval({
   Object.assign(vars, registers);
 
   // Initialize these outside try block so they're in scope for the catch
+  // Merge test.options into prompt.config (test options override prompt config)
+  const mergedPromptConfig = {
+    ...(prompt.config ?? {}),
+    ...(test.options ?? {}),
+  };
   const setup = {
     provider: {
       id: provider.id(),
@@ -327,7 +332,7 @@ export async function runEval({
     prompt: {
       raw: '',
       label: promptLabel,
-      config: prompt.config,
+      config: mergedPromptConfig,
     },
     vars,
   };
@@ -360,12 +365,17 @@ export async function runEval({
       // Generate trace context if tracing is enabled
       traceContext = await generateTraceContextIfNeeded(test, evaluateOptions, testIdx, promptIdx);
 
+      // Create a prompt object with merged config for the provider
+      const promptWithMergedConfig = {
+        ...prompt,
+        config: mergedPromptConfig,
+      };
       const callApiContext: any = {
         // Always included
         vars,
 
         // Part of these may be removed in python and script providers, but every Javascript provider gets them
-        prompt,
+        prompt: promptWithMergedConfig,
         filters,
         originalProvider: provider,
         test,
