@@ -251,10 +251,7 @@ providers:
 defaultTest:
   options:
     # Grader (judge)
-    provider:
-      id: openai:gpt-5.2
-      config:
-        temperature: 0
+    provider: openai:gpt-5.2
 
 tests:
   - vars:
@@ -353,10 +350,7 @@ Reference it in your config:
 defaultTest:
   options:
     rubricPrompt: file://graders/judge-prompt.yaml
-    provider:
-      id: openai:gpt-5.2
-      config:
-        temperature: 0
+    provider: openai:gpt-5.2
 ```
 
 The `rubricPrompt` supports these variables:
@@ -418,10 +412,7 @@ providers:
 
 defaultTest:
   options:
-    provider:
-      id: openai:gpt-5.2
-      config:
-        temperature: 0
+    provider: openai:gpt-5.2
 
 tests:
   - vars:
@@ -603,15 +594,11 @@ To get more consistent results:
 
 1. **Write specific rubrics** with clear criteria—ambiguity is the main source of variance
 2. **Use low-precision scales** (binary or 3-point) rather than 1-10 scales
-3. **Set `temperature: 0`** for deterministic outputs
 
 ```yaml
 defaultTest:
   options:
-    provider:
-      id: openai:gpt-5.2
-      config:
-        temperature: 0
+    provider: openai:gpt-5.2
 ```
 
 :::note
@@ -629,7 +616,6 @@ defaultTest:
     provider:
       id: openai:gpt-5.2
       config:
-        temperature: 0
         response_format:
           type: json_schema
           json_schema:
@@ -733,10 +719,7 @@ assert:
 ```yaml title="ci-strict.yaml"
 defaultTest:
   options:
-    provider:
-      id: openai:gpt-5.2
-      config:
-        temperature: 0
+    provider: openai:gpt-5.2
 ```
 
 ## Promptfoo's model-graded assertions
@@ -810,7 +793,7 @@ Use [`assert-set`](/docs/configuration/expected-outputs/deterministic#assert-set
 
 ### Why do my scores vary between runs?
 
-Write more specific rubrics—ambiguity is the main cause of variance. Use low-precision scales (binary or 3-point) rather than 1-10. Set `temperature: 0` for deterministic outputs. See [Reducing judge variance](#reducing-judge-variance).
+Write more specific rubrics—ambiguity is the main cause of variance. Use low-precision scales (binary or 3-point) rather than 1-10. See [Reducing judge variance](#reducing-judge-variance).
 
 ### How do I evaluate multi-turn conversations?
 
