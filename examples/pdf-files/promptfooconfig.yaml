@@ -5,7 +5,7 @@ prompts:
   - file://prompt.py:format_pdf_prompt
 
 providers:
-  - id: vertex:gemini-2.5-flash
+  - id: google:gemini-2.5-flash
   - id: anthropic:messages:claude-sonnet-4-5-20250929
   - id: openai:responses:gpt-5.2
 
