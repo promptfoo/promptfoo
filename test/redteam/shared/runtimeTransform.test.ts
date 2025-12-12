@@ -217,7 +217,7 @@ describe('runtimeTransform', () => {
     });
 
     it('should handle different inject variable names', async () => {
-      const result = await applyRuntimeTransforms('test', 'query', ['base64'], mockStrategies);
+      await applyRuntimeTransforms('test', 'query', ['base64'], mockStrategies);
 
       // The strategy should receive the correct inject var name
       expect(mockBase64Strategy.action).toHaveBeenCalledWith(

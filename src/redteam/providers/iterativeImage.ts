@@ -355,6 +355,7 @@ async function runRedteamConversation({
             undefined,
             options,
           );
+          accumulateResponseTokenUsage(totalTokenUsage, visionResponse);
 
           if (visionProvider.delay) {
             await sleep(visionProvider.delay);
