@@ -10,6 +10,7 @@ import type { Agent } from 'http';
 import { getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
+import { getPricingData, type BedrockPricingData } from './pricingFetcher';
 import type { BedrockRuntime, Trace } from '@aws-sdk/client-bedrock-runtime';
 import type { AwsCredentialIdentity, AwsCredentialIdentityProvider } from '@aws-sdk/types';
 
@@ -27,6 +28,8 @@ export interface BedrockOptions {
   trace?: Trace;
   showThinking?: boolean;
   endpoint?: string;
+  /** Custom cost override. Can be a single number (per token) or { input, output } per token. */
+  cost?: number | { input: number; output: number };
 }
 
 export abstract class AwsBedrockGenericProvider {
@@ -34,6 +37,8 @@ export abstract class AwsBedrockGenericProvider {
   env?: EnvOverrides;
   bedrock?: BedrockRuntime;
   config: BedrockOptions;
+  private pricingData?: BedrockPricingData | null;
+  private pricingDataPromise?: Promise<BedrockPricingData | null>;
 
   constructor(
     modelName: string,
@@ -179,5 +184,46 @@ export abstract class AwsBedrockGenericProvider {
       getEnvString('AWS_BEDROCK_REGION') ||
       'us-east-1'
     );
+  }
+
+  /**
+   * Gets pricing data for cost calculation, with lazy loading and caching.
+   * Pricing fetch is done asynchronously and won't block the API call.
+   * Returns cached data if available, null if still fetching or failed.
+   */
+  async getPricingDataForCost(): Promise<BedrockPricingData | null> {
+    // Return cached result if we have it
+    if (this.pricingData !== undefined) {
+      return this.pricingData;
+    }
+
+    // If a fetch is already in progress, wait for it
+    if (this.pricingDataPromise) {
+      return this.pricingDataPromise;
+    }
+
+    // Start fetching pricing data
+    // Only fetch if we have IAM credentials (not API key-only auth)
+    const apiKey = this.getApiKey();
+    if (apiKey && !this.config.accessKeyId) {
+      // API key-only auth - pricing API won't work without IAM credentials
+      logger.debug('[Bedrock]: Skipping pricing fetch - API key auth without IAM credentials');
+      this.pricingData = null;
+      return null;
+    }
+
+    const credentials = await this.getCredentials();
+    this.pricingDataPromise = getPricingData(this.getRegion(), credentials)
+      .then((data) => {
+        this.pricingData = data;
+        return data;
+      })
+      .catch((err) => {
+        logger.debug('[Bedrock]: Failed to fetch pricing data', { error: String(err) });
+        this.pricingData = null;
+        return null;
+      });
+
+    return this.pricingDataPromise;
   }
 }
