@@ -7,10 +7,9 @@ export const handleGuardrails = async ({
   inverse,
   providerResponse,
 }: AssertionParams): Promise<GradingResult> => {
-  const guardrails =
-    providerResponse.guardrails ||
+  const guardrails = providerResponse.guardrails ||
     providerResponse.metadata?.redteamHistory?.[providerResponse.metadata.redteamHistory.length - 1]
-      ?.guardrails;
+      ?.guardrails || { flagged: false, flaggedInput: false, flaggedOutput: false };
   logger.debug(`Guardrails from target response: ${JSON.stringify(guardrails, null, 2)}`);
 
   if (guardrails) {

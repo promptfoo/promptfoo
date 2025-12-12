@@ -73,6 +73,7 @@ describe('getTokenUsage', () => {
     };
 
     const result = getTokenUsage(data, true);
+    // Cached responses don't count as a new request
     expect(result).toEqual({
       cached: 100,
       total: 100,

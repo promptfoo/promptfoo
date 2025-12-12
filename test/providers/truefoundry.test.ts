@@ -368,6 +368,7 @@ describe('TrueFoundry', () => {
           tokenUsage: {
             total: 10,
             cached: 10,
+            numRequests: 1,
           },
         });
         expect(cachedResult.latencyMs).toBeGreaterThanOrEqual(0);

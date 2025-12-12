@@ -1,29 +1,36 @@
-import { vi, type Mock } from 'vitest';
+import { describe, it, expect, beforeEach, vi, type Mock } from 'vitest';
 import { generateEvalSummary } from '../../../src/commands/eval/summary';
 import type { EvalSummaryParams } from '../../../src/commands/eval/summary';
+import type { TokenUsageTracker } from '../../../src/util/tokenUsage';
 import { stripAnsi } from '../../util/utils';
 
+type MockTracker = {
+  getProviderIds: Mock;
+  getProviderUsage: Mock;
+  trackUsage: Mock;
+  resetAllUsage: Mock;
+  resetProviderUsage: Mock;
+  getTotalUsage: Mock;
+  cleanup: Mock;
+};
+
+function createMockTracker(): TokenUsageTracker {
+  return {
+    getProviderIds: vi.fn().mockReturnValue([]),
+    getProviderUsage: vi.fn(),
+    trackUsage: vi.fn(),
+    resetAllUsage: vi.fn(),
+    resetProviderUsage: vi.fn(),
+    getTotalUsage: vi.fn(),
+    cleanup: vi.fn(),
+  } as unknown as TokenUsageTracker;
+}
+
 describe('generateEvalSummary', () => {
-  let mockTracker: {
-    getProviderIds: Mock;
-    getProviderUsage: Mock;
-    trackUsage: Mock;
-    resetAllUsage: Mock;
-    resetProviderUsage: Mock;
-    getTotalUsage: Mock;
-    cleanup: Mock;
-  };
+  let mockTracker: MockTracker & TokenUsageTracker;
 
   beforeEach(() => {
-    mockTracker = {
-      getProviderIds: vi.fn().mockReturnValue([]),
-      getProviderUsage: vi.fn(),
-      trackUsage: vi.fn(),
-      resetAllUsage: vi.fn(),
-      resetProviderUsage: vi.fn(),
-      getTotalUsage: vi.fn(),
-      cleanup: vi.fn(),
-    };
+    mockTracker = createMockTracker() as MockTracker & TokenUsageTracker;
   });
 
   describe('completion message', () => {

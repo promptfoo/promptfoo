@@ -200,14 +200,15 @@ describe('HttpAdvancedConfiguration', () => {
       />,
     );
 
-    // Click on Digital Signature Auth tab first
-    const digitalSignatureTab = screen.getByRole('tab', { name: /Digital Signature Auth/i });
-    fireEvent.click(digitalSignatureTab);
+    // Click on Authorization tab first (digital signature is now part of Authorization tab)
+    const authorizationTab = screen.getByRole('tab', { name: /Authorization/i });
+    fireEvent.click(authorizationTab);
 
     // Check that PEM is selected by default
-    // The Select element renders as a combobox role without a name, so we get all comboboxes
+    // The first combobox is "Authentication Type" (showing "Digital Signature")
+    // The second combobox is "Certificate Type" (showing "PEM")
     const comboboxes = screen.getAllByRole('combobox');
-    const certificateTypeSelect = comboboxes[0]; // First combobox is the certificate type
+    const certificateTypeSelect = comboboxes[1]; // Second combobox is the certificate type
     expect(certificateTypeSelect).toHaveTextContent('PEM');
   });
 
@@ -230,9 +231,9 @@ describe('HttpAdvancedConfiguration', () => {
         />,
       );
 
-      // Click on Digital Signature Auth tab first
-      const digitalSignatureTab = screen.getByRole('tab', { name: /Digital Signature Auth/i });
-      fireEvent.click(digitalSignatureTab);
+      // Click on Authorization tab first (digital signature is now part of Authorization tab)
+      const authorizationTab = screen.getByRole('tab', { name: /Authorization/i });
+      fireEvent.click(authorizationTab);
 
       expect(screen.getByText('Keystore File')).toBeInTheDocument();
       expect(screen.getByLabelText('Keystore Path')).toBeInTheDocument();
@@ -259,9 +260,9 @@ describe('HttpAdvancedConfiguration', () => {
       />,
     );
 
-    // Click on Digital Signature Auth tab first
-    const digitalSignatureTab = screen.getByRole('tab', { name: /Digital Signature Auth/i });
-    fireEvent.click(digitalSignatureTab);
+    // Click on Authorization tab first (digital signature is now part of Authorization tab)
+    const authorizationTab = screen.getByRole('tab', { name: /Authorization/i });
+    fireEvent.click(authorizationTab);
 
     expect(screen.getByLabelText('PFX File Path')).toBeInTheDocument();
 
@@ -290,9 +291,9 @@ describe('HttpAdvancedConfiguration', () => {
       />,
     );
 
-    // Click on Digital Signature Auth tab first
-    const digitalSignatureTab = screen.getByRole('tab', { name: /Digital Signature Auth/i });
-    fireEvent.click(digitalSignatureTab);
+    // Click on Authorization tab first (digital signature is now part of Authorization tab)
+    const authorizationTab = screen.getByRole('tab', { name: /Authorization/i });
+    fireEvent.click(authorizationTab);
 
     const pfxPasswordInput = screen.getByLabelText('PFX Password') as HTMLInputElement;
     fireEvent.change(pfxPasswordInput, { target: { value: 'test-password' } });
@@ -322,9 +323,9 @@ describe('HttpAdvancedConfiguration', () => {
       />,
     );
 
-    // Click on Digital Signature Auth tab first
-    const digitalSignatureTab = screen.getByRole('tab', { name: /Digital Signature Auth/i });
-    fireEvent.click(digitalSignatureTab);
+    // Click on Authorization tab first (digital signature is now part of Authorization tab)
+    const authorizationTab = screen.getByRole('tab', { name: /Authorization/i });
+    fireEvent.click(authorizationTab);
 
     const keystorePasswordInput = screen.getByLabelText('Keystore Password');
     const keyAliasInput = screen.getByLabelText('Key Alias');
@@ -363,9 +364,9 @@ describe('HttpAdvancedConfiguration', () => {
       />,
     );
 
-    // Click on Digital Signature Auth tab first
-    const digitalSignatureTab = screen.getByRole('tab', { name: /Digital Signature Auth/i });
-    fireEvent.click(digitalSignatureTab);
+    // Click on Authorization tab first (digital signature is now part of Authorization tab)
+    const authorizationTab = screen.getByRole('tab', { name: /Authorization/i });
+    fireEvent.click(authorizationTab);
 
     const keystorePasswordInput = screen.getByLabelText('Keystore Password') as HTMLInputElement;
     expect(keystorePasswordInput).toBeInTheDocument();
@@ -400,13 +401,14 @@ describe('HttpAdvancedConfiguration', () => {
       />,
     );
 
-    // Click on Digital Signature Auth tab first
-    const digitalSignatureTab = screen.getByRole('tab', { name: /Digital Signature Auth/i });
-    fireEvent.click(digitalSignatureTab);
+    // Click on Authorization tab first (digital signature is now part of Authorization tab)
+    const authorizationTab = screen.getByRole('tab', { name: /Authorization/i });
+    fireEvent.click(authorizationTab);
 
     // Change certificate type to JKS
+    // The first combobox is "Authentication Type", the second is "Certificate Type"
     const comboboxes = screen.getAllByRole('combobox');
-    const certificateTypeSelect = comboboxes[0]; // First combobox is the certificate type
+    const certificateTypeSelect = comboboxes[1]; // Second combobox is the certificate type
 
     // MUI Select needs mouseDown event to open
     fireEvent.mouseDown(certificateTypeSelect);
@@ -455,18 +457,19 @@ describe('HttpAdvancedConfiguration', () => {
       />,
     );
 
-    // Click on Digital Signature Auth tab first
-    const digitalSignatureTab = screen.getByRole('tab', { name: /Digital Signature Auth/i });
-    fireEvent.click(digitalSignatureTab);
+    // Click on Authorization tab first (digital signature is now part of Authorization tab)
+    const authorizationTab = screen.getByRole('tab', { name: /Authorization/i });
+    fireEvent.click(authorizationTab);
 
     // Change certificate type to PFX
+    // The first combobox is "Authentication Type", the second is "Certificate Type"
     const comboboxes = screen.getAllByRole('combobox');
-    const certificateTypeSelect = comboboxes[0]; // First combobox is the certificate type
+    const certificateTypeSelect = comboboxes[1]; // Second combobox is the certificate type
 
     // MUI Select needs mouseDown event to open
     fireEvent.mouseDown(certificateTypeSelect);
 
-    // Find and click PFX option
+    // Find and click PFX option (it's labeled "PFX/PKCS#12" in the component)
     const pfxOption = screen.getByRole('option', { name: /PFX/ });
     fireEvent.click(pfxOption);
 
