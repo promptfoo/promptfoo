@@ -135,7 +135,8 @@ export function resolvePackageEntryPoint(packageName: string, baseDir: string): 
     try: true,
   });
 
-  return resolved ?? null;
+  // Normalize the path to use platform-specific separators (forward slashes on Unix, backslashes on Windows)
+  return resolved ? path.normalize(resolved) : null;
 }
 
 // Global variable defined by tsup at build time
