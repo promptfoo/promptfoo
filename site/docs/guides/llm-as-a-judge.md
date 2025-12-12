@@ -603,8 +603,9 @@ To get more consistent results:
 
 1. **Write specific rubrics** with clear criteria—ambiguity is the main source of variance
 2. **Use low-precision scales** (binary or 3-point) rather than 1-10 scales
-3. **Set `temperature: 0`** where supported (standard chat models like gpt-5.2)
-4. **Set `seed`** where supported (OpenAI)—though many providers ignore it
+3. **Configure model parameters** for determinism (see examples below)
+
+**Standard chat models** (GPT-4o, Claude, Gemini):
 
 ```yaml
 defaultTest:
@@ -613,11 +614,22 @@ defaultTest:
       id: openai:gpt-5.2
       config:
         temperature: 0
-        seed: 42
+        seed: 42 # OpenAI only, often ignored
+```
+
+**Reasoning models** (o3, o4-mini) don't support `temperature`. Use `reasoning_effort` instead:
+
+```yaml
+defaultTest:
+  options:
+    provider:
+      id: openai:o3
+      config:
+        reasoning_effort: medium # low, medium, or high
 ```
 
 :::note
-Some models don't support `temperature`. Clear, specific rubrics are the most reliable way to reduce variance across all models.
+Clear, specific rubrics are the most reliable way to reduce variance across all models—more impactful than any parameter setting.
 :::
 
 <details>
@@ -812,7 +824,7 @@ Use [`assert-set`](/docs/configuration/expected-outputs/deterministic#assert-set
 
 ### Why do my scores vary between runs?
 
-Write more specific rubrics—ambiguity is the main cause of variance. Use low-precision scales (binary or 3-point) rather than 1-10. Set `temperature: 0` where supported (not available on reasoning models). `seed` helps on OpenAI but many providers ignore it.
+Write more specific rubrics—ambiguity is the main cause of variance. Use low-precision scales (binary or 3-point) rather than 1-10. For standard chat models, set `temperature: 0`. For reasoning models (o3, o4-mini), use `reasoning_effort` instead. See [Reducing judge variance](#reducing-judge-variance).
 
 ### How do I evaluate multi-turn conversations?
 
