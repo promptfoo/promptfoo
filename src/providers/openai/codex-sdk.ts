@@ -398,7 +398,9 @@ export class OpenAICodexSDKProvider implements ApiProvider {
         ? { additionalDirectories: config.additional_directories }
         : {}),
       ...(config.sandbox_mode ? { sandboxMode: config.sandbox_mode } : {}),
-      ...(config.model_reasoning_effort ? { modelReasoningEffort: config.model_reasoning_effort } : {}),
+      ...(config.model_reasoning_effort
+        ? { modelReasoningEffort: config.model_reasoning_effort }
+        : {}),
       ...(config.network_access_enabled !== undefined
         ? { networkAccessEnabled: config.network_access_enabled }
         : {}),
