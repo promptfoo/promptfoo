@@ -72,6 +72,9 @@ function parseAssertion(assertion: unknown, context: string): Assertion | Assert
   return result.data;
 }
 
+// Maximum number of assertions per test case to prevent DoS
+const MAX_ASSERTIONS_PER_TEST = 10000;
+
 /**
  * Validate assertions in test cases and defaultTest.
  * Uses Zod schema validation for type safety and helpful error messages.
@@ -80,18 +83,40 @@ function parseAssertion(assertion: unknown, context: string): Assertion | Assert
  * @param defaultTest - Optional default test case to validate
  * @throws AssertValidationError if any assertion is malformed
  */
+
 export function validateAssertions(tests: TestCase[], defaultTest?: Partial<TestCase>): void {
   // Validate defaultTest assertions
   if (defaultTest?.assert) {
+    if (!Array.isArray(defaultTest.assert)) {
+      throw new AssertValidationError('defaultTest.assert must be an array');
+    }
+    if (defaultTest.assert.length > MAX_ASSERTIONS_PER_TEST) {
+      throw new AssertValidationError(
+        `defaultTest.assert has ${defaultTest.assert.length} assertions, exceeding maximum of ${MAX_ASSERTIONS_PER_TEST}`,
+      );
+    }
     for (let i = 0; i < defaultTest.assert.length; i++) {
       parseAssertion(defaultTest.assert[i], `defaultTest.assert[${i}]`);
     }
+  }
+
+  // Validate tests array
+  if (!Array.isArray(tests)) {
+    throw new AssertValidationError('tests must be an array');
   }
 
   // Validate test case assertions
   for (let testIdx = 0; testIdx < tests.length; testIdx++) {
     const test = tests[testIdx];
     if (test.assert) {
+      if (!Array.isArray(test.assert)) {
+        throw new AssertValidationError(`tests[${testIdx}].assert must be an array`);
+      }
+      if (test.assert.length > MAX_ASSERTIONS_PER_TEST) {
+        throw new AssertValidationError(
+          `tests[${testIdx}].assert has ${test.assert.length} assertions, exceeding maximum of ${MAX_ASSERTIONS_PER_TEST}`,
+        );
+      }
       for (let i = 0; i < test.assert.length; i++) {
         parseAssertion(test.assert[i], `tests[${testIdx}].assert[${i}]`);
       }

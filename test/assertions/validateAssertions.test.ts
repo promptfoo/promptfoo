@@ -324,4 +324,47 @@ describe('validateAssertions', () => {
       expect(() => validateAssertions(tests)).not.toThrow();
     });
   });
+
+  describe('input validation (security)', () => {
+    it('throws when tests is not an array', () => {
+      expect(() => validateAssertions('not an array' as any)).toThrow(AssertValidationError);
+      expect(() => validateAssertions('not an array' as any)).toThrow(/tests must be an array/);
+    });
+
+    it('throws when tests is an object with length property', () => {
+      // Simulates potential prototype pollution or malicious input
+      const maliciousInput = { length: 1000000, 0: { vars: {} } };
+      expect(() => validateAssertions(maliciousInput as any)).toThrow(AssertValidationError);
+      expect(() => validateAssertions(maliciousInput as any)).toThrow(/tests must be an array/);
+    });
+
+    it('throws when test.assert is not an array', () => {
+      const tests = [{ vars: {}, assert: 'not an array' }] as any;
+      expect(() => validateAssertions(tests)).toThrow(AssertValidationError);
+      expect(() => validateAssertions(tests)).toThrow(/tests\[0\]\.assert must be an array/);
+    });
+
+    it('throws when test.assert is an object with length property', () => {
+      const tests = [{ vars: {}, assert: { length: 100, 0: { type: 'equals' } } }] as any;
+      expect(() => validateAssertions(tests)).toThrow(AssertValidationError);
+      expect(() => validateAssertions(tests)).toThrow(/tests\[0\]\.assert must be an array/);
+    });
+
+    it('throws when defaultTest.assert is not an array', () => {
+      expect(() => validateAssertions([], { assert: 'not an array' } as any)).toThrow(
+        AssertValidationError,
+      );
+      expect(() => validateAssertions([], { assert: 'not an array' } as any)).toThrow(
+        /defaultTest\.assert must be an array/,
+      );
+    });
+
+    it('throws when defaultTest.assert is an object with length property', () => {
+      const defaultTest = { assert: { length: 100, 0: { type: 'equals' } } } as any;
+      expect(() => validateAssertions([], defaultTest)).toThrow(AssertValidationError);
+      expect(() => validateAssertions([], defaultTest)).toThrow(
+        /defaultTest\.assert must be an array/,
+      );
+    });
+  });
 });
