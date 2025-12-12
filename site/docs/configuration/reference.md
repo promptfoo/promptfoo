@@ -105,7 +105,7 @@ The external file must contain the complete configuration object. For OpenAI str
 }
 ```
 
-See the [OpenAI structured outputs guide](/docs/providers/openai#structured-outputs-json-schema) for more details.
+See the [OpenAI structured outputs guide](/docs/providers/openai#using-response_format) for more details.
 
 ### Assertion
 
