@@ -44,6 +44,7 @@ export class EchoProvider implements ApiProvider {
         total: 0,
         prompt: 0,
         completion: 0,
+        numRequests: 1,
       },
       isRefusal: false,
       metadata: context?.metadata || {},

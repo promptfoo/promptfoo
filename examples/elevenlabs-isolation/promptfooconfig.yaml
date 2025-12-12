@@ -1,0 +1,50 @@
+# yaml-language-server: $schema=../../site/static/config-schema.json
+description: ElevenLabs Audio Isolation - Background noise removal
+
+# Isolation uses audio files as inputs - pass via vars
+prompts:
+  - '{{audioFile}}'
+
+providers:
+  # Basic audio isolation (noise removal)
+  - id: elevenlabs:isolation:basic
+    label: Audio Isolation (MP3)
+    config:
+      outputFormat: mp3_44100_128
+
+  # High quality output
+  - id: elevenlabs:isolation:hq
+    label: Audio Isolation (HQ)
+    config:
+      outputFormat: mp3_44100_192
+
+# Default test configuration
+defaultTest:
+  # All tests will require isolation to complete
+  assert:
+    - type: not-contains
+      value: error
+
+tests:
+  - description: Isolate speech from sample1 (Armstrong)
+    vars:
+      audioFile: examples/elevenlabs-stt/audio/sample1.mp3
+    assert:
+      - type: javascript
+        value: output.includes('isolated successfully')
+      - type: cost
+        threshold: 1.00
+
+  - description: Isolate speech from sample2 (Hello message)
+    vars:
+      audioFile: examples/elevenlabs-stt/audio/sample2.wav
+    assert:
+      - type: javascript
+        value: output.includes('isolated successfully')
+
+  - description: Isolate speech from sample3 (Kennedy)
+    vars:
+      audioFile: examples/elevenlabs-stt/audio/sample3_multiple_speakers.mp3
+    assert:
+      - type: javascript
+        value: output.includes('isolated successfully')
