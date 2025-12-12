@@ -815,6 +815,10 @@
                                 "type": "boolean"
                               }
                             }
+                          },
+                          {
+                            "type": "object",
+                            "additionalProperties": {}
                           }
                         ]
                       },
