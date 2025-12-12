@@ -1,6 +1,6 @@
 import { type GradingResult, isGradingResult } from '../types/index';
 import invariant from '../util/invariant';
-import { getProcessShim } from '../util/transform';
+import { getProcessShim } from '../util/processShim';
 
 import type { AssertionParams } from '../types/index';
 
