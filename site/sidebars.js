@@ -247,6 +247,10 @@ const redTeamSidebar = [
     items: [
       {
         type: 'doc',
+        id: 'red-team/recon',
+      },
+      {
+        type: 'doc',
         id: 'red-team/discovery',
       },
       {
