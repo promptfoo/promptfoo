@@ -1018,9 +1018,9 @@ describe('Plugins', () => {
     });
   });
 
-  // Test for infinite loop fix - uses normalized comparison to prevent loops
+  // Test for infinite loop fix - updatePlugins compares merged output vs current state
   describe('Plugin sync effect stability', () => {
-    it('should use normalized comparison to prevent infinite re-renders', async () => {
+    it('should not cause infinite re-renders when selecting presets', async () => {
       // Set up config with existing intent plugin
       const configWithIntent = {
         plugins: [
@@ -1041,7 +1041,7 @@ describe('Plugins', () => {
       fireEvent.click(recommendedPreset);
 
       // updatePlugins should be called a bounded number of times (not infinite)
-      // With the normalized comparison fix, it should be called once per user interaction
+      // The fix in updatePlugins compares merged output vs current state to prevent loops
       await waitFor(() => {
         expect(mockUpdatePlugins.mock.calls.length).toBeLessThan(5);
       });
@@ -1086,8 +1086,8 @@ describe('Plugins', () => {
       // This test verifies the fix for the infinite loop bug
       // The bug was: effect depends on config.plugins -> calls updatePlugins ->
       // config.plugins changes -> effect runs again -> infinite loop
-      // The fix: normalized comparison ensures the effect only triggers updates
-      // when there's an actual semantic change in plugins.
+      // The fix: updatePlugins compares merged output vs current state,
+      // returning early if they're equal to prevent unnecessary state changes.
 
       let updateCallCount = 0;
       const trackingUpdatePlugins = vi.fn(() => {
@@ -1111,13 +1111,13 @@ describe('Plugins', () => {
       });
 
       // With the infinite loop bug, updateCallCount would be very high or the test would hang
-      // With the normalized comparison fix, it should be called at most once or twice
+      // With the fix in updatePlugins, it should be called at most once or twice
       expect(updateCallCount).toBeLessThan(5);
     });
 
-    it('should skip updatePlugins when normalized plugins are equal', async () => {
-      // This tests that the normalized comparison correctly identifies identical plugins
-      // even when they might have different property orderings or extra properties
+    it('should not call updatePlugins without user interaction', async () => {
+      // Without user interaction (hasUserInteracted is false), the sync effect
+      // should not call updatePlugins
       const existingPlugins = ['bola', { id: 'harmful:hate', config: { numTests: 5 } }];
 
       mockUseRedTeamConfig.mockReturnValue({
