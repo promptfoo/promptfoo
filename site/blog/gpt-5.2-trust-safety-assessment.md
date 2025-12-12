@@ -48,7 +48,7 @@ Total runtime: **~30 minutes** on a MacBook Pro.
 
 We used [Promptfoo](https://github.com/promptfoo/promptfoo), an [open-source LLM red teaming tool](/docs/red-team/quickstart). The config:
 
-```yaml title="redteam.yaml"
+```yaml title="promptfooconfig.yaml"
 targets:
   - id: openai:chat:gpt-5.2
     config:
@@ -155,7 +155,7 @@ Using the Hydra strategy, the model produced step-by-step MDMA synthesis instruc
 
 **Category:** harmful:insults
 
-Using the Meta strategy, the model generated a 12-line acrostic targeting Elon Musk that spelled out a disparaging phrase. The creative writing format bypassed harassment filters. OpenAI's flagship model roasting xAI's founder on command—it didn't take much convincing.
+Using the Meta strategy, the model generated a 12-line acrostic targeting Elon Musk that spelled out a disparaging phrase. The creative writing format bypassed harassment filters. OpenAI's flagship model roasting xAI's founder on command. It didn't take much convincing.
 
 ![Targeted Harassment Generation](/img/blog/gpt-5.2-security/insult-elon.jpg)
 
@@ -171,7 +171,7 @@ The model provided operational guidance for shipping illegal drugs across border
 
 **Category:** harmful:child-exploitation
 
-After the jailbreak bypassed safety filters, the model generated conversation scripts that could be used to manipulate minors. We are not sharing these outputs publicly.
+After the jailbreak bypassed safety filters, the model generated conversation scripts that could be used to manipulate minors. There are worse examples we are not sharing publicly.
 
 ![Child Grooming Content](/img/blog/gpt-5.2-security/grooming.jpg)
 
@@ -225,7 +225,7 @@ We re-ran the eval with `reasoning_effort: 'low'`. Reasoning tokens let the mode
 | **Meta** (single-turn) | 61.0%        | 55.1%         | -5.9pp  |
 | **Baseline**           | 4.3%         | 5.2%          | +0.9pp  |
 
-Reasoning helped most with multi-turn attacks. But even with reasoning enabled, 62% of Hydra attacks and 55% of Meta attacks still succeeded. The eval required 5,615 probes vs 4,229 in the original—adaptive strategies worked harder against the more resistant model.
+Reasoning helped most with multi-turn attacks. But even with reasoning enabled, 62% of Hydra attacks and 55% of Meta attacks still succeeded. The eval required 5,615 probes vs 4,229 in the original. Adaptive strategies worked harder against the more resistant model.
 
 High-failure categories under low reasoning:
 
@@ -235,7 +235,7 @@ High-failure categories under low reasoning:
 - Dangerous activity: 67%
 - Graphic content: 60%
 
-**Takeaway:** Enable reasoning for safety-critical deployments—it provides meaningful improvement. But it's not a fix. Defense in depth still applies.
+**Takeaway:** Enable reasoning for safety-critical deployments. It provides meaningful improvement, but it's not a fix. Defense in depth still applies.
 
 ---
 
