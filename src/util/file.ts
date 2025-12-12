@@ -250,3 +250,102 @@ export function maybeLoadConfigFromExternalFile(
   }
   return maybeLoadFromExternalFile(config, context);
 }
+
+/**
+ * Extracts text content from a PDF file.
+ *
+ * @param pdfPath Path to the PDF file
+ * @returns Extracted text content trimmed
+ */
+export async function extractTextFromPDF(pdfPath: string): Promise<string> {
+  logger.debug(`Extracting text from PDF: ${pdfPath}`);
+  try {
+    const { PDFParse } = await import('pdf-parse');
+    const dataBuffer = fs.readFileSync(pdfPath);
+    const parser = new PDFParse({ data: dataBuffer });
+    const result = await parser.getText();
+    await parser.destroy();
+    return result.text.trim();
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("Cannot find module 'pdf-parse'")) {
+      throw new Error('pdf-parse is not installed. Please install it with: npm install pdf-parse');
+    }
+    throw new Error(
+      `Failed to extract text from PDF ${pdfPath}: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
+/**
+ * Gets MIME type from file extension
+ *
+ * Supported formats:
+ * - JPEG/JPG (image/jpeg)
+ * - PNG (image/png)
+ * - GIF (image/gif)
+ * - WebP (image/webp)
+ * - BMP (image/bmp)
+ * - SVG (image/svg+xml)
+ * - TIFF (image/tiff)
+ * - ICO (image/x-icon)
+ * - AVIF (image/avif)
+ * - HEIC/HEIF (image/heic)
+ *
+ * @param extension File extension (with or without dot)
+ * @returns MIME type string (defaults to image/jpeg for unknown formats)
+ */
+export function getMimeTypeFromExtension(extension: string): string {
+  const normalizedExt = extension.toLowerCase().replace(/^\./, '');
+  const mimeTypes: Record<string, string> = {
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    png: 'image/png',
+    gif: 'image/gif',
+    bmp: 'image/bmp',
+    webp: 'image/webp',
+    svg: 'image/svg+xml',
+    tif: 'image/tiff',
+    tiff: 'image/tiff',
+    ico: 'image/x-icon',
+    avif: 'image/avif',
+    heic: 'image/heic',
+    heif: 'image/heif',
+  };
+  return mimeTypes[normalizedExt] || 'image/jpeg';
+}
+
+/**
+ * Detects MIME type from base64 magic numbers for additional accuracy
+ *
+ * Magic numbers (base64-encoded file signatures):
+ * - JPEG: /9j/ (0xFFD8FF)
+ * - PNG: iVBORw0KGgo (0x89504E47)
+ * - GIF: R0lGODlh or R0lGODdh (GIF87a/GIF89a)
+ * - WebP: UklGR (RIFF)
+ * - BMP: Qk0 or Qk1 (BM)
+ * - TIFF: SUkq or TU0A (II* or MM*)
+ * - ICO: AAABAA (0x00000100)
+ *
+ * @param base64Data Base64 encoded image data
+ * @returns MIME type string or null if format cannot be detected
+ */
+export function detectMimeFromBase64(base64Data: string): string | null {
+  // Check magic numbers at the start of base64 data
+  if (base64Data.startsWith('/9j/')) {
+    return 'image/jpeg';
+  } else if (base64Data.startsWith('iVBORw0KGgo')) {
+    return 'image/png';
+  } else if (base64Data.startsWith('R0lGODlh') || base64Data.startsWith('R0lGODdh')) {
+    return 'image/gif';
+  } else if (base64Data.startsWith('UklGR')) {
+    return 'image/webp';
+  } else if (base64Data.startsWith('Qk0') || base64Data.startsWith('Qk1')) {
+    return 'image/bmp';
+  } else if (base64Data.startsWith('SUkq') || base64Data.startsWith('TU0A')) {
+    return 'image/tiff';
+  } else if (base64Data.startsWith('AAABAA')) {
+    return 'image/x-icon';
+  }
+  // Return null if format cannot be detected - caller will log warning
+  return null;
+}
