@@ -193,15 +193,13 @@ The longer rubric isn't just more words; it's more consistent. When you define e
 
 ---
 
-## December 2025: automation makes ASR even less portable
+## Automation adds more variables
 
-In 2025, most high ASR results come from automation: multi-try search, memory, and parallel sampling. That's useful operationally, but it turns "ASR" into a bundle of choices: attempt budget, search policy, stopping rules, and branching strategy.
+Automated red teaming frameworks introduce additional measurement choices: search policies, stopping rules, memory across attempts, and branching strategies. This is the attempt budget problem compounded.
 
-Recent work makes this explicit:
+If one system uses exhaustive search with 10,000 attempts and another uses greedy search with early stopping, their ASR numbers aren't comparable even if everything else matches. The automation design becomes part of the measurement.
 
-- Large-scale red teaming comparisons show automated approaches outperform manual on success rate while differing on time-to-solve, meaning "attempt budget" is now the default variable, not the exception ([Mulla et al., 2025](https://arxiv.org/abs/2504.19855))
-- Newer automated red teaming papers explicitly reframe ASR around per-attack repeatability ("discoverability") by repeating the same attack across random seeds ([Freenor et al., 2025](https://arxiv.org/abs/2507.22133))
-- Autonomous frameworks report higher ASR at lower cost by changing search and memory, which makes cross-paper comparisons fragile unless you standardize what "one attack" means ([AutoRedTeamer](https://arxiv.org/abs/2503.15754))
+Recent work makes this explicit. [Mulla et al.](https://arxiv.org/abs/2504.19855) show that automated approaches outperform manual on success rate while differing on time-to-solve. [Freenor et al.](https://arxiv.org/abs/2507.22133) reframe ASR around per-attack repeatability by testing across random seeds. [AutoRedTeamer](https://arxiv.org/abs/2503.15754) reports higher ASR at lower cost by changing search and memory. In each case, the automation choices shape the reported numbers.
 
 If two papers pick different automation defaults, the leaderboard mostly measures those defaults.
 
