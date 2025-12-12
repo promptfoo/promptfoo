@@ -151,7 +151,7 @@ describe('ElevenLabsHistoryProvider', () => {
 
       const response = await provider.callApi('', {
         vars: { conversationId: 'conv-456' },
-      } as any);
+      });
 
       expect(response.error).toBeUndefined();
       expect(response.metadata?.conversationId).toBe('conv-456');
@@ -235,7 +235,7 @@ describe('ElevenLabsHistoryProvider', () => {
 
       const response = await provider.callApi('', {
         vars: { agentId: 'agent-456' },
-      } as any);
+      });
 
       expect(response.error).toBeUndefined();
       expect(response.metadata?.agentId).toBe('agent-456');
@@ -253,7 +253,7 @@ describe('ElevenLabsHistoryProvider', () => {
 
       await provider.callApi('', {
         vars: { status: 'completed' },
-      } as any);
+      });
 
       expect((provider as any).client.get).toHaveBeenCalledWith(
         expect.stringContaining('status=completed'),
@@ -275,7 +275,7 @@ describe('ElevenLabsHistoryProvider', () => {
           startDate: '2024-01-01',
           endDate: '2024-01-31',
         },
-      } as any);
+      });
 
       const callArg = mockGet.mock.calls[0][0];
       expect(callArg).toContain('start_date=2024-01-01');

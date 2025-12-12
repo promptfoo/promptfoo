@@ -144,9 +144,7 @@ interface PromptfooChatCompletionOptions {
     | 'judge'
     | 'blocking-question-analysis'
     | 'meta-agent-decision'
-    | 'hydra-decision'
-    | 'voice-crescendo'
-    | 'voice-crescendo-eval';
+    | 'hydra-decision';
 }
 
 /**

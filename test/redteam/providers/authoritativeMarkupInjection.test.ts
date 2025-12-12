@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ApiProvider, CallApiContextParams } from '../../../src/types/index';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const mockFetchWithProxy = vi.fn() as any;
+const mockFetchWithProxy = vi.fn<any>();
 
 vi.mock('../../../src/util/fetch/index', () => ({
   fetchWithProxy: (...args: unknown[]) => mockFetchWithProxy(...args),

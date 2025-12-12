@@ -501,27 +501,27 @@ export async function renderPrompt(
 // Extension Hooks
 // ================================
 
-export type BeforeAllExtensionHookContext = {
+type BeforeAllExtensionHookContext = {
   suite: TestSuite;
 };
 
-export type BeforeEachExtensionHookContext = {
+type BeforeEachExtensionHookContext = {
   test: TestCase;
 };
 
-export type AfterEachExtensionHookContext = {
+type AfterEachExtensionHookContext = {
   test: TestCase;
   result: EvaluateResult;
 };
 
-export type AfterAllExtensionHookContext = {
+type AfterAllExtensionHookContext = {
   suite: TestSuite;
   results: EvalResult[];
   prompts: CompletedPrompt[];
 };
 
 // Maps hook names to their context types.
-export type HookContextMap = {
+type HookContextMap = {
   beforeAll: BeforeAllExtensionHookContext;
   beforeEach: BeforeEachExtensionHookContext;
   afterEach: AfterEachExtensionHookContext;

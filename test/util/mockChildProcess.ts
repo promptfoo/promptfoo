@@ -23,7 +23,7 @@ export interface MockChildProcessOptions {
   customEventHandlers?: Record<string, (callback: (...args: any[]) => void) => void>;
 }
 
-export interface MockChildProcess {
+export interface MockChildProcess extends Partial<ChildProcess> {
   stdout: { on: ReturnType<typeof vi.fn> };
   stderr: { on: ReturnType<typeof vi.fn> };
   killed: boolean;

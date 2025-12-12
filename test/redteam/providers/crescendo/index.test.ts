@@ -2531,8 +2531,8 @@ describe('CrescendoProvider - perTurnLayers configuration', () => {
     // Verify redteamHistory exists but promptAudio/promptImage are undefined
     expect(result.metadata?.redteamHistory).toBeDefined();
     if (result.metadata?.redteamHistory && result.metadata.redteamHistory.length > 0) {
-      expect((result.metadata.redteamHistory[0] as any).promptAudio).toBeUndefined();
-      expect((result.metadata.redteamHistory[0] as any).promptImage).toBeUndefined();
+      expect(result.metadata.redteamHistory[0].promptAudio).toBeUndefined();
+      expect(result.metadata.redteamHistory[0].promptImage).toBeUndefined();
     }
   });
 });

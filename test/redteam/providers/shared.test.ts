@@ -286,7 +286,9 @@ describe('shared redteam provider utilities', () => {
 
       const mockProvider: ApiProvider = {
         id: () => 'test-provider',
-        callApi: vi.fn().mockRejectedValue(abortError) as any,
+        callApi: vi
+          .fn<Promise<ProviderResponse>, [string, CallApiContextParams | undefined, any]>()
+          .mockRejectedValue(abortError),
       };
 
       await expect(getTargetResponse(mockProvider, 'test prompt')).rejects.toThrow(
@@ -299,7 +301,9 @@ describe('shared redteam provider utilities', () => {
 
       const mockProvider: ApiProvider = {
         id: () => 'test-provider',
-        callApi: vi.fn().mockRejectedValue(regularError) as any,
+        callApi: vi
+          .fn<Promise<ProviderResponse>, [string, CallApiContextParams | undefined, any]>()
+          .mockRejectedValue(regularError),
       };
 
       const result = await getTargetResponse(mockProvider, 'test prompt');

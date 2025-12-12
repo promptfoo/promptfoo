@@ -57,8 +57,6 @@ export interface AgentTool {
  */
 export interface SimulatedUser {
   prompt?: string; // Instructions for simulated user behavior
-  persona?: string; // Persona description for simulated user
-  first_message?: string; // Initial message from simulated user
   temperature?: number; // User model temperature
   responseStyle?: 'concise' | 'verbose' | 'casual' | 'formal';
   language?: string; // Language for simulated user (ISO 639-1 code)
@@ -84,8 +82,6 @@ export interface ToolMockConfig {
     returnValue?: any;
     error?: string;
     latencyMs?: number;
-    name?: string;
-    mock_response?: any;
   };
 }
 
@@ -139,7 +135,7 @@ export interface ToolCall {
 export interface ConversationAnalysis {
   call_successful: boolean;
   transcript_summary?: string;
-  evaluation_criteria_results?: EvaluationResult[] | RawEvaluationCriteriaResults;
+  evaluation_criteria_results?: EvaluationResult[];
   sentiment?: {
     overall: 'positive' | 'neutral' | 'negative';
     by_turn?: Array<{
@@ -153,23 +149,7 @@ export interface ConversationAnalysis {
 }
 
 /**
- * Raw evaluation result from API (keyed by criterion name)
- */
-export interface RawEvaluationCriteriaResult {
-  criteria_id: string;
-  result: 'success' | 'failure' | string;
-  rationale: string;
-}
-
-/**
- * Raw evaluation criteria results map from API
- */
-export interface RawEvaluationCriteriaResults {
-  [criterionName: string]: RawEvaluationCriteriaResult;
-}
-
-/**
- * Evaluation result for a criterion (normalized)
+ * Evaluation result for a criterion
  */
 export interface EvaluationResult {
   criterion: string;

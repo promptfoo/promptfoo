@@ -182,6 +182,7 @@ describe('monkeyPatchFetch', () => {
 
   it('should handle connection errors with specific messaging', async () => {
     const connectionError = new TypeError('fetch failed');
+    // @ts-expect-error undici error cause
     connectionError.cause = {
       stack: 'Error: connect ECONNREFUSED\n    at internalConnectMultiple',
     };
