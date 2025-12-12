@@ -24,7 +24,12 @@ describe('useCloudConfig', () => {
   it('should initialize with isLoading=true, data=null, and error=null', () => {
     (callApi as Mock).mockResolvedValue({
       ok: true,
-      json: vi.fn().mockResolvedValue({ appUrl: 'https://app.promptfoo.com', isEnabled: true }),
+      json: vi.fn().mockResolvedValue({
+        isAuthenticated: true,
+        hasApiKey: true,
+        appUrl: 'https://app.promptfoo.app',
+        isEnterprise: false,
+      }),
     });
 
     const { result } = renderHook(() => useCloudConfig());
@@ -35,14 +40,16 @@ describe('useCloudConfig', () => {
   });
 
   it('should set data and isLoading=false on successful API call', async () => {
-    const mockCloudConfig = {
-      appUrl: 'https://app.promptfoo.com',
-      isEnabled: true,
+    const mockApiResponse = {
+      isAuthenticated: true,
+      hasApiKey: true,
+      appUrl: 'https://app.promptfoo.app',
+      isEnterprise: false,
     };
 
     (callApi as Mock).mockResolvedValue({
       ok: true,
-      json: vi.fn().mockResolvedValue(mockCloudConfig),
+      json: vi.fn().mockResolvedValue(mockApiResponse),
     });
 
     const { result } = renderHook(() => useCloudConfig());
@@ -51,10 +58,34 @@ describe('useCloudConfig', () => {
       expect(result.current.isLoading).toBe(false);
     });
 
-    expect(result.current.data).toEqual(mockCloudConfig);
+    expect(result.current.data).toEqual({
+      appUrl: 'https://app.promptfoo.app',
+      isEnabled: true,
+      isEnterprise: false,
+    });
     expect(result.current.error).toBeNull();
     expect(callApi).toHaveBeenCalledTimes(1);
-    expect(callApi).toHaveBeenCalledWith('/user/cloud-config');
+    expect(callApi).toHaveBeenCalledWith('/user/cloud/status');
+  });
+
+  it('should map isAuthenticated to isEnabled for backwards compatibility', async () => {
+    (callApi as Mock).mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        isAuthenticated: true,
+        hasApiKey: true,
+        appUrl: 'https://app.promptfoo.app',
+        isEnterprise: false,
+      }),
+    });
+
+    const { result } = renderHook(() => useCloudConfig());
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    expect(result.current.data?.isEnabled).toBe(true);
   });
 
   it('should set error and isLoading=false when API returns ok=false', async () => {
@@ -72,7 +103,7 @@ describe('useCloudConfig', () => {
     expect(result.current.data).toBeNull();
     expect(result.current.error).toBe('Failed to fetch cloud config');
     expect(callApi).toHaveBeenCalledTimes(1);
-    expect(callApi).toHaveBeenCalledWith('/user/cloud-config');
+    expect(callApi).toHaveBeenCalledWith('/user/cloud/status');
   });
 
   it('should handle network errors gracefully', async () => {
@@ -88,7 +119,7 @@ describe('useCloudConfig', () => {
     expect(result.current.data).toBeNull();
     expect(result.current.error).toBe('Network error');
     expect(callApi).toHaveBeenCalledTimes(1);
-    expect(callApi).toHaveBeenCalledWith('/user/cloud-config');
+    expect(callApi).toHaveBeenCalledWith('/user/cloud/status');
   });
 
   it('should handle non-Error exceptions', async () => {
@@ -106,14 +137,16 @@ describe('useCloudConfig', () => {
   });
 
   it('should fetch cloud config on mount', async () => {
-    const mockCloudConfig = {
-      appUrl: 'https://app.promptfoo.com',
-      isEnabled: false,
+    const mockApiResponse = {
+      isAuthenticated: false,
+      hasApiKey: false,
+      appUrl: null,
+      isEnterprise: false,
     };
 
     (callApi as Mock).mockResolvedValue({
       ok: true,
-      json: vi.fn().mockResolvedValue(mockCloudConfig),
+      json: vi.fn().mockResolvedValue(mockApiResponse),
     });
 
     renderHook(() => useCloudConfig());
@@ -122,24 +155,49 @@ describe('useCloudConfig', () => {
       expect(callApi).toHaveBeenCalledTimes(1);
     });
 
-    expect(callApi).toHaveBeenCalledWith('/user/cloud-config');
+    expect(callApi).toHaveBeenCalledWith('/user/cloud/status');
+  });
+
+  it('should detect enterprise deployment', async () => {
+    (callApi as Mock).mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        isAuthenticated: true,
+        hasApiKey: true,
+        appUrl: 'https://enterprise.company.com',
+        isEnterprise: true,
+      }),
+    });
+
+    const { result } = renderHook(() => useCloudConfig());
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    expect(result.current.data?.isEnterprise).toBe(true);
+    expect(result.current.data?.appUrl).toBe('https://enterprise.company.com');
   });
 
   describe('refetch', () => {
     it('should refetch data when refetch is called', async () => {
-      const initialConfig = {
-        appUrl: 'https://app.promptfoo.com',
-        isEnabled: true,
+      const initialResponse = {
+        isAuthenticated: true,
+        hasApiKey: true,
+        appUrl: 'https://app.promptfoo.app',
+        isEnterprise: false,
       };
 
-      const updatedConfig = {
-        appUrl: 'https://new.promptfoo.com',
-        isEnabled: false,
+      const updatedResponse = {
+        isAuthenticated: false,
+        hasApiKey: false,
+        appUrl: null,
+        isEnterprise: false,
       };
 
       (callApi as Mock).mockResolvedValueOnce({
         ok: true,
-        json: vi.fn().mockResolvedValue(initialConfig),
+        json: vi.fn().mockResolvedValue(initialResponse),
       });
 
       const { result } = renderHook(() => useCloudConfig());
@@ -148,13 +206,13 @@ describe('useCloudConfig', () => {
         expect(result.current.isLoading).toBe(false);
       });
 
-      expect(result.current.data).toEqual(initialConfig);
+      expect(result.current.data?.isEnabled).toBe(true);
       expect(callApi).toHaveBeenCalledTimes(1);
 
       // Setup mock for refetch
       (callApi as Mock).mockResolvedValueOnce({
         ok: true,
-        json: vi.fn().mockResolvedValue(updatedConfig),
+        json: vi.fn().mockResolvedValue(updatedResponse),
       });
 
       // Call refetch
@@ -163,18 +221,20 @@ describe('useCloudConfig', () => {
       });
 
       await waitFor(() => {
-        expect(result.current.data).toEqual(updatedConfig);
+        expect(result.current.data?.isEnabled).toBe(false);
       });
 
       expect(result.current.error).toBeNull();
       expect(callApi).toHaveBeenCalledTimes(2);
-      expect(callApi).toHaveBeenNthCalledWith(2, '/user/cloud-config');
+      expect(callApi).toHaveBeenNthCalledWith(2, '/user/cloud/status');
     });
 
     it('should set isLoading=true during refetch and back to false after completion', async () => {
-      const mockCloudConfig = {
-        appUrl: 'https://app.promptfoo.com',
-        isEnabled: true,
+      const mockApiResponse = {
+        isAuthenticated: true,
+        hasApiKey: true,
+        appUrl: 'https://app.promptfoo.app',
+        isEnterprise: false,
       };
 
       let resolveFetch: any;
@@ -185,7 +245,7 @@ describe('useCloudConfig', () => {
       // First call resolves immediately
       (callApi as Mock).mockResolvedValueOnce({
         ok: true,
-        json: vi.fn().mockResolvedValue(mockCloudConfig),
+        json: vi.fn().mockResolvedValue(mockApiResponse),
       });
 
       const { result } = renderHook(() => useCloudConfig());
@@ -209,7 +269,7 @@ describe('useCloudConfig', () => {
       // Resolve the delayed promise
       resolveFetch({
         ok: true,
-        json: vi.fn().mockResolvedValue(mockCloudConfig),
+        json: vi.fn().mockResolvedValue(mockApiResponse),
       });
 
       // Wait for loading to become false
@@ -219,15 +279,17 @@ describe('useCloudConfig', () => {
     });
 
     it('should handle errors during refetch', async () => {
-      const mockCloudConfig = {
-        appUrl: 'https://app.promptfoo.com',
-        isEnabled: true,
+      const mockApiResponse = {
+        isAuthenticated: true,
+        hasApiKey: true,
+        appUrl: 'https://app.promptfoo.app',
+        isEnterprise: false,
       };
 
       // Initial successful fetch
       (callApi as Mock).mockResolvedValueOnce({
         ok: true,
-        json: vi.fn().mockResolvedValue(mockCloudConfig),
+        json: vi.fn().mockResolvedValue(mockApiResponse),
       });
 
       const { result } = renderHook(() => useCloudConfig());
@@ -236,7 +298,7 @@ describe('useCloudConfig', () => {
         expect(result.current.isLoading).toBe(false);
       });
 
-      expect(result.current.data).toEqual(mockCloudConfig);
+      expect(result.current.data?.isEnabled).toBe(true);
       expect(result.current.error).toBeNull();
 
       // Setup error for refetch
@@ -252,7 +314,7 @@ describe('useCloudConfig', () => {
       });
 
       // Data should remain unchanged when refetch fails
-      expect(result.current.data).toEqual(mockCloudConfig);
+      expect(result.current.data?.isEnabled).toBe(true);
       expect(result.current.error).toBe('Refetch failed');
       expect(callApi).toHaveBeenCalledTimes(2);
     });
@@ -270,15 +332,17 @@ describe('useCloudConfig', () => {
       expect(result.current.data).toBeNull();
       expect(result.current.error).toBe('Initial fetch failed');
 
-      const mockCloudConfig = {
-        appUrl: 'https://app.promptfoo.com',
-        isEnabled: true,
+      const mockApiResponse = {
+        isAuthenticated: true,
+        hasApiKey: true,
+        appUrl: 'https://app.promptfoo.app',
+        isEnterprise: false,
       };
 
       // Setup successful refetch
       (callApi as Mock).mockResolvedValueOnce({
         ok: true,
-        json: vi.fn().mockResolvedValue(mockCloudConfig),
+        json: vi.fn().mockResolvedValue(mockApiResponse),
       });
 
       // Call refetch
@@ -290,21 +354,23 @@ describe('useCloudConfig', () => {
         expect(result.current.isLoading).toBe(false);
       });
 
-      expect(result.current.data).toEqual(mockCloudConfig);
+      expect(result.current.data?.isEnabled).toBe(true);
       expect(result.current.error).toBeNull();
       expect(callApi).toHaveBeenCalledTimes(2);
     });
   });
 
   it('should only call the API once on mount and not on rerender', async () => {
-    const mockCloudConfig = {
-      appUrl: 'https://app.promptfoo.com',
-      isEnabled: true,
+    const mockApiResponse = {
+      isAuthenticated: true,
+      hasApiKey: true,
+      appUrl: 'https://app.promptfoo.app',
+      isEnterprise: false,
     };
 
     (callApi as Mock).mockResolvedValue({
       ok: true,
-      json: vi.fn().mockResolvedValue(mockCloudConfig),
+      json: vi.fn().mockResolvedValue(mockApiResponse),
     });
 
     const { result, rerender } = renderHook(() => useCloudConfig());
