@@ -285,9 +285,11 @@ redteam:
 
 Run both. Report both ASR values with their K. Now your measurement has a unit.
 
-For adaptive multi-turn attacks with explicit attempt budgets, [**iterative strategies**](/docs/red-team/strategies/iterative/) give you `numIterations`. For branching search, [**Hydra**](/docs/red-team/strategies/hydra/) gives you explicit tree parameters. For combining multiple strategies with stopping rules, [**Meta**](/docs/red-team/strategies/meta/) gives you orchestration knobs.
+We maintain a [database of 400+ LLM security papers](https://www.promptfoo.dev/lm-security-db/) and implement the best methods as [red team strategies](/docs/red-team/strategies/). Not every paper makes the cut; we select for real-world effectiveness and efficiency.
 
-We built these with explicit threat-model parameters because we've read hundreds of papers and reconstructed their setups. When a goal succeeds in promptfoo, the model actually produced the output, under a threat model you specified and can report. That's the difference between finding real risk and finding measurement artifacts.
+Academic jailbreak papers are existence proofs. Production red teaming needs methods that are reliable, efficient, and reportable. We read the research, filter for what works, and implement it with explicit parameters.
+
+Our [strategies](/docs/red-team/strategies/) include dozens of approaches from the literature. [Meta](/docs/red-team/strategies/meta/) (single-turn) and [Hydra](/docs/red-team/strategies/hydra/) (multi-turn) are among our most efficient; they surface real vulnerabilities quickly without exhaustive search.
 
 ---
 
