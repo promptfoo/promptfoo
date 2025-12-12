@@ -22,6 +22,7 @@ vi.mock('../../src/esm', async (importOriginal) => {
   return {
     ...(await importOriginal()),
     importModule: vi.fn(),
+    resolvePackageEntryPoint: vi.fn(() => '@anthropic-ai/claude-agent-sdk'),
   };
 });
 vi.mock('../../src/providers/mcp/transform');
