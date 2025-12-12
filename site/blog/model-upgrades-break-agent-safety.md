@@ -55,7 +55,6 @@ Model protections help, but they are not your security boundary. If your agent h
 Even within one vendor, updates change the balance between helpfulness, refusal, and instruction-following.
 
 - **GPT-5 safe-completion** optimizes "[helpfulness within safety constraints](https://openai.com/index/gpt-5-safe-completions/)," especially for dual-use prompts. That changes refusal style and edge-case handling.
-- **GPT-5.2** shows measurable jailbreak regression: OpenAI's own System Card notes StrongReject scores dropped from 0.976 (5.1) to 0.878 (5.2). Our [day-0 red team](/blog/gpt-5.2-trust-safety-assessment) found 78% jailbreak success with multi-turn attacks.
 - **Anthropic Constitutional Classifiers** [reduce jailbreak success](https://www.anthropic.com/news/constitutional-classifiers) from 86% to 4.4% in their automated evaluations. But a universal jailbreak was found during their Feb 3–10, 2025 public demo (days 6–7).
 - **Gemini safety settings** are [configurable](https://ai.google.dev/gemini-api/docs/safety-settings), and defaults vary by model and surface. If you don't set thresholds, newer stable GA models default to `BLOCK_NONE` while others default to `BLOCK_MEDIUM_AND_ABOVE`. Civic Integrity has different defaults depending on model and product.
 
