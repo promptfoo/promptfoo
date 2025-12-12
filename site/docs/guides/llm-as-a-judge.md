@@ -52,17 +52,17 @@ Three components:
 
 ### Good fit
 
-- Open-ended or multi-objective outputs (helpful + correct + safe + on-tone)
-- Fast iteration across many test cases
-- Human labeling doesn't scale
+- Open-ended outputs where quality is subjective
+- Multi-criteria evaluation (helpful + accurate + safe + on-tone)
+- High volume—human labeling doesn't scale
 - A/B comparisons between prompts or models
 
-### Not a good fit alone
+### Layer with deterministic checks
 
-| Requirement | Use instead |
-|-------------|-------------|
-| Format must be exact | [`is-json`](/docs/configuration/expected-outputs/deterministic#is-json), `contains`, `regex` |
-| Output must compile/execute | Code execution assertions |
+| Requirement | Also use |
+|-------------|----------|
+| Format must be exact | [`is-json`](/docs/configuration/expected-outputs/deterministic#is-json), [`contains`](/docs/configuration/expected-outputs/deterministic#contains), [`regex`](/docs/configuration/expected-outputs/deterministic#regex) |
+| Output must compile/execute | [JavaScript](/docs/configuration/expected-outputs/javascript) or [Python](/docs/configuration/expected-outputs/python) assertions |
 | Fresh facts needed | [`search-rubric`](/docs/configuration/expected-outputs/model-graded/search-rubric) |
 | Adversarial inputs | [Red teaming](/docs/red-team/quickstart/) (judges can be manipulated) |
 
@@ -72,33 +72,39 @@ Different LLM-as-a-judge methods suit different evaluation needs. Understanding 
 
 ### Direct scoring
 
-The simplest approach: give the judge a rubric and ask for a score.
+The simplest approach: the judge sees the output and rubric together and returns a verdict in one step—no intermediate reasoning or multi-step analysis.
 
+```yaml
+assert:
+  - type: llm-rubric
+    value: 'Is the response helpful and accurate?'
 ```
-Rubric: "Is this response helpful?"
-Output: "Here's how to reset your password..."
-→ Judge returns: {pass: true, score: 1.0, reason: "..."}
+
+When your LLM outputs `"Go to Settings > Account > Reset Password"`, the judge evaluates it against the rubric and returns:
+
+```json
+{"pass": true, "score": 1.0, "reason": "Provides clear, actionable steps"}
 ```
 
-**Pros:** Simple, fast, easy to debug
-**Cons:** May miss nuance on complex criteria
+Direct scoring works well for straightforward criteria—"Is this helpful?" or "Does this contain errors?" It can struggle with complex, multi-part criteria where the judge might focus on one aspect and overlook others.
 
-In Promptfoo: [`llm-rubric`](/docs/configuration/expected-outputs/model-graded/llm-rubric)
+| | |
+|---|---|
+| **Pros** | Simple, fast, easy to debug |
+| **Cons** | May miss nuance on complex criteria |
+
+See [`llm-rubric`](/docs/configuration/expected-outputs/model-graded/llm-rubric) for configuration options.
 
 ### Chain-of-thought evaluation (G-Eval)
 
-From the [G-Eval paper](https://arxiv.org/abs/2303.16634): the judge generates reasoning steps before scoring. This improves consistency on complex criteria.
+From the [G-Eval paper](https://arxiv.org/abs/2303.16634): the judge generates explicit reasoning steps before scoring. This forces systematic evaluation of each criterion rather than a gut-check assessment.
 
-```
-1. Judge generates evaluation steps for the criteria
-2. Judge applies each step to the output
-3. Judge produces final score with reasoning
-```
+How it works:
+1. The judge reads the criteria and breaks them into evaluation steps
+2. The judge applies each step to the output, documenting its reasoning
+3. The judge produces a final score based on the reasoning chain
 
-**Pros:** Better for multi-dimensional criteria, more explainable
-**Cons:** Higher latency, more tokens
-
-In Promptfoo: [`g-eval`](/docs/configuration/expected-outputs/model-graded/g-eval)
+This improves consistency because the judge can't skip criteria or focus on just one aspect. The reasoning chain also makes scores more explainable—you can see exactly why the judge gave a particular score.
 
 ```yaml
 assert:
@@ -110,33 +116,18 @@ assert:
       3. Clarity of explanation
 ```
 
-### Pairwise comparison
+| | |
+|---|---|
+| **Pros** | Better for multi-dimensional criteria, more explainable, more consistent |
+| **Cons** | Higher latency (2-3x more tokens), higher cost |
 
-Instead of absolute scores, compare two outputs: "Which is better?"
-
-**Pros:** Avoids defining "good" precisely, mimics human preference collection
-**Cons:** Requires multiple outputs, can't score a single response
-
-In Promptfoo: [`select-best`](/docs/configuration/expected-outputs/model-graded/select-best)
-
-```yaml
-providers:
-  - openai:gpt-5.2-mini
-  - anthropic:messages:claude-sonnet-4-5-20250929
-
-assert:
-  - type: select-best
-    value: 'Which response is more helpful and accurate?'
-```
+See [`g-eval`](/docs/configuration/expected-outputs/model-graded/g-eval) for configuration options.
 
 ### Reference-based evaluation
 
-Compare the output against a gold-standard answer. Useful when you have ground truth.
+Compare the output against a gold-standard reference answer. The judge checks whether the output is *consistent with* the reference—not whether it's word-for-word identical. This allows for valid paraphrasing while catching factual errors.
 
-**Pros:** Objective comparison target
-**Cons:** Requires reference answers, may penalize valid alternatives
-
-In Promptfoo: [`factuality`](/docs/configuration/expected-outputs/model-graded/factuality) or `llm-rubric` with reference variable
+This is useful when you have ground truth: QA systems with known answers, fact-checking against source documents, or RAG systems where you want to verify the output is grounded in retrieved context.
 
 ```yaml
 tests:
@@ -148,14 +139,23 @@ tests:
         value: '{{reference}}'
 ```
 
+| | |
+|---|---|
+| **Pros** | Objective comparison target, clear success criteria |
+| **Cons** | Requires reference answers, may penalize valid alternative phrasings |
+
+See [`factuality`](/docs/configuration/expected-outputs/model-graded/factuality) for configuration options.
+
 ### Classifier-based evaluation
 
-Use fine-tuned models for specific classification tasks (toxicity, prompt injection, sentiment).
+Use fine-tuned classification models for specific tasks like toxicity detection, prompt injection detection, or sentiment analysis. These models are trained on labeled datasets for narrow categories.
 
-**Pros:** Fast, cheap, specialized
-**Cons:** Limited to trained categories
+Unlike LLM judges, classifiers are:
+- **Fast**: Inference in milliseconds, not seconds
+- **Cheap**: Much smaller models than general-purpose LLMs
+- **Deterministic**: Same input always produces the same output
 
-In Promptfoo: [`classifier`](/docs/configuration/expected-outputs/classifier)
+Use classifiers as a first-pass filter before expensive LLM judges, or for tasks where specialized models outperform general-purpose LLMs (like prompt injection detection).
 
 ```yaml
 assert:
@@ -164,15 +164,61 @@ assert:
     value: SAFE
 ```
 
+| | |
+|---|---|
+| **Pros** | Fast, cheap, specialized, consistent |
+| **Cons** | Limited to categories the model was trained on |
+
+See [`classifier`](/docs/configuration/expected-outputs/classifier) for configuration options. For content safety, see also [`moderation`](/docs/configuration/expected-outputs/moderation) which uses OpenAI's moderation API.
+
+### RAG evaluation
+
+For retrieval-augmented generation systems, Promptfoo provides specialized assertions that evaluate the relationship between query, retrieved context, and generated output:
+
+- [`context-faithfulness`](/docs/configuration/expected-outputs/model-graded/context-faithfulness) — Is the output grounded in the retrieved context? Catches hallucinations.
+- [`context-relevance`](/docs/configuration/expected-outputs/model-graded/context-relevance) — Is the retrieved context relevant to the query? Identifies retrieval failures.
+- [`context-recall`](/docs/configuration/expected-outputs/model-graded/context-recall) — Does the context contain the information needed to answer? Measures retrieval completeness.
+- [`answer-relevance`](/docs/configuration/expected-outputs/model-graded/answer-relevance) — Is the output relevant to the original query?
+
+These are essential for debugging RAG pipelines—they help you distinguish between retrieval problems (wrong documents) and generation problems (wrong answer from right documents). See the [RAG evaluation guide](/docs/guides/evaluate-rag) for complete examples.
+
+### Comparing outputs
+
+The approaches above score a single output. Sometimes you need to compare multiple outputs against each other.
+
+#### Pairwise comparison
+
+Instead of asking "How good is this output?" (absolute scoring), ask "Which output is better?" (relative comparison). Humans and LLMs are often better at relative judgments—it's easier to say "A is better than B" than to assign A a precise score.
+
+This approach is how [LMSYS Chatbot Arena](https://chat.lmsys.org/) collects human preferences and how RLHF training data is often gathered. It's particularly useful when comparing prompts, models, or system configurations.
+
+```yaml
+providers:
+  - openai:gpt-5.2-mini
+  - anthropic:messages:claude-sonnet-4-5-20250929
+
+assert:
+  - type: select-best
+    value: 'Which response is more helpful and accurate?'
+```
+
+| | |
+|---|---|
+| **Pros** | Sidesteps defining "good" precisely, mimics human preference collection |
+| **Cons** | Requires multiple outputs, can't score a single response in isolation |
+
+See [`select-best`](/docs/configuration/expected-outputs/model-graded/select-best) for configuration options.
+
 ### Choosing an approach
 
 | Approach | When to use | Promptfoo type |
 |----------|-------------|----------------|
 | Direct scoring | Simple criteria, fast iteration | `llm-rubric` |
 | Chain-of-thought | Complex multi-dimensional criteria | `g-eval` |
-| Pairwise | A/B comparisons, preference tuning | `select-best` |
 | Reference-based | Ground truth available | `factuality` |
 | Classifier | Specific categories (toxicity, injection) | `classifier` |
+| RAG evaluation | Retrieval-augmented generation | `context-faithfulness`, `context-relevance` |
+| Pairwise comparison | A/B comparisons, preference tuning | `select-best` |
 
 ## Prompting strategies
 
@@ -221,7 +267,7 @@ Define what each score level means to reduce ambiguity:
 Instead of one rubric scoring multiple things, use separate judges:
 
 ```yaml
-# ✅ Decomposed - each judge is single-purpose
+# Decomposed - each judge is single-purpose
 assert:
   - type: llm-rubric
     metric: accuracy
@@ -274,7 +320,7 @@ npx promptfoo eval
 npx promptfoo view
 ```
 
-**Decision tree**: Stack deterministic checks first, then add LLM judges:
+**Decision tree**: Stack [deterministic checks](/docs/configuration/expected-outputs/deterministic) first, then add LLM judges:
 
 ```yaml
 assert:
@@ -287,6 +333,8 @@ assert:
   - type: llm-rubric
     value: 'Response is helpful and accurate. Return pass=true or pass=false.'
 ```
+
+See [`is-json`](/docs/configuration/expected-outputs/deterministic#is-json) and [JavaScript assertions](/docs/configuration/expected-outputs/javascript) for more options.
 
 ## Understanding pass vs. score
 
@@ -448,7 +496,7 @@ Call our support line at 1-800-555-0123 to cancel. We offer a 30-day money-back 
 
 **Judge response**:
 ```json
-{"pass": false, "score": 0, "reason": "Invented phone number and refund policy not in grading note."}
+{"pass": false, "score": 0, "reason": "Invented phone number and refund policy not in rubric."}
 ```
 
 ## Build a judge: the calibration workflow
@@ -595,12 +643,6 @@ To get more consistent results:
 1. **Write specific rubrics** with clear criteria—ambiguity is the main source of variance
 2. **Use low-precision scales** (binary or 3-point) rather than 1-10 scales
 
-```yaml
-defaultTest:
-  options:
-    provider: openai:gpt-5.2
-```
-
 :::note
 Clear, specific rubrics are the most reliable way to reduce variance—more impactful than any parameter setting.
 :::
@@ -690,11 +732,11 @@ assert:
     value: 'Response is helpful and accurate. Return pass=true or pass=false.'
 ```
 
-Delimiters like `<output>...</output>` help the judge distinguish data from instructions, but they are not a security boundary. For adversarial testing, add [red teaming](/docs/red-team/quickstart/).
+Delimiters like `<output>...</output>` help the judge distinguish data from instructions, but they are not a security boundary. For adversarial testing, add [red teaming](/docs/red-team/quickstart/). See also [guardrails](/docs/configuration/expected-outputs/guardrails) for production safety checks.
 
 ## Tiered evaluation for production
 
-Not every test case needs an expensive judge:
+Not every test case needs an expensive judge. See [deterministic assertions](/docs/configuration/expected-outputs/deterministic) for the full list of fast checks.
 
 **Tier 1: Deterministic (always run)** — fast, cheap, reliable
 
@@ -751,7 +793,7 @@ npx promptfoo eval --no-cache   # Fresh results
 npx promptfoo cache clear       # Clear cache
 ```
 
-Cache location: `~/.promptfoo/cache`
+Cache location: `~/.promptfoo/cache`. See [caching docs](/docs/configuration/caching) for configuration options.
 
 ### Grader model selection
 
@@ -806,6 +848,9 @@ Use [`conversation-relevance`](/docs/configuration/expected-outputs/model-graded
 - [llm-rubric configuration](/docs/configuration/expected-outputs/model-graded/llm-rubric)
 - [Model-graded metrics reference](/docs/configuration/expected-outputs/model-graded/)
 - [Deterministic assertions](/docs/configuration/expected-outputs/deterministic)
+- [JavaScript assertions](/docs/configuration/expected-outputs/javascript)
+- [Semantic similarity](/docs/configuration/expected-outputs/similar) (embedding-based alternative to LLM judges)
+- [Classifier assertions](/docs/configuration/expected-outputs/classifier) (for toxicity, injection detection)
 - [Evaluating RAG pipelines](/docs/guides/evaluate-rag)
 - [Red teaming LLM applications](/docs/guides/llm-redteaming)
 
