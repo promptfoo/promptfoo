@@ -123,41 +123,45 @@ prompts:
 
 ## Supported Parameters
 
-| Parameter                            | Type     | Description                                                                       | Default                  |
-| ------------------------------------ | -------- | --------------------------------------------------------------------------------- | ------------------------ |
-| `apiKey`                             | string   | Anthropic API key                                                                 | Environment variable     |
-| `working_dir`                        | string   | Directory for file operations                                                     | Temporary directory      |
-| `model`                              | string   | Primary model to use (passed to Claude Agent SDK)                                 | Claude Agent SDK default |
-| `fallback_model`                     | string   | Fallback model if primary fails                                                   | Claude Agent SDK default |
-| `max_turns`                          | number   | Maximum conversation turns                                                        | Claude Agent SDK default |
-| `max_thinking_tokens`                | number   | Maximum tokens for thinking                                                       | Claude Agent SDK default |
-| `max_budget_usd`                     | number   | Maximum cost budget in USD for the agent execution                                | None                     |
-| `permission_mode`                    | string   | Permission mode: `default`, `plan`, `acceptEdits`, `bypassPermissions`, `dontAsk` | `default`                |
-| `allow_dangerously_skip_permissions` | boolean  | Required safety flag when using `bypassPermissions` mode                          | false                    |
-| `betas`                              | string[] | Enable beta features (e.g., `['context-1m-2025-08-07']` for 1M context)           | None                     |
-| `custom_system_prompt`               | string   | Replace default system prompt                                                     | None                     |
-| `append_system_prompt`               | string   | Append to default system prompt                                                   | None                     |
-| `custom_allowed_tools`               | string[] | Replace default allowed tools                                                     | None                     |
-| `append_allowed_tools`               | string[] | Add to default allowed tools                                                      | None                     |
-| `allow_all_tools`                    | boolean  | Allow all available tools                                                         | false                    |
-| `disallowed_tools`                   | string[] | Tools to explicitly block (overrides allowed)                                     | None                     |
-| `additional_directories`             | string[] | Additional directories the agent can access (beyond working_dir)                  | None                     |
-| `mcp`                                | object   | MCP server configuration                                                          | None                     |
-| `strict_mcp_config`                  | boolean  | Only allow configured MCP servers                                                 | true                     |
-| `setting_sources`                    | string[] | Where SDK looks for settings, CLAUDE.md, and slash commands                       | None (disabled)          |
-| `output_format`                      | object   | Structured output configuration with JSON schema                                  | None                     |
-| `agents`                             | object   | Programmatic agent definitions for custom subagents                               | None                     |
-| `hooks`                              | object   | Event hooks for intercepting tool calls and other events                          | None                     |
-| `include_partial_messages`           | boolean  | Include partial/streaming messages in response                                    | false                    |
-| `resume`                             | string   | Resume from a specific session ID                                                 | None                     |
-| `fork_session`                       | boolean  | Fork from an existing session instead of continuing                               | false                    |
-| `continue`                           | boolean  | Continue an existing session                                                      | false                    |
-| `sandbox`                            | object   | Sandbox settings for command execution isolation                                  | None                     |
-| `permission_prompt_tool_name`        | string   | MCP tool name to use for permission prompts                                       | None                     |
-| `executable`                         | string   | JavaScript runtime: `node`, `bun`, or `deno`                                      | Auto-detected            |
-| `executable_args`                    | string[] | Arguments to pass to the JavaScript runtime                                       | None                     |
-| `extra_args`                         | object   | Additional CLI arguments (keys without `--`, values as strings or null for flags) | None                     |
-| `path_to_claude_code_executable`     | string   | Path to a custom Claude Code executable                                           | Built-in                 |
+| Parameter                            | Type         | Description                                                                              | Default                  |
+| ------------------------------------ | ------------ | ---------------------------------------------------------------------------------------- | ------------------------ |
+| `apiKey`                             | string       | Anthropic API key                                                                        | Environment variable     |
+| `working_dir`                        | string       | Directory for file operations                                                            | Temporary directory      |
+| `model`                              | string       | Primary model to use (passed to Claude Agent SDK)                                        | Claude Agent SDK default |
+| `fallback_model`                     | string       | Fallback model if primary fails                                                          | Claude Agent SDK default |
+| `max_turns`                          | number       | Maximum conversation turns                                                               | Claude Agent SDK default |
+| `max_thinking_tokens`                | number       | Maximum tokens for thinking                                                              | Claude Agent SDK default |
+| `max_budget_usd`                     | number       | Maximum cost budget in USD for the agent execution                                       | None                     |
+| `permission_mode`                    | string       | Permission mode: `default`, `plan`, `acceptEdits`, `bypassPermissions`, `dontAsk`        | `default`                |
+| `allow_dangerously_skip_permissions` | boolean      | Required safety flag when using `bypassPermissions` mode                                 | false                    |
+| `betas`                              | string[]     | Enable beta features (e.g., `['context-1m-2025-08-07']` for 1M context)                  | None                     |
+| `custom_system_prompt`               | string       | Replace default system prompt                                                            | None                     |
+| `append_system_prompt`               | string       | Append to default system prompt                                                          | None                     |
+| `tools`                              | array/object | Base set of built-in tools (array of names or `{type: 'preset', preset: 'claude_code'}`) | None                     |
+| `custom_allowed_tools`               | string[]     | Replace default allowed tools                                                            | None                     |
+| `append_allowed_tools`               | string[]     | Add to default allowed tools                                                             | None                     |
+| `allow_all_tools`                    | boolean      | Allow all available tools                                                                | false                    |
+| `disallowed_tools`                   | string[]     | Tools to explicitly block (overrides allowed)                                            | None                     |
+| `additional_directories`             | string[]     | Additional directories the agent can access (beyond working_dir)                         | None                     |
+| `mcp`                                | object       | MCP server configuration                                                                 | None                     |
+| `strict_mcp_config`                  | boolean      | Only allow configured MCP servers                                                        | true                     |
+| `setting_sources`                    | string[]     | Where SDK looks for settings, CLAUDE.md, and slash commands                              | None (disabled)          |
+| `output_format`                      | object       | Structured output configuration with JSON schema                                         | None                     |
+| `agents`                             | object       | Programmatic agent definitions for custom subagents                                      | None                     |
+| `hooks`                              | object       | Event hooks for intercepting tool calls and other events                                 | None                     |
+| `include_partial_messages`           | boolean      | Include partial/streaming messages in response                                           | false                    |
+| `resume`                             | string       | Resume from a specific session ID                                                        | None                     |
+| `fork_session`                       | boolean      | Fork from an existing session instead of continuing                                      | false                    |
+| `continue`                           | boolean      | Continue an existing session                                                             | false                    |
+| `enable_file_checkpointing`          | boolean      | Track file changes for rewinding to previous states                                      | false                    |
+| `persist_session`                    | boolean      | Save session to disk for later resumption                                                | true                     |
+| `sandbox`                            | object       | Sandbox settings for command execution isolation                                         | None                     |
+| `permission_prompt_tool_name`        | string       | MCP tool name to use for permission prompts                                              | None                     |
+| `executable`                         | string       | JavaScript runtime: `node`, `bun`, or `deno`                                             | Auto-detected            |
+| `executable_args`                    | string[]     | Arguments to pass to the JavaScript runtime                                              | None                     |
+| `extra_args`                         | object       | Additional CLI arguments (keys without `--`, values as strings or null for flags)        | None                     |
+| `path_to_claude_code_executable`     | string       | Path to a custom Claude Code executable                                                  | Built-in                 |
+| `spawn_claude_code_process`          | function     | Custom spawn function for VMs/containers (programmatic only)                             | Default spawn            |
 
 ## Models
 
@@ -234,6 +238,30 @@ providers:
 Customize available tools for your use case:
 
 ```yaml
+# Use all default Claude Code tools via preset
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      tools:
+        type: preset
+        preset: claude_code
+
+# Specify exact base tools
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      tools:
+        - Bash
+        - Read
+        - Edit
+        - Write
+
+# Disable all built-in tools
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      tools: []
+
 # Add tools to defaults
 providers:
   - id: anthropic:claude-agent-sdk
@@ -258,6 +286,8 @@ providers:
     config:
       allow_all_tools: true
 ```
+
+The `tools` option specifies the base set of available built-in tools, while `allowedTools` and `disallowedTools` filter from that base.
 
 ⚠️ **Security Note**: Some tools allow Claude Agent SDK to modify files, run system commands, search the web, and more. Think carefully about security implications before using these tools.
 
@@ -377,6 +407,32 @@ providers:
 
 Session IDs are returned in the response and can be used to continue conversations across eval runs.
 
+### Disabling Session Persistence
+
+By default, sessions are saved to disk (`~/.claude/projects/`) and can be resumed later. For ephemeral or automated workflows where session history is not needed, disable persistence:
+
+```yaml
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      persist_session: false
+```
+
+## File Checkpointing
+
+Track file changes during the session to enable rewinding to previous states:
+
+```yaml
+providers:
+  - id: anthropic:claude-agent-sdk
+    config:
+      enable_file_checkpointing: true
+      working_dir: ./my-project
+      append_allowed_tools: ['Write', 'Edit']
+```
+
+When file checkpointing is enabled, the SDK creates backups of files before they are modified. This allows programmatic restoration to any previous state in the conversation.
+
 ## Beta Features
 
 Enable experimental features using the `betas` parameter:
@@ -465,6 +521,26 @@ providers:
     config:
       path_to_claude_code_executable: /custom/path/to/claude-code
 ```
+
+### Custom Spawn Function (Programmatic Only)
+
+For running Claude Code in VMs, containers, or remote environments, you can provide a custom spawn function when using the provider programmatically:
+
+```typescript
+import { ClaudeCodeSDKProvider } from 'promptfoo';
+
+const provider = new ClaudeCodeSDKProvider({
+  config: {
+    spawn_claude_code_process: (options) => {
+      // Custom spawn logic for VM/container execution
+      // options contains: command, args, cwd, env, signal
+      return myVMProcess; // Must satisfy SpawnedProcess interface
+    },
+  },
+});
+```
+
+This option is only available when using the provider programmatically, not via YAML configuration.
 
 ## Programmatic Agents
 

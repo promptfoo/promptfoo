@@ -20,6 +20,8 @@ import type {
   OutputFormat,
   SandboxSettings,
   SettingSource,
+  SpawnedProcess,
+  SpawnOptions,
 } from '@anthropic-ai/claude-agent-sdk';
 
 import type {
@@ -296,6 +298,73 @@ export interface ClaudeCodeOptions {
    * Useful for testing with custom builds or specific versions.
    */
   path_to_claude_code_executable?: string;
+
+  /**
+   * Specify the base set of available built-in tools.
+   * - `string[]` - Array of specific tool names (e.g., `['Bash', 'Read', 'Edit']`)
+   * - `[]` (empty array) - Disable all built-in tools
+   * - `{ type: 'preset', preset: 'claude_code' }` - Use all default Claude Code tools
+   *
+   * This is different from 'custom_allowed_tools' - 'tools' specifies the base set,
+   * while 'allowedTools' filters from that base.
+   *
+   * @example Use all default tools
+   * ```yaml
+   * tools:
+   *   type: preset
+   *   preset: claude_code
+   * ```
+   *
+   * @example Use only specific tools
+   * ```yaml
+   * tools:
+   *   - Bash
+   *   - Read
+   *   - Edit
+   * ```
+   */
+  tools?: string[] | { type: 'preset'; preset: 'claude_code' };
+
+  /**
+   * Enable file checkpointing to track file changes during the session.
+   * When enabled, files can be rewound to their state at any user message
+   * using the Query.rewindFiles() method.
+   *
+   * File checkpointing creates backups of files before they are modified,
+   * allowing restoration to previous states.
+   *
+   * @default false
+   */
+  enable_file_checkpointing?: boolean;
+
+  /**
+   * When false, disables session persistence to disk. Sessions will not be
+   * saved to ~/.claude/projects/ and cannot be resumed later. Useful for
+   * ephemeral or automated workflows where session history is not needed.
+   *
+   * @default true
+   */
+  persist_session?: boolean;
+
+  /**
+   * Custom function to spawn the Claude Code process.
+   * Use this to run Claude Code in VMs, containers, or remote environments.
+   *
+   * When provided, this function is called instead of the default local spawn.
+   *
+   * Note: This option is only available when using the provider programmatically,
+   * not via YAML config.
+   *
+   * @example
+   * ```typescript
+   * spawn_claude_code_process: (options) => {
+   *   // Custom spawn logic for VM execution
+   *   // options contains: command, args, cwd, env, signal
+   *   return myVMProcess; // Must satisfy SpawnedProcess interface
+   * }
+   * ```
+   */
+  spawn_claude_code_process?: (options: SpawnOptions) => SpawnedProcess;
 }
 
 export class ClaudeCodeSDKProvider implements ApiProvider {
@@ -445,7 +514,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
     // Lets us avoid unnecessary work and cleanup if there's a cache hit
     const cacheKeyQueryOptions: Omit<
       QueryOptions,
-      'abortController' | 'mcpServers' | 'cwd' | 'stderr'
+      'abortController' | 'mcpServers' | 'cwd' | 'stderr' | 'spawnClaudeCodeProcess'
     > = {
       maxTurns: config.max_turns,
       model: config.model,
@@ -483,6 +552,9 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       extraArgs: config.extra_args,
       pathToClaudeCodeExecutable: config.path_to_claude_code_executable,
       settingSources: config.setting_sources,
+      tools: config.tools,
+      enableFileCheckpointing: config.enable_file_checkpointing,
+      persistSession: config.persist_session,
       env,
     };
 
@@ -547,8 +619,9 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       abortController,
       mcpServers,
       cwd: workingDir,
-      // stderr callback is not included in cache key since it's a function
+      // stderr and spawnClaudeCodeProcess callbacks are not included in cache key since they're functions
       stderr: config.stderr,
+      spawnClaudeCodeProcess: config.spawn_claude_code_process,
     };
     const queryParams = { prompt, options };
 
