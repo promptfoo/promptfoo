@@ -12,7 +12,6 @@ Usage:
 """
 
 import random
-import string
 
 
 def random_text(length: int) -> str:

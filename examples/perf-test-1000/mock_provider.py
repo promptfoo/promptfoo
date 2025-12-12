@@ -234,7 +234,6 @@ def call_api(prompt: str, options: dict, context: dict) -> dict[str, Any]:
 
 if __name__ == "__main__":
     # Test the provider
-    import json
 
     test_prompt = "What is the capital of France? Please explain in detail."
 
