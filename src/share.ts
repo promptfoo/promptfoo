@@ -3,6 +3,7 @@ import { URL } from 'url';
 import input from '@inquirer/input';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
+import cliState from './cliState';
 import { getDefaultShareViewBaseUrl, getShareApiBaseUrl, getShareViewBaseUrl } from './constants';
 import { getEnvBool, getEnvInt, getEnvString, isCI } from './envars';
 import { getUserEmail, setUserEmail } from './globalConfig/accounts';
@@ -217,8 +218,13 @@ async function rollbackEval(url: string, evalId: string, headers: Record<string,
   }
 }
 
-async function sendChunkedResults(evalRecord: Eval, url: string): Promise<string | null> {
+async function sendChunkedResults(
+  evalRecord: Eval,
+  url: string,
+  options: { silent?: boolean } = {},
+): Promise<string | null> {
   const isVerbose = isDebugEnabled();
+  const isSilent = options.silent ?? false;
   logger.debug(`Starting chunked results upload to ${url}`);
 
   await checkCloudPermissions(evalRecord.config);
@@ -254,9 +260,10 @@ async function sendChunkedResults(evalRecord: Eval, url: string): Promise<string
   const totalResults = await evalRecord.getTotalResultRowCount();
   logger.debug(`Total results to share: ${totalResults}`);
 
-  // Setup progress bar only if not in verbose mode or CI
+  // Setup progress bar only if not in verbose mode, CI, Ink UI mode, or silent mode
+  const isInkUI = Boolean(cliState.inkUI);
   let progressBar: cliProgress.SingleBar | null = null;
-  if (!isVerbose && !isCI()) {
+  if (!isVerbose && !isCI() && !isInkUI && !isSilent) {
     progressBar = new cliProgress.SingleBar(
       {
         format: 'Sharing | {bar} | {percentage}% | {value}/{total} results',
@@ -290,7 +297,7 @@ async function sendChunkedResults(evalRecord: Eval, url: string): Promise<string
 
           if (progressBar) {
             progressBar.increment(currentChunk.length);
-          } else {
+          } else if (!isInkUI && !isSilent) {
             logger.info(
               `Progress: ${totalSent}/${totalResults} results shared (${Math.round((totalSent / totalResults) * 100)}%)`,
             );
@@ -311,7 +318,7 @@ async function sendChunkedResults(evalRecord: Eval, url: string): Promise<string
 
       if (progressBar) {
         progressBar.increment(currentChunk.length);
-      } else {
+      } else if (!isInkUI && !isSilent) {
         logger.info(`Progress: ${totalSent}/${totalResults} results shared (100%)`);
       }
     }
@@ -431,29 +438,37 @@ export async function getShareableUrl(
  * Shares an eval and returns the shareable URL.
  * @param evalRecord The eval to share.
  * @param showAuth Whether to show the authentication information in the URL.
+ * @param options.silent Whether to suppress progress output (for background sharing).
  * @returns The shareable URL for the eval.
  */
 export async function createShareableUrl(
   evalRecord: Eval,
   showAuth: boolean = false,
+  options: { silent?: boolean } = {},
 ): Promise<string | null> {
+  const isSilent = options.silent ?? false;
+
   // If sharing is explicitly disabled, return null
   if (getEnvBool('PROMPTFOO_DISABLE_SHARING')) {
     logger.debug('Sharing is explicitly disabled, returning null');
     return null;
   }
 
-  // Show org/team context before uploading (only when cloud is enabled)
-  const orgContext = await getOrgContext();
-  if (orgContext) {
-    const teamSuffix = orgContext.teamName ? ` > ${orgContext.teamName}` : '';
-    logger.info(
-      `${chalk.dim('Sharing to:')} ${chalk.cyan(orgContext.organizationName)}${teamSuffix}`,
-    );
+  // Show org/team context before uploading (only when cloud is enabled and not silent)
+  if (!isSilent) {
+    const orgContext = await getOrgContext();
+    if (orgContext) {
+      const teamSuffix = orgContext.teamName ? ` > ${orgContext.teamName}` : '';
+      logger.info(
+        `${chalk.dim('Sharing to:')} ${chalk.cyan(orgContext.organizationName)}${teamSuffix}`,
+      );
+    }
   }
 
-  // 1. Handle email collection
-  await handleEmailCollection(evalRecord);
+  // 1. Handle email collection (skip when silent - background sharing)
+  if (!isSilent) {
+    await handleEmailCollection(evalRecord);
+  }
 
   // 2. Get API configuration
   const { url } = await getApiConfig(evalRecord);
@@ -464,7 +479,7 @@ export async function createShareableUrl(
     `Sharing with ${url} canUseNewResults: ${canUseNewResults} Use old results: ${evalRecord.useOldResults()}`,
   );
 
-  const evalId = await sendChunkedResults(evalRecord, url);
+  const evalId = await sendChunkedResults(evalRecord, url, { silent: isSilent });
 
   if (!evalId) {
     return null;
