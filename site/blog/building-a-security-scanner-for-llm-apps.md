@@ -1,7 +1,7 @@
 ---
 title: 'Building a Security Scanner for LLM Apps'
 description: 'We built a GitHub Action that scans pull requests for LLM-specific vulnerabilities. Learn why traditional security tools miss these issues and how we trace data flows to find prompt injection risks.'
-image: /img/blog/building-a-security-scanner-for-llm-apps/call-graph-io-flows.jpg
+image: /img/blog/building-a-security-scanner-for-llm-apps/call-graph-io-flows.png
 keywords:
   [
     LLM security,
@@ -23,13 +23,11 @@ import styles from './building-a-security-scanner/styles/styles.module.css';
 
 # Building a Security Scanner for LLM Apps
 
-## Introducing the Promptfoo Code Scanner
-
 We're adding something new to Promptfoo's suite of AI security products: code scanning for LLM-related vulnerabilities. In this post, I will:
 
 - Briefly introduce the new product
 - Explain why we think engineering teams need a scanner focused exclusively on interactions with LLMs and agents
-- Demonstrate the scanner in action on a few real-world CVEs
+- Demonstrate the scanner in action on a few real-world CVEs ([click here to skip the background and jump straight to real examples](#testing-on-real-cves))
 
 <!-- truncate -->
 
@@ -53,7 +51,7 @@ Another reason is that an effective strategy for finding the most common and sev
 
 ## What makes LLM apps different
 
-<img src="/img/blog/building-a-security-scanner-for-llm-apps/llm-vulns-prompt-injection.jpg" alt="LLM vulnerabilities related to prompt injection" />
+<img src="/img/blog/building-a-security-scanner-for-llm-apps/llm-vulns-prompt-injection.png" alt="LLM vulnerabilities related to prompt injection" />
 <br/>
 <br/>
 
@@ -79,7 +77,7 @@ So now I'd say that we can whittle the list down to two underlying areas of conc
 1. Jailbreak risk
 2. Prompt injection
 
-Jailbreak risk is definitely a major concern for LLM apps, but jailbreak risk tends to have an interesting quality: it's bimodal in terms of how easy it is to detect.
+Jailbreak risk is definitely a major concern for LLM apps, but tends to have an interesting quality: it's bimodal in terms of how easy it is to detect.
 
 It's either fairly obvious, as in cases where a developer tries to use the system prompt for authorization or access control instead of deterministic checks. Or it's quite difficult, as in cases where many different attack styles need to be tried, or complex conversation state needs to be built up before a jailbreak succeeds.
 
@@ -91,8 +89,7 @@ That leaves prompt injection. The big kahuna. Nearly everything that can go terr
 
 ## The lethal trifecta (and deadly duo)
 
-<img src="/img/blog/building-a-security-scanner-for-llm-apps/lethal-trifecta.jpg" alt="The lethal trifecta" />
-_Image credit: [Simon Willison](https://simonwillison.net/2025/Jun/16/the-lethal-trifecta/)_
+<img src="/img/blog/building-a-security-scanner-for-llm-apps/lethal-trifecta.png" alt="The lethal trifecta" />
 
 Sadly, developers building apps on top of LLMs are constantly faced with an uncomfortable truth: there is a deep tension between making LLM apps secure and making them compelling and useful as products.
 
@@ -158,11 +155,11 @@ Why? Because the LLM "launders" the untrusted input into an output that looks an
 
 ## Call graphs and IO flows
 
-<img src="/img/blog/building-a-security-scanner-for-llm-apps/call-graph-io-flows.jpg" alt="Call graphs and IO flows" />
+<img src="/img/blog/building-a-security-scanner-for-llm-apps/call-graph-io-flows.png" alt="Call graphs and IO flows" />
 <br/>
 <br/>
 
-Because most serious LLM app vulnerabilities are _injection_ vulnerabilities, catching them requires tracing inputs and outputs through the app. But because, as discussed in the previous section, we often can't rely on sanitization, the task is more difficult than for traditional injection vulnerabilities. General security scanners can take a shortcut: if _any_ string is passed into a privileged action like a database query or shell command unsanitized, the scanner flags it. It doesn't need to trace the input all the way back to its source to see if it's _really_ from an untrusted source or not. The best practice is just to sanitize every input regardless, so a scanner can just flag any instance where sanitization isn't done.
+Because most serious LLM app vulnerabilities are _injection_ vulnerabilities, catching them often requires tracing inputs and outputs exhaustively through the app. But because, as discussed in the previous section, we often can't rely on sanitization, the task is more difficult than for traditional injection vulnerabilities. General security scanners _do_ trace, but they can take a shortcut: if _any_ string is passed into a privileged action like a database query or shell command unsanitized, the scanner flags it. It's often unnecessary to trace an input all the way back to its source to see if it's _really_ from an untrusted source or not. The best practice is just to sanitize every input regardless, so a scanner can just flag any instance where sanitization isn't done.
 
 An LLM-focused scanner doesn't have this luxury. If we flagged every instance of an LLM output being used for a privileged action without sanitization, we'd drown developers in unhelpful alerts. It would be like telling developers to make their LLM apps secure by not building LLM apps in the first place.
 
@@ -174,7 +171,7 @@ Perhaps now you can better understand my earlier statement:
 
 > …an effective strategy for finding the most common and severe vulnerabilities in LLM apps definitely would _not_ be an effective strategy for a general review tool, even a general security review tool.
 
-A general PR review tool that tried to trace every untrusted input like this would be incredibly slow and expensive, particularly if it used AI. And it's not necessary—like I said, it has better shortcuts available. For an LLM-focused scanner, the search space is much more constrained, and we can't use the same shortcuts anyway, so tracing is the way to go.
+A general PR review tool that tried to trace _every_ potential untrusted input like this would be incredibly slow and expensive, particularly if it used AI. And it's not necessary—like I said, it has better shortcuts available. For an LLM-focused scanner, the search space is much more constrained, and we can't use the same shortcuts anyway, so extensive tracing is the way to go.
 
 ## Testing on real CVEs
 
@@ -216,37 +213,39 @@ This vulnerability existed in both the Python and JavaScript versions of LangCha
 
 ## Borderline cases and custom guidance
 
-Not every CVE is as clear cut as the examples above. Some are in a bit of a gray zone. They're real vulnerabilities, but flagging the _category_ of vulnerabilities that they belong to by default would risk creating too much noise. That's a _really_ bad thing for a security scanner: alert fatigue makes developers ignore legitimate findings, or just turn off scanning altogether in frustration. Our goal is that when the scanner flags an issue (especially one that's high severity), everyone on your team will agree it's a real issue that needs to be fixed.
+Not every CVE is as clear cut as the examples above. Some are in a bit of a gray zone. They're real vulnerabilities, but flagging the _category_ of vulnerabilities that they belong to by default would risk creating too much noise. That's a _really_ bad thing for a security scanner: alert fatigue makes developers ignore legitimate findings, or just turn off scanning altogether in frustration. Our goal is that when the scanner flags an issue, everyone on your team will agree it's a real issue that needs to be fixed.
 
-### smolagents: Sandbox bypass
+### LlamaIndex: Text-to-SQL without validation
 
-Consider [CVE-2025-5120](https://nvd.nist.gov/vuln/detail/CVE-2025-5120) in smolagents, an agent-building framework. The [PR](https://github.com/huggingface/smolagents/pull/1302) added an `additional_functions` parameter that lets developers inject arbitrary Python functions into a sandboxed executor for LLM-generated code, bypassing the sandbox entirely.
+Consider [CVE-2024-23751](https://nvd.nist.gov/vuln/detail/CVE-2024-23751) in LlamaIndex. [PR #8197](https://github.com/run-llama/llama_index/pull/8197) added an `NLSQLRetriever` class that takes natural language queries, uses an LLM to generate SQL, and executes it directly against the database:
+
+```python
+raw_response_str, metadata = self._sql_database.run_sql(query_bundle.query_str)
+```
 
 Our scanner did notice this during analysis, but filtered it out:
 
-<img src="/img/blog/building-a-security-scanner-for-llm-apps/smolagents-all-clear-pr-comment.jpg" alt="smolagents all clear PR comment" className={[styles.screenshot, styles.mb].join(' ')} />
+<img src="/img/blog/building-a-security-scanner-for-llm-apps/llamaindex-all-clear-pr-comment.jpg" alt="LlamaIndex all clear PR comment" className={[styles.screenshot, styles.mb].join(' ')} />
 
-That reasoning isn't wrong. If we flagged every configuration option that _could_ be misused, we'd drown developers in alerts where things are mostly working as intended. So, by default, we require that any flagged vulnerability must be _directly_ exploitable without requiring insider access, a future mistake, or another attack to succeed first.
+That reasoning isn't wrong. Text-to-SQL is a common pattern in LLM apps, and many teams that use it _do_ rely on database-level permissions when they integrate libraries like LlamaIndex. They might _want_ the LLM to be able to execute "dangerous" queries like `DROP TABLE`. It all depends on what they're building and the security model. Flagging this at the library level would be overzealous. We only want to flag issues that are directly exploitable.
 
-Without this constraint, the scanner would become unusable for many types of apps. But for some codebases, that tradeoff might be wrong. Some teams want this kind of issue to be flagged, even if it requires insider access, misconfiguration, or another attack to succeed first.
-
-That's where [custom guidance](https://www.promptfoo.dev/docs/code-scanning/#custom-guidance) comes in. When we added this guidance to the scanner's config:
+That said, some teams might reasonably prefer a stricter approach. That's where [custom guidance](https://www.promptfoo.dev/docs/code-scanning/#custom-guidance) comes in. When we added this guidance to the scanner's config:
 
 ```yaml
 guidance: |
-  We take a conservative approach to security.
-  - Treat any modification to existing security controls as significant
-  - Flag changes that could expand what untrusted code can do
-  - We prefer false positives over missing real issues
+  We follow defense-in-depth principles. Do not assume that downstream
+  systems (databases, APIs, external services) have proper access controls.
+  Flag cases where untrusted or LLM-generated content is passed to
+  privileged operations without validation at the application layer.
 ```
 
-It then flagged the vulnerability instead of filtering it out.
+It flagged the vulnerability instead:
 
-<img src="/img/blog/building-a-security-scanner-for-llm-apps/smolagents-guidance-pr-comment.jpg" alt="smolagents guidance PR comment" className={styles.screenshot} />
+<img src="/img/blog/building-a-security-scanner-for-llm-apps/llamaindex-guidance-pr-comment.jpg" alt="LlamaIndex guidance PR comment" className={[styles.screenshot, styles.mb].join(' ')} />
 
 ## Wrapping up
 
-That's all I've got for now. If you're building on top of LLMs and want to try the scanner, you can [install the scanner here](https://github.com/apps/promptfoo-code-scanner).
+That's all I've got for now. If you're building on top of LLMs and want to try the scanner, you can [install the scanner here](https://github.com/apps/promptfoo-scanner).
 
 We'll ask for your email during the setup flow, but you don't need an account or any API keys to try it. It takes a couple minutes to install, and runs automatically on every PR that's opened after that.
  

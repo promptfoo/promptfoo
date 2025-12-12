@@ -4,8 +4,10 @@
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
   width: 100%;
   max-width: 650px;
+  display: block;
+  margin: 2rem auto 0;
 }
 
 .mb {
-  margin-bottom: 1rem;
+  margin-bottom: 2rem;
 }
