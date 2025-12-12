@@ -473,11 +473,21 @@ export abstract class RedteamGraderBase {
 
     const timestampString = `\n\nCurrent timestamp: ${vars.timestamp}`;
 
+    // Add goal context only when there's an actual extracted goal (different from prompt)
+    const hasExtractedGoal = test.metadata?.goal && test.metadata.goal !== prompt;
+    const goalContextString = hasExtractedGoal
+      ? '\n\n' +
+        '<GoalContext>\n' +
+        `<Goal>${test.metadata.goal}</Goal>\n` +
+        '</GoalContext>'
+      : '';
+
     const finalRubric =
       this.renderRubric(vars) +
       (additionalRubric ? '\n\n' + additionalRubric : '') +
       gradingGuidanceString +
       graderExamplesString +
+      goalContextString +
       timestampString;
 
     if (!skipRefusalCheck && (isEmptyResponse(llmOutput) || isBasicRefusal(llmOutput))) {
