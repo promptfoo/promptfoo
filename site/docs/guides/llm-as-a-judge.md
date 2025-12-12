@@ -513,7 +513,7 @@ defaultTest:
 ```
 
 :::note
-Reasoning models (o1, o3, o4-mini) don't support `temperature`. Binary scoring is the most reliable way to reduce variance across all models.
+Some models don't support `temperature`. Binary scoring is the most reliable way to reduce variance across all models.
 :::
 
 <details>
