@@ -127,16 +127,6 @@ The authors audited 10 "Political Activities" prompts against OpenAI's usage pol
 
 The pattern: many prompts are phrased as **"can you…" capability questions**. In a one-turn setting, a model can respond "I can help, here's high-level info" and get scored as "success" depending on the rubric. That inflates ASR without demonstrating disallowed behavior.
 
-### Policy drift: the version problem
-
-Provider policies change. OpenAI's usage policy has been revised multiple times. If your benchmark claims "violates provider policy," you need to store:
-
-- Provider name
-- **Policy URL + revision date**
-- The exact "disallowed behavior" clause used for labeling
-
-Without this, your ASR measurement has an expiration date you don't know.
-
 ### Baseline refusal sanity check
 
 Before running jailbreaks, run the prompt set with no attack strategy. If baseline "success" is already high, you're measuring label noise or rubric mismatch, not jailbreakability. This is easy to implement in promptfoo by running an eval with no [strategies](/docs/red-team/strategies/).
