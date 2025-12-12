@@ -88,6 +88,12 @@ interface CrescendoResponse extends ProviderResponse {
 
 interface CrescendoConfig {
   injectVar: string;
+  /**
+   * Additional input variables that the attacker can manipulate.
+   * Key is variable name, value is description of what to generate.
+   * These are passed from the redteam config's `inputs` field.
+   */
+  inputs?: Record<string, string>;
   maxTurns?: number;
   /** @deprecated Use maxTurns instead */
   maxRounds?: number;
@@ -300,6 +306,13 @@ export class CrescendoProvider implements ApiProvider {
       tracingOptions.enabled && (tracingOptions.includeInAttack || tracingOptions.includeInGrading);
     const traceSnapshots: TraceContextData[] = [];
 
+    // Build inputs section for the system prompt if additional inputs are configured
+    const inputsSection = this.config.inputs
+      ? Object.entries(this.config.inputs)
+          .map(([varName, description]) => `- ${varName}: ${description}`)
+          .join('\n')
+      : undefined;
+
     const systemPrompt = this.nunjucks.renderString(CRESCENDO_SYSTEM_PROMPT, {
       conversationObjective: this.userGoal,
       maxTurns: this.maxTurns,
@@ -309,6 +322,7 @@ export class CrescendoProvider implements ApiProvider {
         Object.entries(context?.test?.metadata?.modifiers || {})
           .map(([key, value]) => `${key}: ${value}`)
           .join('\n') || undefined,
+      inputsSection,
     });
 
     this.memory.addMessage(this.redTeamingChatConversationId, {
@@ -345,6 +359,7 @@ export class CrescendoProvider implements ApiProvider {
             Object.entries(context?.test?.metadata?.modifiers || {})
               .map(([key, value]) => `${key}: ${value}`)
               .join('\n') || undefined,
+          inputsSection,
         });
 
         const conversation = this.memory.getConversation(this.redTeamingChatConversationId);
@@ -354,7 +369,7 @@ export class CrescendoProvider implements ApiProvider {
 
         logger.debug(`\n[Crescendo] ROUND ${roundNum}\n`);
 
-        const { generatedQuestion: attackPrompt } = await this.getAttackPrompt(
+        const { generatedQuestion: attackPrompt, generatedInputs } = await this.getAttackPrompt(
           roundNum,
           evalFlag,
           lastResponse,
@@ -370,6 +385,9 @@ export class CrescendoProvider implements ApiProvider {
         }
 
         logger.debug(`[Crescendo] Generated attack prompt: ${attackPrompt}`);
+        if (generatedInputs) {
+          logger.debug(`[Crescendo] Generated inputs: ${JSON.stringify(generatedInputs)}`);
+        }
 
         const { response, transformResult } = await this.sendPrompt(
           attackPrompt,
@@ -383,6 +401,7 @@ export class CrescendoProvider implements ApiProvider {
           tracingOptions,
           shouldFetchTrace,
           traceSnapshots,
+          generatedInputs,
         );
         lastResponse = response;
         lastTransformResult = transformResult;
@@ -425,6 +444,7 @@ export class CrescendoProvider implements ApiProvider {
             tracingOptions,
             shouldFetchTrace,
             traceSnapshots,
+            generatedInputs, // Use the same generated inputs for consistency
           );
 
           accumulateResponseTokenUsage(totalTokenUsage, unblockingResponse);
@@ -633,7 +653,10 @@ export class CrescendoProvider implements ApiProvider {
     objectiveScore: { value: number; rationale: string } | undefined,
     tracingOptions: RedteamTracingOptions,
     options?: CallApiOptionsParams,
-  ): Promise<{ generatedQuestion: string | undefined }> {
+  ): Promise<{
+    generatedQuestion: string | undefined;
+    generatedInputs?: Record<string, string>;
+  }> {
     logger.debug(
       `[Crescendo] getAttackPrompt called: round=${roundNum}, evalFlag=${evalFlag}, objectiveScore=${JSON.stringify(
         objectiveScore,
@@ -712,11 +735,16 @@ export class CrescendoProvider implements ApiProvider {
             generatedQuestion: string;
             rationaleBehindJailbreak: string;
             lastResponseSummary: string;
+            generatedInputs?: Record<string, string>;
           }>(response.output)
         : Array.isArray(response.output)
           ? response.output[0]
           : response.output;
     const expectedKeys = ['generatedQuestion', 'rationaleBehindJailbreak', 'lastResponseSummary'];
+    // Add generatedInputs to expected keys if inputs are configured
+    if (this.config.inputs && Object.keys(this.config.inputs).length > 0) {
+      expectedKeys.push('generatedInputs');
+    }
 
     const missingKeys: string[] = [];
     for (const key of expectedKeys) {
@@ -735,6 +763,7 @@ export class CrescendoProvider implements ApiProvider {
       generatedQuestion: ${parsedOutput.generatedQuestion}
       rationaleBehindJailbreak: ${parsedOutput.rationaleBehindJailbreak}
       lastResponseSummary: ${parsedOutput.lastResponseSummary}
+      generatedInputs: ${JSON.stringify(parsedOutput.generatedInputs)}
     `);
 
     if (Object.keys(parsedOutput).length !== expectedKeys.length) {
@@ -750,6 +779,7 @@ export class CrescendoProvider implements ApiProvider {
 
     return {
       generatedQuestion: parsedOutput.generatedQuestion,
+      generatedInputs: parsedOutput.generatedInputs,
     };
   }
 
@@ -765,13 +795,24 @@ export class CrescendoProvider implements ApiProvider {
     tracingOptions?: RedteamTracingOptions,
     shouldFetchTrace?: boolean,
     traceSnapshots?: TraceContextData[],
+    generatedInputs?: Record<string, string>,
   ): Promise<{ response: TargetResponse; transformResult?: TransformResult }> {
+    // Merge the attack prompt and any generated inputs into the vars
+    const mergedVars = {
+      ...vars,
+      [this.config.injectVar]: attackPrompt,
+      ...(generatedInputs || {}),
+    };
+
+    // Build list of vars to skip template rendering for (injection vars should not be double-evaluated)
+    const skipVars = [this.config.injectVar, ...Object.keys(generatedInputs || {})];
+
     const renderedPrompt = await renderPrompt(
       originalPrompt,
-      { ...vars, [this.config.injectVar]: attackPrompt },
+      mergedVars,
       filters,
       provider,
-      [this.config.injectVar], // Skip template rendering for injection variable to prevent double-evaluation
+      skipVars,
     );
 
     try {
