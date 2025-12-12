@@ -422,6 +422,14 @@ describe('WatsonXProvider', () => {
         return true;
       });
 
+      // Must mock WatsonXAI.newInstance to ensure test isolation
+      const mockedWatsonXAIClient: Partial<any> = {
+        generateText: vi.fn(),
+      };
+      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
+        return mockedWatsonXAIClient as any;
+      });
+
       const provider = new WatsonXProvider(modelName, { config });
       const generateTextSpy = vi.spyOn(await provider.getClient(), 'generateText');
       const response = await provider.callApi(prompt);

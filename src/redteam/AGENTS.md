@@ -41,18 +41,9 @@ strategies:
 
 One plugin can be tested with multiple strategies for comprehensive coverage.
 
-## Security Requirements
+## Logging
 
-**Always sanitize when logging** (test content may be harmful/sensitive):
-
-```typescript
-logger.debug('[RedTeam] Test result', {
-  prompt: testCase.prompt, // May contain exploits
-  output: response.output, // May contain harmful content
-});
-```
-
-Second parameter is auto-sanitized.
+See `docs/logging.md` - especially important here since test content may contain harmful/sensitive data.
 
 ## Adding New Plugins
 

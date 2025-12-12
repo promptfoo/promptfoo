@@ -228,7 +228,7 @@ describe('ESM utilities', () => {
       );
     });
 
-    it('resolves package with module field', () => {
+    it('resolves package with main field', () => {
       const result = resolvePackageEntryPoint('@test/module-field-pkg', mockPackagesDir);
 
       expect(result).toBe(
@@ -262,6 +262,33 @@ describe('ESM utilities', () => {
       expect(result).not.toBeNull();
       expect(result).toContain('@test');
       expect(result).toContain('esm-only-pkg');
+    });
+
+    it('resolves package with direct string exports field', () => {
+      // Tests: "exports": "./index.js"
+      const result = resolvePackageEntryPoint('@test/string-exports-pkg', mockPackagesDir);
+
+      expect(result).toBe(
+        path.join(mockPackagesDir, 'node_modules/@test/string-exports-pkg/index.js'),
+      );
+    });
+
+    it('resolves package with shorthand object exports field', () => {
+      // Tests: "exports": { ".": "./index.js" }
+      const result = resolvePackageEntryPoint('@test/shorthand-exports-pkg', mockPackagesDir);
+
+      expect(result).toBe(
+        path.join(mockPackagesDir, 'node_modules/@test/shorthand-exports-pkg/index.js'),
+      );
+    });
+
+    it('resolves package with default conditional exports field', () => {
+      // Tests: "exports": { ".": { "default": "./index.js" } }
+      const result = resolvePackageEntryPoint('@test/default-exports-pkg', mockPackagesDir);
+
+      expect(result).toBe(
+        path.join(mockPackagesDir, 'node_modules/@test/default-exports-pkg/index.js'),
+      );
     });
   });
 });

@@ -29,6 +29,8 @@ providers:
       region: us-east-1
       maxTokens: 1024
 
+# For Llama 3.2 Vision, see promptfooconfig.llama-vision.yaml (uses InvokeModel API)
+
 tests:
   - vars:
       image: file://cat.jpg

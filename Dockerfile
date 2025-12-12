@@ -11,6 +11,9 @@ ARG PYTHON_VERSION=3.12
 RUN apk add --no-cache python3~=${PYTHON_VERSION} py3-pip py3-setuptools curl && \
     ln -sf python3 /usr/bin/python
 
+# Node 24 ships with npm 11.5.1, but the repo requires >=11.6.4
+RUN npm install -g npm@11.6.4
+
 # Install dependencies only when needed
 FROM base AS builder
 # Check https://github.com/nodejs/docker-node/tree/b4117f9333da4138b03a546ec926ef50a31506c3#nodealpine to understand why libc6-compat might be needed.

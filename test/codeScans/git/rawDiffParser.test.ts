@@ -5,6 +5,7 @@
  */
 
 import { parseRawDiff } from '../../../src/codeScan/git/rawDiffParser';
+import { describe, expect, it } from 'vitest';
 
 describe('parseRawDiff', () => {
   describe('basic file operations', () => {

@@ -879,6 +879,7 @@ class Evaluator {
       telemetry.record('feature_used', {
         feature: 'scenarios',
       });
+      let scenarioIndex = 0;
       for (const scenario of testSuite.scenarios) {
         for (const data of scenario.config) {
           // Merge defaultTest with scenario config
@@ -889,6 +890,20 @@ class Evaluator {
               },
             ]
           ).map((test) => {
+            // Merge metadata from all sources
+            const mergedMetadata = {
+              ...(typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest?.metadata : {}),
+              ...data.metadata,
+              ...test.metadata,
+            };
+
+            // Auto-generate scenarioConversationId if no conversationId is set
+            // This ensures each scenario has isolated conversation history by default
+            // Users can still override by setting their own conversationId
+            if (!mergedMetadata.conversationId) {
+              mergedMetadata.conversationId = `__scenario_${scenarioIndex}__`;
+            }
+
             return {
               ...(typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : {}),
               ...data,
@@ -909,17 +924,12 @@ class Evaluator {
                 ...(data.assert || []),
                 ...(test.assert || []),
               ],
-              metadata: {
-                ...(typeof testSuite.defaultTest === 'object'
-                  ? testSuite.defaultTest?.metadata
-                  : {}),
-                ...data.metadata,
-                ...test.metadata,
-              },
+              metadata: mergedMetadata,
             };
           });
           // Add scenario tests to tests
           tests = tests.concat(scenarioTests);
+          scenarioIndex++;
         }
       }
     }
