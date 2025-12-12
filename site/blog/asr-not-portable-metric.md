@@ -162,7 +162,7 @@ The judge is part of the measurement. Change the judge, change the ranking.
 
 ### Reducing judge variance
 
-If you're running red team evals, grading consistency matters. Promptfoo includes [LLM-as-a-judge](/docs/configuration/expected-outputs/model-graded/) scoring for every [plugin](/docs/red-team/plugins/) (vulnerability category), with rubrics tuned across millions of generations. What we've learned from that scale: specific rubrics beat vague ones. A judge prompt that describes exactly what "success" and "failure" look like will outperform a generic "is this harmful?" check, regardless of which grading model you use.
+When evaluating LLM outputs at scale, grading consistency matters. Promptfoo includes [LLM-as-a-judge](/docs/configuration/expected-outputs/model-graded/) scoring for every [plugin](/docs/red-team/plugins/) (vulnerability category), with rubrics tuned across millions of generations. What we've learned from that scale: specific rubrics beat vague ones. A judge prompt that describes exactly what "success" and "failure" look like will outperform a generic "is this harmful?" check, regardless of which grading model you use.
 
 ---
 
