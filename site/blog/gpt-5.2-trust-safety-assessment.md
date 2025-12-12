@@ -213,17 +213,17 @@ Running this red team will generate harmful content. Keep results internal and l
 
 ## Update: Results with Low Reasoning
 
-*Added December 11, 2025, 5:01 PM PST*
+_Added December 11, 2025, 5:01 PM PST_
 
 We re-ran the eval with `reasoning_effort: 'low'`. Reasoning tokens let the model deliberate before responding, which costs more and adds latency but typically improves safety.
 
 **Attack success by strategy:**
 
-| Strategy | No Reasoning | Low Reasoning | Change |
-|----------|--------------|---------------|--------|
-| **Hydra** (multi-turn) | 78.5% | 61.8% | -16.7pp |
-| **Meta** (single-turn) | 61.0% | 55.1% | -5.9pp |
-| **Baseline** | 4.3% | 5.2% | +0.9pp |
+| Strategy               | No Reasoning | Low Reasoning | Change  |
+| ---------------------- | ------------ | ------------- | ------- |
+| **Hydra** (multi-turn) | 78.5%        | 61.8%         | -16.7pp |
+| **Meta** (single-turn) | 61.0%        | 55.1%         | -5.9pp  |
+| **Baseline**           | 4.3%         | 5.2%          | +0.9pp  |
 
 Reasoning helped most with multi-turn attacks. But even with reasoning enabled, 62% of Hydra attacks and 55% of Meta attacks still succeeded. The eval required 5,615 probes vs 4,229 in the original—adaptive strategies worked harder against the more resistant model.
 
