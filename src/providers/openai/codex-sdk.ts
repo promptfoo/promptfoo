@@ -35,8 +35,28 @@ import type { EnvOverrides } from '../../types/env';
  * - With thread_id: Resumes specific thread from ~/.codex/sessions
  */
 
+/**
+ * Sandbox modes controlling filesystem access
+ */
+export type SandboxMode = 'read-only' | 'workspace-write' | 'danger-full-access';
+
+/**
+ * Approval policies controlling when user approval is required
+ */
+export type ApprovalPolicy = 'never' | 'on-request' | 'on-failure' | 'untrusted';
+
+/**
+ * Reasoning effort levels
+ */
+export type ReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh';
+
 export interface OpenAICodexSDKConfig {
   apiKey?: string;
+
+  /**
+   * Custom base URL for API requests (for proxies)
+   */
+  base_url?: string;
 
   /**
    * Working directory for Codex to operate in
@@ -61,25 +81,45 @@ export interface OpenAICodexSDKConfig {
   codex_path_override?: string;
 
   /**
-   * Model to use (e.g., 'gpt-5.1-codex', 'gpt-4o', 'o3-mini')
+   * Model to use (e.g., 'codex', 'codex-mini', 'gpt-5.2', 'gpt-4o', 'o3-mini')
    */
   model?: string;
 
   /**
-   * Fallback model if primary model fails
+   * Sandbox access level controlling filesystem permissions
+   * - 'read-only': Agent can only read files (safest)
+   * - 'workspace-write': Agent can write to working directory (default)
+   * - 'danger-full-access': Full filesystem access (use with caution)
    */
-  fallback_model?: string;
+  sandbox_mode?: SandboxMode;
 
   /**
-   * Maximum tokens for response
+   * Model reasoning intensity
+   * - 'low': Light reasoning, faster responses
+   * - 'medium': Balanced (default)
+   * - 'high': Thorough reasoning for complex tasks
+   * - 'xhigh': Maximum reasoning for the most complex tasks
    */
-  max_tokens?: number;
+  model_reasoning_effort?: ReasoningEffort;
 
   /**
-   * Maximum tokens for tool output (default: 10000)
-   * Controls how much output from tool calls is included in the context.
+   * Allow network requests
    */
-  tool_output_token_limit?: number;
+  network_access_enabled?: boolean;
+
+  /**
+   * Allow web search
+   */
+  web_search_enabled?: boolean;
+
+  /**
+   * When to require user approval
+   * - 'never': Never require approval
+   * - 'on-request': Require approval when requested
+   * - 'on-failure': Require approval after failures
+   * - 'untrusted': Require approval for untrusted operations
+   */
+  approval_policy?: ApprovalPolicy;
 
   /**
    * Thread management
@@ -99,11 +139,6 @@ export interface OpenAICodexSDKConfig {
    * By default inherits Node.js process.env
    */
   cli_env?: Record<string, string>;
-
-  /**
-   * Custom system instructions
-   */
-  system_prompt?: string;
 
   /**
    * Enable streaming events (default: false for simplicity)
@@ -156,19 +191,25 @@ async function loadCodexSDK(): Promise<any> {
   }
 }
 
-// Pricing per 1M tokens (as of November 2025)
+// Pricing per 1M tokens (as of December 2025)
 // See: https://openai.com/pricing
 const CODEX_MODEL_PRICING: Record<string, { input: number; output: number }> = {
+  // GPT-5.2 (latest frontier model)
+  'gpt-5.2': { input: 2.0, output: 8.0 },
+  // GPT-5.1 Codex models (recommended for code tasks)
   'gpt-5.1-codex': { input: 2.0, output: 8.0 },
   'gpt-5.1-codex-max': { input: 3.0, output: 12.0 },
   'gpt-5.1-codex-mini': { input: 0.5, output: 2.0 },
+  // GPT-5 models
   'gpt-5-codex': { input: 2.0, output: 8.0 },
   'gpt-5-codex-mini': { input: 0.5, output: 2.0 },
   'gpt-5': { input: 2.0, output: 8.0 },
+  // GPT-4 models
   'gpt-4o': { input: 2.5, output: 10.0 },
   'gpt-4o-mini': { input: 0.15, output: 0.6 },
   'gpt-4-turbo': { input: 10.0, output: 30.0 },
   'gpt-4': { input: 30.0, output: 60.0 },
+  // Reasoning models
   'o3-mini': { input: 1.1, output: 4.4 },
   o1: { input: 15.0, output: 60.0 },
   'o1-mini': { input: 3.0, output: 12.0 },
@@ -176,6 +217,8 @@ const CODEX_MODEL_PRICING: Record<string, { input: number; output: number }> = {
 
 export class OpenAICodexSDKProvider implements ApiProvider {
   static OPENAI_MODELS = [
+    // GPT-5.2 (latest frontier model)
+    'gpt-5.2',
     // GPT-5.1 Codex models (recommended for code tasks)
     'gpt-5.1-codex',
     'gpt-5.1-codex-max',
@@ -220,15 +263,6 @@ export class OpenAICodexSDKProvider implements ApiProvider {
 
     if (this.config.model && !OpenAICodexSDKProvider.OPENAI_MODELS.includes(this.config.model)) {
       logger.warn(`Using unknown model for OpenAI Codex SDK: ${this.config.model}`);
-    }
-
-    if (
-      this.config.fallback_model &&
-      !OpenAICodexSDKProvider.OPENAI_MODELS.includes(this.config.fallback_model)
-    ) {
-      logger.warn(
-        `Using unknown model for OpenAI Codex SDK fallback: ${this.config.fallback_model}`,
-      );
     }
   }
 
@@ -346,7 +380,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       }
     }
 
-    // Create new thread
+    // Create new thread with all SDK options
     const thread = this.codexInstance!.startThread({
       workingDirectory: config.working_dir,
       skipGitRepoCheck: config.skip_git_repo_check ?? false,
@@ -354,6 +388,17 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       ...(config.additional_directories?.length
         ? { additionalDirectories: config.additional_directories }
         : {}),
+      ...(config.sandbox_mode ? { sandboxMode: config.sandbox_mode } : {}),
+      ...(config.model_reasoning_effort
+        ? { modelReasoningEffort: config.model_reasoning_effort }
+        : {}),
+      ...(config.network_access_enabled !== undefined
+        ? { networkAccessEnabled: config.network_access_enabled }
+        : {}),
+      ...(config.web_search_enabled !== undefined
+        ? { webSearchEnabled: config.web_search_enabled }
+        : {}),
+      ...(config.approval_policy ? { approvalPolicy: config.approval_policy } : {}),
     });
 
     if (config.persist_threads && cacheKey) {
@@ -409,7 +454,11 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       additional_directories: config.additional_directories,
       model: config.model,
       output_schema: config.output_schema,
-      tool_output_token_limit: config.tool_output_token_limit,
+      sandbox_mode: config.sandbox_mode,
+      model_reasoning_effort: config.model_reasoning_effort,
+      network_access_enabled: config.network_access_enabled,
+      web_search_enabled: config.web_search_enabled,
+      approval_policy: config.approval_policy,
       prompt,
     };
 
@@ -457,6 +506,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       this.codexInstance = new this.codexModule.Codex({
         env,
         ...(config.codex_path_override ? { codexPathOverride: config.codex_path_override } : {}),
+        ...(config.base_url ? { baseUrl: config.base_url } : {}),
       });
     }
 
@@ -468,9 +518,6 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     const runOptions: any = {};
     if (config.output_schema) {
       runOptions.outputSchema = config.output_schema;
-    }
-    if (config.tool_output_token_limit !== undefined) {
-      runOptions.toolOutputTokenLimit = config.tool_output_token_limit;
     }
 
     // Execute turn
