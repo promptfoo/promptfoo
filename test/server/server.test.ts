@@ -81,6 +81,7 @@ describe('server', () => {
     let mockHttpServer: EventEmitter & {
       listen: ReturnType<typeof vi.fn>;
       close: ReturnType<typeof vi.fn>;
+      listening: boolean;
     };
     let originalCreateServer: typeof http.createServer;
     let signalHandlers: Map<string | symbol, ((...args: unknown[]) => void)[]>;
@@ -105,16 +106,22 @@ describe('server', () => {
 
       // Create mock HTTP server
       mockHttpServer = Object.assign(new EventEmitter(), {
+        listening: false,
         listen: vi.fn().mockImplementation(function (
-          this: EventEmitter,
+          this: typeof mockHttpServer,
           _port: number,
           callback: () => void,
         ) {
-          // Simulate async listen
+          // Simulate async listen - server is now listening
+          this.listening = true;
           setImmediate(() => callback());
           return this;
         }),
-        close: vi.fn().mockImplementation(function (callback?: (err?: Error) => void) {
+        close: vi.fn().mockImplementation(function (
+          this: typeof mockHttpServer,
+          callback?: (err?: Error) => void,
+        ) {
+          this.listening = false;
           setImmediate(() => callback?.());
         }),
       });
@@ -204,6 +211,10 @@ describe('server', () => {
       expect(logger.info).toHaveBeenCalledWith('Server closed');
     });
 
+    // Note: Testing the case where socket.io already closed the HTTP server would require
+    // mocking socket.io at the module level. The fix (checking httpServer.listening) handles
+    // this case in production where io.close() closes the underlying server.
+    //
     // Note: Testing the 5-second force shutdown timeout requires mocking socket.io
     // at the module level, which is complex. The timeout exists as a safety measure
     // and the core shutdown logic is tested by the other tests.
