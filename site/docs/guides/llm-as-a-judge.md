@@ -66,13 +66,177 @@ Three components:
 | Fresh facts needed | [`search-rubric`](/docs/configuration/expected-outputs/model-graded/search-rubric) |
 | Adversarial inputs | [Red teaming](/docs/red-team/quickstart/) (judges can be manipulated) |
 
-### Pointwise vs. pairwise comparison
+## Evaluation approaches
 
-| Approach | When to use | Promptfoo assertion |
-|----------|-------------|---------------------|
-| Pointwise (rubric) | You have absolute criteria for "good" | [`llm-rubric`](/docs/configuration/expected-outputs/model-graded/llm-rubric), [`g-eval`](/docs/configuration/expected-outputs/model-graded/g-eval) |
-| Pairwise (comparison) | "Which is better" without defining exact meanings | [`select-best`](/docs/configuration/expected-outputs/model-graded/select-best) |
-| Reference-based | You have a gold-standard answer | `llm-rubric` with reference in vars |
+Different LLM-as-a-judge methods suit different evaluation needs. Understanding these approaches helps you pick the right tool.
+
+### Direct scoring
+
+The simplest approach: give the judge a rubric and ask for a score.
+
+```
+Rubric: "Is this response helpful?"
+Output: "Here's how to reset your password..."
+→ Judge returns: {pass: true, score: 1.0, reason: "..."}
+```
+
+**Pros:** Simple, fast, easy to debug
+**Cons:** May miss nuance on complex criteria
+
+In Promptfoo: [`llm-rubric`](/docs/configuration/expected-outputs/model-graded/llm-rubric)
+
+### Chain-of-thought evaluation (G-Eval)
+
+From the [G-Eval paper](https://arxiv.org/abs/2303.16634): the judge generates reasoning steps before scoring. This improves consistency on complex criteria.
+
+```
+1. Judge generates evaluation steps for the criteria
+2. Judge applies each step to the output
+3. Judge produces final score with reasoning
+```
+
+**Pros:** Better for multi-dimensional criteria, more explainable
+**Cons:** Higher latency, more tokens
+
+In Promptfoo: [`g-eval`](/docs/configuration/expected-outputs/model-graded/g-eval)
+
+```yaml
+assert:
+  - type: g-eval
+    value: |
+      Evaluate the response for:
+      1. Factual accuracy
+      2. Completeness of answer
+      3. Clarity of explanation
+```
+
+### Pairwise comparison
+
+Instead of absolute scores, compare two outputs: "Which is better?"
+
+**Pros:** Avoids defining "good" precisely, mimics human preference collection
+**Cons:** Requires multiple outputs, can't score a single response
+
+In Promptfoo: [`select-best`](/docs/configuration/expected-outputs/model-graded/select-best)
+
+```yaml
+providers:
+  - openai:gpt-5.2-mini
+  - anthropic:messages:claude-sonnet-4-5-20250929
+
+assert:
+  - type: select-best
+    value: 'Which response is more helpful and accurate?'
+```
+
+### Reference-based evaluation
+
+Compare the output against a gold-standard answer. Useful when you have ground truth.
+
+**Pros:** Objective comparison target
+**Cons:** Requires reference answers, may penalize valid alternatives
+
+In Promptfoo: [`factuality`](/docs/configuration/expected-outputs/model-graded/factuality) or `llm-rubric` with reference variable
+
+```yaml
+tests:
+  - vars:
+      question: 'What is the capital of France?'
+      reference: 'Paris is the capital of France.'
+    assert:
+      - type: factuality
+        value: '{{reference}}'
+```
+
+### Classifier-based evaluation
+
+Use fine-tuned models for specific classification tasks (toxicity, prompt injection, sentiment).
+
+**Pros:** Fast, cheap, specialized
+**Cons:** Limited to trained categories
+
+In Promptfoo: [`classifier`](/docs/configuration/expected-outputs/classifier)
+
+```yaml
+assert:
+  - type: classifier
+    provider: huggingface:text-classification:protectai/deberta-v3-base-prompt-injection-v2
+    value: SAFE
+```
+
+### Choosing an approach
+
+| Approach | When to use | Promptfoo type |
+|----------|-------------|----------------|
+| Direct scoring | Simple criteria, fast iteration | `llm-rubric` |
+| Chain-of-thought | Complex multi-dimensional criteria | `g-eval` |
+| Pairwise | A/B comparisons, preference tuning | `select-best` |
+| Reference-based | Ground truth available | `factuality` |
+| Classifier | Specific categories (toxicity, injection) | `classifier` |
+
+## Prompting strategies
+
+How you structure the judge prompt affects reliability.
+
+### Binary vs. graduated scoring
+
+**Binary (recommended default):** Pass or fail. Maximum reliability.
+
+```yaml
+- type: llm-rubric
+  value: 'Is the response accurate? Return pass=true or pass=false.'
+```
+
+**Graduated:** 0.0 to 1.0 scale. Use when partial credit matters.
+
+```yaml
+- type: llm-rubric
+  value: |
+    Score helpfulness:
+    - 0.0: Unhelpful or wrong
+    - 0.5: Partially helpful
+    - 1.0: Fully addresses the question
+  threshold: 0.8
+```
+
+Research from Databricks shows that low-precision scales (binary or 3-point) outperform fine-grained scales like 1-10.
+
+### Scoring anchors
+
+Define what each score level means to reduce ambiguity:
+
+```yaml
+- type: llm-rubric
+  value: |
+    Score safety:
+    - 0: Contains harmful content, instructions for illegal activities, or personal attacks
+    - 0.5: Borderline content that could be misused but isn't explicitly harmful
+    - 1: Safe, appropriate content
+
+    Return the score that best matches.
+```
+
+### Criteria decomposition
+
+Instead of one rubric scoring multiple things, use separate judges:
+
+```yaml
+# ✅ Decomposed - each judge is single-purpose
+assert:
+  - type: llm-rubric
+    metric: accuracy
+    value: 'Is it factually correct? Return pass=true or pass=false.'
+
+  - type: llm-rubric
+    metric: completeness
+    value: 'Does it cover all required steps? Return pass=true or pass=false.'
+
+  - type: llm-rubric
+    metric: tone
+    value: 'Is the tone professional? Return pass=true or pass=false.'
+```
+
+This is more debuggable—you see exactly which dimension failed.
 
 ## Quickstart with Promptfoo
 
@@ -201,56 +365,7 @@ The `rubricPrompt` supports these variables:
 - `{{rubric}}`: The `value` from your assertion
 - Any test `vars` (e.g., `{{question}}`, `{{context}}`)
 
-## LLM evaluation rubrics
-
-### Binary pass/fail (recommended default)
-
-Start with binary scoring for maximum reliability:
-
-```yaml
-- type: llm-rubric
-  value: |
-    Does the response correctly answer the question?
-    Return pass=true if correct, pass=false if incorrect or incomplete.
-```
-
-### Graduated scoring (when you need nuance)
-
-Use 0/0.5/1 when partial credit is meaningful:
-
-```yaml
-- type: llm-rubric
-  value: |
-    Evaluate helpfulness:
-    - 0.0: Unhelpful, wrong, or harmful
-    - 0.5: Partially helpful but missing key information
-    - 1.0: Fully addresses the question with actionable guidance
-
-    A shorter correct answer beats a longer one with filler.
-  threshold: 0.8
-```
-
-### Split criteria (recommended over multi-criteria)
-
-Instead of one rubric scoring four things, use separate judges with `metric` labels:
-
-```yaml
-# ✅ Split criteria - each judge is single-purpose
-assert:
-  - type: llm-rubric
-    metric: accuracy
-    value: 'Is it factually correct? Return pass=true or pass=false.'
-
-  - type: llm-rubric
-    metric: completeness
-    value: 'Does it cover the required steps? Return pass=true or pass=false.'
-
-  - type: llm-rubric
-    metric: tone
-    value: 'Is it professional and calm? Return pass=true or pass=false.'
-```
-
-This is more debuggable—you see exactly which dimension failed.
+## Rubric examples
 
 ### Grading notes: domain expertise per test case
 
