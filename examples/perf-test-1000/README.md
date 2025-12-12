@@ -34,6 +34,7 @@ The Python generator creates 1000 test cases with:
 ## Expected Behavior
 
 The UI should:
+
 - Render smoothly without lag
 - Filter quickly (< 100ms)
 - Navigate without stuttering

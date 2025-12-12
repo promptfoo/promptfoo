@@ -77,4 +77,4 @@ tests:
 
 # Evaluation settings
 evaluateOptions:
-  maxConcurrency: 20  # Process 20 tests in parallel (balance speed vs resource usage)
+  maxConcurrency: 20 # Process 20 tests in parallel (balance speed vs resource usage)

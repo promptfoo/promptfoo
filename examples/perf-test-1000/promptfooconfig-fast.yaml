@@ -19,4 +19,4 @@ tests:
       seed: 42
 
 evaluateOptions:
-  maxConcurrency: 50  # High concurrency since echo is instant
+  maxConcurrency: 50 # High concurrency since echo is instant

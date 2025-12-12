@@ -18,11 +18,36 @@ import string
 def random_text(length: int) -> str:
     """Generate random text of specified length."""
     words = [
-        "the", "quick", "brown", "fox", "jumps", "over", "lazy", "dog",
-        "lorem", "ipsum", "dolor", "sit", "amet", "consectetur", "adipiscing",
-        "evaluation", "testing", "performance", "benchmark", "metrics",
-        "artificial", "intelligence", "machine", "learning", "neural",
-        "network", "transformer", "attention", "embedding", "token",
+        "the",
+        "quick",
+        "brown",
+        "fox",
+        "jumps",
+        "over",
+        "lazy",
+        "dog",
+        "lorem",
+        "ipsum",
+        "dolor",
+        "sit",
+        "amet",
+        "consectetur",
+        "adipiscing",
+        "evaluation",
+        "testing",
+        "performance",
+        "benchmark",
+        "metrics",
+        "artificial",
+        "intelligence",
+        "machine",
+        "learning",
+        "neural",
+        "network",
+        "transformer",
+        "attention",
+        "embedding",
+        "token",
     ]
     result = []
     current_length = 0
@@ -95,7 +120,12 @@ def create_tests(config=None):
         elif outcome_roll < 0.90:
             # Fail case - assertion will fail
             # Assert something that won't be in the output
-            assertions = [{"type": "contains", "value": f"NOTFOUND_{i}_{random.randint(10000,99999)}"}]
+            assertions = [
+                {
+                    "type": "contains",
+                    "value": f"NOTFOUND_{i}_{random.randint(10000, 99999)}",
+                }
+            ]
         else:
             # Error simulation - use icontains-all with value that will fail differently
             # This creates a "soft fail" rather than error, but helps test varied outcomes
@@ -107,14 +137,16 @@ def create_tests(config=None):
         # Add score-based assertion for some tests (creates varied scores)
         if random.random() < 0.3:
             # Add a similarity assertion that will produce fractional scores
-            assertions.append({
-                "type": "similar",
-                "value": input_text[:50],
-                "threshold": 0.5,
-            })
+            assertions.append(
+                {
+                    "type": "similar",
+                    "value": input_text[:50],
+                    "threshold": 0.5,
+                }
+            )
 
         test_case = {
-            "description": f"Test case {i+1:04d} - {categories[i % len(categories)]}",
+            "description": f"Test case {i + 1:04d} - {categories[i % len(categories)]}",
             "vars": {
                 "input": input_text,
                 "test_id": i + 1,
@@ -125,7 +157,11 @@ def create_tests(config=None):
                 "difficulty": difficulties[i % len(difficulties)],
                 "priority": priorities[i % len(priorities)],
                 "batch": (i // 100) + 1,  # Group into batches of 100
-                "content_length": "short" if content_length < 100 else "medium" if content_length < 500 else "long",
+                "content_length": "short"
+                if content_length < 100
+                else "medium"
+                if content_length < 500
+                else "long",
             },
         }
 
@@ -138,4 +174,5 @@ if __name__ == "__main__":
     # Test the generator
     tests = create_tests({"num_tests": 5})
     import json
+
     print(json.dumps(tests, indent=2))
