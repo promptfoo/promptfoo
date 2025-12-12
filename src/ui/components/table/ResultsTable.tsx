@@ -100,7 +100,8 @@ function HelpText({ isCompact, showHistory }: { isCompact: boolean; showHistory?
     return (
       <Box marginTop={1}>
         <Text dimColor>
-          ↑↓ nav | Enter expand | a/p/f/e filter | x export | y copy{showHistory ? ' | H history' : ''} | ? help | q quit
+          ↑↓ nav | Enter expand | a/p/f/e filter | x export | y copy
+          {showHistory ? ' | H history' : ''} | ? help | q quit
         </Text>
       </Box>
     );
@@ -113,8 +114,14 @@ function HelpText({ isCompact, showHistory }: { isCompact: boolean; showHistory?
         <Text color="cyan">[f]</Text>ail <Text color="cyan">[e]</Text>rr{' '}
         <Text color="cyan">[d]</Text>iff | <Text color="cyan">/</Text> search |{' '}
         <Text color="cyan">:</Text> cmd | <Text color="cyan">[x]</Text> export |{' '}
-        <Text color="cyan">[y]</Text> copy{showHistory ? (<> | <Text color="cyan">[H]</Text>istory</>) : null} |{' '}
-        <Text color="cyan">[?]</Text> help | q quit
+        <Text color="cyan">[y]</Text> copy
+        {showHistory ? (
+          <>
+            {' '}
+            | <Text color="cyan">[H]</Text>istory
+          </>
+        ) : null}{' '}
+        | <Text color="cyan">[?]</Text> help | q quit
       </Text>
     </Box>
   );

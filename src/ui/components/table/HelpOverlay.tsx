@@ -184,7 +184,17 @@ export function HelpOverlay({
       )}
 
       {/* Footer */}
-      <Box justifyContent="center" marginTop={1} borderStyle="single" borderTop borderBottom={false} borderLeft={false} borderRight={false} borderColor="gray" paddingTop={1}>
+      <Box
+        justifyContent="center"
+        marginTop={1}
+        borderStyle="single"
+        borderTop
+        borderBottom={false}
+        borderLeft={false}
+        borderRight={false}
+        borderColor="gray"
+        paddingTop={1}
+      >
         <Text color="gray">Press any key to close</Text>
       </Box>
     </Box>

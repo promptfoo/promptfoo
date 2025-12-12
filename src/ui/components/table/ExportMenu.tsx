@@ -128,9 +128,7 @@ export const ExportMenu = memo(function ExportMenu({
       ))}
 
       <Box marginTop={1}>
-        <Text dimColor>
-          Press key to select, Enter to confirm, Esc to cancel
-        </Text>
+        <Text dimColor>Press key to select, Enter to confirm, Esc to cancel</Text>
       </Box>
     </Box>
   );

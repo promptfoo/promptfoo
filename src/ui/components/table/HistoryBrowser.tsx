@@ -365,9 +365,7 @@ export const HistoryBrowser = memo(function HistoryBrowser({
         return (
           <Box key={eval_.id} flexDirection="column">
             <Box>
-              <Text color={isSelected ? 'cyan' : undefined}>
-                {isSelected ? '>' : ' '}{' '}
-              </Text>
+              <Text color={isSelected ? 'cyan' : undefined}>{isSelected ? '>' : ' '} </Text>
               <Text color={isSelected ? 'cyan' : undefined} bold={isSelected}>
                 {shortId}
               </Text>

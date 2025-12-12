@@ -93,9 +93,7 @@ export async function fetchEvalList(limit: number = 50): Promise<EvalListItem[]>
       eval_.prompts,
     );
 
-    const providerLabels = eval_.prompts.map(
-      (p) => p.label || p.provider || 'unknown',
-    );
+    const providerLabels = eval_.prompts.map((p) => p.label || p.provider || 'unknown');
 
     return {
       id: eval_.id,

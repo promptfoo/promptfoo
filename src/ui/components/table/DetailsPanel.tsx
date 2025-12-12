@@ -131,7 +131,8 @@ function ContentBox({
         <Box marginTop={0}>
           <Text dimColor>
             {hasMoreAbove && '↑ '}
-            {totalLines > maxLines && `${scrollOffset + 1}-${Math.min(scrollOffset + maxLines, totalLines)} of ${totalLines} lines`}
+            {totalLines > maxLines &&
+              `${scrollOffset + 1}-${Math.min(scrollOffset + maxLines, totalLines)} of ${totalLines} lines`}
             {hasMoreBelow && ' ↓'}
           </Text>
         </Box>
@@ -474,12 +475,7 @@ export function DetailsPanel({
   // Handle navigation to next/prev failure
   const navigateFailure = useCallback(
     (direction: 'prev' | 'next') => {
-      const failureIndex = findFailureIndex(
-        allRows,
-        currentRowIndex,
-        direction,
-        outputCellIndex,
-      );
+      const failureIndex = findFailureIndex(allRows, currentRowIndex, direction, outputCellIndex);
       if (failureIndex !== null) {
         onNavigate(failureIndex, currentColIndex);
       } else {
@@ -686,10 +682,7 @@ export function DetailsPanel({
               />
             )}
             {output?.error && (
-              <MetadataItem
-                label="Error"
-                value={<Text color="red">{output.error}</Text>}
-              />
+              <MetadataItem label="Error" value={<Text color="red">{output.error}</Text>} />
             )}
             {/* Empty state when no metadata available */}
             {!output?.provider &&
@@ -718,11 +711,8 @@ export function DetailsPanel({
             <Box flexDirection="column">
               {rowData.originalRow.vars.map((varValue, idx) => {
                 const varName = varNames[idx] || `var${idx + 1}`;
-                const truncated =
-                  varValue.length > 100 ? varValue.slice(0, 100) + '…' : varValue;
-                return (
-                  <MetadataItem key={idx} label={varName} value={truncated || '(empty)'} />
-                );
+                const truncated = varValue.length > 100 ? varValue.slice(0, 100) + '…' : varValue;
+                return <MetadataItem key={idx} label={varName} value={truncated || '(empty)'} />;
               })}
             </Box>
           )}
@@ -742,8 +732,8 @@ export function DetailsPanel({
       >
         <Text dimColor>
           <Text color="cyan">[j/k]</Text> scroll <Text color="cyan">[Tab]</Text> section{' '}
-          <Text color="cyan">[[/]]</Text> prev/next <Text color="cyan">[{'{/}'}]</Text> prev/next fail{' '}
-          <Text color="cyan">[y]</Text> copy <Text color="cyan">[q]</Text> close
+          <Text color="cyan">[[/]]</Text> prev/next <Text color="cyan">[{'{/}'}]</Text> prev/next
+          fail <Text color="cyan">[y]</Text> copy <Text color="cyan">[q]</Text> close
         </Text>
       </Box>
     </Box>

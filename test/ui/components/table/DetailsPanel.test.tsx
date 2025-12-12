@@ -5,7 +5,11 @@
 import { render } from 'ink-testing-library';
 import { describe, expect, it, vi } from 'vitest';
 import { DetailsPanel } from '../../../../src/ui/components/table/DetailsPanel';
-import type { TableCellData, TableColumn, TableRowData } from '../../../../src/ui/components/table/types';
+import type {
+  TableCellData,
+  TableColumn,
+  TableRowData,
+} from '../../../../src/ui/components/table/types';
 
 // Mock terminal size
 vi.mock('../../../../src/ui/hooks/useTerminalSize', () => ({
@@ -13,16 +17,18 @@ vi.mock('../../../../src/ui/hooks/useTerminalSize', () => ({
 }));
 
 // Helper to create test data
-function createTestData(overrides: Partial<{
-  pass: boolean;
-  prompt: string;
-  response: string;
-  error: string;
-  latencyMs: number;
-  cost: number;
-  provider: string;
-  gradingResult: any;
-}> = {}) {
+function createTestData(
+  overrides: Partial<{
+    pass: boolean;
+    prompt: string;
+    response: string;
+    error: string;
+    latencyMs: number;
+    cost: number;
+    provider: string;
+    gradingResult: any;
+  }> = {},
+) {
   const cellData: TableCellData = {
     content: overrides.response || 'Test response content',
     displayContent: overrides.response || 'Test response content',
@@ -90,7 +96,7 @@ describe('DetailsPanel', () => {
         outputCellIndex={0}
         onNavigate={onNavigate}
         onClose={onClose}
-      />
+      />,
     );
 
     const output = lastFrame();
@@ -117,7 +123,7 @@ describe('DetailsPanel', () => {
         outputCellIndex={0}
         onNavigate={onNavigate}
         onClose={onClose}
-      />
+      />,
     );
 
     const output = lastFrame();
@@ -143,7 +149,7 @@ describe('DetailsPanel', () => {
         outputCellIndex={0}
         onNavigate={onNavigate}
         onClose={onClose}
-      />
+      />,
     );
 
     const output = lastFrame();
@@ -157,7 +163,12 @@ describe('DetailsPanel', () => {
         score: 1,
         reason: 'All assertions passed',
         componentResults: [
-          { pass: true, score: 1, reason: 'Contains expected text', assertion: { type: 'contains', value: '42' } },
+          {
+            pass: true,
+            score: 1,
+            reason: 'Contains expected text',
+            assertion: { type: 'contains', value: '42' },
+          },
           { pass: true, score: 1, reason: 'Factually accurate', assertion: { type: 'llm-rubric' } },
         ],
       },
@@ -177,7 +188,7 @@ describe('DetailsPanel', () => {
         outputCellIndex={0}
         onNavigate={onNavigate}
         onClose={onClose}
-      />
+      />,
     );
 
     const output = lastFrame();
@@ -206,7 +217,7 @@ describe('DetailsPanel', () => {
         outputCellIndex={0}
         onNavigate={onNavigate}
         onClose={onClose}
-      />
+      />,
     );
 
     const output = lastFrame();
@@ -230,7 +241,7 @@ describe('DetailsPanel', () => {
         outputCellIndex={0}
         onNavigate={onNavigate}
         onClose={onClose}
-      />
+      />,
     );
 
     const output = lastFrame();
@@ -239,7 +250,11 @@ describe('DetailsPanel', () => {
 
   it('should show row position', () => {
     const { cellData, column, rowData } = createTestData();
-    const allRows = [rowData, { ...rowData, index: 1, testIdx: 1 }, { ...rowData, index: 2, testIdx: 2 }];
+    const allRows = [
+      rowData,
+      { ...rowData, index: 1, testIdx: 1 },
+      { ...rowData, index: 2, testIdx: 2 },
+    ];
     const onNavigate = vi.fn();
     const onClose = vi.fn();
 
@@ -255,7 +270,7 @@ describe('DetailsPanel', () => {
         outputCellIndex={0}
         onNavigate={onNavigate}
         onClose={onClose}
-      />
+      />,
     );
 
     const output = lastFrame();
@@ -279,7 +294,7 @@ describe('DetailsPanel', () => {
         outputCellIndex={0}
         onNavigate={onNavigate}
         onClose={onClose}
-      />
+      />,
     );
 
     const output = lastFrame();
@@ -304,7 +319,7 @@ describe('DetailsPanel', () => {
         outputCellIndex={0}
         onNavigate={onNavigate}
         onClose={onClose}
-      />
+      />,
     );
 
     const output = lastFrame();
@@ -329,7 +344,7 @@ describe('DetailsPanel', () => {
         outputCellIndex={0}
         onNavigate={onNavigate}
         onClose={onClose}
-      />
+      />,
     );
 
     const output = lastFrame();
@@ -346,8 +361,18 @@ describe('DetailsPanel', () => {
         pass: false,
         score: 0.5,
         componentResults: [
-          { pass: true, score: 1, reason: 'Contains Paris', assertion: { type: 'contains', value: 'Paris' } },
-          { pass: false, score: 0, reason: 'Cost exceeded limit', assertion: { type: 'cost', value: 0.001 } },
+          {
+            pass: true,
+            score: 1,
+            reason: 'Contains Paris',
+            assertion: { type: 'contains', value: 'Paris' },
+          },
+          {
+            pass: false,
+            score: 0,
+            reason: 'Cost exceeded limit',
+            assertion: { type: 'cost', value: 0.001 },
+          },
         ],
       },
     });
@@ -366,7 +391,7 @@ describe('DetailsPanel', () => {
         outputCellIndex={0}
         onNavigate={onNavigate}
         onClose={onClose}
-      />
+      />,
     );
 
     const output = lastFrame();
