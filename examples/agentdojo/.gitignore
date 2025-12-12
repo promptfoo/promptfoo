@@ -1,0 +1,9 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+
+# Runtime files
+agentdojo_logs/
+agentdojo_results.json
+dataset.jsonl
