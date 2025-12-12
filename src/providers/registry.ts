@@ -40,15 +40,24 @@ import { CohereChatCompletionProvider, CohereEmbeddingProvider } from './cohere'
 import { DatabricksMosaicAiChatCompletionProvider } from './databricks';
 import { createDeepSeekProvider } from './deepseek';
 import { EchoProvider } from './echo';
+import {
+  ElevenLabsTTSProvider,
+  ElevenLabsSTTProvider,
+  ElevenLabsAgentsProvider,
+  ElevenLabsHistoryProvider,
+  ElevenLabsIsolationProvider,
+  ElevenLabsAlignmentProvider,
+} from './elevenlabs';
 import { createEnvoyProvider } from './envoy';
 import { FalImageGenerationProvider } from './fal';
 import { createGitHubProvider } from './github/index';
 import { GolangProvider } from './golangCompletion';
 import { AIStudioChatProvider } from './google/ai.studio';
+import { GeminiImageProvider } from './google/gemini-image';
 import { GoogleImageProvider } from './google/image';
 import { GoogleLiveProvider } from './google/live';
 import { VertexChatProvider, VertexEmbeddingProvider } from './google/vertex';
-import { GroqProvider } from './groq';
+import { GroqProvider, GroqResponsesProvider } from './groq/index';
 import { HeliconeGatewayProvider } from './helicone';
 import { HttpProvider } from './http';
 import {
@@ -71,7 +80,6 @@ import { MCPProvider } from './mcp/index';
 import { MistralChatCompletionProvider, MistralEmbeddingProvider } from './mistral';
 import { createNscaleProvider } from './nscale';
 import { OllamaChatProvider, OllamaCompletionProvider, OllamaEmbeddingProvider } from './ollama';
-import { OpenAiAgentsProvider } from './openai/agents';
 import { OpenAiAssistantProvider } from './openai/assistant';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiCompletionProvider } from './openai/completion';
@@ -197,6 +205,26 @@ export const providerMap: ProviderFactory[] = [
         return new AlibabaEmbeddingProvider(modelName || modelType, providerOptions);
       }
       return new AlibabaChatCompletionProvider(modelName || modelType, providerOptions);
+    },
+  },
+  {
+    test: (providerPath: string) =>
+      providerPath.startsWith('opencode:') || providerPath === 'opencode',
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const { OpenCodeSDKProvider } = await import('./opencode-sdk');
+
+      // opencode:sdk or opencode - uses OpenCode's configured default model
+      // Model selection is configured via OpenCode CLI: opencode config set model <provider/model>
+      return new OpenCodeSDKProvider({
+        ...providerOptions,
+        id: providerPath,
+        config: providerOptions.config,
+        env: context.env,
+      });
     },
   },
   {
@@ -515,6 +543,56 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
+    test: (providerPath: string) => providerPath.startsWith('elevenlabs:'),
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const splits = providerPath.split(':');
+      const capability = splits[1]; // tts, stt, agents, history, isolation, alignment
+      const _additionalId = splits.length > 2 ? splits.slice(2).join(':') : undefined;
+
+      // Route to appropriate provider based on capability
+      switch (capability) {
+        case 'tts':
+          return new ElevenLabsTTSProvider(providerPath, {
+            ...providerOptions,
+            env: context.env,
+          });
+        case 'stt':
+          return new ElevenLabsSTTProvider(providerPath, {
+            ...providerOptions,
+            env: context.env,
+          });
+        case 'agents':
+          return new ElevenLabsAgentsProvider(providerPath, {
+            ...providerOptions,
+            env: context.env,
+          });
+        case 'history':
+          return new ElevenLabsHistoryProvider(providerPath, {
+            ...providerOptions,
+            env: context.env,
+          });
+        case 'isolation':
+          return new ElevenLabsIsolationProvider(providerPath, {
+            ...providerOptions,
+            env: context.env,
+          });
+        case 'alignment':
+          return new ElevenLabsAlignmentProvider(providerPath, {
+            ...providerOptions,
+            env: context.env,
+          });
+        default:
+          throw new Error(
+            `ElevenLabs capability "${capability}" is not supported. Available: tts, stt, agents, history, isolation, alignment`,
+          );
+      }
+    },
+  },
+  {
     test: (providerPath: string) => providerPath.startsWith('envoy:'),
     create: async (
       providerPath: string,
@@ -599,7 +677,26 @@ export const providerMap: ProviderFactory[] = [
       providerOptions: ProviderOptions,
       _context: LoadApiProviderContext,
     ) => {
-      const modelName = providerPath.split(':')[1];
+      // Handle groq:responses:<model> format for Responses API
+      if (providerPath.startsWith('groq:responses:')) {
+        const modelName = providerPath.slice('groq:responses:'.length);
+        if (!modelName) {
+          throw new Error(
+            `Invalid groq:responses provider path: "${providerPath}". ` +
+              'Use format groq:responses:<model> (e.g., groq:responses:llama-3.3-70b-versatile)',
+          );
+        }
+        return new GroqResponsesProvider(modelName, providerOptions);
+      }
+
+      // Handle groq:<model> format for Chat Completions API
+      const modelName = providerPath.slice('groq:'.length);
+      if (!modelName) {
+        throw new Error(
+          `Invalid groq provider path: "${providerPath}". ` +
+            'Use format groq:<model> (e.g., groq:llama-3.3-70b-versatile)',
+        );
+      }
       return new GroqProvider(modelName, providerOptions);
     },
   },
@@ -751,13 +848,21 @@ export const providerMap: ProviderFactory[] = [
     create: async (
       providerPath: string,
       providerOptions: ProviderOptions,
-      _context: LoadApiProviderContext,
+      context: LoadApiProviderContext,
     ) => {
       // Load OpenAI module
       const splits = providerPath.split(':');
       const modelType = splits[1];
       const modelName = splits.slice(2).join(':');
 
+      // Codex SDK providers (openai:codex-sdk or openai:codex)
+      if (modelType === 'codex-sdk' || modelType === 'codex') {
+        const { OpenAICodexSDKProvider } = await import('./openai/codex-sdk');
+        return new OpenAICodexSDKProvider({
+          ...providerOptions,
+          env: context.env,
+        });
+      }
       if (modelType === 'chat') {
         return new OpenAiChatCompletionProvider(modelName || 'gpt-4.1-2025-04-14', providerOptions);
       }
@@ -799,7 +904,12 @@ export const providerMap: ProviderFactory[] = [
         return new OpenAiResponsesProvider(modelType, providerOptions);
       }
       if (modelType === 'agents') {
+        const { OpenAiAgentsProvider } = await import('./openai/agents');
         return new OpenAiAgentsProvider(modelName || 'default-agent', providerOptions);
+      }
+      if (modelType === 'chatkit') {
+        const { OpenAiChatKitProvider } = await import('./openai/chatkit');
+        return new OpenAiChatKitProvider(modelName || '', providerOptions);
       }
       if (modelType === 'assistant') {
         return new OpenAiAssistantProvider(modelName, providerOptions);
@@ -809,7 +919,7 @@ export const providerMap: ProviderFactory[] = [
       }
       // Assume user did not provide model type, and it's a chat model
       logger.warn(
-        `Unknown OpenAI model type: ${modelType}. Treating it as a chat model. Use one of the following providers: openai:chat:<model name>, openai:completion:<model name>, openai:embeddings:<model name>, openai:image:<model name>, openai:realtime:<model name>, openai:agents:<agent name>`,
+        `Unknown OpenAI model type: ${modelType}. Treating it as a chat model. Use one of the following providers: openai:chat:<model name>, openai:completion:<model name>, openai:embeddings:<model name>, openai:image:<model name>, openai:realtime:<model name>, openai:agents:<agent name>, openai:chatkit:<workflow_id>, openai:codex-sdk`,
       );
       return new OpenAiChatCompletionProvider(modelType, providerOptions);
     },
@@ -1079,13 +1189,20 @@ export const providerMap: ProviderFactory[] = [
           // This is a Live API request
           return new GoogleLiveProvider(modelName, providerOptions);
         } else if (serviceType === 'image') {
-          // This is an Image Generation request
+          // This is an Imagen image generation request
           return new GoogleImageProvider(modelName, providerOptions);
         }
       }
 
       // Default to regular Google API
       const modelName = splits[1];
+
+      // Check if this is a Gemini native image generation model
+      // These models have 'image' in their name (e.g., gemini-2.5-flash-image, gemini-3-pro-image-preview)
+      if (modelName.includes('-image')) {
+        return new GeminiImageProvider(modelName, providerOptions);
+      }
+
       return new AIStudioChatProvider(modelName, providerOptions);
     },
   },

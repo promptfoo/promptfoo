@@ -232,6 +232,7 @@ const redTeamSidebar = [
     items: [
       'red-team/nist-ai-rmf',
       'red-team/owasp-llm-top-10',
+      'red-team/owasp-agentic-ai',
       'red-team/owasp-api-top-10',
       'red-team/mitre-atlas',
       'red-team/iso-42001',
@@ -297,7 +298,7 @@ const redTeamSidebar = [
       {
         type: 'doc',
         label: 'Agent Red Teaming',
-        id: 'red-team/agents',
+        id: 'red-team/llm-agents',
       },
       {
         type: 'doc',
@@ -431,6 +432,7 @@ const sidebars = {
       items: [
         { type: 'doc', id: 'code-scanning/github-action' },
         { type: 'doc', id: 'code-scanning/cli' },
+        { type: 'doc', id: 'code-scanning/vscode-extension' },
       ],
     },
     {

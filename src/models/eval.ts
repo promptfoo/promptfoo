@@ -44,7 +44,11 @@ import { convertTestResultsToTableRow } from '../util/exportToFile/index';
 import invariant from '../util/invariant';
 import { getCurrentTimestamp } from '../util/time';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
-import { getCachedResultsCount, queryTestIndicesOptimized } from './evalPerformance';
+import {
+  getCachedResultsCount,
+  getTotalResultRowCount,
+  queryTestIndicesOptimized,
+} from './evalPerformance';
 import EvalResult from './evalResult';
 
 import type { EvalResultsFilterMode, TraceData } from '../types/index';
@@ -568,8 +572,17 @@ export default class Eval {
   }
 
   async getResultsCount(): Promise<number> {
-    // Use cached count for better performance
+    // Returns distinct test count (unique test cases) - used for UI display
     return getCachedResultsCount(this.id);
+  }
+
+  /**
+   * Get the total count of all result rows for this eval.
+   * Use this when iterating over all results (e.g., for sharing progress).
+   * This may be higher than getResultsCount() when there are multiple prompts/providers.
+   */
+  async getTotalResultRowCount(): Promise<number> {
+    return getTotalResultRowCount(this.id);
   }
 
   async fetchResultsByTestIdx(testIdx: number) {

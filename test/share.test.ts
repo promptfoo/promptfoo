@@ -1,5 +1,8 @@
 import { randomUUID } from 'node:crypto';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import * as constants from '../src/constants';
+import * as envars from '../src/envars';
 import { getUserEmail } from '../src/globalConfig/accounts';
 import { cloudConfig } from '../src/globalConfig/cloud';
 import {
@@ -22,16 +25,17 @@ function buildMockEval(): Partial<Eval> {
       { provider: 'openai:gpt-4', raw: 'prompt1', label: 'prompt1' },
       { provider: 'openai:gpt-4', raw: 'prompt2', label: 'prompt2' },
     ],
-    useOldResults: jest.fn().mockReturnValue(false),
-    loadResults: jest.fn().mockResolvedValue(undefined),
+    useOldResults: vi.fn().mockReturnValue(false),
+    loadResults: vi.fn().mockResolvedValue(undefined),
     results: [{ id: '1' }, { id: '2' }] as EvalResult[],
-    save: jest.fn().mockResolvedValue(undefined),
-    toEvaluateSummary: jest.fn().mockResolvedValue({}),
-    getTable: jest.fn().mockResolvedValue([]),
-    getTraces: jest.fn().mockResolvedValue([]),
+    save: vi.fn().mockResolvedValue(undefined),
+    toEvaluateSummary: vi.fn().mockResolvedValue({}),
+    getTable: vi.fn().mockResolvedValue([]),
+    getTraces: vi.fn().mockResolvedValue([]),
     id: randomUUID(),
-    getResultsCount: jest.fn().mockResolvedValue(2),
-    fetchResultsBatched: jest.fn().mockImplementation(() => {
+    getResultsCount: vi.fn().mockResolvedValue(2),
+    getTotalResultRowCount: vi.fn().mockResolvedValue(2),
+    fetchResultsBatched: vi.fn().mockImplementation(() => {
       const iterator = {
         called: false,
         next: async () => {
@@ -50,43 +54,53 @@ function buildMockEval(): Partial<Eval> {
   };
 }
 
-const mockFetch = jest.fn();
+const mockFetch = vi.fn();
 
-jest.mock('../src/globalConfig/cloud');
-jest.mock('../src/util/fetch/index.ts', () => ({
-  fetchWithProxy: jest.fn().mockImplementation((...args) => mockFetch(...args)),
-  fetchWithTimeout: jest.fn().mockResolvedValue({ ok: true }),
+vi.mock('../src/globalConfig/cloud', () => {
+  const cloudConfig = {
+    isEnabled: vi.fn(),
+    getApiHost: vi.fn(),
+    getApiKey: vi.fn(),
+    getCurrentTeamId: vi.fn(),
+    getAppUrl: vi.fn(),
+  };
+
+  return { cloudConfig };
+});
+vi.mock('../src/util/fetch/index.ts', () => ({
+  fetchWithProxy: vi.fn((...args) => mockFetch(...args)),
+  fetchWithTimeout: vi.fn().mockResolvedValue({ ok: true }),
 }));
 
-jest.mock('../src/globalConfig/accounts', () => ({
-  getUserEmail: jest.fn(),
-  setUserEmail: jest.fn(),
-  getAuthor: jest.fn().mockReturnValue('test-author@example.com'),
-  getUserId: jest.fn(),
+vi.mock('../src/globalConfig/accounts', () => ({
+  getUserEmail: vi.fn(),
+  setUserEmail: vi.fn(),
+  getAuthor: vi.fn().mockReturnValue('test-author@example.com'),
+  getUserId: vi.fn(),
 }));
 
-jest.mock('../src/util/cloud', () => ({
-  makeRequest: jest.fn(),
-  checkCloudPermissions: jest.fn().mockResolvedValue(undefined),
-  getOrgContext: jest.fn().mockResolvedValue(null),
+vi.mock('../src/util/cloud', () => ({
+  makeRequest: vi.fn(),
+  checkCloudPermissions: vi.fn().mockResolvedValue(undefined),
+  getOrgContext: vi.fn().mockResolvedValue(null),
 }));
 
-jest.mock('../src/envars', () => ({
-  getEnvBool: jest.fn(),
-  getEnvInt: jest.fn(),
-  getEnvString: jest.fn().mockReturnValue(''),
-  getEnvFloat: jest.fn(),
-  isCI: jest.fn(),
+vi.mock('../src/envars', () => ({
+  getEnvBool: vi.fn(),
+  getEnvInt: vi.fn(),
+  getEnvString: vi.fn().mockReturnValue(''),
+  getEnvFloat: vi.fn(),
+  isCI: vi.fn(),
 }));
 
-jest.mock('../src/constants', () => {
-  const actual = jest.requireActual('../src/constants');
+vi.mock('../src/constants', async () => {
+  const actual = await vi.importActual<typeof import('../src/constants')>('../src/constants');
   return {
     ...actual,
     DEFAULT_API_BASE_URL: 'https://api.promptfoo.app',
-    getShareApiBaseUrl: jest.fn().mockReturnValue('https://api.promptfoo.app'),
-    getDefaultShareViewBaseUrl: jest.fn().mockReturnValue('https://promptfoo.app'),
-    getShareViewBaseUrl: jest.fn().mockReturnValue('https://promptfoo.app'),
+    getShareApiBaseUrl: vi.fn().mockReturnValue('https://api.promptfoo.app'),
+    getDefaultShareViewBaseUrl: vi.fn().mockReturnValue('https://promptfoo.app'),
+    getShareViewBaseUrl: vi.fn().mockReturnValue('https://promptfoo.app'),
   };
 });
 
@@ -128,12 +142,10 @@ describe('stripAuthFromUrl', () => {
 
 describe('isSharingEnabled', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
-    jest.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+    vi.clearAllMocks();
+    vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
     // Reset the mock to default value for each test
-    jest
-      .requireMock('../src/constants')
-      .getShareApiBaseUrl.mockReturnValue('https://api.promptfoo.app');
+    vi.mocked(constants.getShareApiBaseUrl).mockReturnValue('https://api.promptfoo.app');
   });
 
   it('returns true when sharing config is set in eval record', () => {
@@ -149,9 +161,7 @@ describe('isSharingEnabled', () => {
   });
 
   it('returns true when sharing env URL is set and not api.promptfoo.app', () => {
-    jest
-      .requireMock('../src/constants')
-      .getShareApiBaseUrl.mockReturnValue('https://custom-api.example.com');
+    vi.mocked(constants.getShareApiBaseUrl).mockReturnValue('https://custom-api.example.com');
 
     const mockEval: Partial<Eval> = {
       config: {},
@@ -161,8 +171,8 @@ describe('isSharingEnabled', () => {
   });
 
   it('returns true when cloud sharing is enabled', () => {
-    jest.mocked(cloudConfig.isEnabled).mockReturnValue(true);
-    jest.mocked(cloudConfig.getApiHost).mockReturnValue('https://cloud-api.example.com');
+    vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+    vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://cloud-api.example.com');
 
     const mockEval: Partial<Eval> = {
       config: {},
@@ -173,10 +183,8 @@ describe('isSharingEnabled', () => {
 
   it('returns false when no sharing options are enabled', () => {
     // Explicitly ensure we're using the default mock return value
-    jest
-      .requireMock('../src/constants')
-      .getShareApiBaseUrl.mockReturnValue('https://api.promptfoo.app');
-    jest.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+    vi.mocked(constants.getShareApiBaseUrl).mockReturnValue('https://api.promptfoo.app');
+    vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
 
     const mockEval: Partial<Eval> = {
       config: {},
@@ -187,10 +195,8 @@ describe('isSharingEnabled', () => {
 
   it('returns false when sharing config is not an object', () => {
     // Explicitly ensure we're using the default mock return value
-    jest
-      .requireMock('../src/constants')
-      .getShareApiBaseUrl.mockReturnValue('https://api.promptfoo.app');
-    jest.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+    vi.mocked(constants.getShareApiBaseUrl).mockReturnValue('https://api.promptfoo.app');
+    vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
 
     const mockEval: Partial<Eval> = {
       config: {
@@ -204,12 +210,12 @@ describe('isSharingEnabled', () => {
 
 describe('determineShareDomain', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
-    jest.requireMock('../src/envars').getEnvString.mockImplementation((_key: string) => '');
+    vi.clearAllMocks();
+    vi.mocked(envars.getEnvString).mockImplementation((_key: string) => '');
   });
 
   it('should use DEFAULT_SHARE_VIEW_BASE_URL when no custom domain is specified', () => {
-    jest.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+    vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
 
     const mockEval: Partial<Eval> = {
       config: {},
@@ -223,14 +229,14 @@ describe('determineShareDomain', () => {
 
   it('should use PROMPTFOO_REMOTE_APP_BASE_URL when specified', () => {
     const customDomain = 'https://my-custom-instance.com';
-    jest.requireMock('../src/envars').getEnvString.mockImplementation((key: string) => {
+    vi.mocked(envars.getEnvString).mockImplementation((key: string) => {
       if (key === 'PROMPTFOO_REMOTE_APP_BASE_URL') {
         return customDomain;
       }
       return '';
     });
 
-    jest.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+    vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
 
     const mockEval: Partial<Eval> = {
       config: {},
@@ -245,7 +251,7 @@ describe('determineShareDomain', () => {
   it('should use config sharing.appBaseUrl when provided', () => {
     const configAppBaseUrl = 'https://config-specified-domain.com';
 
-    jest.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+    vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
 
     const mockEval: Partial<Eval> = {
       config: {
@@ -265,14 +271,14 @@ describe('determineShareDomain', () => {
     const configAppBaseUrl = 'https://config-specified-domain.com';
     const envAppBaseUrl = 'https://env-specified-domain.com';
 
-    jest.requireMock('../src/envars').getEnvString.mockImplementation((key: string) => {
+    vi.mocked(envars.getEnvString).mockImplementation((key: string) => {
       if (key === 'PROMPTFOO_REMOTE_APP_BASE_URL') {
         return envAppBaseUrl;
       }
       return '';
     });
 
-    jest.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+    vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
 
     const mockEval: Partial<Eval> = {
       config: {
@@ -291,22 +297,22 @@ describe('determineShareDomain', () => {
 
 describe('createShareableUrl', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
-    jest.requireMock('../src/envars').getEnvString.mockImplementation((_key: string) => '');
-    jest.requireMock('../src/envars').isCI.mockReturnValue(false);
-    jest.requireMock('../src/envars').getEnvBool.mockReturnValue(false);
+    vi.clearAllMocks();
+    vi.mocked(envars.getEnvString).mockImplementation((_key: string) => '');
+    vi.mocked(envars.isCI).mockReturnValue(false);
+    vi.mocked(envars.getEnvBool).mockReturnValue(false);
     mockFetch.mockReset();
     // Mock process.stdout.isTTY
     process.stdout.isTTY = false;
   });
 
   it('creates correct URL for cloud config and updates author', async () => {
-    jest.mocked(cloudConfig.isEnabled).mockReturnValue(true);
-    jest.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
-    jest.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
-    jest.mocked(cloudConfig.getApiKey).mockReturnValue('mock-api-key');
-    jest.mocked(cloudConfig.getCurrentTeamId).mockReturnValue(undefined);
-    jest.mocked(getUserEmail).mockReturnValue('logged-in@example.com');
+    vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+    vi.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
+    vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
+    vi.mocked(cloudConfig.getApiKey).mockReturnValue('mock-api-key');
+    vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue(undefined);
+    vi.mocked(getUserEmail).mockReturnValue('logged-in@example.com');
 
     const mockEval = buildMockEval();
     mockEval.author = 'original@example.com';
@@ -327,11 +333,11 @@ describe('createShareableUrl', () => {
   });
 
   it('Cloud: creates correct URL (uses server-assigned ID for idempotency)', async () => {
-    jest.mocked(cloudConfig.isEnabled).mockReturnValue(true);
-    jest.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
-    jest.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
-    jest.mocked(cloudConfig.getApiKey).mockReturnValue('mock-api-key');
-    jest.mocked(cloudConfig.getCurrentTeamId).mockReturnValue(undefined);
+    vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+    vi.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
+    vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
+    vi.mocked(cloudConfig.getApiKey).mockReturnValue('mock-api-key');
+    vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue(undefined);
 
     const originalId = randomUUID();
     const newId = randomUUID();
@@ -367,7 +373,7 @@ describe('createShareableUrl', () => {
   });
 
   it('Self-Hosted: creates unique URL for each share call', async () => {
-    jest.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+    vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
     const originalId = randomUUID();
     const newId = randomUUID();
     const mockEval = buildMockEval();
@@ -407,18 +413,18 @@ describe('createShareableUrl', () => {
     beforeEach(() => {
       mockEval = buildMockEval();
 
-      jest.mocked(getUserEmail).mockReturnValue('test@example.com');
-      jest.mocked(cloudConfig.getApiKey).mockReturnValue('mock-api-key');
-      jest.requireMock('../src/envars').getEnvString.mockImplementation((_key: string) => '');
+      vi.mocked(getUserEmail).mockReturnValue('test@example.com');
+      vi.mocked(cloudConfig.getApiKey).mockReturnValue('mock-api-key');
+      vi.mocked(envars.getEnvString).mockImplementation((_key: string) => '');
 
       mockFetch.mockReset();
     });
 
     it('sends chunked eval to cloud', async () => {
-      jest.mocked(cloudConfig.isEnabled).mockReturnValue(true);
-      jest.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
-      jest.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
-      jest.mocked(cloudConfig.getCurrentTeamId).mockReturnValue(undefined);
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+      vi.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
+      vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
+      vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue(undefined);
 
       // Set up mock responses
       mockFetch
@@ -456,7 +462,7 @@ describe('createShareableUrl', () => {
     });
 
     it('sends chunked eval when open source self hosted', async () => {
-      jest.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
 
       mockFetch
         .mockResolvedValueOnce({
@@ -488,11 +494,11 @@ describe('createShareableUrl', () => {
     });
 
     it('sends eval with trace data when traces are available', async () => {
-      jest.mocked(cloudConfig.isEnabled).mockReturnValue(true);
-      jest.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
-      jest.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
-      jest.mocked(cloudConfig.getApiKey).mockReturnValue('mock-api-key');
-      jest.mocked(cloudConfig.getCurrentTeamId).mockReturnValue(undefined);
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+      vi.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
+      vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
+      vi.mocked(cloudConfig.getApiKey).mockReturnValue('mock-api-key');
+      vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue(undefined);
 
       const mockEvalWithTraces = buildMockEval();
       const mockTraces = [
@@ -512,7 +518,7 @@ describe('createShareableUrl', () => {
           ],
         },
       ];
-      mockEvalWithTraces.getTraces = jest.fn().mockResolvedValue(mockTraces);
+      mockEvalWithTraces.getTraces = vi.fn().mockResolvedValue(mockTraces);
 
       // Mock the initial eval send
       mockFetch.mockResolvedValueOnce({
@@ -557,14 +563,14 @@ describe('createShareableUrl', () => {
     });
 
     it('sends eval with empty traces array when no traces are available', async () => {
-      jest.mocked(cloudConfig.isEnabled).mockReturnValue(true);
-      jest.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
-      jest.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
-      jest.mocked(cloudConfig.getApiKey).mockReturnValue('mock-api-key');
-      jest.mocked(cloudConfig.getCurrentTeamId).mockReturnValue(undefined);
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+      vi.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
+      vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
+      vi.mocked(cloudConfig.getApiKey).mockReturnValue('mock-api-key');
+      vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue(undefined);
 
       const mockEvalNoTraces = buildMockEval();
-      mockEvalNoTraces.getTraces = jest.fn().mockResolvedValue([]);
+      mockEvalNoTraces.getTraces = vi.fn().mockResolvedValue([]);
 
       // Mock the initial eval send
       mockFetch.mockResolvedValueOnce({
@@ -594,14 +600,14 @@ describe('createShareableUrl', () => {
     });
 
     it('handles getTraces errors gracefully', async () => {
-      jest.mocked(cloudConfig.isEnabled).mockReturnValue(true);
-      jest.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
-      jest.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
-      jest.mocked(cloudConfig.getApiKey).mockReturnValue('mock-api-key');
-      jest.mocked(cloudConfig.getCurrentTeamId).mockReturnValue(undefined);
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+      vi.mocked(cloudConfig.getAppUrl).mockReturnValue('https://app.example.com');
+      vi.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.example.com');
+      vi.mocked(cloudConfig.getApiKey).mockReturnValue('mock-api-key');
+      vi.mocked(cloudConfig.getCurrentTeamId).mockReturnValue(undefined);
 
       const mockEvalTracesError = buildMockEval();
-      mockEvalTracesError.getTraces = jest
+      mockEvalTracesError.getTraces = vi
         .fn()
         .mockRejectedValue(new Error('Failed to fetch traces'));
 
@@ -613,10 +619,10 @@ describe('createShareableUrl', () => {
   });
 
   it('creates URL with custom domain from environment variables', async () => {
-    jest.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+    vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
 
     const customDomain = 'https://my-custom-instance.com';
-    jest.requireMock('../src/envars').getEnvString.mockImplementation((key: string) => {
+    vi.mocked(envars.getEnvString).mockImplementation((key: string) => {
       if (key === 'PROMPTFOO_REMOTE_APP_BASE_URL') {
         return customDomain;
       }
@@ -653,7 +659,7 @@ describe('hasEvalBeenShared', () => {
       id: randomUUID(),
     };
 
-    jest.mocked(makeRequest).mockResolvedValue({ status: 200 } as Response);
+    vi.mocked(makeRequest).mockResolvedValue({ status: 200 } as Response);
 
     const result = await hasEvalBeenShared(mockEval as Eval);
     expect(result).toBe(true);
@@ -665,7 +671,7 @@ describe('hasEvalBeenShared', () => {
       id: randomUUID(),
     };
 
-    jest.mocked(makeRequest).mockResolvedValue({ status: 404 } as Response);
+    vi.mocked(makeRequest).mockResolvedValue({ status: 404 } as Response);
 
     const result = await hasEvalBeenShared(mockEval as Eval);
     expect(result).toBe(false);
