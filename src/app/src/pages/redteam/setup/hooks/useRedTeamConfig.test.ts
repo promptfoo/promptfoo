@@ -76,7 +76,9 @@ describe('useRedTeamConfig', () => {
 
     it('should merge configs when updating existing object plugin', () => {
       // Set initial state with a plugin that has some config
-      const initialPlugins = [{ id: 'bola', config: { targetSystems: ['sys1'], severity: 'high' } }];
+      const initialPlugins = [
+        { id: 'bola', config: { targetSystems: ['sys1'], severity: 'high' } },
+      ];
       useRedTeamConfig.setState({
         config: { ...useRedTeamConfig.getState().config, plugins: initialPlugins },
       });
