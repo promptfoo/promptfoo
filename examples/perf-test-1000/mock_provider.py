@@ -26,7 +26,6 @@ import random
 import time
 from typing import Any
 
-
 # Model presets for different performance characteristics
 MODEL_PRESETS = {
     "fast-v1": {
