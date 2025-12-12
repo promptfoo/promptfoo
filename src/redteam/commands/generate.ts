@@ -373,6 +373,7 @@ export async function doGenerateRedteam(
 
   const config = {
     injectVar: redteamConfig?.injectVar || options.injectVar,
+    inputs: redteamConfig?.inputs,
     language: redteamConfig?.language || options.language,
     maxConcurrency:
       options.maxConcurrency ?? commandLineOptions?.maxConcurrency ?? DEFAULT_MAX_CONCURRENCY,

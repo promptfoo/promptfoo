@@ -241,6 +241,12 @@ export const RedteamConfigSchema = z
       .string()
       .optional()
       .describe('Additional instructions for test generation applied to each plugin'),
+    inputs: z
+      .record(z.string(), z.string())
+      .optional()
+      .describe(
+        'Custom input variables to generate for each test case (key: variable name, value: description)',
+      ),
     provider: ProviderSchema.optional().describe('Provider used for generating adversarial inputs'),
     numTests: z.number().int().positive().optional().describe('Number of tests to generate'),
     language: z
@@ -516,6 +522,7 @@ export const RedteamConfigSchema = z
       ...(data.delay ? { delay: data.delay } : {}),
       ...(data.entities ? { entities: data.entities } : {}),
       ...(data.injectVar ? { injectVar: data.injectVar } : {}),
+      ...(data.inputs ? { inputs: data.inputs } : {}),
       ...(data.language ? { language: data.language } : {}),
       ...(data.provider ? { provider: data.provider } : {}),
       ...(data.purpose ? { purpose: data.purpose } : {}),

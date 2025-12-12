@@ -542,6 +542,7 @@ export async function synthesize({
   delay,
   entities: entitiesOverride,
   injectVar,
+  inputs,
   language,
   maxConcurrency = 1,
   plugins,
@@ -893,6 +894,7 @@ export async function synthesize({
           config: {
             ...resolvePluginConfig(plugin.config),
             ...(lang ? { language: lang } : {}),
+            ...(inputs ? { inputs } : {}),
             modifiers: {
               ...(testGenerationInstructions ? { testGenerationInstructions } : {}),
               ...(plugin.config?.modifiers || {}),

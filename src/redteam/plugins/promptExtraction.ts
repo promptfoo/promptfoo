@@ -27,7 +27,12 @@ export class PromptExtractionPlugin extends RedteamPluginBase {
 
   private systemPrompt: string | undefined;
 
-  constructor(provider: ApiProvider, purpose: string, injectVar: string, config: PluginConfig) {
+  constructor(
+    provider: ApiProvider,
+    purpose: string,
+    injectVar: string,
+    config: PluginConfig,
+  ) {
     super(provider, purpose, injectVar, config);
     this.systemPrompt = config.systemPrompt;
   }

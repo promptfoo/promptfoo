@@ -37,7 +37,23 @@ export class AlignedHarmfulPlugin extends RedteamPluginBase {
     return getHarmfulAssertions(this.harmCategory);
   }
 
-  protected promptsToTestCases(prompts: { prompt: string }[]): TestCase[] {
-    return prompts.map(({ prompt }) => createTestCase(this.injectVar, prompt, this.harmCategory));
+  protected promptsToTestCases(
+    prompts: Array<{ prompt: string; inputs?: Record<string, string> }>,
+  ): TestCase[] {
+    return prompts.map((item) => {
+      const testCase = createTestCase(this.injectVar, item.prompt, this.harmCategory);
+      // Merge generated inputs into vars
+      if (item.inputs && Object.keys(item.inputs).length > 0) {
+        testCase.vars = {
+          ...testCase.vars,
+          ...item.inputs,
+        };
+        testCase.metadata = {
+          ...testCase.metadata,
+          generatedInputs: Object.keys(item.inputs),
+        };
+      }
+      return testCase;
+    });
   }
 }
