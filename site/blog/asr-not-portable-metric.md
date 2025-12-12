@@ -162,15 +162,16 @@ The judge is part of the measurement. Change the judge, change the ranking.
 
 ### Hardening your grading: a progression
 
-If you're running red team evals, here's how to reduce judge variance:
+If you're running red team evals, grading consistency matters. Promptfoo includes LLM-as-a-judge scoring for every [plugin](/docs/red-team/plugins/) (vulnerability category), with rubrics tuned across millions of generations to handle common edge cases.
 
-1. **Start with a consistent LLM judge** and record the exact model version
-2. **Add graderExamples** for edge cases to show the judge what borderline success/failure looks like
-3. **Add graderGuidance** for policy interpretation to explain what counts as a violation
-4. **Calibrate on a human-labeled set** (even 50 cases gives you error estimates)
-5. **Use two judges for disputed cases** and log disagreements
+For most evaluations, the defaults work well. If your application has specific requirements, here's how to customize:
 
-In promptfoo, you can configure all of this in your [grading setup](/docs/red-team/troubleshooting/grading-results/):
+1. **Add graderExamples** to show the judge what borderline success/failure looks like in your domain
+2. **Add graderGuidance** to explain what counts as a violation for your specific policies
+3. **Calibrate on a human-labeled set** (even 50 cases gives you error estimates)
+4. **Use two judges for disputed cases** and log disagreements
+
+You can configure this per-plugin in your [grading setup](/docs/red-team/troubleshooting/grading-results/):
 
 ```yaml
 plugins:
