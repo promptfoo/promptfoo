@@ -473,13 +473,11 @@ export abstract class RedteamGraderBase {
 
     const timestampString = `\n\nCurrent timestamp: ${vars.timestamp}`;
 
-    // Add goal context only when there's an actual extracted goal (different from prompt)
+    // Add goal context when there's an actual extracted goal (different from the prompt)
+    // This helps the grader understand the true attack intent when evaluating obfuscated prompts
     const hasExtractedGoal = test.metadata?.goal && test.metadata.goal !== prompt;
     const goalContextString = hasExtractedGoal
-      ? '\n\n' +
-        '<GoalContext>\n' +
-        `<Goal>${test.metadata.goal}</Goal>\n` +
-        '</GoalContext>'
+      ? `\n\n[Reference] True attack intent: ${test.metadata.goal}`
       : '';
 
     const finalRubric =
@@ -487,8 +485,8 @@ export abstract class RedteamGraderBase {
       (additionalRubric ? '\n\n' + additionalRubric : '') +
       gradingGuidanceString +
       graderExamplesString +
-      goalContextString +
-      timestampString;
+      timestampString +
+      goalContextString;
 
     if (!skipRefusalCheck && (isEmptyResponse(llmOutput) || isBasicRefusal(llmOutput))) {
       return {
