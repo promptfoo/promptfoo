@@ -1,14 +1,12 @@
 /**
- * Performance Profiler Utility for React Compiler QA
+ * Performance Profiler Utility
  *
- * This utility helps measure and compare React component render performance
- * with and without React Compiler enabled.
+ * This utility helps measure React component render performance.
  *
  * Usage:
  *   1. Wrap components with <PerformanceProfiler id="ComponentName">
- *   2. Run the app with compiler: npm run dev
- *   3. Run without compiler: DISABLE_REACT_COMPILER=true npm run dev
- *   4. Compare the logged metrics
+ *   2. Run the app: npm run dev
+ *   3. Check console for render metrics or call window.__REACT_PROFILER__.printReport()
  */
 
 export interface RenderMetric {
@@ -138,9 +136,8 @@ export function clearProfilerMetrics(): void {
  */
 export function printProfilerReport(): void {
   const summaries = getAllProfilerSummaries();
-  const compilerEnabled = import.meta.env.VITE_REACT_COMPILER_ENABLED === 'true';
 
-  console.group(`📊 React Profiler Report (Compiler: ${compilerEnabled ? 'ON' : 'OFF'})`);
+  console.group('📊 React Profiler Report');
 
   if (summaries.length === 0) {
     console.log('No profiler data collected yet.');
@@ -176,6 +173,5 @@ if (typeof window !== 'undefined') {
     getAllSummaries: getAllProfilerSummaries,
     printReport: printProfilerReport,
     clear: clearProfilerMetrics,
-    isCompilerEnabled: () => import.meta.env.VITE_REACT_COMPILER_ENABLED === 'true',
   };
 }

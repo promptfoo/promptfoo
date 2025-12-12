@@ -4,13 +4,8 @@
  * This benchmark measures render performance of key components to verify
  * React Compiler is providing expected optimizations.
  *
- * Run with compiler:
- *   npm run test -- src/__benchmarks__/reactCompiler.bench.tsx
- *
- * Run without compiler:
- *   DISABLE_REACT_COMPILER=true npm run test -- src/__benchmarks__/reactCompiler.bench.tsx
- *
- * Compare the "Render time" metrics between runs.
+ * Run:
+ *   npm run test:app -- src/__benchmarks__/reactCompiler.test.tsx
  */
 
 import { Profiler, useState } from 'react';
@@ -109,19 +104,12 @@ function createMetricsCollector(): {
 }
 
 describe('React Compiler Performance Benchmarks', () => {
-  const compilerEnabled = import.meta.env.VITE_REACT_COMPILER_ENABLED === 'true';
-
   beforeEach(() => {
     cleanup();
   });
 
   afterEach(() => {
     cleanup();
-  });
-
-  it('reports compiler status', () => {
-    console.log(`\n📊 React Compiler: ${compilerEnabled ? 'ENABLED' : 'DISABLED'}\n`);
-    expect(true).toBe(true);
   });
 
   it('measures callback stability impact on list re-renders', async () => {
@@ -143,8 +131,7 @@ describe('React Compiler Performance Benchmarks', () => {
     }
 
     // With React Compiler, children should NOT re-render when callbacks are stable
-    // Without compiler, all ListItems would re-render on each parent update
-    console.log(`  Callback Test Results (Compiler: ${compilerEnabled ? 'ON' : 'OFF'}):`);
+    console.log('  Callback Test Results:');
     console.log(`    Total renders: ${metrics.renderCount}`);
     console.log(`    Total actual duration: ${metrics.totalActualDuration.toFixed(2)}ms`);
     console.log(
@@ -154,7 +141,6 @@ describe('React Compiler Performance Benchmarks', () => {
       `    Memoization ratio: ${((metrics.totalActualDuration / metrics.totalBaseDuration) * 100).toFixed(1)}%`,
     );
 
-    // The test passes regardless - we're measuring, not asserting specific values
     expect(metrics.renderCount).toBeGreaterThan(0);
   });
 
@@ -178,35 +164,13 @@ describe('React Compiler Performance Benchmarks', () => {
     const updateDuration = metrics.totalActualDuration - initialActualDuration;
     const avgUpdateDuration = updateDuration / 5;
 
-    console.log(`  Expensive Child Test Results (Compiler: ${compilerEnabled ? 'ON' : 'OFF'}):`);
+    // With compiler, updates should be much faster than initial render
+    // because ExpensiveChild should be memoized
+    console.log('  Expensive Child Test Results:');
     console.log(`    Initial render: ${initialActualDuration.toFixed(2)}ms`);
     console.log(`    5 updates total: ${updateDuration.toFixed(2)}ms`);
     console.log(`    Avg update time: ${avgUpdateDuration.toFixed(2)}ms`);
 
-    // With compiler, updates should be much faster than initial render
-    // because ExpensiveChild should be memoized
-    if (compilerEnabled) {
-      console.log(`    Expected: Update time << Initial render (memoization working)`);
-    } else {
-      console.log(`    Expected: Update time ~ Initial render (no automatic memoization)`);
-    }
-
     expect(metrics.renderCount).toBeGreaterThan(0);
-  });
-
-  it('provides benchmark summary', () => {
-    console.log(`\n${'='.repeat(60)}`);
-    console.log(`BENCHMARK SUMMARY`);
-    console.log(`${'='.repeat(60)}`);
-    console.log(`React Compiler: ${compilerEnabled ? '✅ ENABLED' : '❌ DISABLED'}`);
-    console.log(`\nTo compare performance:`);
-    console.log(`  1. Run: npm run test -- src/__benchmarks__/reactCompiler.bench.tsx`);
-    console.log(
-      `  2. Run: DISABLE_REACT_COMPILER=true npm run test -- src/__benchmarks__/reactCompiler.bench.tsx`,
-    );
-    console.log(`  3. Compare the render times above`);
-    console.log(`${'='.repeat(60)}\n`);
-
-    expect(true).toBe(true);
   });
 });
