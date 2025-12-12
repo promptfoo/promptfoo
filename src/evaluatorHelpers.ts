@@ -23,6 +23,7 @@ import {
 } from './types/index';
 import { renderVarsInObject } from './util/index';
 import { isAudioFile, isImageFile, isJavascriptFile, isVideoFile } from './util/fileExtensions';
+import { processConfigFileReferences } from './util/fileReference';
 import invariant from './util/invariant';
 import { getNunjucksEngine } from './util/templates';
 import { transform } from './util/transform';
@@ -230,7 +231,11 @@ export async function renderPrompt(
 
   let basePrompt = prompt.raw;
 
-  // Load files
+  // First, recursively process any file:// references in nested objects
+  const basePath = cliState.basePath || '';
+  vars = await processConfigFileReferences(vars, path.resolve(process.cwd(), basePath));
+
+  // Load files - handle special cases for top-level JS/Python scripts with arguments
   for (const [varName, value] of Object.entries(vars)) {
     if (typeof value === 'string' && value.startsWith('file://')) {
       const basePath = cliState.basePath || '';

@@ -54,6 +54,17 @@ vi.mock('node:module', () => {
 });
 
 vi.mock('fs', () => ({
+  default: {
+    readFileSync: vi.fn(),
+    writeFileSync: vi.fn(),
+    statSync: vi.fn(),
+    readdirSync: vi.fn(),
+    existsSync: vi.fn(),
+    mkdirSync: vi.fn(),
+    promises: {
+      readFile: vi.fn(),
+    },
+  },
   readFileSync: vi.fn(),
   writeFileSync: vi.fn(),
   statSync: vi.fn(),
@@ -343,6 +354,64 @@ describe('renderPrompt', () => {
 
     expect(fs.readFileSync).toHaveBeenCalledWith(expect.stringContaining('testData.yaml'), 'utf8');
     expect(renderedPrompt).toBe('Test prompt with {"key":"valueFromYaml"}');
+  });
+
+  it('should load file:// references in nested vars objects', async () => {
+    const prompt = toPrompt('Test prompt with {{ reporting_period.current.period }} and {{ reporting_period.previous.report }}');
+    const vars = {
+      reporting_period: {
+        current: {
+          period: '2023-12-31',
+        },
+        previous: {
+          period: '2024-02-15',
+          report: 'file://test_nested_report.txt',
+        },
+      },
+    };
+    const evaluateOptions = {};
+
+    vi.spyOn(fs.promises, 'readFile').mockResolvedValueOnce('This is the report content' as any);
+
+    const renderedPrompt = await renderPrompt(prompt, vars, evaluateOptions);
+
+    expect(renderedPrompt).toBe('Test prompt with 2023-12-31 and This is the report content');
+  });
+
+  it('should load file:// references in deeply nested vars objects', async () => {
+    const prompt = toPrompt('Data: {{ level1.level2.level3.data }}');
+    const vars = {
+      level1: {
+        level2: {
+          level3: {
+            data: 'file://test_deep_data.txt',
+          },
+        },
+      },
+    };
+    const evaluateOptions = {};
+
+    vi.spyOn(fs.promises, 'readFile').mockResolvedValueOnce('Deep nested content' as any);
+
+    const renderedPrompt = await renderPrompt(prompt, vars, evaluateOptions);
+
+    expect(renderedPrompt).toBe('Data: Deep nested content');
+  });
+
+  it('should load file:// references in arrays within nested vars', async () => {
+    const prompt = toPrompt('Items: {{ items[0] }}, {{ items[1] }}');
+    const vars = {
+      items: ['file://test_item1.txt', 'file://test_item2.txt'],
+    };
+    const evaluateOptions = {};
+
+    vi.spyOn(fs.promises, 'readFile')
+      .mockResolvedValueOnce('Content 1' as any)
+      .mockResolvedValueOnce('Content 2' as any);
+
+    const renderedPrompt = await renderPrompt(prompt, vars, evaluateOptions);
+
+    expect(renderedPrompt).toBe('Items: Content 1, Content 2');
   });
 
   describe('with PROMPTFOO_DISABLE_TEMPLATING', () => {
