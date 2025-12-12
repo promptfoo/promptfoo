@@ -150,29 +150,35 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
         <Alert
           severity="info"
           sx={{
-            alignItems: 'center',
             '& .MuiAlert-icon': {
-              mt: 0.25,
+              mt: 0.5,
             },
             '& .MuiAlert-message': {
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
               width: '100%',
-              gap: 2,
-              flexWrap: 'wrap',
             },
           }}
         >
-          <Box
-            sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap', width: '100%' }}
-          >
-            <Typography variant="body2" sx={{ flex: 1, minWidth: '300px' }}>
-              <strong>New to promptfoo?</strong> Want to see it in action? Load an example
-              configuration to get started immediately!
+          <Stack spacing={1.5}>
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 2,
+                flexWrap: 'wrap',
+                width: '100%',
+              }}
+            >
+              <Typography variant="body2" sx={{ flex: 1, minWidth: '300px' }}>
+                <strong>New to promptfoo?</strong> Want to see it in action? Load an example
+                configuration to get started immediately!
+              </Typography>
+              <LoadExampleButton />
+            </Box>
+            <Typography variant="body2" color="text.secondary">
+              <strong>Have an existing YAML config?</strong> Use the <strong>"Load Config"</strong>{' '}
+              button in the sidebar to import it and pre-fill the form.
             </Typography>
-            <LoadExampleButton />
-          </Box>
+          </Stack>
         </Alert>
 
         {/* Provider Name Field */}

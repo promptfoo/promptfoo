@@ -95,109 +95,112 @@ const applicationDefinitionToPurpose = (applicationDefinition: Config['applicati
     return '';
   }
 
-  if (applicationDefinition.purpose) {
+  // Helper to check if a field has meaningful content (not just whitespace)
+  const hasContent = (value: string | undefined): value is string => Boolean(value && value.trim());
+
+  if (hasContent(applicationDefinition.purpose)) {
     sections.push(`Application Purpose:\n\`\`\`\n${applicationDefinition.purpose}\n\`\`\``);
   }
 
-  if (applicationDefinition.features) {
+  if (hasContent(applicationDefinition.features)) {
     sections.push(
       `Key Features and Capabilities:\n\`\`\`\n${applicationDefinition.features}\n\`\`\``,
     );
   }
 
-  if (applicationDefinition.industry) {
+  if (hasContent(applicationDefinition.industry)) {
     sections.push(`Industry/Domain:\n\`\`\`\n${applicationDefinition.industry}\n\`\`\``);
   }
 
-  if (applicationDefinition.attackConstraints) {
+  if (hasContent(applicationDefinition.attackConstraints)) {
     sections.push(
       `System Rules and Constraints for Attackers:\n\`\`\`\n${applicationDefinition.attackConstraints}\n\`\`\``,
     );
   }
 
-  if (applicationDefinition.hasAccessTo) {
+  if (hasContent(applicationDefinition.hasAccessTo)) {
     sections.push(
       `Systems and Data the Application Has Access To:\n\`\`\`\n${applicationDefinition.hasAccessTo}\n\`\`\``,
     );
   }
 
-  if (applicationDefinition.doesNotHaveAccessTo) {
+  if (hasContent(applicationDefinition.doesNotHaveAccessTo)) {
     sections.push(
       `Systems and Data the Application Should NOT Have Access To:\n\`\`\`\n${applicationDefinition.doesNotHaveAccessTo}\n\`\`\``,
     );
   }
 
-  if (applicationDefinition.userTypes) {
+  if (hasContent(applicationDefinition.userTypes)) {
     sections.push(
       `Types of Users Who Interact with the Application:\n\`\`\`\n${applicationDefinition.userTypes}\n\`\`\``,
     );
   }
 
-  if (applicationDefinition.securityRequirements) {
+  if (hasContent(applicationDefinition.securityRequirements)) {
     sections.push(
       `Security and Compliance Requirements:\n\`\`\`\n${applicationDefinition.securityRequirements}\n\`\`\``,
     );
   }
 
-  if (applicationDefinition.sensitiveDataTypes) {
+  if (hasContent(applicationDefinition.sensitiveDataTypes)) {
     sections.push(
       `Types of Sensitive Data Handled:\n\`\`\`\n${applicationDefinition.sensitiveDataTypes}\n\`\`\``,
     );
   }
 
-  if (applicationDefinition.exampleIdentifiers) {
+  if (hasContent(applicationDefinition.exampleIdentifiers)) {
     sections.push(
       `Example Data Identifiers and Formats:\n\`\`\`\n${applicationDefinition.exampleIdentifiers}\n\`\`\``,
     );
   }
 
-  if (applicationDefinition.criticalActions) {
+  if (hasContent(applicationDefinition.criticalActions)) {
     sections.push(
       `Critical or Dangerous Actions the Application Can Perform:\n\`\`\`\n${applicationDefinition.criticalActions}\n\`\`\``,
     );
   }
 
-  if (applicationDefinition.forbiddenTopics) {
+  if (hasContent(applicationDefinition.forbiddenTopics)) {
     sections.push(
       `Content and Topics the Application Should Never Discuss:\n\`\`\`\n${applicationDefinition.forbiddenTopics}\n\`\`\``,
     );
   }
 
-  if (applicationDefinition.competitors) {
+  if (hasContent(applicationDefinition.competitors)) {
     sections.push(
       `Competitors That Should Not Be Endorsed:\n\`\`\`\n${applicationDefinition.competitors}\n\`\`\``,
     );
   }
 
-  if (applicationDefinition.redteamUser) {
+  if (hasContent(applicationDefinition.redteamUser)) {
     sections.push(`Red Team User Persona:\n\`\`\`\n${applicationDefinition.redteamUser}\n\`\`\``);
   }
 
-  if (applicationDefinition.accessToData) {
+  if (hasContent(applicationDefinition.accessToData)) {
     sections.push(
       `Data You Have Access To:\n\`\`\`\n${applicationDefinition.accessToData}\n\`\`\``,
     );
   }
 
-  if (applicationDefinition.forbiddenData) {
+  if (hasContent(applicationDefinition.forbiddenData)) {
     sections.push(
       `Data You Do Not Have Access To:\n\`\`\`\n${applicationDefinition.forbiddenData}\n\`\`\``,
     );
   }
 
-  if (applicationDefinition.accessToActions) {
+  if (hasContent(applicationDefinition.accessToActions)) {
     sections.push(
       `Actions You Can Take:\n\`\`\`\n${applicationDefinition.accessToActions}\n\`\`\``,
     );
   }
 
-  if (applicationDefinition.forbiddenActions) {
+  if (hasContent(applicationDefinition.forbiddenActions)) {
     sections.push(
       `Actions You Should Not Take:\n\`\`\`\n${applicationDefinition.forbiddenActions}\n\`\`\``,
     );
   }
 
-  if (applicationDefinition.connectedSystems) {
+  if (hasContent(applicationDefinition.connectedSystems)) {
     sections.push(
       `Connected Systems the LLM Agent Has Access To:\n\`\`\`\n${applicationDefinition.connectedSystems}\n\`\`\``,
     );
