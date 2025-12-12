@@ -629,7 +629,7 @@ Use structured outputs to eliminate "invalid JSON" failures:
 defaultTest:
   options:
     provider:
-      id: openai:responses:gpt-5.2
+      id: openai:gpt-5.2
       config:
         temperature: 0
         response_format:
@@ -746,7 +746,7 @@ defaultTest:
 | Type | Purpose | Default model |
 |------|---------|---------------|
 | [`llm-rubric`](/docs/configuration/expected-outputs/model-graded/llm-rubric) | General rubric evaluation | Varies by API key |
-| [`g-eval`](/docs/configuration/expected-outputs/model-graded/g-eval) | Chain-of-thought scoring (uses CoT internally) | `gpt-4.1-2025-04-14` |
+| [`g-eval`](/docs/configuration/expected-outputs/model-graded/g-eval) | Chain-of-thought scoring (uses CoT internally) | Varies by API key |
 | [`factuality`](/docs/configuration/expected-outputs/model-graded/factuality) | Fact consistency | Varies by API key |
 | [`select-best`](/docs/configuration/expected-outputs/model-graded/select-best) | Pairwise comparison | Varies by API key |
 | [`search-rubric`](/docs/configuration/expected-outputs/model-graded/search-rubric) | Rubric + web search | Web-search-capable provider |
