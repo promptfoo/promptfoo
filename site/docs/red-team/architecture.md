@@ -138,7 +138,7 @@ The target interface defines how test probes interact with the system under test
 - **[HTTP API](/docs/providers/http/)** - Tests REST endpoints via configurable requests
 - **[Direct Model](/docs/red-team/configuration/#custom-providerstargets)** - Interfaces with LLM providers like OpenAI or local models
 - **[Browser](/docs/providers/browser/)** - Runs end-to-end tests using Selenium or Puppeteer
-- **[Custom Provider](/docs/red-team/configuration/#providers)** - Implements custom runtime integrations via Python/JavaScript
+- **[Custom Provider](/docs/red-team/configuration/#custom-providerstargets)** - Implements custom runtime integrations via Python/JavaScript
 
 Each target type implements a common interface for sending probes and receiving responses.
 

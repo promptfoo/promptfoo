@@ -125,6 +125,14 @@ const webSearchProviderFactory = createLazyProvider(
     }),
 );
 
+const redteamProviderFactory = createLazyProvider(
+  (env?: EnvOverrides) =>
+    new AnthropicMessagesProvider(DEFAULT_ANTHROPIC_MODEL, {
+      env,
+      config: { temperature: 0.7 },
+    }),
+);
+
 /**
  * Gets all default Anthropic providers with the given environment overrides
  * @param env - Optional environment overrides
@@ -140,11 +148,13 @@ export function getAnthropicProviders(
   | 'suggestionsProvider'
   | 'synthesizeProvider'
   | 'webSearchProvider'
+  | 'redteamProvider'
 > {
   // Get providers with the provided environment variables
   const gradingProvider = gradingProviderFactory.getInstance(env);
   const llmRubricProvider = llmRubricProviderFactory.getInstance(env);
   const webSearchProvider = webSearchProviderFactory.getInstance(env);
+  const redteamProvider = redteamProviderFactory.getInstance(env);
 
   return {
     gradingJsonProvider: gradingProvider,
@@ -153,5 +163,6 @@ export function getAnthropicProviders(
     suggestionsProvider: gradingProvider,
     synthesizeProvider: gradingProvider,
     webSearchProvider,
+    redteamProvider,
   };
 }

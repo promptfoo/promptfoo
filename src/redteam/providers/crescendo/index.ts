@@ -179,8 +179,8 @@ export class CrescendoProvider implements ApiProvider {
       if (shouldGenerateRemote()) {
         this.redTeamProvider = new PromptfooChatCompletionProvider({
           task: 'crescendo',
-          jsonOnly: true,
-          preferSmallModel: false,
+          enforceJson: true,
+          preferSmall: false,
         });
       } else {
         this.redTeamProvider = await redteamProviderManager.getProvider({
@@ -198,13 +198,14 @@ export class CrescendoProvider implements ApiProvider {
       if (shouldGenerateRemote()) {
         this.scoringProvider = new PromptfooChatCompletionProvider({
           task: 'crescendo',
-          jsonOnly: false,
-          preferSmallModel: false,
+          enforceJson: false,
+          preferSmall: false,
         });
       } else {
         this.scoringProvider = await redteamProviderManager.getProvider({
           provider: this.config.redteamProvider,
           preferSmallModel: false,
+          jsonOnly: false,
         });
       }
     }

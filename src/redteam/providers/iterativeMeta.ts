@@ -445,13 +445,13 @@ class RedteamIterativeMetaProvider implements ApiProvider {
 
     this.gradingProvider = new PromptfooChatCompletionProvider({
       task: 'judge',
-      jsonOnly: true,
-      preferSmallModel: false,
+      enforceJson: true,
+      preferSmall: false,
     });
     this.agentProvider = new PromptfooChatCompletionProvider({
       task: 'meta-agent-decision',
-      jsonOnly: true,
-      preferSmallModel: false,
+      enforceJson: true,
+      preferSmall: false,
     });
   }
 
