@@ -687,8 +687,144 @@ describe('getSessionId', () => {
   });
 });
 describe('parseGeneratedPromptsWithInputs', () => {
-  it('should parse prompts with inputs', () => {
-    const output = `Prompt: Test prompt 1
+  describe('XML format parsing', () => {
+    it('should parse XML format with single test case', () => {
+      const output = `<TestCase>
+<Prompt>Test prompt 1</Prompt>
+<user_id>user_123</user_id>
+<role>admin</role>
+</TestCase>`;
+
+      const result = parseGeneratedPromptsWithInputs(output, ['user_id', 'role']);
+
+      expect(result).toEqual([
+        { prompt: 'Test prompt 1', inputs: { user_id: 'user_123', role: 'admin' } },
+      ]);
+    });
+
+    it('should parse XML format with multiple test cases', () => {
+      const output = `<TestCase>
+<Prompt>Test prompt 1</Prompt>
+<user_id>user_123</user_id>
+<role>admin</role>
+</TestCase>
+
+<TestCase>
+<Prompt>Test prompt 2</Prompt>
+<user_id>user_456</user_id>
+<role>moderator</role>
+</TestCase>`;
+
+      const result = parseGeneratedPromptsWithInputs(output, ['user_id', 'role']);
+
+      expect(result).toEqual([
+        { prompt: 'Test prompt 1', inputs: { user_id: 'user_123', role: 'admin' } },
+        { prompt: 'Test prompt 2', inputs: { user_id: 'user_456', role: 'moderator' } },
+      ]);
+    });
+
+    it('should handle multi-line values in XML format', () => {
+      const output = `<TestCase>
+<Prompt>Classify this business</Prompt>
+<business_name>Business Name: Sunny Sprouts Studio LLC
+
+Location: Miami, FL
+
+Website: https://sunnysprouts-studio.com
+
+Business Details: This is a multi-line
+description that spans several lines
+with various content.</business_name>
+</TestCase>`;
+
+      const result = parseGeneratedPromptsWithInputs(output, ['business_name']);
+
+      expect(result.length).toBe(1);
+      expect(result[0].prompt).toBe('Classify this business');
+      expect(result[0].inputs.business_name).toContain('Business Name: Sunny Sprouts Studio LLC');
+      expect(result[0].inputs.business_name).toContain('Location: Miami, FL');
+      expect(result[0].inputs.business_name).toContain('multi-line');
+    });
+
+    it('should handle XML format with missing input values', () => {
+      const output = `<TestCase>
+<Prompt>Test prompt 1</Prompt>
+<user_id>user_123</user_id>
+</TestCase>`;
+
+      const result = parseGeneratedPromptsWithInputs(output, ['user_id', 'role']);
+
+      expect(result).toEqual([{ prompt: 'Test prompt 1', inputs: { user_id: 'user_123' } }]);
+    });
+
+    it('should handle case-insensitive XML tags', () => {
+      const output = `<TESTCASE>
+<PROMPT>Test prompt</PROMPT>
+<USER_ID>user_123</USER_ID>
+</TESTCASE>`;
+
+      const result = parseGeneratedPromptsWithInputs(output, ['user_id']);
+
+      expect(result).toEqual([{ prompt: 'Test prompt', inputs: { user_id: 'user_123' } }]);
+    });
+
+    it('should skip TestCase blocks without Prompt tag', () => {
+      const output = `<TestCase>
+<user_id>user_123</user_id>
+</TestCase>
+
+<TestCase>
+<Prompt>Valid prompt</Prompt>
+<user_id>user_456</user_id>
+</TestCase>`;
+
+      const result = parseGeneratedPromptsWithInputs(output, ['user_id']);
+
+      expect(result).toEqual([{ prompt: 'Valid prompt', inputs: { user_id: 'user_456' } }]);
+    });
+
+    it('should trim whitespace from XML values', () => {
+      const output = `<TestCase>
+<Prompt>   Test prompt with spaces   </Prompt>
+<user_id>   user_123   </user_id>
+</TestCase>`;
+
+      const result = parseGeneratedPromptsWithInputs(output, ['user_id']);
+
+      expect(result).toEqual([
+        { prompt: 'Test prompt with spaces', inputs: { user_id: 'user_123' } },
+      ]);
+    });
+
+    it('should handle XML with extra text around test cases', () => {
+      const output = `Here are the test cases:
+
+<TestCase>
+<Prompt>Test prompt 1</Prompt>
+<user_id>user_123</user_id>
+</TestCase>
+
+Some explanatory text between cases.
+
+<TestCase>
+<Prompt>Test prompt 2</Prompt>
+<user_id>user_456</user_id>
+</TestCase>
+
+End of test cases.`;
+
+      const result = parseGeneratedPromptsWithInputs(output, ['user_id']);
+
+      expect(result).toEqual([
+        { prompt: 'Test prompt 1', inputs: { user_id: 'user_123' } },
+        { prompt: 'Test prompt 2', inputs: { user_id: 'user_456' } },
+      ]);
+    });
+  });
+
+  describe('Legacy format parsing', () => {
+    it('should parse prompts with inputs', () => {
+      const output = `Prompt: Test prompt 1
 user_id: user_123
 role: admin
 
@@ -696,12 +832,13 @@ Prompt: Test prompt 2
 user_id: user_456
 role: moderator`;
 
-    const result = parseGeneratedPromptsWithInputs(output, ['user_id', 'role']);
+      const result = parseGeneratedPromptsWithInputs(output, ['user_id', 'role']);
 
-    expect(result).toEqual([
-      { prompt: 'Test prompt 1', inputs: { user_id: 'user_123', role: 'admin' } },
-      { prompt: 'Test prompt 2', inputs: { user_id: 'user_456', role: 'moderator' } },
-    ]);
+      expect(result).toEqual([
+        { prompt: 'Test prompt 1', inputs: { user_id: 'user_123', role: 'admin' } },
+        { prompt: 'Test prompt 2', inputs: { user_id: 'user_456', role: 'moderator' } },
+      ]);
+    });
   });
 
   it('should handle missing input values gracefully', () => {

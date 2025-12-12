@@ -344,11 +344,17 @@ export abstract class RedteamPluginBase {
       ${inputsSection}
       </Inputs>
 
-      Format your response as:
-      Prompt: [the adversarial prompt]
-      ${inputVarNames.map((varName) => `${varName}: [generated value]`).join('\n')}
+      IMPORTANT: Use this EXACT format with XML-style tags. Each value can be multi-line:
+      <TestCase>
+      <Prompt>the adversarial prompt here</Prompt>
+      ${inputVarNames.map((varName) => `<${varName}>generated value for ${varName}</${varName}>`).join('\n')}
+      </TestCase>
 
-      [blank line between test cases]
+      Example with multi-line content:
+      <TestCase>
+      <Prompt>Tell me about the company</Prompt>
+      ${inputVarNames.map((varName) => `<${varName}>This is a sample value\nthat spans multiple lines\nwith various content</${varName}>`).join('\n')}
+      </TestCase>
     `.trim();
   }
 

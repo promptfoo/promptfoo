@@ -16,16 +16,62 @@ export function normalizeApostrophes(str: string): string {
 }
 
 /**
- * Parses the LLM response of generated prompts with custom input variables.
- * Extracts both the prompt and the generated values for each input variable.
+ * Parses the LLM response of generated prompts with custom input variables using XML format.
+ * Handles multi-line values within XML tags.
+ *
+ * @param output - The LLM response containing prompts and input values in XML format.
+ * @param inputKeys - Array of input variable names to extract.
+ * @returns An array of objects with prompt and inputs.
+ */
+function parseXmlFormat(
+  output: string,
+  inputKeys: string[],
+): Array<{ prompt: string; inputs: Record<string, string> }> {
+  const testCases: Array<{ prompt: string; inputs: Record<string, string> }> = [];
+
+  // Match all <TestCase>...</TestCase> blocks (case-insensitive, multiline)
+  const testCaseRegex = /<TestCase>([\s\S]*?)<\/TestCase>/gi;
+  let testCaseMatch;
+
+  while ((testCaseMatch = testCaseRegex.exec(output)) !== null) {
+    const testCaseContent = testCaseMatch[1];
+
+    // Extract prompt from <Prompt>...</Prompt> (case-insensitive, multiline)
+    const promptMatch = testCaseContent.match(/<Prompt>([\s\S]*?)<\/Prompt>/i);
+    if (!promptMatch) {
+      continue;
+    }
+
+    const prompt = promptMatch[1].trim();
+    const inputs: Record<string, string> = {};
+
+    // Extract each input variable
+    for (const inputKey of inputKeys) {
+      // Case-insensitive match for the input key tag, multiline content
+      const inputRegex = new RegExp(`<${inputKey}>([\\s\\S]*?)<\\/${inputKey}>`, 'i');
+      const inputMatch = testCaseContent.match(inputRegex);
+      if (inputMatch) {
+        inputs[inputKey] = inputMatch[1].trim();
+      }
+    }
+
+    testCases.push({ prompt, inputs });
+  }
+
+  return testCases;
+}
+
+/**
+ * Parses the LLM response of generated prompts with custom input variables using legacy line-based format.
+ * Each input value must be on a single line.
  *
  * @param output - The LLM response containing prompts and input values.
  * @param inputKeys - Array of input variable names to extract.
  * @returns An array of objects with prompt and inputs.
  */
-export function parseGeneratedPromptsWithInputs(
+function parseLegacyFormat(
   output: string,
-  inputKeys: string[] = [],
+  inputKeys: string[],
 ): Array<{ prompt: string; inputs: Record<string, string> }> {
   const testCases: Array<{ prompt: string; inputs: Record<string, string> }> = [];
   const lines = output.split('\n');
@@ -75,6 +121,30 @@ export function parseGeneratedPromptsWithInputs(
   }
 
   return testCases;
+}
+
+/**
+ * Parses the LLM response of generated prompts with custom input variables.
+ * Supports both XML format (preferred, handles multi-line values) and legacy line-based format.
+ *
+ * @param output - The LLM response containing prompts and input values.
+ * @param inputKeys - Array of input variable names to extract.
+ * @returns An array of objects with prompt and inputs.
+ */
+export function parseGeneratedPromptsWithInputs(
+  output: string,
+  inputKeys: string[] = [],
+): Array<{ prompt: string; inputs: Record<string, string> }> {
+  // Try XML format first (handles multi-line values) - case-insensitive detection
+  if (/<TestCase>/i.test(output)) {
+    const xmlResults = parseXmlFormat(output, inputKeys);
+    if (xmlResults.length > 0) {
+      return xmlResults;
+    }
+  }
+
+  // Fall back to legacy format
+  return parseLegacyFormat(output, inputKeys);
 }
 
 const REFUSAL_PREFIXES = [
