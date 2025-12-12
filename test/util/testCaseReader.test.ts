@@ -502,9 +502,13 @@ describe('readStandaloneTestsFile', () => {
     // when the read-excel-file module cannot be found
     const mockError = new Error("Cannot find module 'read-excel-file/node'");
 
-    // Mock fs module to survive resetModules
+    // Clear module cache FIRST to ensure fresh imports
+    vi.resetModules();
+
+    // Mock fs module - use require to get actual fs since vi.importActual may return mocked version
+    const actualFs = await vi.importActual<typeof import('fs')>('fs');
     vi.doMock('fs', () => ({
-      ...vi.importActual('fs'),
+      ...actualFs,
       existsSync: vi.fn().mockReturnValue(true),
     }));
 
@@ -512,9 +516,6 @@ describe('readStandaloneTestsFile', () => {
     vi.doMock('read-excel-file/node', () => {
       throw mockError;
     });
-
-    // Clear module cache to ensure fresh import
-    vi.resetModules();
 
     try {
       // Import the module which will attempt to import read-excel-file
@@ -836,7 +837,7 @@ describe('readTest', () => {
 
       const result = await readTest(testCase);
 
-      expect(loadApiProvider).toHaveBeenCalledWith('mock-provider');
+      expect(loadApiProvider).toHaveBeenCalledWith('mock-provider', { basePath: '' });
       expect(result.provider).toBe(mockProvider);
     });
 
@@ -905,7 +906,7 @@ describe('readTest', () => {
       options: {
         provider: {
           text: {
-            id: 'openai:gpt-4',
+            id: 'openai:gpt-5.1-mini',
             config: {
               temperature: 0.7,
             },
@@ -919,7 +920,7 @@ describe('readTest', () => {
     expect(result.options?.provider).toBeDefined();
     expect(result.options?.provider).toEqual({
       text: {
-        id: 'openai:gpt-4',
+        id: 'openai:gpt-5.1-mini',
         config: {
           temperature: 0.7,
         },

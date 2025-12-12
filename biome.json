@@ -106,6 +106,7 @@
         "useJsxKeyInIterable": "error"
       },
       "style": {
+        "noEnum": "error",
         "noNegationElse": "error",
         "useConst": "error",
         "useBlockStatements": "error",
@@ -280,6 +281,15 @@
             "useBlockStatements": "off"
           }
         }
+      }
+    },
+    {
+      "includes": ["test/fixtures/rubric-json-template/**/*.json"],
+      "linter": {
+        "enabled": false
+      },
+      "formatter": {
+        "enabled": false
       }
     }
   ]

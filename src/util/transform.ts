@@ -1,3 +1,4 @@
+import { createRequire } from 'node:module';
 import cliState from '../cliState';
 import { importModule } from '../esm';
 import logger from '../logger';
@@ -7,12 +8,51 @@ import { isJavascriptFile } from './fileExtensions';
 
 import type { Vars } from '../types/index';
 
+// Create a require function for ESM compatibility
+// This allows inline transforms to use require() even in ESM context
+const esmRequire = createRequire(import.meta.url);
+
+// Create a proxy for process that shims process.mainModule.require for backwards compatibility
+// This allows code written for CommonJS (using process.mainModule.require) to work in ESM
+const processWithMainModule = new Proxy(process, {
+  get(target, prop) {
+    if (prop === 'mainModule') {
+      // Return a shim that provides the require function
+      // This matches the CommonJS process.mainModule structure
+      return {
+        require: esmRequire,
+        // Include other mainModule properties that might be accessed
+        exports: {},
+        id: '.',
+        filename: '',
+        loaded: true,
+        children: [],
+        paths: [],
+      };
+    }
+    return Reflect.get(target, prop);
+  },
+});
+
+/**
+ * Returns the shimmed process object with mainModule.require for ESM compatibility.
+ * Use this when creating inline functions that need access to require().
+ *
+ * @example
+ * const fn = new Function('data', 'process', `return process.mainModule.require('fs')`);
+ * fn(data, getProcessShim());
+ */
+export function getProcessShim(): typeof process {
+  return processWithMainModule;
+}
+
 export type TransformContext = object;
 
-export enum TransformInputType {
-  OUTPUT = 'output',
-  VARS = 'vars',
-}
+export const TransformInputType = {
+  OUTPUT: 'output',
+  VARS: 'vars',
+} as const;
+export type TransformInputType = (typeof TransformInputType)[keyof typeof TransformInputType];
 
 /**
  * Parses a file path string to extract the file path and function name.
@@ -42,7 +82,12 @@ async function getJavascriptTransformFunction(
 ): Promise<Function> {
   const requiredModule = await importModule(filePath);
 
-  if (functionName && typeof requiredModule[functionName] === 'function') {
+  // Validate that functionName is an own property to prevent prototype pollution attacks
+  if (
+    functionName &&
+    Object.prototype.hasOwnProperty.call(requiredModule, functionName) &&
+    typeof requiredModule[functionName] === 'function'
+  ) {
     return requiredModule[functionName];
   } else if (typeof requiredModule === 'function') {
     return requiredModule;
@@ -94,9 +139,22 @@ async function getFileTransformFunction(filePath: string): Promise<Function> {
  * Creates a function from inline JavaScript code.
  * @param code - The JavaScript code to convert into a function.
  * @returns A Function created from the provided code.
+ *
+ * The function receives three parameters:
+ * - The input (output or vars depending on inputType)
+ * - A context object
+ * - A process object with mainModule.require shimmed for backwards compatibility
+ *
+ * To use require in inline transforms, use: process.mainModule.require('module-name')
+ * Or assign it to a variable: const require = process.mainModule.require;
  */
 function getInlineTransformFunction(code: string, inputType: TransformInputType): Function {
-  return new Function(inputType, 'context', code.includes('\n') ? code : `return ${code}`);
+  return new Function(
+    inputType,
+    'context',
+    'process',
+    code.includes('\n') ? code : `return ${code}`,
+  );
 }
 
 /**
@@ -158,7 +216,9 @@ export async function transform(
     throw new Error(`Invalid transform function for ${codeOrFilepath}`);
   }
 
-  const ret = await Promise.resolve(postprocessFn(transformInput, context));
+  // Pass processWithMainModule for ESM compatibility in inline transforms
+  // This allows inline code to use process.mainModule.require just like in CommonJS
+  const ret = await Promise.resolve(postprocessFn(transformInput, context, processWithMainModule));
 
   if (validateReturn && (ret === null || ret === undefined)) {
     throw new Error(`Transform function did not return a value\n\n${codeOrFilepath}`);

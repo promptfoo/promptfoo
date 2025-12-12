@@ -219,6 +219,7 @@ describe('TrueFoundry', () => {
             total: 10,
             prompt: 5,
             completion: 5,
+            numRequests: 1,
           },
           cached: false,
           cost: undefined,
@@ -367,6 +368,7 @@ describe('TrueFoundry', () => {
           tokenUsage: {
             total: 10,
             cached: 10,
+            numRequests: 1,
           },
         });
         expect(cachedResult.latencyMs).toBeGreaterThanOrEqual(0);
@@ -507,6 +509,7 @@ describe('TrueFoundry', () => {
           total: 5,
           prompt: 5,
           completion: 0,
+          numRequests: 1,
         },
       });
       expect(result.latencyMs).toBeGreaterThanOrEqual(0);

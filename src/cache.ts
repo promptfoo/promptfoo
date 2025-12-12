@@ -1,12 +1,15 @@
 import fs from 'fs';
 import path from 'path';
 
-import cacheManager from 'cache-manager';
+import { createCache } from 'cache-manager';
+import { Keyv } from 'keyv';
+import { KeyvFile } from 'keyv-file';
 import { getEnvBool, getEnvInt, getEnvString } from './envars';
 import logger from './logger';
 import { REQUEST_TIMEOUT_MS } from './providers/shared';
 import { getConfigDirectoryPath } from './util/config/manage';
 import { fetchWithRetries } from './util/fetch/index';
+import { runMigration, shouldRunMigration } from './cacheMigration';
 import type { Cache } from 'cache-manager';
 
 let cacheInstance: Cache | undefined;
@@ -16,44 +19,93 @@ let enabled = getEnvBool('PROMPTFOO_CACHE_ENABLED', true);
 const cacheType =
   getEnvString('PROMPTFOO_CACHE_TYPE') || (getEnvString('NODE_ENV') === 'test' ? 'memory' : 'disk');
 
+/** Default cache TTL: 14 days in seconds */
+const DEFAULT_CACHE_TTL_SECONDS = 60 * 60 * 24 * 14;
+
+/**
+ * Get the cache TTL in milliseconds.
+ * Reads from PROMPTFOO_CACHE_TTL environment variable (in seconds) or uses default.
+ */
+function getCacheTtlMs(): number {
+  return getEnvInt('PROMPTFOO_CACHE_TTL', DEFAULT_CACHE_TTL_SECONDS) * 1000;
+}
+
 export function getCache() {
   if (!cacheInstance) {
     let cachePath = '';
-    let store: any = 'memory';
+    const stores = [];
+    let migrationFailed = false;
 
     if (cacheType === 'disk' && enabled) {
       cachePath =
         getEnvString('PROMPTFOO_CACHE_PATH') || path.join(getConfigDirectoryPath(), 'cache');
+
       if (!fs.existsSync(cachePath)) {
         logger.info(`Creating cache folder at ${cachePath}.`);
         fs.mkdirSync(cachePath, { recursive: true });
       }
-      // Lazy load fsStore only when disk cache is actually needed.
-      // This prevents module loading errors in tests and handles Windows compatibility issues.
-      // Note: cache-manager-fs-hash depends on lockfile@1.x which uses signal-exit@3.x,
-      // but other dependencies may pull in signal-exit@4.x which has breaking API changes.
-      // If loading fails (common on Windows), we gracefully fall back to memory cache.
-      try {
-        store = require('cache-manager-fs-hash');
-      } catch (err) {
-        logger.warn(
-          `Failed to load disk cache module (${(err as Error).message}). ` +
-            `Using memory cache instead. This is a known limitation on some systems ` +
-            `due to dependency compatibility issues and does not affect functionality.`,
-        );
-        store = 'memory';
+
+      const newCacheFile = path.join(cachePath, 'cache.json');
+
+      // Run migration if needed
+      if (shouldRunMigration(cachePath, newCacheFile)) {
+        logger.info('[Cache] Migrating cache from v4 to v7...');
+
+        try {
+          const result = runMigration(cachePath, newCacheFile);
+
+          if (result.success) {
+            logger.info(
+              `[Cache] Migration completed: ${result.stats.successCount} entries migrated, ` +
+                `${result.stats.skippedExpired} expired`,
+            );
+            if (result.backupPath) {
+              logger.info(`[Cache] Backup kept at: ${result.backupPath}`);
+            }
+          } else {
+            logger.error(
+              `[Cache] Migration failed: ${result.stats.errors.join(', ')}. ` +
+                `Falling back to memory cache.`,
+            );
+            migrationFailed = true;
+          }
+        } catch (err) {
+          logger.error(
+            `[Cache] Migration error: ${(err as Error).message}. ` +
+              `Falling back to memory cache.`,
+          );
+          migrationFailed = true;
+        }
+      }
+
+      // Set up disk cache if migration succeeded or wasn't needed
+      if (!migrationFailed) {
+        try {
+          const store = new KeyvFile({
+            filename: newCacheFile,
+          });
+
+          const keyv = new Keyv({
+            store,
+            ttl: getCacheTtlMs(),
+          });
+
+          stores.push(keyv);
+        } catch (err) {
+          logger.warn(
+            `[Cache] Failed to initialize disk cache: ${(err as Error).message}. ` +
+              `Using memory cache instead.`,
+          );
+          // Falls through to memory cache
+        }
       }
     }
 
-    cacheInstance = cacheManager.caching({
-      store,
-      options: {
-        max: getEnvInt('PROMPTFOO_CACHE_MAX_FILE_COUNT', 10_000), // number of files
-        path: cachePath,
-        ttl: getEnvInt('PROMPTFOO_CACHE_TTL', 60 * 60 * 24 * 14), // in seconds, 14 days
-        maxsize: getEnvInt('PROMPTFOO_CACHE_MAX_SIZE', 1e7), // in bytes, 10mb
-        //zip: true, // whether to use gzip compression
-      },
+    // Initialize cache (disk if stores array has items, memory otherwise)
+    cacheInstance = createCache({
+      stores,
+      ttl: getCacheTtlMs(),
+      refreshThreshold: 0, // Disable background refresh
     });
   }
   return cacheInstance;
@@ -191,7 +243,7 @@ export function disableCache() {
 }
 
 export async function clearCache() {
-  return getCache().reset();
+  return getCache().clear();
 }
 
 export function isCacheEnabled() {

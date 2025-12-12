@@ -140,9 +140,9 @@ export interface CompletionOptions {
   topK?: number;
   top_k?: number; // Alternative format for Claude models
 
-  // Image generation options
+  // Imagen image generation options
   n?: number; // Number of images to generate
-  aspectRatio?: '1:1' | '16:9' | '9:16' | '3:4' | '4:3'; // Valid aspect ratios
+  aspectRatio?: '1:1' | '16:9' | '9:16' | '3:4' | '4:3'; // Valid aspect ratios for Imagen
   personGeneration?: 'allow_all' | 'allow_adult' | 'dont_allow';
   safetyFilterLevel?:
     | 'block_most'
@@ -152,6 +152,20 @@ export interface CompletionOptions {
     | 'block_low_and_above';
   addWatermark?: boolean;
   seed?: number;
+
+  // Gemini native image generation options
+  imageAspectRatio?:
+    | '1:1'
+    | '2:3'
+    | '3:2'
+    | '3:4'
+    | '4:3'
+    | '4:5'
+    | '5:4'
+    | '9:16'
+    | '16:9'
+    | '21:9';
+  imageSize?: '1K' | '2K' | '4K';
 
   // Live API websocket timeout
   timeoutMs?: number;
@@ -255,6 +269,12 @@ export interface CompletionOptions {
    * @see https://cloud.google.com/security-command-center/docs/model-armor-vertex-integration
    */
   modelArmor?: ModelArmorConfig;
+
+  /**
+   * Whether to use streaming API. Defaults to false.
+   * Note: Model Armor floor settings only work with the non-streaming API.
+   */
+  streaming?: boolean;
 }
 
 // Claude API interfaces

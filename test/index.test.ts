@@ -1,4 +1,4 @@
-import { vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import * as cache from '../src/cache';
 import { evaluate as doEvaluate } from '../src/evaluator';
@@ -80,12 +80,15 @@ describe('index.ts exports', () => {
     'isApiProvider',
     'isGradingResult',
     'isProviderOptions',
+    'isResultFailureReason',
     'loadApiProvider',
     'redteam',
   ];
 
   const expectedSchemaExports = [
+    'AssertionOrSetSchema',
     'AssertionSchema',
+    'AssertionSetSchema',
     'AssertionTypeSchema',
     'AtomicTestCaseSchema',
     'BaseAssertionTypesSchema',

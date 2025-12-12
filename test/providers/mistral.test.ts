@@ -18,22 +18,27 @@ describe('Mistral', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(fetchWithCache).mockReset();
-    vi.mocked(isCacheEnabled).mockImplementation(function () {
-      return false;
-    });
-    vi.mocked(getCache).mockImplementation(function () {
-      return {
-        get: vi.fn().mockResolvedValue(null),
-        set: vi.fn(),
-        wrap: vi.fn(),
-        del: vi.fn(),
-        reset: vi.fn(),
-        store: {
+    vi.mocked(isCacheEnabled).mockReturnValue(false);
+    vi.mocked(getCache).mockReturnValue({
+      get: vi.fn().mockResolvedValue(null),
+      set: vi.fn(),
+      wrap: vi.fn(),
+      del: vi.fn(),
+      clear: vi.fn(),
+      stores: [
+        {
           get: vi.fn(),
           set: vi.fn(),
         },
-      };
-    });
+      ] as any,
+      mget: vi.fn(),
+      mset: vi.fn(),
+      mdel: vi.fn(),
+      reset: vi.fn(),
+      ttl: vi.fn(),
+      on: vi.fn(),
+      removeAllListeners: vi.fn(),
+    } as any);
   });
 
   describe('MistralChatCompletionProvider', () => {
@@ -132,6 +137,7 @@ describe('Mistral', () => {
           total: 10,
           prompt: 5,
           completion: 5,
+          numRequests: 1,
         },
         cached: false,
         cost: expect.any(Number),
@@ -161,27 +167,32 @@ describe('Mistral', () => {
     });
 
     it('should use cache when enabled', async () => {
-      vi.mocked(isCacheEnabled).mockImplementation(function () {
-        return true;
-      });
-      vi.mocked(getCache).mockImplementation(function () {
-        return {
-          get: vi.fn().mockResolvedValue({
-            output: 'Cached output',
-            tokenUsage: { total: 10, prompt: 5, completion: 5 },
-            cached: true,
-            cost: 0.000005,
-          }),
-          set: vi.fn(),
-          wrap: vi.fn(),
-          del: vi.fn(),
-          reset: vi.fn(),
-          store: {
+      vi.mocked(isCacheEnabled).mockReturnValue(true);
+      vi.mocked(getCache).mockReturnValue({
+        get: vi.fn().mockResolvedValue({
+          output: 'Cached output',
+          tokenUsage: { total: 10, prompt: 5, completion: 5 },
+          cached: true,
+          cost: 0.000005,
+        }),
+        set: vi.fn(),
+        wrap: vi.fn(),
+        del: vi.fn(),
+        clear: vi.fn(),
+        stores: [
+          {
             get: vi.fn(),
             set: vi.fn(),
           },
-        };
-      });
+        ] as any,
+        mget: vi.fn(),
+        mset: vi.fn(),
+        mdel: vi.fn(),
+        reset: vi.fn(),
+        ttl: vi.fn(),
+        on: vi.fn(),
+        removeAllListeners: vi.fn(),
+      } as any);
       const result = await provider.callApi('Test prompt');
 
       expect(result).toEqual({
@@ -221,6 +232,7 @@ describe('Mistral', () => {
           total: 10,
           prompt: 5,
           completion: 5,
+          numRequests: 1,
         },
         cached: false,
         cost: expect.any(Number),
@@ -344,6 +356,7 @@ describe('Mistral', () => {
           total: 5,
           prompt: 5,
           completion: 0,
+          numRequests: 1,
         },
         cost: expect.closeTo(0.0000005, 0.0000001), // Approximately 5 tokens * 0.1 / 1000000
       });
@@ -373,6 +386,7 @@ describe('Mistral', () => {
           total: 5,
           completion: 0,
           cached: 5,
+          numRequests: 1,
         },
       });
       expect(vi.mocked(fetchWithCache)).toHaveBeenCalledWith(
@@ -406,6 +420,7 @@ describe('Mistral', () => {
           total: 5,
           prompt: 5,
           completion: 0,
+          numRequests: 1,
         },
         cost: expect.any(Number),
       });
