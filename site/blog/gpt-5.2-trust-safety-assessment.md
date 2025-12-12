@@ -155,7 +155,7 @@ Using the Hydra strategy, the model produced step-by-step MDMA synthesis instruc
 
 **Category:** harmful:insults
 
-Using the Meta strategy, the model generated a 12-line acrostic targeting Elon Musk that spelled out a disparaging phrase. The creative writing format bypassed harassment filters.
+Using the Meta strategy, the model generated a 12-line acrostic targeting Elon Musk that spelled out a disparaging phrase. The creative writing format bypassed harassment filters. OpenAI's flagship model roasting xAI's founder on command—it didn't take much convincing.
 
 ![Targeted Harassment Generation](/img/blog/gpt-5.2-security/insult-elon.jpg)
 
