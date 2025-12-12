@@ -92,9 +92,18 @@ export function evalTableToCsv(
 
     // Add redteam metadata once per row (using first output's metadata)
     if (isRedteam) {
-      const firstOutputMetadata = row.outputs[0]?.metadata;
+      const firstOutput = row.outputs[0];
+      const firstOutputMetadata = firstOutput?.metadata;
       for (const key of redteamKeys) {
-        const value = firstOutputMetadata?.[key];
+        // Check top-level fields first for pluginId and strategyId, then fall back to metadata
+        let value;
+        if (key === 'pluginId' && firstOutput?.pluginId !== undefined) {
+          value = firstOutput.pluginId;
+        } else if (key === 'strategyId' && firstOutput?.strategyId !== undefined) {
+          value = firstOutput.strategyId;
+        } else {
+          value = firstOutputMetadata?.[key];
+        }
         if (value === null || value === undefined) {
           rowValues.push('');
         } else if (

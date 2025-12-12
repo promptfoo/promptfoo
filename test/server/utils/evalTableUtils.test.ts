@@ -696,6 +696,13 @@ describe('evalTableUtils', () => {
         const csv = evalTableToCsv(tableWithTopLevelIds, { isRedteam: true });
         expect(csv).toBeDefined();
         expect(csv.length).toBeGreaterThan(0);
+
+        // Verify top-level fields appear in CSV output
+        const lines = csv.split('\n');
+        expect(lines[0]).toContain('pluginId');
+        expect(lines[0]).toContain('strategyId');
+        expect(lines[1]).toContain('harmful:violent-crime');
+        expect(lines[1]).toContain('jailbreak');
       });
     });
 
