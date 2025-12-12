@@ -237,6 +237,7 @@ export abstract class RedteamPluginBase {
 
       let finalTemplate = RedteamPluginBase.appendModifiers(renderedTemplate, this.config);
       finalTemplate = RedteamPluginBase.appendInputsInstructions(finalTemplate, this.config.inputs);
+      logger.debug(`Final prompt template for ${this.constructor.name}:\n${finalTemplate}`);
       const { output: generatedPrompts, error } = await this.provider.callApi(finalTemplate);
       if (delayMs > 0) {
         logger.debug(`Delaying for ${delayMs}ms`);
@@ -278,6 +279,7 @@ export abstract class RedteamPluginBase {
         throw new Error(message);
       }
 
+      logger.debug(`Generated prompts:\n${generatedPrompts}`);
       // Use new parser if inputs are present
       if (this.config.inputs && Object.keys(this.config.inputs).length > 0) {
         return parseGeneratedPromptsWithInputs(generatedPrompts, Object.keys(this.config.inputs));

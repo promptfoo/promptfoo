@@ -2,6 +2,7 @@ import { getEnvInt } from '../../../envars';
 import { PromptfooHarmfulCompletionProvider } from '../../../providers/promptfoo';
 import { retryWithDeduplication, sampleArray } from '../../../util/generation';
 import { sleep } from '../../../util/time';
+import { getShortPluginId, parseGeneratedPromptsWithInputs } from '../../util';
 import { createTestCase } from './common';
 
 import type { PluginActionParams, TestCase } from '../../../types/index';
@@ -30,11 +31,32 @@ export async function getHarmfulTests(
     return [];
   };
   const allPrompts = await retryWithDeduplication(generatePrompts, n);
+
+  // Get input keys from config if inputs are specified
+  const inputKeys = config?.inputs ? Object.keys(config.inputs) : [];
+
   return sampleArray(allPrompts, n).map((prompt) => {
-    const testCase = createTestCase(injectVar, prompt, plugin);
-    // Note: The unaligned provider returns pre-generated harmful content from a dataset,
-    // so inputs cannot be generated dynamically for these test cases.
-    // Inputs feature is not applicable to dataset-based plugins.
-    return testCase;
+    // If inputs are configured and the prompt contains XML format, parse it
+    if (inputKeys.length > 0 && /<TestCase>/i.test(prompt)) {
+      const parsed = parseGeneratedPromptsWithInputs(prompt, inputKeys);
+      if (parsed.length > 0 && parsed[0].prompt) {
+        const testCase = createTestCase(injectVar, parsed[0].prompt, plugin);
+        // Merge parsed inputs into vars
+        if (parsed[0].inputs && Object.keys(parsed[0].inputs).length > 0) {
+          testCase.vars = {
+            ...testCase.vars,
+            ...parsed[0].inputs,
+          };
+          testCase.metadata = {
+            ...testCase.metadata,
+            pluginId: getShortPluginId(plugin),
+            generatedInputs: Object.keys(parsed[0].inputs),
+          };
+        }
+        return testCase;
+      }
+    }
+    // Fall back to original behavior for prompts without inputs
+    return createTestCase(injectVar, prompt, plugin);
   });
 }
