@@ -1,23 +1,24 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { computeRunStats } from '../../src/runStats/index';
 import type { StatableResult } from '../../src/runStats/types';
 import type { ApiProvider, EvaluateStats } from '../../src/types/index';
 import { TokenUsageTracker } from '../../src/util/tokenUsage';
 
 // Mock TokenUsageTracker
-jest.mock('../../src/util/tokenUsage', () => ({
+vi.mock('../../src/util/tokenUsage', () => ({
   TokenUsageTracker: {
-    getInstance: jest.fn(),
+    getInstance: vi.fn(),
   },
 }));
 
 describe('computeRunStats', () => {
   const mockTracker = {
-    getProviderUsage: jest.fn(),
+    getProviderUsage: vi.fn(),
   };
 
   beforeEach(() => {
-    jest.clearAllMocks();
-    (TokenUsageTracker.getInstance as jest.Mock).mockReturnValue(mockTracker);
+    vi.clearAllMocks();
+    vi.mocked(TokenUsageTracker.getInstance).mockReturnValue(mockTracker as any);
     mockTracker.getProviderUsage.mockReturnValue(null);
   });
 
@@ -167,5 +168,107 @@ describe('computeRunStats', () => {
 
     expect(runStats.models.isComparison).toBe(true);
     expect(runStats.models.ids).toEqual(['anthropic:claude-3', 'openai:gpt-4']);
+  });
+
+  it('should handle results with all errors', () => {
+    const results: StatableResult[] = [
+      { success: false, latencyMs: 100, error: 'Timeout error', provider: { id: 'openai:gpt-4' } },
+      { success: false, latencyMs: 200, error: '429 Rate limit', provider: { id: 'openai:gpt-4' } },
+    ];
+
+    const providers = [createProvider('openai:gpt-4')];
+
+    const runStats = computeRunStats({
+      results,
+      stats: createStats(),
+      providers,
+    });
+
+    expect(runStats.errors.total).toBe(2);
+    expect(runStats.errors.breakdown.timeout).toBe(1);
+    expect(runStats.errors.breakdown.rate_limit).toBe(1);
+    expect(runStats.cache.hitRate).toBeNull(); // No successful responses
+  });
+
+  it('should compute provider stats with token usage', () => {
+    mockTracker.getProviderUsage.mockReturnValue({
+      total: 500,
+      prompt: 400,
+      completion: 100,
+      cached: 50,
+    });
+
+    const results: StatableResult[] = [
+      { success: true, latencyMs: 100, provider: { id: 'openai:gpt-4' } },
+    ];
+
+    const providers = [createProvider('openai:gpt-4')];
+
+    const runStats = computeRunStats({
+      results,
+      stats: createStats(),
+      providers,
+    });
+
+    expect(runStats.providers[0]).toMatchObject({
+      provider: 'openai:gpt-4',
+      totalTokens: 500,
+      promptTokens: 400,
+      completionTokens: 100,
+      cachedTokens: 50,
+    });
+  });
+
+  it('should detect custom providers', () => {
+    const results: StatableResult[] = [
+      { success: true, latencyMs: 100, provider: { id: 'my-custom-provider' } },
+    ];
+
+    const providers = [createProvider('my-custom-provider')];
+
+    const runStats = computeRunStats({
+      results,
+      stats: createStats(),
+      providers,
+    });
+
+    expect(runStats.models.hasCustom).toBe(true);
+  });
+
+  it('should extract assertion token usage from stats', () => {
+    const evalStats = createStats({
+      tokenUsage: {
+        total: 1000,
+        prompt: 800,
+        completion: 200,
+        cached: 100,
+        numRequests: 5,
+        assertions: {
+          total: 300,
+          prompt: 200,
+          completion: 100,
+          cached: 25,
+          numRequests: 2,
+          completionDetails: {
+            reasoning: 10,
+          },
+        },
+      },
+    } as any);
+
+    const runStats = computeRunStats({
+      results: [],
+      stats: evalStats,
+      providers: [],
+    });
+
+    expect(runStats.assertions.tokenUsage).toEqual({
+      totalTokens: 300,
+      promptTokens: 200,
+      completionTokens: 100,
+      cachedTokens: 25,
+      numRequests: 2,
+      reasoningTokens: 10,
+    });
   });
 });

@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest';
 import { computeAssertionBreakdown, computeAssertionStats } from '../../src/runStats/assertions';
 import type { StatableResult } from '../../src/runStats/types';
 import type { EvaluateStats } from '../../src/types/index';
@@ -93,6 +94,30 @@ describe('computeAssertionBreakdown', () => {
     const breakdown = computeAssertionBreakdown(results);
     expect(breakdown).toEqual([{ type: 'unknown', pass: 1, fail: 1, total: 2, passRate: 0.5 }]);
   });
+
+  it('should aggregate across multiple results', () => {
+    const results: StatableResult[] = [
+      {
+        success: true,
+        latencyMs: 100,
+        gradingResult: {
+          componentResults: [{ pass: true, score: 1, reason: '', assertion: { type: 'equals' } }],
+        },
+      },
+      {
+        success: true,
+        latencyMs: 200,
+        gradingResult: {
+          componentResults: [
+            { pass: false, score: 0, reason: '', assertion: { type: 'equals' } },
+            { pass: true, score: 1, reason: '', assertion: { type: 'equals' } },
+          ],
+        },
+      },
+    ];
+    const breakdown = computeAssertionBreakdown(results);
+    expect(breakdown).toEqual([{ type: 'equals', pass: 2, fail: 1, total: 3, passRate: 2 / 3 }]);
+  });
 });
 
 describe('computeAssertionStats', () => {
@@ -171,6 +196,37 @@ describe('computeAssertionStats', () => {
     expect(stats.modelGraded).toBe(2);
   });
 
+  it('should recognize all model-graded assertion types', () => {
+    const modelGradedTypes = [
+      'answer-relevance',
+      'context-faithfulness',
+      'context-recall',
+      'context-relevance',
+      'factuality',
+      'llm-rubric',
+      'model-graded-closedqa',
+      'model-graded-factuality',
+      'search-rubric',
+    ];
+
+    const results: StatableResult[] = [
+      {
+        success: true,
+        latencyMs: 100,
+        gradingResult: {
+          componentResults: modelGradedTypes.map((type) => ({
+            pass: true,
+            score: 1,
+            reason: '',
+            assertion: { type },
+          })),
+        },
+      },
+    ];
+    const stats = computeAssertionStats(results, createStats());
+    expect(stats.modelGraded).toBe(modelGradedTypes.length);
+  });
+
   it('should extract token usage from stats', () => {
     const evalStats = createStats({
       tokenUsage: {
@@ -213,5 +269,15 @@ describe('computeAssertionStats', () => {
       numRequests: 0,
       reasoningTokens: 0,
     });
+  });
+
+  it('should handle null gradingResult', () => {
+    const results: StatableResult[] = [
+      { success: true, latencyMs: 100, gradingResult: null },
+      { success: true, latencyMs: 200 },
+    ];
+    const stats = computeAssertionStats(results, createStats());
+    expect(stats.total).toBe(0);
+    expect(stats.passed).toBe(0);
   });
 });

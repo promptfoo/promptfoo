@@ -1,23 +1,24 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { computeModelInfo, computeProviderStats } from '../../src/runStats/providers';
 import type { StatableResult } from '../../src/runStats/types';
 import type { ApiProvider } from '../../src/types/index';
 import { TokenUsageTracker } from '../../src/util/tokenUsage';
 
 // Mock TokenUsageTracker
-jest.mock('../../src/util/tokenUsage', () => ({
+vi.mock('../../src/util/tokenUsage', () => ({
   TokenUsageTracker: {
-    getInstance: jest.fn(),
+    getInstance: vi.fn(),
   },
 }));
 
 describe('computeProviderStats', () => {
   const mockTracker = {
-    getProviderUsage: jest.fn(),
+    getProviderUsage: vi.fn(),
   };
 
   beforeEach(() => {
-    jest.clearAllMocks();
-    (TokenUsageTracker.getInstance as jest.Mock).mockReturnValue(mockTracker);
+    vi.clearAllMocks();
+    vi.mocked(TokenUsageTracker.getInstance).mockReturnValue(mockTracker as any);
     mockTracker.getProviderUsage.mockReturnValue(null);
   });
 
@@ -124,6 +125,36 @@ describe('computeProviderStats', () => {
     expect(stats[0].cacheRate).toBe(0);
     expect(stats[0].tokensPerRequest).toBe(0);
   });
+
+  it('should handle undefined latencyMs', () => {
+    const results: StatableResult[] = [
+      {
+        success: true,
+        latencyMs: undefined as unknown as number,
+        provider: { id: 'openai:gpt-4' },
+      },
+      { success: true, latencyMs: 200, provider: { id: 'openai:gpt-4' } },
+    ];
+
+    const stats = computeProviderStats(results);
+    expect(stats[0].avgLatencyMs).toBe(100); // (0+200)/2
+  });
+
+  it('should sort by request count descending', () => {
+    const results: StatableResult[] = [
+      { success: true, latencyMs: 100, provider: { id: 'provider-a' } },
+      { success: true, latencyMs: 100, provider: { id: 'provider-b' } },
+      { success: true, latencyMs: 100, provider: { id: 'provider-b' } },
+      { success: true, latencyMs: 100, provider: { id: 'provider-b' } },
+      { success: true, latencyMs: 100, provider: { id: 'provider-c' } },
+      { success: true, latencyMs: 100, provider: { id: 'provider-c' } },
+    ];
+
+    const stats = computeProviderStats(results);
+    expect(stats[0].provider).toBe('provider-b'); // 3 requests
+    expect(stats[1].provider).toBe('provider-c'); // 2 requests
+    expect(stats[2].provider).toBe('provider-a'); // 1 request
+  });
 });
 
 describe('computeModelInfo', () => {
@@ -185,5 +216,17 @@ describe('computeModelInfo', () => {
     const providers = [createProvider('openai:gpt-4'), createProvider('anthropic:claude-3')];
     const info = computeModelInfo(providers);
     expect(info.hasCustom).toBe(false);
+  });
+
+  it('should handle mixed standard and custom providers', () => {
+    const providers = [
+      createProvider('openai:gpt-4'),
+      createProvider('my-custom-provider'),
+      createProvider('anthropic:claude-3'),
+    ];
+    const info = computeModelInfo(providers);
+    expect(info.hasCustom).toBe(true);
+    expect(info.isComparison).toBe(true);
+    expect(info.ids).toContain('my-custom-provider');
   });
 });

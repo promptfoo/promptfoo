@@ -1,3 +1,4 @@
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { computeProviderStats } from '../../src/runStats/providers';
 import type { StatableResult } from '../../src/runStats/types';
 import { TokenUsageTracker } from '../../src/util/tokenUsage';
@@ -136,5 +137,15 @@ describe('computeProviderStats integration with TokenUsageTracker', () => {
       tokensPerRequest: 0,
       cacheRate: 0,
     });
+  });
+
+  it('should reset between tests (verify isolation)', () => {
+    // This test verifies that resetAllUsage works correctly
+    // by checking that no stale data exists from previous tests
+    const stats = computeProviderStats([
+      { success: true, latencyMs: 100, provider: { id: 'some-provider' } },
+    ]);
+
+    expect(stats[0].totalTokens).toBe(0);
   });
 });

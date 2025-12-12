@@ -13,7 +13,32 @@ export type ErrorCategory =
   | 'other';
 
 /**
+ * HTTP status code patterns for error categorization.
+ * Uses word boundaries to avoid false positives (e.g., "401k" shouldn't match auth errors).
+ */
+const HTTP_STATUS_PATTERNS = {
+  rate_limit: /\b429\b/,
+  auth: /\b40[13]\b/, // 401 or 403
+  server_error: /\b50[0-3]\b/, // 500, 501, 502, 503
+};
+
+/**
+ * Keyword patterns for error categorization.
+ */
+const ERROR_KEYWORDS = {
+  timeout: ['timeout', 'timed out', 'etimedout', 'request timeout'],
+  rate_limit: ['rate limit', 'rate_limit', 'ratelimit', 'too many requests', 'throttl'],
+  auth: ['unauthorized', 'forbidden', 'authentication', 'invalid api key', 'invalid_api_key'],
+  server_error: ['internal server error', 'bad gateway', 'service unavailable', 'server error'],
+  network: ['network', 'econnrefused', 'enotfound', 'econnreset', 'socket hang up', 'dns'],
+};
+
+/**
  * Categorizes an error message into a known category.
+ *
+ * Uses a combination of HTTP status code patterns and keyword matching.
+ * Status codes are matched with word boundaries to avoid false positives
+ * (e.g., "401k" won't match as an auth error).
  *
  * @param errorMessage - The error message to categorize
  * @returns The error category
@@ -21,29 +46,40 @@ export type ErrorCategory =
 export function categorizeError(errorMessage: string): ErrorCategory {
   const errorLower = errorMessage.toLowerCase();
 
-  if (errorLower.includes('timeout') || errorLower.includes('timed out')) {
+  // Check timeout first (highest priority for user-facing issues)
+  if (ERROR_KEYWORDS.timeout.some((kw) => errorLower.includes(kw))) {
     return 'timeout';
   }
+
+  // Check rate limiting
   if (
-    errorLower.includes('rate limit') ||
-    errorLower.includes('429') ||
-    errorLower.includes('too many requests')
+    HTTP_STATUS_PATTERNS.rate_limit.test(errorMessage) ||
+    ERROR_KEYWORDS.rate_limit.some((kw) => errorLower.includes(kw))
   ) {
     return 'rate_limit';
   }
-  if (errorLower.includes('401') || errorLower.includes('403')) {
+
+  // Check auth errors
+  if (
+    HTTP_STATUS_PATTERNS.auth.test(errorMessage) ||
+    ERROR_KEYWORDS.auth.some((kw) => errorLower.includes(kw))
+  ) {
     return 'auth';
   }
-  if (errorLower.includes('500') || errorLower.includes('502') || errorLower.includes('503')) {
+
+  // Check server errors
+  if (
+    HTTP_STATUS_PATTERNS.server_error.test(errorMessage) ||
+    ERROR_KEYWORDS.server_error.some((kw) => errorLower.includes(kw))
+  ) {
     return 'server_error';
   }
-  if (
-    errorLower.includes('network') ||
-    errorLower.includes('econnrefused') ||
-    errorLower.includes('enotfound')
-  ) {
+
+  // Check network errors
+  if (ERROR_KEYWORDS.network.some((kw) => errorLower.includes(kw))) {
     return 'network';
   }
+
   return 'other';
 }
 
