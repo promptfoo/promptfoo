@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 280" fill="none">
+  <defs>
+    <!-- Subtle shadow filter -->
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000" flood-opacity="0.08"/>
+    </filter>
+
+    <!-- Gradient for primary boxes -->
+    <linearGradient id="primaryGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#ffffff"/>
+      <stop offset="100%" style="stop-color:#f8fafc"/>
+    </linearGradient>
+
+    <!-- Gradient for judge box (accent) -->
+    <linearGradient id="judgeGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#eef2ff"/>
+      <stop offset="100%" style="stop-color:#e0e7ff"/>
+    </linearGradient>
+
+    <!-- Gradient for result box -->
+    <linearGradient id="resultGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#f0fdf4"/>
+      <stop offset="100%" style="stop-color:#dcfce7"/>
+    </linearGradient>
+
+    <!-- Arrow marker -->
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#94a3b8"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="800" height="280" fill="#fafafa" rx="8"/>
+
+  <!-- Box 1: Your System (SUT) -->
+  <g filter="url(#shadow)">
+    <rect x="40" y="60" width="160" height="80" rx="8" fill="url(#primaryGradient)" stroke="#e2e8f0" stroke-width="1.5"/>
+  </g>
+  <text x="120" y="95" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="15" font-weight="600" fill="#1e293b">Your System</text>
+  <text x="120" y="118" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="12" fill="#64748b">(System Under Test)</text>
+
+  <!-- Arrow 1 -->
+  <line x1="200" y1="100" x2="270" y2="100" stroke="#94a3b8" stroke-width="2" marker-end="url(#arrowhead)"/>
+
+  <!-- Box 2: Candidate Output -->
+  <g filter="url(#shadow)">
+    <rect x="280" y="60" width="160" height="80" rx="8" fill="url(#primaryGradient)" stroke="#e2e8f0" stroke-width="1.5"/>
+  </g>
+  <text x="360" y="95" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="15" font-weight="600" fill="#1e293b">Candidate Output</text>
+  <text x="360" y="118" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="12" fill="#64748b">(Untrusted)</text>
+
+  <!-- Arrow 2 -->
+  <line x1="440" y1="100" x2="510" y2="100" stroke="#94a3b8" stroke-width="2" marker-end="url(#arrowhead)"/>
+
+  <!-- Box 3: Judge Model (accent color) -->
+  <g filter="url(#shadow)">
+    <rect x="520" y="60" width="180" height="80" rx="8" fill="url(#judgeGradient)" stroke="#c7d2fe" stroke-width="1.5"/>
+  </g>
+  <text x="610" y="95" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="15" font-weight="600" fill="#3730a3">Judge Model</text>
+  <text x="610" y="118" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="12" fill="#6366f1">+ Rubric Prompt</text>
+
+  <!-- Arrow 3 (vertical) -->
+  <line x1="610" y1="140" x2="610" y2="175" stroke="#94a3b8" stroke-width="2" marker-end="url(#arrowhead)"/>
+
+  <!-- Box 4: Result -->
+  <g filter="url(#shadow)">
+    <rect x="520" y="185" width="180" height="70" rx="8" fill="url(#resultGradient)" stroke="#86efac" stroke-width="1.5"/>
+  </g>
+  <text x="610" y="215" text-anchor="middle" font-family="ui-monospace, monospace" font-size="13" font-weight="500" fill="#166534">{"pass", "score",</text>
+  <text x="610" y="235" text-anchor="middle" font-family="ui-monospace, monospace" font-size="13" font-weight="500" fill="#166534">"reason"}</text>
+</svg>

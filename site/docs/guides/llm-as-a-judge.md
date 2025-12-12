@@ -40,18 +40,7 @@ The tradeoff: judges have biases, add latency, and can be manipulated. This guid
 
 ## How it works
 
-```text
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│  Your System    │────▶│  Candidate      │────▶│  Judge Model    │
-│  (SUT)          │     │  Output         │     │  + Judge Prompt │
-└─────────────────┘     └─────────────────┘     └────────┬────────┘
-                                                         │
-                                                         ▼
-                                               ┌─────────────────┐
-                                               │ {reason, score, │
-                                               │  pass}          │
-                                               └─────────────────┘
-```
+![LLM as a Judge flow diagram](/img/docs/llm-as-a-judge-flow.svg)
 
 Four components:
 
