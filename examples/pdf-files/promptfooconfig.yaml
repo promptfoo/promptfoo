@@ -1,16 +1,20 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: 'PDF Visuals Identification'
+description: 'PDF Document Analysis'
 
 prompts:
   - file://prompt.py:format_pdf_prompt
 
 providers:
-  - id: google:gemini-3-pro-preview
+  - id: vertex:gemini-2.5-flash
   - id: anthropic:messages:claude-sonnet-4-5-20250929
   - id: openai:responses:gpt-5.2
 
+defaultTest:
+  assert:
+    - type: contains
+      value: '2'
+
 tests:
-  - description: 'Test computer vision recognition of visuals in a PDF file'
+  - description: 'Count diagrams in a research paper PDF'
     vars:
       file_path: pdfs/page.pdf
-      label: Research paper with diagrams

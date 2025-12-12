@@ -1,5 +1,9 @@
 import base64
+import os
 import typing
+
+# Get the directory where this script is located
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
 class Vars(typing.TypedDict):
@@ -15,36 +19,48 @@ class PromptFunctionContext(typing.TypedDict):
     provider: Provider
 
 
-def get_file_base64(local_file_path: str, mime_type: str) -> str:
+def get_file_base64(file_path: str) -> str:
     """
     Read a local file and convert it to a base64-encoded string.
 
     Args:
-        local_file_path (str): The path to the local file.
-        mime_type (str): The MIME type of the file (e.g., 'application/pdf').
+        file_path: Path to the file (relative to this script's directory).
 
     Returns:
-        str: The base64-encoded file data.
+        The base64-encoded file data.
     """
-    with open(local_file_path, "rb") as f:
+    resolved_path = os.path.join(SCRIPT_DIR, file_path)
+    with open(resolved_path, "rb") as f:
         return base64.b64encode(f.read()).decode("utf-8")
 
 
-system_prompt = "Count the number of diagrams on this page"
+SYSTEM_PROMPT = "Count the number of diagrams on this page"
+PDF_MIME_TYPE = "application/pdf"
 
 
 def format_pdf_prompt(context: PromptFunctionContext) -> list[dict[str, typing.Any]]:
     """
     Format the prompt for PDF analysis based on the AI provider.
+
+    Each provider has a different format for sending PDF documents.
+    This function handles the provider-specific formatting.
+
+    Args:
+        context: Dictionary containing provider info and variables.
+
+    Returns:
+        Formatted prompt as a list of message dictionaries.
+
+    Raises:
+        ValueError: If an unsupported provider is specified.
     """
     provider_id = context["provider"]["id"]
-    pdf_mime_type = "application/pdf"
     file_path = context["vars"]["file_path"]
-    file_data = get_file_base64(file_path, pdf_mime_type)
+    file_data = get_file_base64(file_path)
 
     if provider_id.startswith("anthropic:"):
         return [
-            {"role": "system", "content": system_prompt},
+            {"role": "system", "content": SYSTEM_PROMPT},
             {
                 "role": "user",
                 "content": [
@@ -52,43 +68,46 @@ def format_pdf_prompt(context: PromptFunctionContext) -> list[dict[str, typing.A
                         "type": "document",
                         "source": {
                             "type": "base64",
-                            "media_type": pdf_mime_type,
+                            "media_type": PDF_MIME_TYPE,
                             "data": file_data,
                         },
                     }
                 ],
             },
         ]
+
     if provider_id.startswith("openai:"):
         return [
             {
                 "role": "system",
-                "content": [{"type": "input_text", "text": system_prompt}],
+                "content": [{"type": "input_text", "text": SYSTEM_PROMPT}],
             },
             {
                 "role": "user",
                 "content": [
                     {
                         "type": "input_file",
-                        "filename": "file.pdf",
-                        "file_data": f"data:{pdf_mime_type};base64,{file_data}",
+                        "filename": "document.pdf",
+                        "file_data": f"data:{PDF_MIME_TYPE};base64,{file_data}",
                     }
                 ],
             },
         ]
-    if provider_id.startswith("google:"):
+
+    if provider_id.startswith("google:") or provider_id.startswith("vertex:"):
         return [
             {
+                "role": "user",
                 "parts": [
                     {
                         "inline_data": {
-                            "mime_type": pdf_mime_type,
+                            "mime_type": PDF_MIME_TYPE,
                             "data": file_data,
                         }
                     },
-                    {"text": system_prompt},
-                ]
+                    {"text": SYSTEM_PROMPT},
+                ],
             }
         ]
 
-    raise ValueError(f"Unsupported provider: {context['provider']}")
+    raise ValueError(f"Unsupported provider: {provider_id}")
