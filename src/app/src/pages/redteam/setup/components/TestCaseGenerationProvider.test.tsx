@@ -458,7 +458,7 @@ describe('TestCaseGenerationProvider', () => {
       // it might go on. But the loop logic relies on state updates.
       // Check at least 4 calls occurred (2 turns minimum).
       // React Compiler may cause additional renders/calls due to different batching.
-      expect(callApi.mock.calls.length).toBeGreaterThanOrEqual(4);
+      expect(callApiMock.mock.calls.length).toBeGreaterThanOrEqual(4);
     });
   });
 });
