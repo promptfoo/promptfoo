@@ -1,93 +1,217 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as path from 'path';
 
 import { runAssertion } from '../../src/assertions/index';
+import { buildFunctionBody } from '../../src/assertions/javascript';
 import { importModule } from '../../src/esm';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { isPackagePath, loadFromPackage } from '../../src/providers/packageParser';
 
 import type { Assertion, AtomicTestCase, GradingResult } from '../../src/types/index';
 
-jest.mock('../../src/redteam/remoteGeneration', () => ({
-  shouldGenerateRemote: jest.fn().mockReturnValue(false),
+vi.mock('../../src/redteam/remoteGeneration', () => ({
+  shouldGenerateRemote: vi.fn().mockReturnValue(false),
 }));
 
-jest.mock('proxy-agent', () => ({
-  ProxyAgent: jest.fn().mockImplementation(() => ({})),
+vi.mock('proxy-agent', () => ({
+  ProxyAgent: vi.fn().mockImplementation(() => ({})),
 }));
 
-jest.mock('node:module', () => {
+vi.mock('node:module', () => {
   const mockRequire: NodeJS.Require = {
-    resolve: jest.fn() as unknown as NodeJS.RequireResolve,
+    resolve: vi.fn() as unknown as NodeJS.RequireResolve,
   } as unknown as NodeJS.Require;
   return {
-    createRequire: jest.fn().mockReturnValue(mockRequire),
+    createRequire: vi.fn().mockReturnValue(mockRequire),
   };
 });
 
-jest.mock('../../src/util/fetch/index.ts', () => {
-  const actual = jest.requireActual('../../src/util/fetch/index.ts');
+vi.mock('../../src/util/fetch/index.ts', async () => {
+  const actual = await vi.importActual<typeof import('../../src/util/fetch/index')>(
+    '../../src/util/fetch/index.ts',
+  );
   return {
     ...actual,
-    fetchWithRetries: jest.fn(actual.fetchWithRetries),
+    fetchWithRetries: vi.fn(actual.fetchWithRetries),
   };
 });
 
-jest.mock('glob', () => ({
-  globSync: jest.fn(),
+vi.mock('glob', () => ({
+  globSync: vi.fn(),
 }));
 
-jest.mock('fs', () => ({
-  readFileSync: jest.fn(),
+vi.mock('fs', () => ({
+  readFileSync: vi.fn(),
+  existsSync: vi.fn(),
+  writeFileSync: vi.fn(),
+  mkdirSync: vi.fn(),
   promises: {
-    readFile: jest.fn(),
+    readFile: vi.fn(),
   },
 }));
 
-jest.mock('../../src/esm', () => ({
-  importModule: jest.fn().mockImplementation((_path, _functionName) => {
+vi.mock('../../src/esm', () => ({
+  importModule: vi.fn().mockImplementation((_path, _functionName) => {
     // Make sure both parameters are captured in the mock call
     return Promise.resolve();
   }),
   __esModule: true,
 }));
-jest.mock('../../src/database', () => ({
-  getDb: jest.fn(),
+vi.mock('../../src/database', () => ({
+  getDb: vi.fn(),
 }));
-jest.mock('path', () => {
-  const actualPath = jest.requireActual('path');
-  return {
+vi.mock('path', async () => {
+  const actualPath = await vi.importActual<typeof import('path')>('path');
+  const mocked = {
     ...actualPath,
-    resolve: jest.fn((basePath, filePath) => actualPath.join(basePath, filePath)),
-    extname: jest.fn((filePath) => actualPath.extname(filePath)),
-    join: actualPath.join,
+    resolve: vi.fn(),
+    extname: vi.fn(),
+  };
+  return {
+    ...mocked,
+    default: mocked,
   };
 });
 
-jest.mock('../../src/cliState', () => ({
+vi.mock('../../src/cliState', () => ({
+  default: {
+    basePath: '/base/path',
+  },
   basePath: '/base/path',
 }));
-jest.mock('../../src/matchers', () => {
-  const actual = jest.requireActual('../../src/matchers');
+vi.mock('../../src/matchers', async () => {
+  const actual = await vi.importActual<typeof import('../../src/matchers')>('../../src/matchers');
   return {
     ...actual,
-    matchesContextRelevance: jest
+    matchesContextRelevance: vi
       .fn()
       .mockResolvedValue({ pass: true, score: 1, reason: 'Mocked reason' }),
-    matchesContextFaithfulness: jest
+    matchesContextFaithfulness: vi
       .fn()
       .mockResolvedValue({ pass: true, score: 1, reason: 'Mocked reason' }),
   };
 });
 
 // Add this mock for packageParser
-jest.mock('../../src/providers/packageParser', () => {
-  const mockIsPackagePath = jest.fn();
-  const mockLoadFromPackage = jest.fn();
+vi.mock('../../src/providers/packageParser', () => {
+  const mockIsPackagePath = vi.fn();
+  const mockLoadFromPackage = vi.fn();
   return {
     isPackagePath: mockIsPackagePath,
     loadFromPackage: mockLoadFromPackage,
     __esModule: true, // This is important for proper mocking
   };
+});
+
+describe('buildFunctionBody', () => {
+  it('should prepend return to simple expressions', () => {
+    expect(buildFunctionBody('output === "test"')).toBe('return output === "test"');
+    expect(buildFunctionBody('output.length > 5')).toBe('return output.length > 5');
+    expect(buildFunctionBody('true')).toBe('return true');
+  });
+
+  it('should inject return before final expression when starting with const', () => {
+    expect(buildFunctionBody('const s = output; s === "test"')).toBe(
+      'const s = output; return s === "test"',
+    );
+    expect(buildFunctionBody('const x = 5; const y = 10; x + y')).toBe(
+      'const x = 5; const y = 10; return x + y',
+    );
+  });
+
+  it('should inject return before final expression when starting with let', () => {
+    expect(buildFunctionBody('let x = output.length; x > 5')).toBe(
+      'let x = output.length; return x > 5',
+    );
+  });
+
+  it('should inject return before final expression when starting with var', () => {
+    expect(buildFunctionBody('var x = output.length; x > 5')).toBe(
+      'var x = output.length; return x > 5',
+    );
+  });
+
+  it('should handle trailing semicolons', () => {
+    expect(buildFunctionBody('const x = 5; x > 0;')).toBe('const x = 5; return x > 0');
+    expect(buildFunctionBody('const x = 5; x > 0;;')).toBe('const x = 5; return x > 0');
+    expect(buildFunctionBody('output === "test";')).toBe('return output === "test"');
+  });
+
+  it('should handle whitespace', () => {
+    expect(buildFunctionBody('  const x = 5; x > 0  ')).toBe('const x = 5; return x > 0');
+    expect(buildFunctionBody('  output === "test"  ')).toBe('return output === "test"');
+  });
+
+  it('should handle declaration without final expression', () => {
+    // This is an edge case - user forgot to add the expression
+    expect(buildFunctionBody('const x = 5;')).toBe('const x = 5');
+  });
+
+  it('should handle semicolons inside strings in declarations', () => {
+    // Semicolon in string within the declaration part (not the final expression)
+    expect(buildFunctionBody('const s = "a;b"; s.length')).toBe('const s = "a;b"; return s.length');
+  });
+
+  it('should handle semicolons inside strings in final expression', () => {
+    // Critical edge case: semicolon in string is the LAST semicolon in the code
+    // This was the bug that caused silent failures
+    expect(buildFunctionBody('const s = output; s === "test;value"')).toBe(
+      'const s = output; return s === "test;value"',
+    );
+    expect(buildFunctionBody('const x = output; x.includes(";")')).toBe(
+      'const x = output; return x.includes(";")',
+    );
+    expect(buildFunctionBody('const x = output; x === "a;b;c"')).toBe(
+      'const x = output; return x === "a;b;c"',
+    );
+  });
+
+  it('should handle single-quoted strings with semicolons', () => {
+    expect(buildFunctionBody("const s = output; s === 'test;value'")).toBe(
+      "const s = output; return s === 'test;value'",
+    );
+    expect(buildFunctionBody("const s = 'a;b'; s.length")).toBe("const s = 'a;b'; return s.length");
+  });
+
+  it('should handle template literals with semicolons', () => {
+    expect(buildFunctionBody('const s = output; s === `test;value`')).toBe(
+      'const s = output; return s === `test;value`',
+    );
+    expect(buildFunctionBody('const s = `a;b`; s.length')).toBe('const s = `a;b`; return s.length');
+  });
+
+  it('should handle escaped quotes', () => {
+    // Escaped quote should not toggle quote state
+    expect(buildFunctionBody('const s = output; s === "test\\"with;quotes"')).toBe(
+      'const s = output; return s === "test\\"with;quotes"',
+    );
+    expect(buildFunctionBody("const s = output; s === 'test\\'with;quotes'")).toBe(
+      "const s = output; return s === 'test\\'with;quotes'",
+    );
+  });
+
+  it('should handle multiple escaped backslashes', () => {
+    // \\\\ is two escaped backslashes, so the quote after is NOT escaped
+    expect(buildFunctionBody('const s = "a\\\\"; s.length')).toBe(
+      'const s = "a\\\\"; return s.length',
+    );
+  });
+
+  it('should handle mixed quote types', () => {
+    // Single quotes inside double quotes
+    expect(buildFunctionBody('const s = output; s === "it\'s;here"')).toBe(
+      'const s = output; return s === "it\'s;here"',
+    );
+    // Double quotes inside single quotes
+    expect(buildFunctionBody('const s = output; s === \'say "hi;there"\'')).toBe(
+      'const s = output; return s === \'say "hi;there"\'',
+    );
+  });
+
+  it('should not modify expressions starting with const-like words', () => {
+    // "constant" starts with "const" but isn't a declaration
+    expect(buildFunctionBody('constant === true')).toBe('return constant === true');
+  });
 });
 
 const javascriptStringAssertion: Assertion = {
@@ -151,12 +275,12 @@ const javascriptFunctionFailAssertion: Assertion = {
 
 describe('JavaScript file references', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     // Reset all mocks before each test
-    jest.mocked(importModule).mockReset();
-    jest.mocked(path.resolve).mockReset();
-    jest.mocked(isPackagePath).mockReset();
-    jest.mocked(loadFromPackage).mockReset();
+    vi.mocked(importModule).mockReset();
+    vi.mocked(path.resolve).mockReset();
+    vi.mocked(isPackagePath).mockReset();
+    vi.mocked(loadFromPackage).mockReset();
   });
 
   it('should handle JavaScript file reference with function name', async () => {
@@ -165,13 +289,13 @@ describe('JavaScript file references', () => {
       value: 'file:///path/to/assert.js:customFunction',
     };
 
-    const mockFn = jest.fn((_output: string) => true);
-    jest.mocked(path.resolve).mockReturnValue('/path/to/assert.js');
-    jest.mocked(path.extname).mockReturnValue('.js');
-    jest.mocked(isPackagePath).mockReturnValue(false);
+    const mockFn = vi.fn((_output: string) => true);
+    vi.mocked(path.resolve).mockReturnValue('/path/to/assert.js');
+    vi.mocked(path.extname).mockReturnValue('.js');
+    vi.mocked(isPackagePath).mockReturnValue(false);
 
     // Mock importModule to return the mock function
-    jest.mocked(importModule).mockImplementationOnce((_path, _functionName) => {
+    vi.mocked(importModule).mockImplementationOnce((_path, _functionName) => {
       return Promise.resolve({
         customFunction: mockFn,
       });
@@ -210,13 +334,13 @@ describe('JavaScript file references', () => {
       value: 'file:///path/to/assert.js',
     };
 
-    const mockFn = jest.fn((_output: string) => true);
-    jest.mocked(path.resolve).mockReturnValue('/path/to/assert.js');
-    jest.mocked(path.extname).mockReturnValue('.js');
-    jest.mocked(isPackagePath).mockReturnValue(false);
+    const mockFn = vi.fn((_output: string) => true);
+    vi.mocked(path.resolve).mockReturnValue('/path/to/assert.js');
+    vi.mocked(path.extname).mockReturnValue('.js');
+    vi.mocked(isPackagePath).mockReturnValue(false);
 
     // Mock importModule to return the mock function
-    jest.mocked(importModule).mockImplementationOnce((_path, _functionName) => {
+    vi.mocked(importModule).mockImplementationOnce((_path, _functionName) => {
       return Promise.resolve(mockFn);
     });
 
@@ -252,13 +376,13 @@ describe('JavaScript file references', () => {
       value: 'file:///path/to/assert.js',
     };
 
-    const mockFn = jest.fn((_output: string) => true);
-    jest.mocked(path.resolve).mockReturnValue('/path/to/assert.js');
-    jest.mocked(path.extname).mockReturnValue('.js');
-    jest.mocked(isPackagePath).mockReturnValue(false);
+    const mockFn = vi.fn((_output: string) => true);
+    vi.mocked(path.resolve).mockReturnValue('/path/to/assert.js');
+    vi.mocked(path.extname).mockReturnValue('.js');
+    vi.mocked(isPackagePath).mockReturnValue(false);
 
     // Mock importModule to handle both parameters
-    const mockImportModule = jest.mocked(importModule);
+    const mockImportModule = vi.mocked(importModule);
     mockImportModule.mockImplementationOnce((_path, _functionName) => {
       // Return the mock function in a default export object
       return Promise.resolve({ default: mockFn });
@@ -537,35 +661,30 @@ describe('JavaScript file references', () => {
   });
 
   it.each([
-    [
-      'boolean',
-      jest.fn((output: string) => output === 'Expected output'),
-      true,
-      'Assertion passed',
-    ],
-    ['number', jest.fn((output: string) => output.length), true, 'Assertion passed'],
+    ['boolean', vi.fn((output: string) => output === 'Expected output'), true, 'Assertion passed'],
+    ['number', vi.fn((output: string) => output.length), true, 'Assertion passed'],
     [
       'GradingResult',
-      jest.fn((_output: string) => ({ pass: true, score: 1, reason: 'Custom reason' })),
+      vi.fn((_output: string) => ({ pass: true, score: 1, reason: 'Custom reason' })),
       true,
       'Custom reason',
     ],
     [
       'boolean',
-      jest.fn((output: string) => output !== 'Expected output'),
+      vi.fn((output: string) => output !== 'Expected output'),
       false,
       'Custom function returned false',
     ],
-    ['number', jest.fn((_output: string) => 0), false, 'Custom function returned false'],
+    ['number', vi.fn((_output: string) => 0), false, 'Custom function returned false'],
     [
       'GradingResult',
-      jest.fn((_output: string) => ({ pass: false, score: 0.1, reason: 'Custom reason' })),
+      vi.fn((_output: string) => ({ pass: false, score: 0.1, reason: 'Custom reason' })),
       false,
       'Custom reason',
     ],
     [
       'boolean Promise',
-      jest.fn((_output: string) => Promise.resolve(true)),
+      vi.fn((_output: string) => Promise.resolve(true)),
       true,
       'Assertion passed',
     ],
@@ -573,14 +692,14 @@ describe('JavaScript file references', () => {
     const output = 'Expected output';
 
     // Mock path.resolve to return a valid path
-    jest.mocked(path.resolve).mockReturnValue('/mocked/path/to/assert.js');
-    jest.mocked(path.extname).mockReturnValue('.js');
+    vi.mocked(path.resolve).mockReturnValue('/mocked/path/to/assert.js');
+    vi.mocked(path.extname).mockReturnValue('.js');
 
     // Mock isPackagePath to return false for file:// paths
-    jest.mocked(isPackagePath).mockReturnValue(false);
+    vi.mocked(isPackagePath).mockReturnValue(false);
 
     // Mock importModule to handle both path and functionName
-    const mockImportModule = jest.mocked(importModule);
+    const mockImportModule = vi.mocked(importModule);
     mockImportModule.mockImplementation((path, functionName) => {
       // Make sure both parameters are captured in the mock
       mockImportModule.mock.calls.push([path, functionName]);
@@ -616,35 +735,30 @@ describe('JavaScript file references', () => {
   });
 
   it.each([
-    [
-      'boolean',
-      jest.fn((output: string) => output === 'Expected output'),
-      true,
-      'Assertion passed',
-    ],
-    ['number', jest.fn((output: string) => output.length), true, 'Assertion passed'],
+    ['boolean', vi.fn((output: string) => output === 'Expected output'), true, 'Assertion passed'],
+    ['number', vi.fn((output: string) => output.length), true, 'Assertion passed'],
     [
       'GradingResult',
-      jest.fn((_output: string) => ({ pass: true, score: 1, reason: 'Custom reason' })),
+      vi.fn((_output: string) => ({ pass: true, score: 1, reason: 'Custom reason' })),
       true,
       'Custom reason',
     ],
     [
       'boolean',
-      jest.fn((output: string) => output !== 'Expected output'),
+      vi.fn((output: string) => output !== 'Expected output'),
       false,
       'Custom function returned false',
     ],
-    ['number', jest.fn((_output: string) => 0), false, 'Custom function returned false'],
+    ['number', vi.fn((_output: string) => 0), false, 'Custom function returned false'],
     [
       'GradingResult',
-      jest.fn((_output: string) => ({ pass: false, score: 0.1, reason: 'Custom reason' })),
+      vi.fn((_output: string) => ({ pass: false, score: 0.1, reason: 'Custom reason' })),
       false,
       'Custom reason',
     ],
     [
       'boolean Promise',
-      jest.fn((_output: string) => Promise.resolve(true)),
+      vi.fn((_output: string) => Promise.resolve(true)),
       true,
       'Assertion passed',
     ],
@@ -652,10 +766,10 @@ describe('JavaScript file references', () => {
     const output = 'Expected output';
 
     // Mock isPackagePath to return true for package paths
-    jest.mocked(isPackagePath).mockReturnValue(true);
+    vi.mocked(isPackagePath).mockReturnValue(true);
 
     // Mock loadFromPackage to return the mockFn
-    jest.mocked(loadFromPackage).mockResolvedValue(mockFn);
+    vi.mocked(loadFromPackage).mockResolvedValue(mockFn);
 
     const packageAssertion: Assertion = {
       type: 'javascript',
@@ -687,17 +801,17 @@ describe('JavaScript file references', () => {
 
   it('should resolve js paths relative to the configuration file', async () => {
     const output = 'Expected output';
-    const mockFn = jest.fn((output: string) => output === 'Expected output');
+    const mockFn = vi.fn((output: string) => output === 'Expected output');
 
     // Mock path.resolve to return a valid path
-    jest.mocked(path.resolve).mockReturnValue('/base/path/path/to/assert.js');
-    jest.mocked(path.extname).mockReturnValue('.js');
+    vi.mocked(path.resolve).mockReturnValue('/base/path/path/to/assert.js');
+    vi.mocked(path.extname).mockReturnValue('.js');
 
     // Mock isPackagePath to return false
-    jest.mocked(isPackagePath).mockReturnValue(false);
+    vi.mocked(isPackagePath).mockReturnValue(false);
 
     // Mock importModule to return the mockFn
-    jest.mocked(importModule).mockResolvedValue(mockFn);
+    vi.mocked(importModule).mockResolvedValue(mockFn);
 
     const fileAssertion: Assertion = {
       type: 'javascript',
@@ -724,6 +838,252 @@ describe('JavaScript file references', () => {
     expect(result).toMatchObject({
       pass: true,
       reason: 'Assertion passed',
+    });
+  });
+
+  describe('Single-line assertions with variable declarations', () => {
+    it('should handle const declaration in single-line assertion', async () => {
+      // The code injects `return` before the final expression, not at the start
+      // "const s = ...; s >= 0.5" becomes "const s = ...; return s >= 0.5"
+      const assertion: Assertion = {
+        type: 'javascript',
+        value: 'const s = JSON.parse(output).score; s >= 0.5 && s <= 0.75',
+      };
+
+      const output = JSON.stringify({ score: 0.67, reason: 'test' });
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+
+      expect(result.pass).toBe(true);
+      expect(result.reason).toBe('Assertion passed');
+    });
+
+    it('should handle let declaration in single-line assertion', async () => {
+      const assertion: Assertion = {
+        type: 'javascript',
+        value: 'let x = output.length; x > 5',
+      };
+
+      const output = 'Hello World';
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+
+      expect(result.pass).toBe(true);
+      expect(result.reason).toBe('Assertion passed');
+    });
+
+    it('should handle var declaration in single-line assertion', async () => {
+      const assertion: Assertion = {
+        type: 'javascript',
+        value: 'var x = output.length; x > 5',
+      };
+
+      const output = 'Hello World';
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+
+      expect(result.pass).toBe(true);
+      expect(result.reason).toBe('Assertion passed');
+    });
+
+    it('should handle multiple declarations in single-line assertion', async () => {
+      const assertion: Assertion = {
+        type: 'javascript',
+        value: 'const a = 5; const b = 10; a + b === 15',
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output: 'test' },
+      });
+
+      expect(result.pass).toBe(true);
+    });
+
+    it('should handle declaration with semicolon in string value', async () => {
+      // Semicolons inside strings should not break the parsing
+      const assertion: Assertion = {
+        type: 'javascript',
+        value: 'const s = "hello; world"; s.length > 5',
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output: 'test' },
+      });
+
+      expect(result.pass).toBe(true);
+    });
+
+    it('should handle semicolon in final expression string (critical edge case)', async () => {
+      // This is the critical bug fix test - semicolon in final expression's string
+      // was causing silent failures before because lastIndexOf(';') found the wrong semicolon
+      const assertion: Assertion = {
+        type: 'javascript',
+        value: 'const s = output; s === "test;value"',
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output: 'test;value' },
+      });
+
+      expect(result.pass).toBe(true);
+      expect(result.reason).toBe('Assertion passed');
+    });
+
+    it('should correctly evaluate includes() with semicolon argument', async () => {
+      const assertion: Assertion = {
+        type: 'javascript',
+        value: 'const x = output; x.includes(";")',
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output: 'hello;world' },
+      });
+
+      expect(result.pass).toBe(true);
+    });
+
+    it('should handle single quotes with semicolons in final expression', async () => {
+      const assertion: Assertion = {
+        type: 'javascript',
+        value: "const s = output; s === 'a;b;c'",
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output: 'a;b;c' },
+      });
+
+      expect(result.pass).toBe(true);
+    });
+
+    it('should handle template literals with semicolons in final expression', async () => {
+      const assertion: Assertion = {
+        type: 'javascript',
+        value: 'const s = output; s === `test;value`',
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output: 'test;value' },
+      });
+
+      expect(result.pass).toBe(true);
+    });
+
+    it('should handle trailing semicolon in assertion', async () => {
+      const assertion: Assertion = {
+        type: 'javascript',
+        value: 'const x = 10; x > 5;',
+      };
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output: 'test' },
+      });
+
+      expect(result.pass).toBe(true);
+    });
+
+    it('should still work with IIFE format', async () => {
+      const assertion: Assertion = {
+        type: 'javascript',
+        value: '(() => { const s = JSON.parse(output).score; return s >= 0.5 && s <= 0.75; })()',
+      };
+
+      const output = JSON.stringify({ score: 0.67, reason: 'test' });
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+
+      expect(result.pass).toBe(true);
+    });
+
+    it('should still work with multiline format', async () => {
+      const assertion: Assertion = {
+        type: 'javascript',
+        value: `const s = JSON.parse(output).score;
+return s >= 0.5 && s <= 0.75;`,
+      };
+
+      const output = JSON.stringify({ score: 0.67, reason: 'test' });
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+
+      expect(result.pass).toBe(true);
+    });
+
+    it('should fail when assertion evaluates to false', async () => {
+      const assertion: Assertion = {
+        type: 'javascript',
+        value: 'const x = output.length; x > 100',
+      };
+
+      const output = 'short';
+
+      const result: GradingResult = await runAssertion({
+        prompt: 'Some prompt',
+        provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+        assertion,
+        test: {} as AtomicTestCase,
+        providerResponse: { output },
+      });
+
+      expect(result.pass).toBe(false);
+      expect(result.reason).toContain('Custom function returned false');
     });
   });
 

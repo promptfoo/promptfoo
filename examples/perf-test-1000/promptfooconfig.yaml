@@ -1,0 +1,80 @@
+# Performance Test: 1000 Test Cases × 8 Providers
+#
+# This configuration tests the Ink CLI UI with a large dataset to identify
+# performance bottlenecks and validate rendering at scale.
+#
+# Total evaluations: 1000 tests × 8 providers = 8,000 evaluations
+#
+# Usage:
+#   # Full test (8000 evaluations)
+#   PROMPTFOO_INTERACTIVE_UI=true npm run local -- eval -c examples/perf-test-1000/promptfooconfig.yaml --no-cache
+#
+#   # Quick test (100 tests × 8 providers = 800 evaluations)
+#   PROMPTFOO_INTERACTIVE_UI=true npm run local -- eval -c examples/perf-test-1000/promptfooconfig.yaml --filter-first-n 100 --no-cache
+#
+#   # Single provider test (1000 evaluations)
+#   PROMPTFOO_INTERACTIVE_UI=true npm run local -- eval -c examples/perf-test-1000/promptfooconfig.yaml --filter-providers "Fast v1" --no-cache
+#
+#   # Filter by metadata
+#   npm run local -- eval -c examples/perf-test-1000/promptfooconfig.yaml --filter-metadata category=math --no-cache
+
+description: 'Performance test with 1000 test cases and 8 providers'
+
+prompts:
+  - 'Process: {{input}}'
+
+providers:
+  # Fast tier - cheap and quick
+  - id: file://mock_provider.py
+    label: 'Fast v1'
+    config:
+      model: 'fast-v1'
+
+  - id: file://mock_provider.py
+    label: 'Fast v2'
+    config:
+      model: 'fast-v2'
+
+  # Balanced tier - moderate cost and latency
+  - id: file://mock_provider.py
+    label: 'Balanced v1'
+    config:
+      model: 'balanced-v1'
+
+  - id: file://mock_provider.py
+    label: 'Balanced v2'
+    config:
+      model: 'balanced-v2'
+
+  # Quality tier - higher cost, better results
+  - id: file://mock_provider.py
+    label: 'Quality v1'
+    config:
+      model: 'quality-v1'
+
+  - id: file://mock_provider.py
+    label: 'Quality v2'
+    config:
+      model: 'quality-v2'
+
+  # Premium tier - highest cost, best results
+  - id: file://mock_provider.py
+    label: 'Premium v1'
+    config:
+      model: 'premium-v1'
+
+  - id: file://mock_provider.py
+    label: 'Premium v2'
+    config:
+      model: 'premium-v2'
+
+# Load 1000 test cases from Python generator
+tests:
+  - path: file://generate_tests.py:create_tests
+    config:
+      num_tests: 1000
+      seed: 42
+
+# Evaluation settings
+evaluateOptions:
+  maxConcurrency: 20  # Process 20 tests in parallel (balance speed vs resource usage)

@@ -4,9 +4,9 @@ description: Claude Vision example
 prompts:
   - file://prompt.json
 providers:
-  - anthropic:messages:claude-3-haiku-20240307
-  - anthropic:messages:claude-3-5-sonnet-20240620
-  - bedrock:us.anthropic.claude-3-5-sonnet-20241022-v2:0
+  - anthropic:messages:claude-3-5-haiku-latest
+  - anthropic:messages:claude-sonnet-4-5-20250929
+  - bedrock:us.anthropic.claude-sonnet-4-5-20250929-v1:0
 
 tests:
   - vars:

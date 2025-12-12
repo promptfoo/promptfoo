@@ -1,3 +1,4 @@
+import { Mocked, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import path from 'path';
 
 import dedent from 'dedent';
@@ -7,9 +8,11 @@ import { importModule } from '../../../src/esm';
 import { fetchJson, GoogleLiveProvider, tryGetThenPost } from '../../../src/providers/google/live';
 import * as fetchModule from '../../../src/util/fetch/index';
 
+const mockFetchWithProxy = vi.mocked(fetchModule.fetchWithProxy);
+
 // Mock setTimeout globally to speed up tests
 const originalSetTimeout = global.setTimeout;
-global.setTimeout = jest.fn((callback: any, delay?: number) => {
+global.setTimeout = vi.fn((callback: any, delay?: number) => {
   // For delays of 1000ms (Python startup), execute immediately
   if (delay === 1000) {
     return originalSetTimeout(callback, 0);
@@ -18,35 +21,51 @@ global.setTimeout = jest.fn((callback: any, delay?: number) => {
   return originalSetTimeout(callback, delay);
 }) as any;
 
-jest.mock('ws');
-jest.mock('../../../src/esm', () => ({
-  importModule: jest.fn(),
-}));
-jest.mock('../../../src/python/pythonUtils', () => ({
-  validatePythonPath: jest.fn().mockImplementation(async (path) => path),
-}));
-jest.mock('child_process', () => ({
-  spawn: jest.fn(() => ({
-    stdout: { on: jest.fn() },
-    stderr: { on: jest.fn() },
-    on: jest.fn((event, callback) => {
-      if (event === 'close') {
-        // Use immediate callback instead of setTimeout
-        setImmediate(callback);
-      }
-    }),
-    kill: jest.fn(),
-    killed: false,
-  })),
-}));
-jest.mock('../../../src/util/fetch', () => ({
-  fetchWithProxy: jest.fn(),
-}));
+vi.mock('ws');
+vi.mock('../../../src/esm', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    importModule: vi.fn(),
+  };
+});
+vi.mock('../../../src/python/pythonUtils', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
 
-const mockImportModule = jest.mocked(importModule);
+    validatePythonPath: vi.fn().mockImplementation(async function (path) {
+      return path;
+    }),
+  };
+});
+vi.mock('child_process', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+
+    spawn: vi.fn(() => ({
+      stdout: { on: vi.fn() },
+      stderr: { on: vi.fn() },
+      on: vi.fn((event, callback) => {
+        if (event === 'close') {
+          // Use immediate callback instead of setTimeout
+          setImmediate(callback);
+        }
+      }),
+      kill: vi.fn(),
+      killed: false,
+    })),
+  };
+});
+vi.mock('../../../src/util/fetch', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    fetchWithProxy: vi.fn(),
+  };
+});
+
+const mockImportModule = vi.mocked(importModule);
 
 // Faster message simulation helpers - use setImmediate instead of setTimeout
-const simulateMessage = (mockWs: jest.Mocked<WebSocket>, simulated_data: any) => {
+const simulateMessage = (mockWs: Mocked<WebSocket>, simulated_data: any) => {
   setImmediate(() => {
     mockWs.onmessage?.({
       data: JSON.stringify(simulated_data),
@@ -54,46 +73,53 @@ const simulateMessage = (mockWs: jest.Mocked<WebSocket>, simulated_data: any) =>
   });
 };
 
-const simulatePartsMessage = (mockWs: jest.Mocked<WebSocket>, simulated_parts: any) => {
+const simulatePartsMessage = (mockWs: Mocked<WebSocket>, simulated_parts: any) => {
   simulateMessage(mockWs, { serverContent: { modelTurn: { parts: simulated_parts } } });
 };
 
-const simulateTextMessage = (mockWs: jest.Mocked<WebSocket>, simulated_text: string) => {
+const simulateTextMessage = (mockWs: Mocked<WebSocket>, simulated_text: string) => {
   simulatePartsMessage(mockWs, [{ text: simulated_text }]);
 };
 
-const simulateFunctionCallMessage = (mockWs: jest.Mocked<WebSocket>, simulated_calls: any) => {
+const simulateFunctionCallMessage = (mockWs: Mocked<WebSocket>, simulated_calls: any) => {
   simulateMessage(mockWs, { toolCall: { functionCalls: simulated_calls } });
 };
 
-const simulateSetupMessage = (mockWs: jest.Mocked<WebSocket>) => {
+const simulateSetupMessage = (mockWs: Mocked<WebSocket>) => {
   simulateMessage(mockWs, { setupComplete: {} });
 };
 
-const simulateCompletionMessage = (mockWs: jest.Mocked<WebSocket>) => {
+const simulateCompletionMessage = (mockWs: Mocked<WebSocket>) => {
   simulateMessage(mockWs, { serverContent: { turnComplete: true } });
 };
 
 describe('GoogleLiveProvider', () => {
-  let mockWs: jest.Mocked<WebSocket>;
+  let mockWs: Mocked<WebSocket>;
   let provider: GoogleLiveProvider;
 
-  beforeEach(() => {
-    mockWs = {
-      on: jest.fn(),
-      send: jest.fn(),
-      close: jest.fn(),
-      onmessage: jest.fn(),
-      onerror: jest.fn(),
-      onopen: jest.fn(),
-    } as unknown as jest.Mocked<WebSocket>;
+  beforeEach(async () => {
+    // Reset fetchWithProxy mock to prevent test pollution from async callbacks
+    mockFetchWithProxy.mockReset();
 
-    jest.mocked(WebSocket).mockImplementation(() => mockWs);
+    mockWs = {
+      on: vi.fn(),
+      send: vi.fn(),
+      close: vi.fn(),
+      onmessage: vi.fn(),
+      onerror: vi.fn(),
+      onopen: vi.fn(),
+    } as unknown as Mocked<WebSocket>;
+
+    vi.mocked(WebSocket).mockImplementation(function () {
+      return mockWs;
+    });
 
     // Reset validatePythonPath mock for each test
-    jest
-      .mocked(jest.requireMock('../../../src/python/pythonUtils').validatePythonPath)
-      .mockImplementation(async (path: string) => path);
+    vi.mocked(
+      (await import('../../../src/python/pythonUtils')).validatePythonPath,
+    ).mockImplementation(async function (path: string) {
+      return path;
+    });
 
     provider = new GoogleLiveProvider('gemini-2.0-flash-exp', {
       config: {
@@ -107,7 +133,7 @@ describe('GoogleLiveProvider', () => {
   });
 
   afterEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('should initialize with correct config', () => {
@@ -120,7 +146,7 @@ describe('GoogleLiveProvider', () => {
   });
 
   it('should send message and handle basic response', async () => {
-    jest.mocked(WebSocket).mockImplementation(() => {
+    vi.mocked(WebSocket).mockImplementation(function () {
       setImmediate(() => {
         mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
         simulateSetupMessage(mockWs);
@@ -145,7 +171,7 @@ describe('GoogleLiveProvider', () => {
   });
 
   it('should send message and handle function call response', async () => {
-    jest.mocked(WebSocket).mockImplementation(() => {
+    vi.mocked(WebSocket).mockImplementation(function () {
       setImmediate(() => {
         mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
         simulateSetupMessage(mockWs);
@@ -195,7 +221,7 @@ describe('GoogleLiveProvider', () => {
   });
 
   it('should send message and handle sequential function calls', async () => {
-    jest.mocked(WebSocket).mockImplementation(() => {
+    vi.mocked(WebSocket).mockImplementation(function () {
       setImmediate(() => {
         mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
         simulateSetupMessage(mockWs);
@@ -234,7 +260,7 @@ describe('GoogleLiveProvider', () => {
   });
 
   it('should send message and handle in-built google search tool', async () => {
-    jest.mocked(WebSocket).mockImplementation(() => {
+    vi.mocked(WebSocket).mockImplementation(function () {
       setImmediate(() => {
         mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
         simulateSetupMessage(mockWs);
@@ -277,7 +303,7 @@ describe('GoogleLiveProvider', () => {
   });
 
   it('should send message and handle in-built code execution tool', async () => {
-    jest.mocked(WebSocket).mockImplementation(() => {
+    vi.mocked(WebSocket).mockImplementation(function () {
       setImmediate(() => {
         mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
         simulateSetupMessage(mockWs);
@@ -306,7 +332,7 @@ describe('GoogleLiveProvider', () => {
   });
 
   it('should handle multiple user inputs', async () => {
-    jest.mocked(WebSocket).mockImplementation(() => {
+    vi.mocked(WebSocket).mockImplementation(function () {
       setImmediate(() => {
         mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
         simulateSetupMessage(mockWs);
@@ -336,7 +362,7 @@ describe('GoogleLiveProvider', () => {
   });
 
   it('should handle WebSocket errors', async () => {
-    jest.mocked(WebSocket).mockImplementation(() => {
+    vi.mocked(WebSocket).mockImplementation(function () {
       setImmediate(() => {
         mockWs.onerror?.({
           type: 'error',
@@ -388,7 +414,7 @@ describe('GoogleLiveProvider', () => {
   });
 
   it('should handle function tool callbacks correctly', async () => {
-    jest.mocked(WebSocket).mockImplementation(() => {
+    vi.mocked(WebSocket).mockImplementation(function () {
       setImmediate(() => {
         mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
         simulateSetupMessage(mockWs);
@@ -412,7 +438,7 @@ describe('GoogleLiveProvider', () => {
       return mockWs;
     });
 
-    const mockAddNumbers = jest.fn().mockResolvedValue({ sum: 5 + 6 });
+    const mockAddNumbers = vi.fn().mockResolvedValue({ sum: 5 + 6 });
 
     provider = new GoogleLiveProvider('gemini-2.0-flash-exp', {
       config: {
@@ -463,7 +489,7 @@ describe('GoogleLiveProvider', () => {
   });
 
   it('should handle errors in function tool callbacks', async () => {
-    jest.mocked(WebSocket).mockImplementation(() => {
+    vi.mocked(WebSocket).mockImplementation(function () {
       setImmediate(() => {
         mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
         simulateSetupMessage(mockWs);
@@ -534,9 +560,7 @@ describe('GoogleLiveProvider', () => {
   });
 
   it('should handle function tool calls to a spawned stateful api', async () => {
-    const mockFetchWithProxy = jest.mocked(fetchModule.fetchWithProxy);
-
-    jest.mocked(WebSocket).mockImplementation(() => {
+    vi.mocked(WebSocket).mockImplementation(function () {
       setImmediate(() => {
         mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
         simulateSetupMessage(mockWs);
@@ -625,7 +649,7 @@ describe('GoogleLiveProvider', () => {
     // Mock fetchWithProxy to return successful responses
     mockFetchWithProxy.mockResolvedValue({
       ok: true,
-      json: jest.fn().mockResolvedValue({ counter: 5 }),
+      json: vi.fn().mockResolvedValue({ counter: 5 }),
     } as any);
 
     const response = await provider.callApi('Add to the counter until it reaches 5');
@@ -665,10 +689,10 @@ describe('GoogleLiveProvider', () => {
   });
   describe('Python executable integration', () => {
     it('should handle Python executable validation correctly', async () => {
-      const mockSpawn = jest.requireMock('child_process').spawn;
-      const validatePythonPathMock = jest.requireMock(
-        '../../../src/python/pythonUtils',
-      ).validatePythonPath;
+      const mockSpawn = vi.mocked((await import('child_process')).spawn);
+      const validatePythonPathMock = vi.mocked(
+        (await import('../../../src/python/pythonUtils')).validatePythonPath,
+      );
 
       validatePythonPathMock.mockResolvedValueOnce('/custom/python/bin');
 
@@ -687,7 +711,7 @@ describe('GoogleLiveProvider', () => {
         },
       });
 
-      jest.mocked(WebSocket).mockImplementation(() => {
+      vi.mocked(WebSocket).mockImplementation(function () {
         setImmediate(() => {
           mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
           simulateSetupMessage(mockWs);
@@ -707,15 +731,15 @@ describe('GoogleLiveProvider', () => {
     });
 
     it('should handle errors when spawning Python process', async () => {
-      const mockSpawn = jest.requireMock('child_process').spawn;
-      const validatePythonPathMock = jest.requireMock(
-        '../../../src/python/pythonUtils',
-      ).validatePythonPath;
+      const mockSpawn = vi.mocked((await import('child_process')).spawn);
+      const validatePythonPathMock = vi.mocked(
+        (await import('../../../src/python/pythonUtils')).validatePythonPath,
+      );
 
       validatePythonPathMock.mockRejectedValueOnce(new Error('Python not found'));
 
       const originalError = console.error;
-      const mockError = jest.fn();
+      const mockError = vi.fn();
       console.error = mockError;
 
       try {
@@ -733,7 +757,7 @@ describe('GoogleLiveProvider', () => {
           },
         });
 
-        jest.mocked(WebSocket).mockImplementation(() => {
+        vi.mocked(WebSocket).mockImplementation(function () {
           setImmediate(() => {
             mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
             simulateSetupMessage(mockWs);
@@ -752,22 +776,22 @@ describe('GoogleLiveProvider', () => {
     });
 
     it('should handle stdout and stderr from the Python process', async () => {
-      const mockSpawn = jest.requireMock('child_process').spawn;
+      const mockSpawn = vi.mocked((await import('child_process')).spawn);
 
-      const mockStdout = { on: jest.fn() };
-      const mockStderr = { on: jest.fn() };
+      const mockStdout = { on: vi.fn() };
+      const mockStderr = { on: vi.fn() };
 
       mockSpawn.mockReturnValueOnce({
         stdout: mockStdout,
         stderr: mockStderr,
-        on: jest.fn(),
-        kill: jest.fn(),
+        on: vi.fn(),
+        kill: vi.fn(),
         killed: false,
-      });
+      } as any);
 
-      const validatePythonPathMock = jest.requireMock(
-        '../../../src/python/pythonUtils',
-      ).validatePythonPath;
+      const validatePythonPathMock = vi.mocked(
+        (await import('../../../src/python/pythonUtils')).validatePythonPath,
+      );
       validatePythonPathMock.mockResolvedValueOnce('python3');
 
       const providerWithStatefulApi = new GoogleLiveProvider('gemini-2.0-flash-exp', {
@@ -784,7 +808,7 @@ describe('GoogleLiveProvider', () => {
         },
       });
 
-      jest.mocked(WebSocket).mockImplementation(() => {
+      vi.mocked(WebSocket).mockImplementation(function () {
         setImmediate(() => {
           mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
           simulateSetupMessage(mockWs);
@@ -804,10 +828,10 @@ describe('GoogleLiveProvider', () => {
       const originalEnv = process.env.PROMPTFOO_PYTHON;
       process.env.PROMPTFOO_PYTHON = '/env/python3';
 
-      const mockSpawn = jest.requireMock('child_process').spawn;
-      const validatePythonPathMock = jest.requireMock(
-        '../../../src/python/pythonUtils',
-      ).validatePythonPath;
+      const mockSpawn = vi.mocked((await import('child_process')).spawn);
+      const validatePythonPathMock = vi.mocked(
+        (await import('../../../src/python/pythonUtils')).validatePythonPath,
+      );
       validatePythonPathMock.mockResolvedValueOnce('/env/python3');
 
       try {
@@ -825,7 +849,7 @@ describe('GoogleLiveProvider', () => {
           },
         });
 
-        jest.mocked(WebSocket).mockImplementation(() => {
+        vi.mocked(WebSocket).mockImplementation(function () {
           setImmediate(() => {
             mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
             simulateSetupMessage(mockWs);
@@ -853,19 +877,19 @@ describe('GoogleLiveProvider', () => {
 
     it('should properly clean up Python process on WebSocket close', async () => {
       const mockProcess = {
-        stdout: { on: jest.fn() },
-        stderr: { on: jest.fn() },
-        on: jest.fn(),
-        kill: jest.fn(),
+        stdout: { on: vi.fn() },
+        stderr: { on: vi.fn() },
+        on: vi.fn(),
+        kill: vi.fn(),
         killed: false,
       };
 
-      const mockSpawn = jest.requireMock('child_process').spawn;
-      mockSpawn.mockReturnValueOnce(mockProcess);
+      const mockSpawn = vi.mocked((await import('child_process')).spawn);
+      mockSpawn.mockReturnValueOnce(mockProcess as any);
 
-      const validatePythonPathMock = jest.requireMock(
-        '../../../src/python/pythonUtils',
-      ).validatePythonPath;
+      const validatePythonPathMock = vi.mocked(
+        (await import('../../../src/python/pythonUtils')).validatePythonPath,
+      );
       validatePythonPathMock.mockResolvedValueOnce('python3');
 
       const providerWithCleanup = new GoogleLiveProvider('gemini-2.0-flash-exp', {
@@ -882,7 +906,7 @@ describe('GoogleLiveProvider', () => {
         },
       });
 
-      jest.mocked(WebSocket).mockImplementation(() => {
+      vi.mocked(WebSocket).mockImplementation(function () {
         setImmediate(() => {
           mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
           simulateSetupMessage(mockWs);
@@ -916,7 +940,7 @@ describe('GoogleLiveProvider', () => {
         },
       });
 
-      jest.mocked(WebSocket).mockImplementation(() => {
+      vi.mocked(WebSocket).mockImplementation(function () {
         setImmediate(() => {
           mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
           // Trigger onclose immediately to resolve the promise
@@ -951,7 +975,7 @@ describe('GoogleLiveProvider', () => {
         },
       });
 
-      jest.mocked(WebSocket).mockImplementation(() => {
+      vi.mocked(WebSocket).mockImplementation(function () {
         setImmediate(() => {
           mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
           // Trigger onclose immediately to resolve the promise
@@ -990,7 +1014,7 @@ describe('GoogleLiveProvider', () => {
         },
       });
 
-      jest.mocked(WebSocket).mockImplementation(() => {
+      vi.mocked(WebSocket).mockImplementation(function () {
         setImmediate(() => {
           mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
           // Trigger onclose immediately to resolve the promise
@@ -1030,7 +1054,7 @@ describe('GoogleLiveProvider', () => {
         },
       });
 
-      jest.mocked(WebSocket).mockImplementation(() => {
+      vi.mocked(WebSocket).mockImplementation(function () {
         setImmediate(() => {
           mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
           // Trigger onclose immediately to resolve the promise
@@ -1074,7 +1098,7 @@ describe('GoogleLiveProvider', () => {
         },
       });
 
-      jest.mocked(WebSocket).mockImplementation(() => {
+      vi.mocked(WebSocket).mockImplementation(function () {
         setImmediate(() => {
           mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
           // Trigger onclose immediately to resolve the promise
@@ -1111,7 +1135,7 @@ describe('GoogleLiveProvider', () => {
         },
       });
 
-      jest.mocked(WebSocket).mockImplementation(() => {
+      vi.mocked(WebSocket).mockImplementation(function () {
         setImmediate(() => {
           mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
           // Trigger onclose immediately to resolve the promise
@@ -1145,12 +1169,12 @@ describe('GoogleLiveProvider', () => {
     });
 
     afterEach(() => {
-      jest.clearAllMocks();
+      vi.clearAllMocks();
       cliState.basePath = undefined;
     });
 
     it('should load and execute external function callbacks from file', async () => {
-      jest.mocked(WebSocket).mockImplementation(() => {
+      vi.mocked(WebSocket).mockImplementation(function () {
         setImmediate(() => {
           mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
           simulateSetupMessage(mockWs);
@@ -1164,7 +1188,7 @@ describe('GoogleLiveProvider', () => {
       });
 
       // Mock importModule to return our test function
-      const mockExternalFunction = jest.fn().mockResolvedValue('External function result');
+      const mockExternalFunction = vi.fn().mockResolvedValue('External function result');
       mockImportModule.mockResolvedValue(mockExternalFunction);
 
       provider = new GoogleLiveProvider('gemini-2.0-flash-exp', {
@@ -1204,7 +1228,7 @@ describe('GoogleLiveProvider', () => {
     });
 
     it('should cache external functions and not reload them on subsequent calls', async () => {
-      jest.mocked(WebSocket).mockImplementation(() => {
+      vi.mocked(WebSocket).mockImplementation(function () {
         setImmediate(() => {
           mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
           simulateSetupMessage(mockWs);
@@ -1217,7 +1241,7 @@ describe('GoogleLiveProvider', () => {
         return mockWs;
       });
 
-      const mockCachedFunction = jest.fn().mockResolvedValue('Cached result');
+      const mockCachedFunction = vi.fn().mockResolvedValue('Cached result');
       mockImportModule.mockResolvedValue(mockCachedFunction);
 
       provider = new GoogleLiveProvider('gemini-2.0-flash-exp', {
@@ -1253,7 +1277,7 @@ describe('GoogleLiveProvider', () => {
       expect(result1.output.text).toBe('Cached result');
 
       // Reset WebSocket mock for second call
-      jest.mocked(WebSocket).mockImplementation(() => {
+      vi.mocked(WebSocket).mockImplementation(function () {
         setImmediate(() => {
           mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
           simulateSetupMessage(mockWs);
@@ -1274,7 +1298,7 @@ describe('GoogleLiveProvider', () => {
     });
 
     it('should handle errors in external function loading gracefully', async () => {
-      jest.mocked(WebSocket).mockImplementation(() => {
+      vi.mocked(WebSocket).mockImplementation(function () {
         setImmediate(() => {
           mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
           simulateSetupMessage(mockWs);
@@ -1326,7 +1350,7 @@ describe('GoogleLiveProvider', () => {
     });
 
     it('should handle mixed inline and external function callbacks', async () => {
-      jest.mocked(WebSocket).mockImplementation(() => {
+      vi.mocked(WebSocket).mockImplementation(function () {
         setImmediate(() => {
           mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
           simulateSetupMessage(mockWs);
@@ -1344,8 +1368,8 @@ describe('GoogleLiveProvider', () => {
         return mockWs;
       });
 
-      const mockInlineFunction = jest.fn().mockResolvedValue('Inline result');
-      const mockExternalFunction = jest.fn().mockResolvedValue('External result');
+      const mockInlineFunction = vi.fn().mockResolvedValue('Inline result');
+      const mockExternalFunction = vi.fn().mockResolvedValue('External result');
       mockImportModule.mockResolvedValue(mockExternalFunction);
 
       provider = new GoogleLiveProvider('gemini-2.0-flash-exp', {
@@ -1395,17 +1419,11 @@ describe('GoogleLiveProvider', () => {
   });
 
   describe('fetchJson', () => {
-    const mockFetchWithProxy = jest.mocked(fetchModule.fetchWithProxy);
-
-    beforeEach(() => {
-      mockFetchWithProxy.mockReset();
-    });
-
     it('should successfully fetch and parse JSON', async () => {
       const mockData = { success: true, data: 'test data' };
       mockFetchWithProxy.mockResolvedValue({
         ok: true,
-        json: jest.fn().mockResolvedValue(mockData),
+        json: vi.fn().mockResolvedValue(mockData),
       } as any);
 
       const result = await fetchJson('https://example.com/api');
@@ -1424,7 +1442,7 @@ describe('GoogleLiveProvider', () => {
 
       mockFetchWithProxy.mockResolvedValue({
         ok: true,
-        json: jest.fn().mockResolvedValue(mockData),
+        json: vi.fn().mockResolvedValue(mockData),
       } as any);
 
       const result = await fetchJson('https://example.com/api', options);
@@ -1437,7 +1455,7 @@ describe('GoogleLiveProvider', () => {
       mockFetchWithProxy.mockResolvedValue({
         ok: false,
         status: 404,
-        json: jest.fn(),
+        json: vi.fn(),
       } as any);
 
       await expect(fetchJson('https://example.com/api')).rejects.toThrow(
@@ -1449,7 +1467,7 @@ describe('GoogleLiveProvider', () => {
       mockFetchWithProxy.mockResolvedValue({
         ok: false,
         status: 500,
-        json: jest.fn(),
+        json: vi.fn(),
       } as any);
 
       await expect(fetchJson('https://example.com/api')).rejects.toThrow(
@@ -1466,17 +1484,11 @@ describe('GoogleLiveProvider', () => {
   });
 
   describe('tryGetThenPost', () => {
-    const mockFetchWithProxy = jest.mocked(fetchModule.fetchWithProxy);
-
-    beforeEach(() => {
-      mockFetchWithProxy.mockReset();
-    });
-
     it('should successfully fetch with GET when no data provided', async () => {
       const mockData = { result: 'success' };
       mockFetchWithProxy.mockResolvedValue({
         ok: true,
-        json: jest.fn().mockResolvedValue(mockData),
+        json: vi.fn().mockResolvedValue(mockData),
       } as any);
 
       const result = await tryGetThenPost('https://example.com/api');
@@ -1491,7 +1503,7 @@ describe('GoogleLiveProvider', () => {
       const data = { param1: 'value1', param2: 'value2' };
       mockFetchWithProxy.mockResolvedValue({
         ok: true,
-        json: jest.fn().mockResolvedValue(mockData),
+        json: vi.fn().mockResolvedValue(mockData),
       } as any);
 
       const result = await tryGetThenPost('https://example.com/api', data);
@@ -1509,7 +1521,7 @@ describe('GoogleLiveProvider', () => {
       const data = '{"param1":"value1","param2":"value2"}';
       mockFetchWithProxy.mockResolvedValue({
         ok: true,
-        json: jest.fn().mockResolvedValue(mockData),
+        json: vi.fn().mockResolvedValue(mockData),
       } as any);
 
       const result = await tryGetThenPost('https://example.com/api', data);
@@ -1532,7 +1544,7 @@ describe('GoogleLiveProvider', () => {
         // Second call (POST) succeeds
         .mockResolvedValueOnce({
           ok: true,
-          json: jest.fn().mockResolvedValue(mockData),
+          json: vi.fn().mockResolvedValue(mockData),
         } as any);
 
       const result = await tryGetThenPost('https://example.com/api', data);
@@ -1564,12 +1576,12 @@ describe('GoogleLiveProvider', () => {
         .mockResolvedValueOnce({
           ok: false,
           status: 404,
-          json: jest.fn(),
+          json: vi.fn(),
         } as any)
         // Second call (POST) succeeds
         .mockResolvedValueOnce({
           ok: true,
-          json: jest.fn().mockResolvedValue(mockData),
+          json: vi.fn().mockResolvedValue(mockData),
         } as any);
 
       const result = await tryGetThenPost('https://example.com/api', data);
@@ -1591,7 +1603,7 @@ describe('GoogleLiveProvider', () => {
 
       mockFetchWithProxy.mockRejectedValueOnce(new Error('GET failed')).mockResolvedValueOnce({
         ok: true,
-        json: jest.fn().mockResolvedValue(mockData),
+        json: vi.fn().mockResolvedValue(mockData),
       } as any);
 
       const result = await tryGetThenPost('https://example.com/api', data);
@@ -1611,7 +1623,7 @@ describe('GoogleLiveProvider', () => {
 
       mockFetchWithProxy.mockRejectedValueOnce(new Error('GET failed')).mockResolvedValueOnce({
         ok: true,
-        json: jest.fn().mockResolvedValue(mockData),
+        json: vi.fn().mockResolvedValue(mockData),
       } as any);
 
       const result = await tryGetThenPost('https://example.com/api');
@@ -1636,7 +1648,7 @@ describe('GoogleLiveProvider', () => {
       };
       mockFetchWithProxy.mockResolvedValue({
         ok: true,
-        json: jest.fn().mockResolvedValue(mockData),
+        json: vi.fn().mockResolvedValue(mockData),
       } as any);
 
       const result = await tryGetThenPost('https://example.com/api', data);

@@ -1,3 +1,4 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   mapBedrockModelIdToApiName,
   getPricingData,
@@ -7,32 +8,38 @@ import {
 } from '../../../src/providers/bedrock/pricingFetcher';
 
 // Mock the cache module
-jest.mock('../../../src/cache', () => ({
-  getCache: jest.fn(),
-  isCacheEnabled: jest.fn(),
+vi.mock('../../../src/cache', () => ({
+  getCache: vi.fn(),
+  isCacheEnabled: vi.fn(),
 }));
 
 // Mock the logger
-jest.mock('../../../src/logger', () => ({
-  debug: jest.fn(),
-  warn: jest.fn(),
-  error: jest.fn(),
+vi.mock('../../../src/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
 }));
 
 // Mock the AWS Pricing client
-jest.mock('@aws-sdk/client-pricing', () => ({
-  PricingClient: jest.fn().mockImplementation(() => ({
-    send: jest.fn(),
+vi.mock('@aws-sdk/client-pricing', () => ({
+  PricingClient: vi.fn().mockImplementation(() => ({
+    send: vi.fn(),
   })),
-  GetProductsCommand: jest.fn(),
+  GetProductsCommand: vi.fn(),
 }));
 
-const { getCache, isCacheEnabled } = jest.requireMock('../../../src/cache');
-const { PricingClient, GetProductsCommand } = jest.requireMock('@aws-sdk/client-pricing');
+import { getCache, isCacheEnabled } from '../../../src/cache';
+import { PricingClient } from '@aws-sdk/client-pricing';
+
+const mockGetCache = vi.mocked(getCache);
+const mockIsCacheEnabled = vi.mocked(isCacheEnabled);
+const MockPricingClient = vi.mocked(PricingClient);
 
 describe('pricingFetcher', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('mapBedrockModelIdToApiName', () => {
@@ -281,12 +288,12 @@ describe('pricingFetcher', () => {
       };
 
       const mockCache = {
-        get: jest.fn().mockResolvedValue(JSON.stringify(cachedData)),
-        set: jest.fn(),
+        get: vi.fn().mockResolvedValue(JSON.stringify(cachedData)),
+        set: vi.fn(),
       };
 
-      getCache.mockResolvedValue(mockCache);
-      isCacheEnabled.mockReturnValue(true);
+      mockGetCache.mockResolvedValue(mockCache as any);
+      mockIsCacheEnabled.mockReturnValue(true);
 
       const result = await getPricingData('us-east-1');
 
@@ -298,28 +305,31 @@ describe('pricingFetcher', () => {
       });
 
       // Should not call the pricing API
-      expect(PricingClient).not.toHaveBeenCalled();
+      expect(MockPricingClient).not.toHaveBeenCalled();
     });
 
     it('should fetch from API when cache is expired', async () => {
+      // Use a unique region to avoid module-level cache interference
+      const testRegion = 'eu-west-1';
+
       // Cache data from 5 hours ago (beyond 4-hour TTL)
       const expiredDate = new Date(Date.now() - 5 * 60 * 60 * 1000);
       const cachedData = {
         models: [['Nova Micro', { input: 0.000000035, output: 0.00000014 }]],
-        region: 'us-east-1',
+        region: testRegion,
         fetchedAt: expiredDate.toISOString(),
       };
 
       const mockCache = {
-        get: jest.fn().mockResolvedValue(JSON.stringify(cachedData)),
-        set: jest.fn(),
+        get: vi.fn().mockResolvedValue(JSON.stringify(cachedData)),
+        set: vi.fn(),
       };
 
-      getCache.mockResolvedValue(mockCache);
-      isCacheEnabled.mockReturnValue(true);
+      mockGetCache.mockResolvedValue(mockCache as any);
+      mockIsCacheEnabled.mockReturnValue(true);
 
-      // Mock API response
-      const mockSend = jest.fn().mockResolvedValue({
+      // Mock API response with both input and output pricing
+      const mockSend = vi.fn().mockResolvedValue({
         PriceList: [
           JSON.stringify({
             product: {
@@ -341,52 +351,79 @@ describe('pricingFetcher', () => {
               },
             },
           }),
+          JSON.stringify({
+            product: {
+              attributes: {
+                model: 'Nova Micro',
+                inferenceType: 'Output tokens',
+                feature: 'On-demand Inference',
+              },
+            },
+            terms: {
+              OnDemand: {
+                term1: {
+                  priceDimensions: {
+                    dim1: {
+                      pricePerUnit: { USD: '0.14' },
+                    },
+                  },
+                },
+              },
+            },
+          }),
         ],
         NextToken: undefined,
       });
 
-      PricingClient.mockImplementation(() => ({
-        send: mockSend,
-      }));
+      MockPricingClient.mockImplementation(function () {
+        return {
+          send: mockSend,
+        };
+      } as any);
 
-      const result = await getPricingData('us-east-1');
+      const result = await getPricingData(testRegion);
 
       expect(result).not.toBeNull();
-      expect(PricingClient).toHaveBeenCalled();
+      expect(MockPricingClient).toHaveBeenCalled();
     });
 
     it('should return null when cache is disabled and API fails', async () => {
+      // Use a unique region to avoid module-level cache interference
+      const testRegion = 'ap-southeast-1';
+
       const mockCache = {
-        get: jest.fn().mockResolvedValue(null),
-        set: jest.fn(),
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn(),
       };
 
-      getCache.mockResolvedValue(mockCache);
-      isCacheEnabled.mockReturnValue(false);
+      mockGetCache.mockResolvedValue(mockCache as any);
+      mockIsCacheEnabled.mockReturnValue(false);
 
       // Mock API failure
-      const mockSend = jest.fn().mockRejectedValue(new Error('API Error'));
+      const mockSend = vi.fn().mockRejectedValue(new Error('API Error'));
 
-      PricingClient.mockImplementation(() => ({
-        send: mockSend,
-      }));
+      MockPricingClient.mockImplementation(function () {
+        return {
+          send: mockSend,
+        };
+      } as any);
 
-      const result = await getPricingData('us-east-1');
+      const result = await getPricingData(testRegion);
 
       expect(result).toBeNull();
     });
 
     it('should handle concurrent requests to same region', async () => {
       const mockCache = {
-        get: jest.fn().mockResolvedValue(null),
-        set: jest.fn(),
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn(),
       };
 
-      getCache.mockResolvedValue(mockCache);
-      isCacheEnabled.mockReturnValue(true);
+      mockGetCache.mockResolvedValue(mockCache as any);
+      mockIsCacheEnabled.mockReturnValue(true);
 
       // Mock API response with a delay
-      const mockSend = jest.fn().mockImplementation(
+      const mockSend = vi.fn().mockImplementation(
         () =>
           new Promise((resolve) => {
             setTimeout(() => {
@@ -419,9 +456,11 @@ describe('pricingFetcher', () => {
           }),
       );
 
-      PricingClient.mockImplementation(() => ({
-        send: mockSend,
-      }));
+      MockPricingClient.mockImplementation(function () {
+        return {
+          send: mockSend,
+        };
+      } as any);
 
       // Make concurrent requests
       const promise1 = getPricingData('us-west-2');
@@ -436,7 +475,7 @@ describe('pricingFetcher', () => {
 
       // API should only be called once due to deduplication
       // (PricingClient is instantiated once per concurrent batch)
-      expect(PricingClient).toHaveBeenCalledTimes(1);
+      expect(MockPricingClient).toHaveBeenCalledTimes(1);
     });
   });
 });

@@ -1,15 +1,16 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { resolveContext } from '../../src/assertions/contextUtils';
 import * as transformUtil from '../../src/util/transform';
 
 import type { Assertion, AtomicTestCase } from '../../src/types/index';
 
-jest.mock('../../src/util/transform');
+vi.mock('../../src/util/transform');
 
 describe('resolveContext', () => {
-  const mockTransform = jest.mocked(transformUtil.transform);
+  const mockTransform = vi.mocked(transformUtil.transform);
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('with context variable', () => {

@@ -1,3 +1,4 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Command } from 'commander';
 import {
   createAndDisplayShareableModelAuditUrl,
@@ -17,24 +18,29 @@ import {
 } from '../../src/share';
 import { loadDefaultConfig } from '../../src/util/config/default';
 
-jest.mock('../../src/share');
-jest.mock('../../src/logger');
-jest.mock('../../src/telemetry', () => ({
-  record: jest.fn(),
-  send: jest.fn(),
+vi.mock('../../src/share');
+vi.mock('../../src/logger');
+vi.mock('../../src/telemetry', () => ({
+  default: {
+    record: vi.fn(),
+    send: vi.fn(),
+  },
 }));
-jest.mock('../../src/envars');
-jest.mock('readline');
-jest.mock('../../src/models/eval');
-jest.mock('../../src/models/modelAudit');
-jest.mock('../../src/util', () => ({
-  setupEnv: jest.fn(),
-}));
-jest.mock('../../src/util/config/default');
+vi.mock('../../src/envars');
+vi.mock('readline');
+vi.mock('../../src/models/eval');
+vi.mock('../../src/models/modelAudit');
+vi.mock('../../src/util', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    setupEnv: vi.fn(),
+  };
+});
+vi.mock('../../src/util/config/default');
 
 describe('Share Command', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     process.exitCode = 0; // Reset exitCode before each test
   });
 
@@ -51,11 +57,13 @@ describe('Share Command', () => {
 
   describe('createAndDisplayShareableUrl', () => {
     it('should return a URL and log it when successful', async () => {
-      jest.mocked(isSharingEnabled).mockReturnValue(true);
+      vi.mocked(isSharingEnabled).mockImplementation(function () {
+        return true;
+      });
       const mockEval = { id: 'test-eval-id' } as Eval;
       const mockUrl = 'https://app.promptfoo.dev/eval/test-eval-id';
 
-      jest.mocked(createShareableUrl).mockResolvedValue(mockUrl);
+      vi.mocked(createShareableUrl).mockResolvedValue(mockUrl);
 
       const result = await createAndDisplayShareableUrl(mockEval, false);
 
@@ -68,7 +76,7 @@ describe('Share Command', () => {
       const mockEval = { id: 'test-eval-id' } as Eval;
       const mockUrl = 'https://app.promptfoo.dev/eval/test-eval-id';
 
-      jest.mocked(createShareableUrl).mockResolvedValue(mockUrl);
+      vi.mocked(createShareableUrl).mockResolvedValue(mockUrl);
 
       await createAndDisplayShareableUrl(mockEval, true);
 
@@ -78,8 +86,10 @@ describe('Share Command', () => {
     it('should return null when createShareableUrl returns null', async () => {
       const mockEval = { id: 'test-eval-id' } as Eval;
 
-      jest.mocked(isSharingEnabled).mockReturnValue(true);
-      jest.mocked(createShareableUrl).mockResolvedValue(null);
+      vi.mocked(isSharingEnabled).mockImplementation(function () {
+        return true;
+      });
+      vi.mocked(createShareableUrl).mockResolvedValue(null);
 
       const result = await createAndDisplayShareableUrl(mockEval, false);
 
@@ -101,7 +111,7 @@ describe('Share Command', () => {
       } as ModelAudit;
       const mockUrl = 'https://app.promptfoo.dev/model-audit/test-audit-id';
 
-      jest.mocked(createShareableModelAuditUrl).mockResolvedValue(mockUrl);
+      vi.mocked(createShareableModelAuditUrl).mockResolvedValue(mockUrl);
 
       const result = await createAndDisplayShareableModelAuditUrl(mockAudit, false);
 
@@ -118,7 +128,7 @@ describe('Share Command', () => {
       } as ModelAudit;
       const mockUrl = 'https://app.promptfoo.dev/model-audit/test-audit-id';
 
-      jest.mocked(createShareableModelAuditUrl).mockResolvedValue(mockUrl);
+      vi.mocked(createShareableModelAuditUrl).mockResolvedValue(mockUrl);
 
       await createAndDisplayShareableModelAuditUrl(mockAudit, true);
 
@@ -132,7 +142,7 @@ describe('Share Command', () => {
         results: {},
       } as ModelAudit;
 
-      jest.mocked(createShareableModelAuditUrl).mockResolvedValue(null);
+      vi.mocked(createShareableModelAuditUrl).mockResolvedValue(null);
 
       const result = await createAndDisplayShareableModelAuditUrl(mockAudit, false);
 
@@ -149,7 +159,7 @@ describe('Share Command', () => {
     let program: Command;
 
     beforeEach(() => {
-      jest.clearAllMocks();
+      vi.clearAllMocks();
       program = new Command();
       shareCommand(program);
     });
@@ -174,11 +184,13 @@ describe('Share Command', () => {
         results: {},
       } as ModelAudit;
 
-      jest.spyOn(ModelAudit, 'findById').mockResolvedValue(mockAudit);
-      jest.mocked(isModelAuditSharingEnabled).mockReturnValue(true);
-      jest
-        .mocked(createShareableModelAuditUrl)
-        .mockResolvedValue('https://example.com/model-audit/scan-test-123');
+      vi.spyOn(ModelAudit, 'findById').mockResolvedValue(mockAudit);
+      vi.mocked(isModelAuditSharingEnabled).mockImplementation(function () {
+        return true;
+      });
+      vi.mocked(createShareableModelAuditUrl).mockResolvedValue(
+        'https://example.com/model-audit/scan-test-123',
+      );
 
       const shareCmd = program.commands.find((c) => c.name() === 'share');
       await shareCmd?.parseAsync(['node', 'test', 'scan-test-123']);
@@ -198,9 +210,11 @@ describe('Share Command', () => {
         config: {},
       } as unknown as Eval;
 
-      jest.spyOn(Eval, 'findById').mockResolvedValue(mockEval);
-      jest.mocked(isSharingEnabled).mockReturnValue(true);
-      jest.mocked(createShareableUrl).mockResolvedValue('https://example.com/eval/eval-test-123');
+      vi.spyOn(Eval, 'findById').mockResolvedValue(mockEval);
+      vi.mocked(isSharingEnabled).mockImplementation(function () {
+        return true;
+      });
+      vi.mocked(createShareableUrl).mockResolvedValue('https://example.com/eval/eval-test-123');
 
       const shareCmd = program.commands.find((c) => c.name() === 'share');
       await shareCmd?.parseAsync(['node', 'test', 'eval-test-123']);
@@ -225,12 +239,14 @@ describe('Share Command', () => {
         results: {},
       } as ModelAudit;
 
-      jest.spyOn(Eval, 'latest').mockResolvedValue(mockEval);
-      jest.spyOn(ModelAudit, 'latest').mockResolvedValue(mockAudit);
-      jest.mocked(isModelAuditSharingEnabled).mockReturnValue(true);
-      jest
-        .mocked(createShareableModelAuditUrl)
-        .mockResolvedValue('https://example.com/model-audit/scan-new');
+      vi.spyOn(Eval, 'latest').mockResolvedValue(mockEval);
+      vi.spyOn(ModelAudit, 'latest').mockResolvedValue(mockAudit);
+      vi.mocked(isModelAuditSharingEnabled).mockImplementation(function () {
+        return true;
+      });
+      vi.mocked(createShareableModelAuditUrl).mockResolvedValue(
+        'https://example.com/model-audit/scan-new',
+      );
 
       const shareCmd = program.commands.find((c) => c.name() === 'share');
       await shareCmd?.parseAsync(['node', 'test']);
@@ -256,10 +272,12 @@ describe('Share Command', () => {
         results: {},
       } as ModelAudit;
 
-      jest.spyOn(Eval, 'latest').mockResolvedValue(mockEval);
-      jest.spyOn(ModelAudit, 'latest').mockResolvedValue(mockAudit);
-      jest.mocked(isSharingEnabled).mockReturnValue(true);
-      jest.mocked(createShareableUrl).mockResolvedValue('https://example.com/eval/eval-new');
+      vi.spyOn(Eval, 'latest').mockResolvedValue(mockEval);
+      vi.spyOn(ModelAudit, 'latest').mockResolvedValue(mockAudit);
+      vi.mocked(isSharingEnabled).mockImplementation(function () {
+        return true;
+      });
+      vi.mocked(createShareableUrl).mockResolvedValue('https://example.com/eval/eval-new');
 
       const shareCmd = program.commands.find((c) => c.name() === 'share');
       await shareCmd?.parseAsync(['node', 'test']);
@@ -271,7 +289,7 @@ describe('Share Command', () => {
     });
 
     it('should handle scan- prefixed model audit not found', async () => {
-      jest.spyOn(ModelAudit, 'findById').mockResolvedValue(null);
+      vi.spyOn(ModelAudit, 'findById').mockResolvedValue(null);
 
       const shareCmd = program.commands.find((c) => c.name() === 'share');
       await shareCmd?.parseAsync(['node', 'test', 'scan-non-existent']);
@@ -284,8 +302,8 @@ describe('Share Command', () => {
     });
 
     it('should handle no evals or model audits available', async () => {
-      jest.spyOn(Eval, 'latest').mockResolvedValue(undefined);
-      jest.spyOn(ModelAudit, 'latest').mockResolvedValue(undefined);
+      vi.spyOn(Eval, 'latest').mockResolvedValue(undefined);
+      vi.spyOn(ModelAudit, 'latest').mockResolvedValue(undefined);
 
       const shareCmd = program.commands.find((c) => c.name() === 'share');
       await shareCmd?.parseAsync(['node', 'test']);
@@ -297,7 +315,7 @@ describe('Share Command', () => {
     });
 
     it('should handle specific eval ID not found', async () => {
-      jest.spyOn(Eval, 'findById').mockResolvedValue(undefined);
+      vi.spyOn(Eval, 'findById').mockResolvedValue(undefined);
 
       const shareCmd = program.commands.find((c) => c.name() === 'share');
       await shareCmd?.parseAsync(['node', 'test', 'eval-non-existent']);
@@ -320,8 +338,8 @@ describe('Share Command', () => {
         createdAt: 1000,
       } as ModelAudit;
 
-      jest.spyOn(Eval, 'latest').mockResolvedValue(mockEval);
-      jest.spyOn(ModelAudit, 'latest').mockResolvedValue(mockAudit);
+      vi.spyOn(Eval, 'latest').mockResolvedValue(mockEval);
+      vi.spyOn(ModelAudit, 'latest').mockResolvedValue(mockAudit);
 
       const shareCmd = program.commands.find((c) => c.name() === 'share');
       await shareCmd?.parseAsync(['node', 'test']);
@@ -344,10 +362,12 @@ describe('Share Command', () => {
         createdAt: 1000,
       } as ModelAudit;
 
-      jest.spyOn(Eval, 'latest').mockResolvedValue(mockEval);
-      jest.spyOn(ModelAudit, 'latest').mockResolvedValue(mockAudit);
-      jest.mocked(isSharingEnabled).mockReturnValue(true);
-      jest.mocked(createShareableUrl).mockResolvedValue('https://example.com/share');
+      vi.spyOn(Eval, 'latest').mockResolvedValue(mockEval);
+      vi.spyOn(ModelAudit, 'latest').mockResolvedValue(mockAudit);
+      vi.mocked(isSharingEnabled).mockImplementation(function () {
+        return true;
+      });
+      vi.mocked(createShareableUrl).mockResolvedValue('https://example.com/share');
 
       const shareCmd = program.commands.find((c) => c.name() === 'share');
       await shareCmd?.parseAsync(['node', 'test', '-y']);
@@ -359,7 +379,9 @@ describe('Share Command', () => {
     });
 
     it('should use promptfoo.app by default if no environment variables are set', () => {
-      jest.mocked(envars.getEnvString).mockImplementation(() => '');
+      vi.mocked(envars.getEnvString).mockImplementation(function () {
+        return '';
+      });
 
       const baseUrl =
         envars.getEnvString('PROMPTFOO_SHARING_APP_BASE_URL') ||
@@ -370,7 +392,7 @@ describe('Share Command', () => {
     });
 
     it('should use PROMPTFOO_SHARING_APP_BASE_URL for hostname when set', () => {
-      jest.mocked(envars.getEnvString).mockImplementation((key) => {
+      vi.mocked(envars.getEnvString).mockImplementation(function (key) {
         if (key === 'PROMPTFOO_SHARING_APP_BASE_URL') {
           return 'https://custom-domain.com';
         }
@@ -386,7 +408,7 @@ describe('Share Command', () => {
     });
 
     it('should use PROMPTFOO_REMOTE_APP_BASE_URL for hostname when PROMPTFOO_SHARING_APP_BASE_URL is not set', () => {
-      jest.mocked(envars.getEnvString).mockImplementation((key) => {
+      vi.mocked(envars.getEnvString).mockImplementation(function (key) {
         if (key === 'PROMPTFOO_REMOTE_APP_BASE_URL') {
           return 'https://self-hosted-domain.com';
         }
@@ -402,7 +424,7 @@ describe('Share Command', () => {
     });
 
     it('should prioritize PROMPTFOO_SHARING_APP_BASE_URL over PROMPTFOO_REMOTE_APP_BASE_URL', () => {
-      jest.mocked(envars.getEnvString).mockImplementation((key) => {
+      vi.mocked(envars.getEnvString).mockImplementation(function (key) {
         if (key === 'PROMPTFOO_SHARING_APP_BASE_URL') {
           return 'https://sharing-domain.com';
         }
@@ -426,35 +448,35 @@ describe('Share Command', () => {
         prompts: ['test prompt'],
         config: {},
         createdAt: 2000,
-        save: jest.fn().mockResolvedValue(undefined),
+        save: vi.fn().mockResolvedValue(undefined),
       } as unknown as Eval;
       const mockAudit = {
         id: 'scan-old',
         createdAt: 1000,
       } as ModelAudit;
 
-      jest.spyOn(Eval, 'latest').mockResolvedValue(mockEval);
-      jest.spyOn(ModelAudit, 'latest').mockResolvedValue(mockAudit);
+      vi.spyOn(Eval, 'latest').mockResolvedValue(mockEval);
+      vi.spyOn(ModelAudit, 'latest').mockResolvedValue(mockAudit);
 
       const mockSharing = {
         apiBaseUrl: 'https://custom-api.example.com',
         appBaseUrl: 'https://custom-app.example.com',
       };
 
-      jest.mocked(loadDefaultConfig).mockResolvedValue({
+      vi.mocked(loadDefaultConfig).mockResolvedValue({
         defaultConfig: {
           sharing: mockSharing,
         },
         defaultConfigPath: 'promptfooconfig.yaml',
       });
 
-      jest.mocked(isSharingEnabled).mockImplementation((evalObj) => {
+      vi.mocked(isSharingEnabled).mockImplementation(function (evalObj) {
         return !!evalObj.config.sharing;
       });
 
-      jest
-        .mocked(createShareableUrl)
-        .mockResolvedValue('https://custom-app.example.com/eval/test-eval-id');
+      vi.mocked(createShareableUrl).mockResolvedValue(
+        'https://custom-app.example.com/eval/test-eval-id',
+      );
 
       const shareCmd = program.commands.find((c) => c.name() === 'share');
       await shareCmd?.parseAsync(['node', 'test']);
@@ -477,10 +499,12 @@ describe('Share Command', () => {
         createdAt: 1000,
       } as ModelAudit;
 
-      jest.spyOn(Eval, 'latest').mockResolvedValue(mockEval);
-      jest.spyOn(ModelAudit, 'latest').mockResolvedValue(mockAudit);
-      jest.mocked(isSharingEnabled).mockReturnValue(false);
-      jest.mocked(loadDefaultConfig).mockResolvedValue({
+      vi.spyOn(Eval, 'latest').mockResolvedValue(mockEval);
+      vi.spyOn(ModelAudit, 'latest').mockResolvedValue(mockAudit);
+      vi.mocked(isSharingEnabled).mockImplementation(function () {
+        return false;
+      });
+      vi.mocked(loadDefaultConfig).mockResolvedValue({
         defaultConfig: {},
         defaultConfigPath: 'promptfooconfig.yaml',
       });
@@ -506,12 +530,14 @@ describe('Share Command', () => {
         createdAt: 1000,
       } as ModelAudit;
 
-      jest.spyOn(Eval, 'latest').mockResolvedValue(mockEval);
-      jest.spyOn(ModelAudit, 'latest').mockResolvedValue(mockAudit);
-      jest.mocked(isSharingEnabled).mockReturnValue(true);
-      jest
-        .mocked(createShareableUrl)
-        .mockResolvedValue('https://app.promptfoo.dev/eval/test-eval-id');
+      vi.spyOn(Eval, 'latest').mockResolvedValue(mockEval);
+      vi.spyOn(ModelAudit, 'latest').mockResolvedValue(mockAudit);
+      vi.mocked(isSharingEnabled).mockImplementation(function () {
+        return true;
+      });
+      vi.mocked(createShareableUrl).mockResolvedValue(
+        'https://app.promptfoo.dev/eval/test-eval-id',
+      );
 
       const shareCmd = program.commands.find((c) => c.name() === 'share');
       await shareCmd?.parseAsync(['node', 'test']);
@@ -528,11 +554,13 @@ describe('Share Command', () => {
         config: { sharing: true },
       } as unknown as Eval;
 
-      jest.spyOn(Eval, 'findById').mockResolvedValue(mockEval);
-      jest.mocked(isSharingEnabled).mockReturnValue(true);
-      jest
-        .mocked(createShareableUrl)
-        .mockResolvedValue('https://app.promptfoo.dev/eval/specific-eval-id');
+      vi.spyOn(Eval, 'findById').mockResolvedValue(mockEval);
+      vi.mocked(isSharingEnabled).mockImplementation(function () {
+        return true;
+      });
+      vi.mocked(createShareableUrl).mockResolvedValue(
+        'https://app.promptfoo.dev/eval/specific-eval-id',
+      );
 
       const shareCmd = program.commands.find((c) => c.name() === 'share');
       await shareCmd?.parseAsync(['node', 'test', 'specific-eval-id']);

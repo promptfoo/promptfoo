@@ -79,6 +79,43 @@ export function calculateCost(
 }
 
 /**
+ * Checks if a string looks like it's attempting to be JSON.
+ * This helps distinguish between actual JSON attempts and plain text that happens to start/end with brackets.
+ */
+function looksLikeJson(prompt: string): boolean {
+  const trimmed = prompt.trim();
+
+  // Objects starting with { are almost always JSON
+  if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+    return true;
+  }
+
+  // Arrays starting with [ need more careful checking
+  if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+    // Check if the character after [ suggests it's JSON
+    // Valid JSON array starts: ", {, [, whitespace, number, or true/false/null
+    const afterBracket = trimmed.slice(1).trimStart();
+    if (
+      afterBracket.startsWith('"') ||
+      afterBracket.startsWith('{') ||
+      afterBracket.startsWith('[') ||
+      /^[\d-]/.test(afterBracket) || // number
+      /^(true|false|null)/.test(afterBracket) // boolean or null
+    ) {
+      return true;
+    }
+    // If it's just whitespace or empty, it might be JSON
+    if (afterBracket.length === 0 || /^\s+$/.test(afterBracket)) {
+      return true;
+    }
+    // Otherwise, it's likely plain text (e.g., [INST]...[/INST])
+    return false;
+  }
+
+  return false;
+}
+
+/**
  * Parses a chat prompt string into a structured format.
  *
  * @template T The expected return type of the parsed prompt.
@@ -101,11 +138,7 @@ export function parseChatPrompt<T>(prompt: string, defaultValue: T): T {
       // Try JSON
       return JSON.parse(prompt) as T;
     } catch (err) {
-      if (
-        getEnvBool('PROMPTFOO_REQUIRE_JSON_PROMPTS') ||
-        (trimmedPrompt.startsWith('{') && trimmedPrompt.endsWith('}')) ||
-        (trimmedPrompt.startsWith('[') && trimmedPrompt.endsWith(']'))
-      ) {
+      if (getEnvBool('PROMPTFOO_REQUIRE_JSON_PROMPTS') || looksLikeJson(trimmedPrompt)) {
         throw new Error(`Chat Completion prompt is not a valid JSON string: ${err}\n\n${prompt}`);
       }
       // Fall back to the provided default value

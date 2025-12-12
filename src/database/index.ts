@@ -107,3 +107,14 @@ export function closeDb() {
 export function isDbOpen(): boolean {
   return sqliteInstance !== null && dbInstance !== null;
 }
+
+/**
+ * Close database connection if it's currently open
+ * Safe to call even if database was never opened
+ * Should be called during graceful shutdown to prevent event loop hanging
+ */
+export function closeDbIfOpen(): void {
+  if (sqliteInstance) {
+    closeDb();
+  }
+}

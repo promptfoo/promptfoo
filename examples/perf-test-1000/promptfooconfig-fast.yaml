@@ -1,0 +1,22 @@
+# Performance Test: Fast version (single provider, no delay)
+#
+# Usage:
+#   npm run local -- eval -c examples/perf-test-1000/promptfooconfig-fast.yaml --no-cache
+
+description: 'Performance test - fast single provider'
+
+prompts:
+  - '{{input}}'
+
+providers:
+  - id: echo
+    label: 'Echo'
+
+tests:
+  - path: file://generate_tests.py:create_tests
+    config:
+      num_tests: 1000
+      seed: 42
+
+evaluateOptions:
+  maxConcurrency: 50  # High concurrency since echo is instant
