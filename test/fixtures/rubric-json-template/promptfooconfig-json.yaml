@@ -1,0 +1,18 @@
+description: 'Bug demo - JSON rubric template'
+
+prompts:
+  - 'summarize this form value in 10 words: {{ form }}'
+
+providers:
+  - id: echo
+
+tests:
+  - vars:
+      form: |
+        title: "bug report"
+        description: "I found a bug: the system crashed."
+    assert:
+      - type: llm-rubric
+        rubricPrompt: file://rubric.json
+        value: Evaluate summary correctness and clarity.
+        provider: echo

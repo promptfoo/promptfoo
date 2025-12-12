@@ -1,4 +1,4 @@
-import { vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { AssertionParams, GradingResult } from '../../src/types/index';
 
 import type { handleMeteorAssertion as originalHandleMeteorAssertion } from '../../src/assertions/meteor';

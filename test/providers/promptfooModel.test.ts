@@ -55,6 +55,7 @@ describe('PromptfooModelProvider', () => {
         total: 10,
         prompt: 5,
         completion: 5,
+        numRequests: 1,
       },
     });
   });

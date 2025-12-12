@@ -21,9 +21,19 @@ import type { ScanResult } from '../ModelAudit.types';
 interface ResultsTabProps {
   scanResults: ScanResult;
   onShowFilesDialog: () => void;
+  // Optional overrides from DB columns (preferred over nested results values for consistency)
+  totalChecks?: number | null;
+  passedChecks?: number | null;
+  failedChecks?: number | null;
 }
 
-export default function ResultsTab({ scanResults, onShowFilesDialog }: ResultsTabProps) {
+export default function ResultsTab({
+  scanResults,
+  onShowFilesDialog,
+  totalChecks,
+  passedChecks,
+  failedChecks,
+}: ResultsTabProps) {
   const [selectedSeverity, setSelectedSeverity] = useState<string | null>(null);
   const [showRawOutput, setShowRawOutput] = useState(false);
   return (
@@ -36,11 +46,12 @@ export default function ResultsTab({ scanResults, onShowFilesDialog }: ResultsTa
       />
 
       {/* Security Checks Section */}
+      {/* Use DB column values (props) if provided, otherwise fall back to nested results values */}
       <ChecksSection
         checks={scanResults.checks}
-        totalChecks={scanResults.total_checks ?? scanResults.totalChecks}
-        passedChecks={scanResults.passed_checks ?? scanResults.passedChecks}
-        failedChecks={scanResults.failed_checks ?? scanResults.failedChecks}
+        totalChecks={totalChecks ?? scanResults.total_checks ?? scanResults.totalChecks}
+        passedChecks={passedChecks ?? scanResults.passed_checks ?? scanResults.passedChecks}
+        failedChecks={failedChecks ?? scanResults.failed_checks ?? scanResults.failedChecks}
         assets={scanResults.assets}
         filesScanned={scanResults.files_scanned ?? scanResults.scannedFiles}
       />
