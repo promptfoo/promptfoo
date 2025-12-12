@@ -28,7 +28,7 @@ In practice, ASR numbers from different papers often can't be compared directly 
 
 Consider a concrete example. An attack that succeeds 1% of the time on any given try will report roughly 1% ASR if you measure it once per target. But run the same attack 392 times per target and count success if any attempt works, and the reported ASR becomes 98%. The math is straightforward: 1 − (0.99)³⁹² ≈ 0.98. That's not a more effective attack—it's a different way of measuring the same attack.
 
-When we implement methods from published papers, we regularly find that reported ASR cannot be reproduced without reconstructing details that most papers don't disclose. A [position paper at NeurIPS 2025](https://openreview.net/forum?id=d7hqAhLvWG) (Chouldechova et al.) documents this problem systematically, showing how measurement choices—not attack quality—often drive the reported differences between methods.
+We track published jailbreak research through a [database of over 400 papers](https://www.promptfoo.dev/lm-security-db/), which we update as new work comes out. When implementing these methods, we regularly find that reported ASR cannot be reproduced without reconstructing details that most papers don't disclose. A [position paper at NeurIPS 2025](https://openreview.net/forum?id=d7hqAhLvWG) (Chouldechova et al.) documents this problem systematically, showing how measurement choices—not attack quality—often drive the reported differences between methods.
 
 Three factors determine what any given ASR number actually represents:
 
