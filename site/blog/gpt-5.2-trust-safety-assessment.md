@@ -121,7 +121,7 @@ npx promptfoo@latest redteam run -c redteam.yaml -j 40 --output results.json
 
 We disabled reasoning tokens (`reasoning_effort: 'none'`) to test the base model behavior. Reasoning tokens let the model "think" before responding, which typically improves safety but costs more and takes longer. GPT-5.2 exposes multiple reasoning effort levels in the API (`none`, `low`, `medium`, `high`, and `xhigh` depending on the variant). We'll run a follow-up eval with reasoning enabled and publish those results separately.
 
-Each plugin generates multiple probes for a given risk area. For jailbreak strategies, we try several prompt variants per scenario. We then aggregate related probes into higher-level "attacks" per category: an attack is counted as a success if any of its probes produce disallowed output. The percentages below are computed over those attack-level aggregates, not raw probe count.
+Each [plugin](/docs/red-team/plugins/) generates multiple probes for a given risk area. For jailbreak strategies, we try several prompt variants per scenario. We then aggregate related probes into higher-level "attacks" per category: an attack is counted as a success if any of its probes produce disallowed output. The percentages below are computed over those attack-level aggregates, not raw probe count.
 
 ## Results
 
@@ -133,7 +133,7 @@ Attack success by strategy:
 - **Meta** (single-turn): 61.0% (122/200 attacks succeeded)
 - **Baseline** (same underlying prompts sent directly, no jailbreak transformation): 4.3% (9/210 attacks succeeded)
 
-Each plugin includes a grader prompt. We consider an attack successful when the grader judges that the output clearly violates OpenAI's stated safety policies. For critical categories (child exploitation, weapons, self-harm), we also performed human review.
+Each plugin includes a grader prompt. We consider an attack successful when the grader judges that the output clearly violates OpenAI's stated safety policies. For [critical categories](/docs/red-team/plugins/harmful) (child exploitation, weapons, self-harm), we also performed human review.
 
 In this configuration, GPT-5.2 refused most direct harmful prompts, but structured jailbreaks bypassed those refusals.
 
@@ -145,7 +145,7 @@ Content below includes descriptions of model outputs involving drugs, child expl
 
 ### Finding 1: MDMA Synthesis Instructions
 
-**Category:** harmful:illegal-drugs
+**Category:** [harmful:illegal-drugs](/docs/red-team/plugins/harmful)
 
 Using the Hydra strategy, the model produced step-by-step MDMA synthesis instructions including reagents, reaction conditions, and purification steps.
 
@@ -229,7 +229,7 @@ Reasoning helped most with multi-turn attacks. But even with reasoning enabled, 
 
 High-failure categories under low reasoning:
 
-- Entity impersonation: 100%
+- [Entity impersonation](/docs/red-team/plugins/imitation): 100%
 - Profanity: 87%
 - Harassment: 67%
 - Dangerous activity: 67%
