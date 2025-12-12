@@ -162,22 +162,22 @@ The `approval_policy` parameter controls when user approval is required:
 
 ## Models
 
-By default, the SDK uses the latest Codex Max model. You can explicitly specify a different model:
+The SDK supports various OpenAI models. Use `gpt-5.1-codex` for code generation tasks:
 
 ```yaml
 providers:
   - id: openai:codex-sdk
     config:
-      model: codex-mini # Use mini for faster/cheaper evals
+      model: gpt-5.1-codex # Recommended for code tasks
 ```
 
-The SDK supports various OpenAI models including:
+Supported models include:
 
-- **Codex models** - Optimized for code generation (default, mini, and max variants)
-- **GPT models** - General-purpose models (GPT-4o, GPT-4, etc.)
-- **Reasoning models** - Enhanced reasoning capabilities (o1, o3, etc.)
-
-Refer to [OpenAI's model documentation](https://platform.openai.com/docs/models) for the latest available models and their capabilities.
+- **GPT-5.2** - Latest frontier model with improved knowledge and reasoning
+- **GPT-5.1 Codex** - Optimized for code generation (`gpt-5.1-codex`, `gpt-5.1-codex-max`, `gpt-5.1-codex-mini`)
+- **GPT-5 Codex** - Previous generation (`gpt-5-codex`, `gpt-5-codex-mini`)
+- **GPT-4 models** - General-purpose (`gpt-4o`, `gpt-4o-mini`, `gpt-4-turbo`)
+- **Reasoning models** - Enhanced reasoning (`o1`, `o1-mini`, `o3-mini`)
 
 ### Mini Models
 
@@ -187,7 +187,7 @@ For faster or lower-cost evals, use mini model variants:
 providers:
   - id: openai:codex-sdk
     config:
-      model: codex-mini
+      model: gpt-5.1-codex-mini
 ```
 
 ## Thread Management

@@ -194,14 +194,9 @@ async function loadCodexSDK(): Promise<any> {
 // Pricing per 1M tokens (as of December 2025)
 // See: https://openai.com/pricing
 const CODEX_MODEL_PRICING: Record<string, { input: number; output: number }> = {
-  // Codex models (SDK defaults)
-  codex: { input: 2.0, output: 8.0 },
-  'codex-mini': { input: 0.5, output: 2.0 },
-  'codex-max': { input: 3.0, output: 12.0 },
-  // GPT-5.2 (latest)
+  // GPT-5.2 (latest frontier model)
   'gpt-5.2': { input: 2.0, output: 8.0 },
-  'gpt-5.2-mini': { input: 0.5, output: 2.0 },
-  // GPT-5.1 Codex models
+  // GPT-5.1 Codex models (recommended for code tasks)
   'gpt-5.1-codex': { input: 2.0, output: 8.0 },
   'gpt-5.1-codex-max': { input: 3.0, output: 12.0 },
   'gpt-5.1-codex-mini': { input: 0.5, output: 2.0 },
@@ -222,14 +217,9 @@ const CODEX_MODEL_PRICING: Record<string, { input: number; output: number }> = {
 
 export class OpenAICodexSDKProvider implements ApiProvider {
   static OPENAI_MODELS = [
-    // Codex models (SDK defaults)
-    'codex',
-    'codex-mini',
-    'codex-max',
-    // GPT-5.2 (latest)
+    // GPT-5.2 (latest frontier model)
     'gpt-5.2',
-    'gpt-5.2-mini',
-    // GPT-5.1 Codex models
+    // GPT-5.1 Codex models (recommended for code tasks)
     'gpt-5.1-codex',
     'gpt-5.1-codex-max',
     'gpt-5.1-codex-mini',
