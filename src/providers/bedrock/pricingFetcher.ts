@@ -13,6 +13,43 @@ import logger from '../../logger';
  */
 const PRICING_CACHE_TTL_MS = 4 * 60 * 60 * 1000; // 4 hours
 
+/**
+ * Valid AWS regions where Bedrock is available.
+ * Used for fail-fast validation to avoid unnecessary API calls with invalid regions.
+ * See: https://docs.aws.amazon.com/bedrock/latest/userguide/bedrock-regions.html
+ */
+const VALID_BEDROCK_REGIONS = new Set([
+  // US regions
+  'us-east-1',
+  'us-east-2',
+  'us-west-1',
+  'us-west-2',
+  // EU regions
+  'eu-central-1',
+  'eu-west-1',
+  'eu-west-2',
+  'eu-west-3',
+  'eu-north-1',
+  // Asia Pacific regions
+  'ap-south-1',
+  'ap-southeast-1',
+  'ap-southeast-2',
+  'ap-northeast-1',
+  'ap-northeast-2',
+  'ap-northeast-3',
+  // South America
+  'sa-east-1',
+  // Canada
+  'ca-central-1',
+  // Middle East
+  'me-south-1',
+  'me-central-1',
+  // Africa
+  'af-south-1',
+  // GovCloud
+  'us-gov-west-1',
+]);
+
 export interface BedrockPricingData {
   models: Map<string, BedrockModelPricing>;
   region: string;
@@ -159,6 +196,15 @@ export async function getPricingData(
   region: string,
   credentials?: AwsCredentialIdentity | AwsCredentialIdentityProvider,
 ): Promise<BedrockPricingData | null> {
+  // Fail fast for invalid regions
+  if (!VALID_BEDROCK_REGIONS.has(region)) {
+    logger.warn('[Bedrock Pricing]: Invalid region, skipping pricing fetch', {
+      region,
+      validRegions: Array.from(VALID_BEDROCK_REGIONS),
+    });
+    return null;
+  }
+
   const cache = await getCache();
   const cacheKey = `bedrock-pricing:${region}`;
 
@@ -339,10 +385,18 @@ async function fetchBedrockPricing(
           continue;
         }
 
-        // Get pricing from OnDemand terms
+        // Get pricing from OnDemand terms with defensive checks
         if (product.terms?.OnDemand) {
           const onDemand = Object.values(product.terms.OnDemand)[0] as any;
+          if (!onDemand?.priceDimensions) {
+            continue;
+          }
+
           const priceDim = Object.values(onDemand.priceDimensions)[0] as any;
+          if (!priceDim?.pricePerUnit?.USD) {
+            continue;
+          }
+
           const price = parseFloat(priceDim.pricePerUnit.USD);
 
           // Skip invalid prices (NaN, negative, or Infinity)
