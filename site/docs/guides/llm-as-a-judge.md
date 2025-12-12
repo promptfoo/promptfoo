@@ -42,12 +42,11 @@ The tradeoff: judges have biases, add latency, and can be manipulated. This guid
 
 ![LLM as a Judge flow diagram](/img/docs/llm-as-a-judge-flow.svg)
 
-Four components:
+Three components:
 
 1. **Candidate output**: Response from your prompt, agent, or RAG system (treated as untrusted)
 2. **Rubric**: Criteria defining what "good" looks like
-3. **Judge prompt**: Full instruction combining rubric + candidate output
-4. **Judge model**: The LLM that evaluates and returns `{reason, score, pass}`
+3. **Judge model**: Evaluates the output against the rubric and returns `{pass, score, reason}`
 
 ## When to use LLM judges
 
