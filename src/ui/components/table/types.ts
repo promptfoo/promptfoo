@@ -182,6 +182,10 @@ export interface ResultsTableProps {
   onRowSelect?: (row: EvaluateTableRow, index: number) => void;
   /** Callback when user exits the table */
   onExit?: () => void;
+  /** Current eval ID to highlight in history browser */
+  currentEvalId?: string;
+  /** Callback when user loads a historical eval - receives the new table data and eval ID */
+  onTableDataChange?: (table: EvaluateTable, evalId: string) => void;
 }
 
 /**

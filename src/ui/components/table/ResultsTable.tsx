@@ -11,12 +11,18 @@
  */
 
 import { Box, Text } from 'ink';
-import { useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { isRawModeSupported } from '../../hooks/useKeypress';
+import { copyToClipboard } from '../../utils/clipboard';
+import { convertTableToFormat } from '../../utils/export';
 import { formatCost, formatLatency } from '../../utils/format';
-import { CellDetailOverlay, VarDetailOverlay } from './CellDetailOverlay';
+import { VarDetailOverlay } from './CellDetailOverlay';
 import { CommandInput } from './CommandInput';
+import { DetailsPanel } from './DetailsPanel';
+import { ExportMenu } from './ExportMenu';
 import { filterRows, getFilterModeLabel, hasActiveFilter, parseSearchQuery } from './filterUtils';
+import { HelpOverlay } from './HelpOverlay';
+import { HistoryBrowser } from './HistoryBrowser';
 import { SearchInput } from './SearchInput';
 import { TableHeader } from './TableHeader';
 import { TableRow } from './TableRow';
@@ -85,7 +91,7 @@ function processTableData(data: EvaluateTable, maxCellLength: number): TableRowD
 /**
  * Help text component showing available keyboard shortcuts.
  */
-function HelpText({ isCompact }: { isCompact: boolean }) {
+function HelpText({ isCompact, showHistory }: { isCompact: boolean; showHistory?: boolean }) {
   if (!isRawModeSupported()) {
     return null;
   }
@@ -93,7 +99,9 @@ function HelpText({ isCompact }: { isCompact: boolean }) {
   if (isCompact) {
     return (
       <Box marginTop={1}>
-        <Text dimColor>↑↓ nav | Enter expand | a/p/f/e filter | q quit</Text>
+        <Text dimColor>
+          ↑↓ nav | Enter expand | a/p/f/e filter | x export | y copy{showHistory ? ' | H history' : ''} | ? help | q quit
+        </Text>
       </Box>
     );
   }
@@ -104,7 +112,9 @@ function HelpText({ isCompact }: { isCompact: boolean }) {
         ↑↓←→ nav | PgUp/Dn page | <Text color="cyan">[a]</Text>ll <Text color="cyan">[p]</Text>ass{' '}
         <Text color="cyan">[f]</Text>ail <Text color="cyan">[e]</Text>rr{' '}
         <Text color="cyan">[d]</Text>iff | <Text color="cyan">/</Text> search |{' '}
-        <Text color="cyan">:</Text> cmd | q quit
+        <Text color="cyan">:</Text> cmd | <Text color="cyan">[x]</Text> export |{' '}
+        <Text color="cyan">[y]</Text> copy{showHistory ? (<> | <Text color="cyan">[H]</Text>istory</>) : null} |{' '}
+        <Text color="cyan">[?]</Text> help | q quit
       </Text>
     </Box>
   );
@@ -266,6 +276,28 @@ export function calculateSummaryStats(rows: TableRowData[]): {
 }
 
 /**
+ * Notification bar for showing temporary messages (e.g., "Copied!" or "Exported to file.json").
+ */
+function NotificationBar({
+  message,
+  type,
+}: {
+  message: string;
+  type: 'success' | 'error' | 'info';
+}) {
+  const color = type === 'success' ? 'green' : type === 'error' ? 'red' : 'cyan';
+  const icon = type === 'success' ? '✓' : type === 'error' ? '✗' : 'ℹ';
+
+  return (
+    <Box marginBottom={1}>
+      <Text color={color}>
+        {icon} {message}
+      </Text>
+    </Box>
+  );
+}
+
+/**
  * Summary statistics footer showing aggregate stats.
  */
 function SummaryStatsFooter({ rows, isFiltered }: { rows: TableRowData[]; isFiltered: boolean }) {
@@ -336,7 +368,26 @@ export function ResultsTable({
   interactive = true,
   onRowSelect,
   onExit,
+  currentEvalId,
+  onTableDataChange,
 }: ResultsTableProps) {
+  // Export/copy/history/help state
+  const [isExporting, setIsExporting] = useState(false);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
+  const [notification, setNotification] = useState<{
+    message: string;
+    type: 'success' | 'error' | 'info';
+  } | null>(null);
+
+  // Clear notification after delay
+  useEffect(() => {
+    if (notification) {
+      const timer = setTimeout(() => setNotification(null), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [notification]);
+
   // Calculate layout based on terminal size
   const layout = useTableLayout(data, {
     showIndex,
@@ -346,6 +397,19 @@ export function ResultsTable({
   // Process data for rendering
   const processedRows = useMemo(() => processTableData(data, maxCellLength), [data, maxCellLength]);
 
+  // Handle copy operation
+  const handleCopy = useCallback(() => {
+    // Copy filtered results as JSON
+    const content = convertTableToFormat(data, 'json');
+    const result = copyToClipboard(content);
+
+    if (result.success) {
+      setNotification({ message: 'Results copied to clipboard', type: 'success' });
+    } else {
+      setNotification({ message: result.error || 'Failed to copy', type: 'error' });
+    }
+  }, [data]);
+
   // Set up keyboard navigation (initially with full row count, will be adjusted after filtering)
   const isInteractive = interactive && isRawModeSupported();
   const navigation = useTableNavigation({
@@ -353,13 +417,17 @@ export function ResultsTable({
     colCount: layout.columns.length,
     visibleRows: layout.visibleRowCount,
     hasIndexColumn: showIndex,
-    isActive: isInteractive && !layout.isCompact,
+    isActive: isInteractive && !layout.isCompact && !isExporting && !isHistoryOpen && !isHelpOpen,
     onExit,
     onExpand: (row, _col) => {
       if (onRowSelect && processedRows[row]) {
         onRowSelect(processedRows[row].originalRow, row);
       }
     },
+    onExport: () => setIsExporting(true),
+    onCopy: handleCopy,
+    onHistory: onTableDataChange ? () => setIsHistoryOpen(true) : undefined,
+    onHelp: () => setIsHelpOpen(true),
   });
 
   // Apply filters to rows
@@ -384,6 +452,52 @@ export function ResultsTable({
 
   // Get visible rows from filtered set
   const visibleRows = filteredRows.slice(visibleStart, visibleEnd);
+
+  // Handle export menu
+  if (isExporting) {
+    return (
+      <ExportMenu
+        data={data}
+        onComplete={(success, message) => {
+          setIsExporting(false);
+          setNotification({
+            message,
+            type: success ? 'success' : 'error',
+          });
+        }}
+        onCancel={() => setIsExporting(false)}
+      />
+    );
+  }
+
+  // Handle history browser
+  if (isHistoryOpen && onTableDataChange) {
+    return (
+      <HistoryBrowser
+        currentEvalId={currentEvalId}
+        onSelect={(table, evalId) => {
+          setIsHistoryOpen(false);
+          onTableDataChange(table, evalId);
+          setNotification({
+            message: `Loaded eval ${evalId}`,
+            type: 'success',
+          });
+        }}
+        onCancel={() => setIsHistoryOpen(false)}
+      />
+    );
+  }
+
+  // Handle help overlay
+  if (isHelpOpen) {
+    return (
+      <HelpOverlay
+        onClose={() => setIsHelpOpen(false)}
+        historyAvailable={!!onTableDataChange}
+        terminalWidth={layout.terminalWidth}
+      />
+    );
+  }
 
   // Handle empty data
   if (data.body.length === 0) {
@@ -446,21 +560,29 @@ export function ResultsTable({
 
     // Find the appropriate cell data for output columns
     let cellData: TableCellData | undefined;
+    let outputIdx = 0;
     if (column.type === 'output') {
-      const outputIdx = layout.columns.filter((c, i) => c.type === 'output' && i < col).length;
+      outputIdx = layout.columns.filter((c, i) => c.type === 'output' && i < col).length;
       cellData = rowData.cells[outputIdx];
     }
 
     if (cellData && rowData) {
       return (
-        <CellDetailOverlay
+        <DetailsPanel
           cellData={cellData}
           column={column}
           rowData={rowData}
+          allRows={filteredRows}
           varNames={data.head.vars}
-          totalRows={filteredRows.length}
-          onNavigate={(direction) => {
-            navigation.dispatch({ type: 'NAVIGATE_EXPANDED', direction });
+          currentRowIndex={row}
+          currentColIndex={col}
+          outputCellIndex={outputIdx}
+          onNavigate={(newRowIndex, newColIndex) => {
+            navigation.dispatch({
+              type: 'SET_EXPANDED_POSITION',
+              row: newRowIndex,
+              col: newColIndex,
+            });
           }}
           onClose={() => navigation.dispatch({ type: 'CLOSE_EXPAND' })}
         />
@@ -472,6 +594,11 @@ export function ResultsTable({
   if (layout.isCompact) {
     return (
       <Box flexDirection="column">
+        {/* Notification bar */}
+        {notification && (
+          <NotificationBar message={notification.message} type={notification.type} />
+        )}
+
         <FilterStatusBar
           filterState={navigation.filter}
           filteredCount={filteredRows.length}
@@ -504,7 +631,7 @@ export function ResultsTable({
             error={navigation.filter.commandError}
           />
         ) : (
-          <HelpText isCompact={true} />
+          <HelpText isCompact={true} showHistory={!!onTableDataChange} />
         )}
       </Box>
     );
@@ -513,6 +640,9 @@ export function ResultsTable({
   // Standard table mode
   return (
     <Box flexDirection="column">
+      {/* Notification bar */}
+      {notification && <NotificationBar message={notification.message} type={notification.type} />}
+
       {/* Filter status bar */}
       <FilterStatusBar
         filterState={navigation.filter}
@@ -575,7 +705,7 @@ export function ResultsTable({
             error={navigation.filter.commandError}
           />
         ) : (
-          <HelpText isCompact={false} />
+          <HelpText isCompact={false} showHistory={!!onTableDataChange} />
         ))}
     </Box>
   );

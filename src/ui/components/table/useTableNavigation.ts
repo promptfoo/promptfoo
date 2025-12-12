@@ -64,6 +64,7 @@ type NavigationAction =
   | { type: 'TOGGLE_EXPAND' }
   | { type: 'CLOSE_EXPAND' }
   | { type: 'NAVIGATE_EXPANDED'; direction: 'up' | 'down' | 'left' | 'right' }
+  | { type: 'SET_EXPANDED_POSITION'; row: number; col: number }
   | { type: 'SET_SCROLL'; offset: number }
   | { type: 'NEXT_MATCH' }
   | { type: 'PREV_MATCH' }
@@ -255,6 +256,18 @@ export function navigationReducer(
       };
     }
 
+    case 'SET_EXPANDED_POSITION': {
+      // Jump directly to a specific row/col while keeping detail view open
+      const clampedRow = Math.max(0, Math.min(rowCount - 1, action.row));
+      const clampedCol = Math.max(minCol, Math.min(colCount - 1, action.col));
+      return {
+        ...state,
+        selectedRow: clampedRow,
+        selectedCol: clampedCol,
+        expandedCell: { row: clampedRow, col: clampedCol },
+      };
+    }
+
     case 'SET_SCROLL':
       return { ...state, scrollOffset: action.offset };
 
@@ -415,6 +428,14 @@ export interface UseTableNavigationOptions {
   onExit?: () => void;
   /** Callback when cell is expanded */
   onExpand?: (row: number, col: number) => void;
+  /** Callback when user wants to export (press 'x') */
+  onExport?: () => void;
+  /** Callback when user wants to copy (press 'y') */
+  onCopy?: () => void;
+  /** Callback when user wants to browse history (press 'H') */
+  onHistory?: () => void;
+  /** Callback when user wants to show help (press '?') */
+  onHelp?: () => void;
 }
 
 /**
@@ -428,6 +449,10 @@ export function useTableNavigation({
   isActive = true,
   onExit,
   onExpand,
+  onExport,
+  onCopy,
+  onHistory,
+  onHelp,
 }: UseTableNavigationOptions): TableNavigationState & {
   dispatch: (action: NavigationAction) => void;
 } {
@@ -628,7 +653,12 @@ export function useTableNavigation({
           dispatch({ type: 'MOVE_UP' });
           break;
         case 'h':
-          dispatch({ type: 'MOVE_LEFT' });
+          // H (shift+h) = open history browser
+          if (shift) {
+            onHistory?.();
+          } else {
+            dispatch({ type: 'MOVE_LEFT' });
+          }
           break;
         case 'l':
           dispatch({ type: 'MOVE_RIGHT' });
@@ -676,9 +706,24 @@ export function useTableNavigation({
           dispatch({ type: 'START_SEARCH' });
           break;
 
+        // Help shortcut (shift+/ = ?)
+        case '?':
+          onHelp?.();
+          break;
+
         // Command mode shortcut
         case ':':
           dispatch({ type: 'START_COMMAND' });
+          break;
+
+        // Export shortcut
+        case 'x':
+          onExport?.();
+          break;
+
+        // Copy/yank shortcut (vim-style 'y' for yank)
+        case 'y':
+          onCopy?.();
           break;
       }
     },
