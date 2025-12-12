@@ -197,13 +197,15 @@ GPT-5.1 is OpenAI's newest flagship model, part of the GPT-5 model family. It ex
 
 #### Available Models
 
-| Model             | Description                                        | Best For                                    |
-| ----------------- | -------------------------------------------------- | ------------------------------------------- |
-| gpt-5.1           | Latest flagship model                              | Complex reasoning and broad world knowledge |
-| gpt-5.1-mini      | Cost-optimized reasoning                           | Balanced speed, cost, and capability        |
-| gpt-5.1-nano      | High-throughput model                              | Simple instruction-following tasks          |
-| gpt-5.1-codex     | Specialized for coding tasks in Codex environments | Agentic coding workflows                    |
-| gpt-5.1-codex-max | Frontier agentic coding model with compaction      | Long-running coding tasks and refactors     |
+| Model               | Description                                        | Best For                                    |
+| ------------------- | -------------------------------------------------- | ------------------------------------------- |
+| gpt-5.1             | Latest flagship model                              | Complex reasoning and broad world knowledge |
+| gpt-5.1-2025-11-13  | Dated snapshot version                             | Locked behavior for production              |
+| gpt-5.1-mini        | Cost-optimized reasoning                           | Balanced speed, cost, and capability        |
+| gpt-5.1-nano        | High-throughput model                              | Simple instruction-following tasks          |
+| gpt-5.1-codex       | Specialized for coding tasks in Codex environments | Agentic coding workflows                    |
+| gpt-5.1-codex-max   | Frontier agentic coding model with compaction      | Long-running coding tasks and refactors     |
+| gpt-5.1-chat-latest | Chat-optimized alias                               | Conversational applications                 |
 
 #### Key Features
 
@@ -251,7 +253,7 @@ GPT-5.1 supports four reasoning effort levels:
 
 GPT-5.1 with default settings (`none` reasoning) is designed as a drop-in replacement for GPT-5. Key differences:
 
-- GPT-5.1 defaults to `none` reasoning effort (GPT-5 defaulted to `minimal`)
+- GPT-5.1 defaults to `none` reasoning effort (GPT-5 defaulted to `low`)
 - GPT-5.1 has better-calibrated reasoning token consumption
 - Improved instruction-following and output formatting
 
