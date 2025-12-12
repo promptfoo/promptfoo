@@ -8,7 +8,7 @@ import { isJavascriptFile } from '../util/fileExtensions';
 import invariant from '../util/invariant';
 import { safeJsonStringify } from '../util/json';
 import { getNunjucksEngine } from '../util/templates';
-import { getProcessShim } from '../util/transform';
+import { getProcessShim } from '../util/processShim';
 import { REQUEST_TIMEOUT_MS } from './shared';
 
 import type {
