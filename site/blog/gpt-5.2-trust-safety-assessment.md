@@ -31,11 +31,11 @@ The headline numbers: our [jailbreak strategies](/docs/red-team/strategies/) (te
 
 We tested jailbreak resilience and [harmful content](/docs/red-team/plugins/harmful) generation, along with [bias detection](/docs/red-team/plugins/bias) and security compliance. In practice, that means prompts about:
 
-- Cybercrime assistance
-- Violent crime instructions
-- Chemical/biological weapons information
+- [Cybercrime](/docs/red-team/plugins/harmful) assistance
+- [Violent crime](/docs/red-team/plugins/harmful) instructions
+- [Chemical/biological weapons](/docs/red-team/plugins/harmful) information
 - [Misinformation](/blog/misinformation) generation
-- Illegal activity guidance
+- [Illegal activity](/docs/red-team/plugins/harmful) guidance
 
 We used two [attack strategies](/docs/red-team/strategies/):
 
