@@ -78,11 +78,13 @@ describe('server', () => {
   });
 
   describe('startServer shutdown behavior', () => {
-    let mockHttpServer: EventEmitter & {
+    type MockHttpServer = EventEmitter & {
       listen: ReturnType<typeof vi.fn>;
       close: ReturnType<typeof vi.fn>;
       listening: boolean;
     };
+
+    let mockHttpServer: MockHttpServer;
     let originalCreateServer: typeof http.createServer;
     let signalHandlers: Map<string | symbol, ((...args: unknown[]) => void)[]>;
 
@@ -108,7 +110,7 @@ describe('server', () => {
       mockHttpServer = Object.assign(new EventEmitter(), {
         listening: false,
         listen: vi.fn().mockImplementation(function (
-          this: typeof mockHttpServer,
+          this: MockHttpServer,
           _port: number,
           callback: () => void,
         ) {
@@ -118,7 +120,7 @@ describe('server', () => {
           return this;
         }),
         close: vi.fn().mockImplementation(function (
-          this: typeof mockHttpServer,
+          this: MockHttpServer,
           callback?: (err?: Error) => void,
         ) {
           this.listening = false;
