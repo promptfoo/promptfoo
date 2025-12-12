@@ -45,6 +45,7 @@ export interface ProviderOptions {
   transform?: string;
   delay?: number;
   env?: EnvOverrides;
+  metadata?: Record<string, any>;
 }
 
 export interface CallApiContextParams {
@@ -87,6 +88,7 @@ export interface ApiProvider {
   delay?: number;
   getSessionId?: () => string;
   label?: ProviderLabel;
+  metadata?: Record<string, any>;
   transform?: string;
   toJSON?: () => any;
   /**

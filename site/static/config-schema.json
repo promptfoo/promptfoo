@@ -383,6 +383,10 @@
                             }
                           },
                           "additionalProperties": false
+                        },
+                        "metadata": {
+                          "type": "object",
+                          "additionalProperties": {}
                         }
                       },
                       "additionalProperties": false
@@ -521,7 +525,11 @@
                               "delay": {
                                 "type": "number"
                               },
-                              "config": {}
+                              "config": {},
+                              "metadata": {
+                                "type": "object",
+                                "additionalProperties": {}
+                              }
                             },
                             "additionalProperties": false
                           }

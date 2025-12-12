@@ -1796,6 +1796,7 @@ export class HttpProvider implements ApiProvider {
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
+    logger.error(`[HTTP Provider]: callApi invoked with prompt: ${prompt}`);
     const vars = {
       ...(context?.vars || {}),
       prompt,
