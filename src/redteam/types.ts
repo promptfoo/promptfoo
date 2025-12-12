@@ -85,6 +85,13 @@ export const PluginConfigSchema = z.object({
   policy: z.union([z.string(), PolicyObjectSchema]).optional(),
   systemPrompt: z.string().optional(),
   // Strategy exclusions - allows plugins to exclude incompatible strategies
+<<<<<<< HEAD
+  excludeStrategies?: string[];
+  // Include safe prompts for testing over-blocking
+  includeSafe?: boolean;
+};
+export type StrategyConfig = RedteamObjectConfig;
+=======
   excludeStrategies: z.array(z.string()).optional(),
 
   // Allow for the inclusion of a nonce to prevent caching of test cases.
@@ -110,6 +117,7 @@ export const ConversationMessageSchema = z.object({
   content: z.string(),
 });
 export type ConversationMessage = z.infer<typeof ConversationMessageSchema>;
+>>>>>>> origin/main
 
 type ConfigurableObject = {
   id: string;
