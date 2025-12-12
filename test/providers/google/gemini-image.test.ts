@@ -1,4 +1,4 @@
-import { vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { GeminiImageProvider } from '../../../src/providers/google/gemini-image';
 import * as googleUtil from '../../../src/providers/google/util';

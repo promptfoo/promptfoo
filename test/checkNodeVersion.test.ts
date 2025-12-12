@@ -1,4 +1,4 @@
-import { vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import chalk from 'chalk';
 import { checkNodeVersion } from '../src/checkNodeVersion';

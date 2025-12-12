@@ -104,6 +104,26 @@ This example demonstrates Claude Agent SDK's structured output feature, which re
 (cd structured-output && promptfoo eval)
 ```
 
+### Advanced Options
+
+This example demonstrates advanced Claude Agent SDK configuration options including sandbox settings, runtime configuration, permission bypass, and CLI arguments.
+
+**Location**: `./advanced-options/`
+
+**Usage**:
+
+```bash
+(cd advanced-options && promptfoo eval)
+```
+
+**Features demonstrated**:
+
+- **Sandbox configuration**: Run commands in isolated environments with network restrictions
+- **Runtime configuration**: Specify JavaScript runtime (node, bun, deno)
+- **Extra CLI arguments**: Pass additional flags to Claude Code
+- **Setting sources**: Control where SDK loads settings from
+- **Permission bypass**: Safely bypass permissions for automated testing
+
 ### Cyber Espionage Red Team
 
 This example demonstrates testing AI agents against cyber espionage attack patterns based on Anthropic's ["Disrupting AI Espionage"](https://www.anthropic.com/news/disrupting-AI-espionage) blog post. It includes:

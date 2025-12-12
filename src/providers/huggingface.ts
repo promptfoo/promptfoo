@@ -3,6 +3,8 @@ import { getEnvString } from '../envars';
 import logger from '../logger';
 import { REQUEST_TIMEOUT_MS } from './shared';
 
+const HF_INFERENCE_API_URL = 'https://router.huggingface.co/hf-inference';
+
 import type {
   ApiProvider,
   ApiSimilarityProvider,
@@ -97,7 +99,7 @@ export class HuggingfaceTextGenerationProvider implements ApiProvider {
 
     const url = this.config.apiEndpoint
       ? this.config.apiEndpoint
-      : `https://api-inference.huggingface.co/models/${this.modelName}`;
+      : `${HF_INFERENCE_API_URL}/models/${this.modelName}`;
     logger.debug(`Huggingface API request: ${url}`, { params });
 
     let response;
@@ -178,7 +180,7 @@ export class HuggingfaceTextClassificationProvider implements ApiProvider {
     try {
       const url = this.config.apiEndpoint
         ? this.config.apiEndpoint
-        : `https://api-inference.huggingface.co/models/${this.modelName}`;
+        : `${HF_INFERENCE_API_URL}/models/${this.modelName}`;
       response = await fetchWithCache(
         url,
         {
@@ -276,7 +278,7 @@ export class HuggingfaceFeatureExtractionProvider implements ApiProvider {
     try {
       const url = this.config.apiEndpoint
         ? this.config.apiEndpoint
-        : `https://api-inference.huggingface.co/models/${this.modelName}`;
+        : `${HF_INFERENCE_API_URL}/models/${this.modelName}`;
       logger.debug('Huggingface API request', { url, params });
       response = await fetchWithCache(
         url,
@@ -365,7 +367,7 @@ export class HuggingfaceSentenceSimilarityProvider implements ApiSimilarityProvi
     try {
       const url = this.config.apiEndpoint
         ? this.config.apiEndpoint
-        : `https://api-inference.huggingface.co/models/${this.modelName}`;
+        : `${HF_INFERENCE_API_URL}/models/${this.modelName}`;
       response = await fetchWithCache(
         url,
         {
@@ -445,7 +447,7 @@ export class HuggingfaceTokenExtractionProvider implements ApiProvider {
     try {
       const url = this.config.apiEndpoint
         ? this.config.apiEndpoint
-        : `https://api-inference.huggingface.co/models/${this.modelName}`;
+        : `${HF_INFERENCE_API_URL}/models/${this.modelName}`;
       response = await fetchWithCache(
         url,
         {

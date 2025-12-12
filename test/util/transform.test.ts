@@ -269,6 +269,45 @@ describe('util', () => {
       );
     });
 
+    describe('ESM compatibility', () => {
+      it('provides process.mainModule.require for backwards compatibility with CommonJS patterns', async () => {
+        const output = 'test';
+        const context = { vars: {}, prompt: {} };
+        // This is the exact pattern users were using before ESM migration
+        // const require = process.mainModule.require;
+        const transformFunction = `
+          const require = process.mainModule.require;
+          const path = require('node:path');
+          return path.basename('/foo/bar/baz.txt');
+        `;
+        const result = await transform(transformFunction, output, context);
+        expect(result).toBe('baz.txt');
+      });
+
+      it('allows direct use of process.mainModule.require without assignment', async () => {
+        const output = 'hello';
+        const context = { vars: {}, prompt: {} };
+        const transformFunction = `
+          const fs = process.mainModule.require('node:fs');
+          const os = process.mainModule.require('node:os');
+          return typeof fs.existsSync === 'function' && typeof os.homedir === 'function' ? output.toUpperCase() : output;
+        `;
+        const result = await transform(transformFunction, output, context);
+        expect(result).toBe('HELLO');
+      });
+
+      it('preserves other process properties like process.env', async () => {
+        const output = 'test';
+        const context = { vars: {}, prompt: {} };
+        const transformFunction = `
+          // process.env should still work
+          return typeof process.env === 'object' ? 'env-works' : 'env-broken';
+        `;
+        const result = await transform(transformFunction, output, context);
+        expect(result).toBe('env-works');
+      });
+    });
+
     describe('file path handling', () => {
       it('handles absolute paths in transform files', async () => {
         const output = 'hello';

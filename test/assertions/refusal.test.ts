@@ -1,4 +1,5 @@
 import { handleIsRefusal } from '../../src/assertions/refusal';
+import { describe, expect, it } from 'vitest';
 
 import type {
   Assertion,

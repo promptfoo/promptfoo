@@ -12,7 +12,7 @@ import { callApi } from '@app/utils/api';
 import { TestCaseGenerationProvider, useTestCaseGeneration } from './TestCaseGenerationProvider';
 import { ToastProvider } from '@app/contexts/ToastContext';
 import { Plugin, Strategy } from '@promptfoo/redteam/constants';
-import { vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // ===================================================================
 // Mocks

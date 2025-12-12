@@ -1,42 +1,56 @@
 ---
 sidebar_label: HuggingFace
-description: Configure HuggingFace's text generation, classification, and embedding models with Mistral-7B and GPT-2 for comprehensive LLM testing and evaluation tasks
+description: Configure HuggingFace's text classification, embedding, and NER models for LLM testing and eval tasks
 ---
 
 # HuggingFace
 
-promptfoo includes support for the [HuggingFace Inference API](https://huggingface.co/inference-api), for text generation, classification, and embeddings related tasks, as well as [HuggingFace Datasets](https://huggingface.co/docs/datasets).
+Promptfoo includes support for the [HuggingFace Inference Providers](https://huggingface.co/docs/inference-providers), for classification, embeddings, and other ML tasks, as well as [HuggingFace Datasets](https://huggingface.co/docs/datasets).
 
-To run a model, specify the task type and model name. Supported models include:
+To run a model, specify the task type and model name. Supported task types include:
 
-- `huggingface:text-generation:<model name>`
 - `huggingface:text-classification:<model name>`
 - `huggingface:token-classification:<model name>`
 - `huggingface:feature-extraction:<model name>`
 - `huggingface:sentence-similarity:<model name>`
+- `huggingface:text-generation:<model name>`
+
+:::note
+
+The HuggingFace serverless inference API (`hf-inference`) focuses primarily on CPU inference tasks like text classification, embeddings, and NER. For LLM text generation, consider using [Inference Endpoints](#inference-endpoints) or other providers like [Together AI](/docs/providers/togetherai), [Groq](/docs/providers/groq), or [OpenRouter](/docs/providers/openrouter) which offer HuggingFace models.
+
+Browse available models at [huggingface.co/models?inference_provider=hf-inference](https://huggingface.co/models?inference_provider=hf-inference).
+
+:::
 
 ## Examples
 
-For example, autocomplete with GPT-2:
+Text classification for sentiment analysis:
 
-```
-huggingface:text-generation:gpt2
-```
-
-Generate text with Mistral:
-
-```
-huggingface:text-generation:mistralai/Mistral-7B-v0.1
+```text
+huggingface:text-classification:cardiffnlp/twitter-roberta-base-sentiment-latest
 ```
 
-Embeddings similarity with `sentence-transformers`:
+Prompt injection detection:
 
+```text
+huggingface:text-classification:protectai/deberta-v3-base-prompt-injection
 ```
-# Model supports the sentence similarity API
+
+Named entity recognition:
+
+```text
+huggingface:token-classification:dslim/bert-base-NER
+```
+
+Embeddings with sentence-transformers:
+
+```yaml
+# Sentence similarity
 huggingface:sentence-similarity:sentence-transformers/all-MiniLM-L6-v2
 
-# Model supports the feature extraction API
-huggingface:feature-extraction:sentence-transformers/paraphrase-xlm-r-multilingual-v1
+# Feature extraction for embeddings
+huggingface:feature-extraction:BAAI/bge-small-en-v1.5
 ```
 
 ## Configuration
@@ -68,18 +82,29 @@ The provider also supports these built-in promptfoo parameters:
 
 Supported environment variables:
 
-- `HF_API_TOKEN` - your HuggingFace API key
+- `HF_TOKEN` - your HuggingFace API token (recommended)
+- `HF_API_TOKEN` - alternative name for your HuggingFace API token
 
-The provider can pass through configuration parameters to the API. See [text generation parameters](https://huggingface.co/docs/api-inference/detailed_parameters#text-generation-task) and [feature extraction parameters](https://huggingface.co/docs/api-inference/detailed_parameters#feature-extraction-task).
+The provider can pass through configuration parameters to the API. See [HuggingFace Inference API documentation](https://huggingface.co/docs/api-inference/tasks/overview) for task-specific parameters.
 
 Here's an example of how this provider might appear in your promptfoo config:
 
 ```yaml
 providers:
-  - id: huggingface:text-generation:mistralai/Mistral-7B-v0.1
-    config:
-      temperature: 0.1
-      max_length: 1024
+  - id: huggingface:text-classification:cardiffnlp/twitter-roberta-base-sentiment-latest
+```
+
+Using as an assertion for prompt injection detection:
+
+```yaml
+tests:
+  - vars:
+      input: 'Hello, how are you?'
+    assert:
+      - type: classifier
+        provider: huggingface:text-classification:protectai/deberta-v3-base-prompt-injection
+        value: SAFE
+        threshold: 0.9
 ```
 
 ## Inference endpoints

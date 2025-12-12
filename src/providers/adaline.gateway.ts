@@ -269,6 +269,7 @@ export class AdalineGatewayEmbeddingProvider extends AdalineGatewayGenericProvid
         tokenUsage: {
           total: response.response.usage?.totalTokens,
           cached: response.cached ? response.response.usage?.totalTokens : 0,
+          numRequests: 1,
         },
       };
     } catch (error) {
@@ -698,7 +699,7 @@ export class AdalineGatewayChatProvider extends AdalineGatewayGenericProvider {
       }
 
       const logProbs = response.response.logProbs?.map((logProb: any) => logProb.logProb);
-      const tokenUsage: TokenUsage = {};
+      const tokenUsage: TokenUsage = { numRequests: 1 };
       if (response.cached) {
         tokenUsage.cached = response.response.usage?.totalTokens;
         tokenUsage.total = response.response.usage?.totalTokens;

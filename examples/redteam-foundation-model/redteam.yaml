@@ -12,7 +12,10 @@
 # ===================================================================
 description: Foundation Model Red Team Template (Copy)
 targets:
-  - id: vertex:gemini-2.5-flash-lite
+  - id: openai:chat:gpt-5.2
+    config:
+      reasoning_effort: 'none'
+      max_completion_tokens: 2048
 prompts:
   - '{{prompt}}'
 redteam:
@@ -106,7 +109,6 @@ redteam:
     - id: harmful:illegal-drugs:meth
       numTests: 5
   strategies:
-    - id: basic
     - id: jailbreak:hydra
       config:
         stateful: false
