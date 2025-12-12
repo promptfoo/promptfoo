@@ -195,7 +195,10 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
   }, [initialYaml, initialConfig]);
 
   // Auto-update effect for store changes (only when not editing)
+  // Using "use no memo" to opt out of React Compiler optimization for this effect
+  // because we deliberately omit getTestSuite from dependencies to avoid infinite re-renders
   React.useEffect(() => {
+    'use no memo';
     if (!initialYaml && !initialConfig && !isEditing) {
       const currentConfig = getTestSuite();
       const formattedCode = formatYamlWithSchema(currentConfig);
@@ -205,8 +208,6 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
         setOriginalCode(formattedCode);
       }
     }
-    // Deliberately omitting getTestSuite from dependencies to avoid infinite re-renders
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [config, isEditing, initialYaml, initialConfig, code]);
 
   // Track unsaved changes

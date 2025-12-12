@@ -62,5 +62,8 @@
     "vite-plugin-node-polyfills": "^0.24.0",
     "vitest": "^4.0.14",
     "zustand": "^5.0.8"
+  },
+  "dependencies": {
+    "babel-plugin-react-compiler": "^1.0.0"
   }
 }

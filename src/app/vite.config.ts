@@ -17,6 +17,15 @@ const maxForks = Math.max(cpuCount - 2, 2);
 
 const API_PORT = process.env.API_PORT || '15500';
 
+// React Compiler toggle for A/B performance testing
+// Set DISABLE_REACT_COMPILER=true to disable the compiler for comparison
+const REACT_COMPILER_ENABLED = process.env.DISABLE_REACT_COMPILER !== 'true';
+if (!REACT_COMPILER_ENABLED) {
+  console.log('⚠️  React Compiler DISABLED (DISABLE_REACT_COMPILER=true)');
+} else if (process.env.NODE_ENV === 'development') {
+  console.log('✅ React Compiler enabled');
+}
+
 // These environment variables are inherited from the parent process (main promptfoo server)
 // We set VITE_ prefixed variables here so Vite can expose them to the client code
 if (process.env.NODE_ENV === 'development') {
@@ -37,7 +46,13 @@ export default defineConfig({
   },
   base: process.env.VITE_PUBLIC_BASENAME || '/',
   plugins: [
-    react(),
+    react({
+      babel: REACT_COMPILER_ENABLED
+        ? {
+            plugins: [['babel-plugin-react-compiler', {}]],
+          }
+        : undefined,
+    }),
     nodePolyfills(), // Removed vm exclusion - we need it for new Function() calls
   ],
   resolve: {
@@ -162,5 +177,7 @@ export default defineConfig({
     'import.meta.env.VITE_POSTHOG_HOST': JSON.stringify(
       process.env.PROMPTFOO_POSTHOG_HOST || 'https://a.promptfoo.app',
     ),
+    // Expose React Compiler status for debugging/QA
+    'import.meta.env.VITE_REACT_COMPILER_ENABLED': JSON.stringify(REACT_COMPILER_ENABLED),
   },
 });

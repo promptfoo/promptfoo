@@ -44,7 +44,7 @@ const EvaluateTestSuiteCreator = () => {
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const [hasCustomConfig, setHasCustomConfig] = useState(false);
 
-  const { config, updateConfig, reset } = useStore();
+  const { config, updateConfig, reset, getTestSuite } = useStore();
   const { providers = [], prompts = [] } = config;
 
   // Ensure providers is always an array of ProviderOptions
@@ -196,7 +196,7 @@ const EvaluateTestSuiteCreator = () => {
         <TestCasesSection varsList={varsList} />
       </ErrorBoundary>
       <Box mt={8} />
-      <YamlEditor initialConfig={useStore.getState().getTestSuite()} />
+      <YamlEditor initialConfig={getTestSuite()} />
       <Dialog
         open={resetDialogOpen}
         onClose={() => setResetDialogOpen(false)}

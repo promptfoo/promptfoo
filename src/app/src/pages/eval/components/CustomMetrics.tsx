@@ -86,6 +86,7 @@ const CustomMetrics = ({
   const applyFilterFromMetric = useApplyFilterFromMetric();
   const { data: cloudConfig } = useCloudConfig();
   const { config } = useTableStore();
+  const policiesById = useCustomPoliciesMap(config?.redteam?.plugins ?? []);
 
   if (!lookup || !Object.keys(lookup).length) {
     return null;
@@ -95,8 +96,6 @@ const CustomMetrics = ({
   const displayMetrics = metrics.slice(0, truncationCount);
 
   const handleClick = applyFilterFromMetric;
-
-  const policiesById = useCustomPoliciesMap(config?.redteam?.plugins ?? []);
 
   return (
     <Box className="custom-metric-container" data-testid="custom-metrics" my={1}>

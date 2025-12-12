@@ -251,6 +251,9 @@ export default function ChatMessages({
   displayTurnCount = false,
   maxTurns = 1,
 }: ChatMessagesProps) {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
+
   if (!messages || messages.length === 0) {
     return null;
   }
@@ -259,9 +262,6 @@ export default function ChatMessages({
     !displayTurnCount || maxTurns !== undefined,
     'maxTurns must be defined when displayTurnCount is true',
   );
-
-  const theme = useTheme();
-  const isDark = theme.palette.mode === 'dark';
 
   return (
     <Stack
