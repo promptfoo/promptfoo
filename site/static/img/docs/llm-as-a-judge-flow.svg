@@ -1,71 +1,80 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 280" fill="none">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 310" fill="none">
   <defs>
-    <!-- Subtle shadow filter -->
-    <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%">
-      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000" flood-opacity="0.08"/>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#1e293b" flood-opacity="0.06"/>
     </filter>
-
-    <!-- Gradient for primary boxes -->
-    <linearGradient id="primaryGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" style="stop-color:#ffffff"/>
-      <stop offset="100%" style="stop-color:#f8fafc"/>
-    </linearGradient>
-
-    <!-- Gradient for judge box (accent) -->
-    <linearGradient id="judgeGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" style="stop-color:#eef2ff"/>
-      <stop offset="100%" style="stop-color:#e0e7ff"/>
-    </linearGradient>
-
-    <!-- Gradient for result box -->
-    <linearGradient id="resultGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" style="stop-color:#f0fdf4"/>
-      <stop offset="100%" style="stop-color:#dcfce7"/>
-    </linearGradient>
-
-    <!-- Arrow marker -->
-    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-      <polygon points="0 0, 10 3.5, 0 7" fill="#94a3b8"/>
+    <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6 L2,3 Z" fill="#94a3b8"/>
+    </marker>
+    <marker id="arrowPurple" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6 L2,3 Z" fill="#7c3aed"/>
     </marker>
   </defs>
 
-  <!-- Background -->
-  <rect width="800" height="280" fill="#fafafa" rx="8"/>
+  <!-- Row 1: Test Input → Your LLM → LLM Output -->
 
-  <!-- Box 1: Your System (SUT) -->
+  <!-- Test Input -->
   <g filter="url(#shadow)">
-    <rect x="40" y="60" width="160" height="80" rx="8" fill="url(#primaryGradient)" stroke="#e2e8f0" stroke-width="1.5"/>
+    <rect x="20" y="40" width="100" height="52" rx="8" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
   </g>
-  <text x="120" y="95" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="15" font-weight="600" fill="#1e293b">Your System</text>
-  <text x="120" y="118" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="12" fill="#64748b">(System Under Test)</text>
+  <text x="70" y="62" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" font-weight="600" fill="#475569">Test Input</text>
+  <text x="70" y="78" text-anchor="middle" font-family="system-ui, sans-serif" font-size="9" fill="#64748b">prompt + vars</text>
 
   <!-- Arrow 1 -->
-  <line x1="200" y1="100" x2="270" y2="100" stroke="#94a3b8" stroke-width="2" marker-end="url(#arrowhead)"/>
+  <path d="M120,66 L148,66" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow)"/>
 
-  <!-- Box 2: Candidate Output -->
+  <!-- Your LLM -->
   <g filter="url(#shadow)">
-    <rect x="280" y="60" width="160" height="80" rx="8" fill="url(#primaryGradient)" stroke="#e2e8f0" stroke-width="1.5"/>
+    <rect x="156" y="36" width="120" height="60" rx="8" fill="#fff" stroke="#cbd5e1" stroke-width="1"/>
   </g>
-  <text x="360" y="95" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="15" font-weight="600" fill="#1e293b">Candidate Output</text>
-  <text x="360" y="118" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="12" fill="#64748b">(Untrusted)</text>
+  <text x="216" y="62" text-anchor="middle" font-family="system-ui, sans-serif" font-size="12" font-weight="600" fill="#1e293b">Your LLM</text>
+  <text x="216" y="78" text-anchor="middle" font-family="system-ui, sans-serif" font-size="9" fill="#64748b">System under test</text>
 
-  <!-- Arrow 2 -->
-  <line x1="440" y1="100" x2="510" y2="100" stroke="#94a3b8" stroke-width="2" marker-end="url(#arrowhead)"/>
+  <!-- Arrow 2 with label -->
+  <path d="M276,66 L318,66" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow)"/>
 
-  <!-- Box 3: Judge Model (accent color) -->
+  <!-- LLM Output (amber/warning = untrusted) -->
   <g filter="url(#shadow)">
-    <rect x="520" y="60" width="180" height="80" rx="8" fill="url(#judgeGradient)" stroke="#c7d2fe" stroke-width="1.5"/>
+    <rect x="326" y="32" width="130" height="68" rx="8" fill="#fef3c7" stroke="#f59e0b" stroke-width="1.5"/>
   </g>
-  <text x="610" y="95" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="15" font-weight="600" fill="#3730a3">Judge Model</text>
-  <text x="610" y="118" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="12" fill="#6366f1">+ Rubric Prompt</text>
+  <text x="391" y="56" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" font-weight="600" fill="#92400e">LLM Output</text>
+  <text x="391" y="72" text-anchor="middle" font-family="system-ui, sans-serif" font-size="9" fill="#b45309">Candidate response</text>
+  <text x="391" y="88" text-anchor="middle" font-family="system-ui, sans-serif" font-size="8" font-style="italic" fill="#d97706">(untrusted)</text>
 
-  <!-- Arrow 3 (vertical) -->
-  <line x1="610" y1="140" x2="610" y2="175" stroke="#94a3b8" stroke-width="2" marker-end="url(#arrowhead)"/>
+  <!-- Row 2: Rubric -->
 
-  <!-- Box 4: Result -->
+  <!-- Rubric (green = trusted criteria) -->
   <g filter="url(#shadow)">
-    <rect x="520" y="185" width="180" height="70" rx="8" fill="url(#resultGradient)" stroke="#86efac" stroke-width="1.5"/>
+    <rect x="326" y="120" width="130" height="52" rx="8" fill="#dcfce7" stroke="#22c55e" stroke-width="1.5"/>
   </g>
-  <text x="610" y="215" text-anchor="middle" font-family="ui-monospace, monospace" font-size="13" font-weight="500" fill="#166534">{"pass", "score",</text>
-  <text x="610" y="235" text-anchor="middle" font-family="ui-monospace, monospace" font-size="13" font-weight="500" fill="#166534">"reason"}</text>
+  <text x="391" y="143" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" font-weight="600" fill="#166534">Rubric</text>
+  <text x="391" y="159" text-anchor="middle" font-family="system-ui, sans-serif" font-size="9" fill="#15803d">Your eval criteria</text>
+
+  <!-- Arrows converging to Judge -->
+  <path d="M456,66 Q490,66 510,95" stroke="#94a3b8" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
+  <path d="M456,146 Q490,146 510,125" stroke="#94a3b8" stroke-width="1.5" fill="none" marker-end="url(#arrow)"/>
+
+  <!-- Judge Model (purple = the evaluator) -->
+  <g filter="url(#shadow)">
+    <rect x="516" y="82" width="160" height="56" rx="10" fill="#7c3aed"/>
+  </g>
+  <text x="596" y="107" text-anchor="middle" font-family="system-ui, sans-serif" font-size="13" font-weight="700" fill="#fff">Judge Model</text>
+  <text x="596" y="124" text-anchor="middle" font-family="system-ui, sans-serif" font-size="9" fill="#ddd6fe">Scores output vs rubric</text>
+
+  <!-- Arrow to Result -->
+  <path d="M596,138 L596,170" stroke="#7c3aed" stroke-width="2" marker-end="url(#arrowPurple)"/>
+
+  <!-- Result box -->
+  <g filter="url(#shadow)">
+    <rect x="516" y="178" width="160" height="112" rx="8" fill="#fff" stroke="#e2e8f0" stroke-width="1"/>
+  </g>
+  <text x="596" y="200" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" font-weight="600" fill="#475569">Result</text>
+
+  <!-- JSON code block -->
+  <rect x="532" y="210" width="128" height="70" rx="4" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1"/>
+  <text x="544" y="228" font-family="ui-monospace, monospace" font-size="10" fill="#334155">{</text>
+  <text x="552" y="242" font-family="ui-monospace, monospace" font-size="9" fill="#64748b">pass: true,</text>
+  <text x="552" y="254" font-family="ui-monospace, monospace" font-size="9" fill="#64748b">score: 1.0,</text>
+  <text x="552" y="266" font-family="ui-monospace, monospace" font-size="9" fill="#64748b">reason: "..."</text>
+  <text x="544" y="278" font-family="ui-monospace, monospace" font-size="10" fill="#334155">}</text>
 </svg>
