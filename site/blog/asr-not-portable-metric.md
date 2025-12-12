@@ -22,36 +22,23 @@ authors: [michael]
 tags: [red-teaming, llm-security, measurement, evaluation]
 ---
 
-A paper reports **98% attack success rate (ASR)**. You implement the method and see **single-digit success**. Nothing is wrong with your code. You're measuring two different things under the same name.
+If you've read papers about jailbreak attacks on language models, you've encountered Attack Success Rate, or ASR. It's the fraction of attack attempts that successfully get a model to produce prohibited content—the headline metric for comparing different methods. Higher ASR means a more effective attack, or so the reasoning goes.
 
-In LLM red teaming, **ASR is not a single number**. It depends on how many attempts you allow, which prompts count as "harmful," and how success is judged. (ASR here means attack success rate, not automatic speech recognition.)
+In practice, ASR numbers from different papers often can't be compared directly because the metric isn't standardized. Different research groups make different choices about what counts as an "attempt," what counts as "success," and which prompts to test. Those choices can shift the reported number by 50 percentage points or more, even when the underlying attack is identical.
 
-Treat reported ASR as conditional on the measurement setup: **ASR = f(K, D, J, A)** where `K` is attempt budget, `D` is the prompt distribution, `J` is the judge, and `A` is the aggregation rule. Change any component, change the number. The implied "per-attempt success probability" is a derived quantity, not an input.
+Consider a concrete example. An attack that succeeds 1% of the time on any given try will report roughly 1% ASR if you measure it once per target. But run the same attack 392 times per target and count success if any attempt works, and the reported ASR becomes 98%. The math is straightforward: 1 − (0.99)³⁹² ≈ 0.98. That's not a more effective attack—it's a different way of measuring the same attack.
 
-When we re-run published jailbreak methods in production evals, the reported ASR often cannot be reproduced without reconstructing attempt budget, prompt set, and judge. Promptfoo maintains a [database of LLM security research](https://www.promptfoo.dev/lm-security-db/) covering over 400 papers. We take these methods and make them runnable. That's where measurement quietly changes the question.
+When we implement methods from published papers, we regularly find that reported ASR cannot be reproduced without reconstructing details that most papers don't disclose. A [position paper at NeurIPS 2025](https://openreview.net/forum?id=d7hqAhLvWG) (Chouldechova et al.) documents this problem systematically, showing how measurement choices—not attack quality—often drive the reported differences between methods.
 
-A [position paper](https://openreview.net/forum?id=d7hqAhLvWG) (Chouldechova et al., NeurIPS 2025) explains why: many papers are valuable as existence proofs—they show a model can be jailbroken. The trouble starts when papers compare methods ("A beats B") using ASR. Those comparisons often stop being comparable.
+Three factors determine what any given ASR number actually represents:
 
-**The three ways ASR changes meaning:**
+- **Attempt budget**: How many tries were allowed per target? Was there early stopping on success?
+- **Prompt set**: Were the test prompts genuine policy violations, or did they include ambiguous questions that models might reasonably answer?
+- **Judge**: Which model determined whether outputs were harmful, and what were its error patterns?
 
-- **Attempt budget (K):** Best-of-N and early stopping change what you're measuring
-- **Prompt set (D):** Mislabeled "harmful" prompts inflate baselines and compress deltas
-- **Judge (J):** Differential error rates across models reshuffle rankings
+This post explains each factor with examples from the research literature, provides a checklist for evaluating ASR claims in papers you read, and offers a reporting template for making your own red team results reproducible.
 
 <!-- truncate -->
-
----
-
-## What is Attack Success Rate (ASR) in LLM red teaming?
-
-ASR is the fraction of attack attempts (or attack goals) judged to elicit a disallowed behavior. Simple definition, but every term hides choices:
-
-- **Attack attempts**: One try? Best of 10? Best of 392? Adaptive search until success?
-- **Goals**: Per-prompt? Per-category? Micro-average or macro-average?
-- **Judged**: Which model? What rubric? How are edge cases handled?
-- **Disallowed behavior**: Which policy? Which version of that policy?
-
-Two papers reporting "ASR = 85%" can be measuring completely different things.
 
 ---
 
