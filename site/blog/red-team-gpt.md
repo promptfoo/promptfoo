@@ -245,6 +245,7 @@ plugins:
 
 ## Additional Resources
 
+- [GPT-5.2 Trust and Safety Assessment](/blog/gpt-5.2-trust-safety-assessment) - Day-0 red team results showing 78% jailbreak success rate
 - [GPT 4.1 Security Report](https://promptfoo.dev/models/reports/gpt-5)
 - [Promptfoo Red Team Documentation](/docs/red-team/quickstart/)
 - [LLM Vulnerability Types](/docs/red-team/llm-vulnerability-types/)

@@ -732,6 +732,8 @@ Just as companies run fire drills, we need to regularly test our defenses. This 
 - Continuous monitoring for new attack patterns
 - Regular updates to defense mechanisms
 
+Real-world testing shows these attacks work at scale: our [GPT-5.2 red team](/blog/gpt-5.2-trust-safety-assessment) achieved 78% jailbreak success using multi-turn attacks, and [DeepSeek-R1](/blog/deepseek-redteam) failed over 60% of harmful content tests.
+
 ### 6. Incident Response
 
 Finally, we need a clear plan for when attacks are detected:
