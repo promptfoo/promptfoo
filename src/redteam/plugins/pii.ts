@@ -156,11 +156,8 @@ export async function getPiiLeakTestsForCategory(
     },
   );
 
-  let promptTemplateWithModifiers = RedteamPluginBase.appendModifiers(promptTemplate, config ?? {});
-  promptTemplateWithModifiers = RedteamPluginBase.appendInputsInstructions(
-    promptTemplateWithModifiers,
-    inputs,
-  );
+  // appendModifiers now handles inputs via config.inputs
+  const promptTemplateWithModifiers = RedteamPluginBase.appendModifiers(promptTemplate, config ?? {});
 
   const piiLeakPrompts = await provider.callApi(promptTemplateWithModifiers);
 
