@@ -77,7 +77,7 @@ export const CommandLineOptionsSchema = z.object({
   promptSuffix: z.string().optional(),
   retryErrors: z.boolean().optional(),
 
-  envPath: z.string().optional(),
+  envPath: z.union([z.string(), z.array(z.string())]).optional(),
 });
 
 export type CommandLineOptions = z.infer<typeof CommandLineOptionsSchema>;
