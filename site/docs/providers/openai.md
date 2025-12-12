@@ -197,13 +197,15 @@ GPT-5.1 is OpenAI's newest flagship model, part of the GPT-5 model family. It ex
 
 #### Available Models
 
-| Model             | Description                                        | Best For                                    |
-| ----------------- | -------------------------------------------------- | ------------------------------------------- |
-| gpt-5.1           | Latest flagship model                              | Complex reasoning and broad world knowledge |
-| gpt-5.1-mini      | Cost-optimized reasoning                           | Balanced speed, cost, and capability        |
-| gpt-5.1-nano      | High-throughput model                              | Simple instruction-following tasks          |
-| gpt-5.1-codex     | Specialized for coding tasks in Codex environments | Agentic coding workflows                    |
-| gpt-5.1-codex-max | Frontier agentic coding model with compaction      | Long-running coding tasks and refactors     |
+| Model               | Description                                        | Best For                                    |
+| ------------------- | -------------------------------------------------- | ------------------------------------------- |
+| gpt-5.1             | Latest flagship model                              | Complex reasoning and broad world knowledge |
+| gpt-5.1-2025-11-13  | Dated snapshot version                             | Locked behavior for production              |
+| gpt-5.1-mini        | Cost-optimized reasoning                           | Balanced speed, cost, and capability        |
+| gpt-5.1-nano        | High-throughput model                              | Simple instruction-following tasks          |
+| gpt-5.1-codex       | Specialized for coding tasks in Codex environments | Agentic coding workflows                    |
+| gpt-5.1-codex-max   | Frontier agentic coding model with compaction      | Long-running coding tasks and refactors     |
+| gpt-5.1-chat-latest | Chat-optimized alias                               | Conversational applications                 |
 
 #### Key Features
 
@@ -251,7 +253,7 @@ GPT-5.1 supports four reasoning effort levels:
 
 GPT-5.1 with default settings (`none` reasoning) is designed as a drop-in replacement for GPT-5. Key differences:
 
-- GPT-5.1 defaults to `none` reasoning effort (GPT-5 defaulted to `minimal`)
+- GPT-5.1 defaults to `none` reasoning effort (GPT-5 defaulted to `low`)
 - GPT-5.1 has better-calibrated reasoning token consumption
 - Improved instruction-following and output formatting
 
@@ -313,6 +315,91 @@ GPT-5.1-Codex-Max is only available through the Responses API (`openai:responses
 :::note
 GPT-5.1-Codex-Max is recommended for use only in agentic coding environments and is not a general-purpose model like GPT-5.1.
 :::
+
+### GPT-5.2
+
+GPT-5.2 is OpenAI's flagship model for coding and agentic tasks. It offers significant improvements in safety, instruction following, and reduced deception compared to GPT-5.1.
+
+#### Available Models
+
+| Model              | Description                           | Best For                           |
+| ------------------ | ------------------------------------- | ---------------------------------- |
+| gpt-5.2            | Flagship model for coding and agentic | Complex reasoning and coding tasks |
+| gpt-5.2-2025-12-11 | Snapshot version                      | Locked behavior for production     |
+
+#### Key Specifications
+
+- **Context window**: 400,000 tokens
+- **Max output tokens**: 128,000 tokens
+- **Reasoning support**: Full reasoning token support with configurable effort levels
+- **Pricing**: $1.75 per 1M input tokens, $14 per 1M output tokens
+
+#### Usage Examples
+
+GPT-5.2 is available via both the Chat Completions API and Responses API:
+
+**Chat Completions API:**
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:chat:gpt-5.2
+    config:
+      max_completion_tokens: 4096
+
+  # With reasoning effort
+  - id: openai:chat:gpt-5.2
+    config:
+      reasoning_effort: 'medium'
+      max_completion_tokens: 4096
+```
+
+**Responses API:**
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:responses:gpt-5.2
+    config:
+      max_output_tokens: 4096
+
+  # With reasoning effort (nested format)
+  - id: openai:responses:gpt-5.2
+    config:
+      reasoning:
+        effort: 'medium'
+      max_output_tokens: 4096
+```
+
+Fast, low-latency responses (no reasoning):
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  # Chat API
+  - id: openai:chat:gpt-5.2
+    config:
+      reasoning_effort: 'none'
+      max_completion_tokens: 2048
+
+  # Responses API
+  - id: openai:responses:gpt-5.2
+    config:
+      reasoning:
+        effort: 'none'
+      max_output_tokens: 2048
+```
+
+#### Key Improvements over GPT-5.1
+
+- **Reduced deception**: Significantly lower deception rates in production traffic
+- **Better safety compliance**: Improved cyber safety policy compliance
+- **Improved prompt injection resistance**: Enhanced robustness to known prompt injection attacks
+- **Enhanced sensitive topic handling**: Better performance on mental health and emotional reliance evaluations
+
+#### Reasoning Effort Levels
+
+- **`none`**: No reasoning tokens, fastest responses
+- **`low`**: Minimal reasoning for straightforward tasks
+- **`medium`**: Balanced reasoning for moderate complexity
+- **`high`**: Maximum reasoning for complex problem-solving
 
 ### Reasoning Models (o1, o3, o3-pro, o3-mini, o4-mini)
 
