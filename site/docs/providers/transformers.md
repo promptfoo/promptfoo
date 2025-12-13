@@ -45,7 +45,7 @@ providers:
 Popular text generation models:
 
 - `Xenova/gpt2` - Small GPT-2 model for testing
-- `onnx-community/Qwen2.5-0.5B-Instruct` - Instruction-tuned Qwen
+- `onnx-community/Qwen3-0.6B-ONNX` - Latest Qwen3 with thinking capabilities (~600MB)
 - `onnx-community/Llama-3.2-1B-Instruct` - Small Llama 3.2
 
 :::note
@@ -85,7 +85,7 @@ providers:
 
 ```yaml
 providers:
-  - id: transformers:text-generation:onnx-community/Qwen2.5-0.5B-Instruct
+  - id: transformers:text-generation:onnx-community/Qwen3-0.6B-ONNX
     config:
       # Maximum tokens to generate
       maxNewTokens: 256

@@ -27,6 +27,9 @@ declare module 'ibm-cloud-sdk-core' {
   }
 }
 
+// @huggingface/transformers ships with types, but they use complex generics that produce
+// "union type too complex" errors when used with dynamic string task names.
+// These simplified declarations allow dynamic usage without type errors.
 declare module '@huggingface/transformers' {
   export type ProgressCallback = (progress: {
     status: string;
