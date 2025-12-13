@@ -237,6 +237,10 @@ export async function fetchWithRetries(
     try {
       response = await fetchWithTimeout(url, options, timeout);
 
+      // 5XX retries are disabled by default because 500 errors are almost always bugs or
+      // misconfigurations rather than transient issues. Enabling retries by default would
+      // significantly slow down failure feedback (e.g., 100-test eval: ~2min → ~2hrs).
+      // Users can opt-in via PROMPTFOO_RETRY_5XX=true for known-flaky endpoints.
       if (getEnvBool('PROMPTFOO_RETRY_5XX') && response.status >= 500 && response.status < 600) {
         throw new Error(`Internal Server Error: ${response.status} ${response.statusText}`);
       }
