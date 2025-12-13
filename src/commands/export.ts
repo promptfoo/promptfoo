@@ -8,19 +8,8 @@ import Eval from '../models/eval';
 import telemetry from '../telemetry';
 import { getConfigDirectoryPath } from '../util/config/manage';
 import { createOutputMetadata, writeOutput } from '../util/index';
-import { getLogFiles as getLogFilesUtil } from '../util/logFiles';
+import { getLogFiles } from '../util/logFiles';
 import type { Command } from 'commander';
-
-/**
- * Gets all log files from the logs directory, sorted by modification time (newest first)
- */
-function getLogFiles(logDir: string): Array<{ name: string; path: string; mtime: Date }> {
-  const logFiles = getLogFilesUtil(logDir);
-  if (logFiles.length === 0 && fs.existsSync(logDir)) {
-    logger.error(`No log files found in directory: ${logDir}`);
-  }
-  return logFiles;
-}
 
 /**
  * Creates a compressed tar.gz file containing log files

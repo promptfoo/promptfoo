@@ -202,11 +202,7 @@ export function normalizeTokenUsage(
     completion: tokenUsage?.completion || 0,
     cached: tokenUsage?.cached || 0,
     numRequests: tokenUsage?.numRequests || 0,
-    completionDetails: tokenUsage?.completionDetails || {
-      reasoning: 0,
-      acceptedPrediction: 0,
-      rejectedPrediction: 0,
-    },
+    completionDetails: tokenUsage?.completionDetails || createEmptyCompletionDetails(),
     assertions: tokenUsage?.assertions || createEmptyAssertions(),
   };
 }
