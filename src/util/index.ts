@@ -169,10 +169,13 @@ export async function writeOutput(
   const metadata = createOutputMetadata(evalRecord);
 
   if (outputExtension === 'csv') {
-    // Use the shared evalTableToCsv function - single source of truth for CSV generation
-    const table = await evalRecord.getTable();
-    invariant(table, 'Table is required for CSV export');
-    const csvData = evalTableToCsv(table, {
+    // Use getTablePage with unlimited results - same path as WebUI export for true parity
+    const UNLIMITED_RESULTS = Number.MAX_SAFE_INTEGER;
+    const tableResult = await evalRecord.getTablePage({
+      offset: 0,
+      limit: UNLIMITED_RESULTS,
+    });
+    const csvData = evalTableToCsv(tableResult, {
       isRedteam: Boolean(evalRecord.config.redteam),
     });
     fs.writeFileSync(outputPath, csvData);
