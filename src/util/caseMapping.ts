@@ -1,11 +1,8 @@
 /**
- * Utility functions for case mapping (snake_case to camelCase)
- */
-
-/**
- * Recursively map snake_case keys to camelCase for Python/Ruby dataclass compatibility
- * This function is used to handle results from Python and Ruby assertion scripts
- * that may return snake_case keys instead of camelCase.
+ * Recursively map snake_case keys to camelCase for Python/Ruby compatibility.
+ * Python and Ruby conventionally use snake_case for identifiers, while JavaScript
+ * uses camelCase. This function handles results from assertion scripts that may
+ * return snake_case keys (e.g., 'named_scores' instead of 'namedScores').
  *
  * @param obj - Object with potentially snake_case keys
  * @returns Object with camelCase keys
