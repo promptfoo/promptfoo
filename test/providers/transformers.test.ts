@@ -44,8 +44,9 @@ describe('TransformersEmbeddingProvider', () => {
     );
 
     // Get the mocked module and set up the pipeline mock
+    // Use 'as any' to avoid complex generic type resolution issues with the library's types
     const transformers = await import('@huggingface/transformers');
-    vi.mocked(transformers.pipeline).mockImplementation(mockPipeline as typeof transformers.pipeline);
+    vi.mocked(transformers.pipeline).mockImplementation(mockPipeline as any);
   });
 
   afterEach(async () => {
@@ -205,7 +206,7 @@ describe('TransformersTextGenerationProvider', () => {
     );
 
     const transformers = await import('@huggingface/transformers');
-    vi.mocked(transformers.pipeline).mockImplementation(mockPipeline as typeof transformers.pipeline);
+    vi.mocked(transformers.pipeline).mockImplementation(mockPipeline as any);
   });
 
   afterEach(async () => {
@@ -369,7 +370,7 @@ describe('disposePipelines', () => {
     );
 
     const transformers = await import('@huggingface/transformers');
-    vi.mocked(transformers.pipeline).mockImplementation(mockPipeline as typeof transformers.pipeline);
+    vi.mocked(transformers.pipeline).mockImplementation(mockPipeline as any);
   });
 
   afterEach(() => {
@@ -417,7 +418,7 @@ describe('Pipeline caching', () => {
     );
 
     const transformers = await import('@huggingface/transformers');
-    vi.mocked(transformers.pipeline).mockImplementation(mockPipeline as typeof transformers.pipeline);
+    vi.mocked(transformers.pipeline).mockImplementation(mockPipeline as any);
   });
 
   afterEach(async () => {

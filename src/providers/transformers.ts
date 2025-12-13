@@ -171,15 +171,21 @@ async function getOrCreatePipeline(
 
   // Start new initialization
   const initPromise = (async (): Promise<Pipeline> => {
-    let pipeline: (
+    type PipelineFn = (
       task: string,
       model: string,
       options?: Record<string, unknown>,
     ) => Promise<Pipeline>;
 
+    let pipelineFn: PipelineFn;
+
     try {
-      const transformers = await import('@huggingface/transformers');
-      pipeline = transformers.pipeline;
+      // Dynamic import with type assertion - the library's complex generics
+      // don't work well with dynamic task strings, so we use a simplified type
+      const transformers = (await import('@huggingface/transformers')) as {
+        pipeline: PipelineFn;
+      };
+      pipelineFn = transformers.pipeline;
     } catch {
       throw new Error(
         'Transformers.js is not installed. Install it with: npm install @huggingface/transformers',
@@ -228,7 +234,7 @@ async function getOrCreatePipeline(
     });
 
     const startTime = Date.now();
-    const pipe = await pipeline(task, model, pipelineOptions);
+    const pipe = await pipelineFn(task, model, pipelineOptions);
     const loadTime = Date.now() - startTime;
 
     logger.debug(`[Transformers] Pipeline loaded in ${loadTime}ms: ${cacheKey}`);
