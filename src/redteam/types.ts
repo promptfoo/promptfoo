@@ -74,6 +74,7 @@ export const PluginConfigSchema = z.object({
   mentions: z.boolean().optional(),
   // SSRF
   targetUrls: z.array(z.string()).optional(),
+  ssrfFailThreshold: z.enum(['low', 'medium', 'high', 'critical']).optional(),
   // PII
   name: z.string().optional(),
   // CyberSecEval

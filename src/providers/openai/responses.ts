@@ -65,10 +65,8 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     // Computer use model
     'computer-use-preview',
     'computer-use-preview-2025-03-11',
-    // Image generation model
-    'gpt-image-1',
-    'gpt-image-1-2025-04-15',
-    'gpt-image-1-mini',
+    // NOTE: gpt-image-1 and gpt-image-1-mini are NOT supported with the Responses API.
+    // Use openai:image:gpt-image-1 or openai:image:gpt-image-1-mini instead (which uses /images/generations endpoint)
     // Reasoning models
     'o1',
     'o1-2024-12-17',

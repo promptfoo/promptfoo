@@ -478,7 +478,94 @@ See the [OpenAI vision example](https://github.com/promptfoo/promptfoo/tree/main
 
 ### Generating images
 
-OpenAI supports Dall-E generations via `openai:image:dall-e-3`. See the [OpenAI Dall-E example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-dalle-images).
+OpenAI supports image generation via `openai:image:<model>`. Supported models include:
+
+- `gpt-image-1` - OpenAI's latest and most capable image generation model
+- `gpt-image-1-mini` - Cost-efficient version of GPT Image 1
+- `dall-e-3` - High quality image generation with larger resolution support
+- `dall-e-2` - Lower cost option with concurrent requests support
+
+See the [OpenAI image generation example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-images).
+
+#### GPT Image 1
+
+GPT Image 1 is OpenAI's state-of-the-art image generation model with superior instruction following, text rendering, and real-world knowledge.
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:image:gpt-image-1
+    config:
+      size: 1024x1024 # 1024x1024, 1024x1536, 1536x1024, or auto
+      quality: low # low, medium, high, or auto
+      background: transparent # transparent, opaque, or auto
+      output_format: png # png, jpeg, or webp
+      output_compression: 80 # 0-100, only for jpeg/webp
+      moderation: auto # auto or low
+```
+
+| Parameter            | Description                             | Options                                       |
+| -------------------- | --------------------------------------- | --------------------------------------------- |
+| `size`               | Image dimensions                        | `1024x1024`, `1024x1536`, `1536x1024`, `auto` |
+| `quality`            | Rendering quality                       | `low`, `medium`, `high`, `auto`               |
+| `background`         | Background transparency (png/webp only) | `transparent`, `opaque`, `auto`               |
+| `output_format`      | Output image format                     | `png`, `jpeg`, `webp`                         |
+| `output_compression` | Compression level (jpeg/webp only)      | `0-100`                                       |
+| `moderation`         | Content moderation strictness           | `auto`, `low`                                 |
+
+**Pricing:**
+
+| Quality | 1024x1024 | 1024x1536 | 1536x1024 |
+| ------- | --------- | --------- | --------- |
+| Low     | $0.011    | $0.016    | $0.016    |
+| Medium  | $0.042    | $0.063    | $0.063    |
+| High    | $0.167    | $0.25     | $0.25     |
+
+#### GPT Image 1 Mini
+
+GPT Image 1 Mini is a cost-efficient version of GPT Image 1 with the same capabilities at lower cost.
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:image:gpt-image-1-mini
+    config:
+      size: 1024x1024 # 1024x1024, 1024x1536, 1536x1024, or auto
+      quality: low # low, medium, high, or auto
+      background: transparent # transparent, opaque, or auto
+      output_format: png # png, jpeg, or webp
+      output_compression: 80 # 0-100, only for jpeg/webp
+      moderation: auto # auto or low
+```
+
+**Pricing:**
+
+| Quality | 1024x1024 | 1024x1536 | 1536x1024 |
+| ------- | --------- | --------- | --------- |
+| Low     | $0.005    | $0.006    | $0.006    |
+| Medium  | $0.011    | $0.015    | $0.015    |
+| High    | $0.036    | $0.052    | $0.052    |
+
+#### DALL-E 3
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:image:dall-e-3
+    config:
+      size: 1024x1024 # 1024x1024, 1792x1024, 1024x1792
+      quality: standard # standard or hd
+      style: vivid # vivid or natural
+```
+
+#### DALL-E 2
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:image:dall-e-2
+    config:
+      size: 512x512 # 256x256, 512x512, 1024x1024
+      response_format: url # url or b64_json
+```
+
+#### Example
 
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
@@ -487,7 +574,7 @@ prompts:
   - 'In the style of Dali: {{subject}}'
 
 providers:
-  - openai:image:dall-e-3
+  - openai:image:gpt-image-1
 
 tests:
   - vars:
