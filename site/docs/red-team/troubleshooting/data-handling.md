@@ -12,11 +12,11 @@ This page explains what data leaves your machine during red team testing and how
 
 Red team testing involves three distinct operations, each with different data requirements:
 
-| Operation | What Runs | Data Sent Externally |
-|-----------|-----------|---------------------|
-| **Target evaluation** | Always local | Only to your configured LLM provider |
-| **Test generation** | Local or remote | Depends on configuration (see below) |
-| **Result grading** | Local or remote | Depends on configuration (see below) |
+| Operation             | What Runs       | Data Sent Externally                 |
+| --------------------- | --------------- | ------------------------------------ |
+| **Target evaluation** | Always local    | Only to your configured LLM provider |
+| **Test generation**   | Local or remote | Depends on configuration (see below) |
+| **Result grading**    | Local or remote | Depends on configuration (see below) |
 
 Your target model is always evaluated locally. Promptfoo never receives your target's responses unless you're using remote grading.
 
@@ -25,16 +25,19 @@ Your target model is always evaluated locally. Promptfoo never receives your tar
 Without an `OPENAI_API_KEY`, promptfoo uses hosted inference for test generation and grading. The following data is sent to `api.promptfoo.app`:
 
 **For test generation:**
+
 - Application purpose (from your config's `purpose` field)
 - Plugin configuration and settings
 - Your email (for usage tracking)
 
 **For grading:**
+
 - The prompt sent to your target
 - Your target's response
 - Grading criteria
 
 **Never sent:**
+
 - API keys or credentials
 - Your promptfooconfig.yaml file
 - Model weights or training data
@@ -62,6 +65,7 @@ With this configuration, promptfoo servers receive only [telemetry](#telemetry).
 Some plugins require promptfoo's hosted inference and cannot run locally. These are marked with 🌐 in the [plugin documentation](/docs/red-team/plugins/).
 
 Remote-only plugins include:
+
 - Harmful content plugins (`harmful:*`)
 - Bias plugins
 - Domain-specific plugins (medical, financial, insurance, pharmacy, ecommerce)
@@ -91,6 +95,7 @@ See [Configuring Inference](/docs/red-team/troubleshooting/inference-limit/) for
 ## Telemetry
 
 Promptfoo collects anonymous usage telemetry:
+
 - Commands run (`redteam generate`, `redteam run`, etc.)
 - Plugin and strategy types used (not content)
 - Assertion types
@@ -109,11 +114,11 @@ See [Telemetry Configuration](/docs/configuration/telemetry/) for details.
 
 When using remote generation, promptfoo requires access to:
 
-| Domain | Purpose |
-|--------|---------|
-| `api.promptfoo.app` | Test generation and grading |
+| Domain              | Purpose                              |
+| ------------------- | ------------------------------------ |
+| `api.promptfoo.app` | Test generation and grading          |
 | `api.promptfoo.dev` | Consent tracking for harmful plugins |
-| `a.promptfoo.app` | Telemetry (PostHog) |
+| `a.promptfoo.app`   | Telemetry (PostHog)                  |
 
 If blocked by your firewall, see [Remote Generation Troubleshooting](/docs/red-team/troubleshooting/remote-generation/).
 
@@ -122,6 +127,7 @@ If blocked by your firewall, see [Remote Generation Troubleshooting](/docs/red-t
 For organizations requiring complete network isolation:
 
 **[Promptfoo Enterprise On-Prem](/docs/enterprise/)** provides:
+
 - Dedicated runner within your network perimeter
 - Full air-gapped operation
 - Self-hosted inference for all plugins
@@ -131,11 +137,11 @@ See the [Enterprise Overview](/docs/enterprise/) for deployment options.
 
 ## Configuration Summary
 
-| Requirement | Configuration |
-|-------------|---------------|
-| No data to promptfoo servers | Set `OPENAI_API_KEY` + `PROMPTFOO_DISABLE_TELEMETRY=1` |
-| Local generation only | Set `PROMPTFOO_DISABLE_REMOTE_GENERATION=true` + configure local provider |
-| Air-gapped deployment | Use [Enterprise On-Prem](/docs/enterprise/) |
+| Requirement                  | Configuration                                                             |
+| ---------------------------- | ------------------------------------------------------------------------- |
+| No data to promptfoo servers | Set `OPENAI_API_KEY` + `PROMPTFOO_DISABLE_TELEMETRY=1`                    |
+| Local generation only        | Set `PROMPTFOO_DISABLE_REMOTE_GENERATION=true` + configure local provider |
+| Air-gapped deployment        | Use [Enterprise On-Prem](/docs/enterprise/)                               |
 
 ## Related Documentation
 
