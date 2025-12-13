@@ -8,30 +8,18 @@ import Eval from '../models/eval';
 import telemetry from '../telemetry';
 import { writeOutput, createOutputMetadata } from '../util/index';
 import { getConfigDirectoryPath } from '../util/config/manage';
+import { getLogFiles as getLogFilesUtil } from '../util/logFiles';
 import type { Command } from 'commander';
 
 /**
  * Gets all log files from the logs directory, sorted by modification time (newest first)
  */
 function getLogFiles(logDir: string): Array<{ name: string; path: string; mtime: Date }> {
-  if (!fs.existsSync(logDir)) {
-    return [];
+  const logFiles = getLogFilesUtil(logDir);
+  if (logFiles.length === 0 && fs.existsSync(logDir)) {
+    logger.error(`Error reading log directory`);
   }
-
-  try {
-    return fs
-      .readdirSync(logDir)
-      .filter((file) => file.startsWith('promptfoo-') && file.endsWith('.log'))
-      .map((file) => ({
-        name: file,
-        path: path.join(logDir, file),
-        mtime: fs.statSync(path.join(logDir, file)).mtime,
-      }))
-      .sort((a, b) => b.mtime.getTime() - a.mtime.getTime()); // Sort by newest first
-  } catch (error) {
-    logger.error(`Error reading log directory: ${error}`);
-    return [];
-  }
+  return logFiles;
 }
 
 /**
