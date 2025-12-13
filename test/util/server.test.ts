@@ -40,6 +40,7 @@ vi.mock('../../src/util/fetch', () => ({
 // Mock remoteGeneration
 vi.mock('../../src/redteam/remoteGeneration', () => ({
   getRemoteVersionUrl: vi.fn(),
+  shouldGenerateRemote: vi.fn().mockReturnValue(false),
 }));
 
 // Import the mocked fetchWithProxy for use in tests
