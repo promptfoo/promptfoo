@@ -880,6 +880,11 @@ providers:
         responseTemplate: projects/${VERTEX_PROJECT_ID}/locations/us-central1/templates/basic-safety
 ```
 
+| Option                        | Description                                 |
+| ----------------------------- | ------------------------------------------- |
+| `modelArmor.promptTemplate`   | Template path for screening input prompts   |
+| `modelArmor.responseTemplate` | Template path for screening model responses |
+
 #### Prerequisites
 
 1. Enable the Model Armor API:

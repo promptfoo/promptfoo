@@ -17,9 +17,18 @@ import {
   type Plugin,
   type Strategy,
 } from '@promptfoo/redteam/constants';
+import type { ConversationMessage } from '@promptfoo/redteam/types';
 import { TestCaseDialog } from './TestCaseDialog';
+import type {
+  GeneratedTestCase,
+  TargetResponse,
+  TargetPlugin,
+  TargetStrategy,
+} from './testCaseGenerationTypes';
 import { type Config } from '../types';
-import type { ConversationMessage, PluginConfig, StrategyConfig } from '@promptfoo/redteam/types';
+
+// Re-export types for backward compatibility
+export type { GeneratedTestCase, TargetResponse, TargetPlugin, TargetStrategy };
 
 const DEFAULT_PLUGIN = 'harmful:hate';
 
@@ -30,28 +39,6 @@ const ERROR_MSG_DURATION = 7500; // 7.5s duration
 // Batch generation constants
 const BATCH_SIZE = 5; // Number of test cases to generate per batch
 const PREFETCH_THRESHOLD = 2; // Prefetch next batch when N remaining
-
-export interface GeneratedTestCase {
-  prompt: string;
-  context?: string;
-  metadata?: any;
-}
-
-export interface TargetResponse {
-  output: string | null;
-  error: string | null;
-}
-
-export interface TargetPlugin {
-  id: Plugin;
-  config: PluginConfig;
-  isStatic: boolean;
-}
-export interface TargetStrategy {
-  id: Strategy;
-  config: StrategyConfig;
-  isStatic: boolean;
-}
 
 type OnGenerationSuccess = (testCase: GeneratedTestCase) => void;
 type OnGenerationError = (error: Error) => void;

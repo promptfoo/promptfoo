@@ -8,9 +8,13 @@ import { doGenerateRedteam } from '../../src/redteam/commands/generate';
 import { doRedteamRun } from '../../src/redteam/shared';
 import { checkRemoteHealth } from '../../src/util/apiHealth';
 import { loadDefaultConfig } from '../../src/util/config/default';
+import { initVerboseToggle } from '../../src/util/verboseToggle';
 import FakeDataFactory from '../factories/data/fakeDataFactory';
 
 vi.mock('../../src/redteam/commands/generate');
+vi.mock('../../src/util/verboseToggle', () => ({
+  initVerboseToggle: vi.fn(),
+}));
 vi.mock('../../src/commands/eval', async (importOriginal) => {
   return {
     ...(await importOriginal()),
@@ -326,6 +330,59 @@ describe('doRedteamRun', () => {
       expect(mockLogger.debug).toHaveBeenCalledWith(
         `Live config: ${JSON.stringify(mockConfig, null, 2)}`,
       );
+    });
+  });
+
+  describe('verbose toggle integration', () => {
+    it('should initialize verbose toggle when logCallback is not provided', async () => {
+      await doRedteamRun({});
+
+      expect(initVerboseToggle).toHaveBeenCalled();
+    });
+
+    it('should NOT initialize verbose toggle when logCallback is provided', async () => {
+      const mockLogCallback = vi.fn();
+
+      await doRedteamRun({
+        logCallback: mockLogCallback,
+      });
+
+      expect(initVerboseToggle).not.toHaveBeenCalled();
+    });
+
+    it('should call cleanup function on successful completion', async () => {
+      const mockCleanup = vi.fn();
+      vi.mocked(initVerboseToggle).mockReturnValue(mockCleanup);
+
+      await doRedteamRun({});
+
+      expect(mockCleanup).toHaveBeenCalled();
+    });
+
+    it('should call cleanup function when no test cases are generated', async () => {
+      const mockCleanup = vi.fn();
+      vi.mocked(initVerboseToggle).mockReturnValue(mockCleanup);
+      vi.mocked(doGenerateRedteam).mockResolvedValue(null);
+
+      await doRedteamRun({});
+
+      expect(mockCleanup).toHaveBeenCalled();
+    });
+
+    it('should handle null cleanup function gracefully', async () => {
+      vi.mocked(initVerboseToggle).mockReturnValue(null);
+
+      // Should not throw
+      await expect(doRedteamRun({})).resolves.not.toThrow();
+    });
+
+    it('should not call cleanup when initVerboseToggle returns null', async () => {
+      vi.mocked(initVerboseToggle).mockReturnValue(null);
+
+      await doRedteamRun({});
+
+      // Just verifying no errors - cleanup should be handled gracefully
+      expect(initVerboseToggle).toHaveBeenCalled();
     });
   });
 });
