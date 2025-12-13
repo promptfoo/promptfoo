@@ -1466,7 +1466,7 @@ Supported config options:
 | transformResponse | string \| Function      | Transforms the API response using a JavaScript expression (e.g., 'json.result'), function, or file path (e.g., 'file://parser.js'). Replaces the deprecated `responseParser` field. |
 | tokenEstimation   | object                  | Configuration for optional token usage estimation. See Token Estimation section above for details.                                                                                  |
 | maxRetries        | number                  | Maximum number of retry attempts for failed requests. Defaults to 4.                                                                                                                |
-| validateStatus    | Function                | A function that takes a status code and returns a boolean indicating if the response should be treated as successful. By default, accepts all status codes.                         |
+| validateStatus    | string \| Function      | A function, string expression, or file path to validate HTTP status codes. Returns boolean indicating if the response should be treated as successful. By default, rejects 401, 403, and 5xx status codes. See [Error Handling](#error-handling). |
 | auth              | object                  | Authentication configuration (bearer, api_key, basic, or oauth). See [Authentication](#authentication) section.                                                                     |
 | signatureAuth     | object                  | Digital signature authentication configuration. See [Digital Signature Authentication](#digital-signature-authentication) section.                                                  |
 | tls               | object                  | Configuration for TLS/HTTPS connections including client certificates, CA certificates, and cipher settings. See TLS Configuration Options above.                                   |
@@ -1489,9 +1489,9 @@ The HTTP provider throws errors for:
 - Invalid response parsing
 - Session parsing errors
 - Invalid request configurations
-- Status codes that fail the configured validation (if `validateStatus` is set)
+- Status codes that fail validation (401, 403, and 5xx by default)
 
-By default, all response status codes are accepted. You can customize this using the `validateStatus` option:
+By default, the HTTP provider rejects 401 (Unauthorized), 403 (Forbidden), and 5xx (server error) status codes. You can customize this using the `validateStatus` option:
 
 ```yaml
 providers:
