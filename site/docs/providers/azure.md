@@ -414,7 +414,7 @@ defaultTest:
           apiHost: 'your-resource.openai.azure.com'
 ```
 
-Note that any moderation tasks will still use the OpenAI API.
+For moderation tasks, you can use [Azure Content Safety](/docs/configuration/expected-outputs/moderation#azure-content-safety-moderation) instead of the OpenAI moderation API.
 
 ## Configuration
 
@@ -1209,6 +1209,7 @@ For complete working examples, check out the [Azure Foundry Agent example direct
 ## See Also
 
 - [OpenAI Provider](/docs/providers/openai) - The base provider that Azure shares configuration with
+- [Azure Content Safety](/docs/configuration/expected-outputs/moderation#azure-content-safety-moderation) - Use Azure Content Safety for moderation assertions
 - [Evaluating Assistants](/docs/guides/evaluate-openai-assistants/) - Learn how to compare different models and instructions
 - [Azure Examples](https://github.com/promptfoo/promptfoo/tree/main/examples/azure) - All Azure examples in one place:
   - [OpenAI](https://github.com/promptfoo/promptfoo/tree/main/examples/azure/openai) - Chat, vision, and embedding examples

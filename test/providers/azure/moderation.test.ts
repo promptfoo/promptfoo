@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  AZURE_MAX_SEVERITY,
   type AzureModerationCategory,
   getModerationCacheKey,
   handleApiError,
@@ -25,14 +26,58 @@ describe('Azure Moderation', () => {
 
       const result = parseAzureModerationResponse(response);
 
-      expect(result).toEqual({
-        flags: [
+      expect(result.flags).toHaveLength(1);
+      expect(result.flags![0].code).toBe('hate');
+      expect(result.flags![0].description).toBe('Content flagged for Hate');
+      expect(result.flags![0].confidence).toBeCloseTo(4 / AZURE_MAX_SEVERITY);
+      expect(result.flags![0].metadata).toEqual({
+        azure_severity: 4,
+        max_severity: AZURE_MAX_SEVERITY,
+      });
+    });
+
+    it('should return all categories when returnAllCategories is true', () => {
+      const response = {
+        categoriesAnalysis: [
           {
-            code: 'hate',
-            description: 'Content flagged for Hate',
-            confidence: 4 / 7,
+            category: 'Hate' as AzureModerationCategory,
+            severity: 4,
+          },
+          {
+            category: 'Sexual' as AzureModerationCategory,
+            severity: 0,
           },
         ],
+      };
+
+      const result = parseAzureModerationResponse(response, { returnAllCategories: true });
+
+      expect(result.flags).toHaveLength(2);
+      expect(result.flags![0].code).toBe('hate');
+      expect(result.flags![0].description).toBe('Content flagged for Hate');
+      expect(result.flags![1].code).toBe('sexual');
+      expect(result.flags![1].description).toBe('Sexual (not flagged)');
+      expect(result.flags![1].confidence).toBe(0);
+    });
+
+    it('should use custom maxSeverity for confidence calculation', () => {
+      const response = {
+        categoriesAnalysis: [
+          {
+            category: 'Hate' as AzureModerationCategory,
+            severity: 2,
+          },
+        ],
+      };
+
+      // Use maxSeverity of 3 (FourSeverityLevels for images)
+      const result = parseAzureModerationResponse(response, { maxSeverity: 3 });
+
+      expect(result.flags).toHaveLength(1);
+      expect(result.flags![0].confidence).toBeCloseTo(2 / 3);
+      expect(result.flags![0].metadata).toEqual({
+        azure_severity: 2,
+        max_severity: 3,
       });
     });
 
@@ -69,19 +114,18 @@ describe('Azure Moderation', () => {
 
       const result = parseAzureModerationResponse(response);
 
-      expect(result).toEqual({
-        flags: [
-          {
-            code: 'hate',
-            description: 'Content flagged for Hate',
-            confidence: 3 / 7,
-          },
-          {
-            code: 'violence',
-            description: 'Content flagged for Violence',
-            confidence: 5 / 7,
-          },
-        ],
+      expect(result.flags).toHaveLength(2);
+      expect(result.flags![0]).toEqual({
+        code: 'hate',
+        description: 'Content flagged for Hate',
+        confidence: 3 / AZURE_MAX_SEVERITY,
+        metadata: { azure_severity: 3, max_severity: AZURE_MAX_SEVERITY },
+      });
+      expect(result.flags![1]).toEqual({
+        code: 'violence',
+        description: 'Content flagged for Violence',
+        confidence: 5 / AZURE_MAX_SEVERITY,
+        metadata: { azure_severity: 5, max_severity: AZURE_MAX_SEVERITY },
       });
     });
 
@@ -117,18 +161,22 @@ describe('Azure Moderation', () => {
 
       const result = parseAzureModerationResponse(response);
 
-      expect(result.flags).toEqual([
-        {
-          code: 'hate',
-          description: 'Content flagged for Hate',
-          confidence: 5 / 7,
+      expect(result.flags).toHaveLength(2);
+      expect(result.flags![0]).toEqual({
+        code: 'hate',
+        description: 'Content flagged for Hate',
+        confidence: 5 / AZURE_MAX_SEVERITY,
+        metadata: { azure_severity: 5, max_severity: AZURE_MAX_SEVERITY },
+      });
+      expect(result.flags![1]).toEqual({
+        code: 'blocklist:custom-list',
+        description: 'Content matched blocklist item: forbidden term',
+        confidence: 1.0,
+        metadata: {
+          blocklist_item_id: '456',
+          blocklist_item_text: 'forbidden term',
         },
-        {
-          code: 'blocklist:custom-list',
-          description: 'Content matched blocklist item: forbidden term',
-          confidence: 1.0,
-        },
-      ]);
+      });
     });
   });
 
