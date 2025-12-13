@@ -31,7 +31,7 @@ export function getLogFiles(logDir: string): LogFileInfo[] {
         mtime: fs.statSync(path.join(logDir, file)).mtime,
       }))
       .sort((a, b) => b.mtime.getTime() - a.mtime.getTime()); // Sort by newest first
-  } catch (error) {
+  } catch (_error) {
     // Return empty array on error - caller can handle logging
     return [];
   }

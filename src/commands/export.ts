@@ -6,8 +6,8 @@ import { getEnvString } from '../envars';
 import logger from '../logger';
 import Eval from '../models/eval';
 import telemetry from '../telemetry';
-import { writeOutput, createOutputMetadata } from '../util/index';
 import { getConfigDirectoryPath } from '../util/config/manage';
+import { createOutputMetadata, writeOutput } from '../util/index';
 import { getLogFiles as getLogFilesUtil } from '../util/logFiles';
 import type { Command } from 'commander';
 
