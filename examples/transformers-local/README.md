@@ -27,10 +27,10 @@ npx promptfoo@latest eval
 
 ## Models Used
 
-| Model | Task | Size | Purpose |
-|-------|------|------|---------|
-| `onnx-community/Qwen3-0.6B-ONNX` | Text Generation | ~600MB | Generate responses |
-| `Xenova/all-MiniLM-L6-v2` | Embeddings | ~23MB | Similarity assertions |
+| Model                            | Task            | Size   | Purpose               |
+| -------------------------------- | --------------- | ------ | --------------------- |
+| `onnx-community/Qwen3-0.6B-ONNX` | Text Generation | ~600MB | Generate responses    |
+| `Xenova/all-MiniLM-L6-v2`        | Embeddings      | ~23MB  | Similarity assertions |
 
 ## First Run
 

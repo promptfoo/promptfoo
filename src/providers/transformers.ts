@@ -1,11 +1,7 @@
 import logger from '../logger';
 import { providerRegistry } from './providerRegistry';
 
-import type {
-  ApiProvider,
-  ProviderEmbeddingResponse,
-  ProviderResponse,
-} from '../types/index';
+import type { ApiProvider, ProviderEmbeddingResponse, ProviderResponse } from '../types/index';
 
 /**
  * Common options for all Transformers.js providers
@@ -334,7 +330,8 @@ export class TransformersEmbeddingProvider implements ApiProvider {
 
   async callApi(_prompt: string): Promise<ProviderResponse> {
     return {
-      error: 'Cannot use an embedding provider for text generation. Use callEmbeddingApi() instead.',
+      error:
+        'Cannot use an embedding provider for text generation. Use callEmbeddingApi() instead.',
     };
   }
 

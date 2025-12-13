@@ -39,9 +39,9 @@ describe('TransformersEmbeddingProvider', () => {
     mockDispose = vi.fn().mockResolvedValue(undefined);
 
     // Mock pipeline factory
-    mockPipeline = vi.fn().mockResolvedValue(
-      Object.assign(mockExtractor, { dispose: mockDispose }),
-    );
+    mockPipeline = vi
+      .fn()
+      .mockResolvedValue(Object.assign(mockExtractor, { dispose: mockDispose }));
 
     // Get the mocked module and set up the pipeline mock
     // Use 'as any' to avoid complex generic type resolution issues with the library's types
@@ -125,10 +125,7 @@ describe('TransformersEmbeddingProvider', () => {
 
       await provider.callEmbeddingApi('test text');
 
-      expect(mockExtractor).toHaveBeenCalledWith(
-        'query: test text',
-        expect.any(Object),
-      );
+      expect(mockExtractor).toHaveBeenCalledWith('query: test text', expect.any(Object));
     });
 
     it('should use custom pooling options', async () => {
@@ -201,9 +198,9 @@ describe('TransformersTextGenerationProvider', () => {
     mockGenerator = vi.fn().mockResolvedValue([{ generated_text: 'Generated output' }]);
     mockDispose = vi.fn().mockResolvedValue(undefined);
 
-    mockPipeline = vi.fn().mockResolvedValue(
-      Object.assign(mockGenerator, { dispose: mockDispose }),
-    );
+    mockPipeline = vi
+      .fn()
+      .mockResolvedValue(Object.assign(mockGenerator, { dispose: mockDispose }));
 
     const transformers = await import('@huggingface/transformers');
     vi.mocked(transformers.pipeline).mockImplementation(mockPipeline as any);
@@ -442,13 +439,13 @@ describe('Pipeline caching', () => {
 
     // Need to setup generator mock for text generation
     const mockGenerator = vi.fn().mockResolvedValue([{ generated_text: 'output' }]);
-    mockPipeline.mockResolvedValueOnce(
-      Object.assign(vi.fn().mockResolvedValue({ data: new Float32Array([0.1]), dims: [1] }), {
-        dispose: vi.fn(),
-      }),
-    ).mockResolvedValueOnce(
-      Object.assign(mockGenerator, { dispose: vi.fn() }),
-    );
+    mockPipeline
+      .mockResolvedValueOnce(
+        Object.assign(vi.fn().mockResolvedValue({ data: new Float32Array([0.1]), dims: [1] }), {
+          dispose: vi.fn(),
+        }),
+      )
+      .mockResolvedValueOnce(Object.assign(mockGenerator, { dispose: vi.fn() }));
 
     await embeddingProvider.callEmbeddingApi('test');
     await textGenProvider.callApi('test');
