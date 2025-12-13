@@ -26,3 +26,33 @@ declare module 'ibm-cloud-sdk-core' {
     constructor(config: { bearerToken: string });
   }
 }
+
+declare module '@huggingface/transformers' {
+  export type ProgressCallback = (progress: {
+    status: string;
+    file?: string;
+    progress?: number;
+    model?: string;
+  }) => void;
+
+  export interface PipelineOptions {
+    progress_callback?: ProgressCallback;
+    device?: string;
+    dtype?: string;
+    cache_dir?: string;
+    local_files_only?: boolean;
+    revision?: string;
+    session_options?: Record<string, unknown>;
+  }
+
+  export interface Pipeline {
+    (input: string | string[], options?: Record<string, unknown>): Promise<unknown>;
+    dispose?: () => Promise<void>;
+  }
+
+  export function pipeline(
+    task: string,
+    model: string,
+    options?: PipelineOptions,
+  ): Promise<Pipeline>;
+}
