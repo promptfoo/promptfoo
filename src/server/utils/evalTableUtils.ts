@@ -11,6 +11,15 @@ import type {
 } from '../../types/index';
 
 /**
+ * Type representing the table page result from eval.getTablePage().
+ * This differs from EvaluateTable in that it uses Prompt[] instead of CompletedPrompt[].
+ */
+type TablePageResult = {
+  head: { prompts: Prompt[]; vars: string[] };
+  body: EvaluateTableRow[];
+};
+
+/**
  * Options for generating CSV from an evaluation.
  */
 export interface GenerateEvalCsvOptions {
@@ -217,14 +226,14 @@ export function evalTableToJson(table: {
  *
  * @param mainEvalId - The ID of the main evaluation
  * @param mainTable - The main evaluation table
- * @param comparisonData - Array of comparison eval data (eval object and table)
+ * @param comparisonData - Array of comparison eval data (eval ID and table)
  * @returns Merged table with all prompts and outputs combined
  */
 function mergeComparisonTables(
   mainEvalId: string,
-  mainTable: EvaluateTable,
-  comparisonData: Array<{ eval_: Eval; table: EvaluateTable }>,
-): EvaluateTable {
+  mainTable: TablePageResult,
+  comparisonData: Array<{ evalId: string; table: TablePageResult }>,
+): TablePageResult {
   return {
     head: {
       prompts: [
@@ -234,10 +243,10 @@ function mergeComparisonTables(
           label: `[${mainEvalId}] ${prompt.label || ''}`,
         })),
         // Comparison eval prompts with their eval ID prefixes
-        ...comparisonData.flatMap(({ table }) =>
+        ...comparisonData.flatMap(({ evalId, table }) =>
           table.head.prompts.map((prompt) => ({
             ...prompt,
-            label: `[${table.id}] ${prompt.label || ''}`,
+            label: `[${evalId}] ${prompt.label || ''}`,
           })),
         ),
       ],
@@ -290,7 +299,7 @@ export async function generateEvalCsv(
     filters: options.filters,
   });
 
-  let finalTable: EvaluateTable = mainTable;
+  let finalTable: TablePageResult = mainTable;
 
   // Handle comparison evals if provided
   if (options.comparisonEvalIds && options.comparisonEvalIds.length > 0) {
@@ -313,7 +322,7 @@ export async function generateEvalCsv(
           filters: options.filters,
         });
 
-        return { eval_: comparisonEval, table };
+        return { evalId: comparisonEval.id, table };
       }),
     );
 
