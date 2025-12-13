@@ -2,7 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { describe, expect, it, vi, beforeEach, type Mock } from 'vitest';
-import { TestCaseGenerateButton } from './TestCaseDialog';
+import { TestCaseGenerateButton, TestCaseDialog } from './TestCaseDialog';
 import type { DefinedUseQueryResult } from '@tanstack/react-query';
 import type { ApiHealthResult } from '@app/hooks/useApiHealth';
 
@@ -226,6 +226,84 @@ describe('TestCaseGenerateButton', () => {
 
       const iconButton = screen.getByRole('button');
       expect(iconButton).toBeDisabled();
+    });
+  });
+});
+
+describe('TestCaseDialog', () => {
+  const defaultProps = {
+    open: true,
+    onClose: vi.fn(),
+    plugin: { id: 'harmful:hate' as const, config: {}, isStatic: false },
+    strategy: { id: 'basic' as const, config: {}, isStatic: false },
+    isGenerating: false,
+    generatedTestCases: [{ prompt: 'Test prompt', context: 'Test context' }],
+    targetResponses: [],
+    isRunningTest: false,
+    onRegenerate: vi.fn(),
+    onContinue: vi.fn(),
+    currentTurn: 0,
+    maxTurns: 1,
+    availablePlugins: ['harmful:hate', 'harmful:violence', 'pii'],
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUseApiHealth.mockReturnValue({
+      data: { status: 'connected', message: null },
+      refetch: vi.fn(),
+      isLoading: false,
+    });
+  });
+
+  describe('allowPluginChange prop', () => {
+    it('should NOT show strategy chip when allowPluginChange is false', () => {
+      renderWithTheme(<TestCaseDialog {...defaultProps} allowPluginChange={false} />);
+
+      expect(screen.queryByTestId('strategy-chip')).not.toBeInTheDocument();
+    });
+
+    it('should show strategy chip when allowPluginChange is true', () => {
+      renderWithTheme(<TestCaseDialog {...defaultProps} allowPluginChange={true} />);
+
+      expect(screen.getByTestId('strategy-chip')).toBeInTheDocument();
+      expect(screen.getByTestId('strategy-chip')).toHaveTextContent('Strategy: Baseline Testing');
+    });
+
+    it('should show static plugin chip when allowPluginChange is false', () => {
+      renderWithTheme(<TestCaseDialog {...defaultProps} allowPluginChange={false} />);
+
+      const pluginChip = screen.getByTestId('plugin-chip');
+      expect(pluginChip).toBeInTheDocument();
+      expect(pluginChip).toHaveTextContent('Plugin: Hate Speech');
+      // Should not have a dropdown arrow
+      expect(pluginChip.querySelector('svg')).toBeNull();
+    });
+
+    it('should show clickable plugin chip with dropdown when allowPluginChange is true', async () => {
+      const user = userEvent.setup();
+      renderWithTheme(<TestCaseDialog {...defaultProps} allowPluginChange={true} />);
+
+      const pluginChip = screen.getByTestId('plugin-chip');
+      expect(pluginChip).toBeInTheDocument();
+      expect(pluginChip).toHaveTextContent('Plugin: Hate Speech');
+
+      // Click the chip to open the popover
+      await user.click(pluginChip);
+
+      // Popover should appear with plugin selector
+      await waitFor(() => {
+        expect(screen.getByLabelText('Select Plugin')).toBeInTheDocument();
+      });
+    });
+
+    it('should show dropdown arrow icon when allowPluginChange is true', () => {
+      renderWithTheme(<TestCaseDialog {...defaultProps} allowPluginChange={true} />);
+
+      const pluginChip = screen.getByTestId('plugin-chip');
+      // Check for the ArrowDropDownIcon (SVG element)
+      const svg = pluginChip.querySelector('svg');
+      expect(svg).toBeInTheDocument();
     });
   });
 });

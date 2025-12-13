@@ -1954,8 +1954,8 @@ class Evaluator {
       isRedteam: Boolean(options.isRedteam),
     });
 
-    // Update database signal file after all results are written
-    updateSignalFile();
+    // Update database signal file after all results are written, passing the eval ID
+    updateSignalFile(this.evalRecord.id);
 
     return this.evalRecord;
   }
