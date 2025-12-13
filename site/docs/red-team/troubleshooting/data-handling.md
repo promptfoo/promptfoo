@@ -1,109 +1,146 @@
 ---
 title: Data Handling and Privacy
 sidebar_label: Data handling
-description: What data promptfoo collects and how to configure data transmission.
+description: Understand what data promptfoo transmits during red team testing and how to configure privacy settings.
 ---
 
-# Data handling and privacy
+# Data Handling and Privacy
 
-Data sent to promptfoo servers depends on your configuration.
+This page explains what data leaves your machine during red team testing and how to control it.
 
-## Data sent to promptfoo servers
+## Data Flow Overview
 
-**Regular evals** (non-red team):
+Red team testing involves three distinct operations, each with different data requirements:
 
-- Anonymous telemetry only
-- Test cases run locally against your target
-- No test content sent to promptfoo
+| Operation | What Runs | Data Sent Externally |
+|-----------|-----------|---------------------|
+| **Target evaluation** | Always local | Only to your configured LLM provider |
+| **Test generation** | Local or remote | Depends on configuration (see below) |
+| **Result grading** | Local or remote | Depends on configuration (see below) |
 
-**Red team testing without `OPENAI_API_KEY`:**
+Your target model is always evaluated locally. Promptfoo never receives your target's responses unless you're using remote grading.
 
-- Test generation: Application details and purpose
-- Grading: Prompts and model responses
-- Telemetry: Anonymous usage analytics
+## Default Behavior (No API Key)
 
-Many plugins, strategies, and jailbreak methods require remote generation:
+Without an `OPENAI_API_KEY`, promptfoo uses hosted inference for test generation and grading. The following data is sent to `api.promptfoo.app`:
 
-- 20+ plugins (competitors, hijacking, indirect-prompt-injection)
-- Strategies (citation, gcg, likert, audio/image/video, math-prompt)
-- Jailbreak methods (hydra, goat, iterativeMeta, bestOfN)
+**For test generation:**
+- Application purpose (from your config's `purpose` field)
+- Plugin configuration and settings
+- Your email (for usage tracking)
 
-**Red team testing with `OPENAI_API_KEY`:**
+**For grading:**
+- The prompt sent to your target
+- Your target's response
+- Grading criteria
 
-- Telemetry only
-- Generation and grading use your OpenAI account
-- Test data goes to OpenAI, not promptfoo servers
-
-If you configure [`redteam.provider`](/docs/red-team/configuration/#changing-the-model), that provider is used for grading.
-
-## What is never sent
-
-- Model weights or training data
-- Configuration files or secrets
+**Never sent:**
 - API keys or credentials
+- Your promptfooconfig.yaml file
+- Model weights or training data
+- Files from your filesystem (unless explicitly configured in prompts)
 
-## Configuration recommendations
+## With Your Own API Key
 
-**Development and testing:**
-
-Use the free tier without setting `OPENAI_API_KEY`. Generation and grading use promptfoo's OpenAI account.
-
-**Production or sensitive data:**
-
-Set your OpenAI API key:
+Setting `OPENAI_API_KEY` routes generation and grading through your OpenAI account instead of promptfoo servers:
 
 ```bash
 export OPENAI_API_KEY=sk-...
 ```
 
-Test data goes to your OpenAI account, not promptfoo servers. Optionally disable telemetry (see [telemetry configuration](/docs/configuration/telemetry/)).
+Or configure a different provider for grading:
 
-**Regulated industries:**
+```yaml
+redteam:
+  provider: anthropic:messages:claude-sonnet-4-20250514
+```
 
-Use [Enterprise on-prem](/docs/enterprise/) for airgapped deployment.
+With this configuration, promptfoo servers receive only [telemetry](#telemetry).
 
-## Advanced options
+## Remote-Only Plugins
 
-**Disable remote generation:**
+Some plugins require promptfoo's hosted inference and cannot run locally. These are marked with 🌐 in the [plugin documentation](/docs/red-team/plugins/).
 
-Force local generation with your own provider:
+Remote-only plugins include:
+- Harmful content plugins (`harmful:*`)
+- Bias plugins
+- Domain-specific plugins (medical, financial, insurance, pharmacy, ecommerce)
+- Security plugins: `ssrf`, `bola`, `bfla`, `indirect-prompt-injection`, `ascii-smuggling`
+- Others: `competitors`, `hijacking`, `off-topic`, `system-prompt-override`
+
+Remote-only strategies include: `audio`, `citation`, `gcg`, `goat`, `jailbreak:composite`, `jailbreak:hydra`, `jailbreak:likert`, `jailbreak:meta`
+
+## Disabling Remote Generation
+
+To run entirely locally:
+
+```bash
+export PROMPTFOO_DISABLE_REMOTE_GENERATION=true
+```
+
+This disables all remote-only plugins and strategies. You must provide your own `OPENAI_API_KEY` or configure a local model for generation and grading.
+
+For red-team-specific control (keeps SimulatedUser remote generation enabled):
 
 ```bash
 export PROMPTFOO_DISABLE_REDTEAM_REMOTE_GENERATION=true
 ```
 
-**Warning**: Disables 20+ plugins, multiple strategies (citation, gcg, likert, audio/image/video, math-prompt), and jailbreak methods (hydra, goat, iterativeMeta, bestOfN). See [remote generation configuration](/docs/red-team/configuration/#remote-generation).
+See [Configuring Inference](/docs/red-team/troubleshooting/inference-limit/) for detailed setup.
 
-**Offline environments:**
+## Telemetry
 
-Disable update checks:
+Promptfoo collects anonymous usage telemetry:
+- Commands run (`redteam generate`, `redteam run`, etc.)
+- Plugin and strategy types used (not content)
+- Assertion types
+
+No prompt content, responses, or personally identifiable information is included.
+
+To disable:
 
 ```bash
-export PROMPTFOO_DISABLE_UPDATE=1
+export PROMPTFOO_DISABLE_TELEMETRY=1
 ```
 
-## Data retention
+See [Telemetry Configuration](/docs/configuration/telemetry/) for details.
 
-**Test data:**
+## Network Requirements
 
-With remote generation (without `OPENAI_API_KEY`), promptfoo processes test data to generate tests and grade results. See [privacy policy](/privacy/) for retention details.
+When using remote generation, promptfoo requires access to:
 
-**Telemetry:**
+| Domain | Purpose |
+|--------|---------|
+| `api.promptfoo.app` | Test generation and grading |
+| `api.promptfoo.dev` | Consent tracking for harmful plugins |
+| `a.promptfoo.app` | Telemetry (PostHog) |
 
-Promptfoo collects anonymous usage analytics. No personally identifiable information. See [telemetry documentation](/docs/configuration/telemetry/).
+If blocked by your firewall, see [Remote Generation Troubleshooting](/docs/red-team/troubleshooting/remote-generation/).
 
-## Network requirements
+## Enterprise Deployment
 
-Without `OPENAI_API_KEY`, promptfoo requires access to:
+For organizations requiring complete network isolation:
 
-- `api.promptfoo.app` - Test generation and grading
-- `*.promptfoo.app` - Additional services
+**[Promptfoo Enterprise On-Prem](/docs/enterprise/)** provides:
+- Dedicated runner within your network perimeter
+- Full air-gapped operation
+- Self-hosted inference for all plugins
+- No data transmission to external servers
 
-If blocked by corporate firewall, allowlist these domains or see [remote generation troubleshooting](/docs/red-team/troubleshooting/remote-generation/).
+See the [Enterprise Overview](/docs/enterprise/) for deployment options.
 
-## Related documentation
+## Configuration Summary
 
-- [Telemetry configuration](/docs/configuration/telemetry/)
-- [Remote generation](/docs/red-team/configuration/#remote-generation)
-- [Enterprise on-prem](/docs/enterprise/)
-- [Privacy policy](/privacy/)
+| Requirement | Configuration |
+|-------------|---------------|
+| No data to promptfoo servers | Set `OPENAI_API_KEY` + `PROMPTFOO_DISABLE_TELEMETRY=1` |
+| Local generation only | Set `PROMPTFOO_DISABLE_REMOTE_GENERATION=true` + configure local provider |
+| Air-gapped deployment | Use [Enterprise On-Prem](/docs/enterprise/) |
+
+## Related Documentation
+
+- [Privacy Policy](/privacy/)
+- [Telemetry Configuration](/docs/configuration/telemetry/)
+- [Remote Generation Configuration](/docs/red-team/configuration/#remote-generation)
+- [Configuring Inference](/docs/red-team/troubleshooting/inference-limit/)
+- [Self-Hosting](/docs/usage/self-hosting/)
