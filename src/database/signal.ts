@@ -30,6 +30,14 @@ export function readSignalEvalId(): string | undefined {
   try {
     const content = fs.readFileSync(filePath, 'utf8').trim();
     // Format: evalId:timestamp or just timestamp
+    // ISO timestamps look like: 2024-01-01T00:00:00.000Z
+    // With evalId: evalId:2024-01-01T00:00:00.000Z
+    // We need to distinguish between timestamp-only and evalId:timestamp
+    // Timestamps start with a 4-digit year, eval IDs typically don't
+    if (/^\d{4}-\d{2}-\d{2}T/.test(content)) {
+      // Content starts with ISO date format - no eval ID present
+      return undefined;
+    }
     if (content.includes(':')) {
       const evalId = content.split(':')[0];
       // Basic validation: eval IDs are typically UUIDs or formatted IDs
