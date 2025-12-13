@@ -459,7 +459,7 @@ describe('OpenAICodexSDKProvider', () => {
 
         await provider.callApi('Test prompt');
 
-        expect(MockCodex.mock.instances[0].startThread).toHaveBeenCalledWith(
+        expect((MockCodex.mock.instances[0] as any).startThread).toHaveBeenCalledWith(
           expect.objectContaining({
             sandboxMode: 'read-only',
           }),
@@ -479,7 +479,7 @@ describe('OpenAICodexSDKProvider', () => {
 
         await provider.callApi('Test prompt');
 
-        expect(MockCodex.mock.instances[0].startThread).toHaveBeenCalledWith(
+        expect((MockCodex.mock.instances[0] as any).startThread).toHaveBeenCalledWith(
           expect.objectContaining({
             networkAccessEnabled: true,
             webSearchEnabled: true,
@@ -499,7 +499,7 @@ describe('OpenAICodexSDKProvider', () => {
 
         await provider.callApi('Test prompt');
 
-        expect(MockCodex.mock.instances[0].startThread).toHaveBeenCalledWith(
+        expect((MockCodex.mock.instances[0] as any).startThread).toHaveBeenCalledWith(
           expect.objectContaining({
             modelReasoningEffort: 'high',
           }),
@@ -518,7 +518,7 @@ describe('OpenAICodexSDKProvider', () => {
 
         await provider.callApi('Test prompt');
 
-        expect(MockCodex.mock.instances[0].startThread).toHaveBeenCalledWith(
+        expect((MockCodex.mock.instances[0] as any).startThread).toHaveBeenCalledWith(
           expect.objectContaining({
             approvalPolicy: 'never',
           }),
