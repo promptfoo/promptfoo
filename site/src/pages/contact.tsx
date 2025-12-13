@@ -33,7 +33,7 @@ function Calendar() {
     <div className={styles.calendarContainer}>
       <Cal
         calLink="team/promptfoo/intro2"
-        style={{ width: '100%', height: '100%', overflow: 'scroll' }}
+        style={{ width: '100%', height: '100%', overflow: 'visible' }}
         config={{ layout: 'month_view' }}
       />
     </div>
@@ -62,7 +62,7 @@ function TabPanel(props: TabPanelProps) {
   );
 }
 
-function Contact(): JSX.Element {
+function Contact(): React.ReactElement {
   const isDarkTheme = useColorMode().colorMode === 'dark';
   const [tabValue, setTabValue] = useState(0);
 
@@ -406,7 +406,7 @@ function Contact(): JSX.Element {
   );
 }
 
-export default function Page(): JSX.Element {
+export default function Page(): React.ReactElement {
   return (
     <Layout
       title="Contact Enterprise Sales"

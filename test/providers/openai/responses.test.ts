@@ -1,28 +1,44 @@
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { Mock } from 'vitest';
+
 import * as cache from '../../../src/cache';
 import logger from '../../../src/logger';
 import { OpenAiResponsesProvider } from '../../../src/providers/openai/responses';
 
-jest.mock('../../../src/cache', () => ({
-  fetchWithCache: jest.fn(),
+vi.mock('../../../src/cache', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    fetchWithCache: vi.fn(),
+  };
+});
+
+vi.mock('../../../src/logger', () => ({
+  __esModule: true,
+  default: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
 }));
 
-jest.mock('../../../src/logger', () => ({
-  debug: jest.fn(),
-  info: jest.fn(),
-  warn: jest.fn(),
-  error: jest.fn(),
-}));
+vi.mock('../../../src/python/pythonUtils', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    runPython: vi.fn(),
+  };
+});
 
 describe('OpenAiResponsesProvider', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   afterEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
-  it('should support various model names', () => {
+  it('should support various model names', async () => {
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o1-pro');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o3-pro');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-4o');
@@ -37,14 +53,14 @@ describe('OpenAiResponsesProvider', () => {
     // GPT-4.5 models deprecated as of 2025-07-14, removed from API
   });
 
-  it('should support the latest o-series reasoning models', () => {
+  it('should support the latest o-series reasoning models', async () => {
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o3');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o3-2025-04-16');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o4-mini');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o4-mini-2025-04-16');
   });
 
-  it('should support gpt-4.1 and its variants', () => {
+  it('should support gpt-4.1 and its variants', async () => {
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-4.1');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-4.1-2025-04-14');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-4.1-mini');
@@ -57,7 +73,7 @@ describe('OpenAiResponsesProvider', () => {
     );
   });
 
-  it('should support gpt-5 and its variants', () => {
+  it('should support gpt-5 and its variants', async () => {
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5-chat-latest');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5-nano');
@@ -92,7 +108,7 @@ describe('OpenAiResponsesProvider', () => {
       },
     };
 
-    jest.mocked(cache.fetchWithCache).mockResolvedValue({
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
       data: mockApiResponse,
       cached: false,
       status: 200,
@@ -147,7 +163,7 @@ describe('OpenAiResponsesProvider', () => {
       usage: { input_tokens: 15, output_tokens: 10, total_tokens: 25 },
     };
 
-    jest.mocked(cache.fetchWithCache).mockResolvedValue({
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
       data: mockApiResponse,
       cached: false,
       status: 200,
@@ -197,7 +213,7 @@ describe('OpenAiResponsesProvider', () => {
       usage: { input_tokens: 20, output_tokens: 15, total_tokens: 35 },
     };
 
-    jest.mocked(cache.fetchWithCache).mockResolvedValue({
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
       data: mockApiResponse,
       cached: false,
       status: 200,
@@ -269,7 +285,7 @@ describe('OpenAiResponsesProvider', () => {
       usage: { input_tokens: 20, output_tokens: 15, total_tokens: 35 },
     };
 
-    jest.mocked(cache.fetchWithCache).mockResolvedValue({
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
       data: mockApiResponse,
       cached: false,
       status: 200,
@@ -332,7 +348,7 @@ describe('OpenAiResponsesProvider', () => {
       usage: { input_tokens: 10, output_tokens: 10, total_tokens: 20 },
     };
 
-    jest.mocked(cache.fetchWithCache).mockResolvedValue({
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
       data: mockApiResponse,
       cached: false,
       status: 200,
@@ -350,7 +366,7 @@ describe('OpenAiResponsesProvider', () => {
 
     await provider.callApi('Test prompt');
 
-    const mockCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
+    const mockCall = vi.mocked(cache.fetchWithCache).mock.calls[0];
     const reqOptions = mockCall[1] as { body: string };
     const body = JSON.parse(reqOptions.body);
 
@@ -379,7 +395,7 @@ describe('OpenAiResponsesProvider', () => {
       usage: { input_tokens: 10, output_tokens: 10, total_tokens: 20 },
     };
 
-    jest.mocked(cache.fetchWithCache).mockResolvedValue({
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
       data: mockApiResponse,
       cached: false,
       status: 200,
@@ -432,7 +448,7 @@ describe('OpenAiResponsesProvider', () => {
       usage: { input_tokens: 3896, output_tokens: 100, total_tokens: 3996 },
     };
 
-    jest.mocked(cache.fetchWithCache).mockResolvedValue({
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
       data: mockApiResponse,
       cached: false,
       status: 200,
@@ -471,7 +487,7 @@ describe('OpenAiResponsesProvider', () => {
       usage: { input_tokens: 15, output_tokens: 10, total_tokens: 25 },
     };
 
-    jest.mocked(cache.fetchWithCache).mockResolvedValue({
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
       data: mockApiResponse,
       cached: false,
       status: 200,
@@ -491,7 +507,7 @@ describe('OpenAiResponsesProvider', () => {
 
     await provider.callApi(structuredInput);
 
-    const mockCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
+    const mockCall = vi.mocked(cache.fetchWithCache).mock.calls[0];
     const reqOptions = mockCall[1] as { body: string };
     const body = JSON.parse(reqOptions.body);
 
@@ -522,7 +538,7 @@ describe('OpenAiResponsesProvider', () => {
       usage: { input_tokens: 10, output_tokens: 10, total_tokens: 20 },
     };
 
-    jest.mocked(cache.fetchWithCache).mockResolvedValue({
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
       data: mockApiResponse,
       cached: false,
       status: 200,
@@ -562,7 +578,7 @@ describe('OpenAiResponsesProvider', () => {
       statusText: 'Bad Request',
     };
 
-    jest.mocked(cache.fetchWithCache).mockResolvedValue({
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
       data: mockApiResponse,
       cached: false,
       status: 400,
@@ -631,7 +647,7 @@ describe('OpenAiResponsesProvider', () => {
     };
 
     // Setup mock for fetchWithCache
-    jest.mocked(cache.fetchWithCache).mockResolvedValue({
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
       data: mockApiResponse,
       cached: false,
       status: 200,
@@ -672,7 +688,7 @@ describe('OpenAiResponsesProvider', () => {
 
   it('should handle API errors correctly', async () => {
     // Setup mock for fetchWithCache to return an error
-    jest.mocked(cache.fetchWithCache).mockResolvedValue({
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
       data: {
         error: {
           message: 'Invalid request',
@@ -701,7 +717,7 @@ describe('OpenAiResponsesProvider', () => {
   });
 
   it('should format JSON schema correctly in request body', async () => {
-    jest.mocked(cache.fetchWithCache).mockResolvedValue({
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
       data: {
         id: 'resp_abc123',
         output: [
@@ -745,9 +761,9 @@ describe('OpenAiResponsesProvider', () => {
     const provider = new OpenAiResponsesProvider('gpt-4o', { config });
     await provider.callApi('Test prompt');
 
-    expect(jest.mocked(cache.fetchWithCache).mock.calls.length).toBeGreaterThan(0);
+    expect(vi.mocked(cache.fetchWithCache).mock.calls.length).toBeGreaterThan(0);
 
-    const mockCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
+    const mockCall = vi.mocked(cache.fetchWithCache).mock.calls[0];
     expect(mockCall).toBeDefined();
 
     const reqOptions = mockCall[1] as { body: string };
@@ -779,7 +795,7 @@ describe('OpenAiResponsesProvider', () => {
       usage: { input_tokens: 15, output_tokens: 10, total_tokens: 25 },
     };
 
-    jest.mocked(cache.fetchWithCache).mockResolvedValue({
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
       data: mockApiResponse,
       cached: false,
       status: 200,
@@ -795,7 +811,7 @@ describe('OpenAiResponsesProvider', () => {
     const objectInput = JSON.stringify({ query: 'What is the weather?', context: 'San Francisco' });
     await provider.callApi(objectInput);
 
-    const mockCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
+    const mockCall = vi.mocked(cache.fetchWithCache).mock.calls[0];
     const reqOptions = mockCall[1] as { body: string };
     const body = JSON.parse(reqOptions.body);
 
@@ -807,7 +823,7 @@ describe('OpenAiResponsesProvider', () => {
       config: {},
     });
 
-    jest.spyOn(provider, 'getApiKey').mockReturnValue(undefined);
+    vi.spyOn(provider, 'getApiKey').mockReturnValue(undefined);
 
     await expect(provider.callApi('Test prompt')).rejects.toThrow('OpenAI API key is not set');
   });
@@ -821,7 +837,7 @@ describe('OpenAiResponsesProvider', () => {
       },
     };
 
-    jest.mocked(cache.fetchWithCache).mockResolvedValue({
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
       data: mockApiResponse,
       cached: false,
       status: 400,
@@ -849,7 +865,7 @@ describe('OpenAiResponsesProvider', () => {
     };
 
     // Setup mock for fetchWithCache
-    jest.mocked(cache.fetchWithCache).mockResolvedValue({
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
       data: mockApiResponse,
       cached: false,
       status: 200,
@@ -892,7 +908,7 @@ describe('OpenAiResponsesProvider', () => {
     };
 
     // Setup mock for fetchWithCache
-    jest.mocked(cache.fetchWithCache).mockResolvedValue({
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
       data: mockApiResponse,
       cached: false,
       status: 200,
@@ -907,7 +923,7 @@ describe('OpenAiResponsesProvider', () => {
     });
 
     // Mock fetchWithCache with successful result
-    jest.mocked(cache.fetchWithCache).mockImplementationOnce(async () => {
+    vi.mocked(cache.fetchWithCache).mockImplementationOnce(async function () {
       return {
         data: mockApiResponse,
         cached: false,
@@ -949,7 +965,7 @@ describe('OpenAiResponsesProvider', () => {
     };
 
     // Setup mock for fetchWithCache
-    jest.mocked(cache.fetchWithCache).mockResolvedValue({
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
       data: mockApiResponse,
       cached: false,
       status: 200,
@@ -984,7 +1000,7 @@ describe('OpenAiResponsesProvider', () => {
       usage: { input_tokens: 10, output_tokens: 10, total_tokens: 20 },
     };
 
-    jest.mocked(cache.fetchWithCache).mockResolvedValue({
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
       data: mockApiResponse,
       cached: false,
       status: 200,
@@ -1013,7 +1029,7 @@ describe('OpenAiResponsesProvider', () => {
   // Test for lines 169-174: Testing when fetch throws an error (not just returns error status)
   it('should handle network errors correctly', async () => {
     // Setup mock to throw an error
-    jest.mocked(cache.fetchWithCache).mockRejectedValue(new Error('Network error'));
+    vi.mocked(cache.fetchWithCache).mockRejectedValue(new Error('Network error'));
 
     // Initialize the provider
     const provider = new OpenAiResponsesProvider('gpt-4o', {
@@ -1052,7 +1068,7 @@ describe('OpenAiResponsesProvider', () => {
     };
 
     // Setup mock for fetchWithCache
-    jest.mocked(cache.fetchWithCache).mockResolvedValue({
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
       data: mockApiResponse,
       cached: false,
       status: 200,
@@ -1103,7 +1119,7 @@ describe('OpenAiResponsesProvider', () => {
     };
 
     // Setup mock for fetchWithCache
-    jest.mocked(cache.fetchWithCache).mockResolvedValue({
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
       data: mockApiResponse,
       cached: false,
       status: 200,
@@ -1148,7 +1164,7 @@ describe('OpenAiResponsesProvider', () => {
     };
 
     // Setup mock for fetchWithCache
-    jest.mocked(cache.fetchWithCache).mockResolvedValue({
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
       data: mockApiResponse,
       cached: false,
       status: 200,
@@ -1195,7 +1211,7 @@ describe('OpenAiResponsesProvider', () => {
         usage: { input_tokens: 15, output_tokens: 10, total_tokens: 25 },
       };
 
-      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
         data: mockApiResponse,
         cached: false,
         status: 200,
@@ -1213,7 +1229,7 @@ describe('OpenAiResponsesProvider', () => {
 
       await provider.callApi('Test prompt with JSON');
 
-      const mockCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
+      const mockCall = vi.mocked(cache.fetchWithCache).mock.calls[0];
       const reqOptions = mockCall[1] as { body: string };
       const body = JSON.parse(reqOptions.body);
 
@@ -1244,7 +1260,7 @@ describe('OpenAiResponsesProvider', () => {
         usage: { input_tokens: 15, output_tokens: 10, total_tokens: 25 },
       };
 
-      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
         data: mockApiResponse,
         cached: false,
         status: 200,
@@ -1274,7 +1290,7 @@ describe('OpenAiResponsesProvider', () => {
 
       await provider.callApi('Test prompt');
 
-      const mockCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
+      const mockCall = vi.mocked(cache.fetchWithCache).mock.calls[0];
       const reqOptions = mockCall[1] as { body: string };
       const body = JSON.parse(reqOptions.body);
 
@@ -1304,7 +1320,7 @@ describe('OpenAiResponsesProvider', () => {
         usage: { input_tokens: 15, output_tokens: 10, total_tokens: 25 },
       };
 
-      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
         data: mockApiResponse,
         cached: false,
         status: 200,
@@ -1333,7 +1349,7 @@ describe('OpenAiResponsesProvider', () => {
 
       await provider.callApi('Test prompt');
 
-      const mockCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
+      const mockCall = vi.mocked(cache.fetchWithCache).mock.calls[0];
       const reqOptions = mockCall[1] as { body: string };
       const body = JSON.parse(reqOptions.body);
 
@@ -1363,7 +1379,7 @@ describe('OpenAiResponsesProvider', () => {
         usage: { input_tokens: 15, output_tokens: 10, total_tokens: 25 },
       };
 
-      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
         data: mockApiResponse,
         cached: false,
         status: 200,
@@ -1393,7 +1409,7 @@ describe('OpenAiResponsesProvider', () => {
 
       await provider.callApi('Test prompt');
 
-      const mockCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
+      const mockCall = vi.mocked(cache.fetchWithCache).mock.calls[0];
       const reqOptions = mockCall[1] as { body: string };
       const body = JSON.parse(reqOptions.body);
 
@@ -1423,7 +1439,7 @@ describe('OpenAiResponsesProvider', () => {
         usage: { input_tokens: 10, output_tokens: 10, total_tokens: 20 },
       };
 
-      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
         data: mockApiResponse,
         cached: false,
         status: 200,
@@ -1438,7 +1454,7 @@ describe('OpenAiResponsesProvider', () => {
 
       await provider.callApi('Test prompt');
 
-      const mockCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
+      const mockCall = vi.mocked(cache.fetchWithCache).mock.calls[0];
       const reqOptions = mockCall[1] as { body: string };
       const body = JSON.parse(reqOptions.body);
 
@@ -1449,7 +1465,7 @@ describe('OpenAiResponsesProvider', () => {
       });
     });
 
-    it('should handle external file loading for response_format correctly', () => {
+    it('should handle external file loading for response_format correctly', async () => {
       // Test that the provider can be configured with external file syntax
       // This verifies the type handling for external file references
       expect(() => {
@@ -1482,7 +1498,7 @@ describe('OpenAiResponsesProvider', () => {
         usage: { input_tokens: 10, output_tokens: 15, total_tokens: 25 },
       };
 
-      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
         data: mockApiResponse,
         cached: false,
         status: 200,
@@ -1500,7 +1516,7 @@ describe('OpenAiResponsesProvider', () => {
 
       await provider.callApi('Test prompt');
 
-      const mockCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
+      const mockCall = vi.mocked(cache.fetchWithCache).mock.calls[0];
       const reqOptions = mockCall[1] as { body: string };
       const body = JSON.parse(reqOptions.body);
 
@@ -1511,7 +1527,7 @@ describe('OpenAiResponsesProvider', () => {
       });
     });
 
-    it('should accept external file reference syntax for response_format', () => {
+    it('should accept external file reference syntax for response_format', async () => {
       // Test that the provider can be instantiated with external file syntax
       // without throwing type errors (using type assertion as needed)
       expect(() => {
@@ -1564,7 +1580,7 @@ describe('OpenAiResponsesProvider', () => {
         usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
       };
 
-      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
         data: mockApiResponse,
         cached: false,
         status: 200,
@@ -1598,7 +1614,7 @@ describe('OpenAiResponsesProvider', () => {
         usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
       };
 
-      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
         data: mockApiResponse,
         cached: false,
         status: 200,
@@ -1633,7 +1649,7 @@ describe('OpenAiResponsesProvider', () => {
         statusText: 'Bad Request',
       };
 
-      jest.mocked(cache.fetchWithCache).mockResolvedValue(mockErrorResponse);
+      vi.mocked(cache.fetchWithCache).mockResolvedValue(mockErrorResponse);
 
       const provider = new OpenAiResponsesProvider('gpt-4o', {
         config: {
@@ -1666,7 +1682,7 @@ describe('OpenAiResponsesProvider', () => {
         statusText: 'Bad Request',
       };
 
-      jest.mocked(cache.fetchWithCache).mockResolvedValue(mockErrorResponse);
+      vi.mocked(cache.fetchWithCache).mockResolvedValue(mockErrorResponse);
 
       const provider = new OpenAiResponsesProvider('gpt-4o', {
         config: {
@@ -1705,7 +1721,7 @@ describe('OpenAiResponsesProvider', () => {
       usage: { input_tokens: 10, output_tokens: 10, total_tokens: 20 },
     };
 
-    jest.mocked(cache.fetchWithCache).mockResolvedValue({
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
       data: mockApiResponse,
       cached: false,
       status: 200,
@@ -1722,7 +1738,7 @@ describe('OpenAiResponsesProvider', () => {
 
     await provider.callApi('Test prompt');
 
-    const mockCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
+    const mockCall = vi.mocked(cache.fetchWithCache).mock.calls[0];
     const reqOptions = mockCall[1] as { body: string };
     const body = JSON.parse(reqOptions.body);
 
@@ -1752,7 +1768,7 @@ describe('OpenAiResponsesProvider', () => {
       usage: { input_tokens: 10, output_tokens: 10, total_tokens: 20 },
     };
 
-    jest.mocked(cache.fetchWithCache).mockResolvedValue({
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
       data: mockApiResponse,
       cached: false,
       status: 200,
@@ -1769,7 +1785,7 @@ describe('OpenAiResponsesProvider', () => {
 
     await provider.callApi('Test prompt');
 
-    const mockCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
+    const mockCall = vi.mocked(cache.fetchWithCache).mock.calls[0];
     const reqOptions = mockCall[1] as { body: string };
     const body = JSON.parse(reqOptions.body);
 
@@ -1799,7 +1815,7 @@ describe('OpenAiResponsesProvider', () => {
       usage: { input_tokens: 10, output_tokens: 10, total_tokens: 20 },
     };
 
-    jest.mocked(cache.fetchWithCache).mockResolvedValue({
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
       data: mockApiResponse,
       cached: false,
       status: 200,
@@ -1816,7 +1832,7 @@ describe('OpenAiResponsesProvider', () => {
 
     await provider.callApi('Test prompt');
 
-    const mockCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
+    const mockCall = vi.mocked(cache.fetchWithCache).mock.calls[0];
     const reqOptions = mockCall[1] as { body: string };
     const body = JSON.parse(reqOptions.body);
 
@@ -1846,7 +1862,7 @@ describe('OpenAiResponsesProvider', () => {
       usage: { input_tokens: 10, output_tokens: 10, total_tokens: 20 },
     };
 
-    jest.mocked(cache.fetchWithCache).mockResolvedValue({
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
       data: mockApiResponse,
       cached: false,
       status: 200,
@@ -1863,7 +1879,7 @@ describe('OpenAiResponsesProvider', () => {
 
     await provider.callApi('Test prompt');
 
-    const mockCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
+    const mockCall = vi.mocked(cache.fetchWithCache).mock.calls[0];
     const reqOptions = mockCall[1] as { body: string };
     const body = JSON.parse(reqOptions.body);
 
@@ -1894,7 +1910,7 @@ describe('OpenAiResponsesProvider', () => {
         usage: { input_tokens: 15, output_tokens: 10, total_tokens: 25 },
       };
 
-      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
         data: mockApiResponse,
         cached: false,
         status: 200,
@@ -1918,7 +1934,7 @@ describe('OpenAiResponsesProvider', () => {
 
       await provider.callApi('Test prompt');
 
-      const mockCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
+      const mockCall = vi.mocked(cache.fetchWithCache).mock.calls[0];
       const reqOptions = mockCall[1] as { body: string };
       const body = JSON.parse(reqOptions.body);
 
@@ -1953,7 +1969,7 @@ describe('OpenAiResponsesProvider', () => {
         usage: { input_tokens: 15, output_tokens: 10, total_tokens: 25 },
       };
 
-      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
         data: mockApiResponse,
         cached: false,
         status: 200,
@@ -1979,7 +1995,7 @@ describe('OpenAiResponsesProvider', () => {
 
       await provider.callApi('Test prompt');
 
-      const mockCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
+      const mockCall = vi.mocked(cache.fetchWithCache).mock.calls[0];
       const reqOptions = mockCall[1] as { body: string };
       const body = JSON.parse(reqOptions.body);
 
@@ -2026,7 +2042,7 @@ describe('OpenAiResponsesProvider', () => {
         usage: { input_tokens: 20, output_tokens: 15, total_tokens: 35 },
       };
 
-      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
         data: mockApiResponse,
         cached: false,
         status: 200,
@@ -2085,7 +2101,7 @@ describe('OpenAiResponsesProvider', () => {
         usage: { input_tokens: 25, output_tokens: 20, total_tokens: 45 },
       };
 
-      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
         data: mockApiResponse,
         cached: false,
         status: 200,
@@ -2136,7 +2152,7 @@ describe('OpenAiResponsesProvider', () => {
         usage: { input_tokens: 15, output_tokens: 10, total_tokens: 25 },
       };
 
-      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
         data: mockApiResponse,
         cached: false,
         status: 200,
@@ -2173,7 +2189,7 @@ describe('OpenAiResponsesProvider', () => {
         usage: { input_tokens: 20, output_tokens: 5, total_tokens: 25 },
       };
 
-      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
         data: mockApiResponse,
         cached: false,
         status: 200,
@@ -2220,7 +2236,7 @@ describe('OpenAiResponsesProvider', () => {
         usage: { input_tokens: 30, output_tokens: 15, total_tokens: 45 },
       };
 
-      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
         data: mockApiResponse,
         cached: false,
         status: 200,
@@ -2257,7 +2273,7 @@ describe('OpenAiResponsesProvider', () => {
 
       await provider.callApi('Test prompt');
 
-      const mockCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
+      const mockCall = vi.mocked(cache.fetchWithCache).mock.calls[0];
       const reqOptions = mockCall[1] as { body: string };
       const body = JSON.parse(reqOptions.body);
 
@@ -2288,7 +2304,7 @@ describe('OpenAiResponsesProvider', () => {
         usage: { input_tokens: 15, output_tokens: 10, total_tokens: 25 },
       };
 
-      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
         data: mockApiResponse,
         cached: false,
         status: 200,
@@ -2316,7 +2332,7 @@ describe('OpenAiResponsesProvider', () => {
 
       await provider.callApi('Test prompt');
 
-      const mockCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
+      const mockCall = vi.mocked(cache.fetchWithCache).mock.calls[0];
       const reqOptions = mockCall[1] as { body: string };
       const body = JSON.parse(reqOptions.body);
 
@@ -2366,7 +2382,7 @@ describe('OpenAiResponsesProvider', () => {
         usage: { input_tokens: 25, output_tokens: 20, total_tokens: 45 },
       };
 
-      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
         data: mockApiResponse,
         cached: false,
         status: 200,
@@ -2394,7 +2410,7 @@ describe('OpenAiResponsesProvider', () => {
 
       // Test the enhanced assertion
       const { handleIsValidOpenAiToolsCall } = await import('../../../src/assertions/openai');
-      const assertionResult = handleIsValidOpenAiToolsCall({
+      const assertionResult = await handleIsValidOpenAiToolsCall({
         assertion: { type: 'is-valid-openai-tools-call' },
         output: result.output,
         provider,
@@ -2434,7 +2450,7 @@ describe('OpenAiResponsesProvider', () => {
         usage: { input_tokens: 15, output_tokens: 10, total_tokens: 25 },
       };
 
-      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
         data: mockApiResponse,
         cached: false,
         status: 200,
@@ -2454,7 +2470,7 @@ describe('OpenAiResponsesProvider', () => {
 
       // Test the enhanced assertion
       const { handleIsValidOpenAiToolsCall } = await import('../../../src/assertions/openai');
-      const assertionResult = handleIsValidOpenAiToolsCall({
+      const assertionResult = await handleIsValidOpenAiToolsCall({
         assertion: { type: 'is-valid-openai-tools-call' },
         output: result.output,
         provider,
@@ -2468,7 +2484,7 @@ describe('OpenAiResponsesProvider', () => {
     });
   });
 
-  it('should include all expected model names', () => {
+  it('should include all expected model names', async () => {
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-4o');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-4o-2024-08-06');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-4o-2024-11-20');
@@ -2491,6 +2507,11 @@ describe('OpenAiResponsesProvider', () => {
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o3-mini-2025-01-31');
     // GPT-4.5 models deprecated as of 2025-07-14, removed from API
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('codex-mini-latest');
+    // GPT-5.1 models
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5.1');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5.1-mini');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5.1-nano');
+    expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('gpt-5.1-codex');
     // Deep research models
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain('o3-deep-research');
     expect(OpenAiResponsesProvider.OPENAI_RESPONSES_MODEL_NAMES).toContain(
@@ -2504,13 +2525,12 @@ describe('OpenAiResponsesProvider', () => {
 
   describe('deep research model validation', () => {
     beforeAll(() => {
-      jest.mocked(cache.fetchWithCache).mockImplementation(
-        () =>
-          ({
-            get: jest.fn(),
-            set: jest.fn(),
-          }) as any,
-      );
+      vi.mocked(cache.fetchWithCache).mockImplementation(function () {
+        return {
+          get: vi.fn(),
+          set: vi.fn(),
+        } as any;
+      });
     });
 
     it('should require web_search_preview tool for deep research models', async () => {
@@ -2538,7 +2558,7 @@ describe('OpenAiResponsesProvider', () => {
         usage: { input_tokens: 100, output_tokens: 200 },
       };
 
-      (cache.fetchWithCache as jest.Mock).mockResolvedValueOnce({
+      (cache.fetchWithCache as Mock).mockResolvedValueOnce({
         data: mockData,
         status: 200,
         statusText: 'OK',
@@ -2589,7 +2609,7 @@ describe('OpenAiResponsesProvider', () => {
         usage: { input_tokens: 100, output_tokens: 200 },
       };
 
-      (cache.fetchWithCache as jest.Mock).mockResolvedValueOnce({
+      (cache.fetchWithCache as Mock).mockResolvedValueOnce({
         data: mockData,
         status: 200,
         statusText: 'OK',
@@ -2628,7 +2648,7 @@ describe('OpenAiResponsesProvider', () => {
         usage: { input_tokens: 100, output_tokens: 200 },
       };
 
-      (cache.fetchWithCache as jest.Mock).mockResolvedValueOnce({
+      (cache.fetchWithCache as Mock).mockResolvedValueOnce({
         data: mockData,
         status: 200,
         statusText: 'OK',
@@ -2675,7 +2695,7 @@ describe('OpenAiResponsesProvider', () => {
         usage: { input_tokens: 10, output_tokens: 20, total_tokens: 30 },
       };
 
-      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
         data: mockData,
         cached: false,
         status: 200,
@@ -2714,7 +2734,7 @@ describe('OpenAiResponsesProvider', () => {
       usage: { input_tokens: 10, output_tokens: 20, total_tokens: 30 },
     };
 
-    jest.mocked(cache.fetchWithCache).mockResolvedValue({
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
       data: mockData,
       cached: false,
       status: 200,
@@ -2753,7 +2773,7 @@ describe('OpenAiResponsesProvider', () => {
         usage: { input_tokens: 15, output_tokens: 10, total_tokens: 25 },
       };
 
-      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
         data: mockApiResponse,
         cached: false,
         status: 200,
@@ -2771,7 +2791,7 @@ describe('OpenAiResponsesProvider', () => {
 
       await provider.callApi('Test prompt with JSON');
 
-      const mockCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
+      const mockCall = vi.mocked(cache.fetchWithCache).mock.calls[0];
       const reqOptions = mockCall[1] as { body: string };
       const body = JSON.parse(reqOptions.body);
 
@@ -2802,7 +2822,7 @@ describe('OpenAiResponsesProvider', () => {
         usage: { input_tokens: 15, output_tokens: 10, total_tokens: 25 },
       };
 
-      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
         data: mockApiResponse,
         cached: false,
         status: 200,
@@ -2832,7 +2852,7 @@ describe('OpenAiResponsesProvider', () => {
 
       await provider.callApi('Test prompt');
 
-      const mockCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
+      const mockCall = vi.mocked(cache.fetchWithCache).mock.calls[0];
       const reqOptions = mockCall[1] as { body: string };
       const body = JSON.parse(reqOptions.body);
 
@@ -2862,7 +2882,7 @@ describe('OpenAiResponsesProvider', () => {
         usage: { input_tokens: 15, output_tokens: 10, total_tokens: 25 },
       };
 
-      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
         data: mockApiResponse,
         cached: false,
         status: 200,
@@ -2891,7 +2911,7 @@ describe('OpenAiResponsesProvider', () => {
 
       await provider.callApi('Test prompt');
 
-      const mockCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
+      const mockCall = vi.mocked(cache.fetchWithCache).mock.calls[0];
       const reqOptions = mockCall[1] as { body: string };
       const body = JSON.parse(reqOptions.body);
 
@@ -2921,7 +2941,7 @@ describe('OpenAiResponsesProvider', () => {
         usage: { input_tokens: 15, output_tokens: 10, total_tokens: 25 },
       };
 
-      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
         data: mockApiResponse,
         cached: false,
         status: 200,
@@ -2951,7 +2971,7 @@ describe('OpenAiResponsesProvider', () => {
 
       await provider.callApi('Test prompt');
 
-      const mockCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
+      const mockCall = vi.mocked(cache.fetchWithCache).mock.calls[0];
       const reqOptions = mockCall[1] as { body: string };
       const body = JSON.parse(reqOptions.body);
 
@@ -2981,7 +3001,7 @@ describe('OpenAiResponsesProvider', () => {
         usage: { input_tokens: 10, output_tokens: 10, total_tokens: 20 },
       };
 
-      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
         data: mockApiResponse,
         cached: false,
         status: 200,
@@ -2996,7 +3016,7 @@ describe('OpenAiResponsesProvider', () => {
 
       await provider.callApi('Test prompt');
 
-      const mockCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
+      const mockCall = vi.mocked(cache.fetchWithCache).mock.calls[0];
       const reqOptions = mockCall[1] as { body: string };
       const body = JSON.parse(reqOptions.body);
 
@@ -3007,7 +3027,7 @@ describe('OpenAiResponsesProvider', () => {
       });
     });
 
-    it('should handle external file loading for response_format correctly', () => {
+    it('should handle external file loading for response_format correctly', async () => {
       // Test that the provider can be configured with external file syntax
       // This verifies the type handling for external file references
       expect(() => {
@@ -3040,7 +3060,7 @@ describe('OpenAiResponsesProvider', () => {
         usage: { input_tokens: 10, output_tokens: 15, total_tokens: 25 },
       };
 
-      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
         data: mockApiResponse,
         cached: false,
         status: 200,
@@ -3058,7 +3078,7 @@ describe('OpenAiResponsesProvider', () => {
 
       await provider.callApi('Test prompt');
 
-      const mockCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
+      const mockCall = vi.mocked(cache.fetchWithCache).mock.calls[0];
       const reqOptions = mockCall[1] as { body: string };
       const body = JSON.parse(reqOptions.body);
 
@@ -3069,7 +3089,7 @@ describe('OpenAiResponsesProvider', () => {
       });
     });
 
-    it('should accept external file reference syntax for response_format', () => {
+    it('should accept external file reference syntax for response_format', async () => {
       // Test that the provider can be instantiated with external file syntax
       // without throwing type errors (using type assertion as needed)
       expect(() => {
@@ -3122,7 +3142,7 @@ describe('OpenAiResponsesProvider', () => {
         usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
       };
 
-      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
         data: mockApiResponse,
         cached: false,
         status: 200,
@@ -3156,7 +3176,7 @@ describe('OpenAiResponsesProvider', () => {
         usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
       };
 
-      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
         data: mockApiResponse,
         cached: false,
         status: 200,
@@ -3191,7 +3211,7 @@ describe('OpenAiResponsesProvider', () => {
         statusText: 'Bad Request',
       };
 
-      jest.mocked(cache.fetchWithCache).mockResolvedValue(mockErrorResponse);
+      vi.mocked(cache.fetchWithCache).mockResolvedValue(mockErrorResponse);
 
       const provider = new OpenAiResponsesProvider('gpt-4o', {
         config: {
@@ -3224,7 +3244,7 @@ describe('OpenAiResponsesProvider', () => {
         statusText: 'Bad Request',
       };
 
-      jest.mocked(cache.fetchWithCache).mockResolvedValue(mockErrorResponse);
+      vi.mocked(cache.fetchWithCache).mockResolvedValue(mockErrorResponse);
 
       const provider = new OpenAiResponsesProvider('gpt-4o', {
         config: {
@@ -3263,7 +3283,7 @@ describe('OpenAiResponsesProvider', () => {
       usage: { input_tokens: 10, output_tokens: 10, total_tokens: 20 },
     };
 
-    jest.mocked(cache.fetchWithCache).mockResolvedValue({
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
       data: mockApiResponse,
       cached: false,
       status: 200,
@@ -3280,7 +3300,7 @@ describe('OpenAiResponsesProvider', () => {
 
     await provider.callApi('Test prompt');
 
-    const mockCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
+    const mockCall = vi.mocked(cache.fetchWithCache).mock.calls[0];
     const reqOptions = mockCall[1] as { body: string };
     const body = JSON.parse(reqOptions.body);
 
@@ -3310,7 +3330,7 @@ describe('OpenAiResponsesProvider', () => {
       usage: { input_tokens: 10, output_tokens: 10, total_tokens: 20 },
     };
 
-    jest.mocked(cache.fetchWithCache).mockResolvedValue({
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
       data: mockApiResponse,
       cached: false,
       status: 200,
@@ -3327,7 +3347,7 @@ describe('OpenAiResponsesProvider', () => {
 
     await provider.callApi('Test prompt');
 
-    const mockCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
+    const mockCall = vi.mocked(cache.fetchWithCache).mock.calls[0];
     const reqOptions = mockCall[1] as { body: string };
     const body = JSON.parse(reqOptions.body);
 
@@ -3357,7 +3377,7 @@ describe('OpenAiResponsesProvider', () => {
       usage: { input_tokens: 10, output_tokens: 10, total_tokens: 20 },
     };
 
-    jest.mocked(cache.fetchWithCache).mockResolvedValue({
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
       data: mockApiResponse,
       cached: false,
       status: 200,
@@ -3374,7 +3394,7 @@ describe('OpenAiResponsesProvider', () => {
 
     await provider.callApi('Test prompt');
 
-    const mockCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
+    const mockCall = vi.mocked(cache.fetchWithCache).mock.calls[0];
     const reqOptions = mockCall[1] as { body: string };
     const body = JSON.parse(reqOptions.body);
 
@@ -3404,7 +3424,7 @@ describe('OpenAiResponsesProvider', () => {
       usage: { input_tokens: 10, output_tokens: 10, total_tokens: 20 },
     };
 
-    jest.mocked(cache.fetchWithCache).mockResolvedValue({
+    vi.mocked(cache.fetchWithCache).mockResolvedValue({
       data: mockApiResponse,
       cached: false,
       status: 200,
@@ -3421,7 +3441,7 @@ describe('OpenAiResponsesProvider', () => {
 
     await provider.callApi('Test prompt');
 
-    const mockCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
+    const mockCall = vi.mocked(cache.fetchWithCache).mock.calls[0];
     const reqOptions = mockCall[1] as { body: string };
     const body = JSON.parse(reqOptions.body);
 
@@ -3452,7 +3472,7 @@ describe('OpenAiResponsesProvider', () => {
         usage: { input_tokens: 15, output_tokens: 10, total_tokens: 25 },
       };
 
-      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
         data: mockApiResponse,
         cached: false,
         status: 200,
@@ -3476,7 +3496,7 @@ describe('OpenAiResponsesProvider', () => {
 
       await provider.callApi('Test prompt');
 
-      const mockCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
+      const mockCall = vi.mocked(cache.fetchWithCache).mock.calls[0];
       const reqOptions = mockCall[1] as { body: string };
       const body = JSON.parse(reqOptions.body);
 
@@ -3511,7 +3531,7 @@ describe('OpenAiResponsesProvider', () => {
         usage: { input_tokens: 15, output_tokens: 10, total_tokens: 25 },
       };
 
-      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
         data: mockApiResponse,
         cached: false,
         status: 200,
@@ -3537,7 +3557,7 @@ describe('OpenAiResponsesProvider', () => {
 
       await provider.callApi('Test prompt');
 
-      const mockCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
+      const mockCall = vi.mocked(cache.fetchWithCache).mock.calls[0];
       const reqOptions = mockCall[1] as { body: string };
       const body = JSON.parse(reqOptions.body);
 
@@ -3584,7 +3604,7 @@ describe('OpenAiResponsesProvider', () => {
         usage: { input_tokens: 20, output_tokens: 15, total_tokens: 35 },
       };
 
-      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
         data: mockApiResponse,
         cached: false,
         status: 200,
@@ -3643,7 +3663,7 @@ describe('OpenAiResponsesProvider', () => {
         usage: { input_tokens: 25, output_tokens: 20, total_tokens: 45 },
       };
 
-      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
         data: mockApiResponse,
         cached: false,
         status: 200,
@@ -3694,7 +3714,7 @@ describe('OpenAiResponsesProvider', () => {
         usage: { input_tokens: 15, output_tokens: 10, total_tokens: 25 },
       };
 
-      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
         data: mockApiResponse,
         cached: false,
         status: 200,
@@ -3731,7 +3751,7 @@ describe('OpenAiResponsesProvider', () => {
         usage: { input_tokens: 20, output_tokens: 5, total_tokens: 25 },
       };
 
-      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
         data: mockApiResponse,
         cached: false,
         status: 200,
@@ -3778,7 +3798,7 @@ describe('OpenAiResponsesProvider', () => {
         usage: { input_tokens: 30, output_tokens: 15, total_tokens: 45 },
       };
 
-      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
         data: mockApiResponse,
         cached: false,
         status: 200,
@@ -3815,7 +3835,7 @@ describe('OpenAiResponsesProvider', () => {
 
       await provider.callApi('Test prompt');
 
-      const mockCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
+      const mockCall = vi.mocked(cache.fetchWithCache).mock.calls[0];
       const reqOptions = mockCall[1] as { body: string };
       const body = JSON.parse(reqOptions.body);
 
@@ -3846,7 +3866,7 @@ describe('OpenAiResponsesProvider', () => {
         usage: { input_tokens: 15, output_tokens: 10, total_tokens: 25 },
       };
 
-      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
         data: mockApiResponse,
         cached: false,
         status: 200,
@@ -3874,7 +3894,7 @@ describe('OpenAiResponsesProvider', () => {
 
       await provider.callApi('Test prompt');
 
-      const mockCall = jest.mocked(cache.fetchWithCache).mock.calls[0];
+      const mockCall = vi.mocked(cache.fetchWithCache).mock.calls[0];
       const reqOptions = mockCall[1] as { body: string };
       const body = JSON.parse(reqOptions.body);
 
@@ -3924,7 +3944,7 @@ describe('OpenAiResponsesProvider', () => {
         usage: { input_tokens: 25, output_tokens: 20, total_tokens: 45 },
       };
 
-      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
         data: mockApiResponse,
         cached: false,
         status: 200,
@@ -3952,7 +3972,7 @@ describe('OpenAiResponsesProvider', () => {
 
       // Test the enhanced assertion
       const { handleIsValidOpenAiToolsCall } = await import('../../../src/assertions/openai');
-      const assertionResult = handleIsValidOpenAiToolsCall({
+      const assertionResult = await handleIsValidOpenAiToolsCall({
         assertion: { type: 'is-valid-openai-tools-call' },
         output: result.output,
         provider,
@@ -3992,7 +4012,7 @@ describe('OpenAiResponsesProvider', () => {
         usage: { input_tokens: 15, output_tokens: 10, total_tokens: 25 },
       };
 
-      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
         data: mockApiResponse,
         cached: false,
         status: 200,
@@ -4012,7 +4032,7 @@ describe('OpenAiResponsesProvider', () => {
 
       // Test the enhanced assertion
       const { handleIsValidOpenAiToolsCall } = await import('../../../src/assertions/openai');
-      const assertionResult = handleIsValidOpenAiToolsCall({
+      const assertionResult = await handleIsValidOpenAiToolsCall({
         assertion: { type: 'is-valid-openai-tools-call' },
         output: result.output,
         provider,
@@ -4043,7 +4063,7 @@ describe('OpenAiResponsesProvider', () => {
         usage: { input_tokens: 20, output_tokens: 15, total_tokens: 35 },
       };
 
-      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
         data: mockApiResponse,
         cached: false,
         status: 200,
@@ -4091,7 +4111,7 @@ describe('OpenAiResponsesProvider', () => {
         usage: { input_tokens: 20, output_tokens: 15, total_tokens: 35 },
       };
 
-      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
         data: mockApiResponse,
         cached: false,
         status: 200,
@@ -4135,7 +4155,7 @@ describe('OpenAiResponsesProvider', () => {
         usage: { input_tokens: 20, output_tokens: 15, total_tokens: 35 },
       };
 
-      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
         data: mockApiResponse,
         cached: false,
         status: 200,
@@ -4184,7 +4204,7 @@ describe('OpenAiResponsesProvider', () => {
         usage: { input_tokens: 20, output_tokens: 15, total_tokens: 35 },
       };
 
-      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
         data: mockApiResponse,
         cached: false,
         status: 200,
@@ -4226,7 +4246,7 @@ describe('OpenAiResponsesProvider', () => {
         usage: { input_tokens: 20, output_tokens: 15, total_tokens: 35 },
       };
 
-      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
         data: mockApiResponse,
         cached: false,
         status: 200,
@@ -4271,7 +4291,7 @@ describe('OpenAiResponsesProvider', () => {
         usage: { input_tokens: 20, output_tokens: 15, total_tokens: 35 },
       };
 
-      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
         data: mockApiResponse,
         cached: false,
         status: 200,
@@ -4314,7 +4334,7 @@ describe('OpenAiResponsesProvider', () => {
         usage: { input_tokens: 20, output_tokens: 15, total_tokens: 35 },
       };
 
-      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
         data: mockApiResponse,
         cached: false,
         status: 200,
@@ -4364,7 +4384,7 @@ describe('OpenAiResponsesProvider', () => {
         usage: { input_tokens: 20, output_tokens: 15, total_tokens: 35 },
       };
 
-      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
         data: mockApiResponse,
         cached: false,
         status: 200,
@@ -4415,7 +4435,7 @@ describe('OpenAiResponsesProvider', () => {
         usage: { input_tokens: 20, output_tokens: 15, total_tokens: 35 },
       };
 
-      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
         data: mockApiResponse,
         cached: false,
         status: 200,
@@ -4456,7 +4476,7 @@ describe('OpenAiResponsesProvider', () => {
         usage: { input_tokens: 20, output_tokens: 15, total_tokens: 35 },
       };
 
-      jest.mocked(cache.fetchWithCache).mockResolvedValue({
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
         data: mockApiResponse,
         cached: false,
         status: 200,
@@ -4498,6 +4518,104 @@ describe('OpenAiResponsesProvider', () => {
 
       expect(result.error).toBeUndefined();
       expect(result.output).toBe('11');
+    });
+  });
+
+  describe('tool loading from external files', () => {
+    it('should return loaded tools array in config for downstream validation', async () => {
+      const provider = new OpenAiResponsesProvider('gpt-4o', {
+        config: {
+          apiKey: 'test-key',
+          tools: [{ type: 'web_search_preview' }],
+        },
+      });
+
+      const context = { prompt: { raw: 'test', label: 'test' }, vars: {} };
+      const { body, config } = await provider.getOpenAiBody('test prompt', context);
+
+      // Verify tools are returned in both body and config
+      expect(body.tools).toEqual([{ type: 'web_search_preview' }]);
+      expect(config.tools).toEqual([{ type: 'web_search_preview' }]);
+      expect(Array.isArray(config.tools)).toBe(true);
+    });
+
+    it('should return undefined tools when not configured', async () => {
+      const provider = new OpenAiResponsesProvider('gpt-4o', {
+        config: {
+          apiKey: 'test-key',
+        },
+      });
+
+      const context = { prompt: { raw: 'test', label: 'test' }, vars: {} };
+      const { body, config } = await provider.getOpenAiBody('test prompt', context);
+
+      expect(body.tools).toBeUndefined();
+      expect(config.tools).toBeUndefined();
+    });
+
+    it('should throw clear error for Python tool files', async () => {
+      const provider = new OpenAiResponsesProvider('gpt-4o', {
+        config: {
+          apiKey: 'test-key',
+          tools: 'file://tools.py:get_tools' as any,
+        },
+      });
+
+      const context = { prompt: { raw: 'test', label: 'test' }, vars: {} };
+      await expect(provider.getOpenAiBody('test prompt', context)).rejects.toThrow(
+        /Failed to load tools/,
+      );
+    });
+
+    it('should allow deep-research validation to work with loaded tools', async () => {
+      const provider = new OpenAiResponsesProvider('o4-mini-deep-research', {
+        config: {
+          apiKey: 'test-key',
+          tools: [{ type: 'web_search_preview' }],
+        },
+      });
+
+      // Mock the API call
+      vi.mocked(cache.fetchWithCache).mockResolvedValue({
+        data: {
+          id: 'resp_123',
+          object: 'response',
+          status: 'completed',
+          model: 'o4-mini-deep-research',
+          output: [
+            {
+              type: 'message',
+              content: [{ type: 'output_text', text: 'Response' }],
+            },
+          ],
+          usage: { input_tokens: 10, output_tokens: 20, total_tokens: 30 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      });
+
+      // This should not throw TypeError because config.tools is now an array
+      const result = await provider.callApi('test');
+      expect(result.error).toBeUndefined();
+    });
+
+    it('should return error for deep-research without web_search_preview', async () => {
+      const provider = new OpenAiResponsesProvider('o4-mini-deep-research', {
+        config: {
+          apiKey: 'test-key',
+          tools: [
+            {
+              type: 'function',
+              function: { name: 'test', parameters: { type: 'object', properties: {} } },
+            },
+          ],
+        },
+      });
+
+      const result = await provider.callApi('test');
+
+      expect(result.error).toContain('requires the web_search_preview tool');
     });
   });
 });

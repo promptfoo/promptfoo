@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ProviderSelector from './ProviderSelector';
+import { ToastProvider } from '@app/contexts/ToastContext';
 
 vi.mock('../../../store/providersStore', () => ({
   useProvidersStore: vi.fn(() => ({
@@ -18,9 +19,17 @@ const mockProviders = [
 const mockOnChange = vi.fn();
 
 describe('ProviderSelector', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
-    render(<ProviderSelector providers={mockProviders} onChange={mockOnChange} />);
+    render(
+      <ToastProvider>
+        <ProviderSelector providers={mockProviders} onChange={mockOnChange} />
+      </ToastProvider>,
+    );
+    // Wait for the component to finish loading
+    await waitFor(() => {
+      expect(screen.queryByText('Loading...')).not.toBeInTheDocument();
+    });
   });
 
   it('renders the component correctly', () => {

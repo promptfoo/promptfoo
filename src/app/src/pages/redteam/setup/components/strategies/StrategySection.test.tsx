@@ -1,6 +1,6 @@
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { fireEvent, render, screen } from '@testing-library/react';
-import { vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { StrategySection } from './StrategySection';
 
 import type { StrategyCardData } from './types';
@@ -11,9 +11,9 @@ describe('StrategySection', () => {
   const mockOnSelectNone = vi.fn();
 
   const testStrategies: StrategyCardData[] = [
-    { id: 'strategy1', name: 'Strategy 1', description: 'Description 1' },
-    { id: 'strategy2', name: 'Strategy 2', description: 'Description 2' },
-    { id: 'strategy3', name: 'Strategy 3', description: 'Description 3' },
+    { id: 'basic', name: 'Strategy 1', description: 'Description 1' },
+    { id: 'jailbreak', name: 'Strategy 2', description: 'Description 2' },
+    { id: 'multilingual', name: 'Strategy 3', description: 'Description 3' },
   ];
 
   beforeEach(() => {
@@ -97,7 +97,7 @@ describe('StrategySection', () => {
           isRemoteGenerationDisabled={false}
           title="Test Section"
           strategies={testStrategies}
-          selectedIds={['strategy1']}
+          selectedIds={['basic']}
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
           onSelectNone={mockOnSelectNone}
@@ -132,7 +132,7 @@ describe('StrategySection', () => {
           isRemoteGenerationDisabled={false}
           title="Test Section"
           strategies={testStrategies}
-          selectedIds={['strategy1', 'strategy2']}
+          selectedIds={['basic', 'jailbreak']}
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
           onSelectNone={mockOnSelectNone}
@@ -150,7 +150,7 @@ describe('StrategySection', () => {
           isRemoteGenerationDisabled={false}
           title="Test Section"
           strategies={testStrategies}
-          selectedIds={['strategy1', 'strategy3']}
+          selectedIds={['basic', 'multilingual']}
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
           onSelectNone={mockOnSelectNone}
@@ -160,7 +160,7 @@ describe('StrategySection', () => {
       const resetButton = screen.getByText('Reset');
       fireEvent.click(resetButton);
 
-      expect(mockOnSelectNone).toHaveBeenCalledWith(['strategy1', 'strategy3']);
+      expect(mockOnSelectNone).toHaveBeenCalledWith(['basic', 'multilingual']);
     });
 
     it('falls back to calling onToggle for each selected strategy when onSelectNone is not provided', () => {
@@ -170,7 +170,7 @@ describe('StrategySection', () => {
           isRemoteGenerationDisabled={false}
           title="Test Section"
           strategies={testStrategies}
-          selectedIds={['strategy1', 'strategy3']}
+          selectedIds={['basic', 'multilingual']}
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
         />,
@@ -180,8 +180,8 @@ describe('StrategySection', () => {
       fireEvent.click(resetButton);
 
       expect(mockOnToggle).toHaveBeenCalledTimes(2);
-      expect(mockOnToggle).toHaveBeenCalledWith('strategy1');
-      expect(mockOnToggle).toHaveBeenCalledWith('strategy3');
+      expect(mockOnToggle).toHaveBeenCalledWith('basic');
+      expect(mockOnToggle).toHaveBeenCalledWith('multilingual');
     });
 
     it('calls onSelectNone with only valid strategy IDs when Reset is clicked and selectedIds contains non-existent IDs', () => {
@@ -191,7 +191,7 @@ describe('StrategySection', () => {
           isRemoteGenerationDisabled={false}
           title="Test Section"
           strategies={testStrategies}
-          selectedIds={['strategy1', 'nonexistent', 'strategy3']}
+          selectedIds={['basic', 'nonexistent', 'multilingual']}
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
           onSelectNone={mockOnSelectNone}
@@ -201,7 +201,7 @@ describe('StrategySection', () => {
       const resetButton = screen.getByText('Reset');
       fireEvent.click(resetButton);
 
-      expect(mockOnSelectNone).toHaveBeenCalledWith(['strategy1', 'strategy3']);
+      expect(mockOnSelectNone).toHaveBeenCalledWith(['basic', 'multilingual']);
     });
 
     it('does not call onSelectNone or onToggle when strategies are empty but selectedIds contains IDs', () => {
@@ -211,7 +211,7 @@ describe('StrategySection', () => {
           isRemoteGenerationDisabled={false}
           title="Test Section"
           strategies={[]}
-          selectedIds={['strategy1', 'strategy2']}
+          selectedIds={['basic', 'jailbreak']}
           onToggle={mockOnToggle}
           onConfigClick={mockOnConfigClick}
           onSelectNone={mockOnSelectNone}
@@ -318,7 +318,7 @@ describe('StrategySection', () => {
       vi.mock('./StrategyItem', () => ({
         StrategyItem: vi.fn().mockImplementation(({ strategy, isSelected, onConfigClick }) => (
           <div>
-            {isSelected && strategy.id === 'configurable-strategy-id' && (
+            {isSelected && strategy.id === 'multilingual' && (
               <button aria-label="settings" onClick={() => onConfigClick(strategy.id)}>
                 Settings
               </button>
@@ -326,12 +326,12 @@ describe('StrategySection', () => {
             {strategy.name}
           </div>
         )),
-        CONFIGURABLE_STRATEGIES: ['configurable-strategy-id'],
+        CONFIGURABLE_STRATEGIES: ['multilingual'],
       }));
     });
 
     it('renders config button when strategy is selected and configurable', () => {
-      const configurableStrategyId = 'configurable-strategy-id';
+      const configurableStrategyId = 'multilingual';
       const configurableStrategy: StrategyCardData = {
         id: configurableStrategyId,
         name: 'Configurable Strategy',

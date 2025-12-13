@@ -1,11 +1,19 @@
 /// <reference types="vitest" />
 
+import os from 'os';
 import path from 'path';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 import react from '@vitejs/plugin-react';
-import { defineConfig } from 'vite';
+import { defineConfig } from 'vitest/config';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
-import packageJson from '../../package.json';
+import packageJson from '../../package.json' with { type: 'json' };
+
+// Calculate max forks for test parallelization
+const cpuCount = os.cpus().length;
+const maxForks = Math.max(cpuCount - 2, 2);
 
 const API_PORT = process.env.API_PORT || '15500';
 
@@ -46,15 +54,6 @@ export default defineConfig({
     outDir: '../../dist/src/app',
     // Enable source maps for production debugging
     sourcemap: process.env.NODE_ENV === 'production' ? 'hidden' : true,
-    // Minification settings
-    minify: 'terser',
-    terserOptions: {
-      compress: {
-        // Keep console statements - useful for a local development tool
-        drop_console: false,
-        drop_debugger: process.env.NODE_ENV === 'production',
-      },
-    },
     rollupOptions: {
       onwarn(warning, warn) {
         // Suppress eval warnings from vm-browserify polyfill
@@ -83,7 +82,76 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     setupFiles: ['./src/setupTests.ts'],
-    globals: true,
+    globals: false,
+    // Enable CSS processing for MUI X v8
+    css: true,
+    // Force vitest to transform MUI packages including CSS imports
+    server: {
+      deps: {
+        inline: ['@mui/x-data-grid', '@mui/x-charts', 'node-stdlib-browser'],
+      },
+    },
+    // Fix ESM directory import issue with punycode in node-stdlib-browser
+    alias: {
+      'punycode/': 'punycode',
+    },
+
+    // Memory leak prevention settings
+    // Use forks (child processes) instead of threads for better memory isolation
+    pool: 'forks',
+    // Vitest 4: poolOptions are now top-level
+    maxWorkers: maxForks,
+    isolate: true, // Each test file gets a clean environment
+    execArgv: [
+      '--max-old-space-size=2048', // 2GB per worker for frontend tests
+    ],
+
+    // Timeouts to prevent stuck tests from hanging forever
+    testTimeout: 30_000, // 30s per test
+    hookTimeout: 30_000, // 30s for beforeAll/afterAll hooks
+    teardownTimeout: 10_000, // 10s for cleanup
+
+    // Limit concurrent tests within each worker to prevent memory spikes
+    maxConcurrency: 5,
+
+    // Fail fast on first error in CI
+    bail: process.env.CI ? 1 : 0,
+    // Suppress known MUI and React Testing Library warnings that don't indicate real problems
+    onConsoleLog(log: string, type: 'stdout' | 'stderr'): false | undefined {
+      if (type === 'stderr') {
+        const suppressPatterns = [
+          // Suppress act() warnings (we've fixed all fixable tests, these are library-level issues)
+          /An update to ForwardRef\(Tabs\) inside a test was not wrapped in act/,
+          /An update to ForwardRef\(TouchRipple\) inside a test was not wrapped in act/,
+          /An update to ForwardRef\(ButtonBase\) inside a test was not wrapped in act/,
+          /An update to ForwardRef\(FormControl\) inside a test was not wrapped in act/,
+          /An update to ForwardRef\(Tooltip\) inside a test was not wrapped in act/,
+          /An update to TransitionGroup inside a test was not wrapped in act/,
+          /An update to \w+ inside a test was not wrapped in act/,
+          /The current testing environment is not configured to support act/,
+
+          // Keep these suppressed (not fixable - library/DOM issues)
+          /validateDOMNesting/,
+          /MUI: You have provided an out-of-range value/,
+          /MUI: The `value` provided to the Tabs component is invalid/,
+          /Failed prop type: MUI/,
+          /ReactDOM\.render is no longer supported/,
+          /unmountComponentAtNode is deprecated/,
+          /A component is changing an? (?:uncontrolled|controlled) input to be (?:controlled|uncontrolled)/,
+          /Function components cannot be given refs/,
+          /React does not recognize the `.*` prop on a DOM element/,
+          /No worst strategy found for plugin/,
+
+          // Test data issues
+          /Received NaN for the.*children/, // Test data setup issue in ResultsTable.test.tsx
+          /Encountered two children with the same key/, // Fixed in component, but may appear in old tests
+        ];
+
+        if (suppressPatterns.some((pattern) => pattern.test(log))) {
+          return false; // Suppress this log
+        }
+      }
+    },
   },
   define: {
     'import.meta.env.VITE_PROMPTFOO_VERSION': JSON.stringify(packageJson.version),

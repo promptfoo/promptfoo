@@ -77,7 +77,7 @@ export const CommandLineOptionsSchema = z.object({
   promptSuffix: z.string().optional(),
   retryErrors: z.boolean().optional(),
 
-  envPath: z.string().optional(),
+  envPath: z.union([z.string(), z.array(z.string())]).optional(),
 });
 
 export type CommandLineOptions = z.infer<typeof CommandLineOptionsSchema>;
@@ -256,13 +256,20 @@ export type ServerPromptWithMetadata = Omit<PromptWithMetadata, 'recentEvalDate'
   recentEvalDate: string;
 };
 
-export enum ResultFailureReason {
+export const ResultFailureReason = {
   // The test passed, or we don't know exactly why the test case failed.
-  NONE = 0,
+  NONE: 0,
   // The test case failed because an assertion rejected it.
-  ASSERT = 1,
+  ASSERT: 1,
   // Test case failed due to some other error.
-  ERROR = 2,
+  ERROR: 2,
+} as const;
+export type ResultFailureReason = (typeof ResultFailureReason)[keyof typeof ResultFailureReason];
+
+const validResultFailureReasons = new Set<number>(Object.values(ResultFailureReason));
+
+export function isResultFailureReason(value: number): value is ResultFailureReason {
+  return validResultFailureReasons.has(value);
 }
 
 export interface EvaluateResult {
@@ -357,6 +364,7 @@ export type EvalTableDTO = {
   table: EvaluateTable;
   totalCount: number;
   filteredCount: number;
+  filteredMetrics: PromptMetrics[] | null;
   config: Partial<UnifiedConfig>;
   author: string | null;
   version: number;
@@ -477,10 +485,15 @@ export const BaseAssertionTypesSchema = z.enum([
   'rouge-n',
   'ruby',
   'similar',
+  'similar:cosine',
+  'similar:dot',
+  'similar:euclidean',
   'starts-with',
+  'tool-call-f1',
   'trace-error-spans',
   'trace-span-count',
   'trace-span-duration',
+  'search-rubric',
   'webhook',
 ]);
 
@@ -510,7 +523,7 @@ export const AssertionTypeSchema = z.union([
 
 export type AssertionType = z.infer<typeof AssertionTypeSchema>;
 
-const AssertionSetSchema = z.object({
+export const AssertionSetSchema = z.object({
   type: z.literal('assert-set'),
   // Sub assertions to be run for this assertion set
   assert: z.array(z.lazy(() => AssertionSchema)),
@@ -563,6 +576,13 @@ export const AssertionSchema = z.object({
 });
 
 export type Assertion = z.infer<typeof AssertionSchema>;
+
+/**
+ * Schema for validating individual assertions (regular or assert-set).
+ * Used for runtime validation of user-provided config.
+ */
+export const AssertionOrSetSchema = z.union([AssertionSetSchema, AssertionSchema]);
+export type AssertionOrSet = z.infer<typeof AssertionOrSetSchema>;
 
 export interface AssertionValueFunctionContext {
   prompt: string | undefined;

@@ -3,7 +3,7 @@ import Link from '@docusaurus/Link';
 import { useLocation } from '@docusaurus/router';
 import styles from './styles.module.css';
 
-export default function EventsBanner(): JSX.Element | null {
+export default function EventsBanner(): React.ReactElement | null {
   // No events currently scheduled.
   return null;
 

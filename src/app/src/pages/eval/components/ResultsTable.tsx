@@ -39,6 +39,7 @@ import CustomMetrics from './CustomMetrics';
 import CustomMetricsDialog from './CustomMetricsDialog';
 import EvalOutputCell from './EvalOutputCell';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
+import { useFilterMode } from './FilterModeProvider';
 import MarkdownErrorBoundary from './MarkdownErrorBoundary';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import TruncatedText from './TruncatedText';
@@ -50,7 +51,7 @@ import './ResultsTable.css';
 import { BaseNumberInput } from '@app/components/form/input/BaseNumberInput';
 import ButtonGroup from '@mui/material/ButtonGroup';
 import { isEncodingStrategy } from '@promptfoo/redteam/constants/strategies';
-import { usePassingTestCounts, usePassRates, useTestCounts } from './hooks';
+import { useMetricsGetter, usePassingTestCounts, usePassRates, useTestCounts } from './hooks';
 
 const VARIABLE_COLUMN_SIZE_PX = 200;
 const PROMPT_COLUMN_SIZE_PX = 400;
@@ -158,7 +159,7 @@ function ResultsTableHeader({
   tableWidth: number;
   maxTextLength: number;
   wordBreak: 'break-word' | 'break-all';
-  theadRef: React.RefObject<HTMLTableSectionElement>;
+  theadRef: React.RefObject<HTMLTableSectionElement | null>;
   stickyHeader: boolean;
   setStickyHeader: (sticky: boolean) => void;
   zoom: number;
@@ -243,9 +244,9 @@ function ResultsTable({
     fetchEvalData,
     isFetching,
     filters,
-    setFilterMode,
   } = useTableStore();
   const { inComparisonMode, comparisonEvalIds } = useResultsViewSettingsStore();
+  const { setFilterMode } = useFilterMode();
 
   const { showToast } = useToast();
   const navigate = useNavigate();
@@ -289,7 +290,7 @@ function ResultsTable({
       rowIndex: number,
       promptIndex: number,
       resultId: string,
-      isPass?: boolean,
+      isPass?: boolean | null,
       score?: number,
       comment?: string,
     ) => {
@@ -298,20 +299,18 @@ function ResultsTable({
       const updatedOutputs = [...updatedRow.outputs];
       const existingOutput = updatedOutputs[promptIndex];
 
-      const finalPass = typeof isPass === 'undefined' ? existingOutput.pass : isPass;
-
-      let finalScore = existingOutput.score;
-      if (typeof score !== 'undefined') {
-        finalScore = score;
-      } else if (typeof isPass !== 'undefined') {
-        finalScore = isPass ? 1 : 0;
-      }
-
-      updatedOutputs[promptIndex].pass = finalPass;
-      updatedOutputs[promptIndex].score = finalScore;
-
       let componentResults = existingOutput.gradingResult?.componentResults;
       let modifiedComponentResults = false;
+      let finalPass = existingOutput.pass;
+      let finalScore = existingOutput.score;
+
+      // Update finalScore first if score parameter is provided
+      if (typeof score !== 'undefined') {
+        finalScore = score;
+      } else if (typeof isPass !== 'undefined' && isPass !== null) {
+        // Only default to 0/1 if no explicit score is provided and isPass is not null
+        finalScore = isPass ? 1 : 0;
+      }
 
       if (typeof isPass !== 'undefined') {
         // Make a copy to avoid mutating the original
@@ -322,20 +321,45 @@ function ResultsTable({
           (result) => result.assertion?.type === 'human',
         );
 
-        const newResult = {
-          pass: finalPass,
-          score: finalScore,
-          reason: 'Manual result (overrides all other grading results)',
-          comment,
-          assertion: { type: 'human' as const },
-        };
-
-        if (humanResultIndex === -1) {
-          componentResults.push(newResult);
+        // If isPass is null, remove the human assertion (unset manual grading)
+        if (isPass === null) {
+          if (humanResultIndex !== -1) {
+            componentResults.splice(humanResultIndex, 1);
+          }
+          // Recalculate pass/score from remaining assertions
+          if (componentResults.length > 0) {
+            const passCount = componentResults.filter((r) => r.pass).length;
+            finalPass = passCount === componentResults.length;
+            // Calculate average score from remaining assertions
+            const scores = componentResults
+              .map((r) => r.score)
+              .filter((s) => typeof s === 'number');
+            if (scores.length > 0) {
+              finalScore = scores.reduce((a, b) => a + b, 0) / scores.length;
+            }
+          }
         } else {
-          componentResults[humanResultIndex] = newResult;
+          // Add or update the human assertion
+          finalPass = isPass;
+
+          const newResult = {
+            pass: finalPass,
+            score: finalScore,
+            reason: 'Manual result (overrides all other grading results)',
+            comment,
+            assertion: { type: 'human' as const },
+          };
+
+          if (humanResultIndex === -1) {
+            componentResults.push(newResult);
+          } else {
+            componentResults[humanResultIndex] = newResult;
+          }
         }
       }
+
+      updatedOutputs[promptIndex].pass = finalPass;
+      updatedOutputs[promptIndex].score = finalScore;
 
       // Build gradingResult, ensuring required fields are always present
       // Destructure to exclude componentResults initially
@@ -542,18 +566,24 @@ function ResultsTable({
   const testCounts = useTestCounts();
   const passingTestCounts = usePassingTestCounts();
   const passRates = usePassRates();
+  const getMetrics = useMetricsGetter();
 
   const numAsserts = React.useMemo(
     () =>
-      head.prompts.map(
-        (prompt) => (prompt.metrics?.assertFailCount ?? 0) + (prompt.metrics?.assertPassCount ?? 0),
-      ),
-    [head.prompts, body],
+      head.prompts.map((_, idx) => {
+        const { total: metrics } = getMetrics(idx);
+        return (metrics?.assertFailCount ?? 0) + (metrics?.assertPassCount ?? 0);
+      }),
+    [head.prompts, getMetrics],
   );
 
   const numGoodAsserts = React.useMemo(
-    () => head.prompts.map((prompt) => prompt.metrics?.assertPassCount || 0),
-    [head.prompts, body],
+    () =>
+      head.prompts.map((_, idx) => {
+        const { total: metrics } = getMetrics(idx);
+        return metrics?.assertPassCount || 0;
+      }),
+    [head.prompts, getMetrics],
   );
 
   const columnHelper = React.useMemo(() => createColumnHelper<EvaluateTableRow>(), []);
@@ -769,16 +799,19 @@ function ResultsTable({
           columnHelper.accessor((row: EvaluateTableRow) => formatRowOutput(row.outputs[idx]), {
             id: `Prompt ${idx + 1}`,
             header: () => {
-              const pct = passRates[idx] ? passRates[idx].toFixed(2) : '0.00';
+              const pct = passRates[idx]?.total?.toFixed(2) ?? '0.00';
               const columnId = `Prompt ${idx + 1}`;
               const isChecked = failureFilter[columnId] || false;
 
+              // Get metrics for this prompt (total and filtered)
+              const { total: metrics, filtered: filteredMetrics } = getMetrics(idx);
+
               const details = showStats ? (
                 <div className="prompt-detail collapse-hidden">
-                  {prompt.metrics?.tokenUsage?.numRequests !== undefined && (
+                  {metrics?.tokenUsage?.numRequests !== undefined && (
                     <div>
                       <strong>{isRedteam ? 'Probes:' : 'Requests:'}</strong>{' '}
-                      {prompt.metrics.tokenUsage.numRequests}
+                      {metrics.tokenUsage.numRequests}
                     </div>
                   )}
                   {numAsserts[idx] ? (
@@ -786,68 +819,108 @@ function ResultsTable({
                       <strong>Asserts:</strong> {numGoodAsserts[idx]}/{numAsserts[idx]} passed
                     </div>
                   ) : null}
-                  {prompt.metrics?.cost ? (
+                  {metrics?.cost ? (
                     <div>
                       <strong>Total Cost:</strong>{' '}
                       <Tooltip
                         title={`Average: $${Intl.NumberFormat(undefined, {
                           minimumFractionDigits: 1,
                           maximumFractionDigits:
-                            testCounts[idx] && prompt.metrics.cost / testCounts[idx] >= 1 ? 2 : 4,
+                            testCounts[idx]?.total && metrics.cost / testCounts[idx].total >= 1
+                              ? 2
+                              : 4,
                         }).format(
-                          testCounts[idx] ? prompt.metrics.cost / testCounts[idx] : 0,
+                          testCounts[idx]?.total ? metrics.cost / testCounts[idx].total : 0,
                         )} per test`}
                       >
                         <span style={{ cursor: 'help' }}>
                           $
                           {Intl.NumberFormat(undefined, {
                             minimumFractionDigits: 2,
-                            maximumFractionDigits: prompt.metrics.cost >= 1 ? 2 : 4,
-                          }).format(prompt.metrics.cost)}
+                            maximumFractionDigits: metrics.cost >= 1 ? 2 : 4,
+                          }).format(metrics.cost)}
                         </span>
                       </Tooltip>
+                      {filteredMetrics?.cost && testCounts[idx]?.filtered ? (
+                        <span style={{ fontSize: '0.9em', color: '#666', marginLeft: '4px' }}>
+                          ($
+                          {Intl.NumberFormat(undefined, {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: filteredMetrics.cost >= 1 ? 2 : 4,
+                          }).format(filteredMetrics.cost)}{' '}
+                          filtered)
+                        </span>
+                      ) : null}
                     </div>
                   ) : null}
-                  {prompt.metrics?.tokenUsage?.total ? (
+                  {metrics?.tokenUsage?.total ? (
                     <div>
                       <strong>Total Tokens:</strong>{' '}
                       {Intl.NumberFormat(undefined, {
                         maximumFractionDigits: 0,
-                      }).format(prompt.metrics.tokenUsage.total)}
+                      }).format(metrics.tokenUsage.total)}
+                      {filteredMetrics?.tokenUsage?.total ? (
+                        <span style={{ fontSize: '0.9em', color: '#666', marginLeft: '4px' }}>
+                          (
+                          {Intl.NumberFormat(undefined, {
+                            maximumFractionDigits: 0,
+                          }).format(filteredMetrics.tokenUsage.total)}{' '}
+                          filtered)
+                        </span>
+                      ) : null}
                     </div>
                   ) : null}
 
-                  {prompt.metrics?.tokenUsage?.total ? (
+                  {metrics?.tokenUsage?.total ? (
                     <div>
                       <strong>Avg Tokens:</strong>{' '}
                       {Intl.NumberFormat(undefined, {
                         maximumFractionDigits: 0,
                       }).format(
-                        testCounts[idx] ? prompt.metrics.tokenUsage.total / testCounts[idx] : 0,
+                        testCounts[idx]?.total
+                          ? metrics.tokenUsage.total / testCounts[idx].total
+                          : 0,
                       )}
+                      {filteredMetrics?.tokenUsage?.total && testCounts[idx]?.filtered ? (
+                        <span style={{ fontSize: '0.9em', color: '#666', marginLeft: '4px' }}>
+                          (
+                          {Intl.NumberFormat(undefined, {
+                            maximumFractionDigits: 0,
+                          }).format(
+                            filteredMetrics.tokenUsage.total / testCounts[idx].filtered,
+                          )}{' '}
+                          filtered)
+                        </span>
+                      ) : null}
                     </div>
                   ) : null}
-                  {prompt.metrics?.totalLatencyMs ? (
+                  {metrics?.totalLatencyMs ? (
                     <div>
                       <strong>Avg Latency:</strong>{' '}
                       {Intl.NumberFormat(undefined, {
                         maximumFractionDigits: 0,
                       }).format(
-                        testCounts[idx] ? prompt.metrics.totalLatencyMs / testCounts[idx] : 0,
+                        testCounts[idx]?.total ? metrics.totalLatencyMs / testCounts[idx].total : 0,
                       )}{' '}
                       ms
+                      {filteredMetrics?.totalLatencyMs && testCounts[idx]?.filtered ? (
+                        <span style={{ fontSize: '0.9em', color: '#666', marginLeft: '4px' }}>
+                          (
+                          {Intl.NumberFormat(undefined, {
+                            maximumFractionDigits: 0,
+                          }).format(filteredMetrics.totalLatencyMs / testCounts[idx].filtered)}{' '}
+                          ms filtered)
+                        </span>
+                      ) : null}
                     </div>
                   ) : null}
-                  {prompt.metrics?.totalLatencyMs && prompt.metrics?.tokenUsage?.completion ? (
+                  {metrics?.totalLatencyMs && metrics?.tokenUsage?.completion ? (
                     <div>
                       <strong>Tokens/Sec:</strong>{' '}
-                      {prompt.metrics.totalLatencyMs > 0
+                      {metrics.totalLatencyMs > 0
                         ? Intl.NumberFormat(undefined, {
                             maximumFractionDigits: 0,
-                          }).format(
-                            prompt.metrics.tokenUsage.completion /
-                              (prompt.metrics.totalLatencyMs / 1000),
-                          )
+                          }).format(metrics.tokenUsage.completion / (metrics.totalLatencyMs / 1000))
                         : '0'}
                     </div>
                   ) : null}
@@ -892,28 +965,44 @@ function ResultsTable({
                     <div className="summary">
                       <div
                         className={`highlight ${
-                          passRates[idx]
-                            ? `success-${Math.round(passRates[idx] / 20) * 20}`
-                            : 'success-0'
+                          passRates[idx]?.filtered !== null
+                            ? `success-${Math.round((passRates[idx].filtered ?? 0) / 20) * 20}`
+                            : passRates[idx]?.total
+                              ? `success-${Math.round(passRates[idx].total / 20) * 20}`
+                              : 'success-0'
                         }`}
                       >
-                        <strong>{pct}% passing</strong> ({passingTestCounts[idx]}/{testCounts[idx]}{' '}
-                        cases)
+                        {passRates[idx]?.filtered !== null ? (
+                          <Tooltip
+                            title={`Filtered: ${passingTestCounts[idx]?.filtered}/${testCounts[idx]?.filtered} passing (${passRates[idx].filtered?.toFixed(2)}%). Total: ${passingTestCounts[idx]?.total}/${testCounts[idx]?.total} passing (${passRates[idx]?.total?.toFixed(2)}%)`}
+                          >
+                            <span>
+                              <strong>{passRates[idx].filtered?.toFixed(2)}% passing</strong> (
+                              {passingTestCounts[idx]?.filtered}/{testCounts[idx]?.filtered}{' '}
+                              filtered, {passingTestCounts[idx]?.total}/{testCounts[idx]?.total}{' '}
+                              total)
+                            </span>
+                          </Tooltip>
+                        ) : (
+                          <>
+                            <strong>{pct}% passing</strong> ({passingTestCounts[idx]?.total}/
+                            {testCounts[idx]?.total} cases)
+                          </>
+                        )}
                       </div>
                     </div>
-                    {prompt.metrics?.testErrorCount && prompt.metrics.testErrorCount > 0 ? (
+                    {metrics?.testErrorCount && metrics.testErrorCount > 0 ? (
                       <div className="summary error-pill" onClick={() => setFilterMode('errors')}>
                         <div className="highlight fail">
-                          <strong>Errors:</strong> {prompt.metrics?.testErrorCount || 0}
+                          <strong>Errors:</strong> {metrics?.testErrorCount || 0}
                         </div>
                       </div>
                     ) : null}
-                    {prompt.metrics?.namedScores &&
-                    Object.keys(prompt.metrics.namedScores).length > 0 ? (
+                    {metrics?.namedScores && Object.keys(metrics.namedScores).length > 0 ? (
                       <Box className="collapse-hidden">
                         <CustomMetrics
-                          lookup={prompt.metrics.namedScores}
-                          counts={prompt.metrics.namedScoresCount}
+                          lookup={metrics.namedScores}
+                          counts={metrics.namedScoresCount}
                           metricTotals={metricTotals}
                           onShowMore={() => setCustomMetricsDialogOpen(true)}
                         />
@@ -997,6 +1086,7 @@ function ResultsTable({
     failureFilter,
     filterMode,
     getFirstOutput,
+    getMetrics,
     getOutput,
     handleRating,
     head.prompts,

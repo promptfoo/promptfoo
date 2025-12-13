@@ -1,4 +1,4 @@
-import React, { forwardRef, useState } from 'react';
+import React, { useState } from 'react';
 
 import { IS_RUNNING_LOCALLY } from '@app/constants';
 import EngineeringIcon from '@mui/icons-material/Engineering';
@@ -24,10 +24,10 @@ import type { ButtonProps } from '@mui/material/Button';
 import type { LinkProps } from 'react-router-dom';
 import './Navigation.css';
 
-// Create a properly typed forwarded ref component for MUI compatibility
-const RouterLink = forwardRef<HTMLAnchorElement, LinkProps>((props, ref) => (
-  <Link ref={ref} {...props} />
-));
+// Create a properly typed ref component for MUI compatibility
+function RouterLink({ ref, ...props }: LinkProps & { ref?: React.Ref<HTMLAnchorElement> }) {
+  return <Link ref={ref} {...props} />;
+}
 RouterLink.displayName = 'RouterLink';
 
 const NavButton = styled(Button)<Partial<ButtonProps> & Partial<LinkProps>>(({ theme }) => ({
@@ -145,7 +145,7 @@ function CreateDropdown({
     scheduleClose();
   };
 
-  const isActive = ['/setup', '/redteam/setup'].some((route) =>
+  const isActive = ['/setup', '/redteam/setup', '/model-audit/setup'].some((route) =>
     location.pathname.startsWith(route),
   );
 
@@ -159,6 +159,11 @@ function CreateDropdown({
       href: '/redteam/setup',
       label: 'Red Team',
       description: 'Set up security testing scenarios',
+    },
+    {
+      href: '/model-audit/setup',
+      label: 'Model Audit',
+      description: 'Configure and run a model security scan',
     },
   ];
 

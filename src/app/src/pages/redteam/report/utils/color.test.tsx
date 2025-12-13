@@ -1,5 +1,6 @@
 import { createAppTheme } from '@app/components/PageShell';
 import { Severity } from '@promptfoo/redteam/constants';
+import { describe, expect, it } from 'vitest';
 import { getProgressColor, getSeverityColor } from './color';
 
 describe('getSeverityColor', () => {
@@ -17,14 +18,14 @@ describe('getSeverityColor', () => {
     { severity: 'invalid-severity' as Severity, expectedColor: theme.palette.grey[500] },
     { severity: null as any, expectedColor: theme.palette.grey[500] },
     { severity: 5 as unknown as Severity, expectedColor: theme.palette.grey[500] },
-  ])(
-    'should return $expectedColor when given $severity as input',
-    ({ severity, expectedColor }) => {
-      const result = getSeverityColor(severity, theme);
+  ])('should return $expectedColor when given $severity as input', ({
+    severity,
+    expectedColor,
+  }) => {
+    const result = getSeverityColor(severity, theme);
 
-      expect(result).toBe(expectedColor);
-    },
-  );
+    expect(result).toBe(expectedColor);
+  });
 });
 
 describe('getProgressColor', () => {
@@ -71,14 +72,15 @@ describe('getProgressColor', () => {
       { percentage: 50, expectedColor: theme.palette.warning.dark, dark: false },
       { percentage: 75, expectedColor: theme.palette.warning.light, dark: false },
       { percentage: 90, expectedColor: theme.palette.success.main, dark: false },
-    ])(
-      'should return $expectedColor for a pass rate percentage of $percentage',
-      ({ percentage, expectedColor, dark }) => {
-        const result = getProgressColor(percentage, dark ? darkTheme : theme, false);
+    ])('should return $expectedColor for a pass rate percentage of $percentage', ({
+      percentage,
+      expectedColor,
+      dark,
+    }) => {
+      const result = getProgressColor(percentage, dark ? darkTheme : theme, false);
 
-        expect(result).toBe(expectedColor);
-      },
-    );
+      expect(result).toBe(expectedColor);
+    });
 
     it('should return the highest severity color for negative percentages', () => {
       const result = getProgressColor(-10, theme, false);
@@ -98,14 +100,14 @@ describe('getProgressColor', () => {
       { percentage: 50, expectedColor: theme.palette.warning.dark },
       { percentage: 75, expectedColor: theme.palette.custom.severity[Severity.High].main },
       { percentage: 90, expectedColor: theme.palette.custom.severity[Severity.Critical].main },
-    ])(
-      'should return $expectedColor for an attack success rate percentage of $percentage',
-      ({ percentage, expectedColor }) => {
-        const result = getProgressColor(percentage, theme, true);
+    ])('should return $expectedColor for an attack success rate percentage of $percentage', ({
+      percentage,
+      expectedColor,
+    }) => {
+      const result = getProgressColor(percentage, theme, true);
 
-        expect(result).toBe(expectedColor);
-      },
-    );
+      expect(result).toBe(expectedColor);
+    });
 
     it('should return low severity color for negative percentages', () => {
       const result = getProgressColor(-10, theme, true);

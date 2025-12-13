@@ -39,7 +39,7 @@ export interface OpenAiSharedOptions {
   maxRetries?: number;
 }
 
-export type ReasoningEffort = 'low' | 'medium' | 'high' | null;
+export type ReasoningEffort = 'none' | 'low' | 'medium' | 'high' | null;
 
 /**
  * **o-series models only**

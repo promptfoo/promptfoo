@@ -1,3 +1,4 @@
+import * as fs from 'fs';
 import path from 'path';
 
 import { loadFromJavaScriptFile } from './assertions/utils';
@@ -10,6 +11,7 @@ import {
   CONTEXT_FAITHFULNESS_NLI_STATEMENTS,
   CONTEXT_RECALL,
   CONTEXT_RECALL_ATTRIBUTED_TOKEN,
+  CONTEXT_RECALL_NOT_ATTRIBUTED_TOKEN,
   CONTEXT_RELEVANCE,
   CONTEXT_RELEVANCE_BAD,
   DEFAULT_GRADING_PROMPT,
@@ -21,11 +23,14 @@ import {
 } from './prompts/index';
 import { loadApiProvider } from './providers/index';
 import { getDefaultProviders } from './providers/defaults';
+import { hasWebSearchCapability, loadWebSearchProvider } from './providers/webSearchUtils';
+import { DEFAULT_WEB_SEARCH_PROMPT } from './prompts/grading';
 import { LLAMA_GUARD_REPLICATE_PROVIDER } from './redteam/constants';
 import { shouldGenerateRemote } from './redteam/remoteGeneration';
 import { doRemoteGrading } from './remoteGrading';
 import { doRemoteScoringWithPi } from './remoteScoring';
-import { maybeLoadFromExternalFile } from './util/file';
+import { getNunjucksEngineForFilePath, maybeLoadFromExternalFile } from './util/file';
+import { parseFileUrl } from './util/functions/loadFunction';
 import { isJavascriptFile } from './util/fileExtensions';
 import invariant from './util/invariant';
 import { extractFirstJsonObject, extractJsonObjects } from './util/json';
@@ -59,7 +64,7 @@ class LlmRubricProviderError extends Error {
 
 const nunjucks = getNunjucksEngine(undefined, false, true);
 
-function cosineSimilarity(vecA: number[], vecB: number[]) {
+function cosineSimilarity(vecA: number[], vecB: number[]): number {
   if (vecA.length !== vecB.length) {
     throw new Error('Vectors must be of equal length');
   }
@@ -67,6 +72,24 @@ function cosineSimilarity(vecA: number[], vecB: number[]) {
   const vecAMagnitude = Math.sqrt(vecA.reduce((acc, val) => acc + val * val, 0));
   const vecBMagnitude = Math.sqrt(vecB.reduce((acc, val) => acc + val * val, 0));
   return dotProduct / (vecAMagnitude * vecBMagnitude);
+}
+
+function dotProduct(vecA: number[], vecB: number[]): number {
+  if (vecA.length !== vecB.length) {
+    throw new Error('Vectors must be of equal length');
+  }
+  return vecA.reduce((acc, val, idx) => acc + val * vecB[idx], 0);
+}
+
+function euclideanDistance(vecA: number[], vecB: number[]): number {
+  if (vecA.length !== vecB.length) {
+    throw new Error('Vectors must be of equal length');
+  }
+  const sumSquaredDiff = vecA.reduce((acc, val, idx) => {
+    const diff = val - vecB[idx];
+    return acc + diff * diff;
+  }, 0);
+  return Math.sqrt(sumSquaredDiff);
 }
 
 /**
@@ -104,8 +127,10 @@ async function loadFromProviderOptions(provider: ProviderOptions) {
     `Provider must be an object, but received an array: ${JSON.stringify(provider)}`,
   );
   invariant(provider.id, 'Provider supplied to assertion must have an id');
-  // TODO(ian): set basepath if invoked from filesystem config
-  return loadApiProvider(provider.id, { options: provider as ProviderOptions });
+  return loadApiProvider(provider.id, {
+    options: provider as ProviderOptions,
+    basePath: cliState.basePath,
+  });
 }
 
 export async function getGradingProvider(
@@ -116,7 +141,7 @@ export async function getGradingProvider(
   let finalProvider: ApiProvider | null;
   if (typeof provider === 'string') {
     // Defined as a string
-    finalProvider = await loadApiProvider(provider);
+    finalProvider = await loadApiProvider(provider, { basePath: cliState.basePath });
   } else if (typeof provider === 'object' && typeof (provider as ApiProvider).id === 'function') {
     // Defined as an ApiProvider interface
     finalProvider = provider as ApiProvider;
@@ -240,6 +265,7 @@ export async function matchesSimilarity(
   threshold: number,
   inverse: boolean = false,
   grading?: GradingConfig,
+  metric: 'cosine' | 'dot_product' | 'euclidean' = 'cosine',
 ): Promise<Omit<GradingResult, 'assertion'>> {
   if (cliState.config?.redteam && shouldGenerateRemote()) {
     try {
@@ -277,7 +303,14 @@ export async function matchesSimilarity(
     },
   };
 
+  // For providers with native similarity API, only cosine is supported
   if ('callSimilarityApi' in finalProvider) {
+    if (metric !== 'cosine') {
+      return fail(
+        `Provider ${finalProvider.id()} only supports cosine similarity via callSimilarityApi`,
+        tokensUsed,
+      );
+    }
     const similarityResp = await finalProvider.callSimilarityApi(expected, output);
     tokensUsed.total = similarityResp.tokenUsage?.total || 0;
     tokensUsed.prompt = similarityResp.tokenUsage?.prompt || 0;
@@ -331,29 +364,76 @@ export async function matchesSimilarity(
       return fail('Embedding not found', tokensUsed);
     }
 
-    similarity = cosineSimilarity(expectedEmbedding.embedding, outputEmbedding.embedding);
+    // Compute metric based on the selected type
+    switch (metric) {
+      case 'cosine':
+        similarity = cosineSimilarity(expectedEmbedding.embedding, outputEmbedding.embedding);
+        break;
+      case 'dot_product':
+        similarity = dotProduct(expectedEmbedding.embedding, outputEmbedding.embedding);
+        break;
+      case 'euclidean':
+        // For euclidean distance, we store it in similarity variable but handle it differently below
+        similarity = euclideanDistance(expectedEmbedding.embedding, outputEmbedding.embedding);
+        break;
+      default:
+        return fail(`Unsupported metric: ${metric}`, tokensUsed);
+    }
   } else {
     throw new Error('Provider must implement callSimilarityApi or callEmbeddingApi');
   }
-  const pass = inverse
-    ? similarity <= threshold + Number.EPSILON
-    : similarity >= threshold - Number.EPSILON;
-  const greaterThanReason = `Similarity ${similarity.toFixed(
-    2,
-  )} is greater than threshold ${threshold}`;
-  const lessThanReason = `Similarity ${similarity.toFixed(2)} is less than threshold ${threshold}`;
-  if (pass) {
-    return {
-      pass: true,
-      score: inverse ? 1 - similarity : similarity,
-      reason: inverse ? lessThanReason : greaterThanReason,
-      tokensUsed,
-    };
+
+  // Handle different semantics for distance vs similarity metrics
+  const isDistanceMetric = metric === 'euclidean';
+
+  let pass: boolean;
+  let score: number;
+  let reason: string;
+
+  if (isDistanceMetric) {
+    // For distance metrics: lower is better, threshold is maximum distance
+    const distance = similarity; // We stored distance in similarity variable
+    pass = inverse
+      ? distance >= threshold - Number.EPSILON
+      : distance <= threshold + Number.EPSILON;
+
+    // Convert distance to a 0-1 score where lower distance = higher score
+    // Using formula: score = 1 / (1 + distance)
+    const normalizedScore = 1 / (1 + distance);
+    score = inverse ? 1 - normalizedScore : normalizedScore;
+
+    const belowThresholdReason = `Distance ${distance.toFixed(2)} is less than or equal to threshold ${threshold}`;
+    const aboveThresholdReason = `Distance ${distance.toFixed(2)} is greater than threshold ${threshold}`;
+    reason = pass
+      ? inverse
+        ? aboveThresholdReason
+        : belowThresholdReason
+      : inverse
+        ? belowThresholdReason
+        : aboveThresholdReason;
+  } else {
+    // For similarity metrics: higher is better, threshold is minimum similarity
+    pass = inverse
+      ? similarity <= threshold + Number.EPSILON
+      : similarity >= threshold - Number.EPSILON;
+
+    score = inverse ? 1 - similarity : similarity;
+
+    const greaterThanReason = `Similarity ${similarity.toFixed(2)} is greater than or equal to threshold ${threshold}`;
+    const lessThanReason = `Similarity ${similarity.toFixed(2)} is less than threshold ${threshold}`;
+    reason = pass
+      ? inverse
+        ? lessThanReason
+        : greaterThanReason
+      : inverse
+        ? greaterThanReason
+        : lessThanReason;
   }
+
   return {
-    pass: false,
-    score: inverse ? 1 - similarity : similarity,
-    reason: inverse ? greaterThanReason : lessThanReason,
+    pass,
+    score,
+    reason,
     tokensUsed,
   };
 }
@@ -409,7 +489,7 @@ export async function matchesClassification(
   };
 }
 
-async function loadRubricPrompt(
+export async function loadRubricPrompt(
   rubricPrompt: string | object | undefined,
   defaultPrompt: string,
 ): Promise<string> {
@@ -420,19 +500,31 @@ async function loadRubricPrompt(
     return defaultPrompt;
   }
 
-  if (
-    typeof rubricPrompt === 'string' &&
-    rubricPrompt.startsWith('file://') &&
-    isJavascriptFile(rubricPrompt)
-  ) {
+  if (typeof rubricPrompt === 'string' && rubricPrompt.startsWith('file://')) {
     const basePath = cliState.basePath || '';
-    let filePath = rubricPrompt.slice('file://'.length);
 
-    const [pathPart, functionName] = filePath.split(':');
-    filePath = path.resolve(basePath, pathPart);
-    rubricPrompt = await loadFromJavaScriptFile(filePath, functionName, []);
+    // Render Nunjucks templates in the file path (e.g., file://{{ env.RUBRIC_PATH }}/rubric.json)
+    const renderedFilePath = getNunjucksEngineForFilePath().renderString(rubricPrompt, {});
+
+    // Parse the file URL to extract file path and function name
+    // This handles colon splitting correctly, including Windows drive letters and :functionName suffix
+    const { filePath, functionName } = parseFileUrl(renderedFilePath);
+    const resolvedPath = path.resolve(basePath, filePath);
+
+    if (isJavascriptFile(filePath)) {
+      rubricPrompt = await loadFromJavaScriptFile(resolvedPath, functionName, []);
+    } else {
+      // For non-JS files (including .json, .yaml, .txt), load as raw text
+      // to allow Nunjucks templating before JSON/YAML parsing.
+      // This fixes the issue where .json files with Nunjucks templates
+      // would fail to parse before rendering.
+      if (!fs.existsSync(resolvedPath)) {
+        throw new Error(`File does not exist: ${resolvedPath}`);
+      }
+      rubricPrompt = fs.readFileSync(resolvedPath, 'utf8');
+    }
   } else {
-    // Load from external file if needed
+    // Load from external file if needed (for non file:// references)
     rubricPrompt = maybeLoadFromExternalFile(rubricPrompt);
   }
 
@@ -1183,12 +1275,23 @@ export async function matchesContextRecall(
   }
 
   invariant(typeof resp.output === 'string', 'context-recall produced malformed response');
-  const sentences = splitIntoSentences(resp.output);
+
+  // Filter to only include lines that contain attribution markers.
+  // This handles cases where LLMs add preamble text before the classification list.
+  // See: https://github.com/promptfoo/promptfoo/issues/1506
+  const attributedTokenLower = CONTEXT_RECALL_ATTRIBUTED_TOKEN.toLowerCase();
+  const notAttributedTokenLower = CONTEXT_RECALL_NOT_ATTRIBUTED_TOKEN.toLowerCase();
+  const sentences = splitIntoSentences(resp.output).filter((line) => {
+    const lowerLine = line.toLowerCase();
+    return lowerLine.includes(attributedTokenLower) || lowerLine.includes(notAttributedTokenLower);
+  });
+
   const sentenceAttributions: { sentence: string; attributed: boolean }[] = [];
   let numerator = 0;
 
   for (const sentence of sentences) {
-    const isAttributed = sentence.includes(CONTEXT_RECALL_ATTRIBUTED_TOKEN);
+    // Case-insensitive check for attribution - handles [ATTRIBUTED], [Attributed], etc.
+    const isAttributed = sentence.toLowerCase().includes(attributedTokenLower);
     if (isAttributed) {
       numerator++;
     }
@@ -1361,14 +1464,17 @@ export async function matchesContextFaithfulness(
   if (grading?.rubricPrompt) {
     invariant(Array.isArray(grading.rubricPrompt), 'rubricPrompt must be an array');
   }
-  const longformPrompt: string =
-    (typeof grading?.rubricPrompt?.[0] === 'string'
+  // Load rubric prompts using loadRubricPrompt to support file:// references with templates
+  const rawLongformPrompt =
+    typeof grading?.rubricPrompt?.[0] === 'string'
       ? grading?.rubricPrompt?.[0]
-      : grading?.rubricPrompt?.[0].content) || CONTEXT_FAITHFULNESS_LONGFORM;
-  const nliPrompt: string =
-    (typeof grading?.rubricPrompt?.[1] === 'string'
+      : grading?.rubricPrompt?.[0]?.content;
+  const rawNliPrompt =
+    typeof grading?.rubricPrompt?.[1] === 'string'
       ? grading?.rubricPrompt?.[1]
-      : grading?.rubricPrompt?.[1].content) || CONTEXT_FAITHFULNESS_NLI_STATEMENTS;
+      : grading?.rubricPrompt?.[1]?.content;
+  const longformPrompt = await loadRubricPrompt(rawLongformPrompt, CONTEXT_FAITHFULNESS_LONGFORM);
+  const nliPrompt = await loadRubricPrompt(rawNliPrompt, CONTEXT_FAITHFULNESS_NLI_STATEMENTS);
 
   let promptText = await renderLlmRubricPrompt(longformPrompt, {
     question: query,
@@ -1639,6 +1745,112 @@ interface ModerationMatchOptions {
   userPrompt: string;
   assistantResponse: string;
   categories?: string[];
+}
+
+export async function matchesSearchRubric(
+  rubric: string,
+  llmOutput: string,
+  grading?: GradingConfig,
+  vars?: Record<string, string | object>,
+  assertion?: Assertion,
+  _provider?: ApiProvider,
+): Promise<GradingResult> {
+  if (!grading) {
+    throw new Error(
+      'Cannot grade output without grading config. Specify --grader option or grading config.',
+    );
+  }
+
+  // Search rubric assertion is like llm-rubric but with web search capabilities
+  const defaultProviders = await getDefaultProviders();
+
+  // Get a provider with web search capabilities
+  let searchProvider =
+    grading.provider ||
+    defaultProviders.webSearchProvider ||
+    defaultProviders.llmRubricProvider ||
+    defaultProviders.gradingProvider;
+
+  // Check if current provider has web search, if not try to load one
+  if (!hasWebSearchCapability(searchProvider)) {
+    // Try to load a provider with web search capabilities
+    // For search-rubric assertion, prefer Anthropic first (pass true)
+    const webSearchProvider = await loadWebSearchProvider(true);
+    if (webSearchProvider) {
+      searchProvider = webSearchProvider;
+    }
+  }
+
+  // Ensure we have a provider with web search capabilities
+  if (!searchProvider || !hasWebSearchCapability(searchProvider)) {
+    throw new Error(
+      'search-rubric assertion requires a grading provider with web search capabilities. ' +
+        'Use --grader with a web search provider (e.g., anthropic:messages:claude-sonnet-4, openai:responses:o4-mini with tools configured, perplexity:sonar) or configure one in defaultTest.options.provider',
+    );
+  }
+
+  // Load the web search rubric prompt
+  const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, DEFAULT_WEB_SEARCH_PROMPT);
+  const prompt = await renderLlmRubricPrompt(rubricPrompt, {
+    output: tryParse(llmOutput),
+    rubric,
+    ...(vars || {}),
+  });
+
+  // Get the evaluation from the search provider
+  const resp = await searchProvider.callApi(prompt);
+
+  if (resp.error || !resp.output) {
+    return {
+      pass: false,
+      score: 0,
+      reason: `Search rubric evaluation failed: ${resp.error || 'No output'}`,
+      tokensUsed: resp.tokenUsage,
+      assertion,
+    };
+  }
+
+  // Parse the response
+  try {
+    const result = extractFirstJsonObject(String(resp.output)) as {
+      pass?: boolean;
+      score?: number;
+      reason?: string;
+      searchResults?: any;
+    };
+
+    // Apply threshold if specified
+    let pass = result.pass ?? false;
+    const score = typeof result.score === 'number' ? result.score : pass ? 1 : 0;
+
+    if (assertion?.threshold !== undefined) {
+      pass = pass && score >= assertion.threshold;
+    }
+
+    return {
+      pass,
+      score,
+      reason: result.reason || 'No reason provided',
+      tokensUsed: resp.tokenUsage,
+      assertion,
+      metadata: {
+        searchResults: result.searchResults || [],
+        searchProvider: searchProvider.id(),
+      },
+    };
+  } catch {
+    // Try to parse as a simple pass/fail
+    const outputLower = String(resp.output).toLowerCase();
+    const pass = outputLower.includes('"pass":true') || outputLower.includes('"pass": true');
+
+    return {
+      pass,
+      score: pass ? 1 : 0,
+      reason: resp.output as string,
+      tokensUsed: resp.tokenUsage,
+      assertion,
+    };
+  }
 }
 
 export async function matchesModeration(

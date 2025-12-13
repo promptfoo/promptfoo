@@ -14,11 +14,11 @@ export function registerGetEvaluationDetailsTool(server: McpServer) {
       id: z
         .string()
         .min(1, 'Eval ID cannot be empty')
-        .regex(/^[a-zA-Z0-9_-]+$/, 'Invalid eval ID format')
+        .regex(/^[a-zA-Z0-9_:-]+$/, 'Invalid eval ID format')
         .describe(
           dedent`
-            Unique eval ID (UUID format).
-            Example: "eval_abc123def456"
+            Unique eval ID.
+            Example: "eval-8h1-2025-11-15T14:17:18"
             Get this from list_evaluations.
           `,
         ),

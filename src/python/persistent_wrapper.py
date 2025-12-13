@@ -6,16 +6,18 @@ This wrapper loads a user script once and handles multiple requests
 via a simple control protocol over stdin/stdout.
 
 Protocol:
-  - Node sends: "CALL:<function_name>:<request_file>:<response_file>\n"
+  - Node sends: "CALL|<function_name>|<request_file>|<response_file>\n"
   - Worker executes function, writes response to file
   - Worker sends: "DONE\n"
   - Node sends: "SHUTDOWN\n" to exit
 
 Data transfer uses files (proven UTF-8 handling), control uses stdin/stdout.
+Note: Using pipe (|) delimiter to avoid conflicts with Windows drive letters (C:).
 """
 
 import asyncio
 import importlib.util
+import inspect
 import json
 import os
 import sys
@@ -104,7 +106,7 @@ def get_callable(module, method_name):
 
 def call_method(method_callable, args):
     """Call the method, handling both sync and async functions."""
-    if asyncio.iscoroutinefunction(method_callable):
+    if inspect.iscoroutinefunction(method_callable):
         return asyncio.run(method_callable(*args))
     else:
         return method_callable(*args)
@@ -149,7 +151,7 @@ def main():
 
             if line.startswith("SHUTDOWN"):
                 break
-            elif line.startswith("CALL:"):
+            elif line.startswith("CALL|"):
                 handle_call(line, user_module, function_name)
             else:
                 print(f"ERROR: Unknown command: {line}", file=sys.stderr, flush=True)
@@ -165,9 +167,10 @@ def handle_call(command_line, user_module, default_function_name):
     """Handle a CALL command."""
     response_file = None
     try:
-        # Parse command: "CALL:<function_name>:<request_file>:<response_file>"
-        # or legacy: "CALL:<request_file>:<response_file>"
-        parts = command_line.split(":", 3)
+        # Parse command: "CALL|<function_name>|<request_file>|<response_file>"
+        # or legacy: "CALL|<request_file>|<response_file>"
+        # Note: Using pipe (|) delimiter to avoid conflicts with Windows drive letters (C:)
+        parts = command_line.split("|", 3)
 
         # Extract response_file first (always the last part) so it's available even if validation fails
         # This ensures we can write an error response file if command format is invalid
@@ -175,10 +178,10 @@ def handle_call(command_line, user_module, default_function_name):
             response_file = parts[-1]
 
         if len(parts) == 4:
-            # New format: CALL:<function_name>:<request_file>:<response_file>
+            # New format: CALL|<function_name>|<request_file>|<response_file>
             _, function_name, request_file, _ = parts
         elif len(parts) == 3:
-            # Legacy format: CALL:<request_file>:<response_file>
+            # Legacy format: CALL|<request_file>|<response_file>
             _, request_file, _ = parts
             function_name = default_function_name
         else:

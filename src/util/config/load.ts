@@ -466,7 +466,7 @@ export async function combineConfigs(configPaths: string[]): Promise<UnifiedConf
       }
 
       const sharingConfig = configs.find((config) => typeof config.sharing === 'object');
-      return sharingConfig ? sharingConfig.sharing : false;
+      return sharingConfig ? sharingConfig.sharing : undefined;
     })(),
     tracing: configs.find((config) => config.tracing)?.tracing,
   };
@@ -561,7 +561,7 @@ export async function resolveConfigs(
     env: fileConfig.env || defaultConfig.env,
     sharing: getEnvBool('PROMPTFOO_DISABLE_SHARING')
       ? false
-      : (fileConfig.sharing ?? defaultConfig.sharing ?? false),
+      : (fileConfig.sharing ?? defaultConfig.sharing),
     defaultTest: processedDefaultTest
       ? await readTest(processedDefaultTest, basePath, true)
       : undefined,
@@ -698,20 +698,30 @@ export async function resolveConfigs(
     tracing: config.tracing,
   };
 
-  if (testSuite.tests) {
-    validateAssertions(testSuite.tests);
-  }
+  // Validate assertions in tests and defaultTest using Zod schema
+  // Note: defaultTest can be a string (file://) reference, so only pass if it's an object
+  validateAssertions(
+    testSuite.tests || [],
+    typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined,
+  );
 
   cliState.config = config;
 
   // Extract commandLineOptions from either explicit config files or default config
   let commandLineOptions = fileConfig.commandLineOptions || defaultConfig.commandLineOptions;
 
-  // Resolve relative envPath against the config file directory
-  if (commandLineOptions?.envPath && !path.isAbsolute(commandLineOptions.envPath) && basePath) {
+  // Resolve relative envPath(s) against the config file directory
+  if (commandLineOptions?.envPath && basePath) {
+    const envPaths = Array.isArray(commandLineOptions.envPath)
+      ? commandLineOptions.envPath
+      : [commandLineOptions.envPath];
+
+    const resolvedPaths = envPaths.map((p) => (path.isAbsolute(p) ? p : path.resolve(basePath, p)));
+
     commandLineOptions = {
       ...commandLineOptions,
-      envPath: path.resolve(basePath, commandLineOptions.envPath),
+      // Keep as single string if only one path, array otherwise
+      envPath: resolvedPaths.length === 1 ? resolvedPaths[0] : resolvedPaths,
     };
   }
 

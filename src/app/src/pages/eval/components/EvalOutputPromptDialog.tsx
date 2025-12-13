@@ -1,6 +1,7 @@
 import type React from 'react';
 import { useEffect, useMemo, useState } from 'react';
 
+import { HIDDEN_METADATA_KEYS } from '@app/constants';
 import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
@@ -13,7 +14,7 @@ import Tabs from '@mui/material/Tabs';
 import Typography from '@mui/material/Typography';
 import type { GradingResult } from '@promptfoo/types';
 
-import { HIDDEN_METADATA_KEYS } from '@app/constants';
+import type { Trace } from '../../../components/traces/TraceView';
 import type { CloudConfigData } from '../../../hooks/useCloudConfig';
 import ChatMessages, { type Message } from './ChatMessages';
 import { DebuggingPanel } from './DebuggingPanel';
@@ -21,8 +22,7 @@ import { EvaluationPanel } from './EvaluationPanel';
 import { type ExpandedMetadataState, MetadataPanel } from './MetadataPanel';
 import { OutputsPanel } from './OutputsPanel';
 import { PromptEditor } from './PromptEditor';
-import type { ResultsFilterType, ResultsFilterOperator } from './store';
-import type { Trace } from '../../../components/traces/TraceView';
+import type { ResultsFilterOperator, ResultsFilterType } from './store';
 
 const copyButtonSx = {
   position: 'absolute',
@@ -69,18 +69,21 @@ function CodeDisplay({
   onMouseLeave,
   showCopyButton = false,
 }: CodeDisplayProps) {
+  // Ensure content is a string - handles cases where providers return objects
+  const safeContent = typeof content === 'string' ? content : JSON.stringify(content, null, 2);
+
   // Improved code detection logic
   const isCode =
-    /^[\s]*[{[]/.test(content) || // JSON-like (starts with { or [)
-    /^#\s/.test(content) || // Markdown headers (starts with # )
-    /```/.test(content) || // Code blocks (contains ```)
-    /^\s*[\w-]+\s*:/.test(content) || // YAML/config-like (key: value)
-    /^\s*<\w+/.test(content) || // XML/HTML-like (starts with <tag)
-    content.includes('function ') || // JavaScript functions
-    content.includes('class ') || // Class definitions
-    content.includes('import ') || // Import statements
-    /^\s*def\s+/.test(content) || // Python functions
-    /^\s*\w+\s*\(/.test(content); // Function calls
+    /^[\s]*[{[]/.test(safeContent) || // JSON-like (starts with { or [)
+    /^#\s/.test(safeContent) || // Markdown headers (starts with # )
+    /```/.test(safeContent) || // Code blocks (contains ```)
+    /^\s*[\w-]+\s*:/.test(safeContent) || // YAML/config-like (key: value)
+    /^\s*<\w+/.test(safeContent) || // XML/HTML-like (starts with <tag)
+    safeContent.includes('function ') || // JavaScript functions
+    safeContent.includes('class ') || // Class definitions
+    safeContent.includes('import ') || // Import statements
+    /^\s*def\s+/.test(safeContent) || // Python functions
+    /^\s*\w+\s*\(/.test(safeContent); // Function calls
 
   return (
     <Box mb={2}>
@@ -121,11 +124,11 @@ function CodeDisplay({
                 wordBreak: 'break-word',
               }}
             >
-              {content}
+              {safeContent}
             </pre>
           ) : (
             <Typography variant="body1" sx={textContentTypographySx}>
-              {content}
+              {safeContent}
             </Typography>
           )}
         </Box>
@@ -370,14 +373,27 @@ export default function EvalOutputPromptDialog({
   const redteamHistoryMessages = (metadata?.redteamHistory || metadata?.redteamTreeHistory || [])
     .filter((entry: any) => entry?.prompt && entry?.output)
     .flatMap(
-      (entry: { prompt: string; output: string; score?: number; graderPassed?: boolean }) => [
+      (entry: {
+        prompt: string;
+        promptAudio?: { data?: string; format?: string };
+        promptImage?: { data?: string; format?: string };
+        output: string;
+        outputAudio?: { data?: string; format?: string };
+        outputImage?: { data?: string; format?: string };
+        score?: number;
+        graderPassed?: boolean;
+      }) => [
         {
           role: 'user' as const,
           content: entry.prompt,
+          audio: entry.promptAudio,
+          image: entry.promptImage,
         },
         {
           role: 'assistant' as const,
           content: entry.output,
+          audio: entry.outputAudio,
+          image: entry.outputImage,
         },
       ],
     );
@@ -427,8 +443,8 @@ export default function EvalOutputPromptDialog({
       slotProps={drawerSlotProps}
       sx={{
         '& .MuiDrawer-paper': {
-          width: { xs: '100%', sm: '75%', md: '65%', lg: '65%' },
-          maxWidth: '1200px',
+          width: { xs: '100%', sm: '85%', md: '85%', lg: '85%' },
+          //maxWidth: '1200px',
           boxSizing: 'border-box',
         },
       }}

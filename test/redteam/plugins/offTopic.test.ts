@@ -1,3 +1,4 @@
+import { beforeEach, describe, expect, it } from 'vitest';
 import { OffTopicPluginGrader } from '../../../src/redteam/plugins/offTopic';
 
 describe('OffTopicPluginGrader', () => {

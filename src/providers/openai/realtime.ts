@@ -191,7 +191,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     }
   }
 
-  getRealtimeSessionBody() {
+  async getRealtimeSessionBody() {
     // Default values
     const modalities = this.config.modalities || ['text', 'audio'];
     const voice = this.config.voice || 'alloy';
@@ -222,7 +222,10 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
     }
 
     if (this.config.tools && this.config.tools.length > 0) {
-      body.tools = maybeLoadToolsFromExternalFile(this.config.tools);
+      const loadedTools = await maybeLoadToolsFromExternalFile(this.config.tools);
+      if (loadedTools !== undefined) {
+        body.tools = loadedTools;
+      }
       // If tools are provided but no tool_choice, default to auto
       if (this.config.tool_choice === undefined) {
         body.tool_choice = 'auto';
@@ -296,7 +299,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
         return event.event_id;
       };
 
-      ws.on('open', () => {
+      ws.on('open', async () => {
         logger.debug('WebSocket connection established successfully');
 
         // Create a conversation item with the user's prompt - immediately after connection
@@ -374,7 +377,10 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
 
                 // Add tools if configured
                 if (this.config.tools && this.config.tools.length > 0) {
-                  responseEvent.response.tools = maybeLoadToolsFromExternalFile(this.config.tools);
+                  const loadedTools = await maybeLoadToolsFromExternalFile(this.config.tools);
+                  if (loadedTools !== undefined) {
+                    responseEvent.response.tools = loadedTools;
+                  }
                   if (Object.prototype.hasOwnProperty.call(this.config, 'tool_choice')) {
                     responseEvent.response.tool_choice = this.config.tool_choice;
                   } else {
@@ -657,6 +663,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
                   prompt: usage?.input_tokens || 0,
                   completion: usage?.output_tokens || 0,
                   cached: 0,
+                  numRequests: 1,
                 },
                 cached: false,
                 metadata: {
@@ -962,7 +969,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
         return event.event_id;
       };
 
-      ws.on('open', () => {
+      ws.on('open', async () => {
         logger.debug('WebSocket connection established successfully');
 
         // First, update the session with our configuration
@@ -984,7 +991,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
             }),
             ...(this.config.tools &&
               this.config.tools.length > 0 && {
-                tools: maybeLoadToolsFromExternalFile(this.config.tools),
+                tools: await maybeLoadToolsFromExternalFile(this.config.tools),
                 tool_choice: this.config.tool_choice || 'auto',
               }),
           },
@@ -1047,7 +1054,10 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
 
                 // Add tools if configured
                 if (this.config.tools && this.config.tools.length > 0) {
-                  responseEvent.response.tools = maybeLoadToolsFromExternalFile(this.config.tools);
+                  const loadedTools = await maybeLoadToolsFromExternalFile(this.config.tools);
+                  if (loadedTools !== undefined) {
+                    responseEvent.response.tools = loadedTools;
+                  }
                   if (Object.prototype.hasOwnProperty.call(this.config, 'tool_choice')) {
                     responseEvent.response.tool_choice = this.config.tool_choice;
                   } else {
@@ -1330,6 +1340,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
                   prompt: usage?.input_tokens || 0,
                   completion: usage?.output_tokens || 0,
                   cached: 0,
+                  numRequests: 1,
                 },
                 cached: false,
                 metadata: {
@@ -1541,6 +1552,7 @@ export class OpenAiRealtimeProvider extends OpenAiGenericProvider {
           prompt: _usage?.prompt_tokens || 0,
           completion: _usage?.completion_tokens || 0,
           cached: 0,
+          numRequests: 1,
         },
         cached: false,
         metadata: {

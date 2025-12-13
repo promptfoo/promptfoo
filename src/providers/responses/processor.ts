@@ -1,12 +1,37 @@
 import logger from '../../logger';
 import { formatOpenAiError } from '../openai/util';
-import type { ProviderResponse, TokenUsage } from '../../types';
+import type { ProviderResponse, TokenUsage } from '../../types/index';
 import type {
   ProcessorConfig,
   ProcessorContext,
   ResponseOutputItem,
   ProcessedOutput,
 } from './types';
+
+/**
+ * Extract user-facing metadata from response data.
+ * Only includes fields that are useful for users viewing eval results.
+ */
+function extractMetadata(data: any, processedOutput: ProcessedOutput): Record<string, any> {
+  const metadata: Record<string, any> = {};
+
+  // Response ID - for linking to OpenAI dashboard
+  if (typeof data.id === 'string' && data.id) {
+    metadata.responseId = data.id;
+  }
+
+  // Actual model used - may differ from requested (e.g., gpt-5 -> gpt-5-2025-08-07)
+  if (typeof data.model === 'string' && data.model) {
+    metadata.model = data.model;
+  }
+
+  // Deep research annotations (citations)
+  if (Array.isArray(processedOutput.annotations) && processedOutput.annotations.length > 0) {
+    metadata.annotations = processedOutput.annotations;
+  }
+
+  return metadata;
+}
 
 /**
  * Extract token usage from response data, handling both OpenAI Chat Completions format
@@ -17,7 +42,7 @@ function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
     if (cached) {
       const totalTokens =
         data.usage.total_tokens || (data.usage.input_tokens || 0) + (data.usage.output_tokens || 0);
-      return { cached: totalTokens, total: totalTokens };
+      return { cached: totalTokens, total: totalTokens, numRequests: 1 };
     } else {
       const promptTokens = data.usage.prompt_tokens || data.usage.input_tokens || 0;
       const completionTokens = data.usage.completion_tokens || data.usage.output_tokens || 0;
@@ -27,6 +52,7 @@ function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
         total: totalTokens,
         prompt: promptTokens,
         completion: completionTokens,
+        numRequests: 1,
         ...(data.usage.completion_tokens_details
           ? {
               completionDetails: {
@@ -55,7 +81,11 @@ export class ResponsesProcessor {
     requestConfig: any,
     cached: boolean,
   ): Promise<ProviderResponse> {
-    logger.debug(`Processing ${this.config.providerType} responses output`);
+    // Log response metadata for debugging
+    logger.debug(`Processing ${this.config.providerType} responses output`, {
+      responseId: data.id,
+      model: data.model,
+    });
 
     if (data.error) {
       return {
@@ -80,6 +110,7 @@ export class ResponsesProcessor {
           cached,
           cost: this.config.costCalculator(this.config.modelName, data.usage, requestConfig),
           raw: data,
+          metadata: extractMetadata(data, processedOutput),
         };
       }
 
@@ -103,9 +134,11 @@ export class ResponsesProcessor {
         cached,
         cost: this.config.costCalculator(this.config.modelName, data.usage, requestConfig),
         raw: data,
+        metadata: extractMetadata(data, processedOutput),
       };
 
       // Add annotations if present (for deep research citations)
+      // This maintains backwards compatibility for code reading result.raw.annotations
       if (processedOutput.annotations && processedOutput.annotations.length > 0) {
         result.raw = { ...data, annotations: processedOutput.annotations };
       }
@@ -266,7 +299,7 @@ export class ResponsesProcessor {
         if (contentItem.type === 'output_text') {
           content += contentItem.text;
           // Preserve annotations for deep research citations
-          if (contentItem.annotations && contentItem.annotations.length > 0) {
+          if (Array.isArray(contentItem.annotations) && contentItem.annotations.length > 0) {
             annotations.push(...contentItem.annotations);
           }
         } else if (contentItem.type === 'tool_use' || contentItem.type === 'function_call') {

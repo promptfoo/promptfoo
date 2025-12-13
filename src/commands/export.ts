@@ -2,36 +2,14 @@ import fs from 'fs';
 import path from 'path';
 import zlib from 'zlib';
 
+import { getEnvString } from '../envars';
 import logger from '../logger';
 import Eval from '../models/eval';
 import telemetry from '../telemetry';
-import { writeOutput, createOutputMetadata } from '../util/index';
 import { getConfigDirectoryPath } from '../util/config/manage';
+import { createOutputMetadata, writeOutput } from '../util/index';
+import { getLogFiles } from '../util/logFiles';
 import type { Command } from 'commander';
-
-/**
- * Gets all log files from the logs directory, sorted by modification time (newest first)
- */
-function getLogFiles(logDir: string): Array<{ name: string; path: string; mtime: Date }> {
-  if (!fs.existsSync(logDir)) {
-    return [];
-  }
-
-  try {
-    return fs
-      .readdirSync(logDir)
-      .filter((file) => file.startsWith('promptfoo-') && file.endsWith('.log'))
-      .map((file) => ({
-        name: file,
-        path: path.join(logDir, file),
-        mtime: fs.statSync(path.join(logDir, file)).mtime,
-      }))
-      .sort((a, b) => b.mtime.getTime() - a.mtime.getTime()); // Sort by newest first
-  } catch (error) {
-    logger.error(`Error reading log directory: ${error}`);
-    return [];
-  }
-}
 
 /**
  * Creates a compressed tar.gz file containing log files
@@ -176,7 +154,9 @@ export function exportCommand(program: Command) {
     .action(async (cmdObj) => {
       try {
         const configDir = getConfigDirectoryPath(true);
-        const logDir = path.join(configDir, 'logs');
+        const logDir = getEnvString('PROMPTFOO_LOG_DIR')
+          ? path.resolve(getEnvString('PROMPTFOO_LOG_DIR')!)
+          : path.join(configDir, 'logs');
 
         if (!fs.existsSync(logDir)) {
           logger.error('No log directory found. Logs have not been created yet.');

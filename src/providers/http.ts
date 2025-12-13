@@ -31,6 +31,7 @@ import { REQUEST_TIMEOUT_MS } from './shared';
 import type {
   ApiProvider,
   CallApiContextParams,
+  CallApiOptionsParams,
   ProviderOptions,
   ProviderResponse,
   TokenUsage,
@@ -746,6 +747,52 @@ const TlsCertificateSchema = z
     },
   );
 
+const OAuthClientCredentialsSchema = z.object({
+  type: z.literal('oauth'),
+  grantType: z.literal('client_credentials'),
+  clientId: z.string(),
+  clientSecret: z.string(),
+  tokenUrl: z.string(),
+  scopes: z.array(z.string()).optional(),
+});
+
+const OAuthPasswordSchema = z.object({
+  type: z.literal('oauth'),
+  grantType: z.literal('password'),
+  clientId: z.string().optional(),
+  clientSecret: z.string().optional(),
+  tokenUrl: z.string(),
+  scopes: z.array(z.string()).optional(),
+  username: z.string(),
+  password: z.string(),
+});
+
+const BasicAuthSchema = z.object({
+  type: z.literal('basic'),
+  username: z.string(),
+  password: z.string(),
+});
+
+const BearerAuthSchema = z.object({
+  type: z.literal('bearer'),
+  token: z.string(),
+});
+
+const ApiKeyAuthSchema = z.object({
+  type: z.literal('api_key'),
+  value: z.string(),
+  placement: z.enum(['header', 'query']),
+  keyName: z.string(),
+});
+
+const AuthSchema = z.union([
+  OAuthClientCredentialsSchema,
+  OAuthPasswordSchema,
+  BasicAuthSchema,
+  BearerAuthSchema,
+  ApiKeyAuthSchema,
+]);
+
 export const HttpProviderConfigSchema = z.object({
   body: z.union([z.record(z.any()), z.string(), z.array(z.any())]).optional(),
   headers: z.record(z.string()).optional(),
@@ -772,6 +819,7 @@ export const HttpProviderConfigSchema = z.object({
   responseParser: z.union([z.string(), z.function()]).optional(),
   // Token estimation configuration
   tokenEstimation: TokenEstimationConfigSchema.optional(),
+  auth: AuthSchema.optional(),
   // Digital Signature Authentication with support for multiple certificate types
   signatureAuth: z
     .union([
@@ -922,11 +970,25 @@ export function processJsonBody(
         }
         return result;
       } else if (typeof obj === 'string') {
-        try {
-          return JSON.parse(obj);
-        } catch {
-          return obj;
+        // Only parse strings that are clearly JSON objects or arrays
+        // This preserves strings that would parse to primitives (numbers, booleans, null)
+        const trimmed = obj.trim();
+        if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+          try {
+            const parsed = JSON.parse(obj);
+            // Only return parsed value if it's an object or array
+            // This prevents primitive values (numbers, booleans, null) from being converted
+            if (typeof parsed === 'object' && parsed !== null) {
+              return parsed;
+            }
+            // If it parsed to a primitive, keep the original string
+            return obj;
+          } catch {
+            return obj;
+          }
         }
+        // Not a JSON object/array, return as-is
+        return obj;
       }
       return obj;
     };
@@ -935,6 +997,8 @@ export function processJsonBody(
   }
 
   // If it's a string, attempt to parse as JSON
+  // For top-level strings, we parse JSON primitives (for backward compatibility)
+  // For nested string values in objects, we only parse objects/arrays (see processNestedValues)
   if (typeof rendered === 'string') {
     try {
       return JSON.parse(rendered);
@@ -998,18 +1062,29 @@ function parseRawRequest(input: string) {
   // If the injectVar is in a query param, we need to encode the URL in the first line
   const encoded = urlEncodeRawRequestPath(adjusted);
   try {
-    const messageModel = httpZ.parse(encoded) as httpZ.HttpZRequestModel;
+    const messageModel = httpZ.parse(encoded);
+    // Type assertion for request model (http-z v8 doesn't export types)
+    const requestModel = messageModel as {
+      method: string;
+      target: string;
+      headers: Array<{ name: string; value: string }>;
+      body?: {
+        contentType?: string;
+        text?: string;
+        params?: Array<{ name: string; value: string }>;
+      };
+    };
     return {
-      method: messageModel.method,
-      url: messageModel.target,
-      headers: messageModel.headers.reduce(
-        (acc, header) => {
+      method: requestModel.method,
+      url: requestModel.target,
+      headers: requestModel.headers.reduce(
+        (acc: Record<string, string>, header: { name: string; value: string }) => {
           acc[header.name.toLowerCase()] = header.value;
           return acc;
         },
         {} as Record<string, string>,
       ),
-      body: messageModel.body,
+      body: requestModel.body,
     };
   } catch (err) {
     throw new Error(`Error parsing raw HTTP request: ${String(err)}`);
@@ -1304,6 +1379,9 @@ export class HttpProvider implements ApiProvider {
   private validateStatus: Promise<(status: number) => boolean>;
   private lastSignatureTimestamp?: number;
   private lastSignature?: string;
+  private lastToken?: string;
+  private lastTokenExpiresAt?: number;
+  private tokenRefreshPromise?: Promise<void>;
   private httpsAgent?: Agent;
   private httpsAgentPromise?: Promise<Agent>;
 
@@ -1388,7 +1466,179 @@ export class HttpProvider implements ApiProvider {
     }
   }
 
-  private async refreshSignatureIfNeeded(): Promise<void> {
+  private async refreshOAuthTokenIfNeeded(vars: Record<string, any> = {}): Promise<void> {
+    if (!this.config.auth || this.config.auth.type !== 'oauth') {
+      logger.debug('[HTTP Provider Auth]: No OAuth auth configured');
+      return;
+    }
+
+    // Render OAuth config values with template substitution
+    const nunjucks = getNunjucksEngine();
+    const baseConfig = {
+      ...this.config.auth,
+      clientId: this.config.auth.clientId
+        ? nunjucks.renderString(this.config.auth.clientId, vars)
+        : undefined,
+      clientSecret: this.config.auth.clientSecret
+        ? nunjucks.renderString(this.config.auth.clientSecret, vars)
+        : undefined,
+      tokenUrl: nunjucks.renderString(this.config.auth.tokenUrl, vars),
+      scopes: this.config.auth.scopes
+        ? this.config.auth.scopes.map((scope) => nunjucks.renderString(scope, vars))
+        : undefined,
+    };
+
+    // Add username/password for password grant type
+    const oauthConfig =
+      this.config.auth.grantType === 'password' && 'username' in this.config.auth
+        ? {
+            ...baseConfig,
+            username: this.config.auth.username
+              ? nunjucks.renderString(this.config.auth.username, vars)
+              : undefined,
+            password: this.config.auth.password
+              ? nunjucks.renderString(this.config.auth.password, vars)
+              : undefined,
+          }
+        : baseConfig;
+    const now = Date.now();
+
+    // Check if token exists and is still valid (with 60 second buffer)
+    const TOKEN_BUFFER_MS = 60000;
+    if (
+      this.lastToken &&
+      this.lastTokenExpiresAt &&
+      now + TOKEN_BUFFER_MS < this.lastTokenExpiresAt
+    ) {
+      logger.debug('[HTTP Provider Auth]: Using cached OAuth token');
+      return;
+    }
+
+    // If a refresh is already in progress, wait for it instead of making a new request
+    if (this.tokenRefreshPromise) {
+      logger.debug('[HTTP Provider Auth]: Token refresh already in progress, waiting...');
+      try {
+        await this.tokenRefreshPromise;
+        // If we successfully waited for the refresh, verify token is still valid
+        // (it might have expired while we were waiting)
+        const stillValid =
+          this.lastToken &&
+          this.lastTokenExpiresAt &&
+          Date.now() + TOKEN_BUFFER_MS < this.lastTokenExpiresAt;
+        if (stillValid) {
+          return;
+        }
+        // Token expired while waiting, fall through to refresh again
+        logger.debug('[HTTP Provider Auth]: Token expired while waiting, refreshing again...');
+      } catch {
+        // If the in-progress refresh failed, we'll try again below
+        logger.debug('[HTTP Provider Auth]: Previous token refresh failed, retrying...');
+      }
+    }
+
+    // Start a new token refresh and store the promise for deduplication
+    logger.debug('[HTTP Provider Auth]: Refreshing OAuth token');
+    const refreshPromise = this.performTokenRefresh(oauthConfig, now);
+    this.tokenRefreshPromise = refreshPromise;
+
+    try {
+      await refreshPromise;
+    } finally {
+      // Only clear the promise if it's still the one we created (prevents race conditions)
+      if (this.tokenRefreshPromise === refreshPromise) {
+        this.tokenRefreshPromise = undefined;
+      }
+    }
+  }
+
+  private async performTokenRefresh(
+    oauthConfig: {
+      grantType: string;
+      clientId?: string;
+      clientSecret?: string;
+      tokenUrl: string;
+      scopes?: string[];
+      username?: string;
+      password?: string;
+    },
+    now: number,
+  ): Promise<void> {
+    try {
+      // Prepare the token request body
+      const tokenRequestBody = new URLSearchParams();
+      tokenRequestBody.append('grant_type', oauthConfig.grantType);
+      if (oauthConfig.clientId) {
+        tokenRequestBody.append('client_id', oauthConfig.clientId);
+      }
+      if (oauthConfig.clientSecret) {
+        tokenRequestBody.append('client_secret', oauthConfig.clientSecret);
+      }
+
+      // Add username and password for password grant type
+      if (oauthConfig.grantType === 'password') {
+        if (!oauthConfig.username || !oauthConfig.password) {
+          throw new Error('Username and password are required for password grant type');
+        }
+        tokenRequestBody.append('username', oauthConfig.username);
+        tokenRequestBody.append('password', oauthConfig.password);
+      }
+
+      if (oauthConfig.scopes && oauthConfig.scopes.length > 0) {
+        tokenRequestBody.append('scope', oauthConfig.scopes.join(' '));
+      }
+
+      // Make the token request
+      const httpsAgent = await this.getHttpsAgent();
+      const fetchOptions: any = {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: tokenRequestBody.toString(),
+      };
+
+      if (httpsAgent) {
+        fetchOptions.dispatcher = httpsAgent;
+      }
+
+      const response = await fetchWithCache(
+        oauthConfig.tokenUrl,
+        fetchOptions,
+        REQUEST_TIMEOUT_MS,
+        'text',
+        true, // Always bust cache for token requests
+        0, // No retries for token requests
+      );
+
+      if (response.status < 200 || response.status >= 300) {
+        throw new Error(
+          `OAuth token request failed with status ${response.status} ${response.statusText}: ${response.data}`,
+        );
+      }
+
+      const tokenData = JSON.parse(response.data as string);
+
+      if (!tokenData.access_token) {
+        throw new Error('OAuth token response missing access_token');
+      }
+
+      this.lastToken = tokenData.access_token;
+
+      // Calculate expiration time
+      // expires_in is typically in seconds, default to 3600 (1 hour) if not provided
+      const expiresInSeconds = tokenData.expires_in || 3600;
+      this.lastTokenExpiresAt = now + expiresInSeconds * 1000;
+
+      logger.debug('[HTTP Provider Auth]: Successfully refreshed OAuth token');
+    } catch (err) {
+      logger.error(`[HTTP Provider Auth]: Failed to refresh OAuth token: ${String(err)}`);
+      throw new Error(`Failed to refresh OAuth token: ${String(err)}`);
+    }
+
+    invariant(this.lastToken, 'OAuth token should be defined at this point');
+  }
+
+  private async refreshSignatureIfNeeded(vars: Record<string, any>): Promise<void> {
     if (!this.config.signatureAuth) {
       logger.debug('[HTTP Provider Auth]: No signature auth configured');
       return;
@@ -1408,10 +1658,19 @@ export class HttpProvider implements ApiProvider {
       logger.debug('[HTTP Provider Auth]: Generating new signature');
       this.lastSignatureTimestamp = Date.now();
 
+      // Render privateKey with template substitution
+      const nunjucks = getNunjucksEngine();
+      const renderedConfig: any = {
+        ...signatureAuth,
+        privateKey: signatureAuth.privateKey
+          ? nunjucks.renderString(signatureAuth.privateKey, vars)
+          : undefined,
+      };
+
       // Determine the signature auth type for legacy configurations
-      let authConfig = signatureAuth;
-      if (!('type' in signatureAuth)) {
-        authConfig = { ...signatureAuth, type: 'pem' };
+      let authConfig = renderedConfig;
+      if (!('type' in renderedConfig)) {
+        authConfig = { ...renderedConfig, type: 'pem' };
       }
 
       this.lastSignature = await generateSignature(authConfig, this.lastSignatureTimestamp);
@@ -1496,23 +1755,60 @@ export class HttpProvider implements ApiProvider {
 
     const nunjucks = getNunjucksEngine();
 
-    return Object.fromEntries(
+    const allHeaders = Object.fromEntries(
       Object.entries({ ...defaultHeaders, ...headers }).map(([key, value]) => [
         key,
         nunjucks.renderString(value, vars),
       ]),
     );
+
+    // Add OAuth Bearer token if configured
+    if (this.config.auth?.type === 'oauth' && this.lastToken) {
+      allHeaders.authorization = `Bearer ${this.lastToken}`;
+    }
+
+    // Add Bearer token if configured
+    if (this.config.auth?.type === 'bearer') {
+      const renderedToken = getNunjucksEngine().renderString(this.config.auth.token, vars);
+      allHeaders.authorization = `Bearer ${renderedToken}`;
+    }
+
+    // Add Basic Auth credentials if configured
+    if (this.config.auth?.type === 'basic') {
+      const renderedUsername = getNunjucksEngine().renderString(this.config.auth.username, vars);
+      const renderedPassword = getNunjucksEngine().renderString(this.config.auth.password, vars);
+      const credentials = Buffer.from(`${renderedUsername}:${renderedPassword}`).toString('base64');
+      allHeaders.authorization = `Basic ${credentials}`;
+    }
+
+    // Add API Key to header if configured
+    if (this.config.auth?.type === 'api_key' && this.config.auth.placement === 'header') {
+      const renderedKeyName = getNunjucksEngine().renderString(this.config.auth.keyName, vars);
+      const renderedValue = getNunjucksEngine().renderString(this.config.auth.value, vars);
+      allHeaders[renderedKeyName.toLowerCase()] = renderedValue;
+    }
+
+    return allHeaders;
   }
 
-  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+  async callApi(
+    prompt: string,
+    context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
+  ): Promise<ProviderResponse> {
     const vars = {
       ...(context?.vars || {}),
       prompt,
     } as Record<string, any>;
 
+    if (this.config.auth?.type === 'oauth') {
+      await this.refreshOAuthTokenIfNeeded(vars);
+      invariant(this.lastToken, 'OAuth token should be defined at this point');
+    }
+
     // Add signature values to vars if signature auth is enabled
     if (this.config.signatureAuth) {
-      await this.refreshSignatureIfNeeded();
+      await this.refreshSignatureIfNeeded(vars);
       invariant(this.lastSignature, 'Signature should be defined at this point');
       invariant(this.lastSignatureTimestamp, 'Timestamp should be defined at this point');
 
@@ -1532,7 +1828,7 @@ export class HttpProvider implements ApiProvider {
     }
 
     if (this.config.request) {
-      return this.callApiWithRawRequest(vars, context);
+      return this.callApiWithRawRequest(vars, context, options);
     }
 
     const defaultHeaders = this.getDefaultHeaders(this.config.body);
@@ -1565,14 +1861,25 @@ export class HttpProvider implements ApiProvider {
         this.config.body,
         vars,
       ),
-      queryParams: this.config.queryParams
-        ? Object.fromEntries(
-            Object.entries(this.config.queryParams).map(([key, value]) => [
-              key,
-              getNunjucksEngine().renderString(value, vars),
-            ]),
-          )
-        : undefined,
+      queryParams: (() => {
+        const baseQueryParams = this.config.queryParams
+          ? Object.fromEntries(
+              Object.entries(this.config.queryParams).map(([key, value]) => [
+                key,
+                getNunjucksEngine().renderString(value, vars),
+              ]),
+            )
+          : {};
+
+        // Add API Key to query params if configured
+        if (this.config.auth?.type === 'api_key' && this.config.auth.placement === 'query') {
+          const renderedKeyName = getNunjucksEngine().renderString(this.config.auth.keyName, vars);
+          const renderedValue = getNunjucksEngine().renderString(this.config.auth.value, vars);
+          baseQueryParams[renderedKeyName] = renderedValue;
+        }
+
+        return Object.keys(baseQueryParams).length > 0 ? baseQueryParams : undefined;
+      })(),
       transformResponse: this.config.transformResponse || this.config.responseParser,
     };
 
@@ -1608,6 +1915,7 @@ export class HttpProvider implements ApiProvider {
     const fetchOptions: any = {
       method: renderedConfig.method,
       headers: renderedConfig.headers,
+      ...(options?.abortSignal && { signal: options.abortSignal }),
       ...(method !== 'GET' &&
         renderedConfig.body != null && {
           body: contentTypeIsJson(headers)
@@ -1717,6 +2025,7 @@ export class HttpProvider implements ApiProvider {
   private async callApiWithRawRequest(
     vars: Record<string, any>,
     context?: CallApiContextParams,
+    options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     invariant(this.config.request, 'Expected request to be set in http provider config');
 
@@ -1739,7 +2048,7 @@ export class HttpProvider implements ApiProvider {
     const parsedRequest = parseRawRequest(renderedRequest.trim());
 
     const protocol = this.url.startsWith('https') || this.config.useHttps ? 'https' : 'http';
-    const url = new URL(
+    let url = new URL(
       parsedRequest.url,
       `${protocol}://${parsedRequest.headers['host']}`,
     ).toString();
@@ -1756,6 +2065,59 @@ export class HttpProvider implements ApiProvider {
       parsedRequest.headers.tracestate = context.tracestate;
     }
 
+    // Add OAuth Bearer token if configured
+    if (this.config.auth?.type === 'oauth' && this.lastToken) {
+      parsedRequest.headers.authorization = `Bearer ${this.lastToken}`;
+    }
+
+    // Add Bearer token if configured
+    if (this.config.auth?.type === 'bearer') {
+      const renderedToken = getNunjucksEngine().renderString(this.config.auth.token, vars);
+      parsedRequest.headers.authorization = `Bearer ${renderedToken}`;
+    }
+
+    // Add Basic Auth credentials if configured
+    if (this.config.auth?.type === 'basic') {
+      const renderedUsername = getNunjucksEngine().renderString(this.config.auth.username, vars);
+      const renderedPassword = getNunjucksEngine().renderString(this.config.auth.password, vars);
+      const credentials = Buffer.from(`${renderedUsername}:${renderedPassword}`).toString('base64');
+      parsedRequest.headers.authorization = `Basic ${credentials}`;
+    }
+
+    // Add API Key to header if configured
+    if (this.config.auth?.type === 'api_key' && this.config.auth.placement === 'header') {
+      const renderedKeyName = getNunjucksEngine().renderString(this.config.auth.keyName, vars);
+      const renderedValue = getNunjucksEngine().renderString(this.config.auth.value, vars);
+      parsedRequest.headers[renderedKeyName.toLowerCase()] = renderedValue;
+    }
+
+    // Add API Key to query params if configured
+    if (this.config.auth?.type === 'api_key' && this.config.auth.placement === 'query') {
+      try {
+        const renderedKeyName = getNunjucksEngine().renderString(this.config.auth.keyName, vars);
+        const renderedValue = getNunjucksEngine().renderString(this.config.auth.value, vars);
+        const urlObj = new URL(url);
+        urlObj.searchParams.append(renderedKeyName, renderedValue);
+        url = urlObj.toString();
+        // Extract the path and query from the full URL
+        const urlPath = urlObj.pathname + urlObj.search;
+        // Update the request line with the new URL path
+        const requestLines = renderedRequest.split('\n');
+        const firstLine = requestLines[0];
+        const method = firstLine.split(' ')[0];
+        const protocol = firstLine.split(' ').slice(-1)[0];
+        requestLines[0] = `${method} ${urlPath} ${protocol}`;
+        // Re-parse with updated URL
+        const updatedRequest = requestLines.join('\n');
+        const reParsed = parseRawRequest(updatedRequest.trim());
+        Object.assign(parsedRequest, reParsed);
+      } catch (err) {
+        logger.warn(
+          `[HTTP Provider]: Failed to add API key to query params in raw request: ${String(err)}`,
+        );
+      }
+    }
+
     logger.debug(
       `[HTTP Provider]: Calling ${sanitizeUrl(url)} with raw request: ${parsedRequest.method}`,
       {
@@ -1768,7 +2130,8 @@ export class HttpProvider implements ApiProvider {
     const fetchOptions: any = {
       method: parsedRequest.method,
       headers: parsedRequest.headers,
-      ...(parsedRequest.body && { body: parsedRequest.body.text.trim() }),
+      ...(options?.abortSignal && { signal: options.abortSignal }),
+      ...(parsedRequest.body?.text && { body: parsedRequest.body.text.trim() }),
     };
 
     // Add HTTPS agent as dispatcher if configured

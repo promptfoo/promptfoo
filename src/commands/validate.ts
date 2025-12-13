@@ -3,15 +3,15 @@ import dedent from 'dedent';
 import { validate as isUUID } from 'uuid';
 import { fromError } from 'zod-validation-error';
 import { disableCache } from '../cache';
+import cliState from '../cliState';
 import logger from '../logger';
 import { loadApiProvider, loadApiProviders } from '../providers/index';
-import telemetry from '../telemetry';
 import { TestSuiteSchema, UnifiedConfigSchema } from '../types/index';
 import { getProviderFromCloud } from '../util/cloud';
 import { resolveConfigs } from '../util/config/load';
 import { isHttpProvider, patchHttpConfigForValidation } from '../util/httpProvider';
 import { setupEnv } from '../util/index';
-import { testHTTPProviderConnectivity, testProviderSession } from '../validators/testProvider';
+import { testProviderConnectivity, testProviderSession } from '../validators/testProvider';
 import type { Command } from 'commander';
 
 import type { UnifiedConfig } from '../types/index';
@@ -125,7 +125,7 @@ async function testHttpProvider(provider: ApiProvider): Promise<void> {
 
   // Test 1: Connectivity
   logger.info('Testing basic connectivity...');
-  const connectivityResult = await testHTTPProviderConnectivity(provider);
+  const connectivityResult = await testProviderConnectivity(provider);
   displayTestResult(connectivityResult, 'Connectivity test');
 
   // Test 2: Session management (only if connectivity test passed and target is stateful)
@@ -164,6 +164,7 @@ async function loadProvidersForTesting(
         : providerOptions;
       provider = await loadApiProvider(patchedOptions.id, {
         options: patchedOptions,
+        basePath: cliState.basePath,
       });
     } else {
       // Check if it's an HTTP provider and patch config if needed
@@ -178,9 +179,10 @@ async function loadProvidersForTesting(
               },
             },
           },
+          basePath: cliState.basePath,
         });
       } else {
-        provider = await loadApiProvider(target);
+        provider = await loadApiProvider(target, { basePath: cliState.basePath });
       }
     }
     return [provider];
@@ -202,6 +204,7 @@ async function loadProvidersForTesting(
 
     return loadApiProviders(patchedProviders, {
       env: config.env,
+      basePath: cliState.basePath,
     });
   }
 }
@@ -343,7 +346,6 @@ export function validateCommand(
       'Path to configuration file. Automatically loads promptfooconfig.yaml',
     )
     .action(async (opts: ValidateOptions) => {
-      telemetry.record('command_used', { name: 'validate' });
       await doValidate(opts, defaultConfig, defaultConfigPath);
     });
 
@@ -354,7 +356,6 @@ export function validateCommand(
     .option('-t, --target <id>', 'Provider ID or cloud UUID to test')
     .option('-c, --config <path>', 'Path to configuration file to test all providers')
     .action(async (opts: ValidateTargetOptions) => {
-      telemetry.record('command_used', { name: 'validate_target' });
       await doValidateTarget(opts, defaultConfig);
     });
 }

@@ -81,6 +81,7 @@ const config: Config = {
           showLastUpdateTime: true,
           exclude: [
             '**/CLAUDE.md', // Exclude Claude Code context files
+            '**/AGENTS.md', // Exclude AI agent instruction files
           ],
         },
         blog: {
@@ -94,13 +95,7 @@ const config: Config = {
         theme: {
           customCss: require.resolve('./src/css/custom.css'),
         },
-        gtag:
-          process.env.NODE_ENV === 'development'
-            ? undefined
-            : {
-                trackingID: 'G-3TS8QLZQ93',
-                anonymizeIP: true,
-              },
+        // gtag disabled in preset - added as standalone plugin below for production only
       } satisfies Preset.Options,
     ],
   ],
@@ -143,6 +138,11 @@ const config: Config = {
               to: '/mcp/',
               label: 'MCP Proxy',
               description: 'Secure proxy for Model Context Protocol communications',
+            },
+            {
+              to: '/code-scanning/',
+              label: 'Code Scanning',
+              description: 'Find LLM vulnerabilities in your IDE and CI/CD',
             },
             {
               to: '/docs/getting-started/',
@@ -289,7 +289,7 @@ const config: Config = {
             },
             {
               label: 'Status',
-              href: 'https://status.promptfoo.dev',
+              href: 'https://status.promptfoo.app/',
             },
           ],
         },
@@ -439,6 +439,18 @@ const config: Config = {
   plugins: [
     require.resolve('docusaurus-plugin-image-zoom'),
     require.resolve('./src/plugins/docusaurus-plugin-og-image'),
+    // Only load gtag in production to avoid "window.gtag is not a function" errors in dev
+    ...(process.env.NODE_ENV === 'development'
+      ? []
+      : [
+          [
+            '@docusaurus/plugin-google-gtag',
+            {
+              trackingID: ['G-3TS8QLZQ93', 'G-3YM29CN26E', 'AW-17347444171'],
+              anonymizeIP: true,
+            },
+          ],
+        ]),
     [
       '@docusaurus/plugin-client-redirects',
       {

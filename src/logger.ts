@@ -7,6 +7,7 @@ import cliState from './cliState';
 import { getEnvBool, getEnvString } from './envars';
 import { getConfigDirectoryPath } from './util/config/manage';
 import { safeJsonStringify } from './util/json';
+import { getLogFiles } from './util/logFiles';
 import { sanitizeObject, sanitizeUrl } from './util/sanitizer';
 
 const MAX_LOG_FILES = 50;
@@ -48,6 +49,19 @@ export interface SanitizedLogContext {
 
 // Lazy source map support - only loaded when debug is enabled
 export let sourceMapSupportInitialized = false;
+
+// Shutdown state tracking - prevents writes once logger closure begins
+let isLoggerShuttingDown = false;
+
+// Setter for testing purposes
+export function setLoggerShuttingDown(value: boolean): void {
+  isLoggerShuttingDown = value;
+}
+
+// Getter for testing purposes
+export function getLoggerShuttingDown(): boolean {
+  return isLoggerShuttingDown;
+}
 
 export async function initializeSourceMapSupport(): Promise<void> {
   if (!sourceMapSupportInitialized) {
@@ -180,10 +194,13 @@ export function isDebugEnabled(): boolean {
 
 /**
  * Creates log directory and cleans up old log files
+ * Respects PROMPTFOO_LOG_DIR environment variable to customize log location
  */
 function setupLogDirectory(): string {
   const configDir = getConfigDirectoryPath(true);
-  const logDir = path.join(configDir, 'logs');
+  const logDir = getEnvString('PROMPTFOO_LOG_DIR')
+    ? path.resolve(getEnvString('PROMPTFOO_LOG_DIR')!)
+    : path.join(configDir, 'logs');
 
   if (!fs.existsSync(logDir)) {
     fs.mkdirSync(logDir, { recursive: true });
@@ -191,15 +208,7 @@ function setupLogDirectory(): string {
 
   // Clean up old log files
   try {
-    const logFiles = fs
-      .readdirSync(logDir)
-      .filter((file) => file.startsWith('promptfoo-') && file.endsWith('.log'))
-      .map((file) => ({
-        name: file,
-        path: path.join(logDir, file),
-        mtime: fs.statSync(path.join(logDir, file)).mtime,
-      }))
-      .sort((a, b) => b.mtime.getTime() - a.mtime.getTime()); // Sort by newest first
+    const logFiles = getLogFiles(logDir);
 
     // Remove old files
     if (logFiles.length >= MAX_LOG_FILES) {
@@ -348,6 +357,11 @@ function createLogMethodWithContext(
   level: keyof typeof LOG_LEVELS,
 ): (message: string, context?: SanitizedLogContext) => void {
   return (message: string, context?: SanitizedLogContext) => {
+    // Prevent new writes once shutdown starts
+    if (isLoggerShuttingDown) {
+      return;
+    }
+
     if (!context) {
       internalLogger[level](message);
       return;
@@ -424,6 +438,67 @@ export async function logRequestResponse(options: {
     logMethod(sanitizeObject(logObject, { context: 'log object for structured logging' }));
   } else {
     logMethod(`Api Request`, logObject);
+  }
+}
+
+/**
+ * Close all file transports and cleanup logger resources
+ * Should be called during graceful shutdown to prevent event loop hanging
+ *
+ * IMPORTANT: All logging should be done BEFORE calling this function
+ */
+export async function closeLogger(): Promise<void> {
+  // Set shutdown flag FIRST to prevent new writes during cleanup
+  setLoggerShuttingDown(true);
+  try {
+    const fileTransports = winstonLogger.transports.filter(
+      (transport) => transport instanceof winston.transports.File,
+    );
+
+    if (fileTransports.length === 0) {
+      return;
+    }
+
+    // Add temporary error handlers to catch "write after end" errors during shutdown.
+    // This can happen due to a race condition where the pipe from winston's Transform
+    // stream still has data when _final() calls transport.end(). The error handlers
+    // prevent this from becoming an uncaught exception that crashes the process.
+    const errorHandlers = new Map<winston.transport, (err: Error) => void>();
+    for (const transport of fileTransports) {
+      const handler = (err: Error) => {
+        // Silently ignore "write after end" errors during shutdown - this is expected
+        // when the logger has buffered data that races with transport closing
+        if (err?.message?.includes('write after end')) {
+          return;
+        }
+        console.error(`Transport error during shutdown: ${err}`);
+      };
+      errorHandlers.set(transport, handler);
+      transport.on('error', handler);
+    }
+
+    // Use winstonLogger.end() instead of ending transports directly.
+    // This properly triggers winston's _final() method which:
+    // 1. Waits for all piped data to flush through the transform stream
+    // 2. Calls transport.end() on each transport in sequence
+    // 3. Waits for each transport's 'finish' event before proceeding
+    // This significantly reduces "write after end" errors from data still in the pipeline.
+    await new Promise<void>((resolve) => {
+      winstonLogger.once('finish', resolve);
+      winstonLogger.end();
+    });
+
+    // Remove error handlers and file transports
+    for (const transport of fileTransports) {
+      const handler = errorHandlers.get(transport);
+      if (handler) {
+        transport.off('error', handler);
+      }
+      winstonLogger.remove(transport);
+    }
+  } catch (error) {
+    // Can't use logger here since we're shutting it down
+    console.error(`Error closing logger: ${error}`);
   }
 }
 

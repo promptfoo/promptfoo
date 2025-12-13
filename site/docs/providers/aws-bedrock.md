@@ -75,7 +75,8 @@ providers:
 The `inferenceModelType` config option supports the following values:
 
 - `claude` - For Anthropic Claude models
-- `nova` - For Amazon Nova models
+- `nova` - For Amazon Nova models (v1)
+- `nova2` - For Amazon Nova 2 models (with reasoning support)
 - `llama` - Defaults to Llama 4 (latest version)
 - `llama2` - For Meta Llama 2 models
 - `llama3` - For Meta Llama 3 models
@@ -96,6 +97,14 @@ The `inferenceModelType` config option supports the following values:
 ```yaml
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
+  # Claude Opus 4.5 via global inference profile (required for this model)
+  - id: bedrock:arn:aws:bedrock:us-east-2::inference-profile/global.anthropic.claude-opus-4-5-20251101-v1:0
+    config:
+      inferenceModelType: 'claude'
+      region: 'us-east-2'
+      max_tokens: 1024
+      temperature: 0.7
+
   # Using an inference profile that routes to Claude models
   - id: bedrock:arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/claude-profile
     config:
@@ -131,6 +140,92 @@ Application Inference Profiles provide several benefits:
 When using inference profiles, ensure the `inferenceModelType` matches the model family your profile is configured for, as the configuration parameters differ between model types.
 
 :::
+
+## Converse API
+
+The Converse API provides a unified interface across all Bedrock models with native support for extended thinking (reasoning), tool calling, and guardrails. Use the `bedrock:converse:` prefix to access this API.
+
+### Basic Usage
+
+```yaml
+providers:
+  - id: bedrock:converse:anthropic.claude-3-5-sonnet-20241022-v2:0
+    config:
+      region: us-east-1
+      maxTokens: 4096
+      temperature: 0.7
+```
+
+### Extended Thinking
+
+Enable Claude's extended thinking capabilities for complex reasoning tasks:
+
+```yaml
+providers:
+  - id: bedrock:converse:us.anthropic.claude-sonnet-4-5-20250929-v1:0
+    config:
+      region: us-west-2
+      maxTokens: 20000
+      thinking:
+        type: enabled
+        budget_tokens: 16000
+      showThinking: true # Include thinking content in output
+```
+
+The `thinking` configuration controls Claude's reasoning behavior:
+
+- `type: enabled` - Activates extended thinking
+- `budget_tokens` - Maximum tokens allocated for thinking (minimum 1024)
+
+Use `showThinking: true` to include the model's reasoning process in the output, or `false` to only show the final response.
+
+:::warning
+Do not set `temperature`, `topP`, or `topK` when using extended thinking. These sampling parameters are incompatible with reasoning mode.
+:::
+
+### Configuration Options
+
+| Option                | Description                                     |
+| --------------------- | ----------------------------------------------- |
+| `maxTokens`           | Maximum output tokens                           |
+| `temperature`         | Sampling temperature (0-1)                      |
+| `topP`                | Nucleus sampling parameter                      |
+| `stopSequences`       | Array of stop sequences                         |
+| `thinking`            | Extended thinking configuration (Claude models) |
+| `reasoningConfig`     | Reasoning configuration (Amazon Nova 2 models)  |
+| `showThinking`        | Include thinking in output (default: false)     |
+| `performanceConfig`   | Performance settings (`latency: optimized`)     |
+| `serviceTier`         | Service tier (`priority`, `default`, or `flex`) |
+| `guardrailIdentifier` | Guardrail ID for content filtering              |
+| `guardrailVersion`    | Guardrail version (default: DRAFT)              |
+
+### Performance Configuration
+
+Optimize for latency or cost:
+
+```yaml
+providers:
+  - id: bedrock:converse:anthropic.claude-3-5-sonnet-20241022-v2:0
+    config:
+      performanceConfig:
+        latency: optimized # or 'standard'
+      serviceTier:
+        type: priority # or 'default', 'flex'
+```
+
+### Supported Models
+
+The Converse API works with all Bedrock models that support the Converse operation:
+
+- **Claude**: All Claude 3.x and 4.x models
+- **Amazon Nova**: Lite, Micro, Pro, Premier (not Sonic)
+- **Amazon Nova 2**: Lite (with reasoning support)
+- **Meta Llama**: 3.x, 4.x models
+- **Mistral**: All Mistral models
+- **Cohere**: Command R and R+ models
+- **AI21**: Jamba models
+- **DeepSeek**: R1 and other models
+- **Qwen**: Qwen3 models
 
 ## Authentication
 
@@ -406,7 +501,7 @@ Different models may support different configuration options. Here are some mode
 
 ### General Configuration Options
 
-- `inferenceModelType`: (Required for inference profiles) Specifies the model family when using application inference profiles. Options include: `claude`, `nova`, `llama`, `llama2`, `llama3`, `llama3.1`, `llama3.2`, `llama3.3`, `llama4`, `mistral`, `cohere`, `ai21`, `titan`, `deepseek`, `openai`, `qwen`
+- `inferenceModelType`: (Required for inference profiles) Specifies the model family when using application inference profiles. Options include: `claude`, `nova`, `nova2`, `llama`, `llama2`, `llama3`, `llama3.1`, `llama3.2`, `llama3.3`, `llama4`, `mistral`, `cohere`, `ai21`, `titan`, `deepseek`, `openai`, `qwen`
 
 ### Amazon Nova Models
 
@@ -445,6 +540,63 @@ providers:
 Nova models use a slightly different configuration structure compared to other Bedrock models, with separate `interfaceConfig` and `toolConfig` sections.
 
 :::
+
+### Amazon Nova 2 Models (Reasoning)
+
+Amazon Nova 2 models introduce extended thinking capabilities with configurable reasoning levels. Nova 2 Lite (`amazon.nova-2-lite-v1:0`) supports step-by-step reasoning and task decomposition with a 1 million token context window.
+
+```yaml
+providers:
+  # Use cross-region model ID (us.) for on-demand access
+  - id: bedrock:us.amazon.nova-2-lite-v1:0
+    config:
+      interfaceConfig:
+        max_new_tokens: 4096
+      reasoningConfig:
+        type: enabled # Enable extended thinking
+        maxReasoningEffort: medium # low, medium, or high
+```
+
+**Reasoning Configuration:**
+
+- `type`: Set to `enabled` to activate extended thinking, or `disabled` for fast responses (default)
+- `maxReasoningEffort`: Controls thinking depth - `low`, `medium`, or `high`
+
+When extended thinking is enabled, the model's reasoning process is captured in the response output with `<thinking>` tags, similar to other reasoning models.
+
+:::warning
+
+When using `reasoningConfig` with `type: enabled`:
+
+- **For all reasoning modes**: Do not set `temperature`, `top_p`, or `top_k` - these are incompatible with reasoning mode
+- **For `maxReasoningEffort: high`**: Also do not set `max_new_tokens` - the model manages output length automatically
+
+:::
+
+**Regional Model IDs:**
+
+Nova 2 models require cross-region inference profiles for on-demand access:
+
+- `us.amazon.nova-2-lite-v1:0` - US region (recommended)
+- `eu.amazon.nova-2-lite-v1:0` - EU region
+- `apac.amazon.nova-2-lite-v1:0` - Asia Pacific region
+- `global.amazon.nova-2-lite-v1:0` - Global cross-region inference
+
+**Using Nova 2 with Converse API:**
+
+Nova 2 reasoning is also supported via the Converse API, which provides a unified interface across Bedrock models:
+
+```yaml
+providers:
+  - id: bedrock:converse:us.amazon.nova-2-lite-v1:0
+    config:
+      maxTokens: 4096
+      reasoningConfig:
+        type: enabled
+        maxReasoningEffort: medium
+```
+
+The same parameter constraints apply when using the Converse API.
 
 ### Amazon Nova Sonic Model
 
@@ -498,6 +650,8 @@ config:
 ### Claude Models
 
 For Claude models (e.g., `anthropic.claude-sonnet-4-5-20250929-v1:0`, `anthropic.claude-haiku-4-5-20251001-v1:0`, `anthropic.claude-sonnet-4-20250514-v1:0`, `anthropic.us.claude-3-5-sonnet-20241022-v2:0`), you can use the following configuration options:
+
+**Note**: Claude Opus 4.5 (`anthropic.claude-opus-4-5-20251101-v1:0`) requires an inference profile ARN and cannot be used as a direct model ID. See the [Application Inference Profiles](#application-inference-profiles) section for setup.
 
 ```yaml
 config:
@@ -554,6 +708,61 @@ config:
   temperature: 0.7
   top_p: 0.9
 ```
+
+#### Llama 3.2 Vision
+
+Llama 3.2 Vision models (`us.meta.llama3-2-11b-instruct-v1:0`, `us.meta.llama3-2-90b-instruct-v1:0`) support image inputs. You can use them with either the legacy InvokeModel API or the Converse API:
+
+**Using InvokeModel API (legacy):**
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: bedrock:us.meta.llama3-2-11b-instruct-v1:0
+    config:
+      region: us-east-1
+      max_gen_len: 256
+
+prompts:
+  - file://llama_vision_prompt.json
+
+tests:
+  - vars:
+      image: file://path/to/image.jpg
+```
+
+```json title="llama_vision_prompt.json"
+[
+  {
+    "role": "user",
+    "content": [
+      {
+        "type": "image",
+        "source": {
+          "type": "base64",
+          "media_type": "image/jpeg",
+          "data": "{{image}}"
+        }
+      },
+      {
+        "type": "text",
+        "text": "What is in this image?"
+      }
+    ]
+  }
+]
+```
+
+**Using Converse API:**
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: bedrock:converse:us.meta.llama3-2-11b-instruct-v1:0
+    config:
+      region: us-east-1
+      maxTokens: 256
+```
+
+The Converse API uses the same prompt format shown above for [Nova Vision](#nova-vision-capabilities).
 
 ### Cohere Models
 
@@ -742,7 +951,7 @@ providers:
 
 ## Model-graded tests
 
-You can use Bedrock models to grade outputs. By default, model-graded tests use `gpt-4.1-2025-04-14` and require the `OPENAI_API_KEY` environment variable to be set. However, when using AWS Bedrock, you have the option of overriding the grader for [model-graded assertions](/docs/configuration/expected-outputs/model-graded/) to point to AWS Bedrock or other providers.
+You can use Bedrock models to grade outputs. By default, model-graded tests use `gpt-5` and require the `OPENAI_API_KEY` environment variable to be set. However, when using AWS Bedrock, you have the option of overriding the grader for [model-graded assertions](/docs/configuration/expected-outputs/model-graded/) to point to AWS Bedrock or other providers.
 
 You can use either regular model IDs or application inference profiles for grading:
 
@@ -807,7 +1016,14 @@ tests:
 
 ## Multimodal Capabilities
 
-Some Bedrock models, like Amazon Nova, support multimodal inputs including images and text. To use these capabilities, you'll need to structure your prompts to include both the image data and text content.
+Several Bedrock models support multimodal inputs including images and text:
+
+- **Amazon Nova** - Supports images and videos
+- **Llama 3.2 Vision** - Supports images (11B and 90B variants)
+- **Claude 3+** - Supports images (via Converse API)
+- **Pixtral Large** - Supports images (via Converse API)
+
+To use these capabilities, structure your prompts to include both image data and text content.
 
 ### Nova Vision Capabilities
 

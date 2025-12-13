@@ -1,30 +1,33 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { processExecutableFile } from '../../../src/prompts/processors/executable';
-import type { ApiProvider } from '../../../src/types';
+import type { ApiProvider } from '../../../src/types/index';
 
-jest.mock('../../../src/logger', () => ({
-  debug: jest.fn(),
-  error: jest.fn(),
+vi.mock('../../../src/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    error: vi.fn(),
+  },
 }));
 
-jest.mock('../../../src/cache', () => ({
-  getCache: jest.fn(() => ({
-    get: jest.fn(),
-    set: jest.fn(),
+vi.mock('../../../src/cache', () => ({
+  getCache: vi.fn(() => ({
+    get: vi.fn(),
+    set: vi.fn(),
   })),
-  isCacheEnabled: jest.fn(() => false),
+  isCacheEnabled: vi.fn(() => false),
 }));
 
 describe('processExecutableFile', () => {
-  const mockProvider: ApiProvider = {
-    id: jest.fn(() => 'test-provider'),
+  const mockProvider = {
+    id: vi.fn(() => 'test-provider'),
     label: 'Test Provider',
-    callApi: jest.fn(),
-  };
+    callApi: vi.fn(),
+  } as ApiProvider;
 
   afterEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   const describeUnix = process.platform === 'win32' ? describe.skip : describe;

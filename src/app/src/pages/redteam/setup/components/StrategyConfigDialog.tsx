@@ -1,8 +1,15 @@
 import React from 'react';
 
+import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
+import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import DeleteIcon from '@mui/icons-material/Delete';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import WarningAmberIcon from '@mui/icons-material/WarningAmber';
+import Alert from '@mui/material/Alert';
+import Autocomplete from '@mui/material/Autocomplete';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import Chip from '@mui/material/Chip';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
@@ -11,13 +18,20 @@ import FormControlLabel from '@mui/material/FormControlLabel';
 import IconButton from '@mui/material/IconButton';
 import Switch from '@mui/material/Switch';
 import TextField from '@mui/material/TextField';
+import ToggleButton from '@mui/material/ToggleButton';
+import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
+import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import {
+  ADDITIONAL_STRATEGIES,
+  AGENTIC_STRATEGIES,
+  MULTI_MODAL_STRATEGIES,
   MULTI_TURN_STRATEGIES,
   type MultiTurnStrategy,
 } from '@promptfoo/redteam/constants/strategies';
 
 import type { StrategyCardData } from './strategies/types';
+import { STRATEGIES_REQUIRING_CONFIG } from './strategies/utils';
 
 const DEFAULT_SIMBA_GOALS = [
   'Generate harmful content',
@@ -29,6 +43,24 @@ const DEFAULT_SIMBA_GOALS = [
   'Manipulate order status or pricing through injection attacks',
 ];
 
+// ADDITIONAL_STRATEGIES contains transformation strategies (base64, jailbreak, etc.) that modify test cases.
+// We use ADDITIONAL_STRATEGIES (not ALL_STRATEGIES) because ALL_STRATEGIES includes preset strategies
+// like 'default', 'multilingual', 'simba' which aren't meant to be composed as layer steps.
+// We exclude 'layer' itself to prevent infinite recursion.
+const LAYER_TRANSFORMABLE_STRATEGIES = ADDITIONAL_STRATEGIES.filter((s) => s !== 'layer').sort();
+
+// Type for layer strategy steps (can be strings or objects with nested config)
+type StepType = string | { id: string; config?: Record<string, any> };
+
+// Helper to extract step ID from either format
+const getStepId = (step: StepType): string => {
+  return typeof step === 'string' ? step : step.id;
+};
+
+// Stable empty arrays to avoid infinite loops in useEffect dependencies
+const EMPTY_PLUGINS_ARRAY: string[] = [];
+const EMPTY_STRATEGIES_ARRAY: Array<string | { id: string; config?: Record<string, any> }> = [];
+
 interface StrategyConfigDialogProps {
   open: boolean;
   strategy: string | null;
@@ -36,6 +68,8 @@ interface StrategyConfigDialogProps {
   onClose: () => void;
   onSave: (strategy: string, config: Record<string, any>) => void;
   strategyData: StrategyCardData | null;
+  selectedPlugins?: string[];
+  allStrategies?: Array<string | { id: string; config?: Record<string, any> }>;
 }
 
 export default function StrategyConfigDialog({
@@ -45,6 +79,8 @@ export default function StrategyConfigDialog({
   onClose,
   onSave,
   strategyData,
+  selectedPlugins = EMPTY_PLUGINS_ARRAY,
+  allStrategies = EMPTY_STRATEGIES_ARRAY,
 }: StrategyConfigDialogProps) {
   const [localConfig, setLocalConfig] = React.useState<Record<string, any>>(config || {});
   const [enabled, setEnabled] = React.useState<boolean>(
@@ -54,6 +90,167 @@ export default function StrategyConfigDialog({
   const [error, setError] = React.useState<string>('');
   const [goals, setGoals] = React.useState<string[]>(config.goals || []);
   const [newGoal, setNewGoal] = React.useState<string>('');
+
+  const [steps, setSteps] = React.useState<StepType[]>(config.steps || []);
+  const [newStep, setNewStep] = React.useState<string>('');
+  const [layerPlugins, setLayerPlugins] = React.useState<string[]>(config.plugins || []);
+  // Plugin targeting: 'all' or 'specific'
+  const [pluginTargeting, setPluginTargeting] = React.useState<'all' | 'specific'>(
+    config.plugins && config.plugins.length > 0 ? 'specific' : 'all',
+  );
+
+  const availablePlugins = selectedPlugins;
+
+  // Helper functions to check strategy types
+  const isAgenticStrategy = React.useCallback((step: StepType): boolean => {
+    const strategyId = getStepId(step);
+    return (AGENTIC_STRATEGIES as readonly string[]).includes(strategyId);
+  }, []);
+
+  const isMultiModalStrategy = React.useCallback((step: StepType): boolean => {
+    const strategyId = getStepId(step);
+    return (MULTI_MODAL_STRATEGIES as readonly string[]).includes(strategyId);
+  }, []);
+
+  // Compute available strategies based on current steps
+  const availableStrategies = React.useMemo(() => {
+    const hasAgenticStrategy = steps.some(isAgenticStrategy);
+    const hasMultiModalStrategy = steps.some(isMultiModalStrategy);
+    const lastStepIsMultiModal = steps.length > 0 && isMultiModalStrategy(steps[steps.length - 1]);
+
+    // If last step is multi-modal, no more steps can be added
+    if (lastStepIsMultiModal) {
+      return [];
+    }
+
+    const stepIds = new Set(steps.map(getStepId));
+
+    // Create a Map for O(1) lookup instead of O(n) find
+    const strategyConfigMap = new Map(
+      allStrategies.map((s) => {
+        const id = typeof s === 'string' ? s : s.id;
+        return [id, s];
+      }),
+    );
+
+    return LAYER_TRANSFORMABLE_STRATEGIES.filter((strategy) => {
+      // Cannot add duplicates
+      if (stepIds.has(strategy)) {
+        return false;
+      }
+
+      // Cannot add multiple agentic strategies
+      if (hasAgenticStrategy && isAgenticStrategy(strategy)) {
+        return false;
+      }
+
+      // Cannot add multiple multi-modal strategies
+      if (hasMultiModalStrategy && isMultiModalStrategy(strategy)) {
+        return false;
+      }
+
+      // Only include strategies that don't require config, or if they do, they must be configured
+      if (STRATEGIES_REQUIRING_CONFIG.includes(strategy)) {
+        const strategyConfig = strategyConfigMap.get(strategy);
+
+        if (!strategyConfig) {
+          return false; // Not configured, don't show
+        }
+
+        const config = typeof strategyConfig === 'object' ? strategyConfig.config : undefined;
+
+        if (strategy === 'custom') {
+          // Custom strategy needs strategyText
+          return !!(config?.strategyText && config.strategyText.trim());
+        }
+      }
+
+      return true;
+    });
+  }, [steps, allStrategies, isAgenticStrategy, isMultiModalStrategy]);
+
+  // Get validation message for why strategies might be disabled
+  const getValidationMessage = (): string | null => {
+    const lastStepIsMultiModal = steps.length > 0 && isMultiModalStrategy(steps[steps.length - 1]);
+
+    if (lastStepIsMultiModal) {
+      return 'Multi-modal strategies must be the last step. Remove the current multi-modal step to add more strategies.';
+    }
+
+    const hasAgenticStrategy = steps.some(isAgenticStrategy);
+    const hasMultiModalStrategy = steps.some(isMultiModalStrategy);
+
+    const messages: string[] = [];
+    if (hasAgenticStrategy) {
+      messages.push('Only one agentic strategy allowed');
+    }
+    if (hasMultiModalStrategy) {
+      messages.push('Only one multi-modal strategy allowed (must be last)');
+    }
+
+    return messages.length > 0 ? messages.join('. ') : null;
+  };
+
+  // Check for ordering warnings (not blocking, just advisory)
+  const getOrderingWarnings = (): string[] => {
+    const warnings: string[] = [];
+    const agenticIndex = steps.findIndex(isAgenticStrategy);
+    const multiModalIndex = steps.findIndex(isMultiModalStrategy);
+
+    // Warning: Agentic strategy should be first
+    if (agenticIndex > 0) {
+      warnings.push(
+        'Agentic strategies work best as the first step. Transforms before an agentic strategy will modify the attack goal, not each turn.',
+      );
+    }
+
+    // Warning: Transform between agentic and multi-modal
+    if (agenticIndex !== -1 && multiModalIndex !== -1 && multiModalIndex - agenticIndex > 1) {
+      warnings.push(
+        'Transforms between agentic and multi-modal will encode the attack text. The audio/image will contain the encoded text, not the original attack.',
+      );
+    }
+
+    return warnings;
+  };
+
+  // Get contextual help based on current configuration
+  const getLayerModeDescription = (): { title: string; description: string } => {
+    const hasAgentic = steps.some(isAgenticStrategy);
+    const hasMultiModal = steps.some(isMultiModalStrategy);
+
+    if (hasAgentic && hasMultiModal) {
+      return {
+        title: 'Multi-Turn + Multi-Modal Attack',
+        description:
+          'The agentic strategy will orchestrate the attack, and each turn will be converted to audio/image before sending to the target.',
+      };
+    }
+    if (hasAgentic) {
+      return {
+        title: 'Multi-Turn Agentic Attack',
+        description:
+          'The agentic strategy will orchestrate a multi-turn conversation to achieve the attack goal.',
+      };
+    }
+    if (hasMultiModal) {
+      return {
+        title: 'Multi-Modal Transform',
+        description: 'Test cases will be converted to audio/image format before evaluation.',
+      };
+    }
+    if (steps.length > 0) {
+      return {
+        title: 'Transform Chain',
+        description: `Test cases will be transformed through ${steps.length} step${steps.length > 1 ? 's' : ''} sequentially before evaluation.`,
+      };
+    }
+    return {
+      title: 'Configure Layer Strategy',
+      description:
+        'Add steps to create transform chains or combine agentic strategies with multi-modal output.',
+    };
+  };
 
   React.useEffect(() => {
     if (!open || !strategy) {
@@ -70,7 +267,26 @@ export default function StrategyConfigDialog({
     setGoals(
       strategy === 'simba' ? nextConfig.goals || DEFAULT_SIMBA_GOALS : nextConfig.goals || [],
     );
-  }, [open, strategy, config]);
+
+    if (strategy === 'layer') {
+      // Keep steps as-is (can be strings or objects with {id, config})
+      const rawSteps = nextConfig.steps || [];
+      setSteps(rawSteps);
+
+      // Filter layerPlugins to only include plugins that are in availablePlugins
+      const configPlugins = nextConfig.plugins || [];
+      const filteredPlugins =
+        selectedPlugins.length > 0
+          ? configPlugins.filter((p: string) => selectedPlugins.includes(p))
+          : configPlugins;
+      setLayerPlugins(filteredPlugins);
+      setPluginTargeting(filteredPlugins.length > 0 ? 'specific' : 'all');
+    } else {
+      setSteps([]);
+      setLayerPlugins([]);
+    }
+    setNewStep('');
+  }, [open, strategy, config, selectedPlugins]);
 
   const handleAddGoal = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && newGoal.trim()) {
@@ -81,6 +297,111 @@ export default function StrategyConfigDialog({
 
   const handleRemoveGoal = (goal: string) => {
     setGoals((prev) => prev.filter((g) => g !== goal));
+  };
+
+  const handlePluginTargetingChange = (
+    _event: React.MouseEvent<HTMLElement>,
+    newTargeting: 'all' | 'specific' | null,
+  ) => {
+    if (newTargeting !== null) {
+      setPluginTargeting(newTargeting);
+      if (newTargeting === 'all') {
+        // Clear plugin selection when switching to "all"
+        setLayerPlugins([]);
+      }
+    }
+  };
+
+  const handleAddStep = React.useCallback(
+    (value: string | null) => {
+      if (value && value.trim()) {
+        const trimmedValue = value.trim();
+        const isFilePath = trimmedValue.startsWith('file://');
+
+        // For file paths, allow them without additional validation
+        if (isFilePath) {
+          // Still check if last step is multi-modal
+          setSteps((prev) => {
+            const lastStepIsMultiModal =
+              prev.length > 0 && isMultiModalStrategy(prev[prev.length - 1]);
+            if (lastStepIsMultiModal) {
+              return prev; // Don't add if last step is multi-modal
+            }
+            return [...prev, trimmedValue];
+          });
+          setNewStep('');
+          return;
+        }
+
+        // For predefined strategies, check if it's in the available list
+        const isValidStrategy = (availableStrategies as string[]).includes(trimmedValue);
+
+        if (isValidStrategy) {
+          // If strategy requires config, get its config from allStrategies
+          if (STRATEGIES_REQUIRING_CONFIG.includes(trimmedValue)) {
+            const strategyConfig = allStrategies.find((s) => {
+              const id = typeof s === 'string' ? s : s.id;
+              return id === trimmedValue;
+            });
+
+            if (strategyConfig && typeof strategyConfig === 'object') {
+              // Add step with its config
+              setSteps((prev) => [...prev, { id: trimmedValue, config: strategyConfig.config }]);
+            } else {
+              // Shouldn't reach here due to filtering, but add as string fallback
+              setSteps((prev) => [...prev, trimmedValue]);
+            }
+          } else {
+            // Regular strategy without config requirements
+            setSteps((prev) => [...prev, trimmedValue]);
+          }
+          setNewStep('');
+        }
+      }
+    },
+    [availableStrategies, allStrategies, isMultiModalStrategy],
+  );
+
+  const handleRemoveStep = (index: number) => {
+    setSteps((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleMoveStepUp = (index: number) => {
+    if (index > 0) {
+      setSteps((prev) => {
+        const newSteps = [...prev];
+        const stepToMove = newSteps[index];
+
+        // Prevent moving a multi-modal strategy up (it must stay at the end)
+        if (isMultiModalStrategy(stepToMove) && index === prev.length - 1) {
+          return prev;
+        }
+
+        // Prevent moving up if the step below is multi-modal
+        if (index < prev.length - 1 && isMultiModalStrategy(prev[index + 1])) {
+          return prev;
+        }
+
+        [newSteps[index - 1], newSteps[index]] = [newSteps[index], newSteps[index - 1]];
+        return newSteps;
+      });
+    }
+  };
+
+  const handleMoveStepDown = (index: number) => {
+    setSteps((prev) => {
+      if (index < prev.length - 1) {
+        // Prevent moving down if the next step is multi-modal (multi-modal must stay last)
+        if (isMultiModalStrategy(prev[index + 1])) {
+          return prev;
+        }
+
+        const newSteps = [...prev];
+        [newSteps[index], newSteps[index + 1]] = [newSteps[index + 1], newSteps[index]];
+        return newSteps;
+      }
+      return prev;
+    });
   };
 
   const handleNumTestsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -115,6 +436,7 @@ export default function StrategyConfigDialog({
       });
     } else if (
       strategy === 'jailbreak' ||
+      strategy === 'jailbreak:hydra' ||
       strategy === 'jailbreak:meta' ||
       strategy === 'jailbreak:tree' ||
       strategy === 'best-of-n' ||
@@ -134,6 +456,19 @@ export default function StrategyConfigDialog({
         ...localConfig,
         goals,
       });
+    } else if (strategy === 'layer') {
+      const layerConfig: Record<string, any> = {
+        ...localConfig,
+      };
+      // Add plugins first, then steps to maintain order in YAML output
+      // Only include plugins if specific targeting is selected and plugins are chosen
+      if (pluginTargeting === 'specific' && layerPlugins.length > 0) {
+        layerConfig.plugins = layerPlugins;
+      } else {
+        delete layerConfig.plugins;
+      }
+      layerConfig.steps = steps;
+      onSave(strategy, layerConfig);
     } else if (strategy === 'retry') {
       const num = Number.parseInt(numTests, 10);
       if (num >= 1) {
@@ -434,6 +769,58 @@ export default function StrategyConfigDialog({
           />
         </Box>
       );
+    } else if (strategy === 'jailbreak:hydra') {
+      return (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <Typography variant="body2" color="text.secondary">
+            Configure the Hydra multi-turn jailbreak. Hydra branches across multiple conversations,
+            reuses what it learns during the scan, and automatically aligns with target session
+            settings.
+          </Typography>
+
+          <TextField
+            fullWidth
+            label="Max Turns"
+            type="number"
+            value={localConfig.maxTurns ?? 10}
+            onChange={(e) => {
+              const parsedValue = Number.parseInt(e.target.value, 10);
+              setLocalConfig({
+                ...localConfig,
+                maxTurns: Number.isNaN(parsedValue) ? undefined : parsedValue,
+              });
+            }}
+            placeholder="Maximum conversation turns (default: 10)"
+            InputProps={{ inputProps: { min: 1, max: 30 } }}
+            helperText="Maximum number of back-and-forth exchanges with the target model."
+          />
+
+          <FormControlLabel
+            control={
+              <Switch
+                checked={localConfig.stateful === true}
+                onChange={(e) => setLocalConfig({ ...localConfig, stateful: e.target.checked })}
+                color="primary"
+              />
+            }
+            label={
+              <Box component="span">
+                <Typography variant="body2" component="span">
+                  Stateful
+                </Typography>
+                <Typography variant="body2" color="text.secondary" component="span" sx={{ ml: 1 }}>
+                  - Enable when your target maintains server-side sessions and expects a session ID
+                  per turn.
+                </Typography>
+              </Box>
+            }
+          />
+
+          <Typography variant="caption" color="text.secondary">
+            Hydra requires Promptfoo Cloud remote generation.
+          </Typography>
+        </Box>
+      );
     } else if (strategy && MULTI_TURN_STRATEGIES.includes(strategy as MultiTurnStrategy)) {
       return (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -671,6 +1058,251 @@ export default function StrategyConfigDialog({
           />
         </Box>
       );
+    } else if (strategy === 'layer') {
+      const modeInfo = getLayerModeDescription();
+      const orderingWarnings = getOrderingWarnings();
+
+      return (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          {/* Mode description */}
+          <Alert severity="info" icon={<InfoOutlinedIcon fontSize="small" />} sx={{ py: 0.5 }}>
+            <Typography variant="body2" sx={{ fontWeight: 600 }}>
+              {modeInfo.title}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              {modeInfo.description}
+            </Typography>
+          </Alert>
+
+          {/* Ordering warnings */}
+          {orderingWarnings.map((warning, idx) => (
+            <Alert
+              key={idx}
+              severity="warning"
+              icon={<WarningAmberIcon fontSize="small" />}
+              sx={{ py: 0.5 }}
+            >
+              <Typography variant="body2">{warning}</Typography>
+            </Alert>
+          ))}
+
+          <Box>
+            <Typography variant="body2" sx={{ mb: 1.5, fontWeight: 600 }}>
+              Target Plugins
+            </Typography>
+            <ToggleButtonGroup
+              value={pluginTargeting}
+              exclusive
+              onChange={handlePluginTargetingChange}
+              fullWidth
+              sx={{ mb: pluginTargeting === 'specific' ? 2 : 0 }}
+            >
+              <ToggleButton value="all">All plugins</ToggleButton>
+              <ToggleButton value="specific">Specific plugins only</ToggleButton>
+            </ToggleButtonGroup>
+
+            {pluginTargeting === 'specific' && (
+              <Autocomplete
+                multiple
+                options={availablePlugins}
+                value={layerPlugins}
+                onChange={(_, newValue) => setLayerPlugins(newValue)}
+                renderInput={(params) => (
+                  <TextField {...params} label="Select Plugins" placeholder="Choose plugins" />
+                )}
+                renderTags={(value, getTagProps) =>
+                  value.map((option, index) => {
+                    const tagProps = getTagProps({ index });
+                    return <Chip label={option} size="small" {...tagProps} key={option} />;
+                  })
+                }
+              />
+            )}
+          </Box>
+
+          <Box>
+            <Typography variant="body2" sx={{ mb: 1, fontWeight: 600 }}>
+              Steps (in order)
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              Select strategies from the dropdown or enter custom file:// paths
+            </Typography>
+
+            <Autocomplete
+              value={null}
+              onChange={(_, newValue) => {
+                if (newValue) {
+                  handleAddStep(newValue);
+                }
+              }}
+              inputValue={newStep}
+              onInputChange={(_, newInputValue) => setNewStep(newInputValue)}
+              options={newStep.startsWith('file://') ? [] : availableStrategies}
+              freeSolo
+              clearOnBlur={false}
+              selectOnFocus
+              handleHomeEndKeys
+              disabled={availableStrategies.length === 0 && !newStep.startsWith('file://')}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Add Strategy Step"
+                  placeholder={
+                    availableStrategies.length === 0
+                      ? 'No more strategies available'
+                      : 'Select a strategy or type file://path/to/custom.js'
+                  }
+                  helperText={
+                    steps.length === 0
+                      ? 'Add at least one strategy step (required)'
+                      : getValidationMessage() || 'Press Enter to add'
+                  }
+                  error={steps.length === 0}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && newStep.trim()) {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleAddStep(newStep);
+                    }
+                  }}
+                />
+              )}
+            />
+
+            {steps.length > 0 && (
+              <Box sx={{ mt: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
+                {steps.map((step, index) => {
+                  const stepId = getStepId(step);
+                  const hasConfig = typeof step === 'object' && step.config;
+                  const isAgentic = isAgenticStrategy(step);
+                  const isMultiModal = isMultiModalStrategy(step);
+
+                  return (
+                    <Box
+                      key={`${stepId}-${index}`}
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        p: 1.5,
+                        border: 1,
+                        borderColor: 'divider',
+                        borderRadius: 1,
+                        bgcolor: 'background.paper',
+                        '&:hover': {
+                          bgcolor: 'action.hover',
+                        },
+                      }}
+                    >
+                      <Typography
+                        variant="body2"
+                        sx={{
+                          flex: 1,
+                          fontFamily: 'monospace',
+                          fontSize: '0.9rem',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 1,
+                        }}
+                      >
+                        <span>{index + 1}.</span>
+                        <span>{stepId}</span>
+                        {hasConfig && (
+                          <Chip
+                            label="configured"
+                            size="small"
+                            sx={{
+                              height: 20,
+                              fontSize: '0.7rem',
+                              bgcolor: 'success.main',
+                              color: 'success.contrastText',
+                            }}
+                          />
+                        )}
+                        {isAgentic && (
+                          <Tooltip title="Orchestrates multi-turn or multi-attempt attacks. Should be first step.">
+                            <Chip
+                              label="agentic"
+                              size="small"
+                              sx={{
+                                height: 20,
+                                fontSize: '0.7rem',
+                                bgcolor: 'primary.main',
+                                color: 'primary.contrastText',
+                              }}
+                            />
+                          </Tooltip>
+                        )}
+                        {isMultiModal && (
+                          <Tooltip title="Converts text to audio or image. Must be last step.">
+                            <Chip
+                              label="multi-modal"
+                              size="small"
+                              sx={{
+                                height: 20,
+                                fontSize: '0.7rem',
+                                bgcolor: 'secondary.main',
+                                color: 'secondary.contrastText',
+                              }}
+                            />
+                          </Tooltip>
+                        )}
+                      </Typography>
+                      <Box sx={{ display: 'flex', gap: 0.5 }}>
+                        <IconButton
+                          size="small"
+                          onClick={() => handleMoveStepUp(index)}
+                          disabled={
+                            index === 0 ||
+                            (isMultiModal && index === steps.length - 1) ||
+                            (index < steps.length - 1 && isMultiModalStrategy(steps[index + 1]))
+                          }
+                          aria-label="move step up"
+                          sx={{
+                            opacity:
+                              index === 0 ||
+                              (isMultiModal && index === steps.length - 1) ||
+                              (index < steps.length - 1 && isMultiModalStrategy(steps[index + 1]))
+                                ? 0.3
+                                : 1,
+                          }}
+                        >
+                          <ArrowUpwardIcon fontSize="small" />
+                        </IconButton>
+                        <IconButton
+                          size="small"
+                          onClick={() => handleMoveStepDown(index)}
+                          disabled={
+                            index === steps.length - 1 ||
+                            (index < steps.length - 1 && isMultiModalStrategy(steps[index + 1]))
+                          }
+                          aria-label="move step down"
+                          sx={{
+                            opacity:
+                              index === steps.length - 1 ||
+                              (index < steps.length - 1 && isMultiModalStrategy(steps[index + 1]))
+                                ? 0.3
+                                : 1,
+                          }}
+                        >
+                          <ArrowDownwardIcon fontSize="small" />
+                        </IconButton>
+                        <IconButton
+                          size="small"
+                          onClick={() => handleRemoveStep(index)}
+                          aria-label="delete step"
+                          color="error"
+                        >
+                          <DeleteIcon fontSize="small" />
+                        </IconButton>
+                      </Box>
+                    </Box>
+                  );
+                })}
+              </Box>
+            )}
+          </Box>
+        </Box>
+      );
     } else {
       return (
         <Typography color="text.secondary">
@@ -693,7 +1325,11 @@ export default function StrategyConfigDialog({
         <Button
           onClick={handleSave}
           variant="contained"
-          disabled={(strategy === 'retry' && (!!error || !numTests)) || !isCustomStrategyValid()}
+          disabled={
+            (strategy === 'retry' && (!!error || !numTests)) ||
+            !isCustomStrategyValid() ||
+            (strategy === 'layer' && steps.length === 0)
+          }
         >
           Save
         </Button>

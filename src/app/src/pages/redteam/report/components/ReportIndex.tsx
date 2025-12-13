@@ -170,6 +170,7 @@ function ReportsDataGrid({ data, isLoading }: { data: EvalSummary[]; isLoading: 
           navigate(`/reports?evalId=${params.row.evalId}`);
         }
       }}
+      showToolbar
     />
   );
 }

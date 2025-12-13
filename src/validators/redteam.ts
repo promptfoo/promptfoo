@@ -9,24 +9,25 @@ import {
   DEFAULT_STRATEGIES,
   FINANCIAL_PLUGINS,
   FOUNDATION_PLUGINS,
+  FRAMEWORK_COMPLIANCE_IDS,
   GUARDRAILS_EVALUATION_PLUGINS,
   HARM_PLUGINS,
   INSURANCE_PLUGINS,
   MEDICAL_PLUGINS,
   PHARMACY_PLUGINS,
   PII_PLUGINS,
-  type Plugin,
   ADDITIONAL_PLUGINS as REDTEAM_ADDITIONAL_PLUGINS,
   ADDITIONAL_STRATEGIES as REDTEAM_ADDITIONAL_STRATEGIES,
   ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
   DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
   Severity,
-  type Strategy,
+  SeveritySchema,
 } from '../redteam/constants';
 import { isCustomStrategy } from '../redteam/constants/strategies';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { ProviderSchema } from '../validators/providers';
 
+import type { FrameworkComplianceId, Plugin, Strategy } from '../redteam/constants';
 import type { RedteamFileConfig, RedteamPluginObject, RedteamStrategy } from '../redteam/types';
 
 const TracingConfigSchema: z.ZodType<any> = z.lazy(() =>
@@ -44,6 +45,11 @@ const TracingConfigSchema: z.ZodType<any> = z.lazy(() =>
     strategies: z.record(z.lazy(() => TracingConfigSchema)).optional(),
   }),
 );
+
+const frameworkOptions = FRAMEWORK_COMPLIANCE_IDS as unknown as [
+  FrameworkComplianceId,
+  ...FrameworkComplianceId[],
+];
 
 export const pluginOptions: string[] = [
   ...new Set([...COLLECTIONS, ...REDTEAM_ALL_PLUGINS, ...ALIASED_PLUGINS]),
@@ -81,7 +87,7 @@ export const RedteamPluginObjectSchema = z.object({
     .default(DEFAULT_NUM_TESTS_PER_PLUGIN)
     .describe('Number of tests to generate for this plugin'),
   config: z.record(z.unknown()).optional().describe('Plugin-specific configuration'),
-  severity: z.nativeEnum(Severity).optional().describe('Severity level for this plugin'),
+  severity: SeveritySchema.optional().describe('Severity level for this plugin'),
 });
 
 /**
@@ -191,6 +197,13 @@ export const RedteamGenerateOptionsSchema = z.object({
     .union([z.string(), z.array(z.string())])
     .optional()
     .describe('Language(s) of tests to generate'),
+  frameworks: z
+    .array(z.enum(frameworkOptions))
+    .min(1)
+    .optional()
+    .describe(
+      'Subset of compliance frameworks to include when generating, reporting, and filtering results',
+    ),
   maxConcurrency: z
     .number()
     .int()
@@ -234,6 +247,11 @@ export const RedteamConfigSchema = z
       .union([z.string(), z.array(z.string())])
       .optional()
       .describe('Language(s) of tests to generate for this plugin'),
+    frameworks: z
+      .array(z.enum(frameworkOptions))
+      .min(1)
+      .optional()
+      .describe('Compliance frameworks to include across reports and commands'),
     entities: z
       .array(z.string())
       .optional()
@@ -276,6 +294,10 @@ export const RedteamConfigSchema = z
   .transform((data): RedteamFileConfig => {
     const pluginMap = new Map<string, RedteamPluginObject>();
     const strategySet = new Set<Strategy>();
+    const frameworks =
+      data.frameworks && data.frameworks.length > 0
+        ? Array.from(new Set(data.frameworks))
+        : undefined;
 
     // MIGRATION: Extract languages from multilingual strategy and merge into global language config
     // This allows plugin-level language generation to work with multilingual strategy
@@ -287,12 +309,13 @@ export const RedteamConfigSchema = z
       const strategyLanguages = multilingualStrategy.config?.languages;
 
       if (Array.isArray(strategyLanguages) && strategyLanguages.length > 0) {
-        // Lazy require to avoid mock interference in tests during module initialization
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const logger = require('../logger').default;
-        logger.debug(
-          '[DEPRECATED] The "multilingual" strategy is deprecated. Use the top-level "language" config instead. See: https://www.promptfoo.dev/docs/red-team/configuration/#language',
-        );
+        // Fire-and-forget async import to avoid circular dependency at module load time
+        (async () => {
+          const { default: logger } = await import('../logger');
+          logger.debug(
+            '[DEPRECATED] The "multilingual" strategy is deprecated. Use the top-level "language" config instead. See: https://www.promptfoo.dev/docs/red-team/configuration/#language',
+          );
+        })();
 
         if (data.language) {
           // Global language exists, merge with 'en' and strategy languages, then deduplicate
@@ -441,6 +464,27 @@ export const RedteamConfigSchema = z
         return JSON.stringify(a.config || {}).localeCompare(JSON.stringify(b.config || {}));
       });
 
+    // Helper to generate a unique key for strategies
+    // For layer strategies, use label or steps to differentiate multiple instances
+    const getStrategyKey = (strategy: RedteamStrategy): string => {
+      if (typeof strategy === 'string') {
+        return strategy;
+      }
+      if (strategy.id === 'layer' && strategy.config) {
+        if (strategy.config.label) {
+          return `layer/${strategy.config.label}`;
+        }
+        if (strategy.config.steps) {
+          return `layer:${JSON.stringify(strategy.config.steps)}`;
+        }
+      }
+      // For other strategies with config, include config in key to allow multiple instances
+      if (strategy.config && Object.keys(strategy.config).length > 0) {
+        return `${strategy.id}:${JSON.stringify(strategy.config)}`;
+      }
+      return strategy.id;
+    };
+
     const strategies = Array.from(
       new Map<string, RedteamStrategy>(
         [...(data.strategies || []), ...Array.from(strategySet)].flatMap(
@@ -453,8 +497,8 @@ export const RedteamConfigSchema = z
                 ? DEFAULT_STRATEGIES.map((id): [string, RedteamStrategy] => [id, { id }])
                 : [[strategy, { id: strategy }]];
             }
-            // Return tuple of [id, strategy] for Map to deduplicate by id
-            return [[strategy.id, strategy]];
+            // Use unique key that considers label/steps for layer strategies
+            return [[getStrategyKey(strategy), strategy]];
           },
         ),
       ).values(),
@@ -468,6 +512,7 @@ export const RedteamConfigSchema = z
       numTests: data.numTests,
       plugins: uniquePlugins,
       strategies,
+      ...(frameworks ? { frameworks } : {}),
       ...(data.delay ? { delay: data.delay } : {}),
       ...(data.entities ? { entities: data.entities } : {}),
       ...(data.injectVar ? { injectVar: data.injectVar } : {}),

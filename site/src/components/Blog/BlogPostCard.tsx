@@ -7,10 +7,15 @@ interface BlogPostCardProps {
   post: PropBlogPostContent;
 }
 
-export default function BlogPostCard({ post }: BlogPostCardProps): JSX.Element {
+export default function BlogPostCard({ post }: BlogPostCardProps): React.ReactElement {
   const { metadata } = post;
   const { title, date, permalink, tags, description } = metadata;
   const author = metadata.authors[0];
+
+  // Format date with UTC timezone to avoid timezone conversion issues
+  const formattedDate = new Date(date).toLocaleDateString(undefined, {
+    timeZone: 'UTC',
+  });
 
   return (
     <Link to={permalink} className={styles.blogPostCard}>
@@ -25,7 +30,7 @@ export default function BlogPostCard({ post }: BlogPostCardProps): JSX.Element {
         <div className={styles.blogPostMeta}>
           {author && (
             <span className={styles.author}>
-              {author.name} · {new Date(date).toLocaleDateString()}
+              {author.name} · {formattedDate}
             </span>
           )}
         </div>

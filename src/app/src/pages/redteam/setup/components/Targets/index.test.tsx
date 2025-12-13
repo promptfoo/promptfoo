@@ -4,7 +4,7 @@ import { useTelemetry } from '@app/hooks/useTelemetry';
 import { callApi } from '@app/utils/api';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import CustomTargetConfiguration from './CustomTargetConfiguration';
 import Targets from './index';
@@ -49,8 +49,8 @@ const renderWithTheme = (ui: React.ReactElement) => {
 };
 
 describe('CustomTargetConfiguration - Config Field Handling', () => {
-  let mockUpdateCustomTarget: ReturnType<typeof vi.fn>;
-  let mockSetRawConfigJson: ReturnType<typeof vi.fn>;
+  let mockUpdateCustomTarget: (field: string, value: unknown) => void;
+  let mockSetRawConfigJson: (value: string) => void;
 
   const defaultProps = {
     selectedTarget: {
@@ -185,10 +185,10 @@ describe('updateCustomTarget function behavior', () => {
 });
 
 describe('Targets Component', () => {
-  let mockUpdateConfig: ReturnType<typeof vi.fn>;
-  let mockRecordEvent: ReturnType<typeof vi.fn>;
-  let mockOnNext: ReturnType<typeof vi.fn>;
-  let mockOnBack: ReturnType<typeof vi.fn>;
+  let mockUpdateConfig: (section: string, value: unknown) => void;
+  let mockRecordEvent: (eventName: string, properties?: Record<string, unknown>) => void;
+  let mockOnNext: () => void;
+  let mockOnBack: () => void;
   let mockCallApi: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {

@@ -1,7 +1,7 @@
 import { renderWithProviders } from '@app/utils/testutils';
 import { fireEvent, screen } from '@testing-library/react';
 import { useNavigate } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import TestSuites from './TestSuites';
 
 vi.mock('react-router-dom', () => ({
@@ -17,7 +17,9 @@ vi.mock('@app/hooks/useTelemetry', () => ({
 describe('TestSuites Component', () => {
   const mockNavigate = vi.fn();
 
-  const mockRef = { current: null } as React.RefObject<HTMLDivElement>;
+  const mockRef = {
+    current: null,
+  } as unknown as React.RefObject<HTMLDivElement> as React.RefObject<HTMLDivElement>;
   const mockFilterModel = { items: [] } as any;
   const mockSetFilterModel = vi.fn();
   const defaultProps = {
@@ -130,7 +132,9 @@ describe('TestSuites Component', () => {
 
 describe('TestSuites Component Navigation', () => {
   const mockNavigate = vi.fn();
-  const mockRef = { current: null } as React.RefObject<HTMLDivElement>;
+  const mockRef = {
+    current: null,
+  } as unknown as React.RefObject<HTMLDivElement> as React.RefObject<HTMLDivElement>;
   const mockFilterModel = { items: [] } as any;
   const mockSetFilterModel = vi.fn();
 
@@ -174,11 +178,41 @@ describe('TestSuites Component Navigation', () => {
 
     fireEvent.click(viewLogsButton);
 
+    const expectedFilter = encodeURIComponent(
+      JSON.stringify([
+        {
+          type: 'plugin',
+          operator: 'equals',
+          value: 'harmful:hate',
+        },
+      ]),
+    );
     expect(mockNavigate).toHaveBeenCalledWith(
-      '/eval/test-eval-123?plugin=harmful%3Ahate&mode=failures',
+      `/eval/test-eval-123?filter=${expectedFilter}&mode=failures`,
     );
   });
 
+  it('should navigate to eval page with a JSON-encoded filter and mode=failures when attackSuccessRate > 0', () => {
+    renderWithProviders(<TestSuites {...defaultProps} />);
+
+    const viewLogsButtons = screen.getAllByText('View logs');
+    const viewLogsButton = viewLogsButtons[0];
+
+    fireEvent.click(viewLogsButton);
+
+    const expectedFilter = encodeURIComponent(
+      JSON.stringify([
+        {
+          type: 'plugin',
+          operator: 'equals',
+          value: 'harmful:hate',
+        },
+      ]),
+    );
+    expect(mockNavigate).toHaveBeenCalledWith(
+      `/eval/test-eval-123?filter=${expectedFilter}&mode=failures`,
+    );
+  });
   it('should not navigate again when browser back button is used', () => {
     renderWithProviders(<TestSuites {...defaultProps} />);
 
@@ -200,8 +234,17 @@ describe('TestSuites Component Navigation', () => {
 
     fireEvent.click(viewLogsButton);
 
+    const expectedFilter = encodeURIComponent(
+      JSON.stringify([
+        {
+          type: 'plugin',
+          operator: 'equals',
+          value: 'harmful:cybercrime',
+        },
+      ]),
+    );
     expect(mockNavigate).toHaveBeenCalledWith(
-      '/eval/test-eval-123?plugin=harmful%3Acybercrime&mode=failures',
+      `/eval/test-eval-123?filter=${expectedFilter}&mode=failures`,
     );
   });
 
@@ -230,7 +273,9 @@ describe('TestSuites Component Navigation', () => {
 describe('TestSuites Component Navigation with Missing EvalId', () => {
   const mockNavigate = vi.fn();
 
-  const mockRef = { current: null } as React.RefObject<HTMLDivElement>;
+  const mockRef = {
+    current: null,
+  } as unknown as React.RefObject<HTMLDivElement> as React.RefObject<HTMLDivElement>;
   const mockFilterModel = { items: [] } as any;
   const mockSetFilterModel = vi.fn();
   const defaultProps = {
@@ -267,15 +312,26 @@ describe('TestSuites Component Navigation with Missing EvalId', () => {
 
     fireEvent.click(viewLogsButton);
 
+    const expectedFilter = encodeURIComponent(
+      JSON.stringify([
+        {
+          type: 'plugin',
+          operator: 'equals',
+          value: 'harmful:hate',
+        },
+      ]),
+    );
     expect(mockNavigate).toHaveBeenCalledWith(
-      '/eval/test-eval-123?plugin=harmful%3Ahate&mode=failures',
+      `/eval/test-eval-123?filter=${expectedFilter}&mode=failures`,
     );
   });
 });
 
 describe('TestSuites Component Filtering', () => {
   const mockNavigate = vi.fn();
-  const mockRef = { current: null } as React.RefObject<HTMLDivElement>;
+  const mockRef = {
+    current: null,
+  } as unknown as React.RefObject<HTMLDivElement> as React.RefObject<HTMLDivElement>;
   const mockFilterModel = { items: [] } as any;
   const mockSetFilterModel = vi.fn();
 
@@ -323,7 +379,9 @@ describe('TestSuites Component Filtering', () => {
 describe('TestSuites Component CSV Export', () => {
   const mockNavigate = vi.fn();
 
-  const mockRef = { current: null } as React.RefObject<HTMLDivElement>;
+  const mockRef = {
+    current: null,
+  } as unknown as React.RefObject<HTMLDivElement> as React.RefObject<HTMLDivElement>;
   const mockFilterModel = { items: [] } as any;
   const mockSetFilterModel = vi.fn();
   const defaultProps = {
@@ -365,7 +423,9 @@ describe('TestSuites Component CSV Export', () => {
 
 describe('TestSuites Component - Zero Attack Success Rate', () => {
   const mockNavigate = vi.fn();
-  const mockRef = { current: null } as React.RefObject<HTMLDivElement>;
+  const mockRef = {
+    current: null,
+  } as unknown as React.RefObject<HTMLDivElement> as React.RefObject<HTMLDivElement>;
   const mockFilterModel = { items: [] } as any;
   const mockSetFilterModel = vi.fn();
 
@@ -413,7 +473,6 @@ describe('TestSuites Component - Zero Attack Success Rate', () => {
     expect(attackSuccessRateElements[0]).toBeInTheDocument();
   });
 });
-
 describe('TestSuites Component CSV Export - Special Characters', () => {
   const mockNavigate = vi.fn();
 
@@ -444,7 +503,9 @@ describe('TestSuites Component CSV Export - Special Characters', () => {
       },
     };
 
-    const mockRef = { current: null } as React.RefObject<HTMLDivElement>;
+    const mockRef = {
+      current: null,
+    } as unknown as React.RefObject<HTMLDivElement> as React.RefObject<HTMLDivElement>;
     const mockFilterModel = { items: [] } as any;
     const mockSetFilterModel = vi.fn();
 
@@ -475,5 +536,192 @@ describe('TestSuites Component CSV Export - Special Characters', () => {
       expect(csvContent).toContain(expectedEscapedDescription);
     };
     reader.readAsText(blob);
+  });
+});
+
+describe('TestSuites Component - Large Filter Object', () => {
+  const mockNavigate = vi.fn();
+  const mockRef = {
+    current: null,
+  } as unknown as React.RefObject<HTMLDivElement> as React.RefObject<HTMLDivElement>;
+  const mockFilterModel = { items: [] } as any;
+  const mockSetFilterModel = vi.fn();
+
+  const _evalId = 'test-eval-123';
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(useNavigate).mockReturnValue(mockNavigate);
+
+    Object.defineProperty(window, 'location', {
+      writable: true,
+      value: { search: '?evalId=test-eval-123' },
+    });
+  });
+
+  it('should navigate with a large filter object without exceeding URL length limits', () => {
+    const _largeFilter = {
+      items: Array.from({ length: 500 }, (_, i) => ({
+        id: `filter-${i}`,
+        value: `value-${i}`,
+        operator: 'equals',
+      })),
+    };
+
+    const defaultProps = {
+      evalId: 'test-eval-123',
+      categoryStats: {
+        'harmful:hate': {
+          pass: 8,
+          total: 10,
+          passWithFilter: 9,
+          failCount: 2,
+        },
+      },
+      plugins: [],
+      vulnerabilitiesDataGridRef: mockRef,
+      vulnerabilitiesDataGridFilterModel: mockFilterModel,
+      setVulnerabilitiesDataGridFilterModel: mockSetFilterModel,
+    };
+
+    renderWithProviders(<TestSuites {...defaultProps} />);
+
+    const viewLogsButtons = screen.getAllByText('View logs');
+    const viewLogsButton = viewLogsButtons[0];
+
+    fireEvent.click(viewLogsButton);
+
+    expect(mockNavigate).toHaveBeenCalledTimes(1);
+
+    const navigateArgs = vi.mocked(mockNavigate).mock.calls[0][0];
+
+    expect(typeof navigateArgs).toBe('string');
+
+    if (typeof navigateArgs === 'string') {
+      expect(navigateArgs.length).toBeLessThan(2048);
+    }
+  });
+});
+
+describe('TestSuites Component Navigation with Special Characters in Plugin ID', () => {
+  const mockNavigate = vi.fn();
+  const mockRef = {
+    current: null,
+  } as unknown as React.RefObject<HTMLDivElement> as React.RefObject<HTMLDivElement>;
+  const mockFilterModel = { items: [] } as any;
+  const mockSetFilterModel = vi.fn();
+
+  const evalId = 'test-eval-123';
+  const specialPluginId = 'plugin:with"special\'chars\\and unicode:你好';
+  const defaultProps = {
+    evalId: evalId,
+    categoryStats: {
+      [specialPluginId]: {
+        pass: 5,
+        total: 10,
+        passWithFilter: 5,
+        failCount: 5,
+      },
+    },
+    plugins: [
+      {
+        id: specialPluginId,
+        config: {},
+      },
+    ],
+    vulnerabilitiesDataGridRef: mockRef,
+    vulnerabilitiesDataGridFilterModel: mockFilterModel,
+    setVulnerabilitiesDataGridFilterModel: mockSetFilterModel,
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(useNavigate).mockReturnValue(mockNavigate);
+
+    Object.defineProperty(window, 'location', {
+      writable: true,
+      value: { search: '?evalId=test-eval-123' },
+    });
+  });
+
+  it('should navigate to eval page with correctly encoded search params when pluginId contains special characters', () => {
+    renderWithProviders(<TestSuites {...defaultProps} />);
+
+    const viewLogsButtons = screen.getAllByText('View logs');
+    const viewLogsButton = viewLogsButtons[0];
+
+    fireEvent.click(viewLogsButton);
+
+    const expectedFilter = encodeURIComponent(
+      JSON.stringify([
+        {
+          type: 'plugin',
+          operator: 'equals',
+          value: specialPluginId,
+        },
+      ]),
+    );
+    expect(mockNavigate).toHaveBeenCalledWith(
+      `/eval/${evalId}?filter=${expectedFilter}&mode=failures`,
+    );
+  });
+});
+
+describe('TestSuites Component - Zero Attack Success Rate Navigation', () => {
+  const mockNavigate = vi.fn();
+  const mockRef = {
+    current: null,
+  } as unknown as React.RefObject<HTMLDivElement> as React.RefObject<HTMLDivElement>;
+  const mockFilterModel = { items: [] } as any;
+  const mockSetFilterModel = vi.fn();
+
+  const evalId = 'test-eval-123';
+
+  const defaultProps = {
+    evalId: evalId,
+    categoryStats: {
+      'harmful:hate': {
+        pass: 0,
+        total: 10,
+        passWithFilter: 0,
+        failCount: 0,
+      },
+    },
+    plugins: [],
+    vulnerabilitiesDataGridRef: mockRef,
+    vulnerabilitiesDataGridFilterModel: mockFilterModel,
+    setVulnerabilitiesDataGridFilterModel: mockSetFilterModel,
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(useNavigate).mockReturnValue(mockNavigate);
+
+    Object.defineProperty(window, 'location', {
+      writable: true,
+      value: { search: '?evalId=test-eval-123' },
+    });
+  });
+
+  it('should navigate to eval page with mode=passes when attackSuccessRate is 0', () => {
+    renderWithProviders(<TestSuites {...defaultProps} />);
+
+    const viewLogsButtons = screen.getAllByText('View logs');
+    const viewLogsButton = viewLogsButtons[0];
+
+    fireEvent.click(viewLogsButton);
+
+    const expectedFilter = encodeURIComponent(
+      JSON.stringify([
+        {
+          type: 'plugin',
+          operator: 'equals',
+          value: 'harmful:hate',
+        },
+      ]),
+    );
+    expect(mockNavigate).toHaveBeenCalledWith(
+      `/eval/${evalId}?filter=${expectedFilter}&mode=passes`,
+    );
   });
 });

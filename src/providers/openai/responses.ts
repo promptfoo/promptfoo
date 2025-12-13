@@ -7,7 +7,7 @@ import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { REQUEST_TIMEOUT_MS } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import { calculateOpenAICost, formatOpenAiError, getTokenUsage } from './util';
-import { ResponsesProcessor } from '../responses';
+import { ResponsesProcessor } from '../responses/index';
 
 import type {
   CallApiContextParams,
@@ -46,6 +46,17 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     'gpt-5-mini-2025-08-07',
     'gpt-5-pro',
     'gpt-5-pro-2025-10-06',
+    // GPT-5.1 models
+    'gpt-5.1',
+    'gpt-5.1-2025-11-13',
+    'gpt-5.1-mini',
+    'gpt-5.1-nano',
+    'gpt-5.1-codex',
+    'gpt-5.1-codex-max',
+    'gpt-5.1-chat-latest',
+    // GPT-5.2 models
+    'gpt-5.2',
+    'gpt-5.2-2025-12-11',
     // Audio models
     'gpt-audio',
     'gpt-audio-2025-08-28',
@@ -53,9 +64,9 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     'gpt-audio-mini-2025-10-06',
     // Computer use model
     'computer-use-preview',
-    // Image generation model
-    'gpt-image-1',
-    'gpt-image-1-2025-04-15',
+    'computer-use-preview-2025-03-11',
+    // NOTE: gpt-image-1 and gpt-image-1-mini are NOT supported with the Responses API.
+    // Use openai:image:gpt-image-1 or openai:image:gpt-image-1-mini instead (which uses /images/generations endpoint)
     // Reasoning models
     'o1',
     'o1-2024-12-17',
@@ -119,7 +130,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     return !this.isReasoningModel();
   }
 
-  getOpenAiBody(
+  async getOpenAiBody(
     prompt: string,
     context?: CallApiContextParams,
     _callApiOptions?: CallApiOptionsParams,
@@ -198,6 +209,17 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       textFormat = { format: { type: 'text' } };
     }
 
+    // Add verbosity for GPT-5.1 models if configured
+    if (this.modelName.startsWith('gpt-5') && config.verbosity) {
+      textFormat = { ...textFormat, verbosity: config.verbosity };
+    }
+
+    // Load tools from external file if needed
+    // Store in variable so we can include in both body and returned config
+    const loadedTools = config.tools
+      ? await maybeLoadToolsFromExternalFile(config.tools, context?.vars)
+      : undefined;
+
     const body = {
       model: this.modelName,
       input,
@@ -208,9 +230,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       ...(config.top_p !== undefined || getEnvString('OPENAI_TOP_P')
         ? { top_p: config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1) }
         : {}),
-      ...(config.tools
-        ? { tools: maybeLoadToolsFromExternalFile(config.tools, context?.vars) }
-        : {}),
+      ...(loadedTools ? { tools: loadedTools } : {}),
       ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
       ...(config.max_tool_calls ? { max_tool_calls: config.max_tool_calls } : {}),
       ...(config.previous_response_id ? { previous_response_id: config.previous_response_id } : {}),
@@ -240,7 +260,14 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       body.reasoning = config.reasoning;
     }
 
-    return { body, config: { ...config, response_format: responseFormat } };
+    return {
+      body,
+      config: {
+        ...config,
+        tools: loadedTools, // Include loaded tools for downstream validation
+        response_format: responseFormat,
+      },
+    };
   }
 
   async callApi(
@@ -254,7 +281,7 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
       );
     }
 
-    const { body, config } = this.getOpenAiBody(prompt, context, callApiOptions);
+    const { body, config } = await this.getOpenAiBody(prompt, context, callApiOptions);
 
     // Validate deep research models have required tools
     const isDeepResearchModel = this.modelName.includes('deep-research');

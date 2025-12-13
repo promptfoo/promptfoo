@@ -1,19 +1,9 @@
 import { v4 as uuidv4 } from 'uuid';
+
 import { getEnvInt } from '../../envars';
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
-import invariant from '../../util/invariant';
-import { sleep } from '../../util/time';
-import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
-import { shouldGenerateRemote } from '../remoteGeneration';
-import {
-  createIterationContext,
-  getTargetResponse,
-  redteamProviderManager,
-  type TargetResponse,
-} from './shared';
-
 import type {
   ApiProvider,
   AtomicTestCase,
@@ -25,7 +15,24 @@ import type {
   Prompt,
   RedteamFileConfig,
   TokenUsage,
-} from '../../types';
+} from '../../types/index';
+import invariant from '../../util/invariant';
+import { sleep } from '../../util/time';
+import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import { shouldGenerateRemote } from '../remoteGeneration';
+import {
+  applyRuntimeTransforms,
+  type LayerConfig,
+  type MediaData,
+  type TransformResult,
+} from '../shared/runtimeTransform';
+import { Strategies } from '../strategies';
+import {
+  createIterationContext,
+  getTargetResponse,
+  redteamProviderManager,
+  type TargetResponse,
+} from './shared';
 
 // Meta-agent based iterative testing - cloud handles memory and strategic decisions
 
@@ -37,7 +44,11 @@ interface IterativeMetaMetadata {
   stopReason: 'Grader failed' | 'Agent abandoned' | 'Max iterations reached';
   redteamHistory: {
     prompt: string;
+    promptAudio?: MediaData;
+    promptImage?: MediaData;
     output: string;
+    outputAudio?: MediaData;
+    outputImage?: MediaData;
     score: number;
     graderPassed: boolean | undefined;
     guardrails: GuardrailResponse | undefined;
@@ -72,6 +83,8 @@ export async function runMetaAgentRedteam({
   targetProvider,
   test,
   vars,
+  excludeTargetOutputFromAgenticAttackGeneration = false,
+  perTurnLayers = [],
 }: {
   context?: CallApiContextParams;
   filters: NunjucksFilterMap | undefined;
@@ -84,6 +97,8 @@ export async function runMetaAgentRedteam({
   targetProvider: ApiProvider;
   test?: AtomicTestCase;
   vars: Record<string, string | object>;
+  excludeTargetOutputFromAgenticAttackGeneration?: boolean;
+  perTurnLayers?: LayerConfig[];
 }): Promise<{
   output: string;
   metadata: IterativeMetaMetadata;
@@ -112,13 +127,7 @@ export async function runMetaAgentRedteam({
     'Max iterations reached';
   let lastResponse: TargetResponse | undefined = undefined;
 
-  const redteamHistory: {
-    prompt: string;
-    output: string;
-    score: number;
-    graderPassed: boolean | undefined;
-    guardrails: GuardrailResponse | undefined;
-  }[] = [];
+  const redteamHistory: IterativeMetaMetadata['redteamHistory'] = [];
 
   for (let i = 0; i < numIterations; i++) {
     logger.debug(`[IterativeMeta] Starting iteration ${i + 1}/${numIterations}`, {
@@ -145,11 +154,15 @@ export async function runMetaAgentRedteam({
       goal,
       purpose: test?.metadata?.purpose,
       modifiers: test?.metadata?.modifiers,
+      excludeTargetOutputFromAgenticAttackGeneration,
       lastAttempt:
         i > 0 && lastResponse && redteamHistory[i - 1]
           ? {
               prompt: redteamHistory[i - 1].prompt,
-              response: lastResponse.output,
+              // Conditionally exclude target response for privacy
+              response: excludeTargetOutputFromAgenticAttackGeneration
+                ? '[Hidden for privacy]'
+                : lastResponse.output,
               responseLength: lastResponse.output.length,
               graderPassed: redteamHistory[i - 1].graderPassed || false,
               graderReason: storedGraderResult?.reason,
@@ -158,13 +171,17 @@ export async function runMetaAgentRedteam({
     };
 
     // Get strategic decision from cloud
-    const agentResp = await agentProvider.callApi(JSON.stringify(cloudRequest), {
-      prompt: {
-        raw: JSON.stringify(cloudRequest),
-        label: 'meta-agent',
+    const agentResp = await agentProvider.callApi(
+      JSON.stringify(cloudRequest),
+      {
+        prompt: {
+          raw: JSON.stringify(cloudRequest),
+          label: 'meta-agent',
+        },
+        vars: {},
       },
-      vars: {},
-    });
+      options,
+    );
 
     // Don't track agent provider calls globally (internal meta-coordination, not user-facing probes)
     // Only accumulate tokens for this test's total
@@ -184,16 +201,14 @@ export async function runMetaAgentRedteam({
 
     // Extract attack prompt from cloud response
     let attackPrompt: string;
-    let shouldAbandon = false;
 
     if (typeof agentResp.output === 'string') {
       // Cloud returned string directly (shouldn't happen but handle it)
       attackPrompt = agentResp.output;
     } else {
-      // Cloud returns { result: "attack prompt", shouldAbandon: boolean }
+      // Cloud returns { result: "attack prompt" }
       const cloudResponse = agentResp.output as any;
       attackPrompt = cloudResponse.result;
-      shouldAbandon = cloudResponse.shouldAbandon || false;
     }
 
     if (!attackPrompt) {
@@ -201,19 +216,47 @@ export async function runMetaAgentRedteam({
       continue;
     }
 
-    // Check if agent decided to abandon
-    if (shouldAbandon) {
-      logger.info('[IterativeMeta] Agent decided to abandon attack', {
+    // ═══════════════════════════════════════════════════════════════════════
+    // Apply per-turn layer transforms if configured (e.g., audio, base64)
+    // This enables: layer: { steps: [jailbreak:meta, audio] }
+    // For single-turn iterative, we just transform the attack and send directly
+    // ═══════════════════════════════════════════════════════════════════════
+    let lastTransformResult: TransformResult | undefined;
+    let finalAttackPrompt = attackPrompt;
+    if (perTurnLayers.length > 0) {
+      logger.debug('[IterativeMeta] Applying per-turn transforms', {
         iteration: i + 1,
+        layers: perTurnLayers.map((l) => (typeof l === 'string' ? l : l.id)),
       });
-      stopReason = 'Agent abandoned';
-      finalIteration = i + 1;
-      break;
+      lastTransformResult = await applyRuntimeTransforms(
+        attackPrompt,
+        injectVar,
+        perTurnLayers,
+        Strategies,
+      );
+
+      if (lastTransformResult.error) {
+        logger.warn('[IterativeMeta] Transform failed, skipping iteration', {
+          iteration: i + 1,
+          error: lastTransformResult.error,
+        });
+        continue;
+      }
+
+      // For single-turn iterative, send transformed content directly
+      finalAttackPrompt = lastTransformResult.prompt;
+      logger.debug('[IterativeMeta] Per-turn transforms applied', {
+        iteration: i + 1,
+        originalLength: attackPrompt.length,
+        transformedLength: finalAttackPrompt.length,
+        hasAudio: !!lastTransformResult.audio,
+        hasImage: !!lastTransformResult.image,
+      });
     }
 
     // Render the actual prompt with the agent's attack
-    // Escape nunjucks template syntax in attackPrompt (replace {{ with { { to break the pattern)
-    const escapedAttackPrompt = attackPrompt
+    // Escape nunjucks template syntax (replace {{ with { { to break the pattern)
+    const escapedAttackPrompt = finalAttackPrompt
       .replace(/\{\{/g, '{ {')
       .replace(/\}\}/g, '} }')
       .replace(/\{%/g, '{ %')
@@ -227,6 +270,7 @@ export async function runMetaAgentRedteam({
       },
       filters,
       targetProvider,
+      [injectVar], // Skip template rendering for injection variable to prevent double-evaluation
     );
 
     logger.debug('[IterativeMeta] Calling target with agent-generated prompt', {
@@ -292,7 +336,7 @@ export async function runMetaAgentRedteam({
           ...test,
           vars: iterationVars,
         };
-        const { grade } = await grader.getResult(
+        const { grade, rubric } = await grader.getResult(
           attackPrompt,
           targetResponse.output,
           iterationTest,
@@ -300,8 +344,15 @@ export async function runMetaAgentRedteam({
           assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
           additionalRubric,
         );
-        graderResult = grade;
-        storedGraderResult = grade;
+        graderResult = {
+          ...grade,
+          assertion: grade.assertion
+            ? { ...grade.assertion, value: rubric }
+            : assertToUse && 'type' in assertToUse && assertToUse.type !== 'assert-set'
+              ? { ...assertToUse, value: rubric }
+              : undefined,
+        };
+        storedGraderResult = graderResult;
 
         logger.debug('[IterativeMeta] Grader result', {
           iteration: i + 1,
@@ -312,8 +363,19 @@ export async function runMetaAgentRedteam({
 
     // Store in redteam history for Messages tab
     redteamHistory.push({
-      prompt: attackPrompt,
+      prompt: attackPrompt, // Original text for transcript
+      promptAudio: lastTransformResult?.audio,
+      promptImage: lastTransformResult?.image,
       output: targetResponse.output,
+      // Only include audio/image if data is present
+      outputAudio:
+        targetResponse.audio?.data && targetResponse.audio?.format
+          ? { data: targetResponse.audio.data, format: targetResponse.audio.format }
+          : undefined,
+      outputImage:
+        targetResponse.image?.data && targetResponse.image?.format
+          ? { data: targetResponse.image.data, format: targetResponse.image.format }
+          : undefined,
       score: 0, // Not used in meta strategy
       graderPassed: graderResult?.pass,
       guardrails: undefined,
@@ -327,7 +389,7 @@ export async function runMetaAgentRedteam({
       stopReason = 'Grader failed';
       finalIteration = i + 1;
 
-      logger.info('[IterativeMeta] Vulnerability achieved!', {
+      logger.debug('[IterativeMeta] Vulnerability achieved!', {
         iteration: i + 1,
       });
 
@@ -356,6 +418,8 @@ class RedteamIterativeMetaProvider implements ApiProvider {
   private readonly injectVar: string;
   private readonly numIterations: number;
   private readonly gradingProvider: RedteamFileConfig['provider'];
+  private readonly excludeTargetOutputFromAgenticAttackGeneration: boolean;
+  private readonly perTurnLayers: LayerConfig[];
 
   constructor(readonly config: Record<string, string | object>) {
     logger.debug('[IterativeMeta] Constructor config', {
@@ -366,6 +430,11 @@ class RedteamIterativeMetaProvider implements ApiProvider {
 
     this.numIterations =
       Number(config.numIterations) || getEnvInt('PROMPTFOO_NUM_JAILBREAK_ITERATIONS', 10);
+
+    this.excludeTargetOutputFromAgenticAttackGeneration = Boolean(
+      config.excludeTargetOutputFromAgenticAttackGeneration,
+    );
+    this.perTurnLayers = (config._perTurnLayers as LayerConfig[]) ?? [];
 
     // Meta-agent strategy requires cloud
     if (!shouldGenerateRemote()) {
@@ -420,9 +489,12 @@ class RedteamIterativeMetaProvider implements ApiProvider {
       targetProvider: context.originalProvider,
       injectVar: this.injectVar,
       numIterations: this.numIterations,
+      perTurnLayers: this.perTurnLayers,
       context,
       options,
       test: context.test,
+      excludeTargetOutputFromAgenticAttackGeneration:
+        this.excludeTargetOutputFromAgenticAttackGeneration,
     });
   }
 }

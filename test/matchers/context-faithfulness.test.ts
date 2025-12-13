@@ -1,14 +1,14 @@
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { matchesContextFaithfulness } from '../../src/matchers';
 import { DefaultGradingProvider } from '../../src/providers/openai/defaults';
 
 describe('matchesContextFaithfulness', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
-    jest.resetAllMocks();
+    vi.clearAllMocks();
+    vi.resetAllMocks();
 
-    jest.spyOn(DefaultGradingProvider, 'callApi').mockReset();
-    jest
-      .spyOn(DefaultGradingProvider, 'callApi')
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockReset();
+    vi.spyOn(DefaultGradingProvider, 'callApi')
       .mockImplementationOnce(() => {
         return Promise.resolve({
           output: 'Statement 1\nStatement 2\nStatement 3\n',
@@ -24,7 +24,7 @@ describe('matchesContextFaithfulness', () => {
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('should pass when the faithfulness score is above the threshold', async () => {
@@ -33,7 +33,7 @@ describe('matchesContextFaithfulness', () => {
     const context = 'Context text';
     const threshold = 0.5;
 
-    const mockCallApi = jest
+    const mockCallApi = vi
       .fn()
       .mockImplementationOnce(() => {
         return Promise.resolve({
@@ -48,7 +48,7 @@ describe('matchesContextFaithfulness', () => {
         });
       });
 
-    jest.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
 
     await expect(matchesContextFaithfulness(query, output, context, threshold)).resolves.toEqual({
       pass: true,
@@ -71,7 +71,7 @@ describe('matchesContextFaithfulness', () => {
     const context = 'Context text';
     const threshold = 0.7;
 
-    const mockCallApi = jest
+    const mockCallApi = vi
       .fn()
       .mockImplementationOnce(() => {
         return Promise.resolve({
@@ -86,7 +86,7 @@ describe('matchesContextFaithfulness', () => {
         });
       });
 
-    jest.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
 
     await expect(matchesContextFaithfulness(query, output, context, threshold)).resolves.toEqual({
       pass: false,

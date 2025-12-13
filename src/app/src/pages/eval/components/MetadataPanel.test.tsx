@@ -238,4 +238,115 @@ describe('MetadataPanel', () => {
     expect(linkElement).toBeInTheDocument();
     expect(linkElement).toHaveAttribute('href', urlWithSpecialChars);
   });
+
+  it('should apply different word-break strategies to different content types', () => {
+    const mockMetadata = {
+      urlKey: 'https://www.example.com/verylongpath',
+      stringKey: 'This is a long string',
+    };
+
+    render(<MetadataPanel {...defaultProps} metadata={mockMetadata} />);
+
+    const urlCell = screen.getByText('https://www.example.com/verylongpath').closest('td');
+    expect(urlCell).toHaveStyle('word-break: break-all');
+
+    const stringCell = screen.getByText('This is a long string').closest('td');
+    expect(stringCell).toHaveStyle('word-break: break-word');
+  });
+
+  it('should handle rendering in a very narrow container by applying word-break and overflow-wrap styles', () => {
+    const longString = 'This is a very long string that should wrap. '.repeat(20);
+    const mockMetadata = {
+      longKey: longString,
+    };
+
+    render(
+      <div style={{ width: '100px' }}>
+        <MetadataPanel {...defaultProps} metadata={mockMetadata} />
+      </div>,
+    );
+
+    const tableCell = screen
+      .getByText((content) => content?.includes(longString.substring(0, 20)))
+      .closest('td');
+
+    expect(tableCell).toBeInTheDocument();
+    expect(tableCell).toHaveStyle('word-break: break-word');
+    expect(tableCell).toHaveStyle('overflow-wrap: break-word');
+  });
+
+  it('should handle deeply nested JSON objects by wrapping the text within the table cell', () => {
+    const nestedJsonObject = {
+      level1: {
+        level2: {
+          level3: {
+            level4: {
+              level5: {
+                level6: 'This is a very long string to force wrapping. '.repeat(20),
+              },
+            },
+          },
+        },
+      },
+    };
+
+    const mockMetadata = {
+      nestedObjectKey: nestedJsonObject,
+    };
+
+    render(<MetadataPanel {...defaultProps} metadata={mockMetadata} />);
+
+    const stringifiedJson = JSON.stringify(nestedJsonObject);
+    const tableCell = screen.getByText(new RegExp(`^${stringifiedJson.slice(0, 50)}`), {
+      selector: 'td',
+    });
+
+    expect(tableCell).toBeInTheDocument();
+    expect(tableCell).toHaveStyle('word-break: break-word');
+    expect(tableCell).toHaveStyle('overflow-wrap: break-word');
+  });
+
+  it('should render long non-URL metadata values with word-break and overflow-wrap styles', () => {
+    const longJsonString = JSON.stringify({
+      key1: 'This is a very long string. '.repeat(50),
+      key2: 123,
+      key3: { nestedKey: 'Another long string. '.repeat(50) },
+    });
+
+    const mockMetadata = {
+      longJsonKey: longJsonString,
+    };
+
+    render(<MetadataPanel {...defaultProps} metadata={mockMetadata} />);
+
+    const valueCell = screen.getByText((content) => {
+      return (
+        typeof content === 'string' &&
+        content.startsWith('{"key1":"This is a very long string.') &&
+        content.endsWith('...')
+      );
+    });
+
+    expect(valueCell).toBeInTheDocument();
+
+    const tableCell = valueCell.closest('td');
+    expect(tableCell).toHaveStyle('word-break: break-word');
+    expect(tableCell).toHaveStyle('overflow-wrap: break-word');
+  });
+
+  it('should render long URL values in a way that wraps the text within the table cell, preventing horizontal scrolling, and the cell should have the correct word-break and overflow-wrap styles applied', () => {
+    const longUrl = 'https://www.example.com/very/long/path/to/resource?query=a'.repeat(10);
+    const mockMetadata = {
+      longUrlKey: longUrl,
+    };
+
+    render(<MetadataPanel {...defaultProps} metadata={mockMetadata} />);
+
+    const linkElement = screen.getByRole('link', { name: longUrl });
+    expect(linkElement).toBeInTheDocument();
+
+    const tableCell = linkElement.closest('td');
+    expect(tableCell).toHaveStyle('wordBreak: break-all');
+    expect(tableCell).toHaveStyle('overflowWrap: anywhere');
+  });
 });

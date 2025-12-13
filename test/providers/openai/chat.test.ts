@@ -1,4 +1,5 @@
 import path from 'path';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { disableCache, enableCache, fetchWithCache } from '../../../src/cache';
 import cliState from '../../../src/cliState';
@@ -6,29 +7,60 @@ import { importModule } from '../../../src/esm';
 import logger from '../../../src/logger';
 import { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
 
-jest.mock('../../../src/cache');
-jest.mock('../../../src/logger');
-jest.mock('../../../src/esm', () => ({
-  importModule: jest.fn(),
+vi.mock('../../../src/cache', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    fetchWithCache: vi.fn(),
+    enableCache: vi.fn(),
+    disableCache: vi.fn(),
+  };
+});
+vi.mock('../../../src/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
 }));
+vi.mock('../../../src/esm', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    importModule: vi.fn(),
+  };
+});
 
-const mockFetchWithCache = jest.mocked(fetchWithCache);
-const mockLogger = jest.mocked(logger);
-const mockImportModule = jest.mocked(importModule);
+const mockFetchWithCache = vi.mocked(fetchWithCache);
+const mockLogger = vi.mocked(logger);
+const mockImportModule = vi.mocked(importModule);
+const originalOpenAiApiKey = process.env.OPENAI_API_KEY;
+const originalDeepseekApiKey = process.env.DEEPSEEK_API_KEY;
 
 describe('OpenAI Provider', () => {
   beforeEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
     disableCache();
+    process.env.OPENAI_API_KEY = 'test-api-key';
+    process.env.DEEPSEEK_API_KEY = 'test-deepseek-key';
   });
 
   afterEach(() => {
     enableCache();
+    if (originalOpenAiApiKey) {
+      process.env.OPENAI_API_KEY = originalOpenAiApiKey;
+    } else {
+      delete process.env.OPENAI_API_KEY;
+    }
+    if (originalDeepseekApiKey) {
+      process.env.DEEPSEEK_API_KEY = originalDeepseekApiKey;
+    } else {
+      delete process.env.DEEPSEEK_API_KEY;
+    }
   });
 
   describe('OpenAiChatCompletionProvider', () => {
     beforeEach(() => {
-      jest.clearAllMocks();
+      vi.clearAllMocks();
     });
 
     it('should call API successfully', async () => {
@@ -50,7 +82,7 @@ describe('OpenAI Provider', () => {
 
       expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
       expect(result.output).toBe('Test output');
-      expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
+      expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5, numRequests: 1 });
       expect(result.guardrails).toEqual({ flagged: false });
     });
 
@@ -73,7 +105,7 @@ describe('OpenAI Provider', () => {
 
       expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
       expect(result.output).toBe('Test output 2');
-      expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
+      expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5, numRequests: 1 });
 
       const cachedResponse = {
         ...mockResponse,
@@ -87,7 +119,7 @@ describe('OpenAI Provider', () => {
 
       expect(mockFetchWithCache).toHaveBeenCalledTimes(2);
       expect(result2.output).toBe('Test output 2');
-      expect(result2.tokenUsage).toEqual({ total: 10, cached: 10 });
+      expect(result2.tokenUsage).toEqual({ total: 10, cached: 10, numRequests: 1 });
     });
 
     it('should handle disabled cache correctly', async () => {
@@ -109,7 +141,7 @@ describe('OpenAI Provider', () => {
 
       expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
       expect(result.output).toBe('Test output');
-      expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
+      expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5, numRequests: 1 });
 
       disableCache();
 
@@ -119,7 +151,7 @@ describe('OpenAI Provider', () => {
 
       expect(mockFetchWithCache).toHaveBeenCalledTimes(2);
       expect(result2.output).toBe('Test output');
-      expect(result2.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
+      expect(result2.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5, numRequests: 1 });
 
       enableCache();
     });
@@ -193,7 +225,7 @@ describe('OpenAI Provider', () => {
 
       expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
       expect(result.output).toEqual({ name: 'John', age: 30 });
-      expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
+      expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5, numRequests: 1 });
     });
 
     it('should handle model refusals correctly', async () => {
@@ -220,7 +252,7 @@ describe('OpenAI Provider', () => {
 
       expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
       expect(result.output).toBe('Content policy violation');
-      expect(result.tokenUsage).toEqual({ total: 5, prompt: 5, completion: 0 });
+      expect(result.tokenUsage).toEqual({ total: 5, prompt: 5, completion: 0, numRequests: 1 });
       expect(result.isRefusal).toBe(true);
       expect(result.guardrails).toEqual({ flagged: true });
     });
@@ -298,7 +330,7 @@ describe('OpenAI Provider', () => {
       expect(result.guardrails).toEqual({
         flagged: true,
       });
-      expect(result.tokenUsage).toEqual({ total: 10, prompt: 10, completion: 0 });
+      expect(result.tokenUsage).toEqual({ total: 10, prompt: 10, completion: 0, numRequests: 1 });
     });
 
     it('should still treat non-refusal 400 errors as errors', async () => {
@@ -349,7 +381,69 @@ describe('OpenAI Provider', () => {
 
       expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
       expect(result.output).toBe('Test output');
-      expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
+      expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5, numRequests: 1 });
+    });
+
+    it('should handle OpenAI reasoning field with separate content correctly', async () => {
+      const mockResponse = {
+        data: {
+          choices: [
+            {
+              message: {
+                reasoning:
+                  'First, I need to analyze the numbers. 9.11 has 11 in the hundredths place, while 9.8 has 8 in the tenths place. Converting 9.8 to hundredths gives 9.80, so 9.11 > 9.80.',
+                content: 'The answer is 9.11 is greater than 9.8.',
+              },
+            },
+          ],
+          usage: { total_tokens: 25, prompt_tokens: 12, completion_tokens: 13 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-oss-20b');
+      const result = await provider.callApi(
+        JSON.stringify([{ role: 'user', content: 'Which is greater: 9.11 or 9.8?' }]),
+      );
+
+      expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
+      const expectedOutput = `Thinking: First, I need to analyze the numbers. 9.11 has 11 in the hundredths place, while 9.8 has 8 in the tenths place. Converting 9.8 to hundredths gives 9.80, so 9.11 > 9.80.\n\nThe answer is 9.11 is greater than 9.8.`;
+      expect(result.output).toBe(expectedOutput);
+      expect(result.tokenUsage).toEqual({ total: 25, prompt: 12, completion: 13, numRequests: 1 });
+    });
+
+    it('should hide OpenAI reasoning field when showThinking is false', async () => {
+      const mockResponse = {
+        data: {
+          choices: [
+            {
+              message: {
+                reasoning: 'Let me think through this problem step by step...',
+                content: 'The final answer is 42.',
+              },
+            },
+          ],
+          usage: { total_tokens: 20, prompt_tokens: 10, completion_tokens: 10 },
+        },
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      mockFetchWithCache.mockResolvedValue(mockResponse);
+
+      const provider = new OpenAiChatCompletionProvider('gpt-oss-20b', {
+        config: { showThinking: false },
+      });
+      const result = await provider.callApi(
+        JSON.stringify([{ role: 'user', content: 'What is the answer?' }]),
+      );
+
+      expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
+      expect(result.output).toBe('The final answer is 42.');
+      expect(result.tokenUsage).toEqual({ total: 20, prompt: 10, completion: 10, numRequests: 1 });
     });
 
     it('should handle DeepSeek reasoning model content correctly', async () => {
@@ -382,7 +476,7 @@ describe('OpenAI Provider', () => {
 9.11 > 9.8 because 11 > 8 in the decimal places.
 Therefore, 9.11 is greater than 9.8.\n\nThe final answer is 9.11 is greater than 9.8.`;
       expect(result.output).toBe(expectedOutput);
-      expect(result.tokenUsage).toEqual({ total: 20, prompt: 10, completion: 10 });
+      expect(result.tokenUsage).toEqual({ total: 20, prompt: 10, completion: 10, numRequests: 1 });
     });
 
     it('should hide reasoning content when showThinking is false', async () => {
@@ -414,7 +508,7 @@ Therefore, 9.11 is greater than 9.8.\n\nThe final answer is 9.11 is greater than
 
       expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
       expect(result.output).toBe('The final answer is 9.11 is greater than 9.8.');
-      expect(result.tokenUsage).toEqual({ total: 20, prompt: 10, completion: 10 });
+      expect(result.tokenUsage).toEqual({ total: 20, prompt: 10, completion: 10, numRequests: 1 });
     });
 
     it('should handle multi-round conversations with DeepSeek reasoning model', async () => {
@@ -513,7 +607,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       };
       mockFetchWithCache.mockResolvedValue(mockResponse);
 
-      const mockWeatherFunction = jest.fn().mockResolvedValue('Sunny, 25°C');
+      const mockWeatherFunction = vi.fn().mockResolvedValue('Sunny, 25°C');
 
       const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
         config: {
@@ -545,7 +639,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
       expect(mockWeatherFunction).toHaveBeenCalledWith('{"location":"New York"}');
       expect(result.output).toBe('Sunny, 25°C');
-      expect(result.tokenUsage).toEqual({ total: 15, prompt: 10, completion: 5 });
+      expect(result.tokenUsage).toEqual({ total: 15, prompt: 10, completion: 5, numRequests: 1 });
     });
 
     it('should handle multiple function tool calls', async () => {
@@ -631,7 +725,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
       expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
       expect(result.output).toBe('11\n6');
-      expect(result.tokenUsage).toEqual({ total: 15, prompt: 7, completion: 8 });
+      expect(result.tokenUsage).toEqual({ total: 15, prompt: 7, completion: 8, numRequests: 1 });
     });
 
     it('should handle errors in function tool callbacks', async () => {
@@ -683,7 +777,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
       expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
       expect(result.output).toEqual({ arguments: '{}', name: 'errorFunction' });
-      expect(result.tokenUsage).toEqual({ total: 5, prompt: 2, completion: 3 });
+      expect(result.tokenUsage).toEqual({ total: 5, prompt: 2, completion: 3, numRequests: 1 });
     });
 
     it('should handle undefined message content with tool calls', async () => {
@@ -742,13 +836,13 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
           },
         },
       ]);
-      expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
+      expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5, numRequests: 1 });
     });
 
     describe('External Function Callbacks', () => {
       beforeEach(() => {
         cliState.basePath = '/test/base/path';
-        jest.clearAllMocks();
+        vi.clearAllMocks();
       });
 
       afterEach(() => {
@@ -782,7 +876,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         mockFetchWithCache.mockResolvedValue(mockResponse);
 
         // Mock the external function
-        const mockExternalFunction = jest.fn().mockResolvedValue('External function result');
+        const mockExternalFunction = vi.fn().mockResolvedValue('External function result');
         mockImportModule.mockResolvedValue({
           testFunction: mockExternalFunction,
         });
@@ -819,7 +913,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         );
         expect(mockExternalFunction).toHaveBeenCalledWith('{"param": "test_value"}');
         expect(result.output).toBe('External function result');
-        expect(result.tokenUsage).toEqual({ total: 15, prompt: 10, completion: 5 });
+        expect(result.tokenUsage).toEqual({ total: 15, prompt: 10, completion: 5, numRequests: 1 });
       });
 
       it('should cache external functions and not reload them on subsequent calls', async () => {
@@ -848,7 +942,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         };
         mockFetchWithCache.mockResolvedValue(mockResponse);
 
-        const mockCachedFunction = jest.fn().mockResolvedValue('Cached result');
+        const mockCachedFunction = vi.fn().mockResolvedValue('Cached result');
         mockImportModule.mockResolvedValue({
           cachedFunction: mockCachedFunction,
         });
@@ -989,7 +1083,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         mockFetchWithCache.mockResolvedValue(mockResponse);
 
         // Mock a function that throws during execution
-        const mockFailingFunction = jest
+        const mockFailingFunction = vi
           .fn()
           .mockRejectedValue(new Error('Function execution failed'));
         mockImportModule.mockResolvedValue({
@@ -1062,7 +1156,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         };
         mockFetchWithCache.mockResolvedValue(mockResponse);
 
-        const mockParsedFunction = jest.fn().mockResolvedValue('Parsed successfully');
+        const mockParsedFunction = vi.fn().mockResolvedValue('Parsed successfully');
         mockImportModule.mockResolvedValue(mockParsedFunction);
 
         const provider = new OpenAiChatCompletionProvider('gpt-4o-mini', {
@@ -1130,8 +1224,8 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         };
         mockFetchWithCache.mockResolvedValue(mockResponse);
 
-        const mockInlineFunction = jest.fn().mockResolvedValue('Inline result');
-        const mockExternalFunction = jest.fn().mockResolvedValue('External result');
+        const mockInlineFunction = vi.fn().mockResolvedValue('Inline result');
+        const mockExternalFunction = vi.fn().mockResolvedValue('External result');
         mockImportModule.mockResolvedValue({
           externalFunc: mockExternalFunction,
         });
@@ -1234,7 +1328,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       const requestBody = JSON.parse(call[1].body);
       expect(requestBody.response_format).toEqual(promptResponseFormat);
       expect(result.output).toEqual({ key2: 'value2' });
-      expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
+      expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5, numRequests: 1 });
     });
 
     it('should use provider config response_format when prompt config is not provided', async () => {
@@ -1271,7 +1365,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       const requestBody = JSON.parse(call[1].body);
       expect(requestBody.response_format).toEqual(providerResponseFormat);
       expect(result.output).toBe('{"key1": "value1"}');
-      expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
+      expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5, numRequests: 1 });
     });
 
     it('should call API with basic chat completion', async () => {
@@ -1294,7 +1388,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
       expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
       expect(result.output).toBe('Test output');
-      expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
+      expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5, numRequests: 1 });
     });
 
     it('should handle caching correctly with multiple chat calls', async () => {
@@ -1317,7 +1411,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
       expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
       expect(result.output).toBe('Test output 2');
-      expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
+      expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5, numRequests: 1 });
 
       const cachedResponse = {
         ...mockResponse,
@@ -1334,7 +1428,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
       expect(mockFetchWithCache).toHaveBeenCalledTimes(2);
       expect(result2.output).toBe('Test output 2');
-      expect(result2.tokenUsage).toEqual({ total: 10, cached: 10 });
+      expect(result2.tokenUsage).toEqual({ total: 10, cached: 10, numRequests: 1 });
     });
 
     it('should handle disabled cache correctly for chat completion', async () => {
@@ -1357,7 +1451,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
       expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
       expect(result.output).toBe('Test output');
-      expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
+      expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5, numRequests: 1 });
 
       disableCache();
 
@@ -1367,12 +1461,12 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
       expect(mockFetchWithCache).toHaveBeenCalledTimes(2);
       expect(result2.output).toBe('Test output');
-      expect(result2.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
+      expect(result2.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5, numRequests: 1 });
 
       enableCache();
     });
 
-    it('should identify reasoning models correctly', () => {
+    it('should identify reasoning models correctly', async () => {
       const regularProvider = new OpenAiChatCompletionProvider('gpt-4');
       const o1Provider = new OpenAiChatCompletionProvider('o1-mini');
       const o3Provider = new OpenAiChatCompletionProvider('o3-mini');
@@ -1388,7 +1482,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       expect(o4MiniProvider['isReasoningModel']()).toBe(true);
     });
 
-    it('should handle temperature support correctly', () => {
+    it('should handle temperature support correctly', async () => {
       const regularProvider = new OpenAiChatCompletionProvider('gpt-4');
       const o1Provider = new OpenAiChatCompletionProvider('o1-mini');
       const o3Provider = new OpenAiChatCompletionProvider('o3-mini');
@@ -1533,7 +1627,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         } as any,
       });
 
-      const { body: o4Body } = o4Provider.getOpenAiBody('Test prompt');
+      const { body: o4Body } = await o4Provider.getOpenAiBody('Test prompt');
       expect(o4Body.reasoning_effort).toBe('medium');
       expect(o4Body.service_tier).toBe('premium');
     });
@@ -1561,7 +1655,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         } as any,
       });
 
-      const { body } = provider.getOpenAiBody('Test prompt');
+      const { body } = await provider.getOpenAiBody('Test prompt');
       expect(body.user).toBe('user-123');
       expect(body.metadata).toEqual({
         project: 'test-project',
@@ -1591,7 +1685,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         } as any,
       });
 
-      const { body } = o1Provider.getOpenAiBody('Test prompt');
+      const { body } = await o1Provider.getOpenAiBody('Test prompt');
       expect(body.reasoning).toEqual({
         effort: 'high',
         summary: 'detailed',
@@ -1634,7 +1728,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         transcript: 'This is the audio transcript',
         format: 'mp3',
       });
-      expect(result.tokenUsage).toEqual({ total: 15, prompt: 10, completion: 5 });
+      expect(result.tokenUsage).toEqual({ total: 15, prompt: 10, completion: 5, numRequests: 1 });
     });
 
     it('should handle audio responses without transcript', async () => {
@@ -1672,7 +1766,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         transcript: undefined,
         format: 'wav',
       });
-      expect(result.tokenUsage).toEqual({ total: 12, prompt: 8, completion: 4 });
+      expect(result.tokenUsage).toEqual({ total: 12, prompt: 8, completion: 4, numRequests: 1 });
     });
 
     it('should use default wav format when not specified', async () => {
@@ -1710,7 +1804,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         transcript: 'Audio without format specified',
         format: 'wav', // Default format
       });
-      expect(result.tokenUsage).toEqual({ total: 18, prompt: 12, completion: 6 });
+      expect(result.tokenUsage).toEqual({ total: 18, prompt: 12, completion: 6, numRequests: 1 });
     });
 
     it('should handle cached audio responses correctly', async () => {
@@ -1770,7 +1864,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         format: 'mp3',
       });
       expect(cachedResult.cached).toBe(true);
-      expect(cachedResult.tokenUsage).toEqual({ total: 20, cached: 20 });
+      expect(cachedResult.tokenUsage).toEqual({ total: 20, cached: 20, numRequests: 1 });
     });
 
     it('should properly handle audio requested with response_format option', async () => {
@@ -1804,7 +1898,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       // Verify result handled gracefully
       expect(result.output).toBe('Model responded with text instead of audio');
       expect(result.audio).toBeUndefined(); // No audio returned
-      expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
+      expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5, numRequests: 1 });
     });
 
     it('should surface a normalised finishReason', async () => {
@@ -2031,19 +2125,19 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       await provider.callApi('Test prompt');
     });
 
-    it('should log generic message for unknown chat models', () => {
+    it('should log generic message for unknown chat models', async () => {
       new OpenAiChatCompletionProvider('unknown-model');
 
       expect(mockLogger.debug).toHaveBeenCalledWith('Using unknown chat model: unknown-model');
     });
 
-    it('should not log unknown model message for known OpenAI models', () => {
+    it('should not log unknown model message for known OpenAI models', async () => {
       new OpenAiChatCompletionProvider('gpt-4o-mini');
 
       expect(mockLogger.debug).not.toHaveBeenCalledWith(expect.stringContaining('unknown'));
     });
 
-    it('should support legacy model IDs', () => {
+    it('should support legacy model IDs', async () => {
       // Test legacy GPT-4 models
       const gpt4LegacyProvider = new OpenAiChatCompletionProvider('gpt-4-0314');
       expect(gpt4LegacyProvider.modelName).toBe('gpt-4-0314');
@@ -2066,6 +2160,90 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         'gpt-4o-audio-preview-2025-06-03',
       );
       expect(audioModelProvider.modelName).toBe('gpt-4o-audio-preview-2025-06-03');
+    });
+
+    it('should work with apiKeyRequired: false and API key from environment', () => {
+      const originalEnv = process.env.CUSTOM_LOCAL_API_KEY;
+      process.env.CUSTOM_LOCAL_API_KEY = 'test-local-key';
+
+      try {
+        const provider = new OpenAiChatCompletionProvider('local-model', {
+          config: {
+            apiKeyRequired: false,
+            apiKeyEnvar: 'CUSTOM_LOCAL_API_KEY',
+            apiBaseUrl: 'http://localhost:8080/v1',
+          },
+        });
+
+        // Provider should pick up API key from environment
+        expect(provider.getApiKey()).toBe('test-local-key');
+
+        // Provider should not require API key
+        expect(provider.requiresApiKey()).toBe(false);
+      } finally {
+        if (originalEnv !== undefined) {
+          process.env.CUSTOM_LOCAL_API_KEY = originalEnv;
+        } else {
+          delete process.env.CUSTOM_LOCAL_API_KEY;
+        }
+      }
+    });
+
+    it('should work with apiKeyRequired: false and no API key', async () => {
+      // Ensure no API key is set in the environment
+      const originalCustomEnv = process.env.CUSTOM_LOCAL_API_KEY;
+      const originalOpenAIEnv = process.env.OPENAI_API_KEY;
+      delete process.env.CUSTOM_LOCAL_API_KEY;
+      delete process.env.OPENAI_API_KEY;
+
+      try {
+        const provider = new OpenAiChatCompletionProvider('local-model', {
+          config: {
+            apiKeyRequired: false,
+            apiKeyEnvar: 'CUSTOM_LOCAL_API_KEY',
+            apiBaseUrl: 'http://localhost:8080/v1',
+          },
+        });
+
+        // Provider should not have an API key
+        expect(provider.getApiKey()).toBeFalsy();
+
+        // Provider should not require API key
+        expect(provider.requiresApiKey()).toBe(false);
+
+        // Mock successful API response
+        const mockResponse = {
+          data: {
+            choices: [{ message: { content: 'Response without auth' } }],
+            usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
+          },
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+        };
+        mockFetchWithCache.mockResolvedValue(mockResponse);
+
+        // Call the API
+        const result = await provider.callApi(
+          JSON.stringify([{ role: 'user', content: 'Test prompt' }]),
+        );
+
+        // Verify the call succeeded
+        expect(result.output).toBe('Response without auth');
+        expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
+
+        // Verify that the Authorization header was NOT included (should not be "Bearer undefined")
+        const callArgs = mockFetchWithCache.mock.calls[0];
+        const headers = callArgs[1]?.headers as Record<string, string>;
+        expect(headers.Authorization).toBeUndefined();
+      } finally {
+        if (originalCustomEnv !== undefined) {
+          process.env.CUSTOM_LOCAL_API_KEY = originalCustomEnv;
+        }
+        if (originalOpenAIEnv !== undefined) {
+          process.env.OPENAI_API_KEY = originalOpenAIEnv;
+        }
+      }
     });
   });
 });

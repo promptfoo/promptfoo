@@ -48,6 +48,7 @@ import DownloadMenu from './DownloadMenu';
 import { EvalIdChip } from './EvalIdChip';
 import EvalSelectorDialog from './EvalSelectorDialog';
 import EvalSelectorKeyboardShortcut from './EvalSelectorKeyboardShortcut';
+import { useFilterMode } from './FilterModeProvider';
 import { FilterModeSelector } from './FilterModeSelector';
 import ResultsCharts from './ResultsCharts';
 import FiltersButton from './ResultsFilters/FiltersButton';
@@ -189,9 +190,9 @@ export default function ResultsView({
     highlightedResultsCount,
     filters,
     removeFilter,
-    filterMode,
-    setFilterMode,
   } = useTableStore();
+
+  const { filterMode, setFilterMode } = useFilterMode();
 
   const {
     setInComparisonMode,
@@ -815,9 +816,14 @@ export default function ResultsView({
                         // This should match the display format used in the dropdown
                         const policyName = filters.policyIdToNameMap?.[filter.value];
                         label = formatPolicyIdentifierAsMetric(policyName ?? filter.value);
-                      } else {
-                        // metadata type
-                        label = `${filter.field} ${filter.operator.replace('_', ' ')} "${truncatedValue}"`;
+                      }
+                      // Metadata:
+                      else {
+                        if (filter.operator === 'exists') {
+                          label = `Metadata: ${filter.field}`;
+                        } else {
+                          label = `${filter.field} ${filter.operator.replace('_', ' ')} "${truncatedValue}"`;
+                        }
                       }
 
                       return (

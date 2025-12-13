@@ -1,7 +1,8 @@
 import chalk from 'chalk';
 import { Command } from 'commander';
-import { DEFAULT_MAX_CONCURRENCY } from '../../constants';
 import { z } from 'zod';
+import { fromZodError } from 'zod-validation-error';
+import { DEFAULT_MAX_CONCURRENCY } from '../../constants';
 import logger from '../../logger';
 import { TestSuite, UnifiedConfig } from '../../types/index';
 import { ApiProvider, CallApiContextParams, isApiProvider } from '../../types/providers';
@@ -208,19 +209,19 @@ export function simbaCommand(program: Command, defaultConfig: Partial<UnifiedCon
       setupEnv(opts.envPath);
 
       try {
-        const validatedOpts = SimbaCommandSchema.parse(opts);
+        const validationResult = SimbaCommandSchema.safeParse(opts);
+
+        if (!validationResult.success) {
+          const validationError = fromZodError(validationResult.error);
+          logger.error(`Invalid options:\n${validationError.message}`);
+          process.exitCode = 1;
+          return;
+        }
 
         const { testSuite } = await resolveConfigs(opts, defaultConfig);
 
-        await runSimbaWithProvider(validatedOpts, testSuite);
+        await runSimbaWithProvider(validationResult.data, testSuite);
       } catch (error) {
-        if (error instanceof z.ZodError) {
-          logger.error('Invalid options:');
-          error.errors.forEach((err) => {
-            logger.error(`  ${err.path.join('.')}: ${err.message}`);
-          });
-          process.exit(1);
-        }
         logger.error(`${strategyDisplayNames.simba} command failed: ${error}`);
         process.exit(1);
       }

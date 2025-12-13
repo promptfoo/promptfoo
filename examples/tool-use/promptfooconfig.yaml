@@ -2,7 +2,7 @@
 description: Tool use evaluation with function calling capabilities
 
 providers:
-  - id: anthropic:claude-sonnet-4-20250514
+  - id: anthropic:claude-sonnet-4-5-20250929
     config:
       tools:
         - name: get_weather
@@ -20,7 +20,28 @@ providers:
                   - fahrenheit
             required:
               - location
-  - id: openai:chat:gpt-4.1-mini
+  - id: anthropic:claude-sonnet-4-5-20250929
+    label: With Strict Mode
+    config:
+      tools:
+        - name: get_weather
+          description: Get the current weather in a given location
+          strict: true # Enable strict mode for guaranteed schema validation
+          input_schema:
+            type: object
+            properties:
+              location:
+                type: string
+                description: The city and state, e.g. San Francisco, CA
+              unit:
+                type: string
+                enum:
+                  - celsius
+                  - fahrenheit
+            required:
+              - location
+            additionalProperties: false
+  - id: openai:chat:gpt-5-mini
     config:
       tools:
         - type: function
@@ -40,10 +61,11 @@ providers:
                     - fahrenheit
               required:
                 - location
-  - id: openai:chat:gpt-4.1-mini
+  - id: openai:chat:gpt-5-mini
+    label: External Tools
     config:
       tools: file://external_tools.yaml
-  - id: groq:llama-3.3-70b-versatile
+  - id: groq:llama-4-scout-17b-16e-instruct
     config:
       tools:
         - type: function

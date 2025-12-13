@@ -8,18 +8,15 @@ import useApiConfig from '@app/stores/apiConfig';
 import { callApi } from '@app/utils/api';
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
-import {
-  EvalResultsFilterMode,
-  type ResultLightweightWithLabel,
-  type ResultsFile,
-} from '@promptfoo/types';
+import { type ResultLightweightWithLabel, type ResultsFile } from '@promptfoo/types';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { io as SocketIOClient } from 'socket.io-client';
 import EmptyState from './EmptyState';
 import ResultsView from './ResultsView';
-import { useResultsViewSettingsStore, useTableStore } from './store';
+import { ResultsFilter, useResultsViewSettingsStore, useTableStore } from './store';
 import './Eval.css';
-
+import { useFilterMode } from './FilterModeProvider';
+import { useToast } from '@app/hooks/useToast';
 interface EvalOptions {
   /**
    * ID of a specific eval to load.
@@ -30,7 +27,8 @@ interface EvalOptions {
 export default function Eval({ fetchId }: EvalOptions) {
   const navigate = useNavigate();
   const { apiBaseUrl } = useApiConfig();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { showToast } = useToast();
 
   const {
     table,
@@ -45,9 +43,9 @@ export default function Eval({ fetchId }: EvalOptions) {
     resetFilters,
     addFilter,
     setIsStreaming,
-    setFilterMode,
-    resetFilterMode,
   } = useTableStore();
+
+  const { filterMode } = useFilterMode();
 
   const { setInComparisonMode, setComparisonEvalIds } = useResultsViewSettingsStore();
 
@@ -87,7 +85,7 @@ export default function Eval({ fetchId }: EvalOptions) {
       try {
         setEvalId(id);
 
-        const { filters, filterMode } = useTableStore.getState();
+        const { filters } = useTableStore.getState();
 
         const data = await fetchEvalData(id, {
           skipSettingEvalId: true,
@@ -111,7 +109,7 @@ export default function Eval({ fetchId }: EvalOptions) {
         return false;
       }
     },
-    [fetchEvalData, setFailed, setEvalId],
+    [fetchEvalData, setFailed, setEvalId, filterMode],
   );
 
   /**
@@ -131,64 +129,59 @@ export default function Eval({ fetchId }: EvalOptions) {
   // Effects
   // ================================
 
+  /**
+   * Listens for changes to the filters state. Updates the URL query string with the new filters.
+   */
   useEffect(() => {
-    // Reset filters when navigating to a different eval; necessary because Zustand
-    // is a global store.
+    const unsubscribe = useTableStore.subscribe(
+      (state) => state.filters,
+      (_filters) => {
+        // Read the search params from the URL. Does not use the hook to avoid re-running when the search params change.
+        const _searchParams = new URLSearchParams(window.location.search);
+
+        // Do search params need to be removed?
+        if (_filters.appliedCount === 0) {
+          // clear the search params
+          setSearchParams((prev) => {
+            prev.delete('filter');
+            return prev;
+          });
+        } else if (_filters.appliedCount > 0) {
+          // Serialize the filters to a JSON string
+          const serializedFilters = JSON.stringify(Object.values(_filters.values));
+          // Check whether the serialized filters are already in the search params
+          if (_searchParams.get('filter') !== serializedFilters) {
+            // Add each filter to the search params
+            setSearchParams((prev) => {
+              prev.set('filter', serializedFilters);
+              return prev;
+            });
+          }
+        }
+      },
+    );
+    return () => unsubscribe();
+  }, [setSearchParams]);
+
+  useEffect(() => {
+    const _searchParams = new URLSearchParams(window.location.search);
+
     resetFilters();
 
-    // Check for a `plugin` param in the URL; we support filtering on plugins via the URL which
-    // enables the "View Logs" functionality in Vulnerability reports.
-    const pluginParams = searchParams.getAll('plugin');
+    // Read search params
+    const filtersParam = _searchParams.get('filter');
 
-    // Check for >=1 metric params in the URL.
-    const metricParams = searchParams.getAll('metric');
-
-    // Check for >=1 policyId params in the URL.
-    const policyIdParams = searchParams.getAll('policy');
-
-    // Check for a `mode` param in the URL.
-    const modeParam = searchParams.get('mode');
-
-    if (pluginParams.length > 0) {
-      pluginParams.forEach((pluginParam) => {
-        addFilter({
-          type: 'plugin',
-          operator: 'equals',
-          value: pluginParam,
-          logicOperator: 'or',
-        });
+    if (filtersParam) {
+      let filters: ResultsFilter[] = [];
+      try {
+        filters = JSON.parse(filtersParam) as ResultsFilter[];
+      } catch {
+        showToast('URL contains invalid JSON-encoded filters', 'error');
+        return;
+      }
+      filters.forEach((filter: ResultsFilter) => {
+        addFilter(filter);
       });
-    }
-
-    if (metricParams.length > 0) {
-      metricParams.forEach((metricParam) => {
-        addFilter({
-          type: 'metric',
-          operator: 'equals',
-          value: metricParam,
-          logicOperator: 'or',
-        });
-      });
-    }
-
-    if (policyIdParams.length > 0) {
-      policyIdParams.forEach((policyId) => {
-        addFilter({
-          type: 'policy',
-          operator: 'equals',
-          value: policyId,
-          logicOperator: 'or',
-        });
-      });
-    }
-
-    // If a mode param is provided, set the filter mode to the provided value.
-    // Otherwise, reset the filter mode to ensure that the filter mode from the previously viewed eval
-    // is not applied (again, because Zustand is a global store).
-    if (modeParam && EvalResultsFilterMode.safeParse(modeParam).success) {
-      setFilterMode(modeParam as EvalResultsFilterMode);
-    } else {
-      resetFilterMode();
     }
 
     if (fetchId) {

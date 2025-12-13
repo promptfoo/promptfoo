@@ -1,13 +1,27 @@
 import React, { useMemo } from 'react';
 
-import { useShiftKey } from '@app/hooks/useShiftKey';
-import { useEvalOperations } from '@app/hooks/useEvalOperations';
-import useCloudConfig from '@app/hooks/useCloudConfig';
-import Tooltip, { TooltipProps } from '@mui/material/Tooltip';
-import { type EvaluateTableOutput, ResultFailureReason } from '@promptfoo/types';
 import { diffJson, diffSentences, diffWords } from 'diff';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+
+import useCloudConfig from '@app/hooks/useCloudConfig';
+import { useEvalOperations } from '@app/hooks/useEvalOperations';
+import { useShiftKey } from '@app/hooks/useShiftKey';
+import {
+  Check,
+  ContentCopy,
+  Edit,
+  Link,
+  Numbers,
+  Search,
+  Star,
+  ThumbDown,
+  ThumbUp,
+} from '@mui/icons-material';
+import IconButton from '@mui/material/IconButton';
+import Tooltip, { TooltipProps } from '@mui/material/Tooltip';
+import { type EvaluateTableOutput, ResultFailureReason } from '@promptfoo/types';
+
 import CustomMetrics from './CustomMetrics';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import FailReasonCarousel from './FailReasonCarousel';
@@ -27,6 +41,29 @@ function scoreToString(score: number | null) {
   return `(${score.toFixed(2)})`;
 }
 
+/**
+ * Detects if the provider is an image generation provider.
+ * Image providers follow patterns like:
+ * - 'openai:image:dall-e-3' (OpenAI DALL-E)
+ * - 'google:image:imagen-3.0' (Google Imagen)
+ * - 'google:gemini-2.5-flash-image' (Gemini native image generation)
+ * Used to skip truncation for image content since truncating `![alt](url)` breaks rendering.
+ */
+export function isImageProvider(provider: string | undefined): boolean {
+  if (!provider) {
+    return false;
+  }
+  // Check for :image: namespace (OpenAI DALL-E, Google Imagen)
+  if (provider.includes(':image:')) {
+    return true;
+  }
+  // Check for Gemini native image models (e.g., google:gemini-2.5-flash-image)
+  if (provider.startsWith('google:') && provider.includes('-image')) {
+    return true;
+  }
+  return false;
+}
+
 const tooltipSlotProps: TooltipProps['slotProps'] = {
   popper: { disablePortal: true },
 };
@@ -37,7 +74,7 @@ export interface EvalOutputCellProps {
   rowIndex: number;
   promptIndex: number;
   showStats: boolean;
-  onRating: (isPass?: boolean, score?: number, comment?: string) => void;
+  onRating: (isPass?: boolean | null, score?: number, comment?: string) => void;
   evaluationId?: string;
   testCaseId?: string;
   isRedteam?: boolean;
@@ -147,12 +184,22 @@ function EvalOutputCell({
   let node: React.ReactNode | undefined;
   let failReasons: string[] = [];
 
+  // Extract response audio from the last turn of redteamHistory for display in the cell
+  const redteamHistory = output.metadata?.redteamHistory || output.metadata?.redteamTreeHistory;
+  const lastTurn = redteamHistory?.[redteamHistory.length - 1];
+  const responseAudio = lastTurn?.outputAudio as { data?: string; format?: string } | undefined;
+
   // Extract failure reasons from component results
   if (output.gradingResult?.componentResults) {
     failReasons = output.gradingResult.componentResults
       .filter((result) => (result ? !result.pass : false))
       .map((result) => result.reason)
       .filter((reason) => reason); // Filter out empty/undefined reasons
+  }
+
+  // Include provider-level error if present (e.g., from Python provider returning error)
+  if (output.error) {
+    failReasons.unshift(output.error);
   }
 
   if (showDiffs && firstOutput) {
@@ -242,8 +289,8 @@ function EvalOutputCell({
       <div className="audio-output">
         <audio controls style={{ width: '100%' }} data-testid="audio-player">
           <source
-            src={`data:audio/${output.audio.format || 'wav'};base64,${output.audio.data}`}
-            type={`audio/${output.audio.format || 'wav'}`}
+            src={`data:audio/${output.audio.format || 'mp3'};base64,${output.audio.data}`}
+            type={`audio/${output.audio.format || 'mp3'}`}
           />
           Your browser does not support the audio element.
         </audio>
@@ -273,6 +320,8 @@ function EvalOutputCell({
       node = (
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
+          // Allow data: URIs for inline images (e.g., from Gemini image generation)
+          urlTransform={(url) => url}
           components={{
             img: ({ src, alt }) => (
               <img
@@ -293,10 +342,11 @@ function EvalOutputCell({
 
   const handleRating = React.useCallback(
     (isPass: boolean) => {
-      setActiveRating(isPass);
-      onRating(isPass, undefined, output.gradingResult?.comment);
+      const newRating = activeRating === isPass ? null : isPass;
+      setActiveRating(newRating);
+      onRating(newRating, undefined, output.gradingResult?.comment);
     },
-    [onRating, output.gradingResult?.comment],
+    [activeRating, onRating, output.gradingResult?.comment],
   );
 
   const handleSetScore = React.useCallback(() => {
@@ -585,36 +635,43 @@ function EvalOutputCell({
       {shiftKeyPressed && (
         <>
           <Tooltip title={'Copy output to clipboard'} slotProps={tooltipSlotProps}>
-            <button className="action" onClick={handleCopy} onMouseDown={(e) => e.preventDefault()}>
-              {copied ? '✅' : '📋'}
-            </button>
+            <IconButton
+              className="action"
+              size="small"
+              onClick={handleCopy}
+              onMouseDown={(e) => e.preventDefault()}
+            >
+              {copied ? <Check fontSize="small" /> : <ContentCopy fontSize="small" />}
+            </IconButton>
           </Tooltip>
           <Tooltip title={'Toggle test highlight'} slotProps={tooltipSlotProps}>
-            <button
+            <IconButton
               className="action"
+              size="small"
               onClick={handleToggleHighlight}
               onMouseDown={(e) => e.preventDefault()}
             >
-              🌟
-            </button>
+              <Star fontSize="small" />
+            </IconButton>
           </Tooltip>
           <Tooltip title={'Share output'} slotProps={tooltipSlotProps}>
-            <button
+            <IconButton
               className="action"
+              size="small"
               onClick={handleRowShareLink}
               onMouseDown={(e) => e.preventDefault()}
             >
-              {linked ? '✅' : '🔗'}
-            </button>
+              {linked ? <Check fontSize="small" /> : <Link fontSize="small" />}
+            </IconButton>
           </Tooltip>
         </>
       )}
       {output.prompt && (
         <>
           <Tooltip title={'View output and test details'} slotProps={tooltipSlotProps}>
-            <button className="action" onClick={handlePromptOpen}>
-              🔎
-            </button>
+            <IconButton className="action" size="small" onClick={handlePromptOpen}>
+              <Search fontSize="small" />
+            </IconButton>
           </Tooltip>
           {openPrompt && (
             <EvalOutputPromptDialog
@@ -640,30 +697,38 @@ function EvalOutputCell({
         </>
       )}
       <Tooltip title={'Mark test passed (score 1.0)'} slotProps={tooltipSlotProps}>
-        <button
+        <IconButton
           className={`action ${activeRating === true ? 'active' : ''}`}
+          size="small"
           onClick={() => handleRating(true)}
+          color={activeRating === true ? 'success' : 'default'}
+          aria-pressed={activeRating === true}
+          aria-label="Mark test passed"
         >
-          👍
-        </button>
+          <ThumbUp fontSize="small" />
+        </IconButton>
       </Tooltip>
       <Tooltip title={'Mark test failed (score 0.0)'} slotProps={tooltipSlotProps}>
-        <button
+        <IconButton
           className={`action ${activeRating === false ? 'active' : ''}`}
+          size="small"
           onClick={() => handleRating(false)}
+          color={activeRating === false ? 'error' : 'default'}
+          aria-pressed={activeRating === false}
+          aria-label="Mark test failed"
         >
-          👎
-        </button>
+          <ThumbDown fontSize="small" />
+        </IconButton>
       </Tooltip>
       <Tooltip title={'Set test score'} slotProps={tooltipSlotProps}>
-        <button className="action" onClick={handleSetScore}>
-          🔢
-        </button>
+        <IconButton className="action" size="small" onClick={handleSetScore}>
+          <Numbers fontSize="small" />
+        </IconButton>
       </Tooltip>
       <Tooltip title={'Edit comment'} slotProps={tooltipSlotProps}>
-        <button className="action" onClick={handleCommentOpen}>
-          ✏️
-        </button>
+        <IconButton className="action" size="small" onClick={handleCommentOpen}>
+          <Edit fontSize="small" />
+        </IconButton>
       </Tooltip>
     </div>
   );
@@ -690,11 +755,32 @@ function EvalOutputCell({
       {showPrompts && firstOutput.prompt && (
         <div className="prompt">
           <span className="pill">Prompt</span>
-          {output.prompt}
+          {typeof output.prompt === 'string'
+            ? output.prompt
+            : JSON.stringify(output.prompt, null, 2)}
+        </div>
+      )}
+      {/* Show response audio from redteam history if available (target's audio response) */}
+      {responseAudio?.data && (
+        <div className="response-audio" style={{ marginBottom: '8px' }}>
+          <audio
+            controls
+            style={{ width: '100%', height: '32px' }}
+            data-testid="response-audio-player"
+          >
+            <source
+              src={`data:audio/${responseAudio.format || 'mp3'};base64,${responseAudio.data}`}
+              type={`audio/${responseAudio.format || 'mp3'}`}
+            />
+            Your browser does not support the audio element.
+          </audio>
         </div>
       )}
       <div style={contentStyle}>
-        <TruncatedText text={node || text} maxLength={maxTextLength} />
+        <TruncatedText
+          text={node || text}
+          maxLength={renderMarkdown && isImageProvider(output.provider) ? 0 : maxTextLength}
+        />
       </div>
       {comment}
       {detail}

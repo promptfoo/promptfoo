@@ -1,9 +1,10 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Review from './Review';
 import { useEmailVerification } from '@app/hooks/useEmailVerification';
 import { callApi } from '@app/utils/api';
 import { useApiHealth, type ApiHealthResult } from '@app/hooks/useApiHealth';
+import { useRedteamJobStore } from '@app/stores/redteamJobStore';
 import type { DefinedUseQueryResult } from '@tanstack/react-query';
 
 // Mock the dependencies
@@ -26,10 +27,30 @@ vi.mock('@app/hooks/useToast', () => ({
 }));
 
 vi.mock('@app/utils/api', () => ({
-  callApi: vi.fn(),
+  callApi: vi.fn().mockImplementation(async (url: string) => {
+    if (url === '/redteam/status') {
+      return {
+        ok: true,
+        json: async () => ({ hasRunningJob: false }),
+      };
+    }
+    return { ok: true, json: async () => ({}) };
+  }),
   fetchUserEmail: vi.fn(() => Promise.resolve('test@example.com')),
   fetchUserId: vi.fn(() => Promise.resolve('test-user-id')),
   updateEvalAuthor: vi.fn(() => Promise.resolve({})),
+}));
+
+// Mock the redteamJobStore
+const mockSetJob = vi.fn();
+const mockClearJob = vi.fn();
+vi.mock('@app/stores/redteamJobStore', () => ({
+  useRedteamJobStore: vi.fn(() => ({
+    jobId: null,
+    setJob: mockSetJob,
+    clearJob: mockClearJob,
+    _hasHydrated: true, // Default to hydrated for most tests
+  })),
 }));
 
 vi.mock('@app/hooks/useApiHealth', () => ({
@@ -93,6 +114,7 @@ describe('Review Component', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.useFakeTimers();
 
     // Reset the mock to return a connected state by default
     vi.mocked(useApiHealth).mockReturnValue({
@@ -101,10 +123,40 @@ describe('Review Component', () => {
       isLoading: false,
     } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
+    // Reset the job store mock
+    vi.mocked(useRedteamJobStore).mockReturnValue({
+      jobId: null,
+      setJob: mockSetJob,
+      clearJob: mockClearJob,
+      _hasHydrated: true,
+    });
+
+    // Reset callApi mock to default behavior
+    vi.mocked(callApi).mockImplementation(async (url: string) => {
+      if (url === '/redteam/status') {
+        return {
+          ok: true,
+          json: async () => ({ hasRunningJob: false }),
+        } as Response;
+      }
+      return { ok: true, json: async () => ({}) } as Response;
+    });
+
     mockUseRedTeamConfig.mockReturnValue({
       config: defaultConfig,
       updateConfig: mockUpdateConfig,
     });
+  });
+
+  afterEach(() => {
+    // Only run pending timers if fake timers are active
+    // This prevents errors when child describe blocks use real timers
+    try {
+      vi.runOnlyPendingTimers();
+    } catch {
+      // Ignore error if timers are not mocked
+    }
+    vi.useRealTimers();
   });
 
   describe('Component Integration', () => {
@@ -233,7 +285,12 @@ describe('Review Component', () => {
     const accordionSummary = screen.getByText('Advanced Configuration');
     fireEvent.click(accordionSummary);
 
-    const defaultTestVariables = await screen.findByTestId('default-test-variables');
+    // Advance timers for any animations/transitions
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100);
+    });
+
+    const defaultTestVariables = screen.getByTestId('default-test-variables');
 
     expect(defaultTestVariables).toBeInTheDocument();
 
@@ -434,9 +491,15 @@ Application Details:
       if (buttonWrapper) {
         fireEvent.mouseOver(buttonWrapper);
 
-        await waitFor(() => {
-          expect(screen.getByText(/cannot connect to promptfoo cloud/i)).toBeInTheDocument();
+        // Advance timers for MUI Tooltip to appear
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(500);
         });
+
+        // Match tooltip text specifically (different from Alert text)
+        expect(
+          screen.getByText(/Cannot connect to Promptfoo Cloud\. Please check your network/i),
+        ).toBeInTheDocument();
       }
     });
 
@@ -565,9 +628,15 @@ Application Details:
       if (buttonWrapper) {
         fireEvent.mouseOver(buttonWrapper);
 
-        await waitFor(() => {
-          expect(screen.getByText(/remote generation is disabled/i)).toBeInTheDocument();
+        // Advance timers for MUI Tooltip to appear
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(500);
         });
+
+        // Match tooltip text specifically (different from Alert text)
+        expect(
+          screen.getByText(/Remote generation is disabled\. Running red team evaluations/i),
+        ).toBeInTheDocument();
       }
     });
 
@@ -591,9 +660,12 @@ Application Details:
       if (buttonWrapper) {
         fireEvent.mouseOver(buttonWrapper);
 
-        await waitFor(() => {
-          expect(screen.getByText(/checking connection to promptfoo cloud/i)).toBeInTheDocument();
+        // Advance timers for MUI Tooltip to appear
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(500);
         });
+
+        expect(screen.getByText(/checking connection to promptfoo cloud/i)).toBeInTheDocument();
       }
     });
 
@@ -619,7 +691,7 @@ Application Details:
         fireEvent.mouseOver(buttonWrapper);
 
         // Wait a bit to ensure tooltip would have time to appear if it was going to
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await vi.advanceTimersByTimeAsync(100);
 
         // Check that no tooltip is shown (check for various tooltip text patterns)
         expect(screen.queryByText(/cannot connect to promptfoo cloud/i)).not.toBeInTheDocument();
@@ -650,7 +722,7 @@ Application Details:
         fireEvent.mouseOver(buttonWrapper);
 
         // Wait a bit to ensure tooltip would have time to appear if it was going to
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await vi.advanceTimersByTimeAsync(100);
 
         // Check that no tooltip is shown
         expect(screen.queryByText(/cannot connect to promptfoo cloud/i)).not.toBeInTheDocument();
@@ -662,6 +734,10 @@ Application Details:
 
   describe('Run Now Button - isRunning Integration', () => {
     beforeEach(() => {
+      // These tests rely on real async behavior (button click → API call → state change)
+      // so we need to use real timers instead of fake timers
+      vi.useRealTimers();
+
       // Reset to connected state
       vi.mocked(useApiHealth).mockReturnValue({
         data: { status: 'connected', message: null },
@@ -892,6 +968,11 @@ Application Details:
   });
 
   describe('Run Now Button - State Transitions', () => {
+    beforeEach(() => {
+      // These tests use waitFor which doesn't work well with fake timers
+      vi.useRealTimers();
+    });
+
     it('should update button state when API health status changes', () => {
       vi.mocked(useApiHealth).mockReturnValue({
         data: { status: 'connected', message: null },
@@ -1101,6 +1182,351 @@ Application Details:
           expect(screen.getByText(/checking connection to promptfoo cloud/i)).toBeInTheDocument();
         });
       }
+    });
+  });
+
+  describe('Job Recovery', () => {
+    beforeEach(() => {
+      vi.useRealTimers();
+
+      vi.mocked(useApiHealth).mockReturnValue({
+        data: { status: 'connected', message: null },
+        refetch: vi.fn(),
+        isLoading: false,
+      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
+    });
+
+    it('should check for running job on mount', async () => {
+      vi.mocked(callApi).mockImplementation(async (url: string) => {
+        if (url === '/redteam/status') {
+          return {
+            ok: true,
+            json: async () => ({ hasRunningJob: false }),
+          } as Response;
+        }
+        return { ok: true, json: async () => ({}) } as Response;
+      });
+
+      render(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      // Wait for the effect to run
+      await waitFor(() => {
+        expect(callApi).toHaveBeenCalledWith('/redteam/status');
+      });
+    });
+
+    it('should reconnect to running job when server has one', async () => {
+      vi.mocked(callApi).mockImplementation(async (url: string) => {
+        if (url === '/redteam/status') {
+          return {
+            ok: true,
+            json: async () => ({ hasRunningJob: true, jobId: 'server-job-123' }),
+          } as Response;
+        }
+        if (url === '/eval/job/server-job-123') {
+          return {
+            ok: true,
+            json: async () => ({
+              status: 'in-progress',
+              logs: ['Test running...'],
+            }),
+          } as Response;
+        }
+        return { ok: true, json: async () => ({}) } as Response;
+      });
+
+      render(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      // Wait for recovery to complete and button to show running state
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /running/i })).toBeInTheDocument();
+      });
+
+      // Should have called setJob with the server's job ID
+      expect(mockSetJob).toHaveBeenCalledWith('server-job-123');
+    });
+
+    it('should show completed state when returning to completed job', async () => {
+      vi.mocked(callApi).mockImplementation(async (url: string) => {
+        if (url === '/redteam/status') {
+          return {
+            ok: true,
+            json: async () => ({ hasRunningJob: true, jobId: 'completed-job-456' }),
+          } as Response;
+        }
+        if (url === '/eval/job/completed-job-456') {
+          return {
+            ok: true,
+            json: async () => ({
+              status: 'complete',
+              evalId: 'eval-result-789',
+              logs: ['Evaluation complete'],
+            }),
+          } as Response;
+        }
+        return { ok: true, json: async () => ({}) } as Response;
+      });
+
+      render(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      // Wait for recovery to complete and show View Report link (MUI Button with href renders as link)
+      await waitFor(() => {
+        expect(screen.getByRole('link', { name: /view report/i })).toBeInTheDocument();
+      });
+
+      // Should have cleared the job since it's complete
+      expect(mockClearJob).toHaveBeenCalled();
+    });
+
+    it('should check saved job when no server job is running', async () => {
+      // Mock the store to have a saved job ID
+      vi.mocked(useRedteamJobStore).mockReturnValue({
+        jobId: 'saved-job-999',
+        setJob: mockSetJob,
+        clearJob: mockClearJob,
+        _hasHydrated: true,
+      });
+
+      vi.mocked(callApi).mockImplementation(async (url: string) => {
+        if (url === '/redteam/status') {
+          return {
+            ok: true,
+            json: async () => ({ hasRunningJob: false }),
+          } as Response;
+        }
+        if (url === '/eval/job/saved-job-999') {
+          return {
+            ok: true,
+            json: async () => ({
+              status: 'complete',
+              evalId: 'completed-eval-123',
+              logs: ['Done'],
+            }),
+          } as Response;
+        }
+        return { ok: true, json: async () => ({}) } as Response;
+      });
+
+      render(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      // Wait for recovery to complete
+      await waitFor(() => {
+        expect(callApi).toHaveBeenCalledWith('/eval/job/saved-job-999');
+      });
+
+      // Should clear job since it completed while away
+      expect(mockClearJob).toHaveBeenCalled();
+    });
+
+    it('should call setJob when starting a new job', async () => {
+      vi.mocked(callApi).mockImplementation(async (url: string, _options?: any) => {
+        if (url === '/redteam/status') {
+          return {
+            ok: true,
+            json: async () => ({ hasRunningJob: false }),
+          } as Response;
+        }
+        if (url === '/redteam/run') {
+          return {
+            ok: true,
+            json: async () => ({ id: 'new-job-id' }),
+          } as Response;
+        }
+        if (url.startsWith('/eval/job/')) {
+          return {
+            ok: true,
+            json: async () => ({
+              status: 'in-progress',
+              logs: ['Starting...'],
+            }),
+          } as Response;
+        }
+        return { ok: true, json: async () => ({}) } as Response;
+      });
+
+      vi.mocked(useEmailVerification).mockReturnValue({
+        checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
+      } as any);
+
+      render(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      // Wait for initial render
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /run now/i })).toBeInTheDocument();
+      });
+
+      // Click Run Now
+      fireEvent.click(screen.getByRole('button', { name: /run now/i }));
+
+      // Wait for job to start
+      await waitFor(() => {
+        expect(mockSetJob).toHaveBeenCalledWith('new-job-id');
+      });
+    });
+
+    it('should call clearJob when cancelling a job', async () => {
+      vi.mocked(callApi).mockImplementation(async (url: string, _options?: any) => {
+        if (url === '/redteam/status') {
+          return {
+            ok: true,
+            json: async () => ({ hasRunningJob: false }),
+          } as Response;
+        }
+        if (url === '/redteam/run') {
+          return {
+            ok: true,
+            json: async () => ({ id: 'job-to-cancel' }),
+          } as Response;
+        }
+        if (url === '/redteam/cancel') {
+          return {
+            ok: true,
+            json: async () => ({ success: true }),
+          } as Response;
+        }
+        if (url.startsWith('/eval/job/')) {
+          return {
+            ok: true,
+            json: async () => ({
+              status: 'in-progress',
+              logs: ['Running...'],
+            }),
+          } as Response;
+        }
+        return { ok: true, json: async () => ({}) } as Response;
+      });
+
+      vi.mocked(useEmailVerification).mockReturnValue({
+        checkEmailStatus: vi.fn().mockResolvedValue({ canProceed: true }),
+      } as any);
+
+      render(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      // Wait for initial render
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /run now/i })).toBeInTheDocument();
+      });
+
+      // Click Run Now
+      fireEvent.click(screen.getByRole('button', { name: /run now/i }));
+
+      // Wait for Cancel button to appear
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /cancel/i })).toBeInTheDocument();
+      });
+
+      // Click Cancel
+      fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
+
+      // Should call clearJob
+      await waitFor(() => {
+        expect(mockClearJob).toHaveBeenCalled();
+      });
+    });
+
+    it('should handle job recovery failure when server job returns 404', async () => {
+      vi.mocked(callApi).mockImplementation(async (url: string) => {
+        if (url === '/redteam/status') {
+          return {
+            ok: true,
+            json: async () => ({ hasRunningJob: true, jobId: 'missing-job-404' }),
+          } as Response;
+        }
+        if (url === '/eval/job/missing-job-404') {
+          return {
+            ok: false,
+            status: 404,
+            json: async () => ({ error: 'Job not found' }),
+          } as Response;
+        }
+        return { ok: true, json: async () => ({}) } as Response;
+      });
+
+      render(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      // Wait for recovery to attempt and clear job
+      await waitFor(() => {
+        expect(mockClearJob).toHaveBeenCalled();
+      });
+
+      // Run Now button should be enabled (not in running state)
+      expect(screen.getByRole('button', { name: /run now/i })).toBeEnabled();
+    });
+
+    it('should not attempt recovery until store is hydrated', async () => {
+      // Mock the store as not hydrated yet
+      vi.mocked(useRedteamJobStore).mockReturnValue({
+        jobId: 'saved-job-before-hydration',
+        setJob: mockSetJob,
+        clearJob: mockClearJob,
+        _hasHydrated: false,
+      });
+
+      vi.mocked(callApi).mockImplementation(async (url: string) => {
+        if (url === '/redteam/status') {
+          return {
+            ok: true,
+            json: async () => ({ hasRunningJob: false }),
+          } as Response;
+        }
+        return { ok: true, json: async () => ({}) } as Response;
+      });
+
+      render(
+        <Review
+          navigateToPlugins={vi.fn()}
+          navigateToStrategies={vi.fn()}
+          navigateToPurpose={vi.fn()}
+        />,
+      );
+
+      // Wait a moment - recovery should NOT be called yet because store isn't hydrated
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Should NOT have checked the saved job since we're not hydrated
+      expect(callApi).not.toHaveBeenCalledWith('/eval/job/saved-job-before-hydration');
     });
   });
 });

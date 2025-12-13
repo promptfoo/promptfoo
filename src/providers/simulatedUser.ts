@@ -296,6 +296,15 @@ export class SimulatedUser implements ApiProvider {
         '[SimulatedUser] Initial messages end with user message, getting agent response first',
       );
       agentResponse = await this.sendMessageToAgent(messages, context.originalProvider, context);
+
+      // Check for errors from agent response
+      if (agentResponse.error) {
+        return {
+          error: agentResponse.error,
+          tokenUsage,
+        };
+      }
+
       messages.push({ role: 'assistant', content: String(agentResponse.output ?? '') });
       accumulateResponseTokenUsage(tokenUsage, agentResponse);
     }
@@ -314,7 +323,8 @@ export class SimulatedUser implements ApiProvider {
         };
       }
 
-      const { messages: messagesToUser } = userResult;
+      const { messages: messagesToUser, tokenUsage: userTokenUsage } = userResult;
+      accumulateResponseTokenUsage(tokenUsage, { tokenUsage: userTokenUsage });
       const lastMessage = messagesToUser[messagesToUser.length - 1];
 
       // Check whether the judge has determined that the instruction goal is satisfied.
@@ -333,6 +343,14 @@ export class SimulatedUser implements ApiProvider {
         context.originalProvider,
         context,
       );
+
+      // Check for errors from agent response
+      if (agentResponse.error) {
+        return {
+          error: agentResponse.error,
+          tokenUsage,
+        };
+      }
 
       messages.push({ role: 'assistant', content: String(agentResponse.output ?? '') });
 

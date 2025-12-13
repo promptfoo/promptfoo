@@ -1,5 +1,5 @@
 import * as fs from 'fs';
-import type { CsvRow } from '../types';
+import type { CsvRow } from '../types/index';
 
 export async function parseXlsxFile(filePath: string): Promise<CsvRow[]> {
   try {
@@ -7,65 +7,95 @@ export async function parseXlsxFile(filePath: string): Promise<CsvRow[]> {
     // Supports syntax: file.xlsx#SheetName or file.xlsx#2 (1-based index)
     const [actualFilePath, sheetSpecifier] = filePath.split('#');
 
-    // Try to import xlsx first to give proper error if not installed
-    const xlsx = await import('xlsx');
-
     // Check if file exists before attempting to read it
     if (!fs.existsSync(actualFilePath)) {
       throw new Error(`File not found: ${actualFilePath}`);
     }
-    const workbook = xlsx.readFile(actualFilePath);
+
+    // Try to import read-excel-file first to give proper error if not installed
+    let readXlsxFile: typeof import('read-excel-file/node').default;
+    let readSheetNames: typeof import('read-excel-file/node').readSheetNames;
+    try {
+      const module = await import('read-excel-file/node');
+      readXlsxFile = module.default;
+      readSheetNames = module.readSheetNames;
+    } catch {
+      throw new Error(
+        'read-excel-file is not installed. Please install it with: npm install read-excel-file\n' +
+          'Note: read-excel-file is an optional peer dependency for reading Excel files.',
+      );
+    }
+
+    // Get all sheet names to validate and determine which sheet to use
+    const sheetNames = await readSheetNames(actualFilePath);
 
     // Validate that the workbook has at least one sheet
-    if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
+    if (!sheetNames || sheetNames.length === 0) {
       throw new Error('Excel file has no sheets');
     }
 
     // Determine which sheet to use
-    let sheetName: string;
+    let sheetOption: string | number;
 
     if (sheetSpecifier) {
       // Check if it's a numeric index (1-based)
       const sheetIndex = parseInt(sheetSpecifier, 10);
       if (isNaN(sheetIndex)) {
         // It's a sheet name
-        if (!workbook.SheetNames.includes(sheetSpecifier)) {
+        if (!sheetNames.includes(sheetSpecifier)) {
           throw new Error(
-            `Sheet "${sheetSpecifier}" not found. Available sheets: ${workbook.SheetNames.join(', ')}`,
+            `Sheet "${sheetSpecifier}" not found. Available sheets: ${sheetNames.join(', ')}`,
           );
         }
-        sheetName = sheetSpecifier;
+        sheetOption = sheetSpecifier;
       } else {
-        // Convert to 0-based index
-        const zeroBasedIndex = sheetIndex - 1;
-        if (zeroBasedIndex < 0 || zeroBasedIndex >= workbook.SheetNames.length) {
+        // Validate 1-based index
+        if (sheetIndex < 1 || sheetIndex > sheetNames.length) {
           throw new Error(
-            `Sheet index ${sheetIndex} is out of range. Available sheets: ${workbook.SheetNames.length} (1-${workbook.SheetNames.length})`,
+            `Sheet index ${sheetIndex} is out of range. Available sheets: ${sheetNames.length} (1-${sheetNames.length})`,
           );
         }
-        sheetName = workbook.SheetNames[zeroBasedIndex];
+        sheetOption = sheetIndex;
       }
     } else {
-      // Use the first sheet by default
-      sheetName = workbook.SheetNames[0];
+      // Use the first sheet by default (1-based index)
+      sheetOption = 1;
     }
 
-    const sheet = workbook.Sheets[sheetName];
+    // Get the sheet name for error messages
+    const sheetName = typeof sheetOption === 'number' ? sheetNames[sheetOption - 1] : sheetOption;
 
-    // Convert sheet to JSON and validate the result
-    const data = xlsx.utils.sheet_to_json<CsvRow>(sheet, { defval: '' });
+    // Read the sheet - returns array of arrays
+    const rows = await readXlsxFile(actualFilePath, { sheet: sheetOption });
 
     // Check if the sheet is empty
-    if (data.length === 0) {
+    if (rows.length === 0) {
       throw new Error(`Sheet "${sheetName}" is empty or contains no valid data rows`);
     }
 
+    // First row should be headers
+    const headers = rows[0].map((cell) => (cell != null ? String(cell) : ''));
+
     // Check if the first row has any headers
-    const firstRow = data[0];
-    const headers = Object.keys(firstRow);
-    if (headers.length === 0) {
+    if (headers.length === 0 || headers.every((h) => h === '')) {
       throw new Error(`Sheet "${sheetName}" has no valid column headers`);
     }
+
+    // Check if there's only headers with no data rows
+    if (rows.length === 1) {
+      throw new Error(`Sheet "${sheetName}" is empty or contains no valid data rows`);
+    }
+
+    // Convert rows to array of objects (similar to xlsx's sheet_to_json with defval: '')
+    const data: CsvRow[] = rows.slice(1).map((row) => {
+      const obj: CsvRow = {};
+      headers.forEach((header, index) => {
+        // Use empty string as default value (like xlsx's defval: '')
+        const cellValue = row[index];
+        obj[header] = cellValue != null ? String(cellValue) : '';
+      });
+      return obj;
+    });
 
     // Check for completely empty columns (all values are empty strings)
     const hasValidData = data.some((row) =>
@@ -81,11 +111,11 @@ export async function parseXlsxFile(filePath: string): Promise<CsvRow[]> {
     return data;
   } catch (error) {
     if (error instanceof Error) {
-      // Handle missing xlsx module
-      if (error.message.includes("Cannot find module 'xlsx'")) {
+      // Handle missing read-excel-file module
+      if (error.message.includes("Cannot find module 'read-excel-file")) {
         throw new Error(
-          'xlsx is not installed. Please install it with: npm install xlsx\n' +
-            'Note: xlsx is an optional peer dependency for reading Excel files.',
+          'read-excel-file is not installed. Please install it with: npm install read-excel-file\n' +
+            'Note: read-excel-file is an optional peer dependency for reading Excel files.',
         );
       }
 
@@ -97,6 +127,7 @@ export async function parseXlsxFile(filePath: string): Promise<CsvRow[]> {
         'Sheet "',
         'Sheet index',
         'contains only empty data',
+        'read-excel-file is not installed',
       ];
 
       if (knownErrors.some((prefix) => error.message.startsWith(prefix))) {

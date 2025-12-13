@@ -1,16 +1,20 @@
 import { fetchWithCache } from '../../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
-import { renderVarsInObject, maybeLoadToolsFromExternalFile } from '../../util';
+import { renderVarsInObject, maybeLoadToolsFromExternalFile } from '../../util/index';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { REQUEST_TIMEOUT_MS } from '../shared';
 import { AzureGenericProvider } from './generic';
 import { calculateAzureCost } from './util';
-import { ResponsesProcessor } from '../responses';
+import { ResponsesProcessor } from '../responses/index';
 import invariant from '../../util/invariant';
 
-import type { CallApiContextParams, CallApiOptionsParams, ProviderResponse } from '../../types';
+import type {
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderResponse,
+} from '../../types/index';
 import type { ReasoningEffort } from '../openai/types';
 
 // Azure Responses API uses the v1 preview API version
@@ -41,12 +45,37 @@ export class AzureResponsesProvider extends AzureGenericProvider {
     // TODO: Initialize MCP if needed
   }
 
+  /**
+   * Check if the current deployment is a reasoning model.
+   * Reasoning models use max_completion_tokens instead of max_tokens,
+   * don't support temperature, and accept reasoning_effort parameter.
+   */
   isReasoningModel(): boolean {
+    // Check explicit config flags first (match chat.ts behavior)
+    if (this.config.isReasoningModel || this.config.o1) {
+      return true;
+    }
+
+    const lowerName = this.deploymentName.toLowerCase();
     return (
-      this.deploymentName.startsWith('o1') ||
-      this.deploymentName.startsWith('o3') ||
-      this.deploymentName.startsWith('o4') ||
-      this.deploymentName.startsWith('gpt-5')
+      // OpenAI reasoning models
+      lowerName.startsWith('o1') ||
+      lowerName.includes('-o1') ||
+      lowerName.startsWith('o3') ||
+      lowerName.includes('-o3') ||
+      lowerName.startsWith('o4') ||
+      lowerName.includes('-o4') ||
+      // GPT-5 series (reasoning by default)
+      lowerName.startsWith('gpt-5') ||
+      lowerName.includes('-gpt-5') ||
+      // DeepSeek reasoning models
+      lowerName.includes('deepseek-r1') ||
+      lowerName.includes('deepseek_r1') ||
+      // Microsoft Phi reasoning models
+      lowerName.includes('phi-4-reasoning') ||
+      lowerName.includes('phi-4-mini-reasoning') ||
+      // xAI Grok reasoning models
+      (lowerName.includes('grok') && lowerName.includes('reasoning'))
     );
   }
 
@@ -54,11 +83,11 @@ export class AzureResponsesProvider extends AzureGenericProvider {
     return !this.isReasoningModel();
   }
 
-  getAzureResponsesBody(
+  async getAzureResponsesBody(
     prompt: string,
     context?: CallApiContextParams,
     _callApiOptions?: CallApiOptionsParams,
-  ): Record<string, any> {
+  ): Promise<Record<string, any>> {
     const config = {
       ...this.config,
       ...context?.prompt?.config,
@@ -126,6 +155,11 @@ export class AzureResponsesProvider extends AzureGenericProvider {
       textFormat = { format: { type: 'text' } };
     }
 
+    // Add verbosity for reasoning models if configured
+    if (isReasoningModel && config.verbosity) {
+      textFormat = { ...textFormat, verbosity: config.verbosity };
+    }
+
     // Azure Responses API uses 'model' field for deployment name
     const body = {
       model: this.deploymentName,
@@ -138,7 +172,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
         ? { top_p: config.top_p ?? getEnvFloat('OPENAI_TOP_P', 1) }
         : {}),
       ...(config.tools
-        ? { tools: maybeLoadToolsFromExternalFile(config.tools, context?.vars) }
+        ? { tools: await maybeLoadToolsFromExternalFile(config.tools, context?.vars) }
         : {}),
       ...(config.tool_choice ? { tool_choice: config.tool_choice } : {}),
       ...(config.max_tool_calls ? { max_tool_calls: config.max_tool_calls } : {}),
@@ -201,7 +235,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
       }
     }
 
-    const body = this.getAzureResponsesBody(prompt, context, callApiOptions);
+    const body = await this.getAzureResponsesBody(prompt, context, callApiOptions);
 
     // Calculate timeout for deep research models
     const isDeepResearchModel = this.deploymentName.includes('deep-research');
