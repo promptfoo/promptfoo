@@ -17,7 +17,7 @@ import type { Command } from 'commander';
 function getLogFiles(logDir: string): Array<{ name: string; path: string; mtime: Date }> {
   const logFiles = getLogFilesUtil(logDir);
   if (logFiles.length === 0 && fs.existsSync(logDir)) {
-    logger.error(`Error reading log directory`);
+    logger.error(`No log files found in directory: ${logDir}`);
   }
   return logFiles;
 }

@@ -14,7 +14,10 @@ export interface LogFileInfo {
 /**
  * Get all promptfoo log files from a directory, sorted by modification time (newest first)
  * @param logDir - Directory containing log files
- * @returns Array of log file information objects
+ * @returns Array of log file information objects. Returns empty array if:
+ *   - Directory doesn't exist
+ *   - Directory exists but has no matching log files
+ *   - An error occurs while reading the directory
  */
 export function getLogFiles(logDir: string): LogFileInfo[] {
   if (!fs.existsSync(logDir)) {
@@ -32,7 +35,7 @@ export function getLogFiles(logDir: string): LogFileInfo[] {
       }))
       .sort((a, b) => b.mtime.getTime() - a.mtime.getTime()); // Sort by newest first
   } catch (_error) {
-    // Return empty array on error - caller can handle logging
+    // Return empty array on error - caller should check if directory exists to distinguish errors
     return [];
   }
 }
