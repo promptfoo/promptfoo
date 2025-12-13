@@ -1506,7 +1506,6 @@ describe('doGenerateRedteam with external defaultTest', () => {
           {
             id: () => 'test-provider',
             callApi: vi.fn().mockResolvedValue({ output: 'test output' }),
-            cleanup: vi.fn().mockResolvedValue(undefined),
           },
         ],
         prompts: [],

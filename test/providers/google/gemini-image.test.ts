@@ -78,6 +78,7 @@ describe('GeminiImageProvider', () => {
         },
       },
       cached: false,
+      statusText: 'OK',
     });
 
     const result = await provider.callApi('Generate a picture of a cat');
@@ -158,7 +159,7 @@ describe('GeminiImageProvider', () => {
       };
 
       mockGetGoogleClient.mockResolvedValue({
-        client: mockClient,
+        client: mockClient as any,
         projectId: 'test-project',
       });
 
@@ -228,6 +229,7 @@ describe('GeminiImageProvider', () => {
           ],
         },
         cached: false,
+        statusText: 'OK',
       });
 
       await provider.callApi('Test prompt');
@@ -243,7 +245,7 @@ describe('GeminiImageProvider', () => {
       );
 
       const callArgs = mockFetchWithCache.mock.calls[0];
-      const body = JSON.parse(callArgs[1].body);
+      const body = JSON.parse(callArgs[1]!.body as string);
       expect(body.generationConfig.imageConfig).toEqual({
         aspectRatio: '16:9',
         imageSize: '2K',
@@ -278,12 +280,13 @@ describe('GeminiImageProvider', () => {
           ],
         },
         cached: false,
+        statusText: 'OK',
       });
 
       await provider.callApi('Test prompt');
 
       const callArgs = mockFetchWithCache.mock.calls[0];
-      const body = JSON.parse(callArgs[1].body);
+      const body = JSON.parse(callArgs[1]!.body as string);
       // Should only have aspectRatio, not imageSize
       expect(body.generationConfig.imageConfig).toEqual({
         aspectRatio: '16:9',
@@ -307,6 +310,7 @@ describe('GeminiImageProvider', () => {
           ],
         },
         cached: false,
+        statusText: 'OK',
       });
 
       const result = await provider.callApi('Test prompt');
@@ -326,6 +330,7 @@ describe('GeminiImageProvider', () => {
           },
         },
         cached: false,
+        statusText: 'OK',
       });
 
       const result = await provider.callApi('Test prompt');
@@ -338,6 +343,8 @@ describe('GeminiImageProvider', () => {
 
       mockFetchWithCache.mockResolvedValueOnce({
         status: 400,
+        statusText: 'Bad Request',
+        cached: false,
         data: {
           error: {
             message: 'Invalid request',
@@ -378,6 +385,7 @@ describe('GeminiImageProvider', () => {
           },
         },
         cached: false,
+        statusText: 'OK',
       });
 
       const result = await provider.callApi('Test prompt');
@@ -415,6 +423,7 @@ describe('GeminiImageProvider', () => {
           ],
         },
         cached: false,
+        statusText: 'OK',
       });
 
       const result = await provider.callApi('Test prompt');
@@ -445,6 +454,7 @@ describe('GeminiImageProvider', () => {
           ],
         },
         cached: false,
+        statusText: 'OK',
       });
 
       const result = await provider.callApi('Test prompt');
@@ -480,6 +490,7 @@ describe('GeminiImageProvider', () => {
           ],
         },
         cached: false,
+        statusText: 'OK',
       });
 
       const result = await provider.callApi('Test prompt');
@@ -523,6 +534,7 @@ describe('GeminiImageProvider', () => {
           ],
         },
         cached: false,
+        statusText: 'OK',
       });
 
       await provider.callApi('Test prompt');
@@ -554,6 +566,7 @@ describe('GeminiImageProvider', () => {
           ],
         },
         cached: false,
+        statusText: 'OK',
       });
 
       await provider.callApi('Test prompt');
@@ -583,6 +596,7 @@ describe('GeminiImageProvider', () => {
           ],
         },
         cached: false,
+        statusText: 'OK',
       });
 
       await provider.callApi('Test prompt');

@@ -507,7 +507,7 @@ describe('OpenAiImageProvider', () => {
       await provider.callApi('test prompt');
 
       const callArgs = vi.mocked(fetchWithCache).mock.calls[0];
-      const body = JSON.parse(callArgs[1].body as string);
+      const body = JSON.parse(callArgs[1]!.body as string);
 
       expect(body).not.toHaveProperty('response_format');
       expect(body.model).toBe('gpt-image-1');
@@ -678,7 +678,7 @@ describe('OpenAiImageProvider', () => {
       await provider.callApi('test prompt');
 
       const callArgs = vi.mocked(fetchWithCache).mock.calls[0];
-      const body = JSON.parse(callArgs[1].body as string);
+      const body = JSON.parse(callArgs[1]!.body as string);
 
       expect(body).not.toHaveProperty('response_format');
       expect(body.model).toBe('gpt-image-1-mini');
