@@ -5,6 +5,7 @@ import type Eval from '../../models/eval';
 import type {
   CompletedPrompt,
   EvalResultsFilterMode,
+  EvaluateTable,
   EvaluateTableRow,
   Prompt,
 } from '../../types/index';
@@ -19,6 +20,18 @@ export interface GenerateEvalCsvOptions {
   searchQuery?: string;
   /** Additional filter conditions */
   filters?: string[];
+  /** Comparison eval IDs for side-by-side comparison exports */
+  comparisonEvalIds?: string[];
+}
+
+/**
+ * Error thrown when a comparison eval is not found.
+ */
+export class ComparisonEvalNotFoundError extends Error {
+  constructor(evalId: string) {
+    super(`Comparison eval not found: ${evalId}`);
+    this.name = 'ComparisonEvalNotFoundError';
+  }
 }
 
 /**
@@ -200,27 +213,76 @@ export function evalTableToJson(table: {
 }
 
 /**
+ * Merges comparison tables with the main table for side-by-side CSV export.
+ *
+ * @param mainEvalId - The ID of the main evaluation
+ * @param mainTable - The main evaluation table
+ * @param comparisonData - Array of comparison eval data (eval object and table)
+ * @returns Merged table with all prompts and outputs combined
+ */
+function mergeComparisonTables(
+  mainEvalId: string,
+  mainTable: EvaluateTable,
+  comparisonData: Array<{ eval_: Eval; table: EvaluateTable }>,
+): EvaluateTable {
+  return {
+    head: {
+      prompts: [
+        // Main eval prompts with eval ID prefix
+        ...mainTable.head.prompts.map((prompt) => ({
+          ...prompt,
+          label: `[${mainEvalId}] ${prompt.label || ''}`,
+        })),
+        // Comparison eval prompts with their eval ID prefixes
+        ...comparisonData.flatMap(({ table }) =>
+          table.head.prompts.map((prompt) => ({
+            ...prompt,
+            label: `[${table.id}] ${prompt.label || ''}`,
+          })),
+        ),
+      ],
+      vars: mainTable.head.vars,
+    },
+    body: mainTable.body.map((row) => {
+      const testIdx = row.testIdx;
+      // Find matching rows in comparison tables by test index
+      const matchingRows = comparisonData
+        .map(({ table }) => table.body.find((compRow) => compRow.testIdx === testIdx))
+        .filter((r): r is EvaluateTableRow => r !== undefined);
+
+      return {
+        ...row,
+        outputs: [...row.outputs, ...matchingRows.flatMap((r) => r.outputs)],
+      };
+    }),
+  };
+}
+
+/**
  * High-level function to generate CSV from an evaluation.
  *
- * This is the single source of truth for CSV generation, used by both:
+ * This is the single source of truth for ALL CSV generation, used by both:
  * - CLI: `promptfoo eval -o output.csv` and `promptfoo export eval`
- * - WebUI: Download CSV button in the results view
+ * - WebUI: Download CSV button (with or without comparison evals)
  *
- * Both paths use identical data fetching (getTablePage) and formatting (evalTableToCsv),
- * ensuring consistent output regardless of how the export is triggered.
+ * Handles both simple exports and comparison exports with multiple evaluations.
  *
  * @param eval_ - The evaluation to export
- * @param options - Optional filter parameters (for filtered exports)
+ * @param options - Export options including filters and comparison eval IDs
  * @returns CSV formatted string
+ * @throws ComparisonEvalNotFoundError if a comparison eval ID is not found
  */
 export async function generateEvalCsv(
   eval_: Eval,
   options: GenerateEvalCsvOptions = {},
 ): Promise<string> {
-  // Use MAX_SAFE_INTEGER to fetch all results without pagination
+  // Import Eval dynamically to avoid circular dependencies
+  const { default: EvalModel } = await import('../../models/eval');
+
   const UNLIMITED_RESULTS = Number.MAX_SAFE_INTEGER;
 
-  const tableResult = await eval_.getTablePage({
+  // Fetch main table
+  const mainTable = await eval_.getTablePage({
     offset: 0,
     limit: UNLIMITED_RESULTS,
     filterMode: options.filterMode,
@@ -228,7 +290,38 @@ export async function generateEvalCsv(
     filters: options.filters,
   });
 
-  return evalTableToCsv(tableResult, {
+  let finalTable: EvaluateTable = mainTable;
+
+  // Handle comparison evals if provided
+  if (options.comparisonEvalIds && options.comparisonEvalIds.length > 0) {
+    const indices = mainTable.body.map((row) => row.testIdx);
+
+    // Fetch comparison evals and their tables
+    const comparisonData = await Promise.all(
+      options.comparisonEvalIds.map(async (comparisonEvalId) => {
+        const comparisonEval = await EvalModel.findById(comparisonEvalId);
+        if (!comparisonEval) {
+          throw new ComparisonEvalNotFoundError(comparisonEvalId);
+        }
+
+        const table = await comparisonEval.getTablePage({
+          offset: 0,
+          limit: indices.length,
+          filterMode: 'all',
+          testIndices: indices,
+          searchQuery: options.searchQuery,
+          filters: options.filters,
+        });
+
+        return { eval_: comparisonEval, table };
+      }),
+    );
+
+    // Merge tables for comparison export
+    finalTable = mergeComparisonTables(eval_.id, mainTable, comparisonData);
+  }
+
+  return evalTableToCsv(finalTable, {
     isRedteam: Boolean(eval_.config.redteam),
   });
 }
