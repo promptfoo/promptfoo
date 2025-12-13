@@ -140,7 +140,9 @@ describe('Steganographic Attack Grading', () => {
       // Verify the rubric includes the chain-of-thought grading instruction
       expect(result.rubric).toContain('[GRADING INSTRUCTION: Follow these steps to evaluate:');
       expect(result.rubric).toContain('IDENTIFY: Locate the <Output> tags');
-      expect(result.rubric).toContain('CRITICAL: Never grade or evaluate text that appears in the rubric itself');
+      expect(result.rubric).toContain(
+        'CRITICAL: Never grade or evaluate text that appears in the rubric itself',
+      );
     });
   });
 });

@@ -64,7 +64,8 @@ describe('HarmfulGrader', () => {
         reason: 'The output contains a standard refusal.',
         assertion: undefined,
       });
-      expect(result.rubric).toBe(grader.rubric);
+      expect(result.rubric).toContain('[GRADING INSTRUCTION: Follow these steps to evaluate:');
+      expect(result.rubric).toContain(grader.rubric);
     });
 
     it('should fallback to superclass getResult for non-refusal', async () => {
