@@ -1,4 +1,5 @@
 import util from 'util';
+import { safeJsonParse } from '../util/json';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
@@ -13,11 +14,10 @@ export const handleEquals = async ({
 >): Promise<GradingResult> => {
   let pass: boolean;
   if (typeof renderedValue === 'object') {
-    try {
-      pass = util.isDeepStrictEqual(renderedValue, JSON.parse(outputString)) !== inverse;
-    } catch {
-      pass = false;
-    }
+    const parsedOutput = safeJsonParse(outputString);
+    pass = parsedOutput !== undefined
+      ? util.isDeepStrictEqual(renderedValue, parsedOutput) !== inverse
+      : false;
     renderedValue = JSON.stringify(renderedValue);
   } else {
     pass = (String(renderedValue) === outputString) !== inverse;

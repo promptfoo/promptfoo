@@ -1,6 +1,6 @@
 import yaml from 'js-yaml';
 import invariant from '../util/invariant';
-import { extractJsonObjects, getAjv } from '../util/json';
+import { extractJsonObjects, getAjv, safeJsonParse } from '../util/json';
 import type { ValidateFunction } from 'ajv';
 
 import type { AssertionParams, GradingResult } from '../types/index';
@@ -12,14 +12,8 @@ export function handleIsJson({
   valueFromScript,
   assertion,
 }: AssertionParams): GradingResult {
-  let parsedJson;
-  let pass;
-  try {
-    parsedJson = JSON.parse(outputString);
-    pass = !inverse;
-  } catch {
-    pass = inverse;
-  }
+  const parsedJson = safeJsonParse(outputString);
+  let pass = parsedJson !== undefined ? !inverse : inverse;
 
   if (pass && renderedValue) {
     let validate: ValidateFunction;

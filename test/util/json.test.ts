@@ -9,6 +9,8 @@ import {
   isValidJson,
   orderKeys,
   resetAjv,
+  safeJsonParse,
+  safeJsonParseWithFallback,
   safeJsonStringify,
   summarizeEvaluateResultForLogging,
 } from '../../src/util/json';
@@ -87,6 +89,91 @@ describe('json utilities', () => {
       expect(isValidJson('["unclosed array"')).toBe(false);
       expect(isValidJson('{"key": value}')).toBe(false);
       expect(isValidJson('undefined')).toBe(false);
+    });
+  });
+
+  describe('safeJsonParse', () => {
+    it('parses valid JSON objects', () => {
+      expect(safeJsonParse('{"key": "value"}')).toEqual({ key: 'value' });
+      expect(safeJsonParse('{"nested": {"inner": "value"}}')).toEqual({ 
+        nested: { inner: 'value' } 
+      });
+    });
+
+    it('parses valid JSON arrays', () => {
+      expect(safeJsonParse('[1, 2, 3]')).toEqual([1, 2, 3]);
+      expect(safeJsonParse('[{"a": 1}, {"b": 2}]')).toEqual([{ a: 1 }, { b: 2 }]);
+    });
+
+    it('parses JSON primitives', () => {
+      expect(safeJsonParse('"string"')).toBe('string');
+      expect(safeJsonParse('123')).toBe(123);
+      expect(safeJsonParse('true')).toBe(true);
+      expect(safeJsonParse('false')).toBe(false);
+      expect(safeJsonParse('null')).toBe(null);
+    });
+
+    it('returns undefined for invalid JSON', () => {
+      expect(safeJsonParse('{')).toBeUndefined();
+      expect(safeJsonParse('["unclosed array"')).toBeUndefined();
+      expect(safeJsonParse('{"key": value}')).toBeUndefined();
+      expect(safeJsonParse('undefined')).toBeUndefined();
+      expect(safeJsonParse('not json')).toBeUndefined();
+    });
+
+    it('returns undefined for empty strings', () => {
+      expect(safeJsonParse('')).toBeUndefined();
+    });
+
+    it('handles complex nested structures', () => {
+      const complex = {
+        string: 'value',
+        number: 123,
+        boolean: true,
+        null: null,
+        array: [1, 'two', { three: 3 }],
+        nested: { a: 1, b: [2, 3] },
+      };
+      expect(safeJsonParse(JSON.stringify(complex))).toEqual(complex);
+    });
+
+    it('supports generic type parameter', () => {
+      interface MyType {
+        key: string;
+        value: number;
+      }
+      const result = safeJsonParse<MyType>('{"key": "test", "value": 42}');
+      expect(result).toEqual({ key: 'test', value: 42 });
+    });
+  });
+
+  describe('safeJsonParseWithFallback', () => {
+    it('parses valid JSON and returns the parsed value', () => {
+      expect(safeJsonParseWithFallback('{"key": "value"}', {})).toEqual({ key: 'value' });
+      expect(safeJsonParseWithFallback('[1, 2, 3]', [])).toEqual([1, 2, 3]);
+    });
+
+    it('returns fallback for invalid JSON', () => {
+      expect(safeJsonParseWithFallback('{', { default: true })).toEqual({ default: true });
+      expect(safeJsonParseWithFallback('invalid', null)).toBe(null);
+      expect(safeJsonParseWithFallback('undefined', 'fallback')).toBe('fallback');
+    });
+
+    it('returns fallback for empty strings', () => {
+      expect(safeJsonParseWithFallback('', { empty: true })).toEqual({ empty: true });
+    });
+
+    it('handles different fallback types', () => {
+      expect(safeJsonParseWithFallback('invalid', 'string fallback')).toBe('string fallback');
+      expect(safeJsonParseWithFallback('invalid', 42)).toBe(42);
+      expect(safeJsonParseWithFallback('invalid', [])).toEqual([]);
+      expect(safeJsonParseWithFallback('invalid', { key: 'value' })).toEqual({ key: 'value' });
+    });
+
+    it('preserves the original value if JSON is valid', () => {
+      const parsed = safeJsonParseWithFallback('{"a": 1}', { b: 2 });
+      expect(parsed).toEqual({ a: 1 });
+      expect(parsed).not.toEqual({ b: 2 });
     });
   });
 

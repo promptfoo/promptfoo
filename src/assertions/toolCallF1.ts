@@ -1,5 +1,6 @@
 import type { AssertionParams, GradingResult } from '../types/index';
 import invariant from '../util/invariant';
+import { safeJsonParse } from '../util/json';
 
 /**
  * Extracts tool names from various output formats.
@@ -23,15 +24,13 @@ function extractToolNames(output: unknown): Set<string> {
   // Handle string output - try to parse as JSON and recursively extract
   if (typeof output === 'string') {
     // First, try parsing the entire string as JSON
-    try {
-      const parsed = JSON.parse(output);
+    const parsed = safeJsonParse(output);
+    if (parsed !== undefined) {
       const parsedNames = extractToolNames(parsed);
       for (const name of parsedNames) {
         names.add(name);
       }
       return names;
-    } catch {
-      // Not valid JSON as a whole, continue to try line-by-line parsing
     }
 
     // Handle Anthropic-style output: text and JSON objects separated by newlines
@@ -40,14 +39,12 @@ function extractToolNames(output: unknown): Set<string> {
     for (const line of lines) {
       const trimmed = line.trim();
       if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
-        try {
-          const parsed = JSON.parse(trimmed);
-          const parsedNames = extractToolNames(parsed);
+        const lineParsed = safeJsonParse(trimmed);
+        if (lineParsed !== undefined) {
+          const parsedNames = extractToolNames(lineParsed);
           for (const name of parsedNames) {
             names.add(name);
           }
-        } catch {
-          // Not valid JSON, ignore this line
         }
       }
     }

@@ -2,6 +2,7 @@ import { runPythonCode } from '../python/wrapper';
 import { type GradingResult, isGradingResult } from '../types/index';
 import { mapSnakeCaseToCamelCase } from '../util/caseMapping';
 import invariant from '../util/invariant';
+import { safeJsonParse } from '../util/json';
 
 import type { AssertionParams } from '../types/index';
 
@@ -58,11 +59,9 @@ ${
       pass = false;
       score = 0.0;
     } else if (typeof result === 'string' && result.startsWith('{')) {
-      let parsed;
-      try {
-        parsed = JSON.parse(result);
-      } catch (err) {
-        throw new Error(`Invalid JSON: ${err} when parsing result: ${result}`);
+      const parsed = safeJsonParse(result);
+      if (parsed === undefined) {
+        throw new Error(`Invalid JSON when parsing result: ${result}`);
       }
       if (!isGradingResult(parsed)) {
         throw new Error(

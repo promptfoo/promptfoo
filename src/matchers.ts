@@ -33,7 +33,7 @@ import { getNunjucksEngineForFilePath, maybeLoadFromExternalFile } from './util/
 import { parseFileUrl } from './util/functions/loadFunction';
 import { isJavascriptFile } from './util/fileExtensions';
 import invariant from './util/invariant';
-import { extractFirstJsonObject, extractJsonObjects } from './util/json';
+import { extractFirstJsonObject, extractJsonObjects, safeJsonParseWithFallback } from './util/json';
 import { serializeContext } from './assertions/contextUtils';
 import { getNunjucksEngine } from './util/templates';
 import { accumulateTokenUsage } from './util/tokenUsageUtils';
@@ -537,10 +537,7 @@ export async function loadRubricPrompt(
 }
 
 function tryParse(content: string) {
-  try {
-    return JSON.parse(content);
-  } catch {}
-  return content;
+  return safeJsonParseWithFallback(content, content);
 }
 
 function splitIntoSentences(text: string) {

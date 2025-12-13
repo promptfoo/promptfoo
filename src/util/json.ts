@@ -36,6 +36,49 @@ export function isValidJson(str: string): boolean {
 }
 
 /**
+ * Safely parse a JSON string, returning undefined if parsing fails.
+ * 
+ * @param str - The string to parse as JSON
+ * @returns The parsed JSON value, or undefined if parsing fails
+ * 
+ * @example
+ * const result = safeJsonParse('{"key": "value"}');
+ * // Result: { key: 'value' }
+ * 
+ * const invalid = safeJsonParse('invalid json');
+ * // Result: undefined
+ */
+export function safeJsonParse<T = any>(str: string): T | undefined {
+  try {
+    return JSON.parse(str);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Safely parse a JSON string with a fallback value.
+ * 
+ * @param str - The string to parse as JSON
+ * @param fallback - The fallback value to return if parsing fails
+ * @returns The parsed JSON value, or the fallback value if parsing fails
+ * 
+ * @example
+ * const result = safeJsonParseWithFallback('{"key": "value"}', {});
+ * // Result: { key: 'value' }
+ * 
+ * const invalid = safeJsonParseWithFallback('invalid json', { default: true });
+ * // Result: { default: true }
+ */
+export function safeJsonParseWithFallback<T>(str: string, fallback: T): T {
+  try {
+    return JSON.parse(str);
+  } catch {
+    return fallback;
+  }
+}
+
+/**
  * Creates a truncated version of an object for safe JSON stringification.
  * Prevents memory issues by limiting string, array, and object sizes.
  *
