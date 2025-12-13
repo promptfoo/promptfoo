@@ -1321,7 +1321,6 @@ When signature authentication is enabled, the following variables are available 
 The HTTP provider automatically retries failed requests in the following scenarios:
 
 - Rate limiting (HTTP 429)
-- Server errors
 - Network failures
 
 By default, it will attempt up to 4 retries with exponential backoff. You can configure the maximum number of retries using the `maxRetries` option:
@@ -1332,6 +1331,14 @@ providers:
     config:
       url: https://api.example.com/v1/chat
       maxRetries: 2 # Override default of 4 retries
+```
+
+### Retrying Server Errors
+
+By default, 5xx server errors are not retried. To enable retries for 5xx responses:
+
+```bash
+PROMPTFOO_RETRY_5XX=true promptfoo eval
 ```
 
 ## Streaming Responses
@@ -1418,7 +1425,7 @@ Supported config options:
 | transformResponse | string \| Function      | Transforms the API response using a JavaScript expression (e.g., 'json.result'), function, or file path (e.g., 'file://parser.js'). Replaces the deprecated `responseParser` field. |
 | tokenEstimation   | object                  | Configuration for optional token usage estimation. See Token Estimation section above for details.                                                                                  |
 | maxRetries        | number                  | Maximum number of retry attempts for failed requests. Defaults to 4.                                                                                                                |
-| validateStatus    | Function                | A function that takes a status code and returns a boolean indicating if the response should be treated as successful. By default, accepts all status codes.                         |
+| validateStatus    | string \| Function      | A function or string expression that returns true if the status code should be treated as successful. By default, accepts all status codes.                                         |
 | signatureAuth     | object                  | Configuration for digital signature authentication. See Signature Auth Options below.                                                                                               |
 | tls               | object                  | Configuration for TLS/HTTPS connections including client certificates, CA certificates, and cipher settings. See TLS Configuration Options above.                                   |
 
@@ -1468,7 +1475,7 @@ The HTTP provider throws errors for:
 - Invalid request configurations
 - Status codes that fail the configured validation (if `validateStatus` is set)
 
-By default, all response status codes are accepted. You can customize this using the `validateStatus` option:
+By default, all response status codes are accepted. This accommodates APIs that return valid responses with non-2xx codes (common with guardrails and content filtering). You can customize this using the `validateStatus` option:
 
 ```yaml
 providers:
