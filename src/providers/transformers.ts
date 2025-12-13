@@ -127,7 +127,7 @@ interface TransformersTextGenerationOptions extends TransformersBaseOptions {
   returnFullText?: boolean;
 }
 
-// Type for Transformers.js pipeline (using any to avoid requiring the package at compile time)
+// Type for Transformers.js pipeline result
 type Pipeline = {
   (input: string | string[], options?: Record<string, unknown>): Promise<unknown>;
   dispose?: () => Promise<void>;
@@ -419,7 +419,7 @@ export class TransformersEmbeddingProvider implements ApiProvider {
  * @example
  * ```yaml
  * providers:
- *   - id: transformers:text-generation:onnx-community/Qwen2.5-0.5B-Instruct
+ *   - id: transformers:text-generation:onnx-community/Qwen3-0.6B-ONNX
  *     config:
  *       dtype: q4
  *       maxNewTokens: 256

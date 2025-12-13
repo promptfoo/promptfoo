@@ -46,7 +46,7 @@ Popular text generation models:
 
 - `Xenova/gpt2` - Small GPT-2 model for testing
 - `onnx-community/Qwen3-0.6B-ONNX` - Latest Qwen3 with thinking capabilities (~600MB)
-- `onnx-community/Llama-3.2-1B-Instruct` - Small Llama 3.2
+- `onnx-community/Llama-3.2-1B-Instruct-ONNX` - Small Llama 3.2
 
 :::note
 
@@ -60,12 +60,12 @@ Text generation models run on CPU by default and are best suited for testing and
 
 ```yaml
 providers:
-  - id: transformers:feature-extraction:BAAI/bge-small-en-v1.5
+  - id: transformers:feature-extraction:Xenova/bge-small-en-v1.5
     config:
       # Prefix required for BGE, E5 models
       prefix: 'query: '
 
-      # Pooling strategy: 'mean' (default), 'cls', 'none', 'last_token'
+      # Pooling strategy: 'mean' (default), 'cls', 'first_token', 'eos', 'last_token', 'none'
       pooling: mean
 
       # L2 normalize embeddings (default: true)
@@ -127,10 +127,14 @@ Example with BGE model:
 
 ```yaml
 providers:
-  - id: transformers:feature-extraction:BAAI/bge-small-en-v1.5
+  - id: transformers:feature-extraction:Xenova/bge-small-en-v1.5
     config:
       prefix: 'query: '
 ```
+
+:::tip
+You can also use `transformers:embeddings:<model>` as an alias for `transformers:feature-extraction:<model>`.
+:::
 
 ## Using as a Grading Provider
 
