@@ -5,16 +5,41 @@ import logger from '../logger';
 import { getDbSignalPath } from './index';
 
 /**
- * Updates the signal file with the current timestamp.
+ * Updates the signal file with the current timestamp and optional eval ID.
  * This is used to notify clients that there are new data available.
+ * @param evalId - Optional eval ID that triggered the update
  */
-export function updateSignalFile(): void {
+export function updateSignalFile(evalId?: string): void {
   const filePath = getDbSignalPath();
   try {
     const now = new Date();
-    fs.writeFileSync(filePath, now.toISOString());
+    // Format: evalId:timestamp (evalId is optional)
+    const content = evalId ? `${evalId}:${now.toISOString()}` : now.toISOString();
+    fs.writeFileSync(filePath, content);
   } catch (err) {
     logger.warn(`Failed to write database signal file: ${err}`);
+  }
+}
+
+/**
+ * Reads the signal file and returns the eval ID if present.
+ * @returns The eval ID from the signal file, or undefined if not present
+ */
+export function readSignalEvalId(): string | undefined {
+  const filePath = getDbSignalPath();
+  try {
+    const content = fs.readFileSync(filePath, 'utf8').trim();
+    // Format: evalId:timestamp or just timestamp
+    if (content.includes(':')) {
+      const evalId = content.split(':')[0];
+      // Basic validation: eval IDs are typically UUIDs or formatted IDs
+      if (evalId && evalId.length > 8) {
+        return evalId;
+      }
+    }
+    return undefined;
+  } catch {
+    return undefined;
   }
 }
 

@@ -1,5 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 
+import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import MagicWandIcon from '@mui/icons-material/AutoFixHigh';
 import Alert from '@mui/material/Alert';
 import Autocomplete from '@mui/material/Autocomplete';
@@ -57,6 +58,8 @@ interface TestCaseDialogProps {
   currentTurn: number;
   maxTurns: number;
   availablePlugins: string[];
+  // Whether to allow changing the plugin (only on strategies page)
+  allowPluginChange?: boolean;
 }
 
 export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
@@ -73,6 +76,7 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
   currentTurn,
   maxTurns,
   availablePlugins,
+  allowPluginChange = false,
 }) => {
   const pluginName = plugin?.id ?? '';
   const pluginDisplayName =
@@ -80,25 +84,9 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
     categoryAliases[pluginName as Plugin] ||
     pluginName;
 
-  // State for the selected plugin
-  const [selectedPlugin, setSelectedPlugin] = useState<string>(pluginName);
-
   // Popover state for plugin selector
   const [pluginPopoverAnchor, setPluginPopoverAnchor] = useState<HTMLElement | null>(null);
   const isPluginPopoverOpen = Boolean(pluginPopoverAnchor);
-
-  // Sync selected plugin with the current plugin when it changes
-  useEffect(() => {
-    if (pluginName) {
-      setSelectedPlugin(pluginName);
-    }
-  }, [pluginName]);
-
-  // Get display name for the selected plugin
-  const selectedPluginDisplayName =
-    displayNameOverrides[selectedPlugin as Plugin] ||
-    categoryAliases[selectedPlugin as Plugin] ||
-    selectedPlugin;
 
   const strategyName = strategy?.id ?? '';
   const strategyDisplayName = displayNameOverrides[strategyName as Strategy] || strategyName;
@@ -194,68 +182,80 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
         >
           Test Case
         </DialogTitle>
-        <Box sx={{ display: 'flex', gap: 1 }}>
-          <Chip
-            label={`Strategy: ${strategyDisplayName}${maxTurns > 1 ? ` (${maxTurns} turns)` : ''}`}
-            data-testid="strategy-chip"
-          />
-          <Tooltip title="Click to change plugin">
+        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+          {allowPluginChange && (
             <Chip
-              label={`Plugin: ${selectedPluginDisplayName}`}
-              data-testid="plugin-chip"
-              onClick={(e) => setPluginPopoverAnchor(e.currentTarget)}
-              clickable
-              color={selectedPlugin !== pluginName ? 'primary' : 'default'}
-              sx={{ cursor: 'pointer' }}
+              label={`Strategy: ${strategyDisplayName}${maxTurns > 1 ? ` (${maxTurns} turns)` : ''}`}
+              data-testid="strategy-chip"
             />
-          </Tooltip>
-          <Popover
-            open={isPluginPopoverOpen}
-            anchorEl={pluginPopoverAnchor}
-            onClose={() => setPluginPopoverAnchor(null)}
-            anchorOrigin={{
-              vertical: 'bottom',
-              horizontal: 'left',
-            }}
-            transformOrigin={{
-              vertical: 'top',
-              horizontal: 'left',
-            }}
-            sx={{ zIndex: 10001 }}
-            slotProps={{
-              paper: {
-                sx: { overflow: 'visible' },
-              },
-            }}
-          >
-            <Box sx={{ p: 2, minWidth: 250 }}>
-              <Autocomplete
-                size="small"
-                value={selectedPlugin}
-                onChange={(_, newValue) => {
-                  if (newValue) {
-                    setSelectedPlugin(newValue);
-                    setPluginPopoverAnchor(null);
+          )}
+          {allowPluginChange ? (
+            <>
+              <Tooltip title="Click to change plugin">
+                <Chip
+                  label={
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                      Plugin: {pluginDisplayName}
+                      <ArrowDropDownIcon sx={{ fontSize: '1.125rem', ml: 0.25 }} />
+                    </Box>
                   }
+                  data-testid="plugin-chip"
+                  onClick={(e) => setPluginPopoverAnchor(e.currentTarget)}
+                  clickable
+                  sx={{ cursor: 'pointer' }}
+                />
+              </Tooltip>
+              <Popover
+                open={isPluginPopoverOpen}
+                anchorEl={pluginPopoverAnchor}
+                onClose={() => setPluginPopoverAnchor(null)}
+                anchorOrigin={{
+                  vertical: 'bottom',
+                  horizontal: 'left',
                 }}
-                options={availablePlugins}
-                getOptionLabel={(option) =>
-                  (displayNameOverrides as Record<string, string>)[option] ||
-                  (categoryAliases as Record<string, string>)[option] ||
-                  option
-                }
-                disableClearable
+                transformOrigin={{
+                  vertical: 'top',
+                  horizontal: 'left',
+                }}
+                sx={{ zIndex: 10001 }}
                 slotProps={{
-                  popper: {
-                    disablePortal: true,
+                  paper: {
+                    sx: { overflow: 'visible' },
                   },
                 }}
-                renderInput={(params) => (
-                  <TextField {...params} variant="outlined" size="small" label="Select Plugin" />
-                )}
-              />
-            </Box>
-          </Popover>
+              >
+                <Box sx={{ p: 2, minWidth: 250 }}>
+                  <Autocomplete
+                    size="small"
+                    value={pluginName}
+                    onChange={(_, newValue) => {
+                      if (newValue && newValue !== pluginName) {
+                        setPluginPopoverAnchor(null);
+                        onRegenerate(newValue);
+                      }
+                    }}
+                    options={availablePlugins}
+                    getOptionLabel={(option) =>
+                      (displayNameOverrides as Record<string, string>)[option] ||
+                      (categoryAliases as Record<string, string>)[option] ||
+                      option
+                    }
+                    disableClearable
+                    slotProps={{
+                      popper: {
+                        disablePortal: true,
+                      },
+                    }}
+                    renderInput={(params) => (
+                      <TextField {...params} variant="outlined" size="small" label="Select Plugin" />
+                    )}
+                  />
+                </Box>
+              </Popover>
+            </>
+          ) : (
+            <Chip label={`Plugin: ${pluginDisplayName}`} data-testid="plugin-chip" />
+          )}
         </Box>
       </Box>
       <DialogContent>
@@ -313,7 +313,7 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
             </>
           )}
           <Button
-            onClick={() => onRegenerate(selectedPlugin)}
+            onClick={() => onRegenerate()}
             variant={canAddAdditionalTurns ? 'outlined' : 'contained'}
             loading={isGenerating || isRunningTest}
           >
