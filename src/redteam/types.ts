@@ -284,15 +284,49 @@ export interface SavedRedteamConfig {
 }
 
 /**
+ * Media data (audio or image) for redteam history entries
+ */
+export interface RedteamMediaData {
+  data: string;
+  format: string;
+}
+
+/**
+ * Single entry in redteam conversation history
+ */
+export interface RedteamHistoryEntry {
+  prompt: string;
+  output: string;
+  /** Audio data for the prompt (when using audio transforms) */
+  promptAudio?: RedteamMediaData;
+  /** Image data for the prompt (when using image transforms) */
+  promptImage?: RedteamMediaData;
+  /** Audio data from the target response */
+  outputAudio?: RedteamMediaData;
+}
+
+/**
  * Base metadata interface shared by all redteam providers
  */
 export interface BaseRedteamMetadata {
   redteamFinalPrompt?: string;
   messages: Record<string, any>[];
   stopReason: string;
-  redteamHistory?: { prompt: string; output: string }[];
+  redteamHistory?: RedteamHistoryEntry[];
   sessionIds?: string[];
   sessionId?: string;
+}
+
+/**
+ * Configuration for audio grading in voice-based red team evaluations
+ */
+export interface AudioGradingConfig {
+  /** Whether to enable audio-based grading */
+  enabled?: boolean;
+  /** Model to use for audio grading */
+  model?: string;
+  /** Custom grading prompt */
+  prompt?: string;
 }
 
 /**

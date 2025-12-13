@@ -770,7 +770,7 @@ class Evaluator {
       if (!testSuite.defaultTest) {
         testSuite.defaultTest = {};
       }
-      if (!testSuite.defaultTest.assert) {
+      if (typeof testSuite.defaultTest !== 'string' && !testSuite.defaultTest.assert) {
         testSuite.defaultTest.assert = [];
       }
     }
