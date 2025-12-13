@@ -203,6 +203,91 @@ export async function resolveProvider(
 }
 
 /**
+ * Helper function to load provider configs from a file path without instantiating them.
+ * Returns the raw ProviderOptions with all fields (including `prompts`) intact.
+ */
+function loadProviderConfigsFromFile(filePath: string, basePath?: string): ProviderOptions[] {
+  const relativePath = filePath.slice('file://'.length);
+  const modulePath = path.isAbsolute(relativePath)
+    ? relativePath
+    : path.join(basePath || process.cwd(), relativePath);
+
+  const rawContent = yaml.load(fs.readFileSync(modulePath, 'utf8'));
+  const fileContent = maybeLoadConfigFromExternalFile(rawContent) as
+    | ProviderOptions
+    | ProviderOptions[];
+  invariant(fileContent, `Provider config ${relativePath} is undefined`);
+
+  return [fileContent].flat() as ProviderOptions[];
+}
+
+/**
+ * Resolves raw provider configurations, loading file:// references.
+ * Returns ProviderOptions[] with all fields intact (including `prompts`).
+ * Does NOT instantiate providers - only resolves config.
+ *
+ * This is used to build the provider-prompt map before evaluation,
+ * ensuring that `prompts` filters from external files are respected.
+ */
+export function resolveProviderConfigs(
+  providerPaths: TestSuiteConfig['providers'],
+  options: { basePath?: string } = {},
+): ProviderOptions[] {
+  const { basePath } = options;
+
+  if (typeof providerPaths === 'string') {
+    if (
+      providerPaths.startsWith('file://') &&
+      (providerPaths.endsWith('.yaml') ||
+        providerPaths.endsWith('.yml') ||
+        providerPaths.endsWith('.json'))
+    ) {
+      return loadProviderConfigsFromFile(providerPaths, basePath);
+    }
+    return [{ id: providerPaths }];
+  }
+
+  if (typeof providerPaths === 'function') {
+    const label = (providerPaths as { label?: string }).label;
+    return [{ id: label ?? 'custom-function' }];
+  }
+
+  if (!Array.isArray(providerPaths)) {
+    return [];
+  }
+
+  const results: ProviderOptions[] = [];
+
+  for (let idx = 0; idx < providerPaths.length; idx++) {
+    const provider = providerPaths[idx];
+
+    if (typeof provider === 'string') {
+      if (
+        provider.startsWith('file://') &&
+        (provider.endsWith('.yaml') || provider.endsWith('.yml') || provider.endsWith('.json'))
+      ) {
+        results.push(...loadProviderConfigsFromFile(provider, basePath));
+      } else {
+        results.push({ id: provider });
+      }
+    } else if (typeof provider === 'function') {
+      const label = (provider as { label?: string }).label;
+      results.push({ id: label ?? `custom-function-${idx}` });
+    } else if ((provider as ProviderOptions).id) {
+      // ProviderOptions object - keep as-is
+      results.push(provider as ProviderOptions);
+    } else {
+      // ProviderOptionsMap: { "provider-id": { ... } }
+      const id = Object.keys(provider)[0];
+      const providerObject = (provider as ProviderOptionsMap)[id];
+      results.push({ ...providerObject, id: providerObject.id || id });
+    }
+  }
+
+  return results;
+}
+
+/**
  * Helper function to load providers from a file path.
  * This can handle both single provider and multiple providers in a file.
  */

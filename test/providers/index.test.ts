@@ -19,7 +19,11 @@ import {
   HuggingfaceTextClassificationProvider,
   HuggingfaceTextGenerationProvider,
 } from '../../src/providers/huggingface';
-import { loadApiProvider, loadApiProviders } from '../../src/providers/index';
+import {
+  loadApiProvider,
+  loadApiProviders,
+  resolveProviderConfigs,
+} from '../../src/providers/index';
 import { LlamaProvider } from '../../src/providers/llama';
 import {
   OllamaChatProvider,
@@ -1328,5 +1332,236 @@ describe('resolveProvider', () => {
 
     expect(result).toBeDefined();
     expect(typeof result.id).toBe('function');
+  });
+});
+
+describe('resolveProviderConfigs', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should resolve string provider to ProviderOptions with id', () => {
+    const result = resolveProviderConfigs(['openai:gpt-4']);
+
+    expect(result).toEqual([{ id: 'openai:gpt-4' }]);
+  });
+
+  it('should pass through ProviderOptions objects unchanged', () => {
+    const providerOptions = {
+      id: 'openai:gpt-4',
+      prompts: ['prompt1', 'prompt2'],
+      config: { temperature: 0.7 },
+    };
+
+    const result = resolveProviderConfigs([providerOptions]);
+
+    expect(result).toEqual([providerOptions]);
+  });
+
+  it('should handle ProviderOptionsMap format', () => {
+    const result = resolveProviderConfigs([
+      {
+        'openai:gpt-4': {
+          prompts: ['prompt1'],
+          label: 'GPT-4 Model',
+        },
+      },
+    ]);
+
+    expect(result).toEqual([
+      {
+        id: 'openai:gpt-4',
+        prompts: ['prompt1'],
+        label: 'GPT-4 Model',
+      },
+    ]);
+  });
+
+  it('should handle ProviderOptionsMap with explicit id', () => {
+    const result = resolveProviderConfigs([
+      {
+        'openai:gpt-4': {
+          id: 'custom-id',
+          prompts: ['prompt1'],
+        },
+      },
+    ]);
+
+    expect(result).toEqual([
+      {
+        id: 'custom-id',
+        prompts: ['prompt1'],
+      },
+    ]);
+  });
+
+  it('should handle function providers', () => {
+    const providerFn = (() => Promise.resolve({ output: 'test' })) as ProviderFunction;
+
+    const result = resolveProviderConfigs([providerFn]);
+
+    expect(result).toEqual([{ id: 'custom-function-0' }]);
+  });
+
+  it('should handle function providers with label', () => {
+    const providerFn = (() => Promise.resolve({ output: 'test' })) as ProviderFunction;
+    (providerFn as any).label = 'My Custom Function';
+
+    const result = resolveProviderConfigs([providerFn]);
+
+    expect(result).toEqual([{ id: 'My Custom Function' }]);
+  });
+
+  it('should resolve file:// YAML references and preserve prompts field', () => {
+    const yamlContent = `
+id: ollama:phi3
+label: Phi3 Model
+prompts:
+  - phi3_prompt
+config:
+  temperature: 0.5
+`;
+    mockFsReadFileSync.mockReturnValue(yamlContent);
+
+    const basePath = path.join(path.sep, 'test', 'path');
+    const result = resolveProviderConfigs(['file://./providers/phi3.yaml'], {
+      basePath,
+    });
+
+    expect(mockFsReadFileSync).toHaveBeenCalledWith(
+      path.join(basePath, 'providers', 'phi3.yaml'),
+      'utf8',
+    );
+    expect(result).toEqual([
+      {
+        id: 'ollama:phi3',
+        label: 'Phi3 Model',
+        prompts: ['phi3_prompt'],
+        config: { temperature: 0.5 },
+      },
+    ]);
+  });
+
+  it('should resolve file:// with multiple providers in single file', () => {
+    const yamlContent = `
+- id: ollama:phi3
+  prompts:
+    - phi3_prompt
+- id: ollama:gemma
+  prompts:
+    - gemma_prompt
+`;
+    mockFsReadFileSync.mockReturnValue(yamlContent);
+
+    const basePath = path.join(path.sep, 'test', 'path');
+    const result = resolveProviderConfigs(['file://./providers.yaml'], {
+      basePath,
+    });
+
+    expect(result).toHaveLength(2);
+    expect(result[0]).toEqual({ id: 'ollama:phi3', prompts: ['phi3_prompt'] });
+    expect(result[1]).toEqual({ id: 'ollama:gemma', prompts: ['gemma_prompt'] });
+  });
+
+  it('should handle mixed provider types', () => {
+    const yamlContent = `
+id: ollama:phi3
+prompts:
+  - phi3_prompt
+`;
+    mockFsReadFileSync.mockReturnValue(yamlContent);
+
+    const basePath = path.join(path.sep, 'test');
+    const result = resolveProviderConfigs(
+      [
+        'openai:gpt-4',
+        { id: 'anthropic:claude-3', prompts: ['claude_prompt'] },
+        'file://./phi3.yaml',
+      ],
+      { basePath },
+    );
+
+    expect(result).toHaveLength(3);
+    expect(result[0]).toEqual({ id: 'openai:gpt-4' });
+    expect(result[1]).toEqual({ id: 'anthropic:claude-3', prompts: ['claude_prompt'] });
+    expect(result[2]).toEqual({ id: 'ollama:phi3', prompts: ['phi3_prompt'] });
+  });
+
+  it('should handle single string provider (not array)', () => {
+    const result = resolveProviderConfigs('openai:gpt-4');
+
+    expect(result).toEqual([{ id: 'openai:gpt-4' }]);
+  });
+
+  it('should handle single file:// string provider (not array)', () => {
+    const yamlContent = `
+id: ollama:phi3
+prompts:
+  - phi3_prompt
+`;
+    mockFsReadFileSync.mockReturnValue(yamlContent);
+
+    const basePath = path.join(path.sep, 'test');
+    const result = resolveProviderConfigs('file://./phi3.yaml', { basePath });
+
+    expect(result).toEqual([{ id: 'ollama:phi3', prompts: ['phi3_prompt'] }]);
+  });
+
+  it('should handle single function provider (not array)', () => {
+    const providerFn = (() => Promise.resolve({ output: 'test' })) as ProviderFunction;
+
+    const result = resolveProviderConfigs(providerFn);
+
+    expect(result).toEqual([{ id: 'custom-function' }]);
+  });
+
+  it('should return empty array for invalid input', () => {
+    const result = resolveProviderConfigs({} as any);
+
+    expect(result).toEqual([]);
+  });
+
+  it('should handle absolute file paths', () => {
+    const yamlContent = `
+id: ollama:phi3
+prompts:
+  - phi3_prompt
+`;
+    mockFsReadFileSync.mockReturnValue(yamlContent);
+
+    const absolutePath = path.join(path.sep, 'absolute', 'path', 'provider.yaml');
+    const result = resolveProviderConfigs([`file://${absolutePath}`]);
+
+    expect(mockFsReadFileSync).toHaveBeenCalledWith(absolutePath, 'utf8');
+    expect(result).toEqual([{ id: 'ollama:phi3', prompts: ['phi3_prompt'] }]);
+  });
+
+  it('should handle .yml extension', () => {
+    const yamlContent = `
+id: ollama:phi3
+prompts:
+  - phi3_prompt
+`;
+    mockFsReadFileSync.mockReturnValue(yamlContent);
+
+    const basePath = path.join(path.sep, 'test');
+    const result = resolveProviderConfigs(['file://./provider.yml'], { basePath });
+
+    expect(mockFsReadFileSync).toHaveBeenCalledWith(path.join(basePath, 'provider.yml'), 'utf8');
+    expect(result).toEqual([{ id: 'ollama:phi3', prompts: ['phi3_prompt'] }]);
+  });
+
+  it('should handle .json extension', () => {
+    const jsonContent = JSON.stringify({
+      id: 'openai:gpt-4',
+      prompts: ['gpt_prompt'],
+    });
+    mockFsReadFileSync.mockReturnValue(jsonContent);
+
+    const basePath = path.join(path.sep, 'test');
+    const result = resolveProviderConfigs(['file://./provider.json'], { basePath });
+
+    expect(mockFsReadFileSync).toHaveBeenCalledWith(path.join(basePath, 'provider.json'), 'utf8');
+    expect(result).toEqual([{ id: 'openai:gpt-4', prompts: ['gpt_prompt'] }]);
   });
 });
