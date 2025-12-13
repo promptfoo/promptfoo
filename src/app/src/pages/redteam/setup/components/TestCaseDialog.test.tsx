@@ -234,8 +234,8 @@ describe('TestCaseDialog', () => {
   const defaultProps = {
     open: true,
     onClose: vi.fn(),
-    plugin: { id: 'harmful:hate', config: {}, isStatic: false },
-    strategy: { id: 'basic', config: {}, isStatic: false },
+    plugin: { id: 'harmful:hate' as const, config: {}, isStatic: false },
+    strategy: { id: 'basic' as const, config: {}, isStatic: false },
     isGenerating: false,
     generatedTestCases: [{ prompt: 'Test prompt', context: 'Test context' }],
     targetResponses: [],
