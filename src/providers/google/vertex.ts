@@ -5,9 +5,9 @@ import cliState from '../../cliState';
 import { getEnvString } from '../../envars';
 import { importModule } from '../../esm';
 import logger from '../../logger';
-import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util/index';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { isJavascriptFile } from '../../util/fileExtensions';
+import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util/index';
 import { isValidJson } from '../../util/json';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToGoogle } from '../mcp/transform';
@@ -23,6 +23,7 @@ import {
   resolveProjectId,
 } from './util';
 
+import type { EnvOverrides } from '../../types/env';
 import type {
   ApiEmbeddingProvider,
   ApiProvider,
@@ -32,7 +33,6 @@ import type {
   ProviderResponse,
   TokenUsage,
 } from '../../types/index';
-import type { EnvOverrides } from '../../types/env';
 import type { ClaudeRequest, ClaudeResponse, CompletionOptions } from './types';
 import type {
   GeminiApiResponse,
@@ -268,6 +268,7 @@ export class VertexChatProvider extends VertexGenericProvider {
         total: data.usage.input_tokens + data.usage.output_tokens || 0,
         prompt: data.usage.input_tokens || 0,
         completion: data.usage.output_tokens || 0,
+        numRequests: 1,
       };
 
       const response = {
@@ -397,9 +398,14 @@ export class VertexChatProvider extends VertexGenericProvider {
       try {
         const client = await this.getClientWithCredentials();
         const projectId = await this.getProjectId();
+        // Default to non-streaming (generateContent) since:
+        // 1. Model Armor floor settings only work with non-streaming endpoint
+        // 2. Promptfoo collects full responses for evaluation anyway
+        // Set streaming: true to use streamGenerateContent if needed
+        const endpoint = config.streaming === true ? 'streamGenerateContent' : 'generateContent';
         const url = `https://${this.getApiHost()}/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/${this.getPublisher()}/models/${
           this.modelName
-        }:streamGenerateContent`;
+        }:${endpoint}`;
         const res = await client.request({
           url,
           method: 'POST',
@@ -419,7 +425,7 @@ export class VertexChatProvider extends VertexGenericProvider {
           const code = errorDetails.code;
           const message = errorDetails.message;
           const status = errorDetails.status;
-          logger.debug(`Gemini API error:\n${JSON.stringify(errorDetails)}`);
+          logger.error(`Gemini API error:\n${JSON.stringify(errorDetails)}`);
           return {
             error: `API call error: Status ${status}, Code ${code}, Message:\n\n${message}`,
           };
@@ -431,14 +437,17 @@ export class VertexChatProvider extends VertexGenericProvider {
       }
 
       try {
-        const dataWithError = data as GeminiErrorResponse[];
+        // Normalize response: non-streaming returns single object, streaming returns array
+        const normalizedData = Array.isArray(data) ? data : [data];
+
+        const dataWithError = normalizedData as GeminiErrorResponse[];
         const error = dataWithError[0]?.error;
         if (error) {
           return {
             error: `Error ${error.code}: ${error.message}`,
           };
         }
-        const dataWithResponse = data as GeminiResponseData[];
+        const dataWithResponse = normalizedData as GeminiResponseData[];
         let output;
         for (const datum of dataWithResponse) {
           // Check for blockReason first (before getCandidate) since blocked responses have no candidates
@@ -463,26 +472,13 @@ export class VertexChatProvider extends VertexGenericProvider {
               reason: blockReasonMessage,
             };
 
-            if (cliState.config?.redteam) {
-              // Refusals are not errors during redteams, they're actually successes.
-              return {
-                output: blockReasonMessage,
-                tokenUsage,
-                guardrails,
-                metadata: {
-                  modelArmor: isModelArmor
-                    ? {
-                        blockReason: datum.promptFeedback.blockReason,
-                        ...(datum.promptFeedback.blockReasonMessage && {
-                          blockReasonMessage: datum.promptFeedback.blockReasonMessage,
-                        }),
-                      }
-                    : undefined,
-                },
-              };
-            }
+            // Return as output (not error) so guardrails assertions can evaluate the block:
+            // - In redteam mode: refusals are successes (model correctly refused harmful content)
+            // - In non-redteam mode: allows guardrails/not-guardrails assertions to run
+            // The guardrails object (flagged=true) indicates the block, metadata has details
             return {
-              error: blockReasonMessage,
+              output: blockReasonMessage,
+              tokenUsage,
               guardrails,
               metadata: {
                 modelArmor: isModelArmor
@@ -498,8 +494,16 @@ export class VertexChatProvider extends VertexGenericProvider {
           }
 
           const candidate = getCandidate(datum);
-          if (candidate.finishReason && candidate.finishReason === 'SAFETY') {
-            const finishReason = 'Content was blocked due to safety settings.';
+          const safetyFinishReasons = [
+            'SAFETY',
+            'PROHIBITED_CONTENT',
+            'RECITATION',
+            'BLOCKLIST',
+            'SPII',
+            'IMAGE_SAFETY',
+          ];
+          if (candidate.finishReason && safetyFinishReasons.includes(candidate.finishReason)) {
+            const finishReason = `Content was blocked due to safety settings with finish reason: ${candidate.finishReason}.`;
             const tokenUsage = {
               total: datum.usageMetadata?.totalTokenCount || 0,
               prompt: datum.usageMetadata?.promptTokenCount || 0,
@@ -517,7 +521,28 @@ export class VertexChatProvider extends VertexGenericProvider {
               return { output: finishReason, tokenUsage, guardrails };
             }
             return { error: finishReason, guardrails };
+          } else if (candidate.finishReason && candidate.finishReason === 'MAX_TOKENS') {
+            // Concatenate the text generated so far before returning
+            if (candidate.content?.parts) {
+              output = mergeParts(output, formatCandidateContents(candidate));
+            }
+            const outputTokens = datum.usageMetadata?.candidatesTokenCount || 0;
+            const outputStr = typeof output === 'string' ? output : JSON.stringify(output);
+            const truncatedOutput =
+              outputStr && outputStr.length > 500
+                ? `${outputStr.slice(0, 500)}... (truncated)`
+                : outputStr || '';
+            logger.error(`Gemini API: MAX_TOKENS reached`, {
+              finishReason: candidate.finishReason,
+              outputTokens,
+              totalTokens: datum.usageMetadata?.totalTokenCount || 0,
+            });
+            return {
+              // Prompt and thinking tokens are not included in the token limit
+              error: `Gemini API error due to reaching maximum token limit. ${outputTokens} output tokens used. Output generated: ${truncatedOutput}`,
+            };
           } else if (candidate.finishReason && candidate.finishReason !== 'STOP') {
+            logger.error(`Gemini API error due to finish reason: ${candidate.finishReason}.`);
             // e.g. MALFORMED_FUNCTION_CALL
             return {
               error: `Finish reason ${candidate.finishReason}: ${JSON.stringify(data)}`,
@@ -859,6 +884,7 @@ export class VertexChatProvider extends VertexGenericProvider {
         total: data.usage?.total_tokens || 0,
         prompt: data.usage?.prompt_tokens || 0,
         completion: data.usage?.completion_tokens || 0,
+        numRequests: 1,
       };
 
       const response = {
@@ -1065,6 +1091,7 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
         embedding,
         tokenUsage: {
           total: tokenCount,
+          numRequests: 1,
         },
       };
     } catch (err) {

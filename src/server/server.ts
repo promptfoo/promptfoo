@@ -341,8 +341,17 @@ export async function startServer(
         resolve();
       }, SHUTDOWN_TIMEOUT_MS);
 
-      // Close Socket.io connections first, then the HTTP server
+      // Close Socket.io connections (this also closes the underlying HTTP server)
       io.close(() => {
+        // Socket.io's close() already closes the HTTP server, so check if it's still listening
+        // before attempting to close it again to avoid "Server is not running" errors
+        if (!httpServer.listening) {
+          clearTimeout(forceCloseTimeout);
+          logger.info('Server closed');
+          resolve();
+          return;
+        }
+
         httpServer.close((err) => {
           clearTimeout(forceCloseTimeout);
           if (err) {

@@ -3,7 +3,7 @@ import * as os from 'os';
 import * as path from 'path';
 
 import Database from 'better-sqlite3';
-import { vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const ORIGINAL_ENV = { ...process.env };
 
