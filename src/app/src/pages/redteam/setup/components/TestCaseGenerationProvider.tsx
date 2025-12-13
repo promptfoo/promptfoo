@@ -451,7 +451,7 @@ export const TestCaseGenerationProvider: React.FC<{
         throw error;
       }
     },
-    [redTeamConfig.applicationDefinition.purpose, recordEvent],
+    [redTeamConfig.applicationDefinition?.purpose, recordEvent],
   );
 
   /**

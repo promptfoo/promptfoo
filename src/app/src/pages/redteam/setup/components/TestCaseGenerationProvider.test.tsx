@@ -202,7 +202,9 @@ describe('TestCaseGenerationProvider', () => {
       expect(testCaseDialogComponent).toBeInTheDocument();
 
       // Strategy chip should NOT be shown when allowPluginChange is false (plugins page)
-      expect(within(testCaseDialogComponent).queryByTestId('strategy-chip')).not.toBeInTheDocument();
+      expect(
+        within(testCaseDialogComponent).queryByTestId('strategy-chip'),
+      ).not.toBeInTheDocument();
 
       // The hate speech plugin's display name should be rendered in the dialog
       const pluginChipComponent = within(testCaseDialogComponent).getByTestId('plugin-chip');
@@ -653,7 +655,9 @@ describe('TestCaseGenerationProvider', () => {
       await waitFor(() => expect(callApi).toHaveBeenCalled());
 
       // Verify that count=1 was used (no batch for multi-turn)
-      const generateCall = callApiMock.mock.calls.find((call) => call[0] === '/redteam/generate-test');
+      const generateCall = callApiMock.mock.calls.find(
+        (call) => call[0] === '/redteam/generate-test',
+      );
       expect(generateCall).toBeDefined();
       const requestBody = JSON.parse(generateCall![1]?.body as string);
       expect(requestBody.count).toBe(1);

@@ -292,9 +292,7 @@ export async function startServer(
   const watcher = setupSignalWatcher(async () => {
     // Try to get the specific eval that was updated from the signal file
     const signalEvalId = readSignalEvalId();
-    const updatedEval = signalEvalId
-      ? await Eval.findById(signalEvalId)
-      : await Eval.latest();
+    const updatedEval = signalEvalId ? await Eval.findById(signalEvalId) : await Eval.latest();
 
     const results = await updatedEval?.getResultsCount();
 
