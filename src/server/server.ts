@@ -208,7 +208,7 @@ export function createApp() {
     invariant(eval_, 'Eval not found');
 
     try {
-      const url = await createShareableUrl(eval_, true);
+      const url = await createShareableUrl(eval_, { showAuth: true });
       logger.debug(`Generated share URL for eval ${id}: ${stripAuthFromUrl(url || '')}`);
       res.json({ url });
     } catch (error) {

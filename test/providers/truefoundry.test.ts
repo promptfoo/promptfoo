@@ -365,10 +365,10 @@ describe('TrueFoundry', () => {
           guardrails: {
             flagged: false,
           },
+          // Cached responses don't count as new requests, so numRequests is not included
           tokenUsage: {
             total: 10,
             cached: 10,
-            numRequests: 1,
           },
         });
         expect(cachedResult.latencyMs).toBeGreaterThanOrEqual(0);

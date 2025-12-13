@@ -37,7 +37,7 @@ export async function createAndDisplayShareableUrl(
   evalRecord: Eval,
   showAuth: boolean,
 ): Promise<string | null> {
-  const url = await createShareableUrl(evalRecord, showAuth);
+  const url = await createShareableUrl(evalRecord, { showAuth });
 
   if (url) {
     logger.info(`View results: ${chalk.greenBright.bold(url)}`);

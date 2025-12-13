@@ -151,6 +151,7 @@ describe('Snowflake Cortex Provider', () => {
         cached: false,
         cost: undefined,
         finishReason: 'stop',
+        latencyMs: undefined,
       });
     });
 
