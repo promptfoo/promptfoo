@@ -28,8 +28,49 @@ export const REDTEAM_METADATA_KEYS_TO_CSV_COLUMN_NAMES = {
 const REDTEAM_METADATA_COLUMNS = Object.values(REDTEAM_METADATA_KEYS_TO_CSV_COLUMN_NAMES);
 
 /**
- * Generates CSV data from evaluation table data
- * Includes grader reason, comment, and conversation columns similar to client-side implementation
+ * Get the status string for an output
+ */
+function getOutputStatus(output: EvaluateTableRow['outputs'][0]): 'PASS' | 'FAIL' | 'ERROR' {
+  if (output.pass) {
+    return 'PASS';
+  }
+  return output.failureReason === ResultFailureReason.ASSERT ? 'FAIL' : 'ERROR';
+}
+
+/**
+ * Format named scores for CSV output.
+ * Returns empty string if no named scores, otherwise JSON string.
+ */
+function formatNamedScores(namedScores: Record<string, number> | undefined): string {
+  if (!namedScores || Object.keys(namedScores).length === 0) {
+    return '';
+  }
+  // Format as JSON for parseability, with scores rounded to 2 decimal places
+  const rounded: Record<string, number> = {};
+  for (const [key, value] of Object.entries(namedScores)) {
+    if (typeof value === 'number' && !Number.isNaN(value)) {
+      rounded[key] = Number(value.toFixed(2));
+    }
+  }
+  if (Object.keys(rounded).length === 0) {
+    return '';
+  }
+  return JSON.stringify(rounded);
+}
+
+/**
+ * Generates CSV data from evaluation table data.
+ *
+ * Column structure per prompt:
+ * - Output: Pure LLM output text (no pass/fail prefix)
+ * - Status: PASS | FAIL | ERROR
+ * - Score: Numeric score (e.g., "1.00")
+ * - Named Scores: JSON object with per-assertion scores (e.g., {"clarity": 0.90, "accuracy": 0.85})
+ * - Grader Reason: Explanation from the grader
+ * - Comment: Additional grader comment
+ *
+ * This function is the single source of truth for CSV generation,
+ * used by both the WebUI export and CLI export.
  *
  * @param table - The evaluation table data
  * @param options - Export options
@@ -45,7 +86,7 @@ export function evalTableToCsv(
   // Check if any rows have descriptions
   const hasDescriptions = table.body.some((row) => row.test.description);
 
-  // Create headers with additional columns for grader reason, comment, and conversation
+  // Create headers with columns for output, status, score, named scores, grader reason, and comment
   const headers: string[] = [
     ...(hasDescriptions ? ['Description'] : []),
     ...table.head.vars,
@@ -53,7 +94,8 @@ export function evalTableToCsv(
       // Handle both Prompt and CompletedPrompt types
       const provider = (prompt as CompletedPrompt).provider || '';
       const label = provider ? `[${provider}] ${prompt.label}` : prompt.label;
-      return [label, 'Grader Reason', 'Comment'];
+      // Output column uses the prompt label, followed by metadata columns
+      return [label, 'Status', 'Score', 'Named Scores', 'Grader Reason', 'Comment'];
     }),
   ];
 
@@ -65,26 +107,32 @@ export function evalTableToCsv(
   // Compute stable key ordering for redteam metadata columns
   const redteamKeys = Object.keys(REDTEAM_METADATA_KEYS_TO_CSV_COLUMN_NAMES);
 
-  // Process body rows with pass/fail prefixes and conversation data
+  // Process body rows with separate columns for output, status, score, named scores, etc.
   table.body.forEach((row) => {
     const rowValues = [
       ...(hasDescriptions ? [row.test.description || ''] : []),
       ...row.vars,
       ...row.outputs.flatMap((output) => {
         if (!output) {
-          return ['', '', ''];
+          return ['', '', '', '', '', ''];
         }
 
+        const status = getOutputStatus(output);
+        const score = output.score?.toFixed(2) ?? '';
+        const namedScores = formatNamedScores(output.namedScores);
+
         return [
-          // Add pass/fail/error prefix to text
-          (output.pass
-            ? '[PASS] '
-            : output.failureReason === ResultFailureReason.ASSERT
-              ? '[FAIL] '
-              : '[ERROR] ') + (output.text || ''),
-          // Add grader reason
+          // Pure LLM output text (no prefix)
+          output.text || '',
+          // Status as separate column
+          status,
+          // Score as separate column
+          score,
+          // Named scores as JSON
+          namedScores,
+          // Grader reason
           output.gradingResult?.reason || '',
-          // Add comment
+          // Comment
           output.gradingResult?.comment || '',
         ];
       }),
