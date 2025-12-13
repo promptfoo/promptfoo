@@ -75,7 +75,13 @@ describe('caseMapping utilities', () => {
       const result = mapSnakeCaseToCamelCase({
         component_results: [null, undefined, 'string', 123, { pass_: true }],
       });
-      expect(result.componentResults).toEqual([null, undefined, 'string', 123, { pass_: true, pass: true }]);
+      expect(result.componentResults).toEqual([
+        null,
+        undefined,
+        'string',
+        123,
+        { pass_: true, pass: true },
+      ]);
     });
 
     it('should not mutate the original object', () => {
