@@ -47,6 +47,11 @@ export function isValidJson(str: string): boolean {
  *
  * const invalid = safeJsonParse('invalid json');
  * // Result: undefined
+ *
+ * @remarks
+ * The generic type parameter T is for documentation and type inference only.
+ * No runtime type validation is performed. If you need runtime type validation,
+ * consider using a schema validator like Zod or Ajv after parsing.
  */
 export function safeJsonParse<T = any>(str: string): T | undefined {
   try {
@@ -69,6 +74,11 @@ export function safeJsonParse<T = any>(str: string): T | undefined {
  *
  * const invalid = safeJsonParseWithFallback('invalid json', { default: true });
  * // Result: { default: true }
+ *
+ * @remarks
+ * The generic type parameter T is for documentation and type inference only.
+ * No runtime type validation is performed. If you need runtime type validation,
+ * consider using a schema validator like Zod or Ajv after parsing.
  */
 export function safeJsonParseWithFallback<T>(str: string, fallback: T): T {
   try {
