@@ -356,6 +356,9 @@ describe('util', () => {
             returning: vi.fn().mockResolvedValue([]),
           }),
         }),
+        // Required for getTablePage -> queryTestIndicesOptimized
+        all: vi.fn().mockReturnValue([]),
+        get: vi.fn().mockReturnValue({ count: 0 }),
       });
       const outputPath = 'output.csv';
       const results: EvaluateResult[] = [
