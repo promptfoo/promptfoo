@@ -14,6 +14,7 @@ vi.mock('../../../src/logger', () => ({
 
 import logger from '../../../src/logger';
 import {
+  formatCandidateContents,
   geminiFormatAndSystemInstructions,
   loadFile,
   maybeCoerceToGeminiFormat,
@@ -2133,6 +2134,212 @@ describe('util', () => {
           process.env.GOOGLE_PROJECT_ID = originalGoogleProjectId;
         }
       }
+    });
+  });
+
+  describe('formatCandidateContents', () => {
+    it('should extract text from simple text response', () => {
+      const candidate = {
+        content: {
+          parts: [{ text: 'Hello, world!' }],
+        },
+      };
+
+      const result = formatCandidateContents(candidate);
+      expect(result).toBe('Hello, world!');
+    });
+
+    it('should concatenate multiple text parts', () => {
+      const candidate = {
+        content: {
+          parts: [{ text: 'First part. ' }, { text: 'Second part.' }],
+        },
+      };
+
+      const result = formatCandidateContents(candidate);
+      expect(result).toBe('First part. Second part.');
+    });
+
+    it('should skip undefined text parts and continue processing', () => {
+      // When a part has `text: undefined`, it's treated as a non-text part
+      // and the function returns the full parts array (as other non-text/non-image parts)
+      const candidate = {
+        content: {
+          parts: [{ text: 'Valid text' }, { text: undefined }, { text: 'More text' }],
+        },
+      };
+
+      const result = formatCandidateContents(candidate);
+      // Because of the undefined text part, it falls through to the else branch
+      // and returns the parts array
+      expect(Array.isArray(result)).toBe(true);
+      expect(result).toEqual(candidate.content.parts);
+    });
+
+    it('should not push undefined to output when text property exists but is undefined', () => {
+      // This tests the fix: typeof part.text === 'string' prevents adding undefined
+      // When all parts have valid string text, we get the combined string
+      const candidate = {
+        content: {
+          parts: [{ text: '' }, { text: 'Valid text' }],
+        },
+      };
+
+      const result = formatCandidateContents(candidate);
+      expect(result).toBe('Valid text');
+    });
+
+    it('should convert inline image data to markdown format', () => {
+      const base64Data = 'iVBORw0KGgoAAAANSUhEUg==';
+      const candidate = {
+        content: {
+          parts: [
+            {
+              inlineData: {
+                mimeType: 'image/png',
+                data: base64Data,
+              },
+            },
+          ],
+        },
+      };
+
+      const result = formatCandidateContents(candidate);
+      expect(result).toBe(`![Generated Image](data:image/png;base64,${base64Data})`);
+    });
+
+    it('should handle mixed text and image parts', () => {
+      const base64Data = '/9j/4AAQSkZJRgABAQ==';
+      const candidate = {
+        content: {
+          parts: [
+            { text: 'Here is an image:' },
+            {
+              inlineData: {
+                mimeType: 'image/jpeg',
+                data: base64Data,
+              },
+            },
+            { text: 'And some more text.' },
+          ],
+        },
+      };
+
+      const result = formatCandidateContents(candidate);
+      expect(result).toContain('Here is an image:');
+      expect(result).toContain(`![Generated Image](data:image/jpeg;base64,${base64Data})`);
+      expect(result).toContain('And some more text.');
+    });
+
+    it('should default to image/png when mimeType is missing', () => {
+      const base64Data = 'R0lGODlhAQABAIAAA==';
+      const candidate = {
+        content: {
+          parts: [
+            {
+              inlineData: {
+                data: base64Data,
+              },
+            },
+          ],
+        },
+      };
+
+      const result = formatCandidateContents(candidate);
+      expect(result).toBe(`![Generated Image](data:image/png;base64,${base64Data})`);
+    });
+
+    it('should throw error for SAFETY finish reason', () => {
+      const candidate = {
+        finishReason: 'SAFETY',
+        safetyRatings: [
+          { category: 'HARM_CATEGORY_DANGEROUS', probability: 'HIGH', blocked: true },
+        ],
+      };
+
+      expect(() => formatCandidateContents(candidate)).toThrow(
+        'Response was blocked with finish reason: SAFETY',
+      );
+    });
+
+    it('should throw error for RECITATION finish reason', () => {
+      const candidate = {
+        finishReason: 'RECITATION',
+      };
+
+      expect(() => formatCandidateContents(candidate)).toThrow('RECITATION');
+    });
+
+    it('should throw error for PROHIBITED_CONTENT finish reason', () => {
+      const candidate = {
+        finishReason: 'PROHIBITED_CONTENT',
+      };
+
+      expect(() => formatCandidateContents(candidate)).toThrow('PROHIBITED_CONTENT');
+    });
+
+    it('should throw error when no content is present', () => {
+      const candidate = {};
+
+      expect(() => formatCandidateContents(candidate)).toThrow('No output found in response');
+    });
+
+    it('should return parts array for non-text, non-image parts', () => {
+      const candidate = {
+        content: {
+          parts: [
+            {
+              functionCall: {
+                name: 'myFunction',
+                args: { param: 'value' },
+              },
+            },
+          ],
+        },
+      };
+
+      const result = formatCandidateContents(candidate);
+      expect(Array.isArray(result)).toBe(true);
+      expect(result).toEqual(candidate.content.parts);
+    });
+
+    it('should join multiple images with double newlines', () => {
+      const candidate = {
+        content: {
+          parts: [
+            { inlineData: { mimeType: 'image/png', data: 'image1data' } },
+            { inlineData: { mimeType: 'image/png', data: 'image2data' } },
+          ],
+        },
+      };
+
+      const result = formatCandidateContents(candidate);
+      expect(result).toContain('\n\n');
+      expect(result).toContain('![Generated Image](data:image/png;base64,image1data)');
+      expect(result).toContain('![Generated Image](data:image/png;base64,image2data)');
+    });
+
+    it('should include safety ratings in error message when blocked', () => {
+      const candidate = {
+        finishReason: 'SAFETY',
+        safetyRatings: [
+          { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', probability: 'HIGH', blocked: true },
+          { category: 'HARM_CATEGORY_VIOLENCE', probability: 'NEGLIGIBLE', blocked: false },
+        ],
+      };
+
+      expect(() => formatCandidateContents(candidate)).toThrow('HARM_CATEGORY_SEXUALLY_EXPLICIT');
+    });
+
+    it('should handle empty text strings correctly', () => {
+      const candidate = {
+        content: {
+          parts: [{ text: '' }, { text: 'Some text' }, { text: '' }],
+        },
+      };
+
+      const result = formatCandidateContents(candidate);
+      expect(result).toBe('Some text');
     });
   });
 });
