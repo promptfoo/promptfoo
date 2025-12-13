@@ -3,7 +3,6 @@ import dedent from 'dedent';
 import { z } from 'zod';
 import cliState from '../../cliState';
 import { CLOUD_PROVIDER_PREFIX } from '../../constants';
-import { DEFAULT_MAX_CONCURRENCY } from '../../constants';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { setupEnv } from '../../util/index';
@@ -36,11 +35,8 @@ export function redteamRunCommand(program: Command) {
       'Path to output file for generated tests. Defaults to redteam.yaml in the same directory as the configuration file.',
     )
     .option('--no-cache', 'Do not read or write results to disk cache', false)
-    .option(
-      '-j, --max-concurrency <number>',
-      'Maximum number of concurrent API calls',
-      (val) => Number.parseInt(val, 10),
-      DEFAULT_MAX_CONCURRENCY,
+    .option('-j, --max-concurrency <number>', 'Maximum number of concurrent API calls', (val) =>
+      Number.parseInt(val, 10),
     )
     .option('--delay <number>', 'Delay in milliseconds between API calls', (val) =>
       Number.parseInt(val, 10),
@@ -55,9 +51,6 @@ export function redteamRunCommand(program: Command) {
     .option('-t, --target <id>', 'Cloud provider target ID to run the scan on')
     .action(async (opts: RedteamRunOptions) => {
       setupEnv(opts.envPath);
-      telemetry.record('command_used', {
-        name: 'redteam run',
-      });
       telemetry.record('redteam run', {});
 
       if (opts.config && UUID_REGEX.test(opts.config)) {

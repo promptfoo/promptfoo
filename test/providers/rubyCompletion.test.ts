@@ -320,6 +320,7 @@ describe('RubyProvider', () => {
         tokenUsage: {
           cached: 25,
           total: 25,
+          numRequests: 1,
         },
       });
     });
@@ -398,6 +399,7 @@ describe('RubyProvider', () => {
       expect(result.tokenUsage).toEqual({
         cached: 0,
         total: 0,
+        numRequests: 1,
       });
       expect(result.cached).toBe(true);
     });

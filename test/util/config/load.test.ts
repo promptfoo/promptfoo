@@ -197,7 +197,7 @@ beforeEach(() => {
 });
 
 describe('combineConfigs', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
     vi.restoreAllMocks();
     vi.spyOn(process, 'cwd').mockReturnValue('/mock/cwd');
@@ -210,6 +210,10 @@ describe('combineConfigs', () => {
             : pathOrGlob;
       return [filePart];
     });
+
+    // Reset path.parse to use actual implementation (other tests may have mocked it)
+    const actualPath = await vi.importActual<typeof import('path')>('path');
+    vi.mocked(path.parse).mockImplementation((filePath: string) => actualPath.parse(filePath));
   });
 
   afterEach(() => {
@@ -1353,13 +1357,17 @@ describe('dereferenceConfig', () => {
 describe('resolveConfigs', () => {
   let mockExit: MockInstance;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
     vi.restoreAllMocks();
     vi.spyOn(process, 'cwd').mockReturnValue('/mock/cwd');
     mockExit = vi.spyOn(process, 'exit').mockImplementation((code?: string | number | null) => {
       throw new Error(`Process exited with code ${code}`);
     });
+
+    // Reset path.parse to use actual implementation (other tests may have mocked it)
+    const actualPath = await vi.importActual<typeof import('path')>('path');
+    vi.mocked(path.parse).mockImplementation((filePath: string) => actualPath.parse(filePath));
   });
 
   afterEach(() => {
@@ -1639,9 +1647,17 @@ describe('resolveConfigs', () => {
 });
 
 describe('readConfig', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
     vi.restoreAllMocks();
+
+    // Reset path.parse to use actual implementation (other tests may have mocked it)
+    const actualPath = await vi.importActual<typeof import('path')>('path');
+    vi.mocked(path.parse).mockImplementation((filePath: string) => actualPath.parse(filePath));
+
+    // Reset mockDereference to pass-through (other tests may have queued mockResolvedValueOnce)
+    mockDereference.mockReset();
+    mockDereference.mockImplementation((config: object) => Promise.resolve(config));
   });
 
   afterEach(() => {
@@ -1832,12 +1848,16 @@ describe('readConfig', () => {
 });
 
 describe('resolveConfigs with external defaultTest', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
     vi.restoreAllMocks();
     cliState.basePath = '/mock/base';
     // Default implementation: return the input unchanged
     mockDereference.mockImplementation((config: object) => Promise.resolve(config));
+
+    // Reset path.parse to use actual implementation (other tests may have mocked it)
+    const actualPath = await vi.importActual<typeof import('path')>('path');
+    vi.mocked(path.parse).mockImplementation((filePath: string) => actualPath.parse(filePath));
   });
 
   it('should resolve defaultTest from external file in resolveConfigs', async () => {
@@ -1857,6 +1877,7 @@ describe('resolveConfigs with external defaultTest', () => {
     vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(fileConfig));
     vi.mocked(maybeLoadFromExternalFile).mockResolvedValue(externalDefaultTest);
     vi.mocked(readTests).mockResolvedValue([{ vars: { test: 'value' } }]);
+    vi.mocked(globSync).mockReturnValue(['config.json']);
 
     const result = await resolveConfigs({ config: ['config.json'] }, {});
 

@@ -1,22 +1,26 @@
 # This GitHub Action builds the Docker image Promptfoo,
 # runs the Docker container, performs a health check to ensure the application
 # is running correctly, and then publishes the image to GitHub Container Registry
-# if all checks pass. This action is triggered on release creation, workflow dispatch,
-# pull requests to main that modify the Dockerfile, and pushes to main.
+# if all checks pass. This action is triggered by the release-please workflow,
+# workflow dispatch, pull requests to main that modify the Dockerfile, and pushes to main.
 
 name: Test and Publish Multi-arch Docker Image
 run-name: |
-  ${{ github.event_name == 'release' && 'Release' ||
+  ${{ inputs.tag_name && 'Release' ||
       github.event_name == 'workflow_dispatch' && 'Manual' ||
       github.event_name == 'pull_request' && 'PR' ||
       'Push' }}
-  Docker build for ${{ github.ref_name }}
+  Docker build for ${{ inputs.tag_name || github.ref_name }}
   ${{ github.event_name == 'pull_request' && format('(PR #{0})', github.event.number) || '' }}
   by @${{ github.actor }}
 
 on:
-  release:
-    types: [created]
+  workflow_call:
+    inputs:
+      tag_name:
+        description: 'The release tag name (e.g., 0.120.0)'
+        required: true
+        type: string
   workflow_dispatch:
   pull_request:
     branches:
@@ -76,7 +80,7 @@ jobs:
           tags: local-test-image:latest
           platforms: linux/amd64
           build-args: |
-            BUILD_VERSION=${{ github.ref_name }}
+            BUILD_VERSION=${{ inputs.tag_name || github.ref_name }}
             BUILD_DATE=${{ github.event_name == 'pull_request' && github.event.pull_request.updated_at || github.event.head_commit.timestamp || github.event.repository.updated_at }}
             GIT_SHA=${{ github.sha }}
 
@@ -116,6 +120,16 @@ jobs:
             echo -e "\nHealth check failed after multiple attempts" >&2
             exit 1
           fi
+
+      - name: Use Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
+      - name: Upgrade npm
+        run: npm install -g npm@latest
 
       - name: run promptfoo eval
         id: eval
@@ -199,7 +213,7 @@ jobs:
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            BUILD_VERSION=${{ github.ref_name }}
+            BUILD_VERSION=${{ inputs.tag_name || github.ref_name }}
             BUILD_DATE=${{ github.event_name == 'pull_request' && github.event.pull_request.updated_at || github.event.head_commit.timestamp || github.event.repository.updated_at }}
             GIT_SHA=${{ github.sha }}
           outputs: |
@@ -251,7 +265,8 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=sha
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' || github.event_name == 'release' }}
+            type=raw,value=${{ inputs.tag_name }},enable=${{ inputs.tag_name != '' }}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' || inputs.tag_name != '' }}
 
       - name: Create manifest list and push
         working-directory: ${{ runner.temp }}/digests
@@ -262,4 +277,4 @@ jobs:
 
       - name: Inspect image
         run: |
-          docker buildx imagetools inspect "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}"
+          docker buildx imagetools inspect "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.tag_name || steps.meta.outputs.version }}"

@@ -82,7 +82,7 @@ describe('OpenAI Provider', () => {
 
       expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
       expect(result.output).toBe('Test output');
-      expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
+      expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5, numRequests: 1 });
       expect(result.guardrails).toEqual({ flagged: false });
     });
 
@@ -105,7 +105,7 @@ describe('OpenAI Provider', () => {
 
       expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
       expect(result.output).toBe('Test output 2');
-      expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
+      expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5, numRequests: 1 });
 
       const cachedResponse = {
         ...mockResponse,
@@ -119,7 +119,7 @@ describe('OpenAI Provider', () => {
 
       expect(mockFetchWithCache).toHaveBeenCalledTimes(2);
       expect(result2.output).toBe('Test output 2');
-      expect(result2.tokenUsage).toEqual({ total: 10, cached: 10 });
+      expect(result2.tokenUsage).toEqual({ total: 10, cached: 10, numRequests: 1 });
     });
 
     it('should handle disabled cache correctly', async () => {
@@ -141,7 +141,7 @@ describe('OpenAI Provider', () => {
 
       expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
       expect(result.output).toBe('Test output');
-      expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
+      expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5, numRequests: 1 });
 
       disableCache();
 
@@ -151,7 +151,7 @@ describe('OpenAI Provider', () => {
 
       expect(mockFetchWithCache).toHaveBeenCalledTimes(2);
       expect(result2.output).toBe('Test output');
-      expect(result2.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
+      expect(result2.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5, numRequests: 1 });
 
       enableCache();
     });
@@ -225,7 +225,7 @@ describe('OpenAI Provider', () => {
 
       expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
       expect(result.output).toEqual({ name: 'John', age: 30 });
-      expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
+      expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5, numRequests: 1 });
     });
 
     it('should handle model refusals correctly', async () => {
@@ -252,7 +252,7 @@ describe('OpenAI Provider', () => {
 
       expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
       expect(result.output).toBe('Content policy violation');
-      expect(result.tokenUsage).toEqual({ total: 5, prompt: 5, completion: 0 });
+      expect(result.tokenUsage).toEqual({ total: 5, prompt: 5, completion: 0, numRequests: 1 });
       expect(result.isRefusal).toBe(true);
       expect(result.guardrails).toEqual({ flagged: true });
     });
@@ -330,7 +330,7 @@ describe('OpenAI Provider', () => {
       expect(result.guardrails).toEqual({
         flagged: true,
       });
-      expect(result.tokenUsage).toEqual({ total: 10, prompt: 10, completion: 0 });
+      expect(result.tokenUsage).toEqual({ total: 10, prompt: 10, completion: 0, numRequests: 1 });
     });
 
     it('should still treat non-refusal 400 errors as errors', async () => {
@@ -381,7 +381,7 @@ describe('OpenAI Provider', () => {
 
       expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
       expect(result.output).toBe('Test output');
-      expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
+      expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5, numRequests: 1 });
     });
 
     it('should handle OpenAI reasoning field with separate content correctly', async () => {
@@ -412,7 +412,7 @@ describe('OpenAI Provider', () => {
       expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
       const expectedOutput = `Thinking: First, I need to analyze the numbers. 9.11 has 11 in the hundredths place, while 9.8 has 8 in the tenths place. Converting 9.8 to hundredths gives 9.80, so 9.11 > 9.80.\n\nThe answer is 9.11 is greater than 9.8.`;
       expect(result.output).toBe(expectedOutput);
-      expect(result.tokenUsage).toEqual({ total: 25, prompt: 12, completion: 13 });
+      expect(result.tokenUsage).toEqual({ total: 25, prompt: 12, completion: 13, numRequests: 1 });
     });
 
     it('should hide OpenAI reasoning field when showThinking is false', async () => {
@@ -443,7 +443,7 @@ describe('OpenAI Provider', () => {
 
       expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
       expect(result.output).toBe('The final answer is 42.');
-      expect(result.tokenUsage).toEqual({ total: 20, prompt: 10, completion: 10 });
+      expect(result.tokenUsage).toEqual({ total: 20, prompt: 10, completion: 10, numRequests: 1 });
     });
 
     it('should handle DeepSeek reasoning model content correctly', async () => {
@@ -476,7 +476,7 @@ describe('OpenAI Provider', () => {
 9.11 > 9.8 because 11 > 8 in the decimal places.
 Therefore, 9.11 is greater than 9.8.\n\nThe final answer is 9.11 is greater than 9.8.`;
       expect(result.output).toBe(expectedOutput);
-      expect(result.tokenUsage).toEqual({ total: 20, prompt: 10, completion: 10 });
+      expect(result.tokenUsage).toEqual({ total: 20, prompt: 10, completion: 10, numRequests: 1 });
     });
 
     it('should hide reasoning content when showThinking is false', async () => {
@@ -508,7 +508,7 @@ Therefore, 9.11 is greater than 9.8.\n\nThe final answer is 9.11 is greater than
 
       expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
       expect(result.output).toBe('The final answer is 9.11 is greater than 9.8.');
-      expect(result.tokenUsage).toEqual({ total: 20, prompt: 10, completion: 10 });
+      expect(result.tokenUsage).toEqual({ total: 20, prompt: 10, completion: 10, numRequests: 1 });
     });
 
     it('should handle multi-round conversations with DeepSeek reasoning model', async () => {
@@ -639,7 +639,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
       expect(mockWeatherFunction).toHaveBeenCalledWith('{"location":"New York"}');
       expect(result.output).toBe('Sunny, 25°C');
-      expect(result.tokenUsage).toEqual({ total: 15, prompt: 10, completion: 5 });
+      expect(result.tokenUsage).toEqual({ total: 15, prompt: 10, completion: 5, numRequests: 1 });
     });
 
     it('should handle multiple function tool calls', async () => {
@@ -725,7 +725,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
       expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
       expect(result.output).toBe('11\n6');
-      expect(result.tokenUsage).toEqual({ total: 15, prompt: 7, completion: 8 });
+      expect(result.tokenUsage).toEqual({ total: 15, prompt: 7, completion: 8, numRequests: 1 });
     });
 
     it('should handle errors in function tool callbacks', async () => {
@@ -777,7 +777,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
       expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
       expect(result.output).toEqual({ arguments: '{}', name: 'errorFunction' });
-      expect(result.tokenUsage).toEqual({ total: 5, prompt: 2, completion: 3 });
+      expect(result.tokenUsage).toEqual({ total: 5, prompt: 2, completion: 3, numRequests: 1 });
     });
 
     it('should handle undefined message content with tool calls', async () => {
@@ -836,7 +836,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
           },
         },
       ]);
-      expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
+      expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5, numRequests: 1 });
     });
 
     describe('External Function Callbacks', () => {
@@ -913,7 +913,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         );
         expect(mockExternalFunction).toHaveBeenCalledWith('{"param": "test_value"}');
         expect(result.output).toBe('External function result');
-        expect(result.tokenUsage).toEqual({ total: 15, prompt: 10, completion: 5 });
+        expect(result.tokenUsage).toEqual({ total: 15, prompt: 10, completion: 5, numRequests: 1 });
       });
 
       it('should cache external functions and not reload them on subsequent calls', async () => {
@@ -1328,7 +1328,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       const requestBody = JSON.parse(call[1].body);
       expect(requestBody.response_format).toEqual(promptResponseFormat);
       expect(result.output).toEqual({ key2: 'value2' });
-      expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
+      expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5, numRequests: 1 });
     });
 
     it('should use provider config response_format when prompt config is not provided', async () => {
@@ -1365,7 +1365,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       const requestBody = JSON.parse(call[1].body);
       expect(requestBody.response_format).toEqual(providerResponseFormat);
       expect(result.output).toBe('{"key1": "value1"}');
-      expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
+      expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5, numRequests: 1 });
     });
 
     it('should call API with basic chat completion', async () => {
@@ -1388,7 +1388,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
       expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
       expect(result.output).toBe('Test output');
-      expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
+      expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5, numRequests: 1 });
     });
 
     it('should handle caching correctly with multiple chat calls', async () => {
@@ -1411,7 +1411,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
       expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
       expect(result.output).toBe('Test output 2');
-      expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
+      expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5, numRequests: 1 });
 
       const cachedResponse = {
         ...mockResponse,
@@ -1428,7 +1428,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
       expect(mockFetchWithCache).toHaveBeenCalledTimes(2);
       expect(result2.output).toBe('Test output 2');
-      expect(result2.tokenUsage).toEqual({ total: 10, cached: 10 });
+      expect(result2.tokenUsage).toEqual({ total: 10, cached: 10, numRequests: 1 });
     });
 
     it('should handle disabled cache correctly for chat completion', async () => {
@@ -1451,7 +1451,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
       expect(mockFetchWithCache).toHaveBeenCalledTimes(1);
       expect(result.output).toBe('Test output');
-      expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
+      expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5, numRequests: 1 });
 
       disableCache();
 
@@ -1461,7 +1461,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
       expect(mockFetchWithCache).toHaveBeenCalledTimes(2);
       expect(result2.output).toBe('Test output');
-      expect(result2.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
+      expect(result2.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5, numRequests: 1 });
 
       enableCache();
     });
@@ -1728,7 +1728,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         transcript: 'This is the audio transcript',
         format: 'mp3',
       });
-      expect(result.tokenUsage).toEqual({ total: 15, prompt: 10, completion: 5 });
+      expect(result.tokenUsage).toEqual({ total: 15, prompt: 10, completion: 5, numRequests: 1 });
     });
 
     it('should handle audio responses without transcript', async () => {
@@ -1766,7 +1766,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         transcript: undefined,
         format: 'wav',
       });
-      expect(result.tokenUsage).toEqual({ total: 12, prompt: 8, completion: 4 });
+      expect(result.tokenUsage).toEqual({ total: 12, prompt: 8, completion: 4, numRequests: 1 });
     });
 
     it('should use default wav format when not specified', async () => {
@@ -1804,7 +1804,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         transcript: 'Audio without format specified',
         format: 'wav', // Default format
       });
-      expect(result.tokenUsage).toEqual({ total: 18, prompt: 12, completion: 6 });
+      expect(result.tokenUsage).toEqual({ total: 18, prompt: 12, completion: 6, numRequests: 1 });
     });
 
     it('should handle cached audio responses correctly', async () => {
@@ -1864,7 +1864,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         format: 'mp3',
       });
       expect(cachedResult.cached).toBe(true);
-      expect(cachedResult.tokenUsage).toEqual({ total: 20, cached: 20 });
+      expect(cachedResult.tokenUsage).toEqual({ total: 20, cached: 20, numRequests: 1 });
     });
 
     it('should properly handle audio requested with response_format option', async () => {
@@ -1898,7 +1898,7 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
       // Verify result handled gracefully
       expect(result.output).toBe('Model responded with text instead of audio');
       expect(result.audio).toBeUndefined(); // No audio returned
-      expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5 });
+      expect(result.tokenUsage).toEqual({ total: 10, prompt: 5, completion: 5, numRequests: 1 });
     });
 
     it('should surface a normalised finishReason', async () => {

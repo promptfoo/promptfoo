@@ -85,6 +85,7 @@ section {
   display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
+  gap: 0.5rem;
 }
 
 .buttonPrimary:hover {
@@ -102,6 +103,7 @@ section {
   display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
+  gap: 0.5rem;
 }
 
 .buttonSecondary:hover {
@@ -161,6 +163,11 @@ section {
     0 20px 40px rgba(229, 58, 58, 0.2),
     0 10px 20px rgba(0, 0, 0, 0.1);
   border: 2px solid rgba(255, 255, 255, 0.1);
+}
+
+.heroImageGitHubScanner {
+  width: 100%;
+  max-width: 800px;
 }
 
 .heroSection h2 {

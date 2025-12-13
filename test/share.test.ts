@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { vi } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import * as constants from '../src/constants';
 import * as envars from '../src/envars';
@@ -34,6 +34,7 @@ function buildMockEval(): Partial<Eval> {
     getTraces: vi.fn().mockResolvedValue([]),
     id: randomUUID(),
     getResultsCount: vi.fn().mockResolvedValue(2),
+    getTotalResultRowCount: vi.fn().mockResolvedValue(2),
     fetchResultsBatched: vi.fn().mockImplementation(() => {
       const iterator = {
         called: false,
