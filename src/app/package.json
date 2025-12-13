@@ -15,6 +15,7 @@
     "test:ci": "vitest run"
   },
   "devDependencies": {
+    "babel-plugin-react-compiler": "^1.0.0",
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
     "@kurkle/color": "^0.4.0",
@@ -62,8 +63,5 @@
     "vite-plugin-node-polyfills": "^0.24.0",
     "vitest": "^4.0.14",
     "zustand": "^5.0.8"
-  },
-  "dependencies": {
-    "babel-plugin-react-compiler": "^1.0.0"
   }
 }

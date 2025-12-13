@@ -46,8 +46,9 @@ function TruncatedText({ text: rawText, maxLength }: TruncatedTextProps) {
       ? rawText
       : JSON.stringify(rawText);
 
-  const contentLen = textLength(text);
-  const isOverLength = maxLength > 0 && contentLen > maxLength;
+  // Only compute text length when truncation is enabled (maxLength > 0)
+  // textLength() is O(n) recursive traversal, so skip it when not needed
+  const isOverLength = maxLength > 0 && textLength(text) > maxLength;
 
   // Initialize truncation state based on whether text actually exceeds maxLength
   const [isTruncated, setIsTruncated] = React.useState(() => isOverLength);

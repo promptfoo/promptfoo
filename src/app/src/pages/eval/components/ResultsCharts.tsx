@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 import { callApi } from '@app/utils/api';
 import CloseIcon from '@mui/icons-material/Close';
@@ -643,7 +643,8 @@ function ResultsCharts({ handleHideCharts, scores }: ResultsChartsProps) {
   ] = useState(false);
 
   // Update Chart.js defaults when theme changes
-  useEffect(() => {
+  // useLayoutEffect ensures defaults are set before charts render
+  useLayoutEffect(() => {
     Chart.defaults.color = theme.palette.mode === 'dark' ? '#aaa' : '#666';
   }, [theme.palette.mode]);
 

@@ -168,10 +168,9 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
   }, []);
 
   // Sync isMultiTurnEnabled when config.strategies changes
+  // This keeps the toggle in sync with the actual state of strategies
   useEffect(() => {
-    if (hasMultiTurnStrategies) {
-      setIsMultiTurnEnabled(true);
-    }
+    setIsMultiTurnEnabled(hasMultiTurnStrategies);
   }, [hasMultiTurnStrategies]);
 
   // Determine the initially selected preset

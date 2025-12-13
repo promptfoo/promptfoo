@@ -376,8 +376,15 @@ function EvalOutputCell({
 
   const [copied, setCopied] = React.useState(false);
   const handleCopy = () => {
-    navigator.clipboard.writeText(output.text);
-    setCopied(true);
+    navigator.clipboard
+      .writeText(text)
+      .then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 3000);
+      })
+      .catch((error) => {
+        console.error('Failed to copy output to clipboard:', error);
+      });
   };
 
   let tokenUsageDisplay;
@@ -555,11 +562,14 @@ function EvalOutputCell({
   let providerOverride: React.ReactNode = null;
   const testCaseProvider = output.testCase?.provider;
   if (testCaseProvider) {
-    const providerId =
+    const providerId: string | null =
       typeof testCaseProvider === 'string'
         ? testCaseProvider
-        : typeof testCaseProvider === 'object' && 'id' in testCaseProvider
-          ? (testCaseProvider.id as string)
+        : typeof testCaseProvider === 'object' &&
+            testCaseProvider !== null &&
+            'id' in testCaseProvider &&
+            typeof testCaseProvider.id === 'string'
+          ? testCaseProvider.id
           : null;
     if (providerId) {
       providerOverride = (
