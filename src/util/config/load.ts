@@ -11,6 +11,7 @@ import { fromError } from 'zod-validation-error';
 import { readAssertions } from '../../assertions/index';
 import { validateAssertions } from '../../assertions/validateAssertions';
 import cliState from '../../cliState';
+import { filterProviderConfigs } from '../../commands/eval/filterProviders';
 import { filterTests } from '../../commands/eval/filterTests';
 import { getEnvBool, isCI } from '../../envars';
 import { importModule } from '../../esm';
@@ -608,9 +609,25 @@ export async function resolveConfigs(
   }
 
   invariant(Array.isArray(config.providers), 'providers must be an array');
+
+  // Filter providers BEFORE instantiation to avoid loading providers that won't be used.
+  // This is important when providers validate env vars or other resources on construction.
+  const filterOption = cmdObj.filterProviders || cmdObj.filterTargets;
+  const filteredProviderConfigs = filterProviderConfigs(config.providers, filterOption);
+
+  if (
+    filterOption &&
+    Array.isArray(filteredProviderConfigs) &&
+    filteredProviderConfigs.length === 0
+  ) {
+    logger.warn(
+      `No providers matched the filter "${filterOption}". Check your --filter-providers/--filter-targets value.`,
+    );
+  }
+
   // Parse prompts, providers, and tests
   const parsedPrompts = await readPrompts(config.prompts, cmdObj.prompts ? undefined : basePath);
-  const parsedProviders = await loadApiProviders(config.providers, {
+  const parsedProviders = await loadApiProviders(filteredProviderConfigs, {
     env: config.env,
     basePath,
   });
