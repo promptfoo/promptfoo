@@ -1,7 +1,41 @@
 import { stringify as csvStringify } from 'csv-stringify/sync';
 import { ResultFailureReason } from '../../types/index';
 
-import type { EvaluateTableRow, Prompt } from '../../types/index';
+import type Eval from '../../models/eval';
+import type { EvalResultsFilterMode, EvaluateTableRow, Prompt } from '../../types/index';
+
+/**
+ * Type representing the table page result from eval.getTablePage().
+ * This differs from EvaluateTable in that it uses Prompt[] instead of CompletedPrompt[].
+ */
+type TablePageResult = {
+  head: { prompts: Prompt[]; vars: string[] };
+  body: EvaluateTableRow[];
+};
+
+/**
+ * Options for generating CSV from an evaluation.
+ */
+export interface GenerateEvalCsvOptions {
+  /** Filter mode for results (all, passes, failures, errors, highlights) */
+  filterMode?: EvalResultsFilterMode;
+  /** Search query to filter results */
+  searchQuery?: string;
+  /** Additional filter conditions */
+  filters?: string[];
+  /** Comparison eval IDs for side-by-side comparison exports */
+  comparisonEvalIds?: string[];
+}
+
+/**
+ * Error thrown when a comparison eval is not found.
+ */
+export class ComparisonEvalNotFoundError extends Error {
+  constructor(evalId: string) {
+    super(`Comparison eval not found: ${evalId}`);
+    this.name = 'ComparisonEvalNotFoundError';
+  }
+}
 
 /**
  *
@@ -28,8 +62,49 @@ export const REDTEAM_METADATA_KEYS_TO_CSV_COLUMN_NAMES = {
 const REDTEAM_METADATA_COLUMNS = Object.values(REDTEAM_METADATA_KEYS_TO_CSV_COLUMN_NAMES);
 
 /**
- * Generates CSV data from evaluation table data
- * Includes grader reason, comment, and conversation columns similar to client-side implementation
+ * Get the status string for an output
+ */
+function getOutputStatus(output: EvaluateTableRow['outputs'][0]): 'PASS' | 'FAIL' | 'ERROR' {
+  if (output.pass) {
+    return 'PASS';
+  }
+  return output.failureReason === ResultFailureReason.ASSERT ? 'FAIL' : 'ERROR';
+}
+
+/**
+ * Format named scores for CSV output.
+ * Returns empty string if no named scores, otherwise JSON string.
+ */
+function formatNamedScores(namedScores: Record<string, number> | undefined): string {
+  if (!namedScores || Object.keys(namedScores).length === 0) {
+    return '';
+  }
+  // Format as JSON for parseability, with scores rounded to 2 decimal places
+  const rounded: Record<string, number> = {};
+  for (const [key, value] of Object.entries(namedScores)) {
+    if (typeof value === 'number' && !Number.isNaN(value)) {
+      rounded[key] = Number(value.toFixed(2));
+    }
+  }
+  if (Object.keys(rounded).length === 0) {
+    return '';
+  }
+  return JSON.stringify(rounded);
+}
+
+/**
+ * Generates CSV data from evaluation table data.
+ *
+ * Column structure per prompt:
+ * - Output: Pure LLM output text (no pass/fail prefix)
+ * - Status: PASS | FAIL | ERROR
+ * - Score: Numeric score (e.g., "1.00")
+ * - Named Scores: JSON object with per-assertion scores (e.g., {"clarity": 0.90, "accuracy": 0.85})
+ * - Grader Reason: Explanation from the grader
+ * - Comment: Additional grader comment
+ *
+ * This function is the single source of truth for CSV generation,
+ * used by both the WebUI export and CLI export.
  *
  * @param table - The evaluation table data
  * @param options - Export options
@@ -45,7 +120,7 @@ export function evalTableToCsv(
   // Check if any rows have descriptions
   const hasDescriptions = table.body.some((row) => row.test.description);
 
-  // Create headers with additional columns for grader reason, comment, and conversation
+  // Create headers with columns for output, status, score, named scores, grader reason, and comment
   const headers: string[] = [
     ...(hasDescriptions ? ['Description'] : []),
     ...table.head.vars,
@@ -53,7 +128,8 @@ export function evalTableToCsv(
       // Handle both Prompt and CompletedPrompt types
       const provider = (prompt as any).provider || '';
       const label = provider ? `[${provider}] ${prompt.label}` : prompt.label;
-      return [label, 'Grader Reason', 'Comment'];
+      // Output column uses the prompt label, followed by metadata columns
+      return [label, 'Status', 'Score', 'Named Scores', 'Grader Reason', 'Comment'];
     }),
   ];
 
@@ -65,26 +141,32 @@ export function evalTableToCsv(
   // Compute stable key ordering for redteam metadata columns
   const redteamKeys = Object.keys(REDTEAM_METADATA_KEYS_TO_CSV_COLUMN_NAMES);
 
-  // Process body rows with pass/fail prefixes and conversation data
+  // Process body rows with separate columns for output, status, score, named scores, etc.
   table.body.forEach((row) => {
     const rowValues: any[] = [
       ...(hasDescriptions ? [row.test.description || ''] : []),
       ...row.vars,
       ...row.outputs.flatMap((output) => {
         if (!output) {
-          return ['', '', ''];
+          return ['', '', '', '', '', ''];
         }
 
+        const status = getOutputStatus(output);
+        const score = output.score?.toFixed(2) ?? '';
+        const namedScores = formatNamedScores(output.namedScores);
+
         return [
-          // Add pass/fail/error prefix to text
-          (output.pass
-            ? '[PASS] '
-            : output.failureReason === ResultFailureReason.ASSERT
-              ? '[FAIL] '
-              : '[ERROR] ') + (output.text || ''),
-          // Add grader reason
+          // Pure LLM output text (no prefix)
+          output.text || '',
+          // Status as separate column
+          status,
+          // Score as separate column
+          score,
+          // Named scores as JSON
+          namedScores,
+          // Grader reason
           output.gradingResult?.reason || '',
-          // Add comment
+          // Comment
           output.gradingResult?.comment || '',
         ];
       }),
@@ -127,4 +209,118 @@ export function evalTableToJson(table: {
   body: EvaluateTableRow[];
 }): any {
   return table;
+}
+
+/**
+ * Merges comparison tables with the main table for side-by-side CSV export.
+ *
+ * @param mainEvalId - The ID of the main evaluation
+ * @param mainTable - The main evaluation table
+ * @param comparisonData - Array of comparison eval data (eval ID and table)
+ * @returns Merged table with all prompts and outputs combined
+ */
+function mergeComparisonTables(
+  mainEvalId: string,
+  mainTable: TablePageResult,
+  comparisonData: Array<{ evalId: string; table: TablePageResult }>,
+): TablePageResult {
+  return {
+    head: {
+      prompts: [
+        // Main eval prompts with eval ID prefix
+        ...mainTable.head.prompts.map((prompt) => ({
+          ...prompt,
+          label: `[${mainEvalId}] ${prompt.label || ''}`,
+        })),
+        // Comparison eval prompts with their eval ID prefixes
+        ...comparisonData.flatMap(({ evalId, table }) =>
+          table.head.prompts.map((prompt) => ({
+            ...prompt,
+            label: `[${evalId}] ${prompt.label || ''}`,
+          })),
+        ),
+      ],
+      vars: mainTable.head.vars,
+    },
+    body: mainTable.body.map((row) => {
+      const testIdx = row.testIdx;
+      // Find matching rows in comparison tables by test index
+      const matchingRows = comparisonData
+        .map(({ table }) => table.body.find((compRow) => compRow.testIdx === testIdx))
+        .filter((r): r is EvaluateTableRow => r !== undefined);
+
+      return {
+        ...row,
+        outputs: [...row.outputs, ...matchingRows.flatMap((r) => r.outputs)],
+      };
+    }),
+  };
+}
+
+/**
+ * High-level function to generate CSV from an evaluation.
+ *
+ * This is the single source of truth for ALL CSV generation, used by both:
+ * - CLI: `promptfoo eval -o output.csv` and `promptfoo export eval`
+ * - WebUI: Download CSV button (with or without comparison evals)
+ *
+ * Handles both simple exports and comparison exports with multiple evaluations.
+ *
+ * @param eval_ - The evaluation to export
+ * @param options - Export options including filters and comparison eval IDs
+ * @returns CSV formatted string
+ * @throws ComparisonEvalNotFoundError if a comparison eval ID is not found
+ */
+export async function generateEvalCsv(
+  eval_: Eval,
+  options: GenerateEvalCsvOptions = {},
+): Promise<string> {
+  // Import Eval dynamically to avoid circular dependencies
+  const { default: EvalModel } = await import('../../models/eval');
+
+  const UNLIMITED_RESULTS = Number.MAX_SAFE_INTEGER;
+
+  // Fetch main table
+  const mainTable = await eval_.getTablePage({
+    offset: 0,
+    limit: UNLIMITED_RESULTS,
+    filterMode: options.filterMode,
+    searchQuery: options.searchQuery,
+    filters: options.filters,
+  });
+
+  let finalTable: TablePageResult = mainTable;
+
+  // Handle comparison evals if provided
+  if (options.comparisonEvalIds && options.comparisonEvalIds.length > 0) {
+    const indices = mainTable.body.map((row) => row.testIdx);
+
+    // Fetch comparison evals and their tables
+    const comparisonData = await Promise.all(
+      options.comparisonEvalIds.map(async (comparisonEvalId) => {
+        const comparisonEval = await EvalModel.findById(comparisonEvalId);
+        if (!comparisonEval) {
+          throw new ComparisonEvalNotFoundError(comparisonEvalId);
+        }
+
+        const table = await comparisonEval.getTablePage({
+          offset: 0,
+          limit: indices.length,
+          filterMode: 'all',
+          testIndices: indices,
+          searchQuery: options.searchQuery,
+          filters: options.filters,
+        });
+
+        return { evalId: comparisonEval.id, table };
+      }),
+    );
+
+    // Merge tables for comparison export
+    finalTable = mergeComparisonTables(eval_.id, mainTable, comparisonData);
+  }
+
+  return evalTableToCsv(finalTable, {
+    isRedteam: Boolean(eval_.config.redteam),
+  });
 }
