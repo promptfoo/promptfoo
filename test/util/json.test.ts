@@ -95,8 +95,8 @@ describe('json utilities', () => {
   describe('safeJsonParse', () => {
     it('parses valid JSON objects', () => {
       expect(safeJsonParse('{"key": "value"}')).toEqual({ key: 'value' });
-      expect(safeJsonParse('{"nested": {"inner": "value"}}')).toEqual({ 
-        nested: { inner: 'value' } 
+      expect(safeJsonParse('{"nested": {"inner": "value"}}')).toEqual({
+        nested: { inner: 'value' },
       });
     });
 

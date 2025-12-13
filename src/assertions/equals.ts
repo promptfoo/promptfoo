@@ -15,9 +15,10 @@ export const handleEquals = async ({
   let pass: boolean;
   if (typeof renderedValue === 'object') {
     const parsedOutput = safeJsonParse(outputString);
-    pass = parsedOutput !== undefined
-      ? util.isDeepStrictEqual(renderedValue, parsedOutput) !== inverse
-      : false;
+    pass =
+      parsedOutput !== undefined
+        ? util.isDeepStrictEqual(renderedValue, parsedOutput) !== inverse
+        : false;
     renderedValue = JSON.stringify(renderedValue);
   } else {
     pass = (String(renderedValue) === outputString) !== inverse;

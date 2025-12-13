@@ -9,6 +9,7 @@ import logger from './logger';
 import { REQUEST_TIMEOUT_MS } from './providers/shared';
 import { getConfigDirectoryPath } from './util/config/manage';
 import { fetchWithRetries } from './util/fetch/index';
+import { safeJsonParse } from './util/json';
 import { runMigration, shouldRunMigration } from './cacheMigration';
 import type { Cache } from 'cache-manager';
 
@@ -135,21 +136,26 @@ export async function fetchWithCache<T = any>(
     const fetchLatencyMs = Date.now() - fetchStart;
 
     const respText = await resp.text();
-    try {
-      return {
-        cached: false,
-        data: format === 'json' ? JSON.parse(respText) : respText,
-        status: resp.status,
-        statusText: resp.statusText,
-        headers: Object.fromEntries(resp.headers.entries()),
-        latencyMs: fetchLatencyMs,
-        deleteFromCache: async () => {
-          // No-op when cache is disabled
-        },
-      };
-    } catch {
-      throw new Error(`Error parsing response as JSON: ${respText}`);
+    let parsedData;
+    if (format === 'json') {
+      parsedData = safeJsonParse(respText);
+      if (parsedData === undefined) {
+        throw new Error(`Error parsing response as JSON: ${respText}`);
+      }
+    } else {
+      parsedData = respText;
     }
+    return {
+      cached: false,
+      data: parsedData,
+      status: resp.status,
+      statusText: resp.statusText,
+      headers: Object.fromEntries(resp.headers.entries()),
+      latencyMs: fetchLatencyMs,
+      deleteFromCache: async () => {
+        // No-op when cache is disabled
+      },
+    };
   }
 
   const copy = Object.assign({}, options);
@@ -172,7 +178,15 @@ export async function fetchWithCache<T = any>(
     const headers = Object.fromEntries(response.headers.entries());
 
     try {
-      const parsedData = format === 'json' ? JSON.parse(responseText) : responseText;
+      let parsedData;
+      if (format === 'json') {
+        parsedData = safeJsonParse(responseText);
+        if (parsedData === undefined) {
+          throw new Error(`Error parsing response as JSON: ${responseText}`);
+        }
+      } else {
+        parsedData = responseText;
+      }
       const data = JSON.stringify({
         data: parsedData,
         status: response.status,

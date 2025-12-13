@@ -49,7 +49,7 @@ import { isApiProvider } from './types/providers';
 import { JsonlFileWriter } from './util/exportToFile/writeToFile';
 import { loadFunction, parseFileUrl } from './util/functions/loadFunction';
 import invariant from './util/invariant';
-import { safeJsonStringify, summarizeEvaluateResultForLogging } from './util/json';
+import { safeJsonParse, safeJsonStringify, summarizeEvaluateResultForLogging } from './util/json';
 import { promptYesNo } from './util/readline';
 import { sleep } from './util/time';
 import { TokenUsageTracker } from './util/tokenUsage';
@@ -337,10 +337,7 @@ export async function runEval({
   try {
     // Render the prompt
     const renderedPrompt = await renderPrompt(prompt, vars, filters, provider);
-    let renderedJson = undefined;
-    try {
-      renderedJson = JSON.parse(renderedPrompt);
-    } catch {}
+    const renderedJson = safeJsonParse(renderedPrompt);
     setup.prompt.raw = renderedPrompt;
 
     const startTime = Date.now();
