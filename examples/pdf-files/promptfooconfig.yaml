@@ -1,0 +1,20 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'PDF Document Analysis'
+
+prompts:
+  - file://prompt.py:format_pdf_prompt
+
+providers:
+  - id: google:gemini-2.5-flash
+  - id: anthropic:messages:claude-sonnet-4-5-20250929
+  - id: openai:responses:gpt-5.2
+
+defaultTest:
+  assert:
+    - type: contains
+      value: '2'
+
+tests:
+  - description: 'Count diagrams in a research paper PDF'
+    vars:
+      file_path: pdfs/page.pdf
