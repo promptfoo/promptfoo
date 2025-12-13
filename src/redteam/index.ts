@@ -1092,7 +1092,17 @@ export async function synthesize({
   Object.assign(strategyResults, otherStrategyResults);
 
   // Combine test cases based on basic strategy setting
-  const finalTestCases = [...(includeBasicTests ? pluginTestCases : []), ...strategyTestCases];
+  const combinedTestCases = [...(includeBasicTests ? pluginTestCases : []), ...strategyTestCases];
+
+  // Add purpose and entities to all test case metadata (needed for template rendering in graders)
+  const finalTestCases = combinedTestCases.map((tc) => ({
+    ...tc,
+    metadata: {
+      ...tc.metadata,
+      purpose,
+      entities,
+    },
+  }));
 
   // Check for abort signal
   checkAbort();
