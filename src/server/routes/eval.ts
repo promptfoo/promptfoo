@@ -12,7 +12,7 @@ import { deleteEval, deleteEvals, updateResult, writeResultsToDatabase } from '.
 import invariant from '../../util/invariant';
 import { ApiSchemas } from '../apiSchemas';
 import { setDownloadHeaders } from '../utils/downloadHelpers';
-import { evalTableToCsv, evalTableToJson } from '../utils/evalTableUtils';
+import { evalTableToCsv, evalTableToJson, generateEvalCsv } from '../utils/evalTableUtils';
 import type { Request, Response } from 'express';
 
 import type {
@@ -215,6 +215,19 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
   const eval_ = await Eval.findById(id);
   if (!eval_) {
     res.status(404).json({ error: 'Eval not found' });
+    return;
+  }
+
+  // Fast path: Use shared generateEvalCsv for simple CSV exports (no comparison evals)
+  // This is the same code path used by CLI exports, ensuring consistent output
+  if (format === 'csv' && comparisonEvalIds.length === 0) {
+    const csvData = await generateEvalCsv(eval_, {
+      filterMode,
+      searchQuery: searchText,
+      filters: filters as string[],
+    });
+    setDownloadHeaders(res, `${id}.csv`, 'text/csv');
+    res.send(csvData);
     return;
   }
 

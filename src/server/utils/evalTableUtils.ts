@@ -1,7 +1,25 @@
 import { stringify as csvStringify } from 'csv-stringify/sync';
 import { ResultFailureReason } from '../../types/index';
 
-import type { CompletedPrompt, EvaluateTableRow, Prompt } from '../../types/index';
+import type Eval from '../../models/eval';
+import type {
+  CompletedPrompt,
+  EvalResultsFilterMode,
+  EvaluateTableRow,
+  Prompt,
+} from '../../types/index';
+
+/**
+ * Options for generating CSV from an evaluation.
+ */
+export interface GenerateEvalCsvOptions {
+  /** Filter mode for results (all, passes, failures, errors, highlights) */
+  filterMode?: EvalResultsFilterMode;
+  /** Search query to filter results */
+  searchQuery?: string;
+  /** Additional filter conditions */
+  filters?: string[];
+}
 
 /**
  *
@@ -177,7 +195,40 @@ export function evalTableToCsv(
 export function evalTableToJson(table: {
   head: { prompts: Prompt[]; vars: string[] };
   body: EvaluateTableRow[];
-  // biome-ignore lint/suspicious/noExplicitAny: FIXME
-}): any {
+}): unknown {
   return table;
+}
+
+/**
+ * High-level function to generate CSV from an evaluation.
+ *
+ * This is the single source of truth for CSV generation, used by both:
+ * - CLI: `promptfoo eval -o output.csv` and `promptfoo export eval`
+ * - WebUI: Download CSV button in the results view
+ *
+ * Both paths use identical data fetching (getTablePage) and formatting (evalTableToCsv),
+ * ensuring consistent output regardless of how the export is triggered.
+ *
+ * @param eval_ - The evaluation to export
+ * @param options - Optional filter parameters (for filtered exports)
+ * @returns CSV formatted string
+ */
+export async function generateEvalCsv(
+  eval_: Eval,
+  options: GenerateEvalCsvOptions = {},
+): Promise<string> {
+  // Use MAX_SAFE_INTEGER to fetch all results without pagination
+  const UNLIMITED_RESULTS = Number.MAX_SAFE_INTEGER;
+
+  const tableResult = await eval_.getTablePage({
+    offset: 0,
+    limit: UNLIMITED_RESULTS,
+    filterMode: options.filterMode,
+    searchQuery: options.searchQuery,
+    filters: options.filters,
+  });
+
+  return evalTableToCsv(tableResult, {
+    isRedteam: Boolean(eval_.config.redteam),
+  });
 }
