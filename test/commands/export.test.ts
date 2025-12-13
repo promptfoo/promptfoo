@@ -1,14 +1,4 @@
-import {
-  Mocked,
-  MockedFunction,
-  MockInstance,
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  vi,
-} from 'vitest';
+import { Mocked, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import fs from 'fs';
 
@@ -17,7 +7,7 @@ import { exportCommand } from '../../src/commands/export';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
 import { writeOutput } from '../../src/util/index';
-import { getConfigDirectoryPath } from '../../src/util/config/manage';
+import { getLogDirectory, getLogFiles } from '../../src/util/logs';
 
 vi.mock('../../src/telemetry', () => ({
   default: {
@@ -56,6 +46,11 @@ vi.mock('../../src/util/config/manage', () => ({
   writeMultipleOutputs: vi.fn(),
 }));
 
+vi.mock('../../src/util/logs', () => ({
+  getLogDirectory: vi.fn().mockReturnValue('/tmp/test-config/logs'),
+  getLogFiles: vi.fn().mockReturnValue([]),
+}));
+
 vi.mock('fs', () => ({
   default: {
     existsSync: vi.fn().mockReturnValue(true),
@@ -92,18 +87,12 @@ vi.mock('../../src/database', async (importOriginal) => {
 
 describe('exportCommand', () => {
   let program: Command;
-  let mockExit: MockInstance;
   let mockEval: any;
   const mockFs = fs as Mocked<typeof fs>;
-  const mockGetConfigDirectoryPath = getConfigDirectoryPath as MockedFunction<
-    typeof getConfigDirectoryPath
-  >;
 
   beforeEach(() => {
     program = new Command();
-    mockExit = vi.spyOn(process, 'exit').mockImplementation(function () {
-      return undefined as never;
-    });
+    process.exitCode = 0;
     mockEval = {
       id: 'test-id',
       createdAt: '2025-07-01T00:00:00.000Z',
@@ -118,6 +107,7 @@ describe('exportCommand', () => {
   afterEach(() => {
     vi.clearAllMocks();
     vi.useRealTimers();
+    process.exitCode = 0;
   });
 
   it('should export latest eval record', async () => {
@@ -129,7 +119,7 @@ describe('exportCommand', () => {
 
     expect(Eval.latest).toHaveBeenCalledWith();
     expect(writeOutput).toHaveBeenCalledWith('test.json', mockEval, null);
-    expect(mockExit).not.toHaveBeenCalled();
+    expect(process.exitCode).toBe(0);
   });
 
   it('should export eval record by id', async () => {
@@ -149,7 +139,7 @@ describe('exportCommand', () => {
 
     expect(Eval.findById).toHaveBeenCalledWith('test-id');
     expect(writeOutput).toHaveBeenCalledWith('test.json', mockEval, null);
-    expect(mockExit).not.toHaveBeenCalled();
+    expect(process.exitCode).toBe(0);
   });
 
   it('should log JSON data when no output specified', async () => {
@@ -185,7 +175,7 @@ describe('exportCommand', () => {
 
     await program.parseAsync(['node', 'test', 'export', 'eval', 'non-existent-id']);
 
-    expect(mockExit).toHaveBeenCalledWith(1);
+    expect(process.exitCode).toBe(1);
   });
 
   it('should handle export errors', async () => {
@@ -195,15 +185,17 @@ describe('exportCommand', () => {
 
     await program.parseAsync(['node', 'test', 'export', 'eval', 'test-id']);
 
-    expect(mockExit).toHaveBeenCalledWith(1);
+    expect(process.exitCode).toBe(1);
   });
 
   describe('logs export', () => {
-    const mockConfigDir = '/test/config';
-    const _mockLogDir = '/test/config/logs';
+    const mockLogDir = '/test/config/logs';
+    const mockGetLogDirectory = vi.mocked(getLogDirectory);
+    const mockGetLogFiles = vi.mocked(getLogFiles);
 
     beforeEach(() => {
-      mockGetConfigDirectoryPath.mockReturnValue(mockConfigDir);
+      mockGetLogDirectory.mockReturnValue(mockLogDir);
+      mockGetLogFiles.mockReturnValue([]);
       // Reset all mocks for clean state
       vi.clearAllMocks();
     });
@@ -218,43 +210,59 @@ describe('exportCommand', () => {
       expect(logger.error).toHaveBeenCalledWith(
         'No log directory found. Logs have not been created yet.',
       );
-      expect(mockExit).toHaveBeenCalledWith(1);
+      expect(process.exitCode).toBe(1);
     });
 
     it('should handle no log files found', async () => {
       mockFs.existsSync.mockReturnValue(true);
-      mockFs.readdirSync.mockReturnValue([]);
+      mockGetLogFiles.mockReturnValue([]);
 
       exportCommand(program);
 
       await program.parseAsync(['node', 'test', 'export', 'logs']);
 
       expect(logger.error).toHaveBeenCalledWith('No log files found in the logs directory.');
-      expect(mockExit).toHaveBeenCalledWith(1);
+      expect(process.exitCode).toBe(1);
     });
 
     it('should handle invalid count parameter', async () => {
       mockFs.existsSync.mockReturnValue(true);
-      mockFs.readdirSync.mockReturnValue(['promptfoo-2025-01-01.log'] as any);
+      mockGetLogFiles.mockReturnValue([
+        {
+          name: 'promptfoo-debug-2025-01-01.log',
+          path: '/test/config/logs/promptfoo-debug-2025-01-01.log',
+          mtime: new Date(),
+          type: 'debug',
+          size: 1024,
+        },
+      ]);
 
       exportCommand(program);
 
       await program.parseAsync(['node', 'test', 'export', 'logs', '--count', 'invalid']);
 
       expect(logger.error).toHaveBeenCalledWith('Count must be a positive number');
-      expect(mockExit).toHaveBeenCalledWith(1);
+      expect(process.exitCode).toBe(1);
     });
 
     it('should handle zero count parameter', async () => {
       mockFs.existsSync.mockReturnValue(true);
-      mockFs.readdirSync.mockReturnValue(['promptfoo-2025-01-01.log'] as any);
+      mockGetLogFiles.mockReturnValue([
+        {
+          name: 'promptfoo-debug-2025-01-01.log',
+          path: '/test/config/logs/promptfoo-debug-2025-01-01.log',
+          mtime: new Date(),
+          type: 'debug',
+          size: 1024,
+        },
+      ]);
 
       exportCommand(program);
 
       await program.parseAsync(['node', 'test', 'export', 'logs', '--count', '0']);
 
       expect(logger.error).toHaveBeenCalledWith('Count must be a positive number');
-      expect(mockExit).toHaveBeenCalledWith(1);
+      expect(process.exitCode).toBe(1);
     });
   });
 });
