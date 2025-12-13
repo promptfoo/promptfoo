@@ -4,6 +4,27 @@ import type { ApiProvider, ProviderOptions } from '../types/providers';
 import { type FrameworkComplianceId, type Plugin, Severity, SeveritySchema } from './constants';
 import { isValidPolicyId } from './plugins/policy/validators';
 
+/**
+ * Media data (audio or image) for redteam history entries
+ * Duplicated from runtimeTransform to avoid circular dependency
+ */
+interface RedteamMediaData {
+  data: string;
+  format: string;
+}
+
+/**
+ * Entry in redteam history tracking prompts and outputs with optional media
+ */
+export interface RedteamHistoryEntry {
+  prompt: string;
+  promptAudio?: RedteamMediaData;
+  promptImage?: RedteamMediaData;
+  output: string;
+  outputAudio?: RedteamMediaData;
+  outputImage?: RedteamMediaData;
+}
+
 // Modifiers are used to modify the behavior of the plugin.
 // They let the user specify additional instructions for the plugin,
 // and can be anything the user wants.
@@ -290,9 +311,21 @@ export interface BaseRedteamMetadata {
   redteamFinalPrompt?: string;
   messages: Record<string, any>[];
   stopReason: string;
-  redteamHistory?: { prompt: string; output: string }[];
+  redteamHistory?: RedteamHistoryEntry[];
   sessionIds?: string[];
   sessionId?: string;
+}
+
+/**
+ * Configuration for audio grading in voice-based red team attacks
+ */
+export interface AudioGradingConfig {
+  /** Whether to grade audio transcripts in addition to text responses */
+  transcriptGrading?: boolean;
+  /** Whether to grade audio quality and clarity */
+  audioQualityGrading?: boolean;
+  /** Custom grading criteria for audio responses */
+  customCriteria?: string[];
 }
 
 /**
