@@ -202,7 +202,9 @@ export default function Review({
 
   // Recover job state on mount (e.g., after navigation)
   // Wait for Zustand to hydrate from localStorage before checking savedJobId
+  // Using "use no memo" - this effect intentionally runs once after hydration with limited deps
   useEffect(() => {
+    'use no memo';
     if (!_hasHydrated || hasAttemptedRecovery.current) {
       return;
     }
@@ -266,7 +268,6 @@ export default function Review({
     };
 
     recoverJob();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [_hasHydrated]); // Run once after hydration completes
 
   const handleSaveYaml = () => {

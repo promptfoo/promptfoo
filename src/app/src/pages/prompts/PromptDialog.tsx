@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from 'react';
+import React from 'react';
 
 import CloseIcon from '@mui/icons-material/Close';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
@@ -38,40 +38,36 @@ const PromptDialog = ({
 }: PromptDialogProps) => {
   const [copySnackbar, setCopySnackbar] = React.useState(false);
 
-  const sortedEvals = useMemo(
-    () =>
-      [...(selectedPrompt?.evals || [])]
-        .sort((a, b) => b.id.localeCompare(a.id))
-        .map((evalData) => {
-          const passCount = evalData.metrics?.testPassCount ?? 0;
-          const failCount = evalData.metrics?.testFailCount ?? 0;
-          const errorCount = evalData.metrics?.testErrorCount ?? 0;
-          const total = passCount + failCount + errorCount;
+  const sortedEvals = [...(selectedPrompt?.evals || [])]
+    .sort((a, b) => b.id.localeCompare(a.id))
+    .map((evalData) => {
+      const passCount = evalData.metrics?.testPassCount ?? 0;
+      const failCount = evalData.metrics?.testFailCount ?? 0;
+      const errorCount = evalData.metrics?.testErrorCount ?? 0;
+      const total = passCount + failCount + errorCount;
 
-          return {
-            ...evalData,
-            metrics: {
-              passCount,
-              failCount,
-              errorCount,
-              passRate: total > 0 ? ((passCount / total) * 100.0).toFixed(1) + '%' : '-',
-              score: evalData.metrics?.score,
-            },
-          };
-        }),
-    [selectedPrompt?.evals],
-  );
+      return {
+        ...evalData,
+        metrics: {
+          passCount,
+          failCount,
+          errorCount,
+          passRate: total > 0 ? ((passCount / total) * 100.0).toFixed(1) + '%' : '-',
+          score: evalData.metrics?.score,
+        },
+      };
+    });
 
-  const handleCopyPrompt = useCallback(async () => {
+  const handleCopyPrompt = async () => {
     try {
       await navigator.clipboard.writeText(selectedPrompt?.prompt?.raw || '');
       setCopySnackbar(true);
     } catch (err) {
       console.error('Failed to copy prompt:', err);
     }
-  }, [selectedPrompt?.prompt?.raw]);
+  };
 
-  const handleCloseSnackbar = useCallback(() => setCopySnackbar(false), []);
+  const handleCloseSnackbar = () => setCopySnackbar(false);
 
   const commonCellStyles = {
     width: '12%',

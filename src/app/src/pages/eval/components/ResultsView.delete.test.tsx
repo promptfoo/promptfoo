@@ -87,7 +87,17 @@ describe('ResultsView - Delete Functionality', () => {
       totalResultsCount: 100,
       filteredResultsCount: 100,
       highlightedResultsCount: 0,
-      filters: { appliedCount: 0, values: {} },
+      filters: {
+        appliedCount: 0,
+        values: {},
+        options: {
+          metric: [],
+          plugin: [],
+          strategy: [],
+          severity: [],
+          policy: [],
+        },
+      },
       filterMode: 'all',
       setConfig: vi.fn(),
       setAuthor: vi.fn(),
