@@ -1301,7 +1301,7 @@ Example Response
 Session Parser value:
 
 ```yaml
-sessionParser: 'data.body.responses[0]?.sessionId
+sessionParser: 'data.body.responses[0]?.sessionId'
 ```
 
 The parser can take a string, file or function like the response parser.
@@ -1454,22 +1454,22 @@ This parser would extract `"The quick brown fox"` from the example response abov
 
 Supported config options:
 
-| Option            | Type                    | Description                                                                                                                                                                         |
-| ----------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| url               | string                  | The URL to send the HTTP request to. Supports Nunjucks templates. If not provided, the `id` of the provider will be used as the URL.                                                |
-| request           | string                  | A raw HTTP request to send. This will override the `url`, `method`, `headers`, `body`, and `queryParams` options.                                                                   |
-| method            | string                  | HTTP method (GET, POST, etc). Defaults to POST if body is provided, GET otherwise.                                                                                                  |
-| headers           | Record\<string, string> | Key-value pairs of HTTP headers to include in the request.                                                                                                                          |
-| body              | object \| string        | The request body. For POST requests, objects are automatically stringified as JSON.                                                                                                 |
-| queryParams       | Record\<string, string> | Key-value pairs of query parameters to append to the URL.                                                                                                                           |
-| transformRequest  | string \| Function      | A function, string template, or file path to transform the prompt before sending it to the API.                                                                                     |
-| transformResponse | string \| Function      | Transforms the API response using a JavaScript expression (e.g., 'json.result'), function, or file path (e.g., 'file://parser.js'). Replaces the deprecated `responseParser` field. |
-| tokenEstimation   | object                  | Configuration for optional token usage estimation. See Token Estimation section above for details.                                                                                  |
-| maxRetries        | number                  | Maximum number of retry attempts for failed requests. Defaults to 4.                                                                                                                |
+| Option            | Type                    | Description                                                                                                                                                                                                                                       |
+| ----------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| url               | string                  | The URL to send the HTTP request to. Supports Nunjucks templates. If not provided, the `id` of the provider will be used as the URL.                                                                                                              |
+| request           | string                  | A raw HTTP request to send. This will override the `url`, `method`, `headers`, `body`, and `queryParams` options.                                                                                                                                 |
+| method            | string                  | HTTP method (GET, POST, etc). Defaults to POST if body is provided, GET otherwise.                                                                                                                                                                |
+| headers           | Record\<string, string> | Key-value pairs of HTTP headers to include in the request.                                                                                                                                                                                        |
+| body              | object \| string        | The request body. For POST requests, objects are automatically stringified as JSON.                                                                                                                                                               |
+| queryParams       | Record\<string, string> | Key-value pairs of query parameters to append to the URL.                                                                                                                                                                                         |
+| transformRequest  | string \| Function      | A function, string template, or file path to transform the prompt before sending it to the API.                                                                                                                                                   |
+| transformResponse | string \| Function      | Transforms the API response using a JavaScript expression (e.g., 'json.result'), function, or file path (e.g., 'file://parser.js'). Replaces the deprecated `responseParser` field.                                                               |
+| tokenEstimation   | object                  | Configuration for optional token usage estimation. See Token Estimation section above for details.                                                                                                                                                |
+| maxRetries        | number                  | Maximum number of retry attempts for failed requests. Defaults to 4.                                                                                                                                                                              |
 | validateStatus    | string \| Function      | A function, string expression, or file path to validate HTTP status codes. Returns boolean indicating if the response should be treated as successful. By default, rejects 401, 403, and 5xx status codes. See [Error Handling](#error-handling). |
-| auth              | object                  | Authentication configuration (bearer, api_key, basic, or oauth). See [Authentication](#authentication) section.                                                                     |
-| signatureAuth     | object                  | Digital signature authentication configuration. See [Digital Signature Authentication](#digital-signature-authentication) section.                                                  |
-| tls               | object                  | Configuration for TLS/HTTPS connections including client certificates, CA certificates, and cipher settings. See TLS Configuration Options above.                                   |
+| auth              | object                  | Authentication configuration (bearer, api_key, basic, or oauth). See [Authentication](#authentication) section.                                                                                                                                   |
+| signatureAuth     | object                  | Digital signature authentication configuration. See [Digital Signature Authentication](#digital-signature-authentication) section.                                                                                                                |
+| tls               | object                  | Configuration for TLS/HTTPS connections including client certificates, CA certificates, and cipher settings. See TLS Configuration Options above.                                                                                                 |
 
 In addition to a full URL, the provider `id` field accepts `http` or `https` as values.
 
@@ -1483,13 +1483,15 @@ import { HttpConfigGenerator } from '@site/src/components/HttpConfigGenerator';
 
 ## Error Handling
 
-The HTTP provider throws errors for:
+When an exception is raised by the HTTP provider, the test case will automatically be considered an error. The HTTP provider throws errors for:
 
 - Network errors or request failures
 - Invalid response parsing
 - Session parsing errors
 - Invalid request configurations
 - Status codes that fail validation (401, 403, and 5xx by default)
+
+### HTTP Status Codes
 
 By default, the HTTP provider rejects 401 (Unauthorized), 403 (Forbidden), and 5xx (server error) status codes. You can customize this using the `validateStatus` option:
 
@@ -1517,4 +1519,22 @@ export function validateStatus(status) {
 }
 ```
 
-The provider automatically retries certain errors (like rate limits) based on `maxRetries`, while other errors are thrown immediately.
+### Guardrails
+
+Many applications use client error status codes (4xx) to indicate when a guardrail flagged a request or response. This is why the `validateStatus` function only considers authentication error codes (401,403) as errors instead of all 4xx codes. See the [guardrails documentation](/docs/configuration/expected-outputs/guardrails) for more information on how to update your `transformResponse` function to handle guardrail responses.
+
+### Retries
+
+The provider automatically retries certain errors based on `maxRetries` (default: 4). The following conditions trigger automatic retries:
+
+- **Rate limit errors** (HTTP 429 or responses with rate limit headers like `X-RateLimit-Remaining: 0`)
+- **Network errors** (connection failures, timeouts, DNS errors)
+- **5xx server errors** (when `PROMPTFOO_RETRY_5XX=true` environment variable is set)
+
+Retries use exponential backoff (default: 5 seconds, configurable via `PROMPTFOO_REQUEST_BACKOFF_MS`). Authentication errors (401, 403) and client errors (4xx) are not retried and fail immediately.
+
+To enable retries for 5xx server errors, set the environment variable:
+
+```bash
+PROMPTFOO_RETRY_5XX=true promptfoo eval
+```
