@@ -319,38 +319,6 @@ const config: UnifiedConfig = {
 export default config;
 ```
 
-Gemini requires schema adaptation (it doesn't support `additionalProperties` or `$schema`):
-
-```typescript
-function cleanSchemaForGemini(schema: any): any {
-  if (typeof schema !== 'object' || schema === null) return schema;
-  const cleaned = { ...schema };
-  delete cleaned.additionalProperties;
-  delete cleaned.$schema;
-  if (cleaned.properties) {
-    cleaned.properties = Object.fromEntries(
-      Object.entries(cleaned.properties).map(([key, value]) => [key, cleanSchemaForGemini(value)]),
-    );
-  }
-  if (cleaned.items) cleaned.items = cleanSchemaForGemini(cleaned.items);
-  return cleaned;
-}
-```
-
-Then in your config:
-
-```typescript
-{
-  id: 'google:gemini-3-pro-preview',
-  config: {
-    generationConfig: {
-      response_mime_type: 'application/json',
-      response_schema: cleanSchemaForGemini(responseFormat.json_schema.schema),
-    },
-  },
-}
-```
-
 See the [ts-config example](https://github.com/promptfoo/promptfoo/tree/main/examples/ts-config) for a complete implementation.
 
 ## Conditional Configuration Loading
