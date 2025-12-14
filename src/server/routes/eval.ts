@@ -123,10 +123,17 @@ evalRouter.get('/job/:id', (req: Request, res: Response): void => {
 evalRouter.patch('/:id', async (req: Request, res: Response): Promise<void> => {
   const id = req.params.id;
   const { table, config, rowIndex, row } = req.body;
-  const isRowLevelUpdate = Number.isInteger(rowIndex) && row !== undefined && row !== null;
+  const hasRowPayload = row !== undefined && row !== null;
+  const isRowLevelUpdate =
+    Number.isInteger(rowIndex) && (rowIndex as number) >= 0 && hasRowPayload;
 
   if (!id) {
     res.status(400).json({ error: 'Missing id' });
+    return;
+  }
+
+  if (hasRowPayload && !isRowLevelUpdate) {
+    res.status(400).json({ error: 'Invalid row index' });
     return;
   }
 
