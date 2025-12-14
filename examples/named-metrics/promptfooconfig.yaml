@@ -6,57 +6,51 @@ prompts:
   - 'Say this as though you are a seafarer from the 17th century: {{body}}'
 
 providers:
-  - openai:gpt-4.1-mini
+  - echo  # Using echo provider for demonstration
 
 derivedMetrics:
   - name: DoubleConsistency
     value: Consistency * 2
 
+# Use defaultTest to apply a metric with a template variable
+defaultTest:
+  assert:
+    - type: icontains
+      value: '{{keyword}}'
+      metric: '{{category}}'
+
 tests:
-  - description: Check for exact match
+  - description: Check for pirate tone with dynamic metric
     vars:
-      body: Yes
-    assert:
-      - type: equals
-        value: Yarr
-        metric: Tone
+      body: Yarr, matey!
+      keyword: yarr
+      category: PirateTone
+  
+  - description: Check for hunger-related words with dynamic metric
+    vars:
+      body: I need some grub
+      keyword: grub
+      category: PirateTone
 
-  - description: Another basic substring check
+  - description: Check if output contains expected text
     vars:
-      body: I'm hungry
-    assert:
-      - type: icontains
-        value: grub
-        metric: Tone
-
-  - description: Check if output is JSON
-    vars:
-      body: Output the story of your life in JSON
+      body: '{"message": "Hello"}'
+      keyword: message
+      category: FormatCheck
     assert:
       - type: is-json
         metric: Consistency
 
-  - description: Check for semantic similarity
+  - description: Check for greeting
     vars:
-      body: Hello world
-    assert:
-      # Look for substring
-      - type: javascript
-        value: output.startsWith('Ahoy')
-      - type: python
-        value: max(0, len(output) - 300)
-        metric: Consistency
+      body: Ahoy, world
+      keyword: ahoy
+      category: Greeting
 
-      # Check for semantic similarity
-      - type: similar
-        value: Ahoy, world
-        metric: Tone
-
-  - description: Use LLM to evaluate output
+  - description: Check for pirate-like language
     vars:
-      body: The quick brown fox jumps over the lazy dog
-    assert:
-      # Ask the LLM to check if it spoke like a pirate
-      - type: llm-rubric
-        value: Is spoken like a pirate
-        metric: Tone
+      body: The pirate spoke clearly
+      keyword: pirate
+      category: Tone
+
+

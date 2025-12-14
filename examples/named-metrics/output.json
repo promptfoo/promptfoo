@@ -1,0 +1,1178 @@
+{
+  "evalId": "eval-hRE-2025-12-14T06:54:36",
+  "results": {
+    "version": 3,
+    "timestamp": "2025-12-14T06:54:36.775Z",
+    "prompts": [
+      {
+        "raw": "Say this as though you are a pirate: {{body}}",
+        "label": "Say this as though you are a pirate: {{body}}",
+        "id": "ac1aff107414ae39d0e1927ff6bc534210a8cb49ecfe8b92324d0665965f7b28",
+        "provider": "echo",
+        "metrics": {
+          "score": 4.5,
+          "testPassCount": 4,
+          "testFailCount": 1,
+          "testErrorCount": 0,
+          "assertPassCount": 5,
+          "assertFailCount": 1,
+          "totalLatencyMs": 121,
+          "tokenUsage": {
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "total": 0,
+            "numRequests": 5,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0
+            },
+            "assertions": {
+              "total": 0,
+              "prompt": 0,
+              "completion": 0,
+              "cached": 0,
+              "numRequests": 0,
+              "completionDetails": {
+                "reasoning": 0,
+                "acceptedPrediction": 0,
+                "rejectedPrediction": 0
+              }
+            }
+          },
+          "namedScores": {
+            "PirateTone": 2,
+            "DoubleConsistency": 0,
+            "FormatCheck": 1,
+            "Consistency": 0,
+            "Greeting": 1,
+            "Tone": 1
+          },
+          "namedScoresCount": {
+            "PirateTone": 2,
+            "FormatCheck": 1,
+            "Consistency": 1,
+            "Greeting": 1,
+            "Tone": 1
+          },
+          "cost": 0
+        }
+      },
+      {
+        "raw": "Say this as though you are a seafarer from the 17th century: {{body}}",
+        "label": "Say this as though you are a seafarer from the 17th century: {{body}}",
+        "id": "012226aceef4f02a4b1eb26cbbd0819db6ad6ed541f3ed5b59c7f92761ae1b4f",
+        "provider": "echo",
+        "metrics": {
+          "score": 4.5,
+          "testPassCount": 4,
+          "testFailCount": 1,
+          "testErrorCount": 0,
+          "assertPassCount": 5,
+          "assertFailCount": 1,
+          "totalLatencyMs": 234,
+          "tokenUsage": {
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "total": 0,
+            "numRequests": 5,
+            "completionDetails": {
+              "reasoning": 0,
+              "acceptedPrediction": 0,
+              "rejectedPrediction": 0
+            },
+            "assertions": {
+              "total": 0,
+              "prompt": 0,
+              "completion": 0,
+              "cached": 0,
+              "numRequests": 0,
+              "completionDetails": {
+                "reasoning": 0,
+                "acceptedPrediction": 0,
+                "rejectedPrediction": 0
+              }
+            }
+          },
+          "namedScores": {
+            "PirateTone": 2,
+            "DoubleConsistency": 0,
+            "FormatCheck": 1,
+            "Consistency": 0,
+            "Greeting": 1,
+            "Tone": 1
+          },
+          "namedScoresCount": {
+            "PirateTone": 2,
+            "FormatCheck": 1,
+            "Consistency": 1,
+            "Greeting": 1,
+            "Tone": 1
+          },
+          "cost": 0
+        }
+      }
+    ],
+    "results": [
+      {
+        "cost": 0,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "All assertions passed",
+          "namedScores": {
+            "PirateTone": 1
+          },
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "icontains",
+                "value": "{{keyword}}",
+                "metric": "{{category}}"
+              },
+              "metadata": {
+                "renderedAssertionValue": "yarr"
+              }
+            }
+          ]
+        },
+        "id": "65904fdd-3478-4e6f-a3ae-f9e852f280a6",
+        "latencyMs": 1,
+        "namedScores": {
+          "PirateTone": 1
+        },
+        "prompt": {
+          "raw": "Say this as though you are a pirate: Yarr, matey!",
+          "label": "Say this as though you are a pirate: {{body}}"
+        },
+        "promptId": "ac1aff107414ae39d0e1927ff6bc534210a8cb49ecfe8b92324d0665965f7b28",
+        "promptIdx": 0,
+        "provider": {
+          "id": "echo",
+          "label": ""
+        },
+        "response": {
+          "output": "Say this as though you are a pirate: Yarr, matey!",
+          "raw": "Say this as though you are a pirate: Yarr, matey!",
+          "cost": 0,
+          "cached": false,
+          "tokenUsage": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "numRequests": 1
+          },
+          "isRefusal": false,
+          "metadata": {}
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "description": "Check for pirate tone with dynamic metric",
+          "vars": {
+            "body": "Yarr, matey!",
+            "keyword": "yarr",
+            "category": "PirateTone"
+          },
+          "assert": [
+            {
+              "type": "icontains",
+              "value": "{{keyword}}",
+              "metric": "{{category}}"
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 0,
+        "vars": {
+          "body": "Yarr, matey!",
+          "keyword": "yarr",
+          "category": "PirateTone"
+        },
+        "metadata": {
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      },
+      {
+        "cost": 0,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "All assertions passed",
+          "namedScores": {
+            "PirateTone": 1
+          },
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "icontains",
+                "value": "{{keyword}}",
+                "metric": "{{category}}"
+              },
+              "metadata": {
+                "renderedAssertionValue": "yarr"
+              }
+            }
+          ]
+        },
+        "id": "d5c67ffc-a17a-4bb8-abc3-b4fe2e69f905",
+        "latencyMs": 4,
+        "namedScores": {
+          "PirateTone": 1
+        },
+        "prompt": {
+          "raw": "Say this as though you are a seafarer from the 17th century: Yarr, matey!",
+          "label": "Say this as though you are a seafarer from the 17th century: {{body}}"
+        },
+        "promptId": "012226aceef4f02a4b1eb26cbbd0819db6ad6ed541f3ed5b59c7f92761ae1b4f",
+        "promptIdx": 1,
+        "provider": {
+          "id": "echo",
+          "label": ""
+        },
+        "response": {
+          "output": "Say this as though you are a seafarer from the 17th century: Yarr, matey!",
+          "raw": "Say this as though you are a seafarer from the 17th century: Yarr, matey!",
+          "cost": 0,
+          "cached": false,
+          "tokenUsage": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "numRequests": 1
+          },
+          "isRefusal": false,
+          "metadata": {}
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "description": "Check for pirate tone with dynamic metric",
+          "vars": {
+            "body": "Yarr, matey!",
+            "keyword": "yarr",
+            "category": "PirateTone"
+          },
+          "assert": [
+            {
+              "type": "icontains",
+              "value": "{{keyword}}",
+              "metric": "{{category}}"
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 0,
+        "vars": {
+          "body": "Yarr, matey!",
+          "keyword": "yarr",
+          "category": "PirateTone"
+        },
+        "metadata": {
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      },
+      {
+        "cost": 0,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "All assertions passed",
+          "namedScores": {
+            "PirateTone": 1
+          },
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "icontains",
+                "value": "{{keyword}}",
+                "metric": "{{category}}"
+              },
+              "metadata": {
+                "renderedAssertionValue": "grub"
+              }
+            }
+          ]
+        },
+        "id": "5e35fc3d-a039-4f2c-b47c-f33732c6bcfa",
+        "latencyMs": 4,
+        "namedScores": {
+          "PirateTone": 1
+        },
+        "prompt": {
+          "raw": "Say this as though you are a pirate: I need some grub",
+          "label": "Say this as though you are a pirate: {{body}}"
+        },
+        "promptId": "ac1aff107414ae39d0e1927ff6bc534210a8cb49ecfe8b92324d0665965f7b28",
+        "promptIdx": 0,
+        "provider": {
+          "id": "echo",
+          "label": ""
+        },
+        "response": {
+          "output": "Say this as though you are a pirate: I need some grub",
+          "raw": "Say this as though you are a pirate: I need some grub",
+          "cost": 0,
+          "cached": false,
+          "tokenUsage": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "numRequests": 1
+          },
+          "isRefusal": false,
+          "metadata": {}
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "description": "Check for hunger-related words with dynamic metric",
+          "vars": {
+            "body": "I need some grub",
+            "keyword": "grub",
+            "category": "PirateTone"
+          },
+          "assert": [
+            {
+              "type": "icontains",
+              "value": "{{keyword}}",
+              "metric": "{{category}}"
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 1,
+        "vars": {
+          "body": "I need some grub",
+          "keyword": "grub",
+          "category": "PirateTone"
+        },
+        "metadata": {
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      },
+      {
+        "cost": 0,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "All assertions passed",
+          "namedScores": {
+            "PirateTone": 1
+          },
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "icontains",
+                "value": "{{keyword}}",
+                "metric": "{{category}}"
+              },
+              "metadata": {
+                "renderedAssertionValue": "grub"
+              }
+            }
+          ]
+        },
+        "id": "db42b87a-83a0-407b-b7cd-163a7a46f409",
+        "latencyMs": 5,
+        "namedScores": {
+          "PirateTone": 1
+        },
+        "prompt": {
+          "raw": "Say this as though you are a seafarer from the 17th century: I need some grub",
+          "label": "Say this as though you are a seafarer from the 17th century: {{body}}"
+        },
+        "promptId": "012226aceef4f02a4b1eb26cbbd0819db6ad6ed541f3ed5b59c7f92761ae1b4f",
+        "promptIdx": 1,
+        "provider": {
+          "id": "echo",
+          "label": ""
+        },
+        "response": {
+          "output": "Say this as though you are a seafarer from the 17th century: I need some grub",
+          "raw": "Say this as though you are a seafarer from the 17th century: I need some grub",
+          "cost": 0,
+          "cached": false,
+          "tokenUsage": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "numRequests": 1
+          },
+          "isRefusal": false,
+          "metadata": {}
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "description": "Check for hunger-related words with dynamic metric",
+          "vars": {
+            "body": "I need some grub",
+            "keyword": "grub",
+            "category": "PirateTone"
+          },
+          "assert": [
+            {
+              "type": "icontains",
+              "value": "{{keyword}}",
+              "metric": "{{category}}"
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 1,
+        "vars": {
+          "body": "I need some grub",
+          "keyword": "grub",
+          "category": "PirateTone"
+        },
+        "metadata": {
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      },
+      {
+        "cost": 0,
+        "error": "Expected output to be valid JSON",
+        "gradingResult": {
+          "pass": false,
+          "score": 0.5,
+          "reason": "Expected output to be valid JSON",
+          "namedScores": {
+            "FormatCheck": 1,
+            "Consistency": 0
+          },
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "icontains",
+                "value": "{{keyword}}",
+                "metric": "{{category}}"
+              },
+              "metadata": {
+                "renderedAssertionValue": "message"
+              }
+            },
+            {
+              "pass": false,
+              "score": 0,
+              "reason": "Expected output to be valid JSON",
+              "assertion": {
+                "type": "is-json",
+                "metric": "Consistency"
+              }
+            }
+          ]
+        },
+        "id": "67082f60-2c8f-4d87-84f4-09a32d96978e",
+        "latencyMs": 3,
+        "namedScores": {
+          "FormatCheck": 1,
+          "Consistency": 0
+        },
+        "prompt": {
+          "raw": "Say this as though you are a pirate: {\"message\": \"Hello\"}",
+          "label": "Say this as though you are a pirate: {{body}}"
+        },
+        "promptId": "ac1aff107414ae39d0e1927ff6bc534210a8cb49ecfe8b92324d0665965f7b28",
+        "promptIdx": 0,
+        "provider": {
+          "id": "echo",
+          "label": ""
+        },
+        "response": {
+          "output": "Say this as though you are a pirate: {\"message\": \"Hello\"}",
+          "raw": "Say this as though you are a pirate: {\"message\": \"Hello\"}",
+          "cost": 0,
+          "cached": false,
+          "tokenUsage": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "numRequests": 1
+          },
+          "isRefusal": false,
+          "metadata": {}
+        },
+        "score": 0.5,
+        "success": false,
+        "testCase": {
+          "description": "Check if output contains expected text",
+          "vars": {
+            "body": "{\"message\": \"Hello\"}",
+            "keyword": "message",
+            "category": "FormatCheck"
+          },
+          "assert": [
+            {
+              "type": "icontains",
+              "value": "{{keyword}}",
+              "metric": "{{category}}"
+            },
+            {
+              "type": "is-json",
+              "metric": "Consistency"
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 2,
+        "vars": {
+          "body": "{\"message\": \"Hello\"}",
+          "keyword": "message",
+          "category": "FormatCheck"
+        },
+        "metadata": {
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 1
+      },
+      {
+        "cost": 0,
+        "error": "Expected output to be valid JSON",
+        "gradingResult": {
+          "pass": false,
+          "score": 0.5,
+          "reason": "Expected output to be valid JSON",
+          "namedScores": {
+            "FormatCheck": 1,
+            "Consistency": 0
+          },
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "icontains",
+                "value": "{{keyword}}",
+                "metric": "{{category}}"
+              },
+              "metadata": {
+                "renderedAssertionValue": "message"
+              }
+            },
+            {
+              "pass": false,
+              "score": 0,
+              "reason": "Expected output to be valid JSON",
+              "assertion": {
+                "type": "is-json",
+                "metric": "Consistency"
+              }
+            }
+          ]
+        },
+        "id": "d6a08f81-22f3-4eb0-bd5e-7fa42d849c6a",
+        "latencyMs": 111,
+        "namedScores": {
+          "FormatCheck": 1,
+          "Consistency": 0
+        },
+        "prompt": {
+          "raw": "Say this as though you are a seafarer from the 17th century: {\"message\": \"Hello\"}",
+          "label": "Say this as though you are a seafarer from the 17th century: {{body}}"
+        },
+        "promptId": "012226aceef4f02a4b1eb26cbbd0819db6ad6ed541f3ed5b59c7f92761ae1b4f",
+        "promptIdx": 1,
+        "provider": {
+          "id": "echo",
+          "label": ""
+        },
+        "response": {
+          "output": "Say this as though you are a seafarer from the 17th century: {\"message\": \"Hello\"}",
+          "raw": "Say this as though you are a seafarer from the 17th century: {\"message\": \"Hello\"}",
+          "cost": 0,
+          "cached": false,
+          "tokenUsage": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "numRequests": 1
+          },
+          "isRefusal": false,
+          "metadata": {}
+        },
+        "score": 0.5,
+        "success": false,
+        "testCase": {
+          "description": "Check if output contains expected text",
+          "vars": {
+            "body": "{\"message\": \"Hello\"}",
+            "keyword": "message",
+            "category": "FormatCheck"
+          },
+          "assert": [
+            {
+              "type": "icontains",
+              "value": "{{keyword}}",
+              "metric": "{{category}}"
+            },
+            {
+              "type": "is-json",
+              "metric": "Consistency"
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 2,
+        "vars": {
+          "body": "{\"message\": \"Hello\"}",
+          "keyword": "message",
+          "category": "FormatCheck"
+        },
+        "metadata": {
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 1
+      },
+      {
+        "cost": 0,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "All assertions passed",
+          "namedScores": {
+            "Greeting": 1
+          },
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "icontains",
+                "value": "{{keyword}}",
+                "metric": "{{category}}"
+              },
+              "metadata": {
+                "renderedAssertionValue": "ahoy"
+              }
+            }
+          ]
+        },
+        "id": "ab8381be-b736-4e84-9226-8b35606b60ea",
+        "latencyMs": 112,
+        "namedScores": {
+          "Greeting": 1
+        },
+        "prompt": {
+          "raw": "Say this as though you are a pirate: Ahoy, world",
+          "label": "Say this as though you are a pirate: {{body}}"
+        },
+        "promptId": "ac1aff107414ae39d0e1927ff6bc534210a8cb49ecfe8b92324d0665965f7b28",
+        "promptIdx": 0,
+        "provider": {
+          "id": "echo",
+          "label": ""
+        },
+        "response": {
+          "output": "Say this as though you are a pirate: Ahoy, world",
+          "raw": "Say this as though you are a pirate: Ahoy, world",
+          "cost": 0,
+          "cached": false,
+          "tokenUsage": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "numRequests": 1
+          },
+          "isRefusal": false,
+          "metadata": {}
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "description": "Check for greeting",
+          "vars": {
+            "body": "Ahoy, world",
+            "keyword": "ahoy",
+            "category": "Greeting"
+          },
+          "assert": [
+            {
+              "type": "icontains",
+              "value": "{{keyword}}",
+              "metric": "{{category}}"
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 3,
+        "vars": {
+          "body": "Ahoy, world",
+          "keyword": "ahoy",
+          "category": "Greeting"
+        },
+        "metadata": {
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      },
+      {
+        "cost": 0,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "All assertions passed",
+          "namedScores": {
+            "Greeting": 1
+          },
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "icontains",
+                "value": "{{keyword}}",
+                "metric": "{{category}}"
+              },
+              "metadata": {
+                "renderedAssertionValue": "ahoy"
+              }
+            }
+          ]
+        },
+        "id": "5adb6dd2-4074-4c01-82ea-a39d1bfc5744",
+        "latencyMs": 112,
+        "namedScores": {
+          "Greeting": 1
+        },
+        "prompt": {
+          "raw": "Say this as though you are a seafarer from the 17th century: Ahoy, world",
+          "label": "Say this as though you are a seafarer from the 17th century: {{body}}"
+        },
+        "promptId": "012226aceef4f02a4b1eb26cbbd0819db6ad6ed541f3ed5b59c7f92761ae1b4f",
+        "promptIdx": 1,
+        "provider": {
+          "id": "echo",
+          "label": ""
+        },
+        "response": {
+          "output": "Say this as though you are a seafarer from the 17th century: Ahoy, world",
+          "raw": "Say this as though you are a seafarer from the 17th century: Ahoy, world",
+          "cost": 0,
+          "cached": false,
+          "tokenUsage": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "numRequests": 1
+          },
+          "isRefusal": false,
+          "metadata": {}
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "description": "Check for greeting",
+          "vars": {
+            "body": "Ahoy, world",
+            "keyword": "ahoy",
+            "category": "Greeting"
+          },
+          "assert": [
+            {
+              "type": "icontains",
+              "value": "{{keyword}}",
+              "metric": "{{category}}"
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 3,
+        "vars": {
+          "body": "Ahoy, world",
+          "keyword": "ahoy",
+          "category": "Greeting"
+        },
+        "metadata": {
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      },
+      {
+        "cost": 0,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "All assertions passed",
+          "namedScores": {
+            "Tone": 1
+          },
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "icontains",
+                "value": "{{keyword}}",
+                "metric": "{{category}}"
+              },
+              "metadata": {
+                "renderedAssertionValue": "pirate"
+              }
+            }
+          ]
+        },
+        "id": "1caac491-c01e-4581-91bc-895bf4ff4e13",
+        "latencyMs": 1,
+        "namedScores": {
+          "Tone": 1
+        },
+        "prompt": {
+          "raw": "Say this as though you are a pirate: The pirate spoke clearly",
+          "label": "Say this as though you are a pirate: {{body}}"
+        },
+        "promptId": "ac1aff107414ae39d0e1927ff6bc534210a8cb49ecfe8b92324d0665965f7b28",
+        "promptIdx": 0,
+        "provider": {
+          "id": "echo",
+          "label": ""
+        },
+        "response": {
+          "output": "Say this as though you are a pirate: The pirate spoke clearly",
+          "raw": "Say this as though you are a pirate: The pirate spoke clearly",
+          "cost": 0,
+          "cached": false,
+          "tokenUsage": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "numRequests": 1
+          },
+          "isRefusal": false,
+          "metadata": {}
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "description": "Check for pirate-like language",
+          "vars": {
+            "body": "The pirate spoke clearly",
+            "keyword": "pirate",
+            "category": "Tone"
+          },
+          "assert": [
+            {
+              "type": "icontains",
+              "value": "{{keyword}}",
+              "metric": "{{category}}"
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 4,
+        "vars": {
+          "body": "The pirate spoke clearly",
+          "keyword": "pirate",
+          "category": "Tone"
+        },
+        "metadata": {
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      },
+      {
+        "cost": 0,
+        "gradingResult": {
+          "pass": true,
+          "score": 1,
+          "reason": "All assertions passed",
+          "namedScores": {
+            "Tone": 1
+          },
+          "tokensUsed": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "cached": 0,
+            "numRequests": 0
+          },
+          "componentResults": [
+            {
+              "pass": true,
+              "score": 1,
+              "reason": "Assertion passed",
+              "assertion": {
+                "type": "icontains",
+                "value": "{{keyword}}",
+                "metric": "{{category}}"
+              },
+              "metadata": {
+                "renderedAssertionValue": "pirate"
+              }
+            }
+          ]
+        },
+        "id": "5eaf9bf0-a287-4a3e-9333-316cee6369c3",
+        "latencyMs": 2,
+        "namedScores": {
+          "Tone": 1
+        },
+        "prompt": {
+          "raw": "Say this as though you are a seafarer from the 17th century: The pirate spoke clearly",
+          "label": "Say this as though you are a seafarer from the 17th century: {{body}}"
+        },
+        "promptId": "012226aceef4f02a4b1eb26cbbd0819db6ad6ed541f3ed5b59c7f92761ae1b4f",
+        "promptIdx": 1,
+        "provider": {
+          "id": "echo",
+          "label": ""
+        },
+        "response": {
+          "output": "Say this as though you are a seafarer from the 17th century: The pirate spoke clearly",
+          "raw": "Say this as though you are a seafarer from the 17th century: The pirate spoke clearly",
+          "cost": 0,
+          "cached": false,
+          "tokenUsage": {
+            "total": 0,
+            "prompt": 0,
+            "completion": 0,
+            "numRequests": 1
+          },
+          "isRefusal": false,
+          "metadata": {}
+        },
+        "score": 1,
+        "success": true,
+        "testCase": {
+          "description": "Check for pirate-like language",
+          "vars": {
+            "body": "The pirate spoke clearly",
+            "keyword": "pirate",
+            "category": "Tone"
+          },
+          "assert": [
+            {
+              "type": "icontains",
+              "value": "{{keyword}}",
+              "metric": "{{category}}"
+            }
+          ],
+          "options": {},
+          "metadata": {}
+        },
+        "testIdx": 4,
+        "vars": {
+          "body": "The pirate spoke clearly",
+          "keyword": "pirate",
+          "category": "Tone"
+        },
+        "metadata": {
+          "_promptfooFileMetadata": {}
+        },
+        "failureReason": 0
+      }
+    ],
+    "stats": {
+      "successes": 8,
+      "failures": 2,
+      "errors": 0,
+      "tokenUsage": {
+        "prompt": 0,
+        "completion": 0,
+        "cached": 0,
+        "total": 0,
+        "numRequests": 10,
+        "completionDetails": {
+          "reasoning": 0,
+          "acceptedPrediction": 0,
+          "rejectedPrediction": 0
+        },
+        "assertions": {
+          "total": 0,
+          "prompt": 0,
+          "completion": 0,
+          "cached": 0,
+          "numRequests": 0,
+          "completionDetails": {
+            "reasoning": 0,
+            "acceptedPrediction": 0,
+            "rejectedPrediction": 0
+          }
+        }
+      }
+    }
+  },
+  "config": {
+    "description": "Custom metric naming and derivation for evaluation",
+    "prompts": [
+      "Say this as though you are a pirate: {{body}}",
+      "Say this as though you are a seafarer from the 17th century: {{body}}"
+    ],
+    "providers": [
+      "echo"
+    ],
+    "tests": [
+      {
+        "description": "Check for pirate tone with dynamic metric",
+        "vars": {
+          "body": "Yarr, matey!",
+          "keyword": "yarr",
+          "category": "PirateTone"
+        }
+      },
+      {
+        "description": "Check for hunger-related words with dynamic metric",
+        "vars": {
+          "body": "I need some grub",
+          "keyword": "grub",
+          "category": "PirateTone"
+        }
+      },
+      {
+        "description": "Check if output contains expected text",
+        "vars": {
+          "body": "{\"message\": \"Hello\"}",
+          "keyword": "message",
+          "category": "FormatCheck"
+        },
+        "assert": [
+          {
+            "type": "is-json",
+            "metric": "Consistency"
+          }
+        ]
+      },
+      {
+        "description": "Check for greeting",
+        "vars": {
+          "body": "Ahoy, world",
+          "keyword": "ahoy",
+          "category": "Greeting"
+        }
+      },
+      {
+        "description": "Check for pirate-like language",
+        "vars": {
+          "body": "The pirate spoke clearly",
+          "keyword": "pirate",
+          "category": "Tone"
+        }
+      }
+    ],
+    "defaultTest": {
+      "assert": [
+        {
+          "type": "icontains",
+          "value": "{{keyword}}",
+          "metric": "{{category}}"
+        }
+      ]
+    },
+    "derivedMetrics": [
+      {
+        "name": "DoubleConsistency",
+        "value": "Consistency * 2"
+      }
+    ],
+    "outputPath": [
+      "output.json"
+    ],
+    "extensions": []
+  },
+  "shareableUrl": null,
+  "metadata": {
+    "promptfooVersion": "0.120.4",
+    "nodeVersion": "v20.19.6",
+    "platform": "linux",
+    "arch": "x64",
+    "exportedAt": "2025-12-14T06:54:37.666Z",
+    "evaluationCreatedAt": "2025-12-14T06:54:36.775Z"
+  }
+}
