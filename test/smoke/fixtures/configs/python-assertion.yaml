@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Smoke test - Python file assertion'
+
+providers:
+  - echo
+
+prompts:
+  - 'Hello {{name}}, welcome to the system'
+
+tests:
+  - vars:
+      name: Alice
+      expected_word: Alice
+    assert:
+      - type: python
+        value: file://../assertions/check_keywords.py

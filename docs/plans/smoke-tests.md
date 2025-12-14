@@ -393,10 +393,16 @@ Validate existing examples work with echo provider substitution:
 ### Phase 2: Config & Provider Formats - PARTIAL
 
 - [x] 2.2.1: JSON config
-- [ ] 2.3.1-2.3.7: All JS config variants
-- [ ] 2.4.1-2.4.6: All TS config variants
-- [ ] 3.2.1-3.2.5: All JS provider variants
-- [ ] 3.3.1-3.3.3: All TS provider variants
+- [x] 2.3.1: CJS config with module.exports
+- [x] 2.3.5: ESM config with export default
+- [ ] 2.3.2-2.3.4, 2.3.6-2.3.7: Other JS config variants
+- [x] 2.4.1: TypeScript config with export default
+- [ ] 2.4.2-2.4.6: Other TS config variants
+- [x] 3.2.1: CJS provider class
+- [x] 3.2.4: ESM provider class
+- [ ] 3.2.2-3.2.3, 3.2.5: Other JS provider variants
+- [x] 3.3.1: TypeScript provider class
+- [ ] 3.3.2-3.3.3: Other TS provider variants
 
 ### Phase 3: Script Providers - PARTIAL
 
@@ -410,14 +416,18 @@ Validate existing examples work with echo provider substitution:
 
 - [x] 4.2.2: CSV file tests
 - [x] 4.2.3: JSON file tests
+- [x] 4.2.4: JSONL file tests
+- [x] 4.2.5: YAML file tests
 - [x] 4.3.2: File ref prompts
-- [ ] 4.2.4-4.2.10: Other data loading formats
+- [ ] 4.2.6-4.2.10: Other data loading formats (XLSX, JS/TS/Python generators, glob)
 - [x] 5.1.3: Equals assertion
 - [x] 5.1.5: Regex assertion
 - [x] 5.1.6: Is-JSON assertion
 - [x] 5.2.1: Inline JavaScript assertion
+- [x] 5.2.2: JavaScript file assertion
+- [x] 5.2.5: Python file assertion
 - [ ] 5.1.1-5.1.2, 5.1.4, 5.1.7-5.1.11: Other built-in assertions
-- [ ] 5.2.2-5.2.6: Script assertion files
+- [ ] 5.2.3-5.2.4, 5.2.6: Other script assertion variants
 
 ### Phase 5: HTTP & Auth
 
