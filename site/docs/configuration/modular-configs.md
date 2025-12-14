@@ -235,11 +235,7 @@ module.exports = {
 
 ## TypeScript Configuration
 
-For even more type safety and better integration with your application code, you can use TypeScript configuration files. This enables IDE autocompletion, compile-time checks, and the ability to share types and schemas with your application.
-
-### Basic TypeScript Configuration
-
-Create a `promptfooconfig.ts` file:
+Promptfoo configs can be written in TypeScript:
 
 ```typescript title="promptfooconfig.ts"
 import type { UnifiedConfig } from 'promptfoo';
@@ -269,27 +265,21 @@ export default config;
 
 ### Running TypeScript Configs
 
-To run evaluations with TypeScript configs, you need a TypeScript loader. Install one of these options:
+Install a TypeScript loader:
 
 ```bash
 npm install tsx
-# or
-npm install @swc-node/register
 ```
 
-Then run your evaluation:
+Run with `NODE_OPTIONS`:
 
 ```bash
-# Using tsx
 NODE_OPTIONS="--import tsx" promptfoo eval -c promptfooconfig.ts
-
-# Using @swc-node/register
-NODE_OPTIONS='--import @swc-node/register/esm-register' promptfoo eval -c promptfooconfig.ts
 ```
 
 ### Dynamic Schema Generation
 
-TypeScript configs let you share Zod schemas between your application and promptfoo tests, avoiding duplication:
+Share Zod schemas between your application and promptfoo:
 
 ```typescript title="src/schemas/response.ts"
 import { z } from 'zod';
@@ -329,7 +319,7 @@ const config: UnifiedConfig = {
 export default config;
 ```
 
-For Gemini, you'll need to adapt the schema since it doesn't support all OpenAI schema properties:
+Gemini requires schema adaptation (it doesn't support `additionalProperties` or `$schema`):
 
 ```typescript
 function cleanSchemaForGemini(schema: any): any {
@@ -345,8 +335,11 @@ function cleanSchemaForGemini(schema: any): any {
   if (cleaned.items) cleaned.items = cleanSchemaForGemini(cleaned.items);
   return cleaned;
 }
+```
 
-// Usage with Gemini
+Then in your config:
+
+```typescript
 {
   id: 'google:gemini-2.5-flash',
   config: {
@@ -358,7 +351,7 @@ function cleanSchemaForGemini(schema: any): any {
 }
 ```
 
-See the [ts-config example](https://github.com/promptfoo/promptfoo/tree/main/examples/ts-config) for a complete working implementation
+See the [ts-config example](https://github.com/promptfoo/promptfoo/tree/main/examples/ts-config) for a complete implementation.
 
 ## Conditional Configuration Loading
 
