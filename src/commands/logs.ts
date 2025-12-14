@@ -411,14 +411,12 @@ export function logsCommand(program: Command) {
       ) => {
         telemetry.record('command_used', {
           name: 'logs',
-          options: {
-            type: cmdObj.type,
-            follow: cmdObj.follow,
-            list: cmdObj.list,
-            hasGrep: !!cmdObj.grep,
-            hasLines: !!cmdObj.lines,
-            hasHead: !!cmdObj.head,
-          },
+          type: cmdObj.type,
+          follow: cmdObj.follow,
+          list: cmdObj.list,
+          hasGrep: !!cmdObj.grep,
+          hasLines: !!cmdObj.lines,
+          hasHead: !!cmdObj.head,
         });
 
         try {
@@ -537,7 +535,7 @@ export function logsCommand(program: Command) {
     .action(async (cmdObj: { type: string }) => {
       telemetry.record('command_used', {
         name: 'logs list',
-        options: { type: cmdObj.type },
+        type: cmdObj.type,
       });
 
       const validTypes = ['debug', 'error', 'all'] as const;
