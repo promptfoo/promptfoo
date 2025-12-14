@@ -115,9 +115,17 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
       const targetResponse = targetResponses[i];
 
       if (targetResponse) {
+        const output = targetResponse.output;
+        const content =
+          typeof output === 'string'
+            ? output
+            : output != null
+              ? JSON.stringify(output)
+              : (targetResponse.error ?? 'No response from target');
+
         messages.push({
           role: 'assistant' as const,
-          content: targetResponse.output ?? targetResponse.error ?? 'No response from target',
+          content,
           contentType: 'text' as const,
         } as LoadedMessage);
       }
