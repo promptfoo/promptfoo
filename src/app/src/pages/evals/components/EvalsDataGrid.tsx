@@ -261,7 +261,7 @@ export default function EvalsDataGrid({
    * 3. Sort favorites to the top.
    */
   const rows = useMemo(() => {
-    let rows_ = evals;
+    let rows_ = evals || [];
 
     if (focusedEvalId && rows_.length > 0) {
       // Filter out the focused eval from the list; first find it for downstream filtering.
@@ -275,7 +275,8 @@ export default function EvalsDataGrid({
     }
 
     // Sort favorites to the top, maintaining date order within each group
-    return rows_.sort((a, b) => {
+    // Create a copy to avoid mutating the original array
+    return [...rows_].sort((a, b) => {
       if (a.isFavorite === b.isFavorite) {
         return 0; // Maintain existing order (by date)
       }
@@ -284,7 +285,7 @@ export default function EvalsDataGrid({
   }, [evals, filterByDatasetId, focusedEvalId]);
 
   const hasRedteamEvals = useMemo(() => {
-    return evals.some(({ isRedteam }) => isRedteam === 1);
+    return (evals || []).some(({ isRedteam }) => isRedteam === 1);
   }, [evals]);
 
   const handleCellClick = (params: GridCellParams<Eval>) => onEvalSelected(params.row.evalId);
