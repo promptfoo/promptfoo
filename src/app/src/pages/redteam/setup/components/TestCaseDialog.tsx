@@ -94,6 +94,33 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
   const turnMessages = useMemo<Message[]>(() => {
     const messages = [];
 
+    // Helper to extract string content from provider output
+    // Some providers return objects like { response: "..." } instead of strings
+    const extractOutputContent = (output: unknown): string => {
+      if (typeof output === 'string') {
+        return output;
+      }
+      if (output && typeof output === 'object') {
+        // Handle common object formats from various providers
+        const obj = output as Record<string, unknown>;
+        if (typeof obj.response === 'string') {
+          return obj.response;
+        }
+        if (typeof obj.text === 'string') {
+          return obj.text;
+        }
+        if (typeof obj.content === 'string') {
+          return obj.content;
+        }
+        if (typeof obj.message === 'string') {
+          return obj.message;
+        }
+        // Fallback: stringify the object
+        return JSON.stringify(output);
+      }
+      return '';
+    };
+
     for (let i = 0; i < maxTurns; i++) {
       const generatedTestCase = generatedTestCases[i];
 
@@ -115,9 +142,12 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
       const targetResponse = targetResponses[i];
 
       if (targetResponse) {
+        const outputContent = targetResponse.output
+          ? extractOutputContent(targetResponse.output)
+          : '';
         messages.push({
           role: 'assistant' as const,
-          content: targetResponse.output ?? targetResponse.error ?? 'No response from target',
+          content: outputContent || targetResponse.error || 'No response from target',
           contentType: 'text' as const,
         } as LoadedMessage);
       }

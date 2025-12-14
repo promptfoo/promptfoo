@@ -19,7 +19,8 @@ export interface GeneratedTestCase {
 }
 
 export interface TargetResponse {
-  output: string | null;
+  // Output can be a string or an object (some providers return structured responses)
+  output: string | Record<string, unknown> | null;
   error: string | null;
 }
 

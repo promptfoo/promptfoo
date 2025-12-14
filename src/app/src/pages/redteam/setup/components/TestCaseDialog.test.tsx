@@ -306,4 +306,101 @@ describe('TestCaseDialog', () => {
       expect(svg).toBeInTheDocument();
     });
   });
+
+  describe('target response output formats', () => {
+    it('should render string output directly', () => {
+      renderWithTheme(
+        <TestCaseDialog
+          {...defaultProps}
+          targetResponses={[{ output: 'This is a string response', error: null }]}
+        />,
+      );
+
+      expect(screen.getByText('This is a string response')).toBeInTheDocument();
+    });
+
+    it('should extract response from object with response key', () => {
+      renderWithTheme(
+        <TestCaseDialog
+          {...defaultProps}
+          targetResponses={[
+            { output: { response: 'Extracted from response key' } as unknown as string, error: null },
+          ]}
+        />,
+      );
+
+      expect(screen.getByText('Extracted from response key')).toBeInTheDocument();
+    });
+
+    it('should extract text from object with text key', () => {
+      renderWithTheme(
+        <TestCaseDialog
+          {...defaultProps}
+          targetResponses={[
+            { output: { text: 'Extracted from text key' } as unknown as string, error: null },
+          ]}
+        />,
+      );
+
+      expect(screen.getByText('Extracted from text key')).toBeInTheDocument();
+    });
+
+    it('should extract content from object with content key', () => {
+      renderWithTheme(
+        <TestCaseDialog
+          {...defaultProps}
+          targetResponses={[
+            { output: { content: 'Extracted from content key' } as unknown as string, error: null },
+          ]}
+        />,
+      );
+
+      expect(screen.getByText('Extracted from content key')).toBeInTheDocument();
+    });
+
+    it('should extract message from object with message key', () => {
+      renderWithTheme(
+        <TestCaseDialog
+          {...defaultProps}
+          targetResponses={[
+            { output: { message: 'Extracted from message key' } as unknown as string, error: null },
+          ]}
+        />,
+      );
+
+      expect(screen.getByText('Extracted from message key')).toBeInTheDocument();
+    });
+
+    it('should stringify unknown object formats', () => {
+      renderWithTheme(
+        <TestCaseDialog
+          {...defaultProps}
+          targetResponses={[
+            { output: { unknownKey: 'some value' } as unknown as string, error: null },
+          ]}
+        />,
+      );
+
+      expect(screen.getByText('{"unknownKey":"some value"}')).toBeInTheDocument();
+    });
+
+    it('should show error when output is null and error exists', () => {
+      renderWithTheme(
+        <TestCaseDialog
+          {...defaultProps}
+          targetResponses={[{ output: null, error: 'An error occurred' }]}
+        />,
+      );
+
+      expect(screen.getByText('An error occurred')).toBeInTheDocument();
+    });
+
+    it('should show default message when both output and error are null', () => {
+      renderWithTheme(
+        <TestCaseDialog {...defaultProps} targetResponses={[{ output: null, error: null }]} />,
+      );
+
+      expect(screen.getByText('No response from target')).toBeInTheDocument();
+    });
+  });
 });
