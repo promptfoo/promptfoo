@@ -10,6 +10,7 @@ scratch
 .DS_Store
 node_modules
 dist
+dist-binary
 bundle
 .aider*
 .vite

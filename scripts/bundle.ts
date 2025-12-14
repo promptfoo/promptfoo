@@ -81,6 +81,12 @@ interface BundleResult {
   bundleSize: number;
 }
 
+interface BundleOptions {
+  format: 'esm' | 'cjs';
+  outputFile: string;
+  forSea?: boolean;
+}
+
 /**
  * Clean and create bundle directory.
  */
@@ -151,8 +157,10 @@ function copyAssets(): void {
 /**
  * Create the esbuild bundle.
  */
-async function createBundle(): Promise<BundleResult> {
-  const outputFile = path.join(BUNDLE_DIR, 'promptfoo.mjs');
+async function createBundle(options?: BundleOptions): Promise<BundleResult> {
+  const format = options?.format ?? 'esm';
+  const outputFile = options?.outputFile ?? path.join(BUNDLE_DIR, 'promptfoo.mjs');
+  const forSea = options?.forSea ?? false;
 
   // Node.js built-in modules that should remain external
   const NODE_BUILTINS = [
@@ -199,15 +207,45 @@ async function createBundle(): Promise<BundleResult> {
     'zlib',
   ];
 
+  // Banner for ESM format - sets up __dirname, __filename, require for ESM
+  const esmBanner = `
+import { createRequire as __bundle_createRequire } from 'module';
+import { fileURLToPath as __bundle_fileURLToPath } from 'url';
+import { dirname as __bundle_dirname, join as __bundle_join } from 'path';
+
+const __filename = __bundle_fileURLToPath(import.meta.url);
+const __dirname = __bundle_dirname(__filename);
+const require = __bundle_createRequire(import.meta.url);
+
+// Asset directory for bundled distribution
+const __BUNDLE_ASSETS__ = __bundle_join(__dirname, 'assets');
+`.trim();
+
+  // Banner for CJS format (used in SEA builds)
+  // For SEA, we need to handle the fact that __dirname might point to the executable
+  const cjsBanner = `
+'use strict';
+const path = require('path');
+
+// Asset directory for bundled distribution
+// In SEA mode, assets are next to the executable
+const __BUNDLE_ASSETS__ = path.join(__dirname, 'assets');
+`.trim();
+
+  // Footer for CJS to handle async entry point
+  const cjsFooter = forSea
+    ? ''
+    : '';
+
   try {
     const result = await esbuild.build({
       entryPoints: [path.join(ROOT, 'src', 'main.ts')],
       bundle: true,
       platform: 'node',
       target: 'node20',
-      format: 'esm',
+      format: format,
       outfile: outputFile,
-      minify: false, // Keep readable for debugging initially
+      minify: forSea, // Minify for SEA to reduce binary size
       sourcemap: false,
       metafile: true,
 
@@ -225,27 +263,18 @@ async function createBundle(): Promise<BundleResult> {
         __PROMPTFOO_POSTHOG_KEY__: JSON.stringify(process.env.PROMPTFOO_POSTHOG_KEY || ''),
         __PROMPTFOO_ENGINES_NODE__: JSON.stringify(packageJson.engines.node),
         __PROMPTFOO_INSTALL_METHOD__: JSON.stringify(
-          process.env.PROMPTFOO_INSTALL_METHOD || 'bundle'
+          forSea ? 'binary' : process.env.PROMPTFOO_INSTALL_METHOD || 'bundle'
         ),
-        BUILD_FORMAT: '"esm"',
-        'process.env.BUILD_FORMAT': '"esm"',
+        BUILD_FORMAT: JSON.stringify(format),
+        'process.env.BUILD_FORMAT': JSON.stringify(format),
       },
 
-      // Handle __dirname/__filename in ESM
+      // Handle __dirname/__filename appropriately for format
       banner: {
-        js: `
-import { createRequire as __bundle_createRequire } from 'module';
-import { fileURLToPath as __bundle_fileURLToPath } from 'url';
-import { dirname as __bundle_dirname, join as __bundle_join } from 'path';
-
-const __filename = __bundle_fileURLToPath(import.meta.url);
-const __dirname = __bundle_dirname(__filename);
-const require = __bundle_createRequire(import.meta.url);
-
-// Asset directory for bundled distribution
-const __BUNDLE_ASSETS__ = __bundle_join(__dirname, 'assets');
-`.trim(),
+        js: format === 'esm' ? esmBanner : cjsBanner,
       },
+
+      footer: cjsFooter ? { js: cjsFooter } : undefined,
 
       // Preserve dynamic imports for optional features
       splitting: false,
