@@ -41,6 +41,24 @@ export async function fetchUserId(): Promise<string | null> {
   }
 }
 
+export async function fetchPylonEmailHash(): Promise<string | null> {
+  try {
+    const response = await callApi('/user/pylon', {
+      method: 'GET',
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const data = await response.json();
+    return data.pylonEmailHash;
+  } catch (error) {
+    console.error('Error fetching pylon email hash:', error);
+    return null;
+  }
+}
+
 export async function updateEvalAuthor(evalId: string, author: string) {
   const response = await callApi(`/eval/${evalId}/author`, {
     method: 'PATCH',
