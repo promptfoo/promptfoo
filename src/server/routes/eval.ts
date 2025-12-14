@@ -123,7 +123,7 @@ evalRouter.get('/job/:id', (req: Request, res: Response): void => {
 evalRouter.patch('/:id', async (req: Request, res: Response): Promise<void> => {
   const id = req.params.id;
   const { table, config, rowIndex, row } = req.body;
-  const isRowLevelUpdate = typeof rowIndex === 'number' && row;
+  const isRowLevelUpdate = Number.isInteger(rowIndex) && row !== undefined && row !== null;
 
   if (!id) {
     res.status(400).json({ error: 'Missing id' });
@@ -148,7 +148,9 @@ evalRouter.patch('/:id', async (req: Request, res: Response): Promise<void> => {
         return;
       }
 
-      if (!Number.isInteger(rowIndex) || rowIndex < 0 || rowIndex >= eval_.oldResults.table.body.length) {
+      const numericRowIndex = rowIndex as number;
+
+      if (numericRowIndex < 0 || numericRowIndex >= eval_.oldResults.table.body.length) {
         res.status(400).json({ error: 'Invalid row index' });
         return;
       }
@@ -158,7 +160,7 @@ evalRouter.patch('/:id', async (req: Request, res: Response): Promise<void> => {
         return;
       }
 
-      eval_.oldResults.table.body[rowIndex] = row;
+      eval_.oldResults.table.body[numericRowIndex] = row;
       if (config) {
         eval_.config = config;
       }

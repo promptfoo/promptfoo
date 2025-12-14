@@ -297,7 +297,10 @@ function ResultsTable({
       const updatedData = [...body];
       const targetRow = updatedData[rowIndex];
       if (!targetRow) {
-        console.error('Invalid row index for rating');
+        console.error('Invalid row index for rating', {
+          rowIndex,
+          totalRows: updatedData.length,
+        });
         return;
       }
       const updatedRow = { ...targetRow };
