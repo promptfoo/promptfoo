@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { getDb } from '../../src/database/index';
@@ -60,7 +61,7 @@ describe('eval routes', () => {
     it('updates only the targeted row for legacy eval tables', async () => {
       const db = getDb();
       const legacyEval = oldStyleEval();
-      legacyEval.id = `eval-legacy-${Date.now()}`;
+      legacyEval.id = `eval-legacy-${randomUUID()}`;
       const originalFirstRow = structuredClone(legacyEval.results.table.body[0]);
       const secondRow = structuredClone(legacyEval.results.table.body[0]);
       secondRow.outputs[0].text = 'Second row';

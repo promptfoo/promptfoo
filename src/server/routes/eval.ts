@@ -141,8 +141,13 @@ evalRouter.patch('/:id', async (req: Request, res: Response): Promise<void> => {
         return;
       }
 
-      if (rowIndex < 0 || rowIndex >= eval_.oldResults.table.body.length) {
+      if (!Number.isInteger(rowIndex) || rowIndex < 0 || rowIndex >= eval_.oldResults.table.body.length) {
         res.status(400).json({ error: 'Invalid row index' });
+        return;
+      }
+
+      if (typeof row !== 'object' || row === null || !Array.isArray((row as any).outputs)) {
+        res.status(400).json({ error: 'Invalid row payload' });
         return;
       }
 
