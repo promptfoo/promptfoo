@@ -123,3 +123,31 @@ jobs:
     uses: ./.github/workflows/docker.yml
     with:
       tag_name: ${{ needs.release-please.outputs.tag_name }}
+
+  # Build and upload installer scripts to the release
+  upload-installers:
+    if: needs.release-please.outputs.release_created
+    needs: [release-please]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/create-github-app-token@v2
+        id: app-token
+        with:
+          app-id: ${{ vars.PROMPTFOOBOT_APP_ID }}
+          private-key: ${{ secrets.PROMPTFOOBOT_APP_PRIVATE_KEY }}
+
+      - name: Upload install scripts to release
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          TAG_NAME: ${{ needs.release-please.outputs.tag_name }}
+        run: |
+          echo "Uploading installer scripts to release $TAG_NAME"
+          gh release upload "$TAG_NAME" \
+            scripts/install.sh \
+            scripts/install.ps1 \
+            --clobber \
+            --repo ${{ github.repository }}
