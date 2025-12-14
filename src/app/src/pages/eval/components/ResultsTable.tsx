@@ -437,7 +437,7 @@ function ResultsTable({
         }
       }
     },
-    [body, head, setTable, evalId, inComparisonMode, showToast],
+    [body, head, setTable, evalId, inComparisonMode, showToast, version],
   );
 
   const tableBody = React.useMemo(() => {
