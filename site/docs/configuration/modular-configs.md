@@ -287,21 +287,29 @@ NODE_OPTIONS="--import tsx" promptfoo eval -c promptfooconfig.ts
 NODE_OPTIONS='--import @swc-node/register/esm-register' promptfoo eval -c promptfooconfig.ts
 ```
 
-### Sharing Code with Your Application
+### Dynamic Schema Generation
 
-TypeScript configs are particularly useful when you need to share types, schemas, or logic with your application:
+TypeScript configs let you share Zod schemas between your application and promptfoo tests, avoiding duplication:
+
+```typescript title="src/schemas/response.ts"
+import { z } from 'zod';
+
+export const ResponseSchema = z.object({
+  answer: z.string(),
+  confidence: z.number().min(0).max(1),
+  sources: z.array(z.string()).nullable(),
+});
+```
 
 ```typescript title="promptfooconfig.ts"
 import { zodResponseFormat } from 'openai/helpers/zod.mjs';
 import type { UnifiedConfig } from 'promptfoo';
-import { createConversationSchema } from './src/llm/conversation-schema.js';
+import { ResponseSchema } from './src/schemas/response';
 
-// Dynamically generate schema based on your application code
-const schema = createConversationSchema('english');
-const responseFormat = zodResponseFormat(schema, 'conversation_response');
+const responseFormat = zodResponseFormat(ResponseSchema, 'response');
 
 const config: UnifiedConfig = {
-  prompts: ['file://prompts/conversation.txt'],
+  prompts: ['Answer this question: {{question}}'],
   providers: [
     {
       id: 'openai:gpt-5-mini',
@@ -309,69 +317,48 @@ const config: UnifiedConfig = {
         response_format: responseFormat,
       },
     },
+  ],
+  tests: [
     {
-      id: 'google:gemini-2.5-flash',
-      config: {
-        generationConfig: {
-          response_mime_type: 'application/json',
-          response_schema: cleanSchemaForGemini(responseFormat.json_schema.schema),
-        },
-      },
+      vars: { question: 'What is TypeScript?' },
+      assert: [{ type: 'is-json' }],
     },
   ],
-  tests: generateTestsFromSchema(schema),
 };
 
-// Helper function to adapt schemas for different providers
+export default config;
+```
+
+For Gemini, you'll need to adapt the schema since it doesn't support all OpenAI schema properties:
+
+```typescript
 function cleanSchemaForGemini(schema: any): any {
   if (typeof schema !== 'object' || schema === null) return schema;
-
   const cleaned = { ...schema };
-
-  // Remove properties that Gemini doesn't support
   delete cleaned.additionalProperties;
   delete cleaned.$schema;
-
-  // Recursively clean nested objects
   if (cleaned.properties) {
     cleaned.properties = Object.fromEntries(
       Object.entries(cleaned.properties).map(([key, value]) => [key, cleanSchemaForGemini(value)]),
     );
   }
-
-  if (cleaned.items) {
-    cleaned.items = cleanSchemaForGemini(cleaned.items);
-  }
-
+  if (cleaned.items) cleaned.items = cleanSchemaForGemini(cleaned.items);
   return cleaned;
 }
 
-// Generate tests based on your schema
-function generateTestsFromSchema(schema: any) {
-  // Implementation specific to your use case
-  return [
-    // Generated test cases
-  ];
+// Usage with Gemini
+{
+  id: 'google:gemini-2.5-flash',
+  config: {
+    generationConfig: {
+      response_mime_type: 'application/json',
+      response_schema: cleanSchemaForGemini(responseFormat.json_schema.schema),
+    },
+  },
 }
-
-export default config;
 ```
 
-### Benefits of TypeScript Configs
-
-1. **Type Safety**: Get compile-time checks and IDE autocompletion for your configuration
-2. **Code Reuse**: Share schemas, types, and validation logic with your application
-3. **Dynamic Generation**: Generate tests programmatically based on your codebase
-4. **Single Source of Truth**: Avoid duplicating schemas between your app and tests
-5. **Refactoring Support**: Rename symbols and refactor with confidence
-6. **Provider Adaptation**: Automatically convert schemas for different providers (OpenAI, Gemini)
-
-This approach is especially valuable when:
-
-- Working with structured outputs or response schemas
-- Building complex evaluation suites that need to stay in sync with your application
-- You want to leverage existing TypeScript types and interfaces
-- You need to perform complex configuration logic that benefits from type checking
+See the [ts-config example](https://github.com/promptfoo/promptfoo/tree/main/examples/ts-config) for a complete working implementation
 
 ## Conditional Configuration Loading
 
