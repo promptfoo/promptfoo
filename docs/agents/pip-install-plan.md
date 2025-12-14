@@ -1000,7 +1000,7 @@ echo "=== All smoke tests passed ==="
 - [x] install.sh script (macOS/Linux) (`scripts/install.sh`)
 - [x] install.ps1 script (Windows) (`scripts/install.ps1`)
 - [x] GitHub Action for installer upload (`release-please.yml`)
-- [ ] Smoke test suite
+- [x] Smoke test suite (`scripts/smoke-test.sh`) - 22 tests passing
 - [ ] Manual release to GitHub Releases
 
 **Note on SEA:** The Node.js SEA (Single Executable Application) approach is currently blocked due to ESM/top-level await limitations. Our codebase uses top-level await which cannot be transpiled to CommonJS, and Node.js SEA doesn't fully support ESM yet. For now, the install.sh/install.ps1 scripts install via npm fallback (requires Node.js).
