@@ -1,11 +1,14 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import request from 'supertest';
+import { getDb } from '../../src/database/index';
+import { evalsTable } from '../../src/database/tables';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import EvalResult from '../../src/models/evalResult';
 import { createApp } from '../../src/server/server';
 import invariant from '../../src/util/invariant';
 import EvalFactory from '../factories/evalFactory';
+import { oldStyleEval } from '../factories/data/eval/database_records';
 
 describe('eval routes', () => {
   let app: ReturnType<typeof createApp>;
@@ -52,6 +55,36 @@ describe('eval routes', () => {
     payload.score = score;
     return payload;
   }
+
+  describe('patch("/:id") legacy row updates', () => {
+    it('updates only the targeted row for legacy eval tables', async () => {
+      const db = getDb();
+      const legacyEval = oldStyleEval();
+      legacyEval.id = `eval-legacy-${Date.now()}`;
+      const originalFirstRow = JSON.parse(JSON.stringify(legacyEval.results.table.body[0]));
+      const secondRow = JSON.parse(JSON.stringify(legacyEval.results.table.body[0]));
+      secondRow.outputs[0].text = 'Second row';
+      secondRow.outputs[0].pass = false;
+      legacyEval.results.table.body.push(secondRow);
+
+      await db.insert(evalsTable).values(legacyEval).run();
+      testEvalIds.add(legacyEval.id);
+
+      const updatedRow = JSON.parse(JSON.stringify(secondRow));
+      updatedRow.outputs[0].text = 'Updated legacy row';
+
+      const res = await request(app)
+        .patch(`/api/eval/${legacyEval.id}`)
+        .send({ rowIndex: 1, row: updatedRow });
+
+      expect(res.status).toBe(200);
+
+      const updatedEval = await Eval.findById(legacyEval.id);
+      invariant(updatedEval?.oldResults, 'Legacy eval should have old results');
+      expect(updatedEval.oldResults.table.body[1]).toEqual(updatedRow);
+      expect(updatedEval.oldResults.table.body[0]).toEqual(originalFirstRow);
+    });
+  });
 
   describe('post("/:evalId/results/:id/rating")', () => {
     it('Passing test and the user marked it as passing (no change)', async () => {

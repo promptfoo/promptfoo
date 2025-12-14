@@ -113,9 +113,9 @@ evalRouter.get('/job/:id', (req: Request, res: Response): void => {
   }
 });
 
-evalRouter.patch('/:id', (req: Request, res: Response): void => {
+evalRouter.patch('/:id', async (req: Request, res: Response): Promise<void> => {
   const id = req.params.id;
-  const { table, config } = req.body;
+  const { table, config, rowIndex, row } = req.body;
 
   if (!id) {
     res.status(400).json({ error: 'Missing id' });
@@ -123,9 +123,45 @@ evalRouter.patch('/:id', (req: Request, res: Response): void => {
   }
 
   try {
-    updateResult(id, config, table);
+    const hasRowUpdate = typeof rowIndex === 'number' && row;
+    if (hasRowUpdate) {
+      const eval_ = await Eval.findById(id);
+      if (!eval_) {
+        res.status(404).json({ error: 'Eval not found' });
+        return;
+      }
+
+      if (!eval_.useOldResults()) {
+        res.status(400).json({ error: 'Row-level updates are only supported for legacy evals' });
+        return;
+      }
+
+      if (!eval_.oldResults?.table?.body) {
+        res.status(500).json({ error: 'Eval table not available' });
+        return;
+      }
+
+      if (rowIndex < 0 || rowIndex >= eval_.oldResults.table.body.length) {
+        res.status(400).json({ error: 'Invalid row index' });
+        return;
+      }
+
+      eval_.oldResults.table.body[rowIndex] = row;
+      if (config) {
+        eval_.config = config;
+      }
+      await eval_.save();
+      res.json({ message: 'Eval updated successfully' });
+      return;
+    }
+
+    await updateResult(id, config, table);
     res.json({ message: 'Eval updated successfully' });
-  } catch {
+  } catch (error) {
+    logger.error('[PATCH /eval/:id] Failed to update eval', {
+      evalId: id,
+      error,
+    });
     res.status(500).json({ error: 'Failed to update eval table' });
   }
 });

@@ -1003,6 +1003,112 @@ describe('ResultsTable handleRating', () => {
   });
 });
 
+describe('ResultsTable handleRating - legacy table updates', () => {
+  let mockSetTable: ReturnType<typeof vi.fn>;
+  let mockCallApi: any;
+
+  const createLegacyTable = () => ({
+    body: [
+      {
+        outputs: [
+          {
+            id: 'legacy-output-1',
+            pass: false,
+            score: 0,
+            text: 'legacy output',
+            gradingResult: {
+              pass: false,
+              score: 0,
+              reason: 'Initial reason',
+              comment: 'Initial comment',
+            },
+          },
+        ],
+        test: {},
+        vars: [],
+      },
+    ],
+    head: {
+      prompts: [
+        {
+          provider: 'test-provider',
+        },
+      ],
+      vars: [],
+    },
+  });
+
+  const defaultProps = {
+    columnVisibility: {},
+    failureFilter: {},
+    filterMode: 'all' as const,
+    maxTextLength: 100,
+    onFailureFilterToggle: vi.fn(),
+    onSearchTextChange: vi.fn(),
+    searchText: '',
+    showStats: true,
+    wordBreak: 'break-word' as const,
+    setFilterMode: vi.fn(),
+    selectedMetric: null,
+    zoom: 1,
+    onResultsContainerScroll: vi.fn(),
+    atInitialVerticalScrollPosition: true,
+  };
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    mockSetTable = vi.fn();
+    const apiModule = await import('@app/utils/api');
+    mockCallApi = vi.mocked(apiModule.callApi);
+    mockCallApi.mockResolvedValue({ ok: true });
+
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: 'legacy-eval',
+      inComparisonMode: false,
+      setTable: mockSetTable,
+      table: createLegacyTable(),
+      version: 3,
+      fetchEvalData: vi.fn(),
+      isFetching: false,
+      filteredResultsCount: 1,
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+  });
+
+  it('sends row-level patches when rating legacy evals', async () => {
+    render(<ResultsTable {...defaultProps} />);
+
+    const rateButton = screen.getByText('Rate');
+    await act(async () => {
+      rateButton.click();
+    });
+
+    await waitFor(() => expect(mockCallApi).toHaveBeenCalled());
+    const [, requestInit] = mockCallApi.mock.calls[0];
+    const body = JSON.parse((requestInit as any).body as string);
+
+    expect(body).toMatchObject({
+      rowIndex: 0,
+      row: expect.objectContaining({
+        outputs: [
+          expect.objectContaining({
+            pass: true,
+            score: 0.75,
+          }),
+        ],
+      }),
+    });
+    expect(body.table).toBeUndefined();
+  });
+});
+
 describe('ResultsTable handleRating - Fallback to output values', () => {
   let mockSetTable: ReturnType<typeof vi.fn>;
 

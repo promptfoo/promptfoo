@@ -426,7 +426,7 @@ function ResultsTable({
               headers: {
                 'Content-Type': 'application/json',
               },
-              body: JSON.stringify({ table: newTable }),
+              body: JSON.stringify({ rowIndex, row: updatedRow }),
             });
           }
           if (!response.ok) {
