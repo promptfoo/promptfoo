@@ -580,7 +580,7 @@ High-value tests for CLI filter flags and execution options.
 
 **Priority 4 - Output/Execution Flags:**
 
-- [ ] 1.10.1: Delay between tests
+- [x] 1.10.1: Delay between tests (`--delay 100`)
 - [x] 1.10.5: No table output
 - [x] 1.11.1: Description flag
 - [x] 1.11.2: Multiple output files
@@ -603,6 +603,23 @@ High-value tests for CLI filter flags and execution options.
 - [ ] 7.2.2: File defaultTest
 - [x] 7.3.1: Scenarios feature
 - [ ] 8.1-8.10: Example config tests
+
+### Phase 8: Advanced Features - PARTIAL
+
+Advanced CLI features and assertion capabilities.
+
+- [x] 1.4.8: Environment file loading (`--env-file`)
+- [x] 1.4.4b: HTML output format
+- [x] 4.3.1b: Multiple prompts (A/B testing)
+- [x] 4.3.2b: Multiple file prompts (`file://` references)
+- [x] 5.1.2b: icontains assertion (case-insensitive)
+- [x] 5.1.5b: Regex end-of-string pattern (`$` anchor)
+- [x] 5.3.1: Assertion weights
+- [x] 7.4.1: Test threshold option (partial assertion passes)
+- [ ] 1.4.9: `--grader` flag for model-graded assertions
+- [ ] 1.12.1: Resume evaluation (`--resume`)
+- [ ] 1.12.3: Retry errors (`--retry-errors`)
+- [ ] 2.5.1: Config extends feature
 
 ---
 
@@ -845,3 +862,40 @@ afterAll(() => {
   fs.rmSync(OUTPUT_DIR, { recursive: true, force: true });
 });
 ```
+
+### Available Assertion Types
+
+There is **no `ends-with` assertion type**. To check string suffixes, use the `regex` assertion with a `$` anchor:
+
+```yaml
+# Check if output ends with "42."
+- type: regex
+  value: '42\.$'
+```
+
+Available assertion types include: `contains`, `contains-all`, `contains-any`, `icontains`, `icontains-all`, `icontains-any`, `equals`, `starts-with`, `regex`, `is-json`, `contains-json`, `is-html`, `is-xml`, `is-sql`, `javascript`, `python`, and model-graded assertions.
+
+### Glob Patterns for Prompts
+
+Glob patterns in prompts (e.g., `prompts/*.txt`) have path resolution issues when used with `file://` prefix. Use explicit file references instead:
+
+```yaml
+# Works - explicit file references
+prompts:
+  - file://../prompts/greeting.txt
+  - file://../prompts/farewell.txt
+
+# Has issues - glob pattern
+prompts:
+  - file://prompts/*.txt
+```
+
+### Multiple Config Files Behavior
+
+Using multiple `-c` flags doesn't deeply merge configs. Each config is processed separately with defaults for missing properties. The second config will get a default `{{prompt}}` prompt if prompts aren't specified.
+
+To compose configs, use explicit `file://` references within a single config or specify all required properties in each config file.
+
+### HTML Output Format
+
+The HTML output uses lowercase `<!doctype html>` (valid HTML5) rather than uppercase `<!DOCTYPE html>`.
