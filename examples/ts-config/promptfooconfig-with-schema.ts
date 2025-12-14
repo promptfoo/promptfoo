@@ -97,14 +97,16 @@ Return a JSON response with your translation, confidence level, and any fun cult
         {
           type: 'javascript',
           value: `
-            const parsed = typeof output === 'object' ? output : 
+            const parsed = typeof output === 'object' ? output :
                           JSON.parse(output.replace(/^\`\`\`json\\s*|\\s*\`\`\`$/g, ''));
+            const text = parsed.translation.toLowerCase();
             return parsed.translation &&
-                   (parsed.translation.toLowerCase().includes('thou') ||
-                    parsed.translation.toLowerCase().includes('thee') ||
-                    parsed.translation.toLowerCase().includes('doth') ||
-                    parsed.translation.toLowerCase().includes('hath') ||
-                    parsed.translation.toLowerCase().includes('alas'));
+                   (text.includes('thou') || text.includes('thee') ||
+                    text.includes('doth') || text.includes('hath') ||
+                    text.includes('alas') || text.includes('lieth') ||
+                    text.includes('woeful') || text.includes('undone') ||
+                    text.includes('forsooth') || text.includes('prithee') ||
+                    text.includes('verily') || text.match(/eth\\b/));
           `,
         },
       ],
@@ -118,7 +120,7 @@ Return a JSON response with your translation, confidence level, and any fun cult
         {
           type: 'javascript',
           value: `
-            const parsed = typeof output === 'object' ? output : 
+            const parsed = typeof output === 'object' ? output :
                           JSON.parse(output.replace(/^\`\`\`json\\s*|\\s*\`\`\`$/g, ''));
             const translation = parsed.translation.toLowerCase();
             return parsed.translation &&
@@ -129,7 +131,10 @@ Return a JSON response with your translation, confidence level, and any fun cult
                     translation.includes('lit') ||
                     translation.includes('goat') ||
                     translation.includes('lowkey') ||
-                    translation.includes('no cap'));
+                    translation.includes('low-key') ||
+                    translation.includes('no cap') ||
+                    translation.includes(' fr') ||
+                    translation.includes('insane'));
           `,
         },
       ],
