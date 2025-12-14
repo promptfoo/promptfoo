@@ -111,6 +111,114 @@ test/smoke/
 | 1.7.3 | Config error   | Invalid config       | `1`           |
 | 1.7.4 | Provider error | Provider fails       | `1`           |
 
+#### 1.8 Filter Flags
+
+Test count and content filters that control which tests run.
+
+##### 1.8.1 Count-Based Filters
+
+| #       | Test             | Command                                          | Verifies                          |
+| ------- | ---------------- | ------------------------------------------------ | --------------------------------- |
+| 1.8.1.1 | First N tests    | `--filter-first-n 2` (with 5 tests)              | Takes first 2 tests only          |
+| 1.8.1.2 | First N > total  | `--filter-first-n 100` (with 5 tests)            | Returns all 5 tests               |
+| 1.8.1.3 | First N zero     | `--filter-first-n 0`                             | Returns 0 tests (no eval runs)    |
+| 1.8.1.4 | Sample N tests   | `--filter-sample 2` (with 5 tests)               | Returns exactly 2 tests (random)  |
+| 1.8.1.5 | Sample > total   | `--filter-sample 100` (with 5 tests)             | Returns all 5 tests               |
+
+##### 1.8.2 Pattern Filters
+
+| #       | Test                | Command                                       | Verifies                          |
+| ------- | ------------------- | --------------------------------------------- | --------------------------------- |
+| 1.8.2.1 | Pattern match       | `--filter-pattern "user.*test"`               | Only tests with matching desc     |
+| 1.8.2.2 | Pattern case        | `--filter-pattern "(?i)TEST"`                 | Case-insensitive regex works      |
+| 1.8.2.3 | Pattern no match    | `--filter-pattern "nonexistent123"`           | Zero tests run                    |
+| 1.8.2.4 | Pattern special     | `--filter-pattern "test\\.special"`           | Regex escaping works              |
+
+##### 1.8.3 Metadata Filters
+
+| #       | Test                | Command                                       | Verifies                          |
+| ------- | ------------------- | --------------------------------------------- | --------------------------------- |
+| 1.8.3.1 | Metadata match      | `--filter-metadata category=auth`             | Only tests with metadata match    |
+| 1.8.3.2 | Metadata partial    | `--filter-metadata category=au`               | Partial value match works         |
+| 1.8.3.3 | Metadata array      | `--filter-metadata tags=security`             | Array metadata value match        |
+| 1.8.3.4 | Metadata no match   | `--filter-metadata category=nonexistent`      | Zero tests run                    |
+| 1.8.3.5 | Metadata invalid    | `--filter-metadata invalid`                   | Error: must be key=value format   |
+
+##### 1.8.4 Provider Filters
+
+| #       | Test                | Command                                       | Verifies                          |
+| ------- | ------------------- | --------------------------------------------- | --------------------------------- |
+| 1.8.4.1 | Provider by ID      | `--filter-providers "echo"`                   | Only echo provider runs           |
+| 1.8.4.2 | Provider by label   | `--filter-providers "Custom.*"`               | Provider label regex match        |
+| 1.8.4.3 | Provider multi      | `--filter-providers "echo\|custom"`           | Multiple provider match           |
+| 1.8.4.4 | Provider no match   | `--filter-providers "nonexistent"`            | No providers match, error/empty   |
+| 1.8.4.5 | Filter targets      | `--filter-targets "echo"`                     | Alias for --filter-providers      |
+
+##### 1.8.5 History-Based Filters
+
+| #       | Test                | Command                                       | Verifies                          |
+| ------- | ------------------- | --------------------------------------------- | --------------------------------- |
+| 1.8.5.1 | Filter failing file | `--filter-failing output.json`                | Re-runs only failed tests         |
+| 1.8.5.2 | Filter failing ID   | `--filter-failing eval-abc123`                | Re-runs failures by eval ID       |
+| 1.8.5.3 | Filter errors file  | `--filter-errors-only output.json`            | Re-runs only error tests          |
+| 1.8.5.4 | Filter errors ID    | `--filter-errors-only eval-abc123`            | Re-runs errors by eval ID         |
+
+##### 1.8.6 Combined Filters
+
+| #       | Test                | Command                                       | Verifies                          |
+| ------- | ------------------- | --------------------------------------------- | --------------------------------- |
+| 1.8.6.1 | Pattern + First N   | `--filter-pattern "auth" --filter-first-n 2`  | Filters apply in sequence         |
+| 1.8.6.2 | Metadata + Sample   | `--filter-metadata cat=x --filter-sample 1`   | Metadata then sample              |
+| 1.8.6.3 | Provider + Pattern  | `--filter-providers echo --filter-pattern x`  | Provider and test filtering       |
+
+#### 1.9 Variable and Prompt Flags
+
+Flags that modify variables or prompt content.
+
+| #     | Test             | Command                                       | Verifies                          |
+| ----- | ---------------- | --------------------------------------------- | --------------------------------- |
+| 1.9.1 | Var single       | `--var name=Alice`                            | Variable substitution             |
+| 1.9.2 | Var multiple     | `--var name=Alice --var age=30`               | Multiple vars                     |
+| 1.9.3 | Var override     | `--var name=Override` (config has name=Bob)   | CLI overrides config              |
+| 1.9.4 | Var invalid      | `--var invalid`                               | Error: must be key=value          |
+| 1.9.5 | Prompt prefix    | `--prompt-prefix "System: "`                  | Prefix prepended to prompts       |
+| 1.9.6 | Prompt suffix    | `--prompt-suffix "\nEnd."`                    | Suffix appended to prompts        |
+| 1.9.7 | Prefix + suffix  | `--prompt-prefix "A" --prompt-suffix "Z"`     | Both applied                      |
+
+#### 1.10 Execution Control Flags
+
+Flags that control how tests execute.
+
+| #      | Test             | Command                                       | Verifies                          |
+| ------ | ---------------- | --------------------------------------------- | --------------------------------- |
+| 1.10.1 | Delay            | `--delay 100` (with timing check)             | Delay between tests               |
+| 1.10.2 | Delay zero       | `--delay 0`                                   | No delay (default)                |
+| 1.10.3 | No cache         | `--no-cache`                                  | Cache disabled (already tested)   |
+| 1.10.4 | No progress bar  | `--no-progress-bar`                           | Progress bar hidden               |
+| 1.10.5 | No table         | `--no-table`                                  | Table output suppressed           |
+| 1.10.6 | Table max length | `--table-cell-max-length 50`                  | Cell truncation                   |
+
+#### 1.11 Output and Metadata Flags
+
+Flags that affect output and eval metadata.
+
+| #      | Test             | Command                                       | Verifies                          |
+| ------ | ---------------- | --------------------------------------------- | --------------------------------- |
+| 1.11.1 | Description      | `--description "My test run"`                 | Description in output             |
+| 1.11.2 | Multiple outputs | `-o out.json -o out.csv`                      | Multiple output files             |
+| 1.11.3 | No write         | `--no-write`                                  | Results not persisted to DB       |
+| 1.11.4 | Share disabled   | `--no-share`                                  | Sharing disabled                  |
+
+#### 1.12 Resume and Retry Flags
+
+Flags for resuming or retrying evaluations.
+
+| #      | Test             | Command                                       | Verifies                          |
+| ------ | ---------------- | --------------------------------------------- | --------------------------------- |
+| 1.12.1 | Resume latest    | `--resume`                                    | Resumes latest incomplete eval    |
+| 1.12.2 | Resume by ID     | `--resume eval-abc123`                        | Resumes specific eval             |
+| 1.12.3 | Retry errors     | `--retry-errors`                              | Retries errors from latest        |
+
 ---
 
 ### 2. Config Format Tests
@@ -440,7 +548,41 @@ Validate existing examples work with echo provider substitution:
 - [ ] 3.7.1-3.7.5: HTTP provider basics
 - [ ] 3.8.1-3.8.10: All auth configurations
 
-### Phase 6: Integration & Polish - PARTIAL
+### Phase 6: Filter & Flag Tests (NEW)
+
+High-value tests for CLI filter flags and execution options.
+
+**Priority 1 - Count/Pattern Filters:**
+- [ ] 1.8.1.1: First N tests (`--filter-first-n 2`)
+- [ ] 1.8.1.4: Sample N tests (`--filter-sample 2`)
+- [ ] 1.8.2.1: Pattern filter (`--filter-pattern "desc"`)
+- [ ] 1.8.3.1: Metadata filter (`--filter-metadata key=value`)
+
+**Priority 2 - Provider Filters:**
+- [ ] 1.8.4.1: Provider by ID (`--filter-providers "echo"`)
+- [ ] 1.8.4.2: Provider by label regex
+- [ ] 1.8.6.1: Combined filters (pattern + first-n)
+
+**Priority 3 - Variable/Prompt Flags:**
+- [ ] 1.9.1: Single var (`--var name=Alice`)
+- [ ] 1.9.2: Multiple vars
+- [ ] 1.9.5: Prompt prefix
+- [ ] 1.9.6: Prompt suffix
+
+**Priority 4 - Output/Execution Flags:**
+- [ ] 1.10.1: Delay between tests
+- [ ] 1.10.5: No table output
+- [ ] 1.11.1: Description flag
+- [ ] 1.11.2: Multiple output files
+- [ ] 1.11.3: No write flag
+
+**Priority 5 - History-Based Filters (more complex):**
+- [ ] 1.8.5.1: Filter failing from file
+- [ ] 1.8.5.3: Filter errors only from file
+- [ ] 1.12.1: Resume evaluation
+- [ ] 1.12.3: Retry errors
+
+### Phase 7: Integration & Polish - PARTIAL
 
 - [x] 6.1.1: Transform response expression
 - [ ] 6.1.2-6.1.3: Other transform variants
