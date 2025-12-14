@@ -71,14 +71,20 @@ providers:
       # L2 normalize embeddings (default: true)
       normalize: true
 
-      # Device: 'auto', 'cpu', 'gpu', 'wasm', 'webgpu'
+      # Device: 'auto', 'cpu', 'gpu', 'wasm', 'webgpu', 'cuda', 'dml'
       device: cpu
 
-      # Quantization: 'auto', 'fp32', 'fp16', 'q8', 'q4'
+      # Quantization: 'auto', 'fp32', 'fp16', 'q8', 'int8', 'uint8', 'q4', 'bnb4', 'q4f16'
       dtype: q8
 
       # Only load from local cache (no downloads)
       localFilesOnly: false
+
+      # Override default cache directory for model files
+      cacheDir: ~/.cache/transformers
+
+      # Model version/branch to use (default: 'main')
+      revision: main
 ```
 
 ### Text Generation Options
@@ -104,6 +110,15 @@ providers:
 
       # Penalty for repeating tokens
       repetitionPenalty: 1.1
+
+      # Prevent n-grams of this size from repeating
+      noRepeatNgramSize: 3
+
+      # Number of beams for beam search (1 = no beam search)
+      numBeams: 1
+
+      # Include the prompt in the output (default: false)
+      returnFullText: false
 
       # Quantization for smaller models
       dtype: q4
