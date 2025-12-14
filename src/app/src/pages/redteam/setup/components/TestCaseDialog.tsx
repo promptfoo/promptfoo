@@ -82,7 +82,6 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
     categoryAliases[pluginName as Plugin] ||
     pluginName;
 
-
   const strategyName = strategy?.id ?? '';
   const strategyDisplayName = displayNameOverrides[strategyName as Strategy] || strategyName;
 
