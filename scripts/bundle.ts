@@ -155,6 +155,204 @@ function copyAssets(): void {
 }
 
 /**
+ * Copy native node modules that can't be bundled.
+ * These are platform-specific and include prebuilt binaries.
+ */
+function copyNativeModules(): void {
+  console.log('\n[bundle] Copying native modules...');
+
+  // Native modules that must be shipped alongside the bundle
+  const nativeModules = ['better-sqlite3'];
+
+  const nodeModulesDir = path.join(ROOT, 'node_modules');
+  const bundleNodeModulesDir = path.join(BUNDLE_DIR, 'node_modules');
+
+  // Track copied modules to avoid duplicates
+  const copiedModules = new Set<string>();
+
+  // Recursive function to copy a module and its dependencies
+  function copyModuleWithDeps(moduleName: string, isRoot: boolean = false): void {
+    if (copiedModules.has(moduleName)) {
+      return;
+    }
+
+    const srcDir = path.join(nodeModulesDir, moduleName);
+    const destDir = path.join(bundleNodeModulesDir, moduleName);
+
+    if (!fs.existsSync(srcDir)) {
+      if (isRoot) {
+        console.warn(`[bundle] Warning: Native module not found: ${moduleName}`);
+      }
+      return;
+    }
+
+    copiedModules.add(moduleName);
+    fs.mkdirSync(destDir, { recursive: true });
+    fs.cpSync(srcDir, destDir, {
+      recursive: true,
+      filter: (src) => {
+        const basename = path.basename(src);
+        // Skip unnecessary files to reduce bundle size
+        if (basename === 'test' || basename === 'tests' || basename === 'docs') {
+          return false;
+        }
+        if (basename.endsWith('.md') && basename !== 'LICENSE.md') {
+          return false;
+        }
+        return true;
+      },
+    });
+
+    const label = isRoot ? 'native module' : 'dependency';
+    console.log(`[bundle] Copied ${label}: ${moduleName}`);
+
+    // Recursively copy dependencies
+    const modulePackageJson = path.join(srcDir, 'package.json');
+    if (fs.existsSync(modulePackageJson)) {
+      const pkg = JSON.parse(fs.readFileSync(modulePackageJson, 'utf8'));
+      const deps = { ...pkg.dependencies, ...pkg.optionalDependencies };
+
+      for (const depName of Object.keys(deps || {})) {
+        copyModuleWithDeps(depName);
+      }
+    }
+  }
+
+  // Copy all native modules with their dependency trees
+  for (const moduleName of nativeModules) {
+    copyModuleWithDeps(moduleName, true);
+  }
+
+  // Create stub modules for optional externals that fail at import time
+  // These modules are truly optional and only used for specific features
+  createStubModules(bundleNodeModulesDir);
+}
+
+/**
+ * Create stub modules for optional dependencies.
+ * These prevent ESM import errors while still allowing the code to run
+ * (features that need these modules will fail gracefully when used).
+ */
+function createStubModules(nodeModulesDir: string): void {
+  console.log('\n[bundle] Creating stub modules for optional dependencies...');
+
+  // Modules that need stubs with their commonly used named exports
+  // Format: { name: string, exports: string[] }
+  const stubModules: Array<{ name: string; exports: string[] }> = [
+    // Heavy/optional native modules
+    { name: 'playwright', exports: ['chromium', 'firefox', 'webkit', 'devices', 'errors', 'request', 'selectors'] },
+    { name: 'playwright-core', exports: ['chromium', 'firefox', 'webkit', 'devices', 'errors', 'request', 'selectors'] },
+    { name: '@playwright/browser-chromium', exports: [] },
+    // Optional cloud SDKs
+    { name: '@anthropic-ai/claude-agent-sdk', exports: ['Anthropic', 'Agent'] },
+    { name: '@aws-sdk/client-bedrock-runtime', exports: ['BedrockRuntimeClient', 'InvokeModelCommand', 'InvokeModelWithResponseStreamCommand', 'ConverseCommand', 'ConverseStreamCommand'] },
+    { name: '@aws-sdk/client-bedrock-agent-runtime', exports: ['BedrockAgentRuntimeClient', 'InvokeAgentCommand', 'RetrieveCommand'] },
+    { name: '@aws-sdk/client-sagemaker-runtime', exports: ['SageMakerRuntimeClient', 'InvokeEndpointCommand'] },
+    { name: '@azure/identity', exports: ['DefaultAzureCredential', 'ClientSecretCredential', 'ManagedIdentityCredential', 'AzureCliCredential'] },
+    { name: '@azure/openai-assistants', exports: ['AssistantsClient'] },
+    { name: '@azure/ai-projects', exports: ['AIProjectClient'] },
+    { name: '@fal-ai/client', exports: ['fal'] },
+    { name: '@ibm-cloud/watsonx-ai', exports: ['WatsonXAI'] },
+    { name: '@ibm-generative-ai/node-sdk', exports: ['Client'] },
+    { name: 'langfuse', exports: ['Langfuse', 'LangfuseTraceClient'] },
+    { name: 'google-auth-library', exports: ['GoogleAuth', 'Compute', 'JWT', 'OAuth2Client'] },
+    // Other optional deps
+    { name: 'sharp', exports: [] },
+    { name: 'pdf-parse', exports: [] },
+    { name: 'read-excel-file', exports: [] },
+    { name: 'fluent-ffmpeg', exports: [] },
+    { name: 'jsdom', exports: ['JSDOM', 'VirtualConsole', 'CookieJar', 'ResourceLoader'] },
+    { name: 'esbuild', exports: ['build', 'buildSync', 'transform', 'transformSync', 'version'] },
+  ];
+
+  for (const { name: moduleName, exports: namedExports } of stubModules) {
+    const moduleDir = path.join(nodeModulesDir, moduleName);
+
+    // Skip if real module was already copied
+    if (fs.existsSync(moduleDir)) {
+      continue;
+    }
+
+    fs.mkdirSync(moduleDir, { recursive: true });
+
+    // Create package.json - use ESM
+    const packageJson = {
+      name: moduleName,
+      version: '0.0.0-stub',
+      main: 'index.mjs',
+      module: 'index.mjs',
+      type: 'module',
+      exports: {
+        '.': {
+          import: './index.mjs',
+          require: './index.cjs',
+        },
+      },
+    };
+    fs.writeFileSync(path.join(moduleDir, 'package.json'), JSON.stringify(packageJson, null, 2));
+
+    // Helper function for error message
+    const errorMsg = (name: string) =>
+      `The optional module '${name}' is not installed. Install it with: npm install ${name}`;
+
+    // Create ESM stub with named exports
+    const namedExportsCode = namedExports
+      .map(
+        (exp) => `
+export const ${exp} = new Proxy(function ${exp}() {}, {
+  get(target, prop) {
+    if (prop === 'then' || prop === Symbol.toStringTag) return undefined;
+    throw new Error(${JSON.stringify(errorMsg(moduleName))});
+  },
+  apply() {
+    throw new Error(${JSON.stringify(errorMsg(moduleName))});
+  },
+  construct() {
+    throw new Error(${JSON.stringify(errorMsg(moduleName))});
+  }
+});`
+      )
+      .join('\n');
+
+    const esmStubCode = `
+// Stub module for ${moduleName} - install with: npm install ${moduleName}
+const createStub = (name) => new Proxy(function() {}, {
+  get(target, prop) {
+    if (prop === 'then' || prop === Symbol.toStringTag) return undefined;
+    throw new Error(${JSON.stringify(errorMsg(moduleName))});
+  },
+  apply() { throw new Error(${JSON.stringify(errorMsg(moduleName))}); },
+  construct() { throw new Error(${JSON.stringify(errorMsg(moduleName))}); }
+});
+
+${namedExportsCode}
+
+const defaultExport = createStub('default');
+export default defaultExport;
+`.trim();
+
+    fs.writeFileSync(path.join(moduleDir, 'index.mjs'), esmStubCode);
+
+    // Create CJS stub for compatibility
+    const cjsStubCode = `
+'use strict';
+const msg = ${JSON.stringify(errorMsg(moduleName))};
+const handler = {
+  get(t, p) { if (p === 'then' || p === Symbol.toStringTag) return undefined; throw new Error(msg); },
+  apply() { throw new Error(msg); },
+  construct() { throw new Error(msg); }
+};
+module.exports = new Proxy(function() {}, handler);
+${namedExports.map((exp) => `module.exports.${exp} = module.exports;`).join('\n')}
+`.trim();
+
+    fs.writeFileSync(path.join(moduleDir, 'index.cjs'), cjsStubCode);
+  }
+
+  console.log(`[bundle] Created ${stubModules.length} stub modules`);
+}
+
+/**
  * Create the esbuild bundle.
  */
 async function createBundle(options?: BundleOptions): Promise<BundleResult> {
@@ -350,6 +548,9 @@ async function main(): Promise<void> {
   // Copy assets first
   console.log('\n[bundle] Copying assets...');
   copyAssets();
+
+  // Copy native modules (better-sqlite3, etc.)
+  copyNativeModules();
 
   // Create bundle
   console.log('\n[bundle] Creating esbuild bundle...');
