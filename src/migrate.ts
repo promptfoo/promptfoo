@@ -1,3 +1,4 @@
+import * as fs from 'node:fs';
 import * as path from 'path';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
@@ -53,7 +54,13 @@ export async function runDbMigrations(): Promise<void> {
         // Use getCurrentDir() which handles both ESM and CJS contexts
         const dir = getCurrentDir();
         let migrationsFolder: string;
-        if (dir.includes('dist/src')) {
+
+        // Check for bundle context first (pip install, shell installer, standalone bundle)
+        // In bundle context, drizzle is in assets/drizzle relative to the bundle
+        const bundleDrizzle = path.join(dir, 'assets', 'drizzle');
+        if (fs.existsSync(bundleDrizzle)) {
+          migrationsFolder = bundleDrizzle;
+        } else if (dir.includes('dist/src')) {
           // When running from bundled dist (e.g., npx promptfoo or dist/src/main.js)
           // Navigate to project root and find drizzle folder in dist
           const projectRoot = dir.split('dist/src')[0];
