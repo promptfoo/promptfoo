@@ -265,7 +265,7 @@ async function runRedteamConversation({
       const redteamBody = JSON.stringify(redteamHistory);
 
       // Get new prompt
-      const redteamResp = await redteamProvider.callApi(redteamBody);
+      const redteamResp = await redteamProvider.callApi(redteamBody, undefined, options);
       if (redteamProvider.delay) {
         await sleep(redteamProvider.delay);
       }
@@ -289,6 +289,10 @@ async function runRedteamConversation({
           `Iteration ${i + 1}: Generated new prompt with improvement: ${improvement.slice(0, 100)}${improvement.length > 100 ? '...' : ''}`,
         );
       } catch (err) {
+        // Re-throw abort errors to properly cancel the operation
+        if (err instanceof Error && err.name === 'AbortError') {
+          throw err;
+        }
         logger.warn(`Iteration ${i + 1}: Failed to parse redteam response: ${err}`);
         continue;
       }
@@ -348,7 +352,10 @@ async function runRedteamConversation({
                 ],
               },
             ]),
+            undefined,
+            options,
           );
+          accumulateResponseTokenUsage(totalTokenUsage, visionResponse);
 
           if (visionProvider.delay) {
             await sleep(visionProvider.delay);
@@ -368,10 +375,18 @@ async function runRedteamConversation({
               `Iteration ${i + 1}: Processed image description (${imageDescription.length} chars)`,
             );
           } catch (parseErr) {
+            // Re-throw abort errors to properly cancel the operation
+            if (parseErr instanceof Error && parseErr.name === 'AbortError') {
+              throw parseErr;
+            }
             logger.warn(`Iteration ${i + 1}: Failed to parse vision response: ${parseErr}`);
             imageDescription = visionResponse.output; // Fallback to raw output if JSON parsing fails
           }
         } catch (err) {
+          // Re-throw abort errors to properly cancel the operation
+          if (err instanceof Error && err.name === 'AbortError') {
+            throw err;
+          }
           logger.warn(`Iteration ${i + 1}: Vision API call failed: ${err}`);
           continue;
         }
@@ -403,7 +418,11 @@ async function runRedteamConversation({
         },
       ]);
 
-      const judgeResp: ProviderResponse = await redteamProvider.callApi(judgeBody);
+      const judgeResp: ProviderResponse = await redteamProvider.callApi(
+        judgeBody,
+        undefined,
+        options,
+      );
       if (redteamProvider.delay) {
         await sleep(redteamProvider.delay);
       }
@@ -462,10 +481,18 @@ async function runRedteamConversation({
           `,
         });
       } catch (err) {
+        // Re-throw abort errors to properly cancel the operation
+        if (err instanceof Error && err.name === 'AbortError') {
+          throw err;
+        }
         logger.warn(`Iteration ${i + 1}: Failed to parse judge response: ${err}`);
         continue;
       }
     } catch (err) {
+      // Re-throw abort errors to properly cancel the operation
+      if (err instanceof Error && err.name === 'AbortError') {
+        throw err;
+      }
       logger.error(`Iteration ${i + 1} failed: ${err}`);
       continue;
     }

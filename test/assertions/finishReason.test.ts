@@ -1,7 +1,7 @@
-import { describe, expect, it } from '@jest/globals';
 import { handleFinishReason } from '../../src/assertions/finishReason';
 
 import type { AssertionParams } from '../../src/types/index';
+import { describe, expect, it } from 'vitest';
 
 describe('finishReason assertion', () => {
   it('should pass when finish reason matches', () => {

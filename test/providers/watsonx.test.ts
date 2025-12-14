@@ -1,3 +1,4 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { WatsonXAI } from '@ibm-cloud/watsonx-ai';
 import { BearerTokenAuthenticator, IamAuthenticator } from 'ibm-cloud-sdk-core';
 import { fetchWithCache, getCache, isCacheEnabled } from '../../src/cache';
@@ -10,45 +11,72 @@ import {
 } from '../../src/providers/watsonx';
 import { createEmptyTokenUsage } from '../../src/util/tokenUsageUtils';
 
-jest.mock('@ibm-cloud/watsonx-ai', () => ({
-  WatsonXAI: {
-    newInstance: jest.fn(),
+vi.mock('../../src/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
   },
+  getLogLevel: vi.fn().mockReturnValue('info'),
 }));
 
-jest.mock('ibm-cloud-sdk-core', () => ({
-  IamAuthenticator: jest.fn(),
-  BearerTokenAuthenticator: jest.fn(),
-}));
+vi.mock('@ibm-cloud/watsonx-ai', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
 
-jest.mock('../../src/cache', () => ({
-  getCache: jest.fn(),
-  isCacheEnabled: jest.fn(),
-  fetchWithCache: jest.fn().mockImplementation(async () => ({
-    data: {
-      resources: [
-        {
-          model_id: 'meta-llama/llama-3-2-1b-instruct',
-          input_tier: 'class_c1',
-          output_tier: 'class_c1',
-          label: 'llama-3-2-1b-instruct',
-          provider: 'Meta',
-          source: 'Hugging Face',
-          model_limits: {
-            max_sequence_length: 131072,
-            max_output_tokens: 8192,
-          },
-        },
-      ],
+    WatsonXAI: {
+      newInstance: vi.fn(),
     },
-    cached: false,
-  })),
-}));
+  };
+});
 
-jest.mock('../../src/envars', () => ({
-  getEnvString: jest.fn(),
-  getEnvInt: jest.fn(),
-}));
+vi.mock('ibm-cloud-sdk-core', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    IamAuthenticator: vi.fn(),
+    BearerTokenAuthenticator: vi.fn(),
+  };
+});
+
+vi.mock('../../src/cache', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    getCache: vi.fn(),
+    isCacheEnabled: vi.fn(),
+
+    fetchWithCache: vi.fn().mockImplementation(async function () {
+      return {
+        data: {
+          resources: [
+            {
+              model_id: 'meta-llama/llama-3-2-1b-instruct',
+              input_tier: 'class_c1',
+              output_tier: 'class_c1',
+              label: 'llama-3-2-1b-instruct',
+              provider: 'Meta',
+              source: 'Hugging Face',
+              model_limits: {
+                max_sequence_length: 131072,
+                max_output_tokens: 8192,
+              },
+            },
+          ],
+        },
+
+        cached: false,
+      };
+    }),
+  };
+});
+
+vi.mock('../../src/envars', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    getEnvString: vi.fn(),
+    getEnvInt: vi.fn(),
+  };
+});
 
 describe('WatsonXProvider', () => {
   const modelName = 'test-model';
@@ -61,21 +89,23 @@ describe('WatsonXProvider', () => {
   const prompt = 'Test prompt';
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     clearModelSpecsCache();
   });
 
   afterEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     clearModelSpecsCache();
   });
 
   describe('constructor', () => {
     it('should initialize with modelName and config', async () => {
       const mockedWatsonXAIClient: Partial<any> = {
-        generateText: jest.fn(),
+        generateText: vi.fn(),
       };
-      jest.mocked(WatsonXAI.newInstance).mockReturnValue(mockedWatsonXAIClient as any);
+      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
+        return mockedWatsonXAIClient as any;
+      });
 
       const provider = new WatsonXProvider(modelName, { config });
       expect(provider.modelName).toBe(modelName);
@@ -88,9 +118,11 @@ describe('WatsonXProvider', () => {
 
     it('should initialize with default id based on modelName', () => {
       const mockedWatsonXAIClient: Partial<any> = {
-        generateText: jest.fn(),
+        generateText: vi.fn(),
       };
-      jest.mocked(WatsonXAI.newInstance).mockReturnValue(mockedWatsonXAIClient as any);
+      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
+        return mockedWatsonXAIClient as any;
+      });
 
       const provider = new WatsonXProvider(modelName, { config });
       expect(provider.id()).toBe(`watsonx:${modelName}`);
@@ -100,9 +132,11 @@ describe('WatsonXProvider', () => {
   describe('id', () => {
     it('should return the correct id string', () => {
       const mockedWatsonXAIClient: Partial<any> = {
-        generateText: jest.fn(),
+        generateText: vi.fn(),
       };
-      jest.mocked(WatsonXAI.newInstance).mockReturnValue(mockedWatsonXAIClient as any);
+      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
+        return mockedWatsonXAIClient as any;
+      });
 
       const provider = new WatsonXProvider(modelName, { config });
       expect(provider.id()).toBe(`watsonx:${modelName}`);
@@ -112,9 +146,11 @@ describe('WatsonXProvider', () => {
   describe('toString', () => {
     it('should return the correct string representation', () => {
       const mockedWatsonXAIClient: Partial<any> = {
-        generateText: jest.fn(),
+        generateText: vi.fn(),
       };
-      jest.mocked(WatsonXAI.newInstance).mockReturnValue(mockedWatsonXAIClient as any);
+      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
+        return mockedWatsonXAIClient as any;
+      });
 
       const provider = new WatsonXProvider(modelName, { config });
       expect(provider.toString()).toBe(`[Watsonx Provider ${modelName}]`);
@@ -124,9 +160,11 @@ describe('WatsonXProvider', () => {
   describe('getClient', () => {
     it('should initialize WatsonXAI client with correct parameters', async () => {
       const mockedWatsonXAIClient: Partial<any> = {
-        generateText: jest.fn(),
+        generateText: vi.fn(),
       };
-      jest.mocked(WatsonXAI.newInstance).mockReturnValue(mockedWatsonXAIClient as any);
+      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
+        return mockedWatsonXAIClient as any;
+      });
 
       const provider = new WatsonXProvider(modelName, { config });
       const client = await provider.getClient();
@@ -142,7 +180,7 @@ describe('WatsonXProvider', () => {
     });
 
     it('should throw an error if neither API key nor Bearer Token is set', async () => {
-      jest.spyOn(envarsModule, 'getEnvString').mockReturnValue(undefined as any);
+      vi.spyOn(envarsModule, 'getEnvString').mockReturnValue(undefined as any);
 
       const provider = new WatsonXProvider(modelName, {
         config: { ...config, apiKey: undefined, apiBearerToken: undefined },
@@ -162,9 +200,11 @@ describe('WatsonXProvider', () => {
         apiBearerToken: 'test-bearer-token',
       };
       const mockedWatsonXAIClient: Partial<any> = {
-        generateText: jest.fn(),
+        generateText: vi.fn(),
       };
-      jest.mocked(WatsonXAI.newInstance).mockReturnValue(mockedWatsonXAIClient as any);
+      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
+        return mockedWatsonXAIClient as any;
+      });
 
       const provider = new WatsonXProvider(modelName, { config: bearerTokenConfig });
       await provider.getClient();
@@ -180,9 +220,11 @@ describe('WatsonXProvider', () => {
     it('should prefer API Key Authentication over Bearer Token Authentication when both are provided', async () => {
       const dualAuthConfig = { ...config, apiBearerToken: 'test-bearer-token' };
       const mockedWatsonXAIClient: Partial<any> = {
-        generateText: jest.fn(),
+        generateText: vi.fn(),
       };
-      jest.mocked(WatsonXAI.newInstance).mockReturnValue(mockedWatsonXAIClient as any);
+      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
+        return mockedWatsonXAIClient as any;
+      });
 
       const provider = new WatsonXProvider(modelName, { config: dualAuthConfig });
       await provider.getClient();
@@ -198,9 +240,11 @@ describe('WatsonXProvider', () => {
     it('should use IAM Authentication when WATSONX_AI_AUTH_TYPE is set to iam', async () => {
       const dualAuthConfig = { ...config, apiBearerToken: 'test-bearer-token' };
       const mockedWatsonXAIClient: Partial<any> = {
-        generateText: jest.fn(),
+        generateText: vi.fn(),
       };
-      jest.mocked(WatsonXAI.newInstance).mockReturnValue(mockedWatsonXAIClient as any);
+      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
+        return mockedWatsonXAIClient as any;
+      });
 
       const provider = new WatsonXProvider(modelName, {
         config: dualAuthConfig,
@@ -225,9 +269,11 @@ describe('WatsonXProvider', () => {
         apiBearerToken: 'test-bearer-token',
       };
       const mockedWatsonXAIClient: Partial<any> = {
-        generateText: jest.fn(),
+        generateText: vi.fn(),
       };
-      jest.mocked(WatsonXAI.newInstance).mockReturnValue(mockedWatsonXAIClient as any);
+      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
+        return mockedWatsonXAIClient as any;
+      });
 
       const provider = new WatsonXProvider(modelName, {
         config: dualAuthConfig,
@@ -248,9 +294,11 @@ describe('WatsonXProvider', () => {
     it('should fallback to default behavior when WATSONX_AI_AUTH_TYPE is invalid', async () => {
       const dualAuthConfig = { ...config, apiBearerToken: 'test-bearer-token' };
       const mockedWatsonXAIClient: Partial<any> = {
-        generateText: jest.fn(),
+        generateText: vi.fn(),
       };
-      jest.mocked(WatsonXAI.newInstance).mockReturnValue(mockedWatsonXAIClient as any);
+      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
+        return mockedWatsonXAIClient as any;
+      });
 
       const provider = new WatsonXProvider(modelName, {
         config: dualAuthConfig,
@@ -270,7 +318,7 @@ describe('WatsonXProvider', () => {
   describe('callApi', () => {
     it('should call generateText with correct parameters and return the correct response', async () => {
       const mockedWatsonXAIClient: Partial<any> = {
-        generateText: jest.fn().mockResolvedValue({
+        generateText: vi.fn().mockResolvedValue({
           result: {
             model_id: 'ibm/test-model',
             model_version: '1.0.0',
@@ -286,19 +334,25 @@ describe('WatsonXProvider', () => {
           },
         }),
       };
-      jest.mocked(WatsonXAI.newInstance).mockReturnValue(mockedWatsonXAIClient as any);
+      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
+        return mockedWatsonXAIClient as any;
+      });
 
       const cache: Partial<any> = {
-        get: jest.fn().mockResolvedValue(null),
-        set: jest.fn(),
-        wrap: jest.fn(),
-        del: jest.fn(),
-        reset: jest.fn(),
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn(),
+        wrap: vi.fn(),
+        del: vi.fn(),
+        reset: vi.fn(),
         store: {} as any,
       };
 
-      jest.mocked(getCache).mockReturnValue(cache as any);
-      jest.mocked(isCacheEnabled).mockReturnValue(true);
+      vi.mocked(getCache).mockImplementation(function () {
+        return cache as any;
+      });
+      vi.mocked(isCacheEnabled).mockImplementation(function () {
+        return true;
+      });
 
       const provider = new WatsonXProvider(modelName, { config });
       const response = await provider.callApi(prompt);
@@ -353,19 +407,31 @@ describe('WatsonXProvider', () => {
 
       const cacheKey = `watsonx:${modelName}:${generateConfigHash(config)}:${prompt}`;
       const cache: Partial<any> = {
-        get: jest.fn().mockResolvedValue(JSON.stringify(storedCachedData)),
-        set: jest.fn(),
-        wrap: jest.fn(),
-        del: jest.fn(),
-        reset: jest.fn(),
+        get: vi.fn().mockResolvedValue(JSON.stringify(storedCachedData)),
+        set: vi.fn(),
+        wrap: vi.fn(),
+        del: vi.fn(),
+        reset: vi.fn(),
         store: {} as any,
       };
 
-      jest.mocked(getCache).mockReturnValue(cache as any);
-      jest.mocked(isCacheEnabled).mockReturnValue(true);
+      vi.mocked(getCache).mockImplementation(function () {
+        return cache as any;
+      });
+      vi.mocked(isCacheEnabled).mockImplementation(function () {
+        return true;
+      });
+
+      // Must mock WatsonXAI.newInstance to ensure test isolation
+      const mockedWatsonXAIClient: Partial<any> = {
+        generateText: vi.fn(),
+      };
+      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
+        return mockedWatsonXAIClient as any;
+      });
 
       const provider = new WatsonXProvider(modelName, { config });
-      const generateTextSpy = jest.spyOn(await provider.getClient(), 'generateText');
+      const generateTextSpy = vi.spyOn(await provider.getClient(), 'generateText');
       const response = await provider.callApi(prompt);
       expect(cache.get).toHaveBeenCalledWith(cacheKey);
       expect(response).toEqual(expectedResponse);
@@ -374,20 +440,26 @@ describe('WatsonXProvider', () => {
 
     it('should handle API errors gracefully', async () => {
       const mockedWatsonXAIClient: Partial<any> = {
-        generateText: jest.fn().mockRejectedValue(new Error('API error')),
+        generateText: vi.fn().mockRejectedValue(new Error('API error')),
       };
-      jest.mocked(WatsonXAI.newInstance).mockReturnValue(mockedWatsonXAIClient as any);
+      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
+        return mockedWatsonXAIClient as any;
+      });
       const cache: Partial<any> = {
-        get: jest.fn().mockResolvedValue(null),
-        set: jest.fn(),
-        wrap: jest.fn(),
-        del: jest.fn(),
-        reset: jest.fn(),
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn(),
+        wrap: vi.fn(),
+        del: vi.fn(),
+        reset: vi.fn(),
         store: {} as any,
       };
 
-      jest.mocked(getCache).mockReturnValue(cache as any);
-      jest.mocked(isCacheEnabled).mockReturnValue(true);
+      vi.mocked(getCache).mockImplementation(function () {
+        return cache as any;
+      });
+      vi.mocked(isCacheEnabled).mockImplementation(function () {
+        return true;
+      });
       const provider = new WatsonXProvider(modelName, { config });
       const response = await provider.callApi(prompt);
       expect(response).toEqual({
@@ -407,35 +479,38 @@ describe('WatsonXProvider', () => {
     };
 
     beforeEach(() => {
-      jest.clearAllMocks();
+      vi.clearAllMocks();
       clearModelSpecsCache();
-      jest.mocked(fetchWithCache).mockImplementation(async () => ({
-        data: {
-          resources: [
-            {
-              model_id: MODEL_ID,
-              input_tier: 'class_c1',
-              output_tier: 'class_c1',
-              label: 'llama-3-3-70b-instruct',
-              provider: 'Meta',
-              source: 'Hugging Face',
-              model_limits: {
-                max_sequence_length: 131072,
-                max_output_tokens: 8192,
+      vi.mocked(fetchWithCache).mockImplementation(async function () {
+        return {
+          data: {
+            resources: [
+              {
+                model_id: MODEL_ID,
+                input_tier: 'class_c1',
+                output_tier: 'class_c1',
+                label: 'llama-3-3-70b-instruct',
+                provider: 'Meta',
+                source: 'Hugging Face',
+                model_limits: {
+                  max_sequence_length: 131072,
+                  max_output_tokens: 8192,
+                },
               },
-            },
-          ],
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-        headers: {},
-      }));
+            ],
+          },
+
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+          headers: {},
+        };
+      });
     });
 
     it('should calculate cost correctly when token counts are provided', async () => {
       const mockedWatsonXAIClient: Partial<any> = {
-        generateText: jest.fn().mockResolvedValue({
+        generateText: vi.fn().mockResolvedValue({
           result: {
             model_id: MODEL_ID,
             model_version: '3.2.0',
@@ -451,15 +526,21 @@ describe('WatsonXProvider', () => {
           },
         }),
       };
-      jest.mocked(WatsonXAI.newInstance).mockReturnValue(mockedWatsonXAIClient as any);
+      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
+        return mockedWatsonXAIClient as any;
+      });
 
       const cache: Partial<any> = {
-        get: jest.fn().mockResolvedValue(null),
-        set: jest.fn(),
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn(),
       };
 
-      jest.mocked(getCache).mockReturnValue(cache as any);
-      jest.mocked(isCacheEnabled).mockReturnValue(true);
+      vi.mocked(getCache).mockImplementation(function () {
+        return cache as any;
+      });
+      vi.mocked(isCacheEnabled).mockImplementation(function () {
+        return true;
+      });
 
       const provider = new WatsonXProvider(MODEL_ID, { config: configWithModelId });
       const response = await provider.callApi(prompt);
@@ -478,33 +559,36 @@ describe('WatsonXProvider', () => {
       const configWithClass9ModelId = { ...config, modelId };
 
       clearModelSpecsCache();
-      jest.mocked(fetchWithCache).mockImplementation(async () => ({
-        data: {
-          resources: [
-            {
-              model_id: modelId,
-              label: 'llama-3-2-11b-vision-instruct',
-              provider: 'Meta',
-              source: 'Hugging Face',
-              functions: [{ id: 'image_chat' }, { id: 'text_chat' }, { id: 'text_generation' }],
-              input_tier: 'class_9',
-              output_tier: 'class_9',
-              number_params: '11b',
-              model_limits: {
-                max_sequence_length: 131072,
-                max_output_tokens: 8192,
+      vi.mocked(fetchWithCache).mockImplementation(async function () {
+        return {
+          data: {
+            resources: [
+              {
+                model_id: modelId,
+                label: 'llama-3-2-11b-vision-instruct',
+                provider: 'Meta',
+                source: 'Hugging Face',
+                functions: [{ id: 'image_chat' }, { id: 'text_chat' }, { id: 'text_generation' }],
+                input_tier: 'class_9',
+                output_tier: 'class_9',
+                number_params: '11b',
+                model_limits: {
+                  max_sequence_length: 131072,
+                  max_output_tokens: 8192,
+                },
               },
-            },
-          ],
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-        headers: {},
-      }));
+            ],
+          },
+
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+          headers: {},
+        };
+      });
 
       const mockedWatsonXAIClient: Partial<any> = {
-        generateText: jest.fn().mockResolvedValue({
+        generateText: vi.fn().mockResolvedValue({
           result: {
             model_id: modelId,
             model_version: '3.2.0',
@@ -520,15 +604,21 @@ describe('WatsonXProvider', () => {
           },
         }),
       };
-      jest.mocked(WatsonXAI.newInstance).mockReturnValue(mockedWatsonXAIClient as any);
+      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
+        return mockedWatsonXAIClient as any;
+      });
 
       const cache: Partial<any> = {
-        get: jest.fn().mockResolvedValue(null),
-        set: jest.fn(),
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn(),
       };
 
-      jest.mocked(getCache).mockReturnValue(cache as any);
-      jest.mocked(isCacheEnabled).mockReturnValue(true);
+      vi.mocked(getCache).mockImplementation(function () {
+        return cache as any;
+      });
+      vi.mocked(isCacheEnabled).mockImplementation(function () {
+        return true;
+      });
 
       const provider = new WatsonXProvider(modelId, { config: configWithClass9ModelId });
       const response = await provider.callApi(prompt);
@@ -547,33 +637,36 @@ describe('WatsonXProvider', () => {
       const configWithGraniteModelId = { ...config, modelId };
 
       clearModelSpecsCache();
-      jest.mocked(fetchWithCache).mockImplementation(async () => ({
-        data: {
-          resources: [
-            {
-              model_id: modelId,
-              label: 'granite-3-3-8b-instruct',
-              provider: 'IBM',
-              source: 'IBM',
-              functions: [{ id: 'text_chat' }, { id: 'text_generation' }],
-              input_tier: 'class_c1',
-              output_tier: 'class_c1',
-              number_params: '8b',
-              model_limits: {
-                max_sequence_length: 8192,
-                max_output_tokens: 4096,
+      vi.mocked(fetchWithCache).mockImplementation(async function () {
+        return {
+          data: {
+            resources: [
+              {
+                model_id: modelId,
+                label: 'granite-3-3-8b-instruct',
+                provider: 'IBM',
+                source: 'IBM',
+                functions: [{ id: 'text_chat' }, { id: 'text_generation' }],
+                input_tier: 'class_c1',
+                output_tier: 'class_c1',
+                number_params: '8b',
+                model_limits: {
+                  max_sequence_length: 8192,
+                  max_output_tokens: 4096,
+                },
               },
-            },
-          ],
-        },
-        cached: false,
-        status: 200,
-        statusText: 'OK',
-        headers: {},
-      }));
+            ],
+          },
+
+          cached: false,
+          status: 200,
+          statusText: 'OK',
+          headers: {},
+        };
+      });
 
       const mockedWatsonXAIClient: Partial<any> = {
-        generateText: jest.fn().mockResolvedValue({
+        generateText: vi.fn().mockResolvedValue({
           result: {
             model_id: modelId,
             model_version: '3.3.0',
@@ -589,15 +682,21 @@ describe('WatsonXProvider', () => {
           },
         }),
       };
-      jest.mocked(WatsonXAI.newInstance).mockReturnValue(mockedWatsonXAIClient as any);
+      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
+        return mockedWatsonXAIClient as any;
+      });
 
       const cache: Partial<any> = {
-        get: jest.fn().mockResolvedValue(null),
-        set: jest.fn(),
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn(),
       };
 
-      jest.mocked(getCache).mockReturnValue(cache as any);
-      jest.mocked(isCacheEnabled).mockReturnValue(true);
+      vi.mocked(getCache).mockImplementation(function () {
+        return cache as any;
+      });
+      vi.mocked(isCacheEnabled).mockImplementation(function () {
+        return true;
+      });
 
       const provider = new WatsonXProvider(modelId, { config: configWithGraniteModelId });
       const response = await provider.callApi(prompt);

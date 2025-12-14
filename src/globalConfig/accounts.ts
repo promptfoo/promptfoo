@@ -165,11 +165,11 @@ export async function checkEmailStatus(options?: {
     };
 
     if (options?.validate) {
-      if (
-        [EmailValidationStatus.RISKY_EMAIL, EmailValidationStatus.DISPOSABLE_EMAIL].includes(
-          data.status,
-        )
-      ) {
+      const riskyStatuses: Set<EmailValidationStatus> = new Set([
+        EmailValidationStatus.RISKY_EMAIL,
+        EmailValidationStatus.DISPOSABLE_EMAIL,
+      ]);
+      if (riskyStatuses.has(data.status)) {
         // Tracking filtered emails via this telemetry endpoint for now to guage sensitivity of validation
         // We should take it out once we're happy with the sensitivity
         await telemetry.saveConsent(userEmail, {
