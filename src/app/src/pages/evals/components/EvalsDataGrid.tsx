@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { useToast } from '@app/hooks/useToast';
 import { callApi } from '@app/utils/api';
 import { formatDataGridDate } from '@app/utils/date';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -178,6 +179,7 @@ export default function EvalsDataGrid({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const { showToast } = useToast();
 
   const [rowSelectionModel, setRowSelectionModel] = useState<GridRowSelectionModel>({
     type: 'include',
@@ -229,30 +231,33 @@ export default function EvalsDataGrid({
   /**
    * Toggles the favorite status of an eval.
    */
-  const handleToggleFavorite = useCallback(async (evalId: string, currentStatus: boolean) => {
-    try {
-      const newStatus = !currentStatus;
-      const res = await callApi(`/eval/${evalId}/favorite`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ isFavorite: newStatus }),
-      });
+  const handleToggleFavorite = useCallback(
+    async (evalId: string, currentStatus: boolean) => {
+      try {
+        const newStatus = !currentStatus;
+        const res = await callApi(`/eval/${evalId}/favorite`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ isFavorite: newStatus }),
+        });
 
-      if (!res.ok) {
-        throw new Error('Failed to update favorite status');
+        if (!res.ok) {
+          throw new Error('Failed to update favorite status');
+        }
+
+        // Update local state
+        setEvals((prev) =>
+          prev.map((e) => (e.evalId === evalId ? { ...e, isFavorite: newStatus } : e)),
+        );
+      } catch (error) {
+        console.error('Failed to toggle favorite:', error);
+        showToast('Failed to update favorite status', 'error');
       }
-
-      // Update local state
-      setEvals((prev) =>
-        prev.map((e) => (e.evalId === evalId ? { ...e, isFavorite: newStatus } : e)),
-      );
-    } catch (error) {
-      console.error('Failed to toggle favorite:', error);
-      alert('Failed to update favorite status');
-    }
-  }, []);
+    },
+    [showToast],
+  );
 
   /**
    * Construct dataset rows:
@@ -322,7 +327,7 @@ export default function EvalsDataGrid({
       setConfirmDeleteOpen(false);
     } catch (error) {
       console.error('Failed to delete evals:', error);
-      alert('Failed to delete evals');
+      showToast('Failed to delete evals', 'error');
     } finally {
       setIsLoading(false);
     }
