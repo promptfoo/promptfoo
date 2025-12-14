@@ -6,15 +6,23 @@
 import logger from '../../logger';
 import type { SocketAuthCredentials } from '../../types/codeScan';
 
-// Import promptfoo's cloud config for auth (using ESM dynamic import)
+// Lazy-loaded cloud config to avoid top-level await (required for CJS/SEA builds)
 let cloudConfig: { getApiKey(): string | undefined } | undefined;
-try {
-  // Dynamic import to avoid circular dependencies
-  const cloudModule = await import('../../globalConfig/cloud');
-  cloudConfig = cloudModule.cloudConfig;
-} catch (_error) {
-  // Promptfoo auth not available - that's OK, will fall back to other methods
-  // Silently fail since other auth methods are available
+let cloudConfigLoaded = false;
+
+async function loadCloudConfig(): Promise<void> {
+  if (cloudConfigLoaded) {
+    return;
+  }
+  cloudConfigLoaded = true;
+  try {
+    // Dynamic import to avoid circular dependencies
+    const cloudModule = await import('../../globalConfig/cloud');
+    cloudConfig = cloudModule.cloudConfig;
+  } catch (_error) {
+    // Promptfoo auth not available - that's OK, will fall back to other methods
+    // Silently fail since other auth methods are available
+  }
 }
 
 /**
@@ -27,7 +35,9 @@ try {
  * @param apiKey Optional API key from CLI arg or config file
  * @returns Resolved auth credentials
  */
-export function resolveAuthCredentials(apiKey?: string): SocketAuthCredentials {
+export async function resolveAuthCredentials(apiKey?: string): Promise<SocketAuthCredentials> {
+  // Load cloud config lazily on first call
+  await loadCloudConfig();
   // 1. API key from argument (CLI --api-key or config file)
   if (apiKey) {
     logger.debug('Using API key from CLI/config');
