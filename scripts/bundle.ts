@@ -72,6 +72,15 @@ const OPTIONAL_EXTERNALS = [
   // Modules that don't bundle well due to require.resolve usage
   'jsdom',
   'esbuild',
+  // Database drivers - optional, users install if needed
+  'pg',
+  'redis',
+  '@redis/client',
+  '@redis/bloom',
+  '@redis/search',
+  '@redis/time-series',
+  '@redis/json',
+  '@redis/graph',
 ];
 
 interface BundleResult {
@@ -264,6 +273,15 @@ function createStubModules(nodeModulesDir: string): void {
     { name: 'fluent-ffmpeg', exports: [] },
     { name: 'jsdom', exports: ['JSDOM', 'VirtualConsole', 'CookieJar', 'ResourceLoader'] },
     { name: 'esbuild', exports: ['build', 'buildSync', 'transform', 'transformSync', 'version'] },
+    // Database drivers
+    { name: 'pg', exports: ['Pool', 'Client', 'types'] },
+    { name: 'redis', exports: ['createClient', 'createCluster'] },
+    { name: '@redis/client', exports: ['createClient', 'createCluster', 'defineScript'] },
+    { name: '@redis/bloom', exports: [] },
+    { name: '@redis/search', exports: [] },
+    { name: '@redis/time-series', exports: [] },
+    { name: '@redis/json', exports: [] },
+    { name: '@redis/graph', exports: [] },
   ];
 
   for (const { name: moduleName, exports: namedExports } of stubModules) {
