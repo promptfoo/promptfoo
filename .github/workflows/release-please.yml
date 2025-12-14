@@ -163,7 +163,7 @@ jobs:
           - os: ubuntu-latest
             platform: linux-x64
             archive: tar.gz
-          - os: ubuntu-24.04-arm64
+          - os: ubuntu-24.04-arm
             platform: linux-arm64
             archive: tar.gz
           - os: macos-13
@@ -203,7 +203,7 @@ jobs:
           cd bundle
           tar -czvf "../${ARCHIVE_NAME}" .
           cd ..
-          echo "ARCHIVE_NAME=${ARCHIVE_NAME}" >> $GITHUB_ENV
+          echo "ARCHIVE_NAME=${ARCHIVE_NAME}" >> "$GITHUB_ENV"
 
       - name: Create archive (Windows)
         if: matrix.archive == 'zip'
@@ -239,7 +239,7 @@ jobs:
           - os: ubuntu-latest
             platform: linux-x64
             wheel_platform: manylinux_2_17_x86_64
-          - os: ubuntu-24.04-arm64
+          - os: ubuntu-24.04-arm
             platform: linux-arm64
             wheel_platform: manylinux_2_17_aarch64
           - os: macos-13

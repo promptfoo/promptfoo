@@ -76,7 +76,7 @@ success() {
 # ─── Help ────────────────────────────────────────────────────────────────────
 
 show_help() {
-  cat << EOF
+  cat <<EOF
 ${BOLD}Promptfoo Installer${NC}
 
 ${BOLD}USAGE${NC}
@@ -117,25 +117,25 @@ EOF
 parse_args() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      -h|--help)
-        show_help
-        ;;
-      -d|--dir)
-        INSTALL_DIR="$2"
-        BIN_DIR="$INSTALL_DIR/bin"
-        shift 2
-        ;;
-      --no-modify-path)
-        PROMPTFOO_NO_MODIFY_PATH=1
-        shift
-        ;;
-      -*)
-        error "Unknown option: $1\nRun with --help for usage."
-        ;;
-      *)
-        VERSION="$1"
-        shift
-        ;;
+    -h | --help)
+      show_help
+      ;;
+    -d | --dir)
+      INSTALL_DIR="$2"
+      BIN_DIR="$INSTALL_DIR/bin"
+      shift 2
+      ;;
+    --no-modify-path)
+      PROMPTFOO_NO_MODIFY_PATH=1
+      shift
+      ;;
+    -*)
+      error "Unknown option: $1\nRun with --help for usage."
+      ;;
+    *)
+      VERSION="$1"
+      shift
+      ;;
     esac
   done
 }
@@ -149,37 +149,37 @@ detect_platform() {
   arch="$(uname -m)"
 
   case "$os" in
-    Darwin)
-      os="darwin"
-      ;;
-    Linux)
-      os="linux"
-      # Check for musl (Alpine, etc.)
-      if ldd --version 2>&1 | grep -q musl; then
-        os="linux-musl"
-      fi
-      ;;
-    MINGW*|MSYS*|CYGWIN*)
-      error "Windows detected. Please use PowerShell:\n  irm https://promptfoo.dev/install.ps1 | iex"
-      ;;
-    *)
-      error "Unsupported operating system: $os"
-      ;;
+  Darwin)
+    os="darwin"
+    ;;
+  Linux)
+    os="linux"
+    # Check for musl (Alpine, etc.)
+    if ldd --version 2>&1 | grep -q musl; then
+      os="linux-musl"
+    fi
+    ;;
+  MINGW* | MSYS* | CYGWIN*)
+    error "Windows detected. Please use PowerShell:\n  irm https://promptfoo.dev/install.ps1 | iex"
+    ;;
+  *)
+    error "Unsupported operating system: $os"
+    ;;
   esac
 
   case "$arch" in
-    x86_64|amd64)
-      arch="x64"
-      ;;
-    arm64|aarch64)
-      arch="arm64"
-      ;;
-    armv7l)
-      arch="arm"
-      ;;
-    *)
-      error "Unsupported architecture: $arch"
-      ;;
+  x86_64 | amd64)
+    arch="x64"
+    ;;
+  arm64 | aarch64)
+    arch="arm64"
+    ;;
+  armv7l)
+    arch="arm"
+    ;;
+  *)
+    error "Unsupported architecture: $arch"
+    ;;
   esac
 
   # Detect Rosetta 2 on macOS
@@ -202,9 +202,9 @@ resolve_version() {
     info "Fetching latest version..."
 
     # Try to get latest release from GitHub API
-    if command -v curl &> /dev/null; then
+    if command -v curl &>/dev/null; then
       version=$(curl -fsSL "${GITHUB_API}/releases/latest" 2>/dev/null | grep '"tag_name"' | cut -d'"' -f4 || true)
-    elif command -v wget &> /dev/null; then
+    elif command -v wget &>/dev/null; then
       version=$(wget -qO- "${GITHUB_API}/releases/latest" 2>/dev/null | grep '"tag_name"' | cut -d'"' -f4 || true)
     fi
 
@@ -225,9 +225,9 @@ download() {
   local url="$1"
   local output="$2"
 
-  if command -v curl &> /dev/null; then
+  if command -v curl &>/dev/null; then
     curl --fail --location --progress-bar --output "$output" "$url"
-  elif command -v wget &> /dev/null; then
+  elif command -v wget &>/dev/null; then
     wget --quiet --show-progress --output-document="$output" "$url"
   else
     error "Neither curl nor wget found. Please install one of them."
@@ -246,7 +246,7 @@ install_npm() {
 
   # For now, we install via npm since SEA binaries aren't ready yet
   # This requires Node.js to be installed
-  if ! command -v node &> /dev/null; then
+  if ! command -v node &>/dev/null; then
     error "Node.js is required but not installed.\nPlease install Node.js 20+ from https://nodejs.org"
   fi
 
@@ -313,7 +313,7 @@ install_binary() {
 verify_installation() {
   if [[ -x "$BIN_DIR/promptfoo" ]]; then
     # Try to run version check
-    if "$BIN_DIR/promptfoo" --version &> /dev/null; then
+    if "$BIN_DIR/promptfoo" --version &>/dev/null; then
       return 0
     fi
   fi
@@ -333,28 +333,28 @@ setup_path() {
   shell_name=$(basename "${SHELL:-/bin/bash}")
 
   case "$shell_name" in
-    bash)
-      if [[ -f "$HOME/.bashrc" ]]; then
-        rc_file="$HOME/.bashrc"
-      elif [[ -f "$HOME/.bash_profile" ]]; then
-        rc_file="$HOME/.bash_profile"
-      else
-        rc_file="$HOME/.bashrc"
-      fi
-      export_line="export PATH=\"$BIN_DIR:\$PATH\""
-      ;;
-    zsh)
-      rc_file="${ZDOTDIR:-$HOME}/.zshrc"
-      export_line="export PATH=\"$BIN_DIR:\$PATH\""
-      ;;
-    fish)
-      rc_file="$HOME/.config/fish/config.fish"
-      export_line="set -gx PATH $BIN_DIR \$PATH"
-      ;;
-    *)
-      rc_file=""
-      export_line="export PATH=\"$BIN_DIR:\$PATH\""
-      ;;
+  bash)
+    if [[ -f "$HOME/.bashrc" ]]; then
+      rc_file="$HOME/.bashrc"
+    elif [[ -f "$HOME/.bash_profile" ]]; then
+      rc_file="$HOME/.bash_profile"
+    else
+      rc_file="$HOME/.bashrc"
+    fi
+    export_line="export PATH=\"$BIN_DIR:\$PATH\""
+    ;;
+  zsh)
+    rc_file="${ZDOTDIR:-$HOME}/.zshrc"
+    export_line="export PATH=\"$BIN_DIR:\$PATH\""
+    ;;
+  fish)
+    rc_file="$HOME/.config/fish/config.fish"
+    export_line="set -gx PATH $BIN_DIR \$PATH"
+    ;;
+  *)
+    rc_file=""
+    export_line="export PATH=\"$BIN_DIR:\$PATH\""
+    ;;
   esac
 
   # Check if already in PATH
@@ -378,7 +378,7 @@ setup_path() {
       echo ""
       echo "# Promptfoo"
       echo "$export_line"
-    } >> "$rc_file"
+    } >>"$rc_file"
 
     info "Added promptfoo to PATH in $rc_file"
   fi
@@ -415,7 +415,7 @@ send_install_telemetry() {
   local version="$2"
 
   (
-    if command -v curl &> /dev/null; then
+    if command -v curl &>/dev/null; then
       curl -fsSL -X POST "https://r.promptfoo.app/" \
         -H "Content-Type: application/json" \
         -d "{
@@ -441,7 +441,7 @@ main() {
   echo ""
 
   # Check prerequisites
-  if ! command -v tar &> /dev/null; then
+  if ! command -v tar &>/dev/null; then
     error "tar is required but not installed."
   fi
 

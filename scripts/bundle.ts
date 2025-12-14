@@ -157,7 +157,9 @@ function copyAssets(): void {
           return !basename.endsWith('.md') && !basename.startsWith('.');
         },
       });
-      console.log(`[bundle] Copied: ${asset.src.replace(ROOT, '.')} -> ${asset.dest.replace(ROOT, '.')}`);
+      console.log(
+        `[bundle] Copied: ${asset.src.replace(ROOT, '.')} -> ${asset.dest.replace(ROOT, '.')}`,
+      );
     } else {
       console.warn(`[bundle] Warning: Asset not found: ${asset.src.replace(ROOT, '.')}`);
     }
@@ -250,15 +252,44 @@ function createStubModules(nodeModulesDir: string): void {
   // Format: { name: string, exports: string[] }
   const stubModules: Array<{ name: string; exports: string[] }> = [
     // Heavy/optional native modules
-    { name: 'playwright', exports: ['chromium', 'firefox', 'webkit', 'devices', 'errors', 'request', 'selectors'] },
-    { name: 'playwright-core', exports: ['chromium', 'firefox', 'webkit', 'devices', 'errors', 'request', 'selectors'] },
+    {
+      name: 'playwright',
+      exports: ['chromium', 'firefox', 'webkit', 'devices', 'errors', 'request', 'selectors'],
+    },
+    {
+      name: 'playwright-core',
+      exports: ['chromium', 'firefox', 'webkit', 'devices', 'errors', 'request', 'selectors'],
+    },
     { name: '@playwright/browser-chromium', exports: [] },
     // Optional cloud SDKs
     { name: '@anthropic-ai/claude-agent-sdk', exports: ['Anthropic', 'Agent'] },
-    { name: '@aws-sdk/client-bedrock-runtime', exports: ['BedrockRuntimeClient', 'InvokeModelCommand', 'InvokeModelWithResponseStreamCommand', 'ConverseCommand', 'ConverseStreamCommand'] },
-    { name: '@aws-sdk/client-bedrock-agent-runtime', exports: ['BedrockAgentRuntimeClient', 'InvokeAgentCommand', 'RetrieveCommand'] },
-    { name: '@aws-sdk/client-sagemaker-runtime', exports: ['SageMakerRuntimeClient', 'InvokeEndpointCommand'] },
-    { name: '@azure/identity', exports: ['DefaultAzureCredential', 'ClientSecretCredential', 'ManagedIdentityCredential', 'AzureCliCredential'] },
+    {
+      name: '@aws-sdk/client-bedrock-runtime',
+      exports: [
+        'BedrockRuntimeClient',
+        'InvokeModelCommand',
+        'InvokeModelWithResponseStreamCommand',
+        'ConverseCommand',
+        'ConverseStreamCommand',
+      ],
+    },
+    {
+      name: '@aws-sdk/client-bedrock-agent-runtime',
+      exports: ['BedrockAgentRuntimeClient', 'InvokeAgentCommand', 'RetrieveCommand'],
+    },
+    {
+      name: '@aws-sdk/client-sagemaker-runtime',
+      exports: ['SageMakerRuntimeClient', 'InvokeEndpointCommand'],
+    },
+    {
+      name: '@azure/identity',
+      exports: [
+        'DefaultAzureCredential',
+        'ClientSecretCredential',
+        'ManagedIdentityCredential',
+        'AzureCliCredential',
+      ],
+    },
     { name: '@azure/openai-assistants', exports: ['AssistantsClient'] },
     { name: '@azure/ai-projects', exports: ['AIProjectClient'] },
     { name: '@fal-ai/client', exports: ['fal'] },
@@ -329,7 +360,7 @@ export const ${exp} = new Proxy(function ${exp}() {}, {
   construct() {
     throw new Error(${JSON.stringify(errorMsg(moduleName))});
   }
-});`
+});`,
       )
       .join('\n');
 
@@ -478,9 +509,7 @@ if (isSEA) {
 `.trim();
 
   // Footer for CJS to handle async entry point
-  const cjsFooter = forSea
-    ? ''
-    : '';
+  const cjsFooter = forSea ? '' : '';
 
   try {
     const result = await esbuild.build({
@@ -508,7 +537,7 @@ if (isSEA) {
         __PROMPTFOO_POSTHOG_KEY__: JSON.stringify(process.env.PROMPTFOO_POSTHOG_KEY || ''),
         __PROMPTFOO_ENGINES_NODE__: JSON.stringify(packageJson.engines.node),
         __PROMPTFOO_INSTALL_METHOD__: JSON.stringify(
-          forSea ? 'binary' : process.env.PROMPTFOO_INSTALL_METHOD || 'bundle'
+          forSea ? 'binary' : process.env.PROMPTFOO_INSTALL_METHOD || 'bundle',
         ),
         BUILD_FORMAT: JSON.stringify(format),
         'process.env.BUILD_FORMAT': JSON.stringify(format),
@@ -544,7 +573,7 @@ if (isSEA) {
     if (result.metafile) {
       fs.writeFileSync(
         path.join(BUNDLE_DIR, 'metafile.json'),
-        JSON.stringify(result.metafile, null, 2)
+        JSON.stringify(result.metafile, null, 2),
       );
     }
 

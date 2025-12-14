@@ -129,7 +129,7 @@ test_init() {
 
   setup_test_dir
 
-  if pf init --no-interactive > /dev/null 2>&1 || pf init -y > /dev/null 2>&1; then
+  if pf init --no-interactive >/dev/null 2>&1 || pf init -y >/dev/null 2>&1; then
     if [[ -f "promptfooconfig.yaml" ]]; then
       log_pass "init created promptfooconfig.yaml"
       return 0
@@ -148,7 +148,7 @@ test_eval_echo_provider() {
 
   setup_test_dir
 
-  cat > promptfooconfig.yaml << 'EOF'
+  cat >promptfooconfig.yaml <<'EOF'
 prompts:
   - "Hello {{name}}"
 providers:
@@ -158,7 +158,7 @@ tests:
       name: World
 EOF
 
-  if pf eval --no-cache -o results.json > /dev/null 2>&1; then
+  if pf eval --no-cache -o results.json >/dev/null 2>&1; then
     if [[ -f "results.json" ]]; then
       log_pass "eval with echo provider completed"
       return 0
@@ -177,7 +177,7 @@ test_eval_with_assertions() {
 
   setup_test_dir
 
-  cat > promptfooconfig.yaml << 'EOF'
+  cat >promptfooconfig.yaml <<'EOF'
 prompts:
   - "The answer is {{answer}}"
 providers:
@@ -219,7 +219,7 @@ test_eval_failing_assertion() {
 
   setup_test_dir
 
-  cat > promptfooconfig.yaml << 'EOF'
+  cat >promptfooconfig.yaml <<'EOF'
 prompts:
   - "Hello World"
 providers:
@@ -232,7 +232,7 @@ tests:
 EOF
 
   # This should complete but have failing assertions
-  if pf eval --no-cache -o results.json > /dev/null 2>&1; then
+  if pf eval --no-cache -o results.json >/dev/null 2>&1; then
     if [[ -f "results.json" ]]; then
       log_pass "eval with failing assertion completed correctly"
       return 0
@@ -282,7 +282,7 @@ test_cache_functionality() {
 
   setup_test_dir
 
-  cat > promptfooconfig.yaml << 'EOF'
+  cat >promptfooconfig.yaml <<'EOF'
 prompts:
   - "Cache test {{id}}"
 providers:
@@ -293,13 +293,13 @@ tests:
 EOF
 
   # Run once to populate cache
-  if ! pf eval -o results1.json > /dev/null 2>&1; then
+  if ! pf eval -o results1.json >/dev/null 2>&1; then
     log_fail "first eval for cache test failed"
     return 1
   fi
 
   # Run again - should use cache
-  if pf eval -o results2.json > /dev/null 2>&1; then
+  if pf eval -o results2.json >/dev/null 2>&1; then
     log_pass "cache functionality works"
     return 0
   else
@@ -313,7 +313,7 @@ test_json_output() {
 
   setup_test_dir
 
-  cat > promptfooconfig.yaml << 'EOF'
+  cat >promptfooconfig.yaml <<'EOF'
 prompts:
   - "Test output"
 providers:
@@ -322,11 +322,11 @@ tests:
   - vars: {}
 EOF
 
-  if pf eval --no-cache -o results.json > /dev/null 2>&1; then
+  if pf eval --no-cache -o results.json >/dev/null 2>&1; then
     if [[ -f "results.json" ]]; then
       # Validate it's valid JSON
-      if python3 -c "import json; json.load(open('results.json'))" 2>/dev/null || \
-         node -e "JSON.parse(require('fs').readFileSync('results.json'))" 2>/dev/null; then
+      if python3 -c "import json; json.load(open('results.json'))" 2>/dev/null ||
+        node -e "JSON.parse(require('fs').readFileSync('results.json'))" 2>/dev/null; then
         log_pass "JSON output is valid"
         return 0
       else
@@ -349,7 +349,7 @@ test_yaml_config() {
   setup_test_dir
 
   # More complex YAML with anchors and references
-  cat > promptfooconfig.yaml << 'EOF'
+  cat >promptfooconfig.yaml <<'EOF'
 # Test YAML parsing with comments
 prompts:
   - id: test-prompt
@@ -372,7 +372,7 @@ tests:
         value: custom
 EOF
 
-  if pf eval --no-cache -o results.json > /dev/null 2>&1; then
+  if pf eval --no-cache -o results.json >/dev/null 2>&1; then
     log_pass "YAML config parsing works"
     return 0
   else
@@ -386,7 +386,7 @@ test_multiple_providers() {
 
   setup_test_dir
 
-  cat > promptfooconfig.yaml << 'EOF'
+  cat >promptfooconfig.yaml <<'EOF'
 prompts:
   - "Test {{name}}"
 providers:
@@ -398,7 +398,7 @@ tests:
       name: multi
 EOF
 
-  if pf eval --no-cache -o results.json > /dev/null 2>&1; then
+  if pf eval --no-cache -o results.json >/dev/null 2>&1; then
     if [[ -f "results.json" ]]; then
       log_pass "multiple providers work"
       return 0
@@ -416,7 +416,7 @@ test_env_vars() {
 
   export TEST_VAR="environment_value"
 
-  cat > promptfooconfig.yaml << 'EOF'
+  cat >promptfooconfig.yaml <<'EOF'
 prompts:
   - "Value: {{value}}"
 providers:
@@ -427,7 +427,7 @@ tests:
 EOF
 
   # This tests if env vars are handled (even if not substituted in vars)
-  if pf eval --no-cache -o results.json > /dev/null 2>&1; then
+  if pf eval --no-cache -o results.json >/dev/null 2>&1; then
     log_pass "environment variable handling works"
     return 0
   else
@@ -442,7 +442,7 @@ test_generate_dataset() {
   setup_test_dir
 
   # Test if the command exists and shows help
-  if pf generate dataset --help > /dev/null 2>&1; then
+  if pf generate dataset --help >/dev/null 2>&1; then
     log_pass "generate dataset command available"
     return 0
   else
@@ -454,7 +454,7 @@ test_generate_dataset() {
 test_share_command() {
   log_test "share command exists"
 
-  if pf share --help > /dev/null 2>&1; then
+  if pf share --help >/dev/null 2>&1; then
     log_pass "share command available"
     return 0
   else
@@ -466,7 +466,7 @@ test_share_command() {
 test_redteam_command() {
   log_test "redteam command exists"
 
-  if pf redteam --help > /dev/null 2>&1; then
+  if pf redteam --help >/dev/null 2>&1; then
     log_pass "redteam command available"
     return 0
   else
@@ -478,7 +478,7 @@ test_redteam_command() {
 test_view_command() {
   log_test "view command exists"
 
-  if pf view --help > /dev/null 2>&1; then
+  if pf view --help >/dev/null 2>&1; then
     log_pass "view command available"
     return 0
   else
@@ -493,7 +493,7 @@ test_export_command() {
   setup_test_dir
 
   # First create some data
-  cat > promptfooconfig.yaml << 'EOF'
+  cat >promptfooconfig.yaml <<'EOF'
 prompts:
   - "Test export"
 providers:
@@ -502,10 +502,10 @@ tests:
   - vars: {}
 EOF
 
-  pf eval --no-cache > /dev/null 2>&1
+  pf eval --no-cache >/dev/null 2>&1
 
   # Now test export
-  if pf export --help > /dev/null 2>&1; then
+  if pf export --help >/dev/null 2>&1; then
     log_pass "export command available"
     return 0
   else
@@ -517,7 +517,7 @@ EOF
 test_config_command() {
   log_test "config command exists"
 
-  if pf config --help > /dev/null 2>&1; then
+  if pf config --help >/dev/null 2>&1; then
     log_pass "config command available"
     return 0
   else
@@ -529,7 +529,7 @@ test_config_command() {
 test_auth_command() {
   log_test "auth command exists"
 
-  if pf auth --help > /dev/null 2>&1; then
+  if pf auth --help >/dev/null 2>&1; then
     log_pass "auth command available"
     return 0
   else
@@ -544,19 +544,19 @@ test_python_provider() {
   log_test "Python provider"
 
   # Check if Python is available
-  if ! command -v python3 &> /dev/null && ! command -v python &> /dev/null; then
+  if ! command -v python3 &>/dev/null && ! command -v python &>/dev/null; then
     log_skip "Python not installed"
     return 0
   fi
 
   setup_test_dir
 
-  cat > provider.py << 'EOF'
+  cat >provider.py <<'EOF'
 def call_api(prompt, options, context):
     return {"output": f"Python: {prompt}"}
 EOF
 
-  cat > config.yaml << 'EOF'
+  cat >config.yaml <<'EOF'
 prompts:
   - "Test {{name}}"
 providers:
@@ -569,7 +569,7 @@ tests:
         value: "Python"
 EOF
 
-  if pf eval -c config.yaml --no-cache -o results.json > /dev/null 2>&1; then
+  if pf eval -c config.yaml --no-cache -o results.json >/dev/null 2>&1; then
     if [[ -f "results.json" ]]; then
       log_pass "Python provider works"
       return 0
@@ -584,20 +584,20 @@ test_ruby_provider() {
   log_test "Ruby provider"
 
   # Check if Ruby is available
-  if ! command -v ruby &> /dev/null; then
+  if ! command -v ruby &>/dev/null; then
     log_skip "Ruby not installed"
     return 0
   fi
 
   setup_test_dir
 
-  cat > provider.rb << 'EOF'
+  cat >provider.rb <<'EOF'
 def call_api(prompt, options, context)
   { "output" => "Ruby: #{prompt}" }
 end
 EOF
 
-  cat > config.yaml << 'EOF'
+  cat >config.yaml <<'EOF'
 prompts:
   - "Test {{name}}"
 providers:
@@ -610,7 +610,7 @@ tests:
         value: "Ruby"
 EOF
 
-  if pf eval -c config.yaml --no-cache -o results.json > /dev/null 2>&1; then
+  if pf eval -c config.yaml --no-cache -o results.json >/dev/null 2>&1; then
     if [[ -f "results.json" ]]; then
       log_pass "Ruby provider works"
       return 0
@@ -672,20 +672,20 @@ main() {
   # Parse arguments
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --installed)
-        USE_INSTALLED=true
-        shift
-        ;;
-      *)
-        echo "Unknown option: $1"
-        exit 1
-        ;;
+    --installed)
+      USE_INSTALLED=true
+      shift
+      ;;
+    *)
+      echo "Unknown option: $1"
+      exit 1
+      ;;
     esac
   done
 
   # Check prerequisites
   if [[ "$USE_INSTALLED" == "true" ]]; then
-    if ! command -v promptfoo &> /dev/null; then
+    if ! command -v promptfoo &>/dev/null; then
       echo -e "${RED}Error: promptfoo not found in PATH${NC}"
       exit 1
     fi
