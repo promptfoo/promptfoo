@@ -595,7 +595,6 @@ export default function EvalsDataGrid({
             borderColor: 'divider',
           },
           '& .MuiDataGrid-columnHeaders': {
-            backgroundColor: 'background.default',
             borderColor: 'divider',
           },
           '& .MuiDataGrid-selectedRow': {
