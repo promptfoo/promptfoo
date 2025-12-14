@@ -602,7 +602,7 @@ export class HydraProvider implements ApiProvider {
           },
         };
 
-        await this.agentProvider.callApi(
+        const learningResponse = await this.agentProvider.callApi(
           JSON.stringify(learningRequest),
           {
             prompt: {
@@ -613,6 +613,7 @@ export class HydraProvider implements ApiProvider {
           },
           options,
         );
+        accumulateResponseTokenUsage(totalTokenUsage, learningResponse);
 
         logger.debug('[Hydra] Scan learnings updated', { scanId, testRunId });
       } catch (error) {

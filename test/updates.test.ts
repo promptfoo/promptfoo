@@ -71,6 +71,10 @@ describe('getLatestVersion', () => {
 
 describe('checkForUpdates', () => {
   beforeEach(() => {
+    // Reset fetchWithTimeout to clear any queued mockResolvedValueOnce from other tests
+    vi.mocked(fetchWithTimeout).mockReset();
+    // Clear env var that other tests may have set
+    delete process.env.PROMPTFOO_DISABLE_UPDATE;
     vi.spyOn(console, 'log').mockImplementation(() => {});
   });
 
