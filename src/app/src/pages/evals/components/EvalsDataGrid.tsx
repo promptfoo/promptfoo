@@ -342,7 +342,7 @@ export default function EvalsDataGrid({
       [
         {
           field: 'isFavorite',
-          headerName: '',
+          headerName: '⭐',
           width: 60,
           sortable: false,
           filterable: false,
