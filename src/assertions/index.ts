@@ -544,10 +544,16 @@ export async function runAssertions({
         traceId,
       });
 
+      // Render metric field with test variables if it's a template string
+      let renderedMetric = assertion.metric;
+      if (renderedMetric && typeof renderedMetric === 'string') {
+        renderedMetric = nunjucks.renderString(renderedMetric, test.vars || {});
+      }
+
       assertResult.addResult({
         index,
         result,
-        metric: assertion.metric,
+        metric: renderedMetric,
         weight: assertion.weight,
       });
     },
@@ -560,10 +566,16 @@ export async function runAssertions({
       assertionSet: { metric, weight },
     } = subAssertResult.parentAssertionSet!;
 
+    // Render metric field with test variables if it's a template string
+    let renderedMetric = metric;
+    if (renderedMetric && typeof renderedMetric === 'string') {
+      renderedMetric = nunjucks.renderString(renderedMetric, test.vars || {});
+    }
+
     mainAssertResult.addResult({
       index,
       result,
-      metric,
+      metric: renderedMetric,
       weight,
     });
   });

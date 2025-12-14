@@ -540,4 +540,74 @@ describe('runAssertions', () => {
       }),
     );
   });
+
+  it('should render metric field with variables from test.vars', async () => {
+    const test: AtomicTestCase = {
+      vars: {
+        metricName: 'CustomMetric',
+        category: 'accuracy',
+      },
+      assert: [
+        {
+          type: 'equals',
+          value: 'Expected output',
+          metric: '{{metricName}}',
+        },
+        {
+          type: 'contains',
+          value: 'output',
+          metric: '{{category}}',
+        },
+      ],
+    };
+
+    const result: GradingResult = await runAssertions({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      test,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(result.pass).toBe(true);
+    expect(result.namedScores).toEqual({
+      CustomMetric: 1,
+      accuracy: 1,
+    });
+  });
+
+  it('should render metric field in assert-set with variables from test.vars', async () => {
+    const test: AtomicTestCase = {
+      vars: {
+        metricGroup: 'ValidationGroup',
+      },
+      assert: [
+        {
+          type: 'assert-set',
+          metric: '{{metricGroup}}',
+          assert: [
+            {
+              type: 'equals',
+              value: 'Expected output',
+            },
+            {
+              type: 'contains',
+              value: 'output',
+            },
+          ],
+        },
+      ],
+    };
+
+    const result: GradingResult = await runAssertions({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      test,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(result.pass).toBe(true);
+    expect(result.namedScores).toEqual({
+      ValidationGroup: 1,
+    });
+  });
 });
