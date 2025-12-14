@@ -40,6 +40,7 @@ vi.mock('../../src/esm', async (importOriginal) => {
   return {
     ...(await importOriginal()),
     importModule: vi.fn(),
+    resolvePackageEntryPoint: vi.fn(() => '@openai/codex-sdk'),
   };
 });
 
@@ -128,23 +129,10 @@ describe('OpenAICodexSDKProvider', () => {
       warnSpy.mockRestore();
     });
 
-    it('should warn about unknown fallback model', () => {
-      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
-
-      new OpenAICodexSDKProvider({ config: { fallback_model: 'unknown-fallback' } });
-
-      expect(warnSpy).toHaveBeenCalledWith(
-        'Using unknown model for OpenAI Codex SDK fallback: unknown-fallback',
-      );
-
-      warnSpy.mockRestore();
-    });
-
     it('should not warn about known OpenAI models', () => {
       const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {});
 
       new OpenAICodexSDKProvider({ config: { model: 'gpt-4o' } });
-      new OpenAICodexSDKProvider({ config: { fallback_model: 'o3-mini' } });
 
       expect(warnSpy).not.toHaveBeenCalled();
 
@@ -157,7 +145,6 @@ describe('OpenAICodexSDKProvider', () => {
       new OpenAICodexSDKProvider({ config: { model: 'gpt-5.1-codex' } });
       new OpenAICodexSDKProvider({ config: { model: 'gpt-5.1-codex-max' } });
       new OpenAICodexSDKProvider({ config: { model: 'gpt-5.1-codex-mini' } });
-      new OpenAICodexSDKProvider({ config: { fallback_model: 'gpt-5-codex' } });
 
       expect(warnSpy).not.toHaveBeenCalled();
 
@@ -459,54 +446,83 @@ describe('OpenAICodexSDKProvider', () => {
       });
     });
 
-    describe('tool_output_token_limit', () => {
-      it('should pass tool_output_token_limit to run options', async () => {
+    describe('sandbox and network options', () => {
+      it('should pass sandbox_mode to thread options', async () => {
         mockRun.mockResolvedValue(createMockResponse('Response'));
 
         const provider = new OpenAICodexSDKProvider({
           config: {
-            tool_output_token_limit: 20000,
+            sandbox_mode: 'read-only',
           },
           env: { OPENAI_API_KEY: 'test-api-key' },
         });
 
         await provider.callApi('Test prompt');
 
-        expect(mockRun).toHaveBeenCalledWith('Test prompt', {
-          toolOutputTokenLimit: 20000,
-        });
+        expect((MockCodex.mock.instances[0] as any).startThread).toHaveBeenCalledWith(
+          expect.objectContaining({
+            sandboxMode: 'read-only',
+          }),
+        );
       });
 
-      it('should combine tool_output_token_limit with output_schema', async () => {
-        const schema = { type: 'object' };
-        mockRun.mockResolvedValue(createMockResponse('{}'));
+      it('should pass network and web search options to thread', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
 
         const provider = new OpenAICodexSDKProvider({
           config: {
-            output_schema: schema,
-            tool_output_token_limit: 15000,
+            network_access_enabled: true,
+            web_search_enabled: true,
           },
           env: { OPENAI_API_KEY: 'test-api-key' },
         });
 
         await provider.callApi('Test prompt');
 
-        expect(mockRun).toHaveBeenCalledWith('Test prompt', {
-          outputSchema: schema,
-          toolOutputTokenLimit: 15000,
-        });
+        expect((MockCodex.mock.instances[0] as any).startThread).toHaveBeenCalledWith(
+          expect.objectContaining({
+            networkAccessEnabled: true,
+            webSearchEnabled: true,
+          }),
+        );
       });
 
-      it('should not include toolOutputTokenLimit when not specified', async () => {
+      it('should pass model_reasoning_effort to thread options', async () => {
         mockRun.mockResolvedValue(createMockResponse('Response'));
 
         const provider = new OpenAICodexSDKProvider({
+          config: {
+            model_reasoning_effort: 'high',
+          },
           env: { OPENAI_API_KEY: 'test-api-key' },
         });
 
         await provider.callApi('Test prompt');
 
-        expect(mockRun).toHaveBeenCalledWith('Test prompt', {});
+        expect((MockCodex.mock.instances[0] as any).startThread).toHaveBeenCalledWith(
+          expect.objectContaining({
+            modelReasoningEffort: 'high',
+          }),
+        );
+      });
+
+      it('should pass approval_policy to thread options', async () => {
+        mockRun.mockResolvedValue(createMockResponse('Response'));
+
+        const provider = new OpenAICodexSDKProvider({
+          config: {
+            approval_policy: 'never',
+          },
+          env: { OPENAI_API_KEY: 'test-api-key' },
+        });
+
+        await provider.callApi('Test prompt');
+
+        expect((MockCodex.mock.instances[0] as any).startThread).toHaveBeenCalledWith(
+          expect.objectContaining({
+            approvalPolicy: 'never',
+          }),
+        );
       });
     });
 

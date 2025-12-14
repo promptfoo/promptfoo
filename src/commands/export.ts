@@ -5,7 +5,7 @@ import zlib from 'zlib';
 import logger from '../logger';
 import Eval from '../models/eval';
 import telemetry from '../telemetry';
-import { writeOutput, createOutputMetadata } from '../util/index';
+import { createOutputMetadata, writeOutput } from '../util/index';
 import { getLogDirectory, getLogFilesSync } from '../util/logs';
 import type { Command } from 'commander';
 

@@ -1,4 +1,3 @@
-import { createRequire } from 'node:module';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -6,7 +5,7 @@ import path from 'path';
 import dedent from 'dedent';
 import cliState from '../cliState';
 import { getEnvString } from '../envars';
-import { importModule } from '../esm';
+import { importModule, resolvePackageEntryPoint } from '../esm';
 import logger from '../logger';
 import { cacheResponse, getCachedResponse, initializeAgenticCache } from './agentic-utils';
 import { ANTHROPIC_MODELS } from './anthropic/util';
@@ -20,6 +19,8 @@ import type {
   OutputFormat,
   SandboxSettings,
   SettingSource,
+  SpawnedProcess,
+  SpawnOptions,
 } from '@anthropic-ai/claude-agent-sdk';
 
 import type {
@@ -33,8 +34,7 @@ import type { EnvOverrides } from '../types/env';
 /**
  * Claude Agent SDK Provider
  *
- * This provider requires the @anthropic-ai/claude-agent-sdk package, which has a
- * proprietary license and is not installed by default. Users must install it separately:
+ * This provider requires the @anthropic-ai/claude-agent-sdk package to be installed separately:
  *   npm install @anthropic-ai/claude-agent-sdk
  *
  * Two default configurations:
@@ -64,17 +64,26 @@ export const CLAUDE_CODE_MODEL_ALIASES = [
 
 /**
  * Helper to load the Claude Agent SDK ESM module
- * Uses the same pattern as other providers for resolving npm packages
+ * Uses resolvePackageEntryPoint to handle ESM-only packages with restrictive exports
  */
 async function loadClaudeCodeSDK(): Promise<typeof import('@anthropic-ai/claude-agent-sdk')> {
+  const basePath =
+    cliState.basePath && path.isAbsolute(cliState.basePath) ? cliState.basePath : process.cwd();
+
+  const claudeCodePath = resolvePackageEntryPoint('@anthropic-ai/claude-agent-sdk', basePath);
+
+  if (!claudeCodePath) {
+    throw new Error(
+      dedent`The @anthropic-ai/claude-agent-sdk package is required but not installed.
+
+      To use the Claude Agent SDK provider, install it with:
+        npm install @anthropic-ai/claude-agent-sdk
+
+      For more information, see: https://www.promptfoo.dev/docs/providers/claude-agent-sdk/`,
+    );
+  }
+
   try {
-    // Use a file path for createRequire to ensure proper module resolution
-    // createRequire needs an absolute path, not a relative one
-    const basePath =
-      cliState.basePath && path.isAbsolute(cliState.basePath) ? cliState.basePath : process.cwd();
-    const resolveFrom = path.join(basePath, 'package.json');
-    const require = createRequire(resolveFrom);
-    const claudeCodePath = require.resolve('@anthropic-ai/claude-agent-sdk');
     return importModule(claudeCodePath);
   } catch (err) {
     logger.error(`Failed to load Claude Agent SDK: ${err}`);
@@ -82,11 +91,13 @@ async function loadClaudeCodeSDK(): Promise<typeof import('@anthropic-ai/claude-
       logger.error((err as any).stack);
     }
     throw new Error(
-      dedent`The @anthropic-ai/claude-agent-sdk package is required but not installed.
+      dedent`Failed to load @anthropic-ai/claude-agent-sdk.
 
-      This package has a proprietary license and is not installed by default.
+      The package was found but could not be loaded. This may be due to:
+      - Incompatible Node.js version (requires Node.js 20+)
+      - Corrupted installation
 
-      To use the Claude Agent SDK provider, install it with:
+      Try reinstalling:
         npm install @anthropic-ai/claude-agent-sdk
 
       For more information, see: https://www.promptfoo.dev/docs/providers/claude-agent-sdk/`,
@@ -296,6 +307,73 @@ export interface ClaudeCodeOptions {
    * Useful for testing with custom builds or specific versions.
    */
   path_to_claude_code_executable?: string;
+
+  /**
+   * Specify the base set of available built-in tools.
+   * - `string[]` - Array of specific tool names (e.g., `['Bash', 'Read', 'Edit']`)
+   * - `[]` (empty array) - Disable all built-in tools
+   * - `{ type: 'preset', preset: 'claude_code' }` - Use all default Claude Code tools
+   *
+   * This is different from 'custom_allowed_tools' - 'tools' specifies the base set,
+   * while 'allowedTools' filters from that base.
+   *
+   * @example Use all default tools
+   * ```yaml
+   * tools:
+   *   type: preset
+   *   preset: claude_code
+   * ```
+   *
+   * @example Use only specific tools
+   * ```yaml
+   * tools:
+   *   - Bash
+   *   - Read
+   *   - Edit
+   * ```
+   */
+  tools?: string[] | { type: 'preset'; preset: 'claude_code' };
+
+  /**
+   * Enable file checkpointing to track file changes during the session.
+   * When enabled, files can be rewound to their state at any user message
+   * using the Query.rewindFiles() method.
+   *
+   * File checkpointing creates backups of files before they are modified,
+   * allowing restoration to previous states.
+   *
+   * @default false
+   */
+  enable_file_checkpointing?: boolean;
+
+  /**
+   * When false, disables session persistence to disk. Sessions will not be
+   * saved to ~/.claude/projects/ and cannot be resumed later. Useful for
+   * ephemeral or automated workflows where session history is not needed.
+   *
+   * @default true
+   */
+  persist_session?: boolean;
+
+  /**
+   * Custom function to spawn the Claude Code process.
+   * Use this to run Claude Code in VMs, containers, or remote environments.
+   *
+   * When provided, this function is called instead of the default local spawn.
+   *
+   * Note: This option is only available when using the provider programmatically,
+   * not via YAML config.
+   *
+   * @example
+   * ```typescript
+   * spawn_claude_code_process: (options) => {
+   *   // Custom spawn logic for VM execution
+   *   // options contains: command, args, cwd, env, signal
+   *   return myVMProcess; // Must satisfy SpawnedProcess interface
+   * }
+   * ```
+   */
+  spawn_claude_code_process?: (options: SpawnOptions) => SpawnedProcess;
 }
 
 export class ClaudeCodeSDKProvider implements ApiProvider {
@@ -445,7 +523,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
     // Lets us avoid unnecessary work and cleanup if there's a cache hit
     const cacheKeyQueryOptions: Omit<
       QueryOptions,
-      'abortController' | 'mcpServers' | 'cwd' | 'stderr'
+      'abortController' | 'mcpServers' | 'cwd' | 'stderr' | 'spawnClaudeCodeProcess'
     > = {
       maxTurns: config.max_turns,
       model: config.model,
@@ -483,6 +561,9 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       extraArgs: config.extra_args,
       pathToClaudeCodeExecutable: config.path_to_claude_code_executable,
       settingSources: config.setting_sources,
+      tools: config.tools,
+      enableFileCheckpointing: config.enable_file_checkpointing,
+      persistSession: config.persist_session,
       env,
     };
 
@@ -547,8 +628,9 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       abortController,
       mcpServers,
       cwd: workingDir,
-      // stderr callback is not included in cache key since it's a function
+      // stderr and spawnClaudeCodeProcess callbacks are not included in cache key since they're functions
       stderr: config.stderr,
+      spawnClaudeCodeProcess: config.spawn_claude_code_process,
     };
     const queryParams = { prompt, options };
 

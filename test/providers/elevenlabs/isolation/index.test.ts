@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ElevenLabsIsolationProvider } from '../../../../src/providers/elevenlabs/isolation';
+import type { CallApiContextParams } from '../../../../src/types/providers';
 
 // Mock dependencies
 vi.mock('../../../../src/providers/elevenlabs/client');
@@ -173,7 +174,7 @@ describe('ElevenLabsIsolationProvider', () => {
 
       const response = await provider.callApi('', {
         vars: { audioFile: '/path/to/audio.mp3' },
-      });
+      } as unknown as CallApiContextParams);
 
       expect(response.error).toBeUndefined();
       expect(response.metadata?.sourceFile).toBe('/path/to/audio.mp3');

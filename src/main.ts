@@ -47,6 +47,31 @@ import { printErrorInformation } from './util/errors/index';
 import { setupEnv } from './util/index';
 
 /**
+ * Normalize env paths from CLI input.
+ * Handles: single string, array of strings, comma-separated strings.
+ * @returns Single string (if one path) or array of strings (if multiple)
+ */
+function normalizeEnvPaths(input: string | string[] | undefined): string | string[] | undefined {
+  if (!input) {
+    return undefined;
+  }
+  // Commander with variadic option gives us an array
+  const rawPaths = Array.isArray(input) ? input : [input];
+
+  // Expand comma-separated values and flatten
+  const expanded = rawPaths
+    .flatMap((p) => (p.includes(',') ? p.split(',').map((s) => s.trim()) : p.trim()))
+    .filter((p) => p.length > 0);
+
+  if (expanded.length === 0) {
+    return undefined;
+  }
+
+  // Return single string if only one path (backward compat for logging)
+  return expanded.length === 1 ? expanded[0] : expanded;
+}
+
+/**
  * Checks if the current module is the main entry point.
  * Handles npm global bin symlinks by resolving real paths.
  *
@@ -108,7 +133,11 @@ export function addCommonOptionsRecursively(command: Command) {
     (option) => option.long === '--env-file' || option.long === '--env-path',
   );
   if (!hasEnvFileOption) {
-    command.option('--env-file, --env-path <path>', 'Path to .env file');
+    // Variadic option: supports --env-file a --env-file b or --env-file a,b
+    command.option(
+      '--env-file, --env-path <paths...>',
+      'Path(s) to .env file(s). Can specify multiple files or use comma-separated values.',
+    );
   }
 
   command.hook('preAction', (thisCommand) => {
@@ -117,10 +146,12 @@ export function addCommonOptionsRecursively(command: Command) {
       logger.debug('Verbose mode enabled via --verbose flag');
     }
 
-    const envPath = thisCommand.opts().envFile || thisCommand.opts().envPath;
+    const rawEnvPath = thisCommand.opts().envFile || thisCommand.opts().envPath;
+    const envPath = normalizeEnvPaths(rawEnvPath);
     if (envPath) {
       setupEnv(envPath);
-      logger.debug(`Loading environment from ${envPath}`);
+      const pathsStr = Array.isArray(envPath) ? envPath.join(', ') : envPath;
+      logger.debug(`Loading environment from ${pathsStr}`);
     }
 
     // Automatically record telemetry for all commands

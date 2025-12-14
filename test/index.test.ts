@@ -86,7 +86,9 @@ describe('index.ts exports', () => {
   ];
 
   const expectedSchemaExports = [
+    'AssertionOrSetSchema',
     'AssertionSchema',
+    'AssertionSetSchema',
     'AssertionTypeSchema',
     'AtomicTestCaseSchema',
     'BaseAssertionTypesSchema',
