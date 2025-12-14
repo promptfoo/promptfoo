@@ -147,7 +147,7 @@
     "@types/supertest": "^6.0.3",
     "concurrently": "^9.2.1",
     "depcheck": "^1.4.7",
-    "drizzle-kit": "^0.31.7",
+    "drizzle-kit": "^0.31.8",
     "ibm-cloud-sdk-core": "^5.4.4",
     "knip": "^5.70.2",
     "langfuse": "^3.38.6",

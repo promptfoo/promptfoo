@@ -248,6 +248,7 @@ export default class Eval {
   _resultsLoaded: boolean = false;
   runtimeOptions?: Partial<import('../types').EvaluateOptions>;
   _shared: boolean = false;
+  isFavorite: boolean = false;
 
   static async latest() {
     const db = getDb();
@@ -297,6 +298,7 @@ export default class Eval {
       persisted: true,
       vars: eval_.vars || [],
       runtimeOptions: (eval_ as any).runtimeOptions,
+      isFavorite: eval_.isFavorite || false,
     });
     if (eval_.results && 'table' in eval_.results) {
       evalInstance.oldResults = eval_.results as EvaluateSummaryV2;
@@ -465,6 +467,7 @@ export default class Eval {
       persisted?: boolean;
       vars?: string[];
       runtimeOptions?: Partial<import('../types').EvaluateOptions>;
+      isFavorite?: boolean;
     },
   ) {
     const createdAt = opts?.createdAt || new Date();
@@ -479,6 +482,7 @@ export default class Eval {
     this._resultsLoaded = false;
     this.vars = opts?.vars || [];
     this.runtimeOptions = opts?.runtimeOptions;
+    this.isFavorite = opts?.isFavorite || false;
   }
 
   version() {
@@ -509,6 +513,7 @@ export default class Eval {
       updatedAt: getCurrentTimestamp(),
       vars: Array.from(this.vars),
       runtimeOptions: sanitizeRuntimeOptions(this.runtimeOptions),
+      isFavorite: this.isFavorite,
     };
 
     if (this.useOldResults()) {
@@ -1335,6 +1340,7 @@ export async function getEvalSummaries(
       isRedteam: sql<boolean>`json_type(${evalsTable.config}, '$.redteam') IS NOT NULL`,
       prompts: evalsTable.prompts,
       config: evalsTable.config,
+      isFavorite: evalsTable.isFavorite,
     })
     .from(evalsTable)
     .leftJoin(evalsToDatasetsTable, eq(evalsTable.id, evalsToDatasetsTable.evalId))
@@ -1424,6 +1430,7 @@ export async function getEvalSummaries(
       numTests: testCount,
       datasetId: result.datasetId,
       isRedteam: result.isRedteam,
+      isFavorite: result.isFavorite || false,
       passRate: testRunCount > 0 ? (passCount / testRunCount) * 100 : 0,
       label: result.description ? `${result.description} (${result.evalId})` : result.evalId,
       providers: deserializedProviders,

@@ -68,11 +68,13 @@ export const evalsTable = sqliteTable(
       Partial<import('../types').EvaluateOptions>
     >(),
     isRedteam: integer('is_redteam', { mode: 'boolean' }).notNull().default(false),
+    isFavorite: integer('is_favorite', { mode: 'boolean' }).notNull().default(false),
   },
   (table) => ({
     createdAtIdx: index('evals_created_at_idx').on(table.createdAt),
     authorIdx: index('evals_author_idx').on(table.author),
     isRedteamIdx: index('evals_is_redteam_idx').on(table.isRedteam),
+    isFavoriteIdx: index('evals_is_favorite_idx').on(table.isFavorite),
   }),
 );
 
