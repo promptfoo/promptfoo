@@ -538,6 +538,89 @@ test_auth_command() {
   fi
 }
 
+# ─── Provider Tests ──────────────────────────────────────────
+
+test_python_provider() {
+  log_test "Python provider"
+
+  # Check if Python is available
+  if ! command -v python3 &> /dev/null && ! command -v python &> /dev/null; then
+    log_skip "Python not installed"
+    return 0
+  fi
+
+  setup_test_dir
+
+  cat > provider.py << 'EOF'
+def call_api(prompt, options, context):
+    return {"output": f"Python: {prompt}"}
+EOF
+
+  cat > config.yaml << 'EOF'
+prompts:
+  - "Test {{name}}"
+providers:
+  - id: python:provider.py
+tests:
+  - vars:
+      name: "World"
+    assert:
+      - type: contains
+        value: "Python"
+EOF
+
+  if pf eval -c config.yaml --no-cache -o results.json > /dev/null 2>&1; then
+    if [[ -f "results.json" ]]; then
+      log_pass "Python provider works"
+      return 0
+    fi
+  fi
+
+  log_fail "Python provider failed"
+  return 1
+}
+
+test_ruby_provider() {
+  log_test "Ruby provider"
+
+  # Check if Ruby is available
+  if ! command -v ruby &> /dev/null; then
+    log_skip "Ruby not installed"
+    return 0
+  fi
+
+  setup_test_dir
+
+  cat > provider.rb << 'EOF'
+def call_api(prompt, options, context)
+  { "output" => "Ruby: #{prompt}" }
+end
+EOF
+
+  cat > config.yaml << 'EOF'
+prompts:
+  - "Test {{name}}"
+providers:
+  - id: ruby:provider.rb
+tests:
+  - vars:
+      name: "World"
+    assert:
+      - type: contains
+        value: "Ruby"
+EOF
+
+  if pf eval -c config.yaml --no-cache -o results.json > /dev/null 2>&1; then
+    if [[ -f "results.json" ]]; then
+      log_pass "Ruby provider works"
+      return 0
+    fi
+  fi
+
+  log_fail "Ruby provider failed"
+  return 1
+}
+
 # ─── Install Script Tests ────────────────────────────────────────────────────
 
 test_install_script_syntax() {
@@ -642,6 +725,10 @@ main() {
   test_export_command
   test_config_command
   test_auth_command
+
+  # Provider tests
+  test_python_provider
+  test_ruby_provider
 
   # Install script tests
   test_install_script_syntax

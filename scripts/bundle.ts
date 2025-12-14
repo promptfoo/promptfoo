@@ -103,26 +103,26 @@ function prepareBundleDir(): void {
  */
 function copyAssets(): void {
   const assets = [
-    // Drizzle migrations
+    // Drizzle migrations (kept in assets/)
     { src: path.join(ROOT, 'drizzle'), dest: path.join(BUNDLE_DIR, 'assets', 'drizzle') },
-    // Python wrapper
+    // Python wrapper - must be at bundle/python/ (matches WRAPPER_SUBDIRS in code)
     {
       src: path.join(ROOT, 'src', 'python', 'wrapper.py'),
-      dest: path.join(BUNDLE_DIR, 'assets', 'python', 'wrapper.py'),
+      dest: path.join(BUNDLE_DIR, 'python', 'wrapper.py'),
     },
     {
       src: path.join(ROOT, 'src', 'python', 'persistent_wrapper.py'),
-      dest: path.join(BUNDLE_DIR, 'assets', 'python', 'persistent_wrapper.py'),
+      dest: path.join(BUNDLE_DIR, 'python', 'persistent_wrapper.py'),
     },
-    // Ruby wrapper
+    // Ruby wrapper - must be at bundle/ruby/ (matches WRAPPER_SUBDIRS in code)
     {
       src: path.join(ROOT, 'src', 'ruby', 'wrapper.rb'),
-      dest: path.join(BUNDLE_DIR, 'assets', 'ruby', 'wrapper.rb'),
+      dest: path.join(BUNDLE_DIR, 'ruby', 'wrapper.rb'),
     },
-    // Go wrapper
+    // Go wrapper - must be at bundle/golang/ (matches WRAPPER_SUBDIRS in code)
     {
       src: path.join(ROOT, 'src', 'golang', 'wrapper.go'),
-      dest: path.join(BUNDLE_DIR, 'assets', 'golang', 'wrapper.go'),
+      dest: path.join(BUNDLE_DIR, 'golang', 'wrapper.go'),
     },
     // Proto files for OTLP
     {
