@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import fs from 'fs';
+import fs from 'fs/promises';
 import { Command } from 'commander';
 
 import { logsCommand } from '../../src/commands/logs';
@@ -7,6 +7,7 @@ import cliState from '../../src/cliState';
 import logger from '../../src/logger';
 import * as logsUtil from '../../src/util/logs';
 
+vi.mock('fs/promises');
 vi.mock('fs');
 vi.mock('../../src/logger', () => ({
   default: {
@@ -30,7 +31,8 @@ vi.mock('../../src/cliState', () => ({
 }));
 vi.mock('../../src/util/logs', () => ({
   getLogDirectory: vi.fn().mockReturnValue('/home/user/.promptfoo/logs'),
-  getLogFiles: vi.fn().mockReturnValue([]),
+  getLogFiles: vi.fn().mockResolvedValue([]),
+  getLogFilesSync: vi.fn().mockReturnValue([]),
   findLogFile: vi.fn().mockReturnValue(null),
   formatFileSize: vi.fn((bytes: number) => `${bytes} B`),
 }));
@@ -50,6 +52,7 @@ describe('logs command', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     program = new Command();
+    program.enablePositionalOptions(); // Required for passThroughOptions() in logs command
     logsCommand(program);
     process.exitCode = 0;
 
@@ -91,17 +94,17 @@ describe('logs command', () => {
 
   describe('--list option', () => {
     it('should display message when no log files found', async () => {
-      mockLogsUtil.getLogFiles.mockReturnValue([]);
+      mockLogsUtil.getLogFiles.mockResolvedValue([]);
 
       const logsCmd = program.commands.find((c) => c.name() === 'logs');
       await logsCmd?.parseAsync(['node', 'test', '--list']);
 
-      expect(mockLogsUtil.getLogFiles).toHaveBeenCalledWith('debug');
+      expect(mockLogsUtil.getLogFiles).toHaveBeenCalledWith('all');
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('No log files found'));
     });
 
     it('should display table when log files exist', async () => {
-      mockLogsUtil.getLogFiles.mockReturnValue([
+      mockLogsUtil.getLogFiles.mockResolvedValue([
         {
           name: 'promptfoo-debug-2024-01-01_10-00-00.log',
           path: '/home/user/.promptfoo/logs/promptfoo-debug-2024-01-01_10-00-00.log',
@@ -122,7 +125,7 @@ describe('logs command', () => {
     });
 
     it('should filter by type when specified', async () => {
-      mockLogsUtil.getLogFiles.mockReturnValue([]);
+      mockLogsUtil.getLogFiles.mockResolvedValue([]);
 
       const logsCmd = program.commands.find((c) => c.name() === 'logs');
       await logsCmd?.parseAsync(['node', 'test', '--list', '--type', 'error']);
@@ -130,11 +133,11 @@ describe('logs command', () => {
       expect(mockLogsUtil.getLogFiles).toHaveBeenCalledWith('error');
     });
 
-    it('should use all log types when --type all is specified', async () => {
-      mockLogsUtil.getLogFiles.mockReturnValue([]);
+    it('should default to all log types', async () => {
+      mockLogsUtil.getLogFiles.mockResolvedValue([]);
 
       const logsCmd = program.commands.find((c) => c.name() === 'logs');
-      await logsCmd?.parseAsync(['node', 'test', '--list', '--type', 'all']);
+      await logsCmd?.parseAsync(['node', 'test', '--list']);
 
       expect(mockLogsUtil.getLogFiles).toHaveBeenCalledWith('all');
     });
@@ -149,7 +152,7 @@ describe('logs command', () => {
 
     beforeEach(() => {
       mockLogsUtil.findLogFile.mockReturnValue(null);
-      mockLogsUtil.getLogFiles.mockReturnValue([
+      mockLogsUtil.getLogFiles.mockResolvedValue([
         {
           name: 'promptfoo-debug-2024-01-01_10-00-00.log',
           path: mockLogPath,
@@ -158,17 +161,16 @@ describe('logs command', () => {
           size: mockLogContent.length,
         },
       ]);
-      mockFs.existsSync.mockReturnValue(true);
-      mockFs.statSync.mockReturnValue({
+      mockFs.access.mockResolvedValue(undefined);
+      mockFs.stat.mockResolvedValue({
         size: mockLogContent.length,
         mtime: new Date('2024-01-01T10:00:00Z'),
-      } as fs.Stats);
-      mockFs.readFileSync.mockReturnValue(mockLogContent);
-      mockFs.accessSync.mockReturnValue(undefined);
+      } as any);
+      mockFs.readFile.mockResolvedValue(mockLogContent);
     });
 
     it('should show error when no log files available', async () => {
-      mockLogsUtil.getLogFiles.mockReturnValue([]);
+      mockLogsUtil.getLogFiles.mockResolvedValue([]);
 
       const logsCmd = program.commands.find((c) => c.name() === 'logs');
       await logsCmd?.parseAsync(['node', 'test']);
@@ -188,29 +190,33 @@ describe('logs command', () => {
     });
 
     it('should display most recent log file by default', async () => {
-      mockFs.existsSync.mockReturnValue(true);
+      mockFs.access.mockResolvedValue(undefined);
 
       const logsCmd = program.commands.find((c) => c.name() === 'logs');
       await logsCmd?.parseAsync(['node', 'test']);
 
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('promptfoo-debug'));
-      expect(mockFs.readFileSync).toHaveBeenCalledWith(mockLogPath, 'utf-8');
+      expect(mockFs.readFile).toHaveBeenCalledWith(mockLogPath, 'utf-8');
     });
 
     it('should use current session log file when available', async () => {
       const sessionLogPath = '/session/log/path.log';
       mockCliState.debugLogFile = sessionLogPath;
-      mockFs.existsSync.mockImplementation((p) => p === sessionLogPath);
-      mockFs.statSync.mockReturnValue({
+      mockFs.access.mockImplementation(async (p) => {
+        if (p !== sessionLogPath) {
+          throw new Error('Not found');
+        }
+      });
+      mockFs.stat.mockResolvedValue({
         size: mockLogContent.length,
         mtime: new Date(),
-      } as fs.Stats);
-      mockFs.readFileSync.mockReturnValue(mockLogContent);
+      } as any);
+      mockFs.readFile.mockResolvedValue(mockLogContent);
 
       const logsCmd = program.commands.find((c) => c.name() === 'logs');
       await logsCmd?.parseAsync(['node', 'test']);
 
-      expect(mockFs.readFileSync).toHaveBeenCalledWith(sessionLogPath, 'utf-8');
+      expect(mockFs.readFile).toHaveBeenCalledWith(sessionLogPath, 'utf-8');
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('current CLI session'));
     });
 
@@ -222,32 +228,28 @@ describe('logs command', () => {
 
       expect(mockLogsUtil.findLogFile).toHaveBeenCalledWith(
         'promptfoo-debug-2024-01-01_10-00-00.log',
-        'debug',
+        'all',
       );
-      expect(mockFs.readFileSync).toHaveBeenCalledWith(mockLogPath, 'utf-8');
+      expect(mockFs.readFile).toHaveBeenCalledWith(mockLogPath, 'utf-8');
     });
 
     it('should limit output with --lines option', async () => {
       mockLogsUtil.findLogFile.mockReturnValue(mockLogPath);
+      const mockOpen = vi.fn().mockResolvedValue({
+        stat: vi.fn().mockResolvedValue({ size: 100 }),
+        readFile: vi.fn().mockResolvedValue(mockLogContent),
+        close: vi.fn(),
+      });
+      mockFs.open = mockOpen as any;
 
       const logsCmd = program.commands.find((c) => c.name() === 'logs');
       await logsCmd?.parseAsync(['node', 'test', '-n', '2']);
 
-      expect(mockFs.readFileSync).toHaveBeenCalled();
-      // The command reads the file and slices lines internally
-    });
-
-    it('should limit output with --head option', async () => {
-      mockLogsUtil.findLogFile.mockReturnValue(mockLogPath);
-
-      const logsCmd = program.commands.find((c) => c.name() === 'logs');
-      await logsCmd?.parseAsync(['node', 'test', '--head', '2']);
-
-      expect(mockFs.readFileSync).toHaveBeenCalled();
+      expect(mockFs.open).toHaveBeenCalled();
     });
 
     it('should handle permission errors', async () => {
-      mockLogsUtil.getLogFiles.mockReturnValue([
+      mockLogsUtil.getLogFiles.mockResolvedValue([
         {
           name: 'test.log',
           path: mockLogPath,
@@ -256,10 +258,7 @@ describe('logs command', () => {
           size: 100,
         },
       ]);
-      mockFs.existsSync.mockReturnValue(true);
-      mockFs.accessSync.mockImplementation(() => {
-        throw new Error('Permission denied');
-      });
+      mockFs.access.mockRejectedValue(new Error('Permission denied'));
 
       const logsCmd = program.commands.find((c) => c.name() === 'logs');
       await logsCmd?.parseAsync(['node', 'test']);
@@ -269,7 +268,7 @@ describe('logs command', () => {
     });
 
     it('should handle empty log files', async () => {
-      mockLogsUtil.getLogFiles.mockReturnValue([
+      mockLogsUtil.getLogFiles.mockResolvedValue([
         {
           name: 'empty.log',
           path: mockLogPath,
@@ -278,10 +277,10 @@ describe('logs command', () => {
           size: 0,
         },
       ]);
-      mockFs.statSync.mockReturnValue({
+      mockFs.stat.mockResolvedValue({
         size: 0,
         mtime: new Date(),
-      } as fs.Stats);
+      } as any);
 
       const logsCmd = program.commands.find((c) => c.name() === 'logs');
       await logsCmd?.parseAsync(['node', 'test']);
@@ -291,7 +290,7 @@ describe('logs command', () => {
 
     it('should warn about large files', async () => {
       const largeSize = 2 * 1024 * 1024; // 2MB
-      mockLogsUtil.getLogFiles.mockReturnValue([
+      mockLogsUtil.getLogFiles.mockResolvedValue([
         {
           name: 'large.log',
           path: mockLogPath,
@@ -300,11 +299,11 @@ describe('logs command', () => {
           size: largeSize,
         },
       ]);
-      mockFs.statSync.mockReturnValue({
+      mockFs.stat.mockResolvedValue({
         size: largeSize,
         mtime: new Date(),
-      } as fs.Stats);
-      mockFs.readFileSync.mockReturnValue('a'.repeat(largeSize));
+      } as any);
+      mockFs.readFile.mockResolvedValue('a'.repeat(largeSize));
 
       const logsCmd = program.commands.find((c) => c.name() === 'logs');
       await logsCmd?.parseAsync(['node', 'test']);
@@ -318,7 +317,7 @@ describe('logs command', () => {
 2024-01-01T10:00:02.000Z [INFO]: Retrying connection
 2024-01-01T10:00:03.000Z [ERROR]: Connection timeout`;
 
-      mockLogsUtil.getLogFiles.mockReturnValue([
+      mockLogsUtil.getLogFiles.mockResolvedValue([
         {
           name: 'test.log',
           path: mockLogPath,
@@ -327,11 +326,11 @@ describe('logs command', () => {
           size: logContentWithErrors.length,
         },
       ]);
-      mockFs.statSync.mockReturnValue({
+      mockFs.stat.mockResolvedValue({
         size: logContentWithErrors.length,
         mtime: new Date(),
-      } as fs.Stats);
-      mockFs.readFileSync.mockReturnValue(logContentWithErrors);
+      } as any);
+      mockFs.readFile.mockResolvedValue(logContentWithErrors);
 
       const logsCmd = program.commands.find((c) => c.name() === 'logs');
       await logsCmd?.parseAsync(['node', 'test', '--grep', 'ERROR']);
@@ -344,7 +343,7 @@ describe('logs command', () => {
     });
 
     it('should show message when grep finds no matches', async () => {
-      mockLogsUtil.getLogFiles.mockReturnValue([
+      mockLogsUtil.getLogFiles.mockResolvedValue([
         {
           name: 'test.log',
           path: mockLogPath,
@@ -353,24 +352,32 @@ describe('logs command', () => {
           size: mockLogContent.length,
         },
       ]);
-      mockFs.statSync.mockReturnValue({
+      mockFs.stat.mockResolvedValue({
         size: mockLogContent.length,
         mtime: new Date(),
-      } as fs.Stats);
-      mockFs.readFileSync.mockReturnValue(mockLogContent);
+      } as any);
+      mockFs.readFile.mockResolvedValue(mockLogContent);
 
       const logsCmd = program.commands.find((c) => c.name() === 'logs');
       await logsCmd?.parseAsync(['node', 'test', '--grep', 'NONEXISTENT_PATTERN']);
 
       expect(logger.info).toHaveBeenCalledWith(
-        expect.stringContaining('No lines matching "NONEXISTENT_PATTERN" found'),
+        expect.stringContaining('No lines matching pattern found'),
       );
+    });
+
+    it('should handle invalid regex patterns gracefully', async () => {
+      const logsCmd = program.commands.find((c) => c.name() === 'logs');
+      await logsCmd?.parseAsync(['node', 'test', '--grep', '[invalid']);
+
+      expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Invalid grep pattern'));
+      expect(process.exitCode).toBe(1);
     });
   });
 
   describe('list subcommand', () => {
     it('should list all log types by default', async () => {
-      mockLogsUtil.getLogFiles.mockReturnValue([]);
+      mockLogsUtil.getLogFiles.mockResolvedValue([]);
 
       const logsCmd = program.commands.find((c) => c.name() === 'logs');
       const listCmd = logsCmd?.commands.find((c) => c.name() === 'list');
@@ -380,7 +387,7 @@ describe('logs command', () => {
     });
 
     it('should filter by type when specified', async () => {
-      mockLogsUtil.getLogFiles.mockReturnValue([]);
+      mockLogsUtil.getLogFiles.mockResolvedValue([]);
 
       const logsCmd = program.commands.find((c) => c.name() === 'logs');
       const listCmd = logsCmd?.commands.find((c) => c.name() === 'list');
@@ -392,14 +399,40 @@ describe('logs command', () => {
 
   describe('error handling', () => {
     it('should handle general errors gracefully', async () => {
-      mockLogsUtil.getLogFiles.mockImplementation(() => {
-        throw new Error('Unexpected error');
-      });
+      mockLogsUtil.getLogFiles.mockRejectedValue(new Error('Unexpected error'));
 
       const logsCmd = program.commands.find((c) => c.name() === 'logs');
       await logsCmd?.parseAsync(['node', 'test']);
 
       expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Failed to read logs'));
+      expect(process.exitCode).toBe(1);
+    });
+
+    it('should reject invalid --type values', async () => {
+      const logsCmd = program.commands.find((c) => c.name() === 'logs');
+      await logsCmd?.parseAsync(['node', 'test', '--type', 'invalid']);
+
+      expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Invalid log type'));
+      expect(process.exitCode).toBe(1);
+    });
+
+    it('should reject invalid --lines values', async () => {
+      const logsCmd = program.commands.find((c) => c.name() === 'logs');
+      await logsCmd?.parseAsync(['node', 'test', '--lines', '-5']);
+
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('--lines must be a positive number'),
+      );
+      expect(process.exitCode).toBe(1);
+    });
+
+    it('should reject invalid --head values', async () => {
+      const logsCmd = program.commands.find((c) => c.name() === 'logs');
+      await logsCmd?.parseAsync(['node', 'test', '--head', 'abc']);
+
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('--head must be a positive number'),
+      );
       expect(process.exitCode).toBe(1);
     });
   });

@@ -6,7 +6,7 @@ import logger from '../logger';
 import Eval from '../models/eval';
 import telemetry from '../telemetry';
 import { writeOutput, createOutputMetadata } from '../util/index';
-import { getLogDirectory, getLogFiles } from '../util/logs';
+import { getLogDirectory, getLogFilesSync } from '../util/logs';
 import type { Command } from 'commander';
 
 /**
@@ -160,7 +160,7 @@ export function exportCommand(program: Command) {
           return;
         }
 
-        const allLogFiles = getLogFiles();
+        const allLogFiles = getLogFilesSync();
 
         if (allLogFiles.length === 0) {
           logger.error('No log files found in the logs directory.');

@@ -7,7 +7,7 @@ import { exportCommand } from '../../src/commands/export';
 import logger from '../../src/logger';
 import Eval from '../../src/models/eval';
 import { writeOutput } from '../../src/util/index';
-import { getLogDirectory, getLogFiles } from '../../src/util/logs';
+import { getLogDirectory, getLogFilesSync } from '../../src/util/logs';
 
 vi.mock('../../src/telemetry', () => ({
   default: {
@@ -48,7 +48,7 @@ vi.mock('../../src/util/config/manage', () => ({
 
 vi.mock('../../src/util/logs', () => ({
   getLogDirectory: vi.fn().mockReturnValue('/tmp/test-config/logs'),
-  getLogFiles: vi.fn().mockReturnValue([]),
+  getLogFilesSync: vi.fn().mockReturnValue([]),
 }));
 
 vi.mock('fs', () => ({
@@ -191,11 +191,11 @@ describe('exportCommand', () => {
   describe('logs export', () => {
     const mockLogDir = '/test/config/logs';
     const mockGetLogDirectory = vi.mocked(getLogDirectory);
-    const mockGetLogFiles = vi.mocked(getLogFiles);
+    const mockGetLogFilesSync = vi.mocked(getLogFilesSync);
 
     beforeEach(() => {
       mockGetLogDirectory.mockReturnValue(mockLogDir);
-      mockGetLogFiles.mockReturnValue([]);
+      mockGetLogFilesSync.mockReturnValue([]);
       // Reset all mocks for clean state
       vi.clearAllMocks();
     });
@@ -215,7 +215,7 @@ describe('exportCommand', () => {
 
     it('should handle no log files found', async () => {
       mockFs.existsSync.mockReturnValue(true);
-      mockGetLogFiles.mockReturnValue([]);
+      mockGetLogFilesSync.mockReturnValue([]);
 
       exportCommand(program);
 
@@ -227,7 +227,7 @@ describe('exportCommand', () => {
 
     it('should handle invalid count parameter', async () => {
       mockFs.existsSync.mockReturnValue(true);
-      mockGetLogFiles.mockReturnValue([
+      mockGetLogFilesSync.mockReturnValue([
         {
           name: 'promptfoo-debug-2025-01-01.log',
           path: '/test/config/logs/promptfoo-debug-2025-01-01.log',
@@ -247,7 +247,7 @@ describe('exportCommand', () => {
 
     it('should handle zero count parameter', async () => {
       mockFs.existsSync.mockReturnValue(true);
-      mockGetLogFiles.mockReturnValue([
+      mockGetLogFilesSync.mockReturnValue([
         {
           name: 'promptfoo-debug-2025-01-01.log',
           path: '/test/config/logs/promptfoo-debug-2025-01-01.log',

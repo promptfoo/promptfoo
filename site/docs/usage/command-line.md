@@ -195,7 +195,7 @@ View promptfoo log files directly from the command line.
 | Option                 | Description                                | Default |
 | ---------------------- | ------------------------------------------ | ------- |
 | `[file]`               | Log file to view (name, path, or partial)  | latest  |
-| `--type <type>`        | Log type: `debug`, `error`, or `all`       | `debug` |
+| `--type <type>`        | Log type: `debug`, `error`, or `all`       | `all`   |
 | `-n, --lines <num>`    | Number of lines to display from end (tail) |         |
 | `--head <num>`         | Number of lines to display from start      |         |
 | `-f, --follow`         | Follow log file in real-time               | `false` |

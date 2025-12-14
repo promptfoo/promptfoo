@@ -153,6 +153,7 @@ async function main() {
     .version(VERSION)
     .showHelpAfterError()
     .showSuggestionAfterError()
+    .enablePositionalOptions()
     .on('option:*', function () {
       logger.error('Invalid option(s)');
       program.help();

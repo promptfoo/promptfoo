@@ -1,8 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import fs from 'fs';
+import fs from 'fs/promises';
+import fsSync from 'fs';
 import path from 'path';
 
 // Mock dependencies before importing the module under test
+vi.mock('fs/promises');
 vi.mock('fs');
 vi.mock('../../src/logger', () => ({
   default: {
@@ -25,10 +27,17 @@ vi.mock('../../src/envars', () => ({
 }));
 
 // Import after mocks are set up
-import { findLogFile, formatFileSize, getLogDirectory, getLogFiles } from '../../src/util/logs';
+import {
+  findLogFile,
+  formatFileSize,
+  getLogDirectory,
+  getLogFiles,
+  getLogFilesSync,
+} from '../../src/util/logs';
 
 describe('util/logs', () => {
   const mockFs = vi.mocked(fs);
+  const mockFsSync = vi.mocked(fsSync);
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -56,103 +65,103 @@ describe('util/logs', () => {
     });
   });
 
-  describe('getLogFiles', () => {
+  describe('getLogFiles (async)', () => {
     beforeEach(() => {
       mockGetEnvString.mockReturnValue('');
     });
 
-    it('returns empty array when directory does not exist', () => {
-      mockFs.existsSync.mockReturnValue(false);
+    it('returns empty array when directory does not exist', async () => {
+      mockFs.access.mockRejectedValue(new Error('ENOENT'));
 
-      const result = getLogFiles();
+      const result = await getLogFiles();
       expect(result).toEqual([]);
     });
 
-    it('returns empty array when no log files found', () => {
-      mockFs.existsSync.mockReturnValue(true);
-      mockFs.readdirSync.mockReturnValue([]);
+    it('returns empty array when no log files found', async () => {
+      mockFs.access.mockResolvedValue(undefined);
+      mockFs.readdir.mockResolvedValue([]);
 
-      const result = getLogFiles();
+      const result = await getLogFiles();
       expect(result).toEqual([]);
     });
 
-    it('filters non-promptfoo files', () => {
-      mockFs.existsSync.mockReturnValue(true);
-      mockFs.readdirSync.mockReturnValue([
+    it('filters non-promptfoo files', async () => {
+      mockFs.access.mockResolvedValue(undefined);
+      mockFs.readdir.mockResolvedValue([
         'other-file.log',
         'promptfoo-debug-2024-01-01_10-00-00.log',
         'readme.txt',
       ] as any);
-      mockFs.statSync.mockReturnValue({
+      mockFs.stat.mockResolvedValue({
         mtime: new Date('2024-01-01T10:00:00Z'),
         size: 1024,
-      } as fs.Stats);
+      } as any);
 
-      const result = getLogFiles();
+      const result = await getLogFiles();
 
       expect(result).toHaveLength(1);
       expect(result[0].name).toBe('promptfoo-debug-2024-01-01_10-00-00.log');
     });
 
-    it('filters by type when specified', () => {
-      mockFs.existsSync.mockReturnValue(true);
-      mockFs.readdirSync.mockReturnValue([
+    it('filters by type when specified', async () => {
+      mockFs.access.mockResolvedValue(undefined);
+      mockFs.readdir.mockResolvedValue([
         'promptfoo-debug-2024-01-01_10-00-00.log',
         'promptfoo-error-2024-01-01_10-00-00.log',
       ] as any);
-      mockFs.statSync.mockReturnValue({
+      mockFs.stat.mockResolvedValue({
         mtime: new Date('2024-01-01T10:00:00Z'),
         size: 1024,
-      } as fs.Stats);
+      } as any);
 
-      const debugFiles = getLogFiles('debug');
+      const debugFiles = await getLogFiles('debug');
       expect(debugFiles).toHaveLength(1);
       expect(debugFiles[0].type).toBe('debug');
 
-      const errorFiles = getLogFiles('error');
+      const errorFiles = await getLogFiles('error');
       expect(errorFiles).toHaveLength(1);
       expect(errorFiles[0].type).toBe('error');
 
-      const allFiles = getLogFiles('all');
+      const allFiles = await getLogFiles('all');
       expect(allFiles).toHaveLength(2);
     });
 
-    it('sorts by modification time (newest first)', () => {
-      mockFs.existsSync.mockReturnValue(true);
-      mockFs.readdirSync.mockReturnValue([
+    it('sorts by modification time (newest first)', async () => {
+      mockFs.access.mockResolvedValue(undefined);
+      mockFs.readdir.mockResolvedValue([
         'promptfoo-debug-2024-01-01_10-00-00.log',
         'promptfoo-debug-2024-01-02_10-00-00.log',
       ] as any);
 
       const dates = [new Date('2024-01-01T10:00:00Z'), new Date('2024-01-02T10:00:00Z')];
       let callIndex = 0;
-      mockFs.statSync.mockImplementation(
-        () =>
+      mockFs.stat.mockImplementation(
+        async () =>
           ({
             mtime: dates[callIndex++ % 2],
             size: 1024,
-          }) as fs.Stats,
+          }) as any,
       );
 
-      const result = getLogFiles();
+      const result = await getLogFiles();
 
       expect(result).toHaveLength(2);
       // Newest should be first
       expect(result[0].mtime.getTime()).toBeGreaterThanOrEqual(result[1].mtime.getTime());
     });
 
-    it('correctly identifies log types', () => {
-      mockFs.existsSync.mockReturnValue(true);
-      mockFs.readdirSync.mockReturnValue([
+    it('correctly identifies log types', async () => {
+      mockFs.access.mockResolvedValue(undefined);
+      mockFs.readdir.mockResolvedValue([
         'promptfoo-debug-2024-01-01_10-00-00.log',
         'promptfoo-error-2024-01-01_10-00-00.log',
       ] as any);
-      mockFs.statSync.mockReturnValue({
+      mockFs.stat.mockResolvedValue({
         mtime: new Date('2024-01-01T10:00:00Z'),
         size: 1024,
-      } as fs.Stats);
+      } as any);
 
-      const result = getLogFiles('all');
+      const result = await getLogFiles('all');
 
       const debugFile = result.find((f) => f.name.includes('-debug-'));
       const errorFile = result.find((f) => f.name.includes('-error-'));
@@ -162,15 +171,77 @@ describe('util/logs', () => {
     });
   });
 
+  describe('getLogFilesSync', () => {
+    beforeEach(() => {
+      mockGetEnvString.mockReturnValue('');
+    });
+
+    it('returns empty array when directory does not exist', () => {
+      mockFsSync.existsSync.mockReturnValue(false);
+
+      const result = getLogFilesSync();
+      expect(result).toEqual([]);
+    });
+
+    it('returns empty array when no log files found', () => {
+      mockFsSync.existsSync.mockReturnValue(true);
+      mockFsSync.readdirSync.mockReturnValue([]);
+
+      const result = getLogFilesSync();
+      expect(result).toEqual([]);
+    });
+
+    it('filters non-promptfoo files', () => {
+      mockFsSync.existsSync.mockReturnValue(true);
+      mockFsSync.readdirSync.mockReturnValue([
+        'other-file.log',
+        'promptfoo-debug-2024-01-01_10-00-00.log',
+        'readme.txt',
+      ] as any);
+      mockFsSync.statSync.mockReturnValue({
+        mtime: new Date('2024-01-01T10:00:00Z'),
+        size: 1024,
+      } as any);
+
+      const result = getLogFilesSync();
+
+      expect(result).toHaveLength(1);
+      expect(result[0].name).toBe('promptfoo-debug-2024-01-01_10-00-00.log');
+    });
+
+    it('filters by type when specified', () => {
+      mockFsSync.existsSync.mockReturnValue(true);
+      mockFsSync.readdirSync.mockReturnValue([
+        'promptfoo-debug-2024-01-01_10-00-00.log',
+        'promptfoo-error-2024-01-01_10-00-00.log',
+      ] as any);
+      mockFsSync.statSync.mockReturnValue({
+        mtime: new Date('2024-01-01T10:00:00Z'),
+        size: 1024,
+      } as any);
+
+      const debugFiles = getLogFilesSync('debug');
+      expect(debugFiles).toHaveLength(1);
+      expect(debugFiles[0].type).toBe('debug');
+
+      const errorFiles = getLogFilesSync('error');
+      expect(errorFiles).toHaveLength(1);
+      expect(errorFiles[0].type).toBe('error');
+
+      const allFiles = getLogFilesSync('all');
+      expect(allFiles).toHaveLength(2);
+    });
+  });
+
   describe('findLogFile', () => {
     beforeEach(() => {
-      mockFs.existsSync.mockReturnValue(true);
+      mockFsSync.existsSync.mockReturnValue(true);
       mockGetEnvString.mockReturnValue('');
     });
 
     it('resolves absolute paths directly', () => {
       const absolutePath = '/absolute/path/to/logfile.log';
-      mockFs.existsSync.mockImplementation((p) => p === absolutePath);
+      mockFsSync.existsSync.mockImplementation((p) => p === absolutePath);
 
       const result = findLogFile(absolutePath);
       expect(result).toBe(absolutePath);
@@ -180,7 +251,7 @@ describe('util/logs', () => {
       const filename = 'promptfoo-debug-2024-01-01_10-00-00.log';
       const expectedPath = path.join('/home/user/.promptfoo/logs', filename);
 
-      mockFs.existsSync.mockImplementation((p) => {
+      mockFsSync.existsSync.mockImplementation((p) => {
         // Return false for absolute path check, true for log directory path
         if (p === filename) {
           return false;
@@ -194,17 +265,17 @@ describe('util/logs', () => {
 
     it('performs fuzzy matching on partial names', () => {
       const logDir = path.join('/home/user/.promptfoo', 'logs');
-      mockFs.readdirSync.mockReturnValue([
+      mockFsSync.readdirSync.mockReturnValue([
         'promptfoo-debug-2024-01-01_10-00-00.log',
         'promptfoo-debug-2024-01-02_10-00-00.log',
       ] as any);
-      mockFs.statSync.mockReturnValue({
+      mockFsSync.statSync.mockReturnValue({
         mtime: new Date('2024-01-01T10:00:00Z'),
         size: 1024,
-      } as fs.Stats);
+      } as any);
 
       // Make existsSync return false for direct paths to trigger fuzzy matching
-      mockFs.existsSync.mockImplementation((p) => {
+      mockFsSync.existsSync.mockImplementation((p) => {
         const pStr = String(p);
         return pStr === logDir;
       });
@@ -214,8 +285,8 @@ describe('util/logs', () => {
     });
 
     it('returns null when file not found', () => {
-      mockFs.existsSync.mockReturnValue(false);
-      mockFs.readdirSync.mockReturnValue([]);
+      mockFsSync.existsSync.mockReturnValue(false);
+      mockFsSync.readdirSync.mockReturnValue([]);
 
       const result = findLogFile('nonexistent.log');
       expect(result).toBeNull();

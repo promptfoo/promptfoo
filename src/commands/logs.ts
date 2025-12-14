@@ -1,13 +1,17 @@
-import fs from 'fs';
+import fs from 'fs/promises';
+import fsSync from 'fs';
 import path from 'path';
+import readline from 'readline';
 
 import chalk from 'chalk';
+import debounce from 'debounce';
 import dedent from 'dedent';
 import type { Command } from 'commander';
 
 import cliState from '../cliState';
 import logger from '../logger';
 import { wrapTable } from '../table';
+import telemetry from '../telemetry';
 import { printBorder } from '../util/index';
 import { findLogFile, formatFileSize, getLogDirectory, getLogFiles } from '../util/logs';
 
@@ -23,7 +27,7 @@ function highlightLogLines(lines: string[], noColor: boolean): string {
   }
 
   type ColorFn = (s: string) => string;
-  let currentColor: ColorFn = (s) => s;
+  let currentColor: ColorFn = chalk.gray; // Default to gray for lines before any tag
 
   return lines
     .map((line) => {
@@ -46,8 +50,8 @@ function highlightLogLines(lines: string[], noColor: boolean): string {
 /**
  * Prints a header with file information
  */
-function printLogHeader(logPath: string, isCurrentSession: boolean): void {
-  const stats = fs.statSync(logPath);
+async function printLogHeader(logPath: string, isCurrentSession: boolean): Promise<void> {
+  const stats = await fs.stat(logPath);
 
   printBorder();
   logger.info(chalk.bold(path.basename(logPath)));
@@ -65,88 +69,183 @@ function printLogHeader(logPath: string, isCurrentSession: boolean): void {
 interface PrintOptions {
   lines?: number;
   head?: number;
-  grep?: string;
+  grep?: RegExp;
   noColor: boolean;
   noHeader?: boolean;
 }
 
 /**
- * Prints log file content to console with optional filtering
+ * Reads the last N lines from a file using streaming (memory efficient)
  */
-async function printLogContent(logPath: string, options: PrintOptions): Promise<void> {
-  const stats = fs.statSync(logPath);
+async function readLastLines(filePath: string, lineCount: number): Promise<string[]> {
+  const fileHandle = await fs.open(filePath, 'r');
+  try {
+    const stats = await fileHandle.stat();
+    const lines: string[] = [];
 
-  if (stats.size === 0) {
-    logger.info(chalk.gray('Log file is empty.'));
-    return;
+    // For small files, just read the whole thing
+    if (stats.size < 1024 * 1024) {
+      const content = await fileHandle.readFile('utf-8');
+      const allLines = content.split('\n');
+      if (allLines[allLines.length - 1] === '') {
+        allLines.pop();
+      }
+      return allLines.slice(-lineCount);
+    }
+
+    // For large files, use streaming from the end
+    const rl = readline.createInterface({
+      input: fileHandle.createReadStream({ encoding: 'utf-8' }),
+      crlfDelay: Infinity,
+    });
+
+    for await (const line of rl) {
+      lines.push(line);
+      if (lines.length > lineCount) {
+        lines.shift();
+      }
+    }
+
+    return lines;
+  } finally {
+    await fileHandle.close();
   }
+}
+
+/**
+ * Reads the first N lines from a file using streaming (memory efficient)
+ */
+async function readFirstLines(filePath: string, lineCount: number): Promise<string[]> {
+  const fileHandle = await fs.open(filePath, 'r');
+  try {
+    const lines: string[] = [];
+
+    const rl = readline.createInterface({
+      input: fileHandle.createReadStream({ encoding: 'utf-8' }),
+      crlfDelay: Infinity,
+    });
+
+    for await (const line of rl) {
+      lines.push(line);
+      if (lines.length >= lineCount) {
+        rl.close();
+        break;
+      }
+    }
+
+    return lines;
+  } finally {
+    await fileHandle.close();
+  }
+}
+
+/**
+ * Reads entire file content, with warning for large files
+ */
+async function readFileContent(filePath: string): Promise<string[]> {
+  const stats = await fs.stat(filePath);
 
   // Warn about large files
   const ONE_MB = 1024 * 1024;
-  if (stats.size > ONE_MB && !options.lines && !options.head) {
+  if (stats.size > ONE_MB) {
     logger.warn(dedent`
       Log file is large (${formatFileSize(stats.size)}).
       Consider using ${chalk.cyan('-n <lines>')} to limit output.
     `);
   }
 
-  const content = fs.readFileSync(logPath, 'utf-8');
-  let lines = content.split('\n');
+  const content = await fs.readFile(filePath, 'utf-8');
+  const lines = content.split('\n');
 
   // Remove trailing empty line if present
   if (lines[lines.length - 1] === '') {
     lines.pop();
   }
 
-  // Apply grep filter if specified
-  if (options.grep) {
-    const pattern = new RegExp(options.grep, 'i');
-    lines = lines.filter((line) => pattern.test(line));
+  return lines;
+}
 
-    if (lines.length === 0) {
-      logger.info(chalk.gray(`No lines matching "${options.grep}" found.`));
-      return;
-    }
+/**
+ * Prints log file content to console with optional filtering
+ */
+async function printLogContent(logPath: string, options: PrintOptions): Promise<void> {
+  const stats = await fs.stat(logPath);
+
+  if (stats.size === 0) {
+    logger.info(chalk.gray('Log file is empty.'));
+    return;
   }
 
-  if (options.head) {
-    lines = lines.slice(0, options.head);
-  } else if (options.lines) {
-    lines = lines.slice(-options.lines);
+  let lines: string[];
+
+  // Use streaming for tail/head operations on large files
+  if (options.lines) {
+    lines = await readLastLines(logPath, options.lines);
+  } else if (options.head) {
+    lines = await readFirstLines(logPath, options.head);
+  } else {
+    lines = await readFileContent(logPath);
+  }
+
+  // Apply grep filter if specified
+  if (options.grep) {
+    lines = lines.filter((line) => options.grep!.test(line));
+
+    if (lines.length === 0) {
+      logger.info(chalk.gray(`No lines matching pattern found.`));
+      return;
+    }
   }
 
   const output = highlightLogLines(lines, options.noColor);
   logger.info(output);
 }
 
+// Track active watchers for cleanup
+let activeWatcher: fsSync.FSWatcher | null = null;
+let cleanupHandler: (() => void) | null = null;
+
 /**
  * Follows a log file in real-time (like tail -f)
  */
 async function followLogFile(logPath: string, noColor: boolean): Promise<void> {
-  let position = fs.existsSync(logPath) ? fs.statSync(logPath).size : 0;
+  // Get initial file size
+  let position: number;
+  try {
+    const stats = await fs.stat(logPath);
+    position = stats.size;
+  } catch {
+    position = 0;
+  }
 
   logger.info(chalk.gray(`Following ${path.basename(logPath)}... (Ctrl+C to stop)\n`));
 
   // Print existing content first (last 20 lines)
   if (position > 0) {
-    const content = fs.readFileSync(logPath, 'utf-8');
-    const lines = content.split('\n').filter((line) => line.length > 0);
-    const lastLines = lines.slice(-20);
+    const lastLines = await readLastLines(logPath, 20);
     if (lastLines.length > 0) {
       logger.info(highlightLogLines(lastLines, noColor));
     }
-    position = fs.statSync(logPath).size;
+    // Re-read position after reading content to avoid race condition
+    const stats = await fs.stat(logPath);
+    position = stats.size;
   }
 
-  const watcher = fs.watch(logPath, (eventType) => {
-    if (eventType === 'change') {
-      try {
-        const newSize = fs.statSync(logPath).size;
-        if (newSize > position) {
-          const fd = fs.openSync(logPath, 'r');
+  // Create watcher with debouncing to handle rapid file changes
+  const watcher = fsSync.watch(logPath);
+  activeWatcher = watcher;
+
+  const handleChange = debounce(async () => {
+    try {
+      const stats = await fs.stat(logPath);
+      const newSize = stats.size;
+
+      if (newSize > position) {
+        // Read only the new content
+        const fileHandle = await fs.open(logPath, 'r');
+        try {
           const buffer = Buffer.alloc(newSize - position);
-          fs.readSync(fd, buffer, 0, newSize - position, position);
-          fs.closeSync(fd);
+          await fileHandle.read(buffer, 0, newSize - position, position);
 
           const newContent = buffer.toString('utf-8');
           const newLines = newContent.split('\n').filter((line) => line.length > 0);
@@ -154,28 +253,65 @@ async function followLogFile(logPath: string, noColor: boolean): Promise<void> {
             process.stdout.write(highlightLogLines(newLines, noColor) + '\n');
           }
           position = newSize;
+        } finally {
+          await fileHandle.close();
         }
-      } catch {
-        // File may have been rotated or deleted
+      } else if (newSize < position) {
+        // File was truncated/rotated
+        logger.info(chalk.yellow('Log file was rotated, resetting position...'));
+        position = newSize;
       }
+    } catch (error) {
+      // File may have been rotated or deleted
+      logger.debug(`Error reading log file: ${error instanceof Error ? error.message : error}`);
     }
+  }, 100);
+
+  watcher.on('change', handleChange);
+
+  watcher.on('error', (error) => {
+    logger.warn(`File watcher error: ${error}`);
   });
 
-  // Handle cleanup on exit
-  process.on('SIGINT', () => {
-    watcher.close();
-    process.exit(0);
-  });
+  // Cleanup function
+  const cleanup = () => {
+    if (activeWatcher) {
+      activeWatcher.close();
+      activeWatcher = null;
+    }
+    if (cleanupHandler) {
+      process.removeListener('SIGINT', cleanupHandler);
+      process.removeListener('SIGTERM', cleanupHandler);
+      cleanupHandler = null;
+    }
+  };
 
-  // Keep process alive
-  await new Promise(() => {});
+  cleanupHandler = () => {
+    cleanup();
+    process.exitCode = 0;
+  };
+
+  // Register cleanup handlers
+  process.once('SIGINT', cleanupHandler);
+  process.once('SIGTERM', cleanupHandler);
+
+  // Keep process alive until interrupted
+  await new Promise<void>((resolve) => {
+    // This promise resolves when cleanup is called
+    const checkInterval = setInterval(() => {
+      if (!activeWatcher) {
+        clearInterval(checkInterval);
+        resolve();
+      }
+    }, 100);
+  });
 }
 
 /**
  * Lists available log files in a table format
  */
 async function listLogFiles(type: LogType): Promise<void> {
-  const files = getLogFiles(type);
+  const files = await getLogFiles(type);
 
   if (files.length === 0) {
     const logDir = getLogDirectory();
@@ -198,7 +334,7 @@ async function listLogFiles(type: LogType): Promise<void> {
 
   const columnWidths = {
     '#': 4,
-    filename: 45,
+    filename: 50,
     type: 8,
     size: 10,
     modified: 22,
@@ -214,29 +350,37 @@ async function listLogFiles(type: LogType): Promise<void> {
 /**
  * Resolves the log path based on user input or defaults to most recent
  */
-function resolveLogPath(file: string | undefined, type: LogType): string | null {
+async function resolveLogPath(file: string | undefined, type: LogType): Promise<string | null> {
   if (file) {
     return findLogFile(file, type);
   }
 
   // Check if current session has a log file
-  if (type === 'all') {
+  if (type === 'all' || type === 'debug') {
     // Prefer debug log (contains all levels) but fall back to error log
-    if (cliState.debugLogFile && fs.existsSync(cliState.debugLogFile)) {
-      return cliState.debugLogFile;
+    if (cliState.debugLogFile) {
+      try {
+        await fs.access(cliState.debugLogFile);
+        return cliState.debugLogFile;
+      } catch {
+        // File doesn't exist, continue
+      }
     }
-    if (cliState.errorLogFile && fs.existsSync(cliState.errorLogFile)) {
-      return cliState.errorLogFile;
-    }
-  } else {
-    const sessionLogFile = type === 'error' ? cliState.errorLogFile : cliState.debugLogFile;
-    if (sessionLogFile && fs.existsSync(sessionLogFile)) {
-      return sessionLogFile;
+  }
+
+  if (type === 'all' || type === 'error') {
+    if (cliState.errorLogFile) {
+      try {
+        await fs.access(cliState.errorLogFile);
+        return cliState.errorLogFile;
+      } catch {
+        // File doesn't exist, continue
+      }
     }
   }
 
   // Fall back to most recent log file of the requested type
-  const files = getLogFiles(type);
+  const files = await getLogFiles(type);
   return files.length > 0 ? files[0].path : null;
 }
 
@@ -244,7 +388,8 @@ export function logsCommand(program: Command) {
   const logsCmd = program
     .command('logs [file]')
     .description('View promptfoo log files')
-    .option('--type <type>', 'Log type: debug, error, or all', 'debug')
+    .passThroughOptions()
+    .option('--type <type>', 'Log type: debug, error, or all', 'all')
     .option('-n, --lines <count>', 'Number of lines to display from end')
     .option('--head <count>', 'Number of lines to display from start')
     .option('-f, --follow', 'Follow log file in real-time', false)
@@ -264,6 +409,18 @@ export function logsCommand(program: Command) {
           color: boolean;
         },
       ) => {
+        telemetry.record('command_used', {
+          name: 'logs',
+          options: {
+            type: cmdObj.type,
+            follow: cmdObj.follow,
+            list: cmdObj.list,
+            hasGrep: !!cmdObj.grep,
+            hasLines: !!cmdObj.lines,
+            hasHead: !!cmdObj.head,
+          },
+        });
+
         try {
           // Validate --type option
           const validTypes = ['debug', 'error', 'all'] as const;
@@ -294,6 +451,20 @@ export function logsCommand(program: Command) {
             }
           }
 
+          // Validate grep pattern
+          let grepPattern: RegExp | undefined;
+          if (cmdObj.grep) {
+            try {
+              grepPattern = new RegExp(cmdObj.grep, 'i');
+            } catch {
+              logger.error(
+                `Invalid grep pattern: "${cmdObj.grep}" is not a valid regular expression`,
+              );
+              process.exitCode = 1;
+              return;
+            }
+          }
+
           // Handle list mode
           if (cmdObj.list) {
             await listLogFiles(logType);
@@ -301,7 +472,7 @@ export function logsCommand(program: Command) {
           }
 
           // Resolve the log path
-          const logPath = resolveLogPath(file, logType);
+          const logPath = await resolveLogPath(file, logType);
 
           if (!logPath) {
             const logDir = getLogDirectory();
@@ -325,7 +496,7 @@ export function logsCommand(program: Command) {
 
           // Check file permissions
           try {
-            fs.accessSync(logPath, fs.constants.R_OK);
+            await fs.access(logPath, fsSync.constants.R_OK);
           } catch {
             logger.error(`Permission denied: Cannot read ${logPath}`);
             process.exitCode = 1;
@@ -343,12 +514,12 @@ export function logsCommand(program: Command) {
           }
 
           // Print header and content
-          printLogHeader(logPath, isCurrentSession);
+          await printLogHeader(logPath, isCurrentSession);
 
           await printLogContent(logPath, {
             lines: cmdObj.lines ? parseInt(cmdObj.lines, 10) : undefined,
             head: cmdObj.head ? parseInt(cmdObj.head, 10) : undefined,
-            grep: cmdObj.grep,
+            grep: grepPattern,
             noColor: !cmdObj.color,
           });
         } catch (error) {
@@ -364,6 +535,11 @@ export function logsCommand(program: Command) {
     .description('List available log files')
     .option('--type <type>', 'Log type: debug, error, or all', 'all')
     .action(async (cmdObj: { type: string }) => {
+      telemetry.record('command_used', {
+        name: 'logs list',
+        options: { type: cmdObj.type },
+      });
+
       const validTypes = ['debug', 'error', 'all'] as const;
       if (!validTypes.includes(cmdObj.type as LogType)) {
         logger.error(`Invalid log type: ${cmdObj.type}. Must be one of: ${validTypes.join(', ')}`);

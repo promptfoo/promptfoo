@@ -1,4 +1,5 @@
-import fs from 'fs';
+import fs from 'fs/promises';
+import fsSync from 'fs';
 import path from 'path';
 
 import { getEnvString } from '../envars';
@@ -26,15 +27,64 @@ export function getLogDirectory(): string {
  * Gets all log files from the logs directory, sorted by modification time (newest first)
  * @param type - Filter by log type: 'debug', 'error', or 'all'
  */
-export function getLogFiles(type: 'debug' | 'error' | 'all' = 'all'): LogFileInfo[] {
+export async function getLogFiles(type: 'debug' | 'error' | 'all' = 'all'): Promise<LogFileInfo[]> {
   const logDir = getLogDirectory();
 
-  if (!fs.existsSync(logDir)) {
+  try {
+    await fs.access(logDir);
+  } catch {
     return [];
   }
 
   try {
-    return fs
+    const files = await fs.readdir(logDir);
+    const logFiles: LogFileInfo[] = [];
+
+    for (const file of files) {
+      if (!file.startsWith('promptfoo-') || !file.endsWith('.log')) {
+        continue;
+      }
+      if (type !== 'all' && !file.includes(`-${type}-`)) {
+        continue;
+      }
+
+      const filePath = path.join(logDir, file);
+      try {
+        const stats = await fs.stat(filePath);
+        const logType: 'debug' | 'error' = file.includes('-error-') ? 'error' : 'debug';
+        logFiles.push({
+          name: file,
+          path: filePath,
+          mtime: stats.mtime,
+          type: logType,
+          size: stats.size,
+        });
+      } catch {
+        // Skip files we can't stat
+        continue;
+      }
+    }
+
+    return logFiles.sort((a, b) => b.mtime.getTime() - a.mtime.getTime());
+  } catch (error) {
+    logger.error(`Error reading log directory: ${error}`);
+    return [];
+  }
+}
+
+/**
+ * Synchronous version of getLogFiles for use in contexts where async is not possible
+ * @deprecated Use the async getLogFiles when possible
+ */
+export function getLogFilesSync(type: 'debug' | 'error' | 'all' = 'all'): LogFileInfo[] {
+  const logDir = getLogDirectory();
+
+  if (!fsSync.existsSync(logDir)) {
+    return [];
+  }
+
+  try {
+    return fsSync
       .readdirSync(logDir)
       .filter((file) => {
         if (!file.startsWith('promptfoo-') || !file.endsWith('.log')) {
@@ -47,8 +97,7 @@ export function getLogFiles(type: 'debug' | 'error' | 'all' = 'all'): LogFileInf
       })
       .map((file): LogFileInfo => {
         const filePath = path.join(logDir, file);
-        const stats = fs.statSync(filePath);
-        // Explicitly check for error type first, default to debug
+        const stats = fsSync.statSync(filePath);
         const logType: 'debug' | 'error' = file.includes('-error-') ? 'error' : 'debug';
         return {
           name: file,
@@ -75,7 +124,7 @@ export function findLogFile(
   type: 'debug' | 'error' | 'all' = 'all',
 ): string | null {
   // Check if it's a full path that exists
-  if (path.isAbsolute(identifier) && fs.existsSync(identifier)) {
+  if (path.isAbsolute(identifier) && fsSync.existsSync(identifier)) {
     return identifier;
   }
 
@@ -83,12 +132,12 @@ export function findLogFile(
 
   // Check if it's a filename in the logs directory
   const fullPath = path.join(logDir, identifier);
-  if (fs.existsSync(fullPath)) {
+  if (fsSync.existsSync(fullPath)) {
     return fullPath;
   }
 
-  // Try fuzzy matching (prefix/contains)
-  const files = getLogFiles(type);
+  // Try fuzzy matching (prefix/contains) - use sync version here since this is called from resolveLogPath
+  const files = getLogFilesSync(type);
   const match = files.find((f) => f.name.includes(identifier) || f.name.startsWith(identifier));
 
   return match?.path || null;
