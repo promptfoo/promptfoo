@@ -229,7 +229,7 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
           />
         )}
       </Box>
-      <DialogContent>
+      <DialogContent sx={{ minHeight: 200 }}>
         <Stack direction="column" gap={2}>
           <ChatMessages
             messages={turnMessages}
