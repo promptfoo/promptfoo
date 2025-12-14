@@ -899,3 +899,169 @@ To compose configs, use explicit `file://` references within a single config or 
 ### HTML Output Format
 
 The HTML output uses lowercase `<!doctype html>` (valid HTML5) rather than uppercase `<!DOCTYPE html>`.
+
+---
+
+## Bug Regression Tests (0.120.x)
+
+Critical bugs identified in versions 0.120.0-0.120.3 that should have smoke test coverage. These bugs represent real issues users encountered after the major ESM migration.
+
+### 10. ESM Migration Bugs (0.120.0)
+
+The 0.120.0 release migrated from CommonJS to ESM, causing several regressions:
+
+#### 10.1 Module Loading
+
+| #      | Bug                    | Issue   | Description                                                     | Proposed Test                                      |
+| ------ | ---------------------- | ------- | --------------------------------------------------------------- | -------------------------------------------------- |
+| 10.1.1 | CJS fallback           | #6501   | `.js` files with CJS syntax failed to load                      | Load `.js` provider with `module.exports`          |
+| 10.1.2 | require() resolution   | #6468   | `require()` calls in custom code failed                         | Provider that uses require() internally            |
+| 10.1.3 | process.mainModule     | #6606   | Inline transforms using `process.mainModule.require` broke      | Inline JS assertion with `process.mainModule`      |
+| 10.1.4 | ESM import resolution  | #6509   | Various import paths failed in ESM context                      | TS provider with complex imports                   |
+
+#### 10.2 Provider Path Resolution
+
+| #      | Bug                    | Issue   | Description                                                     | Proposed Test                                      |
+| ------ | ---------------------- | ------- | --------------------------------------------------------------- | -------------------------------------------------- |
+| 10.2.1 | Relative path from CWD | #6503   | Provider paths resolved from CWD instead of config directory    | Config in subdir with `./provider.js` path         |
+| 10.2.2 | Python wrapper path    | #6500   | Python wrapper.py path resolution failed                        | Python provider from different working directory   |
+| 10.2.3 | Python provider path   | #6465   | Python provider module path resolution issues                   | Python provider with relative imports              |
+
+#### 10.3 Cache & Config
+
+| #      | Bug                    | Issue   | Description                                                     | Proposed Test                                      |
+| ------ | ---------------------- | ------- | --------------------------------------------------------------- | -------------------------------------------------- |
+| 10.3.1 | Cache init failure     | #6467   | Cache failed to initialize: "KeyvFile is not a constructor"     | Run eval with cache enabled (default)              |
+| 10.3.2 | maxConcurrency ignored | #6526   | `maxConcurrency` in config.yaml was ignored, only CLI worked    | Config with `defaultTest.options.maxConcurrency`   |
+
+#### 10.4 CLI Issues
+
+| #      | Bug                    | Issue   | Description                                                     | Proposed Test                                      |
+| ------ | ---------------------- | ------- | --------------------------------------------------------------- | -------------------------------------------------- |
+| 10.4.1 | Eval hanging           | #6460   | Eval command hung indefinitely, never completing                | Basic eval completes in reasonable time            |
+| 10.4.2 | View premature exit    | #6460   | `promptfoo view` exited immediately after starting              | (Not testable in smoke tests - requires server)    |
+| 10.4.3 | Logger write-after-end | #6511   | Winston "write after end" errors during shutdown                | Multiple evals in sequence don't cause errors      |
+
+#### 10.5 Language Providers
+
+| #      | Bug                    | Issue   | Description                                                     | Proposed Test                                      |
+| ------ | ---------------------- | ------- | --------------------------------------------------------------- | -------------------------------------------------- |
+| 10.5.1 | Go provider broken     | #6506   | Go provider wrapper failed after ESM migration                  | Go provider basic functionality                    |
+| 10.5.2 | Ruby provider broken   | #6506   | Ruby provider wrapper failed after ESM migration                | Ruby provider basic functionality                  |
+
+### 11. Version 0.120.1-0.120.2 Bugs
+
+#### 11.1 Database & Migrations
+
+| #      | Bug                       | Issue   | Description                                                  | Proposed Test                                      |
+| ------ | ------------------------- | ------- | ------------------------------------------------------------ | -------------------------------------------------- |
+| 11.1.1 | Drizzle migrations path   | #6573   | DB migrations not found when using npm/npx                   | (Tested implicitly - eval writes to DB)            |
+
+#### 11.2 Parsing Issues
+
+| #      | Bug                       | Issue   | Description                                                  | Proposed Test                                      |
+| ------ | ------------------------- | ------- | ------------------------------------------------------------ | -------------------------------------------------- |
+| 11.2.1 | JSON chat parsing         | #6568   | Incorrect parsing of JSON vs non-JSON chat messages          | JSON array prompt parses correctly                 |
+| 11.2.2 | Gemini empty contents     | #6580   | Gemini provider crashed on empty content responses           | (Requires Gemini - not for smoke tests)            |
+| 11.2.3 | Context-recall preamble   | #6566   | Preamble text in context-recall parser caused failures       | (Requires grading provider - not for smoke tests)  |
+
+#### 11.3 Assertion Improvements
+
+| #      | Bug                       | Issue   | Description                                                  | Proposed Test                                      |
+| ------ | ------------------------- | ------- | ------------------------------------------------------------ | -------------------------------------------------- |
+| 11.3.1 | is-sql error messages     | #6565   | Unhelpful error messages for is-sql whitelist violations     | is-sql with whitelist shows clear error            |
+
+#### 11.4 HTTP Provider
+
+| #      | Bug                       | Issue   | Description                                                  | Proposed Test                                      |
+| ------ | ------------------------- | ------- | ------------------------------------------------------------ | -------------------------------------------------- |
+| 11.4.1 | Body parsing              | #6484   | HTTP provider body parsing had edge cases                    | HTTP provider with complex body template           |
+
+### 12. Key Regression Test Implementations
+
+Priority smoke tests to add based on critical 0.120.x bugs:
+
+#### 12.1 Module Loading Regression Tests
+
+```yaml
+# Test 10.1.1: CJS provider with module.exports still works
+# Fixture: test/smoke/fixtures/providers/cjs-module-exports.js
+providers:
+  - file://providers/cjs-module-exports.js
+
+# Test 10.1.3: Inline JS with process.mainModule (requires Node.js CJS compat)
+tests:
+  - assert:
+      - type: javascript
+        value: |
+          // This should not throw even though process.mainModule is undefined in ESM
+          const output = context.output || '';
+          return output.includes('test');
+```
+
+#### 12.2 Provider Path Resolution Tests
+
+```yaml
+# Test 10.2.1: Provider path relative to config file, NOT cwd
+# Config at: test/smoke/fixtures/subdir/config-relative-provider.yaml
+# Provider at: test/smoke/fixtures/subdir/local-provider.js
+# Run from: test/smoke/ (different directory than config)
+providers:
+  - file://./local-provider.js  # Should resolve relative to config, not cwd
+```
+
+#### 12.3 Config Option Tests
+
+```yaml
+# Test 10.3.2: maxConcurrency in config.yaml is respected
+defaultTest:
+  options:
+    maxConcurrency: 1
+providers:
+  - echo
+prompts:
+  - 'Test {{n}}'
+tests:
+  - vars: { n: 1 }
+  - vars: { n: 2 }
+  - vars: { n: 3 }
+# Verify tests run sequentially (timing check)
+```
+
+### Implementation Priority for Regression Tests
+
+**Phase 1: High Priority (Add Now)**
+
+- [ ] 10.1.1: CJS module.exports provider loading
+- [ ] 10.2.1: Provider path resolution from config directory
+- [ ] 10.3.2: maxConcurrency in config file
+- [ ] 11.2.1: JSON chat message parsing
+
+**Phase 2: Medium Priority**
+
+- [ ] 10.1.3: Inline JS with process.mainModule shim
+- [ ] 10.5.1: Go provider basic test
+- [ ] 10.5.2: Ruby provider basic test
+
+**Phase 3: Lower Priority (Complex Setup)**
+
+- [ ] 10.2.2: Python wrapper path from different CWD
+- [ ] 11.4.1: HTTP provider complex body parsing
+
+---
+
+## Implemented Tests Summary
+
+Current smoke test coverage:
+
+| Test File                      | Tests | Category                           |
+| ------------------------------ | ----- | ---------------------------------- |
+| `cli.test.ts`                  | 18    | CLI commands, init, validate       |
+| `eval.test.ts`                 | 12    | Core eval pipeline                 |
+| `providers.test.ts`            | 14    | Provider loading (JS/TS/Python)    |
+| `configs.test.ts`              | 8     | Config format parsing              |
+| `data-loading.test.ts`         | 13    | Data sources (CSV, JSON, YAML)     |
+| `filters-flags.test.ts`        | 22    | Filter flags and CLI options       |
+| `advanced-features.test.ts`    | 10    | Advanced features (env, delay, HTML) |
+| `output-and-assertions.test.ts`| 15    | Assertion types and output formats |
+| **Total**                      | **100** |                                  |
