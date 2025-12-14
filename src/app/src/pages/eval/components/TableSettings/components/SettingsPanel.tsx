@@ -1,5 +1,6 @@
 import React, { useCallback, useState } from 'react';
 
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import CodeIcon from '@mui/icons-material/Code';
 import DoneAllIcon from '@mui/icons-material/DoneAll';
 import FormatAlignLeftIcon from '@mui/icons-material/FormatAlignLeft';
@@ -25,6 +26,8 @@ const SettingsPanel = () => {
     setShowPrompts,
     showPassFail,
     setShowPassFail,
+    showPassReasons,
+    setShowPassReasons,
     showInferenceDetails,
     setShowInferenceDetails,
     maxTextLength,
@@ -175,6 +178,14 @@ const SettingsPanel = () => {
             onChange={setShowPassFail}
             icon={<DoneAllIcon fontSize="small" />}
             tooltipText="Display success/failure status indicators for each test result"
+          />
+
+          <SettingItem
+            label="Show pass reasons"
+            checked={showPassReasons}
+            onChange={setShowPassReasons}
+            icon={<CheckCircleOutlineIcon fontSize="small" />}
+            tooltipText="Display reasons for passing assertions (e.g., from llm-rubric). Useful for understanding why tests passed."
           />
 
           <SettingItem
