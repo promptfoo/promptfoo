@@ -4,7 +4,6 @@ import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import Box from '@mui/material/Box';
 import IconButton from '@mui/material/IconButton';
 import Slider from '@mui/material/Slider';
-import Stack from '@mui/material/Stack';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { alpha, useTheme } from '@mui/material/styles';
@@ -39,20 +38,24 @@ const CompactSlider = ({
     unlimited && value >= max ? 'Unlimited' : `${value}${unit ? ` ${unit}` : ''}`;
 
   return (
-    <Box
-      sx={{
-        py: 0.5,
-      }}
-    >
-      <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 0.25 }}>
-        <Stack direction="row" alignItems="center" spacing={0.5}>
+    <Box sx={{ '&:not(:last-child)': { mb: 1.5 } }}>
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          mb: 0.5,
+        }}
+      >
+        <Box sx={{ display: 'flex', alignItems: 'center' }}>
           <Typography
             variant="body2"
+            component="label"
             id={labelId}
             sx={{
               fontSize: '0.8125rem',
               color: theme.palette.text.primary,
-              lineHeight: 1.4,
+              lineHeight: 1.5,
             }}
           >
             {label}
@@ -62,16 +65,20 @@ const CompactSlider = ({
               title={tooltipText}
               arrow
               placement="top"
-              enterDelay={300}
+              enterDelay={400}
               componentsProps={{
                 tooltip: {
                   sx: {
-                    bgcolor: alpha(theme.palette.grey[800], 0.95),
+                    bgcolor: alpha(theme.palette.grey[800], 0.92),
                     fontSize: '0.75rem',
-                    maxWidth: 220,
+                    fontWeight: 400,
+                    maxWidth: 200,
+                    py: 0.75,
+                    px: 1.25,
                     borderRadius: 1,
+                    boxShadow: theme.shadows[8],
                     '& .MuiTooltip-arrow': {
-                      color: alpha(theme.palette.grey[800], 0.95),
+                      color: alpha(theme.palette.grey[800], 0.92),
                     },
                   },
                 },
@@ -82,7 +89,8 @@ const CompactSlider = ({
                 tabIndex={-1}
                 sx={{
                   p: 0.25,
-                  color: alpha(theme.palette.text.secondary, 0.5),
+                  ml: 0.5,
+                  color: alpha(theme.palette.text.secondary, 0.4),
                   '&:hover': {
                     backgroundColor: 'transparent',
                     color: theme.palette.text.secondary,
@@ -90,24 +98,23 @@ const CompactSlider = ({
                 }}
                 aria-label={`Information about ${label}`}
               >
-                <InfoOutlinedIcon sx={{ fontSize: '0.875rem' }} />
+                <InfoOutlinedIcon sx={{ fontSize: '0.9rem' }} />
               </IconButton>
             </Tooltip>
           )}
-        </Stack>
+        </Box>
         <Typography
           variant="body2"
           sx={{
             fontSize: '0.75rem',
             color: theme.palette.text.secondary,
             fontWeight: 500,
-            minWidth: 60,
-            textAlign: 'right',
+            fontVariantNumeric: 'tabular-nums',
           }}
         >
           {displayValue}
         </Typography>
-      </Stack>
+      </Box>
       <Slider
         value={value}
         onChange={(_, newValue) => onChange(newValue as number)}
@@ -119,16 +126,31 @@ const CompactSlider = ({
         size="small"
         aria-labelledby={labelId}
         sx={{
-          height: 4,
-          '& .MuiSlider-thumb': {
-            width: 14,
-            height: 14,
-            '&:hover, &.Mui-focusVisible': {
-              boxShadow: `0px 0px 0px 6px ${alpha(theme.palette.primary.main, 0.16)}`,
-            },
-          },
+          py: 1,
           '& .MuiSlider-rail': {
-            opacity: 0.3,
+            height: 4,
+            borderRadius: 2,
+            opacity: 0.2,
+          },
+          '& .MuiSlider-track': {
+            height: 4,
+            borderRadius: 2,
+            border: 'none',
+          },
+          '& .MuiSlider-thumb': {
+            width: 16,
+            height: 16,
+            backgroundColor: theme.palette.primary.main,
+            boxShadow: 'none',
+            '&::before': {
+              display: 'none',
+            },
+            '&:hover, &.Mui-focusVisible': {
+              boxShadow: `0 0 0 6px ${alpha(theme.palette.primary.main, 0.16)}`,
+            },
+            '&.Mui-active': {
+              boxShadow: `0 0 0 8px ${alpha(theme.palette.primary.main, 0.16)}`,
+            },
           },
         }}
       />

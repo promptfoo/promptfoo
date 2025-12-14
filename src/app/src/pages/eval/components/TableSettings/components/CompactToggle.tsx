@@ -4,11 +4,9 @@ import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import Box from '@mui/material/Box';
 import Checkbox from '@mui/material/Checkbox';
 import IconButton from '@mui/material/IconButton';
-import Stack from '@mui/material/Stack';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { alpha, useTheme } from '@mui/material/styles';
-import { tokens } from '../tokens';
 
 interface CompactToggleProps {
   label: string;
@@ -33,11 +31,14 @@ const CompactToggle = ({
       sx={{
         display: 'flex',
         alignItems: 'center',
-        height: 32,
-        py: 0.25,
-        opacity: disabled ? tokens.opacity.disabled : 1,
-        transition: `all ${tokens.animation.fast}ms ease`,
-        borderRadius: tokens.borderRadius.small,
+        minHeight: 32,
+        py: 0.5,
+        px: 0.5,
+        mx: -0.5,
+        opacity: disabled ? 0.5 : 1,
+        borderRadius: 1,
+        cursor: disabled ? 'default' : 'pointer',
+        transition: 'background-color 150ms ease',
         '&:hover': {
           backgroundColor: disabled ? 'transparent' : alpha(theme.palette.action.hover, 0.04),
         },
@@ -50,10 +51,10 @@ const CompactToggle = ({
         disabled={disabled}
         size="small"
         sx={{
-          p: 0.5,
-          mr: 0.75,
+          p: 0,
+          mr: 1,
           '& .MuiSvgIcon-root': {
-            fontSize: '1.1rem',
+            fontSize: '1.25rem',
           },
           color: checked ? theme.palette.primary.main : theme.palette.action.active,
         }}
@@ -61,59 +62,63 @@ const CompactToggle = ({
           'aria-labelledby': labelId,
         }}
       />
-      <Stack direction="row" alignItems="center" spacing={0.5} sx={{ flex: 1, minWidth: 0 }}>
-        <Typography
-          variant="body2"
-          id={labelId}
-          sx={{
-            fontSize: '0.8125rem',
-            color: disabled ? theme.palette.text.disabled : theme.palette.text.primary,
-            lineHeight: 1.4,
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-          }}
-        >
-          {label}
-        </Typography>
-        {tooltipText && (
-          <Tooltip
-            title={tooltipText}
-            arrow
-            placement="top"
-            enterDelay={300}
-            componentsProps={{
-              tooltip: {
-                sx: {
-                  bgcolor: alpha(theme.palette.grey[800], 0.95),
-                  fontSize: '0.75rem',
-                  maxWidth: 220,
-                  borderRadius: 1,
-                  '& .MuiTooltip-arrow': {
-                    color: alpha(theme.palette.grey[800], 0.95),
-                  },
+      <Typography
+        variant="body2"
+        component="span"
+        id={labelId}
+        sx={{
+          flex: 1,
+          fontSize: '0.8125rem',
+          color: disabled ? theme.palette.text.disabled : theme.palette.text.primary,
+          lineHeight: 1.5,
+          userSelect: 'none',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {label}
+      </Typography>
+      {tooltipText && (
+        <Tooltip
+          title={tooltipText}
+          arrow
+          placement="top"
+          enterDelay={400}
+          componentsProps={{
+            tooltip: {
+              sx: {
+                bgcolor: alpha(theme.palette.grey[800], 0.92),
+                fontSize: '0.75rem',
+                fontWeight: 400,
+                maxWidth: 200,
+                py: 0.75,
+                px: 1.25,
+                borderRadius: 1,
+                boxShadow: theme.shadows[8],
+                '& .MuiTooltip-arrow': {
+                  color: alpha(theme.palette.grey[800], 0.92),
                 },
               },
+            },
+          }}
+        >
+          <IconButton
+            size="small"
+            tabIndex={-1}
+            sx={{
+              p: 0.25,
+              ml: 0.5,
+              color: alpha(theme.palette.text.secondary, 0.4),
+              '&:hover': {
+                backgroundColor: 'transparent',
+                color: theme.palette.text.secondary,
+              },
             }}
+            aria-label={`Information about ${label}`}
           >
-            <IconButton
-              size="small"
-              tabIndex={-1}
-              sx={{
-                p: 0.25,
-                color: alpha(theme.palette.text.secondary, 0.5),
-                '&:hover': {
-                  backgroundColor: 'transparent',
-                  color: theme.palette.text.secondary,
-                },
-              }}
-              aria-label={`Information about ${label}`}
-            >
-              <InfoOutlinedIcon sx={{ fontSize: '0.875rem' }} />
-            </IconButton>
-          </Tooltip>
-        )}
-      </Stack>
+            <InfoOutlinedIcon sx={{ fontSize: '0.9rem' }} />
+          </IconButton>
+        </Tooltip>
+      )}
     </Box>
   );
 };

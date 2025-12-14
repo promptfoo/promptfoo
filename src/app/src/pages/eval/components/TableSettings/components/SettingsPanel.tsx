@@ -1,7 +1,6 @@
 import React, { useCallback, useState } from 'react';
 
 import Box from '@mui/material/Box';
-import Divider from '@mui/material/Divider';
 import Typography from '@mui/material/Typography';
 import { alpha, useTheme } from '@mui/material/styles';
 import { useResultsViewSettingsStore } from '../../store';
@@ -14,12 +13,13 @@ const SectionHeader = ({ children }: { children: React.ReactNode }) => {
     <Typography
       variant="overline"
       sx={{
+        display: 'block',
         fontSize: '0.6875rem',
         fontWeight: 600,
-        letterSpacing: '0.08em',
-        color: alpha(theme.palette.text.secondary, 0.7),
-        display: 'block',
-        mb: 0.75,
+        letterSpacing: '0.1em',
+        color: alpha(theme.palette.text.secondary, 0.6),
+        mb: 1,
+        textTransform: 'uppercase',
       }}
     >
       {children}
@@ -28,6 +28,7 @@ const SectionHeader = ({ children }: { children: React.ReactNode }) => {
 };
 
 const SettingsPanel = () => {
+  const theme = useTheme();
   const {
     stickyHeader,
     setStickyHeader,
@@ -79,14 +80,15 @@ const SettingsPanel = () => {
   return (
     <Box
       sx={{
-        display: 'flex',
-        gap: 3,
-        p: 2,
-        height: '100%',
+        display: 'grid',
+        gridTemplateColumns: '1fr 1px 1fr',
+        gap: 2.5,
+        p: 2.5,
+        pt: 1.5,
       }}
     >
       {/* Left Column - Visibility */}
-      <Box sx={{ flex: 1, minWidth: 0 }}>
+      <Box>
         <SectionHeader>Show</SectionHeader>
 
         <CompactToggle
@@ -126,10 +128,16 @@ const SettingsPanel = () => {
         />
       </Box>
 
-      <Divider orientation="vertical" flexItem sx={{ opacity: 0.5 }} />
+      {/* Subtle Divider */}
+      <Box
+        sx={{
+          backgroundColor: alpha(theme.palette.divider, 0.1),
+          my: 0.5,
+        }}
+      />
 
       {/* Right Column - Formatting */}
-      <Box sx={{ flex: 1, minWidth: 0 }}>
+      <Box>
         <SectionHeader>Display</SectionHeader>
 
         <CompactToggle

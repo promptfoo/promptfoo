@@ -38,10 +38,11 @@ const TableSettingsModal = ({ open, onClose }: SettingsModalProps) => {
       open={open}
       onClose={handleClose}
       fullWidth
-      maxWidth="sm"
+      maxWidth="md"
       PaperProps={{
         elevation: tokens.elevation.dialog,
         sx: {
+          maxWidth: 680,
           borderRadius: tokens.borderRadius.medium,
           overflow: 'hidden',
           backgroundImage:
