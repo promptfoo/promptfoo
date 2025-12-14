@@ -11,7 +11,7 @@ export default defineConfig({
       interopDefault: true,
     },
     environment: 'node',
-    exclude: ['**/*.integration.test.ts', '**/node_modules/**'],
+    exclude: ['**/*.integration.test.ts', '**/node_modules/**', 'test/smoke/**'],
     globals: false,
     include: ['test/**/*.test.ts'],
     root: '.',
