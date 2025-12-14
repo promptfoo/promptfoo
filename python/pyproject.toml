@@ -1,0 +1,69 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "promptfoo"
+dynamic = ["version"]
+description = "Test your prompts, agents, and RAGs. Evaluate and compare LLM outputs, catch regressions, and improve prompt quality."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.8"
+authors = [
+    { name = "promptfoo", email = "team@promptfoo.dev" }
+]
+keywords = [
+    "llm",
+    "testing",
+    "evaluation",
+    "prompts",
+    "ai",
+    "machine-learning",
+    "gpt",
+    "openai",
+    "anthropic",
+    "claude",
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Testing",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+[project.urls]
+Homepage = "https://www.promptfoo.dev"
+Documentation = "https://www.promptfoo.dev/docs"
+Repository = "https://github.com/promptfoo/promptfoo"
+Changelog = "https://github.com/promptfoo/promptfoo/blob/main/CHANGELOG.md"
+
+[project.scripts]
+promptfoo = "promptfoo.cli:main"
+
+[tool.hatch.version]
+path = "src/promptfoo/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/promptfoo"]
+# Include all files in _bin including node_modules
+# The _bin directory is populated during CI with the bundled Node.js CLI
+
+# Override default exclusion of node_modules - we need it for native modules
+[tool.hatch.build]
+ignore-vcs = true
+exclude = [
+  "*.pyc",
+  "__pycache__",
+  ".git",
+]
