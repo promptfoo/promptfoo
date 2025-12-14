@@ -556,3 +556,134 @@ tests:
       - type: contains
         value: World
 ```
+
+---
+
+## Key Findings
+
+Important discoveries made during smoke test implementation that may inform future development:
+
+### Provider Named Function Syntax
+
+The `:functionName` syntax (e.g., `file://provider.py:custom_fn`) is **only supported** for:
+
+- **Python providers** - `file://provider.py:custom_fn` works
+- **Ruby providers** - `file://provider.rb:custom_fn` works
+- **Go providers** - `file://main.go:CustomFn` works
+
+It is **NOT supported** for JavaScript/TypeScript providers. JS/TS providers must export a class:
+
+```javascript
+// Correct - class export
+module.exports = class MyProvider {
+  async callApi(prompt) { return { output: prompt }; }
+};
+
+// NOT supported - named function export for providers
+// module.exports.callApi = async (prompt) => { ... };
+```
+
+The `:functionName` syntax IS supported for JavaScript in other contexts:
+- Assertions: `type: javascript, value: file://assert.js:checkFn`
+- Transforms: `transform: file://transform.js:transformFn`
+- Test generators: `tests: file://tests.js:generateTests`
+
+### Assertion Behavior
+
+#### `contains-json` Assertion
+
+The `contains-json` assertion behaves differently based on whether a `value` is provided:
+
+- **Without value**: Checks that the output contains valid JSON somewhere
+- **With value**: Validates extracted JSON against a **JSON Schema** (not a subset match)
+
+```yaml
+# Just check for valid JSON presence
+- type: contains-json
+
+# Validate against JSON Schema
+- type: contains-json
+  value:
+    type: object
+    required: [status, code]
+    properties:
+      status: { type: string }
+      code: { type: number }
+```
+
+### Scenarios Configuration
+
+The `scenarios[].config` field expects an **array** of variable configurations, not a plain object:
+
+```yaml
+# Correct
+scenarios:
+  - config:
+      - vars:
+          region: US
+      - vars:
+          region: EU
+    tests:
+      - vars: { name: Alice }
+
+# Incorrect - will fail validation
+scenarios:
+  - config:
+      region: US  # This is wrong
+    tests:
+      - vars: { name: Alice }
+```
+
+### Exit Codes
+
+The CLI uses specific exit codes:
+
+| Exit Code | Meaning |
+|-----------|---------|
+| `0` | Success - all tests passed |
+| `100` | Test failures - one or more assertions failed |
+| `1` | Error - configuration error, provider error, or other runtime error |
+
+### Output JSON Structure
+
+When exporting results to JSON (`-o output.json`), key paths:
+
+- `results.prompts[].provider` - Provider label/ID for each prompt
+- `results.results[].success` - Boolean indicating if all assertions passed
+- `results.results[].response.output` - The LLM output text
+- `results.results[].provider.label` - Provider label if configured
+- `results.results[].gradingResult.componentResults[]` - Individual assertion results
+
+### Echo Provider Behavior
+
+The built-in `echo` provider returns the prompt exactly as-is. This is useful for:
+
+- Testing assertion logic without API calls
+- Verifying prompt template rendering
+- Testing data loading and variable substitution
+
+To test JSON-related assertions, include JSON in the prompt itself:
+
+```yaml
+prompts:
+  - 'Response: {"status": "ok", "count": 42}'
+tests:
+  - assert:
+      - type: contains-json
+```
+
+### Test Isolation
+
+Each smoke test file creates its own temporary output directory and cleans it up in `afterAll`. This ensures tests don't interfere with each other when run in parallel.
+
+```typescript
+const OUTPUT_DIR = path.resolve(__dirname, '.temp-output-unique-name');
+
+beforeAll(() => {
+  fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+});
+
+afterAll(() => {
+  fs.rmSync(OUTPUT_DIR, { recursive: true, force: true });
+});
+```
