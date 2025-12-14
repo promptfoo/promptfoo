@@ -306,4 +306,49 @@ describe('TestCaseDialog', () => {
       expect(svg).toBeInTheDocument();
     });
   });
+
+  describe('targetResponses output handling', () => {
+    it('should render string output directly', () => {
+      renderWithTheme(
+        <TestCaseDialog
+          {...defaultProps}
+          targetResponses={[{ output: 'Hello from assistant', error: null }]}
+        />,
+      );
+
+      expect(screen.getByText('Hello from assistant')).toBeInTheDocument();
+    });
+
+    it('should JSON stringify object output', () => {
+      renderWithTheme(
+        <TestCaseDialog
+          {...defaultProps}
+          targetResponses={[
+            { output: { response: 'some text' } as unknown as string, error: null },
+          ]}
+        />,
+      );
+
+      expect(screen.getByText('{"response":"some text"}')).toBeInTheDocument();
+    });
+
+    it('should show error message when output is null', () => {
+      renderWithTheme(
+        <TestCaseDialog
+          {...defaultProps}
+          targetResponses={[{ output: null, error: 'Connection failed' }]}
+        />,
+      );
+
+      expect(screen.getByText('Connection failed')).toBeInTheDocument();
+    });
+
+    it('should show fallback message when output and error are null', () => {
+      renderWithTheme(
+        <TestCaseDialog {...defaultProps} targetResponses={[{ output: null, error: null }]} />,
+      );
+
+      expect(screen.getByText('No response from target')).toBeInTheDocument();
+    });
+  });
 });
