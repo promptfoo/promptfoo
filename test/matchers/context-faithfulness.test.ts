@@ -156,4 +156,101 @@ describe('matchesContextFaithfulness', () => {
       expect(result.reason).toBeDefined();
     });
   });
+
+  describe('Edge Cases', () => {
+    it('should handle response with no verdicts (apology message)', async () => {
+      const query = 'Query text';
+      const output = 'Output text';
+      const context = 'Context text';
+      const threshold = 0.5;
+
+      vi.spyOn(DefaultGradingProvider, 'callApi').mockReset();
+      const mockCallApi = vi
+        .fn()
+        .mockImplementationOnce(() => {
+          return Promise.resolve({
+            output: 'Statement 1\nStatement 2\nStatement 3\n',
+            tokenUsage: { total: 10, prompt: 5, completion: 5 },
+          });
+        })
+        .mockImplementationOnce(() => {
+          return Promise.resolve({
+            output:
+              'I apologize, but I cannot create statements or provide an analysis based on the given context.',
+            tokenUsage: { total: 10, prompt: 5, completion: 5 },
+          });
+        });
+
+      vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+
+      const result = await matchesContextFaithfulness(query, output, context, threshold);
+
+      // Should not return a perfect score of 1.0 when there are no verdicts
+      expect(result.pass).toBe(false);
+      expect(result.reason).toContain('Unable to determine faithfulness');
+    });
+
+    it('should handle response with no valid verdict format', async () => {
+      const query = 'Query text';
+      const output = 'Output text';
+      const context = 'Context text';
+      const threshold = 0.5;
+
+      vi.spyOn(DefaultGradingProvider, 'callApi').mockReset();
+      const mockCallApi = vi
+        .fn()
+        .mockImplementationOnce(() => {
+          return Promise.resolve({
+            output: 'Statement 1\nStatement 2\n',
+            tokenUsage: { total: 10, prompt: 5, completion: 5 },
+          });
+        })
+        .mockImplementationOnce(() => {
+          return Promise.resolve({
+            output: 'This is some random text without any verdict format.',
+            tokenUsage: { total: 10, prompt: 5, completion: 5 },
+          });
+        });
+
+      vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+
+      const result = await matchesContextFaithfulness(query, output, context, threshold);
+
+      // Should handle gracefully
+      expect(result.pass).toBe(false);
+      expect(result.reason).toContain('Unable to determine faithfulness');
+    });
+
+    it('should handle response with "verdict: no" format correctly', async () => {
+      const query = 'Query text';
+      const output = 'Output text';
+      const context = 'Context text';
+      const threshold = 0.5;
+
+      vi.spyOn(DefaultGradingProvider, 'callApi').mockReset();
+      const mockCallApi = vi
+        .fn()
+        .mockImplementationOnce(() => {
+          return Promise.resolve({
+            output: 'Statement 1\nStatement 2\nStatement 3\n',
+            tokenUsage: { total: 10, prompt: 5, completion: 5 },
+          });
+        })
+        .mockImplementationOnce(() => {
+          return Promise.resolve({
+            output: 'Verdict: No\nVerdict: Yes\nVerdict: No',
+            tokenUsage: { total: 10, prompt: 5, completion: 5 },
+          });
+        });
+
+      vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(mockCallApi);
+
+      const result = await matchesContextFaithfulness(query, output, context, threshold);
+
+      // Should calculate score based on "verdict: no" count
+      // 2 "no" verdicts out of 3 statements = 2/3 unfaithful, so 1/3 = 0.33 faithful
+      expect(result.score).toBeCloseTo(0.33, 1);
+      expect(typeof result.pass).toBe('boolean');
+    });
+  });
 });

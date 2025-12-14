@@ -1537,8 +1537,15 @@ export async function matchesContextFaithfulness(
     score =
       verdicts.split('.').filter((answer) => answer.trim() !== '' && !answer.includes('yes'))
         .length / statements.length;
-  } else {
+  } else if (verdicts.includes('verdict:')) {
+    // Only use the verdict: no counting if we actually have verdict: patterns
     score = (verdicts.split('verdict: no').length - 1) / statements.length;
+  } else {
+    // No valid verdict format found - unable to determine faithfulness
+    return fail(
+      'Unable to determine faithfulness: no valid verdict format in response',
+      tokensUsed,
+    );
   }
   score = 1 - score;
   const pass = score >= threshold - Number.EPSILON;
