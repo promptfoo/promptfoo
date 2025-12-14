@@ -44,11 +44,13 @@ const EvalSelectorDialog = ({
       }}
     >
       {title ? (
-        <DialogTitle sx={{ pb: 0, flexShrink: 0 }}>
+        <DialogTitle sx={{ flexShrink: 0 }}>
           {title}
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-            {description || 'Click a row to select an evaluation'}
-          </Typography>
+          {description ? (
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+              {description}
+            </Typography>
+          ) : null}
         </DialogTitle>
       ) : null}
       <DialogContent sx={{ pt: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
