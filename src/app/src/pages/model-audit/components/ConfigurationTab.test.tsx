@@ -52,7 +52,7 @@ describe('ConfigurationTab', () => {
     expect(screen.queryByText(initialError)).toBeNull();
   });
 
-  it('should disable the scan button when installationStatus.installed is false', () => {
+  it('should show error state but remain clickable when installationStatus.installed is false', () => {
     render(
       <ThemeProvider theme={theme}>
         <ConfigurationTab
@@ -63,8 +63,12 @@ describe('ConfigurationTab', () => {
       </ThemeProvider>,
     );
 
+    // Button should show "ModelAudit Not Installed" text
     const scanButton = screen.getByRole('button', { name: 'ModelAudit Not Installed' });
-    expect(scanButton).toBeDisabled();
+    // Button should NOT be disabled - users can click it to see installation instructions
+    expect(scanButton).not.toBeDisabled();
+    // Button should have error color styling
+    expect(scanButton).toHaveClass('MuiButton-containedError');
   });
 
   it('should render PathSelector', () => {

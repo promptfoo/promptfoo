@@ -3,21 +3,22 @@ import { MemoryRouter } from 'react-router-dom';
 import { describe, it, expect, vi } from 'vitest';
 import ModelAuditHistoryPage from './page';
 
-// Mock the ModelAuditHistory component since we're testing the page wrapper
-vi.mock('./ModelAuditHistory', () => ({
-  default: function MockModelAuditHistory({ onScanSelected, showUtilityButtons }: any) {
-    return (
-      <div data-testid="model-audit-history">
-        <div>onScanSelected: {typeof onScanSelected}</div>
-        <div>showUtilityButtons: {String(showUtilityButtons)}</div>
-      </div>
-    );
-  },
-}));
-
-// Mock usePageMeta hook
-vi.mock('@app/hooks/usePageMeta', () => ({
-  usePageMeta: vi.fn(),
+// Mock the stores used by ModelAuditHistory
+vi.mock('../model-audit/stores', () => ({
+  useModelAuditHistoryStore: () => ({
+    historicalScans: [],
+    isLoadingHistory: false,
+    historyError: null,
+    totalCount: 0,
+    pageSize: 10,
+    currentPage: 0,
+    sortModel: [{ field: 'createdAt', sort: 'desc' }],
+    fetchHistoricalScans: vi.fn(),
+    deleteHistoricalScan: vi.fn(),
+    setPageSize: vi.fn(),
+    setCurrentPage: vi.fn(),
+    setSortModel: vi.fn(),
+  }),
 }));
 
 const renderWithRouter = (component: React.ReactElement) => {
@@ -25,19 +26,17 @@ const renderWithRouter = (component: React.ReactElement) => {
 };
 
 describe('ModelAuditHistoryPage', () => {
-  it('renders ModelAuditHistory component with correct props', () => {
+  it('renders the scan history page with New Scan button', () => {
     renderWithRouter(<ModelAuditHistoryPage />);
 
-    expect(screen.getByTestId('model-audit-history')).toBeInTheDocument();
-    expect(screen.getByText('onScanSelected: function')).toBeInTheDocument();
-    expect(screen.getByText('showUtilityButtons: true')).toBeInTheDocument();
+    // The page should render with the DataGrid toolbar containing a New Scan button
+    expect(screen.getByRole('button', { name: /new scan/i })).toBeInTheDocument();
   });
 
-  it('renders within a container with proper styling', () => {
-    const { container } = renderWithRouter(<ModelAuditHistoryPage />);
+  it('renders no rows message when history is empty', () => {
+    renderWithRouter(<ModelAuditHistoryPage />);
 
-    const containerElement = container.querySelector('.MuiContainer-root');
-    expect(containerElement).toBeInTheDocument();
-    expect(containerElement).toHaveClass('MuiContainer-maxWidthXl');
+    // The page should show the no rows overlay
+    expect(screen.getByText(/no scan history found/i)).toBeInTheDocument();
   });
 });
