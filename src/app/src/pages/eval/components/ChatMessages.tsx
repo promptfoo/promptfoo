@@ -50,6 +50,7 @@ const ChatMessage = ({ message, index }: { message: Message; index: number }) =>
   const bubbleProps = {
     p: 1.5,
     maxWidth: '70%',
+    overflow: 'hidden',
     background: isUser ? red[500] : isDark ? grey[800] : grey[200],
     borderRadius: isUser ? '20px 20px 5px 20px' : '20px 20px 20px 5px',
     alignSelf,
@@ -154,6 +155,8 @@ const ChatMessage = ({ message, index }: { message: Message; index: number }) =>
                 sx={{
                   fontSize: '14px',
                   whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word',
+                  overflowWrap: 'anywhere',
                   color: textColor,
                   textShadow: isUser ? '0 1px 2px rgba(0, 0, 0, 0.2)' : 'none',
                   fontWeight: isUser ? 500 : 400,
@@ -172,6 +175,8 @@ const ChatMessage = ({ message, index }: { message: Message; index: number }) =>
             sx={{
               fontSize: '14px',
               whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
+              overflowWrap: 'anywhere',
               color: textColor,
               textShadow: isUser ? '0 1px 2px rgba(0, 0, 0, 0.2)' : 'none',
               fontWeight: isUser ? 500 : 400,
