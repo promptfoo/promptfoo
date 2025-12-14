@@ -276,35 +276,53 @@ const shutdownGracefully = async () => {
   }, FORCE_EXIT_TIMEOUT_MS).unref();
 };
 
+/**
+ * BUILD_FORMAT is a compile-time constant injected by esbuild during bundling.
+ * - 'esm': ESM build - import.meta.url is available
+ * - 'cjs': CJS build (SEA) - import.meta.url is not available, use require.main check
+ * - undefined: Development mode (tsx) - try ESM check first
+ */
+declare const BUILD_FORMAT: 'esm' | 'cjs' | undefined;
+
 // ESM replacement for require.main === module check
 // Check if this module is being run directly (not imported)
-// The isMainModule check may throw in CJS builds where import.meta.url is not available
 let isMain = false;
 try {
-  isMain = isMainModule(import.meta.url, process.argv[1]);
+  // In CJS builds, always run main (the bundle IS the entry point)
+  if (typeof BUILD_FORMAT !== 'undefined' && BUILD_FORMAT === 'cjs') {
+    isMain = true;
+  } else {
+    // ESM check using import.meta.url
+    isMain = isMainModule(import.meta.url, process.argv[1]);
+  }
 } catch {
-  // In CJS builds, import.meta.url throws - CJS entry point is handled differently
+  // In CJS builds, import.meta.url throws - assume we're the main module
+  isMain = true;
 }
 
 if (isMain) {
   checkNodeVersion();
-  let mainError: unknown;
-  try {
-    await main();
-  } catch (error) {
-    mainError = error;
-  } finally {
+
+  // Wrap in async IIFE to avoid top-level await (required for Node.js SEA/CJS builds)
+  (async () => {
+    let mainError: unknown;
     try {
-      await shutdownGracefully();
-    } catch (shutdownError) {
-      // Log shutdown error but preserve the original main error if it exists
-      logger.error(
-        `Shutdown error: ${shutdownError instanceof Error ? shutdownError.message : shutdownError}`,
-      );
+      await main();
+    } catch (error) {
+      mainError = error;
+    } finally {
+      try {
+        await shutdownGracefully();
+      } catch (shutdownError) {
+        // Log shutdown error but preserve the original main error if it exists
+        logger.error(
+          `Shutdown error: ${shutdownError instanceof Error ? shutdownError.message : shutdownError}`,
+        );
+      }
     }
-  }
-  // Re-throw the original error after cleanup is complete
-  if (mainError) {
-    throw mainError;
-  }
+    // Re-throw the original error after cleanup is complete
+    if (mainError) {
+      throw mainError;
+    }
+  })();
 }
