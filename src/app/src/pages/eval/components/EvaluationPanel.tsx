@@ -104,12 +104,25 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
 
               return (
                 <TableRow key={i}>
-                  {hasMetrics && <TableCell>{result.assertion?.metric || ''}</TableCell>}
-                  <TableCell>{result.pass ? '✅' : '❌'}</TableCell>
-                  <TableCell>{result.score?.toFixed(2)}</TableCell>
-                  <TableCell>{result.assertion?.type || ''}</TableCell>
+                  {hasMetrics && (
+                    <TableCell style={{ verticalAlign: 'top' }}>
+                      {result.assertion?.metric || ''}
+                    </TableCell>
+                  )}
+                  <TableCell style={{ verticalAlign: 'top' }}>
+                    {result.pass ? '✅' : '❌'}
+                  </TableCell>
+                  <TableCell style={{ verticalAlign: 'top' }}>{result.score?.toFixed(2)}</TableCell>
+                  <TableCell style={{ verticalAlign: 'top' }}>
+                    {result.assertion?.type || ''}
+                  </TableCell>
                   <TableCell
-                    style={{ whiteSpace: 'pre-wrap', cursor: 'pointer', position: 'relative' }}
+                    style={{
+                      whiteSpace: 'pre-wrap',
+                      cursor: 'pointer',
+                      position: 'relative',
+                      verticalAlign: 'top',
+                    }}
                     onClick={() => toggleExpand(i)}
                     onMouseEnter={() => setHoveredAssertion(valueKey)}
                     onMouseLeave={() => setHoveredAssertion(null)}
@@ -131,7 +144,7 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
                     )}
                   </TableCell>
                   <TableCell
-                    style={{ whiteSpace: 'pre-wrap', position: 'relative' }}
+                    style={{ whiteSpace: 'pre-wrap', position: 'relative', verticalAlign: 'top' }}
                     onMouseEnter={() => setHoveredAssertion(`reason-${i}`)}
                     onMouseLeave={() => setHoveredAssertion(null)}
                   >

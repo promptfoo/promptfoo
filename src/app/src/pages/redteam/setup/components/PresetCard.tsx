@@ -46,10 +46,11 @@ export default function PresetCard({ name, description, isSelected, onClick }: P
       <Typography
         variant="h6"
         sx={{
-          fontWeight: 500,
+          fontWeight: 600,
+          fontSize: '1.125rem',
           color: isSelected ? 'primary.main' : 'text.primary',
-          transition: 'color 0.2s ease-in-out',
-          mb: 1.5,
+          transition: 'color 0.15s ease-in-out',
+          mb: 1,
         }}
       >
         {name}
