@@ -548,36 +548,42 @@ Validate existing examples work with echo provider substitution:
 - [ ] 3.7.1-3.7.5: HTTP provider basics
 - [ ] 3.8.1-3.8.10: All auth configurations
 
-### Phase 6: Filter & Flag Tests (NEW)
+### Phase 6: Filter & Flag Tests - PARTIAL
 
 High-value tests for CLI filter flags and execution options.
 
 **Priority 1 - Count/Pattern Filters:**
-- [ ] 1.8.1.1: First N tests (`--filter-first-n 2`)
-- [ ] 1.8.1.4: Sample N tests (`--filter-sample 2`)
-- [ ] 1.8.2.1: Pattern filter (`--filter-pattern "desc"`)
-- [ ] 1.8.3.1: Metadata filter (`--filter-metadata key=value`)
+- [x] 1.8.1.1: First N tests (`--filter-first-n 2`)
+- [x] 1.8.1.2: First N > total (returns all)
+- [x] 1.8.1.4: Sample N tests (`--filter-sample 2`)
+- [x] 1.8.2.1: Pattern filter (`--filter-pattern "user.*test"`)
+- [x] 1.8.2.3: Pattern no match (0 tests)
+- [x] 1.8.3.1: Metadata filter (`--filter-metadata category=auth`)
+- [x] 1.8.3.2: Metadata partial match
+- [x] 1.8.3.3: Metadata array match
 
 **Priority 2 - Provider Filters:**
-- [ ] 1.8.4.1: Provider by ID (`--filter-providers "echo"`)
-- [ ] 1.8.4.2: Provider by label regex
-- [ ] 1.8.6.1: Combined filters (pattern + first-n)
+- [x] 1.8.4.1: Provider by ID (`--filter-providers "echo"`)
+- [x] 1.8.4.2: Provider by label regex
+- [x] 1.8.6.1: Combined filters (pattern + first-n)
 
 **Priority 3 - Variable/Prompt Flags:**
-- [ ] 1.9.1: Single var (`--var name=Alice`)
-- [ ] 1.9.2: Multiple vars
-- [ ] 1.9.5: Prompt prefix
-- [ ] 1.9.6: Prompt suffix
+- [x] 1.9.1: Single var (`--var name=Alice`)
+- [x] 1.9.2: Multiple vars
+- [x] 1.9.3: Var precedence (test vars override --var)
+- [x] 1.9.5: Prompt prefix
+- [x] 1.9.6: Prompt suffix
+- [x] 1.9.7: Prefix + suffix combined
 
 **Priority 4 - Output/Execution Flags:**
 - [ ] 1.10.1: Delay between tests
-- [ ] 1.10.5: No table output
-- [ ] 1.11.1: Description flag
-- [ ] 1.11.2: Multiple output files
-- [ ] 1.11.3: No write flag
+- [x] 1.10.5: No table output
+- [x] 1.11.1: Description flag
+- [x] 1.11.2: Multiple output files
+- [x] 1.11.3: No write flag
 
 **Priority 5 - History-Based Filters (more complex):**
-- [ ] 1.8.5.1: Filter failing from file
+- [x] 1.8.5.1: Filter failing from file
 - [ ] 1.8.5.3: Filter errors only from file
 - [ ] 1.12.1: Resume evaluation
 - [ ] 1.12.3: Retry errors
