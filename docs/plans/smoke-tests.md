@@ -407,7 +407,8 @@ Validate existing examples work with echo provider substitution:
 ### Phase 3: Script Providers - PARTIAL
 
 - [x] 3.4.1: Python provider (default call_api)
-- [ ] 3.4.2-3.4.7: Python provider variants
+- [x] 3.4.2: Python provider named function
+- [ ] 3.4.3-3.4.7: Other Python provider variants
 - [ ] 3.5.1-3.5.3: Ruby provider variants
 - [ ] 3.6.1-3.6.2: Go provider variants
 - [x] 3.1.2: Exec provider
@@ -418,15 +419,20 @@ Validate existing examples work with echo provider substitution:
 - [x] 4.2.3: JSON file tests
 - [x] 4.2.4: JSONL file tests
 - [x] 4.2.5: YAML file tests
+- [x] 4.2.7: JS test generator
 - [x] 4.3.2: File ref prompts
-- [ ] 4.2.6-4.2.10: Other data loading formats (XLSX, JS/TS/Python generators, glob)
+- [ ] 4.2.6, 4.2.8-4.2.10: Other data loading formats (XLSX, TS/Python generators, glob)
+- [x] 5.1.1: Contains assertion
+- [x] 5.1.2: Not-contains assertion
 - [x] 5.1.3: Equals assertion
+- [x] 5.1.4: Starts-with assertion
 - [x] 5.1.5: Regex assertion
 - [x] 5.1.6: Is-JSON assertion
+- [x] 5.1.7: Contains-json assertion
 - [x] 5.2.1: Inline JavaScript assertion
 - [x] 5.2.2: JavaScript file assertion
 - [x] 5.2.5: Python file assertion
-- [ ] 5.1.1-5.1.2, 5.1.4, 5.1.7-5.1.11: Other built-in assertions
+- [ ] 5.1.8-5.1.11: Other built-in assertions (json-schema, cost, latency, perplexity)
 - [ ] 5.2.3-5.2.4, 5.2.6: Other script assertion variants
 
 ### Phase 5: HTTP & Auth
@@ -434,10 +440,15 @@ Validate existing examples work with echo provider substitution:
 - [ ] 3.7.1-3.7.5: HTTP provider basics
 - [ ] 3.8.1-3.8.10: All auth configurations
 
-### Phase 6: Integration & Polish
+### Phase 6: Integration & Polish - PARTIAL
 
-- [ ] 6.1.1-6.1.3: Transforms
-- [ ] 7.1.1-7.3.1: Feature integrations
+- [x] 6.1.1: Transform response expression
+- [ ] 6.1.2-6.1.3: Other transform variants
+- [x] 7.1.1: Provider with config options
+- [ ] 7.1.2-7.1.3: Other provider config variants
+- [x] 7.2.1: DefaultTest feature
+- [ ] 7.2.2: File defaultTest
+- [x] 7.3.1: Scenarios feature
 - [ ] 8.1-8.10: Example config tests
 
 ---
