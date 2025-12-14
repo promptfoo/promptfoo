@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { Mock, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Request, Response } from 'express';
 import Eval from '../../../src/models/eval';
 
@@ -8,8 +8,8 @@ vi.mock('../../../src/models/eval');
 describe('evalRouter - PATCH /:id/favorite', () => {
   let mockReq: Partial<Request>;
   let mockRes: Partial<Response>;
-  let jsonMock: ReturnType<typeof vi.fn>;
-  let statusMock: ReturnType<typeof vi.fn>;
+  let jsonMock: Mock;
+  let statusMock: Mock;
 
   const mockEval = {
     id: 'test-eval-123',
@@ -26,7 +26,7 @@ describe('evalRouter - PATCH /:id/favorite', () => {
     mockRes = {
       json: jsonMock,
       status: statusMock,
-    };
+    } as Partial<Response>;
 
     mockReq = {
       params: { id: 'test-eval-123' },
