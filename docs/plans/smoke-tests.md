@@ -912,70 +912,70 @@ The 0.120.0 release migrated from CommonJS to ESM, causing several regressions:
 
 #### 10.1 Module Loading
 
-| #      | Bug                    | Issue   | Description                                                     | Proposed Test                                      |
-| ------ | ---------------------- | ------- | --------------------------------------------------------------- | -------------------------------------------------- |
-| 10.1.1 | CJS fallback           | #6501   | `.js` files with CJS syntax failed to load                      | Load `.js` provider with `module.exports`          |
-| 10.1.2 | require() resolution   | #6468   | `require()` calls in custom code failed                         | Provider that uses require() internally            |
-| 10.1.3 | process.mainModule     | #6606   | Inline transforms using `process.mainModule.require` broke      | Inline JS assertion with `process.mainModule`      |
-| 10.1.4 | ESM import resolution  | #6509   | Various import paths failed in ESM context                      | TS provider with complex imports                   |
+| #      | Bug                   | Issue | Description                                                | Proposed Test                                 |
+| ------ | --------------------- | ----- | ---------------------------------------------------------- | --------------------------------------------- |
+| 10.1.1 | CJS fallback          | #6501 | `.js` files with CJS syntax failed to load                 | Load `.js` provider with `module.exports`     |
+| 10.1.2 | require() resolution  | #6468 | `require()` calls in custom code failed                    | Provider that uses require() internally       |
+| 10.1.3 | process.mainModule    | #6606 | Inline transforms using `process.mainModule.require` broke | Inline JS assertion with `process.mainModule` |
+| 10.1.4 | ESM import resolution | #6509 | Various import paths failed in ESM context                 | TS provider with complex imports              |
 
 #### 10.2 Provider Path Resolution
 
-| #      | Bug                    | Issue   | Description                                                     | Proposed Test                                      |
-| ------ | ---------------------- | ------- | --------------------------------------------------------------- | -------------------------------------------------- |
-| 10.2.1 | Relative path from CWD | #6503   | Provider paths resolved from CWD instead of config directory    | Config in subdir with `./provider.js` path         |
-| 10.2.2 | Python wrapper path    | #6500   | Python wrapper.py path resolution failed                        | Python provider from different working directory   |
-| 10.2.3 | Python provider path   | #6465   | Python provider module path resolution issues                   | Python provider with relative imports              |
+| #      | Bug                    | Issue | Description                                                  | Proposed Test                                    |
+| ------ | ---------------------- | ----- | ------------------------------------------------------------ | ------------------------------------------------ |
+| 10.2.1 | Relative path from CWD | #6503 | Provider paths resolved from CWD instead of config directory | Config in subdir with `./provider.js` path       |
+| 10.2.2 | Python wrapper path    | #6500 | Python wrapper.py path resolution failed                     | Python provider from different working directory |
+| 10.2.3 | Python provider path   | #6465 | Python provider module path resolution issues                | Python provider with relative imports            |
 
 #### 10.3 Cache & Config
 
-| #      | Bug                    | Issue   | Description                                                     | Proposed Test                                      |
-| ------ | ---------------------- | ------- | --------------------------------------------------------------- | -------------------------------------------------- |
-| 10.3.1 | Cache init failure     | #6467   | Cache failed to initialize: "KeyvFile is not a constructor"     | Run eval with cache enabled (default)              |
-| 10.3.2 | maxConcurrency ignored | #6526   | `maxConcurrency` in config.yaml was ignored, only CLI worked    | Config with `defaultTest.options.maxConcurrency`   |
+| #      | Bug                    | Issue | Description                                                  | Proposed Test                                    |
+| ------ | ---------------------- | ----- | ------------------------------------------------------------ | ------------------------------------------------ |
+| 10.3.1 | Cache init failure     | #6467 | Cache failed to initialize: "KeyvFile is not a constructor"  | Run eval with cache enabled (default)            |
+| 10.3.2 | maxConcurrency ignored | #6526 | `maxConcurrency` in config.yaml was ignored, only CLI worked | Config with `defaultTest.options.maxConcurrency` |
 
 #### 10.4 CLI Issues
 
-| #      | Bug                    | Issue   | Description                                                     | Proposed Test                                      |
-| ------ | ---------------------- | ------- | --------------------------------------------------------------- | -------------------------------------------------- |
-| 10.4.1 | Eval hanging           | #6460   | Eval command hung indefinitely, never completing                | Basic eval completes in reasonable time            |
-| 10.4.2 | View premature exit    | #6460   | `promptfoo view` exited immediately after starting              | (Not testable in smoke tests - requires server)    |
-| 10.4.3 | Logger write-after-end | #6511   | Winston "write after end" errors during shutdown                | Multiple evals in sequence don't cause errors      |
+| #      | Bug                    | Issue | Description                                        | Proposed Test                                   |
+| ------ | ---------------------- | ----- | -------------------------------------------------- | ----------------------------------------------- |
+| 10.4.1 | Eval hanging           | #6460 | Eval command hung indefinitely, never completing   | Basic eval completes in reasonable time         |
+| 10.4.2 | View premature exit    | #6460 | `promptfoo view` exited immediately after starting | (Not testable in smoke tests - requires server) |
+| 10.4.3 | Logger write-after-end | #6511 | Winston "write after end" errors during shutdown   | Multiple evals in sequence don't cause errors   |
 
 #### 10.5 Language Providers
 
-| #      | Bug                    | Issue   | Description                                                     | Proposed Test                                      |
-| ------ | ---------------------- | ------- | --------------------------------------------------------------- | -------------------------------------------------- |
-| 10.5.1 | Go provider broken     | #6506   | Go provider wrapper failed after ESM migration                  | Go provider basic functionality                    |
-| 10.5.2 | Ruby provider broken   | #6506   | Ruby provider wrapper failed after ESM migration                | Ruby provider basic functionality                  |
+| #      | Bug                  | Issue | Description                                      | Proposed Test                     |
+| ------ | -------------------- | ----- | ------------------------------------------------ | --------------------------------- |
+| 10.5.1 | Go provider broken   | #6506 | Go provider wrapper failed after ESM migration   | Go provider basic functionality   |
+| 10.5.2 | Ruby provider broken | #6506 | Ruby provider wrapper failed after ESM migration | Ruby provider basic functionality |
 
 ### 11. Version 0.120.1-0.120.2 Bugs
 
 #### 11.1 Database & Migrations
 
-| #      | Bug                       | Issue   | Description                                                  | Proposed Test                                      |
-| ------ | ------------------------- | ------- | ------------------------------------------------------------ | -------------------------------------------------- |
-| 11.1.1 | Drizzle migrations path   | #6573   | DB migrations not found when using npm/npx                   | (Tested implicitly - eval writes to DB)            |
+| #      | Bug                     | Issue | Description                                | Proposed Test                           |
+| ------ | ----------------------- | ----- | ------------------------------------------ | --------------------------------------- |
+| 11.1.1 | Drizzle migrations path | #6573 | DB migrations not found when using npm/npx | (Tested implicitly - eval writes to DB) |
 
 #### 11.2 Parsing Issues
 
-| #      | Bug                       | Issue   | Description                                                  | Proposed Test                                      |
-| ------ | ------------------------- | ------- | ------------------------------------------------------------ | -------------------------------------------------- |
-| 11.2.1 | JSON chat parsing         | #6568   | Incorrect parsing of JSON vs non-JSON chat messages          | JSON array prompt parses correctly                 |
-| 11.2.2 | Gemini empty contents     | #6580   | Gemini provider crashed on empty content responses           | (Requires Gemini - not for smoke tests)            |
-| 11.2.3 | Context-recall preamble   | #6566   | Preamble text in context-recall parser caused failures       | (Requires grading provider - not for smoke tests)  |
+| #      | Bug                     | Issue | Description                                            | Proposed Test                                     |
+| ------ | ----------------------- | ----- | ------------------------------------------------------ | ------------------------------------------------- |
+| 11.2.1 | JSON chat parsing       | #6568 | Incorrect parsing of JSON vs non-JSON chat messages    | JSON array prompt parses correctly                |
+| 11.2.2 | Gemini empty contents   | #6580 | Gemini provider crashed on empty content responses     | (Requires Gemini - not for smoke tests)           |
+| 11.2.3 | Context-recall preamble | #6566 | Preamble text in context-recall parser caused failures | (Requires grading provider - not for smoke tests) |
 
 #### 11.3 Assertion Improvements
 
-| #      | Bug                       | Issue   | Description                                                  | Proposed Test                                      |
-| ------ | ------------------------- | ------- | ------------------------------------------------------------ | -------------------------------------------------- |
-| 11.3.1 | is-sql error messages     | #6565   | Unhelpful error messages for is-sql whitelist violations     | is-sql with whitelist shows clear error            |
+| #      | Bug                   | Issue | Description                                              | Proposed Test                           |
+| ------ | --------------------- | ----- | -------------------------------------------------------- | --------------------------------------- |
+| 11.3.1 | is-sql error messages | #6565 | Unhelpful error messages for is-sql whitelist violations | is-sql with whitelist shows clear error |
 
 #### 11.4 HTTP Provider
 
-| #      | Bug                       | Issue   | Description                                                  | Proposed Test                                      |
-| ------ | ------------------------- | ------- | ------------------------------------------------------------ | -------------------------------------------------- |
-| 11.4.1 | Body parsing              | #6484   | HTTP provider body parsing had edge cases                    | HTTP provider with complex body template           |
+| #      | Bug          | Issue | Description                               | Proposed Test                            |
+| ------ | ------------ | ----- | ----------------------------------------- | ---------------------------------------- |
+| 11.4.1 | Body parsing | #6484 | HTTP provider body parsing had edge cases | HTTP provider with complex body template |
 
 ### 12. Key Regression Test Implementations
 
@@ -1007,7 +1007,7 @@ tests:
 # Provider at: test/smoke/fixtures/subdir/local-provider.js
 # Run from: test/smoke/ (different directory than config)
 providers:
-  - file://./local-provider.js  # Should resolve relative to config, not cwd
+  - file://./local-provider.js # Should resolve relative to config, not cwd
 ```
 
 #### 12.3 Config Option Tests
@@ -1054,14 +1054,14 @@ tests:
 
 Current smoke test coverage:
 
-| Test File                      | Tests | Category                           |
-| ------------------------------ | ----- | ---------------------------------- |
-| `cli.test.ts`                  | 18    | CLI commands, init, validate       |
-| `eval.test.ts`                 | 12    | Core eval pipeline                 |
-| `providers.test.ts`            | 14    | Provider loading (JS/TS/Python)    |
-| `configs.test.ts`              | 8     | Config format parsing              |
-| `data-loading.test.ts`         | 13    | Data sources (CSV, JSON, YAML)     |
-| `filters-flags.test.ts`        | 22    | Filter flags and CLI options       |
-| `advanced-features.test.ts`    | 10    | Advanced features (env, delay, HTML) |
-| `output-and-assertions.test.ts`| 15    | Assertion types and output formats |
-| **Total**                      | **100** |                                  |
+| Test File                       | Tests   | Category                             |
+| ------------------------------- | ------- | ------------------------------------ |
+| `cli.test.ts`                   | 18      | CLI commands, init, validate         |
+| `eval.test.ts`                  | 12      | Core eval pipeline                   |
+| `providers.test.ts`             | 14      | Provider loading (JS/TS/Python)      |
+| `configs.test.ts`               | 8       | Config format parsing                |
+| `data-loading.test.ts`          | 13      | Data sources (CSV, JSON, YAML)       |
+| `filters-flags.test.ts`         | 22      | Filter flags and CLI options         |
+| `advanced-features.test.ts`     | 10      | Advanced features (env, delay, HTML) |
+| `output-and-assertions.test.ts` | 15      | Assertion types and output formats   |
+| **Total**                       | **100** |                                      |
