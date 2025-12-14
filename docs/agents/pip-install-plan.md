@@ -989,18 +989,21 @@ echo "=== All smoke tests passed ==="
 
 ## 9. Crawl → Walk → Run Timeline
 
-### Phase 1: CRAWL (Foundation)
+### Phase 1: CRAWL (Foundation) - IN PROGRESS
 
 **Goal:** Basic install.sh working on macOS and Linux
 
 **Deliverables:**
-- [ ] esbuild bundle configuration
+- [x] esbuild bundle configuration (`scripts/bundle.ts`)
 - [ ] better-sqlite3 prebuilds for 4 platforms
-- [ ] Node.js SEA build script
-- [ ] install.sh script (macOS/Linux)
-- [ ] GitHub Action for binary builds
+- [x] Node.js SEA build script (`scripts/build-sea.ts`) - **EXPERIMENTAL**
+- [x] install.sh script (macOS/Linux) (`scripts/install.sh`)
+- [x] install.ps1 script (Windows) (`scripts/install.ps1`)
+- [x] GitHub Action for installer upload (`release-please.yml`)
 - [ ] Smoke test suite
 - [ ] Manual release to GitHub Releases
+
+**Note on SEA:** The Node.js SEA (Single Executable Application) approach is currently blocked due to ESM/top-level await limitations. Our codebase uses top-level await which cannot be transpiled to CommonJS, and Node.js SEA doesn't fully support ESM yet. For now, the install.sh/install.ps1 scripts install via npm fallback (requires Node.js).
 
 **Exit Criteria:** `curl promptfoo.dev/install.sh | bash && promptfoo eval` works
 
