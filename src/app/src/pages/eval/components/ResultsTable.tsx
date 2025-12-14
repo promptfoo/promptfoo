@@ -295,7 +295,12 @@ function ResultsTable({
       comment?: string,
     ) => {
       const updatedData = [...body];
-      const updatedRow = { ...updatedData[rowIndex] };
+      const targetRow = updatedData[rowIndex];
+      if (!targetRow) {
+        console.error('Invalid row index for rating');
+        return;
+      }
+      const updatedRow = { ...targetRow };
       const updatedOutputs = [...updatedRow.outputs];
       const existingOutput = updatedOutputs[promptIndex];
 

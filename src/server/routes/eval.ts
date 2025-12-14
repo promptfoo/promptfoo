@@ -20,6 +20,7 @@ import type {
   EvalTableDTO,
   EvaluateSummaryV2,
   EvaluateTestSuiteWithEvaluateOptions,
+  EvaluateTableRow,
   GradingResult,
   Job,
   PromptMetrics,
@@ -30,6 +31,12 @@ export const evalRouter = Router();
 
 // Running jobs
 export const evalJobs = new Map<string, Job>();
+
+const isEvaluateTableRow = (value: unknown): value is EvaluateTableRow =>
+  typeof value === 'object' &&
+  value !== null &&
+  'outputs' in value &&
+  Array.isArray((value as { outputs: unknown }).outputs);
 
 evalRouter.post('/job', (req: Request, res: Response): void => {
   const { evaluateOptions, ...testSuite } = req.body as EvaluateTestSuiteWithEvaluateOptions;
@@ -146,7 +153,7 @@ evalRouter.patch('/:id', async (req: Request, res: Response): Promise<void> => {
         return;
       }
 
-      if (typeof row !== 'object' || row === null || !Array.isArray((row as any).outputs)) {
+      if (!isEvaluateTableRow(row)) {
         res.status(400).json({ error: 'Invalid row payload' });
         return;
       }
