@@ -344,9 +344,9 @@ export default function EvalsDataGrid({
           field: 'isFavorite',
           headerName: '⭐',
           width: 60,
-          sortable: false,
-          filterable: false,
-          disableColumnMenu: true,
+          type: 'boolean',
+          sortable: true,
+          valueGetter: (value: Eval['isFavorite']) => value ?? false,
           renderCell: (params: GridRenderCellParams<Eval>) => (
             <IconButton
               size="small"
