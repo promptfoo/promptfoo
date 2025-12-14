@@ -570,6 +570,7 @@ export default function EvalsDataGrid({
         }}
         getRowClassName={(params) => (params.id === focusedEvalId ? 'focused-row' : '')}
         sx={{
+          height: '100%',
           border: 'none',
           '& .MuiDataGrid-row': {
             cursor: 'pointer',

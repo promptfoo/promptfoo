@@ -29,17 +29,30 @@ const EvalSelectorDialog = ({
   onOpenFocusSearch = false,
 }: Props) => {
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="lg" fullWidth>
+    <Dialog
+      open={open}
+      onClose={onClose}
+      maxWidth="lg"
+      fullWidth
+      PaperProps={{
+        sx: {
+          height: '80vh',
+          maxHeight: '800px',
+          display: 'flex',
+          flexDirection: 'column',
+        },
+      }}
+    >
       {title ? (
-        <DialogTitle sx={{ pb: 0 }}>
+        <DialogTitle sx={{ pb: 0, flexShrink: 0 }}>
           {title}
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
             {description || 'Click a row to select an evaluation'}
           </Typography>
         </DialogTitle>
       ) : null}
-      <DialogContent sx={{ pt: 1 }}>
-        <Box sx={{ width: '100%' }}>
+      <DialogContent sx={{ pt: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+        <Box sx={{ width: '100%', flex: 1, minHeight: 0 }}>
           <EvalsDataGrid
             onEvalSelected={onEvalSelected}
             focusedEvalId={focusedEvalId}
@@ -48,7 +61,7 @@ const EvalSelectorDialog = ({
           />
         </Box>
       </DialogContent>
-      <DialogActions>
+      <DialogActions sx={{ flexShrink: 0 }}>
         <Button variant="outlined" onClick={onClose}>
           Cancel
         </Button>
