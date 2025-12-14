@@ -34,10 +34,9 @@ describe('Eval.addPrompts', () => {
 
   it('should call updateSignalFile when eval is persisted', async () => {
     // Create a persisted eval
-    const eval_ = await Eval.create(
-      { description: 'Test eval for addPrompts' },
-      [{ raw: 'Test prompt', label: 'Test' }],
-    );
+    const eval_ = await Eval.create({ description: 'Test eval for addPrompts' }, [
+      { raw: 'Test prompt', label: 'Test' },
+    ]);
 
     const mockPrompts: CompletedPrompt[] = [
       {
@@ -123,10 +122,9 @@ describe('Eval.addPrompts', () => {
   });
 
   it('should persist prompts to database when eval is persisted', async () => {
-    const eval_ = await Eval.create(
-      { description: 'Persistence test' },
-      [{ raw: 'Initial', label: 'Initial' }],
-    );
+    const eval_ = await Eval.create({ description: 'Persistence test' }, [
+      { raw: 'Initial', label: 'Initial' },
+    ]);
 
     const mockPrompts: CompletedPrompt[] = [
       {
