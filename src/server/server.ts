@@ -327,6 +327,10 @@ export async function startServer(
     const signalEvalId = readSignalEvalId();
     const updatedEval = signalEvalId ? await Eval.findById(signalEvalId) : await Eval.latest();
 
+    // Always invalidate the prompts cache when any eval update signal is received.
+    // This ensures new prompts are visible even before results are added.
+    allPrompts = null;
+
     const results = await updatedEval?.getResultsCount();
 
     if (results && results > 0) {
@@ -334,7 +338,6 @@ export async function startServer(
         `Emitting update for eval: ${updatedEval?.config?.description || updatedEval?.id || 'unknown'}`,
       );
       io.emit('update', updatedEval);
-      allPrompts = null;
     }
   });
 

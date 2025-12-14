@@ -984,6 +984,8 @@ export default class Eval {
     if (this.persisted) {
       const db = getDb();
       db.update(evalsTable).set({ prompts }).where(eq(evalsTable.id, this.id)).run();
+      // Notify watchers that prompts have been updated
+      updateSignalFile(this.id);
     }
   }
 
