@@ -61,8 +61,8 @@ describe('eval routes', () => {
       const db = getDb();
       const legacyEval = oldStyleEval();
       legacyEval.id = `eval-legacy-${Date.now()}`;
-      const originalFirstRow = JSON.parse(JSON.stringify(legacyEval.results.table.body[0]));
-      const secondRow = JSON.parse(JSON.stringify(legacyEval.results.table.body[0]));
+      const originalFirstRow = structuredClone(legacyEval.results.table.body[0]);
+      const secondRow = structuredClone(legacyEval.results.table.body[0]);
       secondRow.outputs[0].text = 'Second row';
       secondRow.outputs[0].pass = false;
       legacyEval.results.table.body.push(secondRow);
@@ -70,7 +70,7 @@ describe('eval routes', () => {
       await db.insert(evalsTable).values(legacyEval).run();
       testEvalIds.add(legacyEval.id);
 
-      const updatedRow = JSON.parse(JSON.stringify(secondRow));
+      const updatedRow = structuredClone(secondRow);
       updatedRow.outputs[0].text = 'Updated legacy row';
 
       const res = await request(app)

@@ -116,6 +116,7 @@ evalRouter.get('/job/:id', (req: Request, res: Response): void => {
 evalRouter.patch('/:id', async (req: Request, res: Response): Promise<void> => {
   const id = req.params.id;
   const { table, config, rowIndex, row } = req.body;
+  const isRowLevelUpdate = typeof rowIndex === 'number' && row;
 
   if (!id) {
     res.status(400).json({ error: 'Missing id' });
@@ -123,8 +124,7 @@ evalRouter.patch('/:id', async (req: Request, res: Response): Promise<void> => {
   }
 
   try {
-    const hasRowUpdate = typeof rowIndex === 'number' && row;
-    if (hasRowUpdate) {
+    if (isRowLevelUpdate) {
       const eval_ = await Eval.findById(id);
       if (!eval_) {
         res.status(404).json({ error: 'Eval not found' });
@@ -161,6 +161,7 @@ evalRouter.patch('/:id', async (req: Request, res: Response): Promise<void> => {
     logger.error('[PATCH /eval/:id] Failed to update eval', {
       evalId: id,
       error,
+      isRowLevelUpdate,
     });
     res.status(500).json({ error: 'Failed to update eval table' });
   }
