@@ -27,7 +27,7 @@ const TableSettingsModal = ({ open, onClose }: SettingsModalProps) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
-  const { hasChanges, resetToDefaults } = useSettingsState(open);
+  const { resetToDefaults } = useSettingsState(open);
 
   const handleClose = () => {
     onClose();
@@ -102,19 +102,9 @@ const TableSettingsModal = ({ open, onClose }: SettingsModalProps) => {
       <DialogContent
         sx={{
           p: 0,
-          height: {
-            xs: 'calc(100% - 125px)',
-            sm: 480,
-          },
-          '&::-webkit-scrollbar': {
-            width: '6px',
-          },
-          '&::-webkit-scrollbar-thumb': {
-            backgroundColor: alpha(theme.palette.text.secondary, 0.2),
-            borderRadius: '10px',
-          },
-          '&::-webkit-scrollbar-thumb:hover': {
-            backgroundColor: alpha(theme.palette.text.secondary, 0.3),
+          minHeight: {
+            xs: 'auto',
+            sm: 'auto',
           },
         }}
       >
@@ -162,18 +152,14 @@ const TableSettingsModal = ({ open, onClose }: SettingsModalProps) => {
             px: tokens.spacing.padding.container,
             py: tokens.spacing.padding.compact - 0.1,
             fontWeight: 600,
-            backgroundColor: hasChanges
-              ? theme.palette.primary.main
-              : alpha(theme.palette.primary.main, 0.8),
-            boxShadow: hasChanges ? theme.shadows[2] : 'none',
             transition: `all ${tokens.animation.fast}ms ease-in-out`,
             '&:hover': {
-              boxShadow: theme.shadows[3],
+              boxShadow: theme.shadows[2],
               transform: 'translateY(-1px)',
             },
           }}
         >
-          {hasChanges ? 'Save Changes' : 'Done'}
+          Done
         </Button>
       </DialogActions>
     </Dialog>
