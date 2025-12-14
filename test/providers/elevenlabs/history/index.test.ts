@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ElevenLabsHistoryProvider } from '../../../../src/providers/elevenlabs/history';
+import type { CallApiContextParams } from '../../../../src/types/providers';
 
 // Mock dependencies
 vi.mock('../../../../src/providers/elevenlabs/client');
@@ -151,7 +152,7 @@ describe('ElevenLabsHistoryProvider', () => {
 
       const response = await provider.callApi('', {
         vars: { conversationId: 'conv-456' },
-      });
+      } as unknown as CallApiContextParams);
 
       expect(response.error).toBeUndefined();
       expect(response.metadata?.conversationId).toBe('conv-456');
@@ -235,7 +236,7 @@ describe('ElevenLabsHistoryProvider', () => {
 
       const response = await provider.callApi('', {
         vars: { agentId: 'agent-456' },
-      });
+      } as unknown as CallApiContextParams);
 
       expect(response.error).toBeUndefined();
       expect(response.metadata?.agentId).toBe('agent-456');
@@ -253,7 +254,7 @@ describe('ElevenLabsHistoryProvider', () => {
 
       await provider.callApi('', {
         vars: { status: 'completed' },
-      });
+      } as unknown as CallApiContextParams);
 
       expect((provider as any).client.get).toHaveBeenCalledWith(
         expect.stringContaining('status=completed'),
@@ -275,7 +276,7 @@ describe('ElevenLabsHistoryProvider', () => {
           startDate: '2024-01-01',
           endDate: '2024-01-31',
         },
-      });
+      } as unknown as CallApiContextParams);
 
       const callArg = mockGet.mock.calls[0][0];
       expect(callArg).toContain('start_date=2024-01-01');

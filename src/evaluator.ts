@@ -770,7 +770,7 @@ class Evaluator {
       if (!testSuite.defaultTest) {
         testSuite.defaultTest = {};
       }
-      if (!testSuite.defaultTest.assert) {
+      if (typeof testSuite.defaultTest !== 'string' && !testSuite.defaultTest.assert) {
         testSuite.defaultTest.assert = [];
       }
     }
@@ -1954,8 +1954,8 @@ class Evaluator {
       isRedteam: Boolean(options.isRedteam),
     });
 
-    // Update database signal file after all results are written
-    updateSignalFile();
+    // Update database signal file after all results are written, passing the eval ID
+    updateSignalFile(this.evalRecord.id);
 
     return this.evalRecord;
   }

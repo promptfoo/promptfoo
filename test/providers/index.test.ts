@@ -123,10 +123,11 @@ vi.mock('../../src/redteam/remoteGeneration', async (importOriginal) => {
 });
 vi.mock('../../src/providers/websocket');
 
-vi.mock('../../src/globalConfig/cloud', async (importOriginal) => {
+vi.mock('../../src/globalConfig/cloud', () => {
   return {
-    ...(await importOriginal()),
-
+    CLOUD_API_HOST: 'https://api.promptfoo.app',
+    API_HOST: 'https://api.promptfoo.app',
+    CloudConfig: vi.fn(),
     cloudConfig: {
       isEnabled: vi.fn().mockReturnValue(false),
       getApiHost: vi.fn().mockReturnValue('https://api.promptfoo.dev'),
