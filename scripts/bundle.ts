@@ -17,6 +17,7 @@
  */
 
 import * as esbuild from 'esbuild';
+import { execSync, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -421,13 +422,41 @@ const __BUNDLE_ASSETS__ = __bundle_join(__dirname, 'assets');
 
   // Banner for CJS format (used in SEA builds)
   // For SEA, we need to handle the fact that __dirname might point to the executable
+  // and native modules need to be loaded from disk relative to the executable
   const cjsBanner = `
 'use strict';
 const path = require('path');
+const Module = require('module');
+
+// Detect if running as SEA (Single Executable Application)
+const isSEA = (() => {
+  try {
+    const sea = require('node:sea');
+    return sea.isSea();
+  } catch {
+    return false;
+  }
+})();
+
+// Get the directory containing the executable/script
+const __EXEC_DIR__ = isSEA ? path.dirname(process.execPath) : __dirname;
 
 // Asset directory for bundled distribution
-// In SEA mode, assets are next to the executable
-const __BUNDLE_ASSETS__ = path.join(__dirname, 'assets');
+const __BUNDLE_ASSETS__ = path.join(__EXEC_DIR__, 'assets');
+
+// Override require for native modules in SEA mode
+if (isSEA) {
+  const nativeModules = ['better-sqlite3'];
+  const originalRequire = Module.prototype.require;
+  Module.prototype.require = function(id) {
+    if (nativeModules.includes(id)) {
+      // Load native module from disk next to the executable
+      const modulePath = path.join(__EXEC_DIR__, 'node_modules', id);
+      return originalRequire.call(this, modulePath);
+    }
+    return originalRequire.call(this, id);
+  };
+}
 `.trim();
 
   // Footer for CJS to handle async entry point
@@ -535,12 +564,212 @@ function formatSize(bytes: number): string {
 }
 
 /**
+ * Post-process the CJS bundle to fix native module requires for SEA.
+ *
+ * In SEA context, require() for external modules doesn't work normally.
+ * We replace require("module-name") with a dynamic require that uses
+ * createRequire to load from the directory containing the executable.
+ */
+function patchNativeRequiresForSea(bundlePath: string): void {
+  let content = fs.readFileSync(bundlePath, 'utf8');
+  // Patch all external modules - both native and optional
+  // In SEA context, any external module needs to be loaded via createRequire from disk
+  const modulesToPatch = [...NATIVE_EXTERNALS, ...OPTIONAL_EXTERNALS];
+  let patchCount = 0;
+
+  for (const moduleName of modulesToPatch) {
+    // Match require("module-name") or require('module-name')
+    // Need to escape special regex characters in module names (like @, /)
+    const escapedName = moduleName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const patterns = [
+      new RegExp(`require\\("${escapedName}"\\)`, 'g'),
+      new RegExp(`require\\('${escapedName}'\\)`, 'g'),
+    ];
+
+    for (const pattern of patterns) {
+      const matches = content.match(pattern);
+      if (matches) {
+        // Replace with a SEA-aware require that:
+        // - In SEA mode: uses createRequire to load from executable directory
+        // - In normal mode: falls back to regular require
+        const replacement = `(function(){try{const sea=require("node:sea");if(sea.isSea()){const{createRequire}=require("module");const p=require("path");const r=createRequire(p.join(p.dirname(process.execPath),"node_modules","${moduleName}","package.json"));return r("${moduleName}")}}catch{}return require("${moduleName}")})()`;
+        content = content.replace(pattern, replacement);
+        patchCount += matches.length;
+      }
+    }
+  }
+
+  if (patchCount > 0) {
+    fs.writeFileSync(bundlePath, content);
+    console.log(`[bundle] Patched ${patchCount} external module require(s) for SEA compatibility`);
+  }
+}
+
+/**
+ * Generate a Node.js Single Executable Application (SEA).
+ *
+ * This takes the CJS bundle and creates a standalone binary that includes
+ * Node.js itself. The binary can run without requiring Node.js to be installed.
+ *
+ * Process:
+ * 1. Create SEA config JSON
+ * 2. Generate blob using `node --experimental-sea-config`
+ * 3. Copy Node.js binary
+ * 4. Inject blob using postject
+ * 5. Codesign on macOS
+ */
+async function generateSea(): Promise<boolean> {
+  console.log('\n[bundle] Generating Node.js Single Executable Application...');
+
+  const cjsBundle = path.join(BUNDLE_DIR, 'promptfoo.cjs');
+  const seaConfig = path.join(BUNDLE_DIR, 'sea-config.json');
+  const seaBlob = path.join(BUNDLE_DIR, 'sea-prep.blob');
+
+  // Determine output binary name based on platform
+  const platform = process.platform;
+  const binaryName = platform === 'win32' ? 'promptfoo.exe' : 'promptfoo';
+  const seaBinary = path.join(BUNDLE_DIR, binaryName);
+
+  // Step 1: Create SEA config
+  console.log('[bundle] Creating SEA config...');
+  const seaConfigContent = {
+    main: cjsBundle,
+    output: seaBlob,
+    disableExperimentalSEAWarning: true,
+    useSnapshot: false, // Snapshots don't work well with complex apps
+    useCodeCache: true, // Improves startup time
+  };
+  fs.writeFileSync(seaConfig, JSON.stringify(seaConfigContent, null, 2));
+
+  // Step 2: Generate blob
+  console.log('[bundle] Generating SEA blob...');
+  try {
+    execSync(`node --experimental-sea-config "${seaConfig}"`, {
+      cwd: BUNDLE_DIR,
+      stdio: 'inherit',
+    });
+  } catch (error) {
+    console.error('[bundle] Failed to generate SEA blob:', error);
+    return false;
+  }
+
+  if (!fs.existsSync(seaBlob)) {
+    console.error('[bundle] SEA blob was not created');
+    return false;
+  }
+
+  const blobStats = fs.statSync(seaBlob);
+  console.log(`[bundle] SEA blob size: ${formatSize(blobStats.size)}`);
+
+  // Step 3: Copy Node.js binary
+  console.log('[bundle] Copying Node.js binary...');
+  const nodeBinary = process.execPath;
+  fs.copyFileSync(nodeBinary, seaBinary);
+
+  // On macOS, need to remove signature before injection
+  if (platform === 'darwin') {
+    console.log('[bundle] Removing existing code signature (macOS)...');
+    try {
+      execSync(`codesign --remove-signature "${seaBinary}"`, { stdio: 'inherit' });
+    } catch (_error) {
+      // May fail if not signed, that's OK
+    }
+  }
+
+  // Step 4: Inject blob using postject
+  console.log('[bundle] Injecting SEA blob into binary...');
+
+  // Check if postject is installed
+  const postjectPath = path.join(ROOT, 'node_modules', '.bin', 'postject');
+  const hasPostject = fs.existsSync(postjectPath) || fs.existsSync(postjectPath + '.cmd');
+
+  if (!hasPostject) {
+    console.error('[bundle] postject not found. Install with: npm install -D postject');
+    return false;
+  }
+
+  const postjectArgs = [
+    seaBinary,
+    'NODE_SEA_BLOB',
+    seaBlob,
+    '--sentinel-fuse',
+    'NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2',
+  ];
+
+  // macOS specific options
+  if (platform === 'darwin') {
+    postjectArgs.push('--macho-segment-name', 'NODE_SEA');
+  }
+
+  try {
+    const result = spawnSync('npx', ['postject', ...postjectArgs], {
+      cwd: ROOT,
+      stdio: 'inherit',
+      shell: true,
+    });
+    if (result.status !== 0) {
+      console.error('[bundle] postject failed with exit code:', result.status);
+      return false;
+    }
+  } catch (error) {
+    console.error('[bundle] Failed to inject SEA blob:', error);
+    return false;
+  }
+
+  // Step 5: Re-sign on macOS
+  if (platform === 'darwin') {
+    console.log('[bundle] Re-signing binary (macOS)...');
+    try {
+      execSync(`codesign --sign - "${seaBinary}"`, { stdio: 'inherit' });
+    } catch (error) {
+      console.error('[bundle] Warning: Failed to re-sign binary:', error);
+      // Continue anyway, ad-hoc signing might not be required for local use
+    }
+  }
+
+  // Verify the binary works
+  console.log('[bundle] Verifying SEA binary...');
+  try {
+    const versionResult = spawnSync(seaBinary, ['--version'], {
+      encoding: 'utf8',
+      timeout: 10000,
+    });
+    if (versionResult.status === 0) {
+      console.log(`[bundle] SEA binary verified: ${versionResult.stdout.trim()}`);
+    } else {
+      console.error('[bundle] Warning: SEA binary verification returned non-zero exit code');
+      console.error('stdout:', versionResult.stdout);
+      console.error('stderr:', versionResult.stderr);
+    }
+  } catch (error) {
+    console.error('[bundle] Warning: Failed to verify SEA binary:', error);
+  }
+
+  // Report final size
+  const seaStats = fs.statSync(seaBinary);
+  console.log(`\n[bundle] SEA binary complete!`);
+  console.log(`  Output: ${seaBinary.replace(ROOT, '.')}`);
+  console.log(`  Size: ${formatSize(seaStats.size)}`);
+
+  // Cleanup intermediate files
+  fs.rmSync(seaConfig);
+  fs.rmSync(seaBlob);
+
+  return true;
+}
+
+/**
  * Main bundle function.
  */
 async function main(): Promise<void> {
+  const buildSea = process.argv.includes('--sea');
+
   console.log('[bundle] Starting bundle process...');
   console.log(`[bundle] Version: ${packageJson.version}`);
   console.log(`[bundle] Output directory: ${BUNDLE_DIR.replace(ROOT, '.')}`);
+  if (buildSea) {
+    console.log('[bundle] SEA mode: Also building CJS bundle for Node.js SEA');
+  }
 
   // Prepare bundle directory
   prepareBundleDir();
@@ -552,8 +781,8 @@ async function main(): Promise<void> {
   // Copy native modules (better-sqlite3, etc.)
   copyNativeModules();
 
-  // Create bundle
-  console.log('\n[bundle] Creating esbuild bundle...');
+  // Create ESM bundle (default)
+  console.log('\n[bundle] Creating ESM bundle...');
   const result = await createBundle();
 
   if (!result.success) {
@@ -571,9 +800,42 @@ async function main(): Promise<void> {
     }
   }
 
-  console.log('\n[bundle] Bundle complete!');
+  console.log('\n[bundle] ESM bundle complete!');
   console.log(`  Output: ${result.outputFile.replace(ROOT, '.')}`);
   console.log(`  Size: ${formatSize(result.bundleSize)}`);
+
+  // Create CJS bundle for SEA if requested
+  if (buildSea) {
+    console.log('\n[bundle] Creating CJS bundle for SEA...');
+    const seaResult = await createBundle({
+      format: 'cjs',
+      outputFile: path.join(BUNDLE_DIR, 'promptfoo.cjs'),
+      forSea: true,
+    });
+
+    if (!seaResult.success) {
+      console.error('\n[bundle] SEA bundle failed with errors:');
+      for (const error of seaResult.errors) {
+        console.error(`  - ${error}`);
+      }
+      process.exit(1);
+    }
+
+    console.log('\n[bundle] CJS bundle for SEA complete!');
+    console.log(`  Output: ${seaResult.outputFile.replace(ROOT, '.')}`);
+    console.log(`  Size: ${formatSize(seaResult.bundleSize)}`);
+
+    // Post-process the CJS bundle to fix native module requires for SEA
+    console.log('\n[bundle] Post-processing CJS bundle for SEA native modules...');
+    patchNativeRequiresForSea(seaResult.outputFile);
+
+    // Generate the actual SEA binary
+    const seaSuccess = await generateSea();
+    if (!seaSuccess) {
+      console.error('\n[bundle] SEA generation failed');
+      process.exit(1);
+    }
+  }
 
   // List external dependencies
   console.log('\n[bundle] External dependencies (must be available at runtime):');
