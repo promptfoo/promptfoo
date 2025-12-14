@@ -51,13 +51,13 @@ test/smoke/
 
 #### 1.1 Basic CLI Operations
 
-| #     | Test            | Command                              | Verifies                    |
-| ----- | --------------- | ------------------------------------ | --------------------------- |
-| 1.1.1 | Version output  | `promptfoo --version`                | Binary executes, version    |
-| 1.1.2 | Help output     | `promptfoo --help`                   | Commander parsing           |
-| 1.1.3 | Subcommand help | `promptfoo eval --help`              | Subcommand routing          |
-| 1.1.4 | Unknown command | `promptfoo unknownxyz`               | Error handling              |
-| 1.1.5 | Invalid config  | `promptfoo eval -c nonexistent.yaml` | File not found error        |
+| #     | Test            | Command                              | Verifies                 |
+| ----- | --------------- | ------------------------------------ | ------------------------ |
+| 1.1.1 | Version output  | `promptfoo --version`                | Binary executes, version |
+| 1.1.2 | Help output     | `promptfoo --help`                   | Commander parsing        |
+| 1.1.3 | Subcommand help | `promptfoo eval --help`              | Subcommand routing       |
+| 1.1.4 | Unknown command | `promptfoo unknownxyz`               | Error handling           |
+| 1.1.5 | Invalid config  | `promptfoo eval -c nonexistent.yaml` | File not found error     |
 
 #### 1.2 Init Command
 
@@ -68,48 +68,48 @@ test/smoke/
 
 #### 1.3 Validate Command
 
-| #     | Test           | Command                              | Verifies          |
-| ----- | -------------- | ------------------------------------ | ----------------- |
-| 1.3.1 | Valid config   | `promptfoo validate -c valid.yaml`   | Validation passes |
-| 1.3.2 | Invalid config | `promptfoo validate -c invalid.yaml` | Validation errors |
+| #     | Test           | Command                                | Verifies          |
+| ----- | -------------- | -------------------------------------- | ----------------- |
+| 1.3.1 | Valid config   | `promptfoo validate -c valid.yaml`     | Validation passes |
+| 1.3.2 | Invalid config | `promptfoo validate -c invalid.yaml`   | Validation errors |
 | 1.3.3 | Schema errors  | `promptfoo validate -c malformed.yaml` | Schema validation |
 
 #### 1.4 Eval Command (Core)
 
-| #     | Test            | Command                                           | Verifies            |
-| ----- | --------------- | ------------------------------------------------- | ------------------- |
-| 1.4.1 | Basic eval      | `promptfoo eval -c echo-config.yaml --no-cache`   | Core eval pipeline  |
-| 1.4.2 | JSON output     | `promptfoo eval -c config.yaml -o out.json`       | JSON export         |
-| 1.4.3 | YAML output     | `promptfoo eval -c config.yaml -o out.yaml`       | YAML export         |
-| 1.4.4 | CSV output      | `promptfoo eval -c config.yaml -o out.csv`        | CSV export          |
+| #     | Test            | Command                                             | Verifies            |
+| ----- | --------------- | --------------------------------------------------- | ------------------- |
+| 1.4.1 | Basic eval      | `promptfoo eval -c echo-config.yaml --no-cache`     | Core eval pipeline  |
+| 1.4.2 | JSON output     | `promptfoo eval -c config.yaml -o out.json`         | JSON export         |
+| 1.4.3 | YAML output     | `promptfoo eval -c config.yaml -o out.yaml`         | YAML export         |
+| 1.4.4 | CSV output      | `promptfoo eval -c config.yaml -o out.csv`          | CSV export          |
 | 1.4.5 | Max concurrency | `promptfoo eval -c config.yaml --max-concurrency 1` | Concurrency control |
-| 1.4.6 | Repeat          | `promptfoo eval -c config.yaml --repeat 2`        | Repeat runs         |
-| 1.4.7 | Verbose         | `promptfoo eval -c config.yaml --verbose`         | Verbose logging     |
-| 1.4.8 | Env file        | `promptfoo eval -c config.yaml --env-file .env`   | Env loading         |
+| 1.4.6 | Repeat          | `promptfoo eval -c config.yaml --repeat 2`          | Repeat runs         |
+| 1.4.7 | Verbose         | `promptfoo eval -c config.yaml --verbose`           | Verbose logging     |
+| 1.4.8 | Env file        | `promptfoo eval -c config.yaml --env-file .env`     | Env loading         |
 
 #### 1.5 List/Show/Export Commands
 
-| #     | Test          | Command                                  | Verifies          |
-| ----- | ------------- | ---------------------------------------- | ----------------- |
-| 1.5.1 | List evals    | `promptfoo list evals`                   | Database reads    |
-| 1.5.2 | List datasets | `promptfoo list datasets`                | Dataset listing   |
-| 1.5.3 | Show eval     | `promptfoo show <eval-id>`               | Eval retrieval    |
+| #     | Test          | Command                                  | Verifies             |
+| ----- | ------------- | ---------------------------------------- | -------------------- |
+| 1.5.1 | List evals    | `promptfoo list evals`                   | Database reads       |
+| 1.5.2 | List datasets | `promptfoo list datasets`                | Dataset listing      |
+| 1.5.3 | Show eval     | `promptfoo show <eval-id>`               | Eval retrieval       |
 | 1.5.4 | Export eval   | `promptfoo export <eval-id> -o out.json` | Export functionality |
 
 #### 1.6 Cache Commands
 
-| #     | Test        | Command                | Verifies         |
-| ----- | ----------- | ---------------------- | ---------------- |
+| #     | Test        | Command                 | Verifies         |
+| ----- | ----------- | ----------------------- | ---------------- |
 | 1.6.1 | Cache clear | `promptfoo cache clear` | Cache management |
 
 #### 1.7 Exit Codes
 
-| #     | Test           | Scenario             | Expected Code |
-| ----- | -------------- | -------------------- | ------------- |
-| 1.7.1 | All pass       | All assertions pass  | `0`           |
-| 1.7.2 | Assertion fail | Assertion fails      | `100`         |
-| 1.7.3 | Config error   | Invalid config       | `1`           |
-| 1.7.4 | Provider error | Provider fails       | `1`           |
+| #     | Test           | Scenario            | Expected Code |
+| ----- | -------------- | ------------------- | ------------- |
+| 1.7.1 | All pass       | All assertions pass | `0`           |
+| 1.7.2 | Assertion fail | Assertion fails     | `100`         |
+| 1.7.3 | Config error   | Invalid config      | `1`           |
+| 1.7.4 | Provider error | Provider fails      | `1`           |
 
 #### 1.8 Filter Flags
 
@@ -117,107 +117,107 @@ Test count and content filters that control which tests run.
 
 ##### 1.8.1 Count-Based Filters
 
-| #       | Test             | Command                                          | Verifies                          |
-| ------- | ---------------- | ------------------------------------------------ | --------------------------------- |
-| 1.8.1.1 | First N tests    | `--filter-first-n 2` (with 5 tests)              | Takes first 2 tests only          |
-| 1.8.1.2 | First N > total  | `--filter-first-n 100` (with 5 tests)            | Returns all 5 tests               |
-| 1.8.1.3 | First N zero     | `--filter-first-n 0`                             | Returns 0 tests (no eval runs)    |
-| 1.8.1.4 | Sample N tests   | `--filter-sample 2` (with 5 tests)               | Returns exactly 2 tests (random)  |
-| 1.8.1.5 | Sample > total   | `--filter-sample 100` (with 5 tests)             | Returns all 5 tests               |
+| #       | Test            | Command                               | Verifies                         |
+| ------- | --------------- | ------------------------------------- | -------------------------------- |
+| 1.8.1.1 | First N tests   | `--filter-first-n 2` (with 5 tests)   | Takes first 2 tests only         |
+| 1.8.1.2 | First N > total | `--filter-first-n 100` (with 5 tests) | Returns all 5 tests              |
+| 1.8.1.3 | First N zero    | `--filter-first-n 0`                  | Returns 0 tests (no eval runs)   |
+| 1.8.1.4 | Sample N tests  | `--filter-sample 2` (with 5 tests)    | Returns exactly 2 tests (random) |
+| 1.8.1.5 | Sample > total  | `--filter-sample 100` (with 5 tests)  | Returns all 5 tests              |
 
 ##### 1.8.2 Pattern Filters
 
-| #       | Test                | Command                                       | Verifies                          |
-| ------- | ------------------- | --------------------------------------------- | --------------------------------- |
-| 1.8.2.1 | Pattern match       | `--filter-pattern "user.*test"`               | Only tests with matching desc     |
-| 1.8.2.2 | Pattern case        | `--filter-pattern "(?i)TEST"`                 | Case-insensitive regex works      |
-| 1.8.2.3 | Pattern no match    | `--filter-pattern "nonexistent123"`           | Zero tests run                    |
-| 1.8.2.4 | Pattern special     | `--filter-pattern "test\\.special"`           | Regex escaping works              |
+| #       | Test             | Command                             | Verifies                      |
+| ------- | ---------------- | ----------------------------------- | ----------------------------- |
+| 1.8.2.1 | Pattern match    | `--filter-pattern "user.*test"`     | Only tests with matching desc |
+| 1.8.2.2 | Pattern case     | `--filter-pattern "(?i)TEST"`       | Case-insensitive regex works  |
+| 1.8.2.3 | Pattern no match | `--filter-pattern "nonexistent123"` | Zero tests run                |
+| 1.8.2.4 | Pattern special  | `--filter-pattern "test\\.special"` | Regex escaping works          |
 
 ##### 1.8.3 Metadata Filters
 
-| #       | Test                | Command                                       | Verifies                          |
-| ------- | ------------------- | --------------------------------------------- | --------------------------------- |
-| 1.8.3.1 | Metadata match      | `--filter-metadata category=auth`             | Only tests with metadata match    |
-| 1.8.3.2 | Metadata partial    | `--filter-metadata category=au`               | Partial value match works         |
-| 1.8.3.3 | Metadata array      | `--filter-metadata tags=security`             | Array metadata value match        |
-| 1.8.3.4 | Metadata no match   | `--filter-metadata category=nonexistent`      | Zero tests run                    |
-| 1.8.3.5 | Metadata invalid    | `--filter-metadata invalid`                   | Error: must be key=value format   |
+| #       | Test              | Command                                  | Verifies                        |
+| ------- | ----------------- | ---------------------------------------- | ------------------------------- |
+| 1.8.3.1 | Metadata match    | `--filter-metadata category=auth`        | Only tests with metadata match  |
+| 1.8.3.2 | Metadata partial  | `--filter-metadata category=au`          | Partial value match works       |
+| 1.8.3.3 | Metadata array    | `--filter-metadata tags=security`        | Array metadata value match      |
+| 1.8.3.4 | Metadata no match | `--filter-metadata category=nonexistent` | Zero tests run                  |
+| 1.8.3.5 | Metadata invalid  | `--filter-metadata invalid`              | Error: must be key=value format |
 
 ##### 1.8.4 Provider Filters
 
-| #       | Test                | Command                                       | Verifies                          |
-| ------- | ------------------- | --------------------------------------------- | --------------------------------- |
-| 1.8.4.1 | Provider by ID      | `--filter-providers "echo"`                   | Only echo provider runs           |
-| 1.8.4.2 | Provider by label   | `--filter-providers "Custom.*"`               | Provider label regex match        |
-| 1.8.4.3 | Provider multi      | `--filter-providers "echo\|custom"`           | Multiple provider match           |
-| 1.8.4.4 | Provider no match   | `--filter-providers "nonexistent"`            | No providers match, error/empty   |
-| 1.8.4.5 | Filter targets      | `--filter-targets "echo"`                     | Alias for --filter-providers      |
+| #       | Test              | Command                             | Verifies                        |
+| ------- | ----------------- | ----------------------------------- | ------------------------------- |
+| 1.8.4.1 | Provider by ID    | `--filter-providers "echo"`         | Only echo provider runs         |
+| 1.8.4.2 | Provider by label | `--filter-providers "Custom.*"`     | Provider label regex match      |
+| 1.8.4.3 | Provider multi    | `--filter-providers "echo\|custom"` | Multiple provider match         |
+| 1.8.4.4 | Provider no match | `--filter-providers "nonexistent"`  | No providers match, error/empty |
+| 1.8.4.5 | Filter targets    | `--filter-targets "echo"`           | Alias for --filter-providers    |
 
 ##### 1.8.5 History-Based Filters
 
-| #       | Test                | Command                                       | Verifies                          |
-| ------- | ------------------- | --------------------------------------------- | --------------------------------- |
-| 1.8.5.1 | Filter failing file | `--filter-failing output.json`                | Re-runs only failed tests         |
-| 1.8.5.2 | Filter failing ID   | `--filter-failing eval-abc123`                | Re-runs failures by eval ID       |
-| 1.8.5.3 | Filter errors file  | `--filter-errors-only output.json`            | Re-runs only error tests          |
-| 1.8.5.4 | Filter errors ID    | `--filter-errors-only eval-abc123`            | Re-runs errors by eval ID         |
+| #       | Test                | Command                            | Verifies                    |
+| ------- | ------------------- | ---------------------------------- | --------------------------- |
+| 1.8.5.1 | Filter failing file | `--filter-failing output.json`     | Re-runs only failed tests   |
+| 1.8.5.2 | Filter failing ID   | `--filter-failing eval-abc123`     | Re-runs failures by eval ID |
+| 1.8.5.3 | Filter errors file  | `--filter-errors-only output.json` | Re-runs only error tests    |
+| 1.8.5.4 | Filter errors ID    | `--filter-errors-only eval-abc123` | Re-runs errors by eval ID   |
 
 ##### 1.8.6 Combined Filters
 
-| #       | Test                | Command                                       | Verifies                          |
-| ------- | ------------------- | --------------------------------------------- | --------------------------------- |
-| 1.8.6.1 | Pattern + First N   | `--filter-pattern "auth" --filter-first-n 2`  | Filters apply in sequence         |
-| 1.8.6.2 | Metadata + Sample   | `--filter-metadata cat=x --filter-sample 1`   | Metadata then sample              |
-| 1.8.6.3 | Provider + Pattern  | `--filter-providers echo --filter-pattern x`  | Provider and test filtering       |
+| #       | Test               | Command                                      | Verifies                    |
+| ------- | ------------------ | -------------------------------------------- | --------------------------- |
+| 1.8.6.1 | Pattern + First N  | `--filter-pattern "auth" --filter-first-n 2` | Filters apply in sequence   |
+| 1.8.6.2 | Metadata + Sample  | `--filter-metadata cat=x --filter-sample 1`  | Metadata then sample        |
+| 1.8.6.3 | Provider + Pattern | `--filter-providers echo --filter-pattern x` | Provider and test filtering |
 
 #### 1.9 Variable and Prompt Flags
 
 Flags that modify variables or prompt content.
 
-| #     | Test             | Command                                       | Verifies                          |
-| ----- | ---------------- | --------------------------------------------- | --------------------------------- |
-| 1.9.1 | Var single       | `--var name=Alice`                            | Variable substitution             |
-| 1.9.2 | Var multiple     | `--var name=Alice --var age=30`               | Multiple vars                     |
-| 1.9.3 | Var override     | `--var name=Override` (config has name=Bob)   | CLI overrides config              |
-| 1.9.4 | Var invalid      | `--var invalid`                               | Error: must be key=value          |
-| 1.9.5 | Prompt prefix    | `--prompt-prefix "System: "`                  | Prefix prepended to prompts       |
-| 1.9.6 | Prompt suffix    | `--prompt-suffix "\nEnd."`                    | Suffix appended to prompts        |
-| 1.9.7 | Prefix + suffix  | `--prompt-prefix "A" --prompt-suffix "Z"`     | Both applied                      |
+| #     | Test            | Command                                     | Verifies                    |
+| ----- | --------------- | ------------------------------------------- | --------------------------- |
+| 1.9.1 | Var single      | `--var name=Alice`                          | Variable substitution       |
+| 1.9.2 | Var multiple    | `--var name=Alice --var age=30`             | Multiple vars               |
+| 1.9.3 | Var override    | `--var name=Override` (config has name=Bob) | CLI overrides config        |
+| 1.9.4 | Var invalid     | `--var invalid`                             | Error: must be key=value    |
+| 1.9.5 | Prompt prefix   | `--prompt-prefix "System: "`                | Prefix prepended to prompts |
+| 1.9.6 | Prompt suffix   | `--prompt-suffix "\nEnd."`                  | Suffix appended to prompts  |
+| 1.9.7 | Prefix + suffix | `--prompt-prefix "A" --prompt-suffix "Z"`   | Both applied                |
 
 #### 1.10 Execution Control Flags
 
 Flags that control how tests execute.
 
-| #      | Test             | Command                                       | Verifies                          |
-| ------ | ---------------- | --------------------------------------------- | --------------------------------- |
-| 1.10.1 | Delay            | `--delay 100` (with timing check)             | Delay between tests               |
-| 1.10.2 | Delay zero       | `--delay 0`                                   | No delay (default)                |
-| 1.10.3 | No cache         | `--no-cache`                                  | Cache disabled (already tested)   |
-| 1.10.4 | No progress bar  | `--no-progress-bar`                           | Progress bar hidden               |
-| 1.10.5 | No table         | `--no-table`                                  | Table output suppressed           |
-| 1.10.6 | Table max length | `--table-cell-max-length 50`                  | Cell truncation                   |
+| #      | Test             | Command                           | Verifies                        |
+| ------ | ---------------- | --------------------------------- | ------------------------------- |
+| 1.10.1 | Delay            | `--delay 100` (with timing check) | Delay between tests             |
+| 1.10.2 | Delay zero       | `--delay 0`                       | No delay (default)              |
+| 1.10.3 | No cache         | `--no-cache`                      | Cache disabled (already tested) |
+| 1.10.4 | No progress bar  | `--no-progress-bar`               | Progress bar hidden             |
+| 1.10.5 | No table         | `--no-table`                      | Table output suppressed         |
+| 1.10.6 | Table max length | `--table-cell-max-length 50`      | Cell truncation                 |
 
 #### 1.11 Output and Metadata Flags
 
 Flags that affect output and eval metadata.
 
-| #      | Test             | Command                                       | Verifies                          |
-| ------ | ---------------- | --------------------------------------------- | --------------------------------- |
-| 1.11.1 | Description      | `--description "My test run"`                 | Description in output             |
-| 1.11.2 | Multiple outputs | `-o out.json -o out.csv`                      | Multiple output files             |
-| 1.11.3 | No write         | `--no-write`                                  | Results not persisted to DB       |
-| 1.11.4 | Share disabled   | `--no-share`                                  | Sharing disabled                  |
+| #      | Test             | Command                       | Verifies                    |
+| ------ | ---------------- | ----------------------------- | --------------------------- |
+| 1.11.1 | Description      | `--description "My test run"` | Description in output       |
+| 1.11.2 | Multiple outputs | `-o out.json -o out.csv`      | Multiple output files       |
+| 1.11.3 | No write         | `--no-write`                  | Results not persisted to DB |
+| 1.11.4 | Share disabled   | `--no-share`                  | Sharing disabled            |
 
 #### 1.12 Resume and Retry Flags
 
 Flags for resuming or retrying evaluations.
 
-| #      | Test             | Command                                       | Verifies                          |
-| ------ | ---------------- | --------------------------------------------- | --------------------------------- |
-| 1.12.1 | Resume latest    | `--resume`                                    | Resumes latest incomplete eval    |
-| 1.12.2 | Resume by ID     | `--resume eval-abc123`                        | Resumes specific eval             |
-| 1.12.3 | Retry errors     | `--retry-errors`                              | Retries errors from latest        |
+| #      | Test          | Command                | Verifies                       |
+| ------ | ------------- | ---------------------- | ------------------------------ |
+| 1.12.1 | Resume latest | `--resume`             | Resumes latest incomplete eval |
+| 1.12.2 | Resume by ID  | `--resume eval-abc123` | Resumes specific eval          |
+| 1.12.3 | Retry errors  | `--retry-errors`       | Retries errors from latest     |
 
 ---
 
@@ -225,11 +225,11 @@ Flags for resuming or retrying evaluations.
 
 #### 2.1 YAML Configs
 
-| #     | Test              | Config               | Verifies           |
-| ----- | ----------------- | -------------------- | ------------------ |
-| 2.1.1 | Basic YAML        | `config.yaml`        | YAML parsing       |
-| 2.1.2 | YAML with anchors | `config-anchors.yaml` | YAML anchor/alias  |
-| 2.1.3 | YML extension     | `config.yml`         | .yml extension     |
+| #     | Test              | Config                | Verifies          |
+| ----- | ----------------- | --------------------- | ----------------- |
+| 2.1.1 | Basic YAML        | `config.yaml`         | YAML parsing      |
+| 2.1.2 | YAML with anchors | `config-anchors.yaml` | YAML anchor/alias |
+| 2.1.3 | YML extension     | `config.yml`          | .yml extension    |
 
 #### 2.2 JSON Configs
 
@@ -239,26 +239,26 @@ Flags for resuming or retrying evaluations.
 
 #### 2.3 JavaScript Configs
 
-| #     | Test             | Config       | Export Style               | Verifies    |
-| ----- | ---------------- | ------------ | -------------------------- | ----------- |
-| 2.3.1 | CJS class export | `config.js`  | `module.exports = Class`   | CJS class   |
-| 2.3.2 | CJS object export | `config.js` | `module.exports = { ... }` | CJS object  |
-| 2.3.3 | CJS named export | `config.js`  | `module.exports.foo = ...` | CJS named   |
-| 2.3.4 | CJS explicit ext | `config.cjs` | `module.exports = ...`     | .cjs extension |
-| 2.3.5 | ESM default      | `config.mjs` | `export default { ... }`   | ESM default |
-| 2.3.6 | ESM class        | `config.mjs` | `export default class`     | ESM class   |
-| 2.3.7 | ESM named        | `config.mjs` | `export const config`      | ESM named   |
+| #     | Test              | Config       | Export Style               | Verifies       |
+| ----- | ----------------- | ------------ | -------------------------- | -------------- |
+| 2.3.1 | CJS class export  | `config.js`  | `module.exports = Class`   | CJS class      |
+| 2.3.2 | CJS object export | `config.js`  | `module.exports = { ... }` | CJS object     |
+| 2.3.3 | CJS named export  | `config.js`  | `module.exports.foo = ...` | CJS named      |
+| 2.3.4 | CJS explicit ext  | `config.cjs` | `module.exports = ...`     | .cjs extension |
+| 2.3.5 | ESM default       | `config.mjs` | `export default { ... }`   | ESM default    |
+| 2.3.6 | ESM class         | `config.mjs` | `export default class`     | ESM class      |
+| 2.3.7 | ESM named         | `config.mjs` | `export const config`      | ESM named      |
 
 #### 2.4 TypeScript Configs
 
-| #     | Test             | Config       | Export Style               | Verifies       |
-| ----- | ---------------- | ------------ | -------------------------- | -------------- |
-| 2.4.1 | TS default       | `config.ts`  | `export default { ... }`   | TS transpile   |
-| 2.4.2 | TS class         | `config.ts`  | `export default class`     | TS class       |
-| 2.4.3 | TS named         | `config.ts`  | `export const config`      | TS named       |
-| 2.4.4 | TS with types    | `config.ts`  | `implements ApiProvider`   | Type imports   |
-| 2.4.5 | MTS extension    | `config.mts` | `export default ...`       | .mts extension |
-| 2.4.6 | CTS extension    | `config.cts` | `module.exports = ...`     | .cts extension |
+| #     | Test          | Config       | Export Style             | Verifies       |
+| ----- | ------------- | ------------ | ------------------------ | -------------- |
+| 2.4.1 | TS default    | `config.ts`  | `export default { ... }` | TS transpile   |
+| 2.4.2 | TS class      | `config.ts`  | `export default class`   | TS class       |
+| 2.4.3 | TS named      | `config.ts`  | `export const config`    | TS named       |
+| 2.4.4 | TS with types | `config.ts`  | `implements ApiProvider` | Type imports   |
+| 2.4.5 | MTS extension | `config.mts` | `export default ...`     | .mts extension |
+| 2.4.6 | CTS extension | `config.cts` | `module.exports = ...`   | .cts extension |
 
 ---
 
@@ -266,40 +266,40 @@ Flags for resuming or retrying evaluations.
 
 #### 3.1 Built-in Providers (No API Key)
 
-| #     | Test          | Provider             | Verifies          |
-| ----- | ------------- | -------------------- | ----------------- |
-| 3.1.1 | Echo provider | `echo`               | Built-in echo     |
-| 3.1.2 | Exec provider | `exec:echo "hello"`  | Shell command     |
+| #     | Test          | Provider            | Verifies      |
+| ----- | ------------- | ------------------- | ------------- |
+| 3.1.1 | Echo provider | `echo`              | Built-in echo |
+| 3.1.2 | Exec provider | `exec:echo "hello"` | Shell command |
 
 #### 3.2 JavaScript Providers
 
-| #     | Test         | Provider Config              | Export Style                 | Verifies          |
-| ----- | ------------ | ---------------------------- | ---------------------------- | ----------------- |
-| 3.2.1 | CJS class    | `file://provider.js`         | `module.exports = Class`     | CJS class         |
-| 3.2.2 | CJS function | `file://provider.js:callApi` | `module.exports.callApi = fn` | CJS named fn      |
-| 3.2.3 | CJS explicit | `file://provider.cjs`        | `module.exports = ...`       | .cjs extension    |
-| 3.2.4 | ESM default  | `file://provider.mjs`        | `export default class`       | ESM class         |
-| 3.2.5 | ESM function | `file://provider.mjs:callApi` | `export function callApi`   | ESM named fn      |
+| #     | Test         | Provider Config               | Export Style                  | Verifies       |
+| ----- | ------------ | ----------------------------- | ----------------------------- | -------------- |
+| 3.2.1 | CJS class    | `file://provider.js`          | `module.exports = Class`      | CJS class      |
+| 3.2.2 | CJS function | `file://provider.js:callApi`  | `module.exports.callApi = fn` | CJS named fn   |
+| 3.2.3 | CJS explicit | `file://provider.cjs`         | `module.exports = ...`        | .cjs extension |
+| 3.2.4 | ESM default  | `file://provider.mjs`         | `export default class`        | ESM class      |
+| 3.2.5 | ESM function | `file://provider.mjs:callApi` | `export function callApi`     | ESM named fn   |
 
 #### 3.3 TypeScript Providers
 
-| #     | Test              | Provider Config               | Export Style              | Verifies       |
-| ----- | ----------------- | ----------------------------- | ------------------------- | -------------- |
-| 3.3.1 | TS default class  | `file://provider.ts`          | `export default class`    | TS class       |
-| 3.3.2 | TS named function | `file://provider.ts:callApi`  | `export function callApi` | TS named fn    |
-| 3.3.3 | TS with interface | `file://provider.ts`          | `implements ApiProvider`  | TS interface   |
+| #     | Test              | Provider Config              | Export Style              | Verifies     |
+| ----- | ----------------- | ---------------------------- | ------------------------- | ------------ |
+| 3.3.1 | TS default class  | `file://provider.ts`         | `export default class`    | TS class     |
+| 3.3.2 | TS named function | `file://provider.ts:callApi` | `export function callApi` | TS named fn  |
+| 3.3.3 | TS with interface | `file://provider.ts`         | `implements ApiProvider`  | TS interface |
 
 #### 3.4 Python Providers
 
-| #     | Test            | Provider Config                | Function               | Verifies        |
-| ----- | --------------- | ------------------------------ | ---------------------- | --------------- |
-| 3.4.1 | Default fn      | `file://provider.py`           | `call_api()`           | Python default  |
-| 3.4.2 | Named fn        | `file://provider.py:custom_fn` | `custom_fn()`          | Python named    |
-| 3.4.3 | Async fn        | `file://provider.py:async_fn`  | `async def async_fn()` | Python async    |
-| 3.4.4 | With context    | `file://provider.py`           | Uses `context` param   | Context passing |
-| 3.4.5 | With options    | `file://provider.py`           | Uses `options` param   | Options passing |
-| 3.4.6 | Token usage     | `file://provider.py`           | Returns `tokenUsage`   | Token tracking  |
-| 3.4.7 | Error return    | `file://provider.py`           | Returns `error`        | Error handling  |
+| #     | Test         | Provider Config                | Function               | Verifies        |
+| ----- | ------------ | ------------------------------ | ---------------------- | --------------- |
+| 3.4.1 | Default fn   | `file://provider.py`           | `call_api()`           | Python default  |
+| 3.4.2 | Named fn     | `file://provider.py:custom_fn` | `custom_fn()`          | Python named    |
+| 3.4.3 | Async fn     | `file://provider.py:async_fn`  | `async def async_fn()` | Python async    |
+| 3.4.4 | With context | `file://provider.py`           | Uses `context` param   | Context passing |
+| 3.4.5 | With options | `file://provider.py`           | Uses `options` param   | Options passing |
+| 3.4.6 | Token usage  | `file://provider.py`           | Returns `tokenUsage`   | Token tracking  |
+| 3.4.7 | Error return | `file://provider.py`           | Returns `error`        | Error handling  |
 
 #### 3.5 Ruby Providers
 
@@ -311,35 +311,35 @@ Flags for resuming or retrying evaluations.
 
 #### 3.6 Go Providers
 
-| #     | Test            | Provider Config     | Function     | Verifies   |
-| ----- | --------------- | ------------------- | ------------ | ---------- |
-| 3.6.1 | Default fn      | `file://main.go`    | `CallApi`    | Go default |
-| 3.6.2 | With go.mod     | `file://main.go`    | Multi-package | Go modules |
+| #     | Test        | Provider Config  | Function      | Verifies   |
+| ----- | ----------- | ---------------- | ------------- | ---------- |
+| 3.6.1 | Default fn  | `file://main.go` | `CallApi`     | Go default |
+| 3.6.2 | With go.mod | `file://main.go` | Multi-package | Go modules |
 
 #### 3.7 HTTP Providers
 
-| #     | Test               | Provider Config                       | Verifies           |
-| ----- | ------------------ | ------------------------------------- | ------------------ |
-| 3.7.1 | Basic HTTP         | `id: http://...`                      | HTTP provider      |
-| 3.7.2 | HTTPS              | `id: https://...`                     | HTTPS provider     |
-| 3.7.3 | Body template      | `body: { prompt: "{{prompt}}" }`      | Body templating    |
-| 3.7.4 | Transform response | `transformResponse: json.output`      | Response transform |
-| 3.7.5 | Custom headers     | `headers: { X-Custom: value }`        | Header passing     |
+| #     | Test               | Provider Config                  | Verifies           |
+| ----- | ------------------ | -------------------------------- | ------------------ |
+| 3.7.1 | Basic HTTP         | `id: http://...`                 | HTTP provider      |
+| 3.7.2 | HTTPS              | `id: https://...`                | HTTPS provider     |
+| 3.7.3 | Body template      | `body: { prompt: "{{prompt}}" }` | Body templating    |
+| 3.7.4 | Transform response | `transformResponse: json.output` | Response transform |
+| 3.7.5 | Custom headers     | `headers: { X-Custom: value }`   | Header passing     |
 
 #### 3.8 HTTP Auth Configurations
 
-| #      | Test               | Auth Config                                      | Verifies       |
-| ------ | ------------------ | ------------------------------------------------ | -------------- |
-| 3.8.1  | Bearer token       | `auth: { type: bearer, token: ... }`             | Bearer auth    |
-| 3.8.2  | API key header     | `auth: { type: api_key, placement: header }`     | API key header |
-| 3.8.3  | API key query      | `auth: { type: api_key, placement: query }`      | API key query  |
-| 3.8.4  | Basic auth         | `auth: { type: basic, username, password }`      | Basic auth     |
-| 3.8.5  | OAuth client creds | `auth: { type: oauth, grantType: client_credentials }` | OAuth CC  |
-| 3.8.6  | OAuth password     | `auth: { type: oauth, grantType: password }`     | OAuth password |
-| 3.8.7  | Signature PEM      | `signatureAuth: { type: pem, privateKeyPath }`   | PEM signature  |
-| 3.8.8  | Signature JKS      | `signatureAuth: { type: jks, keystorePath }`     | JKS signature  |
-| 3.8.9  | Signature PFX      | `signatureAuth: { type: pfx, pfxPath }`          | PFX signature  |
-| 3.8.10 | mTLS cert          | `tls: { certPath, keyPath }`                     | Mutual TLS     |
+| #      | Test               | Auth Config                                            | Verifies       |
+| ------ | ------------------ | ------------------------------------------------------ | -------------- |
+| 3.8.1  | Bearer token       | `auth: { type: bearer, token: ... }`                   | Bearer auth    |
+| 3.8.2  | API key header     | `auth: { type: api_key, placement: header }`           | API key header |
+| 3.8.3  | API key query      | `auth: { type: api_key, placement: query }`            | API key query  |
+| 3.8.4  | Basic auth         | `auth: { type: basic, username, password }`            | Basic auth     |
+| 3.8.5  | OAuth client creds | `auth: { type: oauth, grantType: client_credentials }` | OAuth CC       |
+| 3.8.6  | OAuth password     | `auth: { type: oauth, grantType: password }`           | OAuth password |
+| 3.8.7  | Signature PEM      | `signatureAuth: { type: pem, privateKeyPath }`         | PEM signature  |
+| 3.8.8  | Signature JKS      | `signatureAuth: { type: jks, keystorePath }`           | JKS signature  |
+| 3.8.9  | Signature PFX      | `signatureAuth: { type: pfx, pfxPath }`                | PFX signature  |
+| 3.8.10 | mTLS cert          | `tls: { certPath, keyPath }`                           | Mutual TLS     |
 
 ---
 
@@ -355,28 +355,28 @@ Flags for resuming or retrying evaluations.
 
 #### 4.2 Tests Loading
 
-| #      | Test             | Config                     | Source        | Verifies         |
-| ------ | ---------------- | -------------------------- | ------------- | ---------------- |
-| 4.2.1  | Inline tests     | `tests: [{ vars: ... }]`   | YAML inline   | Direct tests     |
-| 4.2.2  | CSV file         | `tests: file://tests.csv`  | CSV file      | CSV parsing      |
-| 4.2.3  | JSON file        | `tests: file://tests.json` | JSON file     | JSON tests       |
-| 4.2.4  | JSONL file       | `tests: file://tests.jsonl` | JSONL file   | JSONL parsing    |
-| 4.2.5  | YAML file        | `tests: file://tests.yaml` | YAML file     | YAML tests       |
-| 4.2.6  | XLSX file        | `tests: file://tests.xlsx` | Excel file    | Excel parsing    |
-| 4.2.7  | JS generator     | `tests: file://tests.js`   | JS function   | JS test gen      |
-| 4.2.8  | TS generator     | `tests: file://tests.ts`   | TS function   | TS test gen      |
-| 4.2.9  | Python generator | `tests: file://tests.py`   | Python fn     | Python test gen  |
-| 4.2.10 | Glob pattern     | `tests: tests/*.yaml`      | Glob          | Glob expansion   |
+| #      | Test             | Config                      | Source      | Verifies        |
+| ------ | ---------------- | --------------------------- | ----------- | --------------- |
+| 4.2.1  | Inline tests     | `tests: [{ vars: ... }]`    | YAML inline | Direct tests    |
+| 4.2.2  | CSV file         | `tests: file://tests.csv`   | CSV file    | CSV parsing     |
+| 4.2.3  | JSON file        | `tests: file://tests.json`  | JSON file   | JSON tests      |
+| 4.2.4  | JSONL file       | `tests: file://tests.jsonl` | JSONL file  | JSONL parsing   |
+| 4.2.5  | YAML file        | `tests: file://tests.yaml`  | YAML file   | YAML tests      |
+| 4.2.6  | XLSX file        | `tests: file://tests.xlsx`  | Excel file  | Excel parsing   |
+| 4.2.7  | JS generator     | `tests: file://tests.js`    | JS function | JS test gen     |
+| 4.2.8  | TS generator     | `tests: file://tests.ts`    | TS function | TS test gen     |
+| 4.2.9  | Python generator | `tests: file://tests.py`    | Python fn   | Python test gen |
+| 4.2.10 | Glob pattern     | `tests: tests/*.yaml`       | Glob        | Glob expansion  |
 
 #### 4.3 Prompts Loading
 
-| #     | Test         | Config                          | Source        | Verifies        |
-| ----- | ------------ | ------------------------------- | ------------- | --------------- |
-| 4.3.1 | Inline       | `prompts: ["Hello {{name}}"]`   | YAML inline   | Direct prompt   |
-| 4.3.2 | File ref     | `prompts: [file://prompt.txt]`  | Text file     | File loading    |
-| 4.3.3 | Glob pattern | `prompts: prompts/*.txt`        | Glob          | Glob prompts    |
-| 4.3.4 | Exec prompt  | `prompts: [{ raw: "exec:..." }]` | Shell        | Executable      |
-| 4.3.5 | JSON chat    | `prompts: [file://chat.json]`   | JSON messages | Chat format     |
+| #     | Test         | Config                           | Source        | Verifies      |
+| ----- | ------------ | -------------------------------- | ------------- | ------------- |
+| 4.3.1 | Inline       | `prompts: ["Hello {{name}}"]`    | YAML inline   | Direct prompt |
+| 4.3.2 | File ref     | `prompts: [file://prompt.txt]`   | Text file     | File loading  |
+| 4.3.3 | Glob pattern | `prompts: prompts/*.txt`         | Glob          | Glob prompts  |
+| 4.3.4 | Exec prompt  | `prompts: [{ raw: "exec:..." }]` | Shell         | Executable    |
+| 4.3.5 | JSON chat    | `prompts: [file://chat.json]`    | JSON messages | Chat format   |
 
 ---
 
@@ -384,39 +384,39 @@ Flags for resuming or retrying evaluations.
 
 #### 5.1 Built-in Assertions
 
-| #      | Test              | Assertion Type            | Verifies          |
-| ------ | ----------------- | ------------------------- | ----------------- |
-| 5.1.1  | Contains          | `type: contains`          | String contains   |
-| 5.1.2  | Not contains      | `type: not-contains`      | String not contains |
-| 5.1.3  | Equals            | `type: equals`            | Exact match       |
-| 5.1.4  | Starts with       | `type: starts-with`       | Prefix match      |
-| 5.1.5  | Regex             | `type: regex`             | Regex match       |
-| 5.1.6  | Is JSON           | `type: is-json`           | JSON validation   |
-| 5.1.7  | Contains JSON     | `type: contains-json`     | JSON subset       |
-| 5.1.8  | JSON schema       | `type: is-valid-json-schema` | JSON schema    |
-| 5.1.9  | Cost              | `type: cost`              | Cost threshold    |
-| 5.1.10 | Latency           | `type: latency`           | Latency threshold |
-| 5.1.11 | Perplexity        | `type: perplexity`        | Perplexity check  |
+| #      | Test          | Assertion Type               | Verifies            |
+| ------ | ------------- | ---------------------------- | ------------------- |
+| 5.1.1  | Contains      | `type: contains`             | String contains     |
+| 5.1.2  | Not contains  | `type: not-contains`         | String not contains |
+| 5.1.3  | Equals        | `type: equals`               | Exact match         |
+| 5.1.4  | Starts with   | `type: starts-with`          | Prefix match        |
+| 5.1.5  | Regex         | `type: regex`                | Regex match         |
+| 5.1.6  | Is JSON       | `type: is-json`              | JSON validation     |
+| 5.1.7  | Contains JSON | `type: contains-json`        | JSON subset         |
+| 5.1.8  | JSON schema   | `type: is-valid-json-schema` | JSON schema         |
+| 5.1.9  | Cost          | `type: cost`                 | Cost threshold      |
+| 5.1.10 | Latency       | `type: latency`              | Latency threshold   |
+| 5.1.11 | Perplexity    | `type: perplexity`           | Perplexity check    |
 
 #### 5.2 Script Assertions
 
-| #     | Test          | Assertion Config                              | Verifies      |
-| ----- | ------------- | --------------------------------------------- | ------------- |
-| 5.2.1 | Inline JS     | `type: javascript, value: "output.includes()"` | Inline JS    |
-| 5.2.2 | JS file       | `type: javascript, value: file://assert.js`   | JS file       |
-| 5.2.3 | JS named fn   | `type: javascript, value: file://assert.js:fn` | JS named     |
-| 5.2.4 | Inline Python | `type: python, value: "output.lower()"`       | Inline Python |
-| 5.2.5 | Python file   | `type: python, value: file://assert.py`       | Python file   |
-| 5.2.6 | Python named  | `type: python, value: file://assert.py:check` | Python named  |
+| #     | Test          | Assertion Config                               | Verifies      |
+| ----- | ------------- | ---------------------------------------------- | ------------- |
+| 5.2.1 | Inline JS     | `type: javascript, value: "output.includes()"` | Inline JS     |
+| 5.2.2 | JS file       | `type: javascript, value: file://assert.js`    | JS file       |
+| 5.2.3 | JS named fn   | `type: javascript, value: file://assert.js:fn` | JS named      |
+| 5.2.4 | Inline Python | `type: python, value: "output.lower()"`        | Inline Python |
+| 5.2.5 | Python file   | `type: python, value: file://assert.py`        | Python file   |
+| 5.2.6 | Python named  | `type: python, value: file://assert.py:check`  | Python named  |
 
 #### 5.3 Model-Graded Assertions (Config Validation Only)
 
-| #     | Test             | Assertion Type         | Verifies    |
-| ----- | ---------------- | ---------------------- | ----------- |
-| 5.3.1 | Factuality       | `type: factuality`     | Config load |
-| 5.3.2 | Answer relevance | `type: answer-relevance` | Config load |
+| #     | Test              | Assertion Type            | Verifies    |
+| ----- | ----------------- | ------------------------- | ----------- |
+| 5.3.1 | Factuality        | `type: factuality`        | Config load |
+| 5.3.2 | Answer relevance  | `type: answer-relevance`  | Config load |
 | 5.3.3 | Context relevance | `type: context-relevance` | Config load |
-| 5.3.4 | LLM rubric       | `type: llm-rubric`     | Config load |
+| 5.3.4 | LLM rubric        | `type: llm-rubric`        | Config load |
 
 ---
 
@@ -424,17 +424,17 @@ Flags for resuming or retrying evaluations.
 
 #### 6.1 Response Transforms
 
-| #     | Test             | Transform Config                          | Verifies       |
-| ----- | ---------------- | ----------------------------------------- | -------------- |
-| 6.1.1 | String expr      | `transformResponse: "json.content"`       | Expression eval |
-| 6.1.2 | JS file          | `transformResponse: file://transform.js`  | JS transform   |
-| 6.1.3 | Named function   | `transformResponse: file://transform.js:fn` | Named transform |
+| #     | Test           | Transform Config                            | Verifies        |
+| ----- | -------------- | ------------------------------------------- | --------------- |
+| 6.1.1 | String expr    | `transformResponse: "json.content"`         | Expression eval |
+| 6.1.2 | JS file        | `transformResponse: file://transform.js`    | JS transform    |
+| 6.1.3 | Named function | `transformResponse: file://transform.js:fn` | Named transform |
 
 #### 6.2 Prompt Transforms
 
-| #     | Test            | Transform Config                    | Verifies       |
-| ----- | --------------- | ----------------------------------- | -------------- |
-| 6.2.1 | Prompt function | `prompt: file://prompt.js`          | Prompt fn      |
+| #     | Test            | Transform Config                     | Verifies       |
+| ----- | --------------- | ------------------------------------ | -------------- |
+| 6.2.1 | Prompt function | `prompt: file://prompt.js`           | Prompt fn      |
 | 6.2.2 | Nunjucks filter | `nunjucksFilters: file://filters.js` | Custom filters |
 
 ---
@@ -443,23 +443,23 @@ Flags for resuming or retrying evaluations.
 
 #### 7.1 Provider Config Options
 
-| #     | Test               | Config                                         | Verifies       |
-| ----- | ------------------ | ---------------------------------------------- | -------------- |
+| #     | Test                 | Config                                            | Verifies       |
+| ----- | -------------------- | ------------------------------------------------- | -------------- |
 | 7.1.1 | Provider with config | `providers: [{ id: echo, config: { foo: bar } }]` | Config passing |
-| 7.1.2 | Provider with label | `providers: [{ id: echo, label: "My Echo" }]`  | Label support  |
-| 7.1.3 | Multiple providers | `providers: [echo, echo]`                      | Multi-provider |
+| 7.1.2 | Provider with label  | `providers: [{ id: echo, label: "My Echo" }]`     | Label support  |
+| 7.1.3 | Multiple providers   | `providers: [echo, echo]`                         | Multi-provider |
 
 #### 7.2 DefaultTest
 
-| #     | Test              | Config                              | Verifies      |
-| ----- | ----------------- | ----------------------------------- | ------------- |
+| #     | Test               | Config                             | Verifies       |
+| ----- | ------------------ | ---------------------------------- | -------------- |
 | 7.2.1 | Inline defaultTest | `defaultTest: { assert: [...] }`   | Inline default |
-| 7.2.2 | File defaultTest  | `defaultTest: file://default.yaml`  | File default  |
+| 7.2.2 | File defaultTest   | `defaultTest: file://default.yaml` | File default   |
 
 #### 7.3 Scenarios
 
-| #     | Test           | Config                                   | Verifies         |
-| ----- | -------------- | ---------------------------------------- | ---------------- |
+| #     | Test           | Config                                     | Verifies         |
+| ----- | -------------- | ------------------------------------------ | ---------------- |
 | 7.3.1 | Basic scenario | `scenarios: [{ config: ..., tests: ... }]` | Scenario loading |
 
 ---
@@ -468,18 +468,18 @@ Flags for resuming or retrying evaluations.
 
 Validate existing examples work with echo provider substitution:
 
-| #    | Example                        | Original Provider | Test With |
-| ---- | ------------------------------ | ----------------- | --------- |
-| 8.1  | `examples/simple-test`         | openai            | echo      |
-| 8.2  | `examples/simple-csv`          | openai            | echo      |
-| 8.3  | `examples/json-output`         | openai            | echo      |
-| 8.4  | `examples/executable-prompts`  | echo              | as-is     |
-| 8.5  | `examples/csv-metadata`        | openai            | echo      |
-| 8.6  | `examples/jsonl-test-cases`    | openai            | echo      |
-| 8.7  | `examples/javascript-assert-external` | openai      | echo      |
-| 8.8  | `examples/nunjucks-custom-filters` | openai         | echo      |
-| 8.9  | `examples/external-defaulttest` | openai           | echo      |
-| 8.10 | `examples/multishot`           | openai            | echo      |
+| #    | Example                               | Original Provider | Test With |
+| ---- | ------------------------------------- | ----------------- | --------- |
+| 8.1  | `examples/simple-test`                | openai            | echo      |
+| 8.2  | `examples/simple-csv`                 | openai            | echo      |
+| 8.3  | `examples/json-output`                | openai            | echo      |
+| 8.4  | `examples/executable-prompts`         | echo              | as-is     |
+| 8.5  | `examples/csv-metadata`               | openai            | echo      |
+| 8.6  | `examples/jsonl-test-cases`           | openai            | echo      |
+| 8.7  | `examples/javascript-assert-external` | openai            | echo      |
+| 8.8  | `examples/nunjucks-custom-filters`    | openai            | echo      |
+| 8.9  | `examples/external-defaulttest`       | openai            | echo      |
+| 8.10 | `examples/multishot`                  | openai            | echo      |
 
 ---
 
@@ -553,6 +553,7 @@ Validate existing examples work with echo provider substitution:
 High-value tests for CLI filter flags and execution options.
 
 **Priority 1 - Count/Pattern Filters:**
+
 - [x] 1.8.1.1: First N tests (`--filter-first-n 2`)
 - [x] 1.8.1.2: First N > total (returns all)
 - [x] 1.8.1.4: Sample N tests (`--filter-sample 2`)
@@ -563,11 +564,13 @@ High-value tests for CLI filter flags and execution options.
 - [x] 1.8.3.3: Metadata array match
 
 **Priority 2 - Provider Filters:**
+
 - [x] 1.8.4.1: Provider by ID (`--filter-providers "echo"`)
 - [x] 1.8.4.2: Provider by label regex
 - [x] 1.8.6.1: Combined filters (pattern + first-n)
 
 **Priority 3 - Variable/Prompt Flags:**
+
 - [x] 1.9.1: Single var (`--var name=Alice`)
 - [x] 1.9.2: Multiple vars
 - [x] 1.9.3: Var precedence (test vars override --var)
@@ -576,6 +579,7 @@ High-value tests for CLI filter flags and execution options.
 - [x] 1.9.7: Prefix + suffix combined
 
 **Priority 4 - Output/Execution Flags:**
+
 - [ ] 1.10.1: Delay between tests
 - [x] 1.10.5: No table output
 - [x] 1.11.1: Description flag
@@ -583,6 +587,7 @@ High-value tests for CLI filter flags and execution options.
 - [x] 1.11.3: No write flag
 
 **Priority 5 - History-Based Filters (more complex):**
+
 - [x] 1.8.5.1: Filter failing from file
 - [ ] 1.8.5.3: Filter errors only from file
 - [ ] 1.12.1: Resume evaluation
@@ -613,11 +618,11 @@ High-value tests for CLI filter flags and execution options.
 
 ### Script Language Matrix
 
-| #     | Language | Versions    | Tests           |
-| ----- | -------- | ----------- | --------------- |
-| 9.2.1 | Python   | 3.9, 3.11   | Python provider |
-| 9.2.2 | Ruby     | 3.0, 3.3    | Ruby provider   |
-| 9.2.3 | Go       | 1.23        | Go provider     |
+| #     | Language | Versions  | Tests           |
+| ----- | -------- | --------- | --------------- |
+| 9.2.1 | Python   | 3.9, 3.11 | Python provider |
+| 9.2.2 | Ruby     | 3.0, 3.3  | Ruby provider   |
+| 9.2.3 | Go       | 1.23      | Go provider     |
 
 ---
 
@@ -679,7 +684,9 @@ module.exports = class EchoProvider {
   constructor(options) {
     this.id = options.id || 'echo-js';
   }
-  id() { return this.id; }
+  id() {
+    return this.id;
+  }
   async callApi(prompt) {
     return { output: `Echo: ${prompt}` };
   }
@@ -724,7 +731,9 @@ It is **NOT supported** for JavaScript/TypeScript providers. JS/TS providers mus
 ```javascript
 // Correct - class export
 module.exports = class MyProvider {
-  async callApi(prompt) { return { output: prompt }; }
+  async callApi(prompt) {
+    return { output: prompt };
+  }
 };
 
 // NOT supported - named function export for providers
@@ -732,6 +741,7 @@ module.exports = class MyProvider {
 ```
 
 The `:functionName` syntax IS supported for JavaScript in other contexts:
+
 - Assertions: `type: javascript, value: file://assert.js:checkFn`
 - Transforms: `transform: file://transform.js:transformFn`
 - Test generators: `tests: file://tests.js:generateTests`
@@ -786,11 +796,11 @@ scenarios:
 
 The CLI uses specific exit codes:
 
-| Exit Code | Meaning |
-|-----------|---------|
-| `0` | Success - all tests passed |
-| `100` | Test failures - one or more assertions failed |
-| `1` | Error - configuration error, provider error, or other runtime error |
+| Exit Code | Meaning                                                             |
+| --------- | ------------------------------------------------------------------- |
+| `0`       | Success - all tests passed                                          |
+| `100`     | Test failures - one or more assertions failed                       |
+| `1`       | Error - configuration error, provider error, or other runtime error |
 
 ### Output JSON Structure
 

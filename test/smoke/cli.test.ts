@@ -40,9 +40,7 @@ describe('CLI Smoke Tests', () => {
   beforeAll(() => {
     // Verify the built binary exists
     if (!fs.existsSync(CLI_PATH)) {
-      throw new Error(
-        `Built CLI not found at ${CLI_PATH}. Run 'npm run build' first.`,
-      );
+      throw new Error(`Built CLI not found at ${CLI_PATH}. Run 'npm run build' first.`);
     }
   });
 
@@ -82,17 +80,15 @@ describe('CLI Smoke Tests', () => {
     });
 
     it('1.1.5 - handles missing config file gracefully', () => {
-      const { stdout, stderr, exitCode } = runCli([
-        'eval',
-        '-c',
-        'nonexistent-config-file.yaml',
-      ]);
+      const { stdout, stderr, exitCode } = runCli(['eval', '-c', 'nonexistent-config-file.yaml']);
 
       expect(exitCode).toBe(1);
       // Error may appear in stdout (uncaught exception) or stderr
       const output = stdout + stderr;
       // Should indicate the file wasn't found
-      expect(output.toLowerCase()).toMatch(/not found|no such file|does not exist|cannot find|no configuration file/i);
+      expect(output.toLowerCase()).toMatch(
+        /not found|no such file|does not exist|cannot find|no configuration file/i,
+      );
     });
   });
 
@@ -131,11 +127,7 @@ describe('CLI Smoke Tests', () => {
     const fixturesDir = path.join(__dirname, 'fixtures/configs');
 
     it('1.3.1 - validates a correct config file', () => {
-      const { stdout, exitCode } = runCli([
-        'validate',
-        '-c',
-        path.join(fixturesDir, 'basic.yaml'),
-      ]);
+      const { stdout, exitCode } = runCli(['validate', '-c', path.join(fixturesDir, 'basic.yaml')]);
 
       expect(exitCode).toBe(0);
       expect(stdout.toLowerCase()).toContain('valid');

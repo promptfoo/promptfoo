@@ -42,9 +42,7 @@ function runCli(
 describe('Named Function Provider Smoke Tests', () => {
   beforeAll(() => {
     if (!fs.existsSync(CLI_PATH)) {
-      throw new Error(
-        `Built CLI not found at ${CLI_PATH}. Run 'npm run build' first.`,
-      );
+      throw new Error(`Built CLI not found at ${CLI_PATH}. Run 'npm run build' first.`);
     }
     fs.mkdirSync(OUTPUT_DIR, { recursive: true });
   });
@@ -60,10 +58,9 @@ describe('Named Function Provider Smoke Tests', () => {
       const configPath = path.join(CONFIGS_DIR, 'not-contains-assertion.yaml');
       const outputPath = path.join(OUTPUT_DIR, 'not-contains-output.json');
 
-      const { exitCode } = runCli(
-        ['eval', '-c', configPath, '-o', outputPath, '--no-cache'],
-        { cwd: CONFIGS_DIR },
-      );
+      const { exitCode } = runCli(['eval', '-c', configPath, '-o', outputPath, '--no-cache'], {
+        cwd: CONFIGS_DIR,
+      });
 
       expect(exitCode).toBe(0);
 
@@ -91,9 +88,7 @@ describe('Named Function Provider Smoke Tests', () => {
           (output.toLowerCase().includes('not found') ||
             output.toLowerCase().includes('no such file'))
         ) {
-          console.warn(
-            'Skipping Python named function test - Python not available',
-          );
+          console.warn('Skipping Python named function test - Python not available');
           return;
         }
       }
@@ -103,9 +98,7 @@ describe('Named Function Provider Smoke Tests', () => {
       const content = fs.readFileSync(outputPath, 'utf-8');
       const parsed = JSON.parse(content);
       expect(parsed.results.results[0].success).toBe(true);
-      expect(parsed.results.results[0].response.output).toContain(
-        'Python Custom Echo:',
-      );
+      expect(parsed.results.results[0].response.output).toContain('Python Custom Echo:');
     });
   });
 });
@@ -126,10 +119,9 @@ describe('Test Generator Smoke Tests', () => {
       const configPath = path.join(CONFIGS_DIR, 'js-test-generator.yaml');
       const outputPath = path.join(OUTPUT_DIR, 'js-generator-output.json');
 
-      const { exitCode } = runCli(
-        ['eval', '-c', configPath, '-o', outputPath, '--no-cache'],
-        { cwd: CONFIGS_DIR },
-      );
+      const { exitCode } = runCli(['eval', '-c', configPath, '-o', outputPath, '--no-cache'], {
+        cwd: CONFIGS_DIR,
+      });
 
       expect(exitCode).toBe(0);
 
@@ -165,10 +157,9 @@ describe('Additional Assertion Smoke Tests', () => {
       const configPath = path.join(CONFIGS_DIR, 'contains-assertion.yaml');
       const outputPath = path.join(OUTPUT_DIR, 'contains-output.json');
 
-      const { exitCode } = runCli(
-        ['eval', '-c', configPath, '-o', outputPath, '--no-cache'],
-        { cwd: CONFIGS_DIR },
-      );
+      const { exitCode } = runCli(['eval', '-c', configPath, '-o', outputPath, '--no-cache'], {
+        cwd: CONFIGS_DIR,
+      });
 
       expect(exitCode).toBe(0);
 
@@ -181,10 +172,9 @@ describe('Additional Assertion Smoke Tests', () => {
       const configPath = path.join(CONFIGS_DIR, 'starts-with-assertion.yaml');
       const outputPath = path.join(OUTPUT_DIR, 'starts-with-output.json');
 
-      const { exitCode } = runCli(
-        ['eval', '-c', configPath, '-o', outputPath, '--no-cache'],
-        { cwd: CONFIGS_DIR },
-      );
+      const { exitCode } = runCli(['eval', '-c', configPath, '-o', outputPath, '--no-cache'], {
+        cwd: CONFIGS_DIR,
+      });
 
       expect(exitCode).toBe(0);
 
@@ -197,10 +187,9 @@ describe('Additional Assertion Smoke Tests', () => {
       const configPath = path.join(CONFIGS_DIR, 'contains-json-assertion.yaml');
       const outputPath = path.join(OUTPUT_DIR, 'contains-json-output.json');
 
-      const { exitCode } = runCli(
-        ['eval', '-c', configPath, '-o', outputPath, '--no-cache'],
-        { cwd: CONFIGS_DIR },
-      );
+      const { exitCode } = runCli(['eval', '-c', configPath, '-o', outputPath, '--no-cache'], {
+        cwd: CONFIGS_DIR,
+      });
 
       expect(exitCode).toBe(0);
 
@@ -227,10 +216,9 @@ describe('Transform Smoke Tests', () => {
       const configPath = path.join(CONFIGS_DIR, 'transform-response.yaml');
       const outputPath = path.join(OUTPUT_DIR, 'transform-output.json');
 
-      const { exitCode } = runCli(
-        ['eval', '-c', configPath, '-o', outputPath, '--no-cache'],
-        { cwd: CONFIGS_DIR },
-      );
+      const { exitCode } = runCli(['eval', '-c', configPath, '-o', outputPath, '--no-cache'], {
+        cwd: CONFIGS_DIR,
+      });
 
       expect(exitCode).toBe(0);
 
@@ -257,10 +245,9 @@ describe('Feature Integration Smoke Tests', () => {
       const configPath = path.join(CONFIGS_DIR, 'provider-with-config.yaml');
       const outputPath = path.join(OUTPUT_DIR, 'provider-config-output.json');
 
-      const { exitCode } = runCli(
-        ['eval', '-c', configPath, '-o', outputPath, '--no-cache'],
-        { cwd: CONFIGS_DIR },
-      );
+      const { exitCode } = runCli(['eval', '-c', configPath, '-o', outputPath, '--no-cache'], {
+        cwd: CONFIGS_DIR,
+      });
 
       expect(exitCode).toBe(0);
 
@@ -277,10 +264,9 @@ describe('Feature Integration Smoke Tests', () => {
       const configPath = path.join(CONFIGS_DIR, 'default-test.yaml');
       const outputPath = path.join(OUTPUT_DIR, 'default-test-output.json');
 
-      const { exitCode } = runCli(
-        ['eval', '-c', configPath, '-o', outputPath, '--no-cache'],
-        { cwd: CONFIGS_DIR },
-      );
+      const { exitCode } = runCli(['eval', '-c', configPath, '-o', outputPath, '--no-cache'], {
+        cwd: CONFIGS_DIR,
+      });
 
       expect(exitCode).toBe(0);
 
@@ -289,9 +275,7 @@ describe('Feature Integration Smoke Tests', () => {
 
       // All 3 tests should pass with the defaultTest assertion
       expect(parsed.results.results.length).toBe(3);
-      expect(parsed.results.results.every((r: { success: boolean }) => r.success)).toBe(
-        true,
-      );
+      expect(parsed.results.results.every((r: { success: boolean }) => r.success)).toBe(true);
     });
   });
 
@@ -300,10 +284,9 @@ describe('Feature Integration Smoke Tests', () => {
       const configPath = path.join(CONFIGS_DIR, 'scenarios.yaml');
       const outputPath = path.join(OUTPUT_DIR, 'scenarios-output.json');
 
-      const { exitCode } = runCli(
-        ['eval', '-c', configPath, '-o', outputPath, '--no-cache'],
-        { cwd: CONFIGS_DIR },
-      );
+      const { exitCode } = runCli(['eval', '-c', configPath, '-o', outputPath, '--no-cache'], {
+        cwd: CONFIGS_DIR,
+      });
 
       expect(exitCode).toBe(0);
 
@@ -312,9 +295,7 @@ describe('Feature Integration Smoke Tests', () => {
 
       // Should have 3 tests total (2 from US scenario + 1 from EU scenario)
       expect(parsed.results.results.length).toBe(3);
-      expect(parsed.results.results.every((r: { success: boolean }) => r.success)).toBe(
-        true,
-      );
+      expect(parsed.results.results.every((r: { success: boolean }) => r.success)).toBe(true);
 
       // Verify scenarios data
       const outputs = parsed.results.results.map(

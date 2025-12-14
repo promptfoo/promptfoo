@@ -2,4 +2,4 @@
 # Provides default assertions applied to all tests
 assert:
   - type: contains
-    value: "Hello"
+    value: 'Hello'

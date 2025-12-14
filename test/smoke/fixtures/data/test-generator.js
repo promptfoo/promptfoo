@@ -3,7 +3,7 @@
  * Exports a function that returns an array of test cases
  */
 
-module.exports = function() {
+module.exports = function () {
   return [
     {
       vars: { name: 'Generated1' },

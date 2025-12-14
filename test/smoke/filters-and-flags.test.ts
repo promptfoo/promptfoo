@@ -43,9 +43,7 @@ function runCli(
 describe('Count-Based Filter Tests', () => {
   beforeAll(() => {
     if (!fs.existsSync(CLI_PATH)) {
-      throw new Error(
-        `Built CLI not found at ${CLI_PATH}. Run 'npm run build' first.`,
-      );
+      throw new Error(`Built CLI not found at ${CLI_PATH}. Run 'npm run build' first.`);
     }
     fs.mkdirSync(OUTPUT_DIR, { recursive: true });
   });
@@ -61,16 +59,7 @@ describe('Count-Based Filter Tests', () => {
     const outputPath = path.join(OUTPUT_DIR, 'first-n-output.json');
 
     const { exitCode } = runCli(
-      [
-        'eval',
-        '-c',
-        configPath,
-        '-o',
-        outputPath,
-        '--no-cache',
-        '--filter-first-n',
-        '2',
-      ],
+      ['eval', '-c', configPath, '-o', outputPath, '--no-cache', '--filter-first-n', '2'],
       { cwd: CONFIGS_DIR },
     );
 
@@ -95,16 +84,7 @@ describe('Count-Based Filter Tests', () => {
     const outputPath = path.join(OUTPUT_DIR, 'first-n-large-output.json');
 
     const { exitCode } = runCli(
-      [
-        'eval',
-        '-c',
-        configPath,
-        '-o',
-        outputPath,
-        '--no-cache',
-        '--filter-first-n',
-        '100',
-      ],
+      ['eval', '-c', configPath, '-o', outputPath, '--no-cache', '--filter-first-n', '100'],
       { cwd: CONFIGS_DIR },
     );
 
@@ -122,16 +102,7 @@ describe('Count-Based Filter Tests', () => {
     const outputPath = path.join(OUTPUT_DIR, 'sample-output.json');
 
     const { exitCode } = runCli(
-      [
-        'eval',
-        '-c',
-        configPath,
-        '-o',
-        outputPath,
-        '--no-cache',
-        '--filter-sample',
-        '3',
-      ],
+      ['eval', '-c', configPath, '-o', outputPath, '--no-cache', '--filter-sample', '3'],
       { cwd: CONFIGS_DIR },
     );
 
@@ -161,16 +132,7 @@ describe('Pattern Filter Tests', () => {
     const outputPath = path.join(OUTPUT_DIR, 'pattern-output.json');
 
     const { exitCode } = runCli(
-      [
-        'eval',
-        '-c',
-        configPath,
-        '-o',
-        outputPath,
-        '--no-cache',
-        '--filter-pattern',
-        'user.*test',
-      ],
+      ['eval', '-c', configPath, '-o', outputPath, '--no-cache', '--filter-pattern', 'user.*test'],
       { cwd: CONFIGS_DIR },
     );
 
@@ -337,16 +299,7 @@ describe('Provider Filter Tests', () => {
     const outputPath = path.join(OUTPUT_DIR, 'provider-filter-output.json');
 
     const { exitCode } = runCli(
-      [
-        'eval',
-        '-c',
-        configPath,
-        '-o',
-        outputPath,
-        '--no-cache',
-        '--filter-providers',
-        'echo',
-      ],
+      ['eval', '-c', configPath, '-o', outputPath, '--no-cache', '--filter-providers', 'echo'],
       { cwd: CONFIGS_DIR },
     );
 
@@ -364,16 +317,7 @@ describe('Provider Filter Tests', () => {
     const outputPath = path.join(OUTPUT_DIR, 'provider-label-output.json');
 
     const { exitCode } = runCli(
-      [
-        'eval',
-        '-c',
-        configPath,
-        '-o',
-        outputPath,
-        '--no-cache',
-        '--filter-providers',
-        'Custom.*',
-      ],
+      ['eval', '-c', configPath, '-o', outputPath, '--no-cache', '--filter-providers', 'Custom.*'],
       { cwd: CONFIGS_DIR },
     );
 
@@ -557,16 +501,7 @@ describe('Prompt Modification Tests', () => {
     const outputPath = path.join(OUTPUT_DIR, 'prefix-output.json');
 
     const { exitCode } = runCli(
-      [
-        'eval',
-        '-c',
-        configPath,
-        '-o',
-        outputPath,
-        '--no-cache',
-        '--prompt-prefix',
-        'PREFIX_',
-      ],
+      ['eval', '-c', configPath, '-o', outputPath, '--no-cache', '--prompt-prefix', 'PREFIX_'],
       { cwd: CONFIGS_DIR },
     );
 
@@ -585,16 +520,7 @@ describe('Prompt Modification Tests', () => {
     const outputPath = path.join(OUTPUT_DIR, 'suffix-output.json');
 
     const { exitCode } = runCli(
-      [
-        'eval',
-        '-c',
-        configPath,
-        '-o',
-        outputPath,
-        '--no-cache',
-        '--prompt-suffix',
-        '_SUFFIX',
-      ],
+      ['eval', '-c', configPath, '-o', outputPath, '--no-cache', '--prompt-suffix', '_SUFFIX'],
       { cwd: CONFIGS_DIR },
     );
 
@@ -698,16 +624,7 @@ describe('Output Flag Tests', () => {
     const csvOutput = path.join(OUTPUT_DIR, 'multi-out.csv');
 
     const { exitCode } = runCli(
-      [
-        'eval',
-        '-c',
-        configPath,
-        '-o',
-        jsonOutput,
-        '-o',
-        csvOutput,
-        '--no-cache',
-      ],
+      ['eval', '-c', configPath, '-o', jsonOutput, '-o', csvOutput, '--no-cache'],
       { cwd: CONFIGS_DIR },
     );
 
@@ -762,10 +679,9 @@ describe('History-Based Filter Tests', () => {
     const secondRunOutput = path.join(OUTPUT_DIR, 'failing-second-run.json');
 
     // First run: run all tests (some will fail)
-    const firstRun = runCli(
-      ['eval', '-c', configPath, '-o', firstRunOutput, '--no-cache'],
-      { cwd: CONFIGS_DIR },
-    );
+    const firstRun = runCli(['eval', '-c', configPath, '-o', firstRunOutput, '--no-cache'], {
+      cwd: CONFIGS_DIR,
+    });
 
     // Exit code 100 = some assertions failed
     expect(firstRun.exitCode).toBe(100);

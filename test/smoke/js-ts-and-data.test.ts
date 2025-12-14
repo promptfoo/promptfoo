@@ -42,9 +42,7 @@ function runCli(
 describe('JavaScript/TypeScript Config Smoke Tests', () => {
   beforeAll(() => {
     if (!fs.existsSync(CLI_PATH)) {
-      throw new Error(
-        `Built CLI not found at ${CLI_PATH}. Run 'npm run build' first.`,
-      );
+      throw new Error(`Built CLI not found at ${CLI_PATH}. Run 'npm run build' first.`);
     }
     fs.mkdirSync(OUTPUT_DIR, { recursive: true });
   });
@@ -60,14 +58,7 @@ describe('JavaScript/TypeScript Config Smoke Tests', () => {
       const configPath = path.join(CONFIGS_DIR, 'config-cjs.cjs');
       const outputPath = path.join(OUTPUT_DIR, 'cjs-config-output.json');
 
-      const { exitCode } = runCli([
-        'eval',
-        '-c',
-        configPath,
-        '-o',
-        outputPath,
-        '--no-cache',
-      ]);
+      const { exitCode } = runCli(['eval', '-c', configPath, '-o', outputPath, '--no-cache']);
 
       expect(exitCode).toBe(0);
 
@@ -81,14 +72,7 @@ describe('JavaScript/TypeScript Config Smoke Tests', () => {
       const configPath = path.join(CONFIGS_DIR, 'config-esm.mjs');
       const outputPath = path.join(OUTPUT_DIR, 'esm-config-output.json');
 
-      const { exitCode } = runCli([
-        'eval',
-        '-c',
-        configPath,
-        '-o',
-        outputPath,
-        '--no-cache',
-      ]);
+      const { exitCode } = runCli(['eval', '-c', configPath, '-o', outputPath, '--no-cache']);
 
       expect(exitCode).toBe(0);
 
@@ -104,14 +88,7 @@ describe('JavaScript/TypeScript Config Smoke Tests', () => {
       const configPath = path.join(CONFIGS_DIR, 'config-ts.ts');
       const outputPath = path.join(OUTPUT_DIR, 'ts-config-output.json');
 
-      const { exitCode } = runCli([
-        'eval',
-        '-c',
-        configPath,
-        '-o',
-        outputPath,
-        '--no-cache',
-      ]);
+      const { exitCode } = runCli(['eval', '-c', configPath, '-o', outputPath, '--no-cache']);
 
       expect(exitCode).toBe(0);
 
@@ -139,10 +116,9 @@ describe('JavaScript/TypeScript Provider Smoke Tests', () => {
       const configPath = path.join(CONFIGS_DIR, 'provider-cjs.yaml');
       const outputPath = path.join(OUTPUT_DIR, 'cjs-provider-output.json');
 
-      const { exitCode } = runCli(
-        ['eval', '-c', configPath, '-o', outputPath, '--no-cache'],
-        { cwd: CONFIGS_DIR },
-      );
+      const { exitCode } = runCli(['eval', '-c', configPath, '-o', outputPath, '--no-cache'], {
+        cwd: CONFIGS_DIR,
+      });
 
       expect(exitCode).toBe(0);
 
@@ -156,10 +132,9 @@ describe('JavaScript/TypeScript Provider Smoke Tests', () => {
       const configPath = path.join(CONFIGS_DIR, 'provider-esm.yaml');
       const outputPath = path.join(OUTPUT_DIR, 'esm-provider-output.json');
 
-      const { exitCode } = runCli(
-        ['eval', '-c', configPath, '-o', outputPath, '--no-cache'],
-        { cwd: CONFIGS_DIR },
-      );
+      const { exitCode } = runCli(['eval', '-c', configPath, '-o', outputPath, '--no-cache'], {
+        cwd: CONFIGS_DIR,
+      });
 
       expect(exitCode).toBe(0);
 
@@ -175,19 +150,16 @@ describe('JavaScript/TypeScript Provider Smoke Tests', () => {
       const configPath = path.join(CONFIGS_DIR, 'provider-ts.yaml');
       const outputPath = path.join(OUTPUT_DIR, 'ts-provider-output.json');
 
-      const { exitCode } = runCli(
-        ['eval', '-c', configPath, '-o', outputPath, '--no-cache'],
-        { cwd: CONFIGS_DIR },
-      );
+      const { exitCode } = runCli(['eval', '-c', configPath, '-o', outputPath, '--no-cache'], {
+        cwd: CONFIGS_DIR,
+      });
 
       expect(exitCode).toBe(0);
 
       const content = fs.readFileSync(outputPath, 'utf-8');
       const parsed = JSON.parse(content);
       expect(parsed.results.results[0].success).toBe(true);
-      expect(parsed.results.results[0].response.output).toContain(
-        'TypeScript Echo:',
-      );
+      expect(parsed.results.results[0].response.output).toContain('TypeScript Echo:');
     });
   });
 });
@@ -208,10 +180,9 @@ describe('Data Loading Format Smoke Tests', () => {
       const configPath = path.join(CONFIGS_DIR, 'jsonl-tests.yaml');
       const outputPath = path.join(OUTPUT_DIR, 'jsonl-tests-output.json');
 
-      const { exitCode } = runCli(
-        ['eval', '-c', configPath, '-o', outputPath, '--no-cache'],
-        { cwd: CONFIGS_DIR },
-      );
+      const { exitCode } = runCli(['eval', '-c', configPath, '-o', outputPath, '--no-cache'], {
+        cwd: CONFIGS_DIR,
+      });
 
       expect(exitCode).toBe(0);
 
@@ -233,10 +204,9 @@ describe('Data Loading Format Smoke Tests', () => {
       const configPath = path.join(CONFIGS_DIR, 'yaml-tests.yaml');
       const outputPath = path.join(OUTPUT_DIR, 'yaml-tests-output.json');
 
-      const { exitCode } = runCli(
-        ['eval', '-c', configPath, '-o', outputPath, '--no-cache'],
-        { cwd: CONFIGS_DIR },
-      );
+      const { exitCode } = runCli(['eval', '-c', configPath, '-o', outputPath, '--no-cache'], {
+        cwd: CONFIGS_DIR,
+      });
 
       expect(exitCode).toBe(0);
 
@@ -271,10 +241,9 @@ describe('Script Assertion Smoke Tests', () => {
       const configPath = path.join(CONFIGS_DIR, 'js-assertion.yaml');
       const outputPath = path.join(OUTPUT_DIR, 'js-assertion-output.json');
 
-      const { exitCode } = runCli(
-        ['eval', '-c', configPath, '-o', outputPath, '--no-cache'],
-        { cwd: CONFIGS_DIR },
-      );
+      const { exitCode } = runCli(['eval', '-c', configPath, '-o', outputPath, '--no-cache'], {
+        cwd: CONFIGS_DIR,
+      });
 
       expect(exitCode).toBe(0);
 
@@ -295,10 +264,7 @@ describe('Script Assertion Smoke Tests', () => {
       // Python may not be available in all environments
       if (exitCode !== 0) {
         const output = stdout + stderr;
-        if (
-          output.toLowerCase().includes('python') &&
-          output.toLowerCase().includes('not found')
-        ) {
+        if (output.toLowerCase().includes('python') && output.toLowerCase().includes('not found')) {
           console.warn('Skipping Python assertion test - Python not available');
           return;
         }

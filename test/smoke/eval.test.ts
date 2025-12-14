@@ -42,9 +42,7 @@ describe('Eval Smoke Tests', () => {
   beforeAll(() => {
     // Verify the built binary exists
     if (!fs.existsSync(CLI_PATH)) {
-      throw new Error(
-        `Built CLI not found at ${CLI_PATH}. Run 'npm run build' first.`,
-      );
+      throw new Error(`Built CLI not found at ${CLI_PATH}. Run 'npm run build' first.`);
     }
 
     // Create output directory for test artifacts
@@ -61,12 +59,7 @@ describe('Eval Smoke Tests', () => {
   describe('1.4 Eval Command', () => {
     it('1.4.1 - runs basic eval with echo provider', () => {
       const configPath = path.join(FIXTURES_DIR, 'configs/basic.yaml');
-      const { stdout, stderr, exitCode } = runCli([
-        'eval',
-        '-c',
-        configPath,
-        '--no-cache',
-      ]);
+      const { stdout, stderr, exitCode } = runCli(['eval', '-c', configPath, '--no-cache']);
 
       // Should complete successfully
       expect(exitCode).toBe(0);
@@ -79,14 +72,7 @@ describe('Eval Smoke Tests', () => {
       const configPath = path.join(FIXTURES_DIR, 'configs/basic.yaml');
       const outputPath = path.join(OUTPUT_DIR, 'output.json');
 
-      const { exitCode } = runCli([
-        'eval',
-        '-c',
-        configPath,
-        '-o',
-        outputPath,
-        '--no-cache',
-      ]);
+      const { exitCode } = runCli(['eval', '-c', configPath, '-o', outputPath, '--no-cache']);
 
       expect(exitCode).toBe(0);
       expect(fs.existsSync(outputPath)).toBe(true);
@@ -103,14 +89,7 @@ describe('Eval Smoke Tests', () => {
       const configPath = path.join(FIXTURES_DIR, 'configs/basic.yaml');
       const outputPath = path.join(OUTPUT_DIR, 'output.yaml');
 
-      const { exitCode } = runCli([
-        'eval',
-        '-c',
-        configPath,
-        '-o',
-        outputPath,
-        '--no-cache',
-      ]);
+      const { exitCode } = runCli(['eval', '-c', configPath, '-o', outputPath, '--no-cache']);
 
       expect(exitCode).toBe(0);
       expect(fs.existsSync(outputPath)).toBe(true);
@@ -124,14 +103,7 @@ describe('Eval Smoke Tests', () => {
       const configPath = path.join(FIXTURES_DIR, 'configs/basic.yaml');
       const outputPath = path.join(OUTPUT_DIR, 'output.csv');
 
-      const { exitCode } = runCli([
-        'eval',
-        '-c',
-        configPath,
-        '-o',
-        outputPath,
-        '--no-cache',
-      ]);
+      const { exitCode } = runCli(['eval', '-c', configPath, '-o', outputPath, '--no-cache']);
 
       expect(exitCode).toBe(0);
       expect(fs.existsSync(outputPath)).toBe(true);
@@ -185,13 +157,7 @@ describe('Eval Smoke Tests', () => {
 
     it('1.4.7 - runs with --verbose flag', () => {
       const configPath = path.join(FIXTURES_DIR, 'configs/basic.yaml');
-      const { stdout, exitCode } = runCli([
-        'eval',
-        '-c',
-        configPath,
-        '--verbose',
-        '--no-cache',
-      ]);
+      const { stdout, exitCode } = runCli(['eval', '-c', configPath, '--verbose', '--no-cache']);
 
       expect(exitCode).toBe(0);
       // Verbose mode should produce more output
@@ -216,12 +182,7 @@ describe('Eval Smoke Tests', () => {
     });
 
     it('1.7.3 - returns exit code 1 for config errors', () => {
-      const { exitCode } = runCli([
-        'eval',
-        '-c',
-        'nonexistent-file.yaml',
-        '--no-cache',
-      ]);
+      const { exitCode } = runCli(['eval', '-c', 'nonexistent-file.yaml', '--no-cache']);
 
       expect(exitCode).toBe(1);
     });
@@ -232,14 +193,7 @@ describe('Eval Smoke Tests', () => {
       const configPath = path.join(FIXTURES_DIR, 'configs/basic.yaml');
       const outputPath = path.join(OUTPUT_DIR, 'echo-test.json');
 
-      const { exitCode } = runCli([
-        'eval',
-        '-c',
-        configPath,
-        '-o',
-        outputPath,
-        '--no-cache',
-      ]);
+      const { exitCode } = runCli(['eval', '-c', configPath, '-o', outputPath, '--no-cache']);
 
       expect(exitCode).toBe(0);
 

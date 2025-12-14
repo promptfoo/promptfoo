@@ -41,9 +41,7 @@ function runCli(
 describe('Config Format Smoke Tests', () => {
   beforeAll(() => {
     if (!fs.existsSync(CLI_PATH)) {
-      throw new Error(
-        `Built CLI not found at ${CLI_PATH}. Run 'npm run build' first.`,
-      );
+      throw new Error(`Built CLI not found at ${CLI_PATH}. Run 'npm run build' first.`);
     }
     fs.mkdirSync(OUTPUT_DIR, { recursive: true });
   });
@@ -59,14 +57,7 @@ describe('Config Format Smoke Tests', () => {
       const configPath = path.join(FIXTURES_DIR, 'configs/basic.json');
       const outputPath = path.join(OUTPUT_DIR, 'json-config-output.json');
 
-      const { exitCode } = runCli([
-        'eval',
-        '-c',
-        configPath,
-        '-o',
-        outputPath,
-        '--no-cache',
-      ]);
+      const { exitCode } = runCli(['eval', '-c', configPath, '-o', outputPath, '--no-cache']);
 
       expect(exitCode).toBe(0);
 
@@ -94,14 +85,7 @@ describe('Provider Smoke Tests', () => {
       const configPath = path.join(FIXTURES_DIR, 'configs/exec-provider.yaml');
       const outputPath = path.join(OUTPUT_DIR, 'exec-provider-output.json');
 
-      const { exitCode } = runCli([
-        'eval',
-        '-c',
-        configPath,
-        '-o',
-        outputPath,
-        '--no-cache',
-      ]);
+      const { exitCode } = runCli(['eval', '-c', configPath, '-o', outputPath, '--no-cache']);
 
       expect(exitCode).toBe(0);
 
@@ -162,10 +146,9 @@ describe('Data Loading Smoke Tests', () => {
       const configPath = path.join(FIXTURES_DIR, 'configs/csv-tests.yaml');
       const outputPath = path.join(OUTPUT_DIR, 'csv-tests-output.json');
 
-      const { exitCode } = runCli(
-        ['eval', '-c', configPath, '-o', outputPath, '--no-cache'],
-        { cwd: path.join(FIXTURES_DIR, 'configs') },
-      );
+      const { exitCode } = runCli(['eval', '-c', configPath, '-o', outputPath, '--no-cache'], {
+        cwd: path.join(FIXTURES_DIR, 'configs'),
+      });
 
       expect(exitCode).toBe(0);
 
@@ -187,10 +170,9 @@ describe('Data Loading Smoke Tests', () => {
       const configPath = path.join(FIXTURES_DIR, 'configs/json-tests.yaml');
       const outputPath = path.join(OUTPUT_DIR, 'json-tests-output.json');
 
-      const { exitCode } = runCli(
-        ['eval', '-c', configPath, '-o', outputPath, '--no-cache'],
-        { cwd: path.join(FIXTURES_DIR, 'configs') },
-      );
+      const { exitCode } = runCli(['eval', '-c', configPath, '-o', outputPath, '--no-cache'], {
+        cwd: path.join(FIXTURES_DIR, 'configs'),
+      });
 
       expect(exitCode).toBe(0);
 
@@ -213,10 +195,9 @@ describe('Data Loading Smoke Tests', () => {
       const configPath = path.join(FIXTURES_DIR, 'configs/file-prompt.yaml');
       const outputPath = path.join(OUTPUT_DIR, 'file-prompt-output.json');
 
-      const { exitCode } = runCli(
-        ['eval', '-c', configPath, '-o', outputPath, '--no-cache'],
-        { cwd: path.join(FIXTURES_DIR, 'configs') },
-      );
+      const { exitCode } = runCli(['eval', '-c', configPath, '-o', outputPath, '--no-cache'], {
+        cwd: path.join(FIXTURES_DIR, 'configs'),
+      });
 
       expect(exitCode).toBe(0);
 
@@ -246,14 +227,7 @@ describe('Assertion Smoke Tests', () => {
       const configPath = path.join(FIXTURES_DIR, 'configs/assertions.yaml');
       const outputPath = path.join(OUTPUT_DIR, 'assertions-output.json');
 
-      const { exitCode } = runCli([
-        'eval',
-        '-c',
-        configPath,
-        '-o',
-        outputPath,
-        '--no-cache',
-      ]);
+      const { exitCode } = runCli(['eval', '-c', configPath, '-o', outputPath, '--no-cache']);
 
       expect(exitCode).toBe(0);
 
@@ -272,14 +246,7 @@ describe('Assertion Smoke Tests', () => {
       const configPath = path.join(FIXTURES_DIR, 'configs/assertions.yaml');
       const outputPath = path.join(OUTPUT_DIR, 'equals-output.json');
 
-      const { exitCode } = runCli([
-        'eval',
-        '-c',
-        configPath,
-        '-o',
-        outputPath,
-        '--no-cache',
-      ]);
+      const { exitCode } = runCli(['eval', '-c', configPath, '-o', outputPath, '--no-cache']);
 
       expect(exitCode).toBe(0);
 
@@ -296,14 +263,7 @@ describe('Assertion Smoke Tests', () => {
       const configPath = path.join(FIXTURES_DIR, 'configs/assertions.yaml');
       const outputPath = path.join(OUTPUT_DIR, 'regex-output.json');
 
-      const { exitCode } = runCli([
-        'eval',
-        '-c',
-        configPath,
-        '-o',
-        outputPath,
-        '--no-cache',
-      ]);
+      const { exitCode } = runCli(['eval', '-c', configPath, '-o', outputPath, '--no-cache']);
 
       expect(exitCode).toBe(0);
 
@@ -319,14 +279,7 @@ describe('Assertion Smoke Tests', () => {
       const configPath = path.join(FIXTURES_DIR, 'configs/assertions.yaml');
       const outputPath = path.join(OUTPUT_DIR, 'isjson-output.json');
 
-      const { exitCode } = runCli([
-        'eval',
-        '-c',
-        configPath,
-        '-o',
-        outputPath,
-        '--no-cache',
-      ]);
+      const { exitCode } = runCli(['eval', '-c', configPath, '-o', outputPath, '--no-cache']);
 
       expect(exitCode).toBe(0);
 
@@ -342,14 +295,7 @@ describe('Assertion Smoke Tests', () => {
       const configPath = path.join(FIXTURES_DIR, 'configs/assertions.yaml');
       const outputPath = path.join(OUTPUT_DIR, 'js-output.json');
 
-      const { exitCode } = runCli([
-        'eval',
-        '-c',
-        configPath,
-        '-o',
-        outputPath,
-        '--no-cache',
-      ]);
+      const { exitCode } = runCli(['eval', '-c', configPath, '-o', outputPath, '--no-cache']);
 
       expect(exitCode).toBe(0);
 

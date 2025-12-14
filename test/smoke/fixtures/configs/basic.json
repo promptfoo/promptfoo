@@ -6,10 +6,7 @@
   "tests": [
     {
       "vars": { "name": "JSON" },
-      "assert": [
-        { "type": "contains", "value": "Hello" },
-        { "type": "contains", "value": "JSON" }
-      ]
+      "assert": [{ "type": "contains", "value": "Hello" }, { "type": "contains", "value": "JSON" }]
     }
   ]
 }
