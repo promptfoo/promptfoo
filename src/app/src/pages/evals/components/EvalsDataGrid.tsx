@@ -274,11 +274,12 @@ export default function EvalsDataGrid({
       }
     }
 
-    // Sort favorites to the top, maintaining date order within each group
+    // Sort favorites to the top, maintaining the existing order within each group
+    // (the array is already sorted by createdAt desc from the API)
     // Create a copy to avoid mutating the original array
     return [...rows_].sort((a, b) => {
       if (a.isFavorite === b.isFavorite) {
-        return 0; // Maintain existing order (by date)
+        return 0; // Keep original order (already sorted by date)
       }
       return a.isFavorite ? -1 : 1; // Favorites come first
     });
