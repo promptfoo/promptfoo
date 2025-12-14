@@ -2964,6 +2964,7 @@ describe('AwsBedrockCompletionProvider', () => {
       'test prompt',
       expect.any(Array),
       'us.anthropic.claude-3-7-sonnet-20250219-v1:0',
+      undefined, // vars not provided when context is undefined
     );
   });
 
@@ -3004,6 +3005,7 @@ describe('AwsBedrockCompletionProvider', () => {
       'test prompt',
       expect.any(Array),
       'us.anthropic.claude-3-7-sonnet-20250219-v1:0',
+      {}, // vars from context
     );
   });
 
@@ -3047,6 +3049,7 @@ describe('AwsBedrockCompletionProvider', () => {
       'test prompt',
       expect.any(Array),
       'us.anthropic.claude-3-7-sonnet-20250219-v1:0',
+      {}, // vars from context
     );
   });
 });
