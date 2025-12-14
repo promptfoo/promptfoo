@@ -32,7 +32,9 @@ Full documentation is available at [promptfoo.dev/docs](https://www.promptfoo.de
 ## Requirements
 
 - Python 3.8+
-- Node.js 20+ (bundled with the package or installed separately)
+- Supported platforms: Linux (x64, arm64), macOS (x64, arm64), Windows (x64)
+
+The package includes a standalone binary with the Node.js runtime bundled, so no separate Node.js installation is required.
 
 ## Alternative Installation Methods
 

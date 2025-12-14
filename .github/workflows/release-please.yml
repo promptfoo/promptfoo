@@ -228,7 +228,7 @@ jobs:
           echo "Uploading ${{ env.ARCHIVE_NAME }} to release $TAG_NAME"
           gh release upload "$TAG_NAME" "${{ env.ARCHIVE_NAME }}" --clobber --repo ${{ github.repository }}
 
-  # Build Python wheels and publish to PyPI
+  # Build Python wheels with platform-specific SEA binaries
   build-python:
     if: needs.release-please.outputs.release_created
     needs: [build-bundles, release-please]
@@ -239,18 +239,23 @@ jobs:
           - os: ubuntu-latest
             platform: linux-x64
             wheel_platform: manylinux_2_17_x86_64
+            binary_name: promptfoo
           - os: ubuntu-24.04-arm
             platform: linux-arm64
             wheel_platform: manylinux_2_17_aarch64
+            binary_name: promptfoo
           - os: macos-13
             platform: darwin-x64
             wheel_platform: macosx_10_15_x86_64
+            binary_name: promptfoo
           - os: macos-14
             platform: darwin-arm64
             wheel_platform: macosx_11_0_arm64
+            binary_name: promptfoo
           - os: windows-latest
             platform: win32-x64
             wheel_platform: win_amd64
+            binary_name: promptfoo.exe
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
@@ -268,9 +273,10 @@ jobs:
 
       - run: npm ci
 
-      - name: Build bundle
-        run: npm run bundle
+      - name: Build SEA binary
+        run: npx tsx scripts/bundle.ts --sea
         env:
+          NODE_OPTIONS: --max-old-space-size=4096
           PROMPTFOO_POSTHOG_KEY: ${{ secrets.PROMPTFOO_POSTHOG_KEY }}
 
       - name: Prepare Python package
@@ -278,20 +284,44 @@ jobs:
         env:
           VERSION: ${{ needs.release-please.outputs.tag_name }}
         run: |
-          # Copy bundle to Python package
+          # Create _bin directory and copy SEA binary + assets
           mkdir -p python/src/promptfoo/_bin
-          cp -r bundle/* python/src/promptfoo/_bin/
+
+          # Copy the SEA binary (standalone executable with embedded Node.js)
+          cp "bundle/${{ matrix.binary_name }}" python/src/promptfoo/_bin/
+
+          # Copy assets (drizzle migrations, etc.)
+          if [ -d "bundle/assets" ]; then
+            cp -r bundle/assets python/src/promptfoo/_bin/
+          fi
 
           # Sync version from release tag to Python package
-          # Strip 'v' prefix if present (release-please uses vX.Y.Z format)
           PY_VERSION="${VERSION#v}"
           echo "Setting Python package version to: $PY_VERSION"
           sed -i.bak "s/__version__ = \".*\"/__version__ = \"$PY_VERSION\"/" python/src/promptfoo/__init__.py
           rm -f python/src/promptfoo/__init__.py.bak
 
-      - name: Build wheel
+      - name: Build and tag wheel
+        shell: bash
         working-directory: python
-        run: uv build --wheel
+        run: |
+          # Build the wheel (will be py3-none-any initially)
+          uv build --wheel
+
+          # Install wheel package to retag it
+          uv pip install wheel --system
+
+          # Find the built wheel
+          WHEEL_FILE=$(ls dist/*.whl)
+          echo "Built wheel: $WHEEL_FILE"
+
+          # Retag the wheel with the correct platform tag
+          # This changes py3-none-any to py3-none-<platform>
+          python -m wheel tags --platform-tag=${{ matrix.wheel_platform }} --remove "$WHEEL_FILE"
+
+          # Show the final wheel
+          ls -la dist/
+          echo "Final wheel: $(ls dist/*.whl)"
 
       - uses: actions/upload-artifact@v4
         with:
