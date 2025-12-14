@@ -343,9 +343,11 @@ export default function EvalsDataGrid({
         {
           field: 'isFavorite',
           headerName: '⭐',
-          width: 60,
+          width: 70,
           type: 'boolean',
           sortable: true,
+          headerAlign: 'center',
+          align: 'center',
           valueGetter: (value: Eval['isFavorite']) => value ?? false,
           renderCell: (params: GridRenderCellParams<Eval>) => (
             <IconButton

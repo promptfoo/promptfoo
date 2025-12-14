@@ -4,6 +4,7 @@ import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
+import Typography from '@mui/material/Typography';
 import EvalsDataGrid from '../../evals/components/EvalsDataGrid';
 
 type Props = {
@@ -29,10 +30,16 @@ const EvalSelectorDialog = ({
 }: Props) => {
   return (
     <Dialog open={open} onClose={onClose} maxWidth="lg" fullWidth>
-      {title ? <DialogTitle>{title}</DialogTitle> : null}
-      <DialogContent>
-        {description ? <Box sx={{ mb: 4 }}>{description}</Box> : null}
-        <Box sx={{ width: '100%', mt: 2 }}>
+      {title ? (
+        <DialogTitle sx={{ pb: 0 }}>
+          {title}
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+            {description || 'Click a row to select an evaluation'}
+          </Typography>
+        </DialogTitle>
+      ) : null}
+      <DialogContent sx={{ pt: 1 }}>
+        <Box sx={{ width: '100%' }}>
           <EvalsDataGrid
             onEvalSelected={onEvalSelected}
             focusedEvalId={focusedEvalId}
@@ -42,7 +49,9 @@ const EvalSelectorDialog = ({
         </Box>
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose}>Cancel</Button>
+        <Button variant="outlined" onClick={onClose}>
+          Cancel
+        </Button>
       </DialogActions>
     </Dialog>
   );
