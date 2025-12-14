@@ -206,10 +206,12 @@ describe('TestCaseGenerationProvider', () => {
         within(testCaseDialogComponent).queryByTestId('strategy-chip'),
       ).not.toBeInTheDocument();
 
-      // The hate speech plugin's display name should be rendered in the dialog
-      const pluginChipComponent = within(testCaseDialogComponent).getByTestId('plugin-chip');
-      expect(pluginChipComponent).toBeInTheDocument();
-      expect(pluginChipComponent).toHaveTextContent('Plugin: Hate Speech');
+      // The plugin label and name should be rendered in the dialog
+      const pluginLabel = within(testCaseDialogComponent).getByTestId('plugin-chip');
+      expect(pluginLabel).toBeInTheDocument();
+      expect(pluginLabel).toHaveTextContent('Plugin Preview');
+      // Plugin name should be in the dialog title
+      expect(within(testCaseDialogComponent).getByText('Hate Speech')).toBeInTheDocument();
 
       await waitFor(() => {
         expect(

@@ -257,53 +257,43 @@ describe('TestCaseDialog', () => {
   });
 
   describe('allowPluginChange prop', () => {
-    it('should NOT show strategy chip when allowPluginChange is false', () => {
+    it('should NOT show strategy label when allowPluginChange is false', () => {
       renderWithTheme(<TestCaseDialog {...defaultProps} allowPluginChange={false} />);
 
       expect(screen.queryByTestId('strategy-chip')).not.toBeInTheDocument();
     });
 
-    it('should show strategy chip when allowPluginChange is true', () => {
+    it('should show strategy name as title when allowPluginChange is true', () => {
       renderWithTheme(<TestCaseDialog {...defaultProps} allowPluginChange={true} />);
 
       expect(screen.getByTestId('strategy-chip')).toBeInTheDocument();
-      expect(screen.getByTestId('strategy-chip')).toHaveTextContent('Strategy: Baseline Testing');
+      expect(screen.getByTestId('strategy-chip')).toHaveTextContent('Strategy Preview');
+      // Strategy name should be in the dialog title
+      expect(screen.getByText('Baseline Testing')).toBeInTheDocument();
     });
 
-    it('should show static plugin chip when allowPluginChange is false', () => {
+    it('should show plugin name as title when allowPluginChange is false', () => {
       renderWithTheme(<TestCaseDialog {...defaultProps} allowPluginChange={false} />);
 
-      const pluginChip = screen.getByTestId('plugin-chip');
-      expect(pluginChip).toBeInTheDocument();
-      expect(pluginChip).toHaveTextContent('Plugin: Hate Speech');
-      // Should not have a dropdown arrow
-      expect(pluginChip.querySelector('svg')).toBeNull();
+      const pluginLabel = screen.getByTestId('plugin-chip');
+      expect(pluginLabel).toBeInTheDocument();
+      expect(pluginLabel).toHaveTextContent('Plugin Preview');
+      // Plugin name should be in the dialog title
+      expect(screen.getByText('Hate Speech')).toBeInTheDocument();
     });
 
-    it('should show clickable plugin chip with dropdown when allowPluginChange is true', async () => {
-      const user = userEvent.setup();
+    it('should show plugin dropdown when allowPluginChange is true', async () => {
       renderWithTheme(<TestCaseDialog {...defaultProps} allowPluginChange={true} />);
 
-      const pluginChip = screen.getByTestId('plugin-chip');
-      expect(pluginChip).toBeInTheDocument();
-      expect(pluginChip).toHaveTextContent('Plugin: Hate Speech');
-
-      // Click the chip to open the popover
-      await user.click(pluginChip);
-
-      // Popover should appear with plugin selector
-      await waitFor(() => {
-        expect(screen.getByLabelText('Select Plugin')).toBeInTheDocument();
-      });
+      // Plugin dropdown should be directly visible (not behind a popover)
+      expect(screen.getByTestId('plugin-dropdown')).toBeInTheDocument();
+      expect(screen.getByLabelText('Plugin')).toBeInTheDocument();
     });
 
-    it('should show dropdown arrow icon when allowPluginChange is true', () => {
-      renderWithTheme(<TestCaseDialog {...defaultProps} allowPluginChange={true} />);
+    it('should NOT show plugin dropdown when allowPluginChange is false', () => {
+      renderWithTheme(<TestCaseDialog {...defaultProps} allowPluginChange={false} />);
 
-      const pluginChip = screen.getByTestId('plugin-chip');
-      // Check for the ArrowDropDownIcon (SVG element)
-      const svg = pluginChip.querySelector('svg');
-      expect(svg).toBeInTheDocument();
+      expect(screen.queryByTestId('plugin-dropdown')).not.toBeInTheDocument();
     });
   });
 
