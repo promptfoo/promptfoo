@@ -44,6 +44,8 @@
     "build:watch": "NODE_OPTIONS='--max-old-space-size=8192' tsdown --watch",
     "build": "concurrently -g --kill-others-on-fail \"tsc --noEmit\" \"NODE_OPTIONS='--max-old-space-size=8192' tsdown\" \"npm run build:app\"",
     "postbuild": "tsx scripts/postbuild.ts",
+    "bundle": "npm run build:app && tsx scripts/bundle.ts",
+    "bundle:sea": "tsx scripts/build-sea.ts",
     "citation:generate": "tsx scripts/generateCitation.ts",
     "db:generate": "npx drizzle-kit generate",
     "db:migrate": "tsx src/migrate.ts",
