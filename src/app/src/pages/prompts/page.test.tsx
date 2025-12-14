@@ -31,7 +31,15 @@ vi.mock('@app/utils/api', () => ({
 
 // Mock the Prompts component to simplify testing
 vi.mock('./Prompts', () => ({
-  default: ({ data, isLoading, error }: { data: unknown[]; isLoading: boolean; error: string | null }) => (
+  default: ({
+    data,
+    isLoading,
+    error,
+  }: {
+    data: unknown[];
+    isLoading: boolean;
+    error: string | null;
+  }) => (
     <div data-testid="prompts-component">
       {isLoading && <span>Loading...</span>}
       {error && <span>{error}</span>}
@@ -102,9 +110,9 @@ describe('PromptsPage', () => {
     });
 
     // Get the update handler that was registered
-    const updateHandler = mockSocket.on.mock.calls.find(
-      (call: [string, () => void]) => call[0] === 'update',
-    )?.[1];
+    const updateHandler = mockSocket.on.mock.calls.find((call) => call[0] === 'update')?.[1] as
+      | (() => void)
+      | undefined;
 
     expect(updateHandler).toBeDefined();
 
@@ -159,9 +167,9 @@ describe('PromptsPage', () => {
     });
 
     // Get the update handler
-    const updateHandler = mockSocket.on.mock.calls.find(
-      (call: [string, () => void]) => call[0] === 'update',
-    )?.[1];
+    const updateHandler = mockSocket.on.mock.calls.find((call) => call[0] === 'update')?.[1] as
+      | (() => void)
+      | undefined;
 
     // Trigger background update
     if (updateHandler) {
