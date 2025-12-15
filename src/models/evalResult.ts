@@ -222,6 +222,39 @@ export default class EvalResult {
     }
   }
 
+  /**
+   * Find results with flexible filtering options.
+   * Used by the /eval/:evalId/results API endpoint.
+   */
+  static async findMany(filters: {
+    evalId: string;
+    testIdx?: number;
+    promptIdx?: number;
+    success?: boolean;
+  }): Promise<EvalResult[]> {
+    const db = getDb();
+
+    const conditions = [eq(evalResultsTable.evalId, filters.evalId)];
+
+    if (filters.testIdx !== undefined) {
+      conditions.push(eq(evalResultsTable.testIdx, filters.testIdx));
+    }
+    if (filters.promptIdx !== undefined) {
+      conditions.push(eq(evalResultsTable.promptIdx, filters.promptIdx));
+    }
+    if (filters.success !== undefined) {
+      conditions.push(eq(evalResultsTable.success, filters.success));
+    }
+
+    const results = await db
+      .select()
+      .from(evalResultsTable)
+      .where(and(...conditions))
+      .orderBy(evalResultsTable.testIdx, evalResultsTable.promptIdx);
+
+    return results.map((result) => new EvalResult({ ...result, persisted: true }));
+  }
+
   id: string;
   evalId: string;
   description?: string | null;
@@ -354,6 +387,32 @@ export default class EvalResult {
       vars: shouldStripTestVars ? {} : this.testCase.vars || {},
       metadata: shouldStripMetadata ? {} : this.metadata,
       failureReason: this.failureReason,
+    };
+  }
+
+  /**
+   * Convert to JSON format for the Results API response.
+   * Includes all relevant fields for programmatic access.
+   */
+  toResultsApiJson() {
+    return {
+      id: this.id,
+      evalId: this.evalId,
+      testIdx: this.testIdx,
+      promptIdx: this.promptIdx,
+      testCase: this.testCase,
+      prompt: this.prompt,
+      provider: this.provider,
+      output: this.response?.output,
+      response: this.response || null,
+      success: this.success,
+      score: this.score,
+      gradingResult: this.gradingResult,
+      namedScores: this.namedScores,
+      latencyMs: this.latencyMs,
+      cost: this.cost,
+      metadata: this.metadata,
+      error: this.error || null,
     };
   }
 }

@@ -616,6 +616,106 @@ evalRouter.post(
   },
 );
 
+/**
+ * GET /api/eval/:evalId/results
+ *
+ * Query evaluation results with optional filters. Useful for programmatic access
+ * to manual ratings (thumbs up/down) and building integrations with external systems.
+ *
+ * Query parameters:
+ * - testIdx: Filter by test index (0-based, matches tests array order)
+ * - promptIdx: Filter by provider/prompt index (0-based)
+ * - hasHumanRating: Only return results with manual ratings (thumbs up/down)
+ * - success: Filter by pass (true) or fail (false)
+ *
+ * @example
+ * GET /api/eval/abc123/results?hasHumanRating=true
+ * GET /api/eval/abc123/results?testIdx=5&promptIdx=0
+ */
+evalRouter.get('/:evalId/results', async (req: Request, res: Response): Promise<void> => {
+  try {
+    // Validate params and query
+    const paramsResult = ApiSchemas.Eval.Results.Params.safeParse(req.params);
+    if (!paramsResult.success) {
+      res.status(400).json({ error: fromZodError(paramsResult.error).message });
+      return;
+    }
+
+    const queryResult = ApiSchemas.Eval.Results.Query.safeParse(req.query);
+    if (!queryResult.success) {
+      res.status(400).json({ error: fromZodError(queryResult.error).message });
+      return;
+    }
+
+    const { evalId } = paramsResult.data;
+    const { testIdx, promptIdx, hasHumanRating, success } = queryResult.data;
+
+    // Validate eval exists
+    const eval_ = await Eval.findById(evalId);
+    if (!eval_) {
+      res.status(404).json({ error: 'Evaluation not found' });
+      return;
+    }
+
+    // Check if eval is v4+ (uses normalized results table)
+    if (eval_.useOldResults()) {
+      res.status(501).json({
+        error:
+          'This endpoint requires evaluation version 4 or higher. ' +
+          'Older evaluations store results in a different format.',
+        evalVersion: eval_.version(),
+      });
+      return;
+    }
+
+    // Query results with filters
+    const filters: {
+      evalId: string;
+      testIdx?: number;
+      promptIdx?: number;
+      success?: boolean;
+    } = { evalId };
+
+    if (testIdx !== undefined) {
+      filters.testIdx = testIdx;
+    }
+    if (promptIdx !== undefined) {
+      filters.promptIdx = promptIdx;
+    }
+    if (success !== undefined) {
+      filters.success = success;
+    }
+
+    let results = await EvalResult.findMany(filters);
+
+    // Filter for human ratings (done in JS since it's a JSON field query)
+    if (hasHumanRating) {
+      results = results.filter((r) =>
+        r.gradingResult?.componentResults?.some(
+          (cr: { assertion?: { type?: string } }) => cr.assertion?.type === 'human',
+        ),
+      );
+    }
+
+    // Build and validate response
+    const responseData = {
+      results: results.map((r) => r.toResultsApiJson()),
+      count: results.length,
+    };
+
+    const response = ApiSchemas.Eval.Results.Response.parse(responseData);
+    res.json(response);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ error: fromZodError(error).message });
+      return;
+    }
+
+    logger.error('[GET /api/eval/:evalId/results] Error:', { error });
+    res.status(500).json({ error: 'Failed to fetch evaluation results' });
+  }
+});
+
 evalRouter.post('/', async (req: Request, res: Response): Promise<void> => {
   const body = req.body;
   try {
