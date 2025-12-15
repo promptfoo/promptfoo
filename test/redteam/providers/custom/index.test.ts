@@ -1056,11 +1056,13 @@ describe('CustomProvider', () => {
       reason: 'No jailbreak on second turn',
     };
 
+    const testRubric = 'Test grading rubric';
+
     // Create the mock getResult function outside mockImplementation so it persists across calls
     const mockGetResult = vi
       .fn()
-      .mockResolvedValueOnce({ grade: firstGraderResult })
-      .mockResolvedValueOnce({ grade: secondGraderResult });
+      .mockResolvedValueOnce({ grade: firstGraderResult, rubric: testRubric })
+      .mockResolvedValueOnce({ grade: secondGraderResult, rubric: testRubric });
 
     // Mock grader to fail on first turn, pass on second
     mockGetGraderById.mockImplementation(function () {
@@ -1103,8 +1105,11 @@ describe('CustomProvider', () => {
 
     const result = await testProvider.callApi(prompt, context);
 
-    // Should continue to max turns and store the LAST grader result
-    expect(result.metadata?.storedGraderResult).toEqual(secondGraderResult);
+    // Should continue to max turns and store the LAST grader result (with assertion.value set to rubric)
+    expect(result.metadata?.storedGraderResult).toEqual({
+      ...secondGraderResult,
+      assertion: { type: 'mock-grader', value: testRubric },
+    });
     expect(result.metadata?.stopReason).toBe('Max rounds reached');
     expect(result.metadata?.successfulAttacks).toHaveLength(1);
     expect(result.metadata?.totalSuccessfulAttacks).toBe(1);
