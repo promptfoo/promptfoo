@@ -105,7 +105,39 @@ export async function loadApiProvider(
     const modulePath = path.isAbsolute(filePath)
       ? filePath
       : path.join(basePath || process.cwd(), filePath);
-    const rawContent = yaml.load(fs.readFileSync(modulePath, 'utf8'));
+
+    if (!fs.existsSync(modulePath)) {
+      const absolutePath = path.resolve(modulePath);
+      const errorMessage = dedent`
+        Provider file not found: ${chalk.bold(absolutePath)}
+
+        ${chalk.white('Please verify that:')}
+          - The file path is correct
+          - The file exists at the specified location
+          ${basePath ? `- The path is relative to: ${path.resolve(basePath)}` : '- The path is relative to the current directory'}
+
+        ${chalk.white('For more information on file providers, visit:')} ${chalk.cyan('https://promptfoo.dev/docs/providers/file/')}
+      `;
+      logger.error(errorMessage);
+      throw new Error(`Provider file not found: ${absolutePath}`);
+    }
+
+    let rawContent;
+    try {
+      rawContent = yaml.load(fs.readFileSync(modulePath, 'utf8'));
+    } catch (error) {
+      const readErrorAbsPath = path.resolve(modulePath);
+      const errorMessage = dedent`
+        Failed to read provider file: ${chalk.bold(readErrorAbsPath)}
+
+        ${chalk.white('Error:')} ${error instanceof Error ? error.message : String(error)}
+      `;
+      logger.error(errorMessage);
+      throw new Error(
+        `Failed to read provider file ${readErrorAbsPath}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+
     const fileContent = maybeLoadConfigFromExternalFile(rawContent) as ProviderOptions;
     invariant(fileContent, `Provider config ${filePath} is undefined`);
 
@@ -219,7 +251,38 @@ async function loadProvidersFromFile(
     ? relativePath
     : path.join(basePath || process.cwd(), relativePath);
 
-  const rawContent = yaml.load(fs.readFileSync(modulePath, 'utf8'));
+  if (!fs.existsSync(modulePath)) {
+    const absolutePath = path.resolve(modulePath);
+    const errorMessage = dedent`
+      Provider file not found: ${chalk.bold(absolutePath)}
+
+      ${chalk.white('Please verify that:')}
+        - The file path is correct
+        - The file exists at the specified location
+        ${basePath ? `- The path is relative to: ${path.resolve(basePath)}` : '- The path is relative to the current directory'}
+
+      ${chalk.white('For more information on file providers, visit:')} ${chalk.cyan('https://promptfoo.dev/docs/providers/file/')}
+    `;
+    logger.error(errorMessage);
+    throw new Error(`Provider file not found: ${absolutePath}`);
+  }
+
+  let rawContent;
+  try {
+    rawContent = yaml.load(fs.readFileSync(modulePath, 'utf8'));
+  } catch (error) {
+    const absolutePath = path.resolve(modulePath);
+    const errorMessage = dedent`
+      Failed to read provider file: ${chalk.bold(absolutePath)}
+
+      ${chalk.white('Error:')} ${error instanceof Error ? error.message : String(error)}
+    `;
+    logger.error(errorMessage);
+    throw new Error(
+      `Failed to read provider file ${absolutePath}: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+
   const fileContent = maybeLoadConfigFromExternalFile(rawContent) as
     | ProviderOptions
     | ProviderOptions[];

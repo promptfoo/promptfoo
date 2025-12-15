@@ -1,0 +1,9 @@
+providers:
+  - id: "file://dog.py"
+prompts:
+  - "{{prompt}}"
+
+tests:
+  - vars:
+      prompt: "hello"
+

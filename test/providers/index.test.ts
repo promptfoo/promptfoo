@@ -500,6 +500,8 @@ describe('call provider apis', () => {
 describe('loadApiProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Default mock for fs.existsSync to return true (file exists)
+    vi.mocked(fs.existsSync).mockReturnValue(true);
   });
 
   it('loadApiProvider with yaml filepath', async () => {

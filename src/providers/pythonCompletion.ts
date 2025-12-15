@@ -1,3 +1,5 @@
+import chalk from 'chalk';
+import dedent from 'dedent';
 import fs from 'fs';
 import path from 'path';
 
@@ -85,6 +87,23 @@ export class PythonProvider implements ApiProvider {
         const absPath = path.resolve(
           path.join(this.options?.config.basePath || '', this.scriptPath),
         );
+
+        // Check if the Python script exists before trying to load it
+        if (!fs.existsSync(absPath)) {
+          const basePath = this.options?.config.basePath;
+          const errorMessage = dedent`
+            Python provider script not found: ${chalk.bold(absPath)}
+
+            ${chalk.white('Please verify that:')}
+              - The file path is correct
+              - The file exists at the specified location
+              ${basePath ? `- The path is relative to: ${path.resolve(basePath)}` : '- The path is relative to the current directory'}
+
+            ${chalk.white('For more information on Python providers, visit:')} ${chalk.cyan('https://promptfoo.dev/docs/providers/python/')}
+          `;
+          logger.error(errorMessage);
+          throw new Error(`Python provider script not found: ${absPath}`);
+        }
 
         this.pool = new PythonWorkerPool(
           absPath,
