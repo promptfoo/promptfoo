@@ -622,9 +622,10 @@ describe('RedteamGoatProvider', () => {
     await provider.callApi('test prompt', context);
 
     // Verify that additionalRubric was generated and passed to grader
+    // Goal context is now added in base.ts via goalContextString, not in additionalRubric
     expect(capturedAdditionalRubric).toBeDefined();
-    expect(capturedAdditionalRubric).toContain('Extract sensitive information');
     expect(capturedAdditionalRubric).toContain('ADDITIONAL EVALUATION CRITERIA');
+    expect(capturedAdditionalRubric).toContain('multi-turn conversation');
   });
 
   it('should store grader result in metadata when grader fails', async () => {
