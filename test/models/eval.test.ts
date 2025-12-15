@@ -375,6 +375,28 @@ describe('evaluator', () => {
         },
       });
     });
+
+    it('should include durationMs when set', () => {
+      const eval1 = new Eval({});
+      eval1.setDurationMs(12345);
+
+      const stats = eval1.getStats();
+      expect(stats.durationMs).toBe(12345);
+    });
+
+    it('should return undefined durationMs when not set', () => {
+      const eval1 = new Eval({});
+
+      const stats = eval1.getStats();
+      expect(stats.durationMs).toBeUndefined();
+    });
+
+    it('should preserve durationMs when passed via constructor', () => {
+      const eval1 = new Eval({}, { durationMs: 54321 });
+
+      const stats = eval1.getStats();
+      expect(stats.durationMs).toBe(54321);
+    });
   });
 
   describe('toResultsFile', () => {

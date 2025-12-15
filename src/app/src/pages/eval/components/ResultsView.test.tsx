@@ -1566,3 +1566,175 @@ describe('ResultsView Chart Visibility on Init from URL', () => {
     expect(screen.getByTestId('results-charts')).toBeInTheDocument();
   });
 });
+
+describe('ResultsView Duration Display', () => {
+  const mockOnRecentEvalSelected = vi.fn();
+  const mockRecentEvals: ResultLightweightWithLabel[] = [
+    {
+      evalId: 'eval-1',
+      datasetId: null,
+      label: 'Evaluation 1',
+      createdAt: new Date('2023-01-01T00:00:00Z').getTime(),
+      description: 'Test evaluation 1',
+      numTests: 5,
+    },
+  ];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(1100);
+
+    vi.mocked(useResultsViewSettingsStore).mockReturnValue({
+      setInComparisonMode: vi.fn(),
+      columnStates: {},
+      setColumnState: vi.fn(),
+      maxTextLength: 100,
+      wordBreak: 'break-word',
+      showInferenceDetails: true,
+      comparisonEvalIds: [],
+      setComparisonEvalIds: vi.fn(),
+    });
+  });
+
+  it('should display duration chip when stats.durationMs is available', async () => {
+    vi.mocked(useTableStore).mockReturnValue({
+      author: 'Test Author',
+      table: {
+        head: {
+          prompts: [{ label: 'Test', provider: 'openai:gpt-4', raw: 'Test' }],
+          vars: ['input'],
+        },
+        body: [],
+      },
+      config: { description: 'Test Evaluation' },
+      setConfig: vi.fn(),
+      evalId: 'test-eval-id',
+      setAuthor: vi.fn(),
+      filteredResultsCount: 10,
+      totalResultsCount: 15,
+      highlightedResultsCount: 0,
+      filters: { appliedCount: 0, values: {} },
+      removeFilter: vi.fn(),
+      stats: { successes: 10, failures: 5, errors: 0, tokenUsage: {} as any, durationMs: 45000 },
+    });
+
+    renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="test-eval-id"
+      />,
+    );
+
+    // Should display formatted duration (45000ms = 45.0s)
+    await waitFor(() => {
+      expect(screen.getByText('45.0s')).toBeInTheDocument();
+    });
+  });
+
+  it('should not display duration chip when stats.durationMs is not available', async () => {
+    vi.mocked(useTableStore).mockReturnValue({
+      author: 'Test Author',
+      table: {
+        head: {
+          prompts: [{ label: 'Test', provider: 'openai:gpt-4', raw: 'Test' }],
+          vars: ['input'],
+        },
+        body: [],
+      },
+      config: { description: 'Test Evaluation' },
+      setConfig: vi.fn(),
+      evalId: 'test-eval-id',
+      setAuthor: vi.fn(),
+      filteredResultsCount: 10,
+      totalResultsCount: 15,
+      highlightedResultsCount: 0,
+      filters: { appliedCount: 0, values: {} },
+      removeFilter: vi.fn(),
+      stats: null,
+    });
+
+    renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="test-eval-id"
+      />,
+    );
+
+    // Duration chip should not be present
+    expect(screen.queryByText(/^\d+(\.\d+)?(ms|s|m|h)/)).toBeNull();
+  });
+
+  it('should format duration correctly for milliseconds', async () => {
+    vi.mocked(useTableStore).mockReturnValue({
+      author: 'Test Author',
+      table: {
+        head: {
+          prompts: [{ label: 'Test', provider: 'openai:gpt-4', raw: 'Test' }],
+          vars: ['input'],
+        },
+        body: [],
+      },
+      config: { description: 'Test Evaluation' },
+      setConfig: vi.fn(),
+      evalId: 'test-eval-id',
+      setAuthor: vi.fn(),
+      filteredResultsCount: 10,
+      totalResultsCount: 15,
+      highlightedResultsCount: 0,
+      filters: { appliedCount: 0, values: {} },
+      removeFilter: vi.fn(),
+      stats: { successes: 10, failures: 5, errors: 0, tokenUsage: {} as any, durationMs: 500 },
+    });
+
+    renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="test-eval-id"
+      />,
+    );
+
+    // Should display 500ms
+    await waitFor(() => {
+      expect(screen.getByText('500ms')).toBeInTheDocument();
+    });
+  });
+
+  it('should format duration correctly for minutes', async () => {
+    vi.mocked(useTableStore).mockReturnValue({
+      author: 'Test Author',
+      table: {
+        head: {
+          prompts: [{ label: 'Test', provider: 'openai:gpt-4', raw: 'Test' }],
+          vars: ['input'],
+        },
+        body: [],
+      },
+      config: { description: 'Test Evaluation' },
+      setConfig: vi.fn(),
+      evalId: 'test-eval-id',
+      setAuthor: vi.fn(),
+      filteredResultsCount: 10,
+      totalResultsCount: 15,
+      highlightedResultsCount: 0,
+      filters: { appliedCount: 0, values: {} },
+      removeFilter: vi.fn(),
+      stats: { successes: 10, failures: 5, errors: 0, tokenUsage: {} as any, durationMs: 125000 },
+    });
+
+    renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="test-eval-id"
+      />,
+    );
+
+    // Should display 2m 5s (125000ms)
+    await waitFor(() => {
+      expect(screen.getByText('2m 5s')).toBeInTheDocument();
+    });
+  });
+});
