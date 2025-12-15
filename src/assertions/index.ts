@@ -198,6 +198,22 @@ const ASSERTION_HANDLERS: Record<
 const nunjucks = getNunjucksEngine();
 
 /**
+ * Renders a metric name template with test variables.
+ * @param metric - The metric name, possibly containing Nunjucks template syntax
+ * @param vars - The test variables to use for rendering
+ * @returns The rendered metric name, or the original if not a template
+ */
+function renderMetricName(
+  metric: string | undefined,
+  vars: Record<string, unknown>,
+): string | undefined {
+  if (metric && typeof metric === 'string') {
+    return nunjucks.renderString(metric, vars);
+  }
+  return metric;
+}
+
+/**
  * Tests whether an assertion is inverse e.g. "not-equals" is inverse of "equals"
  * or "not-contains" is inverse of "contains".
  * @param assertion - The assertion to test
@@ -544,16 +560,10 @@ export async function runAssertions({
         traceId,
       });
 
-      // Render metric field with test variables if it's a template string
-      let renderedMetric = assertion.metric;
-      if (renderedMetric && typeof renderedMetric === 'string') {
-        renderedMetric = nunjucks.renderString(renderedMetric, test.vars || {});
-      }
-
       assertResult.addResult({
         index,
         result,
-        metric: renderedMetric,
+        metric: renderMetricName(assertion.metric, test.vars || {}),
         weight: assertion.weight,
       });
     },
@@ -566,16 +576,10 @@ export async function runAssertions({
       assertionSet: { metric, weight },
     } = subAssertResult.parentAssertionSet!;
 
-    // Render metric field with test variables if it's a template string
-    let renderedMetric = metric;
-    if (renderedMetric && typeof renderedMetric === 'string') {
-      renderedMetric = nunjucks.renderString(renderedMetric, test.vars || {});
-    }
-
     mainAssertResult.addResult({
       index,
       result,
-      metric: renderedMetric,
+      metric: renderMetricName(metric, test.vars || {}),
       weight,
     });
   });

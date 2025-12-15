@@ -6,51 +6,63 @@ prompts:
   - 'Say this as though you are a seafarer from the 17th century: {{body}}'
 
 providers:
-  - echo  # Using echo provider for demonstration
+  - echo # Using echo provider for easy demonstration without API keys
 
 derivedMetrics:
   - name: DoubleConsistency
     value: Consistency * 2
 
-# Use defaultTest to apply a metric with a template variable
+# Demonstrates dynamic metric naming via defaultTest.assert
+# The metric field supports Nunjucks template variables from test.vars
 defaultTest:
   assert:
     - type: icontains
       value: '{{keyword}}'
-      metric: '{{category}}'
+      metric: '{{metricCategory}}'
 
 tests:
-  - description: Check for pirate tone with dynamic metric
+  # These tests use the dynamic metric from defaultTest
+  - description: Check for pirate tone (dynamic metric)
     vars:
       body: Yarr, matey!
       keyword: yarr
-      category: PirateTone
-  
-  - description: Check for hunger-related words with dynamic metric
+      metricCategory: PirateTone
+
+  - description: Check for hunger-related words (dynamic metric)
     vars:
       body: I need some grub
       keyword: grub
-      category: PirateTone
+      metricCategory: PirateTone
 
-  - description: Check if output contains expected text
+  # This test combines dynamic metric with static metric
+  - description: Check for message keyword with static metric
     vars:
-      body: '{"message": "Hello"}'
+      body: The message was delivered
       keyword: message
-      category: FormatCheck
+      metricCategory: FormatCheck
     assert:
-      - type: is-json
+      - type: contains
+        value: delivered
         metric: Consistency
 
-  - description: Check for greeting
+  # Multiple assertions with different metric types
+  - description: Check for greeting with multiple metrics
     vars:
       body: Ahoy, world
       keyword: ahoy
-      category: Greeting
+      metricCategory: Greeting
+    assert:
+      - type: javascript
+        value: output.startsWith('Say this')
+        metric: FormatValidation
 
-  - description: Check for pirate-like language
+  # Demonstrates combining dynamic and static metrics
+  - description: Complex validation with mixed metrics
     vars:
       body: The pirate spoke clearly
       keyword: pirate
-      category: Tone
-
-
+      metricCategory: ContentCheck
+    assert:
+      - type: contains
+        value: pirate
+        metric: Tone
