@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 
 dotenv.config({ quiet: true });
 
+import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 
@@ -22,6 +23,7 @@ import { createShareableUrl, determineShareDomain, stripAuthFromUrl } from '../s
 import telemetry, { TelemetryEventSchema } from '../telemetry';
 import { synthesizeFromTestSuite } from '../testCase/synthesis';
 import { checkRemoteHealth } from '../util/apiHealth';
+import { getConfigDirectoryPath } from '../util/config/manage';
 import {
   getPrompts,
   getPromptsForTestCasesHash,
@@ -237,6 +239,26 @@ export function createApp() {
   app.use('/api/model-audit', modelAuditRouter);
   app.use('/api/traces', tracesRouter);
   app.use('/api/version', versionRouter);
+
+  // Video output file serving
+  app.get('/api/output/video/:uuid/video.mp4', (req: Request, res: Response): void => {
+    const { uuid } = req.params;
+    // Validate UUID format to prevent path traversal
+    if (!/^[a-f0-9-]+$/i.test(uuid)) {
+      res.status(400).send('Invalid video ID');
+      return;
+    }
+
+    const videoPath = path.join(getConfigDirectoryPath(), 'output', 'video', uuid, 'video.mp4');
+
+    if (!fs.existsSync(videoPath)) {
+      res.status(404).send('Video not found');
+      return;
+    }
+
+    res.setHeader('Content-Type', 'video/mp4');
+    res.sendFile(videoPath);
+  });
 
   app.post('/api/telemetry', async (req: Request, res: Response): Promise<void> => {
     try {
