@@ -391,6 +391,131 @@ Key differences from Imagen:
 
 See the [Google Imagen example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-imagen) for Gemini image generation configurations.
 
+### Video Generation Models (Veo)
+
+Google's Veo models enable AI-powered video generation from text prompts. Use the `google:video:` prefix:
+
+#### Available Models
+
+| Model | Description | Duration Support |
+|-------|-------------|------------------|
+| `google:video:veo-3.1-generate-preview` | Latest Veo 3.1 model with video extension support | 5-8 seconds |
+| `google:video:veo-3.1-fast-preview` | Fast Veo 3.1 model | 5-8 seconds |
+| `google:video:veo-3-generate` | Veo 3.0 standard model | 4-8 seconds |
+| `google:video:veo-3-fast` | Veo 3.0 fast model | 4-8 seconds |
+| `google:video:veo-2-generate` | Veo 2.0 model | 5-8 seconds |
+
+#### Basic Usage
+
+```yaml
+providers:
+  - id: google:video:veo-3.1-generate-preview
+    config:
+      aspectRatio: '16:9'   # or '9:16'
+      resolution: '720p'    # or '1080p'
+      duration: 5           # seconds (model-dependent)
+
+prompts:
+  - 'Generate a video of {{subject}}'
+
+tests:
+  - vars:
+      subject: 'a cat playing with a ball of yarn'
+```
+
+#### Configuration Options
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `aspectRatio` | string | Video aspect ratio: `16:9` (default) or `9:16` |
+| `resolution` | string | Video resolution: `720p` (default) or `1080p` |
+| `duration` | number | Video duration in seconds (varies by model) |
+| `personGeneration` | string | Person generation mode: `allow_adult` or `dont_allow` |
+| `negativePrompt` | string | Concepts to avoid in the generated video |
+| `referenceImages` | array | Up to 3 reference images (file paths or URLs) |
+| `image` | string | Source image for image-to-video generation |
+| `lastImage` | string | End frame for interpolation (requires `image`) |
+| `sourceVideo` | string | Video to extend (Veo 3.1 only) |
+
+#### Image-to-Video Generation
+
+Generate videos from a starting image:
+
+```yaml
+providers:
+  - id: google:video:veo-3.1-generate-preview
+    config:
+      image: file://assets/start-frame.jpg
+      aspectRatio: '16:9'
+      duration: 5
+
+prompts:
+  - 'Animate this image: {{animation_description}}'
+
+tests:
+  - vars:
+      animation_description: 'the character slowly turns to face the camera'
+```
+
+#### Video Interpolation (First and Last Frame)
+
+Generate video that transitions between two images:
+
+```yaml
+providers:
+  - id: google:video:veo-3.1-generate-preview
+    config:
+      image: file://assets/start.jpg      # First frame
+      lastImage: file://assets/end.jpg    # Last frame
+      duration: 5
+
+prompts:
+  - 'Create a smooth transition between these frames'
+```
+
+#### Video Extension (Veo 3.1 Only)
+
+Extend an existing video:
+
+```yaml
+providers:
+  - id: google:video:veo-3.1-generate-preview
+    config:
+      sourceVideo: file://assets/original.mp4
+      duration: 5
+
+prompts:
+  - 'Continue this video with {{continuation}}'
+
+tests:
+  - vars:
+      continuation: 'the camera panning to reveal a sunset'
+```
+
+#### Reference Images
+
+Use up to 3 reference images to guide video style:
+
+```yaml
+providers:
+  - id: google:video:veo-3.1-generate-preview
+    config:
+      referenceImages:
+        - file://assets/style-ref-1.jpg
+        - file://assets/style-ref-2.jpg
+      aspectRatio: '16:9'
+```
+
+#### Caching
+
+Generated videos are cached locally at `~/.promptfoo/output/video/` to avoid regenerating identical content. The cache key is based on the prompt, model, and all configuration settings. Use `--no-cache` to force regeneration:
+
+```bash
+promptfoo eval --no-cache
+```
+
+See the [Google Video example](https://github.com/promptfoo/promptfoo/tree/main/examples/google-video) for complete configurations.
+
 ### Basic Configuration
 
 The provider supports various configuration options that can be used to customize the behavior of the model:
