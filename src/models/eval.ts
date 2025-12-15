@@ -552,8 +552,8 @@ export default class Eval {
       this.results.push(newResult);
     }
     if (this.persisted) {
-      // Notify watchers that new results are available
-      updateSignalFile();
+      // Notify watchers that new results are available, passing the eval ID
+      updateSignalFile(this.id);
     }
   }
 

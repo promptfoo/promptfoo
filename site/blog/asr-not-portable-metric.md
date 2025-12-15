@@ -48,7 +48,7 @@ ASR depends on how you count. One paper reports success if any of 392 attempts w
 
 ### Example: 392 tries vs 1 try
 
-[Huang et al. (ICLR 2024)](https://arxiv.org/abs/2310.06987) compared their method (Generation Exploitation) against [GCG](https://arxiv.org/abs/2307.15043). But GE was evaluated as best-of-392 (49 configs × 8 samples). GCG was evaluated on a single output. That's comparing different units: one allows 392 retries, the other allows one.
+[Huang et al. (ICLR 2024)](https://arxiv.org/abs/2310.06987) compared their method (Generation Exploitation) against [Greedy Coordinate Gradient (GCG)](https://arxiv.org/abs/2307.15043). But GE was evaluated as best-of-392 (49 configs × 8 samples). GCG was evaluated on a single output. That's comparing different units: one allows 392 retries, the other allows one.
 
 The math: if a method succeeds with probability `p` per attempt, best-of-K succeeds with probability:
 
@@ -75,7 +75,7 @@ This assumes K independent, identically distributed attempts. For mixed configs 
 
 In the position paper's replication (using their own judge, so not directly comparable to other papers), baseline prompts on Llama 2 7B Chat reach **0.83 ASR** with top-1 selection over 50 samples at temperature 2.0. No jailbreak needed. The point: best-of-K creates a strong baseline that many papers don't compute-match against.
 
-Best-of-K is a valid threat model, since attackers often do get multiple tries. The problem isn't the method; it's comparing best-of-392 against one-shot without acknowledging the difference.
+Best-of-K is a valid threat model, since attackers often get multiple tries. The problem isn't the method; it's comparing best-of-392 against one-shot without acknowledging the difference.
 
 ### The missing failure mode: early stopping
 

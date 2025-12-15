@@ -1,7 +1,7 @@
 import logger from '../logger';
 import { safeJsonStringify } from '../util/json';
 import { sanitizeObject } from '../util/sanitizer';
-import { getProcessShim } from '../util/transform';
+import { getProcessShim } from '../util/processShim';
 
 import type { FetchWithCacheResult } from '../cache';
 import type { CallApiContextParams, ProviderResponse } from '../types/index';

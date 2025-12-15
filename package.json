@@ -42,7 +42,7 @@
     "build:app": "npm run build --prefix src/app",
     "build:clean": "shx rm -rf dist",
     "build:watch": "NODE_OPTIONS='--max-old-space-size=8192' tsdown --watch",
-    "build": "concurrently -g \"NODE_OPTIONS='--max-old-space-size=8192' tsdown\" \"npm run build:app\"",
+    "build": "concurrently -g --kill-others-on-fail \"tsc --noEmit\" \"NODE_OPTIONS='--max-old-space-size=8192' tsdown\" \"npm run build:app\"",
     "postbuild": "tsx scripts/postbuild.ts",
     "citation:generate": "tsx scripts/generateCitation.ts",
     "db:generate": "npx drizzle-kit generate",
@@ -228,7 +228,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.2",
     "@apidevtools/json-schema-ref-parser": "^15.0.0",
-    "@googleapis/sheets": "^12.0.0",
+    "@googleapis/sheets": "^13.0.0",
     "@inquirer/checkbox": "^5.0.1",
     "@inquirer/confirm": "^6.0.1",
     "@inquirer/core": "^11.0.1",
