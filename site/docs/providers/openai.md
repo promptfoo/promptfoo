@@ -1023,7 +1023,12 @@ prompts:
   - 'Answer this question: {{question}}'
 
 providers:
-  - openai:gpt-4.1-mini
+  - openai:gpt-4o-mini
+
+# Parse JSON output so assertions can access properties directly
+defaultTest:
+  options:
+    transform: JSON.parse(output)
 
 tests:
   # Math problems use math schema

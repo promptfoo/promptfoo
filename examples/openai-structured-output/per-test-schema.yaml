@@ -17,6 +17,11 @@ providers:
     config:
       temperature: 0
 
+# Parse JSON output so assertions can access properties directly
+defaultTest:
+  options:
+    transform: JSON.parse(output)
+
 tests:
   # Test 1: Math problem - expects structured math response
   - vars:
