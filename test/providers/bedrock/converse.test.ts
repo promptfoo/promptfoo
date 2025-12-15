@@ -497,6 +497,46 @@ describe('AwsBedrockConverseProvider', () => {
       });
     });
 
+    it('should handle malformed_model_output stop reason', async () => {
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: { region: 'us-east-1' },
+      });
+
+      mockSend.mockResolvedValueOnce(
+        createMockConverseResponse('Partial output', {
+          stopReason: 'malformed_model_output' as StopReason,
+        }),
+      );
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.error).toBe(
+        'Model produced invalid output. The response could not be parsed correctly.',
+      );
+      expect(result.output).toBe('Partial output');
+      expect(result.metadata?.isModelError).toBe(true);
+    });
+
+    it('should handle malformed_tool_use stop reason', async () => {
+      const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {
+        config: { region: 'us-east-1' },
+      });
+
+      mockSend.mockResolvedValueOnce(
+        createMockConverseResponse('Partial output', {
+          stopReason: 'malformed_tool_use' as StopReason,
+        }),
+      );
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.error).toBe(
+        'Model produced a malformed tool use request. Check tool configuration and input schema.',
+      );
+      expect(result.output).toBe('Partial output');
+      expect(result.metadata?.isModelError).toBe(true);
+    });
+
     it('should calculate cost for Claude Sonnet models', async () => {
       // Use model ID that contains 'anthropic.claude-3-5-sonnet' for pricing lookup
       const provider = new AwsBedrockConverseProvider('anthropic.claude-3-5-sonnet-20241022-v2:0', {

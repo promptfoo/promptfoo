@@ -1,4 +1,4 @@
-import '@testing-library/jest-dom';
+import '@testing-library/jest-dom/vitest';
 // Ensure Prism is initialized before any language components are loaded
 import 'prismjs';
 import 'prismjs/components/prism-clike';
@@ -6,7 +6,11 @@ import 'prismjs/components/prism-javascript';
 import 'prismjs/components/prism-json';
 import 'prismjs/components/prism-yaml';
 import 'prismjs/components/prism-http';
-import { afterEach, vi } from 'vitest';
+import { afterEach, expect, vi } from 'vitest';
+import * as matchers from '@testing-library/jest-dom/matchers';
+
+// Extend vitest's expect with jest-dom matchers
+expect.extend(matchers);
 import { cleanup } from '@testing-library/react';
 
 // We can mock the environment variables. For example:

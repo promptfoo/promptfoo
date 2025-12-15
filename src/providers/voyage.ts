@@ -94,6 +94,7 @@ export class VoyageEmbeddingProvider implements ApiEmbeddingProvider {
         latencyMs,
         tokenUsage: {
           total: data.usage.total_tokens,
+          numRequests: 1,
         },
       };
     } catch (err) {

@@ -1,4 +1,4 @@
-import { vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { gatherFeedback, sendFeedback } from '../src/feedback';
 import logger from '../src/logger';

@@ -11,7 +11,7 @@ import express from 'express';
 import { Server as SocketIOServer } from 'socket.io';
 import { fromError } from 'zod-validation-error';
 import { getDefaultPort, VERSION } from '../constants';
-import { setupSignalWatcher } from '../database/signal';
+import { readSignalEvalId, setupSignalWatcher } from '../database/signal';
 import { getDirectory } from '../esm';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
@@ -290,14 +290,17 @@ export async function startServer(
   await runDbMigrations();
 
   const watcher = setupSignalWatcher(async () => {
-    const latestEval = await Eval.latest();
-    const results = await latestEval?.getResultsCount();
+    // Try to get the specific eval that was updated from the signal file
+    const signalEvalId = readSignalEvalId();
+    const updatedEval = signalEvalId ? await Eval.findById(signalEvalId) : await Eval.latest();
+
+    const results = await updatedEval?.getResultsCount();
 
     if (results && results > 0) {
-      logger.info(
-        `Emitting update for eval: ${latestEval?.config?.description || latestEval?.id || 'unknown'}`,
+      logger.debug(
+        `Emitting update for eval: ${updatedEval?.config?.description || updatedEval?.id || 'unknown'}`,
       );
-      io.emit('update', latestEval);
+      io.emit('update', updatedEval);
       allPrompts = null;
     }
   });
@@ -341,8 +344,17 @@ export async function startServer(
         resolve();
       }, SHUTDOWN_TIMEOUT_MS);
 
-      // Close Socket.io connections first, then the HTTP server
+      // Close Socket.io connections (this also closes the underlying HTTP server)
       io.close(() => {
+        // Socket.io's close() already closes the HTTP server, so check if it's still listening
+        // before attempting to close it again to avoid "Server is not running" errors
+        if (!httpServer.listening) {
+          clearTimeout(forceCloseTimeout);
+          logger.info('Server closed');
+          resolve();
+          return;
+        }
+
         httpServer.close((err) => {
           clearTimeout(forceCloseTimeout);
           if (err) {

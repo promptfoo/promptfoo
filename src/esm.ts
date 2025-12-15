@@ -1,8 +1,10 @@
 import fs from 'node:fs';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import vm from 'node:vm';
-import { createRequire } from 'node:module';
+
+import { resolveModulePath } from 'exsolve';
 
 import logger from './logger';
 import { safeResolve } from './util/pathUtils';
@@ -75,6 +77,66 @@ export function clearWrapperDirCache(): void {
   for (const key of Object.keys(wrapperDirCache) as WrapperType[]) {
     delete wrapperDirCache[key];
   }
+}
+
+/**
+ * Resolves the entry point path for an npm package, handling ESM-only packages
+ * with restrictive `exports` fields.
+ *
+ * ## Why this function exists
+ *
+ * Some ESM-only packages (like `@openai/codex-sdk`) have restrictive `exports` fields:
+ *
+ * ```json
+ * {
+ *   "type": "module",
+ *   "exports": {
+ *     ".": { "import": "./dist/index.js" }
+ *   }
+ * }
+ * ```
+ *
+ * This causes problems with Node.js's `require.resolve()`:
+ * - `require.resolve('@openai/codex-sdk')` fails with "No exports main defined"
+ *   because there's no `"require"` or `"default"` condition.
+ *
+ * ## Solution
+ *
+ * This function uses `exsolve` which implements Node's ESM resolution algorithm,
+ * correctly handling all `exports` field variations:
+ * - Direct string exports: `"exports": "./index.js"`
+ * - Shorthand object: `"exports": { ".": "./index.js" }`
+ * - Conditional exports: `"exports": { ".": { "import": "./index.js" } }`
+ * - Nested conditionals, array fallbacks, pattern exports, etc.
+ *
+ * @param packageName - The npm package name (e.g., '@openai/codex-sdk')
+ * @param baseDir - The directory to resolve from (should contain node_modules)
+ * @returns The absolute path to the package entry point, or null if not found
+ *
+ * @example
+ * ```typescript
+ * // Resolve from current directory
+ * const codexPath = resolvePackageEntryPoint('@openai/codex-sdk', process.cwd());
+ * if (codexPath) {
+ *   const module = await importModule(codexPath);
+ * }
+ * ```
+ */
+export function resolvePackageEntryPoint(packageName: string, baseDir: string): string | null {
+  // Use exsolve which implements Node's ESM resolution algorithm
+  // The `from` URL tells exsolve where to start looking for node_modules
+  const from = pathToFileURL(path.join(baseDir, 'package.json')).href;
+
+  const resolved = resolveModulePath(packageName, {
+    from,
+    // Conditions in priority order: Node.js-specific, ESM, CommonJS, default fallback
+    conditions: ['node', 'import', 'require', 'default'],
+    // Return undefined instead of throwing when package not found
+    try: true,
+  });
+
+  // Normalize the path to use platform-specific separators (forward slashes on Unix, backslashes on Windows)
+  return resolved ? path.normalize(resolved) : null;
 }
 
 // Global variable defined by tsup at build time

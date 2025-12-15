@@ -1052,6 +1052,7 @@ describe('setupEnv', () => {
   let dotenvConfigSpy: MockInstance<
     (options?: dotenv.DotenvConfigOptions) => dotenv.DotenvConfigOutput
   >;
+  let existsSyncSpy: MockInstance<(path: fs.PathLike) => boolean>;
 
   beforeEach(() => {
     originalEnv = { ...process.env };
@@ -1059,6 +1060,8 @@ describe('setupEnv', () => {
     delete process.env.NODE_ENV;
     // Spy on dotenv.config to verify it's called with the right parameters
     dotenvConfigSpy = vi.spyOn(dotenv, 'config').mockImplementation(() => ({ parsed: {} }));
+    // Mock file existence check - default to true for backward compat with existing tests
+    existsSyncSpy = vi.spyOn(fs, 'existsSync').mockReturnValue(true);
   });
 
   afterEach(() => {
@@ -1111,6 +1114,99 @@ describe('setupEnv', () => {
     // Then load .env.production with override (should change NODE_ENV to 'production')
     setupEnv('.env.production');
     expect(process.env.NODE_ENV).toBe('production');
+  });
+
+  describe('multi-file support', () => {
+    it('should call dotenv.config with array of paths when multiple files specified', () => {
+      const paths = ['.env', '.env.local'];
+
+      setupEnv(paths);
+
+      expect(dotenvConfigSpy).toHaveBeenCalledTimes(1);
+      expect(dotenvConfigSpy).toHaveBeenCalledWith({
+        path: paths,
+        override: true,
+        quiet: true,
+      });
+    });
+
+    it('should call dotenv.config with single path (not array) when one file specified as array', () => {
+      const paths = ['.env'];
+
+      setupEnv(paths);
+
+      expect(dotenvConfigSpy).toHaveBeenCalledTimes(1);
+      expect(dotenvConfigSpy).toHaveBeenCalledWith({
+        path: '.env',
+        override: true,
+        quiet: true,
+      });
+    });
+
+    it('should throw error when specified file does not exist', () => {
+      existsSyncSpy.mockReturnValue(false);
+
+      expect(() => setupEnv('.env.missing')).toThrow('Environment file not found: .env.missing');
+    });
+
+    it('should throw error when any file in array does not exist', () => {
+      existsSyncSpy.mockImplementation((p) => p === '.env');
+
+      expect(() => setupEnv(['.env', '.env.missing'])).toThrow(
+        'Environment file not found: .env.missing',
+      );
+    });
+
+    it('should validate all files exist before calling dotenv.config', () => {
+      existsSyncSpy.mockImplementation((p) => p === '.env');
+
+      expect(() => setupEnv(['.env', '.env.missing'])).toThrow();
+      expect(dotenvConfigSpy).not.toHaveBeenCalled();
+    });
+
+    it('should filter out empty strings from array', () => {
+      setupEnv(['', '.env', '  ']);
+
+      expect(dotenvConfigSpy).toHaveBeenCalledWith({
+        path: '.env',
+        override: true,
+        quiet: true,
+      });
+    });
+
+    it('should call default dotenv.config when array contains only empty strings', () => {
+      setupEnv(['', '  ', '']);
+
+      expect(dotenvConfigSpy).toHaveBeenCalledWith({ quiet: true });
+    });
+
+    it('should call default dotenv.config when given empty array', () => {
+      setupEnv([]);
+
+      expect(dotenvConfigSpy).toHaveBeenCalledWith({ quiet: true });
+    });
+
+    it('should expand comma-separated values within array elements', () => {
+      // This simulates what Commander passes when using --env-file .env,.env.local
+      setupEnv(['.env,.env.local']);
+
+      expect(dotenvConfigSpy).toHaveBeenCalledTimes(1);
+      expect(dotenvConfigSpy).toHaveBeenCalledWith({
+        path: ['.env', '.env.local'],
+        override: true,
+        quiet: true,
+      });
+    });
+
+    it('should handle mixed array with some comma-separated and some individual paths', () => {
+      setupEnv(['.env,.env.local', '.env.production']);
+
+      expect(dotenvConfigSpy).toHaveBeenCalledWith({
+        path: ['.env', '.env.local', '.env.production'],
+        override: true,
+        quiet: true,
+      });
+    });
   });
 });
 

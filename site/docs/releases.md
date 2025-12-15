@@ -324,7 +324,7 @@ This month we focused on expanding **provider support**, enhancing **evaluation 
 
 - **[LiteLLM Embeddings](/docs/providers/litellm/#embedding-configuration)** - Similarity testing and semantic search
 - **[Google Vision](/docs/providers/google/#chat-and-multimodal-models)** - Image understanding for multimodal evaluations
-- **HTTP Provider Enhancements** - Added support for [JKS](/docs/providers/http/#jks-java-keystore-certificates) and [PFX](/docs/providers/http/#pfx-personal-information-exchange-certificates) client certificates.
+- **HTTP Provider Enhancements** - Added support for [JKS](/docs/providers/http/#using-jks-java-keystore-certificates) and [PFX](/docs/providers/http/#using-pfxpkcs12-certificates) client certificates.
 - **[Browser Provider](/docs/providers/browser/)** - Connect to existing Chrome browser sessions via Chrome DevTools Protocol (CDP) for testing OAuth-authenticated applications
 
 #### Assertion Improvements {#july-2025-assertions}

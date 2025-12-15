@@ -186,3 +186,23 @@ export function accumulateResponseTokenUsage(
     target.numRequests = (target.numRequests ?? 0) + 1;
   }
 }
+
+/**
+ * Normalize token usage from a provider response into a standard TokenUsage object.
+ * Provides default values for all fields if not present in the response.
+ * @param tokenUsage Token usage from provider response (may be partial or undefined)
+ * @returns Fully populated TokenUsage object with defaults
+ */
+export function normalizeTokenUsage(
+  tokenUsage: Partial<TokenUsage> | undefined,
+): Required<TokenUsage> {
+  return {
+    total: tokenUsage?.total || 0,
+    prompt: tokenUsage?.prompt || 0,
+    completion: tokenUsage?.completion || 0,
+    cached: tokenUsage?.cached || 0,
+    numRequests: tokenUsage?.numRequests || 0,
+    completionDetails: tokenUsage?.completionDetails || createEmptyCompletionDetails(),
+    assertions: tokenUsage?.assertions || createEmptyAssertions(),
+  };
+}

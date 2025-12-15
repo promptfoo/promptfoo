@@ -1,8 +1,8 @@
 ---
-displayed_sidebar: promptfoo
+sidebar_position: 999
 sidebar_label: Managing Large Configs
 title: Managing Large Promptfoo Configurations
-description: Organize complex promptfoo configurations using modular YAML structures, file imports, and environment-specific settings
+description: Learn how to structure, organize, and modularize large promptfoo configurations for better maintainability and reusability.
 keywords:
   [
     promptfoo configuration,
@@ -46,13 +46,13 @@ defaultTest: file://configs/default-test.yaml
 
 ```yaml title="configs/providers.yaml"
 # Providers configuration
-- id: gpt-5-mini
-  provider: openai:gpt-5-mini
+- id: gpt-5.2
+  provider: openai:gpt-5.2
   config:
     temperature: 0.7
     max_tokens: 1000
 - id: claude-sonnet
-  provider: anthropic:claude-3-5-sonnet-20241022
+  provider: anthropic:claude-sonnet-4-5-20250929
   config:
     temperature: 0.7
     max_tokens: 1000
@@ -117,14 +117,14 @@ env: file://configs/env-prod.yaml
 
 ```yaml title="configs/providers-prod.yaml"
 # Production providers with rate limiting
-- id: gpt-5-mini-prod
-  provider: # ...
+- id: gpt-5.2-prod
+  provider: openai:gpt-5.2
   config:
     temperature: 0.1
     max_tokens: 500
     requestsPerMinute: 100
 - id: claude-sonnet-prod
-  provider: # ...
+  provider: anthropic:claude-sonnet-4-5-20250929
   config:
     temperature: 0.1
     max_tokens: 500
@@ -192,7 +192,7 @@ Use JavaScript configurations for complex logic:
 const baseConfig = {
   description: 'Dynamic configuration example',
   prompts: ['file://prompts/base-prompt.txt'],
-  providers: ['openai:gpt-5-mini', 'anthropic:claude-3-5-sonnet-20241022'],
+  providers: ['openai:gpt-5.2', 'anthropic:claude-sonnet-4-5-20250929'],
 };
 
 // Generate test cases programmatically
@@ -233,6 +233,94 @@ module.exports = {
 };
 ```
 
+## TypeScript Configuration
+
+Promptfoo configs can be written in TypeScript:
+
+```typescript title="promptfooconfig.ts"
+import type { UnifiedConfig } from 'promptfoo';
+
+const config: UnifiedConfig = {
+  description: 'My evaluation suite',
+  prompts: ['Tell me about {{topic}} in {{style}}'],
+  providers: ['openai:gpt-5.2', 'anthropic:claude-sonnet-4-5-20250929'],
+  tests: [
+    {
+      vars: {
+        topic: 'quantum computing',
+        style: 'simple terms',
+      },
+      assert: [
+        {
+          type: 'contains',
+          value: 'quantum',
+        },
+      ],
+    },
+  ],
+};
+
+export default config;
+```
+
+### Running TypeScript Configs
+
+Install a TypeScript loader:
+
+```bash
+npm install tsx
+```
+
+Run with `NODE_OPTIONS`:
+
+```bash
+NODE_OPTIONS="--import tsx" promptfoo eval -c promptfooconfig.ts
+```
+
+### Dynamic Schema Generation
+
+Share Zod schemas between your application and promptfoo:
+
+```typescript title="src/schemas/response.ts"
+import { z } from 'zod';
+
+export const ResponseSchema = z.object({
+  answer: z.string(),
+  confidence: z.number().min(0).max(1),
+  sources: z.array(z.string()).nullable(),
+});
+```
+
+```typescript title="promptfooconfig.ts"
+import { zodResponseFormat } from 'openai/helpers/zod.mjs';
+import type { UnifiedConfig } from 'promptfoo';
+import { ResponseSchema } from './src/schemas/response';
+
+const responseFormat = zodResponseFormat(ResponseSchema, 'response');
+
+const config: UnifiedConfig = {
+  prompts: ['Answer this question: {{question}}'],
+  providers: [
+    {
+      id: 'openai:gpt-5.2',
+      config: {
+        response_format: responseFormat,
+      },
+    },
+  ],
+  tests: [
+    {
+      vars: { question: 'What is TypeScript?' },
+      assert: [{ type: 'is-json' }],
+    },
+  ],
+};
+
+export default config;
+```
+
+See the [ts-config example](https://github.com/promptfoo/promptfoo/tree/main/examples/ts-config) for a complete implementation.
+
 ## Conditional Configuration Loading
 
 Create configurations that adapt based on environment:
@@ -251,7 +339,7 @@ if (isQuickTest) {
   module.exports = {
     ...baseConfig,
     providers: [
-      'openai:gpt-5-mini', // Faster for quick testing
+      'openai:gpt-5.1-mini', // Faster, cheaper for quick testing
     ],
     tests: 'file://tests/quick/', // Smaller test suite
     env: {
@@ -264,7 +352,11 @@ if (isQuickTest) {
 if (isComprehensive) {
   module.exports = {
     ...baseConfig,
-    providers: ['openai:gpt-5-mini', 'anthropic:claude-3-5-sonnet-20241022', 'openai:gpt-4o'],
+    providers: [
+      'openai:gpt-5.2',
+      'anthropic:claude-sonnet-4-5-20250929',
+      'google:gemini-2.5-flash',
+    ],
     tests: 'file://tests/comprehensive/', // Full test suite
     env: {
       LOG_LEVEL: 'info',

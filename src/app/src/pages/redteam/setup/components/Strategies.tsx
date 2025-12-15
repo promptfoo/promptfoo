@@ -657,7 +657,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
         </Alert>
       )}
 
-      <TestCaseGenerationProvider redTeamConfig={config}>
+      <TestCaseGenerationProvider redTeamConfig={config} allowPluginChange>
         <Box>
           <EstimationsDisplay config={config} />
 

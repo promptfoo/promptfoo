@@ -1,9 +1,8 @@
-import { createRequire } from 'node:module';
 import path from 'path';
 
 import chalk from 'chalk';
 import dedent from 'dedent';
-import { importModule } from '../esm';
+import { importModule, resolvePackageEntryPoint } from '../esm';
 import logger from '../logger';
 
 import type { ApiProvider, ProviderOptions } from '../types/index';
@@ -27,12 +26,10 @@ export async function loadFromPackage(packageInstancePath: string, basePath: str
     );
   }
 
-  // First, try to resolve the package path
-  let filePath: string;
-  try {
-    const require = createRequire(path.resolve(basePath));
-    filePath = require.resolve(packageName);
-  } catch {
+  // Resolve the package path using exsolve-based resolver
+  // This handles ESM-only packages with restrictive exports fields
+  const filePath = resolvePackageEntryPoint(packageName, path.resolve(basePath));
+  if (!filePath) {
     throw new Error(`Package not found: ${packageName}. Make sure it's installed in ${basePath}`);
   }
 

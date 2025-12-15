@@ -1,4 +1,4 @@
-import { vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { handleSimilar } from '../../src/assertions/similar';
 import { matchesSimilarity } from '../../src/matchers';
 

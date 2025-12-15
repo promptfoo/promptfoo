@@ -228,7 +228,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
       // Combine all plugins
       const allPlugins = [...regularPlugins, ...policyPlugins, ...intentPlugins];
 
-      // Update the global config
+      // updatePlugins handles deduplication by comparing merged output vs current state
       updatePlugins(allPlugins as Array<string | { id: string; config: any }>);
     }
   }, [selectedPlugins, pluginConfig, hasUserInteracted, config.plugins, updatePlugins]);

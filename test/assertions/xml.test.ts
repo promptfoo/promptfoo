@@ -1,5 +1,6 @@
 import dedent from 'dedent';
 import { containsXml, validateXml } from '../../src/assertions/xml';
+import { describe, expect, it } from 'vitest';
 
 describe('validateXml', () => {
   it('should validate a simple valid XML string', () => {

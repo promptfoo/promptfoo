@@ -1,0 +1,18 @@
+# Virtual environment
+.venv/
+venv/
+
+# Environment files with secrets
+.env
+
+# Lock files
+uv.lock
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# IDE
+.idea/
+.vscode/

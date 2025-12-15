@@ -169,7 +169,7 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
               }}
             >
               <Typography variant="body2" sx={{ flex: 1, minWidth: '300px' }}>
-                <strong>New to promptfoo?</strong> Want to see it in action? Load an example
+                <strong>New to Promptfoo?</strong> Want to see it in action? Load an example
                 configuration to get started immediately!
               </Typography>
               <LoadExampleButton />

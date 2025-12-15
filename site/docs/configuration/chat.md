@@ -231,31 +231,29 @@ When the `_conversation` variable is present, the eval will run single-threaded 
 
 ## Separating Chat Conversations
 
-When running multiple test files or test sequences, you may want to maintain conversation history between tests. This can be achieved by adding a `conversationId` to the test metadata:
+Each unique `conversationId` maintains its own separate conversation history. Scenarios automatically isolate conversations by default.
 
-```yaml title="test1.yaml"
-- vars:
-    question: 'Who founded Facebook?'
-  metadata:
-    conversationId: 'conversation1'
-- vars:
-    question: 'Where does he live?'
-  metadata:
-    conversationId: 'conversation1'
+You can explicitly control conversation grouping by adding a `conversationId` to the test metadata:
+
+```yaml
+tests:
+  - vars:
+      question: 'Who founded Facebook?'
+    metadata:
+      conversationId: 'conversation1'
+  - vars:
+      question: 'Where does he live?'
+    metadata:
+      conversationId: 'conversation1'
+  - vars:
+      question: 'Where is Yosemite National Park?'
+    metadata:
+      conversationId: 'conversation2'
+  - vars:
+      question: 'What are good hikes there?'
+    metadata:
+      conversationId: 'conversation2'
 ```
-
-```yaml title="test2.yaml"
-- vars:
-    question: 'Where is Yosemite National Park?'
-  metadata:
-    conversationId: 'conversation2'
-- vars:
-    question: 'What are good hikes there?'
-  metadata:
-    conversationId: 'conversation2'
-```
-
-Each unique `conversationId` maintains its own separate conversation history. If no `conversationId` is specified, all tests using the same provider and prompt will share a conversation history.
 
 ### Including JSON in prompt content
 

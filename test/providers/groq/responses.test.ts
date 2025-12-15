@@ -192,6 +192,7 @@ describe('GroqResponsesProvider', () => {
         total: 15,
         prompt: 10,
         completion: 5,
+        numRequests: 1,
       });
     });
 

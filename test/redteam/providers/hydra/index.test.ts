@@ -225,7 +225,8 @@ describe('HydraProvider', () => {
       expect(result.metadata?.hydraBacktrackCount).toBe(0);
       expect(result.metadata?.hydraResult).toBe(false);
       expect(result.metadata?.stopReason).toBe('Max turns reached');
-      expect(result.tokenUsage?.total).toBe(150);
+      // agent (100) + target (50) + learning update (100) = 250
+      expect(result.tokenUsage?.total).toBe(250);
     });
 
     it('should detect vulnerability when grader fails', async () => {

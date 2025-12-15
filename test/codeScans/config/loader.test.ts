@@ -8,6 +8,7 @@ import path from 'path';
 
 import { loadConfig, loadConfigOrDefault } from '../../../src/codeScan/config/loader';
 import { CodeScanSeverity, ConfigLoadError } from '../../../src/types/codeScan';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 describe('Configuration Loader', () => {
   let tempDir: string;

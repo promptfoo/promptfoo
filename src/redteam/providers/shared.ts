@@ -23,6 +23,7 @@ import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
 import { transform, type TransformContext, TransformInputType } from '../../util/transform';
 import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
+import type { RedteamHistoryEntry } from '../types';
 
 async function loadRedteamProvider({
   provider,
@@ -410,7 +411,7 @@ export interface BaseRedteamMetadata {
   redteamFinalPrompt?: string;
   messages: Record<string, any>[];
   stopReason: string;
-  redteamHistory?: { prompt: string; output: string }[];
+  redteamHistory?: RedteamHistoryEntry[];
 }
 
 /**

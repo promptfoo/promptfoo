@@ -2,7 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { describe, expect, it, vi, beforeEach, type Mock } from 'vitest';
-import { TestCaseGenerateButton } from './TestCaseDialog';
+import { TestCaseGenerateButton, TestCaseDialog } from './TestCaseDialog';
 import type { DefinedUseQueryResult } from '@tanstack/react-query';
 import type { ApiHealthResult } from '@app/hooks/useApiHealth';
 
@@ -226,6 +226,119 @@ describe('TestCaseGenerateButton', () => {
 
       const iconButton = screen.getByRole('button');
       expect(iconButton).toBeDisabled();
+    });
+  });
+});
+
+describe('TestCaseDialog', () => {
+  const defaultProps = {
+    open: true,
+    onClose: vi.fn(),
+    plugin: { id: 'harmful:hate' as const, config: {}, isStatic: false },
+    strategy: { id: 'basic' as const, config: {}, isStatic: false },
+    isGenerating: false,
+    generatedTestCases: [{ prompt: 'Test prompt', context: 'Test context' }],
+    targetResponses: [],
+    isRunningTest: false,
+    onRegenerate: vi.fn(),
+    onContinue: vi.fn(),
+    currentTurn: 0,
+    maxTurns: 1,
+    availablePlugins: ['harmful:hate', 'harmful:violence', 'pii'],
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUseApiHealth.mockReturnValue({
+      data: { status: 'connected', message: null },
+      refetch: vi.fn(),
+      isLoading: false,
+    });
+  });
+
+  describe('allowPluginChange prop', () => {
+    it('should NOT show strategy label when allowPluginChange is false', () => {
+      renderWithTheme(<TestCaseDialog {...defaultProps} allowPluginChange={false} />);
+
+      expect(screen.queryByTestId('strategy-chip')).not.toBeInTheDocument();
+    });
+
+    it('should show strategy name as title when allowPluginChange is true', () => {
+      renderWithTheme(<TestCaseDialog {...defaultProps} allowPluginChange={true} />);
+
+      expect(screen.getByTestId('strategy-chip')).toBeInTheDocument();
+      expect(screen.getByTestId('strategy-chip')).toHaveTextContent('Strategy Preview');
+      // Strategy name should be in the dialog title
+      expect(screen.getByText('Baseline Testing')).toBeInTheDocument();
+    });
+
+    it('should show plugin name as title when allowPluginChange is false', () => {
+      renderWithTheme(<TestCaseDialog {...defaultProps} allowPluginChange={false} />);
+
+      const pluginLabel = screen.getByTestId('plugin-chip');
+      expect(pluginLabel).toBeInTheDocument();
+      expect(pluginLabel).toHaveTextContent('Plugin Preview');
+      // Plugin name should be in the dialog title
+      expect(screen.getByText('Hate Speech')).toBeInTheDocument();
+    });
+
+    it('should show plugin dropdown when allowPluginChange is true', async () => {
+      renderWithTheme(<TestCaseDialog {...defaultProps} allowPluginChange={true} />);
+
+      // Plugin dropdown should be directly visible (not behind a popover)
+      expect(screen.getByTestId('plugin-dropdown')).toBeInTheDocument();
+      expect(screen.getByLabelText('Plugin')).toBeInTheDocument();
+    });
+
+    it('should NOT show plugin dropdown when allowPluginChange is false', () => {
+      renderWithTheme(<TestCaseDialog {...defaultProps} allowPluginChange={false} />);
+
+      expect(screen.queryByTestId('plugin-dropdown')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('targetResponses output handling', () => {
+    it('should render string output directly', () => {
+      renderWithTheme(
+        <TestCaseDialog
+          {...defaultProps}
+          targetResponses={[{ output: 'Hello from assistant', error: null }]}
+        />,
+      );
+
+      expect(screen.getByText('Hello from assistant')).toBeInTheDocument();
+    });
+
+    it('should JSON stringify object output', () => {
+      renderWithTheme(
+        <TestCaseDialog
+          {...defaultProps}
+          targetResponses={[
+            { output: { response: 'some text' } as unknown as string, error: null },
+          ]}
+        />,
+      );
+
+      expect(screen.getByText('{"response":"some text"}')).toBeInTheDocument();
+    });
+
+    it('should show error message when output is null', () => {
+      renderWithTheme(
+        <TestCaseDialog
+          {...defaultProps}
+          targetResponses={[{ output: null, error: 'Connection failed' }]}
+        />,
+      );
+
+      expect(screen.getByText('Connection failed')).toBeInTheDocument();
+    });
+
+    it('should show fallback message when output and error are null', () => {
+      renderWithTheme(
+        <TestCaseDialog {...defaultProps} targetResponses={[{ output: null, error: null }]} />,
+      );
+
+      expect(screen.getByText('No response from target')).toBeInTheDocument();
     });
   });
 });

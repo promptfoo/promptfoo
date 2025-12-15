@@ -1,4 +1,4 @@
-import { vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleModelGradedClosedQa } from '../../src/assertions/modelGradedClosedQa';
 import { matchesClosedQa } from '../../src/matchers';
 

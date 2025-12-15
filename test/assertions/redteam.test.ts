@@ -1,4 +1,4 @@
-import { vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { handleRedteam } from '../../src/assertions/redteam';
 import { isAssertionInverse, getAssertionBaseType } from '../../src/assertions/index';
 import { RedteamGraderBase } from '../../src/redteam/plugins/base';

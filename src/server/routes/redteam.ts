@@ -60,6 +60,8 @@ const TestCaseGenerationSchema = z.object({
   history: z.array(ConversationMessageSchema).optional().default([]),
   goal: z.string().optional(),
   stateful: z.boolean().optional(),
+  // Batch generation: number of test cases to generate (1-10, default 1)
+  count: z.number().int().min(1).max(10).optional().default(1),
 });
 
 /**
@@ -82,6 +84,7 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
       history,
       goal: goalOverride,
       stateful,
+      count,
     } = parsedBody.data;
 
     const pluginConfigurationError = getPluginConfigurationError(plugin);
@@ -90,7 +93,10 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
       return;
     }
 
-    logger.debug('Generating red team test case', { plugin, strategy });
+    // For multi-turn strategies, force count to 1 (each turn depends on previous response)
+    const effectiveCount = isMultiTurnStrategy(strategy.id) ? 1 : count;
+
+    logger.debug('Generating red team test case', { plugin, strategy, count: effectiveCount });
 
     // Find the plugin
     const pluginFactory = Plugins.find((p) => p.key === plugin.id) as PluginFactory;
@@ -106,7 +112,7 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
       provider: redteamProvider,
       purpose: config.applicationDefinition.purpose ?? 'general AI assistant',
       injectVar,
-      n: 1, // Generate only one test case
+      n: effectiveCount, // Generate requested number of test cases
       delayMs: 0,
       config: {
         ...plugin.config,
@@ -148,18 +154,20 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
       }
     }
 
-    const testCase = finalTestCases[0];
-    const generatedPrompt = extractGeneratedPrompt(testCase, injectVar);
-    const baseMetadata =
-      testCase.metadata && typeof testCase.metadata === 'object' ? testCase.metadata : {};
-    const metadataForStrategy = {
-      ...baseMetadata,
-      strategyId: strategy.id,
-    };
     const context = `This test case targets the ${plugin.id} plugin with strategy ${strategy.id} and was generated based on your application context. If the test case is not relevant to your application, you can modify the application definition to improve relevance.`;
     const purpose = config.applicationDefinition.purpose ?? null;
 
+    // Handle multi-turn strategies (always single test case)
     if (isMultiTurnStrategy(strategy.id)) {
+      const testCase = finalTestCases[0];
+      const generatedPrompt = extractGeneratedPrompt(testCase, injectVar);
+      const baseMetadata =
+        testCase.metadata && typeof testCase.metadata === 'object' ? testCase.metadata : {};
+      const metadataForStrategy = {
+        ...baseMetadata,
+        strategyId: strategy.id,
+      };
+
       try {
         const multiTurnResult = await generateMultiTurnPrompt({
           pluginId: plugin.id,
@@ -195,8 +203,31 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
           error: 'Failed to generate multi-turn prompt',
           details: error instanceof Error ? error.message : String(error),
         });
+        return;
       }
     }
+
+    // Handle batch response (count > 1)
+    if (effectiveCount > 1) {
+      const batchResults = finalTestCases.map((testCase) => {
+        const prompt = extractGeneratedPrompt(testCase, injectVar);
+        const metadata =
+          testCase.metadata && typeof testCase.metadata === 'object' ? testCase.metadata : {};
+        return { prompt, context, metadata };
+      });
+
+      res.json({
+        testCases: batchResults,
+        count: batchResults.length,
+      });
+      return;
+    }
+
+    // Handle single test case response (backward compatible)
+    const testCase = finalTestCases[0];
+    const generatedPrompt = extractGeneratedPrompt(testCase, injectVar);
+    const baseMetadata =
+      testCase.metadata && typeof testCase.metadata === 'object' ? testCase.metadata : {};
 
     res.json({
       prompt: generatedPrompt,

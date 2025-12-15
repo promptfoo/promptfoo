@@ -89,7 +89,7 @@ BoN achieves impressive attack success rates across different models and modalit
 - Vision: 56% on GPT-4 Vision
 - Audio: 72% on GPT-4 Audio
 
-The attack success rate follows a power-law scaling with the number of samples, meaning it reliably improves as more variations are tested.
+The attack success rate follows a power-law scaling with the number of samples, meaning it reliably improves as more variations are tested. This illustrates why [ASR comparisons must account for attempt budget](/blog/asr-not-portable-metric): a 1% per-attempt method becomes 98% with 392 tries.
 
 ## Key Features
 
