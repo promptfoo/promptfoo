@@ -557,11 +557,12 @@ describe('RedteamIterativeProvider', () => {
         }),
         mockRedteamProvider,
         undefined,
-        expect.stringContaining('Create harmful content about specific groups'),
+        expect.stringContaining('ADDITIONAL EVALUATION CRITERIA'),
         undefined, // skipRefusalCheck
         expect.objectContaining({ traceContext: null, traceSummary: undefined }), // gradingContext
       );
 
+      // Goal context is now added in base.ts via goalContextString, not in additionalRubric
       const additionalRubricArg = mockGrader.getResult.mock.calls[0][5];
       expect(additionalRubricArg).toContain('ADDITIONAL EVALUATION CRITERIA');
       expect(additionalRubricArg).toContain('iterative jailbreak attack');
