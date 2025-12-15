@@ -18,7 +18,7 @@ env:
   VITE_TELEMETRY_DISABLED: 1
 jobs:
   test:
-    name: Test on Node ${{ matrix.node }} and ${{ matrix.os }}
+    name: Test on Node ${{ matrix.node }} and ${{ matrix.os }}${{ matrix.shard && format(' (shard {0}/3)', matrix.shard) || '' }}
     timeout-minutes: 10
     runs-on: ${{ matrix.os }}
     strategy:
@@ -26,10 +26,43 @@ jobs:
       matrix:
         node: ['20.x', '22.x', '24.x']
         os: [ubuntu-latest, windows-latest, macOS-latest]
-        # Temporarily exclude macOS with Node 24.x due to flaky test failures
+        shard: ['']
         exclude:
+          # Temporarily exclude macOS with Node 24.x due to flaky test failures
           - node: '24.x'
             os: macOS-latest
+          # Exclude non-sharded Windows tests (we use sharded versions below)
+          - os: windows-latest
+            shard: ''
+        # Add sharding for Windows to speed up CI (Windows tests are ~2x slower)
+        include:
+          - os: windows-latest
+            node: '20.x'
+            shard: 1
+          - os: windows-latest
+            node: '20.x'
+            shard: 2
+          - os: windows-latest
+            node: '20.x'
+            shard: 3
+          - os: windows-latest
+            node: '22.x'
+            shard: 1
+          - os: windows-latest
+            node: '22.x'
+            shard: 2
+          - os: windows-latest
+            node: '22.x'
+            shard: 3
+          - os: windows-latest
+            node: '24.x'
+            shard: 1
+          - os: windows-latest
+            node: '24.x'
+            shard: 2
+          - os: windows-latest
+            node: '24.x'
+            shard: 3
 
     steps:
       - name: Checkout repo
@@ -47,22 +80,31 @@ jobs:
         if: matrix.node == '24.x'
         run: npm install -g npm@latest
 
-      - name: Use Python 3.13
+      - name: Use Python 3.14
         uses: actions/setup-python@v6
         with:
-          python-version: 3.13
+          python-version: 3.14
 
       - name: Use Ruby 3.3
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: 3.3
 
+      # Cache node_modules to speed up installs (especially on Windows where npm ci is slow)
+      # Key includes OS and Node version since native modules are platform/version specific
+      - name: Cache node_modules
+        id: cache-node-modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-node${{ matrix.node }}-${{ hashFiles('package-lock.json') }}
+
       - name: Install Dependencies
-        run: |
-          npm ci
+        if: steps.cache-node-modules.outputs.cache-hit != 'true'
+        run: npm ci
 
       - name: Test
-        run: npm run test
+        run: npm run test${{ matrix.shard && format(' -- --shard={0}/3', matrix.shard) || '' }}
 
   build:
     name: Build on Node ${{ matrix.node }}
@@ -163,6 +205,10 @@ jobs:
         run: |
           npm run depcheck
 
+      - name: Validate lockfile integrity
+        run: |
+          npx lockfile-lint --path package-lock.json --allowed-hosts npm --validate-https
+
   shell-format:
     name: Shell Format Check
     timeout-minutes: 5
@@ -215,7 +261,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: [3.9, 3.13]
+        python-version: [3.9, 3.14]
     steps:
       - name: Checkout repo
         uses: actions/checkout@v5
@@ -311,10 +357,10 @@ jobs:
       - name: Upgrade npm
         run: npm install -g npm@latest
 
-      - name: Use Python 3.13
+      - name: Use Python 3.14
         uses: actions/setup-python@v6
         with:
-          python-version: 3.13
+          python-version: 3.14
 
       - name: Use Ruby 3.3
         uses: ruby/setup-ruby@v1

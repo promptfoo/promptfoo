@@ -21,6 +21,7 @@
   "include": [
     "src/",
     "test/",
+    "scripts/",
     "./package.json",
     "src/**/*.json",
     "test/**/*.json",
@@ -35,6 +36,7 @@
     "test/code-scan-action/**/*",
     "test/codeScans/**/*",
     "test/database/**/*",
+    "test/fixtures/rubric-json-template/**/*",
     "test/matchers/**/*",
     "test/site/",
     "test/testCase/**/*",

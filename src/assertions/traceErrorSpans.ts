@@ -1,3 +1,5 @@
+import { matchesPattern } from '../util/tracing';
+
 import type { AssertionParams, GradingResult } from '../types/index';
 import type { TraceSpan } from '../types/tracing';
 
@@ -5,17 +7,6 @@ interface TraceErrorSpansValue {
   max_count?: number;
   max_percentage?: number;
   pattern?: string;
-}
-
-function matchesPattern(spanName: string, pattern: string): boolean {
-  // Convert glob-like pattern to regex
-  const regexPattern = pattern
-    .replace(/[.+^${}()|[\]\\]/g, '\\$&') // Escape special regex chars
-    .replace(/\*/g, '.*') // Convert * to .*
-    .replace(/\?/g, '.'); // Convert ? to .
-
-  const regex = new RegExp(`^${regexPattern}$`, 'i');
-  return regex.test(spanName);
 }
 
 function isErrorSpan(span: TraceSpan): boolean {

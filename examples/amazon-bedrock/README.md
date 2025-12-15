@@ -202,6 +202,36 @@ Run the OpenAI example with:
 promptfoo eval -c examples/amazon-bedrock/promptfooconfig.openai.yaml
 ```
 
+## New Converse API Features (SDK 3.943+)
+
+The Converse API supports additional stop reason handling:
+
+- `malformed_model_output`: Model produced invalid output
+- `malformed_tool_use`: Model produced a malformed tool use request
+
+These are returned as errors in the response with `metadata.isModelError: true`.
+
+## Nova Sonic Configuration
+
+Nova Sonic now supports configurable timeouts:
+
+```yaml
+providers:
+  - id: bedrock:nova-sonic:amazon.nova-sonic-v1:0
+    config:
+      region: us-east-1
+      sessionTimeout: 300000 # 5 minutes (default)
+      requestTimeout: 120000 # 2 minutes
+```
+
+Error responses include categorized error types in `metadata.errorType`:
+
+- `connection`: Network/AWS connectivity issues
+- `timeout`: Request or session timeout
+- `api`: Authentication/authorization errors
+- `parsing`: Response parsing failures
+- `session`: Bidirectional stream session errors
+
 ## Getting Started
 
 1. Run the evaluation:

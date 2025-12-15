@@ -13,7 +13,7 @@ import type {
 import type { EnvOverrides } from '../../types/env';
 import type { OpenAiSharedOptions } from './types';
 
-type OpenAiImageModel = 'dall-e-2' | 'dall-e-3' | 'gpt-image-1';
+type OpenAiImageModel = 'dall-e-2' | 'dall-e-3' | 'gpt-image-1' | 'gpt-image-1-mini';
 type OpenAiImageOperation = 'generation' | 'variation' | 'edit';
 type DallE2Size = '256x256' | '512x512' | '1024x1024';
 type DallE3Size = '1024x1024' | '1792x1024' | '1024x1792';
@@ -51,6 +51,18 @@ export const GPT_IMAGE1_COSTS: Record<string, number> = {
   high_1536x1024: 0.25,
 };
 
+export const GPT_IMAGE1_MINI_COSTS: Record<string, number> = {
+  low_1024x1024: 0.005,
+  low_1024x1536: 0.006,
+  low_1536x1024: 0.006,
+  medium_1024x1024: 0.011,
+  medium_1024x1536: 0.015,
+  medium_1536x1024: 0.015,
+  high_1024x1024: 0.036,
+  high_1024x1536: 0.052,
+  high_1536x1024: 0.052,
+};
+
 type CommonImageOptions = {
   n?: number;
   response_format?: 'url' | 'b64_json';
@@ -62,9 +74,18 @@ type DallE3Options = CommonImageOptions & {
   style?: 'natural' | 'vivid';
 };
 
-type GptImage1Options = CommonImageOptions & {
-  size?: GptImage1Size;
-  quality?: 'low' | 'medium' | 'high';
+type GptImage1Background = 'transparent' | 'opaque' | 'auto';
+type GptImage1OutputFormat = 'png' | 'jpeg' | 'webp';
+type GptImage1Moderation = 'auto' | 'low';
+
+type GptImage1Options = {
+  n?: number;
+  size?: GptImage1Size | 'auto';
+  quality?: 'low' | 'medium' | 'high' | 'auto';
+  background?: GptImage1Background;
+  output_format?: GptImage1OutputFormat;
+  output_compression?: number;
+  moderation?: GptImage1Moderation;
 };
 
 type DallE2Options = CommonImageOptions & {
@@ -96,10 +117,15 @@ export function validateSizeForModel(
     };
   }
 
-  if (model === 'gpt-image-1' && !GPT_IMAGE1_VALID_SIZES.includes(size as GptImage1Size)) {
+  if (
+    (model === 'gpt-image-1' || model === 'gpt-image-1-mini') &&
+    size !== 'auto' &&
+    !GPT_IMAGE1_VALID_SIZES.includes(size as GptImage1Size)
+  ) {
+    const modelName = model === 'gpt-image-1-mini' ? 'GPT Image 1 Mini' : 'GPT Image 1';
     return {
       valid: false,
-      message: `Invalid size "${size}" for GPT Image 1. Valid sizes are: ${GPT_IMAGE1_VALID_SIZES.join(', ')}`,
+      message: `Invalid size "${size}" for ${modelName}. Valid sizes are: ${GPT_IMAGE1_VALID_SIZES.join(', ')}, auto`,
     };
   }
 
@@ -146,8 +172,13 @@ export function prepareRequestBody(
     prompt,
     n: config.n || 1,
     size,
-    response_format: responseFormat,
   };
+
+  // gpt-image-1 and gpt-image-1-mini don't support response_format - they always return b64_json
+  // and use output_format for the image file format instead
+  if (model !== 'gpt-image-1' && model !== 'gpt-image-1-mini') {
+    body.response_format = responseFormat;
+  }
 
   if (model === 'dall-e-3') {
     if ('quality' in config && config.quality) {
@@ -159,9 +190,30 @@ export function prepareRequestBody(
     }
   }
 
-  if (model === 'gpt-image-1') {
+  if (model === 'gpt-image-1' || model === 'gpt-image-1-mini') {
+    // Quality: low, medium, high, or auto
     if ('quality' in config && config.quality) {
       body.quality = config.quality;
+    }
+
+    // Background: transparent, opaque, or auto (only works with png/webp)
+    if ('background' in config && config.background) {
+      body.background = config.background;
+    }
+
+    // Output format: png, jpeg, or webp
+    if ('output_format' in config && config.output_format) {
+      body.output_format = config.output_format;
+    }
+
+    // Compression level for jpeg/webp (0-100)
+    if ('output_compression' in config && config.output_compression !== undefined) {
+      body.output_compression = config.output_compression;
+    }
+
+    // Moderation: auto or low
+    if ('moderation' in config && config.moderation) {
+      body.moderation = config.moderation;
     }
   }
 
@@ -187,6 +239,11 @@ export function calculateImageCost(
     const q = (quality as 'low' | 'medium' | 'high') || 'low';
     const costKey = `${q}_${size}`;
     const costPerImage = GPT_IMAGE1_COSTS[costKey] || GPT_IMAGE1_COSTS['low_1024x1024'];
+    return costPerImage * n;
+  } else if (model === 'gpt-image-1-mini') {
+    const q = (quality as 'low' | 'medium' | 'high') || 'low';
+    const costKey = `${q}_${size}`;
+    const costPerImage = GPT_IMAGE1_MINI_COSTS[costKey] || GPT_IMAGE1_MINI_COSTS['low_1024x1024'];
     return costPerImage * n;
   }
 
@@ -280,7 +337,11 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
 
     const model = config.model || this.modelName;
     const operation = ('operation' in config && config.operation) || 'generation';
-    const responseFormat = config.response_format || 'url';
+    // gpt-image-1 and gpt-image-1-mini always return b64_json, so we treat them as such regardless of config
+    const responseFormat =
+      model === 'gpt-image-1' || model === 'gpt-image-1-mini'
+        ? 'b64_json'
+        : config.response_format || 'url';
 
     if (operation !== 'generation') {
       return {
