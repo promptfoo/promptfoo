@@ -342,6 +342,7 @@ export interface EvaluateStats {
   failures: number;
   errors: number;
   tokenUsage: Required<TokenUsage>;
+  durationMs?: number;
 }
 
 export interface EvaluateSummaryV3 {
