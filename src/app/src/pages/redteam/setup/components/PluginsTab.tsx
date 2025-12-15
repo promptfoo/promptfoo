@@ -46,6 +46,7 @@ import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import PluginConfigDialog from './PluginConfigDialog';
 import PresetCard from './PresetCard';
+import PresetConfigModal from './PresetConfigModal';
 import {
   getPluginDocumentationUrl,
   hasSpecificPluginDocumentation,
@@ -110,6 +111,13 @@ export default function PluginsTab({
   const [configDialogOpen, setConfigDialogOpen] = useState(false);
   const [selectedConfigPlugin, setSelectedConfigPlugin] = useState<Plugin | null>(null);
   const [isCustomMode, setIsCustomMode] = useState(true);
+
+  // Preset config modal state
+  const [presetConfigModalOpen, setPresetConfigModalOpen] = useState(false);
+  const [pendingPreset, setPendingPreset] = useState<{
+    name: string;
+    plugins: Set<Plugin> | ReadonlySet<Plugin>;
+  } | null>(null);
 
   const {
     data: { status: apiHealthStatus },
@@ -357,6 +365,42 @@ export default function PluginsTab({
     setSelectedCategory((prev) => (prev === category ? undefined : category));
   }, []);
 
+  // Get plugins from a preset that require configuration
+  const getPluginsRequiringConfigFromPreset = useCallback(
+    (plugins: Set<Plugin> | ReadonlySet<Plugin>): Plugin[] => {
+      return Array.from(plugins).filter((plugin) => PLUGINS_REQUIRING_CONFIG.includes(plugin));
+    },
+    [],
+  );
+
+  // Apply a preset (used both directly and from the modal)
+  const applyPreset = useCallback(
+    (
+      preset: { name: string; plugins: Set<Plugin> | ReadonlySet<Plugin> },
+      skipPlugins: Plugin[] = [],
+    ) => {
+      const pluginsToApply = new Set(
+        Array.from(preset.plugins).filter((plugin) => !skipPlugins.includes(plugin)),
+      );
+
+      pluginsToApply.forEach((plugin) => {
+        if (!selectedPlugins.has(plugin)) {
+          handlePluginToggle(plugin);
+        }
+      });
+
+      // Remove plugins not in the filtered preset
+      selectedPlugins.forEach((plugin) => {
+        if (!pluginsToApply.has(plugin)) {
+          handlePluginToggle(plugin);
+        }
+      });
+
+      setIsCustomMode(false);
+    },
+    [selectedPlugins, handlePluginToggle],
+  );
+
   const handlePresetSelect = useCallback(
     (preset: { name: string; plugins: Set<Plugin> | ReadonlySet<Plugin> }) => {
       recordEvent('feature_used', {
@@ -364,24 +408,50 @@ export default function PluginsTab({
         preset: preset.name,
       });
       onUserInteraction();
+
       if (preset.name === 'Custom') {
         setIsCustomMode(true);
+        return;
+      }
+
+      // Check if any plugins in the preset require configuration
+      const pluginsNeedingConfig = getPluginsRequiringConfigFromPreset(preset.plugins);
+
+      // Filter out plugins that are already configured
+      const unconfiguredPlugins = pluginsNeedingConfig.filter(
+        (plugin) => !isPluginConfigured(plugin),
+      );
+
+      if (unconfiguredPlugins.length > 0) {
+        // Show the configuration modal
+        setPendingPreset(preset);
+        setPresetConfigModalOpen(true);
       } else {
-        preset.plugins.forEach((plugin) => {
-          if (!selectedPlugins.has(plugin)) {
-            handlePluginToggle(plugin);
-          }
-        });
-        // Remove plugins not in preset
-        selectedPlugins.forEach((plugin) => {
-          if (!preset.plugins.has(plugin)) {
-            handlePluginToggle(plugin);
-          }
-        });
-        setIsCustomMode(false);
+        // No plugins need configuration, apply directly
+        applyPreset(preset);
       }
     },
-    [recordEvent, onUserInteraction, selectedPlugins, handlePluginToggle],
+    [
+      recordEvent,
+      onUserInteraction,
+      getPluginsRequiringConfigFromPreset,
+      isPluginConfigured,
+      applyPreset,
+    ],
+  );
+
+  const handlePresetConfigModalClose = useCallback(() => {
+    setPresetConfigModalOpen(false);
+    setPendingPreset(null);
+  }, []);
+
+  const handlePresetApplyFromModal = useCallback(
+    (skipPlugins: Plugin[]) => {
+      if (pendingPreset) {
+        applyPreset(pendingPreset, skipPlugins);
+      }
+    },
+    [pendingPreset, applyPreset],
   );
 
   const handleGenerateTestCase = useCallback(
@@ -817,6 +887,19 @@ export default function PluginsTab({
               setSelectedConfigPlugin(null);
             }}
           />
+
+          {/* Preset config modal */}
+          {pendingPreset && (
+            <PresetConfigModal
+              open={presetConfigModalOpen}
+              onClose={handlePresetConfigModalClose}
+              presetName={pendingPreset.name}
+              pluginsRequiringConfig={getPluginsRequiringConfigFromPreset(pendingPreset.plugins)}
+              pluginConfig={pluginConfig}
+              onApplyPreset={handlePresetApplyFromModal}
+              onConfigSave={updatePluginConfig}
+            />
+          )}
         </Box>
 
         {/* Selected Plugins Sidebar */}
