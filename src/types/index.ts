@@ -684,6 +684,9 @@ export const TestCaseSchema = z.object({
   // Override the provider.
   provider: z.union([z.string(), ProviderOptionsSchema, ApiProviderSchema]).optional(),
 
+  // Filter to specific prompts by label or ID. If not provided, test runs against all prompts.
+  prompts: z.array(z.string()).optional(),
+
   // Output related from running values in Vars with provider. Having this value would skip running the prompt through the provider, and go straight to the assertions
   providerOutput: z.union([z.string(), z.object({})]).optional(),
 

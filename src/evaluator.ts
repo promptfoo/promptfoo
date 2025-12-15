@@ -60,6 +60,7 @@ import {
   createEmptyTokenUsage,
 } from './util/tokenUsageUtils';
 import { type TransformContext, TransformInputType, transform } from './util/transform';
+import { isPromptAllowed } from './util/promptMatching';
 import type { SingleBar } from 'cli-progress';
 import type winston from 'winston';
 
@@ -233,27 +234,22 @@ function updateAssertionMetrics(
 
 /**
  * Validates if a given prompt is allowed based on the provided list of allowed
- * prompt labels. Providers can be configured with a `prompts` attribute, which
- * corresponds to an array of prompt labels. Labels can either refer to a group
- * (for example from a file) or to individual prompts. If the attribute is
- * present, this function validates that the prompt labels fit the matching
- * criteria of the provider. Examples:
+ * prompt references. Providers and tests can be configured with a `prompts` attribute,
+ * which corresponds to an array of prompt labels or IDs. References can either match
+ * exactly or use wildcard patterns. Examples:
  *
- * - `prompts: ['examplePrompt']` matches `examplePrompt` exactly
- * - `prompts: ['exampleGroup:*']` matches any prompt that starts with `exampleGroup:`
+ * - `prompts: ['examplePrompt']` matches prompt with label OR id 'examplePrompt'
+ * - `prompts: ['exampleGroup:*']` matches any prompt with label/id starting with 'exampleGroup:'
+ * - `prompts: ['exampleGroup']` matches 'exampleGroup' exactly OR any label/id starting with 'exampleGroup:'
  *
  * If no `prompts` attribute is present, all prompts are allowed by default.
  *
  * @param prompt - The prompt object to check.
- * @param allowedPrompts - The list of allowed prompt labels.
+ * @param allowedPrompts - The list of allowed prompt labels or IDs.
  * @returns Returns true if the prompt is allowed, false otherwise.
  */
 export function isAllowedPrompt(prompt: Prompt, allowedPrompts: string[] | undefined): boolean {
-  return (
-    !Array.isArray(allowedPrompts) ||
-    allowedPrompts.includes(prompt.label) ||
-    allowedPrompts.some((allowedPrompt) => prompt.label.startsWith(`${allowedPrompt}:`))
-  );
+  return isPromptAllowed(prompt, allowedPrompts);
 }
 
 /**
@@ -1010,6 +1006,10 @@ class Evaluator {
         ...(typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest?.metadata : {}),
         ...testCase.metadata,
       };
+      // If the test case doesn't have prompts filter, use the one from defaultTest
+      testCase.prompts =
+        testCase.prompts ??
+        (typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest?.prompts : undefined);
       // If the test case doesn't have a provider, use the one from defaultTest
       // Note: defaultTest.provider may be a raw config object that needs to be loaded
       if (
@@ -1071,7 +1071,12 @@ class Evaluator {
           for (const provider of testSuite.providers) {
             for (const prompt of testSuite.prompts) {
               const providerKey = provider.label || provider.id();
+              // Provider-level prompt filtering
               if (!isAllowedPrompt(prompt, testSuite.providerPromptMap?.[providerKey])) {
+                continue;
+              }
+              // Test-level prompt filtering
+              if (!isAllowedPrompt(prompt, testCase.prompts)) {
                 continue;
               }
               runEvalOptions.push({

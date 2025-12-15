@@ -10,6 +10,7 @@ import yaml from 'js-yaml';
 import { fromError } from 'zod-validation-error';
 import { readAssertions } from '../../assertions/index';
 import { validateAssertions } from '../../assertions/validateAssertions';
+import { validateTestPromptReferences } from '../validateTestPromptReferences';
 import cliState from '../../cliState';
 import { filterTests } from '../../commands/eval/filterTests';
 import { getEnvBool, isCI } from '../../envars';
@@ -702,6 +703,13 @@ export async function resolveConfigs(
   // Note: defaultTest can be a string (file://) reference, so only pass if it's an object
   validateAssertions(
     testSuite.tests || [],
+    typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined,
+  );
+
+  // Validate that all prompt references in tests exist
+  validateTestPromptReferences(
+    testSuite.tests || [],
+    testSuite.prompts,
     typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined,
   );
 
