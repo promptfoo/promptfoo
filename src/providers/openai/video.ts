@@ -18,6 +18,7 @@ import type {
   OpenAiVideoJob,
   OpenAiVideoModel,
   OpenAiVideoSize,
+  OpenAiVideoDuration,
   OpenAiVideoVariant,
 } from './types';
 
@@ -39,10 +40,15 @@ export const SORA_COSTS: Record<OpenAiVideoModel, number> = {
 const VALID_VIDEO_SIZES: OpenAiVideoSize[] = ['1280x720', '720x1280'];
 
 /**
+ * Valid video durations in seconds
+ */
+const VALID_VIDEO_DURATIONS: OpenAiVideoDuration[] = [4, 8, 12];
+
+/**
  * Default configuration values
  */
 const DEFAULT_SIZE: OpenAiVideoSize = '1280x720';
-const DEFAULT_SECONDS = 8;
+const DEFAULT_SECONDS: OpenAiVideoDuration = 8;
 const DEFAULT_POLL_INTERVAL_MS = 10000; // 10 seconds
 const DEFAULT_MAX_POLL_TIME_MS = 600000; // 10 minutes
 
@@ -107,6 +113,19 @@ export function validateVideoSize(size: string): { valid: boolean; message?: str
     return {
       valid: false,
       message: `Invalid video size "${size}". Valid sizes: ${VALID_VIDEO_SIZES.join(', ')}`,
+    };
+  }
+  return { valid: true };
+}
+
+/**
+ * Validate video seconds parameter
+ */
+export function validateVideoSeconds(seconds: number): { valid: boolean; message?: string } {
+  if (!VALID_VIDEO_DURATIONS.includes(seconds as OpenAiVideoDuration)) {
+    return {
+      valid: false,
+      message: `Invalid video duration "${seconds}" seconds. Valid durations: ${VALID_VIDEO_DURATIONS.join(', ')} seconds`,
     };
   }
   return { valid: true };
@@ -365,6 +384,12 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
     const sizeValidation = validateVideoSize(size);
     if (!sizeValidation.valid) {
       return { error: sizeValidation.message };
+    }
+
+    // Validate seconds
+    const secondsValidation = validateVideoSeconds(seconds);
+    if (!secondsValidation.valid) {
+      return { error: secondsValidation.message };
     }
 
     const startTime = Date.now();

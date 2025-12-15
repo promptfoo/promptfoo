@@ -9,13 +9,13 @@ providers:
   - id: openai:video:sora-2
     config:
       size: 1280x720 # Landscape: 1280x720, Portrait: 720x1280
-      seconds: 5 # Video duration in seconds
+      seconds: 4 # Video duration: 4, 8, or 12 seconds
 
   # Sora 2 Pro - Higher quality video generation ($0.30/second)
   - id: openai:video:sora-2-pro
     config:
       size: 1280x720
-      seconds: 5
+      seconds: 4
 
 tests:
   - vars:

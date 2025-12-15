@@ -1,0 +1,21 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Promptfoo red panda video test
+
+prompts:
+  - |
+    A cute red panda character (the Promptfoo mascot) in a modern tech setting.
+    The red panda should be sitting at a computer workstation, looking intelligent and focused.
+    Include visual elements suggesting AI and technology - subtle circuit patterns, floating code snippets, or holographic displays.
+    Color palette: deep purples, teals, and orange accents matching Promptfoo's brand.
+    Style: Modern 3D animation, Pixar-like quality, professional but approachable.
+    The scene should feel dynamic and tech-forward.
+    Mood: innovative, friendly, cutting-edge technology.
+
+providers:
+  - id: openai:video:sora-2
+    config:
+      size: 1280x720
+      seconds: 4
+
+tests:
+  - vars: {}

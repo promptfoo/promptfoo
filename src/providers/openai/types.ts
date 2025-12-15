@@ -199,6 +199,11 @@ export type OpenAiVideoModel = 'sora-2' | 'sora-2-pro';
 export type OpenAiVideoSize = '1280x720' | '720x1280';
 
 /**
+ * Valid video duration in seconds (Sora API only accepts these values)
+ */
+export type OpenAiVideoDuration = 4 | 8 | 12;
+
+/**
  * Video generation job status
  */
 export type OpenAiVideoStatus = 'queued' | 'in_progress' | 'completed' | 'failed';
@@ -217,7 +222,7 @@ export interface OpenAiVideoOptions extends OpenAiSharedOptions {
 
   // Video parameters
   size?: OpenAiVideoSize;
-  seconds?: number;
+  seconds?: OpenAiVideoDuration;
 
   // Image-to-video: base64 image data or file path (file://path)
   input_reference?: string;
@@ -259,7 +264,7 @@ export interface OpenAiVideoCreateRequest {
   model: string;
   prompt: string;
   size?: string;
-  seconds?: number;
+  seconds?: OpenAiVideoDuration;
   input_reference?: string;
 }
 

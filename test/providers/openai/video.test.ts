@@ -6,6 +6,7 @@ import {
   calculateVideoCost,
   getVideoApiPath,
   validateVideoSize,
+  validateVideoSeconds,
 } from '../../../src/providers/openai/video';
 
 // Mock the dependencies
@@ -59,6 +60,38 @@ describe('OpenAiVideoProvider', () => {
 
     it('should reject non-standard sizes', () => {
       const result = validateVideoSize('500x500');
+      expect(result.valid).toBe(false);
+    });
+  });
+
+  describe('validateVideoSeconds', () => {
+    it('should accept 4 seconds', () => {
+      expect(validateVideoSeconds(4)).toEqual({ valid: true });
+    });
+
+    it('should accept 8 seconds', () => {
+      expect(validateVideoSeconds(8)).toEqual({ valid: true });
+    });
+
+    it('should accept 12 seconds', () => {
+      expect(validateVideoSeconds(12)).toEqual({ valid: true });
+    });
+
+    it('should reject invalid duration like 5 seconds', () => {
+      const result = validateVideoSeconds(5);
+      expect(result.valid).toBe(false);
+      expect(result.message).toContain('Invalid video duration');
+      expect(result.message).toContain('5');
+      expect(result.message).toContain('4, 8, 12');
+    });
+
+    it('should reject 10 seconds', () => {
+      const result = validateVideoSeconds(10);
+      expect(result.valid).toBe(false);
+    });
+
+    it('should reject 0 seconds', () => {
+      const result = validateVideoSeconds(0);
       expect(result.valid).toBe(false);
     });
   });
@@ -335,7 +368,7 @@ describe('OpenAiVideoProvider', () => {
 
     it('should use specified size and seconds', async () => {
       const provider = new OpenAiVideoProvider('sora-2', {
-        config: { apiKey: 'test-key', size: '720x1280', seconds: 10 },
+        config: { apiKey: 'test-key', size: '720x1280', seconds: 12 },
       });
 
       setupMocksForSuccess();
@@ -351,11 +384,11 @@ describe('OpenAiVideoProvider', () => {
       expect(mockFetch).toHaveBeenCalledWith(
         expect.stringContaining('/videos'),
         expect.objectContaining({
-          body: expect.stringContaining('"seconds":10'),
+          body: expect.stringContaining('"seconds":12'),
         }),
       );
       expect(result.video?.size).toBe('720x1280');
-      expect(result.video?.duration).toBe(10);
+      expect(result.video?.duration).toBe(12);
     });
 
     it('should skip thumbnail download when disabled', async () => {

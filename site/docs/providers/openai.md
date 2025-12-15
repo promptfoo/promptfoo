@@ -606,7 +606,7 @@ providers:
   - id: openai:video:sora-2
     config:
       size: 1280x720 # 1280x720 (landscape) or 720x1280 (portrait)
-      seconds: 10 # Duration in seconds (default: 5)
+      seconds: 8 # Duration: 4, 8, or 12 seconds
 ```
 
 ### Configuration Options
@@ -614,8 +614,8 @@ providers:
 | Parameter              | Description                                        | Default      |
 | ---------------------- | -------------------------------------------------- | ------------ |
 | `size`                 | Video dimensions                                   | `1280x720`   |
-| `seconds`              | Duration in seconds                                | `5`          |
-| `poll_interval_ms`     | Polling interval for job status                    | `5000`       |
+| `seconds`              | Duration in seconds (4, 8, or 12)                  | `8`          |
+| `poll_interval_ms`     | Polling interval for job status                    | `10000`      |
 | `max_poll_time_ms`     | Maximum time to wait for video generation          | `600000`     |
 | `download_thumbnail`   | Download thumbnail preview                         | `true`       |
 | `download_spritesheet` | Download spritesheet preview                       | `true`       |
@@ -630,11 +630,11 @@ providers:
   - id: openai:video:sora-2
     config:
       size: 1280x720
-      seconds: 10
+      seconds: 4
   - id: openai:video:sora-2-pro
     config:
       size: 720x1280
-      seconds: 5
+      seconds: 8
 
 tests:
   - vars:

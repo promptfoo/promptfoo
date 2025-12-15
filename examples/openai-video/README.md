@@ -44,8 +44,8 @@ This example compares two Sora models:
 | Parameter              | Description                               | Default    |
 | ---------------------- | ----------------------------------------- | ---------- |
 | `size`                 | Video dimensions (1280x720 or 720x1280)   | 1280x720   |
-| `seconds`              | Duration in seconds                       | 5          |
-| `poll_interval_ms`     | Polling interval for job status           | 5000       |
+| `seconds`              | Duration in seconds (4, 8, or 12)         | 8          |
+| `poll_interval_ms`     | Polling interval for job status           | 10000      |
 | `max_poll_time_ms`     | Maximum wait time for generation          | 600000     |
 | `download_thumbnail`   | Download thumbnail preview                | true       |
 | `download_spritesheet` | Download spritesheet preview              | true       |
