@@ -250,3 +250,122 @@ export function maybeLoadConfigFromExternalFile(
   }
   return maybeLoadFromExternalFile(config, context);
 }
+
+export interface FileReference {
+  /** The original file:// string as found in the config */
+  original: string;
+  /** The resolved file path (without file:// prefix and function name) */
+  filePath: string;
+  /** The function name if specified (e.g., file://path.py:func_name) */
+  functionName?: string;
+  /** The path in the config where this reference was found (for error reporting) */
+  configPath: string;
+}
+
+/**
+ * Recursively extracts all file:// references from a configuration object.
+ *
+ * @param config - The configuration object to search
+ * @param currentPath - The current path in the config (for error reporting)
+ * @returns Array of FileReference objects with details about each file reference
+ */
+export function extractFileReferences(config: unknown, currentPath: string = ''): FileReference[] {
+  const references: FileReference[] = [];
+
+  if (typeof config === 'string' && config.startsWith('file://')) {
+    try {
+      const { filePath, functionName } = parseFileUrl(config);
+      references.push({
+        original: config,
+        filePath,
+        functionName,
+        configPath: currentPath || 'root',
+      });
+    } catch {
+      // If parseFileUrl fails, still try to extract what we can
+      const pathWithoutProtocol = config.slice('file://'.length);
+      references.push({
+        original: config,
+        filePath: pathWithoutProtocol,
+        configPath: currentPath || 'root',
+      });
+    }
+    return references;
+  }
+
+  if (Array.isArray(config)) {
+    config.forEach((item, index) => {
+      const itemPath = currentPath ? `${currentPath}[${index}]` : `[${index}]`;
+      references.push(...extractFileReferences(item, itemPath));
+    });
+    return references;
+  }
+
+  if (config && typeof config === 'object' && config !== null) {
+    for (const [key, value] of Object.entries(config)) {
+      const keyPath = currentPath ? `${currentPath}.${key}` : key;
+      references.push(...extractFileReferences(value, keyPath));
+    }
+  }
+
+  return references;
+}
+
+export interface FileValidationResult {
+  /** Whether all file references are valid */
+  valid: boolean;
+  /** List of missing files with their details */
+  missingFiles: Array<{
+    reference: FileReference;
+    resolvedPath: string;
+  }>;
+  /** List of valid files */
+  validFiles: Array<{
+    reference: FileReference;
+    resolvedPath: string;
+  }>;
+}
+
+/**
+ * Validates that all file:// references in a config point to existing files.
+ *
+ * @param config - The configuration object to validate
+ * @param basePath - The base path to resolve relative file paths
+ * @returns Validation result with details about missing and valid files
+ */
+export function validateFileReferences(
+  config: unknown,
+  basePath: string = '',
+): FileValidationResult {
+  const references = extractFileReferences(config);
+  const result: FileValidationResult = {
+    valid: true,
+    missingFiles: [],
+    validFiles: [],
+  };
+
+  for (const ref of references) {
+    // Skip glob patterns - they will be validated when expanded
+    if (hasMagic(ref.filePath)) {
+      continue;
+    }
+
+    // Skip URLs that look like they might be Nunjucks templates (contain {{ }})
+    if (ref.filePath.includes('{{') && ref.filePath.includes('}}')) {
+      continue;
+    }
+
+    const resolvedPath = path.isAbsolute(ref.filePath)
+      ? ref.filePath
+      : path.resolve(basePath || process.cwd(), ref.filePath);
+
+    if (fs.existsSync(resolvedPath)) {
+      result.validFiles.push({ reference: ref, resolvedPath });
+    } else {
+      result.valid = false;
+      result.missingFiles.push({ reference: ref, resolvedPath });
+    }
+  }
+
+  return result;
+}

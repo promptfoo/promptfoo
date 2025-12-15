@@ -32,7 +32,7 @@ import {
 } from '../../types/index';
 import { readFilters } from '../../util/index';
 import { promptfooCommand } from '../promptfooCommand';
-import { maybeLoadFromExternalFile } from '../../util/file';
+import { maybeLoadFromExternalFile, validateFileReferences } from '../../util/file';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import invariant from '../../util/invariant';
 import { PromptSchema } from '../../validators/prompts';
@@ -495,6 +495,34 @@ export async function resolveConfigs(
     fileConfig = await combineConfigs(configPaths);
     // The user has provided a config file, so we do not want to use the default config.
     defaultConfig = {};
+
+    // Validate all file:// references in the config before proceeding
+    const configBasePath = path.dirname(configPaths[0]);
+    const validationResult = validateFileReferences(fileConfig, configBasePath);
+    if (!validationResult.valid) {
+      const errorMessage = dedent`
+        ${chalk.red.bold('File reference errors found in config:')}
+
+        ${validationResult.missingFiles
+          .map(
+            ({ reference, resolvedPath }) => dedent`
+          ${chalk.yellow('•')} ${chalk.bold(reference.original)}
+            ${chalk.white('Location in config:')} ${reference.configPath}
+            ${chalk.white('Resolved path:')} ${resolvedPath}
+        `,
+          )
+          .join('\n\n')}
+
+        ${chalk.white('Please verify that:')}
+          - The file paths are correct
+          - The files exist at the specified locations
+          - Paths are relative to: ${chalk.cyan(path.resolve(configBasePath))}
+      `;
+      logger.error(errorMessage);
+      throw new Error(
+        `Missing file references: ${validationResult.missingFiles.map((f) => f.resolvedPath).join(', ')}`,
+      );
+    }
   }
   // Standalone assertion mode
   if (cmdObj.assertions) {
