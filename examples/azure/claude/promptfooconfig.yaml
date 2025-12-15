@@ -9,7 +9,7 @@ providers:
     label: claude-opus-4-5
     config:
       apiHost: 'your-deployment.services.ai.azure.com'
-      apiVersion: '2025-04-01-preview'
+      apiVersion: '2025-11-15-preview'
       max_tokens: 1024
       temperature: 0.7
   
