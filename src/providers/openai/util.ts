@@ -316,6 +316,14 @@ export const OPENAI_CHAT_MODELS = [
       output: 10 / 1e6,
     },
   })),
+  // GPT-5.2 models
+  ...['gpt-5.2', 'gpt-5.2-2025-12-11'].map((model) => ({
+    id: model,
+    cost: {
+      input: 1.75 / 1e6,
+      output: 14 / 1e6,
+    },
+  })),
   // gpt-audio models
   ...['gpt-audio', 'gpt-audio-2025-08-28'].map((model) => ({
     id: model,
@@ -572,12 +580,13 @@ export function failApiCall(err: any) {
 export function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
   if (data.usage) {
     if (cached) {
-      return { cached: data.usage.total_tokens, total: data.usage.total_tokens };
+      return { cached: data.usage.total_tokens, total: data.usage.total_tokens, numRequests: 1 };
     } else {
       return {
         total: data.usage.total_tokens,
         prompt: data.usage.prompt_tokens || 0,
         completion: data.usage.completion_tokens || 0,
+        numRequests: 1,
         ...(data.usage.completion_tokens_details
           ? {
               completionDetails: {

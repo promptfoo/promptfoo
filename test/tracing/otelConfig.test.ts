@@ -89,15 +89,15 @@ describe('otelConfig', () => {
 
     it('should fall back to OTEL_EXPORTER_OTLP_ENDPOINT', () => {
       mockedGetEnvBool.mockImplementation((_key, defaultVal) => defaultVal ?? false);
-      mockedGetEnvString.mockImplementation((key, defaultVal) => {
+      mockedGetEnvString.mockImplementation(((key: string, defaultVal?: string) => {
         if (key === 'PROMPTFOO_OTEL_ENDPOINT') {
-          return undefined;
+          return defaultVal;
         }
         if (key === 'OTEL_EXPORTER_OTLP_ENDPOINT') {
           return 'http://standard:4318';
         }
         return defaultVal;
-      });
+      }) as typeof getEnvString);
 
       const config = getOtelConfigFromEnv();
 

@@ -157,12 +157,13 @@ interface MistralChatCompletionOptions {
 function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
   if (data.usage) {
     if (cached) {
-      return { cached: data.usage.total_tokens, total: data.usage.total_tokens };
+      return { cached: data.usage.total_tokens, total: data.usage.total_tokens, numRequests: 1 };
     } else {
       return {
         total: data.usage.total_tokens,
         prompt: data.usage.prompt_tokens || 0,
         completion: data.usage.completion_tokens || 0,
+        numRequests: 1,
       };
     }
   }

@@ -287,6 +287,9 @@ type EnvVars = {
   // CDP
   CDP_DOMAIN?: string;
 
+  // ElevenLabs
+  ELEVENLABS_API_KEY?: string;
+
   // FAL
   FAL_KEY?: string;
 

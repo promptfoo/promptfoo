@@ -779,7 +779,7 @@ class Evaluator {
       if (!testSuite.defaultTest) {
         testSuite.defaultTest = {};
       }
-      if (!testSuite.defaultTest.assert) {
+      if (typeof testSuite.defaultTest !== 'string' && !testSuite.defaultTest.assert) {
         testSuite.defaultTest.assert = [];
       }
     }
@@ -888,6 +888,7 @@ class Evaluator {
       telemetry.record('feature_used', {
         feature: 'scenarios',
       });
+      let scenarioIndex = 0;
       for (const scenario of testSuite.scenarios) {
         for (const data of scenario.config) {
           // Merge defaultTest with scenario config
@@ -898,6 +899,20 @@ class Evaluator {
               },
             ]
           ).map((test) => {
+            // Merge metadata from all sources
+            const mergedMetadata = {
+              ...(typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest?.metadata : {}),
+              ...data.metadata,
+              ...test.metadata,
+            };
+
+            // Auto-generate scenarioConversationId if no conversationId is set
+            // This ensures each scenario has isolated conversation history by default
+            // Users can still override by setting their own conversationId
+            if (!mergedMetadata.conversationId) {
+              mergedMetadata.conversationId = `__scenario_${scenarioIndex}__`;
+            }
+
             return {
               ...(typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : {}),
               ...data,
@@ -918,17 +933,12 @@ class Evaluator {
                 ...(data.assert || []),
                 ...(test.assert || []),
               ],
-              metadata: {
-                ...(typeof testSuite.defaultTest === 'object'
-                  ? testSuite.defaultTest?.metadata
-                  : {}),
-                ...data.metadata,
-                ...test.metadata,
-              },
+              metadata: mergedMetadata,
             };
           });
           // Add scenario tests to tests
           tests = tests.concat(scenarioTests);
+          scenarioIndex++;
         }
       }
     }
@@ -1956,8 +1966,8 @@ class Evaluator {
       isRedteam: Boolean(options.isRedteam),
     });
 
-    // Update database signal file after all results are written
-    updateSignalFile();
+    // Update database signal file after all results are written, passing the eval ID
+    updateSignalFile(this.evalRecord.id);
 
     return this.evalRecord;
   }
@@ -1970,7 +1980,8 @@ class Evaluator {
     const tracingEnabled =
       getEnvBool('PROMPTFOO_TRACING_ENABLED', false) ||
       this.testSuite.tracing?.enabled === true ||
-      this.testSuite.defaultTest?.metadata?.tracingEnabled === true ||
+      (typeof this.testSuite.defaultTest === 'object' &&
+        this.testSuite.defaultTest?.metadata?.tracingEnabled === true) ||
       this.testSuite.tests?.some((t) => t.metadata?.tracingEnabled === true);
 
     if (tracingEnabled) {

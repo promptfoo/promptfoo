@@ -1108,6 +1108,17 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
         ? { flagged: true, reason: 'guardrail_intervened' }
         : undefined;
 
+    // Check for malformed output stop reasons (added in AWS SDK 3.943.0)
+    let malformedError: string | undefined;
+    if (response.stopReason === 'malformed_model_output') {
+      malformedError = 'Model produced invalid output. The response could not be parsed correctly.';
+      metadata.isModelError = true;
+    } else if (response.stopReason === 'malformed_tool_use') {
+      malformedError =
+        'Model produced a malformed tool use request. Check tool configuration and input schema.';
+      metadata.isModelError = true;
+    }
+
     // Handle function tool callbacks if configured
     if (this.config.functionToolCallbacks) {
       const toolUseBlocks = content.filter(
@@ -1148,6 +1159,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
             ...(cost !== undefined ? { cost } : {}),
             ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
             ...(guardrails ? { guardrails } : {}),
+            ...(malformedError ? { error: malformedError } : {}),
           };
         }
       }
@@ -1162,6 +1174,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       ...(cost !== undefined ? { cost } : {}),
       ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
       ...(guardrails ? { guardrails } : {}),
+      ...(malformedError ? { error: malformedError } : {}),
     };
   }
 
@@ -1226,7 +1239,7 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       // Process the stream
       if (response.stream) {
         for await (const event of response.stream) {
-          // Handle content block start - includes tool use initialization
+          // Handle content block start - includes tool use and image initialization
           if ('contentBlockStart' in event && event.contentBlockStart) {
             const blockIndex = event.contentBlockStart.contentBlockIndex ?? 0;
             const start = event.contentBlockStart.start;
@@ -1303,6 +1316,22 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
       }
       const finalOutput = parts.join('\n\n');
 
+      // Check for malformed output stop reasons (added in AWS SDK 3.943.0)
+      let malformedError: string | undefined;
+      const metadata: Record<string, unknown> = {};
+      if (stopReason) {
+        metadata.stopReason = stopReason;
+      }
+      if (stopReason === 'malformed_model_output') {
+        malformedError =
+          'Model produced invalid output. The response could not be parsed correctly.';
+        metadata.isModelError = true;
+      } else if (stopReason === 'malformed_tool_use') {
+        malformedError =
+          'Model produced a malformed tool use request. Check tool configuration and input schema.';
+        metadata.isModelError = true;
+      }
+
       const tokenUsage: Partial<TokenUsage> = {
         prompt: usage.inputTokens,
         completion: usage.outputTokens,
@@ -1320,7 +1349,8 @@ export class AwsBedrockConverseProvider extends AwsBedrockGenericProvider implem
         output: finalOutput,
         tokenUsage,
         ...(cost !== undefined ? { cost } : {}),
-        ...(stopReason ? { metadata: { stopReason } } : {}),
+        ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
+        ...(malformedError ? { error: malformedError } : {}),
       };
     } catch (err: any) {
       return {

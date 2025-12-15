@@ -26,19 +26,21 @@ npm run test:integration
 - **NEVER** increase test timeouts - fix the slow test
 - **NEVER** use `.only()` or `.skip()` in committed code
 - **ALWAYS** clean up mocks in `afterEach`
-- **ALWAYS** use `--randomize` to ensure test independence
+- Tests run in **random order by default** (configured in vitest.config.ts)
+  - Use `--sequence.shuffle=false` to disable when debugging specific failures
+  - Use `--sequence.seed=12345` to reproduce a specific order
 
 ## Writing Tests
 
 **Reference files:**
 
 - **Vitest (frontend)**: `src/app/src/hooks/usePageMeta.test.ts` - explicit imports
-- **Vitest (backend)**: `test/assertions/contains.test.ts` - uses globals (no imports needed)
+- **Vitest (backend)**: `test/assertions/contains.test.ts` - explicit imports
 
-Backend Vitest tests use `globals: true` so `describe`, `it`, `expect`, `vi` are available without imports.
+All tests require explicit imports from vitest:
 
 ```typescript
-import { vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 afterEach(() => {
   vi.resetAllMocks(); // Prevents test pollution
@@ -67,6 +69,19 @@ axiosMock.post.mockResolvedValue({ data: { result: 'success' } });
 - Mock external dependencies but not the code being tested
 - Reset mocks between tests to prevent test pollution
 
+**Critical: Mock Isolation**
+
+`vi.clearAllMocks()` only clears call history, NOT mock implementations. Use `mockReset()` for full isolation:
+
+```typescript
+beforeEach(() => {
+  vi.clearAllMocks(); // Clears .mock.calls and .mock.results
+  vi.mocked(myMock).mockReset(); // Also clears mockReturnValue/mockResolvedValue
+});
+```
+
+For `vi.hoisted()` mocks or mocks with `mockReturnValue()`, you MUST call `mockReset()` in `beforeEach` to ensure test isolation when tests run in random order.
+
 ## Provider Testing
 
 Every provider needs tests covering:
@@ -82,8 +97,8 @@ See `test/providers/openai-codex-sdk.test.ts` for reference patterns.
 
 - Config: `vitest.config.ts` (main tests) and `vitest.integration.config.ts` (integration tests)
 - Setup: `vitest.setup.ts`
-- Globals enabled: `describe`, `it`, `expect`, `beforeEach`, `afterEach` available without imports
-- For mocking utilities, import from `vitest`: `import { vi } from 'vitest'`
+- Globals disabled: All test utilities must be explicitly imported from `vitest`
+- Import `describe`, `it`, `expect`, `beforeEach`, `afterEach`, `vi` from `vitest`
 
 ## Best Practices
 
