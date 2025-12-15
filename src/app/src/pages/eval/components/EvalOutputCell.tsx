@@ -272,6 +272,11 @@ function EvalOutputCell({
       .filter((reason) => reason); // Filter out empty/undefined reasons
   }
 
+  // Include provider-level error if present (e.g., from Python provider returning error)
+  if (output.error) {
+    failReasons.unshift(output.error);
+  }
+
   if (showDiffs && firstOutput) {
     const firstOutputText =
       typeof firstOutput.text === 'string' ? firstOutput.text : JSON.stringify(firstOutput.text);
@@ -816,7 +821,9 @@ function EvalOutputCell({
       {showPrompts && firstOutput.prompt && (
         <div className="prompt">
           <span className="pill">Prompt</span>
-          {output.prompt}
+          {typeof output.prompt === 'string'
+            ? output.prompt
+            : JSON.stringify(output.prompt, null, 2)}
         </div>
       )}
       {/* Show response audio from redteam history if available (target's audio response) */}

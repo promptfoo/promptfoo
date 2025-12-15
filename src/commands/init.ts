@@ -218,9 +218,6 @@ export function initCommand(program: Command) {
     .option('--no-interactive', 'Do not run in interactive mode')
     .option('--example [name]', 'Download an example from the promptfoo repo')
     .action(async (directory: string | null, cmdObj: InitCommandOptions) => {
-      telemetry.record('command_used', {
-        name: 'init - started',
-      });
       if (directory === 'redteam' && cmdObj.interactive) {
         const useRedteam = await confirm({
           message:

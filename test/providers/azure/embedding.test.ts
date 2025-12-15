@@ -51,6 +51,7 @@ describe('AzureEmbeddingProvider', () => {
       tokenUsage: {
         cached: 10,
         total: 10,
+        numRequests: 1,
       },
     });
   });
@@ -66,6 +67,7 @@ describe('AzureEmbeddingProvider', () => {
         total: 0,
         prompt: 0,
         completion: 0,
+        numRequests: 1,
       },
     });
   });
@@ -93,6 +95,7 @@ describe('AzureEmbeddingProvider', () => {
         total: 10,
         prompt: 5,
         completion: 5,
+        numRequests: 1,
       },
     });
   });
@@ -124,6 +127,7 @@ describe('AzureEmbeddingProvider', () => {
         total: undefined,
         prompt: undefined,
         completion: undefined,
+        numRequests: 1,
       },
     });
   });

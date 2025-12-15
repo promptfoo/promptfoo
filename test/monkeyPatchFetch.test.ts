@@ -1,4 +1,4 @@
-import { vi } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CONSENT_ENDPOINT, EVENTS_ENDPOINT, R_ENDPOINT } from '../src/constants';
 import { CLOUD_API_HOST, cloudConfig } from '../src/globalConfig/cloud';
@@ -182,7 +182,6 @@ describe('monkeyPatchFetch', () => {
 
   it('should handle connection errors with specific messaging', async () => {
     const connectionError = new TypeError('fetch failed');
-    // @ts-expect-error undici error cause
     connectionError.cause = {
       stack: 'Error: connect ECONNREFUSED\n    at internalConnectMultiple',
     };
