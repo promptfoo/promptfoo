@@ -397,13 +397,13 @@ Google's Veo models enable AI-powered video generation from text prompts. Use th
 
 #### Available Models
 
-| Model | Description | Duration Support |
-|-------|-------------|------------------|
-| `google:video:veo-3.1-generate-preview` | Latest Veo 3.1 model with video extension support | 5-8 seconds |
-| `google:video:veo-3.1-fast-preview` | Fast Veo 3.1 model | 5-8 seconds |
-| `google:video:veo-3-generate` | Veo 3.0 standard model | 4-8 seconds |
-| `google:video:veo-3-fast` | Veo 3.0 fast model | 4-8 seconds |
-| `google:video:veo-2-generate` | Veo 2.0 model | 5-8 seconds |
+| Model                                   | Description                                       | Duration Support |
+| --------------------------------------- | ------------------------------------------------- | ---------------- |
+| `google:video:veo-3.1-generate-preview` | Latest Veo 3.1 model with video extension support | 5-8 seconds      |
+| `google:video:veo-3.1-fast-preview`     | Fast Veo 3.1 model                                | 5-8 seconds      |
+| `google:video:veo-3-generate`           | Veo 3.0 standard model                            | 4-8 seconds      |
+| `google:video:veo-3-fast`               | Veo 3.0 fast model                                | 4-8 seconds      |
+| `google:video:veo-2-generate`           | Veo 2.0 model                                     | 5-8 seconds      |
 
 #### Basic Usage
 
@@ -411,9 +411,9 @@ Google's Veo models enable AI-powered video generation from text prompts. Use th
 providers:
   - id: google:video:veo-3.1-generate-preview
     config:
-      aspectRatio: '16:9'   # or '9:16'
-      resolution: '720p'    # or '1080p'
-      duration: 5           # seconds (model-dependent)
+      aspectRatio: '16:9' # or '9:16'
+      resolution: '720p' # or '1080p'
+      duration: 5 # seconds (model-dependent)
 
 prompts:
   - 'Generate a video of {{subject}}'
@@ -425,17 +425,17 @@ tests:
 
 #### Configuration Options
 
-| Option | Type | Description |
-|--------|------|-------------|
-| `aspectRatio` | string | Video aspect ratio: `16:9` (default) or `9:16` |
-| `resolution` | string | Video resolution: `720p` (default) or `1080p` |
-| `duration` | number | Video duration in seconds (varies by model) |
+| Option             | Type   | Description                                           |
+| ------------------ | ------ | ----------------------------------------------------- |
+| `aspectRatio`      | string | Video aspect ratio: `16:9` (default) or `9:16`        |
+| `resolution`       | string | Video resolution: `720p` (default) or `1080p`         |
+| `duration`         | number | Video duration in seconds (varies by model)           |
 | `personGeneration` | string | Person generation mode: `allow_adult` or `dont_allow` |
-| `negativePrompt` | string | Concepts to avoid in the generated video |
-| `referenceImages` | array | Up to 3 reference images (file paths or URLs) |
-| `image` | string | Source image for image-to-video generation |
-| `lastImage` | string | End frame for interpolation (requires `image`) |
-| `sourceVideo` | string | Video to extend (Veo 3.1 only) |
+| `negativePrompt`   | string | Concepts to avoid in the generated video              |
+| `referenceImages`  | array  | Up to 3 reference images (file paths or URLs)         |
+| `image`            | string | Source image for image-to-video generation            |
+| `lastImage`        | string | End frame for interpolation (requires `image`)        |
+| `sourceVideo`      | string | Video to extend (Veo 3.1 only)                        |
 
 #### Image-to-Video Generation
 
@@ -465,8 +465,8 @@ Generate video that transitions between two images:
 providers:
   - id: google:video:veo-3.1-generate-preview
     config:
-      image: file://assets/start.jpg      # First frame
-      lastImage: file://assets/end.jpg    # Last frame
+      image: file://assets/start.jpg # First frame
+      lastImage: file://assets/end.jpg # Last frame
       duration: 5
 
 prompts:

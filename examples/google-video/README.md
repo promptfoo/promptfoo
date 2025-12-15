@@ -49,13 +49,13 @@ export GOOGLE_PROJECT_ID=your-project-id
 
 ## Available Models
 
-| Model | Description | Duration |
-|-------|-------------|----------|
-| `veo-3.1-generate-preview` | Latest with video extension support | 5-8s |
-| `veo-3.1-fast-preview` | Fast Veo 3.1 | 5-8s |
-| `veo-3-generate` | Veo 3.0 standard | 4-8s |
-| `veo-3-fast` | Veo 3.0 fast | 4-8s |
-| `veo-2-generate` | Veo 2.0 | 5-8s |
+| Model                      | Description                         | Duration |
+| -------------------------- | ----------------------------------- | -------- |
+| `veo-3.1-generate-preview` | Latest with video extension support | 5-8s     |
+| `veo-3.1-fast-preview`     | Fast Veo 3.1                        | 5-8s     |
+| `veo-3-generate`           | Veo 3.0 standard                    | 4-8s     |
+| `veo-3-fast`               | Veo 3.0 fast                        | 4-8s     |
+| `veo-2-generate`           | Veo 2.0                             | 5-8s     |
 
 ## Running the Example
 
@@ -65,17 +65,17 @@ npx promptfoo@latest eval
 
 ## Configuration Options
 
-| Option | Type | Description |
-|--------|------|-------------|
-| `aspectRatio` | string | `16:9` (default) or `9:16` |
-| `resolution` | string | `720p` (default) or `1080p` |
-| `duration` | number | Duration in seconds (model-dependent) |
-| `personGeneration` | string | `allow_adult` or `dont_allow` |
-| `negativePrompt` | string | Concepts to avoid |
-| `image` | string | Source image for image-to-video |
-| `lastImage` | string | End frame for interpolation |
-| `sourceVideo` | string | Video to extend (Veo 3.1 only) |
-| `referenceImages` | array | Up to 3 style reference images |
+| Option             | Type   | Description                           |
+| ------------------ | ------ | ------------------------------------- |
+| `aspectRatio`      | string | `16:9` (default) or `9:16`            |
+| `resolution`       | string | `720p` (default) or `1080p`           |
+| `duration`         | number | Duration in seconds (model-dependent) |
+| `personGeneration` | string | `allow_adult` or `dont_allow`         |
+| `negativePrompt`   | string | Concepts to avoid                     |
+| `image`            | string | Source image for image-to-video       |
+| `lastImage`        | string | End frame for interpolation           |
+| `sourceVideo`      | string | Video to extend (Veo 3.1 only)        |
+| `referenceImages`  | array  | Up to 3 style reference images        |
 
 ## Features
 

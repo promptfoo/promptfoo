@@ -426,10 +426,7 @@ export class GoogleVideoProvider implements ApiProvider {
     }
   }
 
-  async callApi(
-    prompt: string,
-    context?: CallApiContextParams,
-  ): Promise<ProviderResponse> {
+  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     const apiKey = this.getApiKey();
     if (!apiKey) {
       return {

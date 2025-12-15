@@ -465,9 +465,7 @@ describe('GoogleVideoProvider', () => {
           done: true,
           response: {
             generateVideoResponse: {
-              generatedSamples: [
-                { video: { uri: 'https://storage.googleapis.com/video.mp4' } },
-              ],
+              generatedSamples: [{ video: { uri: 'https://storage.googleapis.com/video.mp4' } }],
             },
           },
         }),
@@ -566,7 +564,9 @@ describe('GoogleVideoProvider', () => {
   describe('image-to-video', () => {
     it('should include image data in request', async () => {
       vi.mocked(fs.existsSync).mockImplementation((path) => {
-        if (path === '/path/to/image.png') return true;
+        if (path === '/path/to/image.png') {
+          return true;
+        }
         return false;
       });
       vi.mocked(fs.readFileSync).mockReturnValue(Buffer.from('fake-image-data'));
@@ -578,9 +578,7 @@ describe('GoogleVideoProvider', () => {
           done: true,
           response: {
             generateVideoResponse: {
-              generatedSamples: [
-                { video: { uri: 'https://storage.googleapis.com/video.mp4' } },
-              ],
+              generatedSamples: [{ video: { uri: 'https://storage.googleapis.com/video.mp4' } }],
             },
           },
         }),
@@ -626,7 +624,9 @@ describe('GoogleVideoProvider', () => {
   describe('reference images (Veo 3.1)', () => {
     it('should include reference images in request', async () => {
       vi.mocked(fs.existsSync).mockImplementation((path) => {
-        if (path === '/path/to/ref1.png' || path === '/path/to/ref2.png') return true;
+        if (path === '/path/to/ref1.png' || path === '/path/to/ref2.png') {
+          return true;
+        }
         return false;
       });
       vi.mocked(fs.readFileSync).mockReturnValue(Buffer.from('ref-image-data'));
@@ -638,9 +638,7 @@ describe('GoogleVideoProvider', () => {
           done: true,
           response: {
             generateVideoResponse: {
-              generatedSamples: [
-                { video: { uri: 'https://storage.googleapis.com/video.mp4' } },
-              ],
+              generatedSamples: [{ video: { uri: 'https://storage.googleapis.com/video.mp4' } }],
             },
           },
         }),
@@ -674,8 +672,12 @@ describe('GoogleVideoProvider', () => {
       // Return true only for the reference image file paths, false for cache check
       vi.mocked(fs.existsSync).mockImplementation((path) => {
         const pathStr = path.toString();
-        if (pathStr.includes('/path/to/ref')) return true; // Reference image files exist
-        if (pathStr.includes('video.mp4')) return false; // No cache hit
+        if (pathStr.includes('/path/to/ref')) {
+          return true; // Reference image files exist
+        }
+        if (pathStr.includes('video.mp4')) {
+          return false; // No cache hit
+        }
         return false; // Output directory doesn't exist
       });
       vi.mocked(fs.readFileSync).mockReturnValue(Buffer.from('ref-image-data'));
@@ -687,9 +689,7 @@ describe('GoogleVideoProvider', () => {
           done: true,
           response: {
             generateVideoResponse: {
-              generatedSamples: [
-                { video: { uri: 'https://storage.googleapis.com/video.mp4' } },
-              ],
+              generatedSamples: [{ video: { uri: 'https://storage.googleapis.com/video.mp4' } }],
             },
           },
         }),
@@ -724,7 +724,9 @@ describe('GoogleVideoProvider', () => {
   describe('interpolation (Veo 3.1)', () => {
     it('should include last frame in request', async () => {
       vi.mocked(fs.existsSync).mockImplementation((path) => {
-        if (path === '/path/to/first.png' || path === '/path/to/last.png') return true;
+        if (path === '/path/to/first.png' || path === '/path/to/last.png') {
+          return true;
+        }
         return false;
       });
       vi.mocked(fs.readFileSync).mockReturnValue(Buffer.from('frame-data'));
@@ -736,9 +738,7 @@ describe('GoogleVideoProvider', () => {
           done: true,
           response: {
             generateVideoResponse: {
-              generatedSamples: [
-                { video: { uri: 'https://storage.googleapis.com/video.mp4' } },
-              ],
+              generatedSamples: [{ video: { uri: 'https://storage.googleapis.com/video.mp4' } }],
             },
           },
         }),
@@ -777,9 +777,7 @@ describe('GoogleVideoProvider', () => {
           done: true,
           response: {
             generateVideoResponse: {
-              generatedSamples: [
-                { video: { uri: 'https://storage.googleapis.com/video.mp4' } },
-              ],
+              generatedSamples: [{ video: { uri: 'https://storage.googleapis.com/video.mp4' } }],
             },
           },
         }),
@@ -808,9 +806,7 @@ describe('GoogleVideoProvider', () => {
           done: true,
           response: {
             generateVideoResponse: {
-              generatedSamples: [
-                { video: { uri: 'https://storage.googleapis.com/video.mp4' } },
-              ],
+              generatedSamples: [{ video: { uri: 'https://storage.googleapis.com/video.mp4' } }],
             },
           },
         }),
@@ -838,9 +834,7 @@ describe('GoogleVideoProvider', () => {
           done: true,
           response: {
             generateVideoResponse: {
-              generatedSamples: [
-                { video: { uri: 'https://storage.googleapis.com/video.mp4' } },
-              ],
+              generatedSamples: [{ video: { uri: 'https://storage.googleapis.com/video.mp4' } }],
             },
           },
         }),
