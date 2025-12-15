@@ -532,12 +532,16 @@ export async function tryUnblocking({
 /**
  * Builds the assertion object for storedGraderResult with the rubric value.
  * This ensures the grading template is preserved for display in the UI.
+ *
+ * Note: Uses `any` for flexibility since the Assertion type is complex and the
+ * function needs to handle both gradeAssertion (from grader result) and
+ * assertToUse (from test config) which may have different shapes.
  */
 export function buildGraderResultAssertion(
-  gradeAssertion: { type: string; value?: string } | undefined,
-  assertToUse: { type: string; value?: string } | undefined,
+  gradeAssertion: any,
+  assertToUse: any,
   rubric: string | undefined,
-): { type: string; value: string | undefined } | undefined {
+): any {
   if (gradeAssertion) {
     return { ...gradeAssertion, value: rubric };
   }
