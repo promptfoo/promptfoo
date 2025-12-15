@@ -8,38 +8,39 @@ This document outlines a plan to optimize the GitHub Actions CI pipeline by inte
 
 ### Workflows Overview
 
-| Workflow | Trigger | Path Filtering | Jobs |
-|----------|---------|----------------|------|
-| `main.yml` | PRs, push to main | ❌ None | 15+ jobs |
-| `docker.yml` | Dockerfile changes | ✅ `Dockerfile` | 3 jobs |
-| `deploy-launcher.yml` | Frontend changes | ✅ `src/app/**` | 1 job |
-| `image-actions.yml` | Image file changes | ✅ `**.jpg`, etc. | 1 job |
-| `validate-pr-title.yml` | All PRs | ❌ None (intentional) | 1 job |
-| `release-please.yml` | Push to main | N/A (release only) | 4 jobs |
+| Workflow                | Trigger            | Path Filtering        | Jobs     |
+| ----------------------- | ------------------ | --------------------- | -------- |
+| `main.yml`              | PRs, push to main  | ❌ None               | 15+ jobs |
+| `docker.yml`            | Dockerfile changes | ✅ `Dockerfile`       | 3 jobs   |
+| `deploy-launcher.yml`   | Frontend changes   | ✅ `src/app/**`       | 1 job    |
+| `image-actions.yml`     | Image file changes | ✅ `**.jpg`, etc.     | 1 job    |
+| `validate-pr-title.yml` | All PRs            | ❌ None (intentional) | 1 job    |
+| `release-please.yml`    | Push to main       | N/A (release only)    | 4 jobs   |
 
 ### Main CI Jobs Analysis (`main.yml`)
 
-| Job | What it Tests | Applicable Paths | Run Time | Matrix Size |
-|-----|--------------|------------------|----------|-------------|
-| `test` | Backend unit tests | `src/**`, `test/**`, `package*.json` | ~10min | 3 Node × 3 OS |
-| `build` | TypeScript build | `src/**`, `package*.json`, `tsconfig*` | ~5min | 3 Node |
-| `style-check` | Linting, formatting | `src/**`, `test/**`, `*.json` | ~5min | 1 |
-| `shell-format` | Shell scripts | `**/*.sh` | ~5min | 1 |
-| `assets` | JSON schema | `src/**`, `scripts/**` | ~5min | 1 |
-| `python` | Python code | `src/python/**` | ~5min | 2 Python versions |
-| `docs` | Documentation site | `site/**` | ~5min | 1 |
-| `webui` | Frontend tests | `src/app/**` | ~5min | 1 |
-| `integration-tests` | Integration tests | `src/**`, `test/**` | ~5min | 1 |
-| `share-test` | Share functionality | `src/**` | ~5min | 1 |
-| `redteam` | Red team tests | `src/redteam/**`, `test/redteam/**` | ~5min | 1 |
-| `redteam-staging` | Red team staging | `src/redteam/**` | ~5min | 1 |
-| `actionlint` | GH Actions lint | `.github/workflows/**` | ~5min | 1 |
-| `ruby` | Ruby code | `src/ruby/**` | ~5min | 2 Ruby versions |
-| `golang` | Go code | `src/golang/**` | ~5min | 1 |
+| Job                 | What it Tests       | Applicable Paths                       | Run Time | Matrix Size       |
+| ------------------- | ------------------- | -------------------------------------- | -------- | ----------------- |
+| `test`              | Backend unit tests  | `src/**`, `test/**`, `package*.json`   | ~10min   | 3 Node × 3 OS     |
+| `build`             | TypeScript build    | `src/**`, `package*.json`, `tsconfig*` | ~5min    | 3 Node            |
+| `style-check`       | Linting, formatting | `src/**`, `test/**`, `*.json`          | ~5min    | 1                 |
+| `shell-format`      | Shell scripts       | `**/*.sh`                              | ~5min    | 1                 |
+| `assets`            | JSON schema         | `src/**`, `scripts/**`                 | ~5min    | 1                 |
+| `python`            | Python code         | `src/python/**`                        | ~5min    | 2 Python versions |
+| `docs`              | Documentation site  | `site/**`                              | ~5min    | 1                 |
+| `webui`             | Frontend tests      | `src/app/**`                           | ~5min    | 1                 |
+| `integration-tests` | Integration tests   | `src/**`, `test/**`                    | ~5min    | 1                 |
+| `share-test`        | Share functionality | `src/**`                               | ~5min    | 1                 |
+| `redteam`           | Red team tests      | `src/redteam/**`, `test/redteam/**`    | ~5min    | 1                 |
+| `redteam-staging`   | Red team staging    | `src/redteam/**`                       | ~5min    | 1                 |
+| `actionlint`        | GH Actions lint     | `.github/workflows/**`                 | ~5min    | 1                 |
+| `ruby`              | Ruby code           | `src/ruby/**`                          | ~5min    | 2 Ruby versions   |
+| `golang`            | Go code             | `src/golang/**`                        | ~5min    | 1                 |
 
 ### Cost Estimation
 
 Current main CI runs **all 15+ jobs** on every PR, regardless of changes:
+
 - Documentation-only PR: Runs ~45 job-minutes unnecessarily
 - Frontend-only PR: Runs ~35 job-minutes unnecessarily
 - Single file typo fix: Runs full suite unnecessarily
@@ -75,23 +76,23 @@ examples:    examples/**
 
 ### Job Dependencies Matrix
 
-| Job | Required Categories | Skip if ONLY these change |
-|-----|--------------------|-----------------------------|
-| `test` | backend, tests, config | docs, frontend-only, python-only, ruby-only, golang-only |
-| `build` | backend, frontend, config | docs-only |
-| `style-check` | backend, frontend, tests, config | docs-only, shell-only, workflows-only |
-| `shell-format` | shell | everything except shell |
-| `assets` | backend, config | docs, frontend-only |
-| `python` | python | everything except python |
-| `docs` | docs | everything except docs |
-| `webui` | frontend | everything except frontend |
-| `integration-tests` | backend, tests | docs, frontend-only |
-| `share-test` | backend | docs, frontend-only |
-| `redteam` | redteam, backend | docs, frontend-only |
-| `redteam-staging` | redteam, backend | docs, frontend-only |
-| `actionlint` | workflows | everything except workflows |
-| `ruby` | ruby | everything except ruby |
-| `golang` | golang | everything except golang |
+| Job                 | Required Categories              | Skip if ONLY these change                                |
+| ------------------- | -------------------------------- | -------------------------------------------------------- |
+| `test`              | backend, tests, config           | docs, frontend-only, python-only, ruby-only, golang-only |
+| `build`             | backend, frontend, config        | docs-only                                                |
+| `style-check`       | backend, frontend, tests, config | docs-only, shell-only, workflows-only                    |
+| `shell-format`      | shell                            | everything except shell                                  |
+| `assets`            | backend, config                  | docs, frontend-only                                      |
+| `python`            | python                           | everything except python                                 |
+| `docs`              | docs                             | everything except docs                                   |
+| `webui`             | frontend                         | everything except frontend                               |
+| `integration-tests` | backend, tests                   | docs, frontend-only                                      |
+| `share-test`        | backend                          | docs, frontend-only                                      |
+| `redteam`           | redteam, backend                 | docs, frontend-only                                      |
+| `redteam-staging`   | redteam, backend                 | docs, frontend-only                                      |
+| `actionlint`        | workflows                        | everything except workflows                              |
+| `ruby`              | ruby                             | everything except ruby                                   |
+| `golang`            | golang                           | everything except golang                                 |
 
 ### Implementation Plan
 
@@ -188,6 +189,7 @@ python:
 #### Phase 3: Handle Edge Cases
 
 **Always run on push to main:**
+
 ```yaml
 if: |
   github.event_name == 'push' ||
@@ -196,6 +198,7 @@ if: |
 ```
 
 **Always run on workflow_dispatch:**
+
 ```yaml
 if: |
   github.event_name == 'workflow_dispatch' ||
@@ -325,21 +328,22 @@ golang:
 
 ### Scenario Analysis
 
-| Change Type | Before | After | Savings |
-|-------------|--------|-------|---------|
-| Docs only (`site/`) | 15 jobs | 2 jobs (detect + docs) | ~85% |
-| Frontend only (`src/app/`) | 15 jobs | 4 jobs (detect, build, style, webui) | ~75% |
-| Python only | 15 jobs | 2 jobs (detect + python) | ~85% |
-| Ruby only | 15 jobs | 2 jobs (detect + ruby) | ~85% |
-| Golang only | 15 jobs | 2 jobs (detect + golang) | ~85% |
-| Shell scripts only | 15 jobs | 2 jobs (detect + shell) | ~85% |
-| Workflow files only | 15 jobs | 2 jobs (detect + actionlint) | ~85% |
-| Backend changes | 15 jobs | 15 jobs | 0% (correct) |
-| Mixed changes | 15 jobs | 15 jobs | 0% (correct) |
+| Change Type                | Before  | After                                | Savings      |
+| -------------------------- | ------- | ------------------------------------ | ------------ |
+| Docs only (`site/`)        | 15 jobs | 2 jobs (detect + docs)               | ~85%         |
+| Frontend only (`src/app/`) | 15 jobs | 4 jobs (detect, build, style, webui) | ~75%         |
+| Python only                | 15 jobs | 2 jobs (detect + python)             | ~85%         |
+| Ruby only                  | 15 jobs | 2 jobs (detect + ruby)               | ~85%         |
+| Golang only                | 15 jobs | 2 jobs (detect + golang)             | ~85%         |
+| Shell scripts only         | 15 jobs | 2 jobs (detect + shell)              | ~85%         |
+| Workflow files only        | 15 jobs | 2 jobs (detect + actionlint)         | ~85%         |
+| Backend changes            | 15 jobs | 15 jobs                              | 0% (correct) |
+| Mixed changes              | 15 jobs | 15 jobs                              | 0% (correct) |
 
 ### Estimated Monthly Savings
 
 Assuming:
+
 - 200 PRs/month
 - 30% are docs-only
 - 20% are frontend-only
@@ -377,54 +381,67 @@ Assuming:
 ## Implementation Steps
 
 ### Step 1: Create the detect-changes job (Low risk)
+
 - Add the `dorny/paths-filter` based detection job
 - No changes to existing jobs yet
 - Verify detection outputs are correct
 
 ### Step 2: Add conditions to isolated language jobs (Low risk)
+
 - `python`, `ruby`, `golang`, `actionlint`, `shell-format`
 - These are independent and easy to verify
 
 ### Step 3: Add conditions to docs job (Low risk)
+
 - `docs` job only runs on `site/` changes
 - Very clear scope, easy to verify
 
 ### Step 4: Add conditions to frontend jobs (Medium risk)
+
 - `webui` job only runs on `src/app/` changes
 - Verify no backend dependencies
 
 ### Step 5: Add conditions to core jobs (Higher risk, go slow)
+
 - `test`, `build`, `style-check`
 - Use broader triggers, be conservative
 - Monitor for false negatives
 
 ### Step 6: Add conditions to integration/e2e jobs (Medium risk)
+
 - `integration-tests`, `share-test`, `redteam`
 - These have more complex dependencies
 
 ## Alternative Approaches Considered
 
 ### 1. Workflow-level path filtering
+
 **Rejected:** Too coarse-grained, can't have different conditions per job.
 
 ### 2. Separate workflows per area
+
 **Rejected:** Would require duplicating shared setup, harder to maintain.
 
 ### 3. Manual labels for skipping
+
 **Rejected:** Human error prone, not automatic.
 
 ### 4. Merge queue with required checks
+
 **Considered:** Could complement this approach for main branch protection.
 
 ## Monitoring & Rollback
 
 ### Success Metrics
+
 - CI time per PR reduced
 - No increase in bugs on main
 - Developer satisfaction with CI speed
 
 ### Rollback Plan
+
 If issues arise:
+
 1. Remove `if:` conditions from affected jobs
 2. Keep `detect-changes` job (no harm if unused)
 3. Investigate and fix detection logic

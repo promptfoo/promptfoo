@@ -5,6 +5,7 @@
 **Issue**: [Support for dynamic external tool call Definitions - i.e. Python, TS, JS #3099](https://github.com/promptfoo/promptfoo/issues/3099)
 
 **Status**: Core feature implemented in PR #6272. This plan addresses remaining gaps:
+
 1. Missing `vars` parameter in Anthropic, Bedrock, and Adaline Gateway providers
 2. Documentation and testing improvements
 
@@ -31,6 +32,7 @@ providers:
 ### Current Implementation
 
 The `maybeLoadToolsFromExternalFile` function in `src/util/index.ts:672-812`:
+
 - Parses `file://path:function_name` syntax
 - Executes Python via `runPython(absPath, functionName, [])`
 - Executes JavaScript via `importModule(absPath)` then `fn()`
@@ -43,13 +45,14 @@ The `maybeLoadToolsFromExternalFile` function in `src/util/index.ts:672-812`:
 
 Three providers call `maybeLoadToolsFromExternalFile` without passing `vars`, preventing Nunjucks template rendering in tool file paths:
 
-| Provider | File | Line | Current |
-|----------|------|------|---------|
-| Anthropic | `src/providers/anthropic/messages.ts` | 103 | `maybeLoadToolsFromExternalFile(config.tools)` |
-| Bedrock | `src/providers/bedrock/index.ts` | 1317, 1521, 1908 | `maybeLoadToolsFromExternalFile(config?.tools)` |
-| Adaline | `src/providers/adaline.gateway.ts` | 424 | `maybeLoadToolsFromExternalFile(_config.tools)` |
+| Provider  | File                                  | Line             | Current                                         |
+| --------- | ------------------------------------- | ---------------- | ----------------------------------------------- |
+| Anthropic | `src/providers/anthropic/messages.ts` | 103              | `maybeLoadToolsFromExternalFile(config.tools)`  |
+| Bedrock   | `src/providers/bedrock/index.ts`      | 1317, 1521, 1908 | `maybeLoadToolsFromExternalFile(config?.tools)` |
+| Adaline   | `src/providers/adaline.gateway.ts`    | 424              | `maybeLoadToolsFromExternalFile(_config.tools)` |
 
 **Impact**: Users cannot use variable interpolation in tool file paths:
+
 ```yaml
 # This works with OpenAI but NOT Anthropic/Bedrock:
 tools: file://./tools_{{ env }}.py:get_tools
@@ -66,11 +69,13 @@ tools: file://./tools_{{ env }}.py:get_tools
 **File**: `src/providers/anthropic/messages.ts`
 
 **Current** (line 103):
+
 ```typescript
 const configTools = (await maybeLoadToolsFromExternalFile(config.tools)) || [];
 ```
 
 **Updated**:
+
 ```typescript
 const configTools = (await maybeLoadToolsFromExternalFile(config.tools, context?.vars)) || [];
 ```
@@ -78,6 +83,7 @@ const configTools = (await maybeLoadToolsFromExternalFile(config.tools, context?
 #### 1.2 Verification
 
 Check that `context` is available at line 103. Looking at the function signature:
+
 ```typescript
 async callApi(
   prompt: string,
@@ -106,6 +112,7 @@ async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderR
 ```
 
 The `params` functions (lines ~1260, ~1491, ~1840) have signature:
+
 ```typescript
 params: async (config, prompt, stop?, modelName?) => {...}
 ```
@@ -176,7 +183,7 @@ const params = await model.params(
   prompt,
   stop,
   this.modelName,
-  context?.vars,  // ADD THIS
+  context?.vars, // ADD THIS
 );
 ```
 
@@ -187,6 +194,7 @@ If there's a type definition for the handler object, update it to include the op
 #### 2.3 Other handlers to check
 
 Search for other handlers with `maybeLoadToolsFromExternalFile` that may need updating:
+
 - CLAUDE_COMPLETION
 - CLAUDE_MESSAGES
 - COHERE_COMMAND_R
@@ -199,6 +207,7 @@ Not all handlers have tools support - only update those that call `maybeLoadTool
 #### 2.4 Note: bedrock/converse.ts is already correct
 
 The `src/providers/bedrock/converse.ts` file already correctly passes `vars`:
+
 ```typescript
 // Line 796 - already correct!
 const tools = await maybeLoadToolsFromExternalFile(this.config.tools, vars);
@@ -215,6 +224,7 @@ Only `src/providers/bedrock/index.ts` needs fixes.
 **File**: `src/providers/adaline.gateway.ts`
 
 **Current** (line 424):
+
 ```typescript
 gatewayTools = _config.tools
   ? ((await maybeLoadToolsFromExternalFile(_config.tools)) as GatewayToolType[])
@@ -222,6 +232,7 @@ gatewayTools = _config.tools
 ```
 
 **Updated**:
+
 ```typescript
 gatewayTools = _config.tools
   ? ((await maybeLoadToolsFromExternalFile(_config.tools, context?.vars)) as GatewayToolType[])
@@ -263,6 +274,7 @@ git checkout -b fix/dynamic-tools-vars-anthropic-bedrock
 **File**: `test/providers/anthropic.test.ts` or create new test file
 
 Add test case:
+
 ```typescript
 describe('maybeLoadToolsFromExternalFile with vars', () => {
   it('should render variables in tool file paths for Anthropic', async () => {
@@ -285,7 +297,7 @@ describe('maybeLoadToolsFromExternalFile with vars', () => {
     expect(runPython).toHaveBeenCalledWith(
       expect.stringContaining('tools_production.py'),
       'get_tools',
-      []
+      [],
     );
   });
 });
@@ -323,12 +335,14 @@ npm run l && npm run f
 ### QA Environment Setup
 
 1. Create test directory:
+
 ```bash
 mkdir -p /tmp/promptfoo-tools-test
 cd /tmp/promptfoo-tools-test
 ```
 
 2. Create Python tool generator:
+
 ```python
 # tools.py
 def get_tools():
@@ -355,29 +369,31 @@ def get_tools_with_env(env="default"):
 ```
 
 3. Create JavaScript tool generator:
+
 ```javascript
 // tools.js
 export function getTools() {
   return [
     {
-      type: "function",
+      type: 'function',
       function: {
-        name: "get_weather",
-        description: "Get weather for a location",
+        name: 'get_weather',
+        description: 'Get weather for a location',
         parameters: {
-          type: "object",
+          type: 'object',
           properties: {
-            location: { type: "string" }
+            location: { type: 'string' },
           },
-          required: ["location"]
-        }
-      }
-    }
+          required: ['location'],
+        },
+      },
+    },
   ];
 }
 ```
 
 4. Create environment-specific tool files for vars testing:
+
 ```python
 # tools_dev.py
 def get_tools():
@@ -391,6 +407,7 @@ def get_tools():
 ### Test Case 1: Anthropic - Basic Python Tool Loading
 
 **Config** (`test-anthropic-basic.yaml`):
+
 ```yaml
 description: Anthropic basic Python tool loading
 
@@ -409,17 +426,20 @@ tests:
 ```
 
 **Run**:
+
 ```bash
 npm run local -- eval -c test-anthropic-basic.yaml --env-file .env --no-cache -o output-anthropic-basic.json
 ```
 
 **Expected**:
+
 - No errors loading tools
 - Model returns tool_use response for weather
 
 ### Test Case 2: Anthropic - JavaScript Tool Loading
 
 **Config** (`test-anthropic-js.yaml`):
+
 ```yaml
 description: Anthropic JavaScript tool loading
 
@@ -438,6 +458,7 @@ tests:
 ```
 
 **Run**:
+
 ```bash
 npm run local -- eval -c test-anthropic-js.yaml --env-file .env --no-cache -o output-anthropic-js.json
 ```
@@ -445,6 +466,7 @@ npm run local -- eval -c test-anthropic-js.yaml --env-file .env --no-cache -o ou
 ### Test Case 3: Anthropic - Variable Interpolation in Path
 
 **Config** (`test-anthropic-vars.yaml`):
+
 ```yaml
 description: Anthropic with variable interpolation in tool path
 
@@ -471,17 +493,20 @@ tests:
 ```
 
 **Run**:
+
 ```bash
 npm run local -- eval -c test-anthropic-vars.yaml --env-file .env --no-cache -o output-anthropic-vars.json
 ```
 
 **Expected**:
+
 - First test loads `tools_dev.py` and sees `dev_tool`
 - Second test loads `tools_prod.py` and sees `prod_tool`
 
 ### Test Case 4: Bedrock - Basic Python Tool Loading
 
 **Config** (`test-bedrock-basic.yaml`):
+
 ```yaml
 description: Bedrock basic Python tool loading
 
@@ -501,6 +526,7 @@ tests:
 ```
 
 **Run**:
+
 ```bash
 npm run local -- eval -c test-bedrock-basic.yaml --env-file .env --no-cache -o output-bedrock-basic.json
 ```
@@ -508,6 +534,7 @@ npm run local -- eval -c test-bedrock-basic.yaml --env-file .env --no-cache -o o
 ### Test Case 5: Bedrock - Variable Interpolation
 
 **Config** (`test-bedrock-vars.yaml`):
+
 ```yaml
 description: Bedrock with variable interpolation in tool path
 
@@ -529,6 +556,7 @@ tests:
 ```
 
 **Run**:
+
 ```bash
 npm run local -- eval -c test-bedrock-vars.yaml --env-file .env --no-cache -o output-bedrock-vars.json
 ```
@@ -536,13 +564,14 @@ npm run local -- eval -c test-bedrock-vars.yaml --env-file .env --no-cache -o ou
 ### Test Case 6: Error Handling - Missing Function Name
 
 **Config** (`test-error-no-function.yaml`):
+
 ```yaml
 description: Test error handling for missing function name
 
 providers:
   - id: anthropic:messages:claude-sonnet-4-20250514
     config:
-      tools: file://./tools.py  # Missing :get_tools
+      tools: file://./tools.py # Missing :get_tools
 
 prompts:
   - Test
@@ -556,12 +585,14 @@ tests:
 ### Test Case 7: Error Handling - Invalid Return Type
 
 Create `bad_tools.py`:
+
 ```python
 def get_tools():
     return "not an array"  # Invalid - should be array/object
 ```
 
 **Config** (`test-error-bad-return.yaml`):
+
 ```yaml
 description: Test error handling for invalid return type
 
@@ -582,21 +613,23 @@ tests:
 ### Test Case 8: Async JavaScript Function
 
 Create `async_tools.js`:
+
 ```javascript
 export async function getTools() {
   // Simulate async operation (e.g., fetching from API)
-  await new Promise(resolve => setTimeout(resolve, 100));
+  await new Promise((resolve) => setTimeout(resolve, 100));
   return [
     {
-      name: "async_tool",
-      description: "Tool loaded asynchronously",
-      input_schema: { type: "object" }
-    }
+      name: 'async_tool',
+      description: 'Tool loaded asynchronously',
+      input_schema: { type: 'object' },
+    },
   ];
 }
 ```
 
 **Config** (`test-async-js.yaml`):
+
 ```yaml
 description: Test async JavaScript tool loading
 
@@ -620,12 +653,14 @@ tests:
 ## QA Checklist
 
 ### Unit Tests
+
 - [ ] `npm run test` passes
 - [ ] `npx vitest run test/providers/anthropic.test.ts` passes
 - [ ] `npx vitest run test/providers/bedrock/index.test.ts` passes
 - [ ] `npx vitest run test/util/index.test.ts` passes
 
 ### Integration Tests
+
 - [ ] Test Case 1: Anthropic basic Python tools
 - [ ] Test Case 2: Anthropic JavaScript tools
 - [ ] Test Case 3: Anthropic variable interpolation (NEW FUNCTIONALITY)
@@ -636,12 +671,14 @@ tests:
 - [ ] Test Case 8: Async JavaScript function
 
 ### Regression Tests
+
 - [ ] Existing OpenAI tool tests still pass
 - [ ] Existing Azure tool tests still pass
 - [ ] Static YAML/JSON tool loading still works
 - [ ] Inline tool definitions still work
 
 ### Lint & Format
+
 - [ ] `npm run lint` passes
 - [ ] `npm run format:check` passes
 
@@ -676,21 +713,23 @@ tests:
 
 ## Files to Modify
 
-| File | Changes |
-|------|---------|
-| `src/providers/anthropic/messages.ts` | Line 103: Add `context?.vars` to `maybeLoadToolsFromExternalFile` call |
-| `src/providers/bedrock/index.ts` | Lines ~1260, ~1491, ~1840: Add `vars` param to handler signatures |
-| `src/providers/bedrock/index.ts` | Lines ~1317, ~1521, ~1908: Pass `vars` to `maybeLoadToolsFromExternalFile` |
-| `src/providers/bedrock/index.ts` | Line ~2243: Pass `context?.vars` to `model.params()` call |
-| `test/providers/anthropic.test.ts` | Add vars interpolation test |
-| `test/providers/bedrock/index.test.ts` | Add vars interpolation test |
+| File                                   | Changes                                                                    |
+| -------------------------------------- | -------------------------------------------------------------------------- |
+| `src/providers/anthropic/messages.ts`  | Line 103: Add `context?.vars` to `maybeLoadToolsFromExternalFile` call     |
+| `src/providers/bedrock/index.ts`       | Lines ~1260, ~1491, ~1840: Add `vars` param to handler signatures          |
+| `src/providers/bedrock/index.ts`       | Lines ~1317, ~1521, ~1908: Pass `vars` to `maybeLoadToolsFromExternalFile` |
+| `src/providers/bedrock/index.ts`       | Line ~2243: Pass `context?.vars` to `model.params()` call                  |
+| `test/providers/anthropic.test.ts`     | Add vars interpolation test                                                |
+| `test/providers/bedrock/index.test.ts` | Add vars interpolation test                                                |
 
 ### Exact Line References (verify before editing)
 
 **Anthropic** (`src/providers/anthropic/messages.ts`):
+
 - Line 103: `maybeLoadToolsFromExternalFile(config.tools)` → add `, context?.vars`
 
 **Bedrock** (`src/providers/bedrock/index.ts`):
+
 - Line ~1260: CLAUDE_MESSAGES params function signature
 - Line ~1317: First `maybeLoadToolsFromExternalFile` call
 - Line ~1491: COHERE_COMMAND_R params function signature
@@ -704,6 +743,7 @@ tests:
 ## Provider Support Matrix (Reference)
 
 ### Full Support (Direct)
+
 - OpenAI (chat, responses, realtime, assistant)
 - Anthropic (after this fix)
 - Azure (chat, responses, assistant, foundry-agent)
@@ -714,11 +754,13 @@ tests:
 - Adaline Gateway (needs fix)
 
 ### Full Support (Inherited via OpenAiChatCompletionProvider)
+
 - Groq, Perplexity, Cerebras, OpenRouter, xAI chat
 - DeepSeek, Databricks, Portkey, LlamaApi
 - Helicone, Alibaba, TrueFoundry, Cloudera
 - Cloudflare AI, Snowflake, Hyperbolic, JFrog, Docker
 
 ### No Tool Support
+
 - Mistral, Cohere, LiteLLM, Replicate, AI21
 - WatsonX, TogetherAI, Envoy, FAL, LocalAI, Llama

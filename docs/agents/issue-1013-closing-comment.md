@@ -8,7 +8,7 @@ Good news: the core issue you described has been addressed. When you filed this,
 
 The v4 approach has been the default for a while now, so if you're running a recent version you should already have this fix.
 
-There's still a theoretical edge case where two people rate the *exact same* result at the same instant - in that scenario the second write wins. In practice this seems rare enough that we haven't seen reports of it happening, but if it becomes a problem we can add optimistic locking.
+There's still a theoretical edge case where two people rate the _exact same_ result at the same instant - in that scenario the second write wins. In practice this seems rare enough that we haven't seen reports of it happening, but if it becomes a problem we can add optimistic locking.
 
 Real-time sync (where you'd see other people's ratings appear without refreshing) would be a nice enhancement for heavier collaborative workflows. That's a bigger lift though - would need WebSocket broadcasts and client-side state reconciliation. If there's interest we could track that separately.
 

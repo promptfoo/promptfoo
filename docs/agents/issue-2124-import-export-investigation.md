@@ -118,12 +118,14 @@ diff /tmp/test-export.json /tmp/test-reexport.json
 Investigation completed 2025-12-15.
 
 ### Test Setup
+
 - Original eval: `eval-5Qb-2025-12-15T00:18:49`
 - Exported to: `/tmp/pf-test-export.json`
 - Imported as: `eval-07E-2025-12-15T04:59:09` (NEW ID!)
 - Re-exported to: `/tmp/pf-test-reexport.json`
 
 ### evalId Preservation
+
 - [x] Original ID preserved on import? **NO - New ID generated**
 - [x] ID format unchanged? N/A - completely different ID
 
@@ -135,6 +137,7 @@ Imported: eval-07E-2025-12-15T04:59:09
 ```
 
 ### Timestamp Preservation
+
 - [x] createdAt matches original? **NO - Defaults to import time**
 - [x] Or defaults to import time? **YES**
 
@@ -146,6 +149,7 @@ Imported: 2025-12-15T04:59:09.715Z (import time)
 ```
 
 ### Author Preservation
+
 - [x] Author string preserved? **NO - Defaults to "Unknown"**
 - [x] Or defaults to "Unknown"? **YES**
 
@@ -157,6 +161,7 @@ Imported: "Unknown"
 ```
 
 ### Results Data Integrity
+
 - [x] All results imported? **YES - 10/10**
 - [x] All result fields preserved? **YES**
 - [x] Scores match? **YES**
@@ -165,11 +170,13 @@ Imported: "Unknown"
 Results data is fully preserved through the cycle.
 
 ### Config Preservation
+
 - [x] Full config preserved? **YES**
 - [x] Tests array preserved? **YES**
 - [x] Provider config preserved? **YES**
 
 ### Relationship Tables
+
 - [x] prompts table populated? **YES**
 - [x] evals_to_prompts junction populated? **YES (2 records)**
 - [x] datasets table populated? **YES**
@@ -178,31 +185,33 @@ Results data is fully preserved through the cycle.
 
 ## Summary of Data Loss
 
-| Field | Original | After Import | Status |
-|-------|----------|--------------|--------|
-| evalId | `eval-5Qb-...` | `eval-07E-...` | **LOST** |
-| createdAt | `00:18:49` | `04:59:09` | **LOST** |
-| author | `""` | `"Unknown"` | **LOST** |
-| description | ✓ | ✓ | Preserved |
-| config | ✓ | ✓ | Preserved |
-| results (10) | ✓ | ✓ | Preserved |
-| prompts junction | ✓ | ✓ | Preserved |
-| datasets junction | ✓ | ✓ | Preserved |
+| Field             | Original       | After Import   | Status    |
+| ----------------- | -------------- | -------------- | --------- |
+| evalId            | `eval-5Qb-...` | `eval-07E-...` | **LOST**  |
+| createdAt         | `00:18:49`     | `04:59:09`     | **LOST**  |
+| author            | `""`           | `"Unknown"`    | **LOST**  |
+| description       | ✓              | ✓              | Preserved |
+| config            | ✓              | ✓              | Preserved |
+| results (10)      | ✓              | ✓              | Preserved |
+| prompts junction  | ✓              | ✓              | Preserved |
+| datasets junction | ✓              | ✓              | Preserved |
 
 ## Root Cause Analysis
 
 The export format uses these field names:
+
 ```json
 {
-  "evalId": "eval-XXX",           // ID is here
+  "evalId": "eval-XXX", // ID is here
   "metadata": {
     "evaluationCreatedAt": "...", // Timestamp is here
-    "author": "..."               // Author is here
+    "author": "..." // Author is here
   }
 }
 ```
 
 But the import code (src/commands/import.ts) looks for:
+
 ```typescript
 id: evalData.id,                    // undefined!
 createdAt: evalData.createdAt,      // undefined!
@@ -229,6 +238,7 @@ const importAuthor = evalData.metadata?.author || evalData.author || 'Unknown';
 ### Option B: Complete Fix (with collision handling)
 
 Same as Option A, plus:
+
 1. Check if eval with `importId` already exists before insert
 2. Provide clear error message if collision occurs
 3. Add `--new-id` flag to force new ID generation
@@ -236,6 +246,7 @@ Same as Option A, plus:
 ### Recommendation
 
 Implement Option B for best user experience:
+
 - Fixes the data loss bugs
 - Prevents silent duplicate creation
 - Provides clear error messages
@@ -255,65 +266,71 @@ Implement Option B for best user experience:
 
 #### evals Table Fields
 
-| Field | Original | After Import | Status | Notes |
-|-------|----------|--------------|--------|-------|
-| id | `eval-5Qb-...` | `eval-p0P-...` | **LOST** | Bug: wrong field name |
-| created_at | `00:18:49` | `05:08:03` | **LOST** | Bug: wrong field location |
-| author | `""` | `"Unknown"` | **LOST** | Bug: wrong field location |
-| description | ✓ | ✓ | OK | |
-| results | ✓ | ✓ | OK | |
-| config | ✓ | ✓ | OK | |
-| prompts | ✓ | ✓ | OK | |
-| vars | `["body","keyword","metricCategory"]` | `[]` | **LOST** | Not passed to Eval.create() |
-| runtime_options | `{showProgressBar:true,...}` | null | **LOST** | Not passed to Eval.create() |
-| is_redteam | 0 | 0 | OK | |
-| is_favorite | 0 | 0 | OK | Not exported (user pref) |
+| Field           | Original                              | After Import   | Status   | Notes                       |
+| --------------- | ------------------------------------- | -------------- | -------- | --------------------------- |
+| id              | `eval-5Qb-...`                        | `eval-p0P-...` | **LOST** | Bug: wrong field name       |
+| created_at      | `00:18:49`                            | `05:08:03`     | **LOST** | Bug: wrong field location   |
+| author          | `""`                                  | `"Unknown"`    | **LOST** | Bug: wrong field location   |
+| description     | ✓                                     | ✓              | OK       |                             |
+| results         | ✓                                     | ✓              | OK       |                             |
+| config          | ✓                                     | ✓              | OK       |                             |
+| prompts         | ✓                                     | ✓              | OK       |                             |
+| vars            | `["body","keyword","metricCategory"]` | `[]`           | **LOST** | Not passed to Eval.create() |
+| runtime_options | `{showProgressBar:true,...}`          | null           | **LOST** | Not passed to Eval.create() |
+| is_redteam      | 0                                     | 0              | OK       |                             |
+| is_favorite     | 0                                     | 0              | OK       | Not exported (user pref)    |
 
 #### eval_results Fields
 
-| Field | Status | Notes |
-|-------|--------|-------|
-| All scalar fields | OK | score, success, latency, cost, etc. |
-| test_case | OK | Full test case preserved |
-| prompt | OK | Prompt preserved |
-| response | OK | Full response preserved |
-| grading_result | OK | Full grading results preserved |
-| provider | **PARTIAL** | `provider.config` intentionally stripped |
-| metadata | OK | |
+| Field             | Status      | Notes                                    |
+| ----------------- | ----------- | ---------------------------------------- |
+| All scalar fields | OK          | score, success, latency, cost, etc.      |
+| test_case         | OK          | Full test case preserved                 |
+| prompt            | OK          | Prompt preserved                         |
+| response          | OK          | Full response preserved                  |
+| grading_result    | OK          | Full grading results preserved           |
+| provider          | **PARTIAL** | `provider.config` intentionally stripped |
+| metadata          | OK          |                                          |
 
 ### Data Loss Categories
 
 #### 1. Critical Bugs (MUST FIX)
+
 - `evalId` - Import reads wrong field
 - `createdAt` - Import reads wrong field
 - `author` - Import reads wrong field
 
 #### 2. Missing Parameters (SHOULD FIX)
+
 - `vars` - Not passed to `Eval.create()` on import
 - `runtime_options` - Not passed to `Eval.create()` on import
 
 Note: `vars` can be reconstructed from results, but for perfect round-trip fidelity we should preserve it.
 
 #### 3. Intentionally Stripped (BY DESIGN - DO NOT FIX)
+
 - `provider.config` - Stripped in `toEvaluateResult()` for security (may contain API keys)
 
 #### 4. User Preferences (NOT EXPORTED - OK)
+
 - `is_favorite` - User preference, not eval data
 
 ### Code Analysis: Where Data is Lost
 
 **Export path (toEvaluateResult in evalResult.ts:348):**
+
 ```typescript
 provider: { id: this.provider.id, label: this.provider.label },
 // Intentionally strips provider.config for security
 ```
 
 **Import path (import.ts:22-27):**
+
 ```typescript
 const evalRecord = await Eval.create(evalData.config, evalData.results.prompts, {
-  id: evalData.id,           // BUG: should be evalData.evalId
-  createdAt: evalData.createdAt,  // BUG: should be metadata.evaluationCreatedAt
-  author: evalData.author || 'Unknown',  // BUG: should check metadata.author
+  id: evalData.id, // BUG: should be evalData.evalId
+  createdAt: evalData.createdAt, // BUG: should be metadata.evaluationCreatedAt
+  author: evalData.author || 'Unknown', // BUG: should check metadata.author
   completedPrompts: evalData.results.prompts,
   // MISSING: vars not passed
   // MISSING: runtimeOptions not passed (though not in export)
@@ -361,18 +378,19 @@ Ensure the fixture has all the fields we're testing (evalId, metadata.evaluation
 
 Complete round-trip test with `sample-export.json`:
 
-| Field | Original Export | After Import | After Re-Export |
-|-------|-----------------|--------------|-----------------|
-| evalId | `eval-WJi-2025-10-01T20:08:11` | `eval-WJi-2025-10-01T20:08:11` | `eval-WJi-2025-10-01T20:08:11` |
-| createdAt | `2025-10-01T20:08:11.168Z` | `2025-10-01T20:08:11.168Z` | `2025-10-01T20:08:11.168Z` |
-| author | `steve@promptfoo.dev` | `steve@promptfoo.dev` | `steve@promptfoo.dev` |
-| description | ✓ | ✓ | ✓ |
-| vars | N/A | `["riddle"]` | (derived) |
-| results (4) | ✓ | ✓ | ✓ |
+| Field       | Original Export                | After Import                   | After Re-Export                |
+| ----------- | ------------------------------ | ------------------------------ | ------------------------------ |
+| evalId      | `eval-WJi-2025-10-01T20:08:11` | `eval-WJi-2025-10-01T20:08:11` | `eval-WJi-2025-10-01T20:08:11` |
+| createdAt   | `2025-10-01T20:08:11.168Z`     | `2025-10-01T20:08:11.168Z`     | `2025-10-01T20:08:11.168Z`     |
+| author      | `steve@promptfoo.dev`          | `steve@promptfoo.dev`          | `steve@promptfoo.dev`          |
+| description | ✓                              | ✓                              | ✓                              |
+| vars        | N/A                            | `["riddle"]`                   | (derived)                      |
+| results (4) | ✓                              | ✓                              | ✓                              |
 
 **All critical fields are now preserved through the export/import cycle.**
 
 ### Tests Added
+
 - `should successfully import the sample export file preserving evalId`
 - `should preserve createdAt timestamp from metadata`
 - `should derive vars from results`
@@ -397,9 +415,7 @@ const importCreatedAt = evalData.metadata?.evaluationCreatedAt
 const importAuthor = evalData.metadata?.author || evalData.author;
 
 // 2. Derive vars from results (for round-trip fidelity)
-const vars = [...new Set(
-  evalData.results.results.flatMap(r => Object.keys(r.vars || {}))
-)];
+const vars = [...new Set(evalData.results.results.flatMap((r) => Object.keys(r.vars || {})))];
 
 // 3. Check for collision (if not --new-id)
 if (importId && !cmdObj.newId) {
