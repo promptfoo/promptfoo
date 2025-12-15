@@ -384,7 +384,7 @@ describe('OpenAiVideoProvider', () => {
       expect(mockFetch).toHaveBeenCalledWith(
         expect.stringContaining('/videos'),
         expect.objectContaining({
-          body: expect.stringContaining('"seconds":12'),
+          body: expect.stringContaining('"seconds":"12"'),
         }),
       );
       expect(result.video?.size).toBe('720x1280');

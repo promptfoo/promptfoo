@@ -201,7 +201,8 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
     // Only include these for new videos (not remix)
     if (!config.remix_video_id) {
       body.size = config.size || DEFAULT_SIZE;
-      body.seconds = config.seconds || DEFAULT_SECONDS;
+      // API requires seconds as a string ("4", "8", or "12")
+      body.seconds = String(config.seconds || DEFAULT_SECONDS);
     }
 
     // Handle input_reference (image-to-video)
