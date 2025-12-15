@@ -33,7 +33,7 @@ import { Strategies } from '../../strategies';
 import type { BaseRedteamMetadata } from '../../types';
 import { getSessionId, isBasicRefusal } from '../../util';
 import { EVAL_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT } from '../crescendo/prompts';
-import { getGoalRubric } from '../prompts';
+import { getMultiTurnStrategyContext } from '../prompts';
 import type { Message } from '../shared';
 import {
   buildGraderResultAssertion,
@@ -336,8 +336,8 @@ export class CustomProvider implements ApiProvider {
     let graderPassed: boolean | undefined;
     let storedGraderResult: GradingResult | undefined;
 
-    // Generate goal-specific evaluation rubric
-    const additionalRubric = getGoalRubric(this.userGoal);
+    // Get strategy-specific context for grading (goal context is added in base.ts)
+    const additionalRubric = getMultiTurnStrategyContext();
 
     while (roundNum < this.maxTurns) {
       try {

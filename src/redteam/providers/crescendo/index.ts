@@ -37,7 +37,7 @@ import {
 import { Strategies } from '../../strategies';
 import type { BaseRedteamMetadata } from '../../types';
 import { getSessionId, isBasicRefusal } from '../../util';
-import { getGoalRubric } from '../prompts';
+import { getMultiTurnStrategyContext } from '../prompts';
 import type { Message } from '../shared';
 import {
   getLastMessageContent,
@@ -328,8 +328,8 @@ export class CrescendoProvider implements ApiProvider {
     const { getGraderById } = await import('../../graders');
     let graderPassed: boolean | undefined;
 
-    // Generate goal-specific evaluation rubric
-    const additionalRubric = getGoalRubric(this.userGoal);
+    // Get strategy-specific context for grading (goal context is added in base.ts)
+    const additionalRubric = getMultiTurnStrategyContext();
     while (roundNum < this.maxTurns) {
       try {
         roundNum++;
