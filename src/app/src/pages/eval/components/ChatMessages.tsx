@@ -5,7 +5,6 @@ import invariant from 'tiny-invariant';
 import Box from '@mui/material/Box';
 import { grey, red } from '@mui/material/colors';
 import Paper from '@mui/material/Paper';
-import Skeleton from '@mui/material/Skeleton';
 import Stack from '@mui/material/Stack';
 import { keyframes, useTheme } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
@@ -197,24 +196,26 @@ const ChatMessage = ({ message, index }: { message: Message; index: number }) =>
   return (
     <Box sx={{ display: 'flex', justifyContent: alignSelf }} data-testid={`chat-message-${index}`}>
       {message.loading ? (
-        <Skeleton
-          variant="rectangular"
-          width="100%" // Force max-width
-          height={100}
+        <Paper
+          elevation={1}
           sx={{
             ...bubbleProps,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
+            py: 1.5,
+            px: 2.5,
+            maxWidth: 'none',
           }}
+          data-testid="loading-indicator"
         >
-          <Box sx={{ display: 'flex', gap: 1, visibility: 'visible !important' }}>
+          <Box sx={{ display: 'flex', gap: 0.75 }}>
             {[0, 1, 2].map((i) => (
               <Box
                 key={i}
                 sx={{
-                  width: 8,
-                  height: 8,
+                  width: 6,
+                  height: 6,
                   bgcolor: 'white',
                   borderRadius: '50%',
                   animation: `${bounce} 1.4s infinite ease-in-out both`,
@@ -223,7 +224,7 @@ const ChatMessage = ({ message, index }: { message: Message; index: number }) =>
               />
             ))}
           </Box>
-        </Skeleton>
+        </Paper>
       ) : (
         <Paper elevation={1} sx={bubbleProps} role="alert">
           <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
