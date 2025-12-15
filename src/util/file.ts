@@ -1,7 +1,9 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
+import chalk from 'chalk';
 import { parse as csvParse, type Options as CsvOptions } from 'csv-parse/sync';
+import dedent from 'dedent';
 import { globSync, hasMagic } from 'glob';
 import yaml from 'js-yaml';
 import nunjucks from 'nunjucks';
@@ -368,4 +370,109 @@ export function validateFileReferences(
   }
 
   return result;
+}
+
+/**
+ * Resolves a file:// protocol path to an absolute file system path.
+ *
+ * @param fileUrl - The file:// URL to resolve (e.g., "file://path/to/file.yaml")
+ * @param basePath - Optional base path for resolving relative paths
+ * @returns The resolved absolute file path
+ */
+export function resolveFileProtocolPath(fileUrl: string, basePath?: string): string {
+  const relativePath = fileUrl.slice('file://'.length);
+  return path.isAbsolute(relativePath)
+    ? relativePath
+    : path.join(basePath || process.cwd(), relativePath);
+}
+
+export interface FileNotFoundErrorOptions {
+  /** The absolute path to the file that was not found */
+  filePath: string;
+  /** Optional base path for showing relative path context */
+  basePath?: string;
+  /** Optional documentation URL */
+  docsUrl?: string;
+}
+
+/**
+ * Formats a user-friendly error message for file not found errors.
+ *
+ * @param options - Options for formatting the error message
+ * @returns Formatted error message string
+ */
+export function formatFileNotFoundError(options: FileNotFoundErrorOptions): string {
+  const { filePath, basePath, docsUrl } = options;
+  const absolutePath = path.resolve(filePath);
+
+  let message = dedent`
+    File not found: ${chalk.bold(absolutePath)}
+
+    ${chalk.white('Please verify that:')}
+      - The file path is correct
+      - The file exists at the specified location
+      ${basePath ? `- The path is relative to: ${path.resolve(basePath)}` : '- The path is relative to the current directory'}
+  `;
+
+  if (docsUrl) {
+    message += `\n\n    ${chalk.white('For more information, visit:')} ${chalk.cyan(docsUrl)}`;
+  }
+
+  return message;
+}
+
+export interface FileReadErrorOptions {
+  /** The absolute path to the file that failed to read */
+  filePath: string;
+  /** The error that occurred */
+  error: unknown;
+}
+
+/**
+ * Formats a user-friendly error message for file read errors.
+ *
+ * @param options - Options for formatting the error message
+ * @returns Formatted error message string
+ */
+export function formatFileReadError(options: FileReadErrorOptions): string {
+  const { filePath, error } = options;
+  const absolutePath = path.resolve(filePath);
+  const errorMessage = error instanceof Error ? error.message : String(error);
+
+  return dedent`
+    Failed to read file: ${chalk.bold(absolutePath)}
+
+    ${chalk.white('Error:')} ${errorMessage}
+  `;
+}
+
+/**
+ * Formats a user-friendly error message for missing file references found during config validation.
+ *
+ * @param validationResult - The result from validateFileReferences
+ * @param basePath - The base path for relative path context
+ * @returns Formatted error message string
+ */
+export function formatMissingFileReferencesError(
+  validationResult: FileValidationResult,
+  basePath: string,
+): string {
+  return dedent`
+    ${chalk.red.bold('File reference errors found in config:')}
+
+    ${validationResult.missingFiles
+      .map(
+        ({ reference, resolvedPath }) => dedent`
+      ${chalk.yellow('•')} ${chalk.bold(reference.original)}
+        ${chalk.white('Location in config:')} ${reference.configPath}
+        ${chalk.white('Resolved path:')} ${resolvedPath}
+    `,
+      )
+      .join('\n\n')}
+
+    ${chalk.white('Please verify that:')}
+      - The file paths are correct
+      - The files exist at the specified locations
+      - Paths are relative to: ${chalk.cyan(path.resolve(basePath))}
+  `;
 }

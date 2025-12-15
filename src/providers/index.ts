@@ -12,7 +12,12 @@ import {
   isCloudProvider,
   validateLinkedTargetId,
 } from '../util/cloud';
-import { maybeLoadConfigFromExternalFile } from '../util/file';
+import {
+  formatFileNotFoundError,
+  formatFileReadError,
+  maybeLoadConfigFromExternalFile,
+  resolveFileProtocolPath,
+} from '../util/file';
 import { renderEnvOnlyInObject } from '../util/index';
 import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
@@ -101,56 +106,42 @@ export async function loadApiProvider(
       renderedProviderPath.endsWith('.yml') ||
       renderedProviderPath.endsWith('.json'))
   ) {
-    const filePath = renderedProviderPath.slice('file://'.length);
-    const modulePath = path.isAbsolute(filePath)
-      ? filePath
-      : path.join(basePath || process.cwd(), filePath);
+    const modulePath = resolveFileProtocolPath(renderedProviderPath, basePath);
 
     if (!fs.existsSync(modulePath)) {
-      const absolutePath = path.resolve(modulePath);
-      const errorMessage = dedent`
-        Provider file not found: ${chalk.bold(absolutePath)}
-
-        ${chalk.white('Please verify that:')}
-          - The file path is correct
-          - The file exists at the specified location
-          ${basePath ? `- The path is relative to: ${path.resolve(basePath)}` : '- The path is relative to the current directory'}
-
-        ${chalk.white('For more information on file providers, visit:')} ${chalk.cyan('https://promptfoo.dev/docs/providers/file/')}
-      `;
+      const errorMessage = formatFileNotFoundError({
+        filePath: modulePath,
+        basePath,
+        docsUrl: 'https://promptfoo.dev/docs/providers/file/',
+      });
       logger.error(errorMessage);
-      throw new Error(`Provider file not found: ${absolutePath}`);
+      throw new Error(`Provider file not found: ${path.resolve(modulePath)}`);
     }
 
     let rawContent;
     try {
       rawContent = yaml.load(fs.readFileSync(modulePath, 'utf8'));
     } catch (error) {
-      const readErrorAbsPath = path.resolve(modulePath);
-      const errorMessage = dedent`
-        Failed to read provider file: ${chalk.bold(readErrorAbsPath)}
-
-        ${chalk.white('Error:')} ${error instanceof Error ? error.message : String(error)}
-      `;
+      const errorMessage = formatFileReadError({ filePath: modulePath, error });
       logger.error(errorMessage);
       throw new Error(
-        `Failed to read provider file ${readErrorAbsPath}: ${error instanceof Error ? error.message : String(error)}`,
+        `Failed to read provider file ${path.resolve(modulePath)}: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
 
     const fileContent = maybeLoadConfigFromExternalFile(rawContent) as ProviderOptions;
-    invariant(fileContent, `Provider config ${filePath} is undefined`);
+    invariant(fileContent, `Provider config ${modulePath} is undefined`);
 
     // If fileContent is an array, it contains multiple providers
     if (Array.isArray(fileContent)) {
       // This is handled by loadApiProviders, so we'll throw an error here
       throw new Error(
-        `Multiple providers found in ${filePath}. Use loadApiProviders instead of loadApiProvider.`,
+        `Multiple providers found in ${modulePath}. Use loadApiProviders instead of loadApiProvider.`,
       );
     }
 
-    invariant(fileContent.id, `Provider config ${filePath} must have an id`);
-    logger.info(`Loaded provider ${fileContent.id} from ${filePath}`);
+    invariant(fileContent.id, `Provider config ${modulePath} must have an id`);
+    logger.info(`Loaded provider ${fileContent.id} from ${modulePath}`);
     return loadApiProvider(fileContent.id, { ...context, options: fileContent });
   }
 
@@ -239,59 +230,45 @@ export async function resolveProvider(
  * This can handle both single provider and multiple providers in a file.
  */
 async function loadProvidersFromFile(
-  filePath: string,
+  fileUrl: string,
   options: {
     basePath?: string;
     env?: EnvOverrides;
   } = {},
 ): Promise<ApiProvider[]> {
   const { basePath, env } = options;
-  const relativePath = filePath.slice('file://'.length);
-  const modulePath = path.isAbsolute(relativePath)
-    ? relativePath
-    : path.join(basePath || process.cwd(), relativePath);
+  const modulePath = resolveFileProtocolPath(fileUrl, basePath);
 
   if (!fs.existsSync(modulePath)) {
-    const absolutePath = path.resolve(modulePath);
-    const errorMessage = dedent`
-      Provider file not found: ${chalk.bold(absolutePath)}
-
-      ${chalk.white('Please verify that:')}
-        - The file path is correct
-        - The file exists at the specified location
-        ${basePath ? `- The path is relative to: ${path.resolve(basePath)}` : '- The path is relative to the current directory'}
-
-      ${chalk.white('For more information on file providers, visit:')} ${chalk.cyan('https://promptfoo.dev/docs/providers/file/')}
-    `;
+    const errorMessage = formatFileNotFoundError({
+      filePath: modulePath,
+      basePath,
+      docsUrl: 'https://promptfoo.dev/docs/providers/file/',
+    });
     logger.error(errorMessage);
-    throw new Error(`Provider file not found: ${absolutePath}`);
+    throw new Error(`Provider file not found: ${path.resolve(modulePath)}`);
   }
 
   let rawContent;
   try {
     rawContent = yaml.load(fs.readFileSync(modulePath, 'utf8'));
   } catch (error) {
-    const absolutePath = path.resolve(modulePath);
-    const errorMessage = dedent`
-      Failed to read provider file: ${chalk.bold(absolutePath)}
-
-      ${chalk.white('Error:')} ${error instanceof Error ? error.message : String(error)}
-    `;
+    const errorMessage = formatFileReadError({ filePath: modulePath, error });
     logger.error(errorMessage);
     throw new Error(
-      `Failed to read provider file ${absolutePath}: ${error instanceof Error ? error.message : String(error)}`,
+      `Failed to read provider file ${path.resolve(modulePath)}: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
 
   const fileContent = maybeLoadConfigFromExternalFile(rawContent) as
     | ProviderOptions
     | ProviderOptions[];
-  invariant(fileContent, `Provider config ${relativePath} is undefined`);
+  invariant(fileContent, `Provider config ${modulePath} is undefined`);
 
   const configs = [fileContent].flat() as ProviderOptions[];
   return Promise.all(
     configs.map((config) => {
-      invariant(config.id, `Provider config in ${relativePath} must have an id`);
+      invariant(config.id, `Provider config in ${modulePath} must have an id`);
       return loadApiProvider(config.id, { options: config, basePath, env });
     }),
   );

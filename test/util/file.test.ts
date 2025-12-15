@@ -7,9 +7,13 @@ import yaml from 'js-yaml';
 import cliState from '../../src/cliState';
 import {
   extractFileReferences,
+  formatFileNotFoundError,
+  formatFileReadError,
+  formatMissingFileReferencesError,
   getResolvedRelativePath,
   maybeLoadConfigFromExternalFile,
   maybeLoadFromExternalFile,
+  resolveFileProtocolPath,
   validateFileReferences,
 } from '../../src/util/file';
 import {
@@ -1185,6 +1189,141 @@ describe('file utilities', () => {
 
       expect(result.valid).toBe(false);
       expect(result.missingFiles).toHaveLength(3);
+    });
+  });
+
+  describe('resolveFileProtocolPath', () => {
+    it('should resolve relative paths with basePath', () => {
+      const result = resolveFileProtocolPath('file://path/to/file.yaml', '/base');
+      expect(result).toBe(path.join('/base', 'path/to/file.yaml'));
+    });
+
+    it('should resolve relative paths with cwd when no basePath', () => {
+      const result = resolveFileProtocolPath('file://path/to/file.yaml');
+      expect(result).toBe(path.join(process.cwd(), 'path/to/file.yaml'));
+    });
+
+    it('should handle absolute paths', () => {
+      const result = resolveFileProtocolPath('file:///absolute/path/file.yaml', '/base');
+      expect(result).toBe('/absolute/path/file.yaml');
+    });
+
+    it('should strip file:// prefix', () => {
+      const result = resolveFileProtocolPath('file://test.yaml', '/base');
+      expect(result).not.toContain('file://');
+    });
+  });
+
+  describe('formatFileNotFoundError', () => {
+    it('should format error with basePath', () => {
+      const result = formatFileNotFoundError({
+        filePath: '/path/to/missing.yaml',
+        basePath: '/base',
+      });
+      expect(result).toContain('File not found');
+      expect(result).toContain('missing.yaml');
+      expect(result).toContain('Please verify that');
+      expect(result).toContain('/base');
+    });
+
+    it('should format error without basePath', () => {
+      const result = formatFileNotFoundError({
+        filePath: '/path/to/missing.yaml',
+      });
+      expect(result).toContain('File not found');
+      expect(result).toContain('current directory');
+    });
+
+    it('should include docs URL when provided', () => {
+      const result = formatFileNotFoundError({
+        filePath: '/path/to/missing.yaml',
+        docsUrl: 'https://example.com/docs',
+      });
+      expect(result).toContain('https://example.com/docs');
+      expect(result).toContain('For more information');
+    });
+
+    it('should not include docs section when no URL', () => {
+      const result = formatFileNotFoundError({
+        filePath: '/path/to/missing.yaml',
+      });
+      expect(result).not.toContain('For more information');
+    });
+  });
+
+  describe('formatFileReadError', () => {
+    it('should format error with Error object', () => {
+      const result = formatFileReadError({
+        filePath: '/path/to/file.yaml',
+        error: new Error('Permission denied'),
+      });
+      expect(result).toContain('Failed to read file');
+      expect(result).toContain('file.yaml');
+      expect(result).toContain('Permission denied');
+    });
+
+    it('should format error with string error', () => {
+      const result = formatFileReadError({
+        filePath: '/path/to/file.yaml',
+        error: 'Something went wrong',
+      });
+      expect(result).toContain('Failed to read file');
+      expect(result).toContain('Something went wrong');
+    });
+  });
+
+  describe('formatMissingFileReferencesError', () => {
+    it('should format error for missing files', () => {
+      const validationResult = {
+        valid: false,
+        missingFiles: [
+          {
+            reference: {
+              original: 'file://missing.py',
+              filePath: 'missing.py',
+              configPath: 'providers[0]',
+            },
+            resolvedPath: '/base/missing.py',
+          },
+        ],
+        validFiles: [],
+      };
+      const result = formatMissingFileReferencesError(validationResult, '/base');
+      expect(result).toContain('File reference errors found');
+      expect(result).toContain('file://missing.py');
+      expect(result).toContain('providers[0]');
+      expect(result).toContain('/base/missing.py');
+      expect(result).toContain('Please verify that');
+    });
+
+    it('should format error for multiple missing files', () => {
+      const validationResult = {
+        valid: false,
+        missingFiles: [
+          {
+            reference: {
+              original: 'file://missing1.py',
+              filePath: 'missing1.py',
+              configPath: 'providers[0]',
+            },
+            resolvedPath: '/base/missing1.py',
+          },
+          {
+            reference: {
+              original: 'file://missing2.txt',
+              filePath: 'missing2.txt',
+              configPath: 'prompts[0]',
+            },
+            resolvedPath: '/base/missing2.txt',
+          },
+        ],
+        validFiles: [],
+      };
+      const result = formatMissingFileReferencesError(validationResult, '/base');
+      expect(result).toContain('file://missing1.py');
+      expect(result).toContain('file://missing2.txt');
+      expect(result).toContain('providers[0]');
+      expect(result).toContain('prompts[0]');
     });
   });
 });
