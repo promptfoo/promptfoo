@@ -272,6 +272,29 @@ Deletes a specific resource.
 
 Import an eval file from JSON format.
 
+| Option     | Description                                                  |
+| ---------- | ------------------------------------------------------------ |
+| `--new-id` | Generate a new eval ID instead of preserving the original ID |
+
+When importing an eval, the following data is preserved from the export:
+
+- **Eval ID** - The original eval ID is preserved by default
+- **Timestamp** - The original creation timestamp is preserved
+- **Author** - The original author is preserved
+- **Config, results, and all test data** - Fully preserved
+
+If an eval with the same ID already exists, the import will fail with an error. Use `--new-id` to import a duplicate with a new ID.
+
+Example:
+
+```sh
+# Import an eval, preserving the original ID
+promptfoo import my-eval.json
+
+# Import even if an eval with this ID exists (creates new ID)
+promptfoo import --new-id my-eval.json
+```
+
 ## `promptfoo export`
 
 Export eval records or logs.
