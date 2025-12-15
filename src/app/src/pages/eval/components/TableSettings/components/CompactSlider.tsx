@@ -152,6 +152,13 @@ const CompactSlider = ({
               boxShadow: `0 0 0 8px ${alpha(theme.palette.primary.main, 0.16)}`,
             },
           },
+          '& .MuiSlider-valueLabel': {
+            backgroundColor: theme.palette.primary.main,
+            color: theme.palette.primary.contrastText,
+            fontSize: '0.75rem',
+            fontWeight: 500,
+            borderRadius: 1,
+          },
         }}
       />
     </Box>
