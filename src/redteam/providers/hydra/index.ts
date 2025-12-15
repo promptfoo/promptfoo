@@ -29,6 +29,7 @@ import { Strategies } from '../../strategies';
 import type { BaseRedteamMetadata } from '../../types';
 import { getSessionId, isBasicRefusal } from '../../util';
 import {
+  buildGraderResultAssertion,
   getTargetResponse,
   isValidChatMessageArray,
   type Message,
@@ -552,11 +553,7 @@ export class HydraProvider implements ApiProvider {
           graderResult = grade;
           storedGraderResult = {
             ...grade,
-            assertion: grade.assertion
-              ? { ...grade.assertion, value: rubric }
-              : assertToUse && 'type' in assertToUse && assertToUse.type !== 'assert-set'
-                ? { ...assertToUse, value: rubric }
-                : undefined,
+            assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
           };
 
           logger.debug('[Hydra] Grader result', {

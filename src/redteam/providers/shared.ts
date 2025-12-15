@@ -528,3 +528,21 @@ export async function tryUnblocking({
     return { success: false };
   }
 }
+
+/**
+ * Builds the assertion object for storedGraderResult with the rubric value.
+ * This ensures the grading template is preserved for display in the UI.
+ */
+export function buildGraderResultAssertion(
+  gradeAssertion: { type: string; value?: string } | undefined,
+  assertToUse: { type: string; value?: string } | undefined,
+  rubric: string | undefined,
+): { type: string; value: string | undefined } | undefined {
+  if (gradeAssertion) {
+    return { ...gradeAssertion, value: rubric };
+  }
+  if (assertToUse && 'type' in assertToUse && assertToUse.type !== 'assert-set') {
+    return { ...assertToUse, value: rubric };
+  }
+  return undefined;
+}

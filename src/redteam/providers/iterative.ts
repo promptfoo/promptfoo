@@ -42,6 +42,7 @@ import {
   JUDGE_SYSTEM_PROMPT,
 } from './prompts';
 import {
+  buildGraderResultAssertion,
   checkPenalizedPhrases,
   createIterationContext,
   getTargetResponse,
@@ -451,11 +452,7 @@ export async function runRedteamConversation({
         );
         storedGraderResult = {
           ...grade,
-          assertion: grade.assertion
-            ? { ...grade.assertion, value: rubric }
-            : assertToUse && 'type' in assertToUse && assertToUse.type !== 'assert-set'
-              ? { ...assertToUse, value: rubric }
-              : undefined,
+          assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
         };
       }
     }
