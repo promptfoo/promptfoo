@@ -158,6 +158,17 @@ export interface ProviderResponse {
     channels?: number;
     duration?: number;
   };
+  video?: {
+    id?: string; // Provider video ID (e.g., Sora job ID)
+    uuid?: string; // Local storage UUID
+    url?: string; // API path to serve video (e.g., /api/output/video/{uuid}/video.mp4)
+    format?: string; // 'mp4'
+    size?: string; // '1280x720' or '720x1280'
+    duration?: number; // Seconds
+    thumbnail?: string; // API path to thumbnail
+    spritesheet?: string; // API path to spritesheet
+    model?: string; // Model used (e.g., 'sora-2', 'sora-2-pro')
+  };
 }
 
 export interface ProviderEmbeddingResponse {
