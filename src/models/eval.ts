@@ -248,6 +248,7 @@ export default class Eval {
   _resultsLoaded: boolean = false;
   runtimeOptions?: Partial<import('../types').EvaluateOptions>;
   _shared: boolean = false;
+  durationMs?: number;
 
   static async latest() {
     const db = getDb();
@@ -287,6 +288,11 @@ export default class Eval {
     const eval_ = evalData[0];
     const datasetId = datasetResults[0]?.datasetId;
 
+    // Extract durationMs from results column (for V4 evals)
+    const resultsObj = eval_.results as Record<string, unknown> | undefined;
+    const durationMs =
+      resultsObj && 'durationMs' in resultsObj ? (resultsObj.durationMs as number) : undefined;
+
     const evalInstance = new Eval(eval_.config, {
       id: eval_.id,
       createdAt: new Date(eval_.createdAt),
@@ -297,6 +303,7 @@ export default class Eval {
       persisted: true,
       vars: eval_.vars || [],
       runtimeOptions: (eval_ as any).runtimeOptions,
+      durationMs,
     });
     if (eval_.results && 'table' in eval_.results) {
       evalInstance.oldResults = eval_.results as EvaluateSummaryV2;
@@ -465,6 +472,7 @@ export default class Eval {
       persisted?: boolean;
       vars?: string[];
       runtimeOptions?: Partial<import('../types').EvaluateOptions>;
+      durationMs?: number;
     },
   ) {
     const createdAt = opts?.createdAt || new Date();
@@ -479,6 +487,7 @@ export default class Eval {
     this._resultsLoaded = false;
     this.vars = opts?.vars || [];
     this.runtimeOptions = opts?.runtimeOptions;
+    this.durationMs = opts?.durationMs;
   }
 
   version() {
@@ -514,6 +523,9 @@ export default class Eval {
     if (this.useOldResults()) {
       invariant(this.oldResults, 'Old results not found');
       updateObj.results = this.oldResults;
+    } else if (this.durationMs !== undefined) {
+      // For V4 evals, store durationMs in the results column
+      updateObj.results = { durationMs: this.durationMs };
     }
     db.update(evalsTable).set(updateObj).where(eq(evalsTable.id, this.id)).run();
     this.persisted = true;
@@ -525,6 +537,10 @@ export default class Eval {
 
   addVar(varName: string) {
     this.vars.push(varName);
+  }
+
+  setDurationMs(durationMs: number) {
+    this.durationMs = durationMs;
   }
 
   getPrompts() {
@@ -1003,6 +1019,7 @@ export default class Eval {
       failures: 0,
       errors: 0,
       tokenUsage: createEmptyTokenUsage(),
+      durationMs: this.durationMs,
     };
 
     for (const prompt of this.prompts) {
