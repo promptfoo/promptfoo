@@ -1835,9 +1835,12 @@ class Evaluator {
 
     this.evalRecord.setVars(Array.from(vars));
 
+    // Load results from database for extensions (results may not be in memory for persisted evals)
+    const allResults = await this.evalRecord.getResults();
+
     await runExtensionHook(testSuite.extensions, 'afterAll', {
       prompts: this.evalRecord.prompts,
-      results: this.evalRecord.results,
+      results: allResults,
       suite: testSuite,
       evalId: this.evalRecord.id,
       config: this.evalRecord.config,

@@ -582,6 +582,23 @@ export type ExtensionHookContextMap = {
  *  - The updated context object, if the extension hook returns a valid context object. The updated context,
  *    if defined, must conform to the type T; otherwise, a validation error is thrown.
  */
+/**
+ * Extracts the hook name from an extension path.
+ * Format: file://path/to/file.js:hookName or file://path/to/file.py:hook_name
+ * @returns The hook name or undefined if not specified
+ */
+function getExtensionHookName(extension: string): string | undefined {
+  if (!extension.startsWith('file://')) {
+    return undefined;
+  }
+  const lastColonIndex = extension.lastIndexOf(':');
+  // Check if colon is part of Windows drive letter (position 8 after file://) or not present
+  if (lastColonIndex > 8) {
+    return extension.slice(lastColonIndex + 1);
+  }
+  return undefined;
+}
+
 export async function runExtensionHook<HookName extends keyof ExtensionHookContextMap>(
   extensions: string[] | null | undefined,
   hookName: HookName,
@@ -599,9 +616,20 @@ export async function runExtensionHook<HookName extends keyof ExtensionHookConte
 
   for (const extension of extensions) {
     invariant(typeof extension === 'string', 'extension must be a string');
+
+    // Only run extensions that match the current hook name
+    // Extension format: file://path/to/file.js:hookName
+    const extensionHookName = getExtensionHookName(extension);
+    if (extensionHookName && extensionHookName !== hookName) {
+      logger.debug(
+        `Skipping extension ${extension} for hook ${hookName} (extension is for ${extensionHookName})`,
+      );
+      continue;
+    }
+
     logger.debug(`Running extension hook ${hookName} with context ${JSON.stringify(context)}`);
 
-    const extensionReturnValue = await transform(extension, hookName, context, false);
+    const extensionReturnValue = await transform(extension, context, { hookName }, false);
 
     // If the extension hook returns a value, update the context with the value's mutable fields.
     // This also provides backwards compatibility for extension hooks that do not return a value.
