@@ -434,7 +434,7 @@ export async function runRedteamConversation({
         const graderTraceSummary = tracingOptions.includeInGrading
           ? computedTraceSummary
           : undefined;
-        const { grade } = await grader.getResult(
+        const { grade, rubric } = await grader.getResult(
           newInjectVar,
           targetResponse.output,
           iterationTest,
@@ -449,7 +449,14 @@ export async function runRedteamConversation({
               }
             : undefined,
         );
-        storedGraderResult = grade;
+        storedGraderResult = {
+          ...grade,
+          assertion: grade.assertion
+            ? { ...grade.assertion, value: rubric }
+            : assertToUse && 'type' in assertToUse && assertToUse.type !== 'assert-set'
+              ? { ...assertToUse, value: rubric }
+              : undefined,
+        };
       }
     }
     // Calculate the score

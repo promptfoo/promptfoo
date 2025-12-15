@@ -515,7 +515,7 @@ export class CustomProvider implements ApiProvider {
         if (test && assertToUse) {
           const grader = getGraderById(assertToUse.type);
           if (grader) {
-            const { grade } = await grader.getResult(
+            const { grade, rubric } = await grader.getResult(
               attackPrompt,
               lastResponse.output,
               test,
@@ -524,7 +524,14 @@ export class CustomProvider implements ApiProvider {
               additionalRubric,
             );
             graderPassed = grade.pass;
-            storedGraderResult = grade;
+            storedGraderResult = {
+              ...grade,
+              assertion: grade.assertion
+                ? { ...grade.assertion, value: rubric }
+                : assertToUse && 'type' in assertToUse && assertToUse.type !== 'assert-set'
+                  ? { ...assertToUse, value: rubric }
+                  : undefined,
+            };
           }
         }
 

@@ -542,7 +542,7 @@ export class HydraProvider implements ApiProvider {
       if (test && assertToUse) {
         const grader = getGraderById(assertToUse.type);
         if (grader) {
-          const { grade } = await grader.getResult(
+          const { grade, rubric } = await grader.getResult(
             nextMessage,
             targetResponse.output,
             test,
@@ -550,7 +550,14 @@ export class HydraProvider implements ApiProvider {
             assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
           );
           graderResult = grade;
-          storedGraderResult = grade;
+          storedGraderResult = {
+            ...grade,
+            assertion: grade.assertion
+              ? { ...grade.assertion, value: rubric }
+              : assertToUse && 'type' in assertToUse && assertToUse.type !== 'assert-set'
+                ? { ...assertToUse, value: rubric }
+                : undefined,
+          };
 
           logger.debug('[Hydra] Grader result', {
             turn,
