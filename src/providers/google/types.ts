@@ -314,3 +314,115 @@ export interface ClaudeResponse {
     output_tokens: number;
   };
 }
+
+// =============================================================================
+// Video Generation Types (Veo)
+// =============================================================================
+
+/**
+ * Supported Veo video models
+ */
+export type GoogleVideoModel =
+  | 'veo-3.1-generate-preview'
+  | 'veo-3.1-fast-preview'
+  | 'veo-3-generate'
+  | 'veo-3-fast'
+  | 'veo-2-generate';
+
+/**
+ * Supported aspect ratios for Veo video generation
+ */
+export type GoogleVideoAspectRatio = '16:9' | '9:16';
+
+/**
+ * Supported resolutions for Veo video generation
+ */
+export type GoogleVideoResolution = '720p' | '1080p';
+
+/**
+ * Valid video durations by model
+ * Veo 3.1/3: 4, 6, 8 seconds
+ * Veo 2: 5, 6, 8 seconds
+ */
+export type GoogleVideoDuration = 4 | 5 | 6 | 8;
+
+/**
+ * Person generation control settings
+ */
+export type GoogleVideoPersonGeneration = 'allow_all' | 'allow_adult' | 'dont_allow';
+
+/**
+ * Reference image for guiding video content (Veo 3.1 only)
+ */
+export interface GoogleVideoReferenceImage {
+  /** Base64 encoded image data or file:// path */
+  image: string;
+  /** Type of reference: 'asset' for style/character/product guidance */
+  referenceType: 'asset';
+}
+
+/**
+ * Configuration options for Google video generation (Veo)
+ */
+export interface GoogleVideoOptions {
+  // Model selection
+  model?: GoogleVideoModel;
+
+  // Video parameters
+  aspectRatio?: GoogleVideoAspectRatio;
+  resolution?: GoogleVideoResolution;
+  durationSeconds?: GoogleVideoDuration;
+
+  // Content guidance
+  negativePrompt?: string;
+
+  // Image-to-video: first frame
+  image?: string; // Base64 or file:// path
+
+  // Interpolation: last frame (Veo 3.1 only, requires image)
+  lastFrame?: string; // Base64 or file:// path
+
+  // Reference images (Veo 3.1 only, up to 3)
+  referenceImages?: GoogleVideoReferenceImage[];
+
+  // Video extension (Veo 3.1 only)
+  extendVideoId?: string; // Previous Veo video operation ID
+
+  // Person generation control
+  personGeneration?: GoogleVideoPersonGeneration;
+
+  // Seed for improved (not guaranteed) determinism (Veo 3 only)
+  seed?: number;
+
+  // Polling configuration
+  pollIntervalMs?: number; // Default: 10000 (10 seconds)
+  maxPollTimeMs?: number; // Default: 600000 (10 minutes)
+
+  // API configuration
+  apiKey?: string;
+  apiHost?: string;
+}
+
+/**
+ * Veo API operation response
+ */
+export interface GoogleVideoOperation {
+  name: string;
+  done: boolean;
+  metadata?: {
+    progress?: number;
+  };
+  response?: {
+    generateVideoResponse?: {
+      generatedSamples: Array<{
+        video: {
+          uri: string;
+        };
+      }>;
+    };
+  };
+  error?: {
+    code: number;
+    message: string;
+  };
+}
