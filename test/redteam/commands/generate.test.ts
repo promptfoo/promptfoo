@@ -1693,6 +1693,346 @@ describe('doGenerateRedteam with external defaultTest', () => {
   });
 });
 
+describe('targetHash for cloud config reuse', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+
+    vi.mocked(configModule.resolveConfigs).mockResolvedValue({
+      basePath: '/mock/path',
+      testSuite: {
+        providers: [
+          {
+            id: () => 'test-provider',
+            callApi: vi.fn().mockResolvedValue({ output: 'test output' }),
+          },
+        ],
+        prompts: [],
+        tests: [],
+      },
+      config: {
+        redteam: {},
+      },
+    });
+  });
+
+  it('should reuse test cases when targetHash matches for cloud config', async () => {
+    const existingConfig = {
+      tests: [{ vars: { input: 'existing test' } }],
+      redteam: { purpose: 'test purpose' },
+      metadata: {
+        targetHash: 'a1b2c3d4e5f6', // Will be computed to match
+      },
+    };
+
+    // Mock fs to return existing config with matching targetHash
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockImplementation((filePath) => {
+      if (String(filePath) === 'output.yaml') {
+        return yaml.dump(existingConfig);
+      }
+      return yaml.dump({});
+    });
+    vi.mocked(fs.writeFileSync).mockImplementation(() => {});
+
+    const options: RedteamCliGenerateOptions = {
+      output: 'output.yaml',
+      cache: true,
+      defaultConfig: {},
+      write: false,
+      configFromCloud: {
+        redteam: { purpose: 'test purpose' },
+        providers: [],
+      },
+      cloudConfigId: '12345678-1234-1234-1234-123456789012',
+      cloudTargetId: '87654321-4321-4321-4321-210987654321',
+    };
+
+    // Pre-compute the targetHash that would be generated (must match computeTargetHash logic)
+    const crypto = await import('crypto');
+    const { VERSION } = await import('../../../src/constants');
+    const redteamConfig = options.configFromCloud?.redteam || {};
+    const normalizedConfig = {
+      purpose: redteamConfig.purpose || '',
+      plugins: redteamConfig.plugins || [],
+      strategies: redteamConfig.strategies || [],
+      numTests: redteamConfig.numTests,
+      language: redteamConfig.language,
+      entities: redteamConfig.entities || [],
+      injectVar: redteamConfig.injectVar,
+    };
+    const hashInput = JSON.stringify({
+      version: VERSION,
+      cloudConfigId: options.cloudConfigId,
+      targetId: options.cloudTargetId || '',
+      config: normalizedConfig,
+    });
+    const expectedHash = crypto.createHash('md5').update(hashInput).digest('hex');
+
+    // Update the mock to have the matching hash
+    existingConfig.metadata.targetHash = expectedHash;
+    vi.mocked(fs.readFileSync).mockImplementation((filePath) => {
+      if (String(filePath) === 'output.yaml') {
+        return yaml.dump(existingConfig);
+      }
+      return yaml.dump({});
+    });
+
+    const result = await doGenerateRedteam(options);
+
+    // Should return existing config without calling synthesize
+    expect(synthesize).not.toHaveBeenCalled();
+    expect(result).toEqual(existingConfig);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('No changes detected in cloud target configuration'),
+    );
+  });
+
+  it('should regenerate when targetHash does not match for cloud config', async () => {
+    const existingConfig = {
+      tests: [{ vars: { input: 'existing test' } }],
+      redteam: { purpose: 'old purpose' },
+      metadata: {
+        targetHash: 'old-hash-that-wont-match',
+      },
+    };
+
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockImplementation((filePath) => {
+      if (String(filePath) === 'output.yaml') {
+        return yaml.dump(existingConfig);
+      }
+      return yaml.dump({});
+    });
+    vi.mocked(fs.writeFileSync).mockImplementation(() => {});
+
+    vi.mocked(synthesize).mockResolvedValue({
+      testCases: [{ vars: { input: 'new test' }, metadata: { pluginId: 'test' } }],
+      purpose: 'new purpose',
+      entities: [],
+      injectVar: 'input',
+    });
+
+    const options: RedteamCliGenerateOptions = {
+      output: 'output.yaml',
+      cache: true,
+      defaultConfig: {},
+      write: false,
+      configFromCloud: {
+        redteam: { purpose: 'new purpose' }, // Different purpose
+        providers: [],
+      },
+      cloudConfigId: '12345678-1234-1234-1234-123456789012',
+      cloudTargetId: '87654321-4321-4321-4321-210987654321',
+    };
+
+    await doGenerateRedteam(options);
+
+    // Should call synthesize because hash doesn't match
+    expect(synthesize).toHaveBeenCalled();
+  });
+
+  it('should regenerate when --force is used even with matching targetHash', async () => {
+    const crypto = await import('crypto');
+    const { VERSION } = await import('../../../src/constants');
+    // Must match computeTargetHash logic with full redteam config
+    const redteamConfig = { purpose: 'test purpose' };
+    const normalizedConfig = {
+      purpose: redteamConfig.purpose || '',
+      plugins: [],
+      strategies: [],
+      numTests: undefined,
+      language: undefined,
+      entities: [],
+      injectVar: undefined,
+    };
+    const hashInput = JSON.stringify({
+      version: VERSION,
+      cloudConfigId: '12345678-1234-1234-1234-123456789012',
+      targetId: '87654321-4321-4321-4321-210987654321',
+      config: normalizedConfig,
+    });
+    const matchingHash = crypto.createHash('md5').update(hashInput).digest('hex');
+
+    const existingConfig = {
+      tests: [{ vars: { input: 'existing test' } }],
+      redteam: { purpose: 'test purpose' },
+      metadata: {
+        targetHash: matchingHash,
+      },
+    };
+
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockImplementation((filePath) => {
+      if (String(filePath) === 'output.yaml') {
+        return yaml.dump(existingConfig);
+      }
+      return yaml.dump({});
+    });
+    vi.mocked(fs.writeFileSync).mockImplementation(() => {});
+
+    vi.mocked(synthesize).mockResolvedValue({
+      testCases: [{ vars: { input: 'new test' }, metadata: { pluginId: 'test' } }],
+      purpose: 'test purpose',
+      entities: [],
+      injectVar: 'input',
+    });
+
+    const options: RedteamCliGenerateOptions = {
+      output: 'output.yaml',
+      cache: true,
+      defaultConfig: {},
+      write: false,
+      force: true, // Force regeneration
+      configFromCloud: {
+        redteam: { purpose: 'test purpose' },
+        providers: [],
+      },
+      cloudConfigId: '12345678-1234-1234-1234-123456789012',
+      cloudTargetId: '87654321-4321-4321-4321-210987654321',
+    };
+
+    await doGenerateRedteam(options);
+
+    // Should call synthesize even with matching hash because of --force
+    expect(synthesize).toHaveBeenCalled();
+  });
+
+  it('should store targetHash in metadata when generating from cloud config', async () => {
+    vi.mocked(fs.existsSync).mockReturnValue(false);
+    vi.mocked(fs.writeFileSync).mockImplementation(() => {});
+    vi.mocked(fs.readFileSync).mockReturnValue(yaml.dump({}));
+
+    vi.mocked(synthesize).mockResolvedValue({
+      testCases: [{ vars: { input: 'test' }, metadata: { pluginId: 'test' } }],
+      purpose: 'test purpose',
+      entities: [],
+      injectVar: 'input',
+    });
+
+    const options: RedteamCliGenerateOptions = {
+      output: 'output.yaml',
+      cache: true,
+      defaultConfig: {},
+      write: false,
+      configFromCloud: {
+        redteam: { purpose: 'test purpose' },
+        providers: [],
+      },
+      cloudConfigId: '12345678-1234-1234-1234-123456789012',
+      cloudTargetId: '87654321-4321-4321-4321-210987654321',
+    };
+
+    await doGenerateRedteam(options);
+
+    // Should write config with targetHash in metadata
+    expect(writePromptfooConfig).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          targetHash: expect.any(String),
+        }),
+      }),
+      'output.yaml',
+      expect.any(Array),
+    );
+  });
+
+  it('should generate when output file does not exist for cloud config', async () => {
+    vi.mocked(fs.existsSync).mockReturnValue(false);
+    vi.mocked(fs.writeFileSync).mockImplementation(() => {});
+    vi.mocked(fs.readFileSync).mockReturnValue(yaml.dump({}));
+
+    vi.mocked(synthesize).mockResolvedValue({
+      testCases: [{ vars: { input: 'test' }, metadata: { pluginId: 'test' } }],
+      purpose: 'test purpose',
+      entities: [],
+      injectVar: 'input',
+    });
+
+    const options: RedteamCliGenerateOptions = {
+      output: 'output.yaml',
+      cache: true,
+      defaultConfig: {},
+      write: false,
+      configFromCloud: {
+        redteam: { purpose: 'test purpose' },
+        providers: [],
+      },
+      cloudConfigId: '12345678-1234-1234-1234-123456789012',
+    };
+
+    await doGenerateRedteam(options);
+
+    // Should call synthesize because output file doesn't exist
+    expect(synthesize).toHaveBeenCalled();
+  });
+
+  it('should regenerate when scan template plugins change for cloud config', async () => {
+    const crypto = await import('crypto');
+    const { VERSION } = await import('../../../src/constants');
+    // Hash was computed with old plugins
+    const oldRedteamConfig = { purpose: 'test purpose', plugins: [{ id: 'harmful' }] };
+    const oldNormalizedConfig = {
+      purpose: oldRedteamConfig.purpose || '',
+      plugins: oldRedteamConfig.plugins || [],
+      strategies: [],
+      numTests: undefined,
+      language: undefined,
+      entities: [],
+      injectVar: undefined,
+    };
+    const oldHashInput = JSON.stringify({
+      version: VERSION,
+      cloudConfigId: '12345678-1234-1234-1234-123456789012',
+      targetId: '87654321-4321-4321-4321-210987654321',
+      config: oldNormalizedConfig,
+    });
+    const oldHash = crypto.createHash('md5').update(oldHashInput).digest('hex');
+
+    const existingConfig = {
+      tests: [{ vars: { input: 'existing test' } }],
+      redteam: { purpose: 'test purpose', plugins: [{ id: 'harmful' }] },
+      metadata: {
+        targetHash: oldHash,
+      },
+    };
+
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockImplementation((filePath) => {
+      if (String(filePath) === 'output.yaml') {
+        return yaml.dump(existingConfig);
+      }
+      return yaml.dump({});
+    });
+    vi.mocked(fs.writeFileSync).mockImplementation(() => {});
+
+    vi.mocked(synthesize).mockResolvedValue({
+      testCases: [{ vars: { input: 'new test' }, metadata: { pluginId: 'test' } }],
+      purpose: 'test purpose',
+      entities: [],
+      injectVar: 'input',
+    });
+
+    // New config has different plugins
+    const options: RedteamCliGenerateOptions = {
+      output: 'output.yaml',
+      cache: true,
+      defaultConfig: {},
+      write: false,
+      configFromCloud: {
+        redteam: { purpose: 'test purpose', plugins: [{ id: 'harmful' }, { id: 'pii' }] }, // Added pii plugin
+        providers: [],
+      },
+      cloudConfigId: '12345678-1234-1234-1234-123456789012',
+      cloudTargetId: '87654321-4321-4321-4321-210987654321',
+    };
+
+    await doGenerateRedteam(options);
+
+    // Should call synthesize because plugins changed
+    expect(synthesize).toHaveBeenCalled();
+  });
+});
+
 describe('redteam generate command with target option', () => {
   let program: Command;
   let originalExitCode: number | undefined;

@@ -1,4 +1,3 @@
-import { createHash } from 'crypto';
 import * as fs from 'fs';
 import path from 'path';
 
@@ -10,7 +9,7 @@ import { z } from 'zod';
 import { fromError } from 'zod-validation-error';
 import { disableCache } from '../../cache';
 import cliState from '../../cliState';
-import { CLOUD_PROVIDER_PREFIX, DEFAULT_MAX_CONCURRENCY, VERSION } from '../../constants';
+import { CLOUD_PROVIDER_PREFIX, DEFAULT_MAX_CONCURRENCY } from '../../constants';
 import { getAuthor, getUserEmail } from '../../globalConfig/accounts';
 import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
@@ -45,6 +44,7 @@ import {
 import { extractMcpToolsInfo } from '../extraction/mcpTools';
 import { isValidPolicyObject } from '../plugins/policy/utils';
 import { shouldGenerateRemote } from '../remoteGeneration';
+import { computeTargetHash, getConfigHash } from '../util/configHash';
 import type { Command } from 'commander';
 
 import type { ApiProvider, TestSuite, UnifiedConfig } from '../../types/index';
@@ -56,11 +56,6 @@ import type {
   RedteamStrategyObject,
   SynthesizeOptions,
 } from '../types';
-
-function getConfigHash(configPath: string): string {
-  const content = fs.readFileSync(configPath, 'utf8');
-  return createHash('md5').update(`${VERSION}:${content}`).digest('hex');
-}
 
 function createHeaderComments({
   title,
@@ -118,8 +113,8 @@ export async function doGenerateRedteam(
   let resolvedConfigMetadata: Record<string, any> | undefined;
   let commandLineOptions: Record<string, any> | undefined;
 
-  // Write a remote config to a temporary file
-  if (options.configFromCloud) {
+  // Write a remote config to a temporary file (only if config path not already provided)
+  if (options.configFromCloud && !options.config) {
     // Write configFromCloud to a temporary file
     const filename = `redteam-generate-${Date.now()}.yaml`;
     const tmpFile = path.join('', filename);
@@ -130,14 +125,49 @@ export async function doGenerateRedteam(
   }
 
   // Check for updates to the config file and decide whether to generate
-  let shouldGenerate = options.force || options.configFromCloud; // Always generate for live configs
-  if (
+  let shouldGenerate = options.force;
+  let currentTargetHash: string | undefined;
+
+  // For cloud configs, check targetHash to determine if we can reuse existing test cases
+  if (options.configFromCloud && options.cloudConfigId) {
+    // Compute the target hash based on cloud config ID, target ID, and redteam config
+    const cloudRedteamConfig = options.configFromCloud?.redteam;
+    currentTargetHash = computeTargetHash(
+      options.cloudConfigId,
+      options.cloudTargetId,
+      cloudRedteamConfig,
+    );
+    logger.debug(`[Cache] Computed targetHash: ${currentTargetHash}`);
+    logger.debug(`[Cache] Output path: ${outputPath}, exists: ${fs.existsSync(outputPath)}`);
+
+    if (!options.force && fs.existsSync(outputPath) && !outputPath.endsWith('.burp')) {
+      try {
+        const redteamContent = yaml.load(
+          fs.readFileSync(outputPath, 'utf8'),
+        ) as Partial<UnifiedConfig>;
+        const storedTargetHash = redteamContent.metadata?.targetHash;
+        logger.debug(`[Cache] Stored targetHash: ${storedTargetHash}`);
+        logger.debug(`[Cache] Hashes match: ${storedTargetHash === currentTargetHash}`);
+
+        if (storedTargetHash && storedTargetHash === currentTargetHash) {
+          logger.warn(
+            'No changes detected in cloud target configuration. Reusing existing test cases (use --force to regenerate)',
+          );
+          return redteamContent;
+        }
+      } catch (error) {
+        logger.debug(`Could not read existing output file for targetHash check: ${error}`);
+      }
+    }
+    shouldGenerate = true;
+  } else if (
     !options.force &&
     !options.configFromCloud &&
     fs.existsSync(outputPath) &&
     configPath &&
     fs.existsSync(configPath)
   ) {
+    // For local configs, use the existing configHash logic
     // Skip hash check for .burp files since they're not YAML
     if (!outputPath.endsWith('.burp')) {
       const redteamContent = yaml.load(
@@ -492,6 +522,7 @@ export async function doGenerateRedteam(
           ? { configHash: getConfigHash(configPath) }
           : { configHash: 'force-regenerate' }),
         ...(pluginSeverityOverridesId ? { pluginSeverityOverridesId } : {}),
+        ...(currentTargetHash ? { targetHash: currentTargetHash } : {}),
       },
     };
     const author = getAuthor();
@@ -566,6 +597,7 @@ export async function doGenerateRedteam(
     existingConfig.metadata = {
       ...(existingConfig.metadata || {}),
       configHash: getConfigHash(configPath),
+      ...(currentTargetHash ? { targetHash: currentTargetHash } : {}),
     };
     const author = getAuthor();
     const userEmail = getUserEmail();
@@ -711,6 +743,11 @@ export function redteamGenerateCommand(
         if (opts.target && !uuidValidate(opts.target)) {
           throw new Error('Invalid target ID, it must be a valid UUID');
         }
+
+        // Store the cloud IDs before fetching the config
+        opts.cloudConfigId = opts.config;
+        opts.cloudTargetId = opts.target;
+
         const configObj = await getConfigFromCloud(opts.config, opts.target);
 
         // backwards compatible for old cloud servers
