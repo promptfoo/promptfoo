@@ -25,6 +25,7 @@ The OpenAI provider supports the following model formats:
 - `openai:completion:<model name>` - uses any model name against the `/v1/completions` endpoint
 - `openai:embeddings:<model name>` - uses any model name against the `/v1/embeddings` endpoint
 - `openai:realtime:<model name>` - uses realtime API models over WebSocket connections
+- `openai:video:<model name>` - uses Sora video generation models
 
 The `openai:<endpoint>:<model name>` construction is useful if OpenAI releases a new model,
 or if you have a custom model.
@@ -590,6 +591,74 @@ To display images in the web viewer, wrap vars or outputs in markdown image tags
 ```
 
 Then, enable 'Render markdown' under Table Settings.
+
+## Video Generation (Sora)
+
+OpenAI supports video generation via `openai:video:<model>`. Supported models include:
+
+- `sora-2` - OpenAI's video generation model ($0.10/second)
+- `sora-2-pro` - Higher quality video generation ($0.30/second)
+
+### Basic Usage
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:video:sora-2
+    config:
+      size: 1280x720 # 1280x720 (landscape) or 720x1280 (portrait)
+      seconds: 10 # Duration in seconds (default: 5)
+```
+
+### Configuration Options
+
+| Parameter              | Description                                        | Default      |
+| ---------------------- | -------------------------------------------------- | ------------ |
+| `size`                 | Video dimensions                                   | `1280x720`   |
+| `seconds`              | Duration in seconds                                | `5`          |
+| `poll_interval_ms`     | Polling interval for job status                    | `5000`       |
+| `max_poll_time_ms`     | Maximum time to wait for video generation          | `600000`     |
+| `download_thumbnail`   | Download thumbnail preview                         | `true`       |
+| `download_spritesheet` | Download spritesheet preview                       | `true`       |
+
+### Example Configuration
+
+```yaml title="promptfooconfig.yaml"
+prompts:
+  - 'A cinematic shot of: {{scene}}'
+
+providers:
+  - id: openai:video:sora-2
+    config:
+      size: 1280x720
+      seconds: 10
+  - id: openai:video:sora-2-pro
+    config:
+      size: 720x1280
+      seconds: 5
+
+tests:
+  - vars:
+      scene: a cat riding a skateboard through a city
+  - vars:
+      scene: waves crashing on a beach at sunset
+```
+
+### Viewing Generated Videos
+
+Videos are automatically displayed in the web viewer with playback controls. The viewer shows:
+
+- Video player with controls
+- Video metadata (model, size, duration)
+- Thumbnail preview (if enabled)
+
+Videos are stored locally in `~/.promptfoo/output/video/` and served via the web interface.
+
+### Pricing
+
+| Model       | Cost per Second |
+| ----------- | --------------- |
+| sora-2      | $0.10           |
+| sora-2-pro  | $0.30           |
 
 ## Web Search Support
 
