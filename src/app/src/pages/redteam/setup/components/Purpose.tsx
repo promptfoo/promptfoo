@@ -321,33 +321,61 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
             onChange={handleTestModeChange}
             aria-label="test mode"
             sx={{
-              '& .Mui-selected': {
-                backgroundColor: `${alpha(theme.palette.primary.main, 0.08)} !important`,
-                '&:hover': {
-                  backgroundColor: `${alpha(theme.palette.primary.main, 0.12)} !important`,
-                },
-              },
+              backgroundColor: 'transparent',
+              gap: 2,
+              display: 'flex',
             }}
           >
             <ToggleButton
               value="application"
               aria-label="test application"
               sx={{
-                py: 1.5,
+                py: 2.5,
+                px: 3,
                 display: 'flex',
                 flexDirection: 'column',
                 gap: 0.5,
                 flex: 1,
-                '&.Mui-selected': {
-                  color: 'primary.main',
-                  borderColor: 'primary.main',
+                borderRadius: '12px !important',
+                transition: 'all 0.2s ease-in-out',
+                border: `2px solid ${
+                  testMode === 'application' ? theme.palette.primary.main : theme.palette.divider
+                } !important`,
+                backgroundColor:
+                  testMode === 'application'
+                    ? alpha(theme.palette.primary.main, 0.08)
+                    : theme.palette.background.paper,
+                boxShadow:
+                  testMode === 'application'
+                    ? `0 0 0 3px ${alpha(theme.palette.primary.main, 0.15)}`
+                    : 'none',
+                '&:hover': {
+                  backgroundColor:
+                    testMode === 'application'
+                      ? alpha(theme.palette.primary.main, 0.12)
+                      : alpha(theme.palette.action.hover, 0.5),
+                  borderColor:
+                    testMode === 'application'
+                      ? theme.palette.primary.main
+                      : theme.palette.grey[400],
                 },
               }}
             >
-              <Typography variant="subtitle2" sx={{ fontWeight: 'medium' }}>
+              <Typography
+                variant="subtitle1"
+                sx={{
+                  fontWeight: 600,
+                  color: testMode === 'application' ? 'primary.main' : 'text.primary',
+                }}
+              >
                 I'm testing an application
               </Typography>
-              <Typography variant="caption" color="text.secondary">
+              <Typography
+                variant="body2"
+                sx={{
+                  color: testMode === 'application' ? 'text.secondary' : 'text.disabled',
+                }}
+              >
                 Test a complete AI application with its context
               </Typography>
             </ToggleButton>
@@ -355,21 +383,50 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
               value="model"
               aria-label="test model"
               sx={{
-                py: 1.5,
+                py: 2.5,
+                px: 3,
                 display: 'flex',
                 flexDirection: 'column',
                 gap: 0.5,
                 flex: 1,
-                '&.Mui-selected': {
-                  color: 'primary.main',
-                  borderColor: 'primary.main',
+                borderRadius: '12px !important',
+                transition: 'all 0.2s ease-in-out',
+                border: `2px solid ${
+                  testMode === 'model' ? theme.palette.primary.main : theme.palette.divider
+                } !important`,
+                backgroundColor:
+                  testMode === 'model'
+                    ? alpha(theme.palette.primary.main, 0.08)
+                    : theme.palette.background.paper,
+                boxShadow:
+                  testMode === 'model'
+                    ? `0 0 0 3px ${alpha(theme.palette.primary.main, 0.15)}`
+                    : 'none',
+                '&:hover': {
+                  backgroundColor:
+                    testMode === 'model'
+                      ? alpha(theme.palette.primary.main, 0.12)
+                      : alpha(theme.palette.action.hover, 0.5),
+                  borderColor:
+                    testMode === 'model' ? theme.palette.primary.main : theme.palette.grey[400],
                 },
               }}
             >
-              <Typography variant="subtitle2" sx={{ fontWeight: 'medium' }}>
+              <Typography
+                variant="subtitle1"
+                sx={{
+                  fontWeight: 600,
+                  color: testMode === 'model' ? 'primary.main' : 'text.primary',
+                }}
+              >
                 I'm testing a model
               </Typography>
-              <Typography variant="caption" color="text.secondary">
+              <Typography
+                variant="body2"
+                sx={{
+                  color: testMode === 'model' ? 'text.secondary' : 'text.disabled',
+                }}
+              >
                 Test a model directly without application context
               </Typography>
             </ToggleButton>
@@ -519,37 +576,84 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                 </Typography>
               </Stack>
 
-              <Stack direction="column" spacing={0}>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
                 {/* Core Application Details */}
                 <Accordion
                   expanded={expandedSections.has('Core Application Details')}
                   onChange={() => handleSectionToggle('Core Application Details')}
                   sx={{
-                    mb: 0,
-                    '&:first-of-type': {
-                      borderTopLeftRadius: '8px',
-                      borderTopRightRadius: '8px',
-                    },
-                    '&:not(:last-of-type)': {
-                      borderBottom: 'none',
-                    },
+                    border: `1px solid ${theme.palette.divider}`,
+                    borderRadius: '12px !important',
+                    overflow: 'hidden',
                     '&:before': {
                       display: 'none',
                     },
+                    '&.Mui-expanded': {
+                      margin: 0,
+                    },
+                    boxShadow:
+                      theme.palette.mode === 'dark' ? 'none' : '0 1px 3px 0 rgba(0, 0, 0, 0.05)',
+                    transition: 'box-shadow 0.15s ease-in-out, border-color 0.15s ease-in-out',
+                    '&:hover': {
+                      borderColor:
+                        theme.palette.mode === 'dark'
+                          ? alpha(theme.palette.primary.main, 0.3)
+                          : theme.palette.grey[300],
+                    },
                   }}
                 >
-                  <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                  <AccordionSummary
+                    expandIcon={<ExpandMoreIcon />}
+                    sx={{
+                      backgroundColor:
+                        theme.palette.mode === 'dark'
+                          ? alpha(theme.palette.grey[800], 0.5)
+                          : theme.palette.grey[50],
+                      borderBottom: expandedSections.has('Core Application Details')
+                        ? `1px solid ${theme.palette.divider}`
+                        : 'none',
+                      minHeight: 64,
+                      '&.Mui-expanded': {
+                        minHeight: 64,
+                      },
+                      '& .MuiAccordionSummary-content': {
+                        margin: '16px 0',
+                        '&.Mui-expanded': {
+                          margin: '16px 0',
+                        },
+                      },
+                    }}
+                  >
                     <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
                       <Typography
                         variant="h6"
-                        sx={{ fontWeight: 'medium', flex: 1, color: 'text.primary' }}
+                        sx={{ fontWeight: 600, flex: 1, color: 'text.primary' }}
                       >
-                        Core Application Details (
-                        {getCompletionPercentage('Core Application Details')})
+                        Core Application Details
                       </Typography>
-                      {getCompletionPercentage('Core Application Details') === '100%' && (
-                        <CheckCircleIcon sx={{ color: 'success.main', mr: 1 }} />
-                      )}
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                        {getCompletionPercentage('Core Application Details') === '100%' ? (
+                          <CheckCircleIcon sx={{ color: 'success.main', fontSize: 22 }} />
+                        ) : (
+                          <Typography
+                            variant="body2"
+                            sx={{
+                              color: 'text.secondary',
+                              fontWeight: 500,
+                              backgroundColor:
+                                theme.palette.mode === 'dark'
+                                  ? alpha(theme.palette.grey[700], 0.5)
+                                  : alpha(theme.palette.grey[200], 0.8),
+                              px: 1.5,
+                              py: 0.5,
+                              borderRadius: 1.5,
+                              fontSize: '0.75rem',
+                            }}
+                          >
+                            {getCompletionPercentage('Core Application Details')}
+                          </Typography>
+                        )}
+                      </Box>
                     </Box>
                   </AccordionSummary>
                   <AccordionDetails sx={{ px: 4, py: 3 }}>
@@ -663,26 +767,78 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                   expanded={expandedSections.has('Access & Permissions')}
                   onChange={() => handleSectionToggle('Access & Permissions')}
                   sx={{
-                    mb: 0,
-                    '&:not(:last-of-type)': {
-                      borderBottom: 'none',
-                    },
+                    border: `1px solid ${theme.palette.divider}`,
+                    borderRadius: '12px !important',
+                    overflow: 'hidden',
                     '&:before': {
                       display: 'none',
                     },
+                    '&.Mui-expanded': {
+                      margin: 0,
+                    },
+                    boxShadow:
+                      theme.palette.mode === 'dark' ? 'none' : '0 1px 3px 0 rgba(0, 0, 0, 0.05)',
+                    transition: 'box-shadow 0.15s ease-in-out, border-color 0.15s ease-in-out',
+                    '&:hover': {
+                      borderColor:
+                        theme.palette.mode === 'dark'
+                          ? alpha(theme.palette.primary.main, 0.3)
+                          : theme.palette.grey[300],
+                    },
                   }}
                 >
-                  <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                  <AccordionSummary
+                    expandIcon={<ExpandMoreIcon />}
+                    sx={{
+                      backgroundColor:
+                        theme.palette.mode === 'dark'
+                          ? alpha(theme.palette.grey[800], 0.5)
+                          : theme.palette.grey[50],
+                      borderBottom: expandedSections.has('Access & Permissions')
+                        ? `1px solid ${theme.palette.divider}`
+                        : 'none',
+                      minHeight: 64,
+                      '&.Mui-expanded': {
+                        minHeight: 64,
+                      },
+                      '& .MuiAccordionSummary-content': {
+                        margin: '16px 0',
+                        '&.Mui-expanded': {
+                          margin: '16px 0',
+                        },
+                      },
+                    }}
+                  >
                     <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
                       <Typography
                         variant="h6"
-                        sx={{ fontWeight: 'medium', flex: 1, color: 'text.primary' }}
+                        sx={{ fontWeight: 600, flex: 1, color: 'text.primary' }}
                       >
-                        Access & Permissions ({getCompletionPercentage('Access & Permissions')})
+                        Access & Permissions
                       </Typography>
-                      {getCompletionPercentage('Access & Permissions') === '100%' && (
-                        <CheckCircleIcon sx={{ color: 'success.main', mr: 1 }} />
-                      )}
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                        {getCompletionPercentage('Access & Permissions') === '100%' ? (
+                          <CheckCircleIcon sx={{ color: 'success.main', fontSize: 22 }} />
+                        ) : (
+                          <Typography
+                            variant="body2"
+                            sx={{
+                              color: 'text.secondary',
+                              fontWeight: 500,
+                              backgroundColor:
+                                theme.palette.mode === 'dark'
+                                  ? alpha(theme.palette.grey[700], 0.5)
+                                  : alpha(theme.palette.grey[200], 0.8),
+                              px: 1.5,
+                              py: 0.5,
+                              borderRadius: 1.5,
+                              fontSize: '0.75rem',
+                            }}
+                          >
+                            {getCompletionPercentage('Access & Permissions')}
+                          </Typography>
+                        )}
+                      </Box>
                     </Box>
                   </AccordionSummary>
                   <AccordionDetails sx={{ px: 4, py: 3 }}>
@@ -827,26 +983,78 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                   expanded={expandedSections.has('Data & Content')}
                   onChange={() => handleSectionToggle('Data & Content')}
                   sx={{
-                    mb: 0,
-                    '&:not(:last-of-type)': {
-                      borderBottom: 'none',
-                    },
+                    border: `1px solid ${theme.palette.divider}`,
+                    borderRadius: '12px !important',
+                    overflow: 'hidden',
                     '&:before': {
                       display: 'none',
                     },
+                    '&.Mui-expanded': {
+                      margin: 0,
+                    },
+                    boxShadow:
+                      theme.palette.mode === 'dark' ? 'none' : '0 1px 3px 0 rgba(0, 0, 0, 0.05)',
+                    transition: 'box-shadow 0.15s ease-in-out, border-color 0.15s ease-in-out',
+                    '&:hover': {
+                      borderColor:
+                        theme.palette.mode === 'dark'
+                          ? alpha(theme.palette.primary.main, 0.3)
+                          : theme.palette.grey[300],
+                    },
                   }}
                 >
-                  <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                  <AccordionSummary
+                    expandIcon={<ExpandMoreIcon />}
+                    sx={{
+                      backgroundColor:
+                        theme.palette.mode === 'dark'
+                          ? alpha(theme.palette.grey[800], 0.5)
+                          : theme.palette.grey[50],
+                      borderBottom: expandedSections.has('Data & Content')
+                        ? `1px solid ${theme.palette.divider}`
+                        : 'none',
+                      minHeight: 64,
+                      '&.Mui-expanded': {
+                        minHeight: 64,
+                      },
+                      '& .MuiAccordionSummary-content': {
+                        margin: '16px 0',
+                        '&.Mui-expanded': {
+                          margin: '16px 0',
+                        },
+                      },
+                    }}
+                  >
                     <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
                       <Typography
                         variant="h6"
-                        sx={{ fontWeight: 'medium', flex: 1, color: 'text.primary' }}
+                        sx={{ fontWeight: 600, flex: 1, color: 'text.primary' }}
                       >
-                        Data & Content ({getCompletionPercentage('Data & Content')})
+                        Data & Content
                       </Typography>
-                      {getCompletionPercentage('Data & Content') === '100%' && (
-                        <CheckCircleIcon sx={{ color: 'success.main', mr: 1 }} />
-                      )}
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                        {getCompletionPercentage('Data & Content') === '100%' ? (
+                          <CheckCircleIcon sx={{ color: 'success.main', fontSize: 22 }} />
+                        ) : (
+                          <Typography
+                            variant="body2"
+                            sx={{
+                              color: 'text.secondary',
+                              fontWeight: 500,
+                              backgroundColor:
+                                theme.palette.mode === 'dark'
+                                  ? alpha(theme.palette.grey[700], 0.5)
+                                  : alpha(theme.palette.grey[200], 0.8),
+                              px: 1.5,
+                              py: 0.5,
+                              borderRadius: 1.5,
+                              fontSize: '0.75rem',
+                            }}
+                          >
+                            {getCompletionPercentage('Data & Content')}
+                          </Typography>
+                        )}
+                      </Box>
                     </Box>
                   </AccordionSummary>
                   <AccordionDetails sx={{ px: 4, py: 3 }}>
@@ -998,27 +1206,78 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                   expanded={expandedSections.has('Business Context')}
                   onChange={() => handleSectionToggle('Business Context')}
                   sx={{
-                    mb: 0,
-                    '&:last-of-type': {
-                      borderBottomLeftRadius: '8px',
-                      borderBottomRightRadius: '8px',
-                    },
+                    border: `1px solid ${theme.palette.divider}`,
+                    borderRadius: '12px !important',
+                    overflow: 'hidden',
                     '&:before': {
                       display: 'none',
                     },
+                    '&.Mui-expanded': {
+                      margin: 0,
+                    },
+                    boxShadow:
+                      theme.palette.mode === 'dark' ? 'none' : '0 1px 3px 0 rgba(0, 0, 0, 0.05)',
+                    transition: 'box-shadow 0.15s ease-in-out, border-color 0.15s ease-in-out',
+                    '&:hover': {
+                      borderColor:
+                        theme.palette.mode === 'dark'
+                          ? alpha(theme.palette.primary.main, 0.3)
+                          : theme.palette.grey[300],
+                    },
                   }}
                 >
-                  <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                  <AccordionSummary
+                    expandIcon={<ExpandMoreIcon />}
+                    sx={{
+                      backgroundColor:
+                        theme.palette.mode === 'dark'
+                          ? alpha(theme.palette.grey[800], 0.5)
+                          : theme.palette.grey[50],
+                      borderBottom: expandedSections.has('Business Context')
+                        ? `1px solid ${theme.palette.divider}`
+                        : 'none',
+                      minHeight: 64,
+                      '&.Mui-expanded': {
+                        minHeight: 64,
+                      },
+                      '& .MuiAccordionSummary-content': {
+                        margin: '16px 0',
+                        '&.Mui-expanded': {
+                          margin: '16px 0',
+                        },
+                      },
+                    }}
+                  >
                     <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
                       <Typography
                         variant="h6"
-                        sx={{ fontWeight: 'medium', flex: 1, color: 'text.primary' }}
+                        sx={{ fontWeight: 600, flex: 1, color: 'text.primary' }}
                       >
-                        Business Context ({getCompletionPercentage('Business Context')})
+                        Business Context
                       </Typography>
-                      {getCompletionPercentage('Business Context') === '100%' && (
-                        <CheckCircleIcon sx={{ color: 'success.main', mr: 1 }} />
-                      )}
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                        {getCompletionPercentage('Business Context') === '100%' ? (
+                          <CheckCircleIcon sx={{ color: 'success.main', fontSize: 22 }} />
+                        ) : (
+                          <Typography
+                            variant="body2"
+                            sx={{
+                              color: 'text.secondary',
+                              fontWeight: 500,
+                              backgroundColor:
+                                theme.palette.mode === 'dark'
+                                  ? alpha(theme.palette.grey[700], 0.5)
+                                  : alpha(theme.palette.grey[200], 0.8),
+                              px: 1.5,
+                              py: 0.5,
+                              borderRadius: 1.5,
+                              fontSize: '0.75rem',
+                            }}
+                          >
+                            {getCompletionPercentage('Business Context')}
+                          </Typography>
+                        )}
+                      </Box>
                     </Box>
                   </AccordionSummary>
                   <AccordionDetails sx={{ px: 4, py: 3 }}>
@@ -1056,7 +1315,7 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                     </Stack>
                   </AccordionDetails>
                 </Accordion>
-              </Stack>
+              </Box>
 
               {/* Red Team User - Standalone Section */}
               <Box sx={{ mt: 4 }}>

@@ -434,17 +434,18 @@ const TestSuites = ({
       headerName: 'Attack Success Rate',
       type: 'number',
       flex: 0.75,
+      minWidth: 190,
       renderCell: (params: GridRenderCellParams) => {
         const value = params.row.attackSuccessRate;
         const passRateWithFilter = params.row.passRateWithFilter;
         const passRate = params.row.passRate;
         return (
-          <Box>
+          <Box sx={{ lineHeight: 1.4 }}>
             <strong>{formatASRForDisplay(value)}%</strong>
             {passRateWithFilter !== passRate && (
-              <>
-                <br />({formatASRForDisplay(100 - passRateWithFilter)}% with mitigation)
-              </>
+              <Box component="span" sx={{ display: 'block', fontSize: '0.85em' }}>
+                ({formatASRForDisplay(100 - passRateWithFilter)}% with mitigation)
+              </Box>
             )}
           </Box>
         );
