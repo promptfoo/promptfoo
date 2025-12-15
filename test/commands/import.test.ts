@@ -96,7 +96,7 @@ describe('importCommand', () => {
   });
 
   describe('with real sample file', () => {
-    it('should successfully import the sample export file into the database', async () => {
+    it('should successfully import the sample export file preserving evalId', async () => {
       const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
 
       // Get the sample data to verify import details
@@ -108,26 +108,128 @@ describe('importCommand', () => {
       // Check if the import process exited with an error
       expect(mockExit).not.toHaveBeenCalledWith(1);
 
-      // Since the sample file doesn't have an 'id' field (only 'evalId'),
-      // the import will generate a new ID. Let's find the imported eval by looking at all evals.
-      const allEvals = await Eval.getMany(1); // Get first eval
-
-      expect(allEvals.length).toBe(1);
-      const importedEval = allEvals[0];
+      // The evalId should now be preserved from the export file
+      const importedEval = await Eval.findById(sampleData.evalId);
 
       expect(importedEval).toBeDefined();
-      expect(importedEval.id).toBeDefined();
-      expect(importedEval.config).toBeDefined();
-      expect(importedEval.prompts).toBeDefined();
-      expect(importedEval.prompts.length).toBe(2); // Based on sample file having 2 prompts
+      expect(importedEval!.id).toBe(sampleData.evalId);
+      expect(importedEval!.config).toBeDefined();
+      expect(importedEval!.prompts).toBeDefined();
+      expect(importedEval!.prompts.length).toBe(2); // Based on sample file having 2 prompts
 
       // Verify that the config matches what we expect from the sample file
-      expect(importedEval.config.description).toBe(sampleData.config.description);
-      expect(importedEval.config.providers).toEqual(sampleData.config.providers);
+      expect(importedEval!.config.description).toBe(sampleData.config.description);
+      expect(importedEval!.config.providers).toEqual(sampleData.config.providers);
 
       // Also verify that eval results were imported
-      const results = await EvalResult.findManyByEvalId(importedEval.id);
+      const results = await EvalResult.findManyByEvalId(importedEval!.id);
       expect(results.length).toBe(4); // Based on sample file having 4 results
+    });
+
+    it('should preserve createdAt timestamp from metadata', async () => {
+      const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
+      const sampleData = JSON.parse(fs.readFileSync(sampleFilePath, 'utf-8'));
+
+      importCommand(program);
+      await program.parseAsync(['node', 'test', 'import', sampleFilePath]);
+
+      const importedEval = await Eval.findById(sampleData.evalId);
+      expect(importedEval).toBeDefined();
+
+      // Verify createdAt matches the metadata.evaluationCreatedAt from export
+      const expectedCreatedAt = new Date(sampleData.metadata.evaluationCreatedAt).getTime();
+      expect(importedEval!.createdAt).toBe(expectedCreatedAt);
+    });
+
+    it('should derive vars from results', async () => {
+      const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
+      const sampleData = JSON.parse(fs.readFileSync(sampleFilePath, 'utf-8'));
+
+      importCommand(program);
+      await program.parseAsync(['node', 'test', 'import', sampleFilePath]);
+
+      const importedEval = await Eval.findById(sampleData.evalId);
+      expect(importedEval).toBeDefined();
+
+      // Verify vars were derived from results
+      expect(importedEval!.vars).toBeDefined();
+      expect(importedEval!.vars.length).toBeGreaterThan(0);
+      // The sample has a 'riddle' variable
+      expect(importedEval!.vars).toContain('riddle');
+    });
+
+    it('should preserve author from metadata', async () => {
+      const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
+      const sampleData = JSON.parse(fs.readFileSync(sampleFilePath, 'utf-8'));
+
+      importCommand(program);
+      await program.parseAsync(['node', 'test', 'import', sampleFilePath]);
+
+      const importedEval = await Eval.findById(sampleData.evalId);
+      expect(importedEval).toBeDefined();
+
+      // Verify author is preserved from metadata
+      expect(importedEval!.author).toBe(sampleData.metadata.author);
+    });
+  });
+
+  describe('collision handling', () => {
+    it('should reject import when eval already exists', async () => {
+      const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
+      const sampleData = JSON.parse(fs.readFileSync(sampleFilePath, 'utf-8'));
+
+      importCommand(program);
+
+      // First import should succeed
+      await program.parseAsync(['node', 'test', 'import', sampleFilePath]);
+      expect(mockExit).not.toHaveBeenCalledWith(1);
+
+      // Reset mocks for second import
+      vi.clearAllMocks();
+
+      // Second import should fail with collision error
+      const program2 = new Command();
+      importCommand(program2);
+      await program2.parseAsync(['node', 'test', 'import', sampleFilePath]);
+
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining(`Eval ${sampleData.evalId} already exists`),
+      );
+      expect(mockExit).toHaveBeenCalledWith(1);
+    });
+
+    it('should allow import with --new-id flag when eval already exists', async () => {
+      const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
+      const sampleData = JSON.parse(fs.readFileSync(sampleFilePath, 'utf-8'));
+
+      importCommand(program);
+
+      // First import should succeed
+      await program.parseAsync(['node', 'test', 'import', sampleFilePath]);
+      expect(mockExit).not.toHaveBeenCalledWith(1);
+
+      // Reset mocks for second import
+      vi.clearAllMocks();
+
+      // Second import with --new-id should succeed
+      const program2 = new Command();
+      importCommand(program2);
+      await program2.parseAsync(['node', 'test', 'import', '--new-id', sampleFilePath]);
+
+      expect(mockExit).not.toHaveBeenCalledWith(1);
+      expect(logger.info).toHaveBeenCalledWith(
+        expect.stringMatching(/has been successfully imported/),
+      );
+
+      // Should now have 2 evals in database
+      const allEvals = await Eval.getMany(10);
+      expect(allEvals.length).toBe(2);
+
+      // One should have the original ID, one should have a new ID
+      const originalEval = allEvals.find((e) => e.id === sampleData.evalId);
+      const newEval = allEvals.find((e) => e.id !== sampleData.evalId);
+      expect(originalEval).toBeDefined();
+      expect(newEval).toBeDefined();
     });
   });
 });
