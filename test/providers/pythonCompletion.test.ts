@@ -67,6 +67,7 @@ describe('PythonProvider', () => {
   const mockGetCache = vi.mocked(getCache);
   const mockIsCacheEnabled = vi.mocked(isCacheEnabled);
   const mockReadFileSync = vi.mocked(fs.readFileSync);
+  const mockExistsSync = vi.mocked(fs.existsSync);
   const mockResolve = vi.mocked(path.resolve);
   const mockGetEnvInt = vi.mocked(getEnvInt);
   const mockPoolInstance = workerPoolMocks.mockPoolInstance as {
@@ -101,6 +102,7 @@ describe('PythonProvider', () => {
     } as never);
     mockIsCacheEnabled.mockReturnValue(false);
     mockReadFileSync.mockReturnValue('mock file content');
+    mockExistsSync.mockReturnValue(true);
     mockResolve.mockReturnValue('/absolute/path/to/script.py');
   });
 
@@ -216,7 +218,7 @@ describe('PythonProvider', () => {
       mockPoolInstance.execute.mockResolvedValue({ invalidKey: 'invalid value' });
 
       await expect(provider.callEmbeddingApi('test prompt')).rejects.toThrow(
-        'The Python script `call_embedding_api` function must return a dict with an `embedding` array or `error` string, instead got {"invalidKey":"invalid value"}',
+        'The Python script `call_embedding_api` function must return a dict with an `embedding` array or `error` string, instead got: {"invalidKey":"invalid value"}',
       );
     });
   });
@@ -240,7 +242,7 @@ describe('PythonProvider', () => {
       mockPoolInstance.execute.mockResolvedValue({ invalidKey: 'invalid value' });
 
       await expect(provider.callClassificationApi('test prompt')).rejects.toThrow(
-        'The Python script `call_classification_api` function must return a dict with a `classification` object or `error` string, instead of {"invalidKey":"invalid value"}',
+        'The Python script `call_classification_api` function must return a dict with a `classification` object or `error` string, instead got: {"invalidKey":"invalid value"}',
       );
     });
   });

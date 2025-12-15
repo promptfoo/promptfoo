@@ -43,11 +43,9 @@ export class PythonProvider implements ApiProvider {
     runPath: string,
     private options?: ProviderOptions,
   ) {
-    const { filePath: providerPath, functionName } = parsePathOrGlob(
-      options?.config.basePath || '',
-      runPath,
-    );
-    this.scriptPath = path.relative(options?.config.basePath || '', providerPath);
+    const basePath = this.getBasePath();
+    const { filePath: providerPath, functionName } = parsePathOrGlob(basePath, runPath);
+    this.scriptPath = path.relative(basePath, providerPath);
     this.functionName = functionName || null;
     this.id = () => options?.id ?? `python:${this.scriptPath}:${this.functionName || 'default'}`;
     this.label = options?.label;
@@ -56,6 +54,71 @@ export class PythonProvider implements ApiProvider {
 
   id() {
     return `python:${this.scriptPath}:${this.functionName || 'default'}`;
+  }
+
+  private getBasePath(): string {
+    return this.options?.config.basePath || '';
+  }
+
+  private getAbsoluteScriptPath(): string {
+    return path.resolve(path.join(this.getBasePath(), this.scriptPath));
+  }
+
+  private validateScriptExists(absPath: string): void {
+    if (!fs.existsSync(absPath)) {
+      const basePath = this.getBasePath();
+      const errorMessage = dedent`
+        Python provider script not found: ${chalk.bold(absPath)}
+
+        ${chalk.white('Please verify that:')}
+          - The file path is correct
+          - The file exists at the specified location
+          ${basePath ? `- The path is relative to: ${path.resolve(basePath)}` : '- The path is relative to the current directory'}
+
+        ${chalk.white('For more information on Python providers, visit:')} ${chalk.cyan('https://promptfoo.dev/docs/providers/python/')}
+      `;
+      logger.error(errorMessage);
+      throw new Error(`Python provider script not found: ${absPath}`);
+    }
+  }
+
+  private validateResult(
+    result: any,
+    functionName: string,
+    apiType: 'call_api' | 'call_embedding_api' | 'call_classification_api',
+  ): void {
+    const apiTypeConfig: Record<
+      typeof apiType,
+      { requiredKey: string; keyDescription: string; typeDescription: string }
+    > = {
+      call_api: {
+        requiredKey: 'output',
+        keyDescription: '`output` string/object',
+        typeDescription: 'an',
+      },
+      call_embedding_api: {
+        requiredKey: 'embedding',
+        keyDescription: '`embedding` array',
+        typeDescription: 'an',
+      },
+      call_classification_api: {
+        requiredKey: 'classification',
+        keyDescription: '`classification` object',
+        typeDescription: 'a',
+      },
+    };
+
+    const config = apiTypeConfig[apiType];
+    const isValidResult =
+      result &&
+      typeof result === 'object' &&
+      (config.requiredKey in result || 'error' in result);
+
+    if (!isValidResult) {
+      throw new Error(
+        `The Python script \`${functionName}\` function must return a dict with ${config.typeDescription} ${config.keyDescription} or \`error\` string, instead got: ${JSON.stringify(result)}`,
+      );
+    }
   }
 
   /**
@@ -77,33 +140,13 @@ export class PythonProvider implements ApiProvider {
     // Start initialization and store the promise
     this.initializationPromise = (async () => {
       try {
-        this.config = await processConfigFileReferences(
-          this.config,
-          this.options?.config.basePath || '',
-        );
+        this.config = await processConfigFileReferences(this.config, this.getBasePath());
 
         // Initialize worker pool
         const workerCount = this.getWorkerCount();
-        const absPath = path.resolve(
-          path.join(this.options?.config.basePath || '', this.scriptPath),
-        );
+        const absPath = this.getAbsoluteScriptPath();
 
-        // Check if the Python script exists before trying to load it
-        if (!fs.existsSync(absPath)) {
-          const basePath = this.options?.config.basePath;
-          const errorMessage = dedent`
-            Python provider script not found: ${chalk.bold(absPath)}
-
-            ${chalk.white('Please verify that:')}
-              - The file path is correct
-              - The file exists at the specified location
-              ${basePath ? `- The path is relative to: ${path.resolve(basePath)}` : '- The path is relative to the current directory'}
-
-            ${chalk.white('For more information on Python providers, visit:')} ${chalk.cyan('https://promptfoo.dev/docs/providers/python/')}
-          `;
-          logger.error(errorMessage);
-          throw new Error(`Python provider script not found: ${absPath}`);
-        }
+        this.validateScriptExists(absPath);
 
         this.pool = new PythonWorkerPool(
           absPath,
@@ -179,7 +222,7 @@ export class PythonProvider implements ApiProvider {
       await this.initialize();
     }
 
-    const absPath = path.resolve(path.join(this.options?.config.basePath || '', this.scriptPath));
+    const absPath = this.getAbsoluteScriptPath();
     logger.debug(`Computing file hash for script ${absPath}`);
     const fileHash = sha256(fs.readFileSync(absPath, 'utf-8'));
 
@@ -254,65 +297,21 @@ export class PythonProvider implements ApiProvider {
       );
 
       const functionName = this.functionName || apiType;
-      let result;
+      const result = await this.pool!.execute(functionName, args);
 
-      // Use worker pool instead of runPython
-      result = await this.pool!.execute(functionName, args);
-
-      // Validation logic based on API type
-      switch (apiType) {
-        case 'call_api':
-          // Log result structure for debugging
+      // Log result structure for debugging (only for call_api)
+      if (apiType === 'call_api') {
+        logger.debug(
+          `Python provider result structure: ${result ? typeof result : 'undefined'}, keys: ${result ? Object.keys(result).join(',') : 'none'}`,
+        );
+        if (result && 'output' in result) {
           logger.debug(
-            `Python provider result structure: ${result ? typeof result : 'undefined'}, keys: ${result ? Object.keys(result).join(',') : 'none'}`,
+            `Python provider output type: ${typeof result.output}, isArray: ${Array.isArray(result.output)}`,
           );
-          if (result && 'output' in result) {
-            logger.debug(
-              `Python provider output type: ${typeof result.output}, isArray: ${Array.isArray(result.output)}`,
-            );
-          }
-
-          if (
-            !result ||
-            typeof result !== 'object' ||
-            (!('output' in result) && !('error' in result))
-          ) {
-            throw new Error(
-              `The Python script \`${functionName}\` function must return a dict with an \`output\` string/object or \`error\` string, instead got: ${JSON.stringify(
-                result,
-              )}`,
-            );
-          }
-          break;
-        case 'call_embedding_api':
-          if (
-            !result ||
-            typeof result !== 'object' ||
-            (!('embedding' in result) && !('error' in result))
-          ) {
-            throw new Error(
-              `The Python script \`${functionName}\` function must return a dict with an \`embedding\` array or \`error\` string, instead got ${JSON.stringify(
-                result,
-              )}`,
-            );
-          }
-          break;
-        case 'call_classification_api':
-          if (
-            !result ||
-            typeof result !== 'object' ||
-            (!('classification' in result) && !('error' in result))
-          ) {
-            throw new Error(
-              `The Python script \`${functionName}\` function must return a dict with a \`classification\` object or \`error\` string, instead of ${JSON.stringify(
-                result,
-              )}`,
-            );
-          }
-          break;
-        default:
-          throw new Error(`Unsupported apiType: ${apiType}`);
+        }
       }
+
+      this.validateResult(result, functionName, apiType);
 
       // Store result in cache if enabled and no errors
       const hasError =
@@ -349,23 +348,14 @@ export class PythonProvider implements ApiProvider {
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
-    if (!this.isInitialized) {
-      await this.initialize();
-    }
     return this.executePythonScript(prompt, context, 'call_api');
   }
 
   async callEmbeddingApi(prompt: string): Promise<ProviderEmbeddingResponse> {
-    if (!this.isInitialized) {
-      await this.initialize();
-    }
     return this.executePythonScript(prompt, undefined, 'call_embedding_api');
   }
 
   async callClassificationApi(prompt: string): Promise<ProviderClassificationResponse> {
-    if (!this.isInitialized) {
-      await this.initialize();
-    }
     return this.executePythonScript(prompt, undefined, 'call_classification_api');
   }
 
