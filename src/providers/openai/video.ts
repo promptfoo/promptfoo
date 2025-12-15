@@ -3,6 +3,7 @@ import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import logger from '../../logger';
 import { getConfigDirectoryPath } from '../../util/config/manage';
+import { fetchWithProxy } from '../../util/fetch/index';
 import { ellipsize } from '../../util/text';
 import { sleep } from '../../util/time';
 import { OpenAiGenericProvider } from '.';
@@ -233,7 +234,7 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
     try {
       logger.debug('[OpenAI Video] Creating video job', { url, model: this.modelName });
 
-      const response = await fetch(url, {
+      const response = await fetchWithProxy(url, {
         method: 'POST',
         headers,
         body: JSON.stringify(body),
@@ -277,7 +278,7 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
 
     while (Date.now() - startTime < maxPollTimeMs) {
       try {
-        const response = await fetch(url, { method: 'GET', headers });
+        const response = await fetchWithProxy(url, { method: 'GET', headers });
 
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}));
@@ -336,7 +337,7 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
     };
 
     try {
-      const response = await fetch(url, { method: 'GET', headers });
+      const response = await fetchWithProxy(url, { method: 'GET', headers });
 
       if (!response.ok) {
         return {
