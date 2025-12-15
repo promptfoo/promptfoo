@@ -292,7 +292,9 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
 
         const job: OpenAiVideoJob = (await response.json()) as OpenAiVideoJob;
 
-        logger.debug(`[OpenAI Video] Job ${videoId} status: ${job.status}, progress: ${job.progress}%`);
+        logger.debug(
+          `[OpenAI Video] Job ${videoId} status: ${job.status}, progress: ${job.progress}%`,
+        );
 
         if (job.status === 'completed') {
           return { job };
@@ -470,7 +472,10 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
     const cost = calculateVideoCost(model, seconds, false);
 
     // Format output as markdown (similar to image provider)
-    const sanitizedPrompt = prompt.replace(/\r?\n|\r/g, ' ').replace(/\[/g, '(').replace(/\]/g, ')');
+    const sanitizedPrompt = prompt
+      .replace(/\r?\n|\r/g, ' ')
+      .replace(/\[/g, '(')
+      .replace(/\]/g, ')');
     const ellipsizedPrompt = ellipsize(sanitizedPrompt, 50);
     const output = `[Video: ${ellipsizedPrompt}](${videoApiPath})`;
 

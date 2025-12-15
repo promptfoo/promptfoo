@@ -310,9 +310,7 @@ describe('OpenAiVideoProvider', () => {
       try {
         const provider = new OpenAiVideoProvider('sora-2');
 
-        await expect(provider.callApi('test prompt')).rejects.toThrow(
-          'OpenAI API key is not set',
-        );
+        await expect(provider.callApi('test prompt')).rejects.toThrow('OpenAI API key is not set');
       } finally {
         process.env.OPENAI_API_KEY = originalEnv;
       }
