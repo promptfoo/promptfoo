@@ -611,14 +611,14 @@ providers:
 
 ### Configuration Options
 
-| Parameter              | Description                                        | Default      |
-| ---------------------- | -------------------------------------------------- | ------------ |
-| `size`                 | Video dimensions                                   | `1280x720`   |
-| `seconds`              | Duration in seconds (4, 8, or 12)                  | `8`          |
-| `poll_interval_ms`     | Polling interval for job status                    | `10000`      |
-| `max_poll_time_ms`     | Maximum time to wait for video generation          | `600000`     |
-| `download_thumbnail`   | Download thumbnail preview                         | `true`       |
-| `download_spritesheet` | Download spritesheet preview                       | `true`       |
+| Parameter              | Description                               | Default    |
+| ---------------------- | ----------------------------------------- | ---------- |
+| `size`                 | Video dimensions                          | `1280x720` |
+| `seconds`              | Duration in seconds (4, 8, or 12)         | `8`        |
+| `poll_interval_ms`     | Polling interval for job status           | `10000`    |
+| `max_poll_time_ms`     | Maximum time to wait for video generation | `600000`   |
+| `download_thumbnail`   | Download thumbnail preview                | `true`     |
+| `download_spritesheet` | Download spritesheet preview              | `true`     |
 
 ### Example Configuration
 
@@ -655,10 +655,10 @@ Videos are stored locally in `~/.promptfoo/output/video/` and served via the web
 
 ### Pricing
 
-| Model       | Cost per Second |
-| ----------- | --------------- |
-| sora-2      | $0.10           |
-| sora-2-pro  | $0.30           |
+| Model      | Cost per Second |
+| ---------- | --------------- |
+| sora-2     | $0.10           |
+| sora-2-pro | $0.30           |
 
 ## Web Search Support
 
