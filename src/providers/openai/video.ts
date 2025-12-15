@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
@@ -79,11 +80,54 @@ function getVideoOutputDir(): string {
 }
 
 /**
+ * Generate a deterministic cache key from video generation parameters.
+ * Uses SHA256 hash formatted as a UUID-like string for directory naming.
+ *
+ * @param prompt - The video generation prompt
+ * @param model - The model name (e.g., 'sora-2')
+ * @param size - Video dimensions (e.g., '1280x720')
+ * @param seconds - Video duration in seconds
+ * @param inputReference - Optional image reference for image-to-video
+ * @returns A UUID-formatted hash string for use as cache key
+ */
+export function generateVideoCacheKey(
+  prompt: string,
+  model: string,
+  size: string,
+  seconds: number,
+  inputReference?: string,
+): string {
+  const hashInput = JSON.stringify({
+    prompt,
+    model,
+    size,
+    seconds,
+    inputReference: inputReference || null,
+  });
+
+  const hash = crypto.createHash('sha256').update(hashInput).digest('hex');
+
+  // Format as UUID-like string: 8-4-4-4-12
+  return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-${hash.slice(12, 16)}-${hash.slice(16, 20)}-${hash.slice(20, 32)}`;
+}
+
+/**
+ * Check if a cached video exists for the given cache key.
+ * Returns the cache key if video exists, undefined otherwise.
+ */
+export function checkVideoCache(cacheKey: string): boolean {
+  const videoPath = getVideoFilePath(cacheKey, 'video');
+  return fs.existsSync(videoPath);
+}
+
+/**
  * Create a new UUID-based output directory for a video generation.
  * Structure: ~/.promptfoo/output/video/{uuid}/
+ *
+ * @param cacheKey - Optional deterministic cache key to use instead of random UUID
  */
-function createVideoOutputDirectory(): string {
-  const uuid = uuidv4();
+function createVideoOutputDirectory(cacheKey?: string): string {
+  const uuid = cacheKey || uuidv4();
   const outputDir = path.join(getVideoOutputDir(), uuid);
   if (!fs.existsSync(outputDir)) {
     fs.mkdirSync(outputDir, { recursive: true });
@@ -396,6 +440,57 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
       return { error: secondsValidation.message };
     }
 
+    // Generate deterministic cache key from inputs
+    // Note: remix_video_id is excluded from cache key as remixes should always regenerate
+    const cacheKey = config.remix_video_id
+      ? undefined
+      : generateVideoCacheKey(prompt, model, size, seconds, config.input_reference);
+
+    // Check for cached video (skip for remix operations)
+    if (cacheKey && checkVideoCache(cacheKey)) {
+      logger.info(`[OpenAI Video] Cache hit for video: ${cacheKey}`);
+
+      const videoApiPath = getVideoApiPath(cacheKey, 'video');
+      const thumbnailApiPath = fs.existsSync(getVideoFilePath(cacheKey, 'thumbnail'))
+        ? getVideoApiPath(cacheKey, 'thumbnail')
+        : undefined;
+      const spritesheetApiPath = fs.existsSync(getVideoFilePath(cacheKey, 'spritesheet'))
+        ? getVideoApiPath(cacheKey, 'spritesheet')
+        : undefined;
+
+      const sanitizedPrompt = prompt
+        .replace(/\r?\n|\r/g, ' ')
+        .replace(/\[/g, '(')
+        .replace(/\]/g, ')');
+      const ellipsizedPrompt = ellipsize(sanitizedPrompt, 50);
+      const output = `[Video: ${ellipsizedPrompt}](${videoApiPath})`;
+
+      return {
+        output,
+        cached: true,
+        latencyMs: 0,
+        cost: 0,
+        video: {
+          id: undefined, // No Sora ID for cached results
+          uuid: cacheKey,
+          url: videoApiPath,
+          format: 'mp4',
+          size,
+          duration: seconds,
+          thumbnail: thumbnailApiPath,
+          spritesheet: spritesheetApiPath,
+          model,
+        },
+        metadata: {
+          cached: true,
+          cacheKey,
+          model,
+          size,
+          seconds,
+        },
+      };
+    }
+
     const startTime = Date.now();
 
     // Step 1: Create video job
@@ -423,8 +518,8 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
       return { error: pollError };
     }
 
-    // Step 3: Create UUID-based output directory
-    const outputUuid = createVideoOutputDirectory();
+    // Step 3: Create output directory using cache key (deterministic) or random UUID
+    const outputUuid = createVideoOutputDirectory(cacheKey);
     logger.debug(`[OpenAI Video] Created video output directory: ${outputUuid}`);
 
     // Step 4: Download assets
