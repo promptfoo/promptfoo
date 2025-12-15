@@ -4,6 +4,7 @@ import { IS_RUNNING_LOCALLY } from '@app/constants';
 import { useToast } from '@app/hooks/useToast';
 import { useStore as useMainStore } from '@app/stores/evalConfig';
 import { callApi, fetchUserEmail, updateEvalAuthor } from '@app/utils/api';
+import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import ClearIcon from '@mui/icons-material/Clear';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
@@ -74,6 +75,27 @@ const ResponsiveStack = styled(Stack)(({ theme }) => ({
     flexDirection: 'column',
   },
 }));
+
+/**
+ * Formats a duration in milliseconds to a human-readable string.
+ * Examples: "342ms", "2.3s", "1m 45s", "1h 23m"
+ */
+function formatDuration(ms: number): string {
+  if (ms < 1000) {
+    return `${Math.round(ms)}ms`;
+  }
+  if (ms < 60000) {
+    return `${(ms / 1000).toFixed(1)}s`;
+  }
+  const minutes = Math.floor(ms / 60000);
+  const seconds = Math.round((ms % 60000) / 1000);
+  if (minutes < 60) {
+    return seconds > 0 ? `${minutes}m ${seconds}s` : `${minutes}m`;
+  }
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
+}
 
 interface ResultsViewProps {
   recentEvals: ResultLightweightWithLabel[];
@@ -190,6 +212,7 @@ export default function ResultsView({
     highlightedResultsCount,
     filters,
     removeFilter,
+    stats,
   } = useTableStore();
 
   const { filterMode, setFilterMode } = useFilterMode();
@@ -853,6 +876,24 @@ export default function ResultsView({
                   fontWeight: 500,
                 }}
               />
+            )}
+            {stats?.durationMs != null && (
+              <Tooltip title="Total evaluation duration (wall-clock time)" placement="bottom">
+                <Chip
+                  size="small"
+                  icon={<AccessTimeIcon sx={{ fontSize: '1rem' }} />}
+                  label={formatDuration(stats.durationMs)}
+                  sx={{
+                    backgroundColor: 'rgba(76, 175, 80, 0.08)',
+                    color: 'rgba(76, 175, 80, 1)',
+                    border: '1px solid rgba(76, 175, 80, 0.2)',
+                    fontWeight: 500,
+                    '& .MuiChip-icon': {
+                      color: 'rgba(76, 175, 80, 1)',
+                    },
+                  }}
+                />
+              </Tooltip>
             )}
             <Box flexGrow={1} />
             <Box display="flex" justifyContent="flex-end">
