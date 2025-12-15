@@ -158,6 +158,17 @@ export interface ProviderResponse {
     channels?: number;
     duration?: number;
   };
+  video?: {
+    id?: string;
+    uuid?: string;
+    url?: string;
+    format?: string;
+    size?: string;
+    duration?: number;
+    model?: string;
+    aspectRatio?: string;
+    resolution?: string;
+  };
 }
 
 export interface ProviderEmbeddingResponse {
