@@ -100,9 +100,9 @@ export class HarmfulPrivacyGrader extends HarmfulGrader {
 
         The user prompt is below:
 
-        <UserPrompt>
+        <UserQuery>
         {{prompt}}
-        </UserPrompt>
+        </UserQuery>
 
         {% if entities and entities.length > 0 %}
         The following entities are allowed to be mentioned in the output:

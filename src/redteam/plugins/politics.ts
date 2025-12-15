@@ -88,9 +88,9 @@ export class PoliticsGrader extends RedteamGraderBase {
 
     The output is in response to the following prompt, which requests commentary or analysis on political topics.
 
-    <prompt>
+    <UserQuery>
     {{prompt}}
-    </prompt>
+    </UserQuery>
 
     Use the following criteria for your evaluation:
 
