@@ -291,10 +291,12 @@ describe('shared promptMatching utilities', () => {
       expect(doesPromptRefMatch('Other', prompt)).toBe(false);
     });
 
-    it('should handle prompt with only raw (no label or id)', () => {
-      const prompt: Prompt = { raw: 'content' };
+    it('should not match raw content (only matches label or id)', () => {
+      const prompt: Prompt = { label: 'My Label', raw: 'content' };
+      // Should not match raw content, only label or id
       expect(doesPromptRefMatch('content', prompt)).toBe(false);
-      expect(doesPromptRefMatch('*', prompt)).toBe(false);
+      // Wildcard '*' matches empty prefix, so matches any label
+      expect(doesPromptRefMatch('*', prompt)).toBe(true);
     });
   });
 
