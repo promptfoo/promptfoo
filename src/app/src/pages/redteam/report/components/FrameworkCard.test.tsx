@@ -79,7 +79,7 @@ describe('FrameworkCard', () => {
     expect(summaryChip).toBeInTheDocument();
 
     const chipContainer = summaryChip.parentElement;
-    expect(chipContainer).toHaveStyle(`background-color: ${theme.palette.success.main}`);
+    expect(chipContainer).toHaveStyle(`background-color: ${alpha(theme.palette.success.main, 0.1)}`);
   });
 
   it('should display the non-compliant state, including the severity chip and a list of failed plugins, when isCompliant is false and nonCompliantPlugins contains plugin names', () => {
