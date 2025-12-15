@@ -2,7 +2,7 @@ import type { FunctionCallbackHandler } from '../functionCallbackUtils';
 
 export interface ProcessorConfig {
   modelName: string;
-  providerType: 'openai' | 'azure';
+  providerType: 'openai' | 'azure' | 'xai';
   functionCallbackHandler: FunctionCallbackHandler;
   costCalculator: (modelName: string, usage: any, config?: any) => number;
 }

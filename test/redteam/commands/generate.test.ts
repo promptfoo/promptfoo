@@ -1,3 +1,4 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import fs from 'fs';
 
 import { Command } from 'commander';
@@ -18,40 +19,69 @@ import { writePromptfooConfig } from '../../../src/util/config/writer';
 
 import type { RedteamCliGenerateOptions, RedteamPluginObject } from '../../../src/redteam/types';
 import type { ApiProvider } from '../../../src/types/index';
+import { DEFAULT_MAX_CONCURRENCY } from '../../../src/constants';
 
-jest.mock('fs');
-jest.mock('../../../src/redteam');
-jest.mock('../../../src/telemetry');
-jest.mock('uuid', () => ({
-  validate: jest.fn((str: string) => {
-    // Simple UUID validation for testing
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    return uuidRegex.test(str);
-  }),
+vi.mock('fs');
+vi.mock('../../../src/redteam', () => ({
+  synthesize: vi.fn().mockResolvedValue({ testCases: [] }),
 }));
-jest.mock('../../../src/util', () => ({
-  setupEnv: jest.fn(),
-  printBorder: jest.fn(),
+vi.mock('../../../src/telemetry');
+vi.mock('../../../src/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+  getLogLevel: vi.fn().mockReturnValue('info'),
 }));
+vi.mock('uuid', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
 
-jest.mock('../../../src/util/promptfooCommand', () => ({
-  promptfooCommand: jest.fn().mockReturnValue('promptfoo redteam init'),
-  detectInstaller: jest.fn().mockReturnValue('unknown'),
-  isRunningUnderNpx: jest.fn().mockReturnValue(false),
-}));
-jest.mock('../../../src/util/config/load', () => ({
-  combineConfigs: jest.fn(),
-  resolveConfigs: jest.fn(),
-  readConfig: jest.fn(),
-}));
+    validate: vi.fn((str: string) => {
+      // Simple UUID validation for testing
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      return uuidRegex.test(str);
+    }),
+  };
+});
+vi.mock('../../../src/util', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    setupEnv: vi.fn(),
+    printBorder: vi.fn(),
+  };
+});
 
-jest.mock('../../../src/redteam/extraction/mcpTools', () => ({
-  extractMcpToolsInfo: jest.fn(),
-}));
+vi.mock('../../../src/util/promptfooCommand', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    promptfooCommand: vi.fn().mockReturnValue('promptfoo redteam init'),
+    detectInstaller: vi.fn().mockReturnValue('unknown'),
+    isRunningUnderNpx: vi.fn().mockReturnValue(false),
+  };
+});
+vi.mock('../../../src/util/config/load', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    combineConfigs: vi.fn(),
+    resolveConfigs: vi.fn(),
+    readConfig: vi.fn(),
+  };
+});
 
-jest.mock('../../../src/envars', () => ({
-  ...jest.requireActual('../../../src/envars'),
-  getEnvBool: jest.fn().mockImplementation((key) => {
+vi.mock('../../../src/redteam/extraction/mcpTools', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    extractMcpToolsInfo: vi.fn(),
+  };
+});
+
+vi.mock('../../../src/envars', async () => ({
+  ...(await vi.importActual('../../../src/envars')),
+
+  getEnvBool: vi.fn().mockImplementation(function (key) {
     if (key === 'PROMPTFOO_REDTEAM_ENABLE_PURPOSE_DISCOVERY_AGENT') {
       return true;
     }
@@ -59,74 +89,106 @@ jest.mock('../../../src/envars', () => ({
   }),
 }));
 
-jest.mock('../../../src/util/cloud', () => ({
-  ...jest.requireActual('../../../src/util/cloud'),
-  getConfigFromCloud: jest.fn(),
-  getCloudDatabaseId: jest.fn(),
-  getPluginSeverityOverridesFromCloud: jest.fn(),
-  isCloudProvider: jest.fn(),
-  getDefaultTeam: jest.fn().mockResolvedValue({ id: 'test-team-id', name: 'Test Team' }),
-  checkCloudPermissions: jest.fn().mockResolvedValue(undefined),
+vi.mock('../../../src/util/cloud', async () => ({
+  ...(await vi.importActual('../../../src/util/cloud')),
+  getConfigFromCloud: vi.fn(),
+  getCloudDatabaseId: vi.fn(),
+  getPluginSeverityOverridesFromCloud: vi.fn(),
+  isCloudProvider: vi.fn(),
+  getDefaultTeam: vi.fn().mockResolvedValue({ id: 'test-team-id', name: 'Test Team' }),
+  checkCloudPermissions: vi.fn().mockResolvedValue(undefined),
 }));
 
-jest.mock('../../../src/util/config/writer', () => ({
-  writePromptfooConfig: jest.fn(),
-}));
+vi.mock('../../../src/util/config/writer', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    writePromptfooConfig: vi.fn(),
+  };
+});
 
-jest.mock('../../../src/cliState', () => ({
-  remote: false,
-}));
-
-jest.mock('../../../src/globalConfig/cloud', () => ({
-  CloudConfig: jest.fn().mockImplementation(() => ({
-    isEnabled: jest.fn().mockReturnValue(false),
-    getApiHost: jest.fn().mockReturnValue('https://api.promptfoo.app'),
-  })),
-  cloudConfig: {
-    isEnabled: jest.fn().mockReturnValue(false),
-    getApiHost: jest.fn().mockReturnValue('https://api.promptfoo.app'),
+vi.mock('../../../src/cliState', () => ({
+  default: {
+    remote: false,
   },
 }));
 
-jest.mock('../../../src/redteam/commands/discover', () => ({
-  doTargetPurposeDiscovery: jest.fn(),
-}));
+vi.mock('../../../src/globalConfig/cloud', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
 
-jest.mock('../../../src/redteam/remoteGeneration', () => ({
-  shouldGenerateRemote: jest.fn().mockReturnValue(false),
-  neverGenerateRemote: jest.fn().mockReturnValue(false),
-  getRemoteGenerationUrl: jest.fn().mockReturnValue('http://test-url'),
-}));
+    CloudConfig: vi.fn().mockImplementation(function () {
+      return {
+        isEnabled: vi.fn().mockReturnValue(false),
+        getApiHost: vi.fn().mockReturnValue('https://api.promptfoo.app'),
+      };
+    }),
 
-jest.mock('../../../src/util/config/manage');
-jest.mock('../../../src/globalConfig/accounts', () => ({
-  getAuthor: jest.fn(),
-  getUserEmail: jest.fn(),
-  getUserId: jest.fn().mockReturnValue('test-id'),
-}));
-jest.mock('../../../src/providers', () => ({
-  loadApiProviders: jest.fn().mockResolvedValue([
-    {
-      id: () => 'test-provider',
-      callApi: jest.fn(),
-      cleanup: jest.fn(),
+    cloudConfig: {
+      isEnabled: vi.fn().mockReturnValue(false),
+      getApiHost: vi.fn().mockReturnValue('https://api.promptfoo.app'),
     },
-  ]),
-  getProviderIds: jest.fn().mockReturnValue(['test-provider']),
+  };
+});
+
+vi.mock('../../../src/redteam/commands/discover', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    doTargetPurposeDiscovery: vi.fn(),
+  };
+});
+
+vi.mock('../../../src/redteam/remoteGeneration', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    shouldGenerateRemote: vi.fn().mockReturnValue(false),
+    neverGenerateRemote: vi.fn().mockReturnValue(false),
+    getRemoteGenerationUrl: vi.fn().mockReturnValue('http://test-url'),
+  };
+});
+
+vi.mock('../../../src/util/config/manage', () => ({
+  getConfigDirectoryPath: vi.fn().mockReturnValue('/tmp/test-config'),
+  setConfigDirectoryPath: vi.fn(),
+  maybeReadConfig: vi.fn(),
+  readConfigs: vi.fn(),
+  writeMultipleOutputs: vi.fn(),
 }));
+vi.mock('../../../src/globalConfig/accounts', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    getAuthor: vi.fn(),
+    getUserEmail: vi.fn(),
+    getUserId: vi.fn().mockReturnValue('test-id'),
+  };
+});
+vi.mock('../../../src/providers', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+
+    loadApiProviders: vi.fn().mockResolvedValue([
+      {
+        id: () => 'test-provider',
+        callApi: vi.fn(),
+        cleanup: vi.fn(),
+      },
+    ]),
+
+    getProviderIds: vi.fn().mockReturnValue(['test-provider']),
+  };
+});
 
 describe('doGenerateRedteam', () => {
   let mockProvider: ApiProvider;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     mockProvider = {
       id: () => 'test-provider',
-      callApi: jest.fn().mockResolvedValue({ output: 'test output' }),
-      cleanup: jest.fn().mockResolvedValue(undefined),
+      callApi: vi.fn().mockResolvedValue({ output: 'test output' }),
+      cleanup: vi.fn().mockResolvedValue(undefined),
     };
 
-    jest.mocked(configModule.resolveConfigs).mockResolvedValue({
+    vi.mocked(configModule.resolveConfigs).mockResolvedValue({
       basePath: '/mock/path',
       testSuite: {
         providers: [mockProvider],
@@ -140,7 +202,7 @@ describe('doGenerateRedteam', () => {
   });
 
   it('should generate redteam tests and write to output file', async () => {
-    jest.mocked(configModule.combineConfigs).mockResolvedValue([
+    vi.mocked(configModule.combineConfigs).mockResolvedValue([
       {
         prompts: [{ raw: 'Test prompt', label: 'Test label' }],
         providers: [],
@@ -156,15 +218,15 @@ describe('doGenerateRedteam', () => {
       write: true,
     };
 
-    jest.mocked(fs.readFileSync).mockReturnValue(
-      JSON.stringify({
+    vi.mocked(fs.readFileSync).mockImplementation(function () {
+      return JSON.stringify({
         prompts: [{ raw: 'Test prompt' }],
         providers: [],
         tests: [],
-      }),
-    );
+      });
+    });
 
-    jest.mocked(synthesize).mockResolvedValue({
+    vi.mocked(synthesize).mockResolvedValue({
       testCases: [
         {
           vars: { input: 'Test input' },
@@ -220,8 +282,10 @@ describe('doGenerateRedteam', () => {
       write: true,
     };
 
-    jest.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({}));
-    jest.mocked(synthesize).mockResolvedValue({
+    vi.mocked(fs.readFileSync).mockImplementation(function () {
+      return JSON.stringify({});
+    });
+    vi.mocked(synthesize).mockResolvedValue({
       testCases: [
         {
           vars: { input: 'Test input' },
@@ -278,7 +342,7 @@ describe('doGenerateRedteam', () => {
 
   it('should use purpose when no config is provided', async () => {
     // Mock extractMcpToolsInfo to return empty string for this test
-    jest.mocked(extractMcpToolsInfo).mockResolvedValue('');
+    vi.mocked(extractMcpToolsInfo).mockResolvedValue('');
 
     const options: RedteamCliGenerateOptions = {
       purpose: 'Test purpose',
@@ -288,7 +352,7 @@ describe('doGenerateRedteam', () => {
       output: 'redteam.yaml',
     };
 
-    jest.mocked(synthesize).mockResolvedValue({
+    vi.mocked(synthesize).mockResolvedValue({
       testCases: [
         {
           vars: { input: 'Test input' },
@@ -318,7 +382,7 @@ describe('doGenerateRedteam', () => {
   });
 
   it('should properly handle numTests for both string and object-style plugins', async () => {
-    jest.mocked(configModule.resolveConfigs).mockResolvedValue({
+    vi.mocked(configModule.resolveConfigs).mockResolvedValue({
       basePath: '/mock/path',
       testSuite: {
         prompts: [{ raw: 'Test prompt', label: 'Test label' }],
@@ -337,15 +401,15 @@ describe('doGenerateRedteam', () => {
       },
     });
 
-    jest.mocked(fs.readFileSync).mockReturnValue(
-      JSON.stringify({
+    vi.mocked(fs.readFileSync).mockImplementation(function () {
+      return JSON.stringify({
         prompts: [{ raw: 'Test prompt' }],
         providers: [],
         tests: [],
-      }),
-    );
+      });
+    });
 
-    jest.mocked(synthesize).mockResolvedValue({
+    vi.mocked(synthesize).mockResolvedValue({
       testCases: [
         {
           vars: { input: 'Test input' },
@@ -385,7 +449,7 @@ describe('doGenerateRedteam', () => {
   });
 
   it('should properly handle severity property in plugin objects', async () => {
-    jest.mocked(configModule.resolveConfigs).mockResolvedValue({
+    vi.mocked(configModule.resolveConfigs).mockResolvedValue({
       basePath: '/mock/path',
       testSuite: {
         prompts: [{ raw: 'Test prompt', label: 'Test label' }],
@@ -405,15 +469,15 @@ describe('doGenerateRedteam', () => {
       },
     });
 
-    jest.mocked(fs.readFileSync).mockReturnValue(
-      JSON.stringify({
+    vi.mocked(fs.readFileSync).mockImplementation(function () {
+      return JSON.stringify({
         prompts: [{ raw: 'Test prompt' }],
         providers: [],
         tests: [],
-      }),
-    );
+      });
+    });
 
-    jest.mocked(synthesize).mockResolvedValue({
+    vi.mocked(synthesize).mockResolvedValue({
       testCases: [
         {
           vars: { input: 'Test input' },
@@ -459,7 +523,7 @@ describe('doGenerateRedteam', () => {
   });
 
   it('should pass entities from redteam config to synthesize', async () => {
-    jest.mocked(configModule.resolveConfigs).mockResolvedValue({
+    vi.mocked(configModule.resolveConfigs).mockResolvedValue({
       basePath: '/mock/path',
       testSuite: {
         prompts: [{ raw: 'Test prompt', label: 'Test label' }],
@@ -474,15 +538,15 @@ describe('doGenerateRedteam', () => {
       },
     });
 
-    jest.mocked(fs.readFileSync).mockReturnValue(
-      JSON.stringify({
+    vi.mocked(fs.readFileSync).mockImplementation(function () {
+      return JSON.stringify({
         prompts: [{ raw: 'Test prompt' }],
         providers: [],
         tests: [],
-      }),
-    );
+      });
+    });
 
-    jest.mocked(synthesize).mockResolvedValue({
+    vi.mocked(synthesize).mockResolvedValue({
       testCases: [
         {
           vars: { input: 'Test input' },
@@ -517,7 +581,7 @@ describe('doGenerateRedteam', () => {
   });
 
   it('should handle undefined entities in redteam config', async () => {
-    jest.mocked(configModule.resolveConfigs).mockResolvedValue({
+    vi.mocked(configModule.resolveConfigs).mockResolvedValue({
       basePath: '/mock/path',
       testSuite: {
         prompts: [{ raw: 'Test prompt', label: 'Test label' }],
@@ -531,15 +595,15 @@ describe('doGenerateRedteam', () => {
       },
     });
 
-    jest.mocked(fs.readFileSync).mockReturnValue(
-      JSON.stringify({
+    vi.mocked(fs.readFileSync).mockImplementation(function () {
+      return JSON.stringify({
         prompts: [{ raw: 'Test prompt' }],
         providers: [],
         tests: [],
-      }),
-    );
+      });
+    });
 
-    jest.mocked(synthesize).mockResolvedValue({
+    vi.mocked(synthesize).mockResolvedValue({
       testCases: [
         {
           vars: { input: 'Test input' },
@@ -570,14 +634,14 @@ describe('doGenerateRedteam', () => {
         strategies: [],
         abortSignal: undefined,
         delay: undefined,
-        maxConcurrency: undefined,
+        maxConcurrency: DEFAULT_MAX_CONCURRENCY,
         numTests: undefined,
       }),
     );
   });
 
   it('should write entities to output config', async () => {
-    jest.mocked(configModule.resolveConfigs).mockResolvedValue({
+    vi.mocked(configModule.resolveConfigs).mockResolvedValue({
       basePath: '/mock/path',
       testSuite: {
         prompts: [{ raw: 'Test prompt', label: 'Test label' }],
@@ -592,15 +656,15 @@ describe('doGenerateRedteam', () => {
       },
     });
 
-    jest.mocked(fs.readFileSync).mockReturnValue(
-      JSON.stringify({
+    vi.mocked(fs.readFileSync).mockImplementation(function () {
+      return JSON.stringify({
         prompts: [{ raw: 'Test prompt' }],
         providers: [],
         tests: [],
-      }),
-    );
+      });
+    });
 
-    jest.mocked(synthesize).mockResolvedValue({
+    vi.mocked(synthesize).mockResolvedValue({
       testCases: [
         {
           vars: { input: 'Test input' },
@@ -641,7 +705,7 @@ describe('doGenerateRedteam', () => {
   });
 
   it('should cleanup provider after generation', async () => {
-    jest.mocked(synthesize).mockResolvedValue({
+    vi.mocked(synthesize).mockResolvedValue({
       testCases: [
         {
           vars: { input: 'Test input' },
@@ -669,7 +733,7 @@ describe('doGenerateRedteam', () => {
   });
 
   it('should handle provider cleanup errors gracefully', async () => {
-    jest.mocked(synthesize).mockResolvedValue({
+    vi.mocked(synthesize).mockResolvedValue({
       testCases: [
         {
           vars: { input: 'Test input' },
@@ -692,7 +756,7 @@ describe('doGenerateRedteam', () => {
     };
 
     if (mockProvider.cleanup) {
-      jest.mocked(mockProvider.cleanup).mockRejectedValueOnce(new Error('Cleanup failed'));
+      vi.mocked(mockProvider.cleanup).mockRejectedValueOnce(new Error('Cleanup failed'));
     }
 
     await doGenerateRedteam(options);
@@ -701,7 +765,7 @@ describe('doGenerateRedteam', () => {
   });
 
   it('should warn and not fail if no plugins are specified (uses default plugins)', async () => {
-    jest.mocked(configModule.resolveConfigs).mockResolvedValue({
+    vi.mocked(configModule.resolveConfigs).mockResolvedValue({
       basePath: '/mock/path',
       testSuite: {
         providers: [mockProvider],
@@ -714,15 +778,15 @@ describe('doGenerateRedteam', () => {
       },
     });
 
-    jest.mocked(fs.readFileSync).mockReturnValue(
-      JSON.stringify({
+    vi.mocked(fs.readFileSync).mockImplementation(function () {
+      return JSON.stringify({
         prompts: [{ raw: 'Prompt' }],
         providers: [],
         tests: [],
-      }),
-    );
+      });
+    });
 
-    jest.mocked(doTargetPurposeDiscovery).mockResolvedValue({
+    vi.mocked(doTargetPurposeDiscovery).mockResolvedValue({
       purpose: 'Generated purpose',
       limitations: 'Generated limitations',
       tools: [
@@ -734,7 +798,7 @@ describe('doGenerateRedteam', () => {
       ],
       user: 'Generated user',
     });
-    jest.mocked(synthesize).mockResolvedValue({
+    vi.mocked(synthesize).mockResolvedValue({
       testCases: [],
       purpose: 'Generated purpose',
       entities: [],
@@ -760,9 +824,9 @@ describe('doGenerateRedteam', () => {
 
   it('should enhance purpose with MCP tools information when available', async () => {
     const mcpToolsInfo = 'MCP Tools: tool1, tool2';
-    jest.mocked(extractMcpToolsInfo).mockResolvedValue(mcpToolsInfo);
+    vi.mocked(extractMcpToolsInfo).mockResolvedValue(mcpToolsInfo);
 
-    jest.mocked(configModule.resolveConfigs).mockResolvedValue({
+    vi.mocked(configModule.resolveConfigs).mockResolvedValue({
       basePath: '/mock/path',
       testSuite: {
         providers: [mockProvider],
@@ -776,7 +840,7 @@ describe('doGenerateRedteam', () => {
       },
     });
 
-    jest.mocked(synthesize).mockResolvedValue({
+    vi.mocked(synthesize).mockResolvedValue({
       testCases: [],
       purpose: 'Test purpose',
       entities: [],
@@ -804,9 +868,9 @@ describe('doGenerateRedteam', () => {
   });
 
   it('should handle MCP tools extraction errors gracefully', async () => {
-    jest.mocked(extractMcpToolsInfo).mockRejectedValue(new Error('MCP tools extraction failed'));
+    vi.mocked(extractMcpToolsInfo).mockRejectedValue(new Error('MCP tools extraction failed'));
 
-    jest.mocked(configModule.resolveConfigs).mockResolvedValue({
+    vi.mocked(configModule.resolveConfigs).mockResolvedValue({
       basePath: '/mock/path',
       testSuite: {
         providers: [mockProvider],
@@ -820,7 +884,7 @@ describe('doGenerateRedteam', () => {
       },
     });
 
-    jest.mocked(synthesize).mockResolvedValue({
+    vi.mocked(synthesize).mockResolvedValue({
       testCases: [],
       purpose: 'Test purpose',
       entities: [],
@@ -849,15 +913,21 @@ describe('doGenerateRedteam', () => {
 
   describe('header comments', () => {
     beforeEach(() => {
-      jest.clearAllMocks();
+      vi.clearAllMocks();
     });
 
     it('should include header comments with author and cloud host when available', async () => {
-      jest.mocked(getAuthor).mockReturnValue('test@example.com');
-      jest.mocked(getUserEmail).mockReturnValue('test@example.com');
-      jest.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.promptfoo.app');
+      vi.mocked(getAuthor).mockImplementation(function () {
+        return 'test@example.com';
+      });
+      vi.mocked(getUserEmail).mockImplementation(function () {
+        return 'test@example.com';
+      });
+      vi.mocked(cloudConfig.getApiHost).mockImplementation(function () {
+        return 'https://api.promptfoo.app';
+      });
 
-      jest.mocked(synthesize).mockResolvedValue({
+      vi.mocked(synthesize).mockResolvedValue({
         testCases: [
           {
             vars: { input: 'Test input' },
@@ -894,10 +964,14 @@ describe('doGenerateRedteam', () => {
     });
 
     it('should show "Not logged in" when no user email', async () => {
-      jest.mocked(getAuthor).mockReturnValue(null);
-      jest.mocked(getUserEmail).mockReturnValue(null);
+      vi.mocked(getAuthor).mockImplementation(function () {
+        return null;
+      });
+      vi.mocked(getUserEmail).mockImplementation(function () {
+        return null;
+      });
 
-      jest.mocked(synthesize).mockResolvedValue({
+      vi.mocked(synthesize).mockResolvedValue({
         testCases: [
           {
             vars: { input: 'Test input' },
@@ -928,11 +1002,17 @@ describe('doGenerateRedteam', () => {
     });
 
     it('should include different headers for updates vs new configs', async () => {
-      jest.mocked(getAuthor).mockReturnValue('test@example.com');
-      jest.mocked(getUserEmail).mockReturnValue('test@example.com');
-      jest.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({}));
+      vi.mocked(getAuthor).mockImplementation(function () {
+        return 'test@example.com';
+      });
+      vi.mocked(getUserEmail).mockImplementation(function () {
+        return 'test@example.com';
+      });
+      vi.mocked(fs.readFileSync).mockImplementation(function () {
+        return JSON.stringify({});
+      });
 
-      jest.mocked(synthesize).mockResolvedValue({
+      vi.mocked(synthesize).mockResolvedValue({
         testCases: [
           {
             vars: { input: 'Test input' },
@@ -967,10 +1047,14 @@ describe('doGenerateRedteam', () => {
     });
 
     it('should include plugin and strategy information in headers', async () => {
-      jest.mocked(getAuthor).mockReturnValue('test@example.com');
-      jest.mocked(getUserEmail).mockReturnValue('test@example.com');
+      vi.mocked(getAuthor).mockImplementation(function () {
+        return 'test@example.com';
+      });
+      vi.mocked(getUserEmail).mockImplementation(function () {
+        return 'test@example.com';
+      });
 
-      jest.mocked(configModule.resolveConfigs).mockResolvedValue({
+      vi.mocked(configModule.resolveConfigs).mockResolvedValue({
         basePath: '/mock/path',
         testSuite: {
           providers: [],
@@ -985,7 +1069,7 @@ describe('doGenerateRedteam', () => {
         },
       });
 
-      jest.mocked(synthesize).mockResolvedValue({
+      vi.mocked(synthesize).mockResolvedValue({
         testCases: [
           {
             vars: { input: 'Test input' },
@@ -1019,11 +1103,17 @@ describe('doGenerateRedteam', () => {
     });
 
     it('should handle missing author gracefully', async () => {
-      jest.mocked(getAuthor).mockReturnValue(null);
-      jest.mocked(getUserEmail).mockReturnValue('test@example.com');
-      jest.mocked(cloudConfig.getApiHost).mockReturnValue('https://api.promptfoo.app');
+      vi.mocked(getAuthor).mockImplementation(function () {
+        return null;
+      });
+      vi.mocked(getUserEmail).mockImplementation(function () {
+        return 'test@example.com';
+      });
+      vi.mocked(cloudConfig.getApiHost).mockImplementation(function () {
+        return 'https://api.promptfoo.app';
+      });
 
-      jest.mocked(synthesize).mockResolvedValue({
+      vi.mocked(synthesize).mockResolvedValue({
         testCases: [
           {
             vars: { input: 'Test input' },
@@ -1046,7 +1136,7 @@ describe('doGenerateRedteam', () => {
 
       await doGenerateRedteam(options);
 
-      const headerComments = jest.mocked(writePromptfooConfig).mock.calls[0][2];
+      const headerComments = vi.mocked(writePromptfooConfig).mock.calls[0][2];
       expect(headerComments).toBeDefined();
       expect(headerComments!.some((comment) => comment.includes('Author:'))).toBe(false);
       expect(headerComments!.some((comment) => comment.includes('https://api.promptfoo.app'))).toBe(
@@ -1059,17 +1149,17 @@ describe('doGenerateRedteam', () => {
     it('should fail when checkCloudPermissions throws an error', async () => {
       // Mock cloudConfig to be enabled
       const mockCloudConfig = {
-        isEnabled: jest.fn().mockReturnValue(true),
-        getApiHost: jest.fn().mockReturnValue('https://api.promptfoo.app'),
+        isEnabled: vi.fn().mockReturnValue(true),
+        getApiHost: vi.fn().mockReturnValue('https://api.promptfoo.app'),
       };
-      jest.mocked(cloudConfig).isEnabled = mockCloudConfig.isEnabled;
+      vi.mocked(cloudConfig).isEnabled = mockCloudConfig.isEnabled;
 
       // Mock checkCloudPermissions to throw an error
       const permissionError = new ConfigPermissionError('Permission denied: insufficient access');
-      jest.mocked(checkCloudPermissions).mockRejectedValueOnce(permissionError);
+      vi.mocked(checkCloudPermissions).mockRejectedValueOnce(permissionError);
 
       // Setup the test configuration
-      jest.mocked(configModule.resolveConfigs).mockResolvedValue({
+      vi.mocked(configModule.resolveConfigs).mockResolvedValue({
         basePath: '/mock/path',
         testSuite: {
           providers: [{ id: () => 'openai:gpt-4', callApi: async () => ({}) }],
@@ -1107,16 +1197,16 @@ describe('doGenerateRedteam', () => {
     it('should call checkCloudPermissions and proceed when it succeeds', async () => {
       // Mock cloudConfig to be enabled
       const mockCloudConfig = {
-        isEnabled: jest.fn().mockReturnValue(true),
-        getApiHost: jest.fn().mockReturnValue('https://api.promptfoo.app'),
+        isEnabled: vi.fn().mockReturnValue(true),
+        getApiHost: vi.fn().mockReturnValue('https://api.promptfoo.app'),
       };
-      jest.mocked(cloudConfig).isEnabled = mockCloudConfig.isEnabled;
+      vi.mocked(cloudConfig).isEnabled = mockCloudConfig.isEnabled;
 
       // Mock checkCloudPermissions to succeed (resolve without throwing)
-      jest.mocked(checkCloudPermissions).mockResolvedValueOnce(undefined);
+      vi.mocked(checkCloudPermissions).mockResolvedValueOnce(undefined);
 
       // Setup the test configuration
-      jest.mocked(configModule.resolveConfigs).mockResolvedValue({
+      vi.mocked(configModule.resolveConfigs).mockResolvedValue({
         basePath: '/mock/path',
         testSuite: {
           providers: [{ id: () => 'openai:gpt-4', callApi: async () => ({}) }],
@@ -1129,7 +1219,7 @@ describe('doGenerateRedteam', () => {
         },
       });
 
-      jest.mocked(synthesize).mockResolvedValue({
+      vi.mocked(synthesize).mockResolvedValue({
         testCases: [
           {
             vars: { input: 'Test input' },
@@ -1166,13 +1256,272 @@ describe('doGenerateRedteam', () => {
       expect(synthesize).toHaveBeenCalled();
     });
   });
+
+  describe('commandLineOptions precedence', () => {
+    let mockProvider: ApiProvider;
+
+    beforeEach(() => {
+      vi.clearAllMocks();
+      mockProvider = {
+        id: () => 'test-provider',
+        callApi: vi.fn().mockResolvedValue({ output: 'test output' }),
+        cleanup: vi.fn().mockResolvedValue(undefined),
+      };
+
+      vi.mocked(synthesize).mockResolvedValue({
+        testCases: [],
+        purpose: 'Test purpose',
+        entities: [],
+        injectVar: 'input',
+      });
+
+      vi.mocked(fs.existsSync).mockImplementation(function () {
+        return false;
+      });
+    });
+
+    it('should use commandLineOptions.maxConcurrency from config when CLI option not provided', async () => {
+      vi.mocked(configModule.resolveConfigs).mockResolvedValue({
+        basePath: '/mock/path',
+        testSuite: {
+          providers: [mockProvider],
+          prompts: [{ raw: 'Test prompt', label: 'Test' }],
+          tests: [],
+        },
+        config: {
+          redteam: {
+            plugins: [{ id: 'harmful', numTests: 1 }],
+          },
+        },
+        commandLineOptions: {
+          maxConcurrency: 10,
+        },
+      });
+
+      const options: RedteamCliGenerateOptions = {
+        config: 'config.yaml',
+        output: 'output.yaml',
+        cache: true,
+        defaultConfig: {},
+        write: false,
+      };
+
+      await doGenerateRedteam(options);
+
+      expect(synthesize).toHaveBeenCalledWith(
+        expect.objectContaining({
+          maxConcurrency: 10,
+        }),
+      );
+    });
+
+    it('should prioritize CLI maxConcurrency over commandLineOptions.maxConcurrency', async () => {
+      vi.mocked(configModule.resolveConfigs).mockResolvedValue({
+        basePath: '/mock/path',
+        testSuite: {
+          providers: [mockProvider],
+          prompts: [{ raw: 'Test prompt', label: 'Test' }],
+          tests: [],
+        },
+        config: {
+          redteam: {
+            plugins: [{ id: 'harmful', numTests: 1 }],
+          },
+        },
+        commandLineOptions: {
+          maxConcurrency: 10,
+        },
+      });
+
+      const options: RedteamCliGenerateOptions = {
+        config: 'config.yaml',
+        output: 'output.yaml',
+        cache: true,
+        defaultConfig: {},
+        maxConcurrency: 20, // CLI override
+        write: false,
+      };
+
+      await doGenerateRedteam(options);
+
+      expect(synthesize).toHaveBeenCalledWith(
+        expect.objectContaining({
+          maxConcurrency: 20,
+        }),
+      );
+    });
+
+    it('should use DEFAULT_MAX_CONCURRENCY when neither CLI nor commandLineOptions provided', async () => {
+      vi.mocked(configModule.resolveConfigs).mockResolvedValue({
+        basePath: '/mock/path',
+        testSuite: {
+          providers: [mockProvider],
+          prompts: [{ raw: 'Test prompt', label: 'Test' }],
+          tests: [],
+        },
+        config: {
+          redteam: {
+            plugins: [{ id: 'harmful', numTests: 1 }],
+          },
+        },
+        commandLineOptions: {},
+      });
+
+      const options: RedteamCliGenerateOptions = {
+        config: 'config.yaml',
+        output: 'output.yaml',
+        cache: true,
+        defaultConfig: {},
+        write: false,
+      };
+
+      await doGenerateRedteam(options);
+
+      expect(synthesize).toHaveBeenCalledWith(
+        expect.objectContaining({
+          maxConcurrency: DEFAULT_MAX_CONCURRENCY,
+        }),
+      );
+    });
+
+    it('should use commandLineOptions.delay from config when CLI option not provided', async () => {
+      vi.mocked(configModule.resolveConfigs).mockResolvedValue({
+        basePath: '/mock/path',
+        testSuite: {
+          providers: [mockProvider],
+          prompts: [{ raw: 'Test prompt', label: 'Test' }],
+          tests: [],
+        },
+        config: {
+          redteam: {
+            plugins: [{ id: 'harmful', numTests: 1 }],
+          },
+        },
+        commandLineOptions: {
+          delay: 500,
+        },
+      });
+
+      const options: RedteamCliGenerateOptions = {
+        config: 'config.yaml',
+        output: 'output.yaml',
+        cache: true,
+        defaultConfig: {},
+        write: false,
+      };
+
+      await doGenerateRedteam(options);
+
+      expect(synthesize).toHaveBeenCalledWith(
+        expect.objectContaining({
+          delay: 500,
+        }),
+      );
+    });
+
+    it('should prioritize CLI delay over commandLineOptions.delay', async () => {
+      vi.mocked(configModule.resolveConfigs).mockResolvedValue({
+        basePath: '/mock/path',
+        testSuite: {
+          providers: [mockProvider],
+          prompts: [{ raw: 'Test prompt', label: 'Test' }],
+          tests: [],
+        },
+        config: {
+          redteam: {
+            plugins: [{ id: 'harmful', numTests: 1 }],
+          },
+        },
+        commandLineOptions: {
+          delay: 500,
+        },
+      });
+
+      const options: RedteamCliGenerateOptions = {
+        config: 'config.yaml',
+        output: 'output.yaml',
+        cache: true,
+        defaultConfig: {},
+        delay: 1000, // CLI override
+        write: false,
+      };
+
+      await doGenerateRedteam(options);
+
+      expect(synthesize).toHaveBeenCalledWith(
+        expect.objectContaining({
+          delay: 1000,
+        }),
+      );
+    });
+
+    it('should prioritize redteamConfig.delay over commandLineOptions.delay', async () => {
+      vi.mocked(configModule.resolveConfigs).mockResolvedValue({
+        basePath: '/mock/path',
+        testSuite: {
+          providers: [mockProvider],
+          prompts: [{ raw: 'Test prompt', label: 'Test' }],
+          tests: [],
+        },
+        config: {
+          redteam: {
+            plugins: [{ id: 'harmful', numTests: 1 }],
+            delay: 200, // redteamConfig.delay
+          },
+        },
+        commandLineOptions: {
+          delay: 500,
+        },
+      });
+
+      const options: RedteamCliGenerateOptions = {
+        config: 'config.yaml',
+        output: 'output.yaml',
+        cache: true,
+        defaultConfig: {},
+        write: false,
+      };
+
+      await doGenerateRedteam(options);
+
+      expect(synthesize).toHaveBeenCalledWith(
+        expect.objectContaining({
+          delay: 200, // redteamConfig wins over commandLineOptions
+        }),
+      );
+    });
+  });
 });
 
 describe('doGenerateRedteam with external defaultTest', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
-    jest.mocked(fs.existsSync).mockReturnValue(false);
-    jest.mocked(fs.readFileSync).mockReturnValue('');
+    vi.clearAllMocks();
+
+    // Reset resolveConfigs with default implementation (tests depend on this being set)
+    vi.mocked(configModule.resolveConfigs).mockReset();
+    vi.mocked(configModule.resolveConfigs).mockResolvedValue({
+      basePath: '/mock/path',
+      testSuite: {
+        providers: [
+          {
+            id: () => 'test-provider',
+            callApi: vi.fn().mockResolvedValue({ output: 'test output' }),
+          },
+        ],
+        prompts: [],
+        tests: [],
+      },
+      config: {
+        redteam: {},
+      },
+    });
+
+    vi.mocked(fs.existsSync).mockImplementation(function () {
+      return false;
+    });
+    vi.mocked(fs.readFileSync).mockImplementation(function () {
+      return '';
+    });
   });
 
   it('should handle string defaultTest when updating config', async () => {
@@ -1191,12 +1540,16 @@ describe('doGenerateRedteam with external defaultTest', () => {
       defaultTest: 'file://external/defaultTest.yaml', // String defaultTest
     };
 
-    jest.mocked(fs.existsSync).mockReturnValue(true);
-    jest.mocked(fs.readFileSync).mockReturnValue(yaml.dump(existingConfig));
-    jest.mocked(readConfig).mockResolvedValue(existingConfig);
+    vi.mocked(fs.existsSync).mockImplementation(function () {
+      return true;
+    });
+    vi.mocked(fs.readFileSync).mockImplementation(function () {
+      return yaml.dump(existingConfig);
+    });
+    vi.mocked(readConfig).mockResolvedValue(existingConfig);
 
     // Mock synthesize to return test cases
-    jest.mocked(synthesize).mockResolvedValue({
+    vi.mocked(synthesize).mockResolvedValue({
       testCases: [
         {
           vars: { input: 'Test input' },
@@ -1245,12 +1598,16 @@ describe('doGenerateRedteam with external defaultTest', () => {
       },
     };
 
-    jest.mocked(fs.existsSync).mockReturnValue(true);
-    jest.mocked(fs.readFileSync).mockReturnValue(yaml.dump(existingConfig));
-    jest.mocked(readConfig).mockResolvedValue(existingConfig);
+    vi.mocked(fs.existsSync).mockImplementation(function () {
+      return true;
+    });
+    vi.mocked(fs.readFileSync).mockImplementation(function () {
+      return yaml.dump(existingConfig);
+    });
+    vi.mocked(readConfig).mockResolvedValue(existingConfig);
 
     // Mock synthesize to return test cases
-    jest.mocked(synthesize).mockResolvedValue({
+    vi.mocked(synthesize).mockResolvedValue({
       testCases: [
         {
           vars: { input: 'Test input' },
@@ -1297,12 +1654,16 @@ describe('doGenerateRedteam with external defaultTest', () => {
       // No defaultTest
     };
 
-    jest.mocked(fs.existsSync).mockReturnValue(true);
-    jest.mocked(fs.readFileSync).mockReturnValue(yaml.dump(existingConfig));
-    jest.mocked(readConfig).mockResolvedValue(existingConfig);
+    vi.mocked(fs.existsSync).mockImplementation(function () {
+      return true;
+    });
+    vi.mocked(fs.readFileSync).mockImplementation(function () {
+      return yaml.dump(existingConfig);
+    });
+    vi.mocked(readConfig).mockResolvedValue(existingConfig);
 
     // Mock synthesize to return test cases
-    jest.mocked(synthesize).mockResolvedValue({
+    vi.mocked(synthesize).mockResolvedValue({
       testCases: [
         {
           vars: { input: 'Test input' },
@@ -1338,7 +1699,7 @@ describe('redteam generate command with target option', () => {
   let mockProvider: ApiProvider;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     program = new Command();
     // Add both generate and init commands to test both
@@ -1349,11 +1710,11 @@ describe('redteam generate command with target option', () => {
 
     mockProvider = {
       id: () => 'test-provider',
-      callApi: jest.fn().mockResolvedValue({ output: 'test output' }),
-      cleanup: jest.fn().mockResolvedValue(undefined),
+      callApi: vi.fn().mockResolvedValue({ output: 'test output' }),
+      cleanup: vi.fn().mockResolvedValue(undefined),
     };
 
-    jest.mocked(configModule.resolveConfigs).mockResolvedValue({
+    vi.mocked(configModule.resolveConfigs).mockResolvedValue({
       basePath: '/mock/path',
       testSuite: {
         providers: [mockProvider],
@@ -1368,7 +1729,7 @@ describe('redteam generate command with target option', () => {
 
   afterEach(() => {
     process.exitCode = originalExitCode;
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('should use target option to fetch cloud config when both config and target are UUIDs', async () => {
@@ -1386,13 +1747,15 @@ describe('redteam generate command with target option', () => {
         strategies: [],
       },
     };
-    jest.mocked(getConfigFromCloud).mockResolvedValue(mockConfig);
+    vi.mocked(getConfigFromCloud).mockResolvedValue(mockConfig);
 
     // Mock fs to handle the temp file write
-    jest.mocked(fs.existsSync).mockReturnValue(false);
-    jest.mocked(fs.writeFileSync).mockImplementation(() => {});
+    vi.mocked(fs.existsSync).mockImplementation(function () {
+      return false;
+    });
+    vi.mocked(fs.writeFileSync).mockImplementation(function () {});
 
-    jest.mocked(synthesize).mockResolvedValue({
+    vi.mocked(synthesize).mockResolvedValue({
       testCases: [],
       purpose: 'Test purpose',
       entities: [],
@@ -1436,13 +1799,15 @@ describe('redteam generate command with target option', () => {
         strategies: [],
       },
     };
-    jest.mocked(getConfigFromCloud).mockResolvedValue(mockConfig);
+    vi.mocked(getConfigFromCloud).mockResolvedValue(mockConfig);
 
     // Mock fs to handle the temp file write
-    jest.mocked(fs.existsSync).mockReturnValue(false);
-    jest.mocked(fs.writeFileSync).mockImplementation(() => {});
+    vi.mocked(fs.existsSync).mockImplementation(function () {
+      return false;
+    });
+    vi.mocked(fs.writeFileSync).mockImplementation(function () {});
 
-    jest.mocked(synthesize).mockResolvedValue({
+    vi.mocked(synthesize).mockResolvedValue({
       testCases: [],
       purpose: 'Test purpose',
       entities: [],
@@ -1505,14 +1870,16 @@ describe('redteam generate command with target option', () => {
     const targetUUID = '87654321-4321-4321-4321-210987654321';
 
     // Mock fs.existsSync to return true for the config file
-    jest.mocked(fs.existsSync).mockReturnValue(true);
-    jest.mocked(fs.readFileSync).mockReturnValue(
-      yaml.dump({
+    vi.mocked(fs.existsSync).mockImplementation(function () {
+      return true;
+    });
+    vi.mocked(fs.readFileSync).mockImplementation(function () {
+      return yaml.dump({
         prompts: ['Test prompt'],
         providers: [],
         tests: [],
-      }),
-    );
+      });
+    });
 
     // Find the generate command
     const generateCommand = program.commands.find((cmd) => cmd.name() === 'generate');
@@ -1595,13 +1962,15 @@ describe('redteam generate command with target option', () => {
         strategies: [],
       },
     };
-    jest.mocked(getConfigFromCloud).mockResolvedValue(mockConfig);
+    vi.mocked(getConfigFromCloud).mockResolvedValue(mockConfig);
 
     // Mock fs to handle the temp file write
-    jest.mocked(fs.existsSync).mockReturnValue(false);
-    jest.mocked(fs.writeFileSync).mockImplementation(() => {});
+    vi.mocked(fs.existsSync).mockImplementation(function () {
+      return false;
+    });
+    vi.mocked(fs.writeFileSync).mockImplementation(function () {});
 
-    jest.mocked(synthesize).mockResolvedValue({
+    vi.mocked(synthesize).mockResolvedValue({
       testCases: [],
       purpose: 'Test purpose',
       entities: [],

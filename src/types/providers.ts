@@ -154,6 +154,9 @@ export interface ProviderResponse {
     data?: string; // base64 encoded audio data
     transcript?: string;
     format?: string;
+    sampleRate?: number;
+    channels?: number;
+    duration?: number;
   };
 }
 
@@ -235,4 +238,5 @@ export interface DefaultProviders {
   moderationProvider: ApiProvider;
   suggestionsProvider: ApiProvider;
   synthesizeProvider: ApiProvider;
+  webSearchProvider?: ApiProvider;
 }

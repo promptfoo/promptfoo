@@ -153,6 +153,7 @@ export class CohereChatCompletionProvider implements ApiProvider {
         total: data.token_count?.total_tokens || 0,
         prompt: data.token_count?.prompt_tokens || 0,
         completion: data.token_count?.response_tokens || 0,
+        numRequests: 1,
       };
 
       let output = data.text;
@@ -258,6 +259,7 @@ export class CohereEmbeddingProvider implements ApiEmbeddingProvider {
       tokenUsage: {
         prompt: data.meta?.billed_units?.input_tokens || 0,
         total: data.meta?.billed_units?.input_tokens || 0,
+        numRequests: 1,
       },
     };
   }

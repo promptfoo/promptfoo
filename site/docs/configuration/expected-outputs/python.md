@@ -8,6 +8,12 @@ description: Create advanced Python validation scripts with complex logic, exter
 
 The `python` assertion allows you to provide a custom Python function to validate the LLM output.
 
+:::tip Python Overview
+
+For an overview of all Python integrations (providers, assertions, test generators, prompts), see the [Python integration guide](/docs/integrations/python).
+
+:::
+
 A variable named `output` is injected into the context. The function should return `true` if the output passes the assertion, and `false` otherwise. If the function returns a number, it will be treated as a score.
 
 Example:

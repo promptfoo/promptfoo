@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 import type { ApiProvider, ProviderOptions } from '../types/providers';
-import { type FrameworkComplianceId, type Plugin, Severity } from './constants';
+import { type FrameworkComplianceId, type Plugin, Severity, SeveritySchema } from './constants';
 import { isValidPolicyId } from './plugins/policy/validators';
 
 // Modifiers are used to modify the behavior of the plugin.
@@ -60,7 +60,7 @@ export const PluginConfigSchema = z.object({
     )
     .optional(),
   graderGuidance: z.string().optional(),
-  severity: z.nativeEnum(Severity).optional(),
+  severity: SeveritySchema.optional(),
   language: z.union([z.string(), z.array(z.string())]).optional(),
   prompt: z.string().optional(),
   purpose: z.string().optional(),
@@ -74,6 +74,7 @@ export const PluginConfigSchema = z.object({
   mentions: z.boolean().optional(),
   // SSRF
   targetUrls: z.array(z.string()).optional(),
+  ssrfFailThreshold: z.enum(['low', 'medium', 'high', 'critical']).optional(),
   // PII
   name: z.string().optional(),
   // CyberSecEval
@@ -283,15 +284,49 @@ export interface SavedRedteamConfig {
 }
 
 /**
+ * Media data (audio or image) for redteam history entries
+ */
+export interface RedteamMediaData {
+  data: string;
+  format: string;
+}
+
+/**
+ * Single entry in redteam conversation history
+ */
+export interface RedteamHistoryEntry {
+  prompt: string;
+  output: string;
+  /** Audio data for the prompt (when using audio transforms) */
+  promptAudio?: RedteamMediaData;
+  /** Image data for the prompt (when using image transforms) */
+  promptImage?: RedteamMediaData;
+  /** Audio data from the target response */
+  outputAudio?: RedteamMediaData;
+}
+
+/**
  * Base metadata interface shared by all redteam providers
  */
 export interface BaseRedteamMetadata {
   redteamFinalPrompt?: string;
   messages: Record<string, any>[];
   stopReason: string;
-  redteamHistory?: { prompt: string; output: string }[];
+  redteamHistory?: RedteamHistoryEntry[];
   sessionIds?: string[];
   sessionId?: string;
+}
+
+/**
+ * Configuration for audio grading in voice-based red team evaluations
+ */
+export interface AudioGradingConfig {
+  /** Whether to enable audio-based grading */
+  enabled?: boolean;
+  /** Model to use for audio grading */
+  model?: string;
+  /** Custom grading prompt */
+  prompt?: string;
 }
 
 /**

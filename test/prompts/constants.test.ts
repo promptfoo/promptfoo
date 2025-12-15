@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest';
 import { VALID_FILE_EXTENSIONS } from '../../src/prompts/constants';
 
 describe('VALID_FILE_EXTENSIONS', () => {

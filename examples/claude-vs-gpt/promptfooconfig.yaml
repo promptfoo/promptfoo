@@ -5,8 +5,8 @@ prompts:
   - file://prompt.yaml
 
 providers:
-  - id: anthropic:claude-sonnet-4-20250514
-    label: Claude Sonnet 4
+  - id: anthropic:claude-sonnet-4-5-20250929
+    label: Claude Sonnet 4.5
   - openai:gpt-4.1-mini
 
 defaultTest:

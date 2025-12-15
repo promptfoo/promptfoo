@@ -1,3 +1,5 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
 import {
   checkGoogleSheetAccess,
   fetchCsvFromGoogleSheetAuthenticated,
@@ -9,42 +11,47 @@ import { fetchWithProxy } from '../src/util/fetch/index';
 import { createMockResponse } from './util/utils';
 
 import type { CsvRow } from '../src/types/index';
+import type { Mock } from 'vitest';
 
 interface MockSpreadsheets {
-  get: jest.Mock;
+  get: Mock;
   values: {
-    get: jest.Mock;
-    update: jest.Mock;
+    get: Mock;
+    update: Mock;
   };
-  batchUpdate: jest.Mock;
+  batchUpdate: Mock;
 }
 
-jest.mock('../src/util/fetch/index.ts', () => ({
-  fetchWithProxy: jest.fn(),
+vi.mock('../src/util/fetch/index', () => ({
+  fetchWithProxy: vi.fn(),
 }));
 
 const mockSpreadsheetsApi = {
-  get: jest.fn(),
+  get: vi.fn(),
   values: {
-    get: jest.fn(),
-    update: jest.fn(),
+    get: vi.fn(),
+    update: vi.fn(),
   },
-  batchUpdate: jest.fn(),
+  batchUpdate: vi.fn(),
 };
 
 // Update mock setup for better auth handling
 const mockAuthClient = {
-  getClient: jest.fn().mockResolvedValue({}),
+  getClient: vi.fn().mockResolvedValue({}),
 };
 
+const mockGoogleAuth = vi.fn(function GoogleAuthMock() {
+  return mockAuthClient;
+});
+
 // Mock Google Sheets API
-jest.mock('@googleapis/sheets', () => {
+vi.mock('@googleapis/sheets', () => {
   return {
-    sheets: jest.fn(() => ({
+    sheets: vi.fn(() => ({
       spreadsheets: mockSpreadsheetsApi,
     })),
     auth: {
-      GoogleAuth: jest.fn(() => mockAuthClient),
+      GoogleAuth: mockGoogleAuth,
     },
   };
 });
@@ -55,12 +62,18 @@ describe('Google Sheets Integration', () => {
     'https://docs.google.com/spreadsheets/d/1234567890/edit?gid=98765';
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
+    vi.spyOn(logger, 'error').mockImplementation(() => {});
+    vi.spyOn(logger, 'info').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   describe('checkGoogleSheetAccess', () => {
     it('should return public:true for accessible sheets', async () => {
-      jest.mocked(fetchWithProxy).mockResolvedValue(createMockResponse({ status: 200 }));
+      vi.mocked(fetchWithProxy).mockResolvedValue(createMockResponse({ status: 200 }));
 
       const result = await checkGoogleSheetAccess(TEST_SHEET_URL);
       expect(result).toEqual({ public: true, status: 200 });
@@ -68,7 +81,7 @@ describe('Google Sheets Integration', () => {
     });
 
     it('should return public:false for inaccessible sheets', async () => {
-      jest.mocked(fetchWithProxy).mockResolvedValue(createMockResponse({ status: 403 }));
+      vi.mocked(fetchWithProxy).mockResolvedValue(createMockResponse({ status: 403 }));
 
       const result = await checkGoogleSheetAccess(TEST_SHEET_URL);
       expect(result).toEqual({ public: false, status: 403 });
@@ -76,7 +89,7 @@ describe('Google Sheets Integration', () => {
     });
 
     it('should handle network errors gracefully', async () => {
-      jest.mocked(fetchWithProxy).mockRejectedValue(new Error('Network error'));
+      vi.mocked(fetchWithProxy).mockRejectedValue(new Error('Network error'));
 
       const result = await checkGoogleSheetAccess(TEST_SHEET_URL);
       expect(result).toEqual({ public: false });
@@ -91,7 +104,7 @@ describe('Google Sheets Integration', () => {
       const mockCsvData = 'header1,header2\nvalue1,value2';
       const expectedUrl = `${TEST_SHEET_URL.replace(/\/edit.*$/, '/export')}?format=csv`;
 
-      jest.mocked(fetchWithProxy).mockResolvedValue(
+      vi.mocked(fetchWithProxy).mockResolvedValue(
         createMockResponse({
           text: () => Promise.resolve(mockCsvData),
         }),
@@ -107,7 +120,7 @@ describe('Google Sheets Integration', () => {
       const baseUrl = TEST_SHEET_URL_WITH_GID.replace(/\/edit.*$/, '/export');
       const expectedUrl = `${baseUrl}?format=csv&gid=98765`;
 
-      jest.mocked(fetchWithProxy).mockResolvedValue(
+      vi.mocked(fetchWithProxy).mockResolvedValue(
         createMockResponse({
           text: () => Promise.resolve(mockCsvData),
         }),
@@ -118,7 +131,7 @@ describe('Google Sheets Integration', () => {
     });
 
     it('should throw error on non-200 response', async () => {
-      jest.mocked(fetchWithProxy).mockResolvedValue(createMockResponse({ status: 403 }));
+      vi.mocked(fetchWithProxy).mockResolvedValue(createMockResponse({ status: 403 }));
 
       await expect(fetchCsvFromGoogleSheetUnauthenticated(TEST_SHEET_URL)).rejects.toThrow(
         'Failed to fetch CSV from Google Sheets URL',
@@ -130,7 +143,7 @@ describe('Google Sheets Integration', () => {
     const spreadsheets = mockSpreadsheetsApi as MockSpreadsheets;
 
     beforeEach(() => {
-      jest.clearAllMocks();
+      vi.clearAllMocks();
       // Set up default sheet response
       spreadsheets.get.mockResolvedValue({
         data: {
@@ -226,7 +239,7 @@ describe('Google Sheets Integration', () => {
     const spreadsheets = mockSpreadsheetsApi as MockSpreadsheets;
 
     beforeEach(() => {
-      jest.clearAllMocks();
+      vi.clearAllMocks();
       // Set up default sheet response
       spreadsheets.get.mockResolvedValue({
         data: {
@@ -389,7 +402,7 @@ describe('Google Sheets Integration', () => {
       ];
 
       for (const { cols, expected } of testCases) {
-        jest.clearAllMocks(); // Clear mocks between iterations
+        vi.clearAllMocks(); // Clear mocks between iterations
 
         const headers = Array.from({ length: cols }, (_, i) => `col${i + 1}`);
         const mockRows: CsvRow[] = [

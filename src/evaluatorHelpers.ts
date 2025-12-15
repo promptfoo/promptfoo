@@ -35,10 +35,12 @@ type FileMetadata = Record<string, { path: string; type: string; format?: string
 export async function extractTextFromPDF(pdfPath: string): Promise<string> {
   logger.debug(`Extracting text from PDF: ${pdfPath}`);
   try {
-    const { default: PDFParser } = await import('pdf-parse');
+    const { PDFParse } = await import('pdf-parse');
     const dataBuffer = fs.readFileSync(pdfPath);
-    const data = await PDFParser(dataBuffer);
-    return data.text.trim();
+    const parser = new PDFParse({ data: dataBuffer });
+    const result = await parser.getText();
+    await parser.destroy();
+    return result.text.trim();
   } catch (error) {
     if (error instanceof Error && error.message.includes("Cannot find module 'pdf-parse'")) {
       throw new Error('pdf-parse is not installed. Please install it with: npm install pdf-parse');

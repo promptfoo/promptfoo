@@ -53,11 +53,25 @@ The `promptfoo` command line utility supports the following subcommands:
 
 Most commands support the following common options:
 
-| Option                          | Description       |
-| ------------------------------- | ----------------- |
-| `--env-file, --env-path <path>` | Path to .env file |
-| `-v, --verbose`                 | Show debug logs   |
-| `--help`                        | Display help      |
+| Option                              | Description                                       |
+| ----------------------------------- | ------------------------------------------------- |
+| `--env-file, --env-path <paths...>` | Path(s) to .env file(s). Supports multiple files. |
+| `-v, --verbose`                     | Show debug logs                                   |
+| `--help`                            | Display help                                      |
+
+### Multiple Environment Files
+
+You can load multiple `.env` files. Later files override values from earlier ones:
+
+```bash
+# Space-separated
+promptfoo eval --env-file .env .env.local
+
+# Repeated flags
+promptfoo eval --env-file .env --env-file .env.local
+```
+
+All specified files must exist or an error is thrown.
 
 ## `promptfoo eval`
 
@@ -615,8 +629,8 @@ prompts:
   - 'Act as a trip planner and help the user plan their trip'
 
 providers:
-  - openai:gpt-4.1-mini
-  - openai:gpt-4.1
+  - openai:gpt-5-mini
+  - openai:gpt-5
 ```
 
 This command will generate adversarial test cases and write them to `redteam.yaml`.

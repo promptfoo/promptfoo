@@ -161,7 +161,7 @@ html {
       rgba(255, 255, 255, 0) 100%
     ),
     /* Accent gradients - using darker reds with lower opacity */
-      radial-gradient(ellipse at 25% 20%, rgba(179, 46, 46, 0.06) 0%, transparent 50%),
+    radial-gradient(ellipse at 25% 20%, rgba(179, 46, 46, 0.06) 0%, transparent 50%),
     radial-gradient(ellipse at 75% 40%, rgba(203, 52, 52, 0.04) 0%, transparent 45%),
     radial-gradient(ellipse at 15% 70%, rgba(179, 46, 46, 0.05) 0%, transparent 55%),
     radial-gradient(ellipse at 85% 85%, rgba(203, 52, 52, 0.03) 0%, transparent 50%),
@@ -184,7 +184,7 @@ html {
       rgba(16, 25, 28, 0) 100%
     ),
     /* Accent gradients for dark theme - more subtle */
-      radial-gradient(ellipse at 25% 20%, rgba(179, 46, 46, 0.08) 0%, transparent 50%),
+    radial-gradient(ellipse at 25% 20%, rgba(179, 46, 46, 0.08) 0%, transparent 50%),
     radial-gradient(ellipse at 75% 40%, rgba(203, 52, 52, 0.06) 0%, transparent 45%),
     radial-gradient(ellipse at 15% 70%, rgba(179, 46, 46, 0.05) 0%, transparent 55%),
     radial-gradient(ellipse at 85% 85%, rgba(203, 52, 52, 0.04) 0%, transparent 50%),
@@ -684,7 +684,7 @@ html {
   font-family: 'Courier New', Courier, monospace;
   font-size: 0.95rem;
   font-weight: 600;
-  overflow-x: auto;
+  overflow: hidden;
   white-space: pre-wrap;
   word-wrap: break-word;
   position: relative;

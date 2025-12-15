@@ -2,6 +2,7 @@ import { handleTraceSpanDuration } from '../../src/assertions/traceSpanDuration'
 
 import type { ApiProvider, AssertionParams, AtomicTestCase } from '../../src/types/index';
 import type { TraceData } from '../../src/types/tracing';
+import { describe, expect, it } from 'vitest';
 
 const mockProvider: ApiProvider = {
   id: () => 'mock',
@@ -10,6 +11,9 @@ const mockProvider: ApiProvider = {
 
 const mockTraceData: TraceData = {
   traceId: 'test-trace-id',
+  evaluationId: 'test-evaluation-id',
+  testCaseId: 'test-test-case-id',
+  metadata: { test: 'value' },
   spans: [
     {
       spanId: 'span-1',
@@ -74,6 +78,9 @@ describe('handleTraceSpanDuration', () => {
         ...defaultParams.assertionValueContext,
         trace: {
           traceId: 'fast-trace',
+          evaluationId: 'test-evaluation-id',
+          testCaseId: 'test-test-case-id',
+          metadata: { test: 'value' },
           spans: [
             { spanId: '1', name: 'fast.op1', startTime: 0, endTime: 100 },
             { spanId: '2', name: 'fast.op2', startTime: 100, endTime: 500 },
@@ -102,7 +109,12 @@ describe('handleTraceSpanDuration', () => {
       renderedValue: { max: 1000 },
       assertionValueContext: {
         ...defaultParams.assertionValueContext,
-        trace: mockTraceData,
+        trace: {
+          ...mockTraceData,
+          evaluationId: 'test-evaluation-id',
+          testCaseId: 'test-test-case-id',
+          metadata: { test: 'value' },
+        },
       },
     };
 
@@ -200,6 +212,9 @@ describe('handleTraceSpanDuration', () => {
         ...defaultParams.assertionValueContext,
         trace: {
           traceId: 'incomplete-trace',
+          evaluationId: 'test-evaluation-id',
+          testCaseId: 'test-test-case-id',
+          metadata: { test: 'value' },
           spans: [
             { spanId: '1', name: 'complete.op', startTime: 0, endTime: 500 },
             { spanId: '2', name: 'incomplete.op', startTime: 600 }, // No endTime
@@ -227,7 +242,13 @@ describe('handleTraceSpanDuration', () => {
       renderedValue: { max: 1000 },
       assertionValueContext: {
         ...defaultParams.assertionValueContext,
-        trace: { traceId: 'empty-trace', spans: [] },
+        trace: {
+          traceId: 'empty-trace',
+          evaluationId: 'test-evaluation-id',
+          testCaseId: 'test-test-case-id',
+          metadata: { test: 'value' },
+          spans: [],
+        },
       },
     };
 
@@ -323,6 +344,9 @@ describe('handleTraceSpanDuration', () => {
         ...defaultParams.assertionValueContext,
         trace: {
           traceId: 'single-span',
+          evaluationId: 'test-evaluation-id',
+          testCaseId: 'test-test-case-id',
+          metadata: { test: 'value' },
           spans: [{ spanId: '1', name: 'single.op', startTime: 0, endTime: 750 }],
         },
       },

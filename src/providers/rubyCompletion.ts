@@ -148,6 +148,7 @@ export class RubyProvider implements ApiProvider {
           parsedResult.tokenUsage = {
             cached: total,
             total,
+            numRequests: parsedResult.tokenUsage.numRequests ?? 1,
           };
           logger.debug(
             `Updated token usage for cached result: ${JSON.stringify(parsedResult.tokenUsage)}`,

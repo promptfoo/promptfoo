@@ -25,9 +25,6 @@ export function redteamSetupCommand(program: Command) {
         } & Command,
       ) => {
         setupEnv(cmdObj.envPath);
-        telemetry.record('command_used', {
-          name: 'redteam setup',
-        });
         telemetry.record('redteam setup', {});
 
         if (directory) {

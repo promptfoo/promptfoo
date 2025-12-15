@@ -25,7 +25,7 @@ There are several criteria used to evaluate RAG applications:
   - **Context relevance**: Measures how much of the context is necessary to answer a given query. See [`context-relevance`](/docs/configuration/expected-outputs/model-graded/) metric.
 - **Custom metrics**: You know your application better than anyone else. Create test cases that focus on things that matter to you (examples include: whether a certain document is cited, whether the response is too long, etc.)
 
-This guide shows how to use promptfoo to evaluate your RAG app. If you're new to promptfoo, head to [Getting Started](/docs/getting-started).
+This guide shows how to use promptfoo to evaluate your RAG app. If you're new to Promptfoo, head to [Getting Started](/docs/getting-started).
 
 You can also jump to the [full RAG example](https://github.com/promptfoo/promptfoo/tree/main/examples/rag-full) on GitHub.
 
@@ -142,7 +142,7 @@ Now that we've constructed a prompt, let's set up some test cases. In this examp
 
 ```yaml title="promptfooconfig.yaml"
 prompts: [file://prompt1.txt]
-providers: [openai:gpt-4.1-mini]
+providers: [openai:gpt-5-mini]
 tests:
   - vars:
       query: What is the max purchase that doesn't require approval?
@@ -263,8 +263,8 @@ Imagine we're exploring budget and want to compare the performance of GPT-4 vs L
 
 ```yaml
 providers:
-  - openai:gpt-4.1-mini
-  - openai:gpt-4.1
+  - openai:gpt-5-mini
+  - openai:gpt-5
   - anthropic:messages:claude-3-5-sonnet-20241022
   - ollama:chat:llama3.3
 ```
@@ -282,7 +282,7 @@ Here's the final config:
 
 ```yaml title="promptfooconfig.yaml"
 prompts: [file://prompt1.txt]
-providers: [openai:gpt-4.1-mini, openai:gpt-4.1, ollama:chat:llama3.3]
+providers: [openai:gpt-5-mini, openai:gpt-5 ollama:chat:llama3.3]
 defaultTest:
   assert:
     - type: python
