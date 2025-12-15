@@ -64,6 +64,21 @@ export function isImageProvider(provider: string | undefined): boolean {
   return false;
 }
 
+/**
+ * Detects if the provider is a video generation provider.
+ * Video providers follow patterns like:
+ * - 'openai:video:sora-2' (OpenAI Sora)
+ * - 'openai:video:sora-2-pro' (OpenAI Sora Pro)
+ * Used to skip truncation for video content.
+ */
+export function isVideoProvider(provider: string | undefined): boolean {
+  if (!provider) {
+    return false;
+  }
+  // Check for :video: namespace (OpenAI Sora)
+  return provider.includes(':video:');
+}
+
 const tooltipSlotProps: TooltipProps['slotProps'] = {
   popper: { disablePortal: true },
 };
@@ -299,6 +314,25 @@ function EvalOutputCell({
             <strong>Transcript:</strong> {output.audio.transcript}
           </div>
         )}
+      </div>
+    );
+  } else if (output.video?.url) {
+    node = (
+      <div className="video-output">
+        <video
+          controls
+          style={{ width: '100%', maxWidth: '640px', borderRadius: '4px' }}
+          poster={output.video.thumbnail}
+          data-testid="video-player"
+        >
+          <source src={output.video.url} type={`video/${output.video.format || 'mp4'}`} />
+          Your browser does not support the video element.
+        </video>
+        <div className="video-metadata" style={{ marginTop: '8px', fontSize: '0.85em', opacity: 0.8 }}>
+          {output.video.model && <span style={{ marginRight: '12px' }}>Model: {output.video.model}</span>}
+          {output.video.size && <span style={{ marginRight: '12px' }}>Size: {output.video.size}</span>}
+          {output.video.duration && <span>Duration: {output.video.duration}s</span>}
+        </div>
       </div>
     );
   } else if ((prettifyJson || renderMarkdown) && !showDiffs) {
@@ -779,7 +813,7 @@ function EvalOutputCell({
       <div style={contentStyle}>
         <TruncatedText
           text={node || text}
-          maxLength={renderMarkdown && isImageProvider(output.provider) ? 0 : maxTextLength}
+          maxLength={renderMarkdown && (isImageProvider(output.provider) || isVideoProvider(output.provider)) ? 0 : maxTextLength}
         />
       </div>
       {comment}
