@@ -2,7 +2,7 @@
 # Time to First Token (TTFT) measurement example
 # This example demonstrates how to measure TTFT using the HTTP provider with OpenAI's Chat Completions API
 
-description: TTFT measurement with gpt-5-mini streaming
+description: TTFT measurement with gpt-4o-mini streaming
 
 prompts:
   - 'Write a short story about {{topic}}'
@@ -16,7 +16,7 @@ providers:
         'Content-Type': 'application/json'
         'Authorization': 'Bearer {{env.OPENAI_API_KEY}}'
       body:
-        model: 'gpt-5-mini'
+        model: 'gpt-4o-mini'
         messages:
           - role: 'user'
             content: '{{prompt}}'

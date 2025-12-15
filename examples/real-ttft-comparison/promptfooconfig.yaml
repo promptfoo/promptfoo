@@ -5,16 +5,16 @@ prompts:
   - 'Write a brief explanation of {{topic}}'
 
 providers:
-  # GPT-5-mini: Fast, cost-efficient model
+  # GPT-4o-mini: Fast, cost-efficient model
   - id: https://api.openai.com/v1/chat/completions
-    label: 'gpt-5-mini'
+    label: 'gpt-4o-mini'
     config:
       method: 'POST'
       headers:
         'Content-Type': 'application/json'
         'Authorization': 'Bearer {{env.OPENAI_API_KEY}}'
       body:
-        model: 'gpt-5-mini'
+        model: 'gpt-4o-mini'
         messages:
           - role: 'user'
             content: '{{prompt}}'
@@ -47,16 +47,16 @@ providers:
           return content.trim();
         }
 
-  # GPT-5: Flagship model with advanced capabilities
+  # GPT-4o: Flagship model with advanced capabilities
   - id: https://api.openai.com/v1/chat/completions
-    label: 'gpt-5'
+    label: 'gpt-4o'
     config:
       method: 'POST'
       headers:
         'Content-Type': 'application/json'
         'Authorization': 'Bearer {{env.OPENAI_API_KEY}}'
       body:
-        model: 'gpt-5'
+        model: 'gpt-4o'
         messages:
           - role: 'user'
             content: '{{prompt}}'
