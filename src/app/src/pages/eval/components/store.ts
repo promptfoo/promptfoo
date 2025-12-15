@@ -16,6 +16,7 @@ import type { PolicyObject, Policy } from '@promptfoo/redteam/types';
 import type {
   EvalResultsFilterMode,
   EvalTableDTO,
+  EvaluateStats,
   EvaluateSummaryV2,
   EvaluateTable,
   PromptMetrics,
@@ -264,6 +265,12 @@ interface TableState {
    */
   filteredMetrics: PromptMetrics[] | null;
   setFilteredMetrics: (metrics: PromptMetrics[] | null) => void;
+
+  /**
+   * Evaluation-level statistics including durationMs (wall-clock time).
+   */
+  stats: EvaluateStats | null;
+  setStats: (stats: EvaluateStats | null) => void;
 
   fetchEvalData: (id: string, options?: FetchEvalOptions) => Promise<EvalTableDTO | null>;
   isFetching: boolean;
@@ -530,6 +537,9 @@ export const useTableStore = create<TableState>()(
     setFilteredMetrics: (metrics: PromptMetrics[] | null) =>
       set(() => ({ filteredMetrics: metrics })),
 
+    stats: null,
+    setStats: (stats: EvaluateStats | null) => set(() => ({ stats })),
+
     highlightedResultsCount: 0,
 
     isFetching: false,
@@ -628,6 +638,8 @@ export const useTableStore = create<TableState>()(
             shouldHighlightSearchText: searchText !== '',
             // Store filtered metrics from backend (null when no filters or feature disabled)
             filteredMetrics: data.filteredMetrics || null,
+            // Store evaluation-level stats including durationMs
+            stats: data.stats || null,
             filters: {
               ...prevState.filters,
               options: {
