@@ -346,6 +346,7 @@ export const ADDITIONAL_PLUGINS = [
   'unsafebench',
   'unverifiable-claims',
   'vlguard',
+  'web-fetch-data-exfil',
   'wordplay',
   'xstest',
 ] as const;
