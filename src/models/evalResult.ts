@@ -8,7 +8,7 @@ import { hashPrompt } from '../prompts/utils';
 import { type EvaluateResult } from '../types/index';
 import { isApiProvider, isProviderOptions } from '../types/providers';
 import { safeJsonStringify } from '../util/json';
-import { sanitizeResultForStorage } from '../util/sanitizeMediaForStorage';
+import { extractAndStoreBinaryData } from '../blobs/extractor';
 import { getCurrentTimestamp } from '../util/time';
 
 import {
@@ -81,30 +81,24 @@ export default class EvalResult {
       testCase,
     } = result;
 
-    // Sanitize media data (replace large base64 with storage refs) before storing
+    // Normalize provider for storage and extract blobs from responses
     const preSanitizeTestCase = {
       ...testCase,
       ...(testCase.provider && {
         provider: sanitizeProvider(testCase.provider),
       }),
     };
-    
-    const sanitized = await sanitizeResultForStorage({
-      testCase: preSanitizeTestCase,
-      response: result.response || null,
+
+    const processedResponse = await extractAndStoreBinaryData(result.response, {
       evalId,
+      testIdx: result.testIdx,
+      promptIdx: result.promptIdx,
     });
-    
-    // Log if sanitization changed anything
-    const testCaseChanged = sanitized.testCase !== preSanitizeTestCase;
-    if (testCaseChanged) {
-      console.log('[EvalResult] Media sanitization applied to result');
-    }
 
     const args = {
       id: randomUUID(),
       evalId,
-      testCase: sanitized.testCase,
+      testCase: preSanitizeTestCase,
       promptIdx: result.promptIdx,
       testIdx: result.testIdx,
       prompt,
@@ -112,7 +106,7 @@ export default class EvalResult {
       error: error?.toString(),
       success,
       score: score == null ? 0 : score,
-      response: sanitized.response,
+      response: processedResponse || null,
       gradingResult: gradingResult || null,
       namedScores,
       provider: sanitizeProvider(provider),
@@ -133,16 +127,22 @@ export default class EvalResult {
   static async createManyFromEvaluateResult(results: EvaluateResult[], evalId: string) {
     const db = getDb();
     const returnResults: EvalResult[] = [];
-    db.transaction(() => {
-      for (const result of results) {
-        const dbResult = db
-          .insert(evalResultsTable)
-          .values({ ...result, evalId, id: randomUUID() })
-          .returning()
-          .get();
-        returnResults.push(new EvalResult({ ...dbResult, persisted: true }));
-      }
-    });
+    for (const result of results) {
+      const processedResponse = getEnvBool('PROMPTFOO_BLOB_STORAGE_ENABLED', false)
+        ? await extractAndStoreBinaryData(result.response, {
+            evalId,
+            testIdx: result.testIdx,
+            promptIdx: result.promptIdx,
+          })
+        : result.response;
+
+      const dbResult = db
+        .insert(evalResultsTable)
+        .values({ ...result, response: processedResponse, evalId, id: randomUUID() })
+        .returning()
+        .get();
+      returnResults.push(new EvalResult({ ...dbResult, persisted: true }));
+    }
     return returnResults;
   }
 

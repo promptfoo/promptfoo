@@ -16,6 +16,7 @@ import useApiConfig from '@app/stores/apiConfig';
 
 /** Prefix for storage references */
 const STORAGE_REF_PREFIX = 'storageRef:';
+const BLOB_REF_PREFIX = 'promptfoo://blob/';
 
 /**
  * Get the base URL for the API.
@@ -34,6 +35,10 @@ export function isStorageRef(value: unknown): value is string {
   return typeof value === 'string' && value.startsWith(STORAGE_REF_PREFIX);
 }
 
+export function isBlobRef(value: unknown): value is string {
+  return typeof value === 'string' && value.startsWith(BLOB_REF_PREFIX);
+}
+
 /**
  * Parse a storage reference to get the key
  */
@@ -42,6 +47,13 @@ export function parseStorageRef(ref: string): string | null {
     return null;
   }
   return ref.slice(STORAGE_REF_PREFIX.length);
+}
+
+export function parseBlobRef(ref: string): string | null {
+  if (!isBlobRef(ref)) {
+    return null;
+  }
+  return ref.slice(BLOB_REF_PREFIX.length);
 }
 
 /**
@@ -56,6 +68,14 @@ export function getMediaUrl(storageRef: string): string | null {
     return null;
   }
   return `${getApiBaseUrl()}/media/${key}`;
+}
+
+export function getBlobUrl(blobRef: string): string | null {
+  const hash = parseBlobRef(blobRef);
+  if (!hash) {
+    return null;
+  }
+  return `${getApiBaseUrl()}/blobs/${hash}`;
 }
 
 /**
@@ -75,6 +95,10 @@ export function resolveMediaUrl(
 ): string | null {
   if (!value) {
     return null;
+  }
+
+  if (isBlobRef(value)) {
+    return getBlobUrl(value);
   }
 
   // Storage ref → direct API URL

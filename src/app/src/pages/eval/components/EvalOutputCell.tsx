@@ -7,6 +7,7 @@ import remarkGfm from 'remark-gfm';
 import useCloudConfig from '@app/hooks/useCloudConfig';
 import { useEvalOperations } from '@app/hooks/useEvalOperations';
 import { useShiftKey } from '@app/hooks/useShiftKey';
+import { normalizeMediaText, resolveAudioSource, resolveImageSource } from '@app/utils/media';
 import {
   Check,
   ContentCopy,
@@ -22,87 +23,12 @@ import IconButton from '@mui/material/IconButton';
 import Tooltip, { TooltipProps } from '@mui/material/Tooltip';
 import { type EvaluateTableOutput, ResultFailureReason } from '@promptfoo/types';
 
-import { isStorageRef, resolveAudioUrl } from '@app/utils/mediaStorage';
-import Box from '@mui/material/Box';
-import CircularProgress from '@mui/material/CircularProgress';
-import Typography from '@mui/material/Typography';
-
 import CustomMetrics from './CustomMetrics';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import FailReasonCarousel from './FailReasonCarousel';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import CommentDialog from './TableCommentDialog';
 import TruncatedText from './TruncatedText';
-
-/**
- * Audio player that handles storage refs and base64 data
- */
-function AsyncAudioPlayer({
-  data,
-  format = 'mp3',
-  transcript,
-}: {
-  data: string;
-  format?: string;
-  transcript?: string;
-}) {
-  const [audioUrl, setAudioUrl] = React.useState<string | null>(null);
-  const [loading, setLoading] = React.useState(isStorageRef(data));
-
-  React.useEffect(() => {
-    let cancelled = false;
-
-    if (isStorageRef(data)) {
-      setLoading(true);
-      resolveAudioUrl(data, format).then((url) => {
-        if (!cancelled) {
-          setAudioUrl(url);
-          setLoading(false);
-        }
-      });
-    } else {
-      // Inline base64
-      const url = data.startsWith('data:') ? data : `data:audio/${format};base64,${data}`;
-      setAudioUrl(url);
-      setLoading(false);
-    }
-
-    return () => {
-      cancelled = true;
-    };
-  }, [data, format]);
-
-  if (loading) {
-    return (
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.5 }}>
-        <CircularProgress size={16} />
-        <Typography variant="caption">Loading audio...</Typography>
-      </Box>
-    );
-  }
-
-  if (!audioUrl) {
-    return (
-      <Typography variant="caption" color="error">
-        Failed to load audio
-      </Typography>
-    );
-  }
-
-  return (
-    <div className="audio-output">
-      <audio controls style={{ width: '100%' }} data-testid="audio-player">
-        <source src={audioUrl} type={`audio/${format}`} />
-        Your browser does not support the audio element.
-      </audio>
-      {transcript && (
-        <div className="transcript">
-          <strong>Transcript:</strong> {transcript}
-        </div>
-      )}
-    </div>
-  );
-}
 
 type CSSPropertiesWithCustomVars = React.CSSProperties & {
   [key: `--${string}`]: string | number;
@@ -256,13 +182,19 @@ function EvalOutputCell({
   };
 
   const text = typeof output.text === 'string' ? output.text : JSON.stringify(output.text);
+  const normalizedText = normalizeMediaText(text);
+  const inlineImageSrc = resolveImageSource(text);
+  const outputAudioSource = resolveAudioSource(output.audio);
   let node: React.ReactNode | undefined;
   let failReasons: string[] = [];
 
   // Extract response audio from the last turn of redteamHistory for display in the cell
   const redteamHistory = output.metadata?.redteamHistory || output.metadata?.redteamTreeHistory;
   const lastTurn = redteamHistory?.[redteamHistory.length - 1];
-  const responseAudio = lastTurn?.outputAudio as { data?: string; format?: string } | undefined;
+  const responseAudio = lastTurn?.outputAudio as
+    | { data?: string; format?: string; blobRef?: { uri?: string; hash?: string } }
+    | undefined;
+  const responseAudioSource = resolveAudioSource(responseAudio);
 
   // Extract failure reasons from component results
   if (output.gradingResult?.componentResults) {
@@ -349,24 +281,40 @@ function EvalOutputCell({
       console.error('Invalid regular expression:', (error as Error).message);
     }
   } else if (
-    text?.match(/^data:(image\/[a-z]+|application\/octet-stream|image\/svg\+xml);(base64,)?/)
+    text?.match(/^data:(image\/[a-z]+|application\/octet-stream|image\/svg\+xml);(base64,)?/) ||
+    inlineImageSrc
   ) {
+    const src = inlineImageSrc || text;
     node = (
       <img
-        src={text}
+        src={src}
         alt={output.prompt}
         style={{ width: '100%' }}
-        onClick={() => toggleLightbox(text)}
+        onClick={() => toggleLightbox(src)}
       />
     );
   } else if (output.audio) {
-    node = (
-      <AsyncAudioPlayer
-        data={output.audio.data}
-        format={output.audio.format || 'mp3'}
-        transcript={output.audio.transcript}
-      />
-    );
+    if (outputAudioSource) {
+      node = (
+        <div className="audio-output">
+          <audio controls style={{ width: '100%' }} data-testid="audio-player">
+            <source src={outputAudioSource.src} type={outputAudioSource.type || 'audio/mpeg'} />
+            Your browser does not support the audio element.
+          </audio>
+          {output.audio.transcript && (
+            <div className="transcript">
+              <strong>Transcript:</strong> {output.audio.transcript}
+            </div>
+          )}
+        </div>
+      );
+    } else if (output.audio.transcript) {
+      node = (
+        <div className="transcript">
+          <strong>Transcript:</strong> {output.audio.transcript}
+        </div>
+      );
+    }
   } else if ((prettifyJson || renderMarkdown) && !showDiffs) {
     // When both prettifyJson and renderMarkdown are enabled,
     // display as JSON if it's a valid object/array, otherwise render as Markdown
@@ -400,7 +348,7 @@ function EvalOutputCell({
             ),
           }}
         >
-          {text}
+          {normalizedText}
         </ReactMarkdown>
       );
     }
@@ -827,17 +775,21 @@ function EvalOutputCell({
         </div>
       )}
       {/* Show response audio from redteam history if available (target's audio response) */}
-      {responseAudio?.data && (
+      {responseAudioSource?.src && (
         <div className="response-audio" style={{ marginBottom: '8px' }}>
-          <AsyncAudioPlayer
-            data={responseAudio.data}
-            format={responseAudio.format || 'mp3'}
-          />
+          <audio
+            controls
+            style={{ width: '100%', height: '32px' }}
+            data-testid="response-audio-player"
+          >
+            <source src={responseAudioSource.src} type={responseAudioSource.type || 'audio/mpeg'} />
+            Your browser does not support the audio element.
+          </audio>
         </div>
       )}
       <div style={contentStyle}>
         <TruncatedText
-          text={node || text}
+          text={node || normalizedText}
           maxLength={renderMarkdown && isImageProvider(output.provider) ? 0 : maxTextLength}
         />
       </div>

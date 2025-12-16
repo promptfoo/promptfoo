@@ -1,16 +1,15 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 
 import invariant from 'tiny-invariant';
 
+import { resolveAudioSource, resolveImageSource } from '@app/utils/media';
+
 import Box from '@mui/material/Box';
-import CircularProgress from '@mui/material/CircularProgress';
 import { grey, red } from '@mui/material/colors';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import { keyframes, useTheme } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
-
-import { isStorageRef, resolveAudioUrl, resolveImageUrl } from '@app/utils/mediaStorage';
 
 const bounce = keyframes`
   0%, 100% {
@@ -28,8 +27,8 @@ interface BaseMessage {
 export interface LoadedMessage extends BaseMessage {
   content: string;
   contentType?: 'text' | 'image' | 'audio' | 'video';
-  audio?: { data?: string; format?: string };
-  image?: { data?: string; format?: string };
+  audio?: { data?: string; format?: string; blobRef?: { uri: string } };
+  image?: { data?: string; format?: string; blobRef?: { uri: string } };
   loading?: false;
 }
 
@@ -39,151 +38,6 @@ export interface LoadingMessage extends BaseMessage {
 }
 
 export type Message = LoadedMessage | LoadingMessage;
-
-/**
- * Audio player that handles both base64 and storage refs
- */
-const AsyncAudioPlayer = ({
-  data,
-  format = 'mp3',
-  style,
-  testId,
-}: {
-  data: string;
-  format?: string;
-  style?: React.CSSProperties;
-  testId?: string;
-}) => {
-  const [audioUrl, setAudioUrl] = useState<string | null>(null);
-  const [loading, setLoading] = useState(isStorageRef(data));
-
-  useEffect(() => {
-    let cancelled = false;
-
-    if (isStorageRef(data)) {
-      setLoading(true);
-      resolveAudioUrl(data, format).then((url) => {
-        if (!cancelled) {
-          setAudioUrl(url);
-          setLoading(false);
-        }
-      });
-    } else {
-      // Inline base64
-      const url = data.startsWith('data:') ? data : `data:audio/${format};base64,${data}`;
-      setAudioUrl(url);
-      setLoading(false);
-    }
-
-    return () => {
-      cancelled = true;
-    };
-  }, [data, format]);
-
-  if (loading) {
-    return (
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, p: 1 }}>
-        <CircularProgress size={20} />
-        <Typography variant="caption">Loading audio...</Typography>
-      </Box>
-    );
-  }
-
-  if (!audioUrl) {
-    return (
-      <Typography variant="caption" color="error">
-        Failed to load audio
-      </Typography>
-    );
-  }
-
-  return (
-    <audio controls style={style} data-testid={testId}>
-      <source src={audioUrl} type={`audio/${format}`} />
-      Your browser does not support the audio element.
-    </audio>
-  );
-};
-
-/**
- * Image display that handles both base64 and storage refs
- */
-const AsyncImage = ({
-  data,
-  format = 'png',
-  alt,
-  style,
-  boxStyle,
-  testId,
-}: {
-  data: string;
-  format?: string;
-  alt?: string;
-  style?: React.CSSProperties;
-  boxStyle?: React.CSSProperties;
-  testId?: string;
-}) => {
-  const [imageUrl, setImageUrl] = useState<string | null>(null);
-  const [loading, setLoading] = useState(isStorageRef(data));
-
-  useEffect(() => {
-    let cancelled = false;
-
-    if (isStorageRef(data)) {
-      setLoading(true);
-      resolveImageUrl(data, format).then((url) => {
-        if (!cancelled) {
-          setImageUrl(url);
-          setLoading(false);
-        }
-      });
-    } else {
-      // Inline base64
-      const url = data.startsWith('data:') ? data : `data:image/${format};base64,${data}`;
-      setImageUrl(url);
-      setLoading(false);
-    }
-
-    return () => {
-      cancelled = true;
-    };
-  }, [data, format]);
-
-  if (loading) {
-    return (
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, p: 1 }}>
-        <CircularProgress size={20} />
-        <Typography variant="caption">Loading image...</Typography>
-      </Box>
-    );
-  }
-
-  if (!imageUrl) {
-    return (
-      <Typography variant="caption" color="error">
-        Failed to load image
-      </Typography>
-    );
-  }
-
-  // If boxStyle provided, use background-image approach
-  if (boxStyle) {
-    return (
-      <Box
-        role="img"
-        data-testid={testId}
-        sx={{
-          ...boxStyle,
-          backgroundImage: `url(${imageUrl})`,
-        }}
-      />
-    );
-  }
-
-  return (
-    <img src={imageUrl} alt={alt || 'Media'} style={style} data-testid={testId} />
-  );
-};
 
 const ChatMessage = ({ message, index }: { message: Message; index: number }) => {
   const theme = useTheme();
@@ -218,27 +72,35 @@ const ChatMessage = ({ message, index }: { message: Message; index: number }) =>
 
     switch (contentType) {
       case 'audio': {
+        const audioSource = resolveAudioSource(message.audio, message.content);
+        if (!audioSource) {
+          return null;
+        }
+
         return (
           <Box>
-            <AsyncAudioPlayer
-              data={message.content}
-              format="mp3"
-              style={{ width: '500px' }}
-              testId="audio"
-            />
+            <audio controls style={{ width: '500px' }} data-testid="audio">
+              <source src={audioSource.src} type={audioSource.type || 'audio/mpeg'} />
+              Your browser does not support the audio element.
+            </audio>
           </Box>
         );
       }
       case 'image': {
+        const imageSrc = resolveImageSource(message.image || message.content);
+        if (!imageSrc) {
+          return null;
+        }
+
         return (
-          <AsyncImage
-            data={message.content}
-            format="png"
-            testId="image"
-            boxStyle={{
+          <Box
+            role="img"
+            data-testid="image"
+            sx={{
               width: '100%',
               minWidth: '500px',
               minHeight: '300px',
+              backgroundImage: `url(${imageSrc})`,
               backgroundSize: 'contain',
               backgroundRepeat: 'no-repeat',
               backgroundPosition: 'start',
@@ -264,8 +126,10 @@ const ChatMessage = ({ message, index }: { message: Message; index: number }) =>
         );
       }
       case 'text': {
-        const hasAudio = message.audio?.data;
-        const hasImage = message.image?.data;
+        const audioSource = resolveAudioSource(message.audio);
+        const imageSrc = resolveImageSource(message.image);
+        const hasAudio = Boolean(audioSource);
+        const hasImage = Boolean(imageSrc);
 
         // If we have audio or image data, render them alongside the transcript
         if (hasAudio || hasImage) {
@@ -273,19 +137,20 @@ const ChatMessage = ({ message, index }: { message: Message; index: number }) =>
             <Box>
               {hasAudio && (
                 <Box sx={{ mb: 1 }}>
-                  <AsyncAudioPlayer
-                    data={message.audio!.data!}
-                    format={message.audio?.format || 'mp3'}
+                  <audio
+                    controls
                     style={{ width: '100%', maxWidth: '400px', height: '36px' }}
-                    testId="audio-with-transcript"
-                  />
+                    data-testid="audio-with-transcript"
+                  >
+                    <source src={audioSource?.src} type={audioSource?.type || 'audio/mpeg'} />
+                    Your browser does not support the audio element.
+                  </audio>
                 </Box>
               )}
               {hasImage && (
                 <Box sx={{ mb: 1 }}>
-                  <AsyncImage
-                    data={message.image!.data!}
-                    format={message.image?.format || 'png'}
+                  <img
+                    src={imageSrc}
                     alt="Input"
                     style={{
                       maxWidth: '100%',

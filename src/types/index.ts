@@ -316,6 +316,7 @@ export interface EvaluateTableOutput {
     id?: string;
     expiresAt?: number;
     data?: string; // base64 encoded audio data
+    blobRef?: import('../blobs/types').BlobRef;
     transcript?: string;
     format?: string;
   };

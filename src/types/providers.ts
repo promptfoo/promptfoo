@@ -152,6 +152,7 @@ export interface ProviderResponse {
     id?: string;
     expiresAt?: number;
     data?: string; // base64 encoded audio data
+    blobRef?: BlobRef;
     transcript?: string;
     format?: string;
     sampleRate?: number;

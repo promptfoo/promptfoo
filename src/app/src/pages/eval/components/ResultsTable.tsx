@@ -3,6 +3,7 @@ import React, { useEffect, useRef } from 'react';
 import ErrorBoundary from '@app/components/ErrorBoundary';
 import { useToast } from '@app/hooks/useToast';
 import { callApi } from '@app/utils/api';
+import { normalizeMediaText, resolveAudioSource, resolveImageSource } from '@app/utils/media';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import CloseIcon from '@mui/icons-material/Close';
@@ -49,7 +50,7 @@ import type { TruncatedTextProps } from './TruncatedText';
 import './ResultsTable.css';
 
 import { BaseNumberInput } from '@app/components/form/input/BaseNumberInput';
-import { isStorageRef, resolveAudioUrl } from '@app/utils/mediaStorage';
+import { isBlobRef, isStorageRef, resolveAudioUrl } from '@app/utils/mediaStorage';
 import ButtonGroup from '@mui/material/ButtonGroup';
 import { isEncodingStrategy } from '@promptfoo/redteam/constants/strategies';
 import { useMetricsGetter, usePassingTestCounts, usePassRates, useTestCounts } from './hooks';
@@ -59,12 +60,12 @@ import { useMetricsGetter, usePassingTestCounts, usePassRates, useTestCounts } f
  */
 function StorageRefAudioPlayer({ data, format = 'mp3' }: { data: string; format?: string }) {
   const [audioUrl, setAudioUrl] = React.useState<string | null>(null);
-  const [loading, setLoading] = React.useState(isStorageRef(data));
+  const [loading, setLoading] = React.useState(isStorageRef(data) || isBlobRef(data));
 
   React.useEffect(() => {
     let cancelled = false;
 
-    if (isStorageRef(data)) {
+    if (isStorageRef(data) || isBlobRef(data)) {
       setLoading(true);
       resolveAudioUrl(data, format).then((url) => {
         if (!cancelled) {
@@ -691,33 +692,46 @@ function ResultsTable({
                   const mediaMetadata = fileMetadata[varName];
                   const mediaType = mediaMetadata.type;
                   const format = mediaMetadata.format || '';
-                  const mediaDataUrl = value.startsWith('data:')
-                    ? value
-                    : `data:${mediaType}/${format};base64,${value}`;
+                  const normalizedValue = normalizeMediaText(value);
+                  const audioSource =
+                    mediaType === 'audio'
+                      ? resolveAudioSource({ data: value, format, blobRef: value })
+                      : null;
+                  const imageSrc =
+                    mediaType === 'image'
+                      ? resolveImageSource({ data: value, format, blobRef: value })
+                      : undefined;
 
                   let mediaElement = null;
 
-                  if (mediaType === 'audio') {
+                  if (mediaType === 'audio' && audioSource) {
                     mediaElement = (
                       <audio controls style={{ maxWidth: '100%' }}>
-                        <source src={mediaDataUrl} type={`audio/${format}`} />
+                        <source src={audioSource.src} type={audioSource.type || 'audio/mpeg'} />
                         Your browser does not support the audio element.
                       </audio>
                     );
                   } else if (mediaType === 'video') {
+                    const mediaSrc =
+                      normalizedValue.startsWith('data:') ||
+                      normalizedValue.startsWith('http') ||
+                      normalizedValue.startsWith('/api/')
+                        ? normalizedValue
+                        : `data:${mediaType}/${format};base64,${value}`;
+
                     mediaElement = (
                       <video controls style={{ maxWidth: '100%', maxHeight: '200px' }}>
-                        <source src={mediaDataUrl} type={`video/${format}`} />
+                        <source src={mediaSrc} type={`video/${format || 'mp4'}`} />
                         Your browser does not support the video element.
                       </video>
                     );
-                  } else if (mediaType === 'image') {
+                  } else if (mediaType === 'image' && imageSrc) {
                     mediaElement = (
                       <img
-                        src={mediaDataUrl}
+                        src={imageSrc}
                         alt="Input image"
                         style={{ maxWidth: '100%', maxHeight: '200px' }}
-                        onClick={() => toggleLightbox?.(mediaDataUrl)}
+                        onClick={() => toggleLightbox?.(imageSrc)}
                       />
                     );
                   }
@@ -771,10 +785,10 @@ function ResultsTable({
                   // Check if value is a storage ref or base64 for audio/image
                   const isAudioContent =
                     strategyId === 'audio' ||
-                    (typeof value === 'string' && isStorageRef(value) && value.includes('audio/'));
+                    (typeof value === 'string' && (isStorageRef(value) || isBlobRef(value)) && value.includes('audio/'));
                   const isImageContent =
                     strategyId === 'image' ||
-                    (typeof value === 'string' && isStorageRef(value) && value.includes('image/'));
+                    (typeof value === 'string' && (isStorageRef(value) || isBlobRef(value)) && value.includes('image/'));
 
                   return (
                     <div className="cell" data-capture="true">
@@ -786,7 +800,7 @@ function ResultsTable({
                       ) : isImageContent ? (
                         /* For image: show image or placeholder */
                         <Box>
-                          {typeof value === 'string' && isStorageRef(value) ? (
+                          {typeof value === 'string' && (isStorageRef(value) || isBlobRef(value)) ? (
                             <Typography variant="caption" color="text.secondary">
                               Image preview not yet supported for storage refs
                             </Typography>
@@ -1452,14 +1466,8 @@ function ResultsTable({
 
                     let cellContent = flexRender(cell.column.columnDef.cell, cell.getContext());
                     const value = cell.getValue();
-                    if (
-                      typeof value === 'string' &&
-                      (value.match(/^data:(image\/[a-z]+|application\/octet-stream);base64,/) ||
-                        value.match(/^[A-Za-z0-9+/]{20,}={0,2}$/))
-                    ) {
-                      const imgSrc = value.startsWith('data:')
-                        ? value
-                        : `data:image/jpeg;base64,${value}`;
+                    const imgSrc = typeof value === 'string' ? resolveImageSource(value) : undefined;
+                    if (imgSrc) {
 
                       // If this is a variable column for the inject var, try to show the original image text
                       let originalImageText: string | undefined;
