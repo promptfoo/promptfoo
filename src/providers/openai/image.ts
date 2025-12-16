@@ -13,16 +13,23 @@ import type {
 import type { EnvOverrides } from '../../types/env';
 import type { OpenAiSharedOptions } from './types';
 
-type OpenAiImageModel = 'dall-e-2' | 'dall-e-3' | 'gpt-image-1';
 type OpenAiImageOperation = 'generation' | 'variation' | 'edit';
 type DallE2Size = '256x256' | '512x512' | '1024x1024';
 type DallE3Size = '1024x1024' | '1792x1024' | '1024x1792';
-type GptImage1Size = '1024x1024' | '1024x1536' | '1536x1024';
+type GptImageSize = '1024x1024' | '1024x1536' | '1536x1024' | 'auto';
 
 const DALLE2_VALID_SIZES: DallE2Size[] = ['256x256', '512x512', '1024x1024'];
 const DALLE3_VALID_SIZES: DallE3Size[] = ['1024x1024', '1792x1024', '1024x1792'];
-const GPT_IMAGE1_VALID_SIZES: GptImage1Size[] = ['1024x1024', '1024x1536', '1536x1024'];
+const GPT_IMAGE_VALID_SIZES: GptImageSize[] = ['1024x1024', '1024x1536', '1536x1024', 'auto'];
 const DEFAULT_SIZE = '1024x1024';
+
+/**
+ * Check if a model is a GPT Image model (gpt-image-1, gpt-image-1-mini, gpt-image-1.5, etc.)
+ * Supports dated versions like gpt-image-1.5-2025-12-16
+ */
+export function isGptImageModel(model: string): boolean {
+  return model.startsWith('gpt-image-');
+}
 
 export const DALLE2_COSTS: Record<DallE2Size, number> = {
   '256x256': 0.016,
@@ -39,7 +46,8 @@ export const DALLE3_COSTS: Record<string, number> = {
   hd_1792x1024: 0.12,
 };
 
-export const GPT_IMAGE1_COSTS: Record<string, number> = {
+// GPT Image model costs (gpt-image-1, gpt-image-1.5, etc.)
+export const GPT_IMAGE_COSTS: Record<string, number> = {
   low_1024x1024: 0.011,
   low_1024x1536: 0.016,
   low_1536x1024: 0.016,
@@ -62,9 +70,12 @@ type DallE3Options = CommonImageOptions & {
   style?: 'natural' | 'vivid';
 };
 
-type GptImage1Options = CommonImageOptions & {
-  size?: GptImage1Size;
-  quality?: 'low' | 'medium' | 'high';
+type GptImageOptions = CommonImageOptions & {
+  size?: GptImageSize;
+  quality?: 'low' | 'medium' | 'high' | 'auto';
+  output_format?: 'png' | 'jpeg' | 'webp';
+  output_compression?: number; // 0-100 for jpeg/webp
+  background?: 'transparent' | 'opaque' | 'auto';
 };
 
 type DallE2Options = CommonImageOptions & {
@@ -75,8 +86,8 @@ type DallE2Options = CommonImageOptions & {
 };
 
 type OpenAiImageOptions = OpenAiSharedOptions & {
-  model?: OpenAiImageModel;
-} & (DallE2Options | DallE3Options | GptImage1Options);
+  model?: string;
+} & (DallE2Options | DallE3Options | GptImageOptions);
 
 export function validateSizeForModel(
   size: string,
@@ -96,10 +107,10 @@ export function validateSizeForModel(
     };
   }
 
-  if (model === 'gpt-image-1' && !GPT_IMAGE1_VALID_SIZES.includes(size as GptImage1Size)) {
+  if (isGptImageModel(model) && !GPT_IMAGE_VALID_SIZES.includes(size as GptImageSize)) {
     return {
       valid: false,
-      message: `Invalid size "${size}" for GPT Image 1. Valid sizes are: ${GPT_IMAGE1_VALID_SIZES.join(', ')}`,
+      message: `Invalid size "${size}" for ${model}. Valid sizes are: ${GPT_IMAGE_VALID_SIZES.join(', ')}`,
     };
   }
 
@@ -110,7 +121,18 @@ export function formatOutput(
   data: any,
   prompt: string,
   responseFormat?: string,
+  model?: string,
 ): string | { error: string } {
+  // GPT Image models always return base64 data
+  if (model && isGptImageModel(model)) {
+    const b64Json = data.data[0].b64_json;
+    if (!b64Json) {
+      return { error: `No base64 image data found in response: ${JSON.stringify(data)}` };
+    }
+    // Return raw JSON so hooks can extract and save the image
+    return JSON.stringify(data);
+  }
+
   if (responseFormat === 'b64_json') {
     const b64Json = data.data[0].b64_json;
     if (!b64Json) {
@@ -146,22 +168,36 @@ export function prepareRequestBody(
     prompt,
     n: config.n || 1,
     size,
-    response_format: responseFormat,
   };
 
-  if (model === 'dall-e-3') {
+  // GPT Image models use different parameters than DALL-E models
+  if (isGptImageModel(model)) {
+    // GPT Image models use output_format (png/jpeg/webp) instead of response_format (url/b64_json)
+    body.output_format = config.output_format || 'png';
+
     if ('quality' in config && config.quality) {
       body.quality = config.quality;
     }
 
-    if ('style' in config && config.style) {
-      body.style = config.style;
+    if ('output_compression' in config && config.output_compression !== undefined) {
+      body.output_compression = config.output_compression;
     }
-  }
 
-  if (model === 'gpt-image-1') {
-    if ('quality' in config && config.quality) {
-      body.quality = config.quality;
+    if ('background' in config && config.background) {
+      body.background = config.background;
+    }
+  } else {
+    // DALL-E models use response_format
+    body.response_format = responseFormat;
+
+    if (model === 'dall-e-3') {
+      if ('quality' in config && config.quality) {
+        body.quality = config.quality;
+      }
+
+      if ('style' in config && config.style) {
+        body.style = config.style;
+      }
     }
   }
 
@@ -183,10 +219,12 @@ export function calculateImageCost(
   } else if (model === 'dall-e-2') {
     const costPerImage = DALLE2_COSTS[size as DallE2Size] || DALLE2_COSTS['1024x1024'];
     return costPerImage * n;
-  } else if (model === 'gpt-image-1') {
+  } else if (isGptImageModel(model)) {
     const q = (quality as 'low' | 'medium' | 'high') || 'low';
-    const costKey = `${q}_${size}`;
-    const costPerImage = GPT_IMAGE1_COSTS[costKey] || GPT_IMAGE1_COSTS['low_1024x1024'];
+    // Handle 'auto' size by defaulting to 1024x1024 for cost calculation
+    const sizeForCost = size === 'auto' ? '1024x1024' : size;
+    const costKey = `${q}_${sizeForCost}`;
+    const costPerImage = GPT_IMAGE_COSTS[costKey] || GPT_IMAGE_COSTS['low_1024x1024'];
     return costPerImage * n;
   }
 
@@ -229,19 +267,22 @@ export async function processApiResponse(
   }
 
   try {
-    const formattedOutput = formatOutput(data, prompt, responseFormat);
+    const formattedOutput = formatOutput(data, prompt, responseFormat, model);
     if (typeof formattedOutput === 'object') {
       return formattedOutput;
     }
 
     const cost = cached ? 0 : calculateImageCost(model, size, quality, n);
 
+    // GPT Image models always return base64 data
+    const isBase64Response = isGptImageModel(model) || responseFormat === 'b64_json';
+
     return {
       output: formattedOutput,
       cached,
       latencyMs,
       cost,
-      ...(responseFormat === 'b64_json' ? { isBase64: true, format: 'json' } : {}),
+      ...(isBase64Response ? { isBase64: true, format: 'json' } : {}),
     };
   } catch (err) {
     await data?.deleteFromCache?.();
