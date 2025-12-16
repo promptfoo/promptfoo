@@ -355,3 +355,44 @@ npx promptfoo@latest view
 ```
 
 Each test case links back to the original trace in Langfuse via the `__langfuse_url` variable, making it easy to investigate failures.
+
+### Supported input/output formats
+
+The `input` and `output` variables are automatically extracted from these common LLM formats:
+
+| Format | Input extraction | Output extraction |
+|--------|-----------------|-------------------|
+| **String** | Used directly | Used directly |
+| **OpenAI chat** | Last user message content from `messages[]` | `choices[0].message.content` |
+| **OpenAI completion** | - | `choices[0].text` |
+| **Anthropic** | Text from content blocks | `content[0].text` or `content` string |
+| **Simple objects** | `query`, `prompt`, `message`, `input`, or `text` field | `response`, `output`, `result`, `completion`, or `text` field |
+
+For formats not listed above, the full object is used. Access raw data via `__langfuse_input` and `__langfuse_output`.
+
+### Troubleshooting
+
+**Authentication failed (401)**
+
+```
+Langfuse authentication failed. Check your LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY, and LANGFUSE_BASE_URL environment variables.
+```
+
+Verify your credentials:
+- Keys are from the correct Langfuse project
+- Using the right host (`https://cloud.langfuse.com` for cloud, `https://us.cloud.langfuse.com` for US region)
+- Environment variables are properly exported
+
+**No traces found**
+
+If traces exist in Langfuse but aren't being loaded:
+- Check filter parameters match your traces (tags, name, timestamps)
+- Verify traces have both `input` and `output` populated
+- Try removing filters to fetch all traces: `langfuse://traces?limit=10`
+
+**Empty input/output variables**
+
+If `input` or `output` are empty but `__langfuse_input`/`__langfuse_output` have data:
+- Your trace format may not match auto-extraction patterns
+- Use `__langfuse_input` and `__langfuse_output` directly in assertions
+- Or extract with JavaScript: `{{__langfuse_output.your_field}}`
