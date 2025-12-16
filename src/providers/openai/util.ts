@@ -550,8 +550,24 @@ export function calculateOpenAICost(
 
   let totalCost = 0;
 
-  const inputCost = config.cost ?? model.cost.input;
-  const outputCost = config.cost ?? model.cost.output;
+  // Handle config.cost as either a number (legacy) or an object with {input, output}
+  let inputCost: number;
+  let outputCost: number;
+
+  if (typeof config.cost === 'object' && config.cost !== null) {
+    // New pattern: config.cost is {input, output}
+    inputCost = config.cost.input;
+    outputCost = config.cost.output;
+  } else if (typeof config.cost === 'number') {
+    // Legacy pattern: config.cost is a single number used for both input and output
+    inputCost = config.cost;
+    outputCost = config.cost;
+  } else {
+    // No custom cost specified, use model defaults
+    inputCost = model.cost.input;
+    outputCost = model.cost.output;
+  }
+
   totalCost += inputCost * promptTokens + outputCost * completionTokens;
 
   if ('audioInput' in model.cost || 'audioOutput' in model.cost) {

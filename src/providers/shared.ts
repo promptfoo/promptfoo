@@ -8,7 +8,7 @@ import type { ApiProvider } from '../types/index';
  */
 export const REQUEST_TIMEOUT_MS = getEnvInt('REQUEST_TIMEOUT_MS', 300_000);
 
-interface ModelCost {
+export interface ModelCost {
   input: number;
   output: number;
   audioInput?: number;
@@ -21,7 +21,7 @@ interface ProviderModel {
 }
 
 export interface ProviderConfig {
-  cost?: number;
+  cost?: number | ModelCost;
   audioCost?: number;
 }
 
@@ -51,13 +51,30 @@ export function calculateCost(
     return undefined;
   }
 
-  const model = models.find((m) => m.id === modelName);
-  if (!model || !model.cost) {
-    return undefined;
+  // Handle config.cost as either a number (legacy) or an object with {input, output}
+  let inputCost: number;
+  let outputCost: number;
+
+  if (typeof config.cost === 'object' && config.cost !== null) {
+    // New pattern: config.cost is {input, output}
+    // This works for any model, even those not in the pricing table
+    inputCost = config.cost.input;
+    outputCost = config.cost.output;
+  } else if (typeof config.cost === 'number') {
+    // Legacy pattern: config.cost is a single number used for both input and output
+    // This works for any model, even those not in the pricing table
+    inputCost = config.cost;
+    outputCost = config.cost;
+  } else {
+    // No custom cost specified, use model defaults from pricing table
+    const model = models.find((m) => m.id === modelName);
+    if (!model || !model.cost) {
+      return undefined;
+    }
+    inputCost = model.cost.input;
+    outputCost = model.cost.output;
   }
 
-  const inputCost = config.cost ?? model.cost.input;
-  const outputCost = config.cost ?? model.cost.output;
   return inputCost * promptTokens + outputCost * completionTokens || undefined;
 }
 

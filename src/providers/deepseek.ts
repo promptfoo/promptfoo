@@ -53,8 +53,28 @@ export function calculateDeepSeekCost(
   }
 
   const uncachedPromptTokens = cachedTokens ? promptTokens - cachedTokens : promptTokens;
-  const inputCost = config.cost ?? model.cost.input;
-  const outputCost = config.cost ?? model.cost.output;
+
+  // Support both number and object-based cost config formats
+  // config.cost can be:
+  //   - number: same cost per token for both input and output
+  //   - { input: number, output: number }: separate costs per token
+  let inputCost: number;
+  let outputCost: number;
+  if (config.cost !== undefined) {
+    if (typeof config.cost === 'number') {
+      inputCost = config.cost;
+      outputCost = config.cost;
+    } else if (typeof config.cost === 'object' && config.cost !== null) {
+      inputCost = config.cost.input ?? model.cost.input;
+      outputCost = config.cost.output ?? model.cost.output;
+    } else {
+      inputCost = model.cost.input;
+      outputCost = model.cost.output;
+    }
+  } else {
+    inputCost = model.cost.input;
+    outputCost = model.cost.output;
+  }
   const cacheReadCost = config.cacheReadCost ?? model.cost.cache_read;
 
   const inputCostTotal = inputCost * uncachedPromptTokens;

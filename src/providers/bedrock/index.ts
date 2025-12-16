@@ -9,6 +9,7 @@ import { outputFromMessage, parseMessages } from '../anthropic/util';
 import { parseChatPrompt } from '../shared';
 import { AwsBedrockGenericProvider, type BedrockOptions } from './base';
 import { novaOutputFromMessage, novaParseMessages } from './util';
+import { calculateCostWithFetchedPricing } from './pricingFetcher';
 
 import type {
   ApiEmbeddingProvider,
@@ -51,6 +52,8 @@ export type BedrockModelFamily =
  */
 interface BedrockInvokeModelOptions extends BedrockOptions {
   inferenceModelType?: BedrockModelFamily;
+  /** Custom cost override. Can be a single number (per token) or { input, output } per token. */
+  cost?: number | { input: number; output: number };
 }
 
 export interface TextGenerationOptions {
@@ -2366,9 +2369,41 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
         tokenUsage.numRequests = 1;
       }
 
+      // Calculate cost if we have token usage
+      let cost: number | undefined;
+      if (tokenUsage.prompt !== undefined && tokenUsage.completion !== undefined) {
+        // Check for custom cost override in config
+        const configCost = this.config.cost;
+        if (typeof configCost === 'object' && configCost !== null) {
+          // Custom cost override: { input: number, output: number }
+          cost = tokenUsage.prompt * configCost.input + tokenUsage.completion * configCost.output;
+          logger.debug('[Bedrock]: Using custom cost override', { cost, configCost });
+        } else if (typeof configCost === 'number') {
+          // Legacy: single number for both input and output
+          cost = (tokenUsage.prompt + tokenUsage.completion) * configCost;
+          logger.debug('[Bedrock]: Using legacy cost override', { cost, configCost });
+        } else {
+          // Fetch pricing data and calculate cost
+          const pricingData = await this.getPricingDataForCost();
+          cost = calculateCostWithFetchedPricing(
+            this.modelName,
+            pricingData,
+            tokenUsage.prompt,
+            tokenUsage.completion,
+          );
+          if (cost !== undefined) {
+            logger.debug('[Bedrock]: Calculated cost from pricing data', {
+              cost,
+              modelName: this.modelName,
+            });
+          }
+        }
+      }
+
       return {
         output: model.output(this.config, output),
         tokenUsage,
+        ...(cost !== undefined ? { cost } : {}),
         ...(output['amazon-bedrock-guardrailAction']
           ? {
               guardrails: {
