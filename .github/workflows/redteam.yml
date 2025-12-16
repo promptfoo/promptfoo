@@ -1,0 +1,94 @@
+name: Redteam
+
+on:
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'test/redteam/**'
+      - 'examples/**'
+      - 'package.json'
+      - 'package-lock.json'
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/**'
+      - 'test/redteam/**'
+      - 'examples/**'
+      - 'package.json'
+      - 'package-lock.json'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  redteam:
+    name: Redteam (Production API)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v5
+
+      - name: Use Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
+      - name: Upgrade npm
+        run: npm install -g npm@latest
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Run Redteam (Production API)
+        run: |
+          npm run test:redteam:integration
+
+  redteam-staging:
+    name: Redteam (Staging API)
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v5
+
+      - name: Use Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
+      - name: Upgrade npm
+        run: npm install -g npm@latest
+
+      - name: Install Dependencies
+        run: npm ci
+
+      # Need to build first so we can login
+      - name: Build
+        run: |
+          npm run build
+
+      - name: Login
+        if: env.PROMPTFOO_INTEGRATION_TEST_API_KEY != ''
+        env:
+          PROMPTFOO_INTEGRATION_TEST_API_KEY: ${{ secrets.PROMPTFOO_INTEGRATION_TEST_API_KEY }}
+        run: |
+          npm run bin auth login -- -k ${{ secrets.PROMPTFOO_INTEGRATION_TEST_API_KEY }} -h ${{ secrets.PROMPTFOO_INTEGRATION_TEST_API_HOST }}
+
+      - name: Run Redteam with Staging API
+        continue-on-error: true
+        run: |
+          npm run test:redteam:integration
