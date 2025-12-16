@@ -12,6 +12,7 @@ import { getEnvBool, getEnvString } from '../envars';
 import { importModule } from '../esm';
 import { fetchCsvFromGoogleSheet } from '../googleSheets';
 import { fetchHuggingFaceDataset } from '../integrations/huggingfaceDatasets';
+import { fetchLangfuseTraces } from '../integrations/langfuseTraces';
 import logger from '../logger';
 import { loadApiProvider } from '../providers/index';
 import { runPython } from '../python/pythonUtils';
@@ -59,6 +60,7 @@ export async function readTestFiles(
  *
  * Supports multiple input sources:
  * - Hugging Face datasets (huggingface://datasets/...)
+ * - Langfuse traces (langfuse://traces?...)
  * - JavaScript/TypeScript files (.js, .ts, .mjs)
  * - Python files (.py) with optional function name
  * - Google Sheets (https://docs.google.com/spreadsheets/...)
@@ -104,6 +106,12 @@ export async function readStandaloneTestsFile(
       feature: 'huggingface dataset',
     });
     return await fetchHuggingFaceDataset(varsPath);
+  }
+  if (varsPath.startsWith('langfuse://traces')) {
+    telemetry.record('feature_used', {
+      feature: 'langfuse traces',
+    });
+    return await fetchLangfuseTraces(varsPath);
   }
   if (isJavascriptFile(pathWithoutFunction)) {
     telemetry.record('feature_used', {
@@ -318,6 +326,12 @@ export async function loadTestsFromGlob(
       feature: 'huggingface dataset',
     });
     return await fetchHuggingFaceDataset(loadTestsGlob);
+  }
+  if (loadTestsGlob.startsWith('langfuse://traces')) {
+    telemetry.record('feature_used', {
+      feature: 'langfuse traces',
+    });
+    return await fetchLangfuseTraces(loadTestsGlob);
   }
 
   if (loadTestsGlob.startsWith('file://')) {
