@@ -152,6 +152,13 @@ export interface PluginActionParams {
   config?: PluginConfig;
 }
 
+// Context for testing multiple security contexts/states
+export interface RedteamContext {
+  id: string;
+  purpose: string;
+  vars?: Record<string, string>;
+}
+
 // Shared redteam options
 type CommonOptions = {
   injectVar?: string;
@@ -160,6 +167,7 @@ type CommonOptions = {
   plugins?: RedteamPluginObject[];
   provider?: string | ProviderOptions | ApiProvider;
   purpose?: string;
+  contexts?: RedteamContext[];
   strategies?: RedteamStrategy[];
   frameworks?: FrameworkComplianceId[];
   delay?: number;
