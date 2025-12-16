@@ -1,11 +1,10 @@
 import fs from 'fs';
 
-import { getDb } from '../database';
+import { getDb } from '../database/index';
 import { evalsTable } from '../database/tables';
 import logger from '../logger';
 import Eval, { createEvalId } from '../models/eval';
 import EvalResult from '../models/evalResult';
-import telemetry from '../telemetry';
 import type { Command } from 'commander';
 
 export function importCommand(program: Command) {
@@ -24,6 +23,7 @@ export function importCommand(program: Command) {
             id: evalData.id,
             createdAt: evalData.createdAt,
             author: evalData.author || 'Unknown',
+            completedPrompts: evalData.results.prompts,
           });
           await EvalResult.createManyFromEvaluateResult(evalData.results.results, evalRecord.id);
           evalId = evalRecord.id;
@@ -44,10 +44,6 @@ export function importCommand(program: Command) {
         }
 
         logger.info(`Eval with ID ${evalId} has been successfully imported.`);
-        telemetry.record('command_used', {
-          name: 'import',
-          evalId: evalData.id,
-        });
       } catch (error) {
         logger.error(`Failed to import eval: ${error}`);
         process.exit(1);

@@ -1,40 +1,56 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Command } from 'commander';
 import logger from '../../../src/logger';
 import { redteamRunCommand } from '../../../src/redteam/commands/run';
 import { doRedteamRun } from '../../../src/redteam/shared';
 import { getConfigFromCloud } from '../../../src/util/cloud';
 
-jest.mock('../../../src/cliState', () => ({
-  remote: false,
+vi.mock('../../../src/cliState', () => ({
+  default: {
+    remote: false,
+  },
 }));
 
-jest.mock('../../../src/telemetry', () => ({
-  record: jest.fn(),
+vi.mock('../../../src/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+  getLogLevel: vi.fn().mockReturnValue('info'),
 }));
 
-jest.mock('../../../src/util', () => ({
-  setupEnv: jest.fn(),
+vi.mock('../../../src/telemetry', () => ({
+  default: {
+    record: vi.fn(),
+  },
 }));
 
-jest.mock('../../../src/redteam/shared', () => ({
-  doRedteamRun: jest.fn().mockResolvedValue({}),
+vi.mock('../../../src/util', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    setupEnv: vi.fn(),
+  };
+});
+
+vi.mock('../../../src/redteam/shared', () => ({
+  doRedteamRun: vi.fn().mockResolvedValue({}),
 }));
 
-jest.mock('../../../src/util/cloud', () => ({
-  getConfigFromCloud: jest.fn(),
-}));
-
-// Add logger mock
-jest.mock('../../../src/logger', () => ({
-  error: jest.fn(),
-}));
+vi.mock('../../../src/util/cloud', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    getConfigFromCloud: vi.fn(),
+  };
+});
 
 describe('redteamRunCommand', () => {
   let program: Command;
   let originalExitCode: number | undefined;
 
   beforeEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
     program = new Command();
     redteamRunCommand(program);
     // Store original exitCode to restore later
@@ -59,7 +75,7 @@ describe('redteamRunCommand', () => {
         },
       ],
     };
-    jest.mocked(getConfigFromCloud).mockResolvedValue(mockConfig);
+    vi.mocked(getConfigFromCloud).mockResolvedValue(mockConfig);
 
     // UUID format for config and target
     const configUUID = '12345678-1234-1234-1234-123456789012';
@@ -160,7 +176,7 @@ describe('redteamRunCommand', () => {
       providers: [{ id: 'test-provider' }],
       targets: [], // Empty targets
     };
-    jest.mocked(getConfigFromCloud).mockResolvedValue(mockConfig);
+    vi.mocked(getConfigFromCloud).mockResolvedValue(mockConfig);
 
     // UUID format for config and target
     const configUUID = '12345678-1234-1234-1234-123456789012';

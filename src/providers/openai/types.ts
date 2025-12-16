@@ -35,9 +35,11 @@ export interface OpenAiSharedOptions {
   organization?: string;
   cost?: number;
   headers?: { [key: string]: string };
+  /** defaults to 4; set to 0 to disable retries; negative values are clamped to 0. */
+  maxRetries?: number;
 }
 
-export type ReasoningEffort = 'low' | 'medium' | 'high' | null;
+export type ReasoningEffort = 'none' | 'low' | 'medium' | 'high' | null;
 
 /**
  * **o-series models only**
@@ -64,6 +66,13 @@ export interface Reasoning {
   summary?: 'auto' | 'concise' | 'detailed' | null;
 }
 
+export type GPT5Reasoning = Omit<Reasoning, 'effort'> & {
+  effort?: ReasoningEffort | 'minimal';
+};
+
+/** Verbosity level supported by GPT-5 models */
+export type GPT5Verbosity = 'low' | 'medium' | 'high';
+
 // OpenAI MCP tool configuration for Responses API
 export interface OpenAiMCPTool {
   type: 'mcp';
@@ -80,6 +89,26 @@ export interface OpenAiMCPTool {
   headers?: Record<string, string>;
 }
 
+// Responses API specific tool types
+export interface OpenAiWebSearchTool {
+  type: 'web_search_preview';
+  search_context_size?: 'small' | 'medium' | 'large';
+  user_location?: string;
+}
+
+export interface OpenAiCodeInterpreterTool {
+  type: 'code_interpreter';
+  container?: {
+    type: 'auto' | string;
+  };
+}
+
+export type OpenAiResponsesTool =
+  | OpenAiTool
+  | OpenAiMCPTool
+  | OpenAiWebSearchTool
+  | OpenAiCodeInterpreterTool;
+
 export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   temperature?: number;
   max_completion_tokens?: number;
@@ -90,7 +119,7 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   best_of?: number;
   functions?: OpenAiFunction[];
   function_call?: 'none' | 'auto' | { name: string };
-  tools?: (OpenAiTool | OpenAiMCPTool)[];
+  tools?: (OpenAiTool | OpenAiMCPTool | OpenAiWebSearchTool | OpenAiCodeInterpreterTool)[];
   tool_choice?: 'none' | 'auto' | 'required' | { type: 'function'; function?: { name: string } };
   tool_resources?: Record<string, any>;
   showThinking?: boolean;
@@ -115,7 +144,7 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   seed?: number;
   passthrough?: object;
   reasoning_effort?: ReasoningEffort;
-  reasoning?: Reasoning;
+  reasoning?: Reasoning | GPT5Reasoning;
   service_tier?: ('auto' | 'default' | 'premium') | null;
   modalities?: string[];
   audio?: {
@@ -128,6 +157,7 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   // Responses API specific options
   instructions?: string;
   max_output_tokens?: number;
+  max_tool_calls?: number;
   metadata?: Record<string, string>;
   parallel_tool_calls?: boolean;
   previous_response_id?: string;
@@ -135,6 +165,8 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
   stream?: boolean;
   truncation?: 'auto' | 'disabled';
   user?: string;
+  background?: boolean;
+  webhook_url?: string;
 
   /**
    * If set, automatically call these functions when the assistant activates
@@ -145,4 +177,9 @@ export type OpenAiCompletionOptions = OpenAiSharedOptions & {
     AssistantFunctionCallback | string
   >;
   mcp?: MCPConfig;
+
+  /**
+   * GPT-5 only: Controls the verbosity of the model's responses. Ignored for non-GPT-5 models.
+   */
+  verbosity?: GPT5Verbosity;
 };

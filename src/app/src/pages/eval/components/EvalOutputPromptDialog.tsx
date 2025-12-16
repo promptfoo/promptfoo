@@ -1,37 +1,29 @@
-import { useEffect, useState } from 'react';
 import type React from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
+import { HIDDEN_METADATA_KEYS } from '@app/constants';
 import CheckIcon from '@mui/icons-material/Check';
+import CloseIcon from '@mui/icons-material/Close';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
-import FilterAltIcon from '@mui/icons-material/FilterAlt';
-import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import Dialog from '@mui/material/Dialog';
-import DialogActions from '@mui/material/DialogActions';
-import DialogContent from '@mui/material/DialogContent';
-import DialogTitle from '@mui/material/DialogTitle';
+import Drawer from '@mui/material/Drawer';
 import IconButton from '@mui/material/IconButton';
-import Link from '@mui/material/Link';
 import Paper from '@mui/material/Paper';
-import Table from '@mui/material/Table';
-import TableBody from '@mui/material/TableBody';
-import TableCell from '@mui/material/TableCell';
-import TableContainer from '@mui/material/TableContainer';
-import TableHead from '@mui/material/TableHead';
-import TableRow from '@mui/material/TableRow';
-import Tooltip from '@mui/material/Tooltip';
+import Tab from '@mui/material/Tab';
+import Tabs from '@mui/material/Tabs';
 import Typography from '@mui/material/Typography';
-import { ErrorBoundary } from 'react-error-boundary';
-import { ellipsize } from '../../../../../util/text';
-import TraceView from '../../../components/traces/TraceView';
+import type { GradingResult } from '@promptfoo/types';
+
+import type { Trace } from '../../../components/traces/TraceView';
+import type { CloudConfigData } from '../../../hooks/useCloudConfig';
 import ChatMessages, { type Message } from './ChatMessages';
-import Citations from './Citations';
-import { useTableStore } from './store';
+import { DebuggingPanel } from './DebuggingPanel';
+import { EvaluationPanel } from './EvaluationPanel';
+import { type ExpandedMetadataState, MetadataPanel } from './MetadataPanel';
+import { OutputsPanel } from './OutputsPanel';
+import { PromptEditor } from './PromptEditor';
+import type { ResultsFilterOperator, ResultsFilterType } from './store';
 
-import type { GradingResult } from './types';
-
-// Common style object for copy buttons
 const copyButtonSx = {
   position: 'absolute',
   right: '8px',
@@ -44,7 +36,6 @@ const copyButtonSx = {
   },
 };
 
-// Common typography styles
 const subtitleTypographySx = {
   mb: 1,
   fontWeight: 500,
@@ -57,34 +48,6 @@ const textContentTypographySx = {
   wordBreak: 'break-word',
 };
 
-/**
- * Returns the value of the assertion.
- * For context-related assertions, read the context value from metadata, if it exists.
- * Otherwise, return the assertion value.
- * @param result - The grading result.
- * @returns The value of the assertion.
- */
-function getValue(result: GradingResult) {
-  // For context-related assertions, read the context value from metadata, if it exists
-  if (
-    result.assertion?.type &&
-    ['context-faithfulness', 'context-recall', 'context-relevance'].includes(
-      result.assertion.type,
-    ) &&
-    result.metadata?.context
-  ) {
-    return result.metadata?.context;
-  }
-
-  // Otherwise, return the assertion value
-  return result.assertion?.value
-    ? typeof result.assertion.value === 'object'
-      ? JSON.stringify(result.assertion.value, null, 2)
-      : String(result.assertion.value)
-    : '-';
-}
-
-// Code display component
 interface CodeDisplayProps {
   content: string;
   title: string;
@@ -106,18 +69,21 @@ function CodeDisplay({
   onMouseLeave,
   showCopyButton = false,
 }: CodeDisplayProps) {
+  // Ensure content is a string - handles cases where providers return objects
+  const safeContent = typeof content === 'string' ? content : JSON.stringify(content, null, 2);
+
   // Improved code detection logic
   const isCode =
-    /^[\s]*[{[]/.test(content) || // JSON-like (starts with { or [)
-    /^#\s/.test(content) || // Markdown headers (starts with # )
-    /```/.test(content) || // Code blocks (contains ```)
-    /^\s*[\w-]+\s*:/.test(content) || // YAML/config-like (key: value)
-    /^\s*<\w+/.test(content) || // XML/HTML-like (starts with <tag)
-    content.includes('function ') || // JavaScript functions
-    content.includes('class ') || // Class definitions
-    content.includes('import ') || // Import statements
-    /^\s*def\s+/.test(content) || // Python functions
-    /^\s*\w+\s*\(/.test(content); // Function calls
+    /^[\s]*[{[]/.test(safeContent) || // JSON-like (starts with { or [)
+    /^#\s/.test(safeContent) || // Markdown headers (starts with # )
+    /```/.test(safeContent) || // Code blocks (contains ```)
+    /^\s*[\w-]+\s*:/.test(safeContent) || // YAML/config-like (key: value)
+    /^\s*<\w+/.test(safeContent) || // XML/HTML-like (starts with <tag)
+    safeContent.includes('function ') || // JavaScript functions
+    safeContent.includes('class ') || // Class definitions
+    safeContent.includes('import ') || // Import statements
+    /^\s*def\s+/.test(safeContent) || // Python functions
+    /^\s*\w+\s*\(/.test(safeContent); // Function calls
 
   return (
     <Box mb={2}>
@@ -158,11 +124,11 @@ function CodeDisplay({
                 wordBreak: 'break-word',
               }}
             >
-              {content}
+              {safeContent}
             </pre>
           ) : (
             <Typography variant="body1" sx={textContentTypographySx}>
-              {content}
+              {safeContent}
             </Typography>
           )}
         </Box>
@@ -181,127 +147,32 @@ function CodeDisplay({
   );
 }
 
-function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[] }) {
-  const [expandedValues, setExpandedValues] = useState<{ [key: number]: boolean }>({});
-  const [copiedAssertions, setCopiedAssertions] = useState<{ [key: string]: boolean }>({});
-  const [hoveredAssertion, setHoveredAssertion] = useState<string | null>(null);
-
-  if (!gradingResults) {
-    return null;
-  }
-
-  const hasMetrics = gradingResults.some((result) => result?.assertion?.metric);
-
-  const toggleExpand = (index: number) => {
-    setExpandedValues((prev) => ({ ...prev, [index]: !prev[index] }));
-  };
-
-  const copyAssertionToClipboard = async (key: string, text: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    await navigator.clipboard.writeText(text);
-    setCopiedAssertions((prev) => ({ ...prev, [key]: true }));
-
-    setTimeout(() => {
-      setCopiedAssertions((prev) => ({ ...prev, [key]: false }));
-    }, 2000);
-  };
-
-  return (
-    <Box mt={2}>
-      <Typography variant="subtitle1" sx={subtitleTypographySx}>
-        Assertions
-      </Typography>
-      <TableContainer component={Paper} variant="outlined">
-        <Table>
-          <TableHead>
-            <TableRow>
-              {hasMetrics && <TableCell style={{ fontWeight: 'bold' }}>Metric</TableCell>}
-              <TableCell style={{ fontWeight: 'bold' }}>Pass</TableCell>
-              <TableCell style={{ fontWeight: 'bold' }}>Score</TableCell>
-              <TableCell style={{ fontWeight: 'bold' }}>Type</TableCell>
-              <TableCell style={{ fontWeight: 'bold' }}>Value</TableCell>
-              <TableCell style={{ fontWeight: 'bold' }}>Reason</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {gradingResults.map((result, i) => {
-              if (!result) {
-                return null;
-              }
-
-              const value = getValue(result);
-              const truncatedValue = ellipsize(value, 300);
-              const isExpanded = expandedValues[i] || false;
-              const valueKey = `value-${i}`;
-
-              return (
-                <TableRow key={i}>
-                  {hasMetrics && <TableCell>{result.assertion?.metric || ''}</TableCell>}
-                  <TableCell>{result.pass ? '✅' : '❌'}</TableCell>
-                  <TableCell>{result.score?.toFixed(2)}</TableCell>
-                  <TableCell>{result.assertion?.type || ''}</TableCell>
-                  <TableCell
-                    style={{ whiteSpace: 'pre-wrap', cursor: 'pointer', position: 'relative' }}
-                    onClick={() => toggleExpand(i)}
-                    onMouseEnter={() => setHoveredAssertion(valueKey)}
-                    onMouseLeave={() => setHoveredAssertion(null)}
-                  >
-                    {isExpanded ? value : truncatedValue}
-                    {(hoveredAssertion === valueKey || copiedAssertions[valueKey]) && (
-                      <IconButton
-                        size="small"
-                        onClick={(e) => copyAssertionToClipboard(valueKey, value, e)}
-                        sx={copyButtonSx}
-                        aria-label={`Copy assertion value ${i}`}
-                      >
-                        {copiedAssertions[valueKey] ? (
-                          <CheckIcon fontSize="small" />
-                        ) : (
-                          <ContentCopyIcon fontSize="small" />
-                        )}
-                      </IconButton>
-                    )}
-                  </TableCell>
-                  <TableCell
-                    style={{ whiteSpace: 'pre-wrap', position: 'relative' }}
-                    onMouseEnter={() => setHoveredAssertion(`reason-${i}`)}
-                    onMouseLeave={() => setHoveredAssertion(null)}
-                  >
-                    {result.reason}
-                    {result.reason &&
-                      (hoveredAssertion === `reason-${i}` || copiedAssertions[`reason-${i}`]) && (
-                        <IconButton
-                          size="small"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            copyAssertionToClipboard(`reason-${i}`, result.reason || '', e);
-                          }}
-                          sx={copyButtonSx}
-                          aria-label={`Copy assertion reason ${i}`}
-                        >
-                          {copiedAssertions[`reason-${i}`] ? (
-                            <CheckIcon fontSize="small" />
-                          ) : (
-                            <ContentCopyIcon fontSize="small" />
-                          )}
-                        </IconButton>
-                      )}
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
-      </TableContainer>
-    </Box>
-  );
+/**
+ * Parameters for replaying an evaluation with a modified prompt.
+ */
+export interface ReplayEvaluationParams {
+  evaluationId: string;
+  testIndex?: number;
+  prompt: string;
+  variables?: Record<string, any>;
 }
 
-interface ExpandedMetadataState {
-  [key: string]: {
-    expanded: boolean;
-    lastClickTime: number;
-  };
+/**
+ * Result from replaying an evaluation.
+ */
+export interface ReplayEvaluationResult {
+  output?: string;
+  error?: string;
+}
+
+/**
+ * Filter configuration for table filtering.
+ */
+export interface FilterConfig {
+  type: ResultsFilterType;
+  operator: ResultsFilterOperator;
+  value: string;
+  field?: string;
 }
 
 interface EvalOutputPromptDialogProps {
@@ -314,17 +185,16 @@ interface EvalOutputPromptDialogProps {
   metadata?: Record<string, any>;
   evaluationId?: string;
   testCaseId?: string;
+  testIndex?: number;
+  promptIndex?: number;
+  variables?: Record<string, any>;
+  onAddFilter?: (filter: FilterConfig) => void;
+  onResetFilters?: () => void;
+  onReplay?: (params: ReplayEvaluationParams) => Promise<ReplayEvaluationResult>;
+  fetchTraces?: (evaluationId: string, signal: AbortSignal) => Promise<Trace[]>;
+  cloudConfig?: CloudConfigData | null;
+  readOnly?: boolean;
 }
-
-// URL detection function
-const isValidUrl = (str: string): boolean => {
-  try {
-    new URL(str);
-    return true;
-  } catch {
-    return false;
-  }
-};
 
 export default function EvalOutputPromptDialog({
   open,
@@ -336,17 +206,72 @@ export default function EvalOutputPromptDialog({
   metadata,
   evaluationId,
   testCaseId,
+  testIndex,
+  promptIndex,
+  variables,
+  onAddFilter,
+  onResetFilters,
+  onReplay,
+  fetchTraces,
+  cloudConfig,
+  readOnly = false,
 }: EvalOutputPromptDialogProps) {
+  const [activeTab, setActiveTab] = useState(0);
   const [copied, setCopied] = useState(false);
   const [copiedFields, setCopiedFields] = useState<{ [key: string]: boolean }>({});
   const [expandedMetadata, setExpandedMetadata] = useState<ExpandedMetadataState>({});
   const [hoveredElement, setHoveredElement] = useState<string | null>(null);
-  const { addFilter, resetFilters } = useTableStore();
+  const [editMode, setEditMode] = useState(false);
+  const [editedPrompt, setEditedPrompt] = useState(prompt);
+  const [replayLoading, setReplayLoading] = useState(false);
+  const [replayOutput, setReplayOutput] = useState<string | null>(null);
+  const [replayError, setReplayError] = useState<string | null>(null);
+  const [traces, setTraces] = useState<Trace[]>([]);
 
   useEffect(() => {
     setCopied(false);
     setCopiedFields({});
+    setEditMode(false);
+    setEditedPrompt(prompt);
+    setReplayOutput(null);
+    setReplayError(null);
+    setActiveTab(0); // Reset to first tab when dialog opens
   }, [prompt]);
+
+  // Fetch traces once when evaluationId changes
+  useEffect(() => {
+    let isActive = true;
+    const controller = new AbortController();
+
+    const loadTraces = async () => {
+      if (!evaluationId || !fetchTraces) {
+        setTraces([]);
+        return;
+      }
+
+      try {
+        const fetchedTraces = await fetchTraces(evaluationId, controller.signal);
+        if (isActive) {
+          setTraces(fetchedTraces || []);
+        }
+      } catch (error) {
+        if (isActive && (error as Error).name !== 'AbortError') {
+          setTraces([]);
+        }
+      }
+    };
+
+    loadTraces();
+
+    return () => {
+      isActive = false;
+      controller.abort();
+    };
+  }, [evaluationId, fetchTraces]);
+
+  const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
+    setActiveTab(newValue);
+  };
 
   const copyToClipboard = async (text: string) => {
     await navigator.clipboard.writeText(text);
@@ -357,10 +282,46 @@ export default function EvalOutputPromptDialog({
     await navigator.clipboard.writeText(text);
     setCopiedFields((prev) => ({ ...prev, [key]: true }));
 
-    // Reset copied status after 2 seconds
     setTimeout(() => {
       setCopiedFields((prev) => ({ ...prev, [key]: false }));
     }, 2000);
+  };
+
+  const handleReplay = async () => {
+    if (!evaluationId || !provider) {
+      setReplayError('Missing evaluation ID or provider');
+      return;
+    }
+
+    if (!onReplay) {
+      setReplayError('Replay functionality is not available');
+      return;
+    }
+
+    setReplayLoading(true);
+    setReplayError(null);
+    setReplayOutput(null);
+
+    try {
+      const result = await onReplay({
+        evaluationId,
+        testIndex,
+        prompt: editedPrompt,
+        variables,
+      });
+
+      if (result.error) {
+        setReplayError(result.error);
+      } else if (result.output) {
+        setReplayOutput(result.output);
+      } else {
+        setReplayOutput('(No output returned)');
+      }
+    } catch (error) {
+      setReplayError(error instanceof Error ? error.message : 'An error occurred');
+    } finally {
+      setReplayLoading(false);
+    }
   };
 
   const handleMetadataClick = (key: string) => {
@@ -382,10 +343,8 @@ export default function EvalOutputPromptDialog({
     value: string,
     operator: 'equals' | 'contains' = 'equals',
   ) => {
-    // Reset all filters first
-    resetFilters();
-    // Then apply only this filter
-    addFilter({
+    onResetFilters?.();
+    onAddFilter?.({
       type: 'metadata',
       operator,
       value: typeof value === 'string' ? value : JSON.stringify(value),
@@ -394,192 +353,229 @@ export default function EvalOutputPromptDialog({
     onClose();
   };
 
+  const handleCancel = () => {
+    setEditedPrompt(prompt);
+    setReplayOutput(null);
+    setReplayError(null);
+  };
+
   let parsedMessages: Message[] = [];
   try {
     parsedMessages = JSON.parse(metadata?.messages || '[]');
   } catch {}
 
-  // Get citations from metadata if they exist
   const citationsData = metadata?.citations;
 
+  const hasOutputContent = Boolean(
+    output || replayOutput || metadata?.redteamFinalPrompt || citationsData,
+  );
+
+  const redteamHistoryMessages = (metadata?.redteamHistory || metadata?.redteamTreeHistory || [])
+    .filter((entry: any) => entry?.prompt && entry?.output)
+    .flatMap(
+      (entry: {
+        prompt: string;
+        promptAudio?: { data?: string; format?: string };
+        promptImage?: { data?: string; format?: string };
+        output: string;
+        outputAudio?: { data?: string; format?: string };
+        outputImage?: { data?: string; format?: string };
+        score?: number;
+        graderPassed?: boolean;
+      }) => [
+        {
+          role: 'user' as const,
+          content: entry.prompt,
+          audio: entry.promptAudio,
+          image: entry.promptImage,
+        },
+        {
+          role: 'assistant' as const,
+          content: entry.output,
+          audio: entry.outputAudio,
+          image: entry.outputImage,
+        },
+      ],
+    );
+
+  const hasEvaluationData = gradingResults && gradingResults.length > 0;
+  const hasMessagesData = parsedMessages.length > 0 || redteamHistoryMessages.length > 0;
+  const hasMetadata =
+    metadata &&
+    Object.keys(metadata).filter((key) => !HIDDEN_METADATA_KEYS.includes(key)).length > 0;
+
+  const visibleTabs: string[] = ['prompt-output'];
+  if (hasEvaluationData) {
+    visibleTabs.push('evaluation');
+  }
+  if (hasMessagesData) {
+    visibleTabs.push('messages');
+  }
+  if (hasMetadata) {
+    visibleTabs.push('metadata');
+  }
+
+  // Show traces tab only when there's actual trace data
+  const hasTracesData = traces.length > 0;
+
+  if (hasTracesData) {
+    visibleTabs.push('traces');
+  }
+
+  const finalTabName = visibleTabs[activeTab] || 'prompt-output';
+
+  const drawerTransitionDuration = useMemo(() => ({ enter: 320, exit: 250 }), []);
+  const drawerSlotProps = useMemo(
+    () => ({
+      transition: {
+        appear: true,
+      },
+    }),
+    [],
+  );
+
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="lg">
-      <DialogTitle>Details{provider && `: ${provider}`}</DialogTitle>
-      <DialogContent>
-        <CodeDisplay
-          content={prompt}
-          title="Prompt"
-          onCopy={() => copyToClipboard(prompt)}
-          copied={copied}
-          onMouseEnter={() => setHoveredElement('prompt')}
-          onMouseLeave={() => setHoveredElement(null)}
-          showCopyButton={hoveredElement === 'prompt' || copied}
-        />
-        {metadata?.redteamFinalPrompt && (
-          <CodeDisplay
-            content={metadata.redteamFinalPrompt}
-            title="Modified User Input (Red Team)"
-            onCopy={() => copyFieldToClipboard('redteamFinalPrompt', metadata.redteamFinalPrompt)}
-            copied={copiedFields['redteamFinalPrompt'] || false}
-            onMouseEnter={() => setHoveredElement('redteamFinalPrompt')}
-            onMouseLeave={() => setHoveredElement(null)}
-            showCopyButton={
-              hoveredElement === 'redteamFinalPrompt' || copiedFields['redteamFinalPrompt']
-            }
-          />
-        )}
-        {output && (
-          <CodeDisplay
-            content={output}
-            title="Output"
-            onCopy={() => copyFieldToClipboard('output', output)}
-            copied={copiedFields['output'] || false}
-            onMouseEnter={() => setHoveredElement('output')}
-            onMouseLeave={() => setHoveredElement(null)}
-            showCopyButton={hoveredElement === 'output' || copiedFields['output']}
-          />
-        )}
-        <AssertionResults gradingResults={gradingResults} />
-        {parsedMessages && parsedMessages.length > 0 && <ChatMessages messages={parsedMessages} />}
-        {evaluationId && (
-          <Box mt={2}>
-            <Typography variant="subtitle1" sx={subtitleTypographySx}>
-              Trace Timeline
-            </Typography>
-            <ErrorBoundary fallback={<Alert severity="error">Error loading traces</Alert>}>
-              <TraceView evaluationId={evaluationId} testCaseId={testCaseId} />
-            </ErrorBoundary>
-          </Box>
-        )}
-        {citationsData && <Citations citations={citationsData} />}
-        {metadata && Object.keys(metadata).filter((key) => key !== 'citations').length > 0 && (
-          <Box my={2}>
-            <Typography variant="subtitle1" sx={subtitleTypographySx}>
-              Metadata
-            </Typography>
-            <TableContainer component={Paper} variant="outlined">
-              <Table size="small">
-                <TableHead>
-                  <TableRow>
-                    <TableCell>
-                      <strong>Key</strong>
-                    </TableCell>
-                    <TableCell>
-                      <strong>Value</strong>
-                    </TableCell>
-                    <TableCell width={80} />
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {Object.entries(metadata).map(([key, value]) => {
-                    // Skip citations in metadata display as they're shown in their own component
-                    if (key === 'citations') {
-                      return null;
-                    }
+    <Drawer
+      anchor="right"
+      open={open}
+      onClose={onClose}
+      transitionDuration={drawerTransitionDuration}
+      slotProps={drawerSlotProps}
+      sx={{
+        '& .MuiDrawer-paper': {
+          width: { xs: '100%', sm: '85%', md: '85%', lg: '85%' },
+          //maxWidth: '1200px',
+          boxSizing: 'border-box',
+        },
+      }}
+    >
+      {/* Header with title and close button */}
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          p: 2,
+          borderBottom: 1,
+          borderColor: 'divider',
+        }}
+      >
+        <Typography variant="h6">Details{provider && `: ${provider}`}</Typography>
+        <IconButton edge="end" onClick={onClose} aria-label="close" sx={{ ml: 2 }}>
+          <CloseIcon />
+        </IconButton>
+      </Box>
 
-                    const stringValue = typeof value === 'string' ? value : JSON.stringify(value);
-                    const truncatedValue = ellipsize(stringValue, 300);
-                    const isUrl = typeof value === 'string' && isValidUrl(value);
+      {/* Main content area */}
+      <Box sx={{ display: 'flex', flexDirection: 'column', height: 'calc(100% - 65px)' }}>
+        <Tabs
+          value={activeTab}
+          onChange={handleTabChange}
+          variant="scrollable"
+          scrollButtons="auto"
+          sx={{
+            borderBottom: 1,
+            borderColor: 'divider',
+            px: 2,
+            flexShrink: 0,
+          }}
+        >
+          <Tab label={hasOutputContent ? 'Prompt & Output' : 'Prompt'} />
+          {hasEvaluationData && <Tab label="Evaluation" />}
+          {hasMessagesData && <Tab label="Messages" />}
+          {hasMetadata && <Tab label="Metadata" />}
+          {hasTracesData && <Tab label="Traces" />}
+        </Tabs>
 
-                    return (
-                      <TableRow key={key}>
-                        <TableCell>{key}</TableCell>
-                        <TableCell
-                          style={{
-                            whiteSpace: 'pre-wrap',
-                            cursor: isUrl ? 'auto' : 'pointer',
-                          }}
-                          onClick={() => !isUrl && handleMetadataClick(key)}
-                        >
-                          {isUrl ? (
-                            <Link href={value} target="_blank" rel="noopener noreferrer">
-                              {expandedMetadata[key]?.expanded ? stringValue : truncatedValue}
-                            </Link>
-                          ) : expandedMetadata[key]?.expanded ? (
-                            stringValue
-                          ) : (
-                            truncatedValue
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <Box sx={{ display: 'flex', gap: 0.5 }}>
-                            <Tooltip title="Copy value">
-                              <IconButton
-                                size="small"
-                                onClick={() => copyFieldToClipboard(key, stringValue)}
-                                sx={{
-                                  color: 'text.disabled',
-                                  transition: 'color 0.2s ease',
-                                  '&:hover': {
-                                    color: 'text.secondary',
-                                  },
-                                }}
-                                aria-label={`Copy metadata value for ${key}`}
-                              >
-                                {copiedFields[key] ? (
-                                  <CheckIcon fontSize="small" />
-                                ) : (
-                                  <ContentCopyIcon fontSize="small" />
-                                )}
-                              </IconButton>
-                            </Tooltip>
-                            <Tooltip title="Filter by value (replaces existing filters)">
-                              <IconButton
-                                size="small"
-                                onClick={() => handleApplyFilter(key, stringValue)}
-                                sx={{
-                                  color: 'text.disabled',
-                                  transition: 'color 0.2s ease',
-                                  '&:hover': {
-                                    color: 'text.secondary',
-                                  },
-                                }}
-                                aria-label={`Filter by ${key}`}
-                              >
-                                <FilterAltIcon fontSize="small" />
-                              </IconButton>
-                            </Tooltip>
-                          </Box>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          </Box>
-        )}
-        {(metadata?.redteamHistory || metadata?.redteamTreeHistory) && (
-          <Box mt={2} mb={3}>
-            <ChatMessages
-              title="Attempts"
-              messages={(metadata?.redteamHistory ?? metadata?.redteamTreeHistory ?? [])
-                .filter((entry: any) => entry?.prompt && entry?.output)
-                .flatMap(
-                  (entry: {
-                    prompt: string;
-                    output: string;
-                    score?: number;
-                    isOnTopic?: boolean;
-                    graderPassed?: boolean;
-                  }) => [
-                    {
-                      role: 'user' as const,
-                      content: entry.prompt,
-                    },
-                    {
-                      role: 'assistant' as const,
-                      content: entry.output,
-                    },
-                  ],
-                )}
-            />
-          </Box>
-        )}
-      </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose}>Close</Button>
-      </DialogActions>
-    </Dialog>
+        {/* Tab Panels Container */}
+        <Box sx={{ flexGrow: 1, overflow: 'auto', p: 2 }}>
+          {/* Prompt & Output Panel */}
+          {finalTabName === 'prompt-output' && (
+            <Box>
+              <PromptEditor
+                prompt={prompt}
+                editMode={editMode}
+                editedPrompt={editedPrompt}
+                replayLoading={replayLoading}
+                replayError={replayError}
+                onEditModeChange={setEditMode}
+                onPromptChange={setEditedPrompt}
+                onReplay={handleReplay}
+                onCancel={handleCancel}
+                onCopy={() => copyToClipboard(prompt)}
+                copied={copied}
+                hoveredElement={hoveredElement}
+                onMouseEnter={setHoveredElement}
+                onMouseLeave={() => setHoveredElement(null)}
+                CodeDisplay={CodeDisplay}
+                subtitleTypographySx={subtitleTypographySx}
+                readOnly={readOnly}
+              />
+              {hasOutputContent && (
+                <OutputsPanel
+                  output={output}
+                  replayOutput={replayOutput}
+                  redteamFinalPrompt={metadata?.redteamFinalPrompt}
+                  copiedFields={copiedFields}
+                  hoveredElement={hoveredElement}
+                  onCopy={copyFieldToClipboard}
+                  onMouseEnter={setHoveredElement}
+                  onMouseLeave={() => setHoveredElement(null)}
+                  CodeDisplay={CodeDisplay}
+                  citations={citationsData}
+                />
+              )}
+            </Box>
+          )}
+
+          {/* Evaluation Panel */}
+          {finalTabName === 'evaluation' && (
+            <Box>
+              <EvaluationPanel gradingResults={gradingResults} />
+            </Box>
+          )}
+
+          {/* Messages Panel */}
+          {finalTabName === 'messages' && (
+            <Box>
+              {parsedMessages.length > 0 && <ChatMessages messages={parsedMessages} />}
+              {redteamHistoryMessages.length > 0 && (
+                <Box mt={parsedMessages.length > 0 ? 3 : 0}>
+                  <ChatMessages messages={redteamHistoryMessages} />
+                </Box>
+              )}
+            </Box>
+          )}
+
+          {/* Metadata Panel */}
+          {finalTabName === 'metadata' && (
+            <Box>
+              <MetadataPanel
+                metadata={metadata}
+                expandedMetadata={expandedMetadata}
+                copiedFields={copiedFields}
+                onMetadataClick={handleMetadataClick}
+                onCopy={copyFieldToClipboard}
+                onApplyFilter={handleApplyFilter}
+                cloudConfig={cloudConfig}
+              />
+            </Box>
+          )}
+
+          {/* Traces Panel */}
+          {finalTabName === 'traces' && (
+            <Box>
+              <DebuggingPanel
+                evaluationId={evaluationId}
+                testCaseId={testCaseId}
+                testIndex={testIndex}
+                promptIndex={promptIndex}
+                traces={traces}
+              />
+            </Box>
+          )}
+        </Box>
+      </Box>
+    </Drawer>
   );
 }

@@ -1,5 +1,6 @@
 ---
 sidebar_label: Evaluating LLM safety with HarmBench
+description: Assess LLM vulnerabilities against 400+ adversarial attacks using HarmBench benchmarks to identify and prevent harmful outputs across 6 risk categories
 ---
 
 # Evaluating LLM safety with HarmBench
@@ -28,10 +29,10 @@ Create a new configuration file `promptfooconfig.yaml`:
 
 ```yaml
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: HarmBench evaluation of OpenAI GPT-4o-mini
+description: HarmBench evaluation of OpenAI GPT-4.1-mini
 targets:
-  - id: openai:gpt-4.1-mini
-    label: OpenAI GPT-4o-mini
+  - id: openai:gpt-5-mini
+    label: OpenAI GPT-4.1-mini
 redteam:
   plugins:
     - id: harmbench
@@ -52,7 +53,7 @@ Once you're done, view the results:
 npx promptfoo@latest view
 ```
 
-You can see an example of the results below as well as the full results of a sample evaluation [here](https://www.promptfoo.app/eval/eval-m9D-2025-01-30T17:29:53). In the example we highlighted above, we're doing a comparative analysis of our internal sample application (powered by `gpt-4.1-mini`) against the vanilla version of `gpt-4.1-mini` from OpenAI.
+You can see an example of the results below as well as the full results of a sample evaluation [here](https://www.promptfoo.app/eval/eval-m9D-2025-01-30T17:29:53). In the example we highlighted above, we're doing a comparative analysis of our internal sample application (powered by `gpt-5-mini`) against the vanilla version of `gpt-5-mini` from OpenAI.
 
 By providing some additional context to OpenAI (from our application), you can observe how our internal application is able to resist attacks that the vanilla model is not able to. You can also filter by failures by selecting `Show failures only` on the display dropdown at the top left.
 
@@ -65,14 +66,14 @@ Promptfoo has built-in support for a wide variety of models such as those from O
 First, start your Ollama server and pull the model you want to test:
 
 ```bash
-ollama pull llama3.1:8b
+ollama pull llama3.3:8b
 ```
 
 Then configure Promptfoo to use it:
 
 ```yaml
 targets:
-  - ollama:llama3.1:8b
+  - ollama:chat:llama3.3:8b
 ```
 
 ### Your application
@@ -105,7 +106,7 @@ For more information, see:
 
 - [HarmBench paper](https://arxiv.org/abs/2402.04249)
 - [HarmBench GitHub repository](https://github.com/centerforaisafety/HarmBench)
-- [HarmBench Propmtfoo plugin](/docs/red-team/plugins/harmbench)
+- [HarmBench Promptfoo plugin](/docs/red-team/plugins/harmbench)
 - [Promptfoo red teaming guide](/docs/red-team/quickstart)
 - [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types)
 - [CybersecEval](/blog/cyberseceval)

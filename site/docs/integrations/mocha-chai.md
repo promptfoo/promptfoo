@@ -1,5 +1,6 @@
 ---
 sidebar_label: Mocha/Chai
+description: Integrate Promptfoo LLM testing with Mocha and Chai to automate prompt quality checks using semantic similarity, factuality, and custom assertions in your test suite.
 ---
 
 import Tabs from '@theme/Tabs';
@@ -147,7 +148,7 @@ import { expect } from 'chai';
 import './assertions';
 
 const gradingConfig = {
-  provider: 'openai:chat:gpt-4.1-mini',
+  provider: 'openai:chat:gpt-5-mini',
 };
 
 describe('semantic similarity tests', () => {

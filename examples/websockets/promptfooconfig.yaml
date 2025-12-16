@@ -8,7 +8,7 @@ prompts:
 providers:
   - id: 'ws://localhost:4000'
     config:
-      messageTemplate: '{"prompt": "{{prompt}}", "model": "{{model}}"}'
+      messageTemplate: '{"prompt": {{prompt | dump}}, "model": {{model | dump}}}'
       transformResponse: 'data.output'
 
 tests:

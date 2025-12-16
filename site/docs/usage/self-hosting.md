@@ -213,6 +213,7 @@ persistentVolumeClaims:
 service:
   type: LoadBalancer # Expose via LoadBalancer (adjust based on your cluster/needs)
 
+
 # Optional: Configure ingress if you have an ingress controller
 # ingress:
 #   enabled: true
@@ -359,6 +360,168 @@ docker run -d --name promptfoo_container -p 3000:3000 \
   ghcr.io/promptfoo/promptfoo:latest
 ```
 
+### Provider Customization
+
+Customize which LLM providers appear in the eval creator UI for cost control, compliance, or routing through internal gateways.
+
+Place a `ui-providers.yaml` file in your `.promptfoo` directory (same location as `promptfoo.db`). When this file exists, only listed providers appear in the UI.
+
+**Example configuration:**
+
+```yaml title="ui-providers.yaml"
+providers:
+  # Simple provider IDs
+  - openai:gpt-5.1-mini
+  - anthropic:messages:claude-sonnet-4-5-20250929
+
+  # With labels and defaults
+  - id: openai:gpt-5.1
+    label: GPT-5.1 (Company Approved)
+    config:
+      temperature: 0.7
+      max_tokens: 4096
+
+  # Custom HTTP provider with env var credentials
+  - id: 'http://llm-gateway.company.com/v1'
+    label: Internal Gateway
+    config:
+      method: POST
+      headers:
+        Authorization: 'Bearer {{ env.INTERNAL_API_KEY }}'
+```
+
+**Docker deployment:**
+
+```bash
+docker run -d \
+  --name promptfoo_container \
+  -p 3000:3000 \
+  -v ./promptfoo_data:/home/promptfoo/.promptfoo \
+  -e INTERNAL_API_KEY=your-key \
+  ghcr.io/promptfoo/promptfoo:latest
+
+# Place ui-providers.yaml in ./promptfoo_data/
+cp ui-providers.yaml ./promptfoo_data/
+```
+
+**Kubernetes ConfigMap:**
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: promptfoo-providers
+data:
+  ui-providers.yaml: |
+    providers:
+      - openai:gpt-5.1
+      - anthropic:messages:claude-sonnet-4-5-20250929
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: promptfoo
+spec:
+  template:
+    spec:
+      containers:
+        - name: promptfoo
+          image: promptfoo/promptfoo:latest
+          volumeMounts:
+            - name: config
+              mountPath: /home/promptfoo/.promptfoo/ui-providers.yaml
+              subPath: ui-providers.yaml
+      volumes:
+        - name: config
+          configMap:
+            name: promptfoo-providers
+```
+
+:::info Behavior Changes
+
+When `ui-providers.yaml` exists:
+
+- Only configured providers shown (replaces default ~600 providers)
+- "Reference Local Provider" button hidden in eval creator
+- Configuration is cached - restart required after changes: `docker restart promptfoo_container`
+
+:::
+
+:::caution Security - Credentials
+
+**DO NOT store API keys in ui-providers.yaml**. Use environment variables with Nunjucks syntax:
+
+```yaml
+# ui-providers.yaml
+providers:
+  - id: 'http://internal-api.com/v1'
+    config:
+      headers:
+        Authorization: 'Bearer {{ env.INTERNAL_API_KEY }}'
+```
+
+```bash
+# Pass via environment
+docker run -e INTERNAL_API_KEY=your-key ...
+```
+
+For Kubernetes, use Secrets (not ConfigMaps) for sensitive data.
+
+:::
+
+**Configuration fields:**
+
+```yaml
+providers:
+  - id: string # Required - Provider identifier
+    label: string # Optional - Display name
+    config: # Optional - Default settings
+      temperature: number # 0.0-2.0
+      max_tokens: number
+      # HTTP providers
+      method: string # POST, GET, etc.
+      headers: object # Custom headers
+      # Cloud providers
+      region: string # AWS region, etc.
+```
+
+**Provider ID formats:**
+
+- **OpenAI:** `openai:gpt-5.1`, `openai:gpt-5.1-mini`
+- **Anthropic:** `anthropic:messages:claude-sonnet-4-5-20250929`
+- **AWS Bedrock:** `bedrock:us.anthropic.claude-sonnet-4-5-20250929-v1:0`
+- **Azure OpenAI:** `azureopenai:chat:deployment-name`
+- **Custom HTTP:** `http://your-api.com/v1` or `https://...`
+
+See [Provider Documentation](/docs/providers/) for complete list.
+
+**Troubleshooting:**
+
+**Providers not updating:** Restart required after config changes.
+
+```bash
+docker restart promptfoo_container
+# or: docker compose restart
+# or: kubectl rollout restart deployment/promptfoo
+```
+
+**Providers missing:** Check logs for validation errors:
+
+```bash
+docker logs promptfoo_container | grep "Invalid provider"
+```
+
+Common issues: missing `id` field, invalid provider ID format, YAML syntax errors.
+
+**Config not detected:** Verify file location and permissions:
+
+```bash
+docker exec promptfoo_container ls -la /home/promptfoo/.promptfoo/
+docker exec promptfoo_container cat /home/promptfoo/.promptfoo/ui-providers.yaml
+```
+
+File must be named `ui-providers.yaml` or `ui-providers.yml` (case-sensitive on Linux).
+
 ## Specifications
 
 ### Client Requirements (Running `promptfoo` CLI)
@@ -368,7 +531,7 @@ docker run -d --name promptfoo_container -p 3000:3000 \
 - **GPU**: Not required
 - **RAM**: 4 GB+
 - **Storage**: 10 GB+
-- **Dependencies**: Node.js v18+, npm
+- **Dependencies**: Node.js v20+, npm
 
 ### Server Requirements (Hosting the Web UI/API)
 

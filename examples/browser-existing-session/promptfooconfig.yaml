@@ -1,0 +1,90 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Browser provider - OAuth authentication testing example
+
+# This example demonstrates two modes:
+# 1. Connecting to an existing Chrome browser session (for OAuth/SSO testing)
+# 2. Launching a new browser (normal operation)
+
+providers:
+  # Example 1: Connect to existing Chrome session with active authentication
+  - id: browser
+    label: existing-session
+    config:
+      connectOptions:
+        debuggingPort: 9222 # Chrome DevTools port
+
+      steps:
+        - action: navigate
+          args:
+            url: 'http://localhost:8080'
+
+        - action: type
+          args:
+            selector: '#chat-input'
+            text: '{{prompt}}'
+
+        - action: click
+          args:
+            selector: '#send-button'
+
+        - action: wait
+          args:
+            ms: 1000
+
+        - action: extract
+          args:
+            selector: '.chat-message:last-child .message-content'
+          name: response
+
+      transformResponse: 'extracted.response'
+
+  # Example 2: Launch new browser (normal operation)
+  - id: browser
+    label: new-browser
+    config:
+      headless: true # Set to false to see the browser
+
+      steps:
+        - action: navigate
+          args:
+            url: 'http://localhost:8080'
+
+        - action: type
+          args:
+            selector: '#chat-input'
+            text: '{{prompt}}'
+
+        - action: click
+          args:
+            selector: '#send-button'
+
+        - action: wait
+          args:
+            ms: 1000
+
+        - action: extract
+          args:
+            selector: '.chat-message:last-child .message-content'
+          name: response
+
+      transformResponse: 'extracted.response'
+
+prompts:
+  - 'Who am I logged in as?'
+
+tests:
+  - description: Test authenticated session access
+    vars:
+      prompt: 'Who am I logged in as?'
+    assert:
+      - type: contains
+        value: 'John Doe'
+# Instructions:
+#
+# For OAuth/SSO testing (existing session):
+# 1. Start Chrome with debugging: chrome --remote-debugging-port=9222
+# 2. Log into your application manually
+# 3. Run: npx promptfoo eval --filter-providers existing-session
+#
+# For normal browser testing:
+# Run: npx promptfoo eval --filter-providers new-browser

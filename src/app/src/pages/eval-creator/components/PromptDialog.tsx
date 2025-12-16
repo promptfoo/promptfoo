@@ -15,7 +15,7 @@ interface PromptDialogProps {
   onCancel: () => void;
 }
 
-const PromptDialog: React.FC<PromptDialogProps> = ({ open, prompt, index, onAdd, onCancel }) => {
+const PromptDialog = ({ open, prompt, index, onAdd, onCancel }: PromptDialogProps) => {
   const [editingPrompt, setEditingPrompt] = React.useState(prompt);
   const textFieldRef = React.useRef<HTMLInputElement>(null);
 

@@ -42,12 +42,10 @@
 }
 
 .risk-card-icon-passed {
-  color: green;
   font-size: 16px;
 }
 
 .risk-card-icon-failed {
-  color: red;
   font-size: 16px;
 }
 

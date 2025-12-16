@@ -1,5 +1,6 @@
 ---
 sidebar_label: How to red team LLM applications
+description: Protect your LLM applications from prompt injection, jailbreaks, and data leaks with automated red teaming tests that identify 20+ vulnerability types and security risks
 ---
 
 # How to red team LLM applications
@@ -53,7 +54,7 @@ You can also dig into specific red team failure cases:
 
 ## Prerequisites
 
-First, install [Node 18 or later](https://nodejs.org/en/download/package-manager/).
+First, install [Node 20 or later](https://nodejs.org/en/download/package-manager/).
 
 Then create a new project for your red teaming needs:
 
@@ -164,9 +165,9 @@ You should choose at least one target. If desired, set multiple in order to comp
 
 ```yaml
 targets:
-  - openai:gpt-4.1
+  - openai:gpt-5
   - anthropic:messages:claude-3-5-sonnet-20241022
-  - ollama:chat:llama3.1:70b
+  - ollama:chat:llama3.3:70b
 ```
 
 To learn more, find your preferred LLM provider [here](/docs/providers).
@@ -223,14 +224,14 @@ You can also reference nested objects. For example, `json.choices[0].message.con
 
 ### Configuring the grader
 
-The results of the red team are graded by a model. By default, `gpt-4.1-2025-04-14` is used and the test expects an `OPENAI_API_KEY` environment variable.
+The results of the red team are graded by a model. By default, `gpt-5` is used and the test expects an `OPENAI_API_KEY` environment variable.
 
 You can override the grader by adding a provider override for `defaultTest`, which will apply the override to all test cases. Here’s an example of using Llama3 as a grader locally:
 
 ```yaml
 defaultTest:
   options:
-    provider: 'ollama:chat:llama3:70b'
+    provider: 'ollama:chat:llama3.3:70b'
 ```
 
 And in this example, we use [Azure OpenAI](/docs/providers/azure/#model-graded-tests) as a grader:

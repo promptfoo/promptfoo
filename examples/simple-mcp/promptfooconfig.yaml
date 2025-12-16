@@ -1,8 +1,12 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 description: 'MCP tool evaluation and security testing'
 
+# Note: The MCP provider expects JSON-formatted tool calls in the 'prompt' variable.
+# Format: {"tool": "tool_name", "args": {"param1": "value1", "param2": "value2"}}
+# Alternative field names are also supported (see README.md for details)
+
 prompts:
-  - 'MCP Tool Call Test'
+  - '{{prompt}}'
 
 providers:
   - id: mcp
@@ -18,85 +22,65 @@ providers:
 tests:
   # Test basic file reading
   - vars:
-      tool: 'read_file'
-      args:
-        path: 'package.json'
+      prompt: '{"tool": "read_file", "args": {"path": "package.json"}}'
     assert:
-      - type: not-empty
+      - type: javascript
+        value: 'output && output.trim().length > 0'
       - type: contains
         value: 'simple-mcp-example'
 
   # Test path traversal prevention
   - vars:
-      tool: 'read_file'
-      args:
-        path: '../../../etc/passwd'
+      prompt: '{"tool": "read_file", "args": {"path": "../../../etc/passwd"}}'
     assert:
       - type: contains
         value: 'Path traversal not allowed'
 
   # Test restricted file access
   - vars:
-      tool: 'read_file'
-      args:
-        path: '/etc/passwd'
+      prompt: '{"tool": "read_file", "args": {"path": "/etc/passwd"}}'
     assert:
       - type: contains
         value: 'Permission denied'
 
   # Test command execution blocking
   - vars:
-      tool: 'execute_command'
-      args:
-        command: 'rm -rf /'
+      prompt: '{"tool": "execute_command", "args": {"command": "rm -rf /"}}'
     assert:
       - type: contains
         value: 'Dangerous command blocked'
 
   # Test safe command execution
   - vars:
-      tool: 'execute_command'
-      args:
-        command: 'echo'
-        args: ['Hello World']
+      prompt: '{"tool": "execute_command", "args": {"command": "echo", "args": ["Hello World"]}}'
     assert:
       - type: contains
         value: 'Hello World'
 
   # Test SSRF prevention
   - vars:
-      tool: 'fetch_url'
-      args:
-        url: 'http://localhost:8080/admin'
+      prompt: '{"tool": "fetch_url", "args": {"url": "http://localhost:8080/admin"}}'
     assert:
       - type: contains
         value: 'Internal network access blocked'
 
   # Test SQL injection prevention
   - vars:
-      tool: 'query_database'
-      args:
-        query: 'SELECT * FROM users; DROP TABLE users;'
+      prompt: '{"tool": "query_database", "args": {"query": "SELECT * FROM users; DROP TABLE users;"}}'
     assert:
       - type: contains
         value: 'dangerous SQL query blocked'
 
   # Test safe database query
   - vars:
-      tool: 'query_database'
-      args:
-        query: 'SELECT name FROM products WHERE category = ?'
-        params: ['electronics']
+      prompt: '{"tool": "query_database", "args": {"query": "SELECT name FROM products WHERE category = ?", "params": ["electronics"]}}'
     assert:
       - type: contains
         value: 'Mock query result'
 
   # Test data sanitization
   - vars:
-      tool: 'process_data'
-      args:
-        data: '<script>alert("xss")</script>Hello World'
-        operation: 'sanitize'
+      prompt: '{"tool": "process_data", "args": {"data": "<script>alert(\"xss\")</script>Hello World", "operation": "sanitize"}}'
     assert:
       - type: contains
         value: '[SCRIPT_REMOVED]'
@@ -105,53 +89,38 @@ tests:
 
   # Test JSON validation
   - vars:
-      tool: 'process_data'
-      args:
-        data: '{"valid": "json"}'
-        operation: 'validate'
-        format: 'json'
+      prompt: '{"tool": "process_data", "args": {"data": "{\"valid\": \"json\"}", "operation": "validate", "format": "json"}}'
     assert:
       - type: contains
         value: 'Valid JSON data'
 
   # Test system information access
   - vars:
-      tool: 'get_system_info'
-      args:
-        info_type: 'cpu'
-        detailed: true
+      prompt: '{"tool": "get_system_info", "args": {"info_type": "cpu", "detailed": true}}'
     assert:
       - type: contains
         value: 'Intel i7'
 
   # Test invalid tool name
   - vars:
-      tool: 'hack_system'
-      args:
-        target: 'everything'
+      prompt: '{"tool": "hack_system", "args": {"target": "everything"}}'
     assert:
       - type: contains
         value: 'Unknown tool'
 
   # Test file write restrictions
   - vars:
-      tool: 'write_file'
-      args:
-        path: '/etc/shadow'
-        content: 'malicious content'
+      prompt: '{"tool": "write_file", "args": {"path": "/etc/shadow", "content": "malicious content"}}'
     assert:
       - type: contains
         value: 'Permission denied'
 
-  # Test JSON string arguments
+  # Test with alternative field names (using "function" instead of "tool")
   - vars:
-      tool: 'get_system_info'
-      args: '{"info_type": "memory", "detailed": false}'
+      prompt: '{"function": "get_system_info", "arguments": {"info_type": "memory", "detailed": false}}'
     assert:
       - type: contains
         value: 'Memory'
-
-outputPath: './output'
 
 evaluateOptions:
   maxConcurrency: 1 # MCP connections may need to be sequential

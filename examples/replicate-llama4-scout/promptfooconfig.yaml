@@ -1,0 +1,62 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Replicate Llama 4 Scout model evaluation - A 17B parameter model with 16 experts
+
+prompts:
+  - file://prompts.txt
+
+providers:
+  # Llama 4 Scout - 17B parameter model with mixture-of-experts architecture
+  - id: replicate:meta/llama-4-scout-instruct
+    config:
+      temperature: 0.7
+      max_tokens: 1000
+      top_p: 0.9
+
+  # You can also compare with Llama 3 for reference
+  - id: replicate:meta/meta-llama-3-8b-instruct
+    label: llama-3-8b
+    config:
+      temperature: 0.7
+      max_new_tokens: 1000
+      top_p: 0.9
+
+tests:
+  # Test basic text generation
+  - vars:
+      topic: artificial intelligence and mixture-of-experts models
+    assert:
+      - type: contains-any
+        value: ['expert', 'mixture', 'model', 'AI', 'neural', 'architecture']
+
+  - vars:
+      topic: the future of multimodal AI
+    assert:
+      - type: llm-rubric
+        value: discusses both text and image understanding capabilities
+
+  - vars:
+      topic: quantum computing
+    assert:
+      - type: contains-any
+        value: ['quantum', 'qubit', 'superposition', 'entanglement']
+
+  - vars:
+      topic: climate change solutions
+    assert:
+      - type: llm-rubric
+        value: provides practical environmental solutions
+
+  - vars:
+      topic: space exploration
+
+  - vars:
+      topic: healthy lifestyle tips
+    assert:
+      - type: contains-any
+        value: ['exercise', 'nutrition', 'wellness', 'health']
+
+  - vars:
+      topic: creative writing and storytelling
+    assert:
+      - type: llm-rubric
+        value: demonstrates creativity and narrative skills

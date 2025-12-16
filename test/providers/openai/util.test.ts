@@ -1,3 +1,5 @@
+import { describe, expect, it, vi } from 'vitest';
+
 import OpenAI from 'openai';
 import {
   calculateOpenAICost,
@@ -8,7 +10,7 @@ import {
   validateFunctionCall,
 } from '../../../src/providers/openai/util';
 
-jest.mock('../../../src/cache');
+vi.mock('../../../src/cache');
 
 describe('failApiCall', () => {
   it('should format OpenAI API errors', () => {
@@ -59,6 +61,7 @@ describe('getTokenUsage', () => {
       total: 100,
       prompt: 40,
       completion: 60,
+      numRequests: 1,
     });
   });
 
@@ -73,6 +76,7 @@ describe('getTokenUsage', () => {
     expect(result).toEqual({
       cached: 100,
       total: 100,
+      numRequests: 1,
     });
   });
 
@@ -101,6 +105,7 @@ describe('getTokenUsage', () => {
       total: 100,
       prompt: 40,
       completion: 60,
+      numRequests: 1,
       completionDetails: {
         reasoning: 20,
         acceptedPrediction: 30,
@@ -111,18 +116,8 @@ describe('getTokenUsage', () => {
 });
 
 describe('calculateOpenAICost', () => {
-  it('should calculate cost correctly for transcription model gpt-4o-transcribe', () => {
-    const cost = calculateOpenAICost('gpt-4o-transcribe', {}, 1000, 500);
-    expect(cost).toBeCloseTo((1000 * 2.5 + 500 * 10) / 1e6, 6);
-  });
-
-  it('should calculate cost correctly for transcription model gpt-4o-mini-transcribe', () => {
-    const cost = calculateOpenAICost('gpt-4o-mini-transcribe', {}, 1000, 500);
-    expect(cost).toBeCloseTo((1000 * 2.5 + 500 * 10) / 1e6, 6);
-  });
-
   it('should calculate cost correctly for TTS model gpt-4o-mini-tts', () => {
-    const cost = calculateOpenAICost('gpt-4o-mini-tts', {}, 1000, 500);
+    const cost = calculateOpenAICost('gpt-4o-mini-tts', {}, 1000, 0, 0, 500);
     expect(cost).toBeCloseTo((1000 * 0.6 + 500 * 12) / 1e6, 6);
   });
 
@@ -166,6 +161,11 @@ describe('calculateOpenAICost', () => {
     expect(cost).toBeCloseTo((1000 * 0.6 + 500 * 2.4) / 1e6, 6);
   });
 
+  it('should calculate cost correctly for gpt-realtime', () => {
+    const cost = calculateOpenAICost('gpt-realtime', {}, 1000, 500);
+    expect(cost).toBeCloseTo((1000 * 32 + 500 * 64) / 1e6, 6);
+  });
+
   it('should calculate cost correctly with audio tokens', () => {
     const cost = calculateOpenAICost('gpt-4o-audio-preview', {}, 1000, 500, 200, 100);
     expect(cost).toBeCloseTo((1000 * 2.5 + 500 * 10 + 200 * 40 + 100 * 80) / 1e6, 6);
@@ -194,6 +194,26 @@ describe('calculateOpenAICost', () => {
   it('should calculate cost correctly for codex-mini-latest', () => {
     const cost = calculateOpenAICost('codex-mini-latest', {}, 1000, 500);
     expect(cost).toBeCloseTo((1000 * 1.5 + 500 * 6.0) / 1e6, 6);
+  });
+
+  it('should calculate cost correctly for gpt-5', () => {
+    const cost = calculateOpenAICost('gpt-5', {}, 1000, 500);
+    expect(cost).toBeCloseTo((1000 * 1.25 + 500 * 10) / 1e6, 6);
+  });
+
+  it('should calculate cost correctly for gpt-5-chat-latest', () => {
+    const cost = calculateOpenAICost('gpt-5-chat-latest', {}, 1000, 500);
+    expect(cost).toBeCloseTo((1000 * 1.25 + 500 * 10) / 1e6, 6);
+  });
+
+  it('should calculate cost correctly for gpt-5-nano', () => {
+    const cost = calculateOpenAICost('gpt-5-nano', {}, 1000, 500);
+    expect(cost).toBeCloseTo((1000 * 0.05 + 500 * 0.4) / 1e6, 6);
+  });
+
+  it('should calculate cost correctly for gpt-5-mini', () => {
+    const cost = calculateOpenAICost('gpt-5-mini', {}, 1000, 500);
+    expect(cost).toBeCloseTo((1000 * 0.25 + 500 * 2) / 1e6, 6);
   });
 
   it('should handle undefined token counts', () => {
@@ -274,6 +294,12 @@ describe('calculateOpenAICost', () => {
       100,
     );
     const expectedCost = (1000 * 0.6 + 500 * 2.4 + 200 * 10 + 100 * 20) / 1e6;
+    expect(cost).toBeCloseTo(expectedCost, 6);
+  });
+
+  it('should calculate audio token costs for gpt-realtime', () => {
+    const cost = calculateOpenAICost('gpt-realtime', {}, 1000, 500, 200, 100);
+    const expectedCost = (1000 * 32 + 500 * 64 + 200 * 32 + 100 * 64) / 1e6;
     expect(cost).toBeCloseTo(expectedCost, 6);
   });
 
@@ -391,6 +417,31 @@ describe('calculateOpenAICost', () => {
   it('should calculate cost correctly for gpt-4o-audio-preview-2025-06-03', () => {
     const cost = calculateOpenAICost('gpt-4o-audio-preview-2025-06-03', {}, 1000, 500);
     expect(cost).toBeCloseTo(0.0075); // 2.5/1M * 1000 + 10/1M * 500
+  });
+
+  it('should calculate cost correctly for o4-mini (responses model)', () => {
+    const cost = calculateOpenAICost('o4-mini', {}, 1000, 500);
+    expect(cost).toBeCloseTo((1000 * 1.1 + 500 * 4.4) / 1e6, 6);
+  });
+
+  it('should calculate cost correctly for o3-deep-research', () => {
+    const cost = calculateOpenAICost('o3-deep-research', {}, 1000, 500);
+    expect(cost).toBeCloseTo((1000 * 10 + 500 * 40) / 1e6, 6);
+  });
+
+  it('should calculate cost correctly for o3-deep-research-2025-06-26', () => {
+    const cost = calculateOpenAICost('o3-deep-research-2025-06-26', {}, 1000, 500);
+    expect(cost).toBeCloseTo((1000 * 10 + 500 * 40) / 1e6, 6);
+  });
+
+  it('should calculate cost correctly for o4-mini-deep-research', () => {
+    const cost = calculateOpenAICost('o4-mini-deep-research', {}, 1000, 500);
+    expect(cost).toBeCloseTo((1000 * 2 + 500 * 8) / 1e6, 6);
+  });
+
+  it('should calculate cost correctly for o4-mini-deep-research-2025-06-26', () => {
+    const cost = calculateOpenAICost('o4-mini-deep-research-2025-06-26', {}, 1000, 500);
+    expect(cost).toBeCloseTo((1000 * 2 + 500 * 8) / 1e6, 6);
   });
 });
 

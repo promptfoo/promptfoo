@@ -5,14 +5,19 @@ import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import { getDefaultShareViewBaseUrl, getShareApiBaseUrl, getShareViewBaseUrl } from './constants';
 import { getEnvBool, getEnvInt, getEnvString, isCI } from './envars';
-import { fetchWithProxy } from './fetch';
 import { getUserEmail, setUserEmail } from './globalConfig/accounts';
 import { cloudConfig } from './globalConfig/cloud';
-import logger from './logger';
-import { makeRequest as makeCloudRequest } from './util/cloud';
+import logger, { isDebugEnabled } from './logger';
+import {
+  checkCloudPermissions,
+  getOrgContext,
+  makeRequest as makeCloudRequest,
+} from './util/cloud';
+import { fetchWithProxy } from './util/fetch/index';
 
 import type Eval from './models/eval';
 import type EvalResult from './models/evalResult';
+import type ModelAudit from './models/modelAudit';
 
 interface ShareDomainResult {
   domain: string;
@@ -29,6 +34,22 @@ export function isSharingEnabled(evalRecord: Eval): boolean {
   if (sharingConfigOnEval) {
     return true;
   }
+
+  if (sharingEnvUrl && !sharingEnvUrl.includes('api.promptfoo.app')) {
+    return true;
+  }
+
+  if (cloudSharingUrl) {
+    return true;
+  }
+
+  return false;
+}
+
+export function isModelAuditSharingEnabled(): boolean {
+  // Model audit sharing uses the same configuration as eval sharing
+  const sharingEnvUrl = getShareApiBaseUrl();
+  const cloudSharingUrl = cloudConfig.isEnabled() ? cloudConfig.getApiHost() : null;
 
   if (sharingEnvUrl && !sharingEnvUrl.includes('api.promptfoo.app')) {
     return true;
@@ -84,19 +105,40 @@ async function sendEvalRecord(
   url: string,
   headers: Record<string, string>,
 ): Promise<string> {
-  const evalDataWithoutResults = { ...evalRecord, results: [] };
-  logger.debug(`Sending initial eval data to ${url}`);
+  // Fetch traces for the eval
+  const traces = await evalRecord.getTraces();
+  const evalDataWithoutResults = { ...evalRecord, results: [], traces };
+  const jsonData = JSON.stringify(evalDataWithoutResults);
+
+  logger.debug(
+    `Sending initial eval data to ${url} - eval ${evalRecord.id} with ${evalRecord.prompts.length} prompts ${traces.length > 0 ? `and trace data` : ''}`,
+  );
+
   const response = await fetchWithProxy(url, {
     method: 'POST',
     headers,
-    body: JSON.stringify(evalDataWithoutResults),
+    body: jsonData,
+    compress: true,
   });
 
   if (!response.ok) {
     const responseBody = await response.text();
-    throw new Error(
-      `Failed to send initial eval data to ${url}: ${response.statusText}, body: ${responseBody}`,
+    // Ensure full error is visible by formatting it properly
+    const errorMessage = `Failed to send initial eval data to ${url}: ${response.statusText}`;
+    const bodyMessage = responseBody ? `\nResponse body: ${responseBody}` : '';
+    const debugInfo = {
+      url,
+      statusCode: response.status,
+      statusText: response.statusText,
+      headers: Object.keys(headers),
+      evalId: evalRecord.id,
+      errorMessage,
+      bodyMessage,
+    };
+    logger.error(
+      `Sharing your eval data to ${url} failed. Debug info: ${JSON.stringify(debugInfo, null, 2)}`,
     );
+    throw new Error(`${errorMessage}${bodyMessage}`);
   }
 
   const responseJson = await response.json();
@@ -116,25 +158,45 @@ async function sendChunkOfResults(
   headers: Record<string, string>,
 ) {
   const targetUrl = `${url}/${evalId}/results`;
-  logger.debug(`Sending chunk of ${chunk.length} results to ${targetUrl}`);
   const stringifiedChunk = JSON.stringify(chunk);
+  const chunkSizeBytes = Buffer.byteLength(stringifiedChunk, 'utf8');
+
+  logger.debug(`Sending chunk of ${chunk.length} results to ${targetUrl}`);
+
   const response = await fetchWithProxy(targetUrl, {
     method: 'POST',
     headers,
     body: stringifiedChunk,
+    compress: true,
   });
 
   if (!response.ok) {
     const responseBody = await response.text();
+    const debugInfo = {
+      url: targetUrl,
+      statusCode: response.status,
+      statusText: response.statusText,
+      chunkSize: chunk.length,
+      chunkSizeBytes,
+      chunkSizeMB: (chunkSizeBytes / 1024 / 1024).toFixed(2),
+      headers: Object.keys(headers),
+      evalId,
+      responseBody: responseBody.length > 500 ? `${responseBody.slice(0, 500)}...` : responseBody,
+    };
+
     logger.error(
       `Failed to send results chunk to ${targetUrl}: status code: ${response.status}, status text: ${response.statusText}, body: ${responseBody}`,
     );
+    logger.error(`Debug info: ${JSON.stringify(debugInfo, null, 2)}`);
+
     if (response.status === 413) {
       throw new Error(
-        `Results chunk too large. It contained ${stringifiedChunk.length} bytes. Please reduce the number of results per chunk using the environment variable PROMPTFOO_SHARE_CHUNK_SIZE. Example: PROMPTFOO_SHARE_CHUNK_SIZE=100 promptfoo share`,
+        `Results chunk too large. It contained ${stringifiedChunk.length} bytes (${(chunkSizeBytes / 1024 / 1024).toFixed(2)} MB). Please reduce the number of results per chunk using the environment variable PROMPTFOO_SHARE_CHUNK_SIZE. Example: PROMPTFOO_SHARE_CHUNK_SIZE=10 promptfoo share`,
       );
     }
-    throw new Error(`Failed to send results chunk`);
+    throw new Error(
+      `Failed to send results chunk to ${targetUrl}. Status: ${response.status} ${response.statusText}. Chunk size: ${chunk.length} results (${(chunkSizeBytes / 1024 / 1024).toFixed(2)} MB). See debug logs for more details.`,
+    );
   }
 }
 
@@ -156,6 +218,11 @@ async function rollbackEval(url: string, evalId: string, headers: Record<string,
 }
 
 async function sendChunkedResults(evalRecord: Eval, url: string): Promise<string | null> {
+  const isVerbose = isDebugEnabled();
+  logger.debug(`Starting chunked results upload to ${url}`);
+
+  await checkCloudPermissions(evalRecord.config);
+
   const sampleResults = (await evalRecord.fetchResultsBatched(100).next()).value ?? [];
   if (sampleResults.length === 0) {
     logger.debug(`No results found`);
@@ -168,7 +235,7 @@ async function sendChunkedResults(evalRecord: Eval, url: string): Promise<string
   logger.debug(`Largest result size from sample: ${largestSize} bytes`);
 
   // Determine how many results per chunk
-  const TARGET_CHUNK_SIZE = 10 * 1024 * 1024; // 10MB in bytes
+  const TARGET_CHUNK_SIZE = 0.9 * 1024 * 1024; // 900KB in bytes
   const estimatedResultsPerChunk =
     getEnvInt('PROMPTFOO_SHARE_CHUNK_SIZE') ??
     Math.max(1, Math.floor(TARGET_CHUNK_SIZE / largestSize));
@@ -183,17 +250,22 @@ async function sendChunkedResults(evalRecord: Eval, url: string): Promise<string
     headers['Authorization'] = `Bearer ${cloudConfig.getApiKey()}`;
   }
 
-  const totalResults = await evalRecord.getResultsCount();
+  // Use total row count (not distinct test count) since we iterate over all result rows
+  const totalResults = await evalRecord.getTotalResultRowCount();
+  logger.debug(`Total results to share: ${totalResults}`);
 
-  // Setup progress bar
-  const progressBar = new cliProgress.SingleBar(
-    {
-      format: 'Sharing | {bar} | {percentage}% | {value}/{total} results',
-      gracefulExit: true,
-    },
-    cliProgress.Presets.shades_classic,
-  );
-  progressBar.start(totalResults, 0);
+  // Setup progress bar only if not in verbose mode or CI
+  let progressBar: cliProgress.SingleBar | null = null;
+  if (!isVerbose && !isCI()) {
+    progressBar = new cliProgress.SingleBar(
+      {
+        format: 'Sharing | {bar} | {percentage}% | {value}/{total} results',
+        gracefulExit: true,
+      },
+      cliProgress.Presets.shades_classic,
+    );
+    progressBar.start(totalResults, 0);
+  }
 
   let evalId: string | undefined;
   try {
@@ -203,24 +275,57 @@ async function sendChunkedResults(evalRecord: Eval, url: string): Promise<string
 
     // Send chunks using batched cursor
     let currentChunk: EvalResult[] = [];
+    let totalSent = 0;
+    let chunkNumber = 0;
+
     for await (const batch of evalRecord.fetchResultsBatched(estimatedResultsPerChunk)) {
       for (const result of batch) {
         currentChunk.push(result);
         if (currentChunk.length >= estimatedResultsPerChunk) {
+          chunkNumber++;
+          logger.debug(`Sending chunk ${chunkNumber} with ${currentChunk.length} results`);
+
           await sendChunkOfResults(currentChunk, url, evalId, headers);
-          progressBar.increment(currentChunk.length);
+          totalSent += currentChunk.length;
+
+          if (progressBar) {
+            progressBar.increment(currentChunk.length);
+          } else {
+            logger.info(
+              `Progress: ${totalSent}/${totalResults} results shared (${Math.round((totalSent / totalResults) * 100)}%)`,
+            );
+          }
+
           currentChunk = [];
         }
       }
     }
+
     // Send final chunk
     if (currentChunk.length > 0) {
+      chunkNumber++;
+      logger.debug(`Sending final chunk ${chunkNumber} with ${currentChunk.length} results`);
+
       await sendChunkOfResults(currentChunk, url, evalId, headers);
-      progressBar.increment(currentChunk.length);
+      totalSent += currentChunk.length;
+
+      if (progressBar) {
+        progressBar.increment(currentChunk.length);
+      } else {
+        logger.info(`Progress: ${totalSent}/${totalResults} results shared (100%)`);
+      }
     }
+
+    logger.debug(
+      `Sharing complete. Total chunks sent: ${chunkNumber}, Total results: ${totalSent}`,
+    );
 
     return evalId;
   } catch (e) {
+    if (progressBar) {
+      progressBar.stop();
+    }
+
     logger.error(`Upload failed: ${e instanceof Error ? e.message : String(e)}`);
 
     if (evalId) {
@@ -229,7 +334,9 @@ async function sendChunkedResults(evalRecord: Eval, url: string): Promise<string
     }
     return null;
   } finally {
-    progressBar.stop();
+    if (progressBar) {
+      progressBar.stop();
+    }
   }
 }
 
@@ -330,6 +437,21 @@ export async function createShareableUrl(
   evalRecord: Eval,
   showAuth: boolean = false,
 ): Promise<string | null> {
+  // If sharing is explicitly disabled, return null
+  if (getEnvBool('PROMPTFOO_DISABLE_SHARING')) {
+    logger.debug('Sharing is explicitly disabled, returning null');
+    return null;
+  }
+
+  // Show org/team context before uploading (only when cloud is enabled)
+  const orgContext = await getOrgContext();
+  if (orgContext) {
+    const teamSuffix = orgContext.teamName ? ` > ${orgContext.teamName}` : '';
+    logger.info(
+      `${chalk.dim('Sharing to:')} ${chalk.cyan(orgContext.organizationName)}${teamSuffix}`,
+    );
+  }
+
   // 1. Handle email collection
   await handleEmailCollection(evalRecord);
 
@@ -377,4 +499,133 @@ export async function hasEvalBeenShared(eval_: Eval): Promise<boolean> {
     logger.error(`[hasEvalBeenShared]: error checking if eval has been shared: ${e}`);
     return false;
   }
+}
+
+/**
+ * Checks whether a model audit has been shared.
+ * @param audit The model audit to check.
+ * @returns True if the model audit has been shared, false otherwise.
+ */
+export async function hasModelAuditBeenShared(audit: ModelAudit): Promise<boolean> {
+  try {
+    // GET /api/v1/model-audits/:id
+    const res = await makeCloudRequest(`model-audits/${audit.id}`, 'GET');
+    switch (res.status) {
+      // 200: Model audit already exists i.e. it has been shared before.
+      case 200:
+        return true;
+      // 404: Model audit not found i.e. it has not been shared before.
+      case 404:
+        return false;
+      default:
+        throw new Error(
+          `[hasModelAuditBeenShared]: unexpected API error: ${res.status}\n${res.statusText}`,
+        );
+    }
+  } catch (e) {
+    logger.debug(`[hasModelAuditBeenShared]: error checking if model audit has been shared: ${e}`);
+    return false;
+  }
+}
+
+/**
+ * Creates a shareable URL for a model audit.
+ * @param auditRecord The model audit to share.
+ * @param showAuth Whether to show the authentication information in the URL.
+ * @returns The shareable URL for the model audit.
+ */
+export async function createShareableModelAuditUrl(
+  auditRecord: ModelAudit,
+  showAuth: boolean = false,
+): Promise<string | null> {
+  // 1. Handle email collection (skip for model audits as they don't have eval config)
+  // Model audits use cloud config directly
+
+  // 2. Get API configuration
+  const apiBaseUrl = cloudConfig.isEnabled() ? cloudConfig.getApiHost() : getShareApiBaseUrl();
+
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(cloudConfig.isEnabled() && { Authorization: `Bearer ${cloudConfig.getApiKey()}` }),
+  };
+
+  const url = `${apiBaseUrl}/api/v1/model-audits/share`;
+
+  // 3. Send the model audit data
+  logger.debug(`Sharing model audit ${auditRecord.id} to ${url}`);
+
+  try {
+    const payload = {
+      scanId: auditRecord.id,
+      createdAt: auditRecord.createdAt,
+      updatedAt: auditRecord.updatedAt,
+      name: auditRecord.name,
+      author: auditRecord.author,
+      modelPath: auditRecord.modelPath,
+      modelType: auditRecord.modelType,
+      results: auditRecord.results,
+      checks: auditRecord.checks,
+      issues: auditRecord.issues,
+      hasErrors: auditRecord.hasErrors,
+      totalChecks: auditRecord.totalChecks,
+      passedChecks: auditRecord.passedChecks,
+      failedChecks: auditRecord.failedChecks,
+      metadata: auditRecord.metadata,
+      // Revision tracking fields for deduplication
+      modelId: auditRecord.modelId,
+      revisionSha: auditRecord.revisionSha,
+      contentHash: auditRecord.contentHash,
+      modelSource: auditRecord.modelSource,
+      sourceLastModified: auditRecord.sourceLastModified,
+      scannerVersion: auditRecord.scannerVersion,
+    };
+
+    // Log payload size for debugging large model audits
+    const payloadSize = Buffer.byteLength(JSON.stringify(payload), 'utf8');
+    logger.debug(`Model audit payload size: ${(payloadSize / 1024 / 1024).toFixed(2)} MB`);
+
+    const response = await fetchWithProxy(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const responseBody = await response.text();
+      throw new Error(
+        `Failed to share model audit: ${response.status} ${response.statusText}\n${responseBody}`,
+      );
+    }
+
+    const { remoteId } = await response.json();
+    logger.debug(`Model audit shared successfully. Remote ID: ${remoteId}`);
+
+    return getShareableModelAuditUrl(auditRecord, remoteId || auditRecord.id, showAuth);
+  } catch (error) {
+    logger.error(
+      `Error sharing model audit: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    return null;
+  }
+}
+
+/**
+ * Gets the shareable URL for a model audit.
+ * @param audit The model audit.
+ * @param remoteAuditId The remote ID of the model audit.
+ * @param showAuth Whether to show the authentication information in the URL.
+ * @returns The shareable URL for the model audit.
+ */
+export function getShareableModelAuditUrl(
+  _audit: ModelAudit,
+  remoteAuditId: string,
+  showAuth: boolean = false,
+): string {
+  const appBaseUrl = cloudConfig.isEnabled()
+    ? cloudConfig.getAppUrl()
+    : getShareViewBaseUrl() || getDefaultShareViewBaseUrl();
+
+  const fullUrl = `${appBaseUrl}/model-audit/scan/${remoteAuditId}`;
+
+  return showAuth ? fullUrl : stripAuthFromUrl(fullUrl);
 }

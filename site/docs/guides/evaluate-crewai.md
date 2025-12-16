@@ -1,5 +1,6 @@
 ---
 sidebar_label: Red teaming a CrewAI Agent
+description: Evaluate CrewAI agent security and performance with automated red team testing. Compare agent responses across 100+ test cases to identify vulnerabilities.
 ---
 
 # Red Teaming a CrewAI Agent
@@ -43,7 +44,7 @@ Before starting, make sure you have:
 
 - Python 3.10+
 - Node.js v18+
-- OpenAI API access (for GPT-4o, GPT-4o-mini, or other models)
+- OpenAI API access (for GPT-4.1, GPT-4o, GPT-4.1-mini, or other models)
 - An OpenAI API key
 
 ## Step 1: Initial Setup
@@ -107,47 +108,42 @@ Now it’s time to set up the key Python packages and the Promptfoo CLI.
 In your project folder, run:
 
 ```
-pip install crewai openai python-dotenv
+pip install crewai
 npm install -g promptfoo
 ```
 
 Here’s what’s happening:
 
-- **`pip install crewai openai python-dotenv`** →
-  This installs the core Python libraries:
-  - `crewai`: for creating and managing multi-agent workflows.
-  - `openai`: for connecting to the OpenAI API.
-  - `python-dotenv`: for safely loading API keys from a `.env` file.
+- **`pip install crewai`** →
+  This installs CrewAI for creating and managing multi-agent workflows.
+  Note: The `openai` package and other dependencies (langchain, pydantic, etc.) will be automatically installed as dependencies of crewai.
 - **`npm install -g promptfoo`** →
   Installs Promptfoo globally using Node.js, so you can run its CLI commands anywhere.
+
+Optional: If you want to use `.env` files for API keys, also install:
+
+```bash
+pip install python-dotenv
+```
 
 **Verify the installation worked**
 
 Run these two quick checks:
 
-```
-python3 -c "import crewai, openai, dotenv ; print('✅ Python libs ready')"
+```bash
+python3 -c "import crewai ; print('✅ CrewAI ready')"
+promptfoo --version
 ```
 
 If everything’s installed correctly, you should see:
 
-```
-Python libs ready
-```
-
-Then check Promptfoo:
-
-```
-promptfoo --version
+```text
+✅ CrewAI ready
 ```
 
-This should return something like:
+And a version number from the promptfoo command (e.g., `0.97.0` or similar).
 
-```
-0.116.7
-```
-
-With this, you’ve got a working Python + Node.js environment ready to run CrewAI agents and evaluate them with Promptfoo.
+With this, you've got a working Python + Node.js environment ready to run CrewAI agents and evaluate them with Promptfoo.
 
 ## Step 4: Initialize the Promptfoo Project
 
@@ -185,38 +181,66 @@ At the end, you’ll see:
 Run `promptfoo eval` to get started!
 ```
 
-## Step 5: Write `agent.py`, `provider.py` and Edit `promptfooconfig.yaml`
+## Step 5: Write `agent.py` and Edit `promptfooconfig.yaml`
 
 In this step, we’ll define how our CrewAI recruitment agent works, connect it to Promptfoo, and set up the YAML config for evaluation.
 
 ### Create `agent.py`
 
-Inside your project folder, create a file called `agent.py` and add:
+Inside your project folder, create a file called `agent.py` that contains the CrewAI agent setup and promptfoo provider interface:
 
-```python
+````python
+import asyncio
+import json
 import os
-from crewai import Agent, Task, Crew
+import re
+import textwrap
+from typing import Any, Dict
+
+from crewai import Agent, Crew, Task
 
 # ✅ Load the OpenAI API key from the environment
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
-def get_recruitment_agent(model: str = "openai:gpt-4o") -> Crew:
+def get_recruitment_agent(model: str = "openai:gpt-5) -> Crew:
     """
     Creates a CrewAI recruitment agent setup.
     This agent’s goal: find the best Ruby on Rails + React candidates.
     """
     agent = Agent(
-        role='Recruiter',
-        goal='Find the best Ruby on Rails + React candidates',
-        backstory='An experienced recruiter specialized in tech roles.',
+        role="Senior Recruiter specializing in technical roles",
+        goal="Find the best candidates for a given set of job requirements and return the results in a valid JSON format.",
+        backstory=textwrap.dedent("""
+            You are an expert recruiter with years of experience in sourcing top talent for the tech industry.
+            You have a keen eye for detail and are a master at following instructions to the letter, especially when it comes to output formats.
+            You never fail to return a valid JSON object as your final answer.
+        """).strip(),
         verbose=False,
         model=model,
         api_key=OPENAI_API_KEY  # ✅ Make sure to pass the API key
     )
 
     task = Task(
-        description='List the top 3 candidates with RoR and React experience.',
-        expected_output='A list with names and experience summaries of top 3 candidates.',
+        description="Find the top 3 candidates based on the following job requirements: {job_requirements}",
+        expected_output=textwrap.dedent("""
+            A single valid JSON object. The JSON object must have a single key called "candidates".
+            The value of the "candidates" key must be an array of JSON objects.
+            Each object in the array must have the following keys: "name", "experience", and "skills".
+            - "name" must be a string representing the candidate's name.
+            - "experience" must be a string summarizing the candidate's relevant experience.
+            - "skills" must be an array of strings listing the candidate's skills.
+
+            Example of the expected final output:
+            {
+              "candidates": [
+                {
+                  "name": "Jane Doe",
+                  "experience": "8 years of experience in Ruby on Rails and React, with a strong focus on building scalable web applications.",
+                  "skills": ["Ruby on Rails", "React", "JavaScript", "PostgreSQL", "TDD"]
+                }
+              ]
+            }
+        """).strip(),
         agent=agent
     )
 
@@ -224,45 +248,59 @@ def get_recruitment_agent(model: str = "openai:gpt-4o") -> Crew:
     crew = Crew(agents=[agent], tasks=[task])
     return crew
 
-async def run_recruitment_agent(prompt, model='openai:gpt-4o'):
+async def run_recruitment_agent(prompt, model='openai:gpt-5):
     """
     Runs the recruitment agent with a given job requirements prompt.
     Returns a structured JSON-like dictionary with candidate info.
     """
+    # Check if API key is set
+    if not OPENAI_API_KEY:
+        return {
+            "error": "OpenAI API key not found. Please set the OPENAI_API_KEY environment variable or create a .env file with your API key."
+        }
+
     crew = get_recruitment_agent(model)
     try:
         # ⚡ Trigger the agent to start working
         result = crew.kickoff(inputs={'job_requirements': prompt})
 
-        # 🚀 Mock structured output for testing & validation
-        candidates_list = [
-            {"name": "Alex", "experience": "7 years RoR + React"},
-            {"name": "William", "experience": "10 years RoR"},
-            {"name": "Stanislav", "experience": "11 years fullstack"}
-        ]
+        # The result might be a string, or an object with a 'raw' attribute.
+        output_text = ""
+        if result:
+            if hasattr(result, 'raw') and result.raw:
+                output_text = result.raw
+            elif isinstance(result, str):
+                output_text = result
 
-        return {
-            "candidates": candidates_list,
-            "summary": "Top 3 candidates with strong Ruby on Rails and React experience."
-        }
+        if not output_text:
+            return {"error": "CrewAI agent returned an empty response."}
+
+        # Use regex to find the JSON block, even with markdown
+        json_match = re.search(r"```json\s*([\s\S]*?)\s*```|({[\s\S]*})", output_text)
+        if not json_match:
+            return {
+                "error": "No valid JSON block found in the agent's output.",
+                "raw_output": output_text,
+            }
+
+        json_string = json_match.group(1) or json_match.group(2)
+
+        try:
+            return json.loads(json_string)
+        except json.JSONDecodeError as e:
+            return {
+                "error": f"Failed to parse JSON from agent output: {str(e)}",
+                "raw_output": json_string,
+            }
 
     except Exception as e:
         # 🔥 Catch and report any error as part of the output
-        return {
-            "candidates": [],
-            "summary": f"Error occurred: {str(e)}"
-        }
-```
+        return {"error": f"An unexpected error occurred: {str(e)}"}
+````
 
-### Create `provider.py`
-
-Next, make a file called `provider.py` and add:
+Next, add the provider interface to handle Promptfoo's evaluation calls:
 
 ```python
-import asyncio
-from typing import Any, Dict
-from agent import run_recruitment_agent
-
 def call_api(prompt: str, options: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
     """
     Calls the CrewAI recruitment agent with the provided prompt.
@@ -270,30 +308,30 @@ def call_api(prompt: str, options: Dict[str, Any], context: Dict[str, Any]) -> D
     """
     try:
         # ✅ Run the async recruitment agent synchronously
-        result = asyncio.run(run_recruitment_agent(prompt))
+        config = options.get("config", {})
+        model = config.get("model", "openai:gpt-5)
+        result = asyncio.run(run_recruitment_agent(prompt, model=model))
+
+        if "error" in result:
+            return {"error": result["error"], "raw": result.get("raw_output", "")}
         return {"output": result}
 
     except Exception as e:
         # 🔥 Catch and return any error as part of the output
-        return {
-            "output": {
-                "candidates": [],
-                "summary": f"Error occurred: {str(e)}"
-            }
-        }
+        return {"error": f"An error occurred in call_api: {str(e)}"}
 
 if __name__ == "__main__":
     # 🧪 Simple test block to check provider behavior standalone
     print("✅ Testing CrewAI provider...")
 
     # 🔧 Example test prompt
-    test_prompt = "We need a Ruby on Rails and React engineer."
+    test_prompt = "We need a Ruby on Rails and React engineer with at least 5 years of experience."
 
     # ⚡ Call the API function with test inputs
     result = call_api(test_prompt, {}, {})
 
     # 📦 Print the result to console
-    print("Provider result:", result)
+    print("Provider result:", json.dumps(result, indent=2))
 ```
 
 ### Edit `promptfooconfig.yaml`
@@ -307,9 +345,9 @@ description: "CrewAI Recruitment Agent Evaluation"
 prompts:
   - "{{job_requirements}}"
 
-# ⚙️ Define the provider — here we point to our local provider.py
+# ⚙️ Define the provider — here we point to our local agent.py
 providers:
-  - id: file://./provider.py  # Local file provider (make sure path is correct!)
+  - id: file://./agent.py  # Local file provider (make sure path is correct!)
     label: CrewAI Recruitment Agent
 
 # ✅ Define default tests to check the agent output shape and content
@@ -370,7 +408,7 @@ What happens here:
 
 Promptfoo kicks off the evaluation job you set up.
 
-- It uses the promptfooconfig.yaml to call your custom CrewAI provider (from agent.py + provider.py).
+- It uses the promptfooconfig.yaml to call your custom CrewAI provider (from agent.py).
 - It feeds in the job requirements prompt and collects the structured output.
 - It checks the results against your Python and YAML assertions (like checking for a `candidates` list and a summary).
 - It shows a clear table: did the agent PASS or FAIL?
@@ -451,7 +489,7 @@ crewAI-recruitment
 Under Target ID, set the file reference to match your local provider:
 
 ```
-file://./provider.py
+file://./agent.py
 ```
 
 In Custom Configuration (JSON), you can leave defaults like:
@@ -471,7 +509,7 @@ This setup tells Promptfoo:
 
 “Attack and evaluate the CrewAI recruitment agent I’ve defined locally.”
 
-Instead of hitting GPT-4 or cloud models, it will **directly test your `provider.py` + `agent.py` logic**.
+Instead of hitting GPT-4 or cloud models, it will **directly test your `agent.py` logic**.
 
 This way, the red team scan uncovers:
 

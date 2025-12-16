@@ -1,0 +1,56 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Function Calling with Callbacks in OpenAI Responses API
+prompts:
+  - 'Please add these numbers: {{a}} and {{b}}'
+  - 'Calculate the sum of {{a}} + {{b}}'
+  - 'What is {{a}} plus {{b}}?'
+
+providers:
+  - id: openai:responses:gpt-4o
+    config:
+      temperature: 0
+      max_output_tokens: 100
+      tool_choice: auto
+      tools:
+        - type: function
+          name: addNumbers
+          description: Add two numbers together
+          parameters:
+            type: object
+            properties:
+              a:
+                type: number
+                description: The first number to add
+              b:
+                type: number
+                description: The second number to add
+            required: ['a', 'b']
+      # Function callbacks execute locally instead of returning the raw function call
+      functionToolCallbacks:
+        addNumbers: |
+          async (args) => {
+            const { a, b } = JSON.parse(args);
+            return String(a + b);
+          }
+
+tests:
+  - vars:
+      a: 5
+      b: 6
+    assert:
+      - type: equals
+        value: '11'
+
+  - vars:
+      a: 123
+      b: 456
+    assert:
+      - type: equals
+        value: '579'
+
+  - vars:
+      a: -10
+      b: 20
+    assert:
+      - type: equals
+        value: '10'

@@ -1,5 +1,6 @@
 ---
 sidebar_label: Gemma vs Llama
+description: Compare Google Gemma vs Meta Llama performance on custom datasets using automated benchmarks and side-by-side evaluations to select the best model for your use case
 ---
 
 # Gemma vs Llama: benchmark on your own data
@@ -178,7 +179,7 @@ tests:
       message: what are the most common non-investor roles at early stage venture capital firms?
 ```
 
-(Note that `llm-rubric` uses GPT-4o by default, which requires the `OPENAI_API_KEY` environment variable. You can [override the grader](/docs/configuration/expected-outputs/model-graded#overriding-the-llm-grader) to a model of your choice.
+(Note that `llm-rubric` uses `gpt-4.1-2025-04-14` by default, which requires the `OPENAI_API_KEY` environment variable. You can [override the grader](/docs/configuration/expected-outputs/model-graded#overriding-the-llm-grader) to a model of your choice.
 
 ## Step 3: Running the Comparison
 

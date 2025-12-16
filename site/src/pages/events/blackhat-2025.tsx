@@ -7,9 +7,10 @@ import BugReportIcon from '@mui/icons-material/BugReport';
 import SecurityIcon from '@mui/icons-material/Security';
 import SpeedIcon from '@mui/icons-material/Speed';
 import Layout from '@theme/Layout';
+import { SITE_CONSTANTS } from '../../constants';
 import styles from './blackhat-2025.module.css';
 
-export default function BlackHat2025(): JSX.Element {
+export default function BlackHat2025(): React.ReactElement {
   useEffect(() => {
     // Force dark theme for this page
     document.documentElement.setAttribute('data-theme', 'dark');
@@ -83,7 +84,9 @@ export default function BlackHat2025(): JSX.Element {
               <h1 className={styles.heroTitle}>
                 Security for AI used by
                 <br />
-                <span className={styles.highlight}>100,000 Developers</span>
+                <span className={styles.highlight}>
+                  {SITE_CONSTANTS.USER_COUNT_DISPLAY} Developers
+                </span>
               </h1>
               <p className={styles.heroSubtitle}>
                 Join us at Black Hat USA to see how Promptfoo helps security teams find and fix LLM
@@ -308,11 +311,11 @@ export default function BlackHat2025(): JSX.Element {
             <h2 className={styles.sectionTitle}>Why Security Teams Choose Promptfoo</h2>
             <div className={styles.statsGrid}>
               <div className={styles.stat}>
-                <div className={styles.statNumber}>100K+</div>
+                <div className={styles.statNumber}>{`${SITE_CONSTANTS.USER_COUNT_DISPLAY}+`}</div>
                 <div className={styles.statLabel}>Open Source Users</div>
               </div>
               <div className={styles.stat}>
-                <div className={styles.statNumber}>27</div>
+                <div className={styles.statNumber}>44</div>
                 <div className={styles.statLabel}>Fortune 500 Companies</div>
               </div>
               <div className={styles.stat}>

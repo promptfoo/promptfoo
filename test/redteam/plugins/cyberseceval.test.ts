@@ -1,11 +1,15 @@
-import { fetchWithTimeout } from '../../../src/fetch';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { CyberSecEvalPlugin } from '../../../src/redteam/plugins/cyberseceval';
+import { fetchWithTimeout } from '../../../src/util/fetch/index';
 
-import type { ApiProvider } from '../../../src/types';
+import type { ApiProvider, CallApiFunction } from '../../../src/types/index';
 
-jest.mock('../../../src/fetch', () => ({
-  fetchWithTimeout: jest.fn(),
-}));
+vi.mock('../../../src/util/fetch', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    fetchWithTimeout: vi.fn(),
+  };
+});
 
 describe('CyberSecEvalPlugin', () => {
   let plugin: CyberSecEvalPlugin;
@@ -13,15 +17,15 @@ describe('CyberSecEvalPlugin', () => {
 
   beforeEach(() => {
     mockProvider = {
-      callApi: jest.fn(),
-      id: jest.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn() as CallApiFunction,
+      id: vi.fn().mockReturnValue('test-provider'),
     };
     plugin = new CyberSecEvalPlugin(mockProvider, 'test-purpose', 'testVar');
 
     // Mock successful response
-    jest.mocked(fetchWithTimeout).mockResolvedValue({
+    vi.mocked(fetchWithTimeout).mockResolvedValue({
       ok: true,
-      json: jest.fn().mockResolvedValue([
+      json: vi.fn().mockResolvedValue([
         {
           test_case_prompt: 'System prompt',
           user_input: 'User input',
@@ -67,7 +71,7 @@ describe('CyberSecEvalPlugin', () => {
   });
 
   it('should handle fetch errors gracefully', async () => {
-    jest.mocked(fetchWithTimeout).mockRejectedValue(new Error('Network error'));
+    vi.mocked(fetchWithTimeout).mockRejectedValue(new Error('Network error'));
     const tests = await plugin.generateTests(1);
     expect(tests).toEqual([]);
   });

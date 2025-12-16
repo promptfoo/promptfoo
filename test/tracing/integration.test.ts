@@ -1,6 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { EvaluateTestSuite } from '../../src/types';
+import type { EvaluateTestSuite } from '../../src/types/index';
 
 // Define the mock provider class
 class MockTracedProviderInstance {
@@ -27,19 +27,19 @@ class MockTracedProviderInstance {
 
 const mockProvider = new MockTracedProviderInstance();
 
-// Mock providers using doMock
-jest.doMock('../../src/providers', () => {
-  const actual = jest.requireActual('../../src/providers');
+// Mock providers using vi.mock with async importActual
+vi.mock('../../src/providers', async () => {
+  const actual = await vi.importActual<typeof import('../../src/providers')>('../../src/providers');
   return {
-    ...(actual as any),
-    loadApiProvider: jest.fn(async (providerPath: string) => {
+    ...actual,
+    loadApiProvider: vi.fn(async (providerPath: string) => {
       if (providerPath === 'mock-traced-provider') {
         return mockProvider;
       }
       // Fall back to original for other providers
-      return (actual as any).loadApiProvider(providerPath);
+      return actual.loadApiProvider(providerPath);
     }),
-    loadApiProviders: jest.fn(async (providers: any) => {
+    loadApiProviders: vi.fn(async (providers: any) => {
       if (Array.isArray(providers) && providers.includes('mock-traced-provider')) {
         return [mockProvider];
       }
@@ -51,20 +51,21 @@ jest.doMock('../../src/providers', () => {
   };
 });
 
-// Dynamic import after mocking
-let evaluate: any;
+// Dynamic import after mocking - initialized in beforeAll
+let evaluate: typeof import('../../src/index').evaluate;
 
 describe('OpenTelemetry Tracing Integration', () => {
+  beforeAll(async () => {
+    const mod = await import('../../src/index');
+    evaluate = mod.evaluate;
+  });
+
   beforeEach(async () => {
-    jest.clearAllMocks();
-    if (!evaluate) {
-      const module = await import('../../src/index');
-      evaluate = module.evaluate;
-    }
+    vi.clearAllMocks();
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('should pass trace context to providers when tracing is enabled', async () => {

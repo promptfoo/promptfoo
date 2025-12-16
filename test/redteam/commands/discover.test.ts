@@ -1,13 +1,14 @@
-import { fetchWithProxy } from '../../../src/fetch';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ArgsSchema,
   doTargetPurposeDiscovery,
   normalizeTargetPurposeDiscoveryResult,
 } from '../../../src/redteam/commands/discover';
+import { fetchWithProxy } from '../../../src/util/fetch/index';
 
-jest.mock('../../../src/fetch');
+vi.mock('../../../src/util/fetch');
 
-const mockedFetchWithProxy = jest.mocked(fetchWithProxy);
+const mockedFetchWithProxy = vi.mocked(fetchWithProxy);
 
 describe('ArgsSchema', () => {
   it('`config` and `target` are mutually exclusive', () => {
@@ -100,7 +101,7 @@ describe('normalizeTargetPurposeDiscoveryResult', () => {
 
 describe('doTargetPurposeDiscovery', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('should handle empty prompt', async () => {
@@ -134,18 +135,18 @@ describe('doTargetPurposeDiscovery', () => {
       },
     ];
 
-    mockedFetchWithProxy.mockImplementation(() =>
-      Promise.resolve(
+    mockedFetchWithProxy.mockImplementation(function () {
+      return Promise.resolve(
         new Response(JSON.stringify(mockResponses.shift()), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
         }),
-      ),
-    );
+      );
+    });
 
     const target = {
       id: () => 'test',
-      callApi: jest.fn().mockResolvedValue({ output: 'I am a test assistant' }),
+      callApi: vi.fn().mockResolvedValue({ output: 'I am a test assistant' }),
     };
 
     const discoveredPurpose = await doTargetPurposeDiscovery(target);
@@ -203,18 +204,18 @@ describe('doTargetPurposeDiscovery', () => {
       },
     ];
 
-    mockedFetchWithProxy.mockImplementation(() =>
-      Promise.resolve(
+    mockedFetchWithProxy.mockImplementation(function () {
+      return Promise.resolve(
         new Response(JSON.stringify(mockResponses.shift()), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
         }),
-      ),
-    );
+      );
+    });
 
     const target = {
       id: () => 'test',
-      callApi: jest.fn().mockResolvedValue({ output: 'I am a test assistant' }),
+      callApi: vi.fn().mockResolvedValue({ output: 'I am a test assistant' }),
     };
     const prompt = {
       raw: 'This is a test prompt {{prompt}}',
@@ -269,18 +270,18 @@ describe('doTargetPurposeDiscovery', () => {
       },
     ];
 
-    mockedFetchWithProxy.mockImplementation(() =>
-      Promise.resolve(
+    mockedFetchWithProxy.mockImplementation(function () {
+      return Promise.resolve(
         new Response(JSON.stringify(mockResponses.shift()), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
         }),
-      ),
-    );
+      );
+    });
 
     const target = {
       id: () => 'test',
-      callApi: jest.fn().mockResolvedValue({ output: 'I cannot provide that information' }),
+      callApi: vi.fn().mockResolvedValue({ output: 'I cannot provide that information' }),
     };
 
     const discoveredPurpose = await doTargetPurposeDiscovery(target);
@@ -323,18 +324,18 @@ describe('doTargetPurposeDiscovery', () => {
       },
     ];
 
-    mockedFetchWithProxy.mockImplementation(() =>
-      Promise.resolve(
+    mockedFetchWithProxy.mockImplementation(function () {
+      return Promise.resolve(
         new Response(JSON.stringify(mockResponses.shift()), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
         }),
-      ),
-    );
+      );
+    });
 
     const target = {
       id: () => 'test',
-      callApi: jest.fn().mockResolvedValue({ output: 'Test response' }),
+      callApi: vi.fn().mockResolvedValue({ output: 'Test response' }),
     };
 
     const discoveredPurpose = await doTargetPurposeDiscovery(target);

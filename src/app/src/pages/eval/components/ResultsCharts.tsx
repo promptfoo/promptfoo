@@ -26,15 +26,13 @@ import {
   type TooltipItem,
 } from 'chart.js';
 import { ErrorBoundary } from 'react-error-boundary';
+import { usePassRates } from './hooks';
 import { useTableStore } from './store';
-import type { VisibilityState } from '@tanstack/table-core';
-
-import type { EvaluateTable, ResultLightweightWithLabel, UnifiedConfig } from './types';
+import type { EvaluateTable, UnifiedConfig } from '@promptfoo/types';
 
 interface ResultsChartsProps {
-  columnVisibility: VisibilityState;
-  recentEvals: ResultLightweightWithLabel[];
   handleHideCharts: () => void;
+  scores: number[];
 }
 
 interface ChartProps {
@@ -107,7 +105,7 @@ function HistogramChart({ table }: ChartProps) {
         (bin) => scores.filter((score) => score >= bin && score < bin + binSize).length,
       );
       return {
-        label: `Column ${promptIdx + 1}`,
+        label: prompt.provider,
         data: counts,
         backgroundColor: COLOR_PALETTE[promptIdx % COLOR_PALETTE.length],
       };
@@ -133,7 +131,7 @@ function HistogramChart({ table }: ChartProps) {
             callbacks: {
               title(context) {
                 const datasetIndex = context[0].datasetIndex;
-                return `Column ${datasetIndex + 1}`;
+                return table.head.prompts[datasetIndex].provider;
               },
               label(context) {
                 const labelIndex = context.dataIndex;
@@ -147,6 +145,20 @@ function HistogramChart({ table }: ChartProps) {
             },
           },
         },
+        scales: {
+          y: {
+            title: {
+              display: true,
+              text: 'Frequency',
+            },
+          },
+          x: {
+            title: {
+              display: true,
+              text: 'Score',
+            },
+          },
+        },
       },
     });
   }, [table]);
@@ -155,6 +167,7 @@ function HistogramChart({ table }: ChartProps) {
 }
 
 function PassRateChart({ table }: ChartProps) {
+  const passRates = usePassRates();
   const passRateCanvasRef = useRef(null);
   const passRateChartInstance = useRef<Chart | null>(null);
 
@@ -167,18 +180,11 @@ function PassRateChart({ table }: ChartProps) {
       passRateChartInstance.current.destroy();
     }
 
-    const datasets = table.head.prompts.map((prompt, promptIdx) => {
-      const outputs = table.body
-        .map((row) => row.outputs[promptIdx])
-        .filter((output) => output != null);
-      const passCount = outputs.filter((output) => output.pass).length;
-      const passRate = (passCount / outputs.length) * 100;
-      return {
-        label: `Column ${promptIdx + 1}`,
-        data: [passRate],
-        backgroundColor: COLOR_PALETTE[promptIdx % COLOR_PALETTE.length],
-      };
-    });
+    const datasets = table.head.prompts.map((prompt, promptIdx) => ({
+      label: prompt.provider,
+      data: [passRates[promptIdx]?.total ?? 0],
+      backgroundColor: COLOR_PALETTE[promptIdx % COLOR_PALETTE.length],
+    }));
 
     passRateChartInstance.current = new Chart(passRateCanvasRef.current, {
       type: 'bar',
@@ -191,10 +197,17 @@ function PassRateChart({ table }: ChartProps) {
         plugins: {
           title: {
             display: true,
-            text: 'Pass rate',
+            text: 'Pass Rate',
           },
           legend: {
             display: true,
+          },
+          tooltip: {
+            callbacks: {
+              label: function (context) {
+                return `${context.dataset.label}: ${(context.parsed.y ?? 0).toFixed(2)}%`;
+              },
+            },
           },
         },
       },
@@ -346,7 +359,7 @@ function ScatterChart({ table }: ChartProps) {
         <DialogContent>
           <FormControl sx={{ m: 1, minWidth: 120 }}>
             <Select value={xAxisPrompt} onChange={(e) => setXAxisPrompt(Number(e.target.value))}>
-              {table.head.prompts.map((prompt, idx) => (
+              {table.head.prompts.map((_prompt, idx) => (
                 <MenuItem key={idx} value={idx}>
                   Prompt {idx + 1}
                 </MenuItem>
@@ -355,7 +368,7 @@ function ScatterChart({ table }: ChartProps) {
           </FormControl>
           <FormControl sx={{ m: 1, minWidth: 120 }}>
             <Select value={yAxisPrompt} onChange={(e) => setYAxisPrompt(Number(e.target.value))}>
-              {table.head.prompts.map((prompt, idx) => (
+              {table.head.prompts.map((_prompt, idx) => (
                 <MenuItem key={idx} value={idx}>
                   Prompt {idx + 1}
                 </MenuItem>
@@ -435,7 +448,7 @@ function MetricChart({ table }: ChartProps) {
                 return tooltipItem[0].dataset.label;
               },
               label(tooltipItem: TooltipItem<'bar'>) {
-                const value = tooltipItem.parsed.y;
+                const value = tooltipItem.parsed.y ?? 0;
                 return `${labels[tooltipItem.dataIndex]}: ${(value * 100).toFixed(2)}% pass rate`;
               },
             },
@@ -587,7 +600,7 @@ function PerformanceOverTimeChart({ evalId }: ChartProps) {
           },
         },
       },
-      onClick: (event: any, elements: any) => {
+      onClick: (_event: any, elements: any) => {
         if (elements.length > 0) {
           const index = elements[0].index;
           window.open(`/eval/?evalId=${chartData[index].evalData.evalId}`, '_blank');
@@ -622,7 +635,7 @@ function PerformanceOverTimeChart({ evalId }: ChartProps) {
   return <canvas ref={lineCanvasRef} style={{ maxHeight: '300px', cursor: 'pointer' }} />;
 }
 
-function ResultsCharts({ columnVisibility, recentEvals, handleHideCharts }: ResultsChartsProps) {
+function ResultsCharts({ handleHideCharts, scores }: ResultsChartsProps) {
   const theme = useTheme();
   Chart.defaults.color = theme.palette.mode === 'dark' ? '#aaa' : '#666';
   const [
@@ -667,22 +680,9 @@ function ResultsCharts({ columnVisibility, recentEvals, handleHideCharts }: Resu
   //   );
   // }
 
-  const scores = table!.body
-    .flatMap((row) => row.outputs.map((output) => output?.score))
-    .filter((score) => typeof score === 'number' && !Number.isNaN(score));
-
-  if (scores.length === 0) {
-    // No valid scores available
-    return null;
-  }
+  const chartWidth = showPerformanceOverTimeChart ? '25%' : '33%';
 
   const scoreSet = new Set(scores);
-  if (scoreSet.size === 1) {
-    // All scores are the same, charts not useful.
-    return null;
-  }
-
-  const chartWidth = showPerformanceOverTimeChart ? '25%' : '33%';
 
   return (
     <ErrorBoundary fallback={null}>

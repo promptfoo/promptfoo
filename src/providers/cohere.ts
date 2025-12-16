@@ -6,10 +6,11 @@ import { REQUEST_TIMEOUT_MS } from './shared';
 import type {
   ApiEmbeddingProvider,
   ApiProvider,
+  CallApiContextParams,
   ProviderEmbeddingResponse,
   ProviderResponse,
   TokenUsage,
-} from '../types';
+} from '../types/index';
 import type { EnvOverrides } from '../types/env';
 
 interface CohereChatOptions {
@@ -80,10 +81,16 @@ export class CohereChatCompletionProvider implements ApiProvider {
     return `cohere:${this.modelName}`;
   }
 
-  async callApi(prompt: string): Promise<ProviderResponse> {
+  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     if (!this.apiKey) {
       return { error: 'Cohere API key is not set. Please provide a valid apiKey.' };
     }
+
+    // Merge configs from the provider and the prompt
+    const config = {
+      ...this.config,
+      ...context?.prompt?.config,
+    };
 
     const defaultParams = {
       chatHistory: [],
@@ -98,7 +105,7 @@ export class CohereChatCompletionProvider implements ApiProvider {
       presence_penalty: 0,
     };
 
-    const params = { ...defaultParams, ...this.config };
+    const params = { ...defaultParams, ...config };
 
     let body;
     try {
@@ -120,8 +127,6 @@ export class CohereChatCompletionProvider implements ApiProvider {
       };
     }
 
-    logger.debug(`Calling Cohere API: ${JSON.stringify(body)}`);
-
     let data,
       cached = false;
     try {
@@ -139,8 +144,6 @@ export class CohereChatCompletionProvider implements ApiProvider {
         REQUEST_TIMEOUT_MS,
       )) as unknown as { data: any; cached: boolean });
 
-      logger.debug(`Cohere chat API response: ${JSON.stringify(data)}`);
-
       if (data.message) {
         return { error: data.message };
       }
@@ -150,6 +153,7 @@ export class CohereChatCompletionProvider implements ApiProvider {
         total: data.token_count?.total_tokens || 0,
         prompt: data.token_count?.prompt_tokens || 0,
         completion: data.token_count?.response_tokens || 0,
+        numRequests: 1,
       };
 
       let output = data.text;
@@ -245,7 +249,6 @@ export class CohereEmbeddingProvider implements ApiEmbeddingProvider {
       logger.error(`API call error: ${err}`);
       throw err;
     }
-    logger.debug(`\tCohere embeddings API response: ${JSON.stringify(data)}`);
 
     const embedding = data?.embeddings?.[0];
     if (!embedding) {
@@ -256,6 +259,7 @@ export class CohereEmbeddingProvider implements ApiEmbeddingProvider {
       tokenUsage: {
         prompt: data.meta?.billed_units?.input_tokens || 0,
         total: data.meta?.billed_units?.input_tokens || 0,
+        numRequests: 1,
       },
     };
   }

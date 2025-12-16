@@ -1,5 +1,6 @@
 ---
 sidebar_label: Cloudera
+description: Configure Cloudera's OpenAI-compatible endpoints and Llama models for secure enterprise LLM testing with CDP authentication and custom namespace deployment
 ---
 
 # Cloudera

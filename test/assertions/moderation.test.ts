@@ -1,3 +1,4 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleModeration } from '../../src/assertions/moderation';
 import { matchesModeration } from '../../src/matchers';
 
@@ -6,14 +7,15 @@ import type {
   Assertion,
   AssertionParams,
   AssertionValueFunctionContext,
+  ProviderResponse,
   TestCase,
-} from '../../src/types';
+} from '../../src/types/index';
 
-jest.mock('../../src/matchers', () => ({
-  matchesModeration: jest.fn(),
+vi.mock('../../src/matchers', () => ({
+  matchesModeration: vi.fn(),
 }));
 
-const mockedMatchesModeration = jest.mocked(matchesModeration);
+const mockedMatchesModeration = vi.mocked(matchesModeration);
 
 describe('handleModeration', () => {
   const mockTest: TestCase = {
@@ -31,7 +33,7 @@ describe('handleModeration', () => {
   const mockProvider: ApiProvider = {
     id: () => 'test-provider',
     config: {},
-    callApi: jest.fn(),
+    callApi: vi.fn().mockResolvedValue({} as ProviderResponse),
   };
 
   const mockContext: AssertionValueFunctionContext = {
@@ -49,14 +51,14 @@ describe('handleModeration', () => {
     outputString: 'output',
     prompt: 'prompt',
     baseType: 'moderation',
-    context: mockContext,
+    assertionValueContext: mockContext,
     inverse: false,
     output: 'output',
     providerResponse: { output: 'output' },
   };
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('should pass moderation check', async () => {

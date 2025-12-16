@@ -18,13 +18,7 @@ interface TestCaseFormProps {
   onCancel: () => void;
 }
 
-const TestCaseForm: React.FC<TestCaseFormProps> = ({
-  open,
-  onAdd,
-  varsList,
-  initialValues,
-  onCancel,
-}) => {
+const TestCaseForm = ({ open, onAdd, varsList, initialValues, onCancel }: TestCaseFormProps) => {
   const [description, setDescription] = useState(initialValues?.description || '');
   const [vars, setVars] = useState(initialValues?.vars || {});
   const [asserts, setAsserts] = useState(initialValues?.assert || []);

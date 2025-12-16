@@ -1,6 +1,6 @@
 ---
 title: Multi-Modal Red Teaming
-description: Learn how to use promptfoo to test the robustness of multi-modal LLMs against adversarial inputs involving text, images, and audio.
+description: Red team multimodal AI systems using adversarial text, images, audio, and video inputs to identify cross-modal vulnerabilities
 keywords:
   [
     red teaming,
@@ -15,6 +15,7 @@ keywords:
     vision models,
     image strategy,
     UnsafeBench,
+    VLGuard,
     audio strategy,
   ]
 ---
@@ -45,6 +46,9 @@ npx promptfoo@latest redteam run -c promptfooconfig.image-strategy.yaml
 
 # Run the UnsafeBench red team
 npx promptfoo@latest redteam run -c promptfooconfig.unsafebench.yaml
+
+# Run the VLGuard red team
+npx promptfoo@latest redteam run -c promptfooconfig.vlguard.yaml
 ```
 
 ## Multi-Modal Red Teaming Approaches
@@ -61,9 +65,17 @@ This approach uses a fixed image while generating various potentially problemati
 
 This approach converts potentially harmful text into images and then sends those images to the model. It tests whether harmful content embedded in images can bypass safety filters that would catch the same content in plain text. For more details, see [Image Jailbreaking](/docs/red-team/strategies/image).
 
-#### 3. UnsafeBench Dataset Testing
+#### 3. Text-to-Video Conversion (Video Strategy)
+
+This approach converts potentially harmful text into videos with text overlay and then sends those videos to the model. It tests whether harmful content embedded in videos can bypass safety filters that would catch the same content in plain text. For more details, see [Video Jailbreaking](/docs/red-team/strategies/video).
+
+#### 4. UnsafeBench Dataset Testing
 
 This approach uses real unsafe images from the [UnsafeBench](https://huggingface.co/datasets/yiting/UnsafeBench) dataset to test how models respond to potentially harmful visual content across various categories. It evaluates whether models can properly detect and refuse to engage with unsafe imagery.
+
+:::note
+UnsafeBench is restricted to non-commercial academic research. Check dataset licenses before commercial use.
+:::
 
 ### Audio Content Strategy
 
@@ -279,7 +291,7 @@ Create a configuration file named `promptfooconfig.unsafebench.yaml`:
 description: UnsafeBench Multi-Modal Model Evaluation
 
 targets:
-  - id: openai:gpt-4.1-mini
+  - id: openai:gpt-5-mini
     label: multimodal-model
 
 prompts:
@@ -413,6 +425,52 @@ redteam:
   numTests: 5 # Change to desired number
 ```
 
+## Alternative: VLGuard Dataset Testing
+
+The VLGuard plugin provides an alternative dataset for multi-modal safety testing.
+
+### VLGuard Configuration
+
+```yaml title="promptfooconfig.vlguard.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: VLGuard Multi-Modal Model Evaluation
+
+targets:
+  - id: openai:gpt-4o
+    label: multimodal-model
+
+prompts:
+  - id: file://image-prompt.json
+    label: vlguard-image-test
+
+redteam:
+  purpose: >-
+    You are a visual analysis assistant that provides information about images
+    while maintaining ethical boundaries.
+  injectVar: image
+  numTests: 3
+  plugins:
+    - id: vlguard
+      config:
+        categories:
+          - deception
+          - risky behavior
+          - privacy
+        # Optional: filter by subcategories
+        # subcategories:
+        #   - violence
+        #   - disinformation
+```
+
+### Dataset Characteristics
+
+- Categories: deception, risky behavior, privacy, discrimination
+- Subcategories: violence, disinformation, professional advice, and more
+- 442 curated images
+- License status: Not explicitly stated
+
+See the [VLGuard plugin documentation](/docs/red-team/plugins/vlguard) for configuration details.
+
 ## Audio Strategy Example
 
 To use the audio strategy for red teaming, create a configuration file:
@@ -426,7 +484,7 @@ prompts:
     label: audio-prompt
 
 targets:
-  - id: openai:gpt-4.1
+  - id: openai:gpt-5
     label: multimodal-model
 
 defaultTest:
@@ -493,5 +551,6 @@ npx promptfoo@latest redteam run -c promptfooconfig.yaml
 - [Red Team Strategies](/docs/red-team/strategies/)
 - [Image Inputs Strategy](/docs/red-team/strategies/image)
 - [Audio Inputs Strategy](/docs/red-team/strategies/audio)
+- [Video Inputs Strategy](/docs/red-team/strategies/video)
 - [LLM Red Teaming Guide](/docs/red-team/)
 - [Testing Guardrails](/docs/guides/testing-guardrails)

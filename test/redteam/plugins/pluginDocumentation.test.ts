@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 
@@ -76,7 +77,12 @@ async function loadPluginsFromDocs(): Promise<Set<string>> {
 }
 
 describe('Plugin Documentation', () => {
-  const pluginFiles = getFiles(PLUGINS_DIR, '.ts', ['index.ts', 'base.ts']);
+  const pluginFiles = getFiles(PLUGINS_DIR, '.ts', [
+    'index.ts',
+    'base.ts',
+    'imageDatasetPluginBase.ts',
+    'imageDatasetUtils.ts',
+  ]);
   const docFiles = getFiles(DOCS_DIR, '.md', ['_category_.json']);
 
   describe('Plugin files and documentation files', () => {

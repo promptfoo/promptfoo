@@ -1,7 +1,7 @@
 ---
 sidebar_label: Hex Encoding
 title: Hex Encoding Strategy
-description: Test how AI systems handle hexadecimal-encoded text that may bypass content filters
+description: Evaluate AI robustness against hexadecimal-encoded attacks designed to bypass content filters and safety mechanisms
 ---
 
 # Hex Encoding Strategy

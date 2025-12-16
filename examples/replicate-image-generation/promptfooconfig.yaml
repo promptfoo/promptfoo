@@ -1,0 +1,124 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Test state-of-the-art image generation models on Replicate
+
+prompts:
+  - 'Generate an image: {{imagePrompt}}'
+
+providers:
+  # FLUX 1.1 Pro Ultra - Highest quality, up to 4MP images
+  - id: replicate:image:black-forest-labs/flux-1.1-pro-ultra
+    config:
+      width: 1024
+      height: 1024
+      aspect_ratio: '1:1'
+      output_format: 'webp'
+
+  # FLUX 1.1 Pro Ultra - Raw mode for photorealistic results
+  - id: replicate:image:black-forest-labs/flux-1.1-pro-ultra
+    label: flux-1.1-pro-ultra-raw
+    config:
+      width: 1024
+      height: 1024
+      aspect_ratio: '1:1'
+      output_format: 'webp'
+      raw: true # Enable raw mode for more authentic photography
+
+  # FLUX Dev - Open source version
+  - id: replicate:image:black-forest-labs/flux-dev
+    config:
+      width: 1024
+      height: 1024
+      num_outputs: 1
+      guidance: 3.5
+      num_inference_steps: 28
+
+  # FLUX Dev Realism - Specialized for photorealistic images
+  - id: replicate:image:xlabs-ai/flux-dev-realism
+    config:
+      width: 1024
+      height: 1024
+      num_outputs: 1
+      num_inference_steps: 28
+      guidance_scale: 3.5
+
+  # Stable Diffusion XL for comparison
+  - id: replicate:image:stability-ai/sdxl:7762fd07cf82c948538e41f63f77d685e02b063e37e496e96eefd46c929f9bdc
+    label: sdxl
+    config:
+      width: 1024
+      height: 1024
+      num_inference_steps: 25
+      guidance_scale: 7.5
+
+tests:
+  # Photorealistic portrait
+  - vars:
+      imagePrompt: 'Professional headshot of a confident business woman, natural lighting, shallow depth of field, shot on Canon R5, 85mm lens'
+    assert:
+      - type: javascript
+        value: |
+          // Check that the output contains markdown image format
+          return output && typeof output === 'string' && output.includes('![') && output.includes('](http');
+
+  # Artistic landscape
+  - vars:
+      imagePrompt: 'Majestic mountain landscape at golden hour, dramatic clouds, painted in the style of Albert Bierstadt, oil on canvas, highly detailed'
+    assert:
+      - type: javascript
+        value: |
+          // Check that the output contains markdown image format
+          return output && typeof output === 'string' && output.includes('![') && output.includes('](http');
+
+  # Architectural visualization
+  - vars:
+      imagePrompt: 'Modern minimalist house with large glass windows, concrete and wood exterior, surrounded by lush greenery, architectural photography, dusk lighting'
+    assert:
+      - type: javascript
+        value: |
+          // Check that the output contains markdown image format
+          return output && typeof output === 'string' && output.includes('![') && output.includes('](http');
+
+  # Product photography
+  - vars:
+      imagePrompt: 'Luxury watch floating in air with dramatic lighting, black background, professional product photography, ultra sharp focus, commercial style'
+    assert:
+      - type: javascript
+        value: |
+          // Check that the output contains markdown image format
+          return output && typeof output === 'string' && output.includes('![') && output.includes('](http');
+
+  # Abstract art
+  - vars:
+      imagePrompt: 'Abstract expressionist painting with vibrant blues and oranges, dynamic brushstrokes, inspired by Jackson Pollock and Mark Rothko'
+    assert:
+      - type: javascript
+        value: |
+          // Check that the output contains markdown image format
+          return output && typeof output === 'string' && output.includes('![') && output.includes('](http');
+
+  # Science fiction scene
+  - vars:
+      imagePrompt: 'Futuristic cyberpunk cityscape at night, neon lights reflecting on wet streets, flying cars, holographic advertisements, blade runner aesthetic'
+    assert:
+      - type: javascript
+        value: |
+          // Check that the output contains markdown image format
+          return output && typeof output === 'string' && output.includes('![') && output.includes('](http');
+
+  # Food photography
+  - vars:
+      imagePrompt: 'Gourmet sushi platter, minimalist presentation, soft natural lighting, shallow depth of field, overhead shot, restaurant quality'
+    assert:
+      - type: javascript
+        value: |
+          // Check that the output contains markdown image format
+          return output && typeof output === 'string' && output.includes('![') && output.includes('](http');
+
+  # Wildlife photography
+  - vars:
+      imagePrompt: 'Majestic lion in African savanna during sunset, sharp focus on eyes, bokeh background, National Geographic style wildlife photography'
+    assert:
+      - type: javascript
+        value: |
+          // Check that the output contains markdown image format
+          return output && typeof output === 'string' && output.includes('![') && output.includes('](http');

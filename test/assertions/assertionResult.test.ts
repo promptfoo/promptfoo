@@ -1,6 +1,6 @@
-import { AssertionsResult } from '../../src/assertions/assertionsResult';
-
-import type { AssertionSet, GradingResult } from '../../src/types';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { AssertionsResult, GUARDRAIL_BLOCKED_REASON } from '../../src/assertions/assertionsResult';
+import type { AssertionSet, GradingResult } from '../../src/types/index';
 
 describe('AssertionsResult', () => {
   beforeEach(() => {
@@ -11,15 +11,13 @@ describe('AssertionsResult', () => {
     pass: true,
     score: 1,
     reason: 'The succeeding reason',
-    tokensUsed: { total: 1, prompt: 2, completion: 3, cached: 0 },
-    assertion: null,
+    tokensUsed: { total: 1, prompt: 2, completion: 3, cached: 0, numRequests: 0 },
   };
   const failingResult = {
     pass: false,
     score: 0,
     reason: 'The failing reason',
-    tokensUsed: { total: 1, prompt: 2, completion: 3, cached: 0 },
-    assertion: null,
+    tokensUsed: { total: 1, prompt: 2, completion: 3, cached: 0, numRequests: 0 },
   };
   const testResult = {
     pass: true,
@@ -27,8 +25,7 @@ describe('AssertionsResult', () => {
     reason: 'All assertions passed',
     componentResults: [succeedingResult],
     namedScores: {},
-    assertion: null,
-    tokensUsed: { total: 1, prompt: 2, completion: 3, cached: 0 },
+    tokensUsed: { total: 1, prompt: 2, completion: 3, cached: 0, numRequests: 0 },
   };
   let assertionsResult: AssertionsResult;
 
@@ -101,7 +98,7 @@ describe('AssertionsResult', () => {
     await expect(assertionsResult.testResult()).resolves.toEqual({
       ...testResult,
       componentResults: [resultWithoutTokensUsed],
-      tokensUsed: { total: 0, prompt: 0, completion: 0, cached: 0 },
+      tokensUsed: { total: 0, prompt: 0, completion: 0, cached: 0, numRequests: 0 },
     });
   });
 
@@ -208,8 +205,7 @@ describe('AssertionsResult', () => {
         pass: true,
         score: 1,
         reason: 'No assertions',
-        tokensUsed: { total: 0, prompt: 0, completion: 0, cached: 0 },
-        assertion: null,
+        tokensUsed: { total: 0, prompt: 0, completion: 0, cached: 0, numRequests: 0 },
       });
     });
   });
@@ -219,7 +215,7 @@ describe('AssertionsResult', () => {
       pass: false,
       score: 0,
       reason: 'Failed guardrail check',
-      tokensUsed: { total: 1, prompt: 2, completion: 3, cached: 0 },
+      tokensUsed: { total: 1, prompt: 2, completion: 3, cached: 0, numRequests: 0 },
       assertion: {
         type: 'guardrails' as const,
         config: {
@@ -235,7 +231,7 @@ describe('AssertionsResult', () => {
 
     const result = await assertionsResult.testResult();
     expect(result.pass).toBe(true);
-    expect(result.reason).toBe('Content failed guardrail safety checks');
+    expect(result.reason).toBe(GUARDRAIL_BLOCKED_REASON);
   });
 
   it('handles multiple named scores from different sources', async () => {
@@ -243,7 +239,7 @@ describe('AssertionsResult', () => {
       pass: true,
       score: 1,
       reason: 'Test passed',
-      tokensUsed: { total: 1, prompt: 2, completion: 3, cached: 0 },
+      tokensUsed: { total: 1, prompt: 2, completion: 3, cached: 0, numRequests: 0 },
       namedScores: {
         'metric-1': 0.8,
         'metric-2': 0.9,
@@ -265,7 +261,7 @@ describe('AssertionsResult', () => {
   });
 
   it('handles scoring function errors', async () => {
-    const mockScoringFunction = jest.fn().mockImplementation(() => {
+    const mockScoringFunction = vi.fn().mockImplementation(() => {
       throw new Error('Scoring function failed');
     });
 
@@ -281,7 +277,7 @@ describe('AssertionsResult', () => {
   });
 
   it('handles invalid scoring function return value', async () => {
-    const mockScoringFunction = jest.fn().mockReturnValue('invalid');
+    const mockScoringFunction = vi.fn().mockReturnValue('invalid');
 
     assertionsResult.addResult({
       index: 0,
@@ -301,7 +297,7 @@ describe('AssertionsResult', () => {
       pass: true,
       score: 1,
       reason: 'Test passed',
-      tokensUsed: { total: 1, prompt: 2, completion: 3, cached: 0 },
+      tokensUsed: { total: 1, prompt: 2, completion: 3, cached: 0, numRequests: 0 },
       namedScores: {
         'metric-1': 0.8,
       } as Record<string, number>,
@@ -319,7 +315,7 @@ describe('AssertionsResult', () => {
   });
 
   it('handles scoring function with async GradingResult', async () => {
-    const mockScoringFunction = jest.fn().mockResolvedValue({
+    const mockScoringFunction = vi.fn().mockResolvedValue({
       pass: true,
       score: 0.9,
       reason: 'Async scoring result',
@@ -341,7 +337,7 @@ describe('AssertionsResult', () => {
       pass: true,
       score: 1,
       reason: 'Test passed',
-      tokensUsed: { total: 1, prompt: 2, completion: 3, cached: 0 },
+      tokensUsed: { total: 1, prompt: 2, completion: 3, cached: 0, numRequests: 0 },
       namedScores: {
         'metric-1': 0.8,
       } as Record<string, number>,

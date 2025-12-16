@@ -1,5 +1,6 @@
 ---
 sidebar_label: Together AI
+description: "Deploy open-source models at scale using Together AI's optimized inference platform with serverless GPU infrastructure"
 ---
 
 # Together AI
@@ -17,7 +18,7 @@ Configure a Together AI model in your promptfoo configuration:
 ```yaml title="promptfooconfig.yaml"
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 providers:
-  - id: togetherai:meta-llama/Llama-3.3-70B-Instruct-Turbo
+  - id: togetherai:meta-llama/Llama-4-Scout-Instruct
     config:
       temperature: 0.7
 ```

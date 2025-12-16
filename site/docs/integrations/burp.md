@@ -1,5 +1,6 @@
 ---
 sidebar_label: Burp Suite
+description: Test LLM applications for jailbreak vulnerabilities by integrating Promptfoo's red teaming capabilities with Burp Suite Intruder for automated security scanning and testing
 ---
 
 # Finding LLM Jailbreaks with Burp Suite

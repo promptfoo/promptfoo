@@ -1,5 +1,6 @@
 ---
 sidebar_label: Evaluating Replicate Lifeboat
+description: Compare GPT-3.5 vs Llama2-70b performance on real-world prompts using Replicate Lifeboat API to benchmark model accuracy and response quality for your specific use case
 ---
 
 # How to evaluate GPT 3.5 vs Llama2-70b with Replicate Lifeboat
@@ -33,7 +34,7 @@ prompts:
   - 'Respond to the user concisely: {{message}}'
 
 providers:
-  - id: openai:chat:gpt-4.1-mini
+  - id: openai:chat:gpt-5-mini
     config:
       apiKey: 'your_openai_api_key'
       temperature: 0.01

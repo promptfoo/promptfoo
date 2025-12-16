@@ -7,24 +7,49 @@ import {
   COLLECTIONS,
   DEFAULT_NUM_TESTS_PER_PLUGIN,
   DEFAULT_STRATEGIES,
+  FINANCIAL_PLUGINS,
   FOUNDATION_PLUGINS,
+  FRAMEWORK_COMPLIANCE_IDS,
   GUARDRAILS_EVALUATION_PLUGINS,
   HARM_PLUGINS,
+  INSURANCE_PLUGINS,
   MEDICAL_PLUGINS,
+  PHARMACY_PLUGINS,
   PII_PLUGINS,
-  type Plugin,
   ADDITIONAL_PLUGINS as REDTEAM_ADDITIONAL_PLUGINS,
   ADDITIONAL_STRATEGIES as REDTEAM_ADDITIONAL_STRATEGIES,
   ALL_PLUGINS as REDTEAM_ALL_PLUGINS,
   DEFAULT_PLUGINS as REDTEAM_DEFAULT_PLUGINS,
   Severity,
-  type Strategy,
+  SeveritySchema,
 } from '../redteam/constants';
 import { isCustomStrategy } from '../redteam/constants/strategies';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { ProviderSchema } from '../validators/providers';
 
+import type { FrameworkComplianceId, Plugin, Strategy } from '../redteam/constants';
 import type { RedteamFileConfig, RedteamPluginObject, RedteamStrategy } from '../redteam/types';
+
+const TracingConfigSchema: z.ZodType<any> = z.lazy(() =>
+  z.object({
+    enabled: z.boolean().optional(),
+    includeInAttack: z.boolean().optional(),
+    includeInGrading: z.boolean().optional(),
+    includeInternalSpans: z.boolean().optional(),
+    maxSpans: z.number().int().positive().optional(),
+    maxDepth: z.number().int().positive().optional(),
+    maxRetries: z.number().int().nonnegative().optional(),
+    retryDelayMs: z.number().int().nonnegative().optional(),
+    spanFilter: z.array(z.string()).optional(),
+    sanitizeAttributes: z.boolean().optional(),
+    strategies: z.record(z.lazy(() => TracingConfigSchema)).optional(),
+  }),
+);
+
+const frameworkOptions = FRAMEWORK_COMPLIANCE_IDS as unknown as [
+  FrameworkComplianceId,
+  ...FrameworkComplianceId[],
+];
 
 export const pluginOptions: string[] = [
   ...new Set([...COLLECTIONS, ...REDTEAM_ALL_PLUGINS, ...ALIASED_PLUGINS]),
@@ -45,8 +70,13 @@ export const RedteamPluginObjectSchema = z.object({
           });
         }
       }),
-      z.string().startsWith('file://', {
-        message: 'Custom plugins must start with file:// (or use one of the built-in plugins)',
+      z.string().superRefine((val, ctx) => {
+        if (!val.startsWith('file://')) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `Invalid plugin id "${val}". Custom plugins must start with file:// or use a built-in plugin. See https://www.promptfoo.dev/docs/red-team/plugins for available plugins.`,
+          });
+        }
       }),
     ])
     .describe('Name of the plugin'),
@@ -57,7 +87,7 @@ export const RedteamPluginObjectSchema = z.object({
     .default(DEFAULT_NUM_TESTS_PER_PLUGIN)
     .describe('Number of tests to generate for this plugin'),
   config: z.record(z.unknown()).optional().describe('Plugin-specific configuration'),
-  severity: z.nativeEnum(Severity).optional().describe('Severity level for this plugin'),
+  severity: SeveritySchema.optional().describe('Severity level for this plugin'),
 });
 
 /**
@@ -76,8 +106,13 @@ export const RedteamPluginSchema = z.union([
           });
         }
       }),
-      z.string().startsWith('file://', {
-        message: 'Custom plugins must start with file:// (or use one of the built-in plugins)',
+      z.string().superRefine((val, ctx) => {
+        if (!val.startsWith('file://')) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `Invalid plugin id "${val}". Custom plugins must start with file:// or use a built-in plugin. See https://www.promptfoo.dev/docs/red-team/plugins for available plugins.`,
+          });
+        }
       }),
     ])
     .describe('Name of the plugin or path to custom plugin'),
@@ -86,6 +121,10 @@ export const RedteamPluginSchema = z.union([
 
 export const strategyIdSchema = z.union([
   z.enum(ALL_STRATEGIES as unknown as [string, ...string[]]).superRefine((val, ctx) => {
+    // Allow 'multilingual' for backward compatibility - it will be migrated to language config
+    if (val === 'multilingual') {
+      return;
+    }
     if (!ALL_STRATEGIES.includes(val as Strategy)) {
       ctx.addIssue({
         code: z.ZodIssueCode.invalid_enum_value,
@@ -97,6 +136,10 @@ export const strategyIdSchema = z.union([
   }),
   z.string().refine(
     (value) => {
+      // Allow 'multilingual' for backward compatibility
+      if (value === 'multilingual') {
+        return true;
+      }
       return value.startsWith('file://') && isJavascriptFile(value);
     },
     {
@@ -138,6 +181,7 @@ export const RedteamGenerateOptionsSchema = z.object({
     .describe('Additional strategies to include'),
   cache: z.boolean().describe('Whether to use caching'),
   config: z.string().optional().describe('Path to the configuration file'),
+  target: z.string().optional().describe('Cloud provider target ID to run the scan on'),
   defaultConfig: z.record(z.unknown()).describe('Default configuration object'),
   defaultConfigPath: z.string().optional().describe('Path to the default configuration file'),
   delay: z
@@ -149,7 +193,17 @@ export const RedteamGenerateOptionsSchema = z.object({
   envFile: z.string().optional().describe('Path to the environment file'),
   force: z.boolean().describe('Whether to force generation').default(false),
   injectVar: z.string().optional().describe('Variable to inject'),
-  language: z.string().optional().describe('Language of tests to generate'),
+  language: z
+    .union([z.string(), z.array(z.string())])
+    .optional()
+    .describe('Language(s) of tests to generate'),
+  frameworks: z
+    .array(z.enum(frameworkOptions))
+    .min(1)
+    .optional()
+    .describe(
+      'Subset of compliance frameworks to include when generating, reporting, and filtering results',
+    ),
   maxConcurrency: z
     .number()
     .int()
@@ -165,6 +219,7 @@ export const RedteamGenerateOptionsSchema = z.object({
   write: z.boolean().describe('Whether to write the output'),
   burpEscapeJson: z.boolean().describe('Whether to escape quotes in Burp payloads').optional(),
   progressBar: z.boolean().describe('Whether to show a progress bar').optional(),
+  configFromCloud: z.any().optional().describe('A configuration object loaded from cloud'),
 });
 
 /**
@@ -188,7 +243,15 @@ export const RedteamConfigSchema = z
       .describe('Additional instructions for test generation applied to each plugin'),
     provider: ProviderSchema.optional().describe('Provider used for generating adversarial inputs'),
     numTests: z.number().int().positive().optional().describe('Number of tests to generate'),
-    language: z.string().optional().describe('Language of tests ot generate for this plugin'),
+    language: z
+      .union([z.string(), z.array(z.string())])
+      .optional()
+      .describe('Language(s) of tests to generate for this plugin'),
+    frameworks: z
+      .array(z.enum(frameworkOptions))
+      .min(1)
+      .optional()
+      .describe('Compliance frameworks to include across reports and commands'),
     entities: z
       .array(z.string())
       .optional()
@@ -224,10 +287,53 @@ export const RedteamConfigSchema = z
       .boolean()
       .optional()
       .describe('Whether to exclude target output from the agentific attack generation process'),
+    tracing: TracingConfigSchema.optional().describe(
+      'Tracing defaults applied to all strategies unless overridden',
+    ),
   })
   .transform((data): RedteamFileConfig => {
     const pluginMap = new Map<string, RedteamPluginObject>();
     const strategySet = new Set<Strategy>();
+    const frameworks =
+      data.frameworks && data.frameworks.length > 0
+        ? Array.from(new Set(data.frameworks))
+        : undefined;
+
+    // MIGRATION: Extract languages from multilingual strategy and merge into global language config
+    // This allows plugin-level language generation to work with multilingual strategy
+    const multilingualStrategy = data.strategies?.find(
+      (s) => (typeof s === 'string' ? s : s.id) === 'multilingual',
+    );
+
+    if (multilingualStrategy && typeof multilingualStrategy !== 'string') {
+      const strategyLanguages = multilingualStrategy.config?.languages;
+
+      if (Array.isArray(strategyLanguages) && strategyLanguages.length > 0) {
+        // Fire-and-forget async import to avoid circular dependency at module load time
+        (async () => {
+          const { default: logger } = await import('../logger');
+          logger.debug(
+            '[DEPRECATED] The "multilingual" strategy is deprecated. Use the top-level "language" config instead. See: https://www.promptfoo.dev/docs/red-team/configuration/#language',
+          );
+        })();
+
+        if (data.language) {
+          // Global language exists, merge with 'en' and strategy languages, then deduplicate
+          const existingLanguages = Array.isArray(data.language) ? data.language : [data.language];
+          data.language = [...new Set([...existingLanguages, 'en', ...strategyLanguages])];
+        } else {
+          // No global language set, prepend 'en' as default to multilingual strategy languages
+          data.language = ['en', ...strategyLanguages];
+        }
+
+        // Remove multilingual strategy from array - it's now a pure config mechanism
+        // Tests will be generated with language modifiers by plugins, not by the strategy
+        data.strategies = data.strategies?.filter((s) => {
+          const id = typeof s === 'string' ? s : s.id;
+          return id !== 'multilingual';
+        });
+      }
+    }
 
     const addPlugin = (
       id: string,
@@ -278,6 +384,12 @@ export const RedteamConfigSchema = z
         expandCollection([...PII_PLUGINS], config, numTests, severity);
       } else if (id === 'medical') {
         expandCollection([...MEDICAL_PLUGINS], config, numTests, severity);
+      } else if (id === 'pharmacy') {
+        expandCollection([...PHARMACY_PLUGINS], config, numTests, severity);
+      } else if (id === 'insurance') {
+        expandCollection([...INSURANCE_PLUGINS], config, numTests, severity);
+      } else if (id === 'financial') {
+        expandCollection([...FINANCIAL_PLUGINS], config, numTests, severity);
       } else if (id === 'default') {
         expandCollection([...REDTEAM_DEFAULT_PLUGINS], config, numTests, severity);
       } else if (id === 'guardrails-eval') {
@@ -352,6 +464,27 @@ export const RedteamConfigSchema = z
         return JSON.stringify(a.config || {}).localeCompare(JSON.stringify(b.config || {}));
       });
 
+    // Helper to generate a unique key for strategies
+    // For layer strategies, use label or steps to differentiate multiple instances
+    const getStrategyKey = (strategy: RedteamStrategy): string => {
+      if (typeof strategy === 'string') {
+        return strategy;
+      }
+      if (strategy.id === 'layer' && strategy.config) {
+        if (strategy.config.label) {
+          return `layer/${strategy.config.label}`;
+        }
+        if (strategy.config.steps) {
+          return `layer:${JSON.stringify(strategy.config.steps)}`;
+        }
+      }
+      // For other strategies with config, include config in key to allow multiple instances
+      if (strategy.config && Object.keys(strategy.config).length > 0) {
+        return `${strategy.id}:${JSON.stringify(strategy.config)}`;
+      }
+      return strategy.id;
+    };
+
     const strategies = Array.from(
       new Map<string, RedteamStrategy>(
         [...(data.strategies || []), ...Array.from(strategySet)].flatMap(
@@ -364,8 +497,8 @@ export const RedteamConfigSchema = z
                 ? DEFAULT_STRATEGIES.map((id): [string, RedteamStrategy] => [id, { id }])
                 : [[strategy, { id: strategy }]];
             }
-            // Return tuple of [id, strategy] for Map to deduplicate by id
-            return [[strategy.id, strategy]];
+            // Use unique key that considers label/steps for layer strategies
+            return [[getStrategyKey(strategy), strategy]];
           },
         ),
       ).values(),
@@ -379,6 +512,7 @@ export const RedteamConfigSchema = z
       numTests: data.numTests,
       plugins: uniquePlugins,
       strategies,
+      ...(frameworks ? { frameworks } : {}),
       ...(data.delay ? { delay: data.delay } : {}),
       ...(data.entities ? { entities: data.entities } : {}),
       ...(data.injectVar ? { injectVar: data.injectVar } : {}),
@@ -391,6 +525,7 @@ export const RedteamConfigSchema = z
               data.excludeTargetOutputFromAgenticAttackGeneration,
           }
         : {}),
+      ...(data.tracing ? { tracing: data.tracing } : {}),
     };
   });
 

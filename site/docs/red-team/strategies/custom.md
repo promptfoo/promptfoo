@@ -1,7 +1,7 @@
 ---
 sidebar_label: Custom Strategy Scripts
 title: Custom Strategy Scripts
-description: Create your own red team testing approaches by writing JavaScript files that programmatically transform test cases
+description: Build custom red team strategies using JavaScript to programmatically generate, mutate, and chain sophisticated attack patterns
 ---
 
 # Custom Strategy Scripts

@@ -1,6 +1,11 @@
-import fs from 'fs';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import yaml from 'js-yaml';
-import path from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 /**
  * Represents the structure of package.json file
@@ -108,6 +113,7 @@ export const updateCitation = async (): Promise<void> => {
   console.log('CITATION.cff file has been updated.');
 };
 
-if (require.main === module) {
-  updateCitation().catch(console.error);
-}
+updateCitation().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});

@@ -1,9 +1,12 @@
 import { fetchWithCache } from '../cache';
 import logger from '../logger';
 import { REQUEST_TIMEOUT_MS } from '../providers/shared';
+import { safeJsonStringify } from '../util/json';
 import { pluginDescriptions } from './constants';
 import { DATASET_PLUGINS } from './constants/strategies';
 import { getRemoteGenerationUrl, neverGenerateRemote } from './remoteGeneration';
+
+import type { CallApiContextParams, ProviderResponse, RunEvalOptions } from '../types/index';
 
 /**
  * Normalizes different types of apostrophes to a standard single quote
@@ -170,7 +173,13 @@ const REFUSAL_SUBSTRINGS = [
 ].map((s) => s.toLowerCase());
 
 export function isEmptyResponse(response: string): boolean {
-  return !response || response.trim() === '' || response.trim() === '{}';
+  return (
+    !response ||
+    response.trim() === '' ||
+    response.trim() === '{}' ||
+    response.trim().toLowerCase() === 'undefined' ||
+    response.trim().toLowerCase() === 'null'
+  );
 }
 
 export function isBasicRefusal(response: string): boolean {
@@ -210,12 +219,14 @@ export function getShortPluginId(pluginId: string): string {
  * @param prompt - The prompt to extract goal from.
  * @param purpose - The purpose of the system.
  * @param pluginId - Optional plugin ID to provide context about the attack type.
+ * @param policy - Optional policy text for custom policy tests to improve intent extraction.
  * @returns The extracted goal, or null if extraction fails.
  */
 export async function extractGoalFromPrompt(
   prompt: string,
   purpose: string,
   pluginId?: string,
+  policy?: string,
 ): Promise<string | null> {
   if (neverGenerateRemote()) {
     logger.debug('Remote generation disabled, skipping goal extraction');
@@ -242,10 +253,9 @@ export async function extractGoalFromPrompt(
     prompt,
     purpose,
     ...(pluginDescription && { pluginContext: pluginDescription }),
+    ...(policy && { policy }),
   };
 
-  logger.debug(`Extracting goal from prompt. Request URL: ${getRemoteGenerationUrl()}`);
-  logger.debug(`Request body: ${JSON.stringify(requestBody, null, 2)}`);
   try {
     const { data, status, statusText } = await fetchWithCache(
       getRemoteGenerationUrl(),
@@ -280,4 +290,50 @@ export async function extractGoalFromPrompt(
     logger.warn(`Error extracting goal: ${error}`);
     return null;
   }
+}
+
+function toSessionIdString(value: any): string | undefined {
+  if (value === undefined || value === null || value === '') {
+    return undefined;
+  }
+
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  // Stringify non-string values (numbers, objects, arrays, etc.)
+  try {
+    return safeJsonStringify(value);
+  } catch (error) {
+    logger.debug(`Failed to stringify sessionId: ${value}`, { error });
+    return undefined;
+  }
+}
+
+export function getSessionId(
+  response: ProviderResponse | undefined | null,
+  context: Pick<CallApiContextParams, 'vars'> | undefined,
+): string | undefined {
+  return toSessionIdString(response?.sessionId) ?? toSessionIdString(context?.vars?.sessionId);
+}
+
+/**
+ * Determines if a test case should be handled by Simba execution flow
+ * based on provider ID or test metadata.
+ *
+ * @param evalOptions - The evaluation options to check
+ * @returns Returns true if this is a Simba test case, false otherwise.
+ */
+export function isSimbaTestCase(evalOptions: RunEvalOptions): boolean {
+  // Check if provider is Simba
+  if (evalOptions.provider.id() === 'promptfoo:redteam:simba') {
+    return true;
+  }
+
+  // Check if test metadata indicates Simba strategy
+  if (evalOptions.test.metadata?.strategyId === 'simba') {
+    return true;
+  }
+
+  return false;
 }

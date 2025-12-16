@@ -17,7 +17,7 @@ import EnhancedRangeSlider from './EnhancedRangeSlider';
 import SettingItem from './SettingItem';
 import SettingsSection from './SettingsSection';
 
-const SettingsPanel: React.FC = () => {
+const SettingsPanel = () => {
   const {
     stickyHeader,
     setStickyHeader,

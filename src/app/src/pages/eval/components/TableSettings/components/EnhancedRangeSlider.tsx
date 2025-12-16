@@ -27,7 +27,7 @@ interface EnhancedRangeSliderProps {
   icon?: React.ReactNode;
 }
 
-const EnhancedRangeSlider: React.FC<EnhancedRangeSliderProps> = ({
+const EnhancedRangeSlider = ({
   value,
   onChange,
   min,
@@ -39,7 +39,7 @@ const EnhancedRangeSlider: React.FC<EnhancedRangeSliderProps> = ({
   disabled = false,
   tooltipText,
   icon,
-}) => {
+}: EnhancedRangeSliderProps) => {
   // Ensure value is always a valid number
   const safeValue = value === null || value === undefined || Number.isNaN(value) ? min : value;
   const [localValue, setLocalValue] = useState(safeValue);
@@ -260,7 +260,6 @@ const EnhancedRangeSlider: React.FC<EnhancedRangeSliderProps> = ({
           </Tooltip>
         )}
       </Stack>
-
       <Slider
         min={min}
         max={max}

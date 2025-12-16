@@ -1,5 +1,6 @@
 ---
 sidebar_label: Gradio WebUI
+description: "Interface with Oobabooga's text-generation-webui for flexible local model hosting with advanced sampling and generation options"
 ---
 
 # text-generation-webui

@@ -1,5 +1,6 @@
 ---
 sidebar_label: Fireworks AI
+description: Configure Fireworks AI's Llama-v3-8b model through their OpenAI-compatible API for seamless integration and inference with enterprise-grade LLM testing
 ---
 
 # Fireworks AI
@@ -10,11 +11,11 @@ The Fireworks AI provider supports all options available in the [OpenAI provider
 
 ## Example Usage
 
-To configure the provider to use the `accounts/fireworks/models/llama-v3-8b-instruct` model, use the following YAML configuration:
+To configure the provider to use the `accounts/fireworks/models/llama-4-scout-instruct` model, use the following YAML configuration:
 
 ```yaml
 providers:
-  - id: fireworks:accounts/fireworks/models/llama-v3-8b-instruct
+  - id: fireworks:accounts/fireworks/models/llama-4-scout-instruct
     config:
       temperature: 0.7
       apiKey: YOUR_FIREWORKS_API_KEY

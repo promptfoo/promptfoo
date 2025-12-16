@@ -1,5 +1,6 @@
 import React from 'react';
 import Link from '@docusaurus/Link';
+import { SITE_CONSTANTS } from '../../constants';
 import styles from './styles.module.css';
 
 export default function HomepageFeatures() {
@@ -26,12 +27,12 @@ export default function HomepageFeatures() {
       description: (
         <>
           <p>
-            Adopted by <strong>27 Fortune 500 companies</strong> shipping apps to hundreds of
+            Adopted by <strong>44 Fortune 500 companies</strong> shipping apps to hundreds of
             millions of users.
           </p>
           <p>
-            Embraced by an open-source community of <strong>over 100,000 developers</strong>{' '}
-            worldwide.
+            Embraced by an open-source community of{' '}
+            <strong>over {SITE_CONSTANTS.USER_COUNT_DISPLAY} developers</strong> worldwide.
           </p>
         </>
       ),

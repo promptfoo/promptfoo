@@ -1,7 +1,7 @@
 ---
 sidebar_label: Iterative Jailbreaks
 title: Iterative Jailbreaks Strategy
-description: Systematically probe and bypass AI system constraints by repeatedly refining prompts through multiple iterations
+description: Apply iterative refinement techniques to systematically evolve prompts that probe and bypass AI safety constraints effectively
 ---
 
 # Iterative Jailbreaks Strategy
@@ -48,6 +48,16 @@ The Iterative Jailbreaks strategy works by:
 This strategy is medium cost since it makes multiple API calls per test. We recommend running it on a smaller number of tests and plugins before running a full test.
 :::
 
+## Session Management
+
+When using `transformVars` with `context.uuid`, each iteration automatically gets a new UUID. This prevents conversation history from affecting subsequent attempts.
+
+```yaml title="promptfooconfig.yaml"
+defaultTest:
+  options:
+    transformVars: '{ ...vars, sessionId: context.uuid }'
+```
+
 ## Example Scenario
 
 Here's how the iteration process works:
@@ -69,9 +79,11 @@ The iterative jailbreak strategy creates refined single-shot jailbreaks that con
 
 ## Related Concepts
 
-- [Prompt Injections](prompt-injection.md)
-- [Tree-based Jailbreaks](tree.md)
-- [Multi-turn Jailbreaks](multi-turn.md)
+- [Meta-Agent Jailbreaks](meta.md) - Strategic taxonomy-building approach
+- [Hydra Multi-turn](hydra.md) - Agentic follow-up attacks with branching backtracks
+- [Tree-based Jailbreaks](tree.md) - Branching exploration strategy
+- [Prompt Injections](prompt-injection.md) - Direct injection techniques
+- [Multi-turn Jailbreaks](multi-turn.md) - Conversation-based attacks
 
 For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.
 

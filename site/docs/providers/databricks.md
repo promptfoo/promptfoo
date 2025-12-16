@@ -1,5 +1,6 @@
 ---
 sidebar_label: Databricks
+description: Configure Databricks Foundation Model APIs with Llama-3, Claude, and custom endpoints for unified access to hosted and external LLMs through OpenAI-compatible interface
 ---
 
 # Databricks Foundation Model APIs

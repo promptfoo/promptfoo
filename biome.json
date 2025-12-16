@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.1.1/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.3.8/schema.json",
   "vcs": {
     "enabled": true,
     "clientKind": "git",
@@ -15,7 +15,15 @@
       "**/*.json",
       "**/*.mjs",
       "**/*.cjs",
-      "!src/app/public/scripts/**/*"
+      "!!drizzle",
+      "!!src/app/src/polyfills",
+      "!!**/node_modules",
+      "!!**/dist",
+      "!!**/build",
+      "!!**/public",
+      "!!examples/adaline-gateway/**/prompt.json",
+      "!!examples/multiple-turn-conversation/prompt.json",
+      "!!examples/openai-chat-history/prompt.json"
     ]
   },
   "formatter": {
@@ -94,10 +102,11 @@
         "noUnusedVariables": "error",
         "noUnusedImports": "error",
         "useExhaustiveDependencies": "off",
-        "noUnusedFunctionParameters": "off",
+        "noUnusedFunctionParameters": "error",
         "useJsxKeyInIterable": "error"
       },
       "style": {
+        "noEnum": "error",
         "noNegationElse": "error",
         "useConst": "error",
         "useBlockStatements": "error",
@@ -108,7 +117,29 @@
         "useSingleVarDeclarator": "off",
         "useImportType": "off",
         "useNodejsImportProtocol": "off",
-        "noNonNullAssertion": "off"
+        "noNonNullAssertion": "off",
+        "noRestrictedGlobals": {
+          "level": "error",
+          "options": {
+            "deniedGlobals": {
+              "fetch": "Use fetchWithProxy() instead of global fetch()."
+            }
+          }
+        },
+        "noRestrictedImports": {
+          "level": "error",
+          "options": {
+            "paths": {
+              "node-fetch": "Use fetchWithProxy() (do not import node-fetch directly).",
+              "undici": {
+                "importNames": ["fetch", "default"],
+                "message": "Use fetchWithProxy() instead of undici.fetch."
+              },
+              "cross-fetch": "Use fetchWithProxy() instead."
+            },
+            "patterns": [{ "group": ["whatwg-fetch", "isomorphic-fetch"] }]
+          }
+        }
       },
       "suspicious": {
         "noExplicitAny": "off",
@@ -209,16 +240,56 @@
         "rules": {
           "correctness": {
             "noUnusedVariables": "error"
+          },
+          "style": {
+            "noRestrictedGlobals": "off"
           }
         }
+      }
+    },
+    {
+      "includes": ["src/app/**/*"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedGlobals": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["examples/claude-agent-sdk/advanced/workspace/**/*"],
+      "linter": {
+        "enabled": false
+      },
+      "formatter": {
+        "enabled": false
       }
     },
     {
       "includes": ["examples/**/*", "site/**/*"],
       "linter": {
         "rules": {
-          "recommended": false
+          "recommended": false,
+          "correctness": {
+            "noUnusedImports": "off",
+            "noUnusedVariables": "off",
+            "noUnusedFunctionParameters": "off"
+          },
+          "style": {
+            "noRestrictedGlobals": "off",
+            "useBlockStatements": "off"
+          }
         }
+      }
+    },
+    {
+      "includes": ["test/fixtures/rubric-json-template/**/*.json"],
+      "linter": {
+        "enabled": false
+      },
+      "formatter": {
+        "enabled": false
       }
     }
   ]

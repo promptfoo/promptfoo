@@ -1,5 +1,6 @@
 ---
 sidebar_label: Debug Access
+description: Red team debug interface vulnerabilities by testing system responses to debugging commands and admin mode requests to prevent unauthorized access exposure
 ---
 
 # Debug Access Plugin

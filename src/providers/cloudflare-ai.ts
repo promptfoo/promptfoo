@@ -5,7 +5,7 @@ import { OpenAiCompletionProvider } from './openai/completion';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
 
 import type { EnvVarKey } from '../envars';
-import type { ApiProvider, ProviderOptions } from '../types';
+import type { ApiProvider, ProviderOptions } from '../types/index';
 import type { EnvOverrides } from '../types/env';
 import type { OpenAiCompletionOptions } from './openai/types';
 

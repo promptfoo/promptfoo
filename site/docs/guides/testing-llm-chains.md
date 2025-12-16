@@ -2,6 +2,7 @@
 sidebar_position: 0
 sidebar_label: Testing LLM chains
 slug: /configuration/testing-llm-chains
+description: Learn how to test complex LLM chains and RAG systems with unit tests and end-to-end validation to ensure reliable outputs and catch failures across multi-step prompts
 ---
 
 # Testing LLM chains
@@ -61,7 +62,7 @@ Now, let's configure promptfoo to run this LangChain script with a bunch of test
 ```yaml
 prompts: file://prompt.txt
 providers:
-  - openai:chat:gpt-4.1
+  - openai:chat:gpt-5
   - exec:python langchain_example.py
 tests:
   - vars:

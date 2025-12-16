@@ -11,7 +11,7 @@ providers:
   # Ablated model, which should fail all of the Harmbench tests
   - 'ollama:mannix/llama3.1-8b-abliterated'
   # Vanilla model from Meta, which should refuse to comply with most of the Harmbench prompts
-  - 'ollama:llama3.1:8b'
+  - 'ollama:chat:llama3.3:8b'
 
 defaultTest:
   assert:

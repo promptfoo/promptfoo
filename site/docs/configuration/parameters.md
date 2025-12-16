@@ -1,5 +1,5 @@
 ---
-sidebar_position: 3
+displayed_sidebar: promptfoo
 sidebar_label: Overview
 title: Configuration Overview - Prompts, Tests, and Outputs
 description: Quick overview of promptfoo's core configuration concepts including prompts, test cases, outputs, and common patterns for LLM evaluation.
@@ -19,6 +19,14 @@ pagination_next: configuration/prompts
 # Prompts, tests, and outputs
 
 Configure how promptfoo evaluates your LLM applications.
+
+:::tip Detailed Documentation
+For comprehensive guides, see the dedicated pages:
+
+- **[Prompts](/docs/configuration/prompts)** - Configure what you send to LLMs
+- **[Test Cases](/docs/configuration/test-cases)** - Set up evaluation scenarios
+- **[Output Formats](/docs/configuration/outputs)** - Save and analyze results
+  :::
 
 ## Quick Start
 
@@ -156,7 +164,7 @@ prompts:
   - file://prompts/generate_prompt.js
 
 providers:
-  - openai:gpt-4.1-mini
+  - openai:gpt-5-mini
   - anthropic:claude-3-haiku
 
 tests:

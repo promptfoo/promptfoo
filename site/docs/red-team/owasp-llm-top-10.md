@@ -1,5 +1,6 @@
 ---
 sidebar_position: 20
+description: Red team LLM apps against OWASP Top 10 vulnerabilities to protect AI systems from injection, data leakage, and supply chain attacks
 ---
 
 # OWASP LLM Top 10
@@ -142,10 +143,35 @@ grader: |
 
 ## 3. Supply Chain Vulnerabilities (LLM03)
 
-While Promptfoo doesn't directly address supply chain issues, it can help verify model integrity:
+LLM supply chains include foundation models, hosted APIs, fine-tuned models from vendors, RAG data sources, and MCP tools. Each component can introduce security risks through behavioral drift, backdoors, or poisoned data.
 
-- **Consistency testing**: Run tests across different versions or sources of a model to detect unexpected changes.
-- **Output validation**: Define strict output criteria to catch potential issues from compromised models.
+Promptfoo helps detect supply chain vulnerabilities through:
+
+- **Model comparison testing**: Run identical security tests across different model versions or providers to detect behavioral drift
+- **Vendor acceptance testing**: Define standardized security test suites that new models must pass before deployment
+- **Static model scanning**: Use [ModelAudit](/docs/model-audit/) to scan model files for malicious code, embedded executables, and backdoors
+- **Compliance verification**: Run OWASP, NIST, and EU AI Act presets on every model upgrade
+
+Example configuration for comparing model versions:
+
+```yaml
+targets:
+  - id: openai:gpt-4o
+    label: current-production
+  - id: openai:gpt-4o-2024-08-06
+    label: candidate-upgrade
+
+redteam:
+  plugins:
+    - owasp:llm
+    - harmful
+    - pii
+  strategies:
+    - jailbreak
+    - prompt-injection
+```
+
+For comprehensive supply chain security coverage, see the [LLM Supply Chain Security guide](/docs/red-team/llm-supply-chain/).
 
 ## 4. Data and Model Poisoning (LLM04)
 
@@ -325,7 +351,7 @@ There are two ways to test for misinformation using Promptfoo:
 
 ### Evals Framework
 
-You can test for factuality and LLM "grounding" through [Promptfoo evals framework](/docs/guides/prevent-llm-hallucations/). This is a more methodical approach that helps developers mitigate the risk of LLM hallucinations by defining test cases and evaluating multiple approaches (such as prompt tuning and RAG).
+You can test for factuality and LLM "grounding" through [Promptfoo evals framework](/docs/guides/prevent-llm-hallucinations/). This is a more methodical approach that helps developers mitigate the risk of LLM hallucinations by defining test cases and evaluating multiple approaches (such as prompt tuning and RAG).
 
 ### Red Team Plugins
 

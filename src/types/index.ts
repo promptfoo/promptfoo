@@ -2,7 +2,7 @@
 // Right now Zod and pure types are mixed together!
 import { z } from 'zod';
 import { ProviderEnvOverridesSchema } from '../types/env';
-import { TokenUsageSchema } from '../types/shared';
+import { BaseTokenUsageSchema } from '../types/shared';
 import { isJavascriptFile, JAVASCRIPT_EXTENSIONS } from '../util/fileExtensions';
 import { PromptConfigSchema, PromptSchema } from '../validators/prompts';
 import { ApiProviderSchema, ProviderOptionsSchema, ProvidersSchema } from '../validators/providers';
@@ -17,7 +17,12 @@ import type {
 } from '../redteam/types';
 import type { EnvOverrides } from '../types/env';
 import type { Prompt, PromptFunction } from './prompts';
-import type { ApiProvider, ProviderOptions, ProviderResponse } from './providers';
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  ProviderOptions,
+  ProviderResponse,
+} from './providers';
 import type { NunjucksFilterMap, TokenUsage } from './shared';
 import type { TraceData } from './tracing';
 
@@ -54,6 +59,7 @@ export const CommandLineOptionsSchema = z.object({
   cache: z.boolean().optional(),
   table: z.boolean().optional(),
   share: z.boolean().optional(),
+  noShare: z.boolean().optional(),
   progressBar: z.boolean().optional(),
   watch: z.boolean().optional(),
   filterErrorsOnly: z.string().optional(),
@@ -69,8 +75,9 @@ export const CommandLineOptionsSchema = z.object({
   generateSuggestions: z.boolean().optional(),
   promptPrefix: z.string().optional(),
   promptSuffix: z.string().optional(),
+  retryErrors: z.boolean().optional(),
 
-  envPath: z.string().optional(),
+  envPath: z.union([z.string(), z.array(z.string())]).optional(),
 });
 
 export type CommandLineOptions = z.infer<typeof CommandLineOptionsSchema>;
@@ -148,8 +155,6 @@ export interface RunEvalOptions {
   registers?: EvalRegisters;
   isRedteam: boolean;
 
-  // Used by pandamonium, this should never be passed to callApi, it could be a massive object that will break the stack
-  allTests?: RunEvalOptions[];
   concurrency?: number;
 
   /**
@@ -209,7 +214,7 @@ const PromptMetricsSchema = z.object({
   assertPassCount: z.number(),
   assertFailCount: z.number(),
   totalLatencyMs: z.number(),
-  tokenUsage: TokenUsageSchema,
+  tokenUsage: BaseTokenUsageSchema,
   namedScores: z.record(z.string(), z.number()),
   namedScoresCount: z.record(z.string(), z.number()),
   redteam: z
@@ -251,13 +256,20 @@ export type ServerPromptWithMetadata = Omit<PromptWithMetadata, 'recentEvalDate'
   recentEvalDate: string;
 };
 
-export enum ResultFailureReason {
+export const ResultFailureReason = {
   // The test passed, or we don't know exactly why the test case failed.
-  NONE = 0,
+  NONE: 0,
   // The test case failed because an assertion rejected it.
-  ASSERT = 1,
+  ASSERT: 1,
   // Test case failed due to some other error.
-  ERROR = 2,
+  ERROR: 2,
+} as const;
+export type ResultFailureReason = (typeof ResultFailureReason)[keyof typeof ResultFailureReason];
+
+const validResultFailureReasons = new Set<number>(Object.values(ResultFailureReason));
+
+export function isResultFailureReason(value: number): value is ResultFailureReason {
+  return validResultFailureReasons.has(value);
 }
 
 export interface EvaluateResult {
@@ -299,6 +311,7 @@ export interface EvaluateTableOutput {
   testCase: AtomicTestCase;
   text: string;
   tokenUsage?: Partial<TokenUsage>;
+  error?: string | null;
   audio?: {
     id?: string;
     expiresAt?: number;
@@ -351,6 +364,7 @@ export type EvalTableDTO = {
   table: EvaluateTable;
   totalCount: number;
   filteredCount: number;
+  filteredMetrics: PromptMetrics[] | null;
   config: Partial<UnifiedConfig>;
   author: string | null;
   version: number;
@@ -383,7 +397,8 @@ export interface GradingResult {
   componentResults?: GradingResult[];
 
   // The assertion that was evaluated
-  assertion?: Assertion | null;
+  // TODO(Will): Can we move to this being required?
+  assertion?: Assertion;
 
   // User comment
   comment?: string;
@@ -395,6 +410,11 @@ export interface GradingResult {
   metadata?: {
     pluginId?: string;
     strategyId?: string;
+    // Context value for context-related assertions (context-faithfulness, context-recall, context-relevance)
+    context?: string | string[];
+    contextUnits?: string[];
+    // Rendered assertion value with substituted variables (for display in UI)
+    renderedAssertionValue?: string;
     [key: string]: any;
   };
 }
@@ -423,12 +443,14 @@ export const BaseAssertionTypesSchema = z.enum([
   'contains',
   'contains-all',
   'contains-any',
+  'contains-html',
   'contains-json',
   'contains-sql',
   'contains-xml',
   'context-faithfulness',
   'context-recall',
   'context-relevance',
+  'conversation-relevance',
   'cost',
   'equals',
   'factuality',
@@ -439,6 +461,7 @@ export const BaseAssertionTypesSchema = z.enum([
   'icontains',
   'icontains-all',
   'icontains-any',
+  'is-html',
   'is-json',
   'is-refusal',
   'is-sql',
@@ -460,11 +483,17 @@ export const BaseAssertionTypesSchema = z.enum([
   'python',
   'regex',
   'rouge-n',
+  'ruby',
   'similar',
+  'similar:cosine',
+  'similar:dot',
+  'similar:euclidean',
   'starts-with',
+  'tool-call-f1',
   'trace-error-spans',
   'trace-span-count',
   'trace-span-duration',
+  'search-rubric',
   'webhook',
 ]);
 
@@ -475,9 +504,11 @@ type NotPrefixed<T extends string> = `not-${T}`;
 // The 'human' assertion type is added via the web UI to allow manual grading.
 // The 'select-best' assertion type compares all variations for a given test case
 // and selects the highest scoring one after all other assertions have completed.
-export type SpecialAssertionTypes = 'select-best' | 'human';
+// The 'max-score' assertion type selects the output with the highest aggregate score
+// from other assertions.
+export type SpecialAssertionTypes = 'select-best' | 'human' | 'max-score';
 
-export const SpecialAssertionTypesSchema = z.enum(['select-best', 'human']);
+export const SpecialAssertionTypesSchema = z.enum(['select-best', 'human', 'max-score']);
 
 export const NotPrefixedAssertionTypesSchema = BaseAssertionTypesSchema.transform(
   (baseType) => `not-${baseType}` as NotPrefixed<BaseAssertionTypes>,
@@ -492,7 +523,7 @@ export const AssertionTypeSchema = z.union([
 
 export type AssertionType = z.infer<typeof AssertionTypeSchema>;
 
-const AssertionSetSchema = z.object({
+export const AssertionSetSchema = z.object({
   type: z.literal('assert-set'),
   // Sub assertions to be run for this assertion set
   assert: z.array(z.lazy(() => AssertionSchema)),
@@ -546,6 +577,13 @@ export const AssertionSchema = z.object({
 
 export type Assertion = z.infer<typeof AssertionSchema>;
 
+/**
+ * Schema for validating individual assertions (regular or assert-set).
+ * Used for runtime validation of user-provided config.
+ */
+export const AssertionOrSetSchema = z.union([AssertionSetSchema, AssertionSchema]);
+export type AssertionOrSet = z.infer<typeof AssertionOrSetSchema>;
+
 export interface AssertionValueFunctionContext {
   prompt: string | undefined;
   vars: Record<string, string | object>;
@@ -569,7 +607,10 @@ export type AssertionValueFunctionResult = boolean | number | GradingResult;
 export interface AssertionParams {
   assertion: Assertion;
   baseType: AssertionType;
-  context: AssertionValueFunctionContext;
+  /** Context passed to provider.callApi() for model-graded assertions */
+  providerCallContext?: CallApiContextParams;
+  /** Context passed to assertion value functions */
+  assertionValueContext: AssertionValueFunctionContext;
   cost?: number;
   inverse: boolean;
   logProbs?: number[];
@@ -1139,7 +1180,26 @@ export interface ResultLightweight {
 
 export type ResultLightweightWithLabel = ResultLightweight & { label: string };
 
-export type EvalSummary = ResultLightweightWithLabel & { passRate: number };
+export type EvalSummary = ResultLightweightWithLabel & {
+  isRedteam: boolean;
+  passRate: number;
+  label: string;
+  providers: {
+    id: string;
+    label: string | null;
+  }[];
+  attackSuccessRate?: number;
+};
+
+export interface OutputMetadata {
+  promptfooVersion: string;
+  nodeVersion: string;
+  platform: string;
+  arch: string;
+  exportedAt: string;
+  evaluationCreatedAt?: string;
+  author?: string;
+}
 
 // File exported as --output option
 export interface OutputFile {
@@ -1147,6 +1207,7 @@ export interface OutputFile {
   results: EvaluateSummaryV3 | EvaluateSummaryV2;
   config: Partial<UnifiedConfig>;
   shareableUrl: string | null;
+  metadata?: OutputMetadata;
 }
 
 // Live eval job state
@@ -1177,3 +1238,14 @@ export interface LoadApiProviderContext {
   basePath?: string;
   env?: EnvOverrides;
 }
+
+export const EvalResultsFilterMode = z.enum([
+  'all',
+  'failures',
+  'different',
+  'highlights',
+  'errors',
+  'passes',
+]);
+
+export type EvalResultsFilterMode = z.infer<typeof EvalResultsFilterMode>;

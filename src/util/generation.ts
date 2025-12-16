@@ -1,4 +1,6 @@
 import logger from '../logger';
+import { PoliciesById, type PolicyObject, RedteamPluginObject } from '../redteam/types';
+import { getPoliciesFromCloud } from '../util/cloud';
 
 /**
  * Retries an operation with deduplication until the target count is reached or max retries are exhausted.
@@ -58,4 +60,36 @@ export function sampleArray<T>(array: T[], n: number): T[] {
   logger.debug(`Sampling ${n} items from array of length ${array.length}`);
   const shuffled = array.slice().sort(() => 0.5 - Math.random());
   return shuffled.slice(0, Math.min(n, array.length));
+}
+
+/**
+ * Given a list of custom policy plugins, fetches the policy texts and severities from Promptfoo Cloud.
+ * Handles id deduplication and warning of missing policies.
+ * @param policyPluginsWithRefs The list of custom policy plugins to fetch the policy texts for.
+ * @param teamId The ID of the team to fetch policies from.
+ * @returns A map of policy IDs to their texts and severities.
+ */
+export async function getCustomPolicies(
+  policyPluginsWithRefs: RedteamPluginObject[],
+  teamId: string,
+): Promise<PoliciesById> {
+  logger.debug(`Loading ${policyPluginsWithRefs.length} policies from Promptfoo Cloud`);
+
+  // Get the unique policy ids
+  const ids = Array.from(
+    new Set(policyPluginsWithRefs.map((p) => (p.config!.policy! as PolicyObject).id)),
+  );
+
+  // Load
+  const policiesById = await getPoliciesFromCloud(ids, teamId);
+
+  // Log a warning if some policies are not found
+  const notFoundPolicyIds = ids.filter((id) => !policiesById.get(id));
+  if (notFoundPolicyIds.length > 0) {
+    logger.warn(
+      `Unable to resolve ${notFoundPolicyIds.length} policies: ${notFoundPolicyIds.join(', ')}`,
+    );
+  }
+
+  return policiesById;
 }

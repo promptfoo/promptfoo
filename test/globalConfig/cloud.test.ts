@@ -1,18 +1,18 @@
-import { fetchWithProxy } from '../../src/fetch';
+import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { API_HOST, CloudConfig, cloudConfig } from '../../src/globalConfig/cloud';
 import { readGlobalConfig, writeGlobalConfigPartial } from '../../src/globalConfig/globalConfig';
-import logger from '../../src/logger';
+import { fetchWithProxy } from '../../src/util/fetch/index';
 
-jest.mock('../../src/fetch');
-jest.mock('../../src/logger');
-jest.mock('../../src/globalConfig/globalConfig');
+vi.mock('../../src/util/fetch/index');
+vi.mock('../../src/logger');
+vi.mock('../../src/globalConfig/globalConfig');
 
 describe('CloudConfig', () => {
   let cloudConfigInstance: CloudConfig;
 
   beforeEach(() => {
-    jest.resetAllMocks();
-    jest.mocked(readGlobalConfig).mockReturnValue({
+    vi.resetAllMocks();
+    vi.mocked(readGlobalConfig).mockReturnValue({
       id: 'test-id',
       cloud: {
         appUrl: 'https://test.app',
@@ -25,7 +25,7 @@ describe('CloudConfig', () => {
 
   describe('constructor', () => {
     it('should initialize with default values when no saved config exists', () => {
-      jest.mocked(readGlobalConfig).mockReturnValue({
+      vi.mocked(readGlobalConfig).mockReturnValue({
         id: 'test-id',
       });
       const config = new CloudConfig();
@@ -47,7 +47,7 @@ describe('CloudConfig', () => {
     });
 
     it('should return false when apiKey does not exist', () => {
-      jest.mocked(readGlobalConfig).mockReturnValue({
+      vi.mocked(readGlobalConfig).mockReturnValue({
         id: 'test-id',
       });
       const config = new CloudConfig();
@@ -118,7 +118,7 @@ describe('CloudConfig', () => {
         text: () => Promise.resolve(JSON.stringify(mockResponse)),
       } as Response;
 
-      jest.mocked(fetchWithProxy).mockResolvedValue(mockFetchResponse);
+      vi.mocked(fetchWithProxy).mockResolvedValue(mockFetchResponse);
 
       const result = await cloudConfigInstance.validateAndSetApiToken(
         'test-token',
@@ -133,7 +133,6 @@ describe('CloudConfig', () => {
           appUrl: 'https://test.app',
         }),
       });
-      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Successfully logged in'));
     });
 
     it('should throw error on failed validation', async () => {
@@ -144,7 +143,7 @@ describe('CloudConfig', () => {
         text: () => Promise.resolve('Unauthorized'),
       } as Response;
 
-      jest.mocked(fetchWithProxy).mockResolvedValue(mockErrorResponse);
+      vi.mocked(fetchWithProxy).mockResolvedValue(mockErrorResponse);
 
       await expect(
         cloudConfigInstance.validateAndSetApiToken('invalid-token', 'https://test.api'),

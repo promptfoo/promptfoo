@@ -1,14 +1,15 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import {
   createHyperbolicAudioProvider,
   HyperbolicAudioProvider,
 } from '../../../src/providers/hyperbolic/audio';
 
-jest.mock('../../../src/cache');
+vi.mock('../../../src/cache');
 
 describe('HyperbolicAudioProvider', () => {
   beforeEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   it('should create provider with default model', () => {
@@ -73,7 +74,7 @@ describe('HyperbolicAudioProvider', () => {
         statusText: 'OK',
       };
 
-      jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+      vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
       const provider = new HyperbolicAudioProvider('melo', {
         config: { apiKey: 'test-key' },
@@ -101,7 +102,7 @@ describe('HyperbolicAudioProvider', () => {
         statusText: 'Bad Request',
       };
 
-      jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+      vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
       const provider = new HyperbolicAudioProvider('melo', {
         config: { apiKey: 'test-key' },
@@ -119,7 +120,7 @@ describe('HyperbolicAudioProvider', () => {
         statusText: 'OK',
       };
 
-      jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+      vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
       const provider = new HyperbolicAudioProvider('melo', {
         config: { apiKey: 'test-key' },
@@ -137,7 +138,7 @@ describe('HyperbolicAudioProvider', () => {
         statusText: 'OK',
       };
 
-      jest.mocked(fetchWithCache).mockResolvedValue(mockResponse);
+      vi.mocked(fetchWithCache).mockResolvedValue(mockResponse);
 
       const provider = new HyperbolicAudioProvider('melo', {
         config: { apiKey: 'test-key' },

@@ -1,3 +1,4 @@
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { TokenUsageTracker } from '../../src/util/tokenUsage';
 
 import type { TokenUsage } from '../../src/types/shared';
@@ -37,12 +38,25 @@ describe('TokenUsageTracker', () => {
     tracker.trackUsage('test-provider', usage);
     const tracked = tracker.getProviderUsage('test-provider');
 
-    expect(tracked).toEqual(usage);
+    expect(tracked).toEqual({
+      ...usage,
+      assertions: {
+        ...usage.assertions,
+        numRequests: 0,
+        completionDetails: {
+          reasoning: 0,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+        },
+      },
+    });
   });
 
   it('should handle undefined token usage', () => {
     tracker.trackUsage('test-provider', undefined);
-    expect(tracker.getProviderUsage('test-provider')).toBeUndefined();
+    expect(tracker.getProviderUsage('test-provider')).toEqual(
+      expect.objectContaining({ numRequests: 1 }),
+    );
   });
 
   it('should merge token usage for the same provider', () => {
@@ -104,6 +118,12 @@ describe('TokenUsageTracker', () => {
         prompt: 30,
         completion: 45,
         cached: 15,
+        numRequests: 0,
+        completionDetails: {
+          reasoning: 0,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+        },
       },
     });
   });
@@ -170,6 +190,12 @@ describe('TokenUsageTracker', () => {
         prompt: 30,
         completion: 45,
         cached: 15,
+        numRequests: 0,
+        completionDetails: {
+          reasoning: 0,
+          acceptedPrediction: 0,
+          rejectedPrediction: 0,
+        },
       },
     });
   });

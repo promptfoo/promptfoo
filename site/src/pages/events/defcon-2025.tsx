@@ -2,9 +2,10 @@ import React, { useEffect } from 'react';
 import Head from '@docusaurus/Head';
 import Link from '@docusaurus/Link';
 import Layout from '@theme/Layout';
+import { SITE_CONSTANTS } from '../../constants';
 import styles from './defcon-2025.module.css';
 
-export default function Defcon2025(): JSX.Element {
+export default function Defcon2025(): React.ReactElement {
   useEffect(() => {
     // Force dark theme for this page
     document.documentElement.setAttribute('data-theme', 'dark');
@@ -240,7 +241,7 @@ export default function Defcon2025(): JSX.Element {
             <h2 className={styles.sectionTitle}>Join the Movement</h2>
             <div className={styles.statsGrid}>
               <div className={styles.stat}>
-                <div className={styles.statNumber}>100K+</div>
+                <div className={styles.statNumber}>{`${SITE_CONSTANTS.USER_COUNT_DISPLAY}+`}</div>
                 <div className={styles.statLabel}>Open Source Users</div>
               </div>
               <div className={styles.stat}>

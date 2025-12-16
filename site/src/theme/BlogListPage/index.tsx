@@ -11,7 +11,7 @@ import SearchMetadata from '@theme/SearchMetadata';
 import clsx from 'clsx';
 import styles from './styles.module.css';
 
-function BlogListPageMetadata(props: Props): JSX.Element {
+function BlogListPageMetadata(props: Props): React.ReactElement {
   const { metadata } = props;
   const {
     siteConfig: { title: siteTitle },
@@ -29,7 +29,7 @@ function BlogListPageMetadata(props: Props): JSX.Element {
   );
 }
 
-function BlogListPageContent(props: Props): JSX.Element {
+function BlogListPageContent(props: Props): React.ReactElement {
   const { metadata, items, sidebar } = props;
 
   // Determine appropriate title based on pagination
@@ -42,12 +42,8 @@ function BlogListPageContent(props: Props): JSX.Element {
   // Determine which posts to display in the grid
   const displayPosts = React.useMemo(() => {
     if (isFirstPage && items.length > 0) {
-      // For the grid, take all remaining posts but ensure an even number for balanced layout
-      const remainingPosts = items.slice(1);
-      const evenCount =
-        remainingPosts.length % 2 === 0 ? remainingPosts.length : remainingPosts.length - 1;
-
-      return remainingPosts.slice(0, evenCount);
+      // For the grid, take all remaining posts after the featured one
+      return items.slice(1);
     }
     // For other pages, or if no items, just use all items
     return items;
@@ -69,7 +65,7 @@ function BlogListPageContent(props: Props): JSX.Element {
   );
 }
 
-export default function BlogListPage(props: Props): JSX.Element {
+export default function BlogListPage(props: Props): React.ReactElement {
   return (
     <HtmlClassNameProvider
       className={clsx(ThemeClassNames.wrapper.blogPages, ThemeClassNames.page.blogListPage)}

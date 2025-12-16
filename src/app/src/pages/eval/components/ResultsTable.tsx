@@ -1,13 +1,7 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 
 import ErrorBoundary from '@app/components/ErrorBoundary';
 import { useToast } from '@app/hooks/useToast';
-import {
-  type EvaluateTable,
-  type EvaluateTableOutput,
-  type EvaluateTableRow,
-  type FilterMode,
-} from '@app/pages/eval/components/types';
 import { callApi } from '@app/utils/api';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
@@ -21,10 +15,15 @@ import IconButton from '@mui/material/IconButton';
 import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
 import { alpha } from '@mui/material/styles';
-import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { FILE_METADATA_KEY } from '@promptfoo/constants';
+import {
+  type EvalResultsFilterMode,
+  type EvaluateTable,
+  type EvaluateTableOutput,
+  type EvaluateTableRow,
+} from '@promptfoo/types';
 import invariant from '@promptfoo/util/invariant';
 import {
   createColumnHelper,
@@ -36,10 +35,11 @@ import yaml from 'js-yaml';
 import ReactMarkdown from 'react-markdown';
 import { Link, useNavigate } from 'react-router-dom';
 import remarkGfm from 'remark-gfm';
-import { useDebounce } from 'use-debounce';
 import CustomMetrics from './CustomMetrics';
+import CustomMetricsDialog from './CustomMetricsDialog';
 import EvalOutputCell from './EvalOutputCell';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
+import { useFilterMode } from './FilterModeProvider';
 import MarkdownErrorBoundary from './MarkdownErrorBoundary';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import TruncatedText from './TruncatedText';
@@ -48,7 +48,10 @@ import type { CellContext, ColumnDef, VisibilityState } from '@tanstack/table-co
 import type { TruncatedTextProps } from './TruncatedText';
 import './ResultsTable.css';
 
+import { BaseNumberInput } from '@app/components/form/input/BaseNumberInput';
 import ButtonGroup from '@mui/material/ButtonGroup';
+import { isEncodingStrategy } from '@promptfoo/redteam/constants/strategies';
+import { useMetricsGetter, usePassingTestCounts, usePassRates, useTestCounts } from './hooks';
 
 const VARIABLE_COLUMN_SIZE_PX = 200;
 const PROMPT_COLUMN_SIZE_PX = 400;
@@ -95,9 +98,9 @@ function TableHeader({
       {expandedText && (
         <>
           <Tooltip title="View prompt">
-            <span className="action" onClick={handlePromptOpen}>
+            <button className="action" onClick={handlePromptOpen}>
               🔎
-            </span>
+            </button>
           </Tooltip>
           {promptOpen && (
             <EvalOutputPromptDialog
@@ -125,14 +128,11 @@ interface ResultsTableProps {
   maxTextLength: number;
   columnVisibility: VisibilityState;
   wordBreak: 'break-word' | 'break-all';
-  filterMode: FilterMode;
+  filterMode: EvalResultsFilterMode;
   failureFilter: { [key: string]: boolean };
-  searchText: string;
   debouncedSearchText?: string;
   showStats: boolean;
   onFailureFilterToggle: (columnId: string, checked: boolean) => void;
-  onSearchTextChange: (text: string) => void;
-  setFilterMode: (mode: FilterMode) => void;
   zoom: number;
 }
 
@@ -145,18 +145,93 @@ interface ExtendedEvaluateTableRow extends EvaluateTableRow {
   outputs: ExtendedEvaluateTableOutput[];
 }
 
+function ResultsTableHeader({
+  reactTable,
+  tableWidth,
+  maxTextLength,
+  wordBreak,
+  theadRef,
+  stickyHeader,
+  setStickyHeader,
+  zoom,
+}: {
+  reactTable: ReturnType<typeof useReactTable<EvaluateTableRow>>;
+  tableWidth: number;
+  maxTextLength: number;
+  wordBreak: 'break-word' | 'break-all';
+  theadRef: React.RefObject<HTMLTableSectionElement | null>;
+  stickyHeader: boolean;
+  setStickyHeader: (sticky: boolean) => void;
+  zoom: number;
+}) {
+  return (
+    <table
+      className={`results-table firefox-fix ${maxTextLength <= 25 ? 'compact' : ''} ${
+        stickyHeader && 'results-table-sticky'
+      }`}
+      style={{
+        wordBreak,
+        width: `${tableWidth}px`,
+        zoom,
+      }}
+    >
+      <thead ref={theadRef}>
+        {stickyHeader && (
+          <div className="header-dismiss">
+            <IconButton
+              onClick={() => setStickyHeader(false)}
+              size="small"
+              sx={{ color: 'text.primary' }}
+            >
+              <CloseIcon fontSize="small" />
+            </IconButton>
+          </div>
+        )}
+        {reactTable.getHeaderGroups().map((headerGroup) => (
+          <tr key={headerGroup.id} className="header">
+            {headerGroup.headers.map((header) => {
+              const isMetadataCol =
+                header.column.id.startsWith('Variable') || header.column.id === 'description';
+              const isFinalRow = headerGroup.depth === 1;
+
+              return (
+                <th
+                  key={header.id}
+                  tabIndex={0}
+                  colSpan={header.colSpan}
+                  style={{
+                    width: header.getSize(),
+                    borderBottom: !isMetadataCol && isFinalRow ? '2px solid #888' : 'none',
+                    height: isFinalRow ? 'fit-content' : 'auto',
+                  }}
+                >
+                  {header.isPlaceholder
+                    ? null
+                    : flexRender(header.column.columnDef.header, header.getContext())}
+                  <div
+                    onMouseDown={header.getResizeHandler()}
+                    onTouchStart={header.getResizeHandler()}
+                    className={`resizer ${header.column.getIsResizing() ? 'isResizing' : ''}`}
+                  />
+                </th>
+              );
+            })}
+          </tr>
+        ))}
+      </thead>
+    </table>
+  );
+}
+
 function ResultsTable({
   maxTextLength,
   columnVisibility,
   wordBreak,
   filterMode,
   failureFilter,
-  searchText,
-  debouncedSearchText: externalDebouncedSearchText,
+  debouncedSearchText,
   showStats,
   onFailureFilterToggle,
-  onSearchTextChange,
-  setFilterMode,
   zoom,
 }: ResultsTableProps) {
   const {
@@ -169,15 +244,19 @@ function ResultsTable({
     fetchEvalData,
     isFetching,
     filters,
-    addFilter,
   } = useTableStore();
   const { inComparisonMode, comparisonEvalIds } = useResultsViewSettingsStore();
+  const { setFilterMode } = useFilterMode();
 
   const { showToast } = useToast();
   const navigate = useNavigate();
 
   invariant(table, 'Table should be defined');
   const { head, body } = table;
+
+  const isRedteam = React.useMemo(() => {
+    return config?.redteam !== undefined;
+  }, [config?.redteam]);
 
   const visiblePromptCount = React.useMemo(
     () => head.prompts.filter((_, idx) => columnVisibility[`Prompt ${idx + 1}`] !== false).length,
@@ -211,7 +290,7 @@ function ResultsTable({
       rowIndex: number,
       promptIndex: number,
       resultId: string,
-      isPass?: boolean,
+      isPass?: boolean | null,
       score?: number,
       comment?: string,
     ) => {
@@ -220,20 +299,18 @@ function ResultsTable({
       const updatedOutputs = [...updatedRow.outputs];
       const existingOutput = updatedOutputs[promptIndex];
 
-      const finalPass = typeof isPass === 'undefined' ? existingOutput.pass : isPass;
-
-      let finalScore = existingOutput.score;
-      if (typeof score !== 'undefined') {
-        finalScore = score;
-      } else if (typeof isPass !== 'undefined') {
-        finalScore = isPass ? 1 : 0;
-      }
-
-      updatedOutputs[promptIndex].pass = finalPass;
-      updatedOutputs[promptIndex].score = finalScore;
-
       let componentResults = existingOutput.gradingResult?.componentResults;
       let modifiedComponentResults = false;
+      let finalPass = existingOutput.pass;
+      let finalScore = existingOutput.score;
+
+      // Update finalScore first if score parameter is provided
+      if (typeof score !== 'undefined') {
+        finalScore = score;
+      } else if (typeof isPass !== 'undefined' && isPass !== null) {
+        // Only default to 0/1 if no explicit score is provided and isPass is not null
+        finalScore = isPass ? 1 : 0;
+      }
 
       if (typeof isPass !== 'undefined') {
         // Make a copy to avoid mutating the original
@@ -244,20 +321,45 @@ function ResultsTable({
           (result) => result.assertion?.type === 'human',
         );
 
-        const newResult = {
-          pass: finalPass,
-          score: finalScore,
-          reason: 'Manual result (overrides all other grading results)',
-          comment,
-          assertion: { type: 'human' as const },
-        };
-
-        if (humanResultIndex === -1) {
-          componentResults.push(newResult);
+        // If isPass is null, remove the human assertion (unset manual grading)
+        if (isPass === null) {
+          if (humanResultIndex !== -1) {
+            componentResults.splice(humanResultIndex, 1);
+          }
+          // Recalculate pass/score from remaining assertions
+          if (componentResults.length > 0) {
+            const passCount = componentResults.filter((r) => r.pass).length;
+            finalPass = passCount === componentResults.length;
+            // Calculate average score from remaining assertions
+            const scores = componentResults
+              .map((r) => r.score)
+              .filter((s) => typeof s === 'number');
+            if (scores.length > 0) {
+              finalScore = scores.reduce((a, b) => a + b, 0) / scores.length;
+            }
+          }
         } else {
-          componentResults[humanResultIndex] = newResult;
+          // Add or update the human assertion
+          finalPass = isPass;
+
+          const newResult = {
+            pass: finalPass,
+            score: finalScore,
+            reason: 'Manual result (overrides all other grading results)',
+            comment,
+            assertion: { type: 'human' as const },
+          };
+
+          if (humanResultIndex === -1) {
+            componentResults.push(newResult);
+          } else {
+            componentResults[humanResultIndex] = newResult;
+          }
         }
       }
+
+      updatedOutputs[promptIndex].pass = finalPass;
+      updatedOutputs[promptIndex].score = finalScore;
 
       // Build gradingResult, ensuring required fields are always present
       // Destructure to exclude componentResults initially
@@ -280,7 +382,9 @@ function ResultsTable({
         gradingResult.pass = finalPass;
         gradingResult.score = finalScore;
         gradingResult.reason = 'Manual result (overrides all other grading results)';
-        gradingResult.assertion = existingOutput.gradingResult?.assertion || null;
+        if (existingOutput.gradingResult?.assertion) {
+          gradingResult.assertion = existingOutput.gradingResult.assertion;
+        }
       }
 
       // Only include componentResults if we modified them, or if we didn't modify them but they exist and are not empty
@@ -336,14 +440,6 @@ function ResultsTable({
     [body, head, setTable, evalId, inComparisonMode, showToast],
   );
 
-  const [localDebouncedSearchText] = useDebounce(searchText, 200);
-  const debouncedSearchText = externalDebouncedSearchText || localDebouncedSearchText;
-  const [isSearching, setIsSearching] = useState(false);
-
-  React.useEffect(() => {
-    setIsSearching(searchText !== debouncedSearchText && searchText !== '');
-  }, [searchText, debouncedSearchText]);
-
   const tableBody = React.useMemo(() => {
     return body.map((row, rowIndex) => ({
       ...row,
@@ -362,9 +458,26 @@ function ResultsTable({
   // Create a stable reference for applied filters to avoid unnecessary re-renders
   const appliedFiltersString = React.useMemo(() => {
     const appliedFilters = Object.values(filters.values)
-      .filter((filter) =>
-        filter.type === 'metadata' ? Boolean(filter.value && filter.field) : Boolean(filter.value),
-      )
+      .filter((filter) => {
+        // For metadata filters with exists operator, only field is required
+        if (filter.type === 'metadata' && filter.operator === 'exists') {
+          return Boolean(filter.field);
+        }
+        // For other metadata operators, both field and value are required
+        if (filter.type === 'metadata') {
+          return Boolean(filter.value && filter.field);
+        }
+        // For metric filters with is_defined operator, only field is required
+        if (filter.type === 'metric' && filter.operator === 'is_defined') {
+          return Boolean(filter.field);
+        }
+        // For metric filters with comparison operators, both field and value are required
+        if (filter.type === 'metric') {
+          return Boolean(filter.value && filter.field);
+        }
+        // For non-metadata/non-metric filters, value is required
+        return Boolean(filter.value);
+      })
       .sort((a, b) => a.sortIndex - b.sortIndex); // Sort by sortIndex for stability
     // Create a stable string representation of applied filters
     return JSON.stringify(
@@ -386,11 +499,11 @@ function ResultsTable({
   // Add a ref to track the current evalId to compare with new values
   const previousEvalIdRef = useRef<string | null>(null);
 
-  // Reset pagination when evalId changes
+  // Reset pagination when evalId changes. Do not mark previousEvalIdRef here to
+  // allow the fetch effect to skip the first fetch after an eval switch.
   React.useEffect(() => {
     if (evalId !== previousEvalIdRef.current) {
       setPagination({ pageIndex: 0, pageSize: pagination.pageSize });
-      previousEvalIdRef.current = evalId;
 
       // Don't fetch here - the parent component (Eval.tsx) is responsible
       // for the initial data load when changing evalId
@@ -410,18 +523,32 @@ function ResultsTable({
       return;
     }
 
-    console.log('Fetching data for filtering/pagination', evalId);
-
     fetchEvalData(evalId, {
       pageIndex: pagination.pageIndex,
       pageSize: pagination.pageSize,
       filterMode,
       searchText: debouncedSearchText,
-      // Only pass the filters that have been applied (have a value).
-      // For metadata filters, both field and value must be present.
-      filters: Object.values(filters.values).filter((filter) =>
-        filter.type === 'metadata' ? Boolean(filter.value && filter.field) : Boolean(filter.value),
-      ),
+      // Only pass the filters that have been applied.
+      // For metadata filters with exists operator, only field is required.
+      // For other metadata operators, both field and value are required.
+      // For metric filters with is_defined operator, only field is required.
+      // For metric filters with comparison operators, both field and value are required.
+      // For non-metadata/non-metric filters, value is required.
+      filters: Object.values(filters.values).filter((filter) => {
+        if (filter.type === 'metadata' && filter.operator === 'exists') {
+          return Boolean(filter.field);
+        }
+        if (filter.type === 'metadata') {
+          return Boolean(filter.value && filter.field);
+        }
+        if (filter.type === 'metric' && filter.operator === 'is_defined') {
+          return Boolean(filter.field);
+        }
+        if (filter.type === 'metric') {
+          return Boolean(filter.value && filter.field);
+        }
+        return Boolean(filter.value);
+      }),
       skipSettingEvalId: true, // Don't change evalId when paginating or filtering
     });
   }, [
@@ -436,31 +563,27 @@ function ResultsTable({
     // Removed filters.appliedCount since appliedFiltersString covers it
   ]);
 
-  // TODO(ian): Switch this to use prompt.metrics field once most clients have updated.
-  const numGoodTests = React.useMemo(
-    () => head.prompts.map((prompt) => prompt.metrics?.testPassCount || 0),
-    [head.prompts, body],
-  );
-
-  const numTests = React.useMemo(
-    () =>
-      head.prompts.map(
-        (prompt) => (prompt.metrics?.testPassCount ?? 0) + (prompt.metrics?.testFailCount ?? 0),
-      ),
-    [head.prompts, body],
-  );
+  const testCounts = useTestCounts();
+  const passingTestCounts = usePassingTestCounts();
+  const passRates = usePassRates();
+  const getMetrics = useMetricsGetter();
 
   const numAsserts = React.useMemo(
     () =>
-      head.prompts.map(
-        (prompt) => (prompt.metrics?.assertFailCount ?? 0) + (prompt.metrics?.assertPassCount ?? 0),
-      ),
-    [head.prompts, body],
+      head.prompts.map((_, idx) => {
+        const { total: metrics } = getMetrics(idx);
+        return (metrics?.assertFailCount ?? 0) + (metrics?.assertPassCount ?? 0);
+      }),
+    [head.prompts, getMetrics],
   );
 
   const numGoodAsserts = React.useMemo(
-    () => head.prompts.map((prompt) => prompt.metrics?.assertPassCount || 0),
-    [head.prompts, body],
+    () =>
+      head.prompts.map((_, idx) => {
+        const { total: metrics } = getMetrics(idx);
+        return metrics?.assertPassCount || 0;
+      }),
+    [head.prompts, getMetrics],
   );
 
   const columnHelper = React.useMemo(() => createColumnHelper<EvaluateTableRow>(), []);
@@ -468,6 +591,8 @@ function ResultsTable({
   const { renderMarkdown } = useResultsViewSettingsStore();
   const variableColumns = React.useMemo(() => {
     if (head.vars.length > 0) {
+      const injectVarName = config?.redteam?.injectVar || 'prompt';
+
       return [
         columnHelper.group({
           id: 'vars',
@@ -480,9 +605,24 @@ function ResultsTable({
               ),
               cell: (info: CellContext<EvaluateTableRow, string>) => {
                 let value: string | object = info.getValue();
-
-                // Get the first output that has metadata for checking file metadata
+                const _originalValue = value; // Store original value for tooltip
                 const row = info.row.original;
+
+                // For red team evals, show the final injected prompt for the configured inject variable
+                // This replaces the original prompt with what was actually sent to the model
+                if (varName === injectVarName) {
+                  // Check all outputs to find one with redteamFinalPrompt metadata
+                  for (const output of row.outputs || []) {
+                    // Check if redteamFinalPrompt exists
+                    if (output?.metadata?.redteamFinalPrompt) {
+                      // Replace the original prompt with the injected version
+                      value = output.metadata.redteamFinalPrompt;
+                      break;
+                    }
+                  }
+                }
+
+                // Get first output for file metadata check
                 const output = row.outputs && row.outputs.length > 0 ? row.outputs[0] : null;
 
                 const fileMetadata = output?.metadata?.[FILE_METADATA_KEY] as
@@ -490,7 +630,7 @@ function ResultsTable({
                   | undefined;
                 const isMediaFile = fileMetadata && fileMetadata[varName];
 
-                if (isMediaFile) {
+                if (isMediaFile && typeof value === 'string') {
                   // Handle various media types
                   const mediaMetadata = fileMetadata[varName];
                   const mediaType = mediaMetadata.type;
@@ -546,19 +686,57 @@ function ResultsTable({
                     value = `\`\`\`json\n${value}\n\`\`\``;
                   }
                 }
-                const truncatedValue =
-                  value.length > maxTextLength
-                    ? `${value.substring(0, maxTextLength - 3).trim()}...`
-                    : value;
+                const cellContent = renderMarkdown ? (
+                  <MarkdownErrorBoundary fallback={value}>
+                    <TruncatedText
+                      text={<ReactMarkdown remarkPlugins={[remarkGfm]}>{value}</ReactMarkdown>}
+                      maxLength={maxTextLength}
+                    />
+                  </MarkdownErrorBoundary>
+                ) : (
+                  <TruncatedText text={value} maxLength={maxTextLength} />
+                );
+
+                // Determine if we should show original text (decoded) even without redteamFinalPrompt
+                const testMetadata = (row as any)?.test?.metadata || {};
+                const metadataOriginal =
+                  typeof testMetadata.originalText === 'string'
+                    ? testMetadata.originalText
+                    : undefined;
+                const strategyId = testMetadata.strategyId;
+                const shouldShowOriginal =
+                  varName === injectVarName &&
+                  isEncodingStrategy(strategyId) &&
+                  Boolean(metadataOriginal);
+
+                // Show original text for encoding strategies
+                if (shouldShowOriginal) {
+                  const originalForDisplay = metadataOriginal || '';
+                  return (
+                    <div className="cell" data-capture="true">
+                      {cellContent}
+                      {originalForDisplay && String(originalForDisplay) !== String(value) && (
+                        <Box
+                          sx={{
+                            marginTop: '6px',
+                            color: 'text.secondary',
+                            fontSize: '0.8em',
+                          }}
+                        >
+                          <strong>Original (decoded):</strong>{' '}
+                          <TruncatedText
+                            text={String(originalForDisplay)}
+                            maxLength={maxTextLength}
+                          />
+                        </Box>
+                      )}
+                    </div>
+                  );
+                }
+
                 return (
                   <div className="cell" data-capture="true">
-                    {renderMarkdown ? (
-                      <MarkdownErrorBoundary fallback={value}>
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{truncatedValue}</ReactMarkdown>
-                      </MarkdownErrorBoundary>
-                    ) : (
-                      <TruncatedText text={value} maxLength={maxTextLength} />
-                    )}
+                    {cellContent}
                   </div>
                 );
               },
@@ -569,7 +747,7 @@ function ResultsTable({
       ];
     }
     return [];
-  }, [columnHelper, head.vars, maxTextLength, renderMarkdown]);
+  }, [columnHelper, head.vars, maxTextLength, renderMarkdown, config]);
 
   const getOutput = React.useCallback(
     (rowIndex: number, promptIndex: number) => {
@@ -612,37 +790,6 @@ function ResultsTable({
     return totals;
   }, [table?.head?.prompts, table?.body]);
 
-  const handleMetricFilterClick = React.useCallback(
-    (metric: string | null) => {
-      if (!metric) {
-        return;
-      }
-
-      const filter = {
-        type: 'metric' as const,
-        operator: 'equals' as const,
-        value: metric,
-        logicOperator: 'or' as const,
-      };
-
-      // If this filter is already applied, do not re-apply it.
-      if (
-        Object.values(filters.values).find(
-          (f) =>
-            f.type === filter.type &&
-            f.value === filter.value &&
-            f.operator === filter.operator &&
-            f.logicOperator === filter.logicOperator,
-        )
-      ) {
-        return;
-      }
-
-      addFilter(filter);
-    },
-    [addFilter, filters.values],
-  );
-
   const promptColumns = React.useMemo(() => {
     return [
       columnHelper.group({
@@ -652,75 +799,128 @@ function ResultsTable({
           columnHelper.accessor((row: EvaluateTableRow) => formatRowOutput(row.outputs[idx]), {
             id: `Prompt ${idx + 1}`,
             header: () => {
-              const pct =
-                numGoodTests[idx] && numTests[idx]
-                  ? ((numGoodTests[idx] / numTests[idx]) * 100.0).toFixed(2)
-                  : '0.00';
+              const pct = passRates[idx]?.total?.toFixed(2) ?? '0.00';
               const columnId = `Prompt ${idx + 1}`;
               const isChecked = failureFilter[columnId] || false;
 
+              // Get metrics for this prompt (total and filtered)
+              const { total: metrics, filtered: filteredMetrics } = getMetrics(idx);
+
               const details = showStats ? (
                 <div className="prompt-detail collapse-hidden">
+                  {metrics?.tokenUsage?.numRequests !== undefined && (
+                    <div>
+                      <strong>{isRedteam ? 'Probes:' : 'Requests:'}</strong>{' '}
+                      {metrics.tokenUsage.numRequests}
+                    </div>
+                  )}
                   {numAsserts[idx] ? (
                     <div>
                       <strong>Asserts:</strong> {numGoodAsserts[idx]}/{numAsserts[idx]} passed
                     </div>
                   ) : null}
-                  {prompt.metrics?.cost ? (
+                  {metrics?.cost ? (
                     <div>
                       <strong>Total Cost:</strong>{' '}
                       <Tooltip
                         title={`Average: $${Intl.NumberFormat(undefined, {
                           minimumFractionDigits: 1,
-                          maximumFractionDigits: prompt.metrics.cost / numTests[idx] >= 1 ? 2 : 4,
-                        }).format(prompt.metrics.cost / numTests[idx])} per test`}
+                          maximumFractionDigits:
+                            testCounts[idx]?.total && metrics.cost / testCounts[idx].total >= 1
+                              ? 2
+                              : 4,
+                        }).format(
+                          testCounts[idx]?.total ? metrics.cost / testCounts[idx].total : 0,
+                        )} per test`}
                       >
                         <span style={{ cursor: 'help' }}>
                           $
                           {Intl.NumberFormat(undefined, {
                             minimumFractionDigits: 2,
-                            maximumFractionDigits: prompt.metrics.cost >= 1 ? 2 : 4,
-                          }).format(prompt.metrics.cost)}
+                            maximumFractionDigits: metrics.cost >= 1 ? 2 : 4,
+                          }).format(metrics.cost)}
                         </span>
                       </Tooltip>
+                      {filteredMetrics?.cost && testCounts[idx]?.filtered ? (
+                        <span style={{ fontSize: '0.9em', color: '#666', marginLeft: '4px' }}>
+                          ($
+                          {Intl.NumberFormat(undefined, {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: filteredMetrics.cost >= 1 ? 2 : 4,
+                          }).format(filteredMetrics.cost)}{' '}
+                          filtered)
+                        </span>
+                      ) : null}
                     </div>
                   ) : null}
-                  {prompt.metrics?.tokenUsage?.total ? (
+                  {metrics?.tokenUsage?.total ? (
                     <div>
                       <strong>Total Tokens:</strong>{' '}
                       {Intl.NumberFormat(undefined, {
                         maximumFractionDigits: 0,
-                      }).format(prompt.metrics.tokenUsage.total)}
+                      }).format(metrics.tokenUsage.total)}
+                      {filteredMetrics?.tokenUsage?.total ? (
+                        <span style={{ fontSize: '0.9em', color: '#666', marginLeft: '4px' }}>
+                          (
+                          {Intl.NumberFormat(undefined, {
+                            maximumFractionDigits: 0,
+                          }).format(filteredMetrics.tokenUsage.total)}{' '}
+                          filtered)
+                        </span>
+                      ) : null}
                     </div>
                   ) : null}
 
-                  {prompt.metrics?.tokenUsage?.total ? (
+                  {metrics?.tokenUsage?.total ? (
                     <div>
                       <strong>Avg Tokens:</strong>{' '}
                       {Intl.NumberFormat(undefined, {
                         maximumFractionDigits: 0,
-                      }).format(prompt.metrics.tokenUsage.total / numTests[idx])}
+                      }).format(
+                        testCounts[idx]?.total
+                          ? metrics.tokenUsage.total / testCounts[idx].total
+                          : 0,
+                      )}
+                      {filteredMetrics?.tokenUsage?.total && testCounts[idx]?.filtered ? (
+                        <span style={{ fontSize: '0.9em', color: '#666', marginLeft: '4px' }}>
+                          (
+                          {Intl.NumberFormat(undefined, {
+                            maximumFractionDigits: 0,
+                          }).format(
+                            filteredMetrics.tokenUsage.total / testCounts[idx].filtered,
+                          )}{' '}
+                          filtered)
+                        </span>
+                      ) : null}
                     </div>
                   ) : null}
-                  {prompt.metrics?.totalLatencyMs ? (
+                  {metrics?.totalLatencyMs ? (
                     <div>
                       <strong>Avg Latency:</strong>{' '}
                       {Intl.NumberFormat(undefined, {
                         maximumFractionDigits: 0,
-                      }).format(prompt.metrics.totalLatencyMs / numTests[idx])}{' '}
+                      }).format(
+                        testCounts[idx]?.total ? metrics.totalLatencyMs / testCounts[idx].total : 0,
+                      )}{' '}
                       ms
+                      {filteredMetrics?.totalLatencyMs && testCounts[idx]?.filtered ? (
+                        <span style={{ fontSize: '0.9em', color: '#666', marginLeft: '4px' }}>
+                          (
+                          {Intl.NumberFormat(undefined, {
+                            maximumFractionDigits: 0,
+                          }).format(filteredMetrics.totalLatencyMs / testCounts[idx].filtered)}{' '}
+                          ms filtered)
+                        </span>
+                      ) : null}
                     </div>
                   ) : null}
-                  {prompt.metrics?.totalLatencyMs && prompt.metrics?.tokenUsage?.completion ? (
+                  {metrics?.totalLatencyMs && metrics?.tokenUsage?.completion ? (
                     <div>
                       <strong>Tokens/Sec:</strong>{' '}
-                      {prompt.metrics.totalLatencyMs > 0
+                      {metrics.totalLatencyMs > 0
                         ? Intl.NumberFormat(undefined, {
                             maximumFractionDigits: 0,
-                          }).format(
-                            prompt.metrics.tokenUsage.completion /
-                              (prompt.metrics.totalLatencyMs / 1000),
-                          )
+                          }).format(metrics.tokenUsage.completion / (metrics.totalLatencyMs / 1000))
                         : '0'}
                     </div>
                   ) : null}
@@ -765,30 +965,46 @@ function ResultsTable({
                     <div className="summary">
                       <div
                         className={`highlight ${
-                          numGoodTests[idx] && numTests[idx]
-                            ? `success-${Math.round(((numGoodTests[idx] / numTests[idx]) * 100) / 20) * 20}`
-                            : 'success-0'
+                          passRates[idx]?.filtered !== null
+                            ? `success-${Math.round((passRates[idx].filtered ?? 0) / 20) * 20}`
+                            : passRates[idx]?.total
+                              ? `success-${Math.round(passRates[idx].total / 20) * 20}`
+                              : 'success-0'
                         }`}
                       >
-                        <strong>{pct}% passing</strong> ({numGoodTests[idx]}/{numTests[idx]} cases)
+                        {passRates[idx]?.filtered !== null ? (
+                          <Tooltip
+                            title={`Filtered: ${passingTestCounts[idx]?.filtered}/${testCounts[idx]?.filtered} passing (${passRates[idx].filtered?.toFixed(2)}%). Total: ${passingTestCounts[idx]?.total}/${testCounts[idx]?.total} passing (${passRates[idx]?.total?.toFixed(2)}%)`}
+                          >
+                            <span>
+                              <strong>{passRates[idx].filtered?.toFixed(2)}% passing</strong> (
+                              {passingTestCounts[idx]?.filtered}/{testCounts[idx]?.filtered}{' '}
+                              filtered, {passingTestCounts[idx]?.total}/{testCounts[idx]?.total}{' '}
+                              total)
+                            </span>
+                          </Tooltip>
+                        ) : (
+                          <>
+                            <strong>{pct}% passing</strong> ({passingTestCounts[idx]?.total}/
+                            {testCounts[idx]?.total} cases)
+                          </>
+                        )}
                       </div>
                     </div>
-                    {prompt.metrics?.testErrorCount && prompt.metrics.testErrorCount > 0 ? (
+                    {metrics?.testErrorCount && metrics.testErrorCount > 0 ? (
                       <div className="summary error-pill" onClick={() => setFilterMode('errors')}>
                         <div className="highlight fail">
-                          <strong>Errors:</strong> {prompt.metrics?.testErrorCount || 0}
+                          <strong>Errors:</strong> {metrics?.testErrorCount || 0}
                         </div>
                       </div>
                     ) : null}
-                    {prompt.metrics?.namedScores &&
-                    Object.keys(prompt.metrics.namedScores).length > 0 ? (
+                    {metrics?.namedScores && Object.keys(metrics.namedScores).length > 0 ? (
                       <Box className="collapse-hidden">
                         <CustomMetrics
-                          lookup={prompt.metrics.namedScores}
-                          counts={prompt.metrics.namedScoresCount}
+                          lookup={metrics.namedScores}
+                          counts={metrics.namedScoresCount}
                           metricTotals={metricTotals}
-                          onSearchTextChange={onSearchTextChange}
-                          onMetricFilter={handleMetricFilterClick}
+                          onShowMore={() => setCustomMetricsDialogOpen(true)}
                         />
                       </Box>
                     ) : null}
@@ -851,7 +1067,7 @@ function ResultsTable({
                     showStats={showStats}
                     evaluationId={evalId || undefined}
                     testCaseId={info.row.original.test?.metadata?.testCaseId || output.id}
-                    onMetricFilter={handleMetricFilterClick}
+                    isRedteam={isRedteam}
                   />
                 </ErrorBoundary>
               ) : (
@@ -870,6 +1086,7 @@ function ResultsTable({
     failureFilter,
     filterMode,
     getFirstOutput,
+    getMetrics,
     getOutput,
     handleRating,
     head.prompts,
@@ -877,12 +1094,13 @@ function ResultsTable({
     metricTotals,
     numAsserts,
     numGoodAsserts,
-    numGoodTests,
     onFailureFilterToggle,
     debouncedSearchText,
     showStats,
     filters.appliedCount,
-    handleMetricFilterClick,
+    passRates,
+    passingTestCounts,
+    testCounts,
   ]);
 
   const descriptionColumn = React.useMemo(() => {
@@ -1015,42 +1233,57 @@ function ResultsTable({
     }
   }, [pagination.pageIndex, pagination.pageSize, reactTable, filteredResultsCount]);
 
-  const tableWidth = React.useMemo(() => {
-    let width = 0;
-    if (descriptionColumn) {
-      width += DESCRIPTION_COLUMN_SIZE_PX;
+  // Use TanStack Table's built-in method to calculate total width of visible columns.
+  // This automatically handles both column visibility changes and user-initiated column resizing.
+  const tableWidth = reactTable.getTotalSize();
+
+  // Listen for scroll events on the table container and sync the header horizontally
+  const tableRef = useRef<HTMLDivElement>(null);
+  const theadRef = useRef<HTMLTableSectionElement>(null);
+
+  useEffect(() => {
+    if (!tableRef.current || !theadRef.current) {
+      return;
     }
-    width += head.vars.length * VARIABLE_COLUMN_SIZE_PX;
-    width += head.prompts.length * PROMPT_COLUMN_SIZE_PX;
-    return width;
-  }, [descriptionColumn, head.vars.length, head.prompts.length]);
+
+    const container = tableRef.current;
+    let rafId: number | null = null;
+
+    const handleScroll = () => {
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+      }
+      rafId = requestAnimationFrame(() => {
+        if (theadRef.current) {
+          const xScroll = container.scrollLeft;
+          theadRef.current.style.transform = `translateX(-${xScroll}px)`;
+        }
+      });
+    };
+
+    container.addEventListener('scroll', handleScroll, { passive: true });
+
+    // Initial sync
+    handleScroll();
+    // Keep in sync on resize
+    window.addEventListener('resize', handleScroll);
+
+    return () => {
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+      }
+      container.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('resize', handleScroll);
+    };
+  }, []);
+
+  const [customMetricsDialogOpen, setCustomMetricsDialogOpen] = React.useState(false);
 
   return (
     // NOTE: It's important that the JSX Fragment is the top-level element within the DOM tree
     // of this component. This ensures that the pagination footer is always pinned to the bottom
     // of the viewport (because the parent container is a flexbox).
     <>
-      {isSearching && searchText && (
-        <Box
-          sx={{
-            position: 'fixed',
-            top: '60px',
-            right: '20px',
-            zIndex: 1000,
-            backgroundColor: 'rgba(25, 118, 210, 0.1)',
-            padding: '5px 10px',
-            borderRadius: '4px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-          }}
-        >
-          <Typography variant="body2" color="primary">
-            Searching...
-          </Typography>
-        </Box>
-      )}
-
       {filteredResultsCount === 0 &&
         !isFetching &&
         (debouncedSearchText || filterMode !== 'all' || filters.appliedCount > 0) && (
@@ -1067,7 +1300,17 @@ function ResultsTable({
             <Typography variant="body1">No results found for the current filters.</Typography>
           </Box>
         )}
-
+      <Box sx={{ height: '1rem' }} />
+      <ResultsTableHeader
+        reactTable={reactTable}
+        tableWidth={tableWidth}
+        maxTextLength={maxTextLength}
+        wordBreak={wordBreak}
+        theadRef={theadRef}
+        stickyHeader={stickyHeader}
+        setStickyHeader={setStickyHeader}
+        zoom={zoom}
+      />
       <div
         id="results-table-container"
         style={{
@@ -1079,6 +1322,7 @@ function ResultsTable({
           flexGrow: 1,
           position: 'relative',
         }}
+        ref={tableRef}
       >
         <Box
           sx={{
@@ -1107,52 +1351,8 @@ function ResultsTable({
             width: `${tableWidth}px`,
           }}
         >
-          <thead className={`${stickyHeader && 'sticky'}`}>
-            {stickyHeader && (
-              // TODO: Fix this position in the CSS.
-              <div className="header-dismiss">
-                <IconButton
-                  onClick={() => setStickyHeader(false)}
-                  size="small"
-                  sx={{ color: 'text.primary' }}
-                >
-                  <CloseIcon fontSize="small" />
-                </IconButton>
-              </div>
-            )}
-            {reactTable.getHeaderGroups().map((headerGroup) => (
-              <tr key={headerGroup.id} className="header">
-                {headerGroup.headers.map((header) => {
-                  const isMetadataCol =
-                    header.column.id.startsWith('Variable') || header.column.id === 'description';
-                  const isFinalRow = headerGroup.depth === 1;
-
-                  return (
-                    <th
-                      key={header.id}
-                      colSpan={header.colSpan}
-                      style={{
-                        width: header.getSize(),
-                        borderBottom: !isMetadataCol && isFinalRow ? '2px solid #888' : 'none',
-                        height: isFinalRow ? 'fit-content' : 'auto',
-                      }}
-                    >
-                      {header.isPlaceholder
-                        ? null
-                        : flexRender(header.column.columnDef.header, header.getContext())}
-                      <div
-                        onMouseDown={header.getResizeHandler()}
-                        onTouchStart={header.getResizeHandler()}
-                        className={`resizer ${header.column.getIsResizing() ? 'isResizing' : ''}`}
-                      />
-                    </th>
-                  );
-                })}
-              </tr>
-            ))}
-          </thead>
           <tbody>
-            {reactTable.getRowModel().rows.map((row, rowIndex) => {
+            {reactTable.getRowModel().rows.map((row) => {
               let colBorderDrawn = false;
 
               return (
@@ -1175,6 +1375,30 @@ function ResultsTable({
                       const imgSrc = value.startsWith('data:')
                         ? value
                         : `data:image/jpeg;base64,${value}`;
+
+                      // If this is a variable column for the inject var, try to show the original image text
+                      let originalImageText: string | undefined;
+                      const columnId = String(cell.column.id);
+                      const match = columnId.match(/^Variable (\d+)$/);
+                      if (match) {
+                        const varIdx = Number(match[1]) - 1;
+                        const injectVarName = config?.redteam?.injectVar || 'prompt';
+                        const varNameForCol = head.vars[varIdx];
+                        if (varNameForCol === injectVarName) {
+                          const testMeta: any = (row.original as any)?.test?.metadata || {};
+                          const fromMeta =
+                            typeof testMeta.originalText === 'string'
+                              ? testMeta.originalText
+                              : undefined;
+                          const testVars: any = (row.original as any)?.test?.vars || {};
+                          const fromVars =
+                            typeof testVars.image_text === 'string'
+                              ? (testVars.image_text as string)
+                              : undefined;
+                          originalImageText = fromVars || fromMeta;
+                        }
+                      }
+
                       cellContent = (
                         <>
                           <img
@@ -1200,12 +1424,28 @@ function ResultsTable({
                               />
                             </div>
                           )}
+                          {originalImageText ? (
+                            <Box
+                              sx={{
+                                marginTop: '6px',
+                                color: 'text.secondary',
+                                fontSize: '0.8em',
+                              }}
+                            >
+                              <strong>Original (image text):</strong>{' '}
+                              <TruncatedText
+                                text={String(originalImageText)}
+                                maxLength={maxTextLength}
+                              />
+                            </Box>
+                          ) : null}
                         </>
                       );
                     }
 
                     return (
                       <td
+                        tabIndex={0}
                         key={cell.id}
                         style={{
                           width: cell.column.getSize(),
@@ -1222,12 +1462,14 @@ function ResultsTable({
           </tbody>
         </table>
       </div>
-
       <Box
         className="pagination"
         px={2}
         mx={-2}
         sx={{
+          position: 'sticky',
+          bottom: 0,
+          zIndex: 1000,
           display: 'flex',
           alignItems: 'center',
           gap: 2,
@@ -1324,12 +1566,11 @@ function ResultsTable({
             }}
           >
             <span>Go to:</span>
-            <TextField
+            <BaseNumberInput
               size="small"
-              type="number"
               value={pagination.pageIndex + 1}
-              onChange={(e) => {
-                const page = e.target.value ? Number(e.target.value) - 1 : null;
+              onChange={(v) => {
+                const page = v !== undefined ? v - 1 : null;
                 if (page !== null && page >= 0 && page < pageCount) {
                   setPagination((prev) => ({
                     ...prev,
@@ -1342,12 +1583,8 @@ function ResultsTable({
                 width: '60px',
                 textAlign: 'center',
               }}
-              slotProps={{
-                htmlInput: {
-                  min: 1,
-                  max: pageCount,
-                },
-              }}
+              min={1}
+              max={pageCount || 1}
               disabled={pageCount === 1}
             />
           </Typography>
@@ -1383,6 +1620,10 @@ function ResultsTable({
           </ButtonGroup>
         </Box>
       </Box>
+      <CustomMetricsDialog
+        open={customMetricsDialogOpen}
+        onClose={() => setCustomMetricsDialogOpen(false)}
+      />
     </>
   );
 }

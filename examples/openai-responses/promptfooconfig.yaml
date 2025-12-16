@@ -4,23 +4,95 @@ prompts:
   - 'Extract information about the event: {{event}}'
 
 providers:
-  - id: openai:responses:gpt-4.1
-    label: text-format
-    config:
-      temperature: 0.7
-      instructions: 'You are a helpful AI assistant. Extract key details about the event.'
-
-  - id: openai:responses:gpt-4.1
-    label: json-object
+  # GPT-5 models showcasing latest capabilities
+  - id: openai:responses:gpt-5
+    label: gpt-5-text-format
     config:
       temperature: 0.7
       instructions: 'You are a helpful AI assistant. Extract key details about the event.'
       response_format:
-        type: 'json_object'
+        type: 'json_schema'
+        name: 'event_information'
+        schema:
+          type: 'object'
+          properties:
+            event_name:
+              type: 'string'
+              description: 'The name of the event'
+            date:
+              type: 'string'
+              description: 'When the event takes place'
+            location:
+              type: 'string'
+              description: 'Where the event takes place'
+            participants:
+              type: 'array'
+              items:
+                type: 'string'
+              description: 'People attending the event'
+          required: ['event_name', 'date', 'location', 'participants']
+          additionalProperties: false
+
+  - id: openai:responses:gpt-5-nano
+    label: gpt-5-nano-json-object
+    config:
+      temperature: 0.7
+      instructions: 'You are a helpful AI assistant. Extract key details about the event.'
+      response_format:
+        type: 'json_schema'
+        name: 'event_information'
+        schema:
+          type: 'object'
+          properties:
+            event_name:
+              type: 'string'
+              description: 'The name of the event'
+            date:
+              type: 'string'
+              description: 'When the event takes place'
+            location:
+              type: 'string'
+              description: 'Where the event takes place'
+            participants:
+              type: 'array'
+              items:
+                type: 'string'
+              description: 'People attending the event'
+          required: ['event_name', 'date', 'location', 'participants']
+          additionalProperties: false
       store: true
 
+  - id: openai:responses:gpt-5-mini
+    label: gpt-5-mini-json-schema
+    config:
+      temperature: 0.7
+      instructions: 'You are a helpful AI assistant. Extract key details about the event.'
+      response_format:
+        type: 'json_schema'
+        name: 'event_information'
+        schema:
+          type: 'object'
+          properties:
+            event_name:
+              type: 'string'
+              description: 'The name of the event'
+            date:
+              type: 'string'
+              description: 'When the event takes place'
+            location:
+              type: 'string'
+              description: 'Where the event takes place'
+            participants:
+              type: 'array'
+              items:
+                type: 'string'
+              description: 'People attending the event'
+          required: ['event_name', 'date', 'location', 'participants']
+          additionalProperties: false
+
+  # Legacy GPT-4.1 for comparison
   - id: openai:responses:gpt-4.1
-    label: json-schema
+    label: gpt-4.1-json-schema
     config:
       temperature: 0.7
       instructions: 'You are a helpful AI assistant. Extract key details about the event.'

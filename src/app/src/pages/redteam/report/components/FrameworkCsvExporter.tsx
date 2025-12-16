@@ -1,15 +1,13 @@
-import React from 'react';
-
 import DownloadIcon from '@mui/icons-material/Download';
 import Button from '@mui/material/Button';
 import {
   ALIASED_PLUGIN_MAPPINGS,
-  FRAMEWORK_COMPLIANCE_IDS,
   FRAMEWORK_NAMES,
   OWASP_API_TOP_10_NAMES,
   OWASP_LLM_TOP_10_NAMES,
   riskCategorySeverityMap,
   Severity,
+  type FrameworkComplianceId,
 } from '@promptfoo/redteam/constants';
 import {
   type CategoryStats,
@@ -17,13 +15,20 @@ import {
   expandPluginCollections,
   getPluginDisplayName,
 } from './FrameworkComplianceUtils';
+import { calculateAttackSuccessRate } from '@promptfoo/redteam/metrics';
+import { formatASRForDisplay } from '@promptfoo/app/src/utils/redteam';
 
 interface CSVExporterProps {
   categoryStats: CategoryStats;
   pluginPassRateThreshold: number;
+  frameworksToShow: readonly FrameworkComplianceId[];
 }
 
-const CSVExporter: React.FC<CSVExporterProps> = ({ categoryStats, pluginPassRateThreshold }) => {
+const CSVExporter = ({
+  categoryStats,
+  pluginPassRateThreshold,
+  frameworksToShow,
+}: CSVExporterProps) => {
   // Function to export framework compliance data to CSV
   const exportToCSV = () => {
     // Collect data for all frameworks
@@ -41,8 +46,8 @@ const CSVExporter: React.FC<CSVExporterProps> = ({ categoryStats, pluginPassRate
       ],
     ];
 
-    // Add data rows
-    FRAMEWORK_COMPLIANCE_IDS.forEach((frameworkId) => {
+    // Add data rows for configured frameworks
+    frameworksToShow.forEach((frameworkId) => {
       const framework = FRAMEWORK_NAMES[frameworkId];
 
       if (frameworkId === 'owasp:api' || frameworkId === 'owasp:llm') {
@@ -76,8 +81,10 @@ const CSVExporter: React.FC<CSVExporterProps> = ({ categoryStats, pluginPassRate
                 riskCategorySeverityMap[plugin as keyof typeof riskCategorySeverityMap] ||
                 Severity.Low;
               const pluginName = getPluginDisplayName(plugin);
-              const attacksSuccessful = stats.total - stats.pass;
-              const asr = ((attacksSuccessful / stats.total) * 100).toFixed(2);
+              const attacksSuccessful = stats.failCount;
+              const asr = formatASRForDisplay(
+                calculateAttackSuccessRate(stats.total, stats.failCount),
+              );
               const status = stats.pass / stats.total >= pluginPassRateThreshold ? 'Pass' : 'Fail';
 
               csvRows.push([
@@ -138,8 +145,8 @@ const CSVExporter: React.FC<CSVExporterProps> = ({ categoryStats, pluginPassRate
           const pluginSeverity =
             riskCategorySeverityMap[plugin as keyof typeof riskCategorySeverityMap] || Severity.Low;
           const pluginName = getPluginDisplayName(plugin);
-          const attacksSuccessful = stats.total - stats.pass;
-          const asr = ((attacksSuccessful / stats.total) * 100).toFixed(2);
+          const attacksSuccessful = stats.failCount;
+          const asr = formatASRForDisplay(calculateAttackSuccessRate(stats.total, stats.failCount));
           const status = stats.pass / stats.total >= pluginPassRateThreshold ? 'Pass' : 'Fail';
 
           csvRows.push([

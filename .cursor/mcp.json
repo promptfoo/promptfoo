@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "promptfoo": {
+      "command": "node",
+      "args": ["dist/src/main.js", "mcp", "--transport", "stdio"],
+      "cwd": ".",
+      "description": "Promptfoo MCP server for LLM evaluation and testing"
+    }
+  }
+}

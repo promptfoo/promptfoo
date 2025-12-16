@@ -15,7 +15,7 @@ import type {
   ProviderEmbeddingResponse,
   ProviderOptions,
   ProviderResponse,
-} from '../types';
+} from '../types/index';
 import type { EnvOverrides } from '../types/env';
 import type { TransformContext } from '../util/transform';
 
@@ -691,7 +691,7 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
   async callApi(
     prompt: string,
     context?: CallApiContextParams,
-    options?: CallApiOptionsParams,
+    _options?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     // Import cache functions dynamically to avoid circular dependencies
     const { isCacheEnabled, getCache } = await import('../cache');
@@ -816,6 +816,7 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
           completion: completionTokens,
           total: promptTokens + completionTokens,
           cached: 0, // No caching for this request
+          numRequests: 1,
         },
         metadata: {
           latencyMs: _latency,
@@ -1043,6 +1044,7 @@ export class SageMakerEmbeddingProvider
               tokenUsage: {
                 prompt: Math.ceil(text.length / 4), // Approximate token count
                 cached: 0,
+                numRequests: 1,
               },
               metadata: {
                 transformed: isTransformed,
@@ -1087,6 +1089,7 @@ export class SageMakerEmbeddingProvider
         tokenUsage: {
           prompt: Math.ceil(text.length / 4), // Approximate token count
           cached: 0,
+          numRequests: 1,
         },
         metadata: {
           transformed: isTransformed,

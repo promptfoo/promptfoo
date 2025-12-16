@@ -1,6 +1,6 @@
 ---
 title: fal.ai Provider
-description: Connect Promptfoo to fal.ai image generation models for AI image evaluation and testing
+description: Integrate fal.ai's fast image generation models including Flux and Stable Diffusion for visual AI testing and evaluation
 sidebar_position: 42
 keywords: [fal.ai, image generation, AI images, flux, imagen, ideogram, promptfoo provider]
 ---

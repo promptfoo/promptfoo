@@ -1,0 +1,33 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Test Vertex AI responseSchema with file:// protocol'
+
+prompts:
+  - 'Write a tweet about {{topic}}'
+
+providers:
+  - id: vertex:gemini-2.5-flash
+    config:
+      region: us-central1
+      projectId: your-project-id # Replace with your actual project ID
+      responseSchema: file://response-schema.json
+
+tests:
+  - vars:
+      topic: bananas
+    assert:
+      - type: equals
+        value: 'Bananas are great'
+        transform: JSON.parse(output).tweet
+
+  - vars:
+      topic: artificial intelligence
+    assert:
+      - type: contains
+        value: 'AI'
+        transform: JSON.parse(output).tweet
+
+  - vars:
+      topic: climate change
+    assert:
+      - type: is-json
+        # This verifies the output is valid JSON that matches our schema

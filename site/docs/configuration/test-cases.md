@@ -81,10 +81,14 @@ tests:
 
 ## CSV Format
 
-CSV is ideal for bulk test data:
+CSV or Excel (XLSX) files are ideal for bulk test data:
 
 ```yaml title="promptfooconfig.yaml"
 tests: file://test_cases.csv
+```
+
+```yaml title="promptfooconfig.yaml"
+tests: file://test_cases.xlsx
 ```
 
 ### Basic CSV
@@ -98,6 +102,59 @@ question,expectedAnswer
 
 Variables are automatically mapped from column headers.
 
+### Excel (XLSX/XLS) Support
+
+Excel files (.xlsx and .xls) are supported as an optional feature. To use Excel files:
+
+1. Install the `xlsx` package as a peer dependency:
+
+   ```bash
+   # Install latest version from npm (recommended)
+   npm install xlsx
+
+   # OR install specific version from SheetJS CDN
+   npm install https://cdn.sheetjs.com/xlsx-0.18.5/xlsx-0.18.5.tgz
+   ```
+
+   **Why two options?**
+   - **npm install xlsx**: Gets version 0.18.5 from npm registry (recommended for most users)
+   - **CDN URL**: Installs the same version from SheetJS CDN for environments that prefer CDN sources
+
+2. Use Excel files just like CSV files:
+   ```yaml title="promptfooconfig.yaml"
+   tests: file://test_cases.xlsx
+   ```
+
+**Multi-sheet support:** By default, only the first sheet is used. To specify a different sheet, use the `#` syntax:
+
+- `file://test_cases.xlsx#Sheet2` - Select sheet by name
+- `file://test_cases.xlsx#2` - Select sheet by 1-based index (2 = second sheet)
+
+```yaml title="promptfooconfig.yaml"
+# Use a specific sheet by name
+tests: file://test_cases.xlsx#DataSheet
+
+# Or by index (1-based)
+tests: file://test_cases.xlsx#2
+```
+
+### XLSX Example
+
+Your Excel file should have column headers in the first row, with each subsequent row representing a test case:
+
+| question                       | expectedAnswer |
+| ------------------------------ | -------------- |
+| What is 2+2?                   | 4              |
+| What is the capital of France? | Paris          |
+| Name a primary color           | blue           |
+
+**Tips for Excel files:**
+
+- First row must contain column headers
+- Column names become variable names in your prompts
+- Empty cells are treated as empty strings
+- Use `__expected` columns for assertions (same as CSV)
+
 ### CSV with Assertions
 
 Use special `__expected` columns for assertions:
@@ -109,6 +166,15 @@ input,__expected
 "What's the weather?","llm-rubric: Provides weather information"
 ```
 
+Values without a type prefix default to `equals`:
+
+| `__expected` value                | Assertion type               |
+| --------------------------------- | ---------------------------- |
+| `Paris`                           | `equals`                     |
+| `contains:Paris`                  | `contains`                   |
+| `factuality:The capital is Paris` | `factuality`                 |
+| `similar(0.8):Hello there`        | `similar` with 0.8 threshold |
+
 Multiple assertions:
 
 ```csv title="test_cases.csv"
@@ -116,18 +182,30 @@ question,__expected1,__expected2,__expected3
 "What is 2+2?","equals: 4","contains: four","javascript: output.length < 10"
 ```
 
+:::note
+**contains-any** and **contains-all** expect comma-delimited values inside the `__expected` column.
+
+```csv title="test_cases.csv"
+translated_text,__expected
+"<span>Hola</span> <b>mundo</b>","contains-any: <b>,</span>"
+```
+
+If you write `"contains-any: <b> </span>"`, promptfoo treats `<b> </span>` as a single search term rather than two separate tags.
+:::
+
 ### Special CSV Columns
 
-| Column                            | Purpose                    | Example             |
-| --------------------------------- | -------------------------- | ------------------- |
-| `__expected`                      | Single assertion           | `contains: Paris`   |
-| `__expected1`, `__expected2`, ... | Multiple assertions        | `equals: 42`        |
-| `__description`                   | Test description           | `Basic math test`   |
-| `__prefix`                        | Prepend to prompt          | `You must answer: ` |
-| `__suffix`                        | Append to prompt           | ` (be concise)`     |
-| `__metric`                        | Metric name for assertions | `accuracy`          |
-| `__threshold`                     | Pass threshold             | `0.8`               |
-| `__metadata:*`                    | Filterable metadata        | See below           |
+| Column                                                      | Purpose                                                  | Example                                                           |
+| ----------------------------------------------------------- | -------------------------------------------------------- | ----------------------------------------------------------------- |
+| `__expected`                                                | Single assertion                                         | `contains: Paris`                                                 |
+| `__expected1`, `__expected2`, ...                           | Multiple assertions                                      | `equals: 42`                                                      |
+| `__description`                                             | Test description                                         | `Basic math test`                                                 |
+| `__prefix`                                                  | Prepend to prompt                                        | `You must answer: `                                               |
+| `__suffix`                                                  | Append to prompt                                         | ` (be concise)`                                                   |
+| `__metric`                                                  | Display name in reports (does not change assertion type) | `accuracy`                                                        |
+| `__threshold`                                               | Pass threshold (applies to all asserts)                  | `0.8`                                                             |
+| `__metadata:*`                                              | Filterable metadata                                      | See below                                                         |
+| `__config:__expected:<key>` or `__config:__expectedN:<key>` | Set configuration for all or specific assertions         | `__config:__expected:threshold`, `__config:__expected2:threshold` |
 
 Using `__metadata` without a key is not supported. Specify the metadata field like `__metadata:category`.
 If a CSV file includes a `__metadata` column without a key, Promptfoo logs a warning and ignores the column.
@@ -173,6 +251,29 @@ Access in prompts:
 prompts:
   - 'Query: {{query}}, Location: {{(context | load).location}}'
 ```
+
+### CSV with defaultTest
+
+Apply the same assertions to all tests loaded from a CSV file using [`defaultTest`](/docs/configuration/guide#default-test-cases):
+
+```yaml title="promptfooconfig.yaml"
+defaultTest:
+  assert:
+    - type: factuality
+      value: '{{reference_answer}}'
+  options:
+    provider: openai:gpt-5.2
+
+tests: file://tests.csv
+```
+
+```csv title="tests.csv"
+question,reference_answer
+"What does GPT stand for?","Generative Pre-trained Transformer"
+"What is the capital of France?","Paris is the capital of France"
+```
+
+Use regular column names (like `reference_answer`) instead of `__expected` when referencing values in `defaultTest` assertions. The `__expected` column automatically creates assertions per row.
 
 ## Dynamic Test Generation
 
@@ -440,10 +541,16 @@ tests:
         threshold: 1000 # milliseconds
 ```
 
-## Loading from Google Sheets
+## External Data Sources
 
-See [Google Sheets integration](/docs/configuration/guide#loading-tests-from-csv) for details on loading test data directly from spreadsheets.
+### Google Sheets
 
-## Loading from HuggingFace datasets
+See [Google Sheets integration](/docs/integrations/google-sheets) for details on loading test data directly from spreadsheets.
+
+### SharePoint
+
+See [SharePoint integration](/docs/integrations/sharepoint) for details on loading test data from Microsoft SharePoint document libraries.
+
+### HuggingFace Datasets
 
 See [HuggingFace Datasets](/docs/configuration/huggingface-datasets) for instructions on importing test cases from existing datasets.

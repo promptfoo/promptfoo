@@ -36,6 +36,7 @@ These metrics are created by logical tests that are run on LLM output.
 | [contains-all](#contains-all)                                   | output contains all list of substrings                             |
 | [contains-any](#contains-any)                                   | output contains any of the listed substrings                       |
 | [contains-json](#contains-json)                                 | output contains valid json (optional json schema validation)       |
+| [contains-html](#contains-html)                                 | output contains HTML content                                       |
 | [contains-sql](#contains-sql)                                   | output contains valid sql                                          |
 | [contains-xml](#contains-xml)                                   | output contains valid xml                                          |
 | [cost](#cost)                                                   | Inference cost is below a threshold                                |
@@ -45,11 +46,13 @@ These metrics are created by logical tests that are run on LLM output.
 | [icontains](#contains)                                          | output contains substring, case insensitive                        |
 | [icontains-all](#contains-all)                                  | output contains all list of substrings, case insensitive           |
 | [icontains-any](#contains-any)                                  | output contains any of the listed substrings, case insensitive     |
+| [is-html](#is-html)                                             | output is valid HTML                                               |
 | [is-json](#is-json)                                             | output is valid json (optional json schema validation)             |
 | [is-sql](#is-sql)                                               | output is valid SQL statement (optional authority list validation) |
 | [is-valid-function-call](#is-valid-function-call)               | Ensure that the function call matches the function's JSON schema   |
 | [is-valid-openai-function-call](#is-valid-openai-function-call) | Ensure that the function call matches the function's JSON schema   |
 | [is-valid-openai-tools-call](#is-valid-openai-tools-call)       | Ensure all tool calls match the tools JSON schema                  |
+| [tool-call-f1](#tool-call-f1)                                   | F1 score comparing actual vs expected tool calls                   |
 | [is-xml](#is-xml)                                               | output is valid xml                                                |
 | [javascript](/docs/configuration/expected-outputs/javascript)   | provided Javascript function validates the output                  |
 | [latency](#latency)                                             | Latency is below a threshold (milliseconds)                        |
@@ -126,8 +129,6 @@ assert:
 
 For case insensitive matching, use `icontains-any`.
 
-For case insensitive matching, use `icontains-all`.
-
 ### Regex
 
 The `regex` assertion checks if the LLM output matches the provided regular expression.
@@ -199,6 +200,54 @@ assert:
 
 See also: [`is-json`](#is-json)
 
+### Contains-Html
+
+The `contains-html` assertion checks if the LLM output contains HTML content. This is useful when you want to verify that the model has generated HTML markup, even if it's embedded within other text.
+
+Example:
+
+```yaml
+assert:
+  - type: contains-html
+```
+
+The assertion uses multiple indicators to detect HTML:
+
+- Opening and closing tags (e.g., `<div>`, `</div>`)
+- Self-closing tags (e.g., `<br />`, `<img />`)
+- HTML entities (e.g., `&amp;`, `&nbsp;`, `&#123;`)
+- HTML attributes (e.g., `class="example"`, `id="test"`)
+- HTML comments (e.g., `<!-- comment -->`)
+- DOCTYPE declarations
+
+This assertion requires at least two HTML indicators to avoid false positives from text like "a < b" or email addresses.
+
+### Is-Html
+
+The `is-html` assertion checks if the entire LLM output is valid HTML (not just contains HTML fragments). The output must start and end with HTML tags, with no non-HTML content outside the tags.
+
+Example:
+
+```yaml
+assert:
+  - type: is-html
+```
+
+This assertion will pass for:
+
+- Complete HTML documents: `<!DOCTYPE html><html>...</html>`
+- HTML fragments: `<div>Content</div>`
+- Multiple elements: `<h1>Title</h1><p>Paragraph</p>`
+- Self-closing tags: `<img src="test.jpg" />`
+
+It will fail for:
+
+- Plain text: `Just text`
+- Mixed content: `Text before <div>HTML</div> text after`
+- XML documents: `<?xml version="1.0"?><root>...</root>`
+- Incomplete HTML: `<div>Unclosed div`
+- Non-HTML content with HTML inside: `Here is some HTML: <div>test</div>`
+
 ### Contains-Sql
 
 This assertion ensure that the output is either valid SQL, or contains a code block with valid SQL.
@@ -220,8 +269,8 @@ Example:
 
 ```yaml
 providers:
-  - openai:gpt-4.1-mini
-  - openai:gpt-4
+  - openai:gpt-5-mini
+  - openai:gpt-5
 assert:
   # Pass if the LLM call costs less than $0.001
   - type: cost
@@ -505,7 +554,7 @@ Example with MCP tools:
 
 ```yaml
 providers:
-  - id: openai:responses:gpt-4.1-2025-04-14
+  - id: openai:responses:gpt-5
     config:
       tools:
         - type: mcp
@@ -522,13 +571,83 @@ tests:
         value: 'MCP Tool Result' # Alternative way to check for MCP success
 ```
 
+### tool-call-f1
+
+The `tool-call-f1` assertion computes the [F1 score](https://en.wikipedia.org/wiki/F-score) comparing the set of tools called by the LLM against an expected set of tools. This metric is useful for evaluating agentic LLM applications where you want to measure how accurately the model selects the right tools.
+
+This assertion supports multiple provider formats including OpenAI, Anthropic, and Google/Vertex.
+
+The F1 score is the harmonic mean of precision and recall, originally introduced by [van Rijsbergen (1979)](http://www.dcs.gla.ac.uk/Keith/Preface.html) for information retrieval evaluation:
+
+- **Precision** = |actual ∩ expected| / |actual| — "Of the tools called, how many were correct?"
+- **Recall** = |actual ∩ expected| / |expected| — "Of the expected tools, how many were called?"
+- **F1** = 2 × (precision × recall) / (precision + recall)
+
+This uses **unordered set comparison** — only the presence of tool names matters, not the order or frequency of calls.
+
+Example:
+
+```yaml
+providers:
+  - id: openai:gpt-4.1
+    config:
+      tools:
+        - type: function
+          function:
+            name: get_weather
+            parameters:
+              type: object
+              properties:
+                city:
+                  type: string
+        - type: function
+          function:
+            name: book_flight
+            parameters:
+              type: object
+              properties:
+                destination:
+                  type: string
+
+tests:
+  - vars:
+      query: "What's the weather in NYC and book me a flight to LA?"
+    assert:
+      # Require exact match (F1 = 1.0)
+      - type: tool-call-f1
+        value:
+          - get_weather
+          - book_flight
+
+      # Allow partial matches with custom threshold
+      - type: tool-call-f1
+        value: ['get_weather', 'book_flight']
+        threshold: 0.8
+```
+
+The `value` can be specified as:
+
+- An array of tool names: `['get_weather', 'book_flight']`
+- A comma-separated string: `'get_weather, book_flight'`
+
+The `threshold` defaults to `1.0` (exact match required). Lower thresholds allow partial matches, which is useful during development or when some flexibility is acceptable.
+
+**Scoring examples:**
+
+| Expected Tools               | Actual Tools Called                  | Precision | Recall | F1    |
+| ---------------------------- | ------------------------------------ | --------- | ------ | ----- |
+| `[get_weather, book_flight]` | `[get_weather, book_flight]`         | 1.0       | 1.0    | 1.0   |
+| `[get_weather, book_flight]` | `[get_weather]`                      | 1.0       | 0.5    | 0.667 |
+| `[get_weather, book_flight]` | `[get_weather, book_flight, search]` | 0.667     | 1.0    | 0.8   |
+| `[get_weather]`              | `[book_flight]`                      | 0.0       | 0.0    | 0.0   |
+
 ### Javascript
 
 See [Javascript assertions](/docs/configuration/expected-outputs/javascript).
 
 ### Latency
 
-The `latency` assertion passes if the LLM call takes longer than the specified threshold. Duration is specified in milliseconds.
+The `latency` assertion fails if the LLM call takes longer than the specified threshold. Duration is specified in milliseconds.
 
 Example:
 
@@ -616,8 +735,8 @@ This makes it easier to include in an aggregate promptfoo score, as higher score
 
 ```yaml
 providers:
-  - openai:gpt-4.1-mini
-  - openai:gpt-4.1
+  - openai:gpt-5-mini
+  - openai:gpt-5
 tests:
   - assert:
       - type: perplexity-score
@@ -647,6 +766,8 @@ The `trace-span-count` assertion counts the number of spans in a trace that matc
 
 :::note
 Trace assertions require tracing to be enabled in your evaluation. See the [tracing documentation](/docs/tracing/) for setup instructions.
+
+If trace data is not available, the assertion will throw an error rather than failing, indicating that the assertion could not be evaluated.
 :::
 
 Example:
@@ -689,6 +810,10 @@ Common patterns:
 
 The `trace-span-duration` assertion checks if span durations in a trace are within acceptable limits. It can check individual spans or percentiles across all matching spans.
 
+:::note
+This assertion requires trace data to be available. If tracing is not enabled or trace data is missing, the assertion will throw an error.
+:::
+
 Example:
 
 ```yaml
@@ -723,6 +848,10 @@ The assertion will show the slowest spans when a threshold is exceeded, making i
 ### Trace-Error-Spans
 
 The `trace-error-spans` assertion detects error spans in a trace and ensures the error rate is within acceptable limits. It automatically detects errors through status codes, error attributes, and status messages.
+
+:::note
+This assertion requires trace data to be available. If tracing is not enabled or trace data is missing, the assertion will throw an error.
+:::
 
 Example:
 
@@ -974,7 +1103,15 @@ METEOR (Metric for Evaluation of Translation with Explicit ORdering) is the most
 
 For additional context, read about the metric on [Wikipedia](https://en.wikipedia.org/wiki/METEOR).
 
-> **Note:** METEOR requires the `natural` package. If you want to use METEOR assertions, install it using: `npm install natural@latest`
+:::info Installation Required
+METEOR requires the optional `natural` package. Install it before using METEOR assertions:
+
+```bash
+npm install natural@^8.1.0
+```
+
+If the package is not installed, you'll receive an error message with installation instructions when attempting to use METEOR assertions.
+:::
 
 #### How METEOR Works
 
@@ -1169,7 +1306,7 @@ tests:
 
 ```yaml
 providers:
-  - id: openai:gpt-4.1-mini
+  - id: openai:gpt-5-mini
     config:
       max_tokens: 10 # Very short limit
 tests:
@@ -1184,7 +1321,7 @@ tests:
 
 ```yaml
 providers:
-  - id: openai:gpt-4.1-mini
+  - id: openai:gpt-5-mini
     config:
       tools:
         - name: get_weather
@@ -1468,7 +1605,7 @@ prompts:
   - 'Write a very concise, funny tweet about {{topic}}'
   - 'Compose a tweet about {{topic}} that will go viral'
 providers:
-  - openai:gpt-4
+  - openai:gpt-5
 tests:
   - vars:
       topic: 'artificial intelligence'
@@ -1483,7 +1620,7 @@ Example with custom grader:
 assert:
   - type: select-best
     value: 'choose the most engaging response'
-    provider: openai:gpt-4o-mini
+    provider: openai:gpt-5-mini
 ```
 
 ## See Also

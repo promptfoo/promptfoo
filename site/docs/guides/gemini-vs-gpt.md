@@ -1,5 +1,6 @@
 ---
 sidebar_label: Gemini vs GPT
+description: Compare Gemini Pro vs GPT-4 performance on your custom datasets using automated benchmarks and side-by-side analysis to identify the best model for your use case
 ---
 
 # Gemini vs GPT: benchmark on your own data
@@ -36,8 +37,8 @@ Edit the `promptfooconfig.yaml` file to include the `gemini-pro` model from Goog
 ```yaml title="promptfooconfig.yaml"
 providers:
   - vertex:gemini-pro
-  - openai:gpt-4.1-mini
-  - openai:gpt-4.1
+  - openai:gpt-5-mini
+  - openai:gpt-5
 ```
 
 ## Step 2: Set up the prompts
@@ -59,10 +60,10 @@ prompts:
 providers:
   - id: vertex:gemini-pro
     prompts: gemini_prompt
-  - id: openai:gpt-4.1-mini
+  - id: openai:gpt-5-mini
     prompts:
       - gpt_prompt
-  - id: openai:gpt-4.1
+  - id: openai:gpt-5
     prompts:
       - gpt_prompt
 ```

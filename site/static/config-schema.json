@@ -38,6 +38,9 @@
                     "type": "string"
                   },
                   {
+                    "$ref": "#/definitions/PromptfooConfigSchema/properties/providers/anyOf/1"
+                  },
+                  {
                     "type": "object",
                     "additionalProperties": {
                       "type": "object",
@@ -126,16 +129,19 @@
                             "AZURE_TOKEN_SCOPE": {
                               "type": "string"
                             },
-                            "BAM_API_HOST": {
+                            "CLAUDE_CODE_USE_BEDROCK": {
                               "type": "string"
                             },
-                            "BAM_API_KEY": {
+                            "CLAUDE_CODE_USE_VERTEX": {
                               "type": "string"
                             },
                             "CLOUDFLARE_ACCOUNT_ID": {
                               "type": "string"
                             },
                             "CLOUDFLARE_API_KEY": {
+                              "type": "string"
+                            },
+                            "COMETAPI_KEY": {
                               "type": "string"
                             },
                             "COHERE_API_KEY": {
@@ -150,7 +156,19 @@
                             "DATABRICKS_WORKSPACE_URL": {
                               "type": "string"
                             },
+                            "DOCKER_MODEL_RUNNER_BASE_URL": {
+                              "type": "string"
+                            },
+                            "DOCKER_MODEL_RUNNER_API_KEY": {
+                              "type": "string"
+                            },
+                            "ELEVENLABS_API_KEY": {
+                              "type": "string"
+                            },
                             "FAL_KEY": {
+                              "type": "string"
+                            },
+                            "GITHUB_TOKEN": {
                               "type": "string"
                             },
                             "GOOGLE_API_HOST": {
@@ -160,6 +178,15 @@
                               "type": "string"
                             },
                             "GOOGLE_API_KEY": {
+                              "type": "string"
+                            },
+                            "GOOGLE_PROJECT_ID": {
+                              "type": "string"
+                            },
+                            "GOOGLE_LOCATION": {
+                              "type": "string"
+                            },
+                            "GOOGLE_GENERATIVE_AI_API_KEY": {
                               "type": "string"
                             },
                             "GEMINI_API_KEY": {
@@ -184,9 +211,6 @@
                               "type": "string"
                             },
                             "JFROG_API_KEY": {
-                              "type": "string"
-                            },
-                            "LAMBDA_API_KEY": {
                               "type": "string"
                             },
                             "LANGFUSE_HOST": {
@@ -216,6 +240,12 @@
                             "MISTRAL_API_KEY": {
                               "type": "string"
                             },
+                            "NSCALE_SERVICE_TOKEN": {
+                              "type": "string"
+                            },
+                            "NSCALE_API_KEY": {
+                              "type": "string"
+                            },
                             "OLLAMA_API_KEY": {
                               "type": "string"
                             },
@@ -235,6 +265,9 @@
                               "type": "string"
                             },
                             "OPENAI_ORGANIZATION": {
+                              "type": "string"
+                            },
+                            "CODEX_API_KEY": {
                               "type": "string"
                             },
                             "PALM_API_HOST": {
@@ -271,6 +304,18 @@
                               "type": "string"
                             },
                             "REPLICATE_API_TOKEN": {
+                              "type": "string"
+                            },
+                            "SHAREPOINT_BASE_URL": {
+                              "type": "string"
+                            },
+                            "SHAREPOINT_CERT_PATH": {
+                              "type": "string"
+                            },
+                            "SHAREPOINT_CLIENT_ID": {
+                              "type": "string"
+                            },
+                            "SHAREPOINT_TENANT_ID": {
                               "type": "string"
                             },
                             "VERTEX_API_HOST": {
@@ -347,10 +392,7 @@
                     }
                   },
                   {
-                    "$ref": "#/definitions/PromptfooConfigSchema/properties/providers/anyOf/2/items/anyOf/1/additionalProperties"
-                  },
-                  {
-                    "$ref": "#/definitions/PromptfooConfigSchema/properties/providers/anyOf/1"
+                    "$ref": "#/definitions/PromptfooConfigSchema/properties/providers/anyOf/2/items/anyOf/2/additionalProperties"
                   }
                 ]
               }
@@ -469,7 +511,7 @@
                             "type": "string"
                           },
                           {
-                            "$ref": "#/definitions/PromptfooConfigSchema/properties/providers/anyOf/2/items/anyOf/1/additionalProperties"
+                            "$ref": "#/definitions/PromptfooConfigSchema/properties/providers/anyOf/2/items/anyOf/2/additionalProperties"
                           },
                           {
                             "type": "object",
@@ -527,12 +569,14 @@
                                               "contains",
                                               "contains-all",
                                               "contains-any",
+                                              "contains-html",
                                               "contains-json",
                                               "contains-sql",
                                               "contains-xml",
                                               "context-faithfulness",
                                               "context-recall",
                                               "context-relevance",
+                                              "conversation-relevance",
                                               "cost",
                                               "equals",
                                               "factuality",
@@ -543,6 +587,7 @@
                                               "icontains",
                                               "icontains-all",
                                               "icontains-any",
+                                              "is-html",
                                               "is-json",
                                               "is-refusal",
                                               "is-sql",
@@ -564,11 +609,17 @@
                                               "python",
                                               "regex",
                                               "rouge-n",
+                                              "ruby",
                                               "similar",
+                                              "similar:cosine",
+                                              "similar:dot",
+                                              "similar:euclidean",
                                               "starts-with",
+                                              "tool-call-f1",
                                               "trace-error-spans",
                                               "trace-span-count",
                                               "trace-span-duration",
+                                              "search-rubric",
                                               "webhook"
                                             ]
                                           },
@@ -577,7 +628,7 @@
                                           },
                                           {
                                             "type": "string",
-                                            "enum": ["select-best", "human"]
+                                            "enum": ["select-best", "human", "max-score"]
                                           },
                                           {}
                                         ]
@@ -973,7 +1024,7 @@
         "env": {
           "anyOf": [
             {
-              "$ref": "#/definitions/PromptfooConfigSchema/properties/providers/anyOf/2/items/anyOf/1/additionalProperties/properties/env"
+              "$ref": "#/definitions/PromptfooConfigSchema/properties/providers/anyOf/2/items/anyOf/2/additionalProperties/properties/env"
             },
             {
               "type": "object",
@@ -1050,10 +1101,10 @@
                   "type": "string"
                 },
                 {
-                  "$ref": "#/definitions/PromptfooConfigSchema/properties/providers/anyOf/2/items/anyOf/1/additionalProperties"
+                  "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/provider/anyOf/2"
                 },
                 {
-                  "$ref": "#/definitions/PromptfooConfigSchema/properties/tests/anyOf/1/items/anyOf/1/properties/provider/anyOf/2"
+                  "$ref": "#/definitions/PromptfooConfigSchema/properties/providers/anyOf/2/items/anyOf/2/additionalProperties"
                 }
               ],
               "description": "Provider used for generating adversarial inputs"
@@ -1064,8 +1115,36 @@
               "description": "Number of tests to generate"
             },
             "language": {
-              "type": "string",
-              "description": "Language of tests ot generate for this plugin"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              ],
+              "description": "Language(s) of tests to generate for this plugin"
+            },
+            "frameworks": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "mitre:atlas",
+                  "nist:ai:measure",
+                  "owasp:api",
+                  "owasp:llm",
+                  "owasp:agentic",
+                  "eu:ai-act",
+                  "iso:42001",
+                  "gdpr"
+                ]
+              },
+              "minItems": 1,
+              "description": "Compliance frameworks to include across reports and commands"
             },
             "entities": {
               "type": "array",
@@ -1097,12 +1176,18 @@
                           "cca",
                           "competitors",
                           "contracts",
+                          "coppa",
                           "cross-session-leak",
                           "cyberseceval",
                           "debug-access",
                           "default",
                           "divergent-repetition",
                           "donotanswer",
+                          "ecommerce",
+                          "ecommerce:compliance-bypass",
+                          "ecommerce:order-fraud",
+                          "ecommerce:pci-dss",
+                          "ecommerce:price-manipulation",
                           "eu:ai-act",
                           "eu:ai-act:annex3:biometric-id",
                           "eu:ai-act:annex3:critical-infrastructure",
@@ -1119,12 +1204,28 @@
                           "eu:ai-act:art5:social-scoring",
                           "eu:ai-act:art5:subliminal-manipulation",
                           "excessive-agency",
+                          "ferpa",
+                          "financial",
                           "financial:calculation-error",
                           "financial:compliance-violation",
+                          "financial:confidential-disclosure",
+                          "financial:counterfactual",
                           "financial:data-leakage",
+                          "financial:defamation",
                           "financial:hallucination",
+                          "financial:impartiality",
+                          "financial:misconduct",
                           "financial:sycophancy",
                           "foundation",
+                          "gdpr",
+                          "gdpr:art15",
+                          "gdpr:art17",
+                          "gdpr:art22",
+                          "gdpr:art25",
+                          "gdpr:art32",
+                          "gdpr:art5",
+                          "gdpr:art9",
+                          "goal-misalignment",
                           "guardrails-eval",
                           "hallucination",
                           "harmbench",
@@ -1159,12 +1260,25 @@
                           "illegal-activity",
                           "imitation",
                           "indirect-prompt-injection",
+                          "insurance",
+                          "insurance:coverage-discrimination",
+                          "insurance:network-misinformation",
+                          "insurance:phi-disclosure",
                           "intent",
+                          "iso:42001",
+                          "iso:42001:accountability",
+                          "iso:42001:fairness",
+                          "iso:42001:privacy",
+                          "iso:42001:robustness",
+                          "iso:42001:safety",
+                          "iso:42001:security",
+                          "iso:42001:transparency",
                           "mcp",
                           "medical",
                           "medical:anchoring-bias",
                           "medical:hallucination",
                           "medical:incorrect-knowledge",
+                          "medical:off-label-use",
                           "medical:prioritization-error",
                           "medical:sycophancy",
                           "misinformation",
@@ -1200,7 +1314,23 @@
                           "nist:ai:measure:4.3",
                           "off-topic",
                           "overreliance",
+                          "owasp:agentic",
+                          "owasp:agentic:redteam",
                           "owasp:agentic:t01",
+                          "owasp:agentic:t02",
+                          "owasp:agentic:t03",
+                          "owasp:agentic:t04",
+                          "owasp:agentic:t05",
+                          "owasp:agentic:t06",
+                          "owasp:agentic:t07",
+                          "owasp:agentic:t08",
+                          "owasp:agentic:t09",
+                          "owasp:agentic:t10",
+                          "owasp:agentic:t11",
+                          "owasp:agentic:t12",
+                          "owasp:agentic:t13",
+                          "owasp:agentic:t14",
+                          "owasp:agentic:t15",
                           "owasp:api",
                           "owasp:api:01",
                           "owasp:api:02",
@@ -1228,6 +1358,10 @@
                           "owasp:llm:redteam:runtime",
                           "owasp:llm:redteam:system",
                           "personal-safety",
+                          "pharmacy",
+                          "pharmacy:controlled-substance-compliance",
+                          "pharmacy:dosage-calculation",
+                          "pharmacy:drug-interaction",
                           "pii",
                           "pii:api-db",
                           "pii:direct",
@@ -1243,6 +1377,7 @@
                           "reasoning-dos",
                           "religion",
                           "shell-injection",
+                          "special-token-injection",
                           "sql-injection",
                           "ssrf",
                           "system-prompt-override",
@@ -1251,12 +1386,14 @@
                           "toxic-chat",
                           "toxicity",
                           "unsafebench",
+                          "unverifiable-claims",
+                          "vlguard",
+                          "wordplay",
                           "xstest"
                         ]
                       },
                       {
-                        "type": "string",
-                        "pattern": "^file\\:\\/\\/"
+                        "type": "string"
                       }
                     ],
                     "description": "Name of the plugin or path to custom plugin"
@@ -1283,12 +1420,18 @@
                               "cca",
                               "competitors",
                               "contracts",
+                              "coppa",
                               "cross-session-leak",
                               "cyberseceval",
                               "debug-access",
                               "default",
                               "divergent-repetition",
                               "donotanswer",
+                              "ecommerce",
+                              "ecommerce:compliance-bypass",
+                              "ecommerce:order-fraud",
+                              "ecommerce:pci-dss",
+                              "ecommerce:price-manipulation",
                               "eu:ai-act",
                               "eu:ai-act:annex3:biometric-id",
                               "eu:ai-act:annex3:critical-infrastructure",
@@ -1305,12 +1448,28 @@
                               "eu:ai-act:art5:social-scoring",
                               "eu:ai-act:art5:subliminal-manipulation",
                               "excessive-agency",
+                              "ferpa",
+                              "financial",
                               "financial:calculation-error",
                               "financial:compliance-violation",
+                              "financial:confidential-disclosure",
+                              "financial:counterfactual",
                               "financial:data-leakage",
+                              "financial:defamation",
                               "financial:hallucination",
+                              "financial:impartiality",
+                              "financial:misconduct",
                               "financial:sycophancy",
                               "foundation",
+                              "gdpr",
+                              "gdpr:art15",
+                              "gdpr:art17",
+                              "gdpr:art22",
+                              "gdpr:art25",
+                              "gdpr:art32",
+                              "gdpr:art5",
+                              "gdpr:art9",
+                              "goal-misalignment",
                               "guardrails-eval",
                               "hallucination",
                               "harmbench",
@@ -1345,12 +1504,25 @@
                               "illegal-activity",
                               "imitation",
                               "indirect-prompt-injection",
+                              "insurance",
+                              "insurance:coverage-discrimination",
+                              "insurance:network-misinformation",
+                              "insurance:phi-disclosure",
                               "intent",
+                              "iso:42001",
+                              "iso:42001:accountability",
+                              "iso:42001:fairness",
+                              "iso:42001:privacy",
+                              "iso:42001:robustness",
+                              "iso:42001:safety",
+                              "iso:42001:security",
+                              "iso:42001:transparency",
                               "mcp",
                               "medical",
                               "medical:anchoring-bias",
                               "medical:hallucination",
                               "medical:incorrect-knowledge",
+                              "medical:off-label-use",
                               "medical:prioritization-error",
                               "medical:sycophancy",
                               "misinformation",
@@ -1386,7 +1558,23 @@
                               "nist:ai:measure:4.3",
                               "off-topic",
                               "overreliance",
+                              "owasp:agentic",
+                              "owasp:agentic:redteam",
                               "owasp:agentic:t01",
+                              "owasp:agentic:t02",
+                              "owasp:agentic:t03",
+                              "owasp:agentic:t04",
+                              "owasp:agentic:t05",
+                              "owasp:agentic:t06",
+                              "owasp:agentic:t07",
+                              "owasp:agentic:t08",
+                              "owasp:agentic:t09",
+                              "owasp:agentic:t10",
+                              "owasp:agentic:t11",
+                              "owasp:agentic:t12",
+                              "owasp:agentic:t13",
+                              "owasp:agentic:t14",
+                              "owasp:agentic:t15",
                               "owasp:api",
                               "owasp:api:01",
                               "owasp:api:02",
@@ -1414,6 +1602,10 @@
                               "owasp:llm:redteam:runtime",
                               "owasp:llm:redteam:system",
                               "personal-safety",
+                              "pharmacy",
+                              "pharmacy:controlled-substance-compliance",
+                              "pharmacy:dosage-calculation",
+                              "pharmacy:drug-interaction",
                               "pii",
                               "pii:api-db",
                               "pii:direct",
@@ -1429,6 +1621,7 @@
                               "reasoning-dos",
                               "religion",
                               "shell-injection",
+                              "special-token-injection",
                               "sql-injection",
                               "ssrf",
                               "system-prompt-override",
@@ -1437,12 +1630,14 @@
                               "toxic-chat",
                               "toxicity",
                               "unsafebench",
+                              "unverifiable-claims",
+                              "vlguard",
+                              "wordplay",
                               "xstest"
                             ]
                           },
                           {
-                            "type": "string",
-                            "pattern": "^file\\:\\/\\/"
+                            "type": "string"
                           }
                         ],
                         "description": "Name of the plugin"
@@ -1482,6 +1677,7 @@
                         "type": "string",
                         "enum": [
                           "audio",
+                          "authoritative-markup-injection",
                           "base64",
                           "basic",
                           "best-of-n",
@@ -1498,19 +1694,22 @@
                           "image",
                           "jailbreak",
                           "jailbreak:composite",
+                          "jailbreak:hydra",
                           "jailbreak:likert",
+                          "jailbreak:meta",
                           "jailbreak:tree",
+                          "layer",
                           "leetspeak",
                           "math-prompt",
                           "mischievous-user",
                           "morse",
                           "multilingual",
                           "other-encodings",
-                          "pandamonium",
                           "piglatin",
                           "prompt-injection",
                           "retry",
                           "rot13",
+                          "simba",
                           "video"
                         ]
                       },
@@ -1539,7 +1738,7 @@
                   }
                 ]
               },
-              "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak, jailbreak:composite\nSupports audio, base64, basic, best-of-n, camelcase, citation, crescendo, custom, default, emoji, gcg, goat, hex, homoglyph, image, jailbreak, jailbreak:composite, jailbreak:likert, jailbreak:tree, leetspeak, math-prompt, mischievous-user, morse, multilingual, other-encodings, pandamonium, piglatin, prompt-injection, retry, rot13, video",
+              "description": "Strategies to use for redteam generation.\n\nDefaults to basic, jailbreak:meta, jailbreak:composite\nSupports audio, authoritative-markup-injection, base64, basic, best-of-n, camelcase, citation, crescendo, custom, default, emoji, gcg, goat, hex, homoglyph, image, jailbreak, jailbreak:composite, jailbreak:hydra, jailbreak:likert, jailbreak:meta, jailbreak:tree, layer, leetspeak, math-prompt, mischievous-user, morse, multilingual, other-encodings, piglatin, prompt-injection, retry, rot13, simba, video",
               "default": ["default"]
             },
             "maxConcurrency": {
@@ -1555,6 +1754,56 @@
             "excludeTargetOutputFromAgenticAttackGeneration": {
               "type": "boolean",
               "description": "Whether to exclude target output from the agentific attack generation process"
+            },
+            "tracing": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "includeInAttack": {
+                  "type": "boolean"
+                },
+                "includeInGrading": {
+                  "type": "boolean"
+                },
+                "includeInternalSpans": {
+                  "type": "boolean"
+                },
+                "maxSpans": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0
+                },
+                "maxDepth": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0
+                },
+                "maxRetries": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "retryDelayMs": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "spanFilter": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "sanitizeAttributes": {
+                  "type": "boolean"
+                },
+                "strategies": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "$ref": "#/definitions/PromptfooConfigSchema/properties/redteam/properties/tracing"
+                  }
+                }
+              },
+              "additionalProperties": false,
+              "description": "Tracing defaults applied to all strategies unless overridden"
             }
           },
           "additionalProperties": false
@@ -1769,6 +2018,9 @@
             "share": {
               "type": "boolean"
             },
+            "noShare": {
+              "type": "boolean"
+            },
             "progressBar": {
               "type": "boolean"
             },
@@ -1816,8 +2068,21 @@
             "promptSuffix": {
               "type": "string"
             },
+            "retryErrors": {
+              "type": "boolean"
+            },
             "envPath": {
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              ]
             }
           },
           "additionalProperties": false

@@ -17,13 +17,13 @@ interface SettingItemProps {
   label: string;
   checked: boolean;
   onChange: (checked: boolean) => void;
-  icon?: JSX.Element | null;
+  icon?: React.ReactElement | null;
   tooltipText?: string;
   disabled?: boolean;
   component?: 'checkbox' | 'switch';
 }
 
-const SettingItem: React.FC<SettingItemProps> = ({
+const SettingItem = ({
   label,
   checked,
   onChange,
@@ -31,7 +31,7 @@ const SettingItem: React.FC<SettingItemProps> = ({
   tooltipText,
   disabled = false,
   component = 'checkbox',
-}) => {
+}: SettingItemProps) => {
   const theme = useTheme();
   const labelId = `setting-${label.replace(/\s+/g, '-').toLowerCase()}`;
 

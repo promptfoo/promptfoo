@@ -1,5 +1,6 @@
 ---
 sidebar_label: GPT 3.5 vs GPT 4
+description: Compare GPT-3.5 vs GPT-4 performance on your custom datasets using automated benchmarks to evaluate costs, latency and reasoning capabilities for your use case
 ---
 
 # GPT 3.5 vs GPT 4: benchmark on your own data
@@ -31,8 +32,8 @@ Edit `promptfooconfig.yaml` to include GPT-3.5 and GPT-4:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - openai:gpt-4.1-mini
-  - openai:gpt-4.1
+  - openai:gpt-5-mini
+  - openai:gpt-5
 ```
 
 ## Step 2: Crafting the prompts
@@ -125,8 +126,8 @@ Finally, we'll use `defaultTest` to clean things up a bit and apply global `late
 
 ```yaml
 providers:
-  - openai:gpt-4.1-mini
-  - openai:gpt-4.1
+  - openai:gpt-5-mini
+  - openai:gpt-5
 
 prompts:
   - 'Solve this riddle: {{riddle}}'

@@ -1,7 +1,7 @@
 ---
 sidebar_label: GOAT
 title: GOAT Jailbreaking Strategy
-description: Generative Offensive Agent Tester technique for dynamic multi-turn jailbreaking of LLMs
+description: Apply GOAT (Generative Offensive Agent Tester) for sophisticated multi-turn jailbreaking using adversarial agent dialogues
 ---
 
 # GOAT Technique for Jailbreaking LLMs
@@ -12,7 +12,7 @@ It was [introduced by Meta researchers](https://arxiv.org/abs/2410.01606) in 202
 
 ## Implementation
 
-Use it like so in your promptfooconfig.yaml:
+Use it by selecting it in the Strategies UI or by editing your config:
 
 ```yaml title="promptfooconfig.yaml"
 strategies:
@@ -22,11 +22,7 @@ strategies:
       stateful: false # Sends the entire conversation history with each turn (Default)
 ```
 
-:::warning
-This is a remote-only strategy and requires an connection to promptfoo's free grading API. Local grading is not supported.
-:::
-
-:::warning
+:::info
 If your system maintains a conversation history and only expects the latest message to be sent, set `stateful: true`. [Make sure to configure cookies or sessions in your provider as well.](/docs/providers/http/#server-side-session-management)
 :::
 

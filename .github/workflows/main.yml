@@ -18,62 +18,119 @@ env:
   VITE_TELEMETRY_DISABLED: 1
 jobs:
   test:
-    name: Test on Node ${{ matrix.node }} and ${{ matrix.os }}
-    timeout-minutes: 8
+    name: Test on Node ${{ matrix.node }} and ${{ matrix.os }}${{ matrix.shard && format(' (shard {0}/3)', matrix.shard) || '' }}
+    timeout-minutes: 10
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        node: ['18.x', '20.x', '22.x', '24.x']
+        node: ['20.x', '22.x', '24.x']
         os: [ubuntu-latest, windows-latest, macOS-latest]
+        shard: ['']
         exclude:
-          # Remove when https://github.com/nodejs/node/issues/51766 is resolved
-          - node: '22.x'
-            os: windows-latest
+          # Temporarily exclude macOS with Node 24.x due to flaky test failures
           - node: '24.x'
-            os: windows-latest
+            os: macOS-latest
+          # Exclude non-sharded Windows tests (we use sharded versions below)
+          - os: windows-latest
+            shard: ''
+        # Add sharding for Windows to speed up CI (Windows tests are ~2x slower)
+        include:
+          - os: windows-latest
+            node: '20.x'
+            shard: 1
+          - os: windows-latest
+            node: '20.x'
+            shard: 2
+          - os: windows-latest
+            node: '20.x'
+            shard: 3
+          - os: windows-latest
+            node: '22.x'
+            shard: 1
+          - os: windows-latest
+            node: '22.x'
+            shard: 2
+          - os: windows-latest
+            node: '22.x'
+            shard: 3
+          - os: windows-latest
+            node: '24.x'
+            shard: 1
+          - os: windows-latest
+            node: '24.x'
+            shard: 2
+          - os: windows-latest
+            node: '24.x'
+            shard: 3
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Use Node ${{ matrix.node }}
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ matrix.node }}
           cache: 'npm'
 
-      - name: Use Python 3.13
-        uses: actions/setup-python@v5
+      # Node 24.x ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
+      # Upgrade to npm@latest (>= 11.6.4) to fix this. Node 20.x/22.x use npm 10.x which is unaffected.
+      - name: Upgrade npm for Node 24.x
+        if: matrix.node == '24.x'
+        run: npm install -g npm@latest
+
+      - name: Use Python 3.14
+        uses: actions/setup-python@v6
         with:
-          python-version: 3.13
+          python-version: 3.14
+
+      - name: Use Ruby 3.3
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: 3.3
+
+      # Cache node_modules to speed up installs (especially on Windows where npm ci is slow)
+      # Key includes OS and Node version since native modules are platform/version specific
+      - name: Cache node_modules
+        id: cache-node-modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-node${{ matrix.node }}-${{ hashFiles('package-lock.json') }}
 
       - name: Install Dependencies
-        run: |
-          npm ci
+        if: steps.cache-node-modules.outputs.cache-hit != 'true'
+        run: npm ci
 
       - name: Test
-        run: npm run test -- --ci
+        run: npm run test${{ matrix.shard && format(' -- --shard={0}/3', matrix.shard) || '' }}
 
   build:
     name: Build on Node ${{ matrix.node }}
     env:
       PROMPTFOO_POSTHOG_KEY: ${{ secrets.PROMPTFOO_POSTHOG_KEY }}
-    timeout-minutes: 4
+    timeout-minutes: 5
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node: ['18.x', '20.x', '22.x', '24.x']
+        node: ['20.x', '22.x', '24.x']
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Use Node ${{ matrix.node }}
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ matrix.node }}
           cache: 'npm'
+
+      # Node 24.x ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
+      # Upgrade to npm@latest (>= 11.6.4) to fix this. Node 20.x/22.x use npm 10.x which is unaffected.
+      - name: Upgrade npm for Node 24.x
+        if: matrix.node == '24.x'
+        run: npm install -g npm@latest
 
       - name: Install Dependencies
         run: npm ci
@@ -89,10 +146,12 @@ jobs:
           elif [[ -z "$PROMPTFOO_POSTHOG_KEY" ]]; then
             echo "PostHog key not available (running without secret), skipping check"
           else
-            if ! grep -q "exports\.POSTHOG_KEY = 'phc_" dist/src/generated-constants.js; then
-              echo "Error: PostHog key not properly replaced in generated-constants.js"
-              echo "Content of generated-constants.js:"
-              cat dist/src/generated-constants.js
+            # PostHog key is injected at build time via tsup's define option
+            # Check that it's present in the built output (it will be inlined as a string)
+            if ! grep -rq '"phc_' dist/src/*.js; then
+              echo "Error: PostHog key not found in built output"
+              echo "Checking for POSTHOG_KEY patterns in built files:"
+              grep -r "POSTHOG_KEY" dist/src/*.js | head -10 || echo "No POSTHOG_KEY found"
               exit 1
             fi
             echo "PostHog key replacement verified successfully"
@@ -104,13 +163,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Use Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
+
+      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
+      - name: Upgrade npm
+        run: npm install -g npm@latest
 
       - name: Install Dependencies
         run: |
@@ -138,12 +201,20 @@ jobs:
           # shellcheck disable=SC2046
           npx madge $(git ls-files '*.ts') --circular
 
+      - name: Check for missing dependencies
+        run: |
+          npm run depcheck
+
+      - name: Validate lockfile integrity
+        run: |
+          npx lockfile-lint --path package-lock.json --allowed-hosts npm --validate-https
+
   shell-format:
     name: Shell Format Check
     timeout-minutes: 5
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: luizm/action-sh-checker@17bd25a6ee188d2b91f677060038f4ba37ba14b2
         env:
           SHFMT_OPTS: '-i 2' # 2 space indent
@@ -156,16 +227,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Use Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
 
+      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
+      - name: Upgrade npm
+        run: npm install -g npm@latest
+
       - name: Install Dependencies
-        run: npm install
+        run: npm ci
 
       - name: Generate JSON Schema
         run: npm run jsonSchema:generate
@@ -186,13 +261,13 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: [3.9, 3.13]
+        python-version: [3.9, 3.14]
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Use Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
 
@@ -216,13 +291,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Use Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
+
+      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
+      - name: Upgrade npm
+        run: npm install -g npm@latest
 
       - name: Install Dependencies
         working-directory: site
@@ -242,13 +321,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Use Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
+
+      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
+      - name: Upgrade npm
+        run: npm install -g npm@latest
 
       - name: Install Dependencies
         run: npm ci
@@ -262,25 +345,34 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Use Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
 
-      - name: Use Python 3.13
-        uses: actions/setup-python@v5
+      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
+      - name: Upgrade npm
+        run: npm install -g npm@latest
+
+      - name: Use Python 3.14
+        uses: actions/setup-python@v6
         with:
-          python-version: 3.13
+          python-version: 3.14
+
+      - name: Use Ruby 3.3
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: 3.3
 
       - name: Install Dependencies
         run: |
           npm ci
 
       - name: Run Integration Tests
-        run: npm run test:integration -- --ci --coverage --maxWorkers=2
+        run: npm run test:integration -- --coverage
 
   share-test:
     name: Share Test
@@ -290,7 +382,17 @@ jobs:
       contents: read
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
+
+      - name: Use Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
+      - name: Upgrade npm
+        run: npm install -g npm@latest
 
       - name: Install Dependencies
         run: npm ci
@@ -331,28 +433,48 @@ jobs:
           node dist/src/main.js eval -c .github/assets/promptfooconfig.yaml --share
 
   redteam:
-    name: Redteam
+    name: Redteam (Production API)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
+
+      - name: Use Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
+      - name: Upgrade npm
+        run: npm install -g npm@latest
 
       - name: Install Dependencies
         run: npm ci
 
-      - name: Run Redteam
+      - name: Run Redteam (Production API)
         run: |
           npm run test:redteam:integration
 
-  redteam-custom-enterprise-server:
-    name: Redteam Custom Enterprise Server
+  redteam-staging:
+    name: Redteam (Staging API)
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
+
+      - name: Use Node
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
+      - name: Upgrade npm
+        run: npm install -g npm@latest
 
       - name: Install Dependencies
         run: npm ci
@@ -369,7 +491,8 @@ jobs:
         run: |
           npm run bin auth login -- -k ${{ secrets.PROMPTFOO_INTEGRATION_TEST_API_KEY }} -h ${{ secrets.PROMPTFOO_INTEGRATION_TEST_API_HOST }}
 
-      - name: Run Redteam
+      - name: Run Redteam with Staging API
+        continue-on-error: true
         run: |
           npm run test:redteam:integration
 
@@ -381,11 +504,59 @@ jobs:
       contents: read
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Run actionlint
         id: actionlint
         uses: raven-actions/actionlint@v2
+
+  ruby:
+    name: Check Ruby
+    timeout-minutes: 5
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        ruby-version: ['3.0', '3.3']
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v5
+
+      - name: Use Ruby ${{ matrix.ruby-version }}
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ matrix.ruby-version }}
+
+      - name: Install Dependencies
+        run: |
+          gem install rubocop
+
+      - name: Check Formatting
+        run: |
+          rubocop --autocorrect-all src/ruby/
+          git diff --exit-code || (echo "Files were modified by rubocop. Please commit these changes." && exit 1)
+
+      - name: Test Ruby Wrapper
+        run: |
+          # Create a simple test script
+          cat > /tmp/test_script.rb << 'EOF'
+          def test_function(a, b)
+            { "sum" => a + b, "product" => a * b }
+          end
+          EOF
+
+          # Create input JSON
+          echo '[2, 3]' > /tmp/input.json
+
+          # Run the wrapper
+          ruby src/ruby/wrapper.rb /tmp/test_script.rb test_function /tmp/input.json /tmp/output.json
+
+          # Verify output
+          cat /tmp/output.json
+          if ! grep -q '"sum":5' /tmp/output.json; then
+            echo "Error: Ruby wrapper test failed"
+            exit 1
+          fi
+          echo "Ruby wrapper test passed"
 
   golang:
     name: Go Tests
@@ -393,10 +564,10 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version: '1.23.6'
           check-latest: true

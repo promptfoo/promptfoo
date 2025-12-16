@@ -19,12 +19,12 @@ interface AuthorChipProps {
   editable: boolean;
 }
 
-export const AuthorChip: React.FC<AuthorChipProps> = ({
+export const AuthorChip = ({
   author,
   onEditAuthor,
   currentUserEmail,
   editable,
-}) => {
+}: AuthorChipProps) => {
   const [isLoading, setIsLoading] = useState(false);
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
   const [email, setEmail] = useState(author || '');

@@ -1,13 +1,15 @@
 import { getEnvBool } from '../envars';
-import { isGradingResult } from '../types';
+import type { AssertionSet, GradingResult, ScoringFunction } from '../types/index';
+import { isGradingResult } from '../types/index';
 
-import type { AssertionSet, GradingResult, ScoringFunction } from '../types';
+export const GUARDRAIL_BLOCKED_REASON = 'Content failed guardrail safety checks';
 
 export const DEFAULT_TOKENS_USED = {
   total: 0,
   prompt: 0,
   completion: 0,
   cached: 0,
+  numRequests: 0,
 };
 
 interface ParentAssertionSet {
@@ -22,7 +24,6 @@ export class AssertionsResult {
       score: 1,
       reason: 'No assertions',
       tokensUsed: { ...DEFAULT_TOKENS_USED },
-      assertion: null,
     };
   }
 
@@ -93,6 +94,7 @@ export class AssertionsResult {
       this.tokensUsed.prompt += result.tokensUsed.prompt || 0;
       this.tokensUsed.completion += result.tokensUsed.completion || 0;
       this.tokensUsed.cached += result.tokensUsed.cached || 0;
+      this.tokensUsed.numRequests += result.tokensUsed.numRequests || 0;
     }
 
     if (result.pass) {
@@ -129,7 +131,7 @@ export class AssertionsResult {
 
     if (this.failedContentSafetyChecks) {
       pass = true;
-      reason = 'Content failed guardrail safety checks';
+      reason = GUARDRAIL_BLOCKED_REASON;
     }
 
     // Flatten nested component results, and copy the assertion into the child results.
@@ -154,7 +156,6 @@ export class AssertionsResult {
       namedScores: this.namedScores,
       tokensUsed: this.tokensUsed,
       componentResults: flattenedComponentResults,
-      assertion: null,
     };
 
     if (scoringFunction) {

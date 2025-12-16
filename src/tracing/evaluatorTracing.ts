@@ -1,9 +1,10 @@
 import { randomBytes } from 'crypto';
 
+import { getEnvBool } from '../envars';
 import logger from '../logger';
 import telemetry from '../telemetry';
 
-import type { TestCase, TestSuite } from '../types';
+import type { TestCase, TestSuite } from '../types/index';
 
 // Track whether OTLP receiver has been started
 let otlpReceiverStarted = false;
@@ -108,8 +109,13 @@ export async function stopOtlpReceiverIfNeeded(): Promise<void> {
 /**
  * Check if tracing is enabled for a test case
  */
-export function isTracingEnabled(test: TestCase, testSuite?: TestSuite): boolean {
-  return test.metadata?.tracingEnabled === true || process.env.PROMPTFOO_TRACING_ENABLED === 'true';
+export function isTracingEnabled(test: TestCase, _testSuite?: TestSuite): boolean {
+  const result =
+    test.metadata?.tracingEnabled === true || getEnvBool('PROMPTFOO_TRACING_ENABLED', false);
+  logger.debug(
+    `[EvaluatorTracing] isTracingEnabled check: test.metadata?.tracingEnabled=${test.metadata?.tracingEnabled}, env=${getEnvBool('PROMPTFOO_TRACING_ENABLED', false)}, result=${result}`,
+  );
+  return result;
 }
 
 /**

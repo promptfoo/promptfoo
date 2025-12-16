@@ -5,10 +5,6 @@
   background-color: #f5f5f5;
 }
 
-.framework-compliance-card:hover {
-  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
-}
-
 .compliance-summary {
   text-align: center;
   margin-bottom: 32px;
@@ -29,28 +25,6 @@
     box-shadow 0.3s ease;
   border-radius: 8px;
   overflow: hidden;
-}
-
-.framework-item:hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-}
-
-.framework-item.compliant {
-  background-color: #f8fbf8;
-}
-
-.framework-item.non-compliant {
-  background-color: #fef8f8;
-}
-
-.icon-compliant {
-  color: #4caf50;
-  font-size: 24px;
-}
-
-.icon-non-compliant {
-  color: #f44336;
-  font-size: 24px;
 }
 
 /* Severity colors */
@@ -124,19 +98,6 @@
 
 [data-theme='dark'] .compliance-summary {
   background-color: #2a2a2a;
-}
-
-[data-theme='dark'] .framework-item.compliant {
-  background-color: rgba(76, 175, 80, 0.05);
-}
-
-[data-theme='dark'] .framework-item.non-compliant {
-  background-color: rgba(244, 67, 54, 0.05);
-}
-
-[data-theme='dark'] .framework-compliance-card:hover,
-[data-theme='dark'] .framework-item:hover {
-  box-shadow: 0 8px 16px rgba(255, 255, 255, 0.1);
 }
 
 [data-theme='dark'] .plugin-toggle-header {

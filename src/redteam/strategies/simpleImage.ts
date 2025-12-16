@@ -3,7 +3,15 @@ import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import invariant from '../../util/invariant';
 
-import type { TestCase } from '../../types';
+import type { TestCase } from '../../types/index';
+
+const SVG_WIDTH = 800;
+const SVG_MIN_HEIGHT = 400;
+const FONT_SIZE = 16;
+const LINE_HEIGHT = Math.round(FONT_SIZE * 1.5);
+const HORIZONTAL_PADDING = 50;
+const VERTICAL_PADDING = 40;
+const WORD_WRAP_CHAR_WIDTH_FACTOR = 0.6;
 
 // Helper function to escape XML special characters for SVG
 function escapeXml(unsafe: string): string {
@@ -17,6 +25,63 @@ function escapeXml(unsafe: string): string {
 
 // Cache for the sharp module to avoid repeated dynamic imports
 let sharpCache: any = null;
+
+function wrapTextToLines(text: string, maxLineWidthPx: number, fontSize: number): string[] {
+  const averageCharWidth = fontSize * WORD_WRAP_CHAR_WIDTH_FACTOR;
+  const maxCharsPerLine = Math.max(1, Math.floor(maxLineWidthPx / averageCharWidth));
+  const normalizedText = text.replace(/\r\n/g, '\n');
+  const wrappedLines: string[] = [];
+
+  for (const paragraph of normalizedText.split('\n')) {
+    if (paragraph.trim() === '') {
+      wrappedLines.push('');
+      continue;
+    }
+
+    const words = paragraph.split(/\s+/);
+    let currentLine = '';
+
+    for (const word of words) {
+      if (!word) {
+        continue;
+      }
+
+      if (word.length > maxCharsPerLine) {
+        if (currentLine) {
+          wrappedLines.push(currentLine);
+          currentLine = '';
+        }
+
+        let sliceIndex = 0;
+        while (sliceIndex < word.length) {
+          const slice = word.slice(sliceIndex, sliceIndex + maxCharsPerLine);
+          if (slice.length === maxCharsPerLine) {
+            wrappedLines.push(slice);
+          } else {
+            currentLine = slice;
+          }
+          sliceIndex += maxCharsPerLine;
+        }
+        continue;
+      }
+
+      if (!currentLine) {
+        currentLine = word;
+      } else if (currentLine.length + 1 + word.length <= maxCharsPerLine) {
+        currentLine = `${currentLine} ${word}`;
+      } else {
+        wrappedLines.push(currentLine);
+        currentLine = word;
+      }
+    }
+
+    if (currentLine) {
+      wrappedLines.push(currentLine);
+    }
+  }
+
+  return wrappedLines;
+}
 
 /**
  * Dynamically imports the sharp library
@@ -51,10 +116,27 @@ async function textToImage(text: string): Promise<string> {
   try {
     // Create a simple image with the text on a white background
     // We're using SVG as an intermediate format as it's easy to generate without canvas
+    const textAreaWidth = SVG_WIDTH - HORIZONTAL_PADDING * 2;
+    const wrappedLines = wrapTextToLines(text, textAreaWidth, FONT_SIZE);
+    const linesToRender = wrappedLines.length > 0 ? wrappedLines : [''];
+    const contentHeight = linesToRender.length * LINE_HEIGHT;
+    const svgHeight = Math.max(SVG_MIN_HEIGHT, VERTICAL_PADDING * 2 + contentHeight);
+    const baselineY = VERTICAL_PADDING + FONT_SIZE;
+
+    const textContent = linesToRender
+      .map((line, index) => {
+        const safeLine = escapeXml(line || ' ');
+        if (index === 0) {
+          return safeLine;
+        }
+        return `<tspan x="${HORIZONTAL_PADDING}" dy="${LINE_HEIGHT}">${safeLine}</tspan>`;
+      })
+      .join('');
+
     const svgImage = `
-      <svg width="800" height="400" xmlns="http://www.w3.org/2000/svg">
+      <svg width="${SVG_WIDTH}" height="${svgHeight}" xmlns="http://www.w3.org/2000/svg">
         <rect width="100%" height="100%" fill="white"/>
-        <text x="50" y="50" font-family="Arial" font-size="16" fill="black">${escapeXml(text)}</text>
+        <text x="${HORIZONTAL_PADDING}" y="${baselineY}" font-family="Arial" font-size="${FONT_SIZE}" fill="black" xml:space="preserve">${textContent}</text>
       </svg>
     `;
 
@@ -142,60 +224,4 @@ export async function addImageToBase64(
   }
 
   return imageTestCases;
-}
-
-// Main function for direct testing via: npx tsx simpleImage.ts "Text to convert to image"
-async function main() {
-  // Get text from command line arguments or use default
-  const textToConvert = process.argv[2] || 'This is a test of the image encoding strategy.';
-
-  logger.info(`Converting text to image: "${textToConvert}"`);
-
-  try {
-    // Convert text to image
-    const base64Image = await textToImage(textToConvert);
-
-    // Log the first 100 characters of the base64 image to avoid terminal clutter
-    logger.info(`Base64 image (first 100 chars): ${base64Image.substring(0, 100)}...`);
-    logger.info(`Total base64 image length: ${base64Image.length} characters`);
-
-    // Create a simple test case
-    const testCase = {
-      vars: {
-        prompt: textToConvert,
-      },
-    };
-
-    // Process the test case
-    const processedTestCases = await addImageToBase64([testCase], 'prompt');
-
-    logger.info('Test case processed successfully.');
-    logger.info(`Original prompt length: ${textToConvert.length} characters`);
-    // Add type assertion to ensure TypeScript knows this is a string
-    const processedPrompt = processedTestCases[0].vars?.prompt as string;
-    logger.info(`Processed prompt length: ${processedPrompt.length} characters`);
-
-    // Check if we're running this directly (not being imported)
-    if (require.main === module) {
-      // Write to a file for testing with image viewers
-      const fs = await import('fs');
-      const outputFilePath = 'test-image.png';
-
-      // Decode base64 back to binary
-      const imageBuffer = Buffer.from(base64Image, 'base64');
-
-      // Write binary data to file
-      fs.writeFileSync(outputFilePath, imageBuffer);
-
-      logger.info(`Image file written to: ${outputFilePath}`);
-      logger.info(`You can open it with any image viewer to verify the conversion.`);
-    }
-  } catch (error) {
-    logger.error(`Error generating image from text: ${error}`);
-  }
-}
-
-// Run the main function if this file is executed directly
-if (require.main === module) {
-  main();
 }

@@ -1,7 +1,7 @@
 ---
 sidebar_label: Audio Inputs
 title: Audio Jailbreaking Strategy
-description: Test how AI systems handle audio-encoded text inputs that may bypass content filters
+description: Assess multimodal AI vulnerabilities using audio-encoded text attacks to circumvent content moderation and safety filters
 ---
 
 # Audio Jailbreaking
@@ -66,7 +66,8 @@ This strategy is worth implementing because:
 
 ## Related Concepts
 
-- [Image Jailbreaking](/docs/red-team/strategies/image.md) - Similar approach using images instead of audio
+- [Image Jailbreaking](/docs/red-team/strategies/image) - Similar approach using images instead of audio
+- [Video Jailbreaking](/docs/red-team/strategies/video) - Similar approach using video instead of audio
+- [Multi-Modal Red Teaming Guide](/docs/guides/multimodal-red-team) - Comprehensive guide for testing multi-modal models
 - [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) - Comprehensive overview of vulnerabilities
 - [Red Teaming Strategies](/docs/red-team/strategies) - Other red teaming approaches
-- [Multi-Modal Red Teaming Guide](/docs/guides/multimodal-red-team)

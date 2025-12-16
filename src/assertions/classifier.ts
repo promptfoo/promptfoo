@@ -1,7 +1,7 @@
 import { matchesClassification } from '../matchers';
 import invariant from '../util/invariant';
 
-import type { AssertionParams, GradingResult } from '../types';
+import type { AssertionParams, GradingResult } from '../types/index';
 
 export async function handleClassifier({
   assertion,
@@ -18,7 +18,7 @@ export async function handleClassifier({
   const classificationResult = await matchesClassification(
     renderedValue,
     outputString,
-    assertion.threshold ?? 1,
+    (assertion.threshold as number) ?? 1,
     test.options,
   );
 

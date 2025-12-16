@@ -2,9 +2,10 @@ import Anthropic from '@anthropic-ai/sdk';
 import { getCache, isCacheEnabled } from '../../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
+import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { AnthropicGenericProvider } from './generic';
 
-import type { ProviderResponse } from '../../types';
+import type { ProviderResponse } from '../../types/index';
 import type { EnvOverrides } from '../../types/env';
 import type { AnthropicCompletionOptions } from './types';
 
@@ -55,7 +56,7 @@ export class AnthropicCompletionProvider extends AnthropicGenericProvider {
       stop_sequences: stop,
     };
 
-    logger.debug(`Calling Anthropic API: ${JSON.stringify(params)}`);
+    logger.debug('Calling Anthropic API', { params });
 
     const cache = await getCache();
     const cacheKey = `anthropic:${JSON.stringify(params)}`;
@@ -67,7 +68,7 @@ export class AnthropicCompletionProvider extends AnthropicGenericProvider {
         logger.debug(`Returning cached response for ${prompt}: ${cachedResponse}`);
         return {
           output: JSON.parse(cachedResponse as string),
-          tokenUsage: {},
+          tokenUsage: createEmptyTokenUsage(),
         };
       }
     }
@@ -80,7 +81,7 @@ export class AnthropicCompletionProvider extends AnthropicGenericProvider {
         error: `API call error: ${String(err)}`,
       };
     }
-    logger.debug(`\tAnthropic API response: ${JSON.stringify(response)}`);
+    logger.debug('\tAnthropic API response', { response });
     if (isCacheEnabled()) {
       try {
         await cache.set(cacheKey, JSON.stringify(response.completion));
@@ -91,7 +92,7 @@ export class AnthropicCompletionProvider extends AnthropicGenericProvider {
     try {
       return {
         output: response.completion,
-        tokenUsage: {}, // TODO: add token usage once Anthropic API supports it
+        tokenUsage: createEmptyTokenUsage(), // TODO: add token usage once Anthropic API supports it
       };
     } catch (err) {
       return {

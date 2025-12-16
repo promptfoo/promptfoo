@@ -2,14 +2,14 @@ import { callApi } from '@app/utils/api';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { useModelAuditStore } from '../store';
+import { useModelAuditConfigStore } from '../stores';
 import PathSelector from './PathSelector';
 
 vi.mock('@app/utils/api');
-vi.mock('../store');
+vi.mock('../stores');
 
 const mockCallApi = vi.mocked(callApi);
-const mockUseModelAuditStore = vi.mocked(useModelAuditStore);
+const mockUseModelAuditConfigStore = vi.mocked(useModelAuditConfigStore);
 
 const theme = createTheme();
 
@@ -19,13 +19,11 @@ describe('PathSelector', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockUseModelAuditStore.mockReturnValue({
+    mockUseModelAuditConfigStore.mockReturnValue({
       recentScans: [],
       clearRecentScans: vi.fn(),
-      addRecentScan: vi.fn(),
-      removeRecentScan: vi.fn(),
-      getRecentScans: () => [],
-    });
+      removeRecentPath: vi.fn(),
+    } as any);
   });
 
   describe('handleAddPath', () => {
@@ -141,7 +139,7 @@ describe('PathSelector', () => {
         expect(onAddPath).toHaveBeenCalledWith({
           path: pathToAdd,
           type: 'directory',
-          name: pathToAdd,
+          name: 'directory', // Extracted directory name from path
         });
       });
 
@@ -201,20 +199,17 @@ describe('PathSelector', () => {
       </ThemeProvider>,
     );
 
-    const listItems = screen.getAllByRole('listitem');
-    const deleteButton = listItems[0].querySelector('button');
+    // Find the delete button for the first path
+    const deleteButton = screen.getByLabelText('Remove model1');
+    fireEvent.click(deleteButton);
 
-    if (deleteButton) {
-      fireEvent.click(deleteButton);
-
-      expect(onRemovePath).toHaveBeenCalledTimes(1);
-      expect(onRemovePath).toHaveBeenCalledWith(0);
-    }
+    expect(onRemovePath).toHaveBeenCalledTimes(1);
+    expect(onRemovePath).toHaveBeenCalledWith(0);
   });
 
   it('should call clearRecentScans when the clear recent scans button is clicked and there are more than three recent scans', () => {
     const clearRecentScansMock = vi.fn();
-    mockUseModelAuditStore.mockReturnValue({
+    mockUseModelAuditConfigStore.mockReturnValue({
       recentScans: [
         { id: '1', paths: [{ path: 'path1', type: 'file', name: 'file1' }], timestamp: 1 },
         { id: '2', paths: [{ path: 'path2', type: 'file', name: 'file2' }], timestamp: 2 },
@@ -222,10 +217,8 @@ describe('PathSelector', () => {
         { id: '4', paths: [{ path: 'path4', type: 'file', name: 'file4' }], timestamp: 4 },
       ],
       clearRecentScans: clearRecentScansMock,
-      addRecentScan: vi.fn(),
-      removeRecentScan: vi.fn(),
-      getRecentScans: () => [],
-    });
+      removeRecentPath: vi.fn(),
+    } as any);
 
     render(
       <ThemeProvider theme={theme}>
@@ -233,9 +226,28 @@ describe('PathSelector', () => {
       </ThemeProvider>,
     );
 
-    const clearButton = screen.getByTitle('Clear recent scans');
+    const clearButton = screen.getByText('Clear All');
     fireEvent.click(clearButton);
 
     expect(clearRecentScansMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('should display the "Clear All" button even when there are fewer than 4 recent scans', () => {
+    mockUseModelAuditConfigStore.mockReturnValue({
+      recentScans: [
+        { id: '1', paths: [{ path: 'path1', type: 'file', name: 'file1' }], timestamp: 1 },
+      ],
+      clearRecentScans: vi.fn(),
+      removeRecentPath: vi.fn(),
+    } as any);
+
+    render(
+      <ThemeProvider theme={theme}>
+        <PathSelector paths={[]} onAddPath={onAddPath} onRemovePath={onRemovePath} />
+      </ThemeProvider>,
+    );
+
+    const clearButton = screen.getByText('Clear All');
+    expect(clearButton).toBeInTheDocument();
   });
 });

@@ -1,5 +1,6 @@
 ---
 sidebar_label: Pliny Injections
+description: Red team LLM systems against prompt injection attacks using curated L1B3RT4S prompts to detect vulnerabilities and verify safety boundaries across major AI providers
 ---
 
 # Pliny prompt injections for LLMs

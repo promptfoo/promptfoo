@@ -1,11 +1,18 @@
-import { forwardRef, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { callApi } from '@app/utils/api';
+import { formatDataGridDate } from '@app/utils/date';
+import DeleteIcon from '@mui/icons-material/Delete';
 import Box from '@mui/material/Box';
-import CircularProgress from '@mui/material/CircularProgress';
+import Button from '@mui/material/Button';
+import Chip from '@mui/material/Chip';
+import Dialog from '@mui/material/Dialog';
+import DialogActions from '@mui/material/DialogActions';
+import DialogContent from '@mui/material/DialogContent';
+import DialogContentText from '@mui/material/DialogContentText';
+import DialogTitle from '@mui/material/DialogTitle';
 import Link from '@mui/material/Link';
-import Paper from '@mui/material/Paper';
-import { useTheme } from '@mui/material/styles';
+import { alpha, useTheme } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
 import {
   DataGrid,
@@ -23,6 +30,7 @@ import {
   type GridToolbarQuickFilterProps,
 } from '@mui/x-data-grid';
 import invariant from '@promptfoo/util/invariant';
+import { useLocation } from 'react-router-dom';
 
 type Eval = {
   createdAt: number;
@@ -39,7 +47,10 @@ type Eval = {
 declare module '@mui/x-data-grid' {
   interface ToolbarPropsOverrides {
     showUtilityButtons: boolean;
+    deletionEnabled: boolean;
     focusQuickFilterOnMount: boolean;
+    selectedCount: number;
+    onDeleteSelected: () => void;
   }
 }
 
@@ -49,30 +60,46 @@ const GridToolbarExport = () => (
   </GridToolbarExportContainer>
 );
 
-const QuickFilter = forwardRef<HTMLInputElement, GridToolbarQuickFilterProps>((props, ref) => {
+interface QuickFilterProps extends GridToolbarQuickFilterProps {
+  ref?: React.Ref<HTMLInputElement>;
+}
+
+function QuickFilter({ ref, ...props }: QuickFilterProps) {
   const theme = useTheme();
+
   return (
-    <GridToolbarQuickFilter
-      {...props}
-      inputRef={ref}
+    <Box
       sx={{
         '& .MuiInputBase-root': {
           borderRadius: 2,
           backgroundColor: theme.palette.background.paper,
         },
       }}
-    />
+    >
+      <GridToolbarQuickFilter
+        {...props}
+        slotProps={{
+          root: {
+            inputRef: ref,
+          },
+        }}
+      />
+    </Box>
   );
-});
-
-QuickFilter.displayName = 'QuickFilter';
+}
 
 function CustomToolbar({
   showUtilityButtons,
+  deletionEnabled,
   focusQuickFilterOnMount,
+  selectedCount,
+  onDeleteSelected,
 }: {
   showUtilityButtons: boolean;
+  deletionEnabled: boolean;
   focusQuickFilterOnMount: boolean;
+  selectedCount: number;
+  onDeleteSelected: () => void;
 }) {
   const theme = useTheme();
   const quickFilterRef = useRef<HTMLInputElement>(null);
@@ -85,12 +112,29 @@ function CustomToolbar({
 
   return (
     <GridToolbarContainer sx={{ p: 1, borderBottom: `1px solid ${theme.palette.divider}` }}>
-      {showUtilityButtons && (
+      {(showUtilityButtons || selectedCount > 0) && (
         <Box sx={{ display: 'flex', gap: 1 }}>
-          <GridToolbarColumnsButton />
-          <GridToolbarFilterButton />
-          <GridToolbarDensitySelector />
-          <GridToolbarExport />
+          {showUtilityButtons && (
+            <>
+              <GridToolbarColumnsButton />
+              <GridToolbarFilterButton />
+              <GridToolbarDensitySelector />
+              <GridToolbarExport />
+            </>
+          )}
+          {deletionEnabled && selectedCount > 0 && (
+            <Button
+              color="error"
+              variant="outlined"
+              size="small"
+              onClick={onDeleteSelected}
+              data-testid="delete-selected-button"
+              startIcon={<DeleteIcon />}
+              sx={{ border: 0 }}
+            >
+              Delete ({selectedCount})
+            </Button>
+          )}
         </Box>
       )}
       <Box sx={{ flexGrow: 1 }} />
@@ -113,12 +157,14 @@ export default function EvalsDataGrid({
   showUtilityButtons = false,
   filterByDatasetId = false,
   focusQuickFilterOnMount = false,
+  deletionEnabled = false,
 }: {
   onEvalSelected: (evalId: string) => void;
   focusedEvalId?: string;
   showUtilityButtons?: boolean;
   filterByDatasetId?: boolean;
   focusQuickFilterOnMount?: boolean;
+  deletionEnabled?: boolean;
 }) {
   if (filterByDatasetId) {
     invariant(focusedEvalId, 'focusedEvalId is required when filterByDatasetId is true');
@@ -127,31 +173,54 @@ export default function EvalsDataGrid({
   const [evals, setEvals] = useState<Eval[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
 
-  const [rowSelectionModel, setRowSelectionModel] = useState<GridRowSelectionModel>(
-    focusedEvalId ? [focusedEvalId] : [],
-  );
+  const [rowSelectionModel, setRowSelectionModel] = useState<GridRowSelectionModel>({
+    type: 'include',
+    ids: focusedEvalId ? new Set([focusedEvalId]) : new Set(),
+  });
 
   /**
    * Fetch evals from the API.
    */
-  useEffect(() => {
-    const fetchEvals = async () => {
-      try {
-        const response = await callApi('/results', { cache: 'no-store' });
-        if (!response.ok) {
-          throw new Error('Failed to fetch evals');
-        }
-        const body = (await response.json()) as { data: Eval[] };
-        setEvals(body.data);
-      } catch (error) {
+  const fetchEvals = async (signal: AbortSignal) => {
+    try {
+      setIsLoading(true);
+      const response = await callApi('/results', { cache: 'no-store', signal });
+      if (!response.ok) {
+        throw new Error('Failed to fetch evals');
+      }
+      const body = (await response.json()) as { data: Eval[] };
+      setEvals(body.data);
+      setError(null);
+    } catch (error) {
+      // Don't set error state if the request was aborted
+      if ((error as Error).name !== 'AbortError') {
         setError(error as Error);
-      } finally {
+      }
+    } finally {
+      // Don't set loading to false if the request was aborted
+      if (signal && !signal.aborted) {
         setIsLoading(false);
       }
+    }
+  };
+
+  // Use React Router's location to detect navigation
+  const location = useLocation();
+
+  useEffect(() => {
+    // Create AbortController for this fetch
+    const abortController = new AbortController();
+
+    // Fetch evals whenever we navigate to this page
+    fetchEvals(abortController.signal);
+
+    // Cleanup: abort any in-flight request when location changes or component unmounts
+    return () => {
+      abortController.abort();
     };
-    fetchEvals();
-  }, []);
+  }, [location.pathname, location.search]); // Refetch when the pathname or query params change
 
   /**
    * Construct dataset rows:
@@ -175,7 +244,52 @@ export default function EvalsDataGrid({
     return rows_;
   }, [evals, filterByDatasetId, focusedEvalId]);
 
+  const hasRedteamEvals = useMemo(() => {
+    return evals.some(({ isRedteam }) => isRedteam === 1);
+  }, [evals]);
+
   const handleCellClick = (params: GridCellParams<Eval>) => onEvalSelected(params.row.evalId);
+
+  /**
+   * Handles the deletion of selected evals.
+   * @returns A promise that resolves when the evals are deleted.
+   */
+  const handleDeleteSelected = () => {
+    if (rowSelectionModel.ids.size === 0) {
+      return;
+    }
+    setConfirmDeleteOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    try {
+      setIsLoading(true);
+      const res = await callApi(`/eval`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ ids: Array.from(rowSelectionModel.ids) }),
+      });
+
+      if (!res.ok) {
+        throw new Error('Failed to delete evals');
+      }
+
+      setEvals((prev) => prev.filter((e) => !rowSelectionModel.ids.has(e.evalId)));
+      setRowSelectionModel({ type: 'include', ids: new Set() });
+      setConfirmDeleteOpen(false);
+    } catch (error) {
+      console.error('Failed to delete evals:', error);
+      alert('Failed to delete evals');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleCancelDelete = () => {
+    setConfirmDeleteOpen(false);
+  };
 
   const columns: GridColDef<Eval>[] = useMemo(
     () =>
@@ -200,6 +314,12 @@ export default function EvalsDataGrid({
                   onEvalSelected(params.row.evalId);
                   return false;
                 }}
+                sx={{
+                  textDecoration: 'none',
+                  color: 'primary.main',
+                  fontFamily: 'monospace',
+                  '&:hover': { textDecoration: 'underline' },
+                }}
               >
                 {params.row.evalId}
               </Link>
@@ -209,11 +329,61 @@ export default function EvalsDataGrid({
           field: 'createdAt',
           headerName: 'Created',
           flex: 0.9,
-          valueGetter: (value: Eval['createdAt'], row: Eval) => {
+          valueGetter: (value: Eval['createdAt']) => {
             return new Date(value);
           },
-          valueFormatter: (value: Eval['createdAt']) => new Date(value).toLocaleString(),
+          valueFormatter: (value: Eval['createdAt']) => formatDataGridDate(value),
         },
+        // Only show the redteam column if there are redteam evals.
+        ...(hasRedteamEvals
+          ? [
+              {
+                field: 'isRedteam',
+                headerName: 'Type',
+                flex: 0.5,
+                type: 'singleSelect',
+                valueOptions: [
+                  { value: true, label: 'Red Team' },
+                  { value: false, label: 'Eval' },
+                ],
+                valueGetter: (value: Eval['isRedteam']) => value === 1,
+                renderCell: (params: GridRenderCellParams<Eval>) => {
+                  const isRedteam = params.value as Eval['isRedteam'];
+                  const displayType = isRedteam ? 'Red Team' : 'Eval';
+
+                  return (
+                    <Chip
+                      label={displayType}
+                      size="small"
+                      variant="outlined"
+                      sx={(theme) => ({
+                        borderColor: isRedteam
+                          ? theme.palette.error.light
+                          : theme.palette.mode === 'dark'
+                            ? theme.palette.grey[600]
+                            : theme.palette.text.disabled,
+                        color: isRedteam
+                          ? theme.palette.error.main
+                          : theme.palette.mode === 'dark'
+                            ? theme.palette.grey[300]
+                            : theme.palette.text.secondary,
+                        bgcolor: isRedteam
+                          ? alpha(theme.palette.error.main, 0.1)
+                          : theme.palette.mode === 'dark'
+                            ? theme.palette.grey[800]
+                            : theme.palette.grey[50],
+                        fontWeight: 500,
+                        '& .MuiChip-label': {
+                          px: 1.5,
+                        },
+                      })}
+                    />
+                  );
+                },
+                cellClassName: 'dg-cursor-pointer',
+              },
+            ]
+          : []),
         {
           field: 'description',
           headerName: 'Description',
@@ -256,35 +426,20 @@ export default function EvalsDataGrid({
           flex: 0.5,
         },
       ].filter(Boolean) as GridColDef<Eval>[],
-    [focusedEvalId, onEvalSelected],
+    [focusedEvalId, onEvalSelected, hasRedteamEvals],
   );
 
   return (
-    <Paper elevation={2} sx={{ height: '100%' }}>
+    <>
+      {/* Evals data grid */}
       <DataGrid
         rows={rows}
         columns={columns}
         loading={isLoading}
         getRowId={(row) => row.evalId}
+        checkboxSelection={deletionEnabled}
         slots={{
           toolbar: CustomToolbar,
-          loadingOverlay: () => (
-            <Box
-              sx={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                height: '100%',
-                gap: 2,
-              }}
-            >
-              <CircularProgress />
-              <Typography variant="body2" color="text.secondary">
-                Loading evaluations...
-              </Typography>
-            </Box>
-          ),
           noRowsOverlay: () => (
             <Box
               sx={{
@@ -325,11 +480,17 @@ export default function EvalsDataGrid({
         slotProps={{
           toolbar: {
             showUtilityButtons,
+            deletionEnabled,
             focusQuickFilterOnMount,
+            selectedCount: rowSelectionModel.ids.size,
+            onDeleteSelected: handleDeleteSelected,
+          },
+          loadingOverlay: {
+            variant: 'linear-progress',
           },
         }}
         onCellClick={(params) => {
-          if (params.id !== focusedEvalId) {
+          if (params.id !== focusedEvalId && params.field !== '__check__') {
             handleCellClick(params);
           }
         }}
@@ -379,7 +540,33 @@ export default function EvalsDataGrid({
         }}
         pageSizeOptions={[10, 25, 50, 100]}
         isRowSelectable={(params) => params.id !== focusedEvalId}
+        showToolbar
       />
-    </Paper>
+      {/* Delete confirmation dialog */}
+      <Dialog open={confirmDeleteOpen} onClose={handleCancelDelete}>
+        <DialogTitle>
+          Delete {rowSelectionModel.ids.size} eval{rowSelectionModel.ids.size === 1 ? '' : 's'}?
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Are you sure you want to delete the selected eval
+            {rowSelectionModel.ids.size === 1 ? '' : 's'}? This action cannot be undone.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCancelDelete} variant="outlined">
+            Cancel
+          </Button>
+          <Button
+            onClick={handleConfirmDelete}
+            color="error"
+            variant="contained"
+            startIcon={<DeleteIcon />}
+          >
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </>
   );
 }

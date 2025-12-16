@@ -1,5 +1,6 @@
 ---
 sidebar_label: False Positives
+description: Red team false positive detection by enhancing grader context and scoring precision to prevent inaccurate vulnerability assessments in AI security testing workflows
 ---
 
 # Preventing False Positives
@@ -10,7 +11,7 @@ By providing comprehensive context to Promptfoo, you can ensure accurate results
 
 ## Understanding How the Grader Makes Decisions
 
-When you run a red team scan against a target, Promptfoo evaluates the results and determines whether the output passes or fails. These results are determined by a model, `gpt-4.1-2025-04-14` by default.
+When you run a red team scan against a target, Promptfoo evaluates the results and determines whether the output passes or fails. These results are determined by a model, `gpt-5` by default.
 
 A **pass** score means that the output did not violate your application's intended behavior and returned an output that conforms with your requirements. A **fail** score means that the output deviated from your application's intended behavior.
 

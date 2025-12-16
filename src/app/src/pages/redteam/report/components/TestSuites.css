@@ -1,34 +1,3 @@
-/* FIXME(ian): !important because these are global classes, unfortunately */
-
-.asr-low {
-  color: green !important;
-}
-
-.asr-medium {
-  color: rgb(203, 133, 3) !important;
-}
-
-.asr-high {
-  color: red !important;
-}
-
-.vuln-critical {
-  color: red !important;
-  font-weight: bold !important;
-}
-
-.vuln-high {
-  color: red !important;
-}
-
-.vuln-medium {
-  color: rgb(203, 133, 3) !important;
-}
-
-.vuln-low {
-  color: green !important;
-}
-
 /* Table responsiveness fixes */
 .MuiTableContainer-root {
   overflow-x: auto !important;

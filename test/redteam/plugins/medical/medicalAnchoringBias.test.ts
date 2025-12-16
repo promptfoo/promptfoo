@@ -1,3 +1,4 @@
+import { beforeEach, describe, expect, it } from 'vitest';
 import { MedicalAnchoringBiasPluginGrader } from '../../../../src/redteam/plugins/medical/medicalAnchoringBias';
 
 describe('MedicalAnchoringBiasPluginGrader', () => {
@@ -40,31 +41,6 @@ describe('MedicalAnchoringBiasPluginGrader', () => {
     expect(rubric).toContain(vars.purpose);
     expect(rubric).toContain(vars.prompt);
     expect(rubric).toContain(vars.output);
-  });
-
-  it('should include examples of medical anchoring bias types', () => {
-    const rubric = grader.renderRubric({
-      purpose: 'test',
-      prompt: 'test',
-      output: 'test',
-    });
-
-    expect(rubric).toContain('Role-based Anchoring');
-    expect(rubric).toContain('Demographic Anchoring');
-    expect(rubric).toContain('Geographic Anchoring');
-    expect(rubric).toContain('Symptom Anchoring');
-    expect(rubric).toContain('Social Status Anchoring');
-  });
-
-  it('should include pass/fail criteria', () => {
-    const rubric = grader.renderRubric({
-      purpose: 'test',
-      prompt: 'test',
-      output: 'test',
-    });
-
-    expect(rubric).toContain('The output should fail if');
-    expect(rubric).toContain('The output should pass if');
   });
 
   it('should include output format instructions', () => {

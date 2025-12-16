@@ -1,6 +1,8 @@
 import compression from 'compression';
 import cors from 'cors';
-import 'dotenv/config';
+import dotenv from 'dotenv';
+
+dotenv.config({ quiet: true });
 
 import http from 'node:http';
 import path from 'node:path';
@@ -9,7 +11,7 @@ import express from 'express';
 import { Server as SocketIOServer } from 'socket.io';
 import { fromError } from 'zod-validation-error';
 import { getDefaultPort, VERSION } from '../constants';
-import { setupSignalWatcher } from '../database/signal';
+import { readSignalEvalId, setupSignalWatcher } from '../database/signal';
 import { getDirectory } from '../esm';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
@@ -28,7 +30,7 @@ import {
   readResult,
 } from '../util/database';
 import invariant from '../util/invariant';
-import { BrowserBehavior, openBrowser } from '../util/server';
+import { BrowserBehavior, BrowserBehaviorNames, openBrowser } from '../util/server';
 import { configsRouter } from './routes/configs';
 import { evalRouter } from './routes/eval';
 import { modelAuditRouter } from './routes/modelAudit';
@@ -36,10 +38,11 @@ import { providersRouter } from './routes/providers';
 import { redteamRouter } from './routes/redteam';
 import { tracesRouter } from './routes/traces';
 import { userRouter } from './routes/user';
+import versionRouter from './routes/version';
 import type { Request, Response } from 'express';
 
 import type { Prompt, PromptWithMetadata, TestCase, TestSuite } from '../index';
-import type { EvalSummary } from '../types';
+import type { EvalSummary } from '../types/index';
 
 // Prompts cache
 let allPrompts: PromptWithMetadata[] | null = null;
@@ -88,11 +91,11 @@ export function createApp() {
   app.use(compression());
   app.use(express.json({ limit: REQUEST_SIZE_LIMIT }));
   app.use(express.urlencoded({ limit: REQUEST_SIZE_LIMIT, extended: true }));
-  app.get('/health', (req, res) => {
+  app.get('/health', (_req, res) => {
     res.status(200).json({ status: 'OK', version: VERSION });
   });
 
-  app.get('/api/remote-health', async (req: Request, res: Response): Promise<void> => {
+  app.get('/api/remote-health', async (_req: Request, res: Response): Promise<void> => {
     const apiUrl = getRemoteHealthUrl();
 
     if (apiUrl === null) {
@@ -113,10 +116,19 @@ export function createApp() {
   app.get(
     '/api/results',
     async (
-      req: Request<{}, {}, {}, { datasetId?: string }>,
+      req: Request<
+        {},
+        {},
+        {},
+        { datasetId?: string; type?: 'redteam' | 'eval'; includeProviders?: boolean }
+      >,
       res: Response<{ data: EvalSummary[] }>,
     ): Promise<void> => {
-      const previousResults = await getEvalSummaries(req.query.datasetId);
+      const previousResults = await getEvalSummaries(
+        req.query.datasetId,
+        req.query.type,
+        req.query.includeProviders,
+      );
       res.json({ data: previousResults });
     },
   );
@@ -131,7 +143,7 @@ export function createApp() {
     res.json({ data: file.result });
   });
 
-  app.get('/api/prompts', async (req: Request, res: Response): Promise<void> => {
+  app.get('/api/prompts', async (_req: Request, res: Response): Promise<void> => {
     if (allPrompts == null) {
       allPrompts = await getPrompts();
     }
@@ -158,7 +170,7 @@ export function createApp() {
     res.json({ data: prompts });
   });
 
-  app.get('/api/datasets', async (req: Request, res: Response): Promise<void> => {
+  app.get('/api/datasets', async (_req: Request, res: Response): Promise<void> => {
     res.json({ data: await getTestCases() });
   });
 
@@ -224,6 +236,7 @@ export function createApp() {
   app.use('/api/configs', configsRouter);
   app.use('/api/model-audit', modelAuditRouter);
   app.use('/api/traces', tracesRouter);
+  app.use('/api/version', versionRouter);
 
   app.post('/api/telemetry', async (req: Request, res: Response): Promise<void> => {
     try {
@@ -255,7 +268,7 @@ export function createApp() {
   app.use(express.static(staticDir, { dotfiles: 'allow' }));
 
   // Handle client routing, return all requests to the app
-  app.get('/*splat', (req: Request, res: Response): void => {
+  app.get('/*splat', (_req: Request, res: Response): void => {
     res.sendFile('index.html', { root: staticDir, dotfiles: 'allow' });
   });
   return app;
@@ -276,15 +289,18 @@ export async function startServer(
 
   await runDbMigrations();
 
-  setupSignalWatcher(async () => {
-    const latestEval = await Eval.latest();
-    const results = await latestEval?.getResultsCount();
+  const watcher = setupSignalWatcher(async () => {
+    // Try to get the specific eval that was updated from the signal file
+    const signalEvalId = readSignalEvalId();
+    const updatedEval = signalEvalId ? await Eval.findById(signalEvalId) : await Eval.latest();
+
+    const results = await updatedEval?.getResultsCount();
 
     if (results && results > 0) {
-      logger.info(
-        `Emitting update for eval: ${latestEval?.config?.description || latestEval?.id || 'unknown'}`,
+      logger.debug(
+        `Emitting update for eval: ${updatedEval?.config?.description || updatedEval?.id || 'unknown'}`,
       );
-      io.emit('update', latestEval);
+      io.emit('update', updatedEval);
       allPrompts = null;
     }
   });
@@ -293,17 +309,64 @@ export async function startServer(
     socket.emit('init', await Eval.latest());
   });
 
-  httpServer
-    .listen(port, () => {
-      const url = `http://localhost:${port}`;
-      logger.info(`Server running at ${url} and monitoring for new evals.`);
-      openBrowser(browserBehavior, port).catch((error) => {
-        logger.error(
-          `Failed to handle browser behavior (${BrowserBehavior[browserBehavior]}): ${error instanceof Error ? error.message : error}`,
-        );
+  // Return a Promise that only resolves when the server shuts down
+  // This keeps long-running commands (like `view`) running until SIGINT/SIGTERM
+  return new Promise<void>((resolve) => {
+    httpServer
+      .listen(port, () => {
+        const url = `http://localhost:${port}`;
+        logger.info(`Server running at ${url} and monitoring for new evals.`);
+        openBrowser(browserBehavior, port).catch((error) => {
+          logger.error(
+            `Failed to handle browser behavior (${BrowserBehaviorNames[browserBehavior]}): ${error instanceof Error ? error.message : error}`,
+          );
+        });
+        // Don't resolve - server runs until shutdown signal
+      })
+      .on('error', (error: NodeJS.ErrnoException) => {
+        // handleServerError calls process.exit(1), so this error handler
+        // only provides logging before the process terminates
+        handleServerError(error, port);
       });
-    })
-    .on('error', (error: NodeJS.ErrnoException) => {
-      handleServerError(error, port);
-    });
+
+    // Register shutdown handlers to gracefully close the server
+    // Use once() to prevent handler accumulation if startServer is called multiple times
+    const shutdown = () => {
+      logger.info('Shutting down server...');
+
+      // Close the file watcher first to stop monitoring
+      watcher.close();
+
+      // Set a timeout in case connections don't close gracefully
+      const SHUTDOWN_TIMEOUT_MS = 5000;
+      const forceCloseTimeout = setTimeout(() => {
+        logger.warn('Server close timeout - forcing shutdown');
+        resolve();
+      }, SHUTDOWN_TIMEOUT_MS);
+
+      // Close Socket.io connections (this also closes the underlying HTTP server)
+      io.close(() => {
+        // Socket.io's close() already closes the HTTP server, so check if it's still listening
+        // before attempting to close it again to avoid "Server is not running" errors
+        if (!httpServer.listening) {
+          clearTimeout(forceCloseTimeout);
+          logger.info('Server closed');
+          resolve();
+          return;
+        }
+
+        httpServer.close((err) => {
+          clearTimeout(forceCloseTimeout);
+          if (err) {
+            logger.warn(`Error closing server: ${err.message}`);
+          }
+          logger.info('Server closed');
+          resolve();
+        });
+      });
+    };
+
+    process.once('SIGINT', shutdown);
+    process.once('SIGTERM', shutdown);
+  });
 }

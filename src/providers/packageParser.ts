@@ -1,12 +1,11 @@
-import { createRequire } from 'node:module';
 import path from 'path';
 
 import chalk from 'chalk';
 import dedent from 'dedent';
-import { importModule } from '../esm';
+import { importModule, resolvePackageEntryPoint } from '../esm';
 import logger from '../logger';
 
-import type { ApiProvider, ProviderOptions } from '../types';
+import type { ApiProvider, ProviderOptions } from '../types/index';
 
 function getValue<T extends object, K extends string>(obj: T, path: K): any {
   return path.split('.').reduce((acc: any, key: string) => {
@@ -27,9 +26,15 @@ export async function loadFromPackage(packageInstancePath: string, basePath: str
     );
   }
 
+  // Resolve the package path using exsolve-based resolver
+  // This handles ESM-only packages with restrictive exports fields
+  const filePath = resolvePackageEntryPoint(packageName, path.resolve(basePath));
+  if (!filePath) {
+    throw new Error(`Package not found: ${packageName}. Make sure it's installed in ${basePath}`);
+  }
+
+  // Then, try to import the module
   try {
-    const require = createRequire(path.resolve(basePath));
-    const filePath = require.resolve(packageName);
     const module = await importModule(filePath);
     const entity = getValue(module, entityName ?? 'default');
 
@@ -41,8 +46,8 @@ export async function loadFromPackage(packageInstancePath: string, basePath: str
     }
 
     return entity;
-  } catch {
-    throw new Error(`Package not found: ${packageName}. Make sure it's installed in ${basePath}`);
+  } catch (error) {
+    throw new Error(`Failed to import module: ${packageName}. Error: ${error}`);
   }
 }
 

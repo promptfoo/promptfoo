@@ -1,3 +1,4 @@
+import * as fs from 'fs';
 import path from 'path';
 
 import { loadFromJavaScriptFile } from './assertions/utils';
@@ -10,6 +11,7 @@ import {
   CONTEXT_FAITHFULNESS_NLI_STATEMENTS,
   CONTEXT_RECALL,
   CONTEXT_RECALL_ATTRIBUTED_TOKEN,
+  CONTEXT_RECALL_NOT_ATTRIBUTED_TOKEN,
   CONTEXT_RELEVANCE,
   CONTEXT_RELEVANCE_BAD,
   DEFAULT_GRADING_PROMPT,
@@ -18,18 +20,23 @@ import {
   OPENAI_CLOSED_QA_PROMPT,
   PROMPTFOO_FACTUALITY_PROMPT,
   SELECT_BEST_PROMPT,
-} from './prompts';
-import { loadApiProvider } from './providers';
+} from './prompts/index';
+import { loadApiProvider } from './providers/index';
 import { getDefaultProviders } from './providers/defaults';
+import { hasWebSearchCapability, loadWebSearchProvider } from './providers/webSearchUtils';
+import { DEFAULT_WEB_SEARCH_PROMPT } from './prompts/grading';
 import { LLAMA_GUARD_REPLICATE_PROVIDER } from './redteam/constants';
 import { shouldGenerateRemote } from './redteam/remoteGeneration';
 import { doRemoteGrading } from './remoteGrading';
 import { doRemoteScoringWithPi } from './remoteScoring';
-import { maybeLoadFromExternalFile } from './util/file';
+import { getNunjucksEngineForFilePath, maybeLoadFromExternalFile } from './util/file';
+import { parseFileUrl } from './util/functions/loadFunction';
 import { isJavascriptFile } from './util/fileExtensions';
 import invariant from './util/invariant';
 import { extractFirstJsonObject, extractJsonObjects } from './util/json';
+import { serializeContext } from './assertions/contextUtils';
 import { getNunjucksEngine } from './util/templates';
+import { accumulateTokenUsage } from './util/tokenUsageUtils';
 
 import type {
   ApiClassificationProvider,
@@ -38,13 +45,15 @@ import type {
   ApiProvider,
   ApiSimilarityProvider,
   Assertion,
+  CallApiContextParams,
   GradingConfig,
   GradingResult,
   ProviderOptions,
+  ProviderResponse,
   ProviderType,
   ProviderTypeMap,
   TokenUsage,
-} from './types';
+} from './types/index';
 
 class LlmRubricProviderError extends Error {
   constructor(message: string) {
@@ -55,7 +64,7 @@ class LlmRubricProviderError extends Error {
 
 const nunjucks = getNunjucksEngine(undefined, false, true);
 
-function cosineSimilarity(vecA: number[], vecB: number[]) {
+function cosineSimilarity(vecA: number[], vecB: number[]): number {
   if (vecA.length !== vecB.length) {
     throw new Error('Vectors must be of equal length');
   }
@@ -63,6 +72,49 @@ function cosineSimilarity(vecA: number[], vecB: number[]) {
   const vecAMagnitude = Math.sqrt(vecA.reduce((acc, val) => acc + val * val, 0));
   const vecBMagnitude = Math.sqrt(vecB.reduce((acc, val) => acc + val * val, 0));
   return dotProduct / (vecAMagnitude * vecBMagnitude);
+}
+
+function dotProduct(vecA: number[], vecB: number[]): number {
+  if (vecA.length !== vecB.length) {
+    throw new Error('Vectors must be of equal length');
+  }
+  return vecA.reduce((acc, val, idx) => acc + val * vecB[idx], 0);
+}
+
+function euclideanDistance(vecA: number[], vecB: number[]): number {
+  if (vecA.length !== vecB.length) {
+    throw new Error('Vectors must be of equal length');
+  }
+  const sumSquaredDiff = vecA.reduce((acc, val, idx) => {
+    const diff = val - vecB[idx];
+    return acc + diff * diff;
+  }, 0);
+  return Math.sqrt(sumSquaredDiff);
+}
+
+/**
+ * Helper to call provider with consistent context propagation pattern.
+ * Spreads the optional context and merges with prompt label and vars.
+ *
+ * IMPORTANT: Spread order matters - context is spread first, then prompt/vars
+ * override. This ensures originalProvider from context is preserved while
+ * allowing this call to specify its own prompt metadata.
+ */
+function callProviderWithContext(
+  provider: ApiProvider,
+  prompt: string,
+  label: string,
+  vars: Record<string, any>,
+  context?: CallApiContextParams,
+): Promise<ProviderResponse> {
+  return provider.callApi(prompt, {
+    ...context,
+    prompt: {
+      raw: prompt,
+      label,
+    },
+    vars,
+  });
 }
 
 async function loadFromProviderOptions(provider: ProviderOptions) {
@@ -75,8 +127,10 @@ async function loadFromProviderOptions(provider: ProviderOptions) {
     `Provider must be an object, but received an array: ${JSON.stringify(provider)}`,
   );
   invariant(provider.id, 'Provider supplied to assertion must have an id');
-  // TODO(ian): set basepath if invoked from filesystem config
-  return loadApiProvider(provider.id, { options: provider as ProviderOptions });
+  return loadApiProvider(provider.id, {
+    options: provider as ProviderOptions,
+    basePath: cliState.basePath,
+  });
 }
 
 export async function getGradingProvider(
@@ -87,7 +141,7 @@ export async function getGradingProvider(
   let finalProvider: ApiProvider | null;
   if (typeof provider === 'string') {
     // Defined as a string
-    finalProvider = await loadApiProvider(provider);
+    finalProvider = await loadApiProvider(provider, { basePath: cliState.basePath });
   } else if (typeof provider === 'object' && typeof (provider as ApiProvider).id === 'function') {
     // Defined as an ApiProvider interface
     finalProvider = provider as ApiProvider;
@@ -117,7 +171,25 @@ export async function getGradingProvider(
       );
     }
   } else {
-    finalProvider = defaultProvider;
+    // No provider specified - check defaultTest.options.provider as fallback
+    const defaultTestIsObject = typeof cliState.config?.defaultTest === 'object';
+    const cfg =
+      (defaultTestIsObject && (cliState.config?.defaultTest as any)?.provider) ||
+      (defaultTestIsObject && (cliState.config?.defaultTest as any)?.options?.provider?.text) ||
+      (defaultTestIsObject && (cliState.config?.defaultTest as any)?.options?.provider) ||
+      undefined;
+
+    if (cfg) {
+      // Recursively call getGradingProvider to handle all provider types (string, object, etc.)
+      finalProvider = await getGradingProvider(type, cfg, defaultProvider);
+      if (finalProvider) {
+        logger.debug(
+          `[Grading] Using provider from defaultTest.options.provider: ${finalProvider.id()}`,
+        );
+      }
+    } else {
+      finalProvider = defaultProvider;
+    }
   }
   return finalProvider;
 }
@@ -164,7 +236,10 @@ export async function getAndCheckProvider(
   return matchedProvider;
 }
 
-function fail(reason: string, tokensUsed?: Partial<TokenUsage>): Omit<GradingResult, 'assertion'> {
+export function fail(
+  reason: string,
+  tokensUsed?: Partial<TokenUsage>,
+): Omit<GradingResult, 'assertion'> {
   return {
     pass: false,
     reason,
@@ -174,38 +249,14 @@ function fail(reason: string, tokensUsed?: Partial<TokenUsage>): Omit<GradingRes
       prompt: tokensUsed?.prompt || 0,
       completion: tokensUsed?.completion || 0,
       cached: tokensUsed?.cached || 0,
+      numRequests: tokensUsed?.numRequests || 0,
       completionDetails: tokensUsed?.completionDetails,
     },
   };
 }
 
-function accumulateTokens(target: Partial<TokenUsage>, update?: Partial<TokenUsage>) {
-  if (!update || !target) {
-    return;
-  }
-
-  target.total = (target.total || 0) + (update.total || 0);
-  target.prompt = (target.prompt || 0) + (update.prompt || 0);
-  target.completion = (target.completion || 0) + (update.completion || 0);
-  target.cached = (target.cached || 0) + (update.cached || 0);
-
-  if (update.completionDetails) {
-    if (!target.completionDetails) {
-      target.completionDetails = {
-        reasoning: 0,
-        acceptedPrediction: 0,
-        rejectedPrediction: 0,
-      };
-    }
-    target.completionDetails.reasoning =
-      (target.completionDetails.reasoning || 0) + (update.completionDetails.reasoning || 0);
-    target.completionDetails.acceptedPrediction =
-      (target.completionDetails.acceptedPrediction || 0) +
-      (update.completionDetails.acceptedPrediction || 0);
-    target.completionDetails.rejectedPrediction =
-      (target.completionDetails.rejectedPrediction || 0) +
-      (update.completionDetails.rejectedPrediction || 0);
-  }
+function accumulateTokens(target: TokenUsage, update?: Partial<TokenUsage>) {
+  accumulateTokenUsage(target, update);
 }
 
 export async function matchesSimilarity(
@@ -214,6 +265,7 @@ export async function matchesSimilarity(
   threshold: number,
   inverse: boolean = false,
   grading?: GradingConfig,
+  metric: 'cosine' | 'dot_product' | 'euclidean' = 'cosine',
 ): Promise<Omit<GradingResult, 'assertion'>> {
   if (cliState.config?.redteam && shouldGenerateRemote()) {
     try {
@@ -243,6 +295,7 @@ export async function matchesSimilarity(
     prompt: 0,
     completion: 0,
     cached: 0,
+    numRequests: 0,
     completionDetails: {
       reasoning: 0,
       acceptedPrediction: 0,
@@ -250,12 +303,20 @@ export async function matchesSimilarity(
     },
   };
 
+  // For providers with native similarity API, only cosine is supported
   if ('callSimilarityApi' in finalProvider) {
+    if (metric !== 'cosine') {
+      return fail(
+        `Provider ${finalProvider.id()} only supports cosine similarity via callSimilarityApi`,
+        tokensUsed,
+      );
+    }
     const similarityResp = await finalProvider.callSimilarityApi(expected, output);
     tokensUsed.total = similarityResp.tokenUsage?.total || 0;
     tokensUsed.prompt = similarityResp.tokenUsage?.prompt || 0;
     tokensUsed.completion = similarityResp.tokenUsage?.completion || 0;
     tokensUsed.cached = similarityResp.tokenUsage?.cached || 0;
+    tokensUsed.numRequests = similarityResp.tokenUsage?.numRequests || 0;
     tokensUsed.completionDetails = similarityResp.tokenUsage?.completionDetails;
     if (similarityResp.error) {
       return fail(similarityResp.error, tokensUsed);
@@ -277,6 +338,9 @@ export async function matchesSimilarity(
       (outputEmbedding.tokenUsage?.completion || 0);
     tokensUsed.cached =
       (expectedEmbedding.tokenUsage?.cached || 0) + (outputEmbedding.tokenUsage?.cached || 0);
+    tokensUsed.numRequests =
+      (expectedEmbedding.tokenUsage?.numRequests || 0) +
+      (outputEmbedding.tokenUsage?.numRequests || 0);
     tokensUsed.completionDetails = {
       reasoning:
         (expectedEmbedding.tokenUsage?.completionDetails?.reasoning || 0) +
@@ -300,29 +364,76 @@ export async function matchesSimilarity(
       return fail('Embedding not found', tokensUsed);
     }
 
-    similarity = cosineSimilarity(expectedEmbedding.embedding, outputEmbedding.embedding);
+    // Compute metric based on the selected type
+    switch (metric) {
+      case 'cosine':
+        similarity = cosineSimilarity(expectedEmbedding.embedding, outputEmbedding.embedding);
+        break;
+      case 'dot_product':
+        similarity = dotProduct(expectedEmbedding.embedding, outputEmbedding.embedding);
+        break;
+      case 'euclidean':
+        // For euclidean distance, we store it in similarity variable but handle it differently below
+        similarity = euclideanDistance(expectedEmbedding.embedding, outputEmbedding.embedding);
+        break;
+      default:
+        return fail(`Unsupported metric: ${metric}`, tokensUsed);
+    }
   } else {
     throw new Error('Provider must implement callSimilarityApi or callEmbeddingApi');
   }
-  const pass = inverse
-    ? similarity <= threshold + Number.EPSILON
-    : similarity >= threshold - Number.EPSILON;
-  const greaterThanReason = `Similarity ${similarity.toFixed(
-    2,
-  )} is greater than threshold ${threshold}`;
-  const lessThanReason = `Similarity ${similarity.toFixed(2)} is less than threshold ${threshold}`;
-  if (pass) {
-    return {
-      pass: true,
-      score: inverse ? 1 - similarity : similarity,
-      reason: inverse ? lessThanReason : greaterThanReason,
-      tokensUsed,
-    };
+
+  // Handle different semantics for distance vs similarity metrics
+  const isDistanceMetric = metric === 'euclidean';
+
+  let pass: boolean;
+  let score: number;
+  let reason: string;
+
+  if (isDistanceMetric) {
+    // For distance metrics: lower is better, threshold is maximum distance
+    const distance = similarity; // We stored distance in similarity variable
+    pass = inverse
+      ? distance >= threshold - Number.EPSILON
+      : distance <= threshold + Number.EPSILON;
+
+    // Convert distance to a 0-1 score where lower distance = higher score
+    // Using formula: score = 1 / (1 + distance)
+    const normalizedScore = 1 / (1 + distance);
+    score = inverse ? 1 - normalizedScore : normalizedScore;
+
+    const belowThresholdReason = `Distance ${distance.toFixed(2)} is less than or equal to threshold ${threshold}`;
+    const aboveThresholdReason = `Distance ${distance.toFixed(2)} is greater than threshold ${threshold}`;
+    reason = pass
+      ? inverse
+        ? aboveThresholdReason
+        : belowThresholdReason
+      : inverse
+        ? belowThresholdReason
+        : aboveThresholdReason;
+  } else {
+    // For similarity metrics: higher is better, threshold is minimum similarity
+    pass = inverse
+      ? similarity <= threshold + Number.EPSILON
+      : similarity >= threshold - Number.EPSILON;
+
+    score = inverse ? 1 - similarity : similarity;
+
+    const greaterThanReason = `Similarity ${similarity.toFixed(2)} is greater than or equal to threshold ${threshold}`;
+    const lessThanReason = `Similarity ${similarity.toFixed(2)} is less than threshold ${threshold}`;
+    reason = pass
+      ? inverse
+        ? lessThanReason
+        : greaterThanReason
+      : inverse
+        ? greaterThanReason
+        : lessThanReason;
   }
+
   return {
-    pass: false,
-    score: inverse ? 1 - similarity : similarity,
-    reason: inverse ? greaterThanReason : lessThanReason,
+    pass,
+    score,
+    reason,
     tokensUsed,
   };
 }
@@ -378,7 +489,7 @@ export async function matchesClassification(
   };
 }
 
-async function loadRubricPrompt(
+export async function loadRubricPrompt(
   rubricPrompt: string | object | undefined,
   defaultPrompt: string,
 ): Promise<string> {
@@ -389,19 +500,31 @@ async function loadRubricPrompt(
     return defaultPrompt;
   }
 
-  if (
-    typeof rubricPrompt === 'string' &&
-    rubricPrompt.startsWith('file://') &&
-    isJavascriptFile(rubricPrompt)
-  ) {
+  if (typeof rubricPrompt === 'string' && rubricPrompt.startsWith('file://')) {
     const basePath = cliState.basePath || '';
-    let filePath = rubricPrompt.slice('file://'.length);
 
-    const [pathPart, functionName] = filePath.split(':');
-    filePath = path.resolve(basePath, pathPart);
-    rubricPrompt = await loadFromJavaScriptFile(filePath, functionName, []);
+    // Render Nunjucks templates in the file path (e.g., file://{{ env.RUBRIC_PATH }}/rubric.json)
+    const renderedFilePath = getNunjucksEngineForFilePath().renderString(rubricPrompt, {});
+
+    // Parse the file URL to extract file path and function name
+    // This handles colon splitting correctly, including Windows drive letters and :functionName suffix
+    const { filePath, functionName } = parseFileUrl(renderedFilePath);
+    const resolvedPath = path.resolve(basePath, filePath);
+
+    if (isJavascriptFile(filePath)) {
+      rubricPrompt = await loadFromJavaScriptFile(resolvedPath, functionName, []);
+    } else {
+      // For non-JS files (including .json, .yaml, .txt), load as raw text
+      // to allow Nunjucks templating before JSON/YAML parsing.
+      // This fixes the issue where .json files with Nunjucks templates
+      // would fail to parse before rendering.
+      if (!fs.existsSync(resolvedPath)) {
+        throw new Error(`File does not exist: ${resolvedPath}`);
+      }
+      rubricPrompt = fs.readFileSync(resolvedPath, 'utf8');
+    }
   } else {
-    // Load from external file if needed
+    // Load from external file if needed (for non file:// references)
     rubricPrompt = maybeLoadFromExternalFile(rubricPrompt);
   }
 
@@ -458,7 +581,7 @@ export async function renderLlmRubricPrompt(
   try {
     // Render every string scalar within the JSON
     // Does not render object keys (only values)
-    const parsed = JSON.parse(rubricPrompt, (k, v) =>
+    const parsed = JSON.parse(rubricPrompt, (_k, v) =>
       typeof v === 'string' ? nunjucks.renderString(v, processedContext) : v,
     );
     return JSON.stringify(parsed);
@@ -476,10 +599,11 @@ export async function matchesLlmRubric(
   llmOutput: string,
   grading?: GradingConfig,
   vars?: Record<string, string | object>,
-  assertion?: Assertion | null,
+  assertion?: Assertion,
   options?: {
     throwOnError?: boolean;
   },
+  providerCallContext?: CallApiContextParams,
 ): Promise<GradingResult> {
   if (!grading) {
     throw new Error(
@@ -487,7 +611,13 @@ export async function matchesLlmRubric(
     );
   }
 
-  if (!grading.rubricPrompt && cliState.config?.redteam && shouldGenerateRemote()) {
+  // Use remote grading only if no provider is explicitly configured and remote generation is enabled
+  if (
+    !grading.rubricPrompt &&
+    !cliState.config?.redteam?.provider &&
+    cliState.config?.redteam &&
+    shouldGenerateRemote()
+  ) {
     return {
       ...(await doRemoteGrading({
         task: 'llm-rubric',
@@ -515,7 +645,17 @@ export async function matchesLlmRubric(
     defaultProvider,
     'llm-rubric check',
   );
-  const resp = await finalProvider.callApi(prompt);
+  const resp = await callProviderWithContext(
+    finalProvider,
+    prompt,
+    'llm-rubric',
+    {
+      output: tryParse(llmOutput),
+      rubric,
+      ...(vars || {}),
+    },
+    providerCallContext,
+  );
   if (resp.error || !resp.output) {
     if (options?.throwOnError) {
       throw new LlmRubricProviderError(resp.error || 'No output');
@@ -591,6 +731,7 @@ export async function matchesLlmRubric(
       prompt: resp.tokenUsage?.prompt || 0,
       completion: resp.tokenUsage?.completion || 0,
       cached: resp.tokenUsage?.cached || 0,
+      numRequests: resp.tokenUsage?.numRequests || 0,
       completionDetails: parsed.tokensUsed?.completionDetails || {
         reasoning: 0,
         acceptedPrediction: 0,
@@ -604,7 +745,7 @@ export async function matchesPiScore(
   renderedValue: string,
   llmInput: string,
   llmOutput: string,
-  assertion?: Assertion | null,
+  assertion?: Assertion,
 ): Promise<GradingResult> {
   return {
     ...(await doRemoteScoringWithPi(
@@ -629,6 +770,7 @@ export async function matchesFactuality(
   output: string,
   grading?: GradingConfig,
   vars?: Record<string, string | object>,
+  providerCallContext?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   if (!grading) {
     throw new Error(
@@ -652,7 +794,18 @@ export async function matchesFactuality(
     'factuality check',
   );
 
-  const resp = await finalProvider.callApi(prompt);
+  const resp = await callProviderWithContext(
+    finalProvider,
+    prompt,
+    'factuality',
+    {
+      input,
+      ideal: expected,
+      completion: tryParse(output),
+      ...(vars || {}),
+    },
+    providerCallContext,
+  );
   if (resp.error || !resp.output) {
     return fail(resp.error || 'No output', resp.tokenUsage);
   }
@@ -715,6 +868,7 @@ export async function matchesFactuality(
         prompt: 0,
         completion: 0,
         cached: 0,
+        numRequests: 0,
         completionDetails: {
           reasoning: 0,
           acceptedPrediction: 0,
@@ -766,6 +920,7 @@ export async function matchesFactuality(
       prompt: resp.tokenUsage?.prompt || 0,
       completion: resp.tokenUsage?.completion || 0,
       cached: resp.tokenUsage?.cached || 0,
+      numRequests: resp.tokenUsage?.numRequests || 0,
       completionDetails: resp.tokenUsage?.completionDetails || {
         reasoning: 0,
         acceptedPrediction: 0,
@@ -781,6 +936,7 @@ export async function matchesClosedQa(
   output: string,
   grading?: GradingConfig,
   vars?: Record<string, string | object>,
+  providerCallContext?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   if (!grading) {
     throw new Error(
@@ -802,7 +958,18 @@ export async function matchesClosedQa(
     (await getDefaultProviders()).gradingProvider,
     'model-graded-closedqa check',
   );
-  const resp = await finalProvider.callApi(prompt);
+  const resp = await callProviderWithContext(
+    finalProvider,
+    prompt,
+    'model-graded-closedqa',
+    {
+      input,
+      criteria: expected,
+      completion: tryParse(output),
+      ...(vars || {}),
+    },
+    providerCallContext,
+  );
   if (resp.error || !resp.output) {
     return fail(resp.error || 'No output', resp.tokenUsage);
   }
@@ -827,6 +994,7 @@ export async function matchesClosedQa(
         prompt: resp.tokenUsage?.prompt || 0,
         completion: resp.tokenUsage?.completion || 0,
         cached: resp.tokenUsage?.cached || 0,
+        numRequests: resp.tokenUsage?.numRequests || 0,
         completionDetails: resp.tokenUsage?.completionDetails || {
           reasoning: 0,
           acceptedPrediction: 0,
@@ -845,6 +1013,7 @@ export async function matchesGEval(
   output: string,
   threshold: number,
   grading?: GradingConfig,
+  providerCallContext?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   if (!input) {
     throw Error('No source text to estimate reply');
@@ -863,6 +1032,7 @@ export async function matchesGEval(
     prompt: 0,
     completion: 0,
     cached: 0,
+    numRequests: 0,
     completionDetails: {
       reasoning: 0,
       acceptedPrediction: 0,
@@ -878,7 +1048,15 @@ export async function matchesGEval(
   const stepsPrompt = await loadRubricPrompt(stepsRubricPrompt, GEVAL_PROMPT_STEPS);
   const promptSteps = await renderLlmRubricPrompt(stepsPrompt, { criteria });
 
-  const respSteps = await textProvider.callApi(promptSteps);
+  const respSteps = await callProviderWithContext(
+    textProvider,
+    promptSteps,
+    'g-eval-steps',
+    {
+      criteria,
+    },
+    providerCallContext,
+  );
   accumulateTokens(tokensUsed, respSteps.tokenUsage);
   let steps;
 
@@ -910,7 +1088,19 @@ export async function matchesGEval(
     output: tryParse(output),
   });
 
-  const resp = await textProvider.callApi(promptText);
+  const resp = await callProviderWithContext(
+    textProvider,
+    promptText,
+    'g-eval',
+    {
+      criteria,
+      steps: steps.join('\n- '),
+      maxScore: maxScore.toString(),
+      input: tryParse(input),
+      output: tryParse(output),
+    },
+    providerCallContext,
+  );
   accumulateTokens(tokensUsed, resp.tokenUsage);
   let result;
 
@@ -933,6 +1123,7 @@ export async function matchesAnswerRelevance(
   output: string,
   threshold: number,
   grading?: GradingConfig,
+  providerCallContext?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   const embeddingProvider = await getAndCheckProvider(
     'embedding',
@@ -952,6 +1143,7 @@ export async function matchesAnswerRelevance(
     prompt: 0,
     completion: 0,
     cached: 0,
+    numRequests: 0,
     completionDetails: {
       reasoning: 0,
       acceptedPrediction: 0,
@@ -964,7 +1156,15 @@ export async function matchesAnswerRelevance(
     // TODO(ian): Parallelize
     const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, ANSWER_RELEVANCY_GENERATE);
     const promptText = await renderLlmRubricPrompt(rubricPrompt, { answer: tryParse(output) });
-    const resp = await textProvider.callApi(promptText);
+    const resp = await callProviderWithContext(
+      textProvider,
+      promptText,
+      'answer-relevance',
+      {
+        answer: tryParse(output),
+      },
+      providerCallContext,
+    );
     accumulateTokens(tokensUsed, resp.tokenUsage);
     if (resp.error || !resp.output) {
       return fail(resp.error || 'No output', tokensUsed);
@@ -990,13 +1190,17 @@ export async function matchesAnswerRelevance(
   const inputEmbedding = inputEmbeddingResp.embedding;
 
   const similarities: number[] = [];
+  const questionsWithScores: { question: string; similarity: number }[] = [];
+
   for (const question of candidateQuestions) {
     const resp = await embeddingProvider.callEmbeddingApi(question);
     accumulateTokens(tokensUsed, resp.tokenUsage);
     if (resp.error || !resp.embedding) {
       return fail(resp.error || 'No embedding', tokensUsed);
     }
-    similarities.push(cosineSimilarity(inputEmbedding, resp.embedding));
+    const questionSimilarity = cosineSimilarity(inputEmbedding, resp.embedding);
+    similarities.push(questionSimilarity);
+    questionsWithScores.push({ question, similarity: questionSimilarity });
   }
 
   const similarity = similarities.reduce((a, b) => a + b, 0) / similarities.length;
@@ -1005,12 +1209,20 @@ export async function matchesAnswerRelevance(
     2,
   )} is greater than threshold ${threshold}`;
   const lessThanReason = `Relevance ${similarity.toFixed(2)} is less than threshold ${threshold}`;
+
+  const metadata = {
+    generatedQuestions: questionsWithScores,
+    averageSimilarity: similarity,
+    threshold,
+  };
+
   if (pass) {
     return {
       pass: true,
       score: similarity,
       reason: greaterThanReason,
       tokensUsed,
+      metadata,
     };
   }
   return {
@@ -1018,15 +1230,17 @@ export async function matchesAnswerRelevance(
     score: similarity,
     reason: lessThanReason,
     tokensUsed,
+    metadata,
   };
 }
 
 export async function matchesContextRecall(
-  context: string,
+  context: string | string[],
   groundTruth: string,
   threshold: number,
   grading?: GradingConfig,
   vars?: Record<string, string | object>,
+  providerCallContext?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   const textProvider = await getAndCheckProvider(
     'text',
@@ -1035,26 +1249,71 @@ export async function matchesContextRecall(
     'context recall check',
   );
 
+  // Convert context to string for LLM prompt
+  const contextString = serializeContext(context);
+
   const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, CONTEXT_RECALL);
   const promptText = await renderLlmRubricPrompt(rubricPrompt, {
-    context,
+    context: contextString,
     groundTruth,
     ...(vars || {}),
   });
 
-  const resp = await textProvider.callApi(promptText);
+  const resp = await callProviderWithContext(
+    textProvider,
+    promptText,
+    'context-recall',
+    {
+      context: contextString,
+      groundTruth,
+      ...(vars || {}),
+    },
+    providerCallContext,
+  );
   if (resp.error || !resp.output) {
     return fail(resp.error || 'No output', resp.tokenUsage);
   }
 
   invariant(typeof resp.output === 'string', 'context-recall produced malformed response');
-  const sentences = splitIntoSentences(resp.output);
-  const numerator = sentences.reduce(
-    (acc, sentence) => acc + (sentence.includes(CONTEXT_RECALL_ATTRIBUTED_TOKEN) ? 1 : 0),
-    0,
-  );
-  const score = numerator / sentences.length;
+
+  // Filter to only include lines that contain attribution markers.
+  // This handles cases where LLMs add preamble text before the classification list.
+  // See: https://github.com/promptfoo/promptfoo/issues/1506
+  const attributedTokenLower = CONTEXT_RECALL_ATTRIBUTED_TOKEN.toLowerCase();
+  const notAttributedTokenLower = CONTEXT_RECALL_NOT_ATTRIBUTED_TOKEN.toLowerCase();
+  const sentences = splitIntoSentences(resp.output).filter((line) => {
+    const lowerLine = line.toLowerCase();
+    return lowerLine.includes(attributedTokenLower) || lowerLine.includes(notAttributedTokenLower);
+  });
+
+  const sentenceAttributions: { sentence: string; attributed: boolean }[] = [];
+  let numerator = 0;
+
+  for (const sentence of sentences) {
+    // Case-insensitive check for attribution - handles [ATTRIBUTED], [Attributed], etc.
+    const isAttributed = sentence.toLowerCase().includes(attributedTokenLower);
+    if (isAttributed) {
+      numerator++;
+    }
+    // Extract the actual sentence content without the classification part
+    const sentenceMatch = sentence.match(/^\d+\.\s*([^\.]+\.)/);
+    const cleanSentence = sentenceMatch ? sentenceMatch[1].trim() : sentence.split('.')[0].trim();
+    sentenceAttributions.push({
+      sentence: cleanSentence,
+      attributed: isAttributed,
+    });
+  }
+
+  const score = sentences.length > 0 ? numerator / sentences.length : 0;
   const pass = score >= threshold - Number.EPSILON;
+
+  const metadata = {
+    sentenceAttributions,
+    totalSentences: sentences.length,
+    attributedSentences: numerator,
+    score,
+  };
+
   return {
     pass,
     score,
@@ -1066,20 +1325,23 @@ export async function matchesContextRecall(
       prompt: resp.tokenUsage?.prompt || 0,
       completion: resp.tokenUsage?.completion || 0,
       cached: resp.tokenUsage?.cached || 0,
+      numRequests: resp.tokenUsage?.numRequests || 0,
       completionDetails: resp.tokenUsage?.completionDetails || {
         reasoning: 0,
         acceptedPrediction: 0,
         rejectedPrediction: 0,
       },
     },
+    metadata,
   };
 }
 
 export async function matchesContextRelevance(
   question: string,
-  context: string,
+  context: string | string[],
   threshold: number,
   grading?: GradingConfig,
+  providerCallContext?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   const textProvider = await getAndCheckProvider(
     'text',
@@ -1088,52 +1350,96 @@ export async function matchesContextRelevance(
     'context relevance check',
   );
 
+  // Convert context to string for LLM prompt
+  const contextString = serializeContext(context);
+
   const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, CONTEXT_RELEVANCE);
   const promptText = await renderLlmRubricPrompt(rubricPrompt, {
-    context,
+    context: contextString,
     query: question,
   });
 
-  const resp = await textProvider.callApi(promptText);
+  const resp = await callProviderWithContext(
+    textProvider,
+    promptText,
+    'context-relevance',
+    {
+      context: contextString,
+      query: question,
+    },
+    providerCallContext,
+  );
   if (resp.error || !resp.output) {
     return fail(resp.error || 'No output', resp.tokenUsage);
   }
 
   invariant(typeof resp.output === 'string', 'context-relevance produced malformed response');
-  const sentences = splitIntoSentences(resp.output);
-  const numerator = sentences.reduce(
-    (acc, sentence) => acc + (sentence.includes(CONTEXT_RELEVANCE_BAD) ? 0 : 1),
-    0,
-  );
-  const score = numerator / sentences.length;
+
+  // Split context into units: use chunks if provided, otherwise split into sentences
+  const contextUnits = Array.isArray(context)
+    ? context.filter((chunk) => chunk.trim().length > 0)
+    : splitIntoSentences(context);
+  const totalContextUnits = contextUnits.length;
+
+  // Parse the LLM's response to get relevant sentences
+  const extractedSentences = splitIntoSentences(resp.output);
+  const relevantSentences: string[] = [];
+  const insufficientInformation = resp.output.includes(CONTEXT_RELEVANCE_BAD);
+
+  let numerator = 0;
+  if (insufficientInformation) {
+    // If the entire response is "Insufficient Information", no sentences are relevant
+    numerator = 0;
+  } else {
+    // Count the extracted sentences as relevant
+    numerator = extractedSentences.length;
+    relevantSentences.push(...extractedSentences);
+  }
+
+  // RAGAS CONTEXT RELEVANCE FORMULA: relevant units / total context units
+  const score = totalContextUnits > 0 ? numerator / totalContextUnits : 0;
   const pass = score >= threshold - Number.EPSILON;
+
+  const metadata = {
+    extractedSentences: relevantSentences,
+    totalContextUnits,
+    totalContextSentences: totalContextUnits, // Backward compatibility
+    contextUnits: contextUnits,
+    relevantSentenceCount: numerator,
+    insufficientInformation,
+    score,
+  };
+
   return {
     pass,
     score,
     reason: pass
-      ? `Relevance ${score.toFixed(2)} is >= ${threshold}`
-      : `Relevance ${score.toFixed(2)} is < ${threshold}`,
+      ? `Context relevance ${score.toFixed(2)} is >= ${threshold}`
+      : `Context relevance ${score.toFixed(2)} is < ${threshold}`,
     tokensUsed: {
       total: resp.tokenUsage?.total || 0,
       prompt: resp.tokenUsage?.prompt || 0,
       completion: resp.tokenUsage?.completion || 0,
       cached: resp.tokenUsage?.cached || 0,
+      numRequests: resp.tokenUsage?.numRequests || 0,
       completionDetails: resp.tokenUsage?.completionDetails || {
         reasoning: 0,
         acceptedPrediction: 0,
         rejectedPrediction: 0,
       },
     },
+    metadata,
   };
 }
 
 export async function matchesContextFaithfulness(
   query: string,
   output: string,
-  context: string,
+  context: string | string[],
   threshold: number,
   grading?: GradingConfig,
   vars?: Record<string, string | object>,
+  providerCallContext?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   const textProvider = await getAndCheckProvider(
     'text',
@@ -1147,6 +1453,7 @@ export async function matchesContextFaithfulness(
     prompt: 0,
     completion: 0,
     cached: 0,
+    numRequests: 0,
     completionDetails: {
       reasoning: 0,
       acceptedPrediction: 0,
@@ -1157,14 +1464,17 @@ export async function matchesContextFaithfulness(
   if (grading?.rubricPrompt) {
     invariant(Array.isArray(grading.rubricPrompt), 'rubricPrompt must be an array');
   }
-  const longformPrompt: string =
-    (typeof grading?.rubricPrompt?.[0] === 'string'
+  // Load rubric prompts using loadRubricPrompt to support file:// references with templates
+  const rawLongformPrompt =
+    typeof grading?.rubricPrompt?.[0] === 'string'
       ? grading?.rubricPrompt?.[0]
-      : grading?.rubricPrompt?.[0].content) || CONTEXT_FAITHFULNESS_LONGFORM;
-  const nliPrompt: string =
-    (typeof grading?.rubricPrompt?.[1] === 'string'
+      : grading?.rubricPrompt?.[0]?.content;
+  const rawNliPrompt =
+    typeof grading?.rubricPrompt?.[1] === 'string'
       ? grading?.rubricPrompt?.[1]
-      : grading?.rubricPrompt?.[1].content) || CONTEXT_FAITHFULNESS_NLI_STATEMENTS;
+      : grading?.rubricPrompt?.[1]?.content;
+  const longformPrompt = await loadRubricPrompt(rawLongformPrompt, CONTEXT_FAITHFULNESS_LONGFORM);
+  const nliPrompt = await loadRubricPrompt(rawNliPrompt, CONTEXT_FAITHFULNESS_NLI_STATEMENTS);
 
   let promptText = await renderLlmRubricPrompt(longformPrompt, {
     question: query,
@@ -1172,7 +1482,17 @@ export async function matchesContextFaithfulness(
     ...(vars || {}),
   });
 
-  let resp = await textProvider.callApi(promptText);
+  let resp = await callProviderWithContext(
+    textProvider,
+    promptText,
+    'context-faithfulness-longform',
+    {
+      question: query,
+      answer: tryParse(output),
+      ...(vars || {}),
+    },
+    providerCallContext,
+  );
   accumulateTokens(tokensUsed, resp.tokenUsage);
   if (resp.error || !resp.output) {
     return fail(resp.error || 'No output', tokensUsed);
@@ -1180,14 +1500,27 @@ export async function matchesContextFaithfulness(
 
   invariant(typeof resp.output === 'string', 'context-faithfulness produced malformed response');
 
+  // Convert context to string for LLM prompt
+  const contextString = serializeContext(context);
+
   const statements = splitIntoSentences(resp.output);
   promptText = await renderLlmRubricPrompt(nliPrompt, {
-    context,
+    context: contextString,
     statements,
     ...(vars || {}),
   });
 
-  resp = await textProvider.callApi(promptText);
+  resp = await callProviderWithContext(
+    textProvider,
+    promptText,
+    'context-faithfulness-nli',
+    {
+      context: contextString,
+      statements,
+      ...(vars || {}),
+    },
+    providerCallContext,
+  );
   accumulateTokens(tokensUsed, resp.tokenUsage);
   if (resp.error || !resp.output) {
     return fail(resp.error || 'No output', tokensUsed);
@@ -1224,6 +1557,7 @@ export async function matchesSelectBest(
   outputs: string[],
   grading?: GradingConfig,
   vars?: Record<string, string | object>,
+  providerCallContext?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>[]> {
   invariant(
     outputs.length >= 2,
@@ -1243,7 +1577,17 @@ export async function matchesSelectBest(
     ...(vars || {}),
   });
 
-  const resp = await textProvider.callApi(promptText);
+  const resp = await callProviderWithContext(
+    textProvider,
+    promptText,
+    'select-best',
+    {
+      criteria,
+      outputs: outputs.map((o) => tryParse(o)),
+      ...(vars || {}),
+    },
+    providerCallContext,
+  );
   if (resp.error || !resp.output) {
     return new Array(outputs.length).fill(fail(resp.error || 'No output', resp.tokenUsage));
   }
@@ -1262,13 +1606,14 @@ export async function matchesSelectBest(
     prompt: resp.tokenUsage?.prompt || 0,
     completion: resp.tokenUsage?.completion || 0,
     cached: resp.tokenUsage?.cached || 0,
+    numRequests: resp.tokenUsage?.numRequests || 0,
     completionDetails: resp.tokenUsage?.completionDetails || {
       reasoning: 0,
       acceptedPrediction: 0,
       rejectedPrediction: 0,
     },
   };
-  return outputs.map((output, index) => {
+  return outputs.map((_output, index) => {
     if (index === verdict) {
       return {
         pass: true,
@@ -1287,10 +1632,225 @@ export async function matchesSelectBest(
   });
 }
 
+export async function selectMaxScore(
+  outputs: string[],
+  resultsWithGradingResults: Array<{
+    gradingResult?: { componentResults?: GradingResult[] } | null;
+  }>,
+  assertion: Assertion,
+): Promise<Omit<GradingResult, 'assertion'>[]> {
+  invariant(
+    outputs.length >= 2,
+    'max-score assertion must have at least two outputs to compare between',
+  );
+
+  // Parse options from assertion value
+  const value = assertion.value || {};
+  const options = {
+    method: (typeof value === 'object' && 'method' in value ? value.method : 'average') as
+      | 'average'
+      | 'sum',
+    weights: (typeof value === 'object' && 'weights' in value ? value.weights : {}) as Record<
+      string,
+      number
+    >,
+    threshold:
+      typeof value === 'object' && 'threshold' in value ? (value.threshold as number) : undefined,
+  };
+
+  // Calculate aggregate score for each output
+  const scores = resultsWithGradingResults.map((result, index) => {
+    // Get component results from gradingResult if available
+    const componentResults = result.gradingResult?.componentResults || [];
+
+    // Filter out max-score and select-best assertions
+    const relevantResults = componentResults.filter(
+      (r: GradingResult) =>
+        r.assertion && r.assertion.type !== 'max-score' && r.assertion.type !== 'select-best',
+    );
+
+    if (relevantResults.length === 0) {
+      throw new Error(
+        'max-score requires at least one other assertion (besides max-score or select-best) to aggregate scores from',
+      );
+    }
+
+    // Calculate weighted scores for each assertion
+    let totalWeightedScore = 0;
+    let totalWeight = 0;
+
+    relevantResults.forEach((componentResult: GradingResult) => {
+      const assertionType = componentResult.assertion?.type || 'unknown';
+      const weight =
+        options.weights[assertionType] !== undefined ? options.weights[assertionType] : 1.0; // Default weight is 1
+
+      const score = componentResult.score || 0;
+      totalWeightedScore += score * weight;
+      totalWeight += weight;
+    });
+
+    // Calculate aggregate score based on method
+    let aggregateScore: number;
+    if (options.method === 'sum') {
+      aggregateScore = totalWeightedScore;
+    } else {
+      // Average method (default)
+      aggregateScore = totalWeight > 0 ? totalWeightedScore / totalWeight : 0;
+    }
+
+    return {
+      index,
+      score: aggregateScore,
+      componentCount: relevantResults.length,
+      totalWeight,
+    };
+  });
+
+  // Find max score (with deterministic tie-breaking by index)
+  let maxScore = -Infinity;
+  let winnerIndex = 0;
+
+  for (let i = 0; i < scores.length; i++) {
+    if (scores[i].score > maxScore) {
+      maxScore = scores[i].score;
+      winnerIndex = i;
+    }
+  }
+
+  // Apply threshold if specified
+  const meetsThreshold = options.threshold === undefined || maxScore >= options.threshold;
+
+  // Return results for each output
+  return scores.map(({ index, score, componentCount, totalWeight }) => {
+    const isWinner = index === winnerIndex && meetsThreshold;
+
+    return {
+      pass: isWinner,
+      score: isWinner ? 1 : 0,
+      reason: isWinner
+        ? `Selected as highest scoring output (score: ${score.toFixed(3)})`
+        : score === maxScore && !meetsThreshold
+          ? `Not selected - score ${score.toFixed(3)} below threshold ${options.threshold}`
+          : `Not selected (score: ${score.toFixed(3)}, max: ${maxScore.toFixed(3)})`,
+      namedScores: {
+        maxScore: score,
+        assertionCount: componentCount,
+        totalWeight,
+      },
+    };
+  });
+}
+
 interface ModerationMatchOptions {
   userPrompt: string;
   assistantResponse: string;
   categories?: string[];
+}
+
+export async function matchesSearchRubric(
+  rubric: string,
+  llmOutput: string,
+  grading?: GradingConfig,
+  vars?: Record<string, string | object>,
+  assertion?: Assertion,
+  _provider?: ApiProvider,
+): Promise<GradingResult> {
+  if (!grading) {
+    throw new Error(
+      'Cannot grade output without grading config. Specify --grader option or grading config.',
+    );
+  }
+
+  // Search rubric assertion is like llm-rubric but with web search capabilities
+  const defaultProviders = await getDefaultProviders();
+
+  // Get a provider with web search capabilities
+  let searchProvider =
+    grading.provider ||
+    defaultProviders.webSearchProvider ||
+    defaultProviders.llmRubricProvider ||
+    defaultProviders.gradingProvider;
+
+  // Check if current provider has web search, if not try to load one
+  if (!hasWebSearchCapability(searchProvider)) {
+    // Try to load a provider with web search capabilities
+    // For search-rubric assertion, prefer Anthropic first (pass true)
+    const webSearchProvider = await loadWebSearchProvider(true);
+    if (webSearchProvider) {
+      searchProvider = webSearchProvider;
+    }
+  }
+
+  // Ensure we have a provider with web search capabilities
+  if (!searchProvider || !hasWebSearchCapability(searchProvider)) {
+    throw new Error(
+      'search-rubric assertion requires a grading provider with web search capabilities. ' +
+        'Use --grader with a web search provider (e.g., anthropic:messages:claude-sonnet-4, openai:responses:o4-mini with tools configured, perplexity:sonar) or configure one in defaultTest.options.provider',
+    );
+  }
+
+  // Load the web search rubric prompt
+  const rubricPrompt = await loadRubricPrompt(grading?.rubricPrompt, DEFAULT_WEB_SEARCH_PROMPT);
+  const prompt = await renderLlmRubricPrompt(rubricPrompt, {
+    output: tryParse(llmOutput),
+    rubric,
+    ...(vars || {}),
+  });
+
+  // Get the evaluation from the search provider
+  const resp = await searchProvider.callApi(prompt);
+
+  if (resp.error || !resp.output) {
+    return {
+      pass: false,
+      score: 0,
+      reason: `Search rubric evaluation failed: ${resp.error || 'No output'}`,
+      tokensUsed: resp.tokenUsage,
+      assertion,
+    };
+  }
+
+  // Parse the response
+  try {
+    const result = extractFirstJsonObject(String(resp.output)) as {
+      pass?: boolean;
+      score?: number;
+      reason?: string;
+      searchResults?: any;
+    };
+
+    // Apply threshold if specified
+    let pass = result.pass ?? false;
+    const score = typeof result.score === 'number' ? result.score : pass ? 1 : 0;
+
+    if (assertion?.threshold !== undefined) {
+      pass = pass && score >= assertion.threshold;
+    }
+
+    return {
+      pass,
+      score,
+      reason: result.reason || 'No reason provided',
+      tokensUsed: resp.tokenUsage,
+      assertion,
+      metadata: {
+        searchResults: result.searchResults || [],
+        searchProvider: searchProvider.id(),
+      },
+    };
+  } catch {
+    // Try to parse as a simple pass/fail
+    const outputLower = String(resp.output).toLowerCase();
+    const pass = outputLower.includes('"pass":true') || outputLower.includes('"pass": true');
+
+    return {
+      pass,
+      score: pass ? 1 : 0,
+      reason: resp.output as string,
+      tokensUsed: resp.tokenUsage,
+      assertion,
+    };
+  }
 }
 
 export async function matchesModeration(

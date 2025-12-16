@@ -1,5 +1,6 @@
 ---
 sidebar_label: RBAC
+description: Red team role-based access control by simulating unauthorized privilege escalation attempts to protect AI systems from dangerous authorization bypasses
 ---
 
 # Role-Based Access Control (RBAC) Plugin

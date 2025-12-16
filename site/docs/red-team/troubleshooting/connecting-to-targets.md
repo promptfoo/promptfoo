@@ -1,5 +1,6 @@
 ---
 sidebar_label: Connecting to Targets
+description: Red team API authentication and rate limiting configurations by validating security headers and tokens to protect AI systems from unauthorized access and abuse
 ---
 
 # Connecting to Targets
@@ -39,3 +40,20 @@ headers:
 ## Streaming or Polling
 
 Many chatbots will stream responses back to the client or have the client poll for new messages. The solution here is to setup an alternate HTTP endpoint or parameter to return the response in a single message.
+
+## Using WebSockets for Realtime Targets
+
+If your target exposes a Realtime WebSocket-compatible API, you can test it directly:
+
+- With the generic [WebSocket provider](/docs/providers/websocket/)
+- With the [OpenAI Realtime provider](/docs/providers/openai/#realtime-api-models)
+
+For OpenAI-compatible Realtime targets (including proxies and local/dev deployments), set `apiBaseUrl` (or `OPENAI_API_BASE_URL`/`OPENAI_BASE_URL`). The WebSocket URL will be derived automatically (https→wss, http→ws), allowing you to route through corporate proxies or test on `localhost`:
+
+```yaml
+providers:
+  - id: openai:realtime:gpt-4o-realtime-preview
+    config:
+      apiBaseUrl: 'http://localhost:8080/v1' # → ws://localhost:8080/v1/realtime
+      modalities: ['text']
+```

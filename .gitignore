@@ -4,6 +4,7 @@
 
 # Temporary and generated files
 scratch
+.worktrees/
 *.sw[op]
 *.log
 .DS_Store
@@ -11,7 +12,8 @@ node_modules
 dist
 .aider*
 .vite
-*.tsbuildinfo
+**/*.tsbuildinfo
+task.md
 
 # pnpm-specific
 .pnpm-store/
@@ -34,4 +36,13 @@ examples/huggingface-dataset-factuality/.cache
 examples/redteam-dalle/images
 examples/redteam-medical-agent/redteam.yaml
 
+# Evaluation results
+examples/grok-4-political-bias/results.json
+examples/grok-4-political-bias/results-multi-judge.json
+
+# LLM Tool Settings
 **/.claude/settings.local.json
+.serena/
+
+# Code scan
+code-scan-action/dist/test.mp4

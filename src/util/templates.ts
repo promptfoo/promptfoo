@@ -2,7 +2,7 @@ import nunjucks from 'nunjucks';
 import cliState from '../cliState';
 import { getEnvBool } from '../envars';
 
-import type { NunjucksFilterMap } from '../types';
+import type { NunjucksFilterMap } from '../types/index';
 
 /**
  * Get a Nunjucks engine instance with optional filters and configuration.

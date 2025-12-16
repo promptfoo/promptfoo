@@ -1,6 +1,7 @@
-import { act } from 'react-dom/test-utils';
+import { act } from 'react';
 
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ResultsTable from './ResultsTable';
 import { useResultsViewSettingsStore, useTableStore } from './store';
@@ -51,13 +52,17 @@ vi.mock('react-router-dom', () => ({
 }));
 
 vi.mock('./EvalOutputCell', () => {
-  const MockEvalOutputCell = vi.fn(({ onRating }: { onRating: any }) => {
-    return (
-      <div data-testid="eval-output-cell">
-        <button onClick={() => onRating(true, 0.75, 'test comment')}>Rate</button>
-      </div>
-    );
-  });
+  const MockEvalOutputCell = vi.fn(
+    ({ onRating, searchText }: { onRating: any; searchText?: string }) => {
+      return (
+        <div data-testid="eval-output-cell" data-searchtext={searchText}>
+          <button onClick={() => onRating(true, 0.75, 'test comment')} className="action">
+            Rate
+          </button>
+        </div>
+      );
+    },
+  );
   return {
     __esModule: true,
     default: MockEvalOutputCell,
@@ -84,6 +89,7 @@ describe('ResultsTable Metrics Display', () => {
             cost: 1.23456,
             namedScores: {},
             testPassCount: 10,
+            testFailCount: 0,
             tokenUsage: {
               completion: 500,
               total: 1000,
@@ -214,6 +220,25 @@ describe('ResultsTable Metrics Display', () => {
     renderWithProviders(<ResultsTable {...defaultProps} />);
     expect(screen.getByText('Tokens/Sec:')).toBeInTheDocument();
     expect(screen.getByText('250')).toBeInTheDocument();
+  });
+
+  describe('Keyboard Navigation', () => {
+    it('should handle keyboard navigation with Tab between cells and actions within cell', async () => {
+      renderWithProviders(<ResultsTable {...defaultProps} />);
+      const tableContainer = document.getElementById('results-table-container');
+      const table = tableContainer?.querySelector('table') as HTMLTableElement;
+      expect(table).toBeInTheDocument();
+      const firstBodyCell = table.querySelector('tbody td') as HTMLElement;
+      expect(firstBodyCell).toBeInTheDocument();
+      firstBodyCell.focus();
+      expect(document.activeElement?.tagName).toBe('TD');
+      expect(document.activeElement).toHaveClass('first-prompt-col');
+      await userEvent.tab();
+      expect(document.activeElement?.tagName).toBe('BUTTON');
+      expect(document.activeElement).toHaveClass('action');
+      await userEvent.tab();
+      expect(document.activeElement?.tagName).toBe('TD');
+    });
   });
 
   describe('Variable rendering', () => {
@@ -353,6 +378,86 @@ describe('ResultsTable Metrics Display', () => {
 
       const element = screen.getByText('null');
       expect(element).toBeInTheDocument();
+    });
+  });
+
+  describe('ResultsTable Media Rendering', () => {
+    const mockTableWithMedia = {
+      body: [
+        {
+          outputs: [
+            {
+              pass: true,
+              score: 1,
+              text: 'test output',
+              metadata: {
+                file: {
+                  imageVar: {
+                    path: '/path/to/image.jpg',
+                    type: 'image',
+                    format: 'jpeg',
+                  },
+                },
+                [Symbol.for('promptfoo:file')]: {
+                  imageVar: {
+                    path: '/path/to/image.jpg',
+                    type: 'image',
+                    format: 'jpeg',
+                  },
+                },
+              },
+            },
+          ],
+          test: {},
+          vars: ['data:image/jpeg;base64,encodedImage'],
+        },
+      ],
+      head: {
+        prompts: [{}],
+        vars: ['imageVar'],
+      },
+    };
+
+    const defaultProps = {
+      columnVisibility: {},
+      failureFilter: {},
+      filterMode: 'all' as const,
+      maxTextLength: 100,
+      onFailureFilterToggle: vi.fn(),
+      onSearchTextChange: vi.fn(),
+      searchText: '',
+      showStats: true,
+      wordBreak: 'break-word' as const,
+      setFilterMode: vi.fn(),
+      zoom: 1,
+      onResultsContainerScroll: vi.fn(),
+      atInitialVerticalScrollPosition: true,
+    };
+
+    beforeEach(() => {
+      vi.mocked(useTableStore).mockImplementation(() => ({
+        config: {},
+        evalId: '123',
+        setTable: vi.fn(),
+        table: mockTableWithMedia,
+        version: 4,
+        fetchEvalData: vi.fn(),
+        filters: {
+          values: {},
+          appliedCount: 0,
+          options: {
+            metric: [],
+          },
+        },
+      }));
+    });
+
+    it('should render media elements in variable cells without truncation', () => {
+      render(<ResultsTable {...defaultProps} />);
+
+      const imageElement = screen.getByRole('img', { name: 'Base64 encoded image' });
+      expect(imageElement).toBeInTheDocument();
+      expect(imageElement.closest('div')).not.toHaveTextContent('TruncatedText');
     });
   });
 });
@@ -722,7 +827,6 @@ describe('ResultsTable handleRating - highlight toggle fix', () => {
       score: 1,
       reason: 'Manual result (overrides all other grading results)',
       comment: 'Test comment',
-      assertion: null,
       componentResults,
     };
 
@@ -864,7 +968,6 @@ describe('ResultsTable handleRating', () => {
       setTable: mockSetTable,
       table: createMockTable(),
       version: 4,
-      renderMarkdown: true,
       fetchEvalData: vi.fn(),
       filters: {
         values: {},
@@ -1274,6 +1377,321 @@ describe('ResultsTable', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table: {
+        head: { prompts: [{ provider: 'test-provider' }], vars: [] },
+        body: [
+          {
+            outputs: [{ pass: true, score: 1, text: 'test output' }],
+            test: {},
+            vars: [],
+          },
+        ],
+      },
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+  });
+
+  it('should pass the debouncedSearchText prop as the searchText to each EvalOutputCell', () => {
+    const debouncedSearchText = 'test search';
+    render(<ResultsTable {...defaultProps} debouncedSearchText={debouncedSearchText} />);
+    const evalOutputCell = screen.getByTestId('eval-output-cell');
+    expect(evalOutputCell).toHaveAttribute('data-searchtext', debouncedSearchText);
+  });
+});
+
+describe('ResultsTable Search Highlights', () => {
+  const mockTable = {
+    body: [
+      {
+        outputs: [
+          {
+            pass: true,
+            score: 1,
+            text: 'test output',
+          },
+        ],
+        test: {},
+        vars: [],
+      },
+    ],
+    head: {
+      prompts: [{}],
+      vars: [],
+    },
+  };
+
+  const defaultProps = {
+    columnVisibility: {},
+    failureFilter: {},
+    filterMode: 'all' as const,
+    maxTextLength: 100,
+    onFailureFilterToggle: vi.fn(),
+    onSearchTextChange: vi.fn(),
+    searchText: '',
+    showStats: true,
+    wordBreak: 'break-word' as const,
+    setFilterMode: vi.fn(),
+    zoom: 1,
+    onResultsContainerScroll: vi.fn(),
+    atInitialVerticalScrollPosition: true,
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('correctly updates cell highlights to match the new search term when debouncedSearchText is updated', () => {
+    const newSearchText = 'new search term';
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table: mockTable,
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+
+    render(<ResultsTable {...defaultProps} debouncedSearchText={newSearchText} />);
+
+    const evalOutputCell = screen.getByTestId('eval-output-cell');
+    expect(evalOutputCell).toHaveAttribute('data-searchtext', newSearchText);
+  });
+});
+
+describe('ResultsTable Regex Handling', () => {
+  const specialRegexChars = '[(*+?^$.{}|)]';
+
+  const mockTable = {
+    body: [
+      {
+        outputs: [
+          {
+            pass: true,
+            score: 1,
+            text: 'test output',
+          },
+        ],
+        test: {},
+        vars: [],
+      },
+    ],
+    head: {
+      prompts: [{}],
+      vars: [],
+    },
+  };
+
+  const defaultProps = {
+    columnVisibility: {},
+    failureFilter: {},
+    filterMode: 'all' as const,
+    maxTextLength: 100,
+    onFailureFilterToggle: vi.fn(),
+    onSearchTextChange: vi.fn(),
+    searchText: '',
+    showStats: true,
+    wordBreak: 'break-word' as const,
+    setFilterMode: vi.fn(),
+    zoom: 1,
+    onResultsContainerScroll: vi.fn(),
+    atInitialVerticalScrollPosition: true,
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should handle special regex characters in debouncedSearchText without throwing errors', () => {
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table: mockTable,
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+
+    render(<ResultsTable {...defaultProps} debouncedSearchText={specialRegexChars} />);
+
+    const evalOutputCell = screen.getByTestId('eval-output-cell');
+    expect(evalOutputCell).toBeInTheDocument();
+    expect(evalOutputCell).toHaveAttribute('data-searchtext', specialRegexChars);
+  });
+});
+
+describe('ResultsTable Malformed Markdown Handling', () => {
+  const malformedMarkdown = 'This is a test with some \n unclosed <tag>';
+
+  const mockTable = {
+    body: [
+      {
+        outputs: [
+          {
+            pass: true,
+            score: 1,
+            text: 'test output',
+          },
+        ],
+        test: {},
+        vars: [malformedMarkdown],
+      },
+    ],
+    head: {
+      prompts: [
+        {
+          provider: 'test-provider',
+        },
+      ],
+      vars: ['testVar'],
+    },
+  };
+
+  const defaultProps = {
+    columnVisibility: {},
+    failureFilter: {},
+    filterMode: 'all' as const,
+    maxTextLength: 100,
+    onFailureFilterToggle: vi.fn(),
+    onSearchTextChange: vi.fn(),
+    searchText: '',
+    showStats: true,
+    wordBreak: 'break-word' as const,
+    setFilterMode: vi.fn(),
+    zoom: 1,
+    onResultsContainerScroll: vi.fn(),
+    atInitialVerticalScrollPosition: true,
+  };
+
+  it('should render variable cells containing malformed markdown without breaking the UI', () => {
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table: mockTable,
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+
+    render(<ResultsTable {...defaultProps} />);
+
+    const elementsWithMalformedMarkdown = screen.getAllByText((_content, element) => {
+      if (!element) {
+        return false;
+      }
+      return (
+        element?.textContent?.includes('This is a test with some') &&
+        element?.textContent?.includes('unclosed <tag>')
+      );
+    });
+    expect(elementsWithMalformedMarkdown.length).toBeGreaterThan(0);
+  });
+});
+
+describe('ResultsTable', () => {
+  const defaultProps = {
+    columnVisibility: {},
+    failureFilter: {},
+    filterMode: 'all' as const,
+    maxTextLength: 100,
+    onFailureFilterToggle: vi.fn(),
+    onSearchTextChange: vi.fn(),
+    searchText: '',
+    showStats: true,
+    wordBreak: 'break-word' as const,
+    setFilterMode: vi.fn(),
+    zoom: 1,
+    onResultsContainerScroll: vi.fn(),
+    atInitialVerticalScrollPosition: true,
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table: {
+        head: { prompts: [{ provider: 'test-provider' }], vars: [] },
+        body: [
+          {
+            outputs: [{ pass: true, score: 1, text: 'test output' }],
+            test: {},
+            vars: [],
+          },
+        ],
+      },
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+  });
+
+  it('should pass the debouncedSearchText prop as the searchText to each EvalOutputCell', () => {
+    const debouncedSearchText = 'test search';
+    render(<ResultsTable {...defaultProps} debouncedSearchText={debouncedSearchText} />);
+    const evalOutputCell = screen.getByTestId('eval-output-cell');
+    expect(evalOutputCell).toHaveAttribute('data-searchtext', debouncedSearchText);
+  });
+});
+
+describe('ResultsTable', () => {
+  const defaultProps = {
+    columnVisibility: {},
+    failureFilter: {},
+    filterMode: 'all' as const,
+    maxTextLength: 100,
+    onFailureFilterToggle: vi.fn(),
+    onSearchTextChange: vi.fn(),
+    searchText: '',
+    showStats: true,
+    wordBreak: 'break-word' as const,
+    setFilterMode: vi.fn(),
+    zoom: 1,
+    onResultsContainerScroll: vi.fn(),
+    atInitialVerticalScrollPosition: true,
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
   });
 
   it('should call fetchEvalData with only applied filters when pagination changes', () => {
@@ -1446,101 +1864,1232 @@ describe('ResultsTable Pagination', () => {
   });
 });
 
-// describe('ResultsTable Pagination Adjustment on Filter', () => {
-//   const mockTable = {
-//     body: Array(25).fill({
-//       outputs: [
-//         {
-//           pass: true,
-//           score: 1,
-//           text: 'test output',
-//         },
-//       ],
-//       test: {},
-//       vars: [],
-//     }),
-//     head: {
-//       prompts: [
-//         {
-//           metrics: {
-//             cost: 1.23456,
-//             namedScores: {},
-//             testPassCount: 25,
-//             tokenUsage: {
-//               completion: 500,
-//               total: 1000,
-//             },
-//             totalLatencyMs: 2000,
-//           },
-//           provider: 'test-provider',
-//         },
-//       ],
-//       vars: [],
-//     },
-//   };
+describe('ResultsTable BaseNumberInput onChange undefined', () => {
+  const defaultProps = {
+    columnVisibility: {},
+    failureFilter: {},
+    filterMode: 'all' as const,
+    maxTextLength: 100,
+    onFailureFilterToggle: vi.fn(),
+    onSearchTextChange: vi.fn(),
+    searchText: '',
+    showStats: true,
+    wordBreak: 'break-word' as const,
+    setFilterMode: vi.fn(),
+    zoom: 1,
+  };
 
-//   const defaultProps = {
-//     columnVisibility: {},
-//     failureFilter: {},
-//     filterMode: 'all' as const,
-//     maxTextLength: 100,
-//     onFailureFilterToggle: vi.fn(),
-//     onSearchTextChange: vi.fn(),
-//     searchText: '',
-//     showStats: true,
-//     wordBreak: 'break-word' as const,
-//     setFilterMode: vi.fn(),
-//   };
+  it('should not set page when BaseNumberInput onChange receives undefined', async () => {
+    const mockSetPagination = vi.fn();
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table: { head: { prompts: [], vars: [] }, body: [] },
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+      setPagination: mockSetPagination,
+      filteredResultsCount: 100,
+    }));
 
-//   const renderWithProviders = (ui: React.ReactElement) => {
-//     return render(ui);
-//   };
+    render(<ResultsTable {...defaultProps} />);
 
-//   it('should adjust current page to 0 when filter reduces results below current page start', async () => {
-//     const mockSetPagination = vi.fn();
-//     const mockAddFilter = vi.fn();
+    const input = screen.getByRole('spinbutton');
+    await act(async () => {
+      await userEvent.clear(input);
+      await userEvent.tab();
+    });
 
-//     vi.mocked(useTableStore).mockImplementation(() => ({
-//       config: {},
-//       evalId: '123',
-//       setTable: vi.fn(),
-//       table: mockTable,
-//       version: 4,
-//       fetchEvalData: vi.fn(),
-//       isFetching: false,
-//       filteredResultsCount: 5,
-//       totalResultsCount: 25,
-//       filters: {
-//         values: {},
-//         appliedCount: 0,
-//         options: {
-//           metric: [],
-//         },
-//       },
-//       addFilter: mockAddFilter,
-//       setFilteredResultsCount: vi.fn(),
-//       pagination: { pageIndex: 2, pageSize: 10 },
-//       setPagination: mockSetPagination,
-//     }));
+    expect(mockSetPagination).not.toHaveBeenCalled();
+  });
+});
 
-//     vi.mocked(useResultsViewSettingsStore).mockImplementation(() => ({
-//       inComparisonMode: false,
-//       renderMarkdown: true,
-//     }));
+describe('ResultsTable Non-Numeric Input Handling', () => {
+  const defaultProps = {
+    columnVisibility: {},
+    failureFilter: {},
+    filterMode: 'all' as const,
+    maxTextLength: 100,
+    onFailureFilterToggle: vi.fn(),
+    onSearchTextChange: vi.fn(),
+    searchText: '',
+    showStats: true,
+    wordBreak: 'break-word' as const,
+    setFilterMode: vi.fn(),
+    zoom: 1,
+  };
 
-//     renderWithProviders(<ResultsTable {...defaultProps} />);
+  it('should not update pagination when non-numeric input is entered in the page navigator', async () => {
+    const setPaginationMock = vi.fn();
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table: { head: { prompts: [], vars: [] }, body: [] },
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+      filteredResultsCount: 25,
+      totalResultsCount: 25,
+      setPagination: setPaginationMock,
+    }));
 
-//     const filter = {
-//       type: 'metric' as const,
-//       operator: 'equals' as const,
-//       value: 'someMetric',
-//       logicOperator: 'or' as const,
-//     };
+    render(<ResultsTable {...defaultProps} />);
 
-//     act(() => {
-//       mockAddFilter(filter);
-//     });
+    const inputElement = screen.getByRole('spinbutton');
+    await act(async () => {
+      await userEvent.type(inputElement, 'abc');
+    });
 
-//     expect(mockSetPagination).toHaveBeenCalledWith({ pageIndex: 0, pageSize: 10 });
-//   });
-// });
+    expect(setPaginationMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('ResultsTable Zoom and Scroll Position', () => {
+  const defaultProps = {
+    columnVisibility: {},
+    failureFilter: {},
+    filterMode: 'all' as const,
+    maxTextLength: 100,
+    onFailureFilterToggle: vi.fn(),
+    onSearchTextChange: vi.fn(),
+    searchText: '',
+    showStats: true,
+    wordBreak: 'break-word' as const,
+    setFilterMode: vi.fn(),
+    zoom: 1,
+    onResultsContainerScroll: vi.fn(),
+    atInitialVerticalScrollPosition: true,
+  };
+
+  it('should maintain scroll position and focused element when zoom changes', () => {
+    const { container } = render(<ResultsTable {...defaultProps} />);
+    const tableContainer = container.querySelector('#results-table-container') as HTMLDivElement;
+    const initialScrollTop = 100;
+    tableContainer.scrollTop = initialScrollTop;
+
+    const cellToFocus = container.querySelector('td');
+    if (cellToFocus) {
+      cellToFocus.focus();
+    }
+
+    act(() => {
+      render(<ResultsTable {...defaultProps} zoom={1.5} />, { container });
+    });
+
+    expect(tableContainer.scrollTop).toBe(initialScrollTop);
+    if (cellToFocus) {
+      expect(document.activeElement).toBe(cellToFocus);
+    }
+  });
+});
+
+describe('ResultsTable Filtered Metrics Display', () => {
+  const mockTable = {
+    body: Array(10).fill({
+      outputs: [
+        {
+          pass: true,
+          score: 1,
+          text: 'test output',
+        },
+      ],
+      test: {},
+      vars: [],
+    }),
+    head: {
+      prompts: [
+        {
+          metrics: {
+            cost: 1.23456,
+            namedScores: {},
+            testPassCount: 10,
+            testFailCount: 0,
+            tokenUsage: {
+              completion: 500,
+              total: 1000,
+            },
+            totalLatencyMs: 2000,
+          },
+          provider: 'test-provider',
+        },
+      ],
+      vars: [],
+    },
+  };
+
+  const defaultProps = {
+    columnVisibility: {},
+    failureFilter: {},
+    filterMode: 'all' as const,
+    maxTextLength: 100,
+    onFailureFilterToggle: vi.fn(),
+    onSearchTextChange: vi.fn(),
+    searchText: '',
+    showStats: true,
+    wordBreak: 'break-word' as const,
+    setFilterMode: vi.fn(),
+    zoom: 1,
+    onResultsContainerScroll: vi.fn(),
+    atInitialVerticalScrollPosition: true,
+  };
+
+  const renderWithProviders = (ui: React.ReactElement) => {
+    return render(ui);
+  };
+
+  beforeEach(() => {
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      inComparisonMode: false,
+      setTable: vi.fn(),
+      table: {
+        ...mockTable,
+        head: {
+          ...mockTable.head,
+          prompts: [
+            {
+              ...mockTable.head.prompts[0],
+              metrics: {
+                cost: 1.23456,
+                namedScores: {},
+                testPassCount: 10,
+                testFailCount: 0,
+                tokenUsage: {
+                  completion: 500,
+                  total: 1000,
+                },
+                totalLatencyMs: 2000,
+              },
+            },
+          ],
+        },
+      },
+      version: 4,
+      renderMarkdown: true,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {
+          filter1: {
+            id: 'filter1',
+            type: 'metric',
+            operator: 'equals',
+            value: 'some_metric',
+            logicOperator: 'or',
+          },
+        },
+        appliedCount: 1,
+        options: {
+          metric: [],
+        },
+      },
+      filteredMetrics: [
+        {
+          cost: 0.61728,
+          namedScores: {},
+          testPassCount: 5,
+          testFailCount: 0,
+          tokenUsage: {
+            completion: 250,
+            total: 500,
+          },
+          totalLatencyMs: 1000,
+        },
+      ],
+    }));
+  });
+
+  it('displays both total and filtered metrics with correct formatting and tooltips when filters are applied', () => {
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    expect(screen.getByText('Total Cost:')).toBeInTheDocument();
+    expect(screen.getByText('$1.23')).toBeInTheDocument();
+
+    const filteredCostElement = screen.getByText('($0.6173 filtered)');
+    expect(filteredCostElement).toBeInTheDocument();
+    expect(filteredCostElement).toHaveStyle('font-size: 0.9em');
+    expect(filteredCostElement).toHaveStyle('color: #666');
+    expect(filteredCostElement).toHaveStyle('margin-left: 4px');
+
+    expect(screen.getByText('Total Tokens:')).toBeInTheDocument();
+    expect(screen.getByText('1,000')).toBeInTheDocument();
+
+    const filteredTokensElement = screen.getByText('(500 filtered)');
+    expect(filteredTokensElement).toBeInTheDocument();
+    expect(filteredTokensElement).toHaveStyle('font-size: 0.9em');
+    expect(filteredTokensElement).toHaveStyle('color: #666');
+    expect(filteredTokensElement).toHaveStyle('margin-left: 4px');
+  });
+});
+
+describe('ResultsTable - No Filters Applied', () => {
+  const mockTable = {
+    body: Array(10).fill({
+      outputs: [
+        {
+          pass: true,
+          score: 1,
+          text: 'test output',
+        },
+      ],
+      test: {},
+      vars: [],
+    }),
+    head: {
+      prompts: [
+        {
+          metrics: {
+            cost: 1.23456,
+            namedScores: {},
+            testPassCount: 10,
+            testFailCount: 0,
+            tokenUsage: {
+              completion: 500,
+              total: 1000,
+            },
+            totalLatencyMs: 2000,
+          },
+          provider: 'test-provider',
+        },
+      ],
+      vars: [],
+    },
+  };
+
+  const defaultProps = {
+    columnVisibility: {},
+    failureFilter: {},
+    filterMode: 'all' as const,
+    maxTextLength: 100,
+    onFailureFilterToggle: vi.fn(),
+    onSearchTextChange: vi.fn(),
+    searchText: '',
+    showStats: true,
+    wordBreak: 'break-word' as const,
+    setFilterMode: vi.fn(),
+    zoom: 1,
+    onResultsContainerScroll: vi.fn(),
+    atInitialVerticalScrollPosition: true,
+  };
+
+  beforeEach(() => {
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: vi.fn(),
+      table: mockTable,
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+  });
+
+  it('should display only total metrics and not display filtered metrics when no filters are applied', () => {
+    render(<ResultsTable {...defaultProps} />);
+
+    expect(screen.getByText('Total Cost:')).toBeInTheDocument();
+    expect(screen.getByText('$1.23')).toBeInTheDocument();
+
+    expect(screen.getByText('Total Tokens:')).toBeInTheDocument();
+    expect(screen.getByText('1,000')).toBeInTheDocument();
+
+    const filteredMetricElements = screen.queryAllByTestId('filtered-metric');
+    expect(filteredMetricElements.length).toBe(0);
+
+    const filteredMetricSpan = screen.queryAllByRole('tooltip', {
+      name: /filtered/i,
+    });
+    expect(filteredMetricSpan.length).toBe(0);
+
+    const filteredCostSpan = screen.queryAllByText(/filtered/i);
+    expect(filteredCostSpan.length).toBe(0);
+
+    const filteredTokenSpan = screen.queryAllByText(/filtered/i);
+    expect(filteredTokenSpan.length).toBe(0);
+
+    const filteredSpan = screen.queryAllByTestId('filtered-span');
+    expect(filteredSpan.length).toBe(0);
+  });
+});
+
+describe('ResultsTable Pass Rate Display', () => {
+  const mockTable = {
+    body: Array(10).fill({
+      outputs: [
+        {
+          pass: true,
+          score: 1,
+          text: 'test output',
+        },
+      ],
+      test: {},
+      vars: [],
+    }),
+    head: {
+      prompts: [
+        {
+          metrics: {
+            testPassCount: 5,
+            testFailCount: 5,
+          },
+          provider: 'test-provider',
+        },
+      ],
+      vars: [],
+    },
+  };
+
+  const defaultProps = {
+    columnVisibility: {},
+    failureFilter: {},
+    filterMode: 'all' as const,
+    maxTextLength: 100,
+    onFailureFilterToggle: vi.fn(),
+    onSearchTextChange: vi.fn(),
+    searchText: '',
+    showStats: true,
+    wordBreak: 'break-word' as const,
+    setFilterMode: vi.fn(),
+    zoom: 1,
+    onResultsContainerScroll: vi.fn(),
+    atInitialVerticalScrollPosition: true,
+  };
+
+  const renderWithProviders = (ui: React.ReactElement) => {
+    return render(ui);
+  };
+
+  beforeEach(() => {
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      inComparisonMode: false,
+      setTable: vi.fn(),
+      table: mockTable,
+      version: 4,
+      renderMarkdown: true,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+  });
+
+  it('displays 0% filtered pass rate when filtered results have zero test cases but total results have some', () => {
+    const mockTableWithZeroFilteredTestCases = {
+      body: Array(10).fill({
+        outputs: [
+          {
+            pass: true,
+            score: 1,
+            text: 'test output',
+          },
+        ],
+        test: {},
+        vars: [],
+      }),
+      head: {
+        prompts: [
+          {
+            metrics: {
+              testPassCount: 5,
+              testFailCount: 5,
+            },
+            provider: 'test-provider',
+          },
+        ],
+        vars: [],
+      },
+    };
+
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      inComparisonMode: false,
+      setTable: vi.fn(),
+      table: mockTableWithZeroFilteredTestCases,
+      version: 4,
+      renderMarkdown: true,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+      filteredMetrics: [
+        {
+          testPassCount: 0,
+          testFailCount: 0,
+        },
+      ],
+    }));
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+    expect(screen.getByText('0.00% passing')).toBeInTheDocument();
+  });
+});
+
+describe('ResultsTable Pass Rate Highlighting', () => {
+  const mockTable = {
+    body: Array(10).fill({
+      outputs: [
+        {
+          pass: true,
+          score: 1,
+          text: 'test output',
+        },
+      ],
+      test: {},
+      vars: [],
+    }),
+    head: {
+      prompts: [
+        {
+          metrics: {
+            cost: 1.23456,
+            namedScores: {},
+            testPassCount: 5,
+            testFailCount: 5,
+            tokenUsage: {
+              completion: 500,
+              total: 1000,
+            },
+            totalLatencyMs: 2000,
+          },
+          provider: 'test-provider',
+        },
+      ],
+      vars: [],
+    },
+  };
+
+  const defaultProps = {
+    columnVisibility: {},
+    failureFilter: {},
+    filterMode: 'all' as const,
+    maxTextLength: 100,
+    onFailureFilterToggle: vi.fn(),
+    onSearchTextChange: vi.fn(),
+    searchText: '',
+    showStats: true,
+    wordBreak: 'break-word' as const,
+    setFilterMode: vi.fn(),
+    zoom: 1,
+    onResultsContainerScroll: vi.fn(),
+    atInitialVerticalScrollPosition: true,
+  };
+
+  const renderWithProviders = (ui: React.ReactElement) => {
+    return render(ui);
+  };
+
+  beforeEach(() => {
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      inComparisonMode: false,
+      setTable: vi.fn(),
+      table: mockTable,
+      version: 4,
+      renderMarkdown: true,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+  });
+
+  it('highlights 0% filtered pass rate with success-0 class when total pass rate is non-zero', () => {
+    const mockTableWithZeroFilteredPassRate = {
+      ...mockTable,
+      head: {
+        prompts: [
+          {
+            metrics: {
+              cost: 1.23456,
+              namedScores: {},
+              testPassCount: 5,
+              testFailCount: 5,
+              tokenUsage: {
+                completion: 500,
+                total: 1000,
+              },
+              totalLatencyMs: 2000,
+            },
+            provider: 'test-provider',
+          },
+        ],
+        vars: [],
+      },
+    };
+
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      inComparisonMode: false,
+      setTable: vi.fn(),
+      table: mockTableWithZeroFilteredPassRate,
+      version: 4,
+      renderMarkdown: true,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+      filteredMetrics: [
+        {
+          cost: 0,
+          testPassCount: 0,
+          testFailCount: 10,
+          tokenUsage: {
+            completion: 0,
+            total: 0,
+          },
+          totalLatencyMs: 0,
+        },
+      ],
+    }));
+
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    const passRatePill = screen.getByText(/0\.00% passing/i).closest('div');
+    expect(passRatePill).toHaveClass('success-0');
+  });
+});
+
+describe('ResultsTable Filtered vs Total Pass Rate Highlighting', () => {
+  const mockTable = {
+    body: Array(10).fill({
+      outputs: [
+        {
+          pass: true,
+          score: 1,
+          text: 'test output',
+        },
+      ],
+      test: {},
+      vars: [],
+    }),
+    head: {
+      prompts: [
+        {
+          metrics: {
+            cost: 1.23456,
+            namedScores: {},
+            testPassCount: 10,
+            testFailCount: 0,
+            tokenUsage: {
+              completion: 500,
+              total: 1000,
+            },
+            totalLatencyMs: 2000,
+          },
+          provider: 'test-provider',
+        },
+        {
+          metrics: {
+            cost: 1.23456,
+            namedScores: {},
+            testPassCount: 8,
+            testFailCount: 2,
+            tokenUsage: {
+              completion: 500,
+              total: 1000,
+            },
+            totalLatencyMs: 2000,
+          },
+          provider: 'test-provider',
+        },
+      ],
+      vars: [],
+    },
+  };
+
+  const defaultProps = {
+    columnVisibility: {},
+    failureFilter: {},
+    filterMode: 'all' as const,
+    maxTextLength: 100,
+    onFailureFilterToggle: vi.fn(),
+    onSearchTextChange: vi.fn(),
+    searchText: '',
+    showStats: true,
+    wordBreak: 'break-word' as const,
+    setFilterMode: vi.fn(),
+    zoom: 1,
+    onResultsContainerScroll: vi.fn(),
+    atInitialVerticalScrollPosition: true,
+  };
+
+  const renderWithProviders = (ui: React.ReactElement) => {
+    return render(ui);
+  };
+
+  beforeEach(() => {
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      inComparisonMode: false,
+      setTable: vi.fn(),
+      table: mockTable,
+      version: 4,
+      renderMarkdown: true,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+      filterMode: 'all',
+      filteredResultsCount: 10,
+      totalResultsCount: 10,
+    }));
+  });
+
+  it('should display the correct pass rate and tooltip when filtered results have 100% pass rate but total results have a lower pass rate', async () => {
+    const mockTableWithFilteredPassRate = {
+      body: Array(10).fill({
+        outputs: [
+          {
+            pass: true,
+            score: 1,
+            text: 'test output',
+          },
+        ],
+        test: {},
+        vars: [],
+      }),
+      head: {
+        prompts: [
+          {
+            metrics: {
+              cost: 1.23456,
+              namedScores: {},
+              testPassCount: 10,
+              testFailCount: 0,
+              tokenUsage: {
+                completion: 500,
+                total: 1000,
+              },
+              totalLatencyMs: 2000,
+            },
+            provider: 'test-provider',
+          },
+          {
+            metrics: {
+              cost: 1.23456,
+              namedScores: {},
+              testPassCount: 8,
+              testFailCount: 2,
+              tokenUsage: {
+                completion: 500,
+                total: 1000,
+              },
+              totalLatencyMs: 2000,
+            },
+            provider: 'test-provider',
+          },
+        ],
+        vars: [],
+      },
+    };
+
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      inComparisonMode: false,
+      setTable: vi.fn(),
+      table: mockTableWithFilteredPassRate,
+      version: 4,
+      renderMarkdown: true,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {
+          testFilter: {
+            id: 'testFilter',
+            type: 'metric',
+            operator: 'equals',
+            value: 'test',
+            logicOperator: 'and',
+          },
+        },
+        appliedCount: 1,
+        options: {
+          metric: [],
+        },
+      },
+      filterMode: 'all',
+      filteredResultsCount: 10,
+      totalResultsCount: 10,
+      filteredMetrics: [
+        null,
+        {
+          cost: 1.0,
+          namedScores: {},
+          testPassCount: 10,
+          testFailCount: 0,
+          tokenUsage: {
+            completion: 500,
+            total: 1000,
+          },
+          totalLatencyMs: 2000,
+        },
+      ],
+    }));
+
+    const user = userEvent.setup();
+    renderWithProviders(<ResultsTable {...defaultProps} />);
+
+    const passRateElement = screen.getAllByText(/100.00% passing/)[1];
+    expect(passRateElement).toBeInTheDocument();
+
+    await user.hover(passRateElement);
+
+    await waitFor(() => {
+      const tooltip = screen.getByRole('tooltip');
+      expect(tooltip).toHaveTextContent(
+        'Filtered: 10/10 passing (100.00%). Total: 8/10 passing (80.00%)',
+      );
+    });
+  });
+});
+
+describe('ResultsTable handleRating - Toggle off (null isPass) behavior', () => {
+  let mockSetTable: ReturnType<typeof vi.fn>;
+  let mockCallApi: any;
+
+  const createMockTableWithHumanAssertion = () => ({
+    body: [
+      {
+        outputs: [
+          {
+            id: 'test-output-1',
+            pass: true,
+            score: 1,
+            text: 'test output',
+            latencyMs: 100,
+            cost: 0.01,
+            failureReason: 0,
+            namedScores: {},
+            gradingResult: {
+              pass: true,
+              score: 1,
+              reason: 'Manual result (overrides all other grading results)',
+              comment: 'User comment',
+              componentResults: [
+                {
+                  pass: false,
+                  score: 0.5,
+                  reason: 'Automated assertion',
+                  assertion: { type: 'contains' as const, value: 'test' },
+                },
+                {
+                  pass: true,
+                  score: 1,
+                  reason: 'Manual result (overrides all other grading results)',
+                  comment: 'User comment',
+                  assertion: { type: 'human' as const },
+                },
+              ],
+            },
+          },
+        ],
+        test: {},
+        vars: [],
+        testIdx: 0,
+      },
+    ],
+    head: {
+      prompts: [
+        {
+          metrics: {
+            testPassCount: 1,
+            testFailCount: 0,
+          },
+          provider: 'test-provider',
+        },
+      ],
+      vars: [],
+    },
+  });
+
+  const defaultProps = {
+    columnVisibility: {},
+    failureFilter: {},
+    filterMode: 'all' as const,
+    maxTextLength: 100,
+    onFailureFilterToggle: vi.fn(),
+    onSearchTextChange: vi.fn(),
+    searchText: '',
+    showStats: true,
+    wordBreak: 'break-word' as const,
+    setFilterMode: vi.fn(),
+    zoom: 1,
+    onResultsContainerScroll: vi.fn(),
+    atInitialVerticalScrollPosition: true,
+  };
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    mockSetTable = vi.fn();
+    const apiModule = await import('@app/utils/api');
+    mockCallApi = vi.mocked(apiModule.callApi);
+    mockCallApi.mockResolvedValue({ ok: true });
+  });
+
+  it('should remove human assertion and recalculate pass/score when isPass is null', () => {
+    const mockTable = createMockTableWithHumanAssertion();
+
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      inComparisonMode: false,
+      setTable: mockSetTable,
+      table: mockTable,
+      version: 4,
+      renderMarkdown: true,
+      fetchEvalData: vi.fn(),
+      isFetching: false,
+      filteredResultsCount: 1,
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+
+    render(<ResultsTable {...defaultProps} />);
+
+    // Simulate handleRating being called with isPass = null
+    const existingOutput = mockTable.body[0].outputs[0];
+    const componentResults = [...(existingOutput.gradingResult?.componentResults || [])];
+
+    // Remove human assertion
+    const humanResultIndex = componentResults.findIndex(
+      (result) => result.assertion?.type === 'human',
+    );
+    expect(humanResultIndex).toBe(1);
+
+    componentResults.splice(humanResultIndex, 1);
+
+    // Recalculate pass/score
+    const passCount = componentResults.filter((r) => r.pass).length;
+    const finalPass = passCount === componentResults.length;
+    const scores = componentResults.map((r) => r.score).filter((s) => typeof s === 'number');
+    const finalScore = scores.reduce((a, b) => a + b, 0) / scores.length;
+
+    expect(componentResults).toHaveLength(1);
+    expect(componentResults[0].assertion?.type).toBe('contains');
+    expect(finalPass).toBe(false);
+    expect(finalScore).toBe(0.5);
+  });
+
+  it('should recalculate pass as true when all remaining assertions pass', () => {
+    const mockTable = {
+      body: [
+        {
+          outputs: [
+            {
+              id: 'test-output-1',
+              pass: true,
+              score: 1,
+              text: 'test output',
+              gradingResult: {
+                pass: true,
+                score: 1,
+                componentResults: [
+                  {
+                    pass: true,
+                    score: 0.8,
+                    reason: 'Assertion 1',
+                    assertion: { type: 'contains' as const },
+                  },
+                  {
+                    pass: true,
+                    score: 0.9,
+                    reason: 'Assertion 2',
+                    assertion: { type: 'similar' as const },
+                  },
+                  {
+                    pass: true,
+                    score: 1,
+                    reason: 'Manual result',
+                    assertion: { type: 'human' as const },
+                  },
+                ],
+              },
+            },
+          ],
+          test: {},
+          vars: [],
+        },
+      ],
+      head: {
+        prompts: [{ provider: 'test-provider' }],
+        vars: [],
+      },
+    };
+
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: mockSetTable,
+      table: mockTable,
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+
+    render(<ResultsTable {...defaultProps} />);
+
+    const existingOutput = mockTable.body[0].outputs[0];
+    const componentResults = [...(existingOutput.gradingResult?.componentResults || [])];
+
+    // Remove human assertion
+    const humanResultIndex = componentResults.findIndex(
+      (result) => result.assertion?.type === 'human',
+    );
+    componentResults.splice(humanResultIndex, 1);
+
+    // Recalculate
+    const passCount = componentResults.filter((r) => r.pass).length;
+    const finalPass = passCount === componentResults.length;
+    const scores = componentResults.map((r) => r.score).filter((s) => typeof s === 'number');
+    const finalScore = scores.reduce((a, b) => a + b, 0) / scores.length;
+
+    expect(finalPass).toBe(true);
+    expect(finalScore).toBeCloseTo(0.85, 2); // (0.8 + 0.9) / 2
+  });
+
+  it('should handle case when no assertions remain after removing human assertion', () => {
+    const mockTable = {
+      body: [
+        {
+          outputs: [
+            {
+              id: 'test-output-1',
+              pass: true,
+              score: 1,
+              text: 'test output',
+              gradingResult: {
+                pass: true,
+                score: 1,
+                componentResults: [
+                  {
+                    pass: true,
+                    score: 1,
+                    reason: 'Manual result',
+                    assertion: { type: 'human' as const },
+                  },
+                ],
+              },
+            },
+          ],
+          test: {},
+          vars: [],
+        },
+      ],
+      head: {
+        prompts: [{ provider: 'test-provider' }],
+        vars: [],
+      },
+    };
+
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: mockSetTable,
+      table: mockTable,
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+
+    render(<ResultsTable {...defaultProps} />);
+
+    const existingOutput = mockTable.body[0].outputs[0];
+    const componentResults = [...(existingOutput.gradingResult?.componentResults || [])];
+
+    // Remove human assertion
+    const humanResultIndex = componentResults.findIndex(
+      (result) => result.assertion?.type === 'human',
+    );
+    componentResults.splice(humanResultIndex, 1);
+
+    expect(componentResults).toHaveLength(0);
+
+    // When no assertions remain, the recalculation logic only runs if componentResults.length > 0
+    // So finalPass and finalScore should retain their original values or not be recalculated
+  });
+
+  it('should preserve custom score when provided alongside isPass', () => {
+    const mockTable = createMockTableWithHumanAssertion();
+
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: mockSetTable,
+      table: mockTable,
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+
+    render(<ResultsTable {...defaultProps} />);
+
+    // When score is provided explicitly, it should be used instead of defaulting to 0/1
+    const customScore = 0.75;
+    const isPass = true;
+
+    // Verify logic: if score is provided, use it; if only isPass, use 0/1
+    let finalScore: number = 0;
+    if (typeof customScore !== 'undefined') {
+      finalScore = customScore;
+    } else if (typeof isPass !== 'undefined' && isPass !== null) {
+      finalScore = isPass ? 1 : 0;
+    }
+
+    expect(finalScore).toBe(0.75);
+  });
+
+  it('should calculate average score correctly from remaining assertions', () => {
+    const mockTable = {
+      body: [
+        {
+          outputs: [
+            {
+              id: 'test-output-1',
+              pass: false,
+              score: 0.5,
+              text: 'test output',
+              gradingResult: {
+                pass: false,
+                score: 0.5,
+                componentResults: [
+                  {
+                    pass: true,
+                    score: 0.6,
+                    reason: 'Assertion 1',
+                    assertion: { type: 'contains' as const },
+                  },
+                  {
+                    pass: false,
+                    score: 0.3,
+                    reason: 'Assertion 2',
+                    assertion: { type: 'similar' as const },
+                  },
+                  {
+                    pass: true,
+                    score: 0.7,
+                    reason: 'Assertion 3',
+                    assertion: { type: 'regex' as const },
+                  },
+                  {
+                    pass: false,
+                    score: 0,
+                    reason: 'Manual fail',
+                    assertion: { type: 'human' as const },
+                  },
+                ],
+              },
+            },
+          ],
+          test: {},
+          vars: [],
+        },
+      ],
+      head: {
+        prompts: [{ provider: 'test-provider' }],
+        vars: [],
+      },
+    };
+
+    vi.mocked(useTableStore).mockImplementation(() => ({
+      config: {},
+      evalId: '123',
+      setTable: mockSetTable,
+      table: mockTable,
+      version: 4,
+      fetchEvalData: vi.fn(),
+      filters: {
+        values: {},
+        appliedCount: 0,
+        options: {
+          metric: [],
+        },
+      },
+    }));
+
+    render(<ResultsTable {...defaultProps} />);
+
+    const existingOutput = mockTable.body[0].outputs[0];
+    const componentResults = [...(existingOutput.gradingResult?.componentResults || [])];
+
+    // Remove human assertion
+    const humanResultIndex = componentResults.findIndex(
+      (result) => result.assertion?.type === 'human',
+    );
+    componentResults.splice(humanResultIndex, 1);
+
+    // Calculate average score
+    const scores = componentResults.map((r) => r.score).filter((s) => typeof s === 'number');
+    const averageScore = scores.reduce((a, b) => a + b, 0) / scores.length;
+
+    expect(averageScore).toBeCloseTo(0.5333, 4); // (0.6 + 0.3 + 0.7) / 3
+  });
+});

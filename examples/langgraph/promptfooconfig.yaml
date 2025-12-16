@@ -1,0 +1,35 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'LangGraph Research Agent Evaluation'
+
+# List of input prompts to test the provider with
+prompts:
+  - '{{input_prompt}}'
+
+# Provider configuration: links to the local Python provider script
+providers:
+  - id: file://./provider.py # Local provider file path
+    label: Research Agent # Label to display in results
+
+# Default test assertions applied to all tests (unless overridden)
+defaultTest:
+  assert:
+    - type: is-json # Check that output is valid JSON
+      value:
+        type: object # Ensure the output is a JSON object
+        properties: # Define expected keys and their types
+          query:
+            type: string
+          raw_info:
+            type: string
+          summary:
+            type: string
+        required: ['query', 'raw_info', 'summary'] # All keys must be present
+
+# Specific test cases
+tests:
+  - description: 'Basic research test' # Name/description of this test
+    vars:
+      input_prompt: 'latest AI research trends' # Value for input_prompt variable
+    assert:
+      - type: python # Custom Python assertion
+        value: "'summary' in output" # Check that 'summary' exists in the output

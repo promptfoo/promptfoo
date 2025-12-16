@@ -1,13 +1,17 @@
-import { AssertionsResult, DEFAULT_TOKENS_USED } from '../../src/assertions/assertionsResult';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  AssertionsResult,
+  DEFAULT_TOKENS_USED,
+  GUARDRAIL_BLOCKED_REASON,
+} from '../../src/assertions/assertionsResult';
 import { getEnvBool } from '../../src/envars';
+import type { AssertionSet, GradingResult } from '../../src/types/index';
 
-import type { AssertionSet, GradingResult } from '../../src/types';
-
-jest.mock('../../src/envars');
+vi.mock('../../src/envars');
 
 describe('AssertionsResult', () => {
   beforeEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   describe('noAssertsResult', () => {
@@ -18,7 +22,6 @@ describe('AssertionsResult', () => {
         score: 1,
         reason: 'No assertions',
         tokensUsed: DEFAULT_TOKENS_USED,
-        assertion: null,
       });
     });
   });
@@ -36,7 +39,6 @@ describe('AssertionsResult', () => {
           completion: 50,
           cached: 0,
         },
-        assertion: null,
       };
 
       assertionsResult.addResult({
@@ -53,6 +55,7 @@ describe('AssertionsResult', () => {
         prompt: 50,
         completion: 50,
         cached: 0,
+        numRequests: 0,
       });
       expect(assertionsResult['namedScores']).toEqual({
         accuracy: 0.8,
@@ -66,7 +69,6 @@ describe('AssertionsResult', () => {
         score: 0.3,
         reason: 'Test failed',
         tokensUsed: DEFAULT_TOKENS_USED,
-        assertion: null,
       };
 
       assertionsResult.addResult({
@@ -78,7 +80,7 @@ describe('AssertionsResult', () => {
     });
 
     it('should throw error if short circuit enabled', () => {
-      jest.mocked(getEnvBool).mockReturnValue(true);
+      vi.mocked(getEnvBool).mockReturnValue(true);
 
       const assertionsResult = new AssertionsResult({});
       const result: GradingResult = {
@@ -86,7 +88,6 @@ describe('AssertionsResult', () => {
         score: 0,
         reason: 'Critical failure',
         tokensUsed: DEFAULT_TOKENS_USED,
-        assertion: null,
       };
 
       expect(() =>
@@ -109,7 +110,6 @@ describe('AssertionsResult', () => {
           score: 0.6,
           reason: 'Test 1',
           tokensUsed: DEFAULT_TOKENS_USED,
-          assertion: null,
         },
         weight: 1,
       });
@@ -121,7 +121,6 @@ describe('AssertionsResult', () => {
           score: 0.8,
           reason: 'Test 2',
           tokensUsed: DEFAULT_TOKENS_USED,
-          assertion: null,
         },
         weight: 1,
       });
@@ -135,7 +134,7 @@ describe('AssertionsResult', () => {
 
     it('should handle scoring function', async () => {
       const assertionsResult = new AssertionsResult({});
-      const scoringFunction = jest.fn().mockResolvedValue({
+      const scoringFunction = vi.fn().mockResolvedValue({
         pass: true,
         score: 0.9,
         reason: 'Custom scoring',
@@ -159,7 +158,7 @@ describe('AssertionsResult', () => {
 
     it('should handle scoring function errors', async () => {
       const assertionsResult = new AssertionsResult({});
-      const scoringFunction = jest.fn().mockRejectedValue(new Error('Scoring failed'));
+      const scoringFunction = vi.fn().mockRejectedValue(new Error('Scoring failed'));
 
       const result = await assertionsResult.testResult(scoringFunction);
 
@@ -190,7 +189,7 @@ describe('AssertionsResult', () => {
       const result = await assertionsResult.testResult();
 
       expect(result.pass).toBe(true);
-      expect(result.reason).toBe('Content failed guardrail safety checks');
+      expect(result.reason).toBe(GUARDRAIL_BLOCKED_REASON);
     });
   });
 

@@ -9,20 +9,12 @@ import PageShell from './PageShell';
 vi.mock('@mui/material/useMediaQuery');
 
 vi.mock('@app/components/Navigation', () => {
-  const MockNavigation = ({
-    darkMode,
-    onToggleDarkMode,
-  }: {
-    darkMode: boolean;
-    onToggleDarkMode: () => void;
-  }) => {
+  const MockNavigation = ({ onToggleDarkMode }: { onToggleDarkMode: () => void }) => {
     return (
       <div data-testid="navigation-mock">
         <button data-testid="toggle-button" onClick={onToggleDarkMode}>
           Toggle Dark Mode
         </button>
-        <div>Dark Mode: {darkMode ? 'true' : 'false'}</div>
-        <div>darkMode: {String(darkMode)}</div>
       </div>
     );
   };
@@ -38,6 +30,16 @@ vi.mock('@app/components/PostHogProvider', () => ({
 vi.mock('./PostHogPageViewTracker', () => ({
   PostHogPageViewTracker: () => <div data-testid="posthog-tracker-mock" />,
 }));
+
+vi.mock('@app/components/UpdateBanner', () => {
+  const MockUpdateBanner = () => {
+    const _theme = useTheme();
+    return <div data-testid="update-banner-mock">UpdateBanner</div>;
+  };
+  return {
+    default: MockUpdateBanner,
+  };
+});
 
 const ThemeDisplay = () => {
   const theme = useTheme();
@@ -83,44 +85,45 @@ describe('PageShell', () => {
         shouldHaveDataTheme: false,
         description: 'light',
       },
-    ])(
-      'should render with $description theme when localStorage has darkMode set to "$storageValue"',
-      async ({ storageValue, expectedMode, shouldHaveDataTheme }) => {
-        localStorage.setItem('darkMode', storageValue);
+    ])('should render with $description theme when localStorage has darkMode set to "$storageValue"', async ({
+      storageValue,
+      expectedMode,
+      shouldHaveDataTheme,
+    }) => {
+      localStorage.setItem('darkMode', storageValue);
 
-        renderPageShell('/', <ThemeDisplay />);
+      renderPageShell('/', <ThemeDisplay />);
 
-        await waitFor(() => {
-          expect(screen.getByTestId('theme-mode')).toHaveTextContent(expectedMode);
-        });
+      await waitFor(() => {
+        expect(screen.getByTestId('theme-mode')).toHaveTextContent(expectedMode);
+      });
 
-        if (shouldHaveDataTheme) {
-          expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
-        } else {
-          expect(document.documentElement.hasAttribute('data-theme')).toBe(false);
-        }
-      },
-    );
+      if (shouldHaveDataTheme) {
+        expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+      } else {
+        expect(document.documentElement.hasAttribute('data-theme')).toBe(false);
+      }
+    });
 
     it.each([
       { darkMode: true, expectedAttribute: 'dark' },
       { darkMode: false, expectedAttribute: null },
-    ])(
-      'should set data-theme="$expectedAttribute" on document element when darkMode is $darkMode',
-      async ({ darkMode, expectedAttribute }) => {
-        localStorage.setItem('darkMode', String(darkMode));
+    ])('should set data-theme="$expectedAttribute" on document element when darkMode is $darkMode', async ({
+      darkMode,
+      expectedAttribute,
+    }) => {
+      localStorage.setItem('darkMode', String(darkMode));
 
-        renderPageShell();
+      renderPageShell();
 
-        await waitFor(() => {
-          if (expectedAttribute) {
-            expect(document.documentElement.getAttribute('data-theme')).toBe(expectedAttribute);
-          } else {
-            expect(document.documentElement.hasAttribute('data-theme')).toBe(false);
-          }
-        });
-      },
-    );
+      await waitFor(() => {
+        if (expectedAttribute) {
+          expect(document.documentElement.getAttribute('data-theme')).toBe(expectedAttribute);
+        } else {
+          expect(document.documentElement.hasAttribute('data-theme')).toBe(false);
+        }
+      });
+    });
 
     it('should handle hydration mismatch by updating theme based on client-side preference', async () => {
       mockUseMediaQuery.mockReturnValueOnce(true);
@@ -133,22 +136,6 @@ describe('PageShell', () => {
       });
 
       expect(document.documentElement.hasAttribute('data-theme')).toBe(false);
-    });
-  });
-
-  it('should pass the correct darkMode value and toggleDarkMode callback to the Navigation component', async () => {
-    localStorage.setItem('darkMode', 'true');
-    renderPageShell();
-
-    await waitFor(() => {
-      expect(screen.getByText('darkMode: true')).toBeInTheDocument();
-    });
-
-    localStorage.setItem('darkMode', 'false');
-    renderPageShell();
-
-    await waitFor(() => {
-      expect(screen.getByText('darkMode: false')).toBeInTheDocument();
     });
   });
 
@@ -175,5 +162,63 @@ describe('PageShell', () => {
       expect(screen.getByTestId('theme-mode')).toHaveTextContent('light');
     });
     expect(localStorage.getItem('darkMode')).toBe('false');
+  });
+
+  it('should render the UpdateBanner component when mounted', async () => {
+    renderPageShell();
+    await waitFor(() => {
+      expect(screen.getByTestId('update-banner-mock')).toBeInTheDocument();
+    });
+  });
+
+  it('should render the Outlet component correctly', async () => {
+    const outletTestId = 'outlet-content';
+    renderPageShell('/', <div data-testid={outletTestId}>Outlet Content</div>);
+
+    await waitFor(() => {
+      expect(screen.getByTestId(outletTestId)).toBeInTheDocument();
+    });
+  });
+
+  it('should adapt UpdateBanner to theme changes when dark mode is toggled', async () => {
+    const originalMock = vi.importActual('@app/components/UpdateBanner');
+    vi.doMock('@app/components/UpdateBanner', () => {
+      const MockUpdateBanner = () => {
+        const theme = useTheme();
+        return <div data-testid="update-banner-theme">{theme.palette.mode}</div>;
+      };
+      return {
+        default: MockUpdateBanner,
+      };
+    });
+
+    localStorage.setItem('darkMode', 'false');
+    renderPageShell();
+
+    await waitFor(() => {
+      expect(document.documentElement.hasAttribute('data-theme')).toBe(false);
+    });
+
+    const toggleButton = screen.getByTestId('toggle-button');
+    userEvent.click(toggleButton);
+
+    await waitFor(() => {
+      expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+    });
+
+    userEvent.click(toggleButton);
+
+    await waitFor(() => {
+      expect(document.documentElement.hasAttribute('data-theme')).toBe(false);
+    });
+
+    vi.doMock('@app/components/UpdateBanner', () => originalMock);
+  });
+
+  it('should render without errors when UpdateBanner receives incomplete deployment type information', async () => {
+    renderPageShell();
+    await waitFor(() => {
+      expect(screen.getByTestId('update-banner-mock')).toBeInTheDocument();
+    });
   });
 });

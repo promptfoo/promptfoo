@@ -1,5 +1,6 @@
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { matchesAnswerRelevance } from '../../src/matchers';
-import { ANSWER_RELEVANCY_GENERATE } from '../../src/prompts';
+import { ANSWER_RELEVANCY_GENERATE } from '../../src/prompts/index';
 import {
   DefaultEmbeddingProvider,
   DefaultGradingProvider,
@@ -9,24 +10,24 @@ import type { OpenAiEmbeddingProvider } from '../../src/providers/openai/embeddi
 
 describe('matchesAnswerRelevance', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
-    jest.resetAllMocks();
+    vi.clearAllMocks();
+    vi.resetAllMocks();
 
-    jest.spyOn(DefaultGradingProvider, 'callApi').mockReset();
-    jest.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi').mockReset();
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockReset();
+    vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi').mockReset();
 
-    jest.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({
       output: 'foobar',
       tokenUsage: { total: 10, prompt: 5, completion: 5 },
     });
-    jest.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi').mockResolvedValue({
+    vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi').mockResolvedValue({
       embedding: [1, 0, 0],
       tokenUsage: { total: 5, prompt: 2, completion: 3 },
     });
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('should pass when the relevance score is above the threshold', async () => {
@@ -34,7 +35,7 @@ describe('matchesAnswerRelevance', () => {
     const output = 'Sample output';
     const threshold = 0.5;
 
-    const mockCallApi = jest.spyOn(DefaultGradingProvider, 'callApi');
+    const mockCallApi = vi.spyOn(DefaultGradingProvider, 'callApi');
     mockCallApi.mockImplementation(() => {
       return Promise.resolve({
         output: 'foobar',
@@ -42,7 +43,7 @@ describe('matchesAnswerRelevance', () => {
       });
     });
 
-    const mockCallEmbeddingApi = jest.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi');
+    const mockCallEmbeddingApi = vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi');
     mockCallEmbeddingApi.mockImplementation(function (this: OpenAiEmbeddingProvider) {
       return Promise.resolve({
         embedding: [1, 0, 0],
@@ -60,10 +61,22 @@ describe('matchesAnswerRelevance', () => {
         completion: expect.any(Number),
         cached: expect.any(Number),
         completionDetails: expect.any(Object),
+        numRequests: 0,
+      },
+      metadata: {
+        generatedQuestions: expect.arrayContaining([
+          expect.objectContaining({
+            question: expect.any(String),
+            similarity: expect.any(Number),
+          }),
+        ]),
+        averageSimilarity: 1,
+        threshold: 0.5,
       },
     });
     expect(mockCallApi).toHaveBeenCalledWith(
       expect.stringContaining(ANSWER_RELEVANCY_GENERATE.slice(0, 50)),
+      expect.any(Object),
     );
     expect(mockCallEmbeddingApi).toHaveBeenCalledWith('Input text');
   });
@@ -73,7 +86,7 @@ describe('matchesAnswerRelevance', () => {
     const output = 'Different output';
     const threshold = 0.5;
 
-    const mockCallApi = jest.spyOn(DefaultGradingProvider, 'callApi');
+    const mockCallApi = vi.spyOn(DefaultGradingProvider, 'callApi');
     mockCallApi.mockImplementation((text) => {
       return Promise.resolve({
         output: text,
@@ -81,7 +94,7 @@ describe('matchesAnswerRelevance', () => {
       });
     });
 
-    const mockCallEmbeddingApi = jest.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi');
+    const mockCallEmbeddingApi = vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi');
     mockCallEmbeddingApi.mockImplementation((text) => {
       if (text.includes('Input text')) {
         return Promise.resolve({
@@ -107,10 +120,22 @@ describe('matchesAnswerRelevance', () => {
         completion: expect.any(Number),
         cached: expect.any(Number),
         completionDetails: expect.any(Object),
+        numRequests: 0,
+      },
+      metadata: {
+        generatedQuestions: expect.arrayContaining([
+          expect.objectContaining({
+            question: expect.any(String),
+            similarity: expect.any(Number),
+          }),
+        ]),
+        averageSimilarity: 0,
+        threshold: 0.5,
       },
     });
     expect(mockCallApi).toHaveBeenCalledWith(
       expect.stringContaining(ANSWER_RELEVANCY_GENERATE.slice(0, 50)),
+      expect.any(Object),
     );
     expect(mockCallEmbeddingApi).toHaveBeenCalledWith(
       expect.stringContaining(ANSWER_RELEVANCY_GENERATE.slice(0, 50)),
@@ -134,5 +159,57 @@ describe('matchesAnswerRelevance', () => {
     expect(result.tokensUsed?.total).toBe(50);
     expect(result.tokensUsed?.cached).toBe(0);
     expect(result.tokensUsed?.completionDetails).toBeDefined();
+  });
+
+  it('should return metadata with generated questions and similarities', async () => {
+    const input = 'What is the capital of France?';
+    const output = 'The capital of France is Paris.';
+    const threshold = 0.7;
+
+    // Mock 3 different generated questions
+    let callCount = 0;
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(() => {
+      const questions = [
+        'What is the capital city of France?',
+        'Which city is the capital of France?',
+        "What is France's capital?",
+      ];
+      return Promise.resolve({
+        output: questions[callCount++ % 3],
+        tokenUsage: { total: 10, prompt: 5, completion: 5 },
+      });
+    });
+
+    // Mock embeddings with varying similarities
+    vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi').mockImplementation((text) => {
+      if (text === input) {
+        return Promise.resolve({
+          embedding: [1, 0, 0],
+          tokenUsage: { total: 5, prompt: 2, completion: 3 },
+        });
+      } else if (text.includes('capital') && text.includes('France')) {
+        // Similar questions get high similarity
+        return Promise.resolve({
+          embedding: [0.9, 0.1, 0],
+          tokenUsage: { total: 5, prompt: 2, completion: 3 },
+        });
+      }
+      return Promise.resolve({
+        embedding: [0.8, 0.2, 0],
+        tokenUsage: { total: 5, prompt: 2, completion: 3 },
+      });
+    });
+
+    const result = await matchesAnswerRelevance(input, output, threshold);
+
+    expect(result.metadata).toBeDefined();
+    expect(result.metadata?.generatedQuestions).toHaveLength(3);
+    expect(result.metadata?.generatedQuestions[0]).toMatchObject({
+      question: expect.stringContaining('capital'),
+      similarity: expect.any(Number),
+    });
+    expect(result.metadata?.averageSimilarity).toBeCloseTo(0.99, 2);
+    expect(result.metadata?.threshold).toBe(0.7);
+    expect(result.pass).toBe(true);
   });
 });

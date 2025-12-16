@@ -18,8 +18,8 @@ const defaultProviders: ProviderOptions[] = (
 )
   .concat([
     {
-      id: 'openai:gpt-4.1',
-      label: 'OpenAI: GPT-4.1',
+      id: 'openai:gpt-5',
+      label: 'OpenAI: GPT-5',
       config: {
         organization: '',
         temperature: 0.5,
@@ -33,8 +33,8 @@ const defaultProviders: ProviderOptions[] = (
       },
     },
     {
-      id: 'openai:gpt-4.1-mini',
-      label: 'OpenAI: GPT-4.1 Mini',
+      id: 'openai:gpt-5-mini',
+      label: 'OpenAI: GPT-5 Mini',
       config: {
         organization: '',
         temperature: 0.5,
@@ -45,8 +45,8 @@ const defaultProviders: ProviderOptions[] = (
       },
     },
     {
-      id: 'openai:gpt-4.1-nano',
-      label: 'OpenAI: GPT-4.1 Nano',
+      id: 'openai:gpt-5-nano',
+      label: 'OpenAI: GPT-5 Nano',
       config: {
         organization: '',
         temperature: 0.5,
@@ -116,8 +116,32 @@ const defaultProviders: ProviderOptions[] = (
   ])
   .concat([
     {
+      id: 'anthropic:messages:claude-opus-4-5-20251101',
+      label: 'Anthropic: Claude 4.5 Opus',
+      config: {
+        max_tokens: 2048,
+        temperature: 0.5,
+      },
+    },
+    {
+      id: 'anthropic:messages:claude-sonnet-4-5-20250929',
+      label: 'Anthropic: Claude 4.5 Sonnet',
+      config: {
+        max_tokens: 2048,
+        temperature: 0.5,
+      },
+    },
+    {
       id: 'anthropic:messages:claude-sonnet-4-20250514',
       label: 'Anthropic: Claude 4 Sonnet',
+      config: {
+        max_tokens: 2048,
+        temperature: 0.5,
+      },
+    },
+    {
+      id: 'anthropic:messages:claude-opus-4-1-20250805',
+      label: 'Anthropic: Claude 4.1 Opus',
       config: {
         max_tokens: 2048,
         temperature: 0.5,
@@ -132,37 +156,11 @@ const defaultProviders: ProviderOptions[] = (
       },
     },
     {
-      id: 'anthropic:messages:claude-sonnet-4-20250514',
-      label: 'Anthropic: Claude 4 Sonnet (with thinking)',
-      config: {
-        max_tokens: 8192,
-        temperature: 1.0,
-        thinking: {
-          type: 'enabled',
-          budget_tokens: 4096,
-        },
-        showThinking: true,
-      },
-    },
-    {
-      id: 'anthropic:messages:claude-3-7-sonnet-20250219',
-      label: 'Anthropic: Claude 3.7 Sonnet',
-      config: {
-        max_tokens: 1024,
-        temperature: 0.5,
-      },
-    },
-    {
-      id: 'anthropic:messages:claude-3-7-sonnet-20250219',
-      label: 'Anthropic: Claude 3.7 Sonnet (with thinking)',
+      id: 'anthropic:messages:claude-haiku-4-5-20251001',
+      label: 'Anthropic: Claude 4.5 Haiku',
       config: {
         max_tokens: 2048,
-        temperature: 1.0,
-        thinking: {
-          type: 'enabled',
-          budget_tokens: 1024,
-        },
-        showThinking: true,
+        temperature: 0.5,
       },
     },
     {
@@ -174,26 +172,33 @@ const defaultProviders: ProviderOptions[] = (
       },
     },
     {
-      id: 'anthropic:messages:claude-3-5-sonnet-20240620',
-      label: 'Anthropic: Claude 3.5 Sonnet (June)',
-      config: {
-        max_tokens: 1024,
-        temperature: 0.5,
-      },
-    },
-    {
-      id: 'anthropic:messages:claude-3-5-haiku-20241022',
-      label: 'Anthropic: Claude 3.5 Haiku',
-      config: {
-        max_tokens: 1024,
-        temperature: 0.5,
-      },
+      id: 'anthropic:claude-agent-sdk',
+      label: 'Anthropic: Claude Agent SDK',
+      config: {},
     },
   ])
   .concat([
     {
+      id: 'bedrock:us.anthropic.claude-sonnet-4-5-20250929-v1:0',
+      label: 'Bedrock: Claude 4.5 Sonnet',
+      config: {
+        max_tokens: 2048,
+        temperature: 0.5,
+        region: 'us-east-1',
+      },
+    },
+    {
       id: 'bedrock:us.anthropic.claude-sonnet-4-20250514-v1:0',
       label: 'Bedrock: Claude 4 Sonnet',
+      config: {
+        max_tokens: 2048,
+        temperature: 0.5,
+        region: 'us-east-1',
+      },
+    },
+    {
+      id: 'bedrock:us.anthropic.claude-opus-4-1-20250805-v1:0',
+      label: 'Bedrock: Claude 4.1 Opus',
       config: {
         max_tokens: 2048,
         temperature: 0.5,
@@ -210,20 +215,6 @@ const defaultProviders: ProviderOptions[] = (
       },
     },
     {
-      id: 'bedrock:us.anthropic.claude-sonnet-4-20250514-v1:0',
-      label: 'Bedrock: Claude 4 Sonnet (with thinking)',
-      config: {
-        max_tokens: 8192,
-        temperature: 1.0,
-        region: 'us-east-1',
-        thinking: {
-          type: 'enabled',
-          budget_tokens: 4096,
-        },
-        showThinking: true,
-      },
-    },
-    {
       id: 'bedrock:us.anthropic.claude-3-7-sonnet-20250219-v1:0',
       label: 'Bedrock: Claude 3.7 Sonnet',
       config: {
@@ -231,21 +222,6 @@ const defaultProviders: ProviderOptions[] = (
         temperature: 0.5,
         anthropic_version: 'bedrock-2023-05-31',
         region: 'us-east-1',
-      },
-    },
-    {
-      id: 'bedrock:us.anthropic.claude-3-7-sonnet-20250219-v1:0',
-      label: 'Bedrock: Claude 3.7 Sonnet (with thinking)',
-      config: {
-        max_tokens: 2048,
-        temperature: 1.0,
-        anthropic_version: 'bedrock-2023-05-31',
-        region: 'us-east-1',
-        thinking: {
-          type: 'enabled',
-          budget_tokens: 1024,
-        },
-        showThinking: true,
       },
     },
     {
@@ -271,6 +247,16 @@ const defaultProviders: ProviderOptions[] = (
     {
       id: 'bedrock:us.meta.llama3-2-90b-instruct-v1:0',
       label: 'Bedrock: Llama 3.2 (90B)',
+      config: {
+        temperature: 0.7,
+        top_p: 0.9,
+        max_new_tokens: 1024,
+        region: 'us-east-1',
+      },
+    },
+    {
+      id: 'bedrock:us.meta.llama4-maverick-17b-instruct-v1:0',
+      label: 'Bedrock: Llama 4 Maverick (17B)',
       config: {
         temperature: 0.7,
         top_p: 0.9,
@@ -340,24 +326,35 @@ const defaultProviders: ProviderOptions[] = (
         region: 'us-east-1',
       },
     },
+    {
+      id: 'bedrock-agent:YOUR_AGENT_ID',
+      label: 'Bedrock: Agent',
+      config: {
+        agentId: 'YOUR_AGENT_ID',
+        agentAliasId: 'YOUR_ALIAS_ID',
+        region: 'us-east-1',
+        enableTrace: false,
+        temperature: 0.5,
+      },
+    },
   ])
   .concat([
     {
-      id: 'azure:chat:gpt-4.1',
-      label: 'Azure: GPT-4.1',
+      id: 'azure:chat:gpt-5',
+      label: 'Azure: GPT-5',
       config: {
         api_host: 'your-resource-name.openai.azure.com',
-        api_version: '2024-02-15-preview',
+        api_version: '2025-08-07',
         temperature: 0.5,
         max_tokens: 1024,
       },
     },
     {
-      id: 'azure:chat:gpt-4.1-mini',
-      label: 'Azure: GPT-4.1 Mini',
+      id: 'azure:chat:gpt-5-mini',
+      label: 'Azure: GPT-5 Mini',
       config: {
         api_host: 'your-resource-name.openai.azure.com',
-        api_version: '2024-02-15-preview',
+        api_version: '2025-08-07',
         temperature: 0.5,
         max_tokens: 1024,
       },
@@ -367,7 +364,7 @@ const defaultProviders: ProviderOptions[] = (
       label: 'Azure: GPT-4o',
       config: {
         api_host: 'your-resource-name.openai.azure.com',
-        api_version: '2024-02-15-preview',
+        api_version: '2025-08-07',
         temperature: 0.5,
         max_tokens: 1024,
       },
@@ -377,7 +374,7 @@ const defaultProviders: ProviderOptions[] = (
       label: 'Azure: GPT-4o Mini',
       config: {
         api_host: 'your-resource-name.openai.azure.com',
-        api_version: '2024-02-15-preview',
+        api_version: '2025-08-07',
         temperature: 0.5,
         max_tokens: 2048,
       },
@@ -455,8 +452,28 @@ const defaultProviders: ProviderOptions[] = (
   ])
   .concat([
     {
+      id: 'vertex:claude-sonnet-4-5@20250929',
+      label: 'Vertex: Claude 4.5 Sonnet',
+      config: {
+        region: 'global',
+        anthropic_version: 'vertex-2024-10-22',
+        max_tokens: 2048,
+        temperature: 0.5,
+      },
+    },
+    {
       id: 'vertex:claude-sonnet-4@20250514',
       label: 'Vertex: Claude 4 Sonnet',
+      config: {
+        region: 'global',
+        anthropic_version: 'vertex-2024-10-22',
+        max_tokens: 2048,
+        temperature: 0.5,
+      },
+    },
+    {
+      id: 'vertex:claude-opus-4-1@20250805',
+      label: 'Vertex: Claude 4.1 Opus',
       config: {
         region: 'global',
         anthropic_version: 'vertex-2024-10-22',
@@ -477,6 +494,16 @@ const defaultProviders: ProviderOptions[] = (
     {
       id: 'vertex:claude-3-5-sonnet-v2@20241022',
       label: 'Vertex: Claude 3.5 Sonnet',
+      config: {
+        region: 'us-east5',
+        anthropic_version: 'vertex-2023-10-16',
+        max_tokens: 1024,
+        temperature: 0.5,
+      },
+    },
+    {
+      id: 'vertex:claude-4-5-haiku@20251001',
+      label: 'Vertex: Claude 3.5 Haiku',
       config: {
         region: 'us-east5',
         anthropic_version: 'vertex-2023-10-16',
@@ -523,8 +550,24 @@ const defaultProviders: ProviderOptions[] = (
   ])
   .concat([
     {
+      id: 'openrouter:anthropic/claude-sonnet-4-5-20250929',
+      label: 'OpenRouter: Claude 4.5 Sonnet',
+      config: {
+        temperature: 0.7,
+        max_tokens: 4096,
+      },
+    },
+    {
       id: 'openrouter:anthropic/claude-sonnet-4-20250514',
       label: 'OpenRouter: Claude 4 Sonnet',
+      config: {
+        temperature: 0.7,
+        max_tokens: 4096,
+      },
+    },
+    {
+      id: 'openrouter:anthropic/claude-opus-4-1-20250805',
+      label: 'OpenRouter: Claude 4.1 Opus',
       config: {
         temperature: 0.7,
         max_tokens: 4096,
@@ -547,8 +590,8 @@ const defaultProviders: ProviderOptions[] = (
       },
     },
     {
-      id: 'openrouter:meta-llama/llama-3.1-405b-instruct',
-      label: 'OpenRouter: Llama 3.1 405B',
+      id: 'openrouter:meta-llama/llama-4-maverick',
+      label: 'OpenRouter: Llama 4 Maverick',
       config: {
         temperature: 0.7,
         max_tokens: 4096,
@@ -563,8 +606,8 @@ const defaultProviders: ProviderOptions[] = (
       },
     },
     {
-      id: 'openrouter:google/gemini-1.5-pro',
-      label: 'OpenRouter: Gemini 1.5 Pro',
+      id: 'openrouter:google/gemini-2.5-pro',
+      label: 'OpenRouter: Gemini 2.5 Pro',
       config: {
         temperature: 0.7,
         max_tokens: 8192,
@@ -577,6 +620,7 @@ const PROVIDER_GROUPS: Record<string, string> = {
   'openai:': 'OpenAI',
   'anthropic:': 'Anthropic',
   'bedrock:': 'Amazon Web Services',
+  'bedrock-agent:': 'Amazon Web Services',
   'azure:': 'Azure',
   'openrouter:': 'OpenRouter',
   'replicate:': 'Replicate',
@@ -609,7 +653,7 @@ interface ProviderSelectorProps {
   onChange: (providers: ProviderOptions[]) => void;
 }
 
-const ProviderSelector: React.FC<ProviderSelectorProps> = ({ providers, onChange }) => {
+const ProviderSelector = ({ providers, onChange }: ProviderSelectorProps) => {
   const { customProviders, addCustomProvider } = useProvidersStore();
   const [selectedProvider, setSelectedProvider] = React.useState<ProviderOptions | null>(null);
   const [isAddLocalDialogOpen, setIsAddLocalDialogOpen] = React.useState(false);
@@ -628,7 +672,7 @@ const ProviderSelector: React.FC<ProviderSelectorProps> = ({ providers, onChange
   };
 
   const handleSave = (providerId: string, config: Record<string, any>) => {
-    onChange(providers.map((p) => (p.id === providerId && !p.label ? { ...p, config } : p)));
+    onChange(providers.map((p) => (p.id === providerId ? { ...p, config } : p)));
     setSelectedProvider(null);
   };
 
@@ -685,7 +729,7 @@ const ProviderSelector: React.FC<ProviderSelectorProps> = ({ providers, onChange
           options={allProviders}
           value={providers}
           groupBy={getProviderGroup}
-          onChange={(event, newValue: (string | ProviderOptions)[]) => {
+          onChange={(_event, newValue: (string | ProviderOptions)[]) => {
             const validValues = newValue.filter((value) => value !== null && value !== undefined);
             onChange(
               validValues.map((value) => (typeof value === 'string' ? { id: value } : value)),

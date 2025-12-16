@@ -25,6 +25,7 @@ export default function PresetCard({ name, description, isSelected, onClick }: P
         position: 'relative',
         overflow: 'hidden',
         transition: 'all 0.2s ease-in-out',
+        width: '230px',
         border: (theme) =>
           `1px solid ${isSelected ? theme.palette.primary.main : theme.palette.divider}`,
         bgcolor: (theme) =>

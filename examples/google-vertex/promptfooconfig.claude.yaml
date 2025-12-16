@@ -1,12 +1,28 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: 'Vertex Claude Code Analysis'
+description: 'Vertex Claude Agent SDK Analysis'
 
 prompts:
   - 'Analyze this code and list any potential issues: ```{{code}}```'
 
 providers:
+  - id: vertex:claude-opus-4-5@20251101
+    label: Claude 4.5 Opus
+    config:
+      region: us-east5
   - id: vertex:claude-3-5-sonnet-v2@20241022
     label: Claude 3.5 Sonnet v2
+    config:
+      region: us-east5
+  - id: vertex:claude-haiku-4-5@20251001
+    label: Claude 4.5 Haiku
+    config:
+      region: us-east5
+  - id: vertex:claude-opus-4-1@20250805
+    label: Claude 4.1 Opus
+    config:
+      region: us-east5
+  - id: vertex:claude-opus-4@20250514
+    label: Claude 4 Opus
     config:
       region: us-east5
 tests:

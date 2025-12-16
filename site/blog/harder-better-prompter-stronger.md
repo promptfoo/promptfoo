@@ -1,6 +1,6 @@
 ---
 title: 'Harder, Better, Prompter, Stronger: AI system prompt hardening'
-description: 'Learn essential techniques for hardening AI system prompts against injection attacks, unauthorized access, and security vulnerabilities. Includes practical examples using Promptfoo evaluations.'
+description: 'Learn techniques for hardening AI prompts against injection attacks and security vulnerabilities with Promptfoo examples'
 image: /img/blog/harder-better-prompter-stronger/header.jpg
 keywords:
   [
@@ -92,7 +92,7 @@ prompts:
   - 'You are a {{role}} at Aperture Science. {{input}}'
 
 providers:
-  - 'openai:gpt-4.1'
+  - 'openai:gpt-5'
   - 'anthropic:messages:claude-sonnet-4-20250514'
 
 tests:

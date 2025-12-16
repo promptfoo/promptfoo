@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 
 import { useUserStore } from '@app/stores/userStore';
 import posthog from 'posthog-js';
@@ -13,7 +13,7 @@ interface PostHogProviderProps {
   children: React.ReactNode;
 }
 
-export const PostHogProvider: React.FC<PostHogProviderProps> = ({ children }) => {
+export const PostHogProvider = ({ children }: PostHogProviderProps) => {
   const [isInitialized, setIsInitialized] = useState(false);
   const { email, userId, fetchEmail, fetchUserId } = useUserStore();
 
@@ -46,7 +46,7 @@ export const PostHogProvider: React.FC<PostHogProviderProps> = ({ children }) =>
       try {
         posthog.init(POSTHOG_KEY, {
           api_host: POSTHOG_HOST,
-          loaded: (posthogInstance: any) => {
+          loaded: (_posthogInstance: any) => {
             setIsInitialized(true);
           },
           capture_pageview: false,
@@ -63,7 +63,7 @@ export const PostHogProvider: React.FC<PostHogProviderProps> = ({ children }) =>
               return '*'.repeat(text.trim().length);
             },
           },
-          opt_out_capturing_by_default: process.env.NODE_ENV === 'development',
+          opt_out_capturing_by_default: import.meta.env.DEV,
           advanced_disable_decide: false,
         });
       } catch (error) {
@@ -72,14 +72,17 @@ export const PostHogProvider: React.FC<PostHogProviderProps> = ({ children }) =>
     }
   }, []);
 
-  const value: PostHogContextType = {
-    posthog: isInitialized ? posthog : null,
-    isInitialized,
-  };
+  const value: PostHogContextType = useMemo(
+    () => ({
+      posthog: isInitialized ? posthog : null,
+      isInitialized,
+    }),
+    [isInitialized],
+  );
 
   if (DISABLE_TELEMETRY === 'true') {
     return children;
   }
 
-  return <PostHogContext.Provider value={value}>{children}</PostHogContext.Provider>;
+  return <PostHogContext value={value}>{children}</PostHogContext>;
 };

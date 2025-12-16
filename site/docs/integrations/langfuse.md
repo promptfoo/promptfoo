@@ -1,5 +1,6 @@
 ---
 sidebar_label: Langfuse
+description: Integrate Langfuse prompts with Promptfoo for LLM testing. Configure version control, labels, and collaborative prompt management using environment variables and SDK setup.
 ---
 
 # Langfuse integration
@@ -78,7 +79,7 @@ prompts:
   - 'langfuse://chat-prompt:2:chat' # Numeric → version 2
 
 providers:
-  - openai:gpt-4o-mini
+  - openai:gpt-5-mini
 
 tests:
   - vars:

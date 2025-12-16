@@ -205,7 +205,7 @@ tests:
 
 ```yaml
 providers:
-  - anthropic:claude-sonnet-4-20250514
+  - anthropic:claude-sonnet-4-5-20250929
   - openai:o4-mini
   - deepseek:deepseek-reasoner
 ```
@@ -214,7 +214,7 @@ providers:
 
 ```yaml
 providers:
-  - id: anthropic:claude-sonnet-4-20250514
+  - id: anthropic:claude-sonnet-4-5-20250929
     config:
       thinking:
         budget_tokens: 8000 # For complex proofs

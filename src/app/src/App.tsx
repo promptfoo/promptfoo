@@ -19,10 +19,15 @@ import EvalsIndexPage from './pages/evals/page';
 import HistoryPage from './pages/history/page';
 import LauncherPage from './pages/launcher/page';
 import LoginPage from './pages/login';
-import ModelAuditPage from './pages/model-audit/page';
+import ModelAuditHistoryPage from './pages/model-audit-history/page';
+import ModelAuditLatestPage from './pages/model-audit-latest/page';
+import ModelAuditResultPage from './pages/model-audit-result/page';
+import ModelAuditSetupPage from './pages/model-audit-setup/page';
+import NotFoundPage from './pages/NotFoundPage';
 import PromptsPage from './pages/prompts/page';
 import ReportPage from './pages/redteam/report/page';
 import RedteamSetupPage from './pages/redteam/setup/page';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 const basename = import.meta.env.VITE_PUBLIC_BASENAME || '';
 
@@ -64,12 +69,24 @@ const router = createBrowserRouter(
           <Route path="/history" element={<HistoryPage />} />
 
           <Route path="/prompts" element={<PromptsPage />} />
-          <Route path="/model-audit" element={<ModelAuditPage />} />
+
+          {/* Model Audit routes - mirrors eval structure */}
+          <Route path="/model-audit" element={<ModelAuditLatestPage />} />
+          <Route path="/model-audits" element={<ModelAuditHistoryPage />} />
+          <Route path="/model-audit/setup" element={<ModelAuditSetupPage />} />
+          <Route path="/model-audit/:id" element={<ModelAuditResultPage />} />
+          {/* Redirect legacy /model-audit/history route */}
+          <Route path="/model-audit/history" element={<Navigate to="/model-audits" replace />} />
+
           <Route path="/redteam" element={<Navigate to="/redteam/setup" replace />} />
           <Route path="/redteam/setup" element={<RedteamSetupPage />} />
-          <Route path="/report" element={<ReportPage />} />
+
+          {/* Redirect legacy /report route to /reports (since v0.118.2) */}
+          <Route path="/report" element={<Navigate to="/reports" replace />} />
+          <Route path="/reports" element={<ReportPage />} />
           <Route path="/setup" element={<EvalCreatorPage />} />
           <Route path="/login" element={<LoginPage />} />
+          <Route path="*" element={<NotFoundPage />} />
         </Route>
       </Route>
     </>,
@@ -77,10 +94,14 @@ const router = createBrowserRouter(
   { basename },
 );
 
+const queryClient = new QueryClient();
+
 function App() {
   return (
     <ToastProvider>
-      <RouterProvider router={router} />
+      <QueryClientProvider client={queryClient}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>
     </ToastProvider>
   );
 }

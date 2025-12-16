@@ -1,6 +1,3 @@
-import React from 'react';
-
-import CancelIcon from '@mui/icons-material/Cancel';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import InfoIcon from '@mui/icons-material/Info';
 import Box from '@mui/material/Box';
@@ -9,8 +6,7 @@ import CardContent from '@mui/material/CardContent';
 import Chip from '@mui/material/Chip';
 import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
-import ListItemIcon from '@mui/material/ListItemIcon';
-import ListItemText from '@mui/material/ListItemText';
+import { alpha, useTheme } from '@mui/material/styles';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import {
@@ -19,46 +15,93 @@ import {
   OWASP_API_TOP_10_NAMES,
   OWASP_LLM_TOP_10_NAMES,
   riskCategorySeverityMap,
+  severityDisplayNames,
   Severity,
 } from '@promptfoo/redteam/constants';
+import { getSeverityColor, getSeverityContrastText } from '../utils/color';
 import {
   type CategoryStats,
   categorizePlugins,
   expandPluginCollections,
   FRAMEWORK_DESCRIPTIONS,
-  getPluginDisplayName,
-  getSeverityColor,
 } from './FrameworkComplianceUtils';
+import FrameworkPluginResult from './FrameworkPluginResult';
+import { useCallback, useMemo } from 'react';
+import { calculateAttackSuccessRate } from '@promptfoo/redteam/metrics';
+import { compareByASRDescending } from '../utils/utils';
 
 interface FrameworkCardProps {
+  evalId: string;
   framework: string;
   isCompliant: boolean;
   frameworkSeverity: Severity;
   categoryStats: CategoryStats;
   pluginPassRateThreshold: number;
   nonCompliantPlugins: string[];
-  sortedNonCompliantPlugins: (plugins: string[]) => string[];
-  getPluginPassRate: (plugin: string) => { pass: number; total: number; rate: number };
   idx: number;
 }
 
-const FrameworkCard: React.FC<FrameworkCardProps> = ({
+const FrameworkCard = ({
+  evalId,
   framework,
   isCompliant,
   frameworkSeverity,
   categoryStats,
   pluginPassRateThreshold,
   nonCompliantPlugins,
-  sortedNonCompliantPlugins,
-  getPluginPassRate,
   idx,
-}) => {
-  const sortedPlugins = sortedNonCompliantPlugins(nonCompliantPlugins);
+}: FrameworkCardProps) => {
+  const theme = useTheme();
+
+  /**
+   * Gets the Attack Success Rate (ASR) for a given plugin.
+   * @param plugin - The plugin to get the ASR for.
+   * @returns The ASR for the given plugin.
+   */
+  const getPluginASR = useCallback(
+    (plugin: string): { asr: number; total: number; failCount: number } => {
+      const stats = categoryStats[plugin];
+      return {
+        asr: stats ? calculateAttackSuccessRate(stats.total, stats.failCount) : 0,
+        total: stats ? stats.total : 0,
+        failCount: stats ? stats.failCount : 0,
+      };
+    },
+    [categoryStats],
+  );
+
+  /**
+   * Given a list of plugins, returns the plugins sorted by ASR (highest first).
+   * @param plugins - The list of plugins to sort.
+   * @returns The sorted list of plugins.
+   */
+  const sortPluginsByASR = useCallback(
+    (plugins: string[]): string[] => {
+      return [...plugins].sort((a, b) => {
+        return compareByASRDescending(getPluginASR(a), getPluginASR(b));
+      });
+    },
+    [getPluginASR],
+  );
+
+  const sortedPlugins = useMemo(
+    () => sortPluginsByASR(nonCompliantPlugins),
+    [nonCompliantPlugins, sortPluginsByASR],
+  );
+
   const breakInside = idx === 0 ? 'undefined' : 'avoid';
+
   return (
     <Card
       className={`framework-item ${isCompliant ? 'compliant' : 'non-compliant'}`}
-      sx={{ pageBreakInside: breakInside, breakInside }}
+      sx={{
+        pageBreakInside: breakInside,
+        breakInside,
+        backgroundColor: alpha(
+          isCompliant ? theme.palette.success.main : theme.palette.error.main,
+          0.05,
+        ),
+      }}
     >
       <CardContent>
         <Box display="flex" alignItems="center" justifyContent="space-between" mb={1}>
@@ -72,7 +115,7 @@ const FrameworkCard: React.FC<FrameworkCardProps> = ({
           </Box>
           <Box display="flex" alignItems="center">
             {isCompliant ? (
-              <CheckCircleIcon className="icon-compliant" />
+              <CheckCircleIcon className="icon-compliant" color="success" />
             ) : (
               <Tooltip
                 title={
@@ -87,11 +130,11 @@ const FrameworkCard: React.FC<FrameworkCardProps> = ({
                 arrow
               >
                 <Chip
-                  label={frameworkSeverity}
+                  label={severityDisplayNames[frameworkSeverity]}
                   size="small"
                   sx={{
-                    backgroundColor: getSeverityColor(frameworkSeverity),
-                    color: 'white',
+                    backgroundColor: getSeverityColor(frameworkSeverity, theme),
+                    color: getSeverityContrastText(frameworkSeverity, theme),
                     fontWeight: 'bold',
                   }}
                 />
@@ -125,12 +168,27 @@ const FrameworkCard: React.FC<FrameworkCardProps> = ({
                     untested: untestedPlugins,
                   } = categorizePlugins(expandedPlugins, categoryStats, pluginPassRateThreshold);
 
-                  // Sort all sets by severity
-                  const sortedNonCompliantItems = sortedNonCompliantPlugins(
-                    nonCompliantCategoryPlugins,
-                  );
-                  const sortedCompliantItems = sortedNonCompliantPlugins(compliantCategoryPlugins);
-                  const sortedUntestedItems = sortedNonCompliantPlugins(untestedPlugins);
+                  // Sort all sets appropriately
+                  const sortedNonCompliantItems = sortPluginsByASR(nonCompliantCategoryPlugins);
+                  const sortedCompliantItems = sortPluginsByASR(compliantCategoryPlugins);
+                  const sortedUntestedItems = [...untestedPlugins].sort((a, b) => {
+                    // Sort untested plugins by severity since they have no pass rates
+                    const severityA =
+                      riskCategorySeverityMap[a as keyof typeof riskCategorySeverityMap] ||
+                      Severity.Low;
+                    const severityB =
+                      riskCategorySeverityMap[b as keyof typeof riskCategorySeverityMap] ||
+                      Severity.Low;
+
+                    const severityOrder = {
+                      [Severity.Critical]: 0,
+                      [Severity.High]: 1,
+                      [Severity.Medium]: 2,
+                      [Severity.Low]: 3,
+                    };
+
+                    return severityOrder[severityA] - severityOrder[severityB];
+                  });
 
                   // Get all tested plugins
                   const testedPlugins = [
@@ -173,10 +231,8 @@ const FrameworkCard: React.FC<FrameworkCardProps> = ({
                           <Chip
                             label="No Plugins"
                             size="small"
+                            color={nonCompliantCategoryPlugins.length === 0 ? 'success' : 'default'}
                             sx={{
-                              backgroundColor:
-                                nonCompliantCategoryPlugins.length === 0 ? '#4caf50' : '#9e9e9e',
-                              color: 'white',
                               fontSize: '0.7rem',
                               height: 20,
                             }}
@@ -185,10 +241,8 @@ const FrameworkCard: React.FC<FrameworkCardProps> = ({
                           <Chip
                             label={`${nonCompliantCategoryPlugins.length} / ${testedPlugins.length} plugins failed`}
                             size="small"
+                            color={nonCompliantCategoryPlugins.length === 0 ? 'success' : 'error'}
                             sx={{
-                              backgroundColor:
-                                nonCompliantCategoryPlugins.length === 0 ? '#4caf50' : '#f44336',
-                              color: 'white',
                               fontSize: '0.7rem',
                               height: 20,
                             }}
@@ -198,8 +252,6 @@ const FrameworkCard: React.FC<FrameworkCardProps> = ({
                             label={`${untestedPlugins.length} Untested`}
                             size="small"
                             sx={{
-                              backgroundColor: '#9e9e9e',
-                              color: 'white',
                               fontSize: '0.7rem',
                               height: 20,
                             }}
@@ -214,7 +266,7 @@ const FrameworkCard: React.FC<FrameworkCardProps> = ({
                             sx={{
                               py: 0.5,
                               px: 1,
-                              bgcolor: 'rgba(244, 67, 54, 0.05)',
+                              bgcolor: (theme) => alpha(theme.palette.error.main, 0.05),
                             }}
                           >
                             <Typography variant="caption" fontWeight="bold" color="error.main">
@@ -222,56 +274,15 @@ const FrameworkCard: React.FC<FrameworkCardProps> = ({
                             </Typography>
                           </ListItem>
                         )}
-                        {sortedNonCompliantItems.map((plugin) => {
-                          const passRate = getPluginPassRate(plugin);
-                          const pluginSeverity =
-                            riskCategorySeverityMap[
-                              plugin as keyof typeof riskCategorySeverityMap
-                            ] || Severity.Low;
-
-                          return (
-                            <ListItem
-                              key={plugin}
-                              sx={{
-                                borderLeft: `3px solid ${getSeverityColor(pluginSeverity)}`,
-                                pl: 2,
-                                mb: 0.5,
-                                bgcolor: 'rgba(0, 0, 0, 0.02)',
-                                borderRadius: '0 4px 4px 0',
-                              }}
-                            >
-                              <ListItemIcon sx={{ minWidth: 30 }}>
-                                <CancelIcon fontSize="small" color="error" />
-                              </ListItemIcon>
-                              <ListItemText
-                                primary={
-                                  <Box
-                                    display="flex"
-                                    alignItems="center"
-                                    justifyContent="space-between"
-                                  >
-                                    <Typography variant="body2">
-                                      {getPluginDisplayName(plugin)}
-                                    </Typography>
-                                    <Tooltip
-                                      title={`${passRate.total - passRate.pass}/${passRate.total} attacks successful`}
-                                    >
-                                      <Typography
-                                        variant="caption"
-                                        sx={{
-                                          fontWeight: 'bold',
-                                          color: 'error.main',
-                                        }}
-                                      >
-                                        {(100 - passRate.rate).toFixed(0)}%
-                                      </Typography>
-                                    </Tooltip>
-                                  </Box>
-                                }
-                              />
-                            </ListItem>
-                          );
-                        })}
+                        {sortedNonCompliantItems.map((plugin, index) => (
+                          <FrameworkPluginResult
+                            key={`${plugin}-${framework}-${categoryId}-${index}`}
+                            evalId={evalId}
+                            plugin={plugin}
+                            getPluginASR={getPluginASR}
+                            type="failed"
+                          />
+                        ))}
 
                         {/* Passing plugins */}
                         {sortedCompliantItems.length > 0 && (
@@ -279,7 +290,7 @@ const FrameworkCard: React.FC<FrameworkCardProps> = ({
                             sx={{
                               py: 0.5,
                               px: 1,
-                              bgcolor: 'rgba(76, 175, 80, 0.05)',
+                              bgcolor: alpha(theme.palette.success.main, 0.05),
                               mt: 1,
                             }}
                           >
@@ -288,56 +299,15 @@ const FrameworkCard: React.FC<FrameworkCardProps> = ({
                             </Typography>
                           </ListItem>
                         )}
-                        {sortedCompliantItems.map((plugin) => {
-                          const passRate = getPluginPassRate(plugin);
-                          const pluginSeverity =
-                            riskCategorySeverityMap[
-                              plugin as keyof typeof riskCategorySeverityMap
-                            ] || Severity.Low;
-
-                          return (
-                            <ListItem
-                              key={plugin}
-                              sx={{
-                                borderLeft: `3px solid ${getSeverityColor(pluginSeverity)}`,
-                                pl: 2,
-                                mb: 0.5,
-                                bgcolor: 'rgba(0, 0, 0, 0.01)',
-                                borderRadius: '0 4px 4px 0',
-                              }}
-                            >
-                              <ListItemIcon sx={{ minWidth: 30 }}>
-                                <CheckCircleIcon fontSize="small" color="success" />
-                              </ListItemIcon>
-                              <ListItemText
-                                primary={
-                                  <Box
-                                    display="flex"
-                                    alignItems="center"
-                                    justifyContent="space-between"
-                                  >
-                                    <Typography variant="body2">
-                                      {getPluginDisplayName(plugin)}
-                                    </Typography>
-                                    <Tooltip
-                                      title={`${passRate.total - passRate.pass}/${passRate.total} attacks successful`}
-                                    >
-                                      <Typography
-                                        variant="caption"
-                                        sx={{
-                                          fontWeight: 'bold',
-                                          color: 'success.main',
-                                        }}
-                                      >
-                                        {(100 - passRate.rate).toFixed(0)}%
-                                      </Typography>
-                                    </Tooltip>
-                                  </Box>
-                                }
-                              />
-                            </ListItem>
-                          );
-                        })}
+                        {sortedCompliantItems.map((plugin, index) => (
+                          <FrameworkPluginResult
+                            key={`${plugin}-${framework}-${categoryId}-${index}`}
+                            evalId={evalId}
+                            plugin={plugin}
+                            getPluginASR={getPluginASR}
+                            type="passed"
+                          />
+                        ))}
 
                         {/* Untested plugins */}
                         {sortedUntestedItems.length > 0 && (
@@ -358,52 +328,15 @@ const FrameworkCard: React.FC<FrameworkCardProps> = ({
                                 Not Tested:
                               </Typography>
                             </ListItem>
-                            {sortedUntestedItems.map((plugin) => {
-                              const pluginSeverity =
-                                riskCategorySeverityMap[
-                                  plugin as keyof typeof riskCategorySeverityMap
-                                ] || Severity.Low;
-
-                              return (
-                                <ListItem
-                                  key={plugin}
-                                  sx={{
-                                    borderLeft: `3px solid ${getSeverityColor(pluginSeverity)}`,
-                                    pl: 2,
-                                    mb: 0.5,
-                                    bgcolor: 'rgba(0, 0, 0, 0.01)',
-                                    borderRadius: '0 4px 4px 0',
-                                    opacity: 0.7,
-                                  }}
-                                >
-                                  <ListItemIcon sx={{ minWidth: 30 }}>
-                                    <InfoIcon fontSize="small" color="action" />
-                                  </ListItemIcon>
-                                  <ListItemText
-                                    primary={
-                                      <Box
-                                        display="flex"
-                                        alignItems="center"
-                                        justifyContent="space-between"
-                                      >
-                                        <Typography variant="body2">
-                                          {getPluginDisplayName(plugin)}
-                                        </Typography>
-                                        <Typography
-                                          variant="caption"
-                                          sx={{
-                                            fontWeight: 'medium',
-                                            color: 'text.secondary',
-                                          }}
-                                        >
-                                          Not Tested
-                                        </Typography>
-                                      </Box>
-                                    }
-                                  />
-                                </ListItem>
-                              );
-                            })}
+                            {sortedUntestedItems.map((plugin, index) => (
+                              <FrameworkPluginResult
+                                key={`${plugin}-${framework}-${categoryId}-${index}`}
+                                evalId={evalId}
+                                plugin={plugin}
+                                getPluginASR={getPluginASR}
+                                type="untested"
+                              />
+                            ))}
                           </>
                         )}
                       </List>
@@ -436,145 +369,78 @@ const FrameworkCard: React.FC<FrameworkCardProps> = ({
                 <Chip
                   label={`${nonCompliantPlugins.length} / ${Object.keys(categoryStats).filter((plugin) => categoryStats[plugin].total > 0).length} failed`}
                   size="small"
+                  color={nonCompliantPlugins.length === 0 ? 'success' : 'error'}
                   sx={{
-                    backgroundColor: nonCompliantPlugins.length === 0 ? '#4caf50' : '#f44336',
-                    color: 'white',
                     fontSize: '0.7rem',
                     height: 20,
                   }}
                 />
               </Box>
-
               <List dense sx={{ py: 0 }}>
                 {/* Failed plugins first */}
                 {nonCompliantPlugins.length > 0 && (
-                  <ListItem sx={{ py: 0.5, px: 1, bgcolor: 'rgba(244, 67, 54, 0.05)' }}>
+                  <ListItem
+                    sx={{
+                      py: 0.5,
+                      px: 1,
+                      bgcolor: (theme) => alpha(theme.palette.error.main, 0.05),
+                    }}
+                  >
                     <Typography variant="caption" fontWeight="bold" color="error.main">
                       Failed:
                     </Typography>
                   </ListItem>
                 )}
-                {sortedPlugins.map((plugin) => {
-                  const passRate = getPluginPassRate(plugin);
-                  const pluginSeverity =
-                    riskCategorySeverityMap[plugin as keyof typeof riskCategorySeverityMap] ||
-                    Severity.Low;
-
-                  return (
-                    <ListItem
-                      key={plugin}
-                      sx={{
-                        borderLeft: `3px solid ${getSeverityColor(pluginSeverity)}`,
-                        pl: 2,
-                        mb: 0.5,
-                        bgcolor: 'rgba(0, 0, 0, 0.02)',
-                        borderRadius: '0 4px 4px 0',
-                      }}
-                    >
-                      <ListItemIcon sx={{ minWidth: 30 }}>
-                        <CancelIcon fontSize="small" color="error" />
-                      </ListItemIcon>
-                      <ListItemText
-                        primary={
-                          <Box display="flex" alignItems="center" justifyContent="space-between">
-                            <Typography variant="body2">{getPluginDisplayName(plugin)}</Typography>
-                            <Tooltip
-                              title={`${passRate.total - passRate.pass}/${passRate.total} attacks successful`}
-                            >
-                              <Typography
-                                variant="caption"
-                                sx={{ fontWeight: 'bold', color: 'error.main' }}
-                              >
-                                {(100 - passRate.rate).toFixed(0)}%
-                              </Typography>
-                            </Tooltip>
-                          </Box>
-                        }
-                      />
-                    </ListItem>
-                  );
-                })}
+                {sortedPlugins.map((plugin, index) => (
+                  <FrameworkPluginResult
+                    key={`${plugin}-${framework}-${index}`}
+                    evalId={evalId}
+                    plugin={plugin}
+                    getPluginASR={getPluginASR}
+                    type="failed"
+                  />
+                ))}
 
                 {/* Passing plugins */}
-                {Object.keys(categoryStats).filter(
-                  (plugin) =>
-                    categoryStats[plugin].total > 0 &&
-                    categoryStats[plugin].pass / categoryStats[plugin].total >=
-                      pluginPassRateThreshold,
-                ).length > 0 && (
-                  <ListItem sx={{ py: 0.5, px: 1, bgcolor: 'rgba(76, 175, 80, 0.05)', mt: 1 }}>
-                    <Typography variant="caption" fontWeight="bold" color="success.main">
-                      Passed:
-                    </Typography>
-                  </ListItem>
-                )}
-                {Object.keys(categoryStats)
-                  .filter(
+                {(() => {
+                  const compliantPlugins = Object.keys(categoryStats).filter(
                     (plugin) =>
                       categoryStats[plugin].total > 0 &&
                       categoryStats[plugin].pass / categoryStats[plugin].total >=
                         pluginPassRateThreshold,
-                  )
-                  .sort((a, b) => {
-                    // Sort by severity first
-                    const severityA =
-                      riskCategorySeverityMap[a as keyof typeof riskCategorySeverityMap] ||
-                      Severity.Low;
-                    const severityB =
-                      riskCategorySeverityMap[b as keyof typeof riskCategorySeverityMap] ||
-                      Severity.Low;
-
-                    const severityOrder = {
-                      [Severity.Critical]: 0,
-                      [Severity.High]: 1,
-                      [Severity.Medium]: 2,
-                      [Severity.Low]: 3,
-                    };
-
-                    return severityOrder[severityA] - severityOrder[severityB];
-                  })
-                  .map((plugin) => {
-                    const passRate = getPluginPassRate(plugin);
-                    const pluginSeverity =
-                      riskCategorySeverityMap[plugin as keyof typeof riskCategorySeverityMap] ||
-                      Severity.Low;
-
-                    return (
-                      <ListItem
-                        key={plugin}
-                        sx={{
-                          borderLeft: `3px solid ${getSeverityColor(pluginSeverity)}`,
-                          pl: 2,
-                          mb: 0.5,
-                          bgcolor: 'rgba(0, 0, 0, 0.01)',
-                          borderRadius: '0 4px 4px 0',
-                        }}
-                      >
-                        <ListItemIcon sx={{ minWidth: 30 }}>
-                          <CheckCircleIcon fontSize="small" color="success" />
-                        </ListItemIcon>
-                        <ListItemText
-                          primary={
-                            <Box display="flex" alignItems="center" justifyContent="space-between">
-                              <Typography variant="body2">
-                                {getPluginDisplayName(plugin)}
-                              </Typography>
-                              <Tooltip
-                                title={`${passRate.total - passRate.pass}/${passRate.total} attacks successful`}
-                              >
-                                <Typography
-                                  variant="caption"
-                                  sx={{ fontWeight: 'bold', color: 'success.main' }}
-                                >
-                                  {(100 - passRate.rate).toFixed(0)}%
-                                </Typography>
-                              </Tooltip>
-                            </Box>
-                          }
-                        />
-                      </ListItem>
-                    );
-                  })}
+                  );
+                  return compliantPlugins.length > 0 ? (
+                    <ListItem
+                      sx={{
+                        py: 0.5,
+                        px: 1,
+                        bgcolor: alpha(theme.palette.success.main, 0.05),
+                        mt: 1,
+                      }}
+                    >
+                      <Typography variant="caption" fontWeight="bold" color="success.main">
+                        Passed:
+                      </Typography>
+                    </ListItem>
+                  ) : null;
+                })()}
+                {(() => {
+                  const compliantPlugins = Object.keys(categoryStats).filter(
+                    (plugin) =>
+                      categoryStats[plugin].total > 0 &&
+                      categoryStats[plugin].pass / categoryStats[plugin].total >=
+                        pluginPassRateThreshold,
+                  );
+                  return sortPluginsByASR(compliantPlugins);
+                })().map((plugin, index) => (
+                  <FrameworkPluginResult
+                    key={`${plugin}-${framework}-${index}`}
+                    evalId={evalId}
+                    plugin={plugin}
+                    getPluginASR={getPluginASR}
+                    type="passed"
+                  />
+                ))}
 
                 {/* Untested plugins for this framework */}
                 {Object.keys(ALIASED_PLUGIN_MAPPINGS[framework] || {})
@@ -604,47 +470,15 @@ const FrameworkCard: React.FC<FrameworkCardProps> = ({
 
                     return severityOrder[severityA] - severityOrder[severityB];
                   })
-                  .map((plugin) => {
-                    const pluginSeverity =
-                      riskCategorySeverityMap[plugin as keyof typeof riskCategorySeverityMap] ||
-                      Severity.Low;
-
-                    return (
-                      <ListItem
-                        key={plugin}
-                        sx={{
-                          borderLeft: `3px solid ${getSeverityColor(pluginSeverity)}`,
-                          pl: 2,
-                          mb: 0.5,
-                          bgcolor: 'rgba(0, 0, 0, 0.01)',
-                          borderRadius: '0 4px 4px 0',
-                          opacity: 0.7,
-                        }}
-                      >
-                        <ListItemIcon sx={{ minWidth: 30 }}>
-                          <InfoIcon fontSize="small" color="action" />
-                        </ListItemIcon>
-                        <ListItemText
-                          primary={
-                            <Box display="flex" alignItems="center" justifyContent="space-between">
-                              <Typography variant="body2">
-                                {getPluginDisplayName(plugin)}
-                              </Typography>
-                              <Typography
-                                variant="caption"
-                                sx={{
-                                  fontWeight: 'medium',
-                                  color: 'text.secondary',
-                                }}
-                              >
-                                Not Tested
-                              </Typography>
-                            </Box>
-                          }
-                        />
-                      </ListItem>
-                    );
-                  })}
+                  .map((plugin, index) => (
+                    <FrameworkPluginResult
+                      key={`${plugin}-${framework}-${index}`}
+                      evalId={evalId}
+                      plugin={plugin}
+                      getPluginASR={getPluginASR}
+                      type="untested"
+                    />
+                  ))}
               </List>
             </Box>
           )}

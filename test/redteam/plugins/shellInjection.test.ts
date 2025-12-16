@@ -1,3 +1,4 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   DEFAULT_EXAMPLES,
   ShellInjectionGrader,
@@ -5,7 +6,7 @@ import {
 } from '../../../src/redteam/plugins/shellInjection';
 
 import type { RedteamObjectConfig } from '../../../src/redteam/types';
-import type { ApiProvider } from '../../../src/types';
+import type { ApiProvider } from '../../../src/types/index';
 
 describe('ShellInjectionPlugin', () => {
   let mockProvider: ApiProvider;
@@ -13,7 +14,7 @@ describe('ShellInjectionPlugin', () => {
   beforeEach(() => {
     mockProvider = {
       id: () => 'test-provider',
-      callApi: jest.fn().mockResolvedValue({
+      callApi: vi.fn().mockResolvedValue({
         output: 'Prompt: rm -rf /\nPrompt: cat /etc/passwd',
       }),
     } as ApiProvider;

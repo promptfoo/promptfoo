@@ -2,17 +2,12 @@ import chalk from 'chalk';
 import logger from '../logger';
 import Eval from '../models/eval';
 import { generateTable, wrapTable } from '../table';
-import telemetry from '../telemetry';
-import { printBorder, setupEnv } from '../util';
+import { printBorder, setupEnv } from '../util/index';
 import { getDatasetFromHash, getEvalFromId, getPromptFromHash } from '../util/database';
 import invariant from '../util/invariant';
 import type { Command } from 'commander';
 
 export async function handlePrompt(id: string) {
-  telemetry.record('command_used', {
-    name: 'show prompt',
-  });
-
   const prompt = await getPromptFromHash(id);
   if (!prompt) {
     logger.error(`Prompt with ID ${id} not found.`);
@@ -64,10 +59,6 @@ export async function handlePrompt(id: string) {
 }
 
 export async function handleEval(id: string) {
-  telemetry.record('command_used', {
-    name: 'show eval',
-  });
-
   const eval_ = await Eval.findById(id);
   if (!eval_) {
     logger.error(`No evaluation found with ID ${id}`);
@@ -97,10 +88,6 @@ export async function handleEval(id: string) {
 }
 
 export async function handleDataset(id: string) {
-  telemetry.record('command_used', {
-    name: 'show dataset',
-  });
-
   const dataset = await getDatasetFromHash(id);
   if (!dataset) {
     logger.error(`Dataset with ID ${id} not found.`);
@@ -161,9 +148,6 @@ export async function showCommand(program: Command) {
     .option('--env-file, --env-path <path>', 'Path to .env file')
     .action(async (id: string | undefined, cmdObj: { envPath?: string }) => {
       setupEnv(cmdObj.envPath);
-      telemetry.record('command_used', {
-        name: 'show',
-      });
 
       if (!id) {
         const latestEval = await Eval.latest();

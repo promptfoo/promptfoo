@@ -31,9 +31,40 @@ This example compares inline vs. external file approach:
 
 Example demonstrating function calling capabilities with the Responses API.
 
+### Function Callbacks (`promptfooconfig.function-callback.yaml`)
+
+Example showing how to use function callbacks to execute functions locally instead of just returning the function call. This allows you to:
+
+- Execute custom logic when the model calls a function
+- Return the result directly to the test assertions
+- Test end-to-end workflows including function execution
+
+Key differences from regular function calling:
+
+- Uses `functionToolCallbacks` to define JavaScript functions
+- Functions are executed locally and results are returned
+- Perfect for testing tool-using AI agents
+
 ### Reasoning Models (`promptfooconfig.reasoning.yaml`)
 
 Example showing how to use reasoning models (o1, o3, etc.) with specific configurations.
+
+### GPT-5.1 (`promptfooconfig.gpt-5.1.yaml`)
+
+Example demonstrating GPT-5.1's key features including:
+
+- **`none` reasoning mode**: No reasoning tokens for fastest responses
+- **Verbosity control**: Adjustable output length (`low`, `medium`, `high`)
+- **Reasoning effort levels**: Compare `none`, `medium`, and `high` reasoning modes
+- **Coding tasks**: Optimized for coding and problem-solving workflows
+
+### GPT-5.2 (`promptfooconfig.gpt-5.2.yaml`)
+
+Example comparing GPT-5.2 with different reasoning effort levels:
+
+- **none**: No reasoning tokens for fastest responses
+- **medium**: Balanced reasoning for most tasks
+- **high**: Maximum reasoning for complex problem-solving
 
 ### Image Processing (`promptfooconfig.image.yaml`)
 
@@ -75,8 +106,17 @@ npx promptfoo eval -c promptfooconfig.mcp.yaml
 # Function calling example
 npx promptfoo eval -c promptfooconfig.function-call.yaml
 
+# Function callbacks example
+npx promptfoo eval -c promptfooconfig.function-callback.yaml
+
 # Reasoning models example
 npx promptfoo eval -c promptfooconfig.reasoning.yaml
+
+# GPT-5.1 example
+npx promptfoo eval -c promptfooconfig.gpt-5.1.yaml
+
+# GPT-5.2 example
+npx promptfoo eval -c promptfooconfig.gpt-5.2.yaml
 ```
 
 ## Prerequisites

@@ -32,19 +32,14 @@ export const BaseTokenUsageSchema = z.object({
       prompt: z.number().optional(),
       completion: z.number().optional(),
       cached: z.number().optional(),
+      numRequests: z.number().optional(),
+      completionDetails: CompletionTokenDetailsSchema.optional(),
     })
     .optional(),
 });
 
-/**
- * Complete token usage statistics, including assertion data
- */
-export const TokenUsageSchema = BaseTokenUsageSchema.extend({
-  assertions: BaseTokenUsageSchema.optional(),
-});
-
 // TypeScript types derived from schemas
 export type BaseTokenUsage = z.infer<typeof BaseTokenUsageSchema>;
-export type TokenUsage = z.infer<typeof TokenUsageSchema>;
+export type TokenUsage = z.infer<typeof BaseTokenUsageSchema>;
 
 export type NunjucksFilterMap = Record<string, (...args: any[]) => string>;

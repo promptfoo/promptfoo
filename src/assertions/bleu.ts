@@ -12,7 +12,7 @@
 import invariant from '../util/invariant';
 import { getNGrams } from './ngrams';
 
-import type { AssertionParams, GradingResult } from '../types';
+import type { AssertionParams, GradingResult } from '../types/index';
 
 /**
  * Calculates the brevity penalty for BLEU score.
@@ -134,7 +134,7 @@ export function handleBleuScore({
     '"bleu" assertion type must have a string or array of strings value',
   );
 
-  const threshold = assertion.threshold ?? 0.5;
+  const threshold: number = (assertion.threshold as number) ?? 0.5;
   const references = Array.isArray(renderedValue) ? renderedValue : [renderedValue];
   const score = calculateBleuScore(outputString, references);
   const pass = score >= threshold !== inverse;

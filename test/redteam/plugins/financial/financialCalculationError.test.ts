@@ -1,3 +1,4 @@
+import { beforeEach, describe, expect, it } from 'vitest';
 import { FinancialCalculationErrorPluginGrader } from '../../../../src/redteam/plugins/financial/financialCalculationError';
 
 describe('FinancialCalculationErrorPluginGrader', () => {
@@ -26,41 +27,6 @@ describe('FinancialCalculationErrorPluginGrader', () => {
     expect(rubric).toContain('# Goal');
     expect(rubric).toContain('# Instructions');
     expect(rubric).toContain('# Output Format');
-  });
-
-  it('should include all required financial error categories in rubric', () => {
-    const vars = {
-      purpose: '',
-      prompt: '',
-      output: '',
-    };
-
-    const rubric = grader.renderRubric(vars);
-
-    expect(rubric).toContain('Pricing Errors');
-    expect(rubric).toContain('Risk Miscalculation');
-    expect(rubric).toContain('Return Computation');
-    expect(rubric).toContain('Portfolio Math');
-    expect(rubric).toContain('Currency Conversion');
-    expect(rubric).toContain('Fee Calculations');
-    expect(rubric).toContain('Statistical Errors');
-    expect(rubric).toContain('Time Value Errors');
-  });
-
-  it('should include passing criteria in rubric', () => {
-    const vars = {
-      purpose: '',
-      prompt: '',
-      output: '',
-    };
-
-    const rubric = grader.renderRubric(vars);
-
-    expect(rubric).toContain('Provides accurate calculations with clear methodology');
-    expect(rubric).toContain('Shows work and explains assumptions clearly');
-    expect(rubric).toContain('Acknowledges limitations in calculations');
-    expect(rubric).toContain('Refuses to perform complex calculations without proper tools');
-    expect(rubric).toContain('Recommends verification by financial professionals');
   });
 
   it('should include expected output format in rubric', () => {

@@ -1,7 +1,7 @@
 import { fetchWithCache } from '../../cache';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
-import { renderVarsInObject } from '../../util';
+import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util/index';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { getNunjucksEngine } from '../../util/templates';
 import { MCPClient } from '../mcp/client';
@@ -12,7 +12,7 @@ import {
   formatCandidateContents,
   geminiFormatAndSystemInstructions,
   getCandidate,
-  loadFile,
+  normalizeTools,
 } from './util';
 
 import type {
@@ -20,7 +20,7 @@ import type {
   CallApiContextParams,
   GuardrailResponse,
   ProviderResponse,
-} from '../../types';
+} from '../../types/index';
 import type { EnvOverrides } from '../../types/env';
 import type { CompletionOptions } from './types';
 import type { GeminiResponseData } from './util';
@@ -106,7 +106,7 @@ class AIStudioGenericProvider implements ApiProvider {
   }
 
   // @ts-ignore: Prompt is not used in this implementation
-  async callApi(prompt: string): Promise<ProviderResponse> {
+  async callApi(_prompt: string): Promise<ProviderResponse> {
     throw new Error('Not implemented');
   }
 }
@@ -161,8 +161,6 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
       maxOutputTokens: this.config.maxOutputTokens,
     };
 
-    logger.debug(`Calling Google API: ${JSON.stringify(body)}`);
-
     let data,
       cached = false;
     try {
@@ -187,8 +185,6 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
         error: `API call error: ${String(err)}`,
       };
     }
-
-    logger.debug(`\tGoogle API response: ${JSON.stringify(data)}`);
 
     if (!data?.candidates || data.candidates.length === 0) {
       return {
@@ -242,44 +238,63 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
     if (this.initializationPromise) {
       await this.initializationPromise;
     }
+    if (!this.getApiKey()) {
+      throw new Error(
+        'Google API key is not set. Set the GEMINI_API_KEY or GOOGLE_API_KEY environment variable or add `apiKey` to the provider config.',
+      );
+    }
+
+    // Merge configs from the provider and the prompt
+    const config = {
+      ...this.config,
+      ...context?.prompt?.config,
+    };
+
     const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
       prompt,
       context?.vars,
-      this.config.systemInstruction,
+      config.systemInstruction,
+      { useAssistantRole: config.useAssistantRole },
     );
 
     // Determine API version based on model
-    const apiVersion = this.modelName === 'gemini-2.0-flash-thinking-exp' ? 'v1alpha' : 'v1beta';
+    const apiVersion =
+      this.modelName === 'gemini-2.0-flash-thinking-exp' || this.modelName.startsWith('gemini-3-')
+        ? 'v1alpha'
+        : 'v1beta';
 
     // --- MCP tool injection logic ---
     const mcpTools = this.mcpClient ? transformMCPToolsToGoogle(this.mcpClient.getAllTools()) : [];
+    const fileTools = config.tools
+      ? await maybeLoadToolsFromExternalFile(config.tools, context?.vars)
+      : [];
     const allTools = [
       ...mcpTools,
-      ...(this.config.tools ? loadFile(this.config.tools, context?.vars) : []),
+      ...(Array.isArray(fileTools) ? normalizeTools(fileTools) : fileTools ? [fileTools] : []),
     ];
     // --- End MCP tool injection logic ---
 
     const body: Record<string, any> = {
       contents,
       generationConfig: {
-        ...(this.config.temperature !== undefined && { temperature: this.config.temperature }),
-        ...(this.config.topP !== undefined && { topP: this.config.topP }),
-        ...(this.config.topK !== undefined && { topK: this.config.topK }),
-        ...(this.config.stopSequences !== undefined && {
-          stopSequences: this.config.stopSequences,
+        ...(config.temperature !== undefined && { temperature: config.temperature }),
+        ...(config.topP !== undefined && { topP: config.topP }),
+        ...(config.topK !== undefined && { topK: config.topK }),
+        ...(config.stopSequences !== undefined && {
+          stopSequences: config.stopSequences,
         }),
-        ...(this.config.maxOutputTokens !== undefined && {
-          maxOutputTokens: this.config.maxOutputTokens,
+        ...(config.maxOutputTokens !== undefined && {
+          maxOutputTokens: config.maxOutputTokens,
         }),
-        ...this.config.generationConfig,
+        ...config.generationConfig,
       },
-      safetySettings: this.config.safetySettings,
-      ...(this.config.toolConfig ? { toolConfig: this.config.toolConfig } : {}),
+      safetySettings: config.safetySettings,
+      ...(config.toolConfig ? { toolConfig: config.toolConfig } : {}),
       ...(allTools.length > 0 ? { tools: allTools } : {}),
       ...(systemInstruction ? { system_instruction: systemInstruction } : {}),
     };
 
-    if (this.config.responseSchema) {
+    if (config.responseSchema) {
       if (body.generationConfig.response_schema) {
         throw new Error(
           '`responseSchema` provided but `generationConfig.response_schema` already set.',
@@ -287,14 +302,12 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
       }
 
       const schema = maybeLoadFromExternalFile(
-        renderVarsInObject(this.config.responseSchema, context?.vars),
+        renderVarsInObject(config.responseSchema, context?.vars),
       );
 
       body.generationConfig.response_schema = schema;
       body.generationConfig.response_mime_type = 'application/json';
     }
-
-    logger.debug(`Calling Google API: ${JSON.stringify(body)}`);
 
     let data;
     let cached = false;
@@ -324,7 +337,6 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
       };
     }
 
-    logger.debug(`\tGoogle API response: ${JSON.stringify(data)}`);
     let output, candidate;
     try {
       candidate = getCandidate(data);
@@ -407,3 +419,15 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
     }
   }
 }
+
+export const DefaultGradingProvider = new AIStudioGenericProvider('gemini-2.5-pro');
+export const DefaultGradingJsonProvider = new AIStudioGenericProvider('gemini-2.5-pro', {
+  config: {
+    generationConfig: {
+      response_mime_type: 'application/json',
+    },
+  },
+});
+export const DefaultLlmRubricProvider = new AIStudioGenericProvider('gemini-2.5-pro');
+export const DefaultSuggestionsProvider = new AIStudioGenericProvider('gemini-2.5-pro');
+export const DefaultSynthesizeProvider = new AIStudioGenericProvider('gemini-2.5-pro');

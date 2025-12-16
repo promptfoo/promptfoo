@@ -1,0 +1,380 @@
+import React, { useMemo, useState } from 'react';
+
+import MagicWandIcon from '@mui/icons-material/AutoFixHigh';
+import Alert from '@mui/material/Alert';
+import Autocomplete from '@mui/material/Autocomplete';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import CircularProgress from '@mui/material/CircularProgress';
+import Dialog from '@mui/material/Dialog';
+import DialogActions from '@mui/material/DialogActions';
+import DialogContent from '@mui/material/DialogContent';
+import DialogTitle from '@mui/material/DialogTitle';
+import IconButton from '@mui/material/IconButton';
+import Link from '@mui/material/Link';
+import TextField from '@mui/material/TextField';
+import Tooltip from '@mui/material/Tooltip';
+import Divider from '@mui/material/Divider';
+import Stack from '@mui/material/Stack';
+import Typography from '@mui/material/Typography';
+import {
+  categoryAliases,
+  displayNameOverrides,
+  isMultiTurnStrategy,
+  type Plugin,
+  type Strategy,
+} from '@promptfoo/redteam/constants';
+import { BaseNumberInput } from '@app/components/form/input/BaseNumberInput';
+import {
+  getPluginDocumentationUrl,
+  hasSpecificPluginDocumentation,
+} from './pluginDocumentationMap';
+import { useApiHealth } from '@app/hooks/useApiHealth';
+import ChatMessages, {
+  type LoadedMessage,
+  type LoadingMessage,
+  type Message,
+} from '@app/pages/eval/components/ChatMessages';
+import type {
+  GeneratedTestCase,
+  TargetResponse,
+  TargetPlugin,
+  TargetStrategy,
+} from './testCaseGenerationTypes';
+
+interface TestCaseDialogProps {
+  open: boolean;
+  onClose: () => void;
+  plugin: TargetPlugin | null;
+  strategy: TargetStrategy | null;
+  isGenerating: boolean;
+  generatedTestCases: GeneratedTestCase[];
+  targetResponses: TargetResponse[];
+  isRunningTest?: boolean;
+  onRegenerate: (newPluginId?: string) => void;
+  onContinue: (additionalTurns: number) => void;
+  currentTurn: number;
+  maxTurns: number;
+  availablePlugins: string[];
+  // Whether to allow changing the plugin (only on strategies page)
+  allowPluginChange?: boolean;
+}
+
+export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
+  open,
+  onClose,
+  plugin,
+  strategy,
+  isGenerating,
+  generatedTestCases,
+  targetResponses,
+  isRunningTest = false,
+  onRegenerate,
+  onContinue,
+  currentTurn,
+  maxTurns,
+  availablePlugins,
+  allowPluginChange = false,
+}) => {
+  const pluginName = plugin?.id ?? '';
+  const pluginDisplayName =
+    displayNameOverrides[pluginName as Plugin] ||
+    categoryAliases[pluginName as Plugin] ||
+    pluginName;
+
+  const strategyName = strategy?.id ?? '';
+  const strategyDisplayName = displayNameOverrides[strategyName as Strategy] || strategyName;
+
+  const turnMessages = useMemo<Message[]>(() => {
+    const messages = [];
+
+    for (let i = 0; i < maxTurns; i++) {
+      const generatedTestCase = generatedTestCases[i];
+
+      if (generatedTestCase) {
+        messages.push({
+          role: 'user' as const,
+          content: generatedTestCase.prompt,
+          contentType:
+            strategyName === 'audio'
+              ? ('audio' as const)
+              : strategyName === 'image'
+                ? ('image' as const)
+                : strategyName === 'video'
+                  ? ('video' as const)
+                  : ('text' as const),
+        } as LoadedMessage);
+      }
+
+      const targetResponse = targetResponses[i];
+
+      if (targetResponse) {
+        const output = targetResponse.output;
+        const content =
+          typeof output === 'string'
+            ? output
+            : output != null
+              ? JSON.stringify(output)
+              : (targetResponse.error ?? 'No response from target');
+
+        messages.push({
+          role: 'assistant' as const,
+          content,
+          contentType: 'text' as const,
+        } as LoadedMessage);
+      }
+    }
+
+    // Indicate loading state to the user
+    if (
+      isGenerating &&
+      generatedTestCases.length === targetResponses.length &&
+      generatedTestCases.length < maxTurns
+    ) {
+      messages.push({ role: 'user' as const, loading: true } as LoadingMessage);
+    } else if (isRunningTest) {
+      messages.push({ role: 'assistant' as const, loading: true } as LoadingMessage);
+    }
+
+    return messages;
+  }, [
+    generatedTestCases,
+    targetResponses,
+    currentTurn,
+    maxTurns,
+    isGenerating,
+    isRunningTest,
+    strategyName,
+  ]);
+
+  const canAddAdditionalTurns =
+    !isGenerating && !isRunningTest && isMultiTurnStrategy(strategyName as Strategy);
+
+  const renderPluginDocumentationLink =
+    pluginName && !plugin?.isStatic && hasSpecificPluginDocumentation(pluginName as Plugin);
+
+  return (
+    <Dialog
+      open={open}
+      onClose={onClose}
+      maxWidth="md"
+      fullWidth
+      sx={{
+        // Ensure the container is always rendered in front of tooltips
+        zIndex: 10000,
+      }}
+      data-testid="test-case-dialog"
+    >
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: 'row',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: 2,
+          px: 3,
+          py: 2,
+        }}
+      >
+        <Box>
+          <DialogTitle
+            sx={{
+              // Override the default padding to set it consistently on the parent container
+              p: 0,
+            }}
+          >
+            {allowPluginChange
+              ? `${strategyDisplayName}${maxTurns > 1 ? ` (${maxTurns} turns)` : ''}`
+              : pluginDisplayName}
+          </DialogTitle>
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            data-testid={allowPluginChange ? 'strategy-chip' : 'plugin-chip'}
+          >
+            {allowPluginChange ? 'Strategy Preview' : 'Plugin Preview'}
+          </Typography>
+        </Box>
+        {allowPluginChange && (
+          <Autocomplete
+            size="small"
+            value={pluginName}
+            onChange={(_, newValue) => {
+              if (newValue && newValue !== pluginName) {
+                onRegenerate(newValue);
+              }
+            }}
+            options={availablePlugins}
+            getOptionLabel={(option) =>
+              (displayNameOverrides as Record<string, string>)[option] ||
+              (categoryAliases as Record<string, string>)[option] ||
+              option
+            }
+            disableClearable
+            slotProps={{
+              popper: {
+                sx: { zIndex: 10001 },
+              },
+            }}
+            sx={{ minWidth: 280 }}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                variant="outlined"
+                size="small"
+                label="Plugin"
+                data-testid="plugin-dropdown"
+              />
+            )}
+          />
+        )}
+      </Box>
+      <DialogContent sx={{ minHeight: 200 }}>
+        <Stack direction="column" gap={2}>
+          <ChatMessages
+            messages={turnMessages}
+            displayTurnCount={maxTurns > 1}
+            maxTurns={maxTurns}
+          />
+          {generatedTestCases.length > 0 && (
+            <Alert severity="info">
+              Dissatisfied with the test case? Fine tune it by adjusting your{' '}
+              {pluginName === 'policy' ? 'Policy details' : 'Application Details'}.
+            </Alert>
+          )}
+        </Stack>
+      </DialogContent>
+      <DialogActions
+        sx={{
+          justifyContent: renderPluginDocumentationLink ? 'space-between' : 'flex-end',
+          px: 3,
+          pb: 3,
+        }}
+      >
+        {renderPluginDocumentationLink && (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Link
+              href={getPluginDocumentationUrl(pluginName as Plugin)}
+              target="_blank"
+              rel="noopener noreferrer"
+              sx={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 0.5,
+                fontSize: '0.875rem',
+                textDecoration: 'none',
+                '&:hover': {
+                  textDecoration: 'underline',
+                },
+              }}
+            >
+              Learn more about {pluginDisplayName}
+              <Box component="span" sx={{ fontSize: '0.75rem' }}>
+                ↗
+              </Box>
+            </Link>
+          </Box>
+        )}
+
+        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+          {canAddAdditionalTurns && (
+            <>
+              <MultiTurnExtensionControl onContinue={onContinue} />{' '}
+              <Divider orientation="vertical" flexItem />
+            </>
+          )}
+          <Button
+            onClick={() => onRegenerate()}
+            variant={canAddAdditionalTurns ? 'outlined' : 'contained'}
+            loading={isGenerating || isRunningTest}
+          >
+            {canAddAdditionalTurns ? 'Start Over' : 'Regenerate'}
+          </Button>
+          <Button onClick={onClose} variant="outlined" color="error">
+            Close
+          </Button>
+        </Box>
+      </DialogActions>
+    </Dialog>
+  );
+};
+
+export const TestCaseGenerateButton: React.FC<{
+  onClick: () => void;
+  disabled?: boolean;
+  isGenerating?: boolean;
+  size?: 'small' | 'medium';
+  tooltipTitle?: string;
+}> = ({ onClick, disabled = false, isGenerating = false, size = 'small', tooltipTitle }) => {
+  const {
+    data: { status: apiHealthStatus },
+  } = useApiHealth();
+  const isRemoteDisabled = apiHealthStatus !== 'connected';
+
+  // Tooltip component uses controlled state in order to imperatively close it when the Test Case
+  // Generation dialog is rendered (by default it will remain open even after the dialog is closed).
+  const [shouldRenderTooltip, setShouldRenderTooltip] = useState<boolean>(false);
+
+  const showTooltip = () => setShouldRenderTooltip(true);
+  const hideTooltip = () => setShouldRenderTooltip(false);
+
+  return (
+    <Tooltip
+      title={
+        isRemoteDisabled
+          ? 'Requires Promptfoo Cloud connection'
+          : tooltipTitle || 'Generate test case'
+      }
+      open={shouldRenderTooltip}
+      onClose={hideTooltip}
+      onOpen={showTooltip}
+    >
+      <span>
+        <IconButton
+          onClick={(e) => {
+            e.stopPropagation();
+            hideTooltip();
+            onClick();
+          }}
+          disabled={disabled || isRemoteDisabled}
+          sx={{ color: 'text.secondary' }}
+          onMouseEnter={showTooltip}
+          onMouseLeave={hideTooltip}
+        >
+          {isGenerating ? (
+            <CircularProgress size={size === 'small' ? 16 : 20} />
+          ) : (
+            <MagicWandIcon fontSize={size} />
+          )}
+        </IconButton>
+      </span>
+    </Tooltip>
+  );
+};
+
+const MultiTurnExtensionControl: React.FC<{
+  onContinue: (additionalTurns: number) => void;
+}> = ({ onContinue }) => {
+  const [additionalTurns, setAdditionalTurns] = React.useState<number>(5);
+
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+      <BaseNumberInput
+        size="small"
+        value={additionalTurns}
+        onChange={(value) => {
+          if (value !== undefined) {
+            setAdditionalTurns(Math.max(1, Math.min(100, value)));
+          }
+        }}
+        sx={{ width: 125 }}
+        label="Additional Turns"
+        min={1}
+        max={100}
+      />
+      <Button onClick={() => onContinue(additionalTurns)} variant="contained" color="primary">
+        Continue
+      </Button>
+    </Box>
+  );
+};

@@ -1,6 +1,6 @@
 ---
 title: Recreating Mistral Magistral AIME2024 Benchmarks in promptfoo
-description: Reproduce Mistral's Magistral 73.6% AIME2024 mathematical reasoning benchmark using promptfoo with a simple evaluation setup comparing Magistral Medium vs Small.
+description: Replicate Mistral Magistral AIME2024 math benchmark achieving 73.6% accuracy with detailed evaluation methodology and comparisons
 image: /img/docs/mistral-magistral-aime2024-evaluation-results.png
 keywords:
   [

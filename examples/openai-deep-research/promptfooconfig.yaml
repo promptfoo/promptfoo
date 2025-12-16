@@ -1,0 +1,21 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: OpenAI Deep Research API
+prompts:
+  - 'Research and provide a comprehensive answer about {{topic}}'
+providers:
+  - id: openai:responses:o4-mini-deep-research
+    config:
+      max_output_tokens: 50000 # Deep research models need high token limits
+      tools:
+        - type: web_search_preview
+tests:
+  - vars:
+      topic: recent advancements in machine learning
+    assert:
+      - type: contains-any
+        value: [machine learning, ML, neural networks, deep learning]
+  - vars:
+      topic: current space exploration missions
+    assert:
+      - type: contains-any
+        value: [space, NASA, SpaceX, Mars, moon]

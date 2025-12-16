@@ -1,5 +1,6 @@
 import asyncio
 import importlib.util
+import inspect
 import json
 import os
 import sys
@@ -22,7 +23,7 @@ def call_method(script_path, method_name, *args):
         method_to_call = getattr(getattr(script_module, class_name), classmethod_name)
     else:
         method_to_call = getattr(script_module, method_name)
-    if asyncio.iscoroutinefunction(method_to_call):
+    if inspect.iscoroutinefunction(method_to_call):
         return asyncio.run(method_to_call(*args))
     else:
         return method_to_call(*args)
@@ -38,4 +39,5 @@ if __name__ == "__main__":
 
     result = call_method(script_path, method_name, *data)
     with open(output_path, "w", encoding="utf-8") as fp:
-        fp.write(json.dumps({"type": "final_result", "data": result}))
+        # Ensure Unicode is preserved by using ensure_ascii=False
+        json.dump({"type": "final_result", "data": result}, fp, ensure_ascii=False)

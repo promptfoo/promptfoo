@@ -44,7 +44,7 @@ const renderWithTheme = (ui: React.ReactElement) => {
 };
 
 describe('HttpAdvancedConfiguration', () => {
-  let mockUpdateCustomTarget: ReturnType<typeof vi.fn>;
+  let mockUpdateCustomTarget: (field: string, value: unknown) => void;
 
   beforeEach(() => {
     mockUpdateCustomTarget = vi.fn();
@@ -79,36 +79,35 @@ describe('HttpAdvancedConfiguration', () => {
       },
     ];
 
-    it.each(testCases)(
-      'should render toggle switch as $expectedChecked when $description',
-      ({ config, expectedChecked }) => {
-        const selectedTarget: ProviderOptions = {
-          id: 'http-provider',
-          config: config as ProviderOptions['config'],
-        };
+    it.each(testCases)('should render toggle switch as $expectedChecked when $description', ({
+      config,
+      expectedChecked,
+    }) => {
+      const selectedTarget: ProviderOptions = {
+        id: 'http-provider',
+        config: config as ProviderOptions['config'],
+      };
 
-        renderWithTheme(
-          <HttpAdvancedConfiguration
-            selectedTarget={selectedTarget}
-            updateCustomTarget={mockUpdateCustomTarget}
-          />,
-        );
+      renderWithTheme(
+        <HttpAdvancedConfiguration
+          selectedTarget={selectedTarget}
+          updateCustomTarget={mockUpdateCustomTarget}
+        />,
+      );
 
-        const accordionHeader = screen.getByRole('button', { name: /Token Estimation/i });
-        expect(accordionHeader).toBeInTheDocument();
+      // Click on Token Estimation tab
+      const tokenEstimationTab = screen.getByRole('tab', { name: /Token Estimation/i });
+      fireEvent.click(tokenEstimationTab);
 
-        const toggleSwitch = screen.getByLabelText('Enable token estimation') as HTMLInputElement;
-        expect(toggleSwitch).toBeInTheDocument();
-
-        expect(toggleSwitch.checked).toBe(expectedChecked);
-      },
-    );
+      const toggleSwitch = screen.getByLabelText('Enable token estimation') as HTMLInputElement;
+      expect(toggleSwitch.checked).toBe(expectedChecked);
+    });
   });
 
   it("should update selectedTarget.config.tokenEstimation to { enabled: true, multiplier: 1.3 } when the 'Enable token estimation' switch is toggled on", () => {
     const selectedTarget: ProviderOptions = {
       id: 'http-provider',
-      config: { tokenEstimation: { enabled: false } },
+      config: {},
     };
 
     renderWithTheme(
@@ -117,6 +116,10 @@ describe('HttpAdvancedConfiguration', () => {
         updateCustomTarget={mockUpdateCustomTarget}
       />,
     );
+
+    // Click on Token Estimation tab
+    const tokenEstimationTab = screen.getByRole('tab', { name: /Token Estimation/i });
+    fireEvent.click(tokenEstimationTab);
 
     const toggleSwitch = screen.getByLabelText('Enable token estimation') as HTMLInputElement;
     fireEvent.click(toggleSwitch);
@@ -140,6 +143,10 @@ describe('HttpAdvancedConfiguration', () => {
       />,
     );
 
+    // Click on Token Estimation tab
+    const tokenEstimationTab = screen.getByRole('tab', { name: /Token Estimation/i });
+    fireEvent.click(tokenEstimationTab);
+
     const toggleSwitch = screen.getByLabelText('Enable token estimation') as HTMLInputElement;
     fireEvent.click(toggleSwitch);
 
@@ -149,12 +156,7 @@ describe('HttpAdvancedConfiguration', () => {
   it('should display a warning that the multiplier cannot be customized and an input field should be added', () => {
     const selectedTarget: ProviderOptions = {
       id: 'http-provider',
-      config: {
-        tokenEstimation: {
-          enabled: true,
-          multiplier: 1.3,
-        },
-      },
+      config: { tokenEstimation: { enabled: true, multiplier: 1.3 } },
     };
 
     renderWithTheme(
@@ -164,17 +166,23 @@ describe('HttpAdvancedConfiguration', () => {
       />,
     );
 
-    const accordionHeader = screen.getByRole('button', { name: /Token Estimation/i });
-    expect(accordionHeader).toBeInTheDocument();
+    // Click on Token Estimation tab
+    const tokenEstimationTab = screen.getByRole('tab', { name: /Token Estimation/i });
+    fireEvent.click(tokenEstimationTab);
 
+    // Check that the token estimation switch is enabled
     const toggleSwitch = screen.getByLabelText('Enable token estimation') as HTMLInputElement;
-    expect(toggleSwitch).toBeInTheDocument();
+    expect(toggleSwitch.checked).toBe(true);
 
-    const multiplierInput = screen.queryByLabelText('Token estimation multiplier');
-    expect(multiplierInput).toBeNull();
+    // Check that documentation link is present
+    const docsLink = screen.getByRole('link', { name: /docs/i });
+    expect(docsLink).toHaveAttribute(
+      'href',
+      'https://www.promptfoo.dev/docs/providers/http/#token-estimation',
+    );
   });
 
-  it('should display certificate type selection when signature authentication is enabled', () => {
+  it('should show certificate type dropdown and fields for PEM certificate when signatureAuth.enabled is true', () => {
     const selectedTarget: ProviderOptions = {
       id: 'http-provider',
       config: {
@@ -192,14 +200,16 @@ describe('HttpAdvancedConfiguration', () => {
       />,
     );
 
-    const accordionHeader = screen.getByRole('button', {
-      name: /Digital Signature Authentication/i,
-    });
-    expect(accordionHeader).toBeInTheDocument();
+    // Click on Authorization tab first (digital signature is now part of Authorization tab)
+    const authorizationTab = screen.getByRole('tab', { name: /Authorization/i });
+    fireEvent.click(authorizationTab);
 
     // Check that PEM is selected by default
-    const pemOption = screen.getByDisplayValue('pem');
-    expect(pemOption).toBeInTheDocument();
+    // The first combobox is "Authentication Type" (showing "Digital Signature")
+    // The second combobox is "Certificate Type" (showing "PEM")
+    const comboboxes = screen.getAllByRole('combobox');
+    const certificateTypeSelect = comboboxes[1]; // Second combobox is the certificate type
+    expect(certificateTypeSelect).toHaveTextContent('PEM');
   });
 
   describe('JKS Keystore Configuration', () => {
@@ -220,6 +230,10 @@ describe('HttpAdvancedConfiguration', () => {
           updateCustomTarget={mockUpdateCustomTarget}
         />,
       );
+
+      // Click on Authorization tab first (digital signature is now part of Authorization tab)
+      const authorizationTab = screen.getByRole('tab', { name: /Authorization/i });
+      fireEvent.click(authorizationTab);
 
       expect(screen.getByText('Keystore File')).toBeInTheDocument();
       expect(screen.getByLabelText('Keystore Path')).toBeInTheDocument();
@@ -245,6 +259,10 @@ describe('HttpAdvancedConfiguration', () => {
         updateCustomTarget={mockUpdateCustomTarget}
       />,
     );
+
+    // Click on Authorization tab first (digital signature is now part of Authorization tab)
+    const authorizationTab = screen.getByRole('tab', { name: /Authorization/i });
+    fireEvent.click(authorizationTab);
 
     expect(screen.getByLabelText('PFX File Path')).toBeInTheDocument();
 
@@ -273,6 +291,10 @@ describe('HttpAdvancedConfiguration', () => {
       />,
     );
 
+    // Click on Authorization tab first (digital signature is now part of Authorization tab)
+    const authorizationTab = screen.getByRole('tab', { name: /Authorization/i });
+    fireEvent.click(authorizationTab);
+
     const pfxPasswordInput = screen.getByLabelText('PFX Password') as HTMLInputElement;
     fireEvent.change(pfxPasswordInput, { target: { value: 'test-password' } });
 
@@ -300,6 +322,10 @@ describe('HttpAdvancedConfiguration', () => {
         updateCustomTarget={mockUpdateCustomTarget}
       />,
     );
+
+    // Click on Authorization tab first (digital signature is now part of Authorization tab)
+    const authorizationTab = screen.getByRole('tab', { name: /Authorization/i });
+    fireEvent.click(authorizationTab);
 
     const keystorePasswordInput = screen.getByLabelText('Keystore Password');
     const keyAliasInput = screen.getByLabelText('Key Alias');
@@ -338,6 +364,10 @@ describe('HttpAdvancedConfiguration', () => {
       />,
     );
 
+    // Click on Authorization tab first (digital signature is now part of Authorization tab)
+    const authorizationTab = screen.getByRole('tab', { name: /Authorization/i });
+    fireEvent.click(authorizationTab);
+
     const keystorePasswordInput = screen.getByLabelText('Keystore Password') as HTMLInputElement;
     expect(keystorePasswordInput).toBeInTheDocument();
 
@@ -358,11 +388,8 @@ describe('HttpAdvancedConfiguration', () => {
         signatureAuth: {
           enabled: true,
           certificateType: 'pem',
-          keyInputType: 'upload',
-          privateKey: 'some key',
-          privateKeyPath: 'some path',
-          pfxPath: 'some pfx path',
-          pfxPassword: 'some pfx password',
+          certificate: 'test-cert',
+          privateKey: 'test-key',
         },
       },
     };
@@ -374,13 +401,27 @@ describe('HttpAdvancedConfiguration', () => {
       />,
     );
 
-    // Change certificate type to JKS
-    const certificateTypeSelect = screen.getByDisplayValue('pem');
-    fireEvent.change(certificateTypeSelect, { target: { value: 'jks' } });
+    // Click on Authorization tab first (digital signature is now part of Authorization tab)
+    const authorizationTab = screen.getByRole('tab', { name: /Authorization/i });
+    fireEvent.click(authorizationTab);
 
+    // Change certificate type to JKS
+    // The first combobox is "Authentication Type", the second is "Certificate Type"
+    const comboboxes = screen.getAllByRole('combobox');
+    const certificateTypeSelect = comboboxes[1]; // Second combobox is the certificate type
+
+    // MUI Select needs mouseDown event to open
+    fireEvent.mouseDown(certificateTypeSelect);
+
+    // Find and click JKS option
+    const jksOption = screen.getByRole('option', { name: 'JKS' });
+    fireEvent.click(jksOption);
+
+    // Expect updateCustomTarget to be called - note that certificate field is kept in the actual implementation
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith('signatureAuth', {
       enabled: true,
       certificateType: 'jks',
+      certificate: 'test-cert', // certificate field is kept
       keyInputType: undefined,
       privateKey: undefined,
       privateKeyPath: undefined,
@@ -403,11 +444,8 @@ describe('HttpAdvancedConfiguration', () => {
         signatureAuth: {
           enabled: true,
           certificateType: 'pem',
-          keyInputType: 'upload',
-          privateKey: 'some key',
-          privateKeyPath: 'some path',
-          pfxPath: 'some pfx path',
-          pfxPassword: 'some pfx password',
+          certificate: 'test-cert',
+          privateKey: 'test-key',
         },
       },
     };
@@ -419,13 +457,27 @@ describe('HttpAdvancedConfiguration', () => {
       />,
     );
 
-    // Change certificate type to PFX
-    const certificateTypeSelect = screen.getByDisplayValue('pem');
-    fireEvent.change(certificateTypeSelect, { target: { value: 'pfx' } });
+    // Click on Authorization tab first (digital signature is now part of Authorization tab)
+    const authorizationTab = screen.getByRole('tab', { name: /Authorization/i });
+    fireEvent.click(authorizationTab);
 
+    // Change certificate type to PFX
+    // The first combobox is "Authentication Type", the second is "Certificate Type"
+    const comboboxes = screen.getAllByRole('combobox');
+    const certificateTypeSelect = comboboxes[1]; // Second combobox is the certificate type
+
+    // MUI Select needs mouseDown event to open
+    fireEvent.mouseDown(certificateTypeSelect);
+
+    // Find and click PFX option (it's labeled "PFX/PKCS#12" in the component)
+    const pfxOption = screen.getByRole('option', { name: /PFX/ });
+    fireEvent.click(pfxOption);
+
+    // Expect updateCustomTarget to be called - note that certificate field is kept in the actual implementation
     expect(mockUpdateCustomTarget).toHaveBeenCalledWith('signatureAuth', {
       enabled: true,
       certificateType: 'pfx',
+      certificate: 'test-cert', // certificate field is kept
       keyInputType: undefined,
       privateKey: undefined,
       privateKeyPath: undefined,

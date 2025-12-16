@@ -1,5 +1,6 @@
 ---
 sidebar_label: Excessive Agency
+description: Red team AI systems for excessive agency vulnerabilities by testing model responses to impossible actions, preventing false capability claims in production
 ---
 
 # Excessive Agency Plugin

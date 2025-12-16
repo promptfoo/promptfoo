@@ -1,5 +1,6 @@
 ---
 sidebar_label: Helicone
+description: Monitor and optimize LLM testing with Helicone integration in Promptfoo. Track usage, costs, and latency while managing prompts through an open-source observability platform.
 ---
 
 # Helicone integration
@@ -19,7 +20,7 @@ To reference prompts in Helicone:
      - 'helicone://my-cool-prompt:5.2'
 
    providers:
-     - openai:gpt-4.1-mini
+     - openai:gpt-5-mini
 
    tests:
      - vars:

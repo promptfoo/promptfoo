@@ -6,6 +6,7 @@ import { useStore as useMainStore } from '@app/stores/evalConfig';
 import { callApi, fetchUserEmail, updateEvalAuthor } from '@app/utils/api';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import ClearIcon from '@mui/icons-material/Clear';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
@@ -14,8 +15,13 @@ import SettingsIcon from '@mui/icons-material/Settings';
 import ShareIcon from '@mui/icons-material/Share';
 import EyeIcon from '@mui/icons-material/Visibility';
 import VisibilityIcon from '@mui/icons-material/Visibility';
+import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import Dialog from '@mui/material/Dialog';
+import DialogActions from '@mui/material/DialogActions';
+import DialogContent from '@mui/material/DialogContent';
+import DialogTitle from '@mui/material/DialogTitle';
 import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
 import IconButton from '@mui/material/IconButton';
@@ -28,17 +34,21 @@ import Stack from '@mui/material/Stack';
 import { styled } from '@mui/material/styles';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
+import Typography from '@mui/material/Typography';
+import { displayNameOverrides } from '@promptfoo/redteam/constants/metadata';
 import invariant from '@promptfoo/util/invariant';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useDebounce } from 'use-debounce';
 import { AuthorChip } from './AuthorChip';
 import { ColumnSelector } from './ColumnSelector';
 import CompareEvalMenuItem from './CompareEvalMenuItem';
+import { ConfirmEvalNameDialog } from './ConfirmEvalNameDialog';
 import ConfigModal from './ConfigModal';
 import DownloadMenu from './DownloadMenu';
 import { EvalIdChip } from './EvalIdChip';
 import EvalSelectorDialog from './EvalSelectorDialog';
 import EvalSelectorKeyboardShortcut from './EvalSelectorKeyboardShortcut';
+import { useFilterMode } from './FilterModeProvider';
 import { FilterModeSelector } from './FilterModeSelector';
 import ResultsCharts from './ResultsCharts';
 import FiltersButton from './ResultsFilters/FiltersButton';
@@ -48,15 +58,14 @@ import ShareModal from './ShareModal';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import SettingsModal from './TableSettings/TableSettingsModal';
 import type { SelectChangeEvent } from '@mui/material/Select';
-import type { StackProps } from '@mui/material/Stack';
+import type { EvalResultsFilterMode, ResultLightweightWithLabel } from '@promptfoo/types';
 import type { VisibilityState } from '@tanstack/table-core';
-
-import type { FilterMode, ResultLightweightWithLabel } from './types';
 import './ResultsView.css';
 
 import BarChartIcon from '@mui/icons-material/BarChart';
 import FormControl from '@mui/material/FormControl';
 import InputLabel from '@mui/material/InputLabel';
+import { formatPolicyIdentifierAsMetric } from '@promptfoo/redteam/plugins/policy/utils';
 
 const ResponsiveStack = styled(Stack)(({ theme }) => ({
   maxWidth: '100%',
@@ -64,7 +73,7 @@ const ResponsiveStack = styled(Stack)(({ theme }) => ({
   [theme.breakpoints.down('sm')]: {
     flexDirection: 'column',
   },
-})) as React.FC<StackProps>;
+}));
 
 interface ResultsViewProps {
   recentEvals: ResultLightweightWithLabel[];
@@ -183,6 +192,8 @@ export default function ResultsView({
     removeFilter,
   } = useTableStore();
 
+  const { filterMode, setFilterMode } = useFilterMode();
+
   const {
     setInComparisonMode,
     columnStates,
@@ -219,10 +230,8 @@ export default function ResultsView({
   invariant(table, 'Table data must be loaded before rendering ResultsView');
   const { head } = table;
 
-  const [filterMode, setFilterMode] = React.useState<FilterMode>('all');
-
   const handleFilterModeChange = (event: SelectChangeEvent<unknown>) => {
-    const mode = event.target.value as FilterMode;
+    const mode = event.target.value as EvalResultsFilterMode;
     setFilterMode(mode);
 
     const newFailureFilter: { [key: string]: boolean } = {};
@@ -337,6 +346,10 @@ export default function ResultsView({
 
   const [configModalOpen, setConfigModalOpen] = React.useState(false);
   const [viewSettingsModalOpen, setViewSettingsModalOpen] = React.useState(false);
+  const [editNameDialogOpen, setEditNameDialogOpen] = React.useState(false);
+  const [copyDialogOpen, setCopyDialogOpen] = React.useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
+  const [isDeleting, setIsDeleting] = React.useState(false);
 
   const allColumns = React.useMemo(
     () => [
@@ -384,12 +397,12 @@ export default function ResultsView({
     [updateColumnVisibility],
   );
 
-  const handleDescriptionClick = async () => {
-    invariant(config, 'Config must be loaded before clicking its description');
-    const newDescription = window.prompt('Enter new description:', config.description);
-    if (newDescription !== null && newDescription !== config.description) {
-      const newConfig = { ...config, description: newDescription };
+  const handleSaveEvalName = React.useCallback(
+    async (newName: string) => {
       try {
+        invariant(config, 'Config must be loaded before updating its description');
+        const newConfig = { ...config, description: newName };
+
         const response = await callApi(`/eval/${evalId}`, {
           method: 'PATCH',
           headers: {
@@ -397,30 +410,135 @@ export default function ResultsView({
           },
           body: JSON.stringify({ config: newConfig }),
         });
+
         if (!response.ok) {
-          throw new Error('Network response was not ok');
+          throw new Error('Failed to update eval name');
         }
+
         setConfig(newConfig);
       } catch (error) {
-        console.error('Failed to update table:', error);
+        console.error('Failed to update eval name:', error);
+        showToast(
+          `Failed to update eval name: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          'error',
+        );
+        throw error;
       }
+    },
+    [config, evalId, setConfig, showToast],
+  );
+
+  const handleCopyEval = React.useCallback(
+    async (description: string) => {
+      try {
+        invariant(evalId, 'Eval ID must be set before copying');
+
+        const response = await callApi(`/eval/${evalId}/copy`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ description }),
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to copy evaluation');
+        }
+
+        const { id: newEvalId, distinctTestCount } = await response.json();
+
+        // Open in new tab (Google Docs pattern)
+        window.open(`/eval/${newEvalId}`, '_blank');
+
+        // Show success toast
+        showToast(`Copied ${distinctTestCount.toLocaleString()} results successfully`, 'success');
+      } catch (error) {
+        console.error('Failed to copy evaluation:', error);
+        showToast(
+          `Failed to copy evaluation: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          'error',
+        );
+        throw error;
+      }
+    },
+    [evalId, showToast],
+  );
+
+  /**
+   * Determines the next eval to navigate to after deleting the current one
+   * @returns The eval ID to navigate to, or null to go home
+   */
+  const getNextEvalAfterDelete = (): string | null => {
+    if (!evalId || recentEvals.length === 0) {
+      return null;
     }
+
+    const currentIndex = recentEvals.findIndex((e) => e.evalId === evalId);
+
+    // If current eval not in list or only one eval, go home
+    if (currentIndex === -1 || recentEvals.length === 1) {
+      return null;
+    }
+
+    // Try next eval first
+    if (currentIndex < recentEvals.length - 1) {
+      return recentEvals[currentIndex + 1].evalId;
+    }
+
+    // If this is the last eval, go to previous
+    if (currentIndex > 0) {
+      return recentEvals[currentIndex - 1].evalId;
+    }
+
+    return null;
   };
 
-  const handleDeleteEvalClick = async () => {
-    if (window.confirm('Are you sure you want to delete this evaluation?')) {
-      try {
-        const response = await callApi(`/eval/${evalId}`, {
-          method: 'DELETE',
-        });
-        if (!response.ok) {
-          throw new Error('Network response was not ok');
-        }
-        navigate('/');
-      } catch (error) {
-        console.error('Failed to delete evaluation:', error);
-        alert('Failed to delete evaluation');
+  const handleDeleteEvalClick = () => {
+    handleMenuClose();
+
+    if (!evalId) {
+      showToast('Cannot delete: Eval ID not found', 'error');
+      return;
+    }
+
+    setDeleteDialogOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!evalId) {
+      return;
+    }
+
+    setIsDeleting(true);
+
+    try {
+      const response = await callApi(`/eval/${evalId}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to delete eval');
       }
+
+      showToast('Eval deleted', 'success');
+
+      // Navigate to next eval or home
+      const nextEvalId = getNextEvalAfterDelete();
+      if (nextEvalId) {
+        onRecentEvalSelected(nextEvalId);
+      } else {
+        navigate('/', { replace: true });
+      }
+    } catch (error) {
+      console.error('Failed to delete eval:', error);
+      showToast(
+        `Failed to delete eval: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        'error',
+      );
+    } finally {
+      setIsDeleting(false);
+      setDeleteDialogOpen(false);
     }
   };
 
@@ -471,64 +589,32 @@ export default function ResultsView({
     [handleSearchTextChange],
   );
 
-  // Handle metric parameter from URL
-  React.useEffect(() => {
-    const metricParam = searchParams.get('metric');
-    if (metricParam) {
-      const { addFilter, resetFilters } = useTableStore.getState();
-
-      resetFilters();
-
-      addFilter({
-        type: 'metric',
-        operator: 'equals',
-        value: metricParam,
-      });
-
-      setSearchParams((prev) => {
-        const newParams = new URLSearchParams(prev);
-        newParams.delete('metric');
-        return newParams;
-      });
-    }
-  }, [searchParams, setSearchParams]);
-
   // Render the charts if a) they can be rendered, and b) the viewport, at mount-time, is tall enough.
-  const canRenderResultsCharts = table && config && table.head.prompts.length > 1;
+  const resultsChartsScores = React.useMemo(() => {
+    if (!table?.body) {
+      return [];
+    }
+    return table?.body
+      .flatMap((row) => row.outputs.map((output) => output?.score))
+      .filter((score) => typeof score === 'number' && !Number.isNaN(score));
+  }, [table]);
+
+  const canRenderResultsCharts =
+    table &&
+    config &&
+    table.head.prompts.length > 1 &&
+    // No valid scores available
+    resultsChartsScores.length > 0 &&
+    // All scores are the same, charts not useful.
+    new Set(resultsChartsScores).size > 1;
   const [renderResultsCharts, setRenderResultsCharts] = React.useState(window.innerHeight >= 1100);
 
   const [resultsTableZoom, setResultsTableZoom] = React.useState(1);
 
-  /**
-   * Because scrolling occurs within the table container, fix the HTML body to prevent the page scroll
-   * (and the rendering of duplicative, useless scrollbars).
-   */
-  React.useEffect(() => {
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.body.style.overflow = 'auto';
-    };
-  }, []);
-
   return (
     <>
-      <Box
-        id="results-view-container"
-        px={2}
-        sx={{
-          display: 'flex',
-          flexDirection: 'column',
-        }}
-        ref={(el: HTMLDivElement | null) => {
-          const top = el?.getBoundingClientRect().top;
-          if (top) {
-            // TODO(Will): This is a hack because the flexbox must have a fixed height in order for the pagination footer to be
-            // stuck to the bottom of the viewport; ideally the parent nodes are flexboxes.
-            el.style.height = `calc(100vh - ${top}px)`;
-          }
-        }}
-      >
-        <Box>
+      <Box px={2} pt={2}>
+        <Box sx={{ transition: 'all 0.3s ease' }}>
           <ResponsiveStack direction="row" spacing={1} alignItems="center" className="eval-header">
             <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', maxWidth: 250 }}>
               <TextField
@@ -667,18 +753,79 @@ export default function ResultsView({
                   )}
                   {filters.appliedCount > 0 &&
                     Object.values(filters.values).map((filter) => {
-                      // For metadata filters, both field and value must be present
-                      if (
-                        filter.type === 'metadata' ? !filter.value || !filter.field : !filter.value
-                      ) {
+                      // For metadata filters with exists operator, only field is required
+                      // For metric filters with is_defined operator, only field is required
+                      // For other filters, check field and value requirements
+                      if (filter.type === 'metadata' && filter.operator === 'exists') {
+                        if (!filter.field) {
+                          return null;
+                        }
+                      } else if (filter.type === 'metric' && filter.operator === 'is_defined') {
+                        if (!filter.field) {
+                          return null;
+                        }
+                      } else if (filter.type === 'metadata' || filter.type === 'metric') {
+                        if (!filter.value || !filter.field) {
+                          return null;
+                        }
+                      } else if (!filter.value) {
                         return null;
                       }
+
                       const truncatedValue =
                         filter.value.length > 50 ? filter.value.slice(0, 50) + '...' : filter.value;
-                      const label =
-                        filter.type === 'metric'
-                          ? `Metric: ${truncatedValue}`
-                          : `${filter.field} ${filter.operator.replace('_', ' ')} "${truncatedValue}"`;
+
+                      let label: string;
+                      if (filter.type === 'metric') {
+                        // Show metric field and operator with value (if applicable)
+                        const operatorSymbols: Record<string, string> = {
+                          is_defined: 'is defined',
+                          eq: '==',
+                          neq: '!=',
+                          gt: '>',
+                          gte: '≥',
+                          lt: '<',
+                          lte: '≤',
+                        };
+                        const operatorDisplay = operatorSymbols[filter.operator] || filter.operator;
+                        if (filter.operator === 'is_defined') {
+                          label = `Metric: ${filter.field}`;
+                        } else {
+                          label = `${filter.field} ${operatorDisplay} ${truncatedValue}`;
+                        }
+                      } else if (filter.type === 'plugin') {
+                        const displayName =
+                          displayNameOverrides[filter.value as keyof typeof displayNameOverrides] ||
+                          filter.value;
+                        label =
+                          filter.operator === 'not_equals'
+                            ? `Plugin != ${displayName}`
+                            : `Plugin: ${displayName}`;
+                      } else if (filter.type === 'strategy') {
+                        const displayName =
+                          displayNameOverrides[filter.value as keyof typeof displayNameOverrides] ||
+                          filter.value;
+                        label = `Strategy: ${displayName}`;
+                      } else if (filter.type === 'severity') {
+                        // Capitalize the first letter of severity value for display
+                        const severityDisplay =
+                          filter.value.charAt(0).toUpperCase() + filter.value.slice(1);
+                        label = `Severity: ${severityDisplay}`;
+                      } else if (filter.type === 'policy') {
+                        // For policy filters, use the policy name from the mapping
+                        // This should match the display format used in the dropdown
+                        const policyName = filters.policyIdToNameMap?.[filter.value];
+                        label = formatPolicyIdentifierAsMetric(policyName ?? filter.value);
+                      }
+                      // Metadata:
+                      else {
+                        if (filter.operator === 'exists') {
+                          label = `Metadata: ${filter.field}`;
+                        } else {
+                          label = `${filter.field} ${filter.operator.replace('_', ' ')} "${truncatedValue}"`;
+                        }
+                      }
+
                       return (
                         <Chip
                           key={filter.id}
@@ -745,7 +892,7 @@ export default function ResultsView({
                     onClose={handleMenuClose}
                   >
                     <Tooltip title="Edit the name of this eval" placement="left">
-                      <MenuItem onClick={handleDescriptionClick}>
+                      <MenuItem onClick={() => setEditNameDialogOpen(true)}>
                         <ListItemIcon>
                           <EditIcon fontSize="small" />
                         </ListItemIcon>
@@ -778,23 +925,31 @@ export default function ResultsView({
                       </MenuItem>
                     </Tooltip>
                     <DownloadMenu />
-                    {config?.sharing && (
-                      <Tooltip
-                        title="Generate a unique URL that others can access"
-                        placement="left"
+                    <Tooltip title="Create a copy of this evaluation" placement="left">
+                      <MenuItem
+                        onClick={() => {
+                          handleMenuClose();
+                          setCopyDialogOpen(true);
+                        }}
                       >
-                        <MenuItem onClick={handleShareButtonClick} disabled={shareLoading}>
-                          <ListItemIcon>
-                            {shareLoading ? (
-                              <CircularProgress size={16} />
-                            ) : (
-                              <ShareIcon fontSize="small" />
-                            )}
-                          </ListItemIcon>
-                          Share
-                        </MenuItem>
-                      </Tooltip>
-                    )}
+                        <ListItemIcon>
+                          <ContentCopyIcon fontSize="small" />
+                        </ListItemIcon>
+                        Copy
+                      </MenuItem>
+                    </Tooltip>
+                    <Tooltip title="Generate a unique URL that others can access" placement="left">
+                      <MenuItem onClick={handleShareButtonClick} disabled={shareLoading}>
+                        <ListItemIcon>
+                          {shareLoading ? (
+                            <CircularProgress size={16} />
+                          ) : (
+                            <ShareIcon fontSize="small" />
+                          )}
+                        </ListItemIcon>
+                        Share
+                      </MenuItem>
+                    </Tooltip>
                     <Tooltip title="Delete this eval" placement="left">
                       <MenuItem onClick={handleDeleteEvalClick}>
                         <ListItemIcon>
@@ -812,7 +967,7 @@ export default function ResultsView({
                       color="primary"
                       variant="contained"
                       startIcon={<EyeIcon />}
-                      onClick={() => navigate(`/report/?evalId=${evalId || defaultEvalId}`)}
+                      onClick={() => navigate(`/reports/?evalId=${evalId || defaultEvalId}`)}
                     >
                       Vulnerability Report
                     </Button>
@@ -823,9 +978,8 @@ export default function ResultsView({
           </ResponsiveStack>
           {canRenderResultsCharts && renderResultsCharts && (
             <ResultsCharts
-              columnVisibility={currentColumnState.columnVisibility}
-              recentEvals={recentEvals}
               handleHideCharts={() => setRenderResultsCharts(false)}
+              scores={resultsChartsScores}
             />
           )}
         </Box>
@@ -836,11 +990,8 @@ export default function ResultsView({
           showStats={showInferenceDetails}
           filterMode={filterMode}
           failureFilter={failureFilter}
-          searchText={searchText}
           debouncedSearchText={debouncedSearchValue}
           onFailureFilterToggle={handleFailureFilterToggle}
-          onSearchTextChange={handleSearchTextChange}
-          setFilterMode={setFilterMode}
           zoom={resultsTableZoom}
         />
       </Box>
@@ -852,7 +1003,92 @@ export default function ResultsView({
         onShare={handleShare}
       />
       <SettingsModal open={viewSettingsModalOpen} onClose={() => setViewSettingsModalOpen(false)} />
+      <ConfirmEvalNameDialog
+        open={editNameDialogOpen}
+        onClose={() => setEditNameDialogOpen(false)}
+        title="Edit Eval Name"
+        label="Description"
+        currentName={config?.description || ''}
+        actionButtonText="Save"
+        onConfirm={handleSaveEvalName}
+      />
+      <ConfirmEvalNameDialog
+        open={copyDialogOpen}
+        onClose={() => setCopyDialogOpen(false)}
+        title="Copy Evaluation"
+        label="Description"
+        currentName={`${config?.description || 'Evaluation'} (Copy)`}
+        actionButtonText="Create Copy"
+        onConfirm={handleCopyEval}
+        showSizeWarning={totalResultsCount > 10000}
+        itemCount={totalResultsCount}
+        itemLabel="results"
+      />
       <EvalSelectorKeyboardShortcut onEvalSelected={onRecentEvalSelected} />
+
+      {/* Delete confirmation dialog */}
+      <Dialog
+        open={deleteDialogOpen}
+        onClose={() => !isDeleting && setDeleteDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <DeleteIcon color="error" />
+          Delete eval?
+        </DialogTitle>
+        <DialogContent>
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            This action cannot be undone.
+          </Alert>
+          <Typography variant="body2" color="text.secondary" gutterBottom>
+            You are about to permanently delete:
+          </Typography>
+          <Box
+            sx={{
+              mt: 2,
+              p: 2,
+              bgcolor: 'action.hover',
+              borderRadius: 1,
+              border: 1,
+              borderColor: 'divider',
+            }}
+          >
+            <Typography variant="body1" fontWeight="medium" gutterBottom>
+              {config?.description || evalId || 'Unnamed eval'}
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 2, mt: 1 }}>
+              <Typography variant="body2" color="text.secondary">
+                {totalResultsCount.toLocaleString()} result{totalResultsCount !== 1 ? 's' : ''}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                •
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                {head.prompts.length} prompt{head.prompts.length !== 1 ? 's' : ''}
+              </Typography>
+            </Box>
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2, gap: 1 }}>
+          <Button
+            onClick={() => setDeleteDialogOpen(false)}
+            disabled={isDeleting}
+            variant="outlined"
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleConfirmDelete}
+            color="error"
+            variant="contained"
+            disabled={isDeleting}
+            startIcon={isDeleting ? <CircularProgress size={16} /> : <DeleteIcon />}
+          >
+            {isDeleting ? 'Deleting...' : 'Delete'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </>
   );
 }

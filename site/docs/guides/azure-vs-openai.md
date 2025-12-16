@@ -1,5 +1,6 @@
 ---
 sidebar_label: OpenAI vs Azure benchmark
+description: Compare OpenAI vs Azure OpenAI performance across speed, cost, and model updates with automated benchmarks to optimize your LLM infrastructure decisions
 ---
 
 # OpenAI vs Azure: How to benchmark
@@ -41,12 +42,12 @@ Create a new directory for your comparison project and initialize it:
 npx promptfoo@latest init openai-azure-comparison
 ```
 
-Edit your `promptfooconfig.yaml` to include both OpenAI and Azure OpenAI as providers. In this case, we're going to compare GPT 3.5 on both services.
+Edit your `promptfooconfig.yaml` to include both OpenAI and Azure OpenAI as providers. In this example, we'll compare the same model on both services.
 
 ```yaml
 providers:
-  - id: openai:chat:gpt-4.1-mini
-  - id: azure:chat:my-gpt-4.1-mini-deployment
+  - id: openai:chat:gpt-5-mini
+  - id: azure:chat:my-gpt-5-mini-deployment
     config:
       apiHost: myazurehost.openai.azure.com
 ```
@@ -59,11 +60,11 @@ For each provider, you may configure additional parameters such as `temperature`
 
 ```yaml
 providers:
-  - id: openai:chat:gpt-4.1-mini
+  - id: openai:chat:gpt-5-mini
     config:
       temperature: 0
       max_tokens: 128
-  - id: azure:chat:my-gpt-4.1-mini-deployment
+  - id: azure:chat:my-gpt-5-mini-deployment
     config:
       apiHost: your_azure_openai_host
       temperature: 0

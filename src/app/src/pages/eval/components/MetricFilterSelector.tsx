@@ -8,7 +8,7 @@ import Select from '@mui/material/Select';
 import { useTableStore } from './store';
 import type { SelectChangeEvent } from '@mui/material/Select';
 
-export const MetricFilterSelector: React.FC<{}> = () => {
+export const MetricFilterSelector = () => {
   const { filters, addFilter, resetFilters } = useTableStore();
   const availableMetrics = filters.options.metric;
 
