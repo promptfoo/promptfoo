@@ -1176,10 +1176,11 @@ The provider supports caching to improve performance and reduce API calls. Resul
 - Tool definitions
 - Input prompt
 
-Enable caching globally in your configuration:
+Caching is enabled by default. To explicitly configure it in your configuration:
 
 ```yaml
-cache: true
+evaluateOptions:
+  cache: true
 
 providers:
   - id: azure:foundry-agent:your_assistant_id

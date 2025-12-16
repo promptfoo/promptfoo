@@ -644,14 +644,14 @@ Web search calls in the Responses API are billed separately from normal tokens:
 
 - The web search tool costs **$10 per 1,000 calls** for the standard tool and **$10-25 per 1,000 calls** for preview variants, plus any search content tokens where applicable
 - Each search-rubric assertion may perform one or more searches
-- Use caching (`--cache`) to avoid redundant searches during development
+- Caching is enabled by default; use `--no-cache` to force fresh searches during development
 - See [OpenAI's pricing page](https://openai.com/api/pricing/) for current rates
   :::
 
 ### Best Practices
 
 1. **Use specific search queries**: More specific queries yield better verification results
-2. **Enable caching**: Run with `npx promptfoo eval --cache` to avoid repeated searches
+2. **Use caching**: Caching is enabled by default; results are reused to avoid repeated searches
 3. **Use appropriate models**: gpt-5.1-mini is recommended for cost-effective web search
 4. **Monitor usage**: Track API costs, especially in CI/CD pipelines
 
