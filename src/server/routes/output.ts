@@ -56,7 +56,15 @@ router.get('/video/:uuid/:filename', (req: Request, res: Response): void => {
   }
 
   const outputDir = getConfigDirectoryPath();
-  const filePath = path.join(outputDir, 'output', 'video', uuid, filename);
+  const videoOutputDir = path.resolve(outputDir, 'output', 'video');
+  const filePath = path.resolve(videoOutputDir, uuid, filename);
+
+  // Additional path traversal protection: ensure resolved path is within expected directory
+  if (!filePath.startsWith(videoOutputDir + path.sep)) {
+    logger.warn('[Output Route] Path traversal attempt detected', { uuid, filename, filePath });
+    res.status(400).json({ error: 'Invalid path' });
+    return;
+  }
 
   // Check if file exists
   if (!fs.existsSync(filePath)) {
