@@ -5,6 +5,8 @@
  * This eliminates the need for LLMs to manually calculate line numbers from hunk headers.
  */
 
+import { parseHunkHeader } from '../util/diffHunkParser';
+
 /**
  * Annotate a single file unified diff patch with absolute line numbers.
  *
@@ -47,11 +49,11 @@ export function annotateSingleFileDiffWithLineNumbers(patch: string): string {
     const line = lines[i];
     const isLastLine = i === lines.length - 1;
     // Check if this is a hunk header: @@ -start,count +start,count @@
-    const hunkMatch = line.match(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
+    const hunkHeader = parseHunkHeader(line);
 
-    if (hunkMatch) {
+    if (hunkHeader) {
       // Extract the starting line number for the new file (right side)
-      currentNewLine = parseInt(hunkMatch[1], 10);
+      currentNewLine = hunkHeader.newStart;
       inHunk = true;
       // Hunk headers are not annotated
       result.push(line);
