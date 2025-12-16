@@ -4,6 +4,50 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.120.5](https://github.com/promptfoo/promptfoo/compare/0.120.4...0.120.5) (2025-12-16)
+
+### Features
+
+- **cli:** support multiple --env-file flags ([#6622](https://github.com/promptfoo/promptfoo/issues/6622)) ([015f2df](https://github.com/promptfoo/promptfoo/commit/015f2dfb76be0710a2c98d87fe957060e18de162))
+- **esm:** add resolvePackageEntryPoint for ESM-only packages ([#6586](https://github.com/promptfoo/promptfoo/issues/6586)) ([fbc0eca](https://github.com/promptfoo/promptfoo/commit/fbc0eca0e27ed03239bc87a9716fd8a1206307f9))
+- **providers:** add gpt-image-1-mini support to OpenAI image provider ([#6603](https://github.com/promptfoo/promptfoo/issues/6603)) ([bedc616](https://github.com/promptfoo/promptfoo/commit/bedc616318bc82c25f700a0996e91ab84e3cc17b))
+- **providers:** update OpenAI Codex SDK to v0.65.0 with new SDK options ([#6563](https://github.com/promptfoo/promptfoo/issues/6563)) ([fc19872](https://github.com/promptfoo/promptfoo/commit/fc1987250d49c0749205bc0c590327d0f5abc23a))
+- **redteam:** ability to change plugin for strategy test case generation ([#6549](https://github.com/promptfoo/promptfoo/issues/6549)) ([ed8b268](https://github.com/promptfoo/promptfoo/commit/ed8b2681c32caacb576fea6298e9d0d9ac2c5b66))
+- **redteam:** add OWASP API Security Top 10 example ([#6615](https://github.com/promptfoo/promptfoo/issues/6615)) ([8d383b5](https://github.com/promptfoo/promptfoo/commit/8d383b58306d3dbfd7b28d6dadec3c7cb836bcea))
+- **redteam:** add tiered severity grading for SSRF plugin ([#6444](https://github.com/promptfoo/promptfoo/issues/6444)) ([1556df3](https://github.com/promptfoo/promptfoo/commit/1556df3b29dcb96014dac14f8181beaa33718796))
+- **types:** add pluginId and strategyId to EvaluateTableOutput ([#6638](https://github.com/promptfoo/promptfoo/issues/6638)) ([9e2121b](https://github.com/promptfoo/promptfoo/commit/9e2121b60228e78fe293c3354399d7685d757d01))
+- **webui:** improve model audit navigation and test coverage ([#5595](https://github.com/promptfoo/promptfoo/issues/5595)) ([55cb973](https://github.com/promptfoo/promptfoo/commit/55cb973d948f4b7b31974be3de6a0d8c1dabc423))
+- **webui:** redesign Table Settings modal with compact two-column layout ([#6683](https://github.com/promptfoo/promptfoo/issues/6683)) ([4c0f3ef](https://github.com/promptfoo/promptfoo/commit/4c0f3efdd85b6731e9280c07e078a0bdf0d530a6))
+
+### Bug Fixes
+
+- **assertions:** handle variable declarations in single-line JavaScript assertions ([#6609](https://github.com/promptfoo/promptfoo/issues/6609)) ([f00cf71](https://github.com/promptfoo/promptfoo/commit/f00cf71a8878dc83fbca80ea8ca2d7fcc42814e5))
+- **assertions:** improve error messages for malformed assertion configs ([#6600](https://github.com/promptfoo/promptfoo/issues/6600)) ([6afb4ca](https://github.com/promptfoo/promptfoo/commit/6afb4ca94f83c7e85e134ea7a31b1338c480e740))
+- **ci:** trigger code scan when PR moves from draft to ready ([#6705](https://github.com/promptfoo/promptfoo/issues/6705)) ([790d6b5](https://github.com/promptfoo/promptfoo/commit/790d6b53a6d104ce793dd4d24fe78085b1a0a3ca))
+- **cli:** filter providers before instantiation ([#6596](https://github.com/promptfoo/promptfoo/issues/6596)) ([2891658](https://github.com/promptfoo/promptfoo/commit/289165894656516544106a6abc51e09d3a968382))
+- **cli:** Increased the number of characters for displaying test variables ([#5041](https://github.com/promptfoo/promptfoo/issues/5041)) ([70c4258](https://github.com/promptfoo/promptfoo/commit/70c4258299f2c3b3c71c6a234b83ccf6f48fe2f0))
+- **deps:** update dependency @googleapis/sheets to v13 ([#6682](https://github.com/promptfoo/promptfoo/issues/6682)) ([b53f2d5](https://github.com/promptfoo/promptfoo/commit/b53f2d5e3901f1bf5bab0d824ce9333376a92415))
+- **deps:** update dependency openai to ^6.10.0 ([#6641](https://github.com/promptfoo/promptfoo/issues/6641)) ([3637b6c](https://github.com/promptfoo/promptfoo/commit/3637b6c05d4390a3ba82ba323a32c21208a31e01))
+- **deps:** update github actions to v2 (major) ([#6681](https://github.com/promptfoo/promptfoo/issues/6681)) ([a0434b5](https://github.com/promptfoo/promptfoo/commit/a0434b579bff8a2a3089649f6192e7fed6fbf870))
+- **evaluator:** isolate \_conversation state between scenarios ([#6623](https://github.com/promptfoo/promptfoo/issues/6623)) ([6fb90c8](https://github.com/promptfoo/promptfoo/commit/6fb90c8c08999285d7e941470566dd2c1d6ffdcb))
+- **geval:** enforce stricter output formatting in GEVAL prompts ([#6632](https://github.com/promptfoo/promptfoo/issues/6632)) ([9432bf7](https://github.com/promptfoo/promptfoo/commit/9432bf754908c55aa441a8fc01035b1b2a550341))
+- improving error logging for GOAT ([#6486](https://github.com/promptfoo/promptfoo/issues/6486)) ([c0da862](https://github.com/promptfoo/promptfoo/commit/c0da86258d1f4d7afbc122385a523d62a114b428))
+- **logger:** prevent "write after end" crash during shutdown ([#6625](https://github.com/promptfoo/promptfoo/issues/6625)) ([516aa2a](https://github.com/promptfoo/promptfoo/commit/516aa2ad9ca09b162bc28e839a0c96a1f00775aa))
+- **mcp:** prevent HTTP server from shutting down immediately ([#6520](https://github.com/promptfoo/promptfoo/issues/6520)) ([f1f10c3](https://github.com/promptfoo/promptfoo/commit/f1f10c3819fd86478940641505ad0418312ec78a))
+- Presentation of strategy demo modal ([#6675](https://github.com/promptfoo/promptfoo/issues/6675)) ([e1f5e68](https://github.com/promptfoo/promptfoo/commit/e1f5e680cc3967ccadaf9b7ed51d3b1bf6a2d8a0))
+- **providers:** treat vertex MAX_TOKENS as success instead of error ([#6697](https://github.com/promptfoo/promptfoo/issues/6697)) ([b6cf509](https://github.com/promptfoo/promptfoo/commit/b6cf50961aea94ba0bfbe417e72aff3ab7339d0c))
+- **redteam:** comprehensive token usage tracking across all providers ([#6619](https://github.com/promptfoo/promptfoo/issues/6619)) ([babd51c](https://github.com/promptfoo/promptfoo/commit/babd51c1760827d3777196d9e091d39f27b198bc))
+- **redteam:** filter runtime vars and merge defaultTest.vars for accurate test matching ([#6706](https://github.com/promptfoo/promptfoo/issues/6706)) ([783961b](https://github.com/promptfoo/promptfoo/commit/783961b399523f29d4d2b986e167ec583643ccab))
+- **redteam:** fix infinite loop in updatePlugins by comparing output vs state ([#6647](https://github.com/promptfoo/promptfoo/issues/6647)) ([28140c8](https://github.com/promptfoo/promptfoo/commit/28140c8b108f48c0a8f97b96db8a24f0538063a2))
+- **redteam:** handle object output in TestCaseDialog ([#6672](https://github.com/promptfoo/promptfoo/issues/6672)) ([33ec0ea](https://github.com/promptfoo/promptfoo/commit/33ec0ea0574c53e476772745e8c53fd10bc48188))
+- **redteam:** prevent infinite loop in Plugins page when selecting presets ([#6626](https://github.com/promptfoo/promptfoo/issues/6626)) ([25f3ea6](https://github.com/promptfoo/promptfoo/commit/25f3ea6b66fa50ca7d589573d9e9d846b29aa982))
+- restore TypeScript type checking in CI ([#6652](https://github.com/promptfoo/promptfoo/issues/6652)) ([d0af689](https://github.com/promptfoo/promptfoo/commit/d0af689f5ac955467eed6583acba4c55c9f0e188))
+- **server:** avoid redundant httpServer.close warning on shutdown ([#6646](https://github.com/promptfoo/promptfoo/issues/6646)) ([0975fc3](https://github.com/promptfoo/promptfoo/commit/0975fc3155b160a5e2df49e85a0c43f1fde08f04))
+- **site:** remove homepage code box scrollbars ([#6668](https://github.com/promptfoo/promptfoo/issues/6668)) ([5ac8abc](https://github.com/promptfoo/promptfoo/commit/5ac8abcd40c1b618e97a104457a68a7d2a0b808b))
+- **test:** make Python concurrency test environment-independent ([#6660](https://github.com/promptfoo/promptfoo/issues/6660)) ([645b6e2](https://github.com/promptfoo/promptfoo/commit/645b6e2560d7bcbf5b0c2ba7c24a4c3fde19c072))
+- **util:** make transform.ts browser-compatible by splitting Node.js code ([#6642](https://github.com/promptfoo/promptfoo/issues/6642)) ([8fc1f12](https://github.com/promptfoo/promptfoo/commit/8fc1f12a82ae0edf79c710eb30305b9d7ebd9895))
+- **webui:** include grading rubric in storedGraderResult for iterative, hydra, and custom strategies ([#6696](https://github.com/promptfoo/promptfoo/issues/6696)) ([933a752](https://github.com/promptfoo/promptfoo/commit/933a752c92de5e423bb98db6b0812b9bbd3872b4))
+
 ## [0.120.4](https://github.com/promptfoo/promptfoo/compare/0.120.3...0.120.4) (2025-12-11)
 
 ### Features
