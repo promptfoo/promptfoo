@@ -34,6 +34,19 @@ vi.mock('../../src/python/pythonUtils', () => ({
   runPython: vi.fn(),
 }));
 vi.mock('../../src/util/fileExtensions');
+vi.mock('../../src/envars', () => ({
+  getEnvBool: vi.fn().mockReturnValue(false),
+}));
+vi.mock('../../src/telemetry', () => ({
+  default: {
+    record: vi.fn(),
+  },
+}));
+vi.mock('../../src/util/file', () => ({
+  getMimeTypeFromExtension: vi.fn().mockReturnValue('image/jpeg'),
+  detectMimeFromBase64: vi.fn().mockReturnValue(null),
+  extractTextFromPDF: vi.fn().mockResolvedValue('PDF text content'),
+}));
 vi.mock('../../src/logger', () => ({
   default: {
     debug: vi.fn(),
@@ -121,7 +134,8 @@ describe('fileReference utility functions', () => {
 
       expect(fs.promises.readFile).toHaveBeenCalledWith('/path/to/config.yaml', 'utf8');
       expect(yaml.load).toHaveBeenCalledWith(fileContent);
-      expect(result).toEqual(parsedContent);
+      // YAML returns JSON string to match top-level behavior in evaluatorHelpers
+      expect(result).toEqual(JSON.stringify(parsedContent));
     });
 
     it('should load JavaScript files correctly', async () => {
@@ -203,13 +217,16 @@ describe('fileReference utility functions', () => {
       expect(result).toEqual(parsedContent);
     });
 
-    it('should throw an error for unsupported file types', async () => {
+    it('should read unknown file types as text', async () => {
       const fileRef = 'file:///path/to/file.xyz';
+      const textContent = 'Some text content in unknown file';
 
       vi.mocked(path.extname).mockReturnValue('.xyz');
       vi.mocked(isJavascriptFile).mockReturnValue(false);
+      readFileMock.mockResolvedValue(textContent);
 
-      await expect(loadFileReference(fileRef)).rejects.toThrow('Unsupported file extension: .xyz');
+      const result = await loadFileReference(fileRef);
+      expect(result).toBe(textContent);
     });
   });
 
@@ -273,7 +290,8 @@ describe('fileReference utility functions', () => {
         setting1: 'value1',
         setting2: { key: 'value2' },
         nested: {
-          setting3: { key: 'value3' },
+          // YAML returns JSON string to match top-level behavior in evaluatorHelpers
+          setting3: JSON.stringify({ key: 'value3' }),
         },
       });
     });
@@ -312,7 +330,13 @@ describe('fileReference utility functions', () => {
 
       const result = await processConfigFileReferences(config);
 
-      expect(result).toEqual(['regular string', { name: 'item1' }, { name: 'item2' }, 42]);
+      // YAML returns JSON string to match top-level behavior in evaluatorHelpers
+      expect(result).toEqual([
+        'regular string',
+        { name: 'item1' },
+        JSON.stringify({ name: 'item2' }),
+        42,
+      ]);
     });
 
     it('should handle errors when processing file references', async () => {
