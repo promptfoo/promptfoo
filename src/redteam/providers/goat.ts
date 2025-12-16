@@ -557,12 +557,15 @@ export default class GoatProvider implements ApiProvider {
             assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
             additionalRubric,
             undefined,
-            tracingOptions.includeInGrading
-              ? {
-                  traceContext: targetResponse.traceContext,
-                  traceSummary: gradingTraceSummary,
-                }
-              : undefined,
+            {
+              providerResponse: finalResponse,
+              ...(tracingOptions.includeInGrading
+                ? {
+                    traceContext: targetResponse.traceContext,
+                    traceSummary: gradingTraceSummary,
+                  }
+                : {}),
+            },
           );
           graderPassed = grade.pass;
           storedGraderResult = {

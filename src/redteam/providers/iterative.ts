@@ -443,12 +443,15 @@ export async function runRedteamConversation({
           assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
           additionalRubric,
           undefined,
-          tracingOptions.includeInGrading
-            ? {
-                traceContext,
-                traceSummary: graderTraceSummary,
-              }
-            : undefined,
+          {
+            providerResponse: targetResponse,
+            ...(tracingOptions.includeInGrading
+              ? {
+                  traceContext,
+                  traceSummary: graderTraceSummary,
+                }
+              : {}),
+          },
         );
         storedGraderResult = {
           ...grade,
