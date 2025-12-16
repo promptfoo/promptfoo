@@ -153,7 +153,7 @@ class ProgressBarManager {
     this.completedCount++;
     const provider = evalStep.provider.label || evalStep.provider.id();
     const prompt = `"${evalStep.prompt.raw.slice(0, 10).replace(/\n/g, ' ')}"`;
-    const vars = formatVarsForDisplay(evalStep.test.vars, 10);
+    const vars = formatVarsForDisplay(evalStep.test.vars, 40);
 
     this.progressBar.increment({
       provider,
