@@ -130,6 +130,37 @@ evalRouter.patch('/:id', (req: Request, res: Response): void => {
   }
 });
 
+evalRouter.patch('/:id/favorite', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { isFavorite } = req.body;
+
+    if (!id) {
+      res.status(400).json({ error: 'Missing id' });
+      return;
+    }
+
+    if (typeof isFavorite !== 'boolean') {
+      res.status(400).json({ error: 'isFavorite must be a boolean' });
+      return;
+    }
+
+    const eval_ = await Eval.findById(id);
+    if (!eval_) {
+      res.status(404).json({ error: 'Eval not found' });
+      return;
+    }
+
+    eval_.isFavorite = isFavorite;
+    await eval_.save();
+
+    res.json({ message: 'Favorite status updated successfully', isFavorite });
+  } catch (error) {
+    logger.error(`Failed to update favorite status: ${error}`);
+    res.status(500).json({ error: 'Failed to update favorite status' });
+  }
+});
+
 evalRouter.patch('/:id/author', async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = ApiSchemas.Eval.UpdateAuthor.Params.parse(req.params);

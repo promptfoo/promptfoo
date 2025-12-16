@@ -1,8 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { useToast } from '@app/hooks/useToast';
 import { callApi } from '@app/utils/api';
 import { formatDataGridDate } from '@app/utils/date';
 import DeleteIcon from '@mui/icons-material/Delete';
+import StarIcon from '@mui/icons-material/Star';
+import StarBorderIcon from '@mui/icons-material/StarBorder';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
@@ -11,6 +14,7 @@ import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogContentText from '@mui/material/DialogContentText';
 import DialogTitle from '@mui/material/DialogTitle';
+import IconButton from '@mui/material/IconButton';
 import Link from '@mui/material/Link';
 import { alpha, useTheme } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
@@ -38,6 +42,7 @@ type Eval = {
   description: string | null;
   evalId: string;
   isRedteam: number;
+  isFavorite?: boolean;
   label: string;
   numTests: number;
   passRate: number;
@@ -174,6 +179,7 @@ export default function EvalsDataGrid({
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const { showToast } = useToast();
 
   const [rowSelectionModel, setRowSelectionModel] = useState<GridRowSelectionModel>({
     type: 'include',
@@ -223,12 +229,44 @@ export default function EvalsDataGrid({
   }, [location.pathname, location.search]); // Refetch when the pathname or query params change
 
   /**
+   * Toggles the favorite status of an eval.
+   */
+  const handleToggleFavorite = useCallback(
+    async (evalId: string, currentStatus: boolean) => {
+      try {
+        const newStatus = !currentStatus;
+        const res = await callApi(`/eval/${evalId}/favorite`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ isFavorite: newStatus }),
+        });
+
+        if (!res.ok) {
+          throw new Error('Failed to update favorite status');
+        }
+
+        // Update local state
+        setEvals((prev) =>
+          prev.map((e) => (e.evalId === evalId ? { ...e, isFavorite: newStatus } : e)),
+        );
+      } catch (error) {
+        console.error('Failed to toggle favorite:', error);
+        showToast('Failed to update favorite status', 'error');
+      }
+    },
+    [showToast],
+  );
+
+  /**
    * Construct dataset rows:
    * 1. Filter out the focused eval from the list.
    * 2. Filter by dataset ID if enabled.
+   * 3. Sort favorites to the top.
    */
   const rows = useMemo(() => {
-    let rows_ = evals;
+    let rows_ = evals || [];
 
     if (focusedEvalId && rows_.length > 0) {
       // Filter out the focused eval from the list; first find it for downstream filtering.
@@ -241,11 +279,19 @@ export default function EvalsDataGrid({
       }
     }
 
-    return rows_;
+    // Sort favorites to the top, maintaining the existing order within each group
+    // (the array is already sorted by createdAt desc from the API)
+    // Create a copy to avoid mutating the original array
+    return [...rows_].sort((a, b) => {
+      if (a.isFavorite === b.isFavorite) {
+        return 0; // Keep original order (already sorted by date)
+      }
+      return a.isFavorite ? -1 : 1; // Favorites come first
+    });
   }, [evals, filterByDatasetId, focusedEvalId]);
 
   const hasRedteamEvals = useMemo(() => {
-    return evals.some(({ isRedteam }) => isRedteam === 1);
+    return (evals || []).some(({ isRedteam }) => isRedteam === 1);
   }, [evals]);
 
   const handleCellClick = (params: GridCellParams<Eval>) => onEvalSelected(params.row.evalId);
@@ -281,7 +327,7 @@ export default function EvalsDataGrid({
       setConfirmDeleteOpen(false);
     } catch (error) {
       console.error('Failed to delete evals:', error);
-      alert('Failed to delete evals');
+      showToast('Failed to delete evals', 'error');
     } finally {
       setIsLoading(false);
     }
@@ -294,6 +340,34 @@ export default function EvalsDataGrid({
   const columns: GridColDef<Eval>[] = useMemo(
     () =>
       [
+        {
+          field: 'isFavorite',
+          headerName: '⭐',
+          width: 70,
+          type: 'boolean',
+          sortable: true,
+          headerAlign: 'center',
+          align: 'center',
+          valueGetter: (value: Eval['isFavorite']) => value ?? false,
+          renderCell: (params: GridRenderCellParams<Eval>) => (
+            <IconButton
+              size="small"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleToggleFavorite(params.row.evalId, params.row.isFavorite || false);
+              }}
+              aria-label={params.row.isFavorite ? 'Unfavorite' : 'Favorite'}
+              sx={{
+                color: params.row.isFavorite ? 'warning.main' : 'action.disabled',
+                '&:hover': {
+                  color: 'warning.main',
+                },
+              }}
+            >
+              {params.row.isFavorite ? <StarIcon /> : <StarBorderIcon />}
+            </IconButton>
+          ),
+        },
         {
           field: 'evalId',
           headerName: 'ID',
@@ -426,7 +500,7 @@ export default function EvalsDataGrid({
           flex: 0.5,
         },
       ].filter(Boolean) as GridColDef<Eval>[],
-    [focusedEvalId, onEvalSelected, hasRedteamEvals],
+    [focusedEvalId, onEvalSelected, hasRedteamEvals, handleToggleFavorite],
   );
 
   return (
@@ -496,6 +570,7 @@ export default function EvalsDataGrid({
         }}
         getRowClassName={(params) => (params.id === focusedEvalId ? 'focused-row' : '')}
         sx={{
+          height: '100%',
           border: 'none',
           '& .MuiDataGrid-row': {
             cursor: 'pointer',
@@ -520,7 +595,6 @@ export default function EvalsDataGrid({
             borderColor: 'divider',
           },
           '& .MuiDataGrid-columnHeaders': {
-            backgroundColor: 'background.default',
             borderColor: 'divider',
           },
           '& .MuiDataGrid-selectedRow': {

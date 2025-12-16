@@ -4,6 +4,7 @@ import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
+import Typography from '@mui/material/Typography';
 import EvalsDataGrid from '../../evals/components/EvalsDataGrid';
 
 type Props = {
@@ -28,11 +29,32 @@ const EvalSelectorDialog = ({
   onOpenFocusSearch = false,
 }: Props) => {
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="lg" fullWidth>
-      {title ? <DialogTitle>{title}</DialogTitle> : null}
-      <DialogContent>
-        {description ? <Box sx={{ mb: 4 }}>{description}</Box> : null}
-        <Box sx={{ width: '100%', mt: 2 }}>
+    <Dialog
+      open={open}
+      onClose={onClose}
+      maxWidth="lg"
+      fullWidth
+      PaperProps={{
+        sx: {
+          height: '80vh',
+          maxHeight: '800px',
+          display: 'flex',
+          flexDirection: 'column',
+        },
+      }}
+    >
+      {title ? (
+        <DialogTitle sx={{ flexShrink: 0 }}>
+          {title}
+          {description ? (
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+              {description}
+            </Typography>
+          ) : null}
+        </DialogTitle>
+      ) : null}
+      <DialogContent sx={{ pt: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+        <Box sx={{ width: '100%', flex: 1, minHeight: 0 }}>
           <EvalsDataGrid
             onEvalSelected={onEvalSelected}
             focusedEvalId={focusedEvalId}
@@ -41,8 +63,10 @@ const EvalSelectorDialog = ({
           />
         </Box>
       </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose}>Cancel</Button>
+      <DialogActions sx={{ flexShrink: 0 }}>
+        <Button variant="outlined" onClick={onClose}>
+          Cancel
+        </Button>
       </DialogActions>
     </Dialog>
   );
