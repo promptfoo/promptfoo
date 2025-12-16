@@ -33,6 +33,10 @@ import {
   redteamProviderManager,
   type TargetResponse,
 } from './shared';
+import {
+  WebFetchInjectionService,
+  type WebFetchInjectionConfig,
+} from './webFetchInjection';
 
 // Meta-agent based iterative testing - cloud handles memory and strategic decisions
 
@@ -85,6 +89,7 @@ export async function runMetaAgentRedteam({
   vars,
   excludeTargetOutputFromAgenticAttackGeneration = false,
   perTurnLayers = [],
+  webFetchInjectionService,
 }: {
   context?: CallApiContextParams;
   filters: NunjucksFilterMap | undefined;
@@ -99,6 +104,7 @@ export async function runMetaAgentRedteam({
   vars: Record<string, string | object>;
   excludeTargetOutputFromAgenticAttackGeneration?: boolean;
   perTurnLayers?: LayerConfig[];
+  webFetchInjectionService?: WebFetchInjectionService;
 }): Promise<{
   output: string;
   metadata: IterativeMetaMetadata;
@@ -214,6 +220,30 @@ export async function runMetaAgentRedteam({
     if (!attackPrompt) {
       logger.info(`[IterativeMeta] ${i + 1}/${numIterations} - Missing attack prompt`);
       continue;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // Web Fetch Injection: Host attack on external server, send fetch URL
+    // ═══════════════════════════════════════════════════════════════════════
+    let webFetchUrl: string | undefined;
+    if (webFetchInjectionService) {
+      try {
+        webFetchUrl = await webFetchInjectionService.hostAttack(attackPrompt);
+        const fetchPrompt = webFetchInjectionService.getFetchPrompt(webFetchUrl);
+        logger.debug('[IterativeMeta] Web fetch injection applied', {
+          iteration: i + 1,
+          originalPrompt: attackPrompt.substring(0, 100) + '...',
+          webFetchUrl,
+          fetchPrompt,
+        });
+        attackPrompt = fetchPrompt;
+      } catch (error) {
+        logger.warn('[IterativeMeta] Web fetch injection failed, using original prompt', {
+          iteration: i + 1,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        // Continue with original attackPrompt if injection fails
+      }
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -420,6 +450,7 @@ class RedteamIterativeMetaProvider implements ApiProvider {
   private readonly gradingProvider: RedteamFileConfig['provider'];
   private readonly excludeTargetOutputFromAgenticAttackGeneration: boolean;
   private readonly perTurnLayers: LayerConfig[];
+  private readonly webFetchInjectionService?: WebFetchInjectionService;
 
   constructor(readonly config: Record<string, string | object>) {
     logger.debug('[IterativeMeta] Constructor config', {
@@ -435,6 +466,18 @@ class RedteamIterativeMetaProvider implements ApiProvider {
       config.excludeTargetOutputFromAgenticAttackGeneration,
     );
     this.perTurnLayers = (config._perTurnLayers as LayerConfig[]) ?? [];
+
+    // Initialize web fetch injection if configured
+    if (config.webFetchInjection) {
+      const webFetchConfig =
+        typeof config.webFetchInjection === 'object'
+          ? (config.webFetchInjection as WebFetchInjectionConfig)
+          : undefined;
+      this.webFetchInjectionService = new WebFetchInjectionService(webFetchConfig);
+      logger.debug('[IterativeMeta] Web fetch injection enabled', {
+        serviceUrl: webFetchConfig?.serviceUrl || 'default',
+      });
+    }
 
     // Meta-agent strategy requires cloud
     if (!shouldGenerateRemote()) {
@@ -490,6 +533,7 @@ class RedteamIterativeMetaProvider implements ApiProvider {
       injectVar: this.injectVar,
       numIterations: this.numIterations,
       perTurnLayers: this.perTurnLayers,
+      webFetchInjectionService: this.webFetchInjectionService,
       context,
       options,
       test: context.test,

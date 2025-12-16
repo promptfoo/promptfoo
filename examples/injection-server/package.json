@@ -1,0 +1,19 @@
+{
+  "name": "injection-server",
+  "version": "1.0.0",
+  "description": "Local server for hosting injection payloads for web fetch indirect prompt injection testing",
+  "main": "index.ts",
+  "scripts": {
+    "start": "npx tsx index.ts",
+    "dev": "npx tsx watch index.ts"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "nanoid": "^5.0.4"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.10.0",
+    "tsx": "^4.6.2"
+  }
+}
