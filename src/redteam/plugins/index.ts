@@ -51,6 +51,7 @@ import { ToxicChatPlugin } from './toxicChat';
 import { UnsafeBenchPlugin } from './unsafebench';
 import { UnverifiableClaimsPlugin } from './unverifiableClaims';
 import { VLGuardPlugin } from './vlguard';
+import { WebFetchDataExfilPlugin } from './webFetchDataExfil';
 import { XSTestPlugin } from './xstest';
 
 import type { ApiProvider, PluginActionParams, PluginConfig, TestCase } from '../../types/index';
@@ -214,6 +215,7 @@ const pluginFactories: PluginFactory[] = [
   createPluginFactory(UnsafeBenchPlugin, 'unsafebench'),
   createPluginFactory(UnverifiableClaimsPlugin, 'unverifiable-claims'),
   createPluginFactory(VLGuardPlugin, 'vlguard'),
+  createPluginFactory(WebFetchDataExfilPlugin, 'web-fetch-data-exfil'),
   ...unalignedHarmCategories.map((category) => ({
     key: category,
     action: async (params: PluginActionParams) => {
