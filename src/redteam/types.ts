@@ -10,6 +10,16 @@ import type { ApiProvider, ProviderOptions } from '../types/providers';
 export type Modifier = string | 'tone' | 'style' | 'context' | 'testGenerationInstructions';
 export type Intent = string | string[];
 
+// Inputs schema for multi-variable test case generation
+// Keys are variable names, values are descriptions of what the variable should contain
+export const InputsSchema = z.record(
+  z.string().regex(/^[a-zA-Z_][a-zA-Z0-9_]*$/, {
+    message: 'Input variable names must be valid identifiers (start with letter or underscore)',
+  }),
+  z.string().min(1, { message: 'Input descriptions must be non-empty strings' }),
+);
+export type Inputs = z.infer<typeof InputsSchema>;
+
 // Policy Types
 export const PolicyObjectSchema = z.object({
   id: z
@@ -87,6 +97,10 @@ export const PluginConfigSchema = z.object({
   // Strategy exclusions - allows plugins to exclude incompatible strategies
   excludeStrategies: z.array(z.string()).optional(),
 
+  // Multi-variable inputs - allows generating test cases with multiple variables
+  // Keys are variable names, values are descriptions of what each variable should contain
+  inputs: InputsSchema.optional(),
+
   // Allow for the inclusion of a nonce to prevent caching of test cases.
   __nonce: z.number().optional(),
 });
@@ -162,6 +176,9 @@ export interface RedteamContext {
 // Shared redteam options
 type CommonOptions = {
   injectVar?: string;
+  // Multi-variable inputs - when specified, generates test cases with multiple variables
+  // The first key becomes the primary injectVar for strategies
+  inputs?: Inputs;
   language?: string | string[];
   numTests?: number;
   plugins?: RedteamPluginObject[];

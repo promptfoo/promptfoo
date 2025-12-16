@@ -82,6 +82,11 @@ interface GoatConfig {
    * Set by the layer strategy when used as: layer: { steps: [goat, audio] }
    */
   _perTurnLayers?: LayerConfig[];
+  /**
+   * Multi-input schema for generating multiple vars at each turn.
+   * Keys are variable names, values are descriptions.
+   */
+  inputs?: Record<string, string>;
   [key: string]: unknown;
 }
 
@@ -114,6 +119,7 @@ export default class GoatProvider implements ApiProvider {
       continueAfterSuccess?: boolean;
       tracing?: RawTracingConfig;
       _perTurnLayers?: LayerConfig[];
+      inputs?: Record<string, string>;
     } = {},
   ) {
     if (neverGenerateRemote()) {
@@ -129,6 +135,7 @@ export default class GoatProvider implements ApiProvider {
       continueAfterSuccess: options.continueAfterSuccess ?? false,
       tracing: options.tracing,
       _perTurnLayers: options._perTurnLayers,
+      inputs: options.inputs,
     };
     this.perTurnLayers = options._perTurnLayers ?? [];
     this.nunjucks = getNunjucksEngine();
@@ -138,6 +145,7 @@ export default class GoatProvider implements ApiProvider {
       stateful: options.stateful,
       continueAfterSuccess: options.continueAfterSuccess,
       perTurnLayers: this.perTurnLayers.map((l) => (typeof l === 'string' ? l : l.id)),
+      inputs: options.inputs,
     });
   }
 
@@ -349,10 +357,32 @@ export default class GoatProvider implements ApiProvider {
 
         previousAttackerMessage = attackerMessage?.content;
 
-        const targetVars = {
+        // Extract JSON from <Prompt> tags if present (multi-input mode)
+        let processedMessage = attackerMessage.content;
+        const promptMatch = /<Prompt>([\s\S]*?)<\/Prompt>/i.exec(attackerMessage.content);
+        if (promptMatch) {
+          processedMessage = promptMatch[1].trim();
+        }
+
+        // Build target vars - handle multi-input mode
+        const targetVars: Record<string, string | object> = {
           ...context.vars,
-          [this.config.injectVar]: attackerMessage.content,
+          [this.config.injectVar]: processedMessage,
         };
+
+        // If inputs is defined, extract individual keys from the attack message JSON
+        if (this.config.inputs && Object.keys(this.config.inputs).length > 0) {
+          try {
+            const parsed = JSON.parse(processedMessage);
+            for (const key of Object.keys(this.config.inputs)) {
+              if (key in parsed) {
+                targetVars[key] = String(parsed[key]);
+              }
+            }
+          } catch {
+            // If parsing fails, processedMessage is plain text - keep original vars
+          }
+        }
 
         const renderedAttackerPrompt = await renderPrompt(
           context.prompt,

@@ -1,10 +1,11 @@
+import { getShortPluginId } from '../../util';
 import invariant from '../../../util/invariant';
 import { RedteamPluginBase } from '../base';
-import { createTestCase, getHarmfulAssertions } from './common';
+import { getHarmfulAssertions } from './common';
 import { REDTEAM_MODEL_CATEGORIES } from './constants';
 
 import type { ApiProvider, Assertion, PluginConfig, TestCase } from '../../../types/index';
-import type { HARM_PLUGINS } from '../../constants';
+import type { HARM_PLUGINS, HARM_PLUGINS as HARM_PLUGINS_TYPE } from '../../constants';
 import type { HarmfulCategory } from './constants';
 
 export class AlignedHarmfulPlugin extends RedteamPluginBase {
@@ -38,6 +39,40 @@ export class AlignedHarmfulPlugin extends RedteamPluginBase {
   }
 
   protected promptsToTestCases(prompts: { prompt: string }[]): TestCase[] {
-    return prompts.map(({ prompt }) => createTestCase(this.injectVar, prompt, this.harmCategory));
+    const hasInputs = this.config.inputs && Object.keys(this.config.inputs).length > 0;
+    const harmCategoryLabel =
+      (require('../../constants').HARM_PLUGINS as typeof HARM_PLUGINS_TYPE)[this.harmCategory] ||
+      this.harmCategory;
+
+    return prompts.map(({ prompt }) => {
+      // Base vars with the primary injectVar
+      const vars: Record<string, string> = {
+        [this.injectVar]: prompt,
+      };
+
+      // If inputs is defined, extract individual keys from the JSON into vars
+      if (hasInputs) {
+        try {
+          const parsed = JSON.parse(prompt);
+          for (const key of Object.keys(this.config.inputs!)) {
+            if (key in parsed) {
+              vars[key] = String(parsed[key]);
+            }
+          }
+        } catch {
+          // If parsing fails, just use the raw prompt
+        }
+      }
+
+      return {
+        vars,
+        metadata: {
+          harmCategory: harmCategoryLabel,
+          pluginId: getShortPluginId(this.harmCategory),
+          pluginConfig: this.config,
+        },
+        assert: getHarmfulAssertions(this.harmCategory),
+      };
+    });
   }
 }

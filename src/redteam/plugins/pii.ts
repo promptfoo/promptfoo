@@ -8,6 +8,41 @@ import type { PII_PLUGINS } from '../constants';
 
 const PLUGIN_ID = 'promptfoo:redteam:pii';
 
+/**
+ * Extract content from <Prompt> tags and parse JSON if inputs are defined.
+ * Returns the processed prompt and any additional vars extracted from JSON.
+ */
+function processPromptForInputs(
+  prompt: string,
+  inputs: Record<string, string> | undefined,
+): { processedPrompt: string; additionalVars: Record<string, string> } {
+  let processedPrompt = prompt.trim();
+  const additionalVars: Record<string, string> = {};
+
+  // Extract content from <Prompt> tags if present
+  const promptMatch = /<Prompt>([\s\S]*?)<\/Prompt>/i.exec(processedPrompt);
+  if (promptMatch) {
+    processedPrompt = promptMatch[1].trim();
+  }
+
+  // If inputs are defined, try to parse JSON and extract individual keys
+  if (inputs && Object.keys(inputs).length > 0) {
+    try {
+      const parsed = JSON.parse(processedPrompt);
+      for (const key of Object.keys(inputs)) {
+        if (key in parsed) {
+          additionalVars[key] = String(parsed[key]);
+        }
+      }
+    } catch {
+      // If parsing fails, processedPrompt is plain text - keep it as is
+      logger.debug('[PII] Could not parse prompt as JSON for multi-input mode');
+    }
+  }
+
+  return { processedPrompt, additionalVars };
+}
+
 type PiiRequestCategory = (typeof PII_PLUGINS)[number];
 /**
  * Interface for a PII category
@@ -174,17 +209,26 @@ export async function getPiiLeakTestsForCategory(
     .filter((line) => line.includes('Prompt:'))
     .map((line) => line.substring(line.indexOf('Prompt:') + 'Prompt:'.length).trim());
 
-  return prompts.map((prompt) => ({
-    vars: {
-      [injectVar]: prompt,
-    },
-    assert: [
-      {
-        type: PLUGIN_ID,
-        metric: 'PIILeak',
-      },
-    ],
-  }));
+  const inputs = config?.inputs as Record<string, string> | undefined;
+
+  return prompts.map((prompt) => {
+    const { processedPrompt, additionalVars } = processPromptForInputs(prompt, inputs);
+
+    const vars: Record<string, string> = {
+      [injectVar]: processedPrompt,
+      ...additionalVars,
+    };
+
+    return {
+      vars,
+      assert: [
+        {
+          type: PLUGIN_ID,
+          metric: 'PIILeak',
+        },
+      ],
+    };
+  });
 }
 
 export class PiiGrader extends RedteamGraderBase {

@@ -102,6 +102,11 @@ interface CrescendoConfig {
    * Set by the layer strategy when used as: layer: { steps: [crescendo, audio] }
    */
   _perTurnLayers?: LayerConfig[];
+  /**
+   * Multi-input schema for generating multiple vars at each turn.
+   * Keys are variable names, values are descriptions.
+   */
+  inputs?: Record<string, string>;
   [key: string]: unknown;
 }
 
@@ -181,6 +186,8 @@ export class CrescendoProvider implements ApiProvider {
           task: 'crescendo',
           jsonOnly: true,
           preferSmallModel: false,
+          // Pass inputs schema for multi-input mode
+          inputs: this.config.inputs,
         });
       } else {
         this.redTeamProvider = await redteamProviderManager.getProvider({
@@ -306,7 +313,11 @@ export class CrescendoProvider implements ApiProvider {
       successFlag: this.successfulAttacks.length,
       purpose: context?.test?.metadata?.purpose,
       modifierSection:
-        Object.entries(context?.test?.metadata?.modifiers || {})
+        Object.entries(
+          context?.test?.metadata?.modifiers ||
+            context?.test?.metadata?.pluginConfig?.modifiers ||
+            {},
+        )
           .map(([key, value]) => `${key}: ${value}`)
           .join('\n') || undefined,
     });
@@ -342,7 +353,11 @@ export class CrescendoProvider implements ApiProvider {
           successFlag: this.successfulAttacks.length,
           purpose: context?.test?.metadata?.purpose,
           modifierSection:
-            Object.entries(context?.test?.metadata?.modifiers || {})
+            Object.entries(
+              context?.test?.metadata?.modifiers ||
+                context?.test?.metadata?.pluginConfig?.modifiers ||
+                {},
+            )
               .map(([key, value]) => `${key}: ${value}`)
               .join('\n') || undefined,
         });
@@ -766,9 +781,36 @@ export class CrescendoProvider implements ApiProvider {
     shouldFetchTrace?: boolean,
     traceSnapshots?: TraceContextData[],
   ): Promise<{ response: TargetResponse; transformResult?: TransformResult }> {
+    // Extract JSON from <Prompt> tags if present (multi-input mode)
+    let processedPrompt = attackPrompt;
+    const promptMatch = /<Prompt>([\s\S]*?)<\/Prompt>/i.exec(attackPrompt);
+    if (promptMatch) {
+      processedPrompt = promptMatch[1].trim();
+    }
+
+    // Build updated vars - handle multi-input mode
+    const updatedVars: Record<string, string | object> = {
+      ...vars,
+      [this.config.injectVar]: processedPrompt,
+    };
+
+    // If inputs is defined, extract individual keys from the processedPrompt JSON
+    if (this.config.inputs && Object.keys(this.config.inputs).length > 0) {
+      try {
+        const parsed = JSON.parse(processedPrompt);
+        for (const key of Object.keys(this.config.inputs)) {
+          if (key in parsed) {
+            updatedVars[key] = String(parsed[key]);
+          }
+        }
+      } catch {
+        // If parsing fails, processedPrompt is plain text - keep original vars
+      }
+    }
+
     const renderedPrompt = await renderPrompt(
       originalPrompt,
-      { ...vars, [this.config.injectVar]: attackPrompt },
+      updatedVars,
       filters,
       provider,
       [this.config.injectVar], // Skip template rendering for injection variable to prevent double-evaluation

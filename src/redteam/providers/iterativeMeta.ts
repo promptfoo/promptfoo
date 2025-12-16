@@ -95,6 +95,7 @@ export async function runMetaAgentRedteam({
   vars,
   excludeTargetOutputFromAgenticAttackGeneration = false,
   perTurnLayers = [],
+  inputs,
 }: {
   context?: CallApiContextParams;
   filters: NunjucksFilterMap | undefined;
@@ -108,6 +109,7 @@ export async function runMetaAgentRedteam({
   test?: AtomicTestCase;
   vars: Record<string, string | object>;
   excludeTargetOutputFromAgenticAttackGeneration?: boolean;
+  inputs?: Record<string, string>;
   perTurnLayers?: LayerConfig[];
 }): Promise<{
   output: string;
@@ -243,6 +245,12 @@ export async function runMetaAgentRedteam({
       continue;
     }
 
+    // Extract JSON from <Prompt> tags if present (multi-input mode)
+    const promptMatch = /<Prompt>([\s\S]*?)<\/Prompt>/i.exec(attackPrompt);
+    if (promptMatch) {
+      attackPrompt = promptMatch[1].trim();
+    }
+
     // ═══════════════════════════════════════════════════════════════════════
     // Apply per-turn layer transforms if configured (e.g., audio, base64)
     // This enables: layer: { steps: [jailbreak:meta, audio] }
@@ -289,12 +297,29 @@ export async function runMetaAgentRedteam({
       .replace(/\{%/g, '{ %')
       .replace(/%\}/g, '% }');
 
+    // Build updated vars - handle multi-input mode
+    const updatedVars: Record<string, string | object> = {
+      ...iterationVars,
+      [injectVar]: escapedAttackPrompt,
+    };
+
+    // If inputs is defined, extract individual keys from the attack prompt JSON
+    if (inputs && Object.keys(inputs).length > 0) {
+      try {
+        const parsed = JSON.parse(finalAttackPrompt);
+        for (const key of Object.keys(inputs)) {
+          if (key in parsed) {
+            updatedVars[key] = String(parsed[key]);
+          }
+        }
+      } catch {
+        // If parsing fails, attackPrompt is plain text - keep original vars
+      }
+    }
+
     const targetPrompt = await renderPrompt(
       prompt,
-      {
-        ...iterationVars,
-        [injectVar]: escapedAttackPrompt,
-      },
+      updatedVars,
       filters,
       targetProvider,
       [injectVar], // Skip template rendering for injection variable to prevent double-evaluation
@@ -505,6 +530,7 @@ class RedteamIterativeMetaProvider implements ApiProvider {
   private readonly gradingProvider: RedteamFileConfig['provider'];
   private readonly excludeTargetOutputFromAgenticAttackGeneration: boolean;
   private readonly perTurnLayers: LayerConfig[];
+  private readonly inputs?: Record<string, string>;
 
   constructor(readonly config: Record<string, string | object>) {
     logger.debug('[IterativeMeta] Constructor config', {
@@ -512,6 +538,7 @@ class RedteamIterativeMetaProvider implements ApiProvider {
     });
     invariant(typeof config.injectVar === 'string', 'Expected injectVar to be set');
     this.injectVar = config.injectVar;
+    this.inputs = config.inputs as Record<string, string> | undefined;
 
     this.numIterations =
       Number(config.numIterations) || getEnvInt('PROMPTFOO_NUM_JAILBREAK_ITERATIONS', 10);
@@ -537,6 +564,8 @@ class RedteamIterativeMetaProvider implements ApiProvider {
       task: 'meta-agent-decision',
       jsonOnly: true,
       preferSmallModel: false,
+      // Pass inputs schema for multi-input mode
+      inputs: this.inputs,
     });
   }
 
@@ -580,6 +609,7 @@ class RedteamIterativeMetaProvider implements ApiProvider {
       test: context.test,
       excludeTargetOutputFromAgenticAttackGeneration:
         this.excludeTargetOutputFromAgenticAttackGeneration,
+      inputs: this.inputs,
     });
   }
 }

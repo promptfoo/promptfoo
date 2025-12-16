@@ -34,6 +34,8 @@ import type {
   RedteamPluginObject,
   RedteamStrategy,
 } from '../redteam/types';
+import { InputsSchema } from '../redteam/types';
+
 
 const TracingConfigSchema: z.ZodType<any> = z.lazy(() =>
   z.object({
@@ -252,6 +254,9 @@ export const RedteamConfigSchema = z
       .describe(
         "Variable to inject. Can be a string or array of strings. If string, it's transformed to an array. Inferred from the prompts by default.",
       ),
+    inputs: InputsSchema.optional().describe(
+      'Multi-variable inputs for test case generation. Keys are variable names, values are descriptions. When specified, the first key becomes the primary injectVar.',
+    ),
     purpose: z
       .string()
       .optional()
@@ -539,6 +544,7 @@ export const RedteamConfigSchema = z
       ...(data.delay ? { delay: data.delay } : {}),
       ...(data.entities ? { entities: data.entities } : {}),
       ...(data.injectVar ? { injectVar: data.injectVar } : {}),
+      ...(data.inputs ? { inputs: data.inputs } : {}),
       ...(data.language ? { language: data.language } : {}),
       ...(data.provider ? { provider: data.provider } : {}),
       ...(data.purpose ? { purpose: data.purpose } : {}),

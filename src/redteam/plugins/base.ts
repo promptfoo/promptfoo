@@ -135,6 +135,44 @@ export function parseGeneratedPrompts(generatedPrompts: string): { prompt: strin
 }
 
 /**
+ * Parses LLM output into multi-input test cases when inputs schema is defined.
+ * Extracts JSON from <Prompt> tags and returns them as prompt strings.
+ *
+ * @param generatedOutput - The LLM response containing generated test cases.
+ * @param inputs - The inputs schema defining expected variable names.
+ * @returns An array of { prompt: string } objects where prompt is the JSON string.
+ */
+export function parseGeneratedInputs(
+  generatedOutput: string,
+  inputs: Record<string, string>,
+): { prompt: string }[] {
+  const results: { prompt: string }[] = [];
+  const inputKeys = Object.keys(inputs);
+
+  // Extract JSON from <Prompt> tags
+  const promptRegex = /<Prompt>([\s\S]*?)<\/Prompt>/gi;
+  let match;
+
+  while ((match = promptRegex.exec(generatedOutput)) !== null) {
+    const jsonStr = match[1].trim();
+    try {
+      const parsed = JSON.parse(jsonStr);
+
+      // Validate all required keys exist
+      const hasAllKeys = inputKeys.every((key) => key in parsed);
+      if (hasAllKeys) {
+        // Return the JSON string as the prompt value
+        results.push({ prompt: jsonStr });
+      }
+    } catch {
+      logger.debug(`Failed to parse JSON from <Prompt> tag: ${jsonStr}`);
+    }
+  }
+
+  return results;
+}
+
+/**
  * Abstract base class for creating plugins that generate test cases.
  */
 export abstract class RedteamPluginBase {
@@ -210,14 +248,23 @@ export abstract class RedteamPluginBase {
     logger.debug(`Generating ${n} test cases`);
     const batchSize = 20;
 
+    // Check if we're using multi-input mode
+    const hasInputs = this.config.inputs && Object.keys(this.config.inputs).length > 0;
+
+    if (hasInputs) {
+      logger.debug(
+        `Using multi-input mode with inputs: ${Object.keys(this.config.inputs!).join(', ')}`,
+      );
+    }
+
     /**
-     * Generates a batch of prompts using the API provider.
-     * @param currentPrompts - The current list of prompts.
-     * @returns A promise that resolves to an array of new prompts.
+     * Generates a batch of prompts/test cases using the API provider.
+     * In single-input mode, returns { prompt: string }[]
+     * In multi-input mode, returns Record<string, string>[]
      */
     const generatePrompts = async (
-      currentPrompts: { prompt: string }[],
-    ): Promise<{ prompt: string }[]> => {
+      currentPrompts: { prompt: string }[] | Record<string, string>[],
+    ): Promise<{ prompt: string }[] | Record<string, string>[]> => {
       const remainingCount = n - currentPrompts.length;
       const currentBatchSize = Math.min(remainingCount, batchSize);
 
@@ -271,9 +318,17 @@ export abstract class RedteamPluginBase {
         throw new Error(message);
       }
 
+      // Use appropriate parser based on mode
+      if (hasInputs) {
+        return parseGeneratedInputs(generatedPrompts, this.config.inputs!);
+      }
       return parseGeneratedPrompts(generatedPrompts);
     };
-    const allPrompts = await retryWithDeduplication(generatePrompts, n);
+
+    const allPrompts = await retryWithDeduplication(
+      generatePrompts as (current: { prompt: string }[]) => Promise<{ prompt: string }[]>,
+      n,
+    );
     const prompts = sampleArray(allPrompts, n);
     logger.debug(`${this.constructor.name} generated test cases from ${prompts.length} prompts`);
 
@@ -281,25 +336,48 @@ export abstract class RedteamPluginBase {
       logger.warn(`Expected ${n} prompts, got ${prompts.length} for ${this.constructor.name}`);
     }
 
-    return this.promptsToTestCases(prompts);
+    return this.promptsToTestCases(prompts as { prompt: string }[]);
   }
 
   /**
    * Converts an array of { prompt: string } objects into an array of test cases.
+   * When inputs is defined, the prompt contains JSON which is set as the injectVar value,
+   * and individual keys are extracted into vars for usability.
    * @param prompts - An array of { prompt: string } objects.
    * @returns An array of test cases.
    */
   protected promptsToTestCases(prompts: { prompt: string }[]): TestCase[] {
-    return prompts.sort().map((prompt) => ({
-      vars: {
+    const hasInputs = this.config.inputs && Object.keys(this.config.inputs).length > 0;
+
+    return prompts.sort().map((prompt) => {
+      // Base vars with the primary injectVar
+      const vars: Record<string, string> = {
         [this.injectVar]: prompt.prompt,
-      },
-      assert: this.getAssertions(prompt.prompt),
-      metadata: {
-        pluginId: getShortPluginId(this.id),
-        pluginConfig: this.config,
-      },
-    }));
+      };
+
+      // If inputs is defined, extract individual keys from the JSON into vars
+      if (hasInputs) {
+        try {
+          const parsed = JSON.parse(prompt.prompt);
+          for (const key of Object.keys(this.config.inputs!)) {
+            if (key in parsed) {
+              vars[key] = String(parsed[key]);
+            }
+          }
+        } catch {
+          // If parsing fails, just use the raw prompt
+        }
+      }
+
+      return {
+        vars,
+        assert: this.getAssertions(prompt.prompt),
+        metadata: {
+          pluginId: getShortPluginId(this.id),
+          pluginConfig: this.config,
+        },
+      };
+    });
   }
 
   /**
@@ -316,12 +394,46 @@ export abstract class RedteamPluginBase {
       modifiers.language = config.language;
     }
 
+    // Add inputs as a modifier if defined - instructs LLM to output JSON wrapped in <Prompt> tags
+    if (config.inputs && Object.keys(config.inputs).length > 0) {
+      const schema = Object.entries(config.inputs)
+        .map(([key, description]) => `"${key}": "<${description}>"`)
+        .join(', ');
+      modifiers.outputFormat = `Output each test case as JSON wrapped in <Prompt> tags: <Prompt>{${schema}}</Prompt>`;
+    }
+
+    // Store the computed modifiers back into config so they get passed to strategies
+    if (Object.keys(modifiers).length > 0) {
+      config.modifiers = modifiers;
+    }
+
     // No modifiers
     if (
       Object.keys(modifiers).length === 0 ||
       Object.values(modifiers).every((value) => typeof value === 'undefined' || value === '')
     ) {
       return template;
+    }
+
+    let processedTemplate = template.trim();
+
+    // If outputFormat modifier is set, remove conflicting format instructions from the template
+    // Templates often have lines like "Each line must begin with 'Prompt:'" that conflict with JSON output
+    if (modifiers.outputFormat) {
+      // Remove common format instruction patterns that conflict with outputFormat
+      processedTemplate = processedTemplate
+        .split('\n')
+        .filter((line) => {
+          const lower = line.toLowerCase();
+          // Remove lines that specify "Prompt:" format
+          return !(
+            lower.includes('each line must begin with') ||
+            lower.includes('begin with the string "prompt') ||
+            lower.includes("begin with the string 'prompt") ||
+            (lower.includes('format') && lower.includes('prompt:') && !lower.includes('<prompt>'))
+          );
+        })
+        .join('\n');
     }
 
     // Append all modifiers
@@ -331,13 +443,13 @@ export abstract class RedteamPluginBase {
       .join('\n');
 
     return dedent`
-      ${template.trim()}
+      ${processedTemplate}
 
-      CRITICAL: Ensure all generated prompts strictly follow these requirements:
+      CRITICAL: Ignore any previous output format instructions. You MUST follow these requirements exactly:
       <Modifiers>
       ${modifierSection}
       </Modifiers>
-      Rewrite ALL prompts to fully comply with the above modifiers.
+      Rewrite ALL prompts to strictly comply with the above modifiers.
     `.trim();
   }
 }

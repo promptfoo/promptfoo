@@ -111,6 +111,7 @@ export async function runRedteamConversation({
   vars,
   excludeTargetOutputFromAgenticAttackGeneration,
   perTurnLayers = [],
+  inputs,
 }: {
   context?: CallApiContextParams;
   filters: NunjucksFilterMap | undefined;
@@ -125,6 +126,7 @@ export async function runRedteamConversation({
   vars: Record<string, string | object>;
   excludeTargetOutputFromAgenticAttackGeneration: boolean;
   perTurnLayers?: LayerConfig[];
+  inputs?: Record<string, string>;
 }): Promise<{
   output: string;
   metadata: IterativeMetadata;
@@ -288,6 +290,12 @@ export async function runRedteamConversation({
       continue;
     }
 
+    // Extract JSON from <Prompt> tags if present (multi-input mode)
+    const promptMatch = /<Prompt>([\s\S]*?)<\/Prompt>/i.exec(newInjectVar);
+    if (promptMatch) {
+      newInjectVar = promptMatch[1].trim();
+    }
+
     // Update the application prompt with the new injection.
     logger.debug(`[Iterative] New injectVar: ${newInjectVar}, improvement: ${improvement}`);
 
@@ -329,12 +337,30 @@ export async function runRedteamConversation({
       });
     }
 
+    // Build updated vars - handle multi-input mode
+    const updatedVars: Record<string, string | object> = {
+      ...iterationVars,
+      [injectVar]: finalInjectVar,
+    };
+
+    // If inputs is defined, extract individual keys from the attack prompt JSON
+    if (inputs && Object.keys(inputs).length > 0) {
+      try {
+        // Use the original newInjectVar (before escaping) for parsing
+        const parsed = JSON.parse(newInjectVar);
+        for (const key of Object.keys(inputs)) {
+          if (key in parsed) {
+            updatedVars[key] = String(parsed[key]);
+          }
+        }
+      } catch {
+        // If parsing fails, it's plain text - keep original vars
+      }
+    }
+
     targetPrompt = await renderPrompt(
       prompt,
-      {
-        ...iterationVars,
-        [injectVar]: finalInjectVar,
-      },
+      updatedVars,
       filters,
       targetProvider,
       [injectVar], // Skip template rendering for injection variable to prevent double-evaluation
@@ -669,11 +695,13 @@ class RedteamIterativeProvider implements ApiProvider {
   private readonly excludeTargetOutputFromAgenticAttackGeneration: boolean;
   private readonly gradingProvider: RedteamFileConfig['provider'];
   private readonly perTurnLayers: LayerConfig[];
+  private readonly inputs?: Record<string, string>;
 
   constructor(readonly config: Record<string, string | object>) {
     logger.debug('[Iterative] Constructor config', { config });
     invariant(typeof config.injectVar === 'string', 'Expected injectVar to be set');
     this.injectVar = config.injectVar;
+    this.inputs = config.inputs as Record<string, string> | undefined;
 
     this.numIterations =
       Number(config.numIterations) || getEnvInt('PROMPTFOO_NUM_JAILBREAK_ITERATIONS', 4);
@@ -694,6 +722,8 @@ class RedteamIterativeProvider implements ApiProvider {
         task: 'iterative',
         jsonOnly: true,
         preferSmallModel: false,
+        // Pass inputs schema for multi-input mode
+        inputs: this.inputs,
       });
     } else {
       this.redteamProvider = config.redteamProvider;
@@ -738,6 +768,7 @@ class RedteamIterativeProvider implements ApiProvider {
       test: context.test,
       excludeTargetOutputFromAgenticAttackGeneration:
         this.excludeTargetOutputFromAgenticAttackGeneration,
+      inputs: this.inputs,
     });
   }
 }

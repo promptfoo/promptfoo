@@ -459,6 +459,7 @@ async function runRedteamConversation({
   vars,
   excludeTargetOutputFromAgenticAttackGeneration,
   perTurnLayers = [],
+  inputs,
 }: {
   context: CallApiContextParams;
   filters: NunjucksFilterMap | undefined;
@@ -472,6 +473,7 @@ async function runRedteamConversation({
   vars: Record<string, string | object>;
   excludeTargetOutputFromAgenticAttackGeneration: boolean;
   perTurnLayers?: LayerConfig[];
+  inputs?: Record<string, string>;
 }): Promise<RedteamTreeResponse> {
   const nunjucks = getNunjucksEngine();
   const goal: string = context?.test?.metadata?.goal || (vars[injectVar] as string);
@@ -544,12 +546,19 @@ async function runRedteamConversation({
         });
         const iterationVars = iterationContext?.vars || {};
 
-        const { improvement, prompt: newInjectVar } = await getNewPrompt(redteamProvider, [
+        let { improvement, prompt: newInjectVar } = await getNewPrompt(redteamProvider, [
           ...redteamHistory,
           { role: 'assistant', content: node.prompt },
         ]);
 
         attempts++;
+
+        // Extract JSON from <Prompt> tags if present (multi-input mode)
+        const promptMatch = /<Prompt>([\s\S]*?)<\/Prompt>/i.exec(newInjectVar);
+        if (promptMatch) {
+          newInjectVar = promptMatch[1].trim();
+        }
+
         logger.debug(
           `[Depth ${depth}, Attempt ${attempts}] Generated new prompt: "${newInjectVar.substring(0, 30)}...", improvement="${improvement.substring(0, 30)}...". Max score so far: ${maxScore}`,
         );
@@ -594,12 +603,30 @@ async function runRedteamConversation({
           });
         }
 
+        // Build updated vars - handle multi-input mode
+        const updatedVars: Record<string, string | object> = {
+          ...iterationVars,
+          [injectVar]: finalInjectVar,
+        };
+
+        // If inputs is defined, extract individual keys from the attack prompt JSON
+        if (inputs && Object.keys(inputs).length > 0) {
+          try {
+            // Use the original newInjectVar (before escaping) for parsing
+            const parsed = JSON.parse(newInjectVar);
+            for (const key of Object.keys(inputs)) {
+              if (key in parsed) {
+                updatedVars[key] = String(parsed[key]);
+              }
+            }
+          } catch {
+            // If parsing fails, it's plain text - keep original vars
+          }
+        }
+
         const targetPrompt = await renderPrompt(
           prompt,
-          {
-            ...iterationVars,
-            [injectVar]: finalInjectVar,
-          },
+          updatedVars,
           filters,
           targetProvider,
           [injectVar], // Skip template rendering for injection variable to prevent double-evaluation
@@ -886,12 +913,36 @@ async function runRedteamConversation({
     );
   }
 
+  // Extract JSON from <Prompt> tags if present (multi-input mode)
+  let bestPrompt = bestNode.prompt;
+  const bestPromptMatch = /<Prompt>([\s\S]*?)<\/Prompt>/i.exec(bestPrompt);
+  if (bestPromptMatch) {
+    bestPrompt = bestPromptMatch[1].trim();
+  }
+
+  // Build final vars - handle multi-input mode
+  const finalUpdatedVars: Record<string, string | object> = {
+    ...vars,
+    [injectVar]: bestPrompt,
+  };
+
+  // If inputs is defined, extract individual keys from the best prompt JSON
+  if (inputs && Object.keys(inputs).length > 0) {
+    try {
+      const parsed = JSON.parse(bestPrompt);
+      for (const key of Object.keys(inputs)) {
+        if (key in parsed) {
+          finalUpdatedVars[key] = String(parsed[key]);
+        }
+      }
+    } catch {
+      // If parsing fails, it's plain text - keep original vars
+    }
+  }
+
   const finalTargetPrompt = await renderPrompt(
     prompt,
-    {
-      ...vars,
-      [injectVar]: bestNode.prompt,
-    },
+    finalUpdatedVars,
     filters,
     targetProvider,
     [injectVar], // Skip template rendering for injection variable to prevent double-evaluation
@@ -953,6 +1004,7 @@ async function runRedteamConversation({
 class RedteamIterativeTreeProvider implements ApiProvider {
   private readonly injectVar: string;
   private readonly excludeTargetOutputFromAgenticAttackGeneration: boolean;
+  private readonly inputs?: Record<string, string>;
 
   /**
    * Creates a new instance of RedteamIterativeTreeProvider.
@@ -963,6 +1015,7 @@ class RedteamIterativeTreeProvider implements ApiProvider {
     logger.debug('[IterativeTree] Constructor config', { config });
     invariant(typeof config.injectVar === 'string', 'Expected injectVar to be set');
     this.injectVar = config.injectVar;
+    this.inputs = config.inputs as Record<string, string> | undefined;
     this.excludeTargetOutputFromAgenticAttackGeneration = Boolean(
       config.excludeTargetOutputFromAgenticAttackGeneration,
     );
@@ -1005,6 +1058,8 @@ class RedteamIterativeTreeProvider implements ApiProvider {
         task: 'iterative:tree',
         jsonOnly: true,
         preferSmallModel: false,
+        // Pass inputs schema for multi-input mode
+        inputs: this.inputs,
       });
     } else {
       redteamProvider = await redteamProviderManager.getProvider({
@@ -1027,6 +1082,7 @@ class RedteamIterativeTreeProvider implements ApiProvider {
       vars: context.vars,
       excludeTargetOutputFromAgenticAttackGeneration:
         this.excludeTargetOutputFromAgenticAttackGeneration,
+      inputs: this.inputs,
     });
   }
 }

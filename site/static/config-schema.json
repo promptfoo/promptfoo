@@ -1087,6 +1087,17 @@
               "type": "string",
               "description": "Variable to inject. Can be a string or array of strings. If string, it's transformed to an array. Inferred from the prompts by default."
             },
+            "inputs": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string",
+                "minLength": 1
+              },
+              "propertyNames": {
+                "pattern": "^[a-zA-Z_][a-zA-Z0-9_]*$"
+              },
+              "description": "Multi-variable inputs for test case generation. Keys are variable names, values are descriptions. When specified, the first key becomes the primary injectVar."
+            },
             "purpose": {
               "type": "string",
               "description": "Purpose override string - describes the prompt templates"

@@ -225,6 +225,13 @@ function addLanguageToPluginMetadata(
   const existingLanguage = getLanguageForTestCase(test);
   const languageToAdd = lang && !existingLanguage ? { language: lang } : {};
 
+  // Use modifiers from the test's pluginConfig first (which may have been computed by appendModifiers),
+  // then fall back to the original plugin.config?.modifiers
+  const pluginModifiers =
+    (test.metadata?.pluginConfig?.modifiers as Record<string, string> | undefined) ||
+    (plugin.config?.modifiers as Record<string, string> | undefined) ||
+    {};
+
   return {
     ...test,
     metadata: {
@@ -233,7 +240,7 @@ function addLanguageToPluginMetadata(
       severity: plugin.severity ?? getPluginSeverity(plugin.id, resolvePluginConfig(plugin.config)),
       modifiers: {
         ...(testGenerationInstructions ? { testGenerationInstructions } : {}),
-        ...(plugin.config?.modifiers || {}),
+        ...pluginModifiers,
         ...test.metadata?.modifiers,
         // Add language to modifiers if not already present (respect existing)
         ...languageToAdd,
@@ -336,26 +343,45 @@ async function applyStrategies(
     newTestCases.push(
       ...strategyTestCases
         .filter((t): t is NonNullable<typeof t> => t !== null && t !== undefined)
-        .map((t) => ({
-          ...t,
-          metadata: {
-            ...(t?.metadata || {}),
-            // Don't set strategyId for retry strategy (it's not user-facing)
-            ...(strategy.id !== 'retry' && {
-              strategyId: t?.metadata?.strategyId || strategy.id,
-            }),
-            ...(t?.metadata?.pluginId && { pluginId: t.metadata.pluginId }),
-            ...(t?.metadata?.pluginConfig && {
-              pluginConfig: t.metadata.pluginConfig,
-            }),
-            ...(strategy.config && {
-              strategyConfig: {
-                ...strategy.config,
-                ...(t?.metadata?.strategyConfig || {}),
-              },
-            }),
-          },
-        })),
+        .map((t) => {
+          // Re-extract individual keys from transformed JSON if inputs was used
+          const inputs = t?.metadata?.pluginConfig?.inputs as Record<string, string> | undefined;
+          let updatedVars = t.vars;
+          if (inputs && Object.keys(inputs).length > 0 && t.vars?.[injectVar]) {
+            try {
+              const parsed = JSON.parse(String(t.vars[injectVar]));
+              updatedVars = { ...t.vars };
+              for (const key of Object.keys(inputs)) {
+                if (key in parsed) {
+                  updatedVars[key] = String(parsed[key]);
+                }
+              }
+            } catch {
+              // If parsing fails, keep original vars
+            }
+          }
+          return {
+            ...t,
+            vars: updatedVars,
+            metadata: {
+              ...(t?.metadata || {}),
+              // Don't set strategyId for retry strategy (it's not user-facing)
+              ...(strategy.id !== 'retry' && {
+                strategyId: t?.metadata?.strategyId || strategy.id,
+              }),
+              ...(t?.metadata?.pluginId && { pluginId: t.metadata.pluginId }),
+              ...(t?.metadata?.pluginConfig && {
+                pluginConfig: t.metadata.pluginConfig,
+              }),
+              ...(strategy.config && {
+                strategyConfig: {
+                  ...strategy.config,
+                  ...(t?.metadata?.strategyConfig || {}),
+                },
+              }),
+            },
+          };
+        }),
     );
 
     // Compute a display id for reporting (helpful for layered strategies)
@@ -558,6 +584,7 @@ export async function synthesize({
   delay,
   entities: entitiesOverride,
   injectVar,
+  inputs,
   language,
   maxConcurrency = 1,
   plugins,
@@ -718,6 +745,16 @@ export async function synthesize({
       (delay ? `• Delay: ${chalk.cyan(delay)}\n` : ''),
   );
 
+  // Handle multi-input mode: log info but don't override injectVar
+  const hasInputs = inputs && Object.keys(inputs).length > 0;
+  if (hasInputs) {
+    const inputKeys = Object.keys(inputs);
+    logger.info(
+      `Using multi-input mode with ${inputKeys.length} variables: ${inputKeys.join(', ')}`,
+    );
+  }
+
+  // Determine injectVar if not explicitly set
   if (typeof injectVar !== 'string') {
     const parsedVars = extractVariablesFromTemplates(prompts);
     if (parsedVars.length > 1) {
@@ -909,6 +946,8 @@ export async function synthesize({
           config: {
             ...resolvePluginConfig(plugin.config),
             ...(lang ? { language: lang } : {}),
+            // Pass inputs to plugin for multi-variable test case generation
+            ...(hasInputs ? { inputs } : {}),
             modifiers: {
               ...(testGenerationInstructions ? { testGenerationInstructions } : {}),
               ...(plugin.config?.modifiers || {}),
