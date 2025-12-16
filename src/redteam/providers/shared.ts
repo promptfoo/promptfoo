@@ -8,6 +8,8 @@ import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
 import type { TraceContextData } from '../../tracing/traceContext';
 import {
   type ApiProvider,
+  type Assertion,
+  type AssertionOrSet,
   type CallApiContextParams,
   type CallApiOptionsParams,
   type EvaluateResult,
@@ -23,6 +25,7 @@ import { sleep } from '../../util/time';
 import { TokenUsageTracker } from '../../util/tokenUsage';
 import { transform, type TransformContext, TransformInputType } from '../../util/transform';
 import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
+import type { RedteamHistoryEntry } from '../types';
 
 async function loadRedteamProvider({
   provider,
@@ -410,7 +413,7 @@ export interface BaseRedteamMetadata {
   redteamFinalPrompt?: string;
   messages: Record<string, any>[];
   stopReason: string;
-  redteamHistory?: { prompt: string; output: string }[];
+  redteamHistory?: RedteamHistoryEntry[];
 }
 
 /**
@@ -526,4 +529,22 @@ export async function tryUnblocking({
     logger.error(`[Unblocking] Error in unblocking flow: ${error}`);
     return { success: false };
   }
+}
+
+/**
+ * Builds the assertion object for storedGraderResult with the rubric value.
+ * This ensures the grading template is preserved for display in the UI.
+ */
+export function buildGraderResultAssertion(
+  gradeAssertion: Assertion | undefined,
+  assertToUse: AssertionOrSet | undefined,
+  rubric: string | undefined,
+): Assertion | undefined {
+  if (gradeAssertion) {
+    return { ...gradeAssertion, value: rubric };
+  }
+  if (assertToUse && 'type' in assertToUse && assertToUse.type !== 'assert-set') {
+    return { ...assertToUse, value: rubric };
+  }
+  return undefined;
 }

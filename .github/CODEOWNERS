@@ -54,7 +54,7 @@
 # DOCUMENTATION
 # ============================================================================
 
-/site/                      @typpo @mldangelo            # Documentation site
+/site/                      @typpo @mldangelo @swarnap   # Documentation site
 /CONTRIBUTING.md            @mldangelo                   # Contributing guide
 /site/docs/contributing.md  @mldangelo                   # Contributing docs
 

@@ -14,6 +14,7 @@ import {
   type TestCase,
 } from '../../src/types/index';
 import {
+  filterRuntimeVars,
   maybeLoadToolsFromExternalFile,
   parsePathOrGlob,
   providerToIdentifier,
@@ -799,6 +800,134 @@ describe('util', () => {
       // Should match because both have same vars after filtering
       expect(resultIsForTestCase(result, testCase)).toBe(true);
     });
+
+    it('matches when result.vars has sessionId runtime variable from GOAT/Crescendo providers', async () => {
+      // This tests the fix for multi-turn strategy providers (GOAT, Crescendo, SIMBA)
+      // that add sessionId to vars during execution
+      const testCase: TestCase = {
+        provider: 'provider',
+        vars: {
+          prompt: 'test prompt',
+          goal: 'test goal',
+        },
+      };
+
+      const result = {
+        provider: 'provider',
+        vars: {
+          prompt: 'test prompt',
+          goal: 'test goal',
+          sessionId: 'goat-session-abc123', // Added by GOAT provider during evaluation
+        },
+      } as any as EvaluateResult;
+
+      // Should match because sessionId is filtered out
+      expect(resultIsForTestCase(result, testCase)).toBe(true);
+    });
+
+    it('matches when result.vars has both _conversation and sessionId runtime variables', async () => {
+      const testCase: TestCase = {
+        provider: 'provider',
+        vars: {
+          input: 'hello',
+        },
+      };
+
+      const result = {
+        provider: 'provider',
+        vars: {
+          input: 'hello',
+          _conversation: [{ role: 'user', content: 'hi' }],
+          sessionId: 'session-xyz789',
+        },
+      } as any as EvaluateResult;
+
+      // Should match because both runtime vars are filtered out
+      expect(resultIsForTestCase(result, testCase)).toBe(true);
+    });
+
+    it('matches when testCase also has sessionId (both filtered)', async () => {
+      // Edge case: if user explicitly sets sessionId in test config, it should still match
+      const testCase: TestCase = {
+        provider: 'provider',
+        vars: {
+          prompt: 'test',
+          sessionId: 'user-defined-session',
+        },
+      };
+
+      const result = {
+        provider: 'provider',
+        vars: {
+          prompt: 'test',
+          sessionId: 'different-runtime-session',
+        },
+      } as any as EvaluateResult;
+
+      // Should match because sessionId is filtered from both sides
+      expect(resultIsForTestCase(result, testCase)).toBe(true);
+    });
+  });
+
+  describe('filterRuntimeVars', () => {
+    it('should filter out _conversation', () => {
+      const vars = { input: 'hello', _conversation: [{ role: 'user', content: 'hi' }] };
+      const result = filterRuntimeVars(vars);
+      expect(result).toEqual({ input: 'hello' });
+      expect(result).not.toHaveProperty('_conversation');
+    });
+
+    it('should filter out sessionId', () => {
+      const vars = { input: 'hello', sessionId: 'test-session-123' };
+      const result = filterRuntimeVars(vars);
+      expect(result).toEqual({ input: 'hello' });
+      expect(result).not.toHaveProperty('sessionId');
+    });
+
+    it('should filter out multiple runtime vars', () => {
+      const vars = {
+        input: 'hello',
+        goal: 'test goal',
+        _conversation: [],
+        sessionId: 'test-session-123',
+      };
+      const result = filterRuntimeVars(vars);
+      expect(result).toEqual({ input: 'hello', goal: 'test goal' });
+      expect(result).not.toHaveProperty('_conversation');
+      expect(result).not.toHaveProperty('sessionId');
+    });
+
+    it('should handle undefined vars', () => {
+      expect(filterRuntimeVars(undefined)).toBeUndefined();
+    });
+
+    it('should handle empty vars', () => {
+      expect(filterRuntimeVars({})).toEqual({});
+    });
+
+    it('should not mutate original vars', () => {
+      const vars = { input: 'hello', sessionId: 'test-123', _conversation: [] };
+      const original = { ...vars };
+      filterRuntimeVars(vars);
+      expect(vars).toEqual(original);
+    });
+
+    it('should preserve all non-runtime vars', () => {
+      const vars = {
+        input: 'hello',
+        output: 'world',
+        context: 'some context',
+        nested: { key: 'value' },
+        sessionId: 'to-be-removed',
+      };
+      const result = filterRuntimeVars(vars);
+      expect(result).toEqual({
+        input: 'hello',
+        output: 'world',
+        context: 'some context',
+        nested: { key: 'value' },
+      });
+    });
   });
 
   describe('parsePathOrGlob', () => {
@@ -1052,6 +1181,7 @@ describe('setupEnv', () => {
   let dotenvConfigSpy: MockInstance<
     (options?: dotenv.DotenvConfigOptions) => dotenv.DotenvConfigOutput
   >;
+  let existsSyncSpy: MockInstance<(path: fs.PathLike) => boolean>;
 
   beforeEach(() => {
     originalEnv = { ...process.env };
@@ -1059,6 +1189,8 @@ describe('setupEnv', () => {
     delete process.env.NODE_ENV;
     // Spy on dotenv.config to verify it's called with the right parameters
     dotenvConfigSpy = vi.spyOn(dotenv, 'config').mockImplementation(() => ({ parsed: {} }));
+    // Mock file existence check - default to true for backward compat with existing tests
+    existsSyncSpy = vi.spyOn(fs, 'existsSync').mockReturnValue(true);
   });
 
   afterEach(() => {
@@ -1111,6 +1243,99 @@ describe('setupEnv', () => {
     // Then load .env.production with override (should change NODE_ENV to 'production')
     setupEnv('.env.production');
     expect(process.env.NODE_ENV).toBe('production');
+  });
+
+  describe('multi-file support', () => {
+    it('should call dotenv.config with array of paths when multiple files specified', () => {
+      const paths = ['.env', '.env.local'];
+
+      setupEnv(paths);
+
+      expect(dotenvConfigSpy).toHaveBeenCalledTimes(1);
+      expect(dotenvConfigSpy).toHaveBeenCalledWith({
+        path: paths,
+        override: true,
+        quiet: true,
+      });
+    });
+
+    it('should call dotenv.config with single path (not array) when one file specified as array', () => {
+      const paths = ['.env'];
+
+      setupEnv(paths);
+
+      expect(dotenvConfigSpy).toHaveBeenCalledTimes(1);
+      expect(dotenvConfigSpy).toHaveBeenCalledWith({
+        path: '.env',
+        override: true,
+        quiet: true,
+      });
+    });
+
+    it('should throw error when specified file does not exist', () => {
+      existsSyncSpy.mockReturnValue(false);
+
+      expect(() => setupEnv('.env.missing')).toThrow('Environment file not found: .env.missing');
+    });
+
+    it('should throw error when any file in array does not exist', () => {
+      existsSyncSpy.mockImplementation((p) => p === '.env');
+
+      expect(() => setupEnv(['.env', '.env.missing'])).toThrow(
+        'Environment file not found: .env.missing',
+      );
+    });
+
+    it('should validate all files exist before calling dotenv.config', () => {
+      existsSyncSpy.mockImplementation((p) => p === '.env');
+
+      expect(() => setupEnv(['.env', '.env.missing'])).toThrow();
+      expect(dotenvConfigSpy).not.toHaveBeenCalled();
+    });
+
+    it('should filter out empty strings from array', () => {
+      setupEnv(['', '.env', '  ']);
+
+      expect(dotenvConfigSpy).toHaveBeenCalledWith({
+        path: '.env',
+        override: true,
+        quiet: true,
+      });
+    });
+
+    it('should call default dotenv.config when array contains only empty strings', () => {
+      setupEnv(['', '  ', '']);
+
+      expect(dotenvConfigSpy).toHaveBeenCalledWith({ quiet: true });
+    });
+
+    it('should call default dotenv.config when given empty array', () => {
+      setupEnv([]);
+
+      expect(dotenvConfigSpy).toHaveBeenCalledWith({ quiet: true });
+    });
+
+    it('should expand comma-separated values within array elements', () => {
+      // This simulates what Commander passes when using --env-file .env,.env.local
+      setupEnv(['.env,.env.local']);
+
+      expect(dotenvConfigSpy).toHaveBeenCalledTimes(1);
+      expect(dotenvConfigSpy).toHaveBeenCalledWith({
+        path: ['.env', '.env.local'],
+        override: true,
+        quiet: true,
+      });
+    });
+
+    it('should handle mixed array with some comma-separated and some individual paths', () => {
+      setupEnv(['.env,.env.local', '.env.production']);
+
+      expect(dotenvConfigSpy).toHaveBeenCalledWith({
+        path: ['.env', '.env.local', '.env.production'],
+        override: true,
+        quiet: true,
+      });
+    });
   });
 });
 

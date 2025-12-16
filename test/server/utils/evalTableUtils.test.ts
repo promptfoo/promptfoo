@@ -657,6 +657,91 @@ describe('evalTableUtils', () => {
           expect(lines[1]).toBeDefined();
         }
       });
+
+      it('should include pluginId and strategyId from metadata in CSV output', () => {
+        // This test validates that pluginId and strategyId are read from metadata
+        // for CSV export, consistent with the promptfoo-cloud approach
+        const outputWithMetadataIds: EvaluateTableOutput = {
+          id: 'test-id',
+          pass: true,
+          text: 'Test output',
+          prompt: 'Test prompt',
+          score: 1,
+          cost: 0,
+          latencyMs: 100,
+          namedScores: {},
+          failureReason: ResultFailureReason.NONE,
+          testCase: { vars: {} },
+          metadata: {
+            pluginId: 'harmful:violent-crime',
+            strategyId: 'jailbreak',
+          },
+        };
+
+        // Verify the fields are accessible via metadata
+        expect(outputWithMetadataIds.metadata?.pluginId).toBe('harmful:violent-crime');
+        expect(outputWithMetadataIds.metadata?.strategyId).toBe('jailbreak');
+
+        // Verify the output can be used in a table
+        const tableWithMetadataIds = {
+          ...mockTable,
+          body: [
+            {
+              ...mockTable.body[0],
+              outputs: [outputWithMetadataIds],
+            },
+          ],
+        };
+
+        // Should not throw when generating CSV
+        const csv = evalTableToCsv(tableWithMetadataIds, { isRedteam: true });
+        expect(csv).toBeDefined();
+        expect(csv.length).toBeGreaterThan(0);
+
+        // Verify metadata fields appear in CSV output
+        const lines = csv.split('\n');
+        expect(lines[0]).toContain('pluginId');
+        expect(lines[0]).toContain('strategyId');
+        expect(lines[1]).toContain('harmful:violent-crime');
+        expect(lines[1]).toContain('jailbreak');
+      });
+
+      it('should default strategyId to "basic" for strategy-less tests', () => {
+        // This test validates that when strategyId is missing from metadata,
+        // the CSV export defaults to 'basic'
+        const outputWithoutStrategy: EvaluateTableOutput = {
+          id: 'test-id',
+          pass: true,
+          text: 'Test output',
+          prompt: 'Test prompt',
+          score: 1,
+          cost: 0,
+          latencyMs: 100,
+          namedScores: {},
+          failureReason: ResultFailureReason.NONE,
+          testCase: { vars: {} },
+          metadata: {
+            pluginId: 'harmful:violent-crime',
+            // strategyId intentionally omitted
+          },
+        };
+
+        const tableWithoutStrategy = {
+          ...mockTable,
+          body: [
+            {
+              ...mockTable.body[0],
+              outputs: [outputWithoutStrategy],
+            },
+          ],
+        };
+
+        const csv = evalTableToCsv(tableWithoutStrategy, { isRedteam: true });
+        const lines = csv.split('\n');
+
+        // Verify strategyId defaults to 'basic'
+        expect(lines[1]).toContain('basic');
+      });
     });
 
     describe('Edge cases and special characters', () => {

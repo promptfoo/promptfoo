@@ -29,6 +29,7 @@ import { Strategies } from '../../strategies';
 import type { BaseRedteamMetadata } from '../../types';
 import { getSessionId, isBasicRefusal } from '../../util';
 import {
+  buildGraderResultAssertion,
   getTargetResponse,
   isValidChatMessageArray,
   type Message,
@@ -542,7 +543,7 @@ export class HydraProvider implements ApiProvider {
       if (test && assertToUse) {
         const grader = getGraderById(assertToUse.type);
         if (grader) {
-          const { grade } = await grader.getResult(
+          const { grade, rubric } = await grader.getResult(
             nextMessage,
             targetResponse.output,
             test,
@@ -550,7 +551,10 @@ export class HydraProvider implements ApiProvider {
             assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
           );
           graderResult = grade;
-          storedGraderResult = grade;
+          storedGraderResult = {
+            ...grade,
+            assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
+          };
 
           logger.debug('[Hydra] Grader result', {
             turn,
@@ -602,7 +606,7 @@ export class HydraProvider implements ApiProvider {
           },
         };
 
-        await this.agentProvider.callApi(
+        const learningResponse = await this.agentProvider.callApi(
           JSON.stringify(learningRequest),
           {
             prompt: {
@@ -613,6 +617,7 @@ export class HydraProvider implements ApiProvider {
           },
           options,
         );
+        accumulateResponseTokenUsage(totalTokenUsage, learningResponse);
 
         logger.debug('[Hydra] Scan learnings updated', { scanId, testRunId });
       } catch (error) {

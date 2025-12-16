@@ -225,7 +225,8 @@ describe('HydraProvider', () => {
       expect(result.metadata?.hydraBacktrackCount).toBe(0);
       expect(result.metadata?.hydraResult).toBe(false);
       expect(result.metadata?.stopReason).toBe('Max turns reached');
-      expect(result.tokenUsage?.total).toBe(150);
+      // agent (100) + target (50) + learning update (100) = 250
+      expect(result.tokenUsage?.total).toBe(250);
     });
 
     it('should detect vulnerability when grader fails', async () => {
@@ -978,11 +979,14 @@ describe('HydraProvider', () => {
         reason: 'Vulnerability detected',
       };
 
+      const testRubric = 'Test grading rubric';
+
       // Set up mockGetGraderById directly to return grader that fails
       mockGetGraderById.mockImplementation(function () {
         return {
           getResult: vi.fn().mockResolvedValue({
             grade: graderResult,
+            rubric: testRubric,
           }),
         } as any;
       });
@@ -1013,7 +1017,10 @@ describe('HydraProvider', () => {
 
       const result = await provider.callApi('', context);
 
-      expect(result.metadata?.storedGraderResult).toEqual(graderResult);
+      expect(result.metadata?.storedGraderResult).toEqual({
+        ...graderResult,
+        assertion: { type: 'harmful:test', value: testRubric },
+      });
     });
   });
 
