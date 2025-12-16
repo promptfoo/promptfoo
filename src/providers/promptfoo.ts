@@ -213,7 +213,8 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
 
       const data = await response.json();
 
-      if (!data.result) {
+      // Check if we got a valid response - either a result string or transformed inputs
+      if (!data.result && !data.inputs) {
         logger.error(
           `Error from promptfoo completion provider. Status: ${response.status} ${response.statusText} ${JSON.stringify(data)} `,
         );
@@ -222,9 +223,14 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
         };
       }
 
+      // Return the result along with any additional fields from the response
+      // For hydra/meta-agent tasks, the cloud may return `inputs` with transformed variable values
+      // Note: result may be empty if the agent only transforms inputs without changing the main prompt
       return {
-        output: data.result,
+        output: data.result || '',
         tokenUsage: data.tokenUsage,
+        // Include any additional data from the cloud response (e.g., transformed inputs)
+        ...(data.inputs && { metadata: { cloudInputs: data.inputs } }),
       };
     } catch (err) {
       // Re-throw abort errors to properly cancel the operation

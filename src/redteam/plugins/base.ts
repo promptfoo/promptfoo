@@ -340,7 +340,10 @@ export abstract class RedteamPluginBase {
       const inputsDescription = Object.entries(config.inputs)
         .map(([varName, description]) => `  - ${varName}: ${description}`)
         .join('\n');
-      modifiers.inputs = `For EACH generated prompt, also generate values for these additional variables that conform to the context of the prompt:\n${inputsDescription}`;
+      modifiers.inputs = `
+        For EACH generated prompt, also generate values for these additional variables that conform 
+        to the context of the plugin. You should try to accomplish the examples with these inputs.
+        Pay attention to format requirements (types, structures):\n${inputsDescription}`;
     }
 
     // No modifiers

@@ -71,6 +71,37 @@ function getIterativeMetaGoalRubric(goal: string | undefined): string {
   `;
 }
 
+/**
+ * Input variable with value and description for cloud agent manipulation.
+ */
+interface InputVariable {
+  value: string;
+  description: string;
+}
+
+/**
+ * Builds the inputs object for the cloud request by combining
+ * current variable values with their descriptions.
+ */
+function buildInputsForCloud(
+  vars: Record<string, string | object>,
+  inputDescriptions: Record<string, string>,
+): Record<string, InputVariable> | undefined {
+  if (Object.keys(inputDescriptions).length === 0) {
+    return undefined;
+  }
+
+  const inputs: Record<string, InputVariable> = {};
+  for (const [name, description] of Object.entries(inputDescriptions)) {
+    const value = vars[name];
+    inputs[name] = {
+      value: typeof value === 'string' ? value : JSON.stringify(value),
+      description,
+    };
+  }
+  return inputs;
+}
+
 export async function runMetaAgentRedteam({
   context,
   filters,
@@ -85,6 +116,7 @@ export async function runMetaAgentRedteam({
   vars,
   excludeTargetOutputFromAgenticAttackGeneration = false,
   perTurnLayers = [],
+  inputDescriptions = {},
 }: {
   context?: CallApiContextParams;
   filters: NunjucksFilterMap | undefined;
@@ -99,6 +131,11 @@ export async function runMetaAgentRedteam({
   vars: Record<string, string | object>;
   excludeTargetOutputFromAgenticAttackGeneration?: boolean;
   perTurnLayers?: LayerConfig[];
+  /**
+   * Descriptions for additional input variables the agent can manipulate.
+   * Key is variable name, value is description.
+   */
+  inputDescriptions?: Record<string, string>;
 }): Promise<{
   output: string;
   metadata: IterativeMetaMetadata;
@@ -168,6 +205,8 @@ export async function runMetaAgentRedteam({
               graderReason: storedGraderResult?.reason,
             }
           : undefined,
+      // Include input variables for the agent to manipulate
+      inputs: buildInputsForCloud(iterationVars as Record<string, string | object>, inputDescriptions),
     };
 
     // Get strategic decision from cloud
@@ -199,21 +238,41 @@ export async function runMetaAgentRedteam({
       continue;
     }
 
-    // Extract attack prompt from cloud response
+    // Extract attack prompt and transformed inputs from cloud response
     let attackPrompt: string;
+    let transformedInputs: Record<string, string> | undefined;
 
     if (typeof agentResp.output === 'string') {
-      // Cloud returned string directly (shouldn't happen but handle it)
       attackPrompt = agentResp.output;
     } else {
-      // Cloud returns { result: "attack prompt" }
       const cloudResponse = agentResp.output as any;
-      attackPrompt = cloudResponse.result;
+      attackPrompt = cloudResponse.result || cloudResponse.message || cloudResponse;
+    }
+
+    // Extract transformed inputs from metadata (set by PromptfooChatCompletionProvider)
+    if (agentResp.metadata?.cloudInputs) {
+      transformedInputs = agentResp.metadata.cloudInputs as Record<string, string>;
+    }
+
+    // If attackPrompt is empty but we have transformed inputs, use a default prompt
+    // This allows the agent to focus solely on input manipulation
+    if (!attackPrompt && transformedInputs && Object.keys(transformedInputs).length > 0) {
+      attackPrompt = String(goal) || 'Process this request';
+      logger.debug('[IterativeMeta] Using goal as prompt since agent only transformed inputs', {
+        iteration: i + 1,
+      });
     }
 
     if (!attackPrompt) {
       logger.info(`[IterativeMeta] ${i + 1}/${numIterations} - Missing attack prompt`);
       continue;
+    }
+
+    if (transformedInputs && Object.keys(transformedInputs).length > 0) {
+      logger.debug('[IterativeMeta] Agent transformed inputs', {
+        iteration: i + 1,
+        transformedInputNames: Object.keys(transformedInputs),
+      });
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -254,23 +313,41 @@ export async function runMetaAgentRedteam({
       });
     }
 
-    // Render the actual prompt with the agent's attack
-    // Escape nunjucks template syntax (replace {{ with { { to break the pattern)
-    const escapedAttackPrompt = finalAttackPrompt
-      .replace(/\{\{/g, '{ {')
-      .replace(/\}\}/g, '} }')
-      .replace(/\{%/g, '{ %')
-      .replace(/%\}/g, '% }');
+    // Escape nunjucks template syntax in all transformed values
+    const escapeNunjucks = (val: unknown): string => {
+      const str = typeof val === 'string' ? val : String(val ?? '');
+      return str
+        .replace(/\{\{/g, '{ {')
+        .replace(/\}\}/g, '} }')
+        .replace(/\{%/g, '{ %')
+        .replace(/%\}/g, '% }');
+    };
 
+    const escapedAttackPrompt = escapeNunjucks(finalAttackPrompt);
+    const escapedTransformedInputs: Record<string, string> = {};
+    if (transformedInputs) {
+      for (const [key, value] of Object.entries(transformedInputs)) {
+        escapedTransformedInputs[key] = escapeNunjucks(value);
+      }
+    }
+
+    // Combine iteration vars with transformed inputs and the main message
+    const varsWithTransforms = {
+      ...iterationVars,
+      ...escapedTransformedInputs,
+      [injectVar]: escapedAttackPrompt,
+    };
+
+    // Build list of vars to skip template rendering for
+    const skipVars = [injectVar, ...Object.keys(inputDescriptions)];
+
+    // Render the actual prompt with the agent's attack and transformed inputs
     const targetPrompt = await renderPrompt(
       prompt,
-      {
-        ...iterationVars,
-        [injectVar]: escapedAttackPrompt,
-      },
+      varsWithTransforms,
       filters,
       targetProvider,
-      [injectVar], // Skip template rendering for injection variable to prevent double-evaluation
+      skipVars, // Skip template rendering for all input variables to prevent double-evaluation
     );
 
     logger.debug('[IterativeMeta] Calling target with agent-generated prompt', {
@@ -420,6 +497,11 @@ class RedteamIterativeMetaProvider implements ApiProvider {
   private readonly gradingProvider: RedteamFileConfig['provider'];
   private readonly excludeTargetOutputFromAgenticAttackGeneration: boolean;
   private readonly perTurnLayers: LayerConfig[];
+  /**
+   * Descriptions for additional input variables the agent can manipulate.
+   * Key is variable name, value is description.
+   */
+  private readonly inputDescriptions: Record<string, string>;
 
   constructor(readonly config: Record<string, string | object>) {
     logger.debug('[IterativeMeta] Constructor config', {
@@ -435,6 +517,7 @@ class RedteamIterativeMetaProvider implements ApiProvider {
       config.excludeTargetOutputFromAgenticAttackGeneration,
     );
     this.perTurnLayers = (config._perTurnLayers as LayerConfig[]) ?? [];
+    this.inputDescriptions = (config.inputs as Record<string, string>) ?? {};
 
     // Meta-agent strategy requires cloud
     if (!shouldGenerateRemote()) {
@@ -490,6 +573,7 @@ class RedteamIterativeMetaProvider implements ApiProvider {
       injectVar: this.injectVar,
       numIterations: this.numIterations,
       perTurnLayers: this.perTurnLayers,
+      inputDescriptions: this.inputDescriptions,
       context,
       options,
       test: context.test,

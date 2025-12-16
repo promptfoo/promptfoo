@@ -15,7 +15,6 @@ import type {
   TokenUsage,
 } from '../../../types/index';
 import invariant from '../../../util/invariant';
-import { isValidJson } from '../../../util/json';
 import { sleep } from '../../../util/time';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../../util/tokenUsageUtils';
 import { shouldGenerateRemote } from '../../remoteGeneration';
@@ -28,13 +27,7 @@ import {
 import { Strategies } from '../../strategies';
 import type { BaseRedteamMetadata } from '../../types';
 import { getSessionId, isBasicRefusal } from '../../util';
-import {
-  buildGraderResultAssertion,
-  getTargetResponse,
-  isValidChatMessageArray,
-  type Message,
-  type TargetResponse,
-} from '../shared';
+import { getTargetResponse, type Message, type TargetResponse } from '../shared';
 
 const DEFAULT_MAX_TURNS = 10;
 const DEFAULT_MAX_BACKTRACKS = 10;
@@ -67,6 +60,14 @@ interface HydraResponse extends ProviderResponse {
   metadata: HydraMetadata;
 }
 
+/**
+ * Input variable with value and description for cloud agent manipulation.
+ */
+interface InputVariable {
+  value: string;
+  description: string;
+}
+
 interface HydraConfig {
   injectVar: string;
   scanId?: string;
@@ -74,6 +75,12 @@ interface HydraConfig {
   maxBacktracks?: number;
   stateful?: boolean;
   excludeTargetOutputFromAgenticAttackGeneration?: boolean;
+  /**
+   * Additional input variables that the agent can manipulate.
+   * Key is variable name, value is description of what it represents.
+   * The agent can selectively transform any or all of these inputs.
+   */
+  inputs?: Record<string, string>;
   /**
    * Per-turn layer transforms to apply to each turn's prompt before sending to target.
    * This enables composing Hydra with delivery strategies like audio, base64, etc.
@@ -92,6 +99,11 @@ export class HydraProvider implements ApiProvider {
   private readonly stateful: boolean;
   private readonly excludeTargetOutputFromAgenticAttackGeneration: boolean;
   private readonly perTurnLayers: LayerConfig[];
+  /**
+   * Descriptions for additional input variables the agent can manipulate.
+   * Key is variable name, value is description.
+   */
+  private readonly inputDescriptions: Record<string, string>;
   private conversationHistory: Message[] = [];
   private sessionId?: string;
 
@@ -105,6 +117,7 @@ export class HydraProvider implements ApiProvider {
     this.excludeTargetOutputFromAgenticAttackGeneration =
       config.excludeTargetOutputFromAgenticAttackGeneration ?? false;
     this.perTurnLayers = config._perTurnLayers ?? [];
+    this.inputDescriptions = config.inputs ?? {};
 
     if (this.stateful && this.maxBacktracks > 0) {
       logger.debug('[Hydra] Backtracking disabled in stateful mode');
@@ -131,11 +144,34 @@ export class HydraProvider implements ApiProvider {
       excludeTargetOutputFromAgenticAttackGeneration:
         this.excludeTargetOutputFromAgenticAttackGeneration,
       perTurnLayers: this.perTurnLayers.map((l) => (typeof l === 'string' ? l : l.id)),
+      inputDescriptions: Object.keys(this.inputDescriptions),
     });
   }
 
   id() {
     return 'promptfoo:redteam:hydra';
+  }
+
+  /**
+   * Builds the inputs object for the cloud request by combining
+   * current variable values with their descriptions.
+   */
+  private buildInputsForCloud(
+    vars: Record<string, string | object>,
+  ): Record<string, InputVariable> | undefined {
+    if (Object.keys(this.inputDescriptions).length === 0) {
+      return undefined;
+    }
+
+    const inputs: Record<string, InputVariable> = {};
+    for (const [name, description] of Object.entries(this.inputDescriptions)) {
+      const value = vars[name];
+      inputs[name] = {
+        value: typeof value === 'string' ? value : JSON.stringify(value),
+        description,
+      };
+    }
+    return inputs;
   }
 
   async callApi(
@@ -262,6 +298,8 @@ export class HydraProvider implements ApiProvider {
         maxTurns: this.maxTurns,
         excludeTargetOutputFromAgenticAttackGeneration:
           this.excludeTargetOutputFromAgenticAttackGeneration,
+        // Include input variables for the agent to manipulate
+        inputs: this.buildInputsForCloud(vars),
       };
 
       // Get next message from cloud
@@ -292,15 +330,27 @@ export class HydraProvider implements ApiProvider {
         continue;
       }
 
-      // Extract message from cloud response
+      // Extract message and transformed inputs from cloud response
       let nextMessage: string;
+      let transformedInputs: Record<string, string> | undefined;
 
       if (typeof agentResp.output === 'string') {
-        // PromptfooChatCompletionProvider extracts data.result as string
         nextMessage = agentResp.output;
       } else {
         const cloudResponse = agentResp.output as any;
-        nextMessage = cloudResponse.result || cloudResponse.message;
+        nextMessage = cloudResponse.result || cloudResponse.message || cloudResponse;
+      }
+
+      // Extract transformed inputs from metadata (set by PromptfooChatCompletionProvider)
+      if (agentResp.metadata?.cloudInputs) {
+        transformedInputs = agentResp.metadata.cloudInputs as Record<string, string>;
+      }
+
+      // If nextMessage is empty but we have transformed inputs, use the goal as the message
+      // This allows the agent to focus solely on input manipulation
+      if (!nextMessage && transformedInputs && Object.keys(transformedInputs).length > 0) {
+        nextMessage = goal || 'Process this request';
+        logger.debug('[Hydra] Using goal as message since agent only transformed inputs', { turn });
       }
 
       if (!nextMessage) {
@@ -308,61 +358,69 @@ export class HydraProvider implements ApiProvider {
         continue;
       }
 
-      // Add message to conversation history
+      if (transformedInputs && Object.keys(transformedInputs).length > 0) {
+        logger.debug('[Hydra] Agent transformed inputs', {
+          turn,
+          transformedInputNames: Object.keys(transformedInputs),
+        });
+      }
+
+      // Build vars with transformed inputs applied
+      // Escape nunjucks template syntax in all transformed values
+      const escapeNunjucks = (val: unknown): string => {
+        const str = typeof val === 'string' ? val : String(val ?? '');
+        return str
+          .replace(/\{\{/g, '{ {')
+          .replace(/\}\}/g, '} }')
+          .replace(/\{%/g, '{ %')
+          .replace(/%\}/g, '% }');
+      };
+
+      const escapedMessage = escapeNunjucks(nextMessage);
+      const escapedTransformedInputs: Record<string, string> = {};
+      if (transformedInputs) {
+        for (const [key, value] of Object.entries(transformedInputs)) {
+          escapedTransformedInputs[key] = escapeNunjucks(value);
+        }
+      }
+
+      // Combine original vars with transformed inputs and the main message
+      const varsWithTransforms = {
+        ...vars,
+        ...escapedTransformedInputs,
+        [this.injectVar]: escapedMessage,
+        ...(this.sessionId ? { sessionId: this.sessionId } : {}),
+      };
+
+      // Build list of vars to skip template rendering for
+      const skipVars = [this.injectVar, ...Object.keys(this.inputDescriptions)];
+
+      // Render the message through the prompt template with variables substituted
+      // This ensures input variables (business_name, website_url, etc.) are included
+      const renderedMessage = await renderPrompt(
+        prompt,
+        varsWithTransforms,
+        filters,
+        targetProvider,
+        skipVars,
+      );
+
+      // Add the rendered message to conversation history
       this.conversationHistory.push({
         role: 'user',
-        content: nextMessage,
+        content: renderedMessage,
       });
 
       // Send to target (different based on stateful/stateless)
       let targetPrompt: string;
 
       if (this.stateful) {
-        // Stateful: send only the new message with sessionId
-        const escapedMessage = nextMessage
-          .replace(/\{\{/g, '{ {')
-          .replace(/\}\}/g, '} }')
-          .replace(/\{%/g, '{ %')
-          .replace(/%\}/g, '% }');
-
-        targetPrompt = await renderPrompt(
-          prompt,
-          {
-            ...vars,
-            [this.injectVar]: escapedMessage,
-            ...(this.sessionId ? { sessionId: this.sessionId } : {}),
-          },
-          filters,
-          targetProvider,
-          [this.injectVar], // Skip template rendering for injection variable to prevent double-evaluation
-        );
+        // Stateful: send the rendered message directly (already has variables substituted)
+        targetPrompt = renderedMessage;
       } else {
         // Stateless: send full conversation history as JSON
-        // Try to parse the rendered prompt to see if it's already chat format
-        const samplePrompt = await renderPrompt(
-          prompt,
-          {
-            ...vars,
-            [this.injectVar]: 'test',
-          },
-          filters,
-          targetProvider,
-          [this.injectVar], // Skip template rendering for injection variable to prevent double-evaluation
-        );
-
-        if (isValidJson(samplePrompt)) {
-          const parsed = JSON.parse(samplePrompt);
-          if (isValidChatMessageArray(parsed)) {
-            // It's already chat format, inject our conversation
-            targetPrompt = JSON.stringify(this.conversationHistory);
-          } else {
-            // Not chat format, use standard rendering
-            targetPrompt = JSON.stringify(this.conversationHistory);
-          }
-        } else {
-          // Not JSON, send as conversation array
-          targetPrompt = JSON.stringify(this.conversationHistory);
-        }
+        // The conversation history already contains rendered messages with variables substituted
+        targetPrompt = JSON.stringify(this.conversationHistory);
       }
 
       logger.debug('[Hydra] Sending to target', {
@@ -543,7 +601,7 @@ export class HydraProvider implements ApiProvider {
       if (test && assertToUse) {
         const grader = getGraderById(assertToUse.type);
         if (grader) {
-          const { grade, rubric } = await grader.getResult(
+          const { grade } = await grader.getResult(
             nextMessage,
             targetResponse.output,
             test,
@@ -551,10 +609,7 @@ export class HydraProvider implements ApiProvider {
             assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
           );
           graderResult = grade;
-          storedGraderResult = {
-            ...grade,
-            assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
-          };
+          storedGraderResult = grade;
 
           logger.debug('[Hydra] Grader result', {
             turn,
