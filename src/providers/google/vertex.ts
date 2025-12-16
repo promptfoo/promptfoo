@@ -522,25 +522,17 @@ export class VertexChatProvider extends VertexGenericProvider {
             }
             return { error: finishReason, guardrails };
           } else if (candidate.finishReason && candidate.finishReason === 'MAX_TOKENS') {
-            // Concatenate the text generated so far before returning
+            // MAX_TOKENS is treated as a successful completion with the generated output
             if (candidate.content?.parts) {
               output = mergeParts(output, formatCandidateContents(candidate));
             }
             const outputTokens = datum.usageMetadata?.candidatesTokenCount || 0;
-            const outputStr = typeof output === 'string' ? output : JSON.stringify(output);
-            const truncatedOutput =
-              outputStr && outputStr.length > 500
-                ? `${outputStr.slice(0, 500)}... (truncated)`
-                : outputStr || '';
-            logger.error(`Gemini API: MAX_TOKENS reached`, {
+            logger.debug(`Gemini API: MAX_TOKENS reached`, {
               finishReason: candidate.finishReason,
               outputTokens,
               totalTokens: datum.usageMetadata?.totalTokenCount || 0,
             });
-            return {
-              // Prompt and thinking tokens are not included in the token limit
-              error: `Gemini API error due to reaching maximum token limit. ${outputTokens} output tokens used. Output generated: ${truncatedOutput}`,
-            };
+            // Continue processing - do not return error
           } else if (candidate.finishReason && candidate.finishReason !== 'STOP') {
             logger.error(`Gemini API error due to finish reason: ${candidate.finishReason}.`);
             // e.g. MALFORMED_FUNCTION_CALL

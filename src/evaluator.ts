@@ -153,7 +153,7 @@ class ProgressBarManager {
     this.completedCount++;
     const provider = evalStep.provider.label || evalStep.provider.id();
     const prompt = `"${evalStep.prompt.raw.slice(0, 10).replace(/\n/g, ' ')}"`;
-    const vars = formatVarsForDisplay(evalStep.test.vars, 10);
+    const vars = formatVarsForDisplay(evalStep.test.vars, 40);
 
     this.progressBar.increment({
       provider,
@@ -298,8 +298,12 @@ export async function runEval({
     `Provider delay should be set for ${provider.label}`,
   );
 
-  // Set up the special _conversation variable
-  const vars = test.vars || {};
+  // Set up vars with a shallow copy to prevent mutation of the original test.vars.
+  // This is important because providers (especially multi-turn strategies like GOAT,
+  // Crescendo, SIMBA) may add runtime variables like sessionId to vars during execution.
+  // Without this copy, those mutations would persist to the stored testCase, causing
+  // test matching to fail when using --filter-errors-only or --filter-failing.
+  const vars = { ...(test.vars || {}) };
 
   // Collect file metadata for the test case before rendering the prompt.
   const fileMetadata = collectFileMetadata(test.vars || vars);
