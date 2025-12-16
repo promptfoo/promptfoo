@@ -14,7 +14,7 @@ keywords:
     lethal trifecta,
     code review,
   ]
-date: 2025-12-09
+date: 2025-12-16
 authors: [dane]
 tags: [company-update, code-scanning, ai-security, llm-security, prompt-injection]
 ---
