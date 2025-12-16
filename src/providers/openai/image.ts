@@ -13,7 +13,12 @@ import type {
 import type { EnvOverrides } from '../../types/env';
 import type { OpenAiSharedOptions } from './types';
 
-type OpenAiImageModel = 'dall-e-2' | 'dall-e-3' | 'gpt-image-1' | 'gpt-image-1-mini';
+type OpenAiImageModel =
+  | 'dall-e-2'
+  | 'dall-e-3'
+  | 'gpt-image-1'
+  | 'gpt-image-1-mini'
+  | 'gpt-image-1.5';
 type OpenAiImageOperation = 'generation' | 'variation' | 'edit';
 type DallE2Size = '256x256' | '512x512' | '1024x1024';
 type DallE3Size = '1024x1024' | '1792x1024' | '1024x1792';
@@ -61,6 +66,21 @@ export const GPT_IMAGE1_MINI_COSTS: Record<string, number> = {
   high_1024x1024: 0.036,
   high_1024x1536: 0.052,
   high_1536x1024: 0.052,
+};
+
+// GPT Image 1.5 uses token-based pricing: $32/1M output image tokens
+// Estimated token counts: low ~2K, medium ~4K, high ~6K tokens per image
+// Larger images use proportionally more tokens
+export const GPT_IMAGE1_5_COSTS: Record<string, number> = {
+  low_1024x1024: 0.064,
+  low_1024x1536: 0.096,
+  low_1536x1024: 0.096,
+  medium_1024x1024: 0.128,
+  medium_1024x1536: 0.192,
+  medium_1536x1024: 0.192,
+  high_1024x1024: 0.192,
+  high_1024x1536: 0.288,
+  high_1536x1024: 0.288,
 };
 
 type CommonImageOptions = {
@@ -118,11 +138,16 @@ export function validateSizeForModel(
   }
 
   if (
-    (model === 'gpt-image-1' || model === 'gpt-image-1-mini') &&
+    (model === 'gpt-image-1' || model === 'gpt-image-1-mini' || model === 'gpt-image-1.5') &&
     size !== 'auto' &&
     !GPT_IMAGE1_VALID_SIZES.includes(size as GptImage1Size)
   ) {
-    const modelName = model === 'gpt-image-1-mini' ? 'GPT Image 1 Mini' : 'GPT Image 1';
+    const modelNames: Record<string, string> = {
+      'gpt-image-1': 'GPT Image 1',
+      'gpt-image-1-mini': 'GPT Image 1 Mini',
+      'gpt-image-1.5': 'GPT Image 1.5',
+    };
+    const modelName = modelNames[model] || model;
     return {
       valid: false,
       message: `Invalid size "${size}" for ${modelName}. Valid sizes are: ${GPT_IMAGE1_VALID_SIZES.join(', ')}, auto`,
@@ -174,9 +199,9 @@ export function prepareRequestBody(
     size,
   };
 
-  // gpt-image-1 and gpt-image-1-mini don't support response_format - they always return b64_json
+  // gpt-image-1, gpt-image-1-mini, and gpt-image-1.5 don't support response_format - they always return b64_json
   // and use output_format for the image file format instead
-  if (model !== 'gpt-image-1' && model !== 'gpt-image-1-mini') {
+  if (model !== 'gpt-image-1' && model !== 'gpt-image-1-mini' && model !== 'gpt-image-1.5') {
     body.response_format = responseFormat;
   }
 
@@ -190,7 +215,7 @@ export function prepareRequestBody(
     }
   }
 
-  if (model === 'gpt-image-1' || model === 'gpt-image-1-mini') {
+  if (model === 'gpt-image-1' || model === 'gpt-image-1-mini' || model === 'gpt-image-1.5') {
     // Quality: low, medium, high, or auto
     if ('quality' in config && config.quality) {
       body.quality = config.quality;
@@ -244,6 +269,11 @@ export function calculateImageCost(
     const q = (quality as 'low' | 'medium' | 'high') || 'low';
     const costKey = `${q}_${size}`;
     const costPerImage = GPT_IMAGE1_MINI_COSTS[costKey] || GPT_IMAGE1_MINI_COSTS['low_1024x1024'];
+    return costPerImage * n;
+  } else if (model === 'gpt-image-1.5') {
+    const q = (quality as 'low' | 'medium' | 'high') || 'low';
+    const costKey = `${q}_${size}`;
+    const costPerImage = GPT_IMAGE1_5_COSTS[costKey] || GPT_IMAGE1_5_COSTS['low_1024x1024'];
     return costPerImage * n;
   }
 
@@ -337,9 +367,9 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
 
     const model = config.model || this.modelName;
     const operation = ('operation' in config && config.operation) || 'generation';
-    // gpt-image-1 and gpt-image-1-mini always return b64_json, so we treat them as such regardless of config
+    // gpt-image-1, gpt-image-1-mini, and gpt-image-1.5 always return b64_json, so we treat them as such regardless of config
     const responseFormat =
-      model === 'gpt-image-1' || model === 'gpt-image-1-mini'
+      model === 'gpt-image-1' || model === 'gpt-image-1-mini' || model === 'gpt-image-1.5'
         ? 'b64_json'
         : config.response_format || 'url';
 
