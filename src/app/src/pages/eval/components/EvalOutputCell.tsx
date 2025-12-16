@@ -7,6 +7,7 @@ import remarkGfm from 'remark-gfm';
 import useCloudConfig from '@app/hooks/useCloudConfig';
 import { useEvalOperations } from '@app/hooks/useEvalOperations';
 import { useShiftKey } from '@app/hooks/useShiftKey';
+import useApiConfig from '@app/stores/apiConfig';
 import {
   Check,
   ContentCopy,
@@ -62,6 +63,21 @@ export function isImageProvider(provider: string | undefined): boolean {
     return true;
   }
   return false;
+}
+
+/**
+ * Detects if the provider is a video generation provider.
+ * Video providers follow patterns like:
+ * - 'openai:video:sora-2' (OpenAI Sora)
+ * - 'openai:video:sora-2-pro' (OpenAI Sora Pro)
+ * Used to skip truncation for video content.
+ */
+export function isVideoProvider(provider: string | undefined): boolean {
+  if (!provider) {
+    return false;
+  }
+  // Check for :video: namespace (OpenAI Sora)
+  return provider.includes(':video:');
 }
 
 const tooltipSlotProps: TooltipProps['slotProps'] = {
@@ -123,6 +139,7 @@ function EvalOutputCell({
   const { shouldHighlightSearchText, addFilter, resetFilters } = useTableStore();
   const { data: cloudConfig } = useCloudConfig();
   const { replayEvaluation, fetchTraces } = useEvalOperations();
+  const { apiBaseUrl } = useApiConfig();
 
   const [openPrompt, setOpen] = React.useState(false);
   const [activeRating, setActiveRating] = React.useState<boolean | null>(
@@ -299,6 +316,36 @@ function EvalOutputCell({
             <strong>Transcript:</strong> {output.audio.transcript}
           </div>
         )}
+      </div>
+    );
+  } else if (output.video?.url) {
+    // Video URLs are API paths like /api/output/video/{uuid}/video.mp4
+    // In dev mode, we need to prepend the apiBaseUrl to reach the backend server
+    const videoSrc = `${apiBaseUrl}${output.video.url}`;
+    const posterSrc = output.video.thumbnail ? `${apiBaseUrl}${output.video.thumbnail}` : undefined;
+    node = (
+      <div className="video-output">
+        <video
+          controls
+          style={{ width: '100%', maxWidth: '640px', borderRadius: '4px' }}
+          poster={posterSrc}
+          data-testid="video-player"
+        >
+          <source src={videoSrc} type={`video/${output.video.format || 'mp4'}`} />
+          Your browser does not support the video element.
+        </video>
+        <div
+          className="video-metadata"
+          style={{ marginTop: '8px', fontSize: '0.85em', opacity: 0.8 }}
+        >
+          {output.video.model && (
+            <span style={{ marginRight: '12px' }}>Model: {output.video.model}</span>
+          )}
+          {output.video.size && (
+            <span style={{ marginRight: '12px' }}>Size: {output.video.size}</span>
+          )}
+          {output.video.duration && <span>Duration: {output.video.duration}s</span>}
+        </div>
       </div>
     );
   } else if ((prettifyJson || renderMarkdown) && !showDiffs) {
@@ -779,7 +826,11 @@ function EvalOutputCell({
       <div style={contentStyle}>
         <TruncatedText
           text={node || text}
-          maxLength={renderMarkdown && isImageProvider(output.provider) ? 0 : maxTextLength}
+          maxLength={
+            renderMarkdown && (isImageProvider(output.provider) || isVideoProvider(output.provider))
+              ? 0
+              : maxTextLength
+          }
         />
       </div>
       {comment}

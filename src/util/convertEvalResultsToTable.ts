@@ -98,6 +98,19 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
             format: result.response.audio.format,
           }
         : undefined,
+      video: result.response?.video
+        ? {
+            id: result.response.video.id,
+            uuid: result.response.video.uuid,
+            url: result.response.video.url,
+            format: result.response.video.format,
+            size: result.response.video.size,
+            duration: result.response.video.duration,
+            thumbnail: result.response.video.thumbnail,
+            spritesheet: result.response.video.spritesheet,
+            model: result.response.video.model,
+          }
+        : undefined,
     };
     invariant(result.promptId, 'Prompt ID is required');
 
