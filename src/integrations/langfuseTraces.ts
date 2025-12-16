@@ -338,7 +338,31 @@ export async function fetchLangfuseTraces(url: string): Promise<TestCase[]> {
 
       logger.debug(`[Langfuse Traces] Fetching page ${page} with limit ${pageLimit}`);
 
-      const response: LangfuseTracesResponse = await langfuse.fetchTraces(fetchQuery);
+      let response: LangfuseTracesResponse;
+      try {
+        response = await langfuse.fetchTraces(fetchQuery);
+      } catch (fetchError: any) {
+        // Handle API errors with helpful messages
+        const message = fetchError?.message || String(fetchError);
+        if (message.includes('401') || message.includes('Unauthorized')) {
+          throw new Error(
+            `Langfuse authentication failed. Check your LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY, and LANGFUSE_BASE_URL environment variables.`,
+          );
+        }
+        if (message.includes('403') || message.includes('Forbidden')) {
+          throw new Error(
+            `Langfuse access denied. Your API key may not have permission to access traces.`,
+          );
+        }
+        throw new Error(`Failed to fetch traces from Langfuse: ${message}`);
+      }
+
+      // Check for null/undefined response (can happen on API errors)
+      if (!response) {
+        throw new Error(
+          'Langfuse returned an empty response. Check your credentials and network connection.',
+        );
+      }
 
       if (!response.data || response.data.length === 0) {
         logger.debug(`[Langfuse Traces] No more traces found on page ${page}`);

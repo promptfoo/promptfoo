@@ -433,5 +433,37 @@ describe('langfuseTraces', () => {
         'https://custom.langfuse.com/project/123/traces/trace-1',
       );
     });
+
+    it('should throw helpful error on 401 authentication failure', async () => {
+      mockFetchTraces.mockRejectedValueOnce(new Error('401 Unauthorized'));
+
+      await expect(fetchLangfuseTraces('langfuse://traces')).rejects.toThrow(
+        'Langfuse authentication failed',
+      );
+    });
+
+    it('should throw helpful error on 403 forbidden', async () => {
+      mockFetchTraces.mockRejectedValueOnce(new Error('403 Forbidden'));
+
+      await expect(fetchLangfuseTraces('langfuse://traces')).rejects.toThrow(
+        'Langfuse access denied',
+      );
+    });
+
+    it('should throw error when response is null', async () => {
+      mockFetchTraces.mockResolvedValueOnce(null);
+
+      await expect(fetchLangfuseTraces('langfuse://traces')).rejects.toThrow(
+        'Langfuse returned an empty response',
+      );
+    });
+
+    it('should wrap generic API errors', async () => {
+      mockFetchTraces.mockRejectedValueOnce(new Error('Network timeout'));
+
+      await expect(fetchLangfuseTraces('langfuse://traces')).rejects.toThrow(
+        'Failed to fetch traces from Langfuse: Network timeout',
+      );
+    });
   });
 });
