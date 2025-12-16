@@ -1,30 +1,42 @@
 ---
 sidebar_label: Langfuse
 description: Integrate Langfuse prompts and traces with Promptfoo for LLM testing. Evaluate stored traces, use version-controlled prompts, and sync evaluation scores back to Langfuse.
+keywords:
+  [
+    langfuse,
+    llm observability,
+    traces,
+    prompt management,
+    production evaluation,
+    llm monitoring,
+  ]
 ---
 
 # Langfuse integration
 
-[Langfuse](https://langfuse.com) is an open-source LLM engineering platform that includes collaborative prompt management, tracing, and evaluation capabilities.
+[Langfuse](https://langfuse.com) is an open-source LLM engineering platform for prompt management, tracing, and evaluation.
 
 Promptfoo integrates with Langfuse in two ways:
 
-1. **Prompts**: Use prompts stored in Langfuse with version control and labels
-2. **Traces**: Evaluate LLM outputs stored in Langfuse traces without re-running them
+| Integration | Use case                                                  |
+| ----------- | --------------------------------------------------------- |
+| **Prompts** | Pull version-controlled prompts from Langfuse for testing |
+| **Traces**  | Evaluate production LLM outputs without re-running them   |
 
 ## Setup
 
-1. Install the langfuse SDK:
+1. Install the Langfuse SDK:
 
    ```bash
    npm install langfuse
    ```
 
-2. Set the required environment variables:
+2. Set environment variables (get keys from [Langfuse Settings](https://langfuse.com) → API Keys):
+
    ```bash
-   export LANGFUSE_PUBLIC_KEY="your-public-key"
-   export LANGFUSE_SECRET_KEY="your-secret-key"
-   export LANGFUSE_HOST="https://cloud.langfuse.com"  # or your self-hosted URL
+   export LANGFUSE_PUBLIC_KEY="pk-lf-..."
+   export LANGFUSE_SECRET_KEY="sk-lf-..."
+   export LANGFUSE_HOST="https://cloud.langfuse.com"  # or self-hosted URL
    ```
 
 ## Using Langfuse prompts
@@ -127,130 +139,219 @@ Common label patterns:
 
 ## Evaluating Langfuse traces
 
-Use the `langfuse://traces` URL scheme to load traces from Langfuse and evaluate them with promptfoo assertions. This enables you to:
+Use the `langfuse://traces` URL scheme to load traces from Langfuse and evaluate them with promptfoo assertions. This is useful for:
 
-- Evaluate LLM outputs already stored in Langfuse without re-running them
-- Run quality checks on production traces
-- Build regression test suites from historical data
+- **Production monitoring**: Run quality checks on live LLM outputs
+- **Regression testing**: Build test suites from real user interactions
+- **Cost analysis**: Verify spending is within budget
+- **Compliance auditing**: Check for PII leakage or policy violations
 
-### Basic usage
+### Quick start
 
-```yaml
-# Evaluate traces with assertions (no LLM re-execution needed)
+```yaml title="promptfooconfig.yaml"
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Evaluate production traces
+
+# Load traces tagged 'production' from Langfuse
 tests: langfuse://traces?tags=production&limit=50
 
+# Run assertions on stored outputs (no LLM calls needed)
 defaultTest:
   assert:
     - type: llm-rubric
-      value: 'Response is helpful and accurate'
+      value: 'Response is helpful and on-topic'
     - type: cost
       threshold: 0.01
 ```
 
+Run the evaluation:
+
+```bash
+npx promptfoo@latest eval
+```
+
+### How it works
+
+1. Promptfoo fetches traces from the Langfuse API based on your filter parameters
+2. Each trace is converted to a test case with the stored input/output
+3. Assertions run against the stored output (no LLM re-execution)
+4. Results show which traces pass or fail your quality criteria
+
 ### URL parameters
 
-| Parameter       | Description                            | Example                          |
-| --------------- | -------------------------------------- | -------------------------------- |
-| `limit`         | Maximum traces to fetch (default: 100) | `limit=50`                       |
-| `userId`        | Filter by user ID                      | `userId=user_123`                |
-| `sessionId`     | Filter by session ID                   | `sessionId=sess_456`             |
-| `tags`          | Filter by tags (comma-separated)       | `tags=production,gpt-4`          |
-| `name`          | Filter by trace name                   | `name=chat-completion`           |
-| `fromTimestamp` | Start timestamp (ISO 8601)             | `fromTimestamp=2024-01-01`       |
-| `toTimestamp`   | End timestamp (ISO 8601)               | `toTimestamp=2024-01-31`         |
-| `version`       | Filter by version                      | `version=1.0`                    |
-| `release`       | Filter by release                      | `release=v2.0.0`                 |
+Filter traces using query parameters:
+
+| Parameter       | Description                            | Example                    |
+| --------------- | -------------------------------------- | -------------------------- |
+| `limit`         | Maximum traces to fetch (default: 100) | `limit=50`                 |
+| `tags`          | Filter by tags (comma-separated)       | `tags=production,gpt-4`    |
+| `name`          | Filter by trace name                   | `name=chat-completion`     |
+| `userId`        | Filter by user ID                      | `userId=user_123`          |
+| `sessionId`     | Filter by session ID                   | `sessionId=sess_456`       |
+| `fromTimestamp` | Start timestamp (ISO 8601)             | `fromTimestamp=2024-01-01` |
+| `toTimestamp`   | End timestamp (ISO 8601)               | `toTimestamp=2024-12-31`   |
+| `version`       | Filter by version                      | `version=1.0`              |
+| `release`       | Filter by release                      | `release=v2.0.0`           |
+
+Example with multiple filters:
+
+```yaml
+tests: langfuse://traces?tags=production&name=chat&fromTimestamp=2024-01-01&limit=200
+```
 
 ### Available variables
 
-Each trace is converted to a test case with these variables:
+Each trace becomes a test case with these variables available in assertions:
 
-```yaml
-vars:
-  # Convenient access to main content
-  input: '...' # Extracted from trace input
-  output: '...' # Extracted from trace output
+| Variable                  | Description                     |
+| ------------------------- | ------------------------------- |
+| `input`                   | Extracted input text            |
+| `output`                  | Extracted output text           |
+| `__langfuse_trace_id`     | Trace ID                        |
+| `__langfuse_input`        | Full input object               |
+| `__langfuse_output`       | Full output object              |
+| `__langfuse_user_id`      | User ID                         |
+| `__langfuse_session_id`   | Session ID                      |
+| `__langfuse_tags`         | Array of tags                   |
+| `__langfuse_metadata`     | Trace metadata                  |
+| `__langfuse_latency`      | Response latency (seconds)      |
+| `__langfuse_cost`         | Cost in USD                     |
+| `__langfuse_url`          | Link to trace in Langfuse UI    |
 
-  # Full Langfuse data (prefixed to avoid collisions)
-  __langfuse_trace_id: 'abc123'
-  __langfuse_input: { query: '...' }
-  __langfuse_output: { response: '...' }
-  __langfuse_user_id: 'user_123'
-  __langfuse_session_id: 'session_456'
-  __langfuse_tags: ['production']
-  __langfuse_metadata: { ... }
-  __langfuse_latency: 0.5
-  __langfuse_cost: 0.001
-  __langfuse_url: 'https://...'
+The `input` and `output` variables are automatically extracted from common formats (string, `{query}`, `{prompt}`, `{response}`, `{result}`, etc.). For complex structures, use the full `__langfuse_input` and `__langfuse_output` objects.
+
+### Examples
+
+#### Quality monitoring
+
+Sample recent production traces and check quality:
+
+```yaml title="promptfooconfig.yaml"
+description: Daily production quality check
+
+tests: langfuse://traces?tags=production&limit=100&fromTimestamp=2024-01-01
+
+defaultTest:
+  assert:
+    # Quality check
+    - type: llm-rubric
+      value: 'Response is helpful, accurate, and professional'
+
+    # Safety check - no PII leakage
+    - type: javascript
+      value: |
+        const piiPatterns = [
+          /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i,  // email
+          /\b\d{3}-\d{2}-\d{4}\b/,                        // SSN
+          /\b\d{16}\b/                                    // credit card
+        ];
+        return !piiPatterns.some(p => p.test(output));
+
+    # Cost check
+    - type: cost
+      threshold: 0.05
 ```
 
-### Assertion-only evaluation
+#### Session continuity
 
-When you load traces without specifying prompts or providers, promptfoo evaluates the stored outputs directly:
+Evaluate all turns in a conversation session:
 
-```yaml
-# No prompts or providers - evaluates stored outputs
+```yaml title="promptfooconfig.yaml"
+description: Session context evaluation
+
+tests: langfuse://traces?sessionId=session_abc123
+
+defaultTest:
+  assert:
+    - type: llm-rubric
+      value: 'Response maintains context from earlier in the conversation'
+```
+
+#### Compare new prompt against production
+
+Use real production inputs to test a new prompt version:
+
+```yaml title="promptfooconfig.yaml"
+description: A/B test new prompt against production baseline
+
+prompts:
+  - langfuse://my-prompt@production
+  - langfuse://my-prompt@experiment-v2
+
+providers:
+  - openai:gpt-4o
+
+# Use production trace inputs as test data
+tests: langfuse://traces?tags=production&limit=50
+
+defaultTest:
+  assert:
+    - type: similar
+      value: '{{output}}'  # Compare to stored output
+      threshold: 0.8
+```
+
+#### Filter by user segment
+
+Evaluate traces from specific user cohorts:
+
+```yaml title="promptfooconfig.yaml"
+description: Enterprise user quality check
+
+tests: langfuse://traces?tags=enterprise,production&limit=100
+
+defaultTest:
+  assert:
+    - type: llm-rubric
+      value: 'Response meets enterprise quality standards'
+```
+
+#### Time-based regression testing
+
+Compare this week's outputs to last week's:
+
+```yaml title="promptfooconfig.yaml"
+description: Weekly regression check
+
+tests: langfuse://traces?tags=production&fromTimestamp=2024-12-09&toTimestamp=2024-12-16&limit=200
+
+defaultTest:
+  assert:
+    - type: llm-rubric
+      value: 'Response quality is consistent with expectations'
+    - type: latency
+      threshold: 5000  # 5 seconds max
+```
+
+### Using with the echo provider
+
+For assertion-only evaluation without re-running prompts, use the `echo` provider to pass through the stored output:
+
+```yaml title="promptfooconfig.yaml"
+description: Assertion-only evaluation
+
+prompts:
+  - '{{input}}'
+
+providers:
+  - id: echo
+    config:
+      text: '{{output}}'
+
 tests: langfuse://traces?tags=production&limit=100
 
 defaultTest:
   assert:
     - type: contains
       value: 'helpful'
-    - type: llm-rubric
-      value: 'Response answers the question'
 ```
 
-### Comparing against new prompts
+### Viewing results
 
-You can also compare stored trace inputs against new prompt versions:
+After running an eval, view results in the promptfoo UI:
 
-```yaml
-prompts:
-  - langfuse://my-prompt@experiment-v2
-
-providers:
-  - openai:gpt-4o
-
-# Use trace inputs as test data
-tests: langfuse://traces?tags=production&limit=50
-
-defaultTest:
-  assert:
-    - type: similar
-      value: '{{output}}' # Compare to stored output
-      threshold: 0.8
+```bash
+npx promptfoo@latest view
 ```
 
-### Example: Quality monitoring
-
-```yaml
-# Monitor production quality by sampling recent traces
-tests: langfuse://traces?tags=production&limit=100&fromTimestamp=2024-01-01
-
-defaultTest:
-  assert:
-    # Check response quality
-    - type: llm-rubric
-      value: 'Response is helpful, accurate, and professional'
-
-    # Check for PII leakage
-    - type: not-contains
-      value: '@example.com'
-
-    # Verify cost is reasonable
-    - type: cost
-      threshold: 0.05
-```
-
-### Example: Session evaluation
-
-Evaluate all traces from a specific conversation session:
-
-```yaml
-tests: langfuse://traces?sessionId=session_abc123
-
-defaultTest:
-  assert:
-    - type: llm-rubric
-      value: 'Response maintains context from the conversation'
-```
+Each test case links back to the original trace in Langfuse via the `__langfuse_url` variable, making it easy to investigate failures.
