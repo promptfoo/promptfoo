@@ -1808,7 +1808,8 @@ describe('evaluator', () => {
       ]),
     });
 
-    expect(summary.results[0].testCase.metadata).toEqual({
+    // Use toMatchObject since _originalVars is also stored in metadata
+    expect(summary.results[0].testCase.metadata).toMatchObject({
       defaultKey: 'defaultValue',
       configKey: 'configValue',
       testKey: 'testValue',
@@ -1884,7 +1885,8 @@ describe('evaluator', () => {
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, evalRecord, {});
     const results = await evalRecord.getResults();
-    expect(results[0].testCase.metadata).toEqual({
+    // Use toMatchObject since _originalVars is also stored in metadata
+    expect(results[0].testCase.metadata).toMatchObject({
       defaultKey: 'defaultValue',
       testKey: 'testValue',
     });
@@ -4341,7 +4343,8 @@ describe('Evaluator with external defaultTest', () => {
       testVar: 'testValue',
     });
     expect(firstResult.testCase.threshold).toBe(0.8);
-    expect(firstResult.testCase.metadata).toEqual({ suite: 'test-suite' });
+    // Use toMatchObject since _originalVars is also stored in metadata
+    expect(firstResult.testCase.metadata).toMatchObject({ suite: 'test-suite' });
 
     // Second test should merge/override appropriately
     const secondResult = summary.results[1] as any;

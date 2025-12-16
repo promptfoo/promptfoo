@@ -458,10 +458,13 @@ export function resultIsForTestCase(result: EvaluateResult, testCase: TestCase):
     ? providerToIdentifier(testCase.provider) === providerToIdentifier(result.provider)
     : true;
 
+  // Use original vars from metadata if available (stored before defaultTest.vars merge)
+  // This ensures accurate matching even when defaultTest.vars were merged during evaluation
+  const originalVars = result.testCase?.metadata?._originalVars as Vars | undefined;
+
   // Filter out runtime variables like _conversation when matching
   // These are added during evaluation but shouldn't affect test matching
-  // Use result.vars (not result.testCase.vars) as it contains the actual vars used during evaluation
-  const resultVars = filterRuntimeVars(result.vars);
+  const resultVars = filterRuntimeVars(originalVars || result.vars);
   const testVars = filterRuntimeVars(testCase.vars);
   return varsMatch(testVars, resultVars) && providersMatch;
 }

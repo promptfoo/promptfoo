@@ -6,6 +6,10 @@
  * it mutates the original test object. This mutated test is stored in results.
  * On subsequent runs with --filter-failing, freshly loaded tests don't have
  * these runtime vars, so deepEqual comparison fails.
+ *
+ * Additional bug: When defaultTest.vars are merged into testCase.vars during
+ * evaluation, the stored results have the merged vars while freshly loaded
+ * tests only have their original vars.
  */
 
 import { describe, expect, it, vi } from 'vitest';
@@ -23,6 +27,100 @@ vi.mock('../../../src/models/eval', () => ({
 }));
 
 describe('filterTests - vars mutation bug', () => {
+  it('should match tests even when stored results have _originalVars in metadata', async () => {
+    // Simulate a test suite as it would be loaded from config (without defaultTest.vars merged)
+    const mockTestSuite: TestSuite = {
+      prompts: [],
+      providers: [],
+      tests: [
+        {
+          description: 'test1',
+          vars: { prompt: 'attack prompt 1' },
+          assert: [],
+        },
+        {
+          description: 'test2',
+          vars: { prompt: 'attack prompt 2' },
+          assert: [],
+        },
+        {
+          description: 'test3',
+          vars: { prompt: 'attack prompt 3' },
+          assert: [],
+        },
+      ],
+    };
+
+    // Simulate stored results where _originalVars is preserved in metadata
+    // This is the fix - we store original vars before merging with defaultTest.vars
+    const mockEval = {
+      id: 'eval-456',
+      createdAt: new Date().getTime(),
+      config: {},
+      results: [],
+      resultsCount: 0,
+      prompts: [],
+      persisted: true,
+      toEvaluateSummary: vi.fn().mockResolvedValue({
+        version: 3,
+        timestamp: new Date().toISOString(),
+        results: [
+          {
+            // vars now comes from _originalVars (before defaultTest.vars merge)
+            vars: { prompt: 'attack prompt 1' },
+            success: false,
+            failureReason: ResultFailureReason.ERROR,
+            testCase: {
+              description: 'test1',
+              // testCase.vars has merged defaultTest.vars, but _originalVars is preserved
+              vars: { prompt: 'attack prompt 1', systemPrompt: 'default system prompt' },
+              metadata: {
+                _originalVars: { prompt: 'attack prompt 1' },
+              },
+              assert: [],
+            },
+          },
+          {
+            vars: { prompt: 'attack prompt 3' },
+            success: false,
+            failureReason: ResultFailureReason.ERROR,
+            testCase: {
+              description: 'test3',
+              vars: { prompt: 'attack prompt 3', systemPrompt: 'default system prompt' },
+              metadata: {
+                _originalVars: { prompt: 'attack prompt 3' },
+              },
+              assert: [],
+            },
+          },
+        ],
+        table: { head: { prompts: [], vars: [] }, body: [] },
+        stats: {
+          successes: 0,
+          failures: 0,
+          errors: 0,
+          tokenUsage: {
+            total: 0,
+            prompt: 0,
+            completion: 0,
+            cached: 0,
+            numRequests: 0,
+            completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
+          },
+        },
+      }),
+    };
+
+    vi.mocked(Eval.findById).mockResolvedValue(mockEval as any);
+
+    // When filtering error tests, it should match based on _originalVars
+    const result = await filterTests(mockTestSuite, { errorsOnly: 'eval-456' });
+
+    // Should find both error tests
+    expect(result).toHaveLength(2);
+    expect(result.map((t) => t.description)).toEqual(['test1', 'test3']);
+  });
+
   it('should match tests even when stored results have additional runtime vars', async () => {
     // Simulate a test suite as it would be loaded from config
     const mockTestSuite: TestSuite = {

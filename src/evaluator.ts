@@ -944,10 +944,22 @@ class Evaluator {
         ? testSuite?.defaultTest?.options?.transformVars
         : undefined;
     for (const testCase of tests) {
+      // Store original vars before merging with defaultTest.vars for accurate test matching
+      // This is used by --filter-failing and --filter-errors-only to match results back to test cases
+      const originalVars = testCase.vars ? { ...testCase.vars } : undefined;
+
       testCase.vars = {
         ...(typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest?.vars : {}),
         ...testCase?.vars,
       };
+
+      // Store original vars in metadata for use in result matching
+      if (originalVars !== undefined) {
+        testCase.metadata = {
+          ...testCase.metadata,
+          _originalVars: originalVars,
+        };
+      }
 
       if (testCase.vars) {
         const varWithSpecialColsRemoved: Vars = {};
