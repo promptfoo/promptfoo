@@ -140,6 +140,9 @@ describe('PromptsPage', () => {
   });
 
   it('should handle API errors gracefully', async () => {
+    // Silence expected console.error from the component's error handling
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
     mockCallApi.mockRejectedValue(new Error('API Error'));
 
     renderWithProviders();
@@ -147,6 +150,9 @@ describe('PromptsPage', () => {
     await waitFor(() => {
       expect(screen.getByText('Failed to load prompts. Please try again.')).toBeInTheDocument();
     });
+
+    expect(consoleErrorSpy).toHaveBeenCalledWith('Failed to fetch prompts:', expect.any(Error));
+    consoleErrorSpy.mockRestore();
   });
 
   it('should not show loading state on background updates', async () => {
