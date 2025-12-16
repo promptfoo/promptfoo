@@ -480,8 +480,9 @@ export async function runEval({
     invariant(ret.tokenUsage, 'This is always defined, just doing this to shut TS up');
 
     // Track token usage at the provider level
+    // Use label (if available) to match state machine provider keys in Ink UI
     if (response.tokenUsage) {
-      const providerId = provider.id();
+      const providerId = provider.label || provider.id();
       const trackingId = provider.constructor?.name
         ? `${providerId} (${provider.constructor.name})`
         : providerId;
@@ -753,7 +754,11 @@ class Evaluator {
       }
     };
 
-    logger.info(`Starting evaluation ${this.evalRecord.id}`);
+    // Skip info logs in Ink UI mode - the UI shows its own status
+    const isInkUI = Boolean(cliState.inkUI);
+    if (!isInkUI) {
+      logger.info(`Starting evaluation ${this.evalRecord.id}`);
+    }
 
     // Add abort checks at key points
     checkAbort();
@@ -1150,7 +1155,7 @@ class Evaluator {
           }
         }
         const skipped = originalCount - runEvalOptions.length;
-        if (skipped > 0) {
+        if (skipped > 0 && !isInkUI) {
           logger.info(`Resuming: skipping ${skipped} previously completed cases`);
         }
       } catch (err) {
@@ -1166,12 +1171,16 @@ class Evaluator {
       const usesConversation = prompts.some((p) => p.raw.includes('_conversation'));
       const usesStoreOutputAs = tests.some((t) => t.options?.storeOutputAs);
       if (usesConversation) {
-        logger.info(
-          `Setting concurrency to 1 because the ${chalk.cyan('_conversation')} variable is used.`,
-        );
+        if (!isInkUI) {
+          logger.info(
+            `Setting concurrency to 1 because the ${chalk.cyan('_conversation')} variable is used.`,
+          );
+        }
         concurrency = 1;
       } else if (usesStoreOutputAs) {
-        logger.info(`Setting concurrency to 1 because storeOutputAs is used.`);
+        if (!isInkUI) {
+          logger.info(`Setting concurrency to 1 because storeOutputAs is used.`);
+        }
         concurrency = 1;
       }
     }
@@ -1497,11 +1506,12 @@ class Evaluator {
       }
     }
 
-    // Print info messages before starting progress bar
-    if (serialRunEvalOptions.length > 0) {
+    // Print info messages before starting progress bar (skip in Ink UI mode)
+    // Note: isInkUI is defined earlier in the function
+    if (!isInkUI && serialRunEvalOptions.length > 0) {
       logger.info(`Running ${serialRunEvalOptions.length} test cases serially...`);
     }
-    if (concurrentRunEvalOptions.length > 0) {
+    if (!isInkUI && concurrentRunEvalOptions.length > 0) {
       logger.info(
         `Running ${concurrentRunEvalOptions.length} test cases (up to ${concurrency} at a time)...`,
       );
@@ -1566,9 +1576,13 @@ class Evaluator {
         // User interruption or max duration timeout
         evalTimedOut = evalTimedOut || maxEvalTimeMs > 0;
         if (evalTimedOut) {
-          logger.warn(`Evaluation stopped after reaching max duration (${maxEvalTimeMs}ms)`);
+          if (!isInkUI) {
+            logger.warn(`Evaluation stopped after reaching max duration (${maxEvalTimeMs}ms)`);
+          }
         } else {
-          logger.info('Evaluation interrupted, saving progress...');
+          if (!isInkUI) {
+            logger.info('Evaluation interrupted, saving progress...');
+          }
         }
       } else {
         if (ciProgressReporter) {
@@ -1703,7 +1717,9 @@ class Evaluator {
     // Process max-score assertions
     const maxScoreRowsCount = rowsWithMaxScoreAssertion.size;
     if (maxScoreRowsCount > 0) {
-      logger.info(`Processing ${maxScoreRowsCount} max-score assertions...`);
+      if (!isInkUI) {
+        logger.info(`Processing ${maxScoreRowsCount} max-score assertions...`);
+      }
 
       for (const testIdx of rowsWithMaxScoreAssertion) {
         const resultsToCompare = this.evalRecord.persisted
