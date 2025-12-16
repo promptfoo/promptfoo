@@ -1,11 +1,16 @@
 ---
 sidebar_label: Langfuse
-description: Integrate Langfuse prompts with Promptfoo for LLM testing. Configure version control, labels, and collaborative prompt management using environment variables and SDK setup.
+description: Integrate Langfuse prompts and traces with Promptfoo for LLM testing. Evaluate stored traces, use version-controlled prompts, and sync evaluation scores back to Langfuse.
 ---
 
 # Langfuse integration
 
 [Langfuse](https://langfuse.com) is an open-source LLM engineering platform that includes collaborative prompt management, tracing, and evaluation capabilities.
+
+Promptfoo integrates with Langfuse in two ways:
+
+1. **Prompts**: Use prompts stored in Langfuse with version control and labels
+2. **Traces**: Evaluate LLM outputs stored in Langfuse traces without re-running them
 
 ## Setup
 
@@ -119,3 +124,133 @@ Common label patterns:
 
 - While prompt IDs containing `@` symbols are supported, we recommend avoiding them for clarity. The parser looks for the last `@` followed by a label pattern to distinguish between the prompt ID and label.
 - If you need to use `@` in your label names, consider using a different naming convention.
+
+## Evaluating Langfuse traces
+
+Use the `langfuse://traces` URL scheme to load traces from Langfuse and evaluate them with promptfoo assertions. This enables you to:
+
+- Evaluate LLM outputs already stored in Langfuse without re-running them
+- Run quality checks on production traces
+- Build regression test suites from historical data
+
+### Basic usage
+
+```yaml
+# Evaluate traces with assertions (no LLM re-execution needed)
+tests: langfuse://traces?tags=production&limit=50
+
+defaultTest:
+  assert:
+    - type: llm-rubric
+      value: 'Response is helpful and accurate'
+    - type: cost
+      threshold: 0.01
+```
+
+### URL parameters
+
+| Parameter       | Description                            | Example                          |
+| --------------- | -------------------------------------- | -------------------------------- |
+| `limit`         | Maximum traces to fetch (default: 100) | `limit=50`                       |
+| `userId`        | Filter by user ID                      | `userId=user_123`                |
+| `sessionId`     | Filter by session ID                   | `sessionId=sess_456`             |
+| `tags`          | Filter by tags (comma-separated)       | `tags=production,gpt-4`          |
+| `name`          | Filter by trace name                   | `name=chat-completion`           |
+| `fromTimestamp` | Start timestamp (ISO 8601)             | `fromTimestamp=2024-01-01`       |
+| `toTimestamp`   | End timestamp (ISO 8601)               | `toTimestamp=2024-01-31`         |
+| `version`       | Filter by version                      | `version=1.0`                    |
+| `release`       | Filter by release                      | `release=v2.0.0`                 |
+
+### Available variables
+
+Each trace is converted to a test case with these variables:
+
+```yaml
+vars:
+  # Convenient access to main content
+  input: '...' # Extracted from trace input
+  output: '...' # Extracted from trace output
+
+  # Full Langfuse data (prefixed to avoid collisions)
+  __langfuse_trace_id: 'abc123'
+  __langfuse_input: { query: '...' }
+  __langfuse_output: { response: '...' }
+  __langfuse_user_id: 'user_123'
+  __langfuse_session_id: 'session_456'
+  __langfuse_tags: ['production']
+  __langfuse_metadata: { ... }
+  __langfuse_latency: 0.5
+  __langfuse_cost: 0.001
+  __langfuse_url: 'https://...'
+```
+
+### Assertion-only evaluation
+
+When you load traces without specifying prompts or providers, promptfoo evaluates the stored outputs directly:
+
+```yaml
+# No prompts or providers - evaluates stored outputs
+tests: langfuse://traces?tags=production&limit=100
+
+defaultTest:
+  assert:
+    - type: contains
+      value: 'helpful'
+    - type: llm-rubric
+      value: 'Response answers the question'
+```
+
+### Comparing against new prompts
+
+You can also compare stored trace inputs against new prompt versions:
+
+```yaml
+prompts:
+  - langfuse://my-prompt@experiment-v2
+
+providers:
+  - openai:gpt-4o
+
+# Use trace inputs as test data
+tests: langfuse://traces?tags=production&limit=50
+
+defaultTest:
+  assert:
+    - type: similar
+      value: '{{output}}' # Compare to stored output
+      threshold: 0.8
+```
+
+### Example: Quality monitoring
+
+```yaml
+# Monitor production quality by sampling recent traces
+tests: langfuse://traces?tags=production&limit=100&fromTimestamp=2024-01-01
+
+defaultTest:
+  assert:
+    # Check response quality
+    - type: llm-rubric
+      value: 'Response is helpful, accurate, and professional'
+
+    # Check for PII leakage
+    - type: not-contains
+      value: '@example.com'
+
+    # Verify cost is reasonable
+    - type: cost
+      threshold: 0.05
+```
+
+### Example: Session evaluation
+
+Evaluate all traces from a specific conversation session:
+
+```yaml
+tests: langfuse://traces?sessionId=session_abc123
+
+defaultTest:
+  assert:
+    - type: llm-rubric
+      value: 'Response maintains context from the conversation'
+```
