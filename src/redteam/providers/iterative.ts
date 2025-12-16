@@ -42,6 +42,7 @@ import {
   JUDGE_SYSTEM_PROMPT,
 } from './prompts';
 import {
+  buildGraderResultAssertion,
   checkPenalizedPhrases,
   createIterationContext,
   getTargetResponse,
@@ -434,7 +435,7 @@ export async function runRedteamConversation({
         const graderTraceSummary = tracingOptions.includeInGrading
           ? computedTraceSummary
           : undefined;
-        const { grade } = await grader.getResult(
+        const { grade, rubric } = await grader.getResult(
           newInjectVar,
           targetResponse.output,
           iterationTest,
@@ -449,7 +450,10 @@ export async function runRedteamConversation({
               }
             : undefined,
         );
-        storedGraderResult = grade;
+        storedGraderResult = {
+          ...grade,
+          assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
+        };
       }
     }
     // Calculate the score
