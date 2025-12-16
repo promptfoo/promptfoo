@@ -27,7 +27,7 @@ We're adding something new to Promptfoo's suite of AI security products: code sc
 
 - Briefly introduce the new product
 - Explain why we think engineering teams need a scanner focused exclusively on interactions with LLMs and agents
-- Demonstrate the scanner in action on a few real-world CVEs ([click here to skip the background and jump straight to real examples](#testing-on-real-cves))
+- Demonstrate the scanner in action on a few real-world CVEs ([click here to skip the background and jump straight to real examples](/blog/building-a-security-scanner-for-llm-apps#testing-on-real-cves))
 
 <!-- truncate -->
 
@@ -198,11 +198,12 @@ This is classic prompt injection: user input flows into an LLM, the LLM output i
 [CVE-2024-7042](https://nvd.nist.gov/vuln/detail/CVE-2024-7042) shows the same pattern, but with database query injection rather than code execution. LangChain's GraphCypherQAChain generates [Neo4j Cypher](https://neo4j.com/product/cypher-graph-query-language/) database queries from user questions:
 
 ```typescript
-const generatedCypher = await this.cypherGenerationChain.call(
-  { question, schema: this.graph.getSchema() }
-);
+const generatedCypher = await this.cypherGenerationChain.call({
+  question,
+  schema: this.graph.getSchema(),
+});
 // ...
-const context = await this.graph.query(extractedCypher);  // Executed directly
+const context = await this.graph.query(extractedCypher); // Executed directly
 ```
 
 It was introduced in [PR #2741](https://github.com/langchain-ai/langchainjs/pull/2741). The scanner successfully flagged this issue as well:
@@ -248,5 +249,5 @@ It flagged the vulnerability instead:
 That's all I've got for now. If you're building on top of LLMs and want to try the scanner, you can [install the scanner here](https://github.com/apps/promptfoo-scanner).
 
 We'll ask for your email during the setup flow, but you don't need an account or any API keys to try it. It takes a couple minutes to install, and runs automatically on every PR that's opened after that.
- 
+
 While we think the scanner can already offer quite a bit of value to any project built on top of LLMs, it's still very much a work in progress. If you see false positives, it misses a vulnerability, or you have any other feedback, please don't hesitate to get in touch: dane@promptfoo.dev
