@@ -358,7 +358,8 @@ describe('langfuseTraces', () => {
         choices: [{ message: { content: 'Hi there!' } }],
       });
       // providerOutput should use extracted string
-      expect(tests[0].providerOutput?.output).toBe('Hi there!');
+      const providerOutput = tests[0].providerOutput as { output: string };
+      expect(providerOutput?.output).toBe('Hi there!');
     });
 
     it('should handle traces with Anthropic format', async () => {
@@ -367,7 +368,9 @@ describe('langfuseTraces', () => {
           {
             id: 'trace-anthropic',
             timestamp: '2024-01-15T10:00:00Z',
-            input: { messages: [{ role: 'user', content: [{ type: 'text', text: 'Hello Claude' }] }] },
+            input: {
+              messages: [{ role: 'user', content: [{ type: 'text', text: 'Hello Claude' }] }],
+            },
             output: { content: [{ type: 'text', text: 'Hello! How can I help?' }] },
           },
         ],
@@ -398,9 +401,8 @@ describe('langfuseTraces', () => {
       expect(tests[0].vars?.input).toEqual({ custom_field: 'custom input' });
       expect(tests[0].vars?.output).toEqual({ custom_response: 'custom output' });
       // providerOutput should stringify unknown objects
-      expect(tests[0].providerOutput?.output).toBe(
-        JSON.stringify({ custom_response: 'custom output' }),
-      );
+      const providerOutput = tests[0].providerOutput as { output: string };
+      expect(providerOutput?.output).toBe(JSON.stringify({ custom_response: 'custom output' }));
     });
 
     it('should use LANGFUSE_HOST as fallback for base URL', async () => {

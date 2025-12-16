@@ -2,14 +2,7 @@
 sidebar_label: Langfuse
 description: Integrate Langfuse prompts and traces with Promptfoo for LLM testing. Evaluate stored traces, use version-controlled prompts, and sync evaluation scores back to Langfuse.
 keywords:
-  [
-    langfuse,
-    llm observability,
-    traces,
-    prompt management,
-    production evaluation,
-    llm monitoring,
-  ]
+  [langfuse, llm observability, traces, prompt management, production evaluation, llm monitoring]
 ---
 
 # Langfuse integration
@@ -203,20 +196,20 @@ tests: langfuse://traces?tags=production&name=chat&fromTimestamp=2024-01-01&limi
 
 Each trace becomes a test case with these variables available in assertions:
 
-| Variable                  | Description                     |
-| ------------------------- | ------------------------------- |
-| `input`                   | Extracted input text            |
-| `output`                  | Extracted output text           |
-| `__langfuse_trace_id`     | Trace ID                        |
-| `__langfuse_input`        | Full input object               |
-| `__langfuse_output`       | Full output object              |
-| `__langfuse_user_id`      | User ID                         |
-| `__langfuse_session_id`   | Session ID                      |
-| `__langfuse_tags`         | Array of tags                   |
-| `__langfuse_metadata`     | Trace metadata                  |
-| `__langfuse_latency`      | Response latency (seconds)      |
-| `__langfuse_cost`         | Cost in USD                     |
-| `__langfuse_url`          | Link to trace in Langfuse UI    |
+| Variable                | Description                  |
+| ----------------------- | ---------------------------- |
+| `input`                 | Extracted input text         |
+| `output`                | Extracted output text        |
+| `__langfuse_trace_id`   | Trace ID                     |
+| `__langfuse_input`      | Full input object            |
+| `__langfuse_output`     | Full output object           |
+| `__langfuse_user_id`    | User ID                      |
+| `__langfuse_session_id` | Session ID                   |
+| `__langfuse_tags`       | Array of tags                |
+| `__langfuse_metadata`   | Trace metadata               |
+| `__langfuse_latency`    | Response latency (seconds)   |
+| `__langfuse_cost`       | Cost in USD                  |
+| `__langfuse_url`        | Link to trace in Langfuse UI |
 
 The `input` and `output` variables are automatically extracted from common formats (string, `{query}`, `{prompt}`, `{response}`, `{result}`, etc.). For complex structures, use the full `__langfuse_input` and `__langfuse_output` objects.
 
@@ -287,7 +280,7 @@ tests: langfuse://traces?tags=production&limit=50
 defaultTest:
   assert:
     - type: similar
-      value: '{{output}}'  # Compare to stored output
+      value: '{{output}}' # Compare to stored output
       threshold: 0.8
 ```
 
@@ -320,7 +313,7 @@ defaultTest:
     - type: llm-rubric
       value: 'Response quality is consistent with expectations'
     - type: latency
-      threshold: 5000  # 5 seconds max
+      threshold: 5000 # 5 seconds max
 ```
 
 ### Using with the echo provider
@@ -360,13 +353,13 @@ Each test case links back to the original trace in Langfuse via the `__langfuse_
 
 The `input` and `output` variables are automatically extracted from these common LLM formats:
 
-| Format | Input extraction | Output extraction |
-|--------|-----------------|-------------------|
-| **String** | Used directly | Used directly |
-| **OpenAI chat** | Last user message content from `messages[]` | `choices[0].message.content` |
-| **OpenAI completion** | - | `choices[0].text` |
-| **Anthropic** | Text from content blocks | `content[0].text` or `content` string |
-| **Simple objects** | `query`, `prompt`, `message`, `input`, or `text` field | `response`, `output`, `result`, `completion`, or `text` field |
+| Format                | Input extraction                                       | Output extraction                                             |
+| --------------------- | ------------------------------------------------------ | ------------------------------------------------------------- |
+| **String**            | Used directly                                          | Used directly                                                 |
+| **OpenAI chat**       | Last user message content from `messages[]`            | `choices[0].message.content`                                  |
+| **OpenAI completion** | -                                                      | `choices[0].text`                                             |
+| **Anthropic**         | Text from content blocks                               | `content[0].text` or `content` string                         |
+| **Simple objects**    | `query`, `prompt`, `message`, `input`, or `text` field | `response`, `output`, `result`, `completion`, or `text` field |
 
 For formats not listed above, the full object is used. Access raw data via `__langfuse_input` and `__langfuse_output`.
 
@@ -374,11 +367,12 @@ For formats not listed above, the full object is used. Access raw data via `__la
 
 **Authentication failed (401)**
 
-```
+```text
 Langfuse authentication failed. Check your LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY, and LANGFUSE_BASE_URL environment variables.
 ```
 
 Verify your credentials:
+
 - Keys are from the correct Langfuse project
 - Using the right host (`https://cloud.langfuse.com` for cloud, `https://us.cloud.langfuse.com` for US region)
 - Environment variables are properly exported
@@ -386,6 +380,7 @@ Verify your credentials:
 **No traces found**
 
 If traces exist in Langfuse but aren't being loaded:
+
 - Check filter parameters match your traces (tags, name, timestamps)
 - Verify traces have both `input` and `output` populated
 - Try removing filters to fetch all traces: `langfuse://traces?limit=10`
@@ -393,6 +388,7 @@ If traces exist in Langfuse but aren't being loaded:
 **Empty input/output variables**
 
 If `input` or `output` are empty but `__langfuse_input`/`__langfuse_output` have data:
+
 - Your trace format may not match auto-extraction patterns
 - Use `__langfuse_input` and `__langfuse_output` directly in assertions
 - Or extract with JavaScript: `{{__langfuse_output.your_field}}`

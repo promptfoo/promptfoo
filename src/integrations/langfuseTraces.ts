@@ -86,9 +86,7 @@ async function getLangfuseClient(): Promise<any> {
   const publicKey = getEnvString('LANGFUSE_PUBLIC_KEY');
   const secretKey = getEnvString('LANGFUSE_SECRET_KEY');
   const baseUrl =
-    getEnvString('LANGFUSE_BASE_URL') ||
-    getEnvString('LANGFUSE_HOST') ||
-    'https://cloud.langfuse.com';
+    process.env.LANGFUSE_BASE_URL || getEnvString('LANGFUSE_HOST') || 'https://cloud.langfuse.com';
 
   if (!publicKey || !secretKey) {
     throw new Error(
@@ -176,7 +174,10 @@ function extractInputText(input: unknown): unknown {
   if (Array.isArray(obj.messages) && obj.messages.length > 0) {
     // Get the last user message, or the last message if no user message
     const userMessages = obj.messages.filter((m: any) => m.role === 'user');
-    const lastMessage = userMessages.length > 0 ? userMessages[userMessages.length - 1] : obj.messages[obj.messages.length - 1];
+    const lastMessage =
+      userMessages.length > 0
+        ? userMessages[userMessages.length - 1]
+        : obj.messages[obj.messages.length - 1];
     if (lastMessage && typeof lastMessage === 'object' && 'content' in lastMessage) {
       const content = (lastMessage as any).content;
       // Handle Anthropic-style content array
@@ -242,27 +243,58 @@ function traceToTestCase(trace: LangfuseTrace, baseUrl: string): TestCase {
   const traceUrl = trace.htmlPath ? `${baseUrl}${trace.htmlPath}` : undefined;
 
   // Create the test case with vars populated from trace data
+  // Build vars object, filtering out undefined values
+  const vars: Record<string, string | number | boolean | string[] | Record<string, unknown>> = {
+    // Prefixed Langfuse fields to avoid collisions
+    __langfuse_trace_id: trace.id,
+    __langfuse_timestamp: trace.timestamp,
+  };
+
+  // Add optional fields only if they have values
+  if (trace.input !== undefined) {
+    vars.__langfuse_input = trace.input as Record<string, unknown>;
+  }
+  if (trace.output !== undefined) {
+    vars.__langfuse_output = trace.output as Record<string, unknown>;
+  }
+  if (trace.name) {
+    vars.__langfuse_name = trace.name;
+  }
+  if (trace.userId) {
+    vars.__langfuse_user_id = trace.userId;
+  }
+  if (trace.sessionId) {
+    vars.__langfuse_session_id = trace.sessionId;
+  }
+  if (trace.tags) {
+    vars.__langfuse_tags = trace.tags;
+  }
+  if (trace.metadata) {
+    vars.__langfuse_metadata = trace.metadata as Record<string, unknown>;
+  }
+  if (trace.latency !== undefined) {
+    vars.__langfuse_latency = trace.latency;
+  }
+  if (trace.totalCost !== undefined) {
+    vars.__langfuse_cost = trace.totalCost;
+  }
+  if (traceUrl) {
+    vars.__langfuse_url = traceUrl;
+  }
+
+  // Also provide convenient unprefixed access to main content
+  if (inputValue !== undefined) {
+    vars.input =
+      typeof inputValue === 'string' ? inputValue : (inputValue as Record<string, unknown>);
+  }
+  if (outputValue !== undefined) {
+    vars.output =
+      typeof outputValue === 'string' ? outputValue : (outputValue as Record<string, unknown>);
+  }
+
   const testCase: TestCase = {
     description: `Trace: ${trace.name || trace.id} (${new Date(trace.timestamp).toLocaleDateString()})`,
-    vars: {
-      // Prefixed Langfuse fields to avoid collisions
-      __langfuse_trace_id: trace.id,
-      __langfuse_input: trace.input,
-      __langfuse_output: trace.output,
-      __langfuse_timestamp: trace.timestamp,
-      __langfuse_name: trace.name ?? undefined,
-      __langfuse_user_id: trace.userId ?? undefined,
-      __langfuse_session_id: trace.sessionId ?? undefined,
-      __langfuse_tags: trace.tags ?? undefined,
-      __langfuse_metadata: trace.metadata ?? undefined,
-      __langfuse_latency: trace.latency,
-      __langfuse_cost: trace.totalCost,
-      __langfuse_url: traceUrl,
-
-      // Also provide convenient unprefixed access to main content
-      input: inputValue,
-      output: outputValue,
-    },
+    vars,
     metadata: {
       langfuseTraceId: trace.id,
       langfuseTraceUrl: traceUrl,
@@ -301,9 +333,7 @@ export async function fetchLangfuseTraces(url: string): Promise<TestCase[]> {
 
   const langfuse = await getLangfuseClient();
   const baseUrl =
-    getEnvString('LANGFUSE_BASE_URL') ||
-    getEnvString('LANGFUSE_HOST') ||
-    'https://cloud.langfuse.com';
+    process.env.LANGFUSE_BASE_URL || getEnvString('LANGFUSE_HOST') || 'https://cloud.langfuse.com';
 
   const tests: TestCase[] = [];
   let page = 1;
