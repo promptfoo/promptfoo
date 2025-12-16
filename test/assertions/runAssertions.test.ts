@@ -762,4 +762,58 @@ describe('runAssertions', () => {
       metric1: 1,
     });
   });
+
+  it('should gracefully handle invalid metric template syntax', async () => {
+    // Invalid template syntax should not crash, should fall back to original metric
+    const test: AtomicTestCase = {
+      vars: {
+        someVar: 'value',
+      },
+      assert: [
+        {
+          type: 'equals',
+          value: 'Expected output',
+          metric: '{{invalid syntax',
+        },
+      ],
+    };
+
+    const result: GradingResult = await runAssertions({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      test,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(result.pass).toBe(true);
+    // Should fall back to the original (invalid) metric string
+    expect(result.namedScores).toEqual({
+      '{{invalid syntax': 1,
+    });
+  });
+
+  it('should handle test with no vars defined', async () => {
+    // When test.vars is undefined, should still work (empty vars object)
+    const test: AtomicTestCase = {
+      assert: [
+        {
+          type: 'equals',
+          value: 'Expected output',
+          metric: 'StaticMetric',
+        },
+      ],
+    };
+
+    const result: GradingResult = await runAssertions({
+      prompt: 'Some prompt',
+      provider: new OpenAiChatCompletionProvider('gpt-4o-mini'),
+      test,
+      providerResponse: { output: 'Expected output' },
+    });
+
+    expect(result.pass).toBe(true);
+    expect(result.namedScores).toEqual({
+      StaticMetric: 1,
+    });
+  });
 });

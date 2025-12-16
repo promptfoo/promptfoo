@@ -6,63 +6,58 @@ prompts:
   - 'Say this as though you are a seafarer from the 17th century: {{body}}'
 
 providers:
-  - echo # Using echo provider for easy demonstration without API keys
+  - openai:gpt-4.1-mini
 
 derivedMetrics:
   - name: DoubleConsistency
     value: Consistency * 2
 
-# Demonstrates dynamic metric naming via defaultTest.assert
+# Demonstrates dynamic metric naming via template variables in defaultTest.assert
 # The metric field supports Nunjucks template variables from test.vars
+# This enables filtering results by different metric names while using a single assertion definition
 defaultTest:
   assert:
-    - type: icontains
-      value: '{{keyword}}'
-      metric: '{{metricCategory}}'
+    - type: llm-rubric
+      value: The response uses {{speechStyle}} speech patterns
+      metric: '{{speechStyle}}Style'
 
 tests:
-  # These tests use the dynamic metric from defaultTest
-  - description: Check for pirate tone (dynamic metric)
+  # Dynamic metric: renders to "pirateStyle"
+  - description: Check for pirate speech
     vars:
-      body: Yarr, matey!
-      keyword: yarr
-      metricCategory: PirateTone
+      body: Ahoy there!
+      speechStyle: pirate
 
-  - description: Check for hunger-related words (dynamic metric)
+  # Dynamic metric: renders to "nauticalStyle"
+  - description: Check for nautical speech
     vars:
-      body: I need some grub
-      keyword: grub
-      metricCategory: PirateTone
+      body: Set sail for adventure
+      speechStyle: nautical
 
-  # This test combines dynamic metric with static metric
-  - description: Check for message keyword with static metric
+  # Dynamic metric: renders to "archaicStyle"
+  - description: Check for archaic speech
     vars:
-      body: The message was delivered
-      keyword: message
-      metricCategory: FormatCheck
+      body: Good morrow to thee
+      speechStyle: archaic
+
+  # Combining dynamic metric with additional static assertions
+  - description: Check speech with JSON validation
+    vars:
+      body: Output your response as JSON
+      speechStyle: pirate
     assert:
-      - type: contains
-        value: delivered
+      - type: is-json
         metric: Consistency
 
-  # Multiple assertions with different metric types
-  - description: Check for greeting with multiple metrics
+  # Multiple static metrics alongside the dynamic one
+  - description: Complex validation
     vars:
-      body: Ahoy, world
-      keyword: ahoy
-      metricCategory: Greeting
+      body: Tell me a story
+      speechStyle: nautical
     assert:
       - type: javascript
-        value: output.startsWith('Say this')
-        metric: FormatValidation
-
-  # Demonstrates combining dynamic and static metrics
-  - description: Complex validation with mixed metrics
-    vars:
-      body: The pirate spoke clearly
-      keyword: pirate
-      metricCategory: ContentCheck
-    assert:
-      - type: contains
-        value: pirate
-        metric: Tone
+        value: output.length > 10
+        metric: Length
+      - type: similar
+        value: A tale of the sea
+        metric: Relevance

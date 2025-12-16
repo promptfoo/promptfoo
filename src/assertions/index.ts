@@ -201,16 +201,27 @@ const nunjucks = getNunjucksEngine();
  * Renders a metric name template with test variables.
  * @param metric - The metric name, possibly containing Nunjucks template syntax
  * @param vars - The test variables to use for rendering
- * @returns The rendered metric name, or the original if not a template
+ * @returns The rendered metric name, or the original if rendering fails
  */
 function renderMetricName(
   metric: string | undefined,
   vars: Record<string, unknown>,
 ): string | undefined {
-  if (metric && typeof metric === 'string') {
-    return nunjucks.renderString(metric, vars);
+  if (!metric) {
+    return metric;
   }
-  return metric;
+  try {
+    const rendered = nunjucks.renderString(metric, vars);
+    if (rendered === '' && metric !== '') {
+      logger.debug(`Metric template "${metric}" rendered to empty string`);
+    }
+    return rendered;
+  } catch (error) {
+    logger.warn(
+      `Failed to render metric template "${metric}": ${error instanceof Error ? error.message : error}`,
+    );
+    return metric;
+  }
 }
 
 /**
