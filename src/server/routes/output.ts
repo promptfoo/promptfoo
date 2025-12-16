@@ -3,9 +3,47 @@ import fs from 'fs';
 import path from 'path';
 import { getConfigDirectoryPath } from '../../util/config/manage';
 import logger from '../../logger';
-import type { Request, Response } from 'express';
+import type { Request, Response, NextFunction } from 'express';
 
 const router = express.Router();
+
+/**
+ * Simple in-memory rate limiter for video output endpoints.
+ * Limits requests per IP to prevent abuse.
+ */
+const RATE_LIMIT_WINDOW_MS = 60000; // 1 minute
+const RATE_LIMIT_MAX_REQUESTS = 100; // 100 requests per minute per IP
+const requestCounts = new Map<string, { count: number; resetTime: number }>();
+
+function rateLimiter(req: Request, res: Response, next: NextFunction): void {
+  const ip = req.ip || req.socket.remoteAddress || 'unknown';
+  const now = Date.now();
+
+  const record = requestCounts.get(ip);
+  if (!record || now > record.resetTime) {
+    requestCounts.set(ip, { count: 1, resetTime: now + RATE_LIMIT_WINDOW_MS });
+    next();
+    return;
+  }
+
+  if (record.count >= RATE_LIMIT_MAX_REQUESTS) {
+    res.status(429).json({ error: 'Too many requests, please try again later' });
+    return;
+  }
+
+  record.count++;
+  next();
+}
+
+// Clean up old entries periodically to prevent memory leaks
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, record] of requestCounts.entries()) {
+    if (now > record.resetTime) {
+      requestCounts.delete(ip);
+    }
+  }
+}, RATE_LIMIT_WINDOW_MS).unref(); // unref() allows the process to exit even if this interval is running
 
 /**
  * MIME types for video output assets
@@ -31,14 +69,16 @@ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
  * Serve video output files from ~/.promptfoo/output/video/{uuid}/{filename}
  *
  * Security measures:
+ * - Rate limiting to prevent abuse (100 requests/minute per IP)
  * - UUID format validation to prevent directory traversal
  * - Filename allowlist to prevent arbitrary file access
+ * - Path resolution validation to ensure files are within expected directory
  * - Proper MIME type headers
  * - Support for HTTP range requests for video streaming
  *
  * @route GET /api/output/video/:uuid/:filename
  */
-router.get('/video/:uuid/:filename', (req: Request, res: Response): void => {
+router.get('/video/:uuid/:filename', rateLimiter, (req: Request, res: Response): void => {
   const { uuid, filename } = req.params;
 
   // Validate UUID format (prevent directory traversal)
