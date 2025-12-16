@@ -963,5 +963,32 @@ describe('OpenAiImageProvider', () => {
       const resultHigh = await providerHigh.callApi('test prompt');
       expect(resultHigh.cost).toBe(0.288); // high_1024x1536
     });
+
+    it('should support dated model variant gpt-image-1.5-2025-12-16', async () => {
+      const provider = new OpenAiImageProvider('gpt-image-1.5-2025-12-16', {
+        config: { apiKey: 'test-key', quality: 'medium', size: '1024x1024' },
+      });
+
+      await provider.callApi('test prompt');
+
+      const callArgs = vi.mocked(fetchWithCache).mock.calls[0];
+      const body = JSON.parse(callArgs[1]!.body as string);
+
+      // Should use the dated model name
+      expect(body.model).toBe('gpt-image-1.5-2025-12-16');
+      // Should not include response_format (GPT Image models use output_format instead)
+      expect(body).not.toHaveProperty('response_format');
+      // Should include quality
+      expect(body.quality).toBe('medium');
+    });
+
+    it('should calculate correct cost for dated variant gpt-image-1.5-2025-12-16', async () => {
+      const provider = new OpenAiImageProvider('gpt-image-1.5-2025-12-16', {
+        config: { apiKey: 'test-key', quality: 'high', size: '1024x1024' },
+      });
+
+      const result = await provider.callApi('test prompt');
+      expect(result.cost).toBe(0.192); // high_1024x1024 for GPT Image 1.5
+    });
   });
 });
