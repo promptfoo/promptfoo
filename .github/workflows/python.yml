@@ -1,0 +1,52 @@
+name: Python
+
+on:
+  pull_request:
+    paths:
+      - 'src/python/**'
+      - '**/*.py'
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/python/**'
+      - '**/*.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  python:
+    name: Check Python ${{ matrix.python-version }}
+    timeout-minutes: 5
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.9, 3.14]
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v5
+
+      - name: Use Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install Dependencies
+        run: |
+          pip install ruff
+
+      - name: Check Formatting
+        run: |
+          ruff check --select I --fix
+          ruff format
+          git diff --exit-code || (echo "Files were modified by ruff. Please commit these changes." && exit 1)
+
+      - name: Run Tests
+        run: |
+          python -m unittest discover -s src/python -p '*_test.py'

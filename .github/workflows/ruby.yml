@@ -1,0 +1,68 @@
+name: Ruby
+
+on:
+  pull_request:
+    paths:
+      - 'src/ruby/**'
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/ruby/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  ruby:
+    name: Check Ruby ${{ matrix.ruby-version }}
+    timeout-minutes: 5
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        ruby-version: ['3.0', '3.3']
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v5
+
+      - name: Use Ruby ${{ matrix.ruby-version }}
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ matrix.ruby-version }}
+
+      - name: Install Dependencies
+        run: |
+          gem install rubocop
+
+      - name: Check Formatting
+        run: |
+          rubocop --autocorrect-all src/ruby/
+          git diff --exit-code || (echo "Files were modified by rubocop. Please commit these changes." && exit 1)
+
+      - name: Test Ruby Wrapper
+        run: |
+          # Create a simple test script
+          cat > /tmp/test_script.rb << 'EOF'
+          def test_function(a, b)
+            { "sum" => a + b, "product" => a * b }
+          end
+          EOF
+
+          # Create input JSON
+          echo '[2, 3]' > /tmp/input.json
+
+          # Run the wrapper
+          ruby src/ruby/wrapper.rb /tmp/test_script.rb test_function /tmp/input.json /tmp/output.json
+
+          # Verify output
+          cat /tmp/output.json
+          if ! grep -q '"sum":5' /tmp/output.json; then
+            echo "Error: Ruby wrapper test failed"
+            exit 1
+          fi
+          echo "Ruby wrapper test passed"
