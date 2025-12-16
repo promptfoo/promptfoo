@@ -199,8 +199,11 @@ describe('GoogleVideoProvider', () => {
 
   describe('getVideoFilePath', () => {
     it('should return correct file path', () => {
-      const path = getVideoFilePath('test-uuid');
-      expect(path).toBe('/mock/.promptfoo/output/video/test-uuid/video.mp4');
+      const filePath = getVideoFilePath('test-uuid');
+      // Use regex to handle both Unix (/) and Windows (\) path separators
+      expect(filePath).toMatch(
+        /[/\\]mock[/\\]\.promptfoo[/\\]output[/\\]video[/\\]test-uuid[/\\]video\.mp4$/,
+      );
     });
   });
 
