@@ -1,0 +1,27 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: Google Veo video extension (Veo 3.1 only)
+
+prompts:
+  - 'Continue this video: {{continuation}}'
+
+providers:
+  - id: google:video:veo-3.1-generate-preview
+    config:
+      # Provide your own source video path here
+      sourceVideo: file://assets/source.mp4
+      duration: 5
+
+tests:
+  - vars:
+      continuation: The camera pans to reveal a beautiful sunset on the horizon
+    assert:
+      - type: is-valid-video
+  - vars:
+      continuation: The scene transitions smoothly to a night sky with stars appearing
+    assert:
+      - type: is-valid-video
+
+# Note: Video extension is only supported by Veo 3.1 models
+# You need to create an assets/ directory with your source video
+# mkdir assets
+# cp /path/to/your/video.mp4 assets/source.mp4

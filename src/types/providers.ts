@@ -159,7 +159,7 @@ export interface ProviderResponse {
     duration?: number;
   };
   video?: {
-    id?: string; // Provider video ID (e.g., Sora job ID)
+    id?: string; // Provider video ID (e.g., Sora job ID, Veo operation name)
     uuid?: string; // Local storage UUID
     url?: string; // API path to serve video (e.g., /api/output/video/{uuid}/video.mp4)
     format?: string; // 'mp4'
@@ -167,7 +167,9 @@ export interface ProviderResponse {
     duration?: number; // Seconds
     thumbnail?: string; // API path to thumbnail
     spritesheet?: string; // API path to spritesheet
-    model?: string; // Model used (e.g., 'sora-2', 'sora-2-pro')
+    model?: string; // Model used (e.g., 'sora-2', 'veo-3.1-generate-preview')
+    aspectRatio?: string; // '16:9' or '9:16'
+    resolution?: string; // '720p' or '1080p'
   };
 }
 
