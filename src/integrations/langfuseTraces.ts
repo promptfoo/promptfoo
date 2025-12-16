@@ -159,26 +159,84 @@ export function parseTracesUrl(url: string): FetchTracesQuery {
 }
 
 /**
+ * Extract text content from various input formats
+ */
+function extractInputText(input: unknown): unknown {
+  if (typeof input === 'string') {
+    return input;
+  }
+
+  if (typeof input !== 'object' || input === null) {
+    return input;
+  }
+
+  const obj = input as Record<string, unknown>;
+
+  // OpenAI chat format: { messages: [{role: 'user', content: '...'}] }
+  if (Array.isArray(obj.messages) && obj.messages.length > 0) {
+    // Get the last user message, or the last message if no user message
+    const userMessages = obj.messages.filter((m: any) => m.role === 'user');
+    const lastMessage = userMessages.length > 0 ? userMessages[userMessages.length - 1] : obj.messages[obj.messages.length - 1];
+    if (lastMessage && typeof lastMessage === 'object' && 'content' in lastMessage) {
+      const content = (lastMessage as any).content;
+      // Handle Anthropic-style content array
+      if (Array.isArray(content)) {
+        const textBlock = content.find((c: any) => c.type === 'text');
+        return textBlock?.text ?? JSON.stringify(content);
+      }
+      return content;
+    }
+  }
+
+  // Simple key patterns: { query, prompt, message, input, text }
+  return obj.query ?? obj.prompt ?? obj.message ?? obj.input ?? obj.text ?? input;
+}
+
+/**
+ * Extract text content from various output formats
+ */
+function extractOutputText(output: unknown): unknown {
+  if (typeof output === 'string') {
+    return output;
+  }
+
+  if (typeof output !== 'object' || output === null) {
+    return output;
+  }
+
+  const obj = output as Record<string, unknown>;
+
+  // OpenAI completion format: { choices: [{message: {content: '...'}}] } or { choices: [{text: '...'}] }
+  if (Array.isArray(obj.choices) && obj.choices.length > 0) {
+    const choice = obj.choices[0] as any;
+    if (choice.message?.content !== undefined) {
+      return choice.message.content;
+    }
+    if (choice.text !== undefined) {
+      return choice.text;
+    }
+  }
+
+  // Anthropic format: { content: [{type: 'text', text: '...'}] } or { content: '...' }
+  if (obj.content !== undefined) {
+    if (Array.isArray(obj.content)) {
+      const textBlock = obj.content.find((c: any) => c.type === 'text');
+      return textBlock?.text ?? JSON.stringify(obj.content);
+    }
+    return obj.content;
+  }
+
+  // Simple key patterns: { response, output, result, completion, text }
+  return obj.response ?? obj.output ?? obj.result ?? obj.completion ?? obj.text ?? output;
+}
+
+/**
  * Convert a Langfuse trace to a promptfoo TestCase
  */
 function traceToTestCase(trace: LangfuseTrace, baseUrl: string): TestCase {
   // Extract input and output, handling different formats
-  let inputValue: unknown = trace.input;
-  let outputValue: unknown = trace.output;
-
-  // If input/output are objects with specific keys, try to extract the main content
-  if (typeof trace.input === 'object' && trace.input !== null) {
-    const inputObj = trace.input as Record<string, unknown>;
-    // Common patterns: { query: "..." }, { prompt: "..." }, { message: "..." }, { input: "..." }
-    inputValue = inputObj.query ?? inputObj.prompt ?? inputObj.message ?? inputObj.input ?? trace.input;
-  }
-
-  if (typeof trace.output === 'object' && trace.output !== null) {
-    const outputObj = trace.output as Record<string, unknown>;
-    // Common patterns: { response: "..." }, { output: "..." }, { result: "..." }, { completion: "..." }
-    outputValue =
-      outputObj.response ?? outputObj.output ?? outputObj.result ?? outputObj.completion ?? trace.output;
-  }
+  const inputValue = extractInputText(trace.input);
+  const outputValue = extractOutputText(trace.output);
 
   // Build the trace URL
   const traceUrl = trace.htmlPath ? `${baseUrl}${trace.htmlPath}` : undefined;

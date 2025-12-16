@@ -333,11 +333,11 @@ describe('langfuseTraces', () => {
       expect(tests[0].providerOutput).toBeUndefined();
     });
 
-    it('should handle traces with complex nested output', async () => {
+    it('should handle traces with OpenAI chat format', async () => {
       mockFetchTraces.mockResolvedValueOnce({
         data: [
           {
-            id: 'trace-complex',
+            id: 'trace-openai',
             timestamp: '2024-01-15T10:00:00Z',
             input: { messages: [{ role: 'user', content: 'Hello' }] },
             output: { choices: [{ message: { content: 'Hi there!' } }] },
@@ -347,13 +347,59 @@ describe('langfuseTraces', () => {
 
       const tests = await fetchLangfuseTraces('langfuse://traces');
 
-      // When output doesn't match known patterns, it should use the whole object
+      // Should extract content from OpenAI format
+      expect(tests[0].vars?.input).toBe('Hello');
+      expect(tests[0].vars?.output).toBe('Hi there!');
+      // Raw data should still be available
+      expect(tests[0].vars?.__langfuse_input).toEqual({
+        messages: [{ role: 'user', content: 'Hello' }],
+      });
       expect(tests[0].vars?.__langfuse_output).toEqual({
         choices: [{ message: { content: 'Hi there!' } }],
       });
-      // providerOutput should stringify complex objects
+      // providerOutput should use extracted string
+      expect(tests[0].providerOutput?.output).toBe('Hi there!');
+    });
+
+    it('should handle traces with Anthropic format', async () => {
+      mockFetchTraces.mockResolvedValueOnce({
+        data: [
+          {
+            id: 'trace-anthropic',
+            timestamp: '2024-01-15T10:00:00Z',
+            input: { messages: [{ role: 'user', content: [{ type: 'text', text: 'Hello Claude' }] }] },
+            output: { content: [{ type: 'text', text: 'Hello! How can I help?' }] },
+          },
+        ],
+      });
+
+      const tests = await fetchLangfuseTraces('langfuse://traces');
+
+      // Should extract text from Anthropic format
+      expect(tests[0].vars?.input).toBe('Hello Claude');
+      expect(tests[0].vars?.output).toBe('Hello! How can I help?');
+    });
+
+    it('should handle traces with unrecognized complex format', async () => {
+      mockFetchTraces.mockResolvedValueOnce({
+        data: [
+          {
+            id: 'trace-unknown',
+            timestamp: '2024-01-15T10:00:00Z',
+            input: { custom_field: 'custom input' },
+            output: { custom_response: 'custom output' },
+          },
+        ],
+      });
+
+      const tests = await fetchLangfuseTraces('langfuse://traces');
+
+      // Should fall back to the full object when format is unknown
+      expect(tests[0].vars?.input).toEqual({ custom_field: 'custom input' });
+      expect(tests[0].vars?.output).toEqual({ custom_response: 'custom output' });
+      // providerOutput should stringify unknown objects
       expect(tests[0].providerOutput?.output).toBe(
-        JSON.stringify({ choices: [{ message: { content: 'Hi there!' } }] }),
+        JSON.stringify({ custom_response: 'custom output' }),
       );
     });
 
