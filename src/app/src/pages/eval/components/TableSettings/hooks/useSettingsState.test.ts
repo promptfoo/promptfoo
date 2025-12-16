@@ -17,6 +17,8 @@ const mockStore = {
   setShowPrompts: vi.fn(),
   showPassFail: true,
   setShowPassFail: vi.fn(),
+  showPassReasons: false,
+  setShowPassReasons: vi.fn(),
   stickyHeader: true,
   setStickyHeader: vi.fn(),
   maxImageWidth: 500,
@@ -101,6 +103,7 @@ describe('useSettingsState', () => {
     expect(mockStore.setPrettifyJson).toHaveBeenCalledWith(true);
     expect(mockStore.setShowPrompts).toHaveBeenCalledWith(false);
     expect(mockStore.setShowPassFail).toHaveBeenCalledWith(true);
+    expect(mockStore.setShowPassReasons).toHaveBeenCalledWith(false);
     expect(mockStore.setShowInferenceDetails).toHaveBeenCalledWith(true);
     expect(mockStore.setMaxTextLength).toHaveBeenCalledWith(500);
     expect(mockStore.setMaxImageWidth).toHaveBeenCalledWith(500);

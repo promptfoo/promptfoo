@@ -205,6 +205,10 @@ jobs:
         run: |
           npm run depcheck
 
+      - name: Validate lockfile integrity
+        run: |
+          npx lockfile-lint --path package-lock.json --allowed-hosts npm --validate-https
+
   shell-format:
     name: Shell Format Check
     timeout-minutes: 5

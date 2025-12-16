@@ -94,7 +94,11 @@ export function evalTableToCsv(
     if (isRedteam) {
       const firstOutputMetadata = row.outputs[0]?.metadata;
       for (const key of redteamKeys) {
-        const value = firstOutputMetadata?.[key];
+        let value = firstOutputMetadata?.[key];
+        // Default strategyId to 'basic' for strategy-less tests
+        if (key === 'strategyId' && (value === null || value === undefined)) {
+          value = 'basic';
+        }
         if (value === null || value === undefined) {
           rowValues.push('');
         } else if (

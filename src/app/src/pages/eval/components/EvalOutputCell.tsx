@@ -117,8 +117,15 @@ function EvalOutputCell({
   showDiffs: boolean;
   searchText?: string;
 }) {
-  const { renderMarkdown, prettifyJson, showPrompts, showPassFail, maxImageWidth, maxImageHeight } =
-    useResultsViewSettingsStore();
+  const {
+    renderMarkdown,
+    prettifyJson,
+    showPrompts,
+    showPassFail,
+    showPassReasons,
+    maxImageWidth,
+    maxImageHeight,
+  } = useResultsViewSettingsStore();
 
   const { shouldHighlightSearchText, addFilter, resetFilters } = useTableStore();
   const { data: cloudConfig } = useCloudConfig();
@@ -183,16 +190,22 @@ function EvalOutputCell({
   const text = typeof output.text === 'string' ? output.text : JSON.stringify(output.text);
   let node: React.ReactNode | undefined;
   let failReasons: string[] = [];
+  let passReasons: string[] = [];
 
   // Extract response audio from the last turn of redteamHistory for display in the cell
   const redteamHistory = output.metadata?.redteamHistory || output.metadata?.redteamTreeHistory;
   const lastTurn = redteamHistory?.[redteamHistory.length - 1];
   const responseAudio = lastTurn?.outputAudio as { data?: string; format?: string } | undefined;
 
-  // Extract failure reasons from component results
+  // Extract failure and pass reasons from component results
   if (output.gradingResult?.componentResults) {
     failReasons = output.gradingResult.componentResults
       .filter((result) => (result ? !result.pass : false))
+      .map((result) => result.reason)
+      .filter((reason) => reason); // Filter out empty/undefined reasons
+
+    passReasons = output.gradingResult.componentResults
+      .filter((result) => (result ? result.pass : false))
       .map((result) => result.reason)
       .filter((reason) => reason); // Filter out empty/undefined reasons
   }
@@ -749,6 +762,15 @@ function EvalOutputCell({
             <span className="fail-reason">
               <FailReasonCarousel failReasons={failReasons} />
             </span>
+          )}
+          {showPassReasons && passReasons.length > 0 && (
+            <div className="pass-reasons">
+              {passReasons.map((reason, index) => (
+                <div key={index} className="pass-reason">
+                  {reason}
+                </div>
+              ))}
+            </div>
           )}
         </div>
       )}

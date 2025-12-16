@@ -1,6 +1,5 @@
 import React, { useMemo, useState } from 'react';
 
-import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import MagicWandIcon from '@mui/icons-material/AutoFixHigh';
 import Alert from '@mui/material/Alert';
 import Autocomplete from '@mui/material/Autocomplete';
@@ -13,11 +12,11 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import IconButton from '@mui/material/IconButton';
 import Link from '@mui/material/Link';
-import Popover from '@mui/material/Popover';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Divider from '@mui/material/Divider';
 import Stack from '@mui/material/Stack';
+import Typography from '@mui/material/Typography';
 import {
   categoryAliases,
   displayNameOverrides,
@@ -31,7 +30,6 @@ import {
   hasSpecificPluginDocumentation,
 } from './pluginDocumentationMap';
 import { useApiHealth } from '@app/hooks/useApiHealth';
-import Chip from '@mui/material/Chip';
 import ChatMessages, {
   type LoadedMessage,
   type LoadingMessage,
@@ -84,10 +82,6 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
     categoryAliases[pluginName as Plugin] ||
     pluginName;
 
-  // Popover state for plugin selector
-  const [pluginPopoverAnchor, setPluginPopoverAnchor] = useState<HTMLElement | null>(null);
-  const isPluginPopoverOpen = Boolean(pluginPopoverAnchor);
-
   const strategyName = strategy?.id ?? '';
   const strategyDisplayName = displayNameOverrides[strategyName as Strategy] || strategyName;
 
@@ -115,9 +109,17 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
       const targetResponse = targetResponses[i];
 
       if (targetResponse) {
+        const output = targetResponse.output;
+        const content =
+          typeof output === 'string'
+            ? output
+            : output != null
+              ? JSON.stringify(output)
+              : (targetResponse.error ?? 'No response from target');
+
         messages.push({
           role: 'assistant' as const,
-          content: targetResponse.output ?? targetResponse.error ?? 'No response from target',
+          content,
           contentType: 'text' as const,
         } as LoadedMessage);
       }
@@ -169,101 +171,65 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
           flexDirection: 'row',
           justifyContent: 'space-between',
           alignItems: 'center',
-          gap: 1,
+          gap: 2,
           px: 3,
           py: 2,
         }}
       >
-        <DialogTitle
-          sx={{
-            // Override the default padding to set it consistently on the parent container
-            p: 0,
-          }}
-        >
-          Test Case
-        </DialogTitle>
-        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-          {allowPluginChange && (
-            <Chip
-              label={`Strategy: ${strategyDisplayName}${maxTurns > 1 ? ` (${maxTurns} turns)` : ''}`}
-              data-testid="strategy-chip"
-            />
-          )}
-          {allowPluginChange ? (
-            <>
-              <Tooltip title="Click to change plugin">
-                <Chip
-                  label={
-                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                      Plugin: {pluginDisplayName}
-                      <ArrowDropDownIcon sx={{ fontSize: '1.125rem', ml: 0.25 }} />
-                    </Box>
-                  }
-                  data-testid="plugin-chip"
-                  onClick={(e) => setPluginPopoverAnchor(e.currentTarget)}
-                  clickable
-                  sx={{ cursor: 'pointer' }}
-                />
-              </Tooltip>
-              <Popover
-                open={isPluginPopoverOpen}
-                anchorEl={pluginPopoverAnchor}
-                onClose={() => setPluginPopoverAnchor(null)}
-                anchorOrigin={{
-                  vertical: 'bottom',
-                  horizontal: 'left',
-                }}
-                transformOrigin={{
-                  vertical: 'top',
-                  horizontal: 'left',
-                }}
-                sx={{ zIndex: 10001 }}
-                slotProps={{
-                  paper: {
-                    sx: { overflow: 'visible' },
-                  },
-                }}
-              >
-                <Box sx={{ p: 2, minWidth: 250 }}>
-                  <Autocomplete
-                    size="small"
-                    value={pluginName}
-                    onChange={(_, newValue) => {
-                      if (newValue && newValue !== pluginName) {
-                        setPluginPopoverAnchor(null);
-                        onRegenerate(newValue);
-                      }
-                    }}
-                    options={availablePlugins}
-                    getOptionLabel={(option) =>
-                      (displayNameOverrides as Record<string, string>)[option] ||
-                      (categoryAliases as Record<string, string>)[option] ||
-                      option
-                    }
-                    disableClearable
-                    slotProps={{
-                      popper: {
-                        disablePortal: true,
-                      },
-                    }}
-                    renderInput={(params) => (
-                      <TextField
-                        {...params}
-                        variant="outlined"
-                        size="small"
-                        label="Select Plugin"
-                      />
-                    )}
-                  />
-                </Box>
-              </Popover>
-            </>
-          ) : (
-            <Chip label={`Plugin: ${pluginDisplayName}`} data-testid="plugin-chip" />
-          )}
+        <Box>
+          <DialogTitle
+            sx={{
+              // Override the default padding to set it consistently on the parent container
+              p: 0,
+            }}
+          >
+            {allowPluginChange
+              ? `${strategyDisplayName}${maxTurns > 1 ? ` (${maxTurns} turns)` : ''}`
+              : pluginDisplayName}
+          </DialogTitle>
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            data-testid={allowPluginChange ? 'strategy-chip' : 'plugin-chip'}
+          >
+            {allowPluginChange ? 'Strategy Preview' : 'Plugin Preview'}
+          </Typography>
         </Box>
+        {allowPluginChange && (
+          <Autocomplete
+            size="small"
+            value={pluginName}
+            onChange={(_, newValue) => {
+              if (newValue && newValue !== pluginName) {
+                onRegenerate(newValue);
+              }
+            }}
+            options={availablePlugins}
+            getOptionLabel={(option) =>
+              (displayNameOverrides as Record<string, string>)[option] ||
+              (categoryAliases as Record<string, string>)[option] ||
+              option
+            }
+            disableClearable
+            slotProps={{
+              popper: {
+                sx: { zIndex: 10001 },
+              },
+            }}
+            sx={{ minWidth: 280 }}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                variant="outlined"
+                size="small"
+                label="Plugin"
+                data-testid="plugin-dropdown"
+              />
+            )}
+          />
+        )}
       </Box>
-      <DialogContent>
+      <DialogContent sx={{ minHeight: 200 }}>
         <Stack direction="column" gap={2}>
           <ChatMessages
             messages={turnMessages}

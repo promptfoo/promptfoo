@@ -373,7 +373,10 @@ describe('OpenAICodexSDKProvider', () => {
 
         await provider.callApi('Test prompt');
 
-        expect(mockResumeThread).toHaveBeenCalledWith('existing-thread-123');
+        expect(mockResumeThread).toHaveBeenCalledWith('existing-thread-123', {
+          skipGitRepoCheck: false,
+          workingDirectory: undefined,
+        });
         expect(mockStartThread).not.toHaveBeenCalled();
       });
 

@@ -168,8 +168,8 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
             sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap', width: '100%' }}
           >
             <Typography variant="body2" sx={{ flex: 1, minWidth: '300px' }}>
-              <strong>New to promptfoo?</strong> Want to see it in action? Load an example
-              configuration to get started immediately!
+              <strong>New to Promptfoo</strong> and want to see it in action? Load an example
+              configuration to get started immediately.
             </Typography>
             <LoadExampleButton />
           </Box>

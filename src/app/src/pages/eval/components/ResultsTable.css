@@ -380,6 +380,37 @@ table.results-table,
   display: inline;
 }
 
+/* Pass reasons container */
+.pass-reasons {
+  margin-top: 0.25rem;
+}
+
+.pass-reason {
+  color: var(--pass-color);
+  font-weight: normal;
+  font-size: 0.9em;
+  opacity: 0.85;
+  padding: 0.15rem 0;
+  border-left: 2px solid var(--pass-color);
+  padding-left: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+.pass-reason:first-child {
+  margin-top: 0;
+}
+
+.compact .pass-reasons {
+  display: inline;
+  margin-left: 0.5rem;
+}
+
+.compact .pass-reason {
+  display: inline;
+  border-left: none;
+  padding-left: 0;
+}
+
 .results-table .fail .pill {
   white-space: nowrap;
   background-color: var(--fail-background-color);

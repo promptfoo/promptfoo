@@ -2,7 +2,7 @@ name: Promptfoo Code Scan
 
 on:
   pull_request:
-    types: [opened]
+    types: [opened, ready_for_review]
 
 jobs:
   security-scan:

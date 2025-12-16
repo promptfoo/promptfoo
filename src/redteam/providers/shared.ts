@@ -8,6 +8,8 @@ import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
 import type { TraceContextData } from '../../tracing/traceContext';
 import {
   type ApiProvider,
+  type Assertion,
+  type AssertionOrSet,
   type CallApiContextParams,
   type CallApiOptionsParams,
   type EvaluateResult,
@@ -527,4 +529,22 @@ export async function tryUnblocking({
     logger.error(`[Unblocking] Error in unblocking flow: ${error}`);
     return { success: false };
   }
+}
+
+/**
+ * Builds the assertion object for storedGraderResult with the rubric value.
+ * This ensures the grading template is preserved for display in the UI.
+ */
+export function buildGraderResultAssertion(
+  gradeAssertion: Assertion | undefined,
+  assertToUse: AssertionOrSet | undefined,
+  rubric: string | undefined,
+): Assertion | undefined {
+  if (gradeAssertion) {
+    return { ...gradeAssertion, value: rubric };
+  }
+  if (assertToUse && 'type' in assertToUse && assertToUse.type !== 'assert-set') {
+    return { ...assertToUse, value: rubric };
+  }
+  return undefined;
 }

@@ -17,6 +17,8 @@ describe('SettingsPanel', () => {
     setShowPrompts: vi.fn(),
     showPassFail: true,
     setShowPassFail: vi.fn(),
+    showPassReasons: false,
+    setShowPassReasons: vi.fn(),
     showInferenceDetails: true,
     setShowInferenceDetails: vi.fn(),
     maxTextLength: 500,
@@ -50,25 +52,25 @@ describe('SettingsPanel', () => {
       expectedNewValue: false,
     },
     {
-      name: 'Show full prompts in output cells',
+      name: 'Full prompts',
       initialState: false,
       setter: 'setShowPrompts' as const,
       expectedNewValue: true,
     },
     {
-      name: 'Show pass/fail indicators',
+      name: 'Pass/fail indicators',
       initialState: true,
       setter: 'setShowPassFail' as const,
       expectedNewValue: false,
     },
     {
-      name: 'Show inference details',
+      name: 'Inference details',
       initialState: true,
       setter: 'setShowInferenceDetails' as const,
       expectedNewValue: false,
     },
     {
-      name: 'Render Markdown content',
+      name: 'Render Markdown',
       initialState: false,
       setter: 'setRenderMarkdown' as const,
       expectedNewValue: true,
@@ -122,7 +124,7 @@ describe('SettingsPanel', () => {
   }) => {
     render(<SettingsPanel />);
 
-    const slider = screen.getByRole('slider', { name: /maximum text length/i });
+    const slider = screen.getByRole('slider', { name: /max text length/i });
     expect(slider).toBeInTheDocument();
     expect(slider).toHaveAttribute('aria-valuenow', String(initialValue));
 
@@ -142,7 +144,7 @@ describe('SettingsPanel', () => {
     render(<SettingsPanel />);
 
     const slider = screen.getByRole('slider', {
-      name: 'Maximum text length',
+      name: /max text length/i,
     });
     expect(slider).toBeInTheDocument();
     expect((slider as HTMLInputElement).value).toBe('1001');
@@ -152,12 +154,31 @@ describe('SettingsPanel', () => {
     render(<SettingsPanel />);
 
     const slider = screen.getByRole('slider', {
-      name: /maximum text length/i,
+      name: /max text length/i,
     });
     expect(slider).toBeInTheDocument();
 
     fireEvent.change(slider, { target: { value: '300' } });
 
     expect(slider).toHaveAttribute('aria-valuenow', '300');
+  });
+
+  it('should disable Pass reasons when Pass/fail indicators is off', () => {
+    mockedUseResultsViewSettingsStore.mockReturnValue({
+      ...mockStore,
+      showPassFail: false,
+    });
+
+    render(<SettingsPanel />);
+
+    const passReasonsToggle = screen.getByRole('checkbox', { name: 'Pass reasons' });
+    expect(passReasonsToggle).toBeDisabled();
+  });
+
+  it('should enable Pass reasons when Pass/fail indicators is on', () => {
+    render(<SettingsPanel />);
+
+    const passReasonsToggle = screen.getByRole('checkbox', { name: 'Pass reasons' });
+    expect(passReasonsToggle).not.toBeDisabled();
   });
 });
