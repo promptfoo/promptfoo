@@ -1,7 +1,7 @@
 ---
 title: Install Promptfoo
-description: Learn how to install promptfoo using npm, npx, or Homebrew. Set up promptfoo for command-line usage or as a library in your project.
-keywords: [install, installation, npm, npx, homebrew, setup, promptfoo]
+description: Learn how to install promptfoo using the shell installer, npm, npx, or Homebrew.
+keywords: [install, installation, npm, npx, homebrew, curl, shell, setup, promptfoo]
 sidebar_position: 4
 ---
 
@@ -13,15 +13,18 @@ import TabItem from '@theme/TabItem';
 
 ## Requirements
 
-- Node.js 20 or newer
 - Supported operating systems: macOS, Linux, Windows
+- Node.js 20 or newer (only required for npm/npx installation)
 
 ## For Command-Line Usage
 
-Install promptfoo using [npx](https://nodejs.org/en/download), [npm](https://nodejs.org/en/download), or [brew](https://brew.sh/):
-
 <Tabs groupId="promptfoo-command">
-  <TabItem value="npm" label="npm" default>
+  <TabItem value="curl" label="curl" default>
+    ```bash
+    curl -fsSL https://promptfoo.dev/install.sh | bash
+    ```
+  </TabItem>
+  <TabItem value="npm" label="npm">
     ```bash
     npm install -g promptfoo
     ```
@@ -51,7 +54,12 @@ npm install promptfoo --save
 To verify that promptfoo is installed correctly, run:
 
 <Tabs groupId="promptfoo-command">
-  <TabItem value="npm" label="npm" default>
+  <TabItem value="curl" label="curl" default>
+    ```bash
+    promptfoo --version
+    ```
+  </TabItem>
+  <TabItem value="npm" label="npm">
     ```bash
     promptfoo --version
     ```
@@ -68,7 +76,7 @@ To verify that promptfoo is installed correctly, run:
   </TabItem>
 </Tabs>
 
-This should display the version number of promptfoo:
+This should display the version number:
 
 ```text
 0.114.7
@@ -79,7 +87,12 @@ This should display the version number of promptfoo:
 After installation, you can start using promptfoo by running:
 
 <Tabs groupId="promptfoo-command">
-  <TabItem value="npm" label="npm" default>
+  <TabItem value="curl" label="curl" default>
+    ```bash
+    promptfoo init
+    ```
+  </TabItem>
+  <TabItem value="npm" label="npm">
     ```bash
     promptfoo init
     ```
@@ -96,7 +109,7 @@ After installation, you can start using promptfoo by running:
   </TabItem>
 </Tabs>
 
-This will create a `promptfooconfig.yaml` placeholder in your current directory.
+This creates a `promptfooconfig.yaml` placeholder in your current directory.
 
 For more detailed usage instructions, please refer to our [Getting Started guide](./getting-started.md).
 

@@ -1,0 +1,10 @@
+# Generated during build
+src/promptfoo/_bin/
+dist/
+build/
+*.egg-info/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo

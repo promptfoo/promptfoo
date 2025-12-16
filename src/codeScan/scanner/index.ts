@@ -132,7 +132,7 @@ export async function executeScan(repoPath: string, options: ScanOptions): Promi
     cleanupRefs.abortController = abortController; // Update ref for signal handlers
 
     // Resolve auth credentials for socket.io
-    const auth = resolveAuthCredentials(options.apiKey);
+    const auth = await resolveAuthCredentials(options.apiKey);
 
     // Determine API host URL
     const apiHost = resolveApiHost(options, config);
