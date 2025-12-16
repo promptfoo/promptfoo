@@ -1,4 +1,4 @@
-import { Mock, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as fs from 'fs';
 import {
   GoogleVideoProvider,
@@ -10,11 +10,19 @@ import {
   validateDuration,
   validateResolution,
 } from '../../../src/providers/google/video';
-import { fetchWithProxy } from '../../../src/util/fetch/index';
+
+// Mock the Google client
+const mockRequest = vi.fn();
+const mockGetGoogleClient = vi.fn().mockResolvedValue({
+  client: { request: mockRequest },
+  projectId: 'test-project',
+});
 
 vi.mock('fs');
-vi.mock('../../../src/util/fetch/index', () => ({
-  fetchWithProxy: vi.fn(),
+vi.mock('../../../src/providers/google/util', () => ({
+  getGoogleClient: () => mockGetGoogleClient(),
+  loadCredentials: vi.fn((creds) => creds),
+  resolveProjectId: vi.fn().mockResolvedValue('test-project'),
 }));
 
 vi.mock('../../../src/util/config/manage', () => ({
@@ -30,14 +38,12 @@ vi.mock('../../../src/logger', () => ({
   },
 }));
 
-const mockFetchWithProxy = fetchWithProxy as Mock;
-
 describe('GoogleVideoProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    process.env.GOOGLE_API_KEY = 'test-api-key';
-    delete process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-    delete process.env.GEMINI_API_KEY;
+    mockRequest.mockReset();
+    process.env.GOOGLE_PROJECT_ID = 'test-project';
+    delete process.env.VERTEX_PROJECT_ID;
 
     // Default mock for fs.existsSync - no cache
     vi.mocked(fs.existsSync).mockReturnValue(false);
@@ -46,9 +52,8 @@ describe('GoogleVideoProvider', () => {
   });
 
   afterEach(() => {
-    delete process.env.GOOGLE_API_KEY;
-    delete process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-    delete process.env.GEMINI_API_KEY;
+    delete process.env.GOOGLE_PROJECT_ID;
+    delete process.env.VERTEX_PROJECT_ID;
   });
 
   describe('constructor and id', () => {
@@ -207,13 +212,15 @@ describe('GoogleVideoProvider', () => {
   });
 
   describe('callApi', () => {
-    it('should return error when API key is missing', async () => {
-      delete process.env.GOOGLE_API_KEY;
+    it('should return error when project ID is missing', async () => {
+      delete process.env.GOOGLE_PROJECT_ID;
+      delete process.env.VERTEX_PROJECT_ID;
       const provider = new GoogleVideoProvider('veo-3.1-generate-preview');
 
       const result = await provider.callApi('Test prompt');
 
-      expect(result.error).toContain('Google API key is not set');
+      expect(result.error).toContain('Google Veo video generation requires Vertex AI');
+      expect(result.error).toContain('GOOGLE_PROJECT_ID');
     });
 
     it('should return error when prompt is empty', async () => {
@@ -259,50 +266,42 @@ describe('GoogleVideoProvider', () => {
       expect(result.latencyMs).toBe(0);
       expect(result.output).toContain('[Video:');
       expect(result.video).toBeDefined();
-      expect(mockFetchWithProxy).not.toHaveBeenCalled();
+      expect(mockRequest).not.toHaveBeenCalled();
     });
 
     it('should create video job and poll for completion', async () => {
-      const operationName = 'operations/test-operation-id';
-      const videoUri = 'https://storage.googleapis.com/video.mp4';
+      const operationName =
+        'projects/test-project/locations/us-central1/publishers/google/models/veo-3.1-generate-preview/operations/test-op';
+      // Base64 encoded MP4 header (simplified for test)
+      const base64Video = Buffer.from('fake mp4 video data').toString('base64');
 
       // Mock job creation
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
+      mockRequest.mockResolvedValueOnce({
+        data: {
           name: operationName,
           done: false,
-        }),
+        },
       });
 
       // Mock polling - not done yet
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
+      mockRequest.mockResolvedValueOnce({
+        data: {
           name: operationName,
           done: false,
           metadata: { progress: 50 },
-        }),
+        },
       });
 
-      // Mock polling - done
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
+      // Mock polling - done with base64 video
+      mockRequest.mockResolvedValueOnce({
+        data: {
           name: operationName,
           done: true,
           response: {
-            generateVideoResponse: {
-              generatedSamples: [{ video: { uri: videoUri } }],
-            },
+            '@type': 'type.googleapis.com/cloud.ai.large_models.vision.GenerateVideoResponse',
+            videos: [{ bytesBase64Encoded: base64Video }],
           },
-        }),
-      });
-
-      // Mock video download
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        arrayBuffer: async () => new ArrayBuffer(100),
+        },
       });
 
       const provider = new GoogleVideoProvider('veo-3.1-generate-preview', {
@@ -320,47 +319,46 @@ describe('GoogleVideoProvider', () => {
       expect(result.video).toBeDefined();
       expect(result.video?.format).toBe('mp4');
       expect(result.video?.model).toBe('veo-3.1-generate-preview');
-      expect(mockFetchWithProxy).toHaveBeenCalledTimes(4);
+      // 3 requests: job creation, 2 polls (one in progress, one done)
+      expect(mockRequest).toHaveBeenCalledTimes(3);
     });
 
     it('should handle API error on job creation', async () => {
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: false,
-        status: 400,
-        statusText: 'Bad Request',
-        json: async () => ({
-          error: { message: 'Invalid prompt' },
-        }),
+      mockRequest.mockRejectedValueOnce({
+        response: {
+          data: {
+            error: { message: 'Invalid prompt' },
+          },
+        },
       });
 
       const provider = new GoogleVideoProvider('veo-3.1-generate-preview');
 
       const result = await provider.callApi('Test prompt');
 
-      expect(result.error).toContain('API error 400');
+      expect(result.error).toContain('Failed to create video job');
       expect(result.error).toContain('Invalid prompt');
     });
 
     it('should handle polling timeout', async () => {
-      const operationName = 'operations/test-operation-id';
+      const operationName =
+        'projects/test-project/locations/us-central1/publishers/google/models/veo-3.1-generate-preview/operations/test-op';
 
       // Mock job creation
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
+      mockRequest.mockResolvedValueOnce({
+        data: {
           name: operationName,
           done: false,
-        }),
+        },
       });
 
       // Mock polling - always not done
-      mockFetchWithProxy.mockResolvedValue({
-        ok: true,
-        json: async () => ({
+      mockRequest.mockResolvedValue({
+        data: {
           name: operationName,
           done: false,
           metadata: { progress: 10 },
-        }),
+        },
       });
 
       const provider = new GoogleVideoProvider('veo-3.1-generate-preview', {
@@ -376,28 +374,27 @@ describe('GoogleVideoProvider', () => {
     });
 
     it('should handle video generation error', async () => {
-      const operationName = 'operations/test-operation-id';
+      const operationName =
+        'projects/test-project/locations/us-central1/publishers/google/models/veo-3.1-generate-preview/operations/test-op';
 
       // Mock job creation
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
+      mockRequest.mockResolvedValueOnce({
+        data: {
           name: operationName,
           done: false,
-        }),
+        },
       });
 
       // Mock polling - error
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
+      mockRequest.mockResolvedValueOnce({
+        data: {
           name: operationName,
           done: true,
           error: {
             code: 400,
             message: 'Content policy violation',
           },
-        }),
+        },
       });
 
       const provider = new GoogleVideoProvider('veo-3.1-generate-preview', {
@@ -412,23 +409,22 @@ describe('GoogleVideoProvider', () => {
       expect(result.error).toContain('Content policy violation');
     });
 
-    it('should handle download error', async () => {
-      const operationName = 'operations/test-operation-id';
+    it('should handle download error for legacy URI format', async () => {
+      const operationName =
+        'projects/test-project/locations/us-central1/publishers/google/models/veo-3.1-generate-preview/operations/test-op';
       const videoUri = 'https://storage.googleapis.com/video.mp4';
 
       // Mock job creation
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
+      mockRequest.mockResolvedValueOnce({
+        data: {
           name: operationName,
           done: false,
-        }),
+        },
       });
 
-      // Mock polling - done
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
+      // Mock polling - done with legacy URI format
+      mockRequest.mockResolvedValueOnce({
+        data: {
           name: operationName,
           done: true,
           response: {
@@ -436,14 +432,12 @@ describe('GoogleVideoProvider', () => {
               generatedSamples: [{ video: { uri: videoUri } }],
             },
           },
-        }),
+        },
       });
 
       // Mock video download - error
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: false,
-        status: 404,
-        statusText: 'Not Found',
+      mockRequest.mockRejectedValueOnce({
+        message: 'Network error',
       });
 
       const provider = new GoogleVideoProvider('veo-3.1-generate-preview', {
@@ -454,26 +448,31 @@ describe('GoogleVideoProvider', () => {
 
       const result = await provider.callApi('Test prompt');
 
-      expect(result.error).toContain('Failed to download video');
+      expect(result.error).toContain('Download error');
     });
 
     it('should include config options in API request', async () => {
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          name: 'operations/test',
-          done: true,
-          response: {
-            generateVideoResponse: {
-              generatedSamples: [{ video: { uri: 'https://storage.googleapis.com/video.mp4' } }],
-            },
-          },
-        }),
+      const operationName =
+        'projects/test-project/locations/us-central1/publishers/google/models/veo-3.1-generate-preview/operations/test-op';
+      const base64Video = Buffer.from('fake video').toString('base64');
+
+      // Mock job creation
+      mockRequest.mockResolvedValueOnce({
+        data: {
+          name: operationName,
+          done: false,
+        },
       });
 
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        arrayBuffer: async () => new ArrayBuffer(100),
+      // Mock polling - done
+      mockRequest.mockResolvedValueOnce({
+        data: {
+          name: operationName,
+          done: true,
+          response: {
+            videos: [{ bytesBase64Encoded: base64Video }],
+          },
+        },
       });
 
       const provider = new GoogleVideoProvider('veo-3.1-generate-preview', {
@@ -484,13 +483,16 @@ describe('GoogleVideoProvider', () => {
           negativePrompt: 'blur, noise',
           personGeneration: 'dont_allow',
           seed: 12345,
+          pollIntervalMs: 10,
         },
       });
 
       await provider.callApi('Test prompt');
 
-      const [, options] = mockFetchWithProxy.mock.calls[0];
-      const body = JSON.parse(options.body);
+      // First call is job creation
+      expect(mockRequest).toHaveBeenCalled();
+      const firstCallOptions = mockRequest.mock.calls[0][0];
+      const body = JSON.parse(firstCallOptions.body);
 
       expect(body.instances[0].aspectRatio).toBe('9:16');
       expect(body.instances[0].resolution).toBe('720p');
@@ -509,35 +511,27 @@ describe('GoogleVideoProvider', () => {
       // 1. Creating output directory - return false so it creates it
       vi.mocked(fs.existsSync).mockReturnValue(false);
 
-      const videoUri = 'https://storage.googleapis.com/video.mp4';
+      const operationName =
+        'projects/test-project/locations/us-central1/publishers/google/models/veo-3.1-generate-preview/operations/test-op';
+      const base64Video = Buffer.from('fake video').toString('base64');
 
       // Mock job creation (POST)
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          name: 'operations/test',
+      mockRequest.mockResolvedValueOnce({
+        data: {
+          name: operationName,
           done: false,
-        }),
+        },
       });
 
-      // Mock polling (GET) - returns done with video
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          name: 'operations/test',
+      // Mock polling (POST) - returns done with video
+      mockRequest.mockResolvedValueOnce({
+        data: {
+          name: operationName,
           done: true,
           response: {
-            generateVideoResponse: {
-              generatedSamples: [{ video: { uri: videoUri } }],
-            },
+            videos: [{ bytesBase64Encoded: base64Video }],
           },
-        }),
-      });
-
-      // Mock download
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        arrayBuffer: async () => new ArrayBuffer(100),
+        },
       });
 
       const provider = new GoogleVideoProvider('veo-3.1-generate-preview', {
@@ -549,14 +543,14 @@ describe('GoogleVideoProvider', () => {
 
       const result = await provider.callApi('Continue the video');
 
-      // Should NOT return cached result - fetch should have been called
-      expect(mockFetchWithProxy).toHaveBeenCalled();
+      // Should NOT return cached result - request should have been called
+      expect(mockRequest).toHaveBeenCalled();
       expect(result.error).toBeUndefined();
       expect(result.cached).toBe(false);
 
       // Should include video extension in request
-      const [, options] = mockFetchWithProxy.mock.calls[0];
-      const body = JSON.parse(options.body);
+      const firstCallOptions = mockRequest.mock.calls[0][0];
+      const body = JSON.parse(firstCallOptions.body);
       expect(body.instances[0].video).toEqual({ operationName: 'previous-operation-id' });
     });
   });
@@ -571,34 +565,40 @@ describe('GoogleVideoProvider', () => {
       });
       vi.mocked(fs.readFileSync).mockReturnValue(Buffer.from('fake-image-data'));
 
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          name: 'operations/test',
-          done: true,
-          response: {
-            generateVideoResponse: {
-              generatedSamples: [{ video: { uri: 'https://storage.googleapis.com/video.mp4' } }],
-            },
-          },
-        }),
+      const operationName =
+        'projects/test-project/locations/us-central1/publishers/google/models/veo-3.1-generate-preview/operations/test-op';
+      const base64Video = Buffer.from('fake video').toString('base64');
+
+      // Mock job creation
+      mockRequest.mockResolvedValueOnce({
+        data: {
+          name: operationName,
+          done: false,
+        },
       });
 
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        arrayBuffer: async () => new ArrayBuffer(100),
+      // Mock polling - done
+      mockRequest.mockResolvedValueOnce({
+        data: {
+          name: operationName,
+          done: true,
+          response: {
+            videos: [{ bytesBase64Encoded: base64Video }],
+          },
+        },
       });
 
       const provider = new GoogleVideoProvider('veo-3.1-generate-preview', {
         config: {
           image: 'file:///path/to/image.png',
+          pollIntervalMs: 10,
         },
       });
 
       await provider.callApi('Animate this image');
 
-      const [, options] = mockFetchWithProxy.mock.calls[0];
-      const body = JSON.parse(options.body);
+      const firstCallOptions = mockRequest.mock.calls[0][0];
+      const body = JSON.parse(firstCallOptions.body);
 
       expect(body.instances[0].image).toEqual({
         imageBytes: 'ZmFrZS1pbWFnZS1kYXRh', // base64 of 'fake-image-data'
@@ -631,22 +631,27 @@ describe('GoogleVideoProvider', () => {
       });
       vi.mocked(fs.readFileSync).mockReturnValue(Buffer.from('ref-image-data'));
 
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          name: 'operations/test',
-          done: true,
-          response: {
-            generateVideoResponse: {
-              generatedSamples: [{ video: { uri: 'https://storage.googleapis.com/video.mp4' } }],
-            },
-          },
-        }),
+      const operationName =
+        'projects/test-project/locations/us-central1/publishers/google/models/veo-3.1-generate-preview/operations/test-op';
+      const base64Video = Buffer.from('fake video').toString('base64');
+
+      // Mock job creation
+      mockRequest.mockResolvedValueOnce({
+        data: {
+          name: operationName,
+          done: false,
+        },
       });
 
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        arrayBuffer: async () => new ArrayBuffer(100),
+      // Mock polling - done with base64 video
+      mockRequest.mockResolvedValueOnce({
+        data: {
+          name: operationName,
+          done: true,
+          response: {
+            videos: [{ bytesBase64Encoded: base64Video }],
+          },
+        },
       });
 
       const provider = new GoogleVideoProvider('veo-3.1-generate-preview', {
@@ -655,13 +660,14 @@ describe('GoogleVideoProvider', () => {
             { image: 'file:///path/to/ref1.png', referenceType: 'asset' },
             { image: 'file:///path/to/ref2.png', referenceType: 'asset' },
           ],
+          pollIntervalMs: 10,
         },
       });
 
       await provider.callApi('Generate with references');
 
-      const [, options] = mockFetchWithProxy.mock.calls[0];
-      const body = JSON.parse(options.body);
+      const firstCallOptions = mockRequest.mock.calls[0][0];
+      const body = JSON.parse(firstCallOptions.body);
 
       expect(body.instances[0].referenceImages).toHaveLength(2);
       expect(body.instances[0].referenceImages[0].referenceType).toBe('asset');
@@ -682,22 +688,27 @@ describe('GoogleVideoProvider', () => {
       });
       vi.mocked(fs.readFileSync).mockReturnValue(Buffer.from('ref-image-data'));
 
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          name: 'operations/test',
-          done: true,
-          response: {
-            generateVideoResponse: {
-              generatedSamples: [{ video: { uri: 'https://storage.googleapis.com/video.mp4' } }],
-            },
-          },
-        }),
+      const operationName =
+        'projects/test-project/locations/us-central1/publishers/google/models/veo-3.1-generate-preview/operations/test-op';
+      const base64Video = Buffer.from('fake video').toString('base64');
+
+      // Mock job creation
+      mockRequest.mockResolvedValueOnce({
+        data: {
+          name: operationName,
+          done: false,
+        },
       });
 
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        arrayBuffer: async () => new ArrayBuffer(100),
+      // Mock polling - done with base64 video
+      mockRequest.mockResolvedValueOnce({
+        data: {
+          name: operationName,
+          done: true,
+          response: {
+            videos: [{ bytesBase64Encoded: base64Video }],
+          },
+        },
       });
 
       const provider = new GoogleVideoProvider('veo-3.1-generate-preview', {
@@ -708,14 +719,15 @@ describe('GoogleVideoProvider', () => {
             { image: 'file:///path/to/ref3.png', referenceType: 'asset' },
             { image: 'file:///path/to/ref4.png', referenceType: 'asset' }, // Should be ignored
           ],
+          pollIntervalMs: 10,
         },
       });
 
       await provider.callApi('Generate with references');
 
-      expect(mockFetchWithProxy).toHaveBeenCalled();
-      const [, options] = mockFetchWithProxy.mock.calls[0];
-      const body = JSON.parse(options.body);
+      expect(mockRequest).toHaveBeenCalled();
+      const firstCallOptions = mockRequest.mock.calls[0][0];
+      const body = JSON.parse(firstCallOptions.body);
 
       expect(body.instances[0].referenceImages).toHaveLength(3);
     });
@@ -731,129 +743,44 @@ describe('GoogleVideoProvider', () => {
       });
       vi.mocked(fs.readFileSync).mockReturnValue(Buffer.from('frame-data'));
 
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          name: 'operations/test',
-          done: true,
-          response: {
-            generateVideoResponse: {
-              generatedSamples: [{ video: { uri: 'https://storage.googleapis.com/video.mp4' } }],
-            },
-          },
-        }),
+      const operationName =
+        'projects/test-project/locations/us-central1/publishers/google/models/veo-3.1-generate-preview/operations/test-op';
+      const base64Video = Buffer.from('fake video').toString('base64');
+
+      // Mock job creation
+      mockRequest.mockResolvedValueOnce({
+        data: {
+          name: operationName,
+          done: false,
+        },
       });
 
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        arrayBuffer: async () => new ArrayBuffer(100),
+      // Mock polling - done with base64 video
+      mockRequest.mockResolvedValueOnce({
+        data: {
+          name: operationName,
+          done: true,
+          response: {
+            videos: [{ bytesBase64Encoded: base64Video }],
+          },
+        },
       });
 
       const provider = new GoogleVideoProvider('veo-3.1-generate-preview', {
         config: {
           image: 'file:///path/to/first.png',
           lastFrame: 'file:///path/to/last.png',
+          pollIntervalMs: 10,
         },
       });
 
       await provider.callApi('Interpolate between frames');
 
-      const [, options] = mockFetchWithProxy.mock.calls[0];
-      const body = JSON.parse(options.body);
+      const firstCallOptions = mockRequest.mock.calls[0][0];
+      const body = JSON.parse(firstCallOptions.body);
 
       expect(body.instances[0].image).toBeDefined();
       expect(body.instances[0].lastFrame).toBeDefined();
-    });
-  });
-
-  describe('API key handling', () => {
-    it('should use GOOGLE_API_KEY', async () => {
-      process.env.GOOGLE_API_KEY = 'google-key';
-
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          name: 'operations/test',
-          done: true,
-          response: {
-            generateVideoResponse: {
-              generatedSamples: [{ video: { uri: 'https://storage.googleapis.com/video.mp4' } }],
-            },
-          },
-        }),
-      });
-
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        arrayBuffer: async () => new ArrayBuffer(100),
-      });
-
-      const provider = new GoogleVideoProvider('veo-3.1-generate-preview');
-      await provider.callApi('Test');
-
-      const [, options] = mockFetchWithProxy.mock.calls[0];
-      expect(options.headers['x-goog-api-key']).toBe('google-key');
-    });
-
-    it('should use GEMINI_API_KEY as fallback', async () => {
-      delete process.env.GOOGLE_API_KEY;
-      process.env.GEMINI_API_KEY = 'gemini-key';
-
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          name: 'operations/test',
-          done: true,
-          response: {
-            generateVideoResponse: {
-              generatedSamples: [{ video: { uri: 'https://storage.googleapis.com/video.mp4' } }],
-            },
-          },
-        }),
-      });
-
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        arrayBuffer: async () => new ArrayBuffer(100),
-      });
-
-      const provider = new GoogleVideoProvider('veo-3.1-generate-preview');
-      await provider.callApi('Test');
-
-      const [, options] = mockFetchWithProxy.mock.calls[0];
-      expect(options.headers['x-goog-api-key']).toBe('gemini-key');
-    });
-
-    it('should use config apiKey over environment', async () => {
-      process.env.GOOGLE_API_KEY = 'env-key';
-
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          name: 'operations/test',
-          done: true,
-          response: {
-            generateVideoResponse: {
-              generatedSamples: [{ video: { uri: 'https://storage.googleapis.com/video.mp4' } }],
-            },
-          },
-        }),
-      });
-
-      mockFetchWithProxy.mockResolvedValueOnce({
-        ok: true,
-        arrayBuffer: async () => new ArrayBuffer(100),
-      });
-
-      const provider = new GoogleVideoProvider('veo-3.1-generate-preview', {
-        config: {
-          apiKey: 'config-key',
-        },
-      });
-      await provider.callApi('Test');
-
-      const [, options] = mockFetchWithProxy.mock.calls[0];
-      expect(options.headers['x-goog-api-key']).toBe('config-key');
     });
   });
 });

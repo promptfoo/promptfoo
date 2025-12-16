@@ -6,9 +6,9 @@ import { v4 as uuidv4 } from 'uuid';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { getConfigDirectoryPath } from '../../util/config/manage';
-import { fetchWithProxy } from '../../util/fetch/index';
 import { ellipsize } from '../../util/text';
 import { sleep } from '../../util/time';
+import { getGoogleClient, loadCredentials, resolveProjectId } from './util';
 
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/index';
 import type { EnvOverrides } from '../../types/env';
@@ -25,10 +25,9 @@ import type {
 // =============================================================================
 
 /**
- * Default API host for Gemini/Veo
+ * Default location for Vertex AI
  */
-const DEFAULT_API_HOST = 'https://generativelanguage.googleapis.com';
-const API_VERSION = 'v1beta';
+const DEFAULT_LOCATION = 'us-central1';
 
 /**
  * Valid durations by model family
@@ -186,20 +185,29 @@ export class GoogleVideoProvider implements ApiProvider {
     return `[Google Video Provider ${this.modelName}]`;
   }
 
-  private getApiKey(): string | undefined {
+  private getLocation(): string {
     return (
-      this.config.apiKey ||
-      getEnvString('GOOGLE_API_KEY') ||
-      getEnvString('GOOGLE_GENERATIVE_AI_API_KEY') ||
-      getEnvString('GEMINI_API_KEY') ||
-      this.env?.GOOGLE_API_KEY ||
-      this.env?.GOOGLE_GENERATIVE_AI_API_KEY ||
-      this.env?.GEMINI_API_KEY
+      this.config.region ||
+      getEnvString('GOOGLE_LOCATION') ||
+      this.env?.GOOGLE_LOCATION ||
+      DEFAULT_LOCATION
     );
   }
 
-  private getApiHost(): string {
-    return this.config.apiHost || DEFAULT_API_HOST;
+  private async getProjectId(): Promise<string> {
+    return await resolveProjectId(this.config, this.env);
+  }
+
+  private async getClientWithCredentials() {
+    const credentials = loadCredentials(this.config.credentials);
+    const { client } = await getGoogleClient({ credentials });
+    return client;
+  }
+
+  private async getVertexEndpoint(action: string = 'predictLongRunning'): Promise<string> {
+    const location = this.getLocation();
+    const projectId = await this.getProjectId();
+    return `https://${location}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${location}/publishers/google/models/${this.modelName}:${action}`;
   }
 
   /**
@@ -223,7 +231,7 @@ export class GoogleVideoProvider implements ApiProvider {
     prompt: string,
     config: GoogleVideoOptions,
   ): Promise<{ operation?: GoogleVideoOperation; error?: string }> {
-    const url = `${this.getApiHost()}/${API_VERSION}/models/${this.modelName}:predictLongRunning`;
+    const url = await this.getVertexEndpoint('predictLongRunning');
 
     // Build the instance object
     const instance: Record<string, unknown> = {
@@ -300,38 +308,34 @@ export class GoogleVideoProvider implements ApiProvider {
     };
 
     try {
+      const client = await this.getClientWithCredentials();
       logger.debug('[Google Video] Creating video job', { url, model: this.modelName });
 
-      const response = await fetchWithProxy(url, {
+      const response = await client.request({
+        url,
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-goog-api-key': this.getApiKey()!,
         },
         body: JSON.stringify(body),
       });
 
-      if (!response.ok) {
-        const errorData = (await response.json().catch(() => ({}))) as {
-          error?: { message?: string };
-        };
-        const errorMessage = errorData.error?.message || response.statusText;
-        return {
-          error: `API error ${response.status}: ${errorMessage}`,
-        };
-      }
-
-      const operation = (await response.json()) as GoogleVideoOperation;
+      const operation = response.data as GoogleVideoOperation;
       return { operation };
     } catch (err) {
+      const error = err as {
+        message?: string;
+        response?: { data?: { error?: { message?: string } } };
+      };
+      const errorMessage = error.response?.data?.error?.message || error.message || String(err);
       return {
-        error: `Failed to create video job: ${String(err)}`,
+        error: `Failed to create video job: ${errorMessage}`,
       };
     }
   }
 
   /**
-   * Poll for video job completion
+   * Poll for video job completion using fetchPredictOperation endpoint
    */
   private async pollOperationStatus(
     operationName: string,
@@ -339,28 +343,31 @@ export class GoogleVideoProvider implements ApiProvider {
     maxPollTimeMs: number,
   ): Promise<{ operation?: GoogleVideoOperation; error?: string }> {
     const startTime = Date.now();
-    const url = `${this.getApiHost()}/${API_VERSION}/${operationName}`;
+    const location = this.getLocation();
+    const projectId = await this.getProjectId();
+
+    // Veo uses fetchPredictOperation endpoint for polling (POST request)
+    // https://docs.cloud.google.com/vertex-ai/generative-ai/docs/model-reference/veo-video-generation
+    const url = `https://${location}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${location}/publishers/google/models/${this.modelName}:fetchPredictOperation`;
+
+    logger.debug(`[Google Video] Polling operation via fetchPredictOperation: ${url}`);
+
+    const client = await this.getClientWithCredentials();
 
     while (Date.now() - startTime < maxPollTimeMs) {
       try {
-        const response = await fetchWithProxy(url, {
-          method: 'GET',
+        const response = await client.request({
+          url,
+          method: 'POST',
           headers: {
-            'x-goog-api-key': this.getApiKey()!,
+            'Content-Type': 'application/json',
           },
+          body: JSON.stringify({
+            operationName,
+          }),
         });
 
-        if (!response.ok) {
-          const errorData = (await response.json().catch(() => ({}))) as {
-            error?: { message?: string };
-          };
-          const errorMessage = errorData.error?.message || response.statusText;
-          return {
-            error: `Status check failed: ${errorMessage}`,
-          };
-        }
-
-        const operation = (await response.json()) as GoogleVideoOperation;
+        const operation = response.data as GoogleVideoOperation;
 
         logger.debug(
           `[Google Video] Operation status: done=${operation.done}, progress=${operation.metadata?.progress}%`,
@@ -377,8 +384,13 @@ export class GoogleVideoProvider implements ApiProvider {
 
         await sleep(pollIntervalMs);
       } catch (err) {
+        const error = err as {
+          message?: string;
+          response?: { data?: { error?: { message?: string } } };
+        };
+        const errorMessage = error.response?.data?.error?.message || error.message || String(err);
         return {
-          error: `Polling error: ${String(err)}`,
+          error: `Polling error: ${errorMessage}`,
         };
       }
     }
@@ -396,22 +408,16 @@ export class GoogleVideoProvider implements ApiProvider {
     outputUuid: string,
   ): Promise<{ filePath?: string; apiPath?: string; error?: string }> {
     try {
-      // The video URI requires the API key for authentication
-      const separator = videoUri.includes('?') ? '&' : '?';
-      const url = `${videoUri}${separator}key=${this.getApiKey()}`;
+      const client = await this.getClientWithCredentials();
 
-      const response = await fetchWithProxy(url, {
+      // Use authenticated request to download video
+      const response = await client.request({
+        url: videoUri,
         method: 'GET',
-        redirect: 'follow',
+        responseType: 'arraybuffer',
       });
 
-      if (!response.ok) {
-        return {
-          error: `Failed to download video: ${response.status} ${response.statusText}`,
-        };
-      }
-
-      const buffer = Buffer.from(await response.arrayBuffer());
+      const buffer = Buffer.from(response.data as ArrayBuffer);
       const filePath = getVideoFilePath(outputUuid);
       fs.writeFileSync(filePath, buffer);
 
@@ -420,18 +426,50 @@ export class GoogleVideoProvider implements ApiProvider {
 
       return { filePath, apiPath };
     } catch (err) {
+      const error = err as { message?: string };
       return {
-        error: `Download error: ${String(err)}`,
+        error: `Download error: ${error.message || String(err)}`,
+      };
+    }
+  }
+
+  /**
+   * Save base64 encoded video to file
+   */
+  private saveBase64Video(
+    base64Data: string,
+    outputUuid: string,
+  ): { filePath?: string; apiPath?: string; error?: string } {
+    try {
+      const buffer = Buffer.from(base64Data, 'base64');
+      const filePath = getVideoFilePath(outputUuid);
+      fs.writeFileSync(filePath, buffer);
+
+      const apiPath = getVideoApiPath(outputUuid);
+      logger.debug(`[Google Video] Saved base64 video to ${filePath} (API: ${apiPath})`);
+
+      return { filePath, apiPath };
+    } catch (err) {
+      const error = err as { message?: string };
+      return {
+        error: `Save error: ${error.message || String(err)}`,
       };
     }
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
-    const apiKey = this.getApiKey();
-    if (!apiKey) {
+    // Check for project ID (required for Vertex AI)
+    const projectId =
+      this.config.projectId ||
+      getEnvString('GOOGLE_PROJECT_ID') ||
+      getEnvString('VERTEX_PROJECT_ID') ||
+      this.env?.GOOGLE_PROJECT_ID ||
+      this.env?.VERTEX_PROJECT_ID;
+
+    if (!projectId) {
       return {
         error:
-          'Google API key is not set. Set GOOGLE_API_KEY, GOOGLE_GENERATIVE_AI_API_KEY, or GEMINI_API_KEY environment variable or add `apiKey` to the provider config.',
+          'Google Veo video generation requires Vertex AI. Set GOOGLE_PROJECT_ID environment variable or add `projectId` to the provider config, then run "gcloud auth application-default login".',
       };
     }
 
@@ -552,25 +590,46 @@ export class GoogleVideoProvider implements ApiProvider {
       return { error: pollError || 'Polling failed' };
     }
 
-    // Extract video URI
-    const videoUri = completedOp.response?.generateVideoResponse?.generatedSamples?.[0]?.video?.uri;
-    if (!videoUri) {
-      return { error: 'No video URI in response' };
-    }
-
     // Step 3: Create output directory
     const outputUuid = createVideoOutputDirectory(cacheKey);
     logger.debug(`[Google Video] Created video output directory: ${outputUuid}`);
 
-    // Step 4: Download video
-    const {
-      apiPath: videoApiPath,
-      filePath: videoPath,
-      error: downloadError,
-    } = await this.downloadVideo(videoUri, outputUuid);
+    let videoApiPath: string | undefined;
+    let videoPath: string | undefined;
 
-    if (downloadError || !videoApiPath) {
-      return { error: downloadError || 'Failed to download video' };
+    // Check for base64 encoded video (new format)
+    const base64Video = completedOp.response?.videos?.[0]?.bytesBase64Encoded;
+    if (base64Video) {
+      logger.debug(`[Google Video] Saving base64 encoded video...`);
+      const { apiPath, filePath, error } = this.saveBase64Video(base64Video, outputUuid);
+      if (error) {
+        return { error };
+      }
+      videoApiPath = apiPath;
+      videoPath = filePath;
+    } else {
+      // Fallback to URI format (legacy)
+      const videoUri =
+        completedOp.response?.generateVideoResponse?.generatedSamples?.[0]?.video?.uri;
+      if (!videoUri) {
+        logger.debug(`[Google Video] Response: ${JSON.stringify(completedOp.response)}`);
+        return { error: 'No video data in response' };
+      }
+
+      const {
+        apiPath,
+        filePath,
+        error: downloadError,
+      } = await this.downloadVideo(videoUri, outputUuid);
+      if (downloadError) {
+        return { error: downloadError };
+      }
+      videoApiPath = apiPath;
+      videoPath = filePath;
+    }
+
+    if (!videoApiPath) {
+      return { error: 'Failed to save video' };
     }
 
     const latencyMs = Date.now() - startTime;

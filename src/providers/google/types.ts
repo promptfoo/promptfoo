@@ -398,9 +398,10 @@ export interface GoogleVideoOptions {
   pollIntervalMs?: number; // Default: 10000 (10 seconds)
   maxPollTimeMs?: number; // Default: 600000 (10 minutes)
 
-  // API configuration
-  apiKey?: string;
-  apiHost?: string;
+  // Vertex AI configuration
+  projectId?: string; // Google Cloud project ID
+  region?: string; // Vertex AI region (default: us-central1)
+  credentials?: string; // Path to credentials file or JSON string
 }
 
 /**
@@ -408,11 +409,17 @@ export interface GoogleVideoOptions {
  */
 export interface GoogleVideoOperation {
   name: string;
-  done: boolean;
+  done?: boolean;
   metadata?: {
     progress?: number;
   };
   response?: {
+    '@type'?: string;
+    // New format: videos array with base64 encoded video
+    videos?: Array<{
+      bytesBase64Encoded: string;
+    }>;
+    // Legacy format with URI
     generateVideoResponse?: {
       generatedSamples: Array<{
         video: {
@@ -420,6 +427,7 @@ export interface GoogleVideoOperation {
         };
       }>;
     };
+    raiMediaFilteredCount?: number;
   };
   error?: {
     code: number;
