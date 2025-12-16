@@ -330,6 +330,9 @@ export async function startServer(
     // Always invalidate the prompts cache when any eval update signal is received.
     // This ensures new prompts are visible even before results are added.
     allPrompts = null;
+    logger.debug(
+      `Invalidated prompts cache for eval: ${updatedEval?.config?.description || updatedEval?.id || 'unknown'}`,
+    );
 
     const results = await updatedEval?.getResultsCount();
 
