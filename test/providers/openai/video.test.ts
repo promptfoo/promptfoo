@@ -589,7 +589,7 @@ describe('OpenAiVideoProvider', () => {
 
       expect(result).toBe(true);
       expect(fs.existsSync).toHaveBeenCalledWith(
-        expect.stringContaining('test-cache-key/video.mp4'),
+        expect.stringMatching(/test-cache-key[/\\]video\.mp4/),
       );
     });
 
