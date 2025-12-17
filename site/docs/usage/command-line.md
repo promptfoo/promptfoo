@@ -272,10 +272,10 @@ Deletes a specific resource.
 
 Import an eval file from JSON format.
 
-| Option     | Description                                                                           |
-| ---------- | ------------------------------------------------------------------------------------- |
-| `--new-id` | Generate a new eval ID instead of preserving the original (creates a duplicate eval)  |
-| `--force`  | Replace an existing eval with the same ID                                             |
+| Option     | Description                                                                          |
+| ---------- | ------------------------------------------------------------------------------------ |
+| `--new-id` | Generate a new eval ID instead of preserving the original (creates a duplicate eval) |
+| `--force`  | Replace an existing eval with the same ID                                            |
 
 When importing an eval, the following data is preserved from the export:
 
