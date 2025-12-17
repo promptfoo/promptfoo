@@ -41,6 +41,40 @@ vi.mock('../../../src/redteam/remoteGeneration', async (importOriginal) => {
   };
 });
 
+// Tracing mocks
+const mockResolveTracingOptions = vi.hoisted(() =>
+  vi.fn(() => ({
+    enabled: false,
+    includeInAttack: true,
+    includeInGrading: true,
+    includeInternalSpans: false,
+    maxSpans: 50,
+    maxDepth: 5,
+    maxRetries: 3,
+    retryDelayMs: 500,
+    sanitizeAttributes: true,
+  })),
+);
+
+const mockFetchTraceContext = vi.hoisted(() => vi.fn());
+const mockFormatTraceSummary = vi.hoisted(() => vi.fn(() => 'Trace summary'));
+const mockFormatTraceForMetadata = vi.hoisted(() => vi.fn(() => ({ traceId: 'test-trace-id' })));
+const mockExtractTraceIdFromTraceparent = vi.hoisted(() => vi.fn(() => 'test-trace-id'));
+
+vi.mock('../../../src/redteam/providers/tracingOptions', () => ({
+  resolveTracingOptions: mockResolveTracingOptions,
+}));
+
+vi.mock('../../../src/tracing/traceContext', () => ({
+  fetchTraceContext: mockFetchTraceContext,
+  extractTraceIdFromTraceparent: mockExtractTraceIdFromTraceparent,
+}));
+
+vi.mock('../../../src/redteam/providers/traceFormatting', () => ({
+  formatTraceSummary: mockFormatTraceSummary,
+  formatTraceForMetadata: mockFormatTraceForMetadata,
+}));
+
 describe('RedteamIterativeMetaProvider', () => {
   let mockAgentProvider: Mocked<ApiProvider>;
   let mockGradingProvider: Mocked<ApiProvider>;
@@ -824,6 +858,306 @@ describe('RedteamIterativeMetaProvider', () => {
       expect(allCloudData).not.toContain('mongodb://');
       expect(allCloudData).not.toContain('API Key');
       expect(allCloudData).not.toContain('Password');
+    });
+  });
+
+  describe('Tracing Support', () => {
+    beforeEach(() => {
+      // Reset tracing mocks to default (disabled) state
+      mockResolveTracingOptions.mockReturnValue({
+        enabled: false,
+        includeInAttack: true,
+        includeInGrading: true,
+        includeInternalSpans: false,
+        maxSpans: 50,
+        maxDepth: 5,
+        maxRetries: 3,
+        retryDelayMs: 500,
+        sanitizeAttributes: true,
+      });
+      mockFetchTraceContext.mockReset();
+      mockFormatTraceSummary.mockReturnValue('Trace summary');
+      mockFormatTraceForMetadata.mockReturnValue({ traceId: 'test-trace-id' });
+    });
+
+    it('should NOT fetch trace context when tracing is disabled (default)', async () => {
+      const result = await runMetaAgentRedteam({
+        context: {
+          vars: { query: 'test' },
+          prompt: { raw: 'test', label: 'test' },
+          originalProvider: mockTargetProvider,
+          traceparent: '00-trace123-span456-01',
+        },
+        filters: undefined,
+        injectVar: 'query',
+        numIterations: 1,
+        options: undefined,
+        prompt: { raw: 'test', label: 'test' },
+        agentProvider: mockAgentProvider,
+        gradingProvider: mockGradingProvider,
+        targetProvider: mockTargetProvider,
+        test: undefined,
+        vars: { query: 'test' },
+      });
+
+      // Should NOT call fetchTraceContext when tracing is disabled
+      expect(mockFetchTraceContext).not.toHaveBeenCalled();
+
+      // Metadata should not have trace data
+      expect(result.metadata.traceSnapshots).toBeUndefined();
+      expect(result.metadata.redteamHistory[0].trace).toBeUndefined();
+      expect(result.metadata.redteamHistory[0].traceSummary).toBeUndefined();
+    });
+
+    it('should fetch trace context when tracing is enabled', async () => {
+      // Enable tracing
+      mockResolveTracingOptions.mockReturnValue({
+        enabled: true,
+        includeInAttack: true,
+        includeInGrading: true,
+        includeInternalSpans: false,
+        maxSpans: 50,
+        maxDepth: 5,
+        maxRetries: 3,
+        retryDelayMs: 500,
+        sanitizeAttributes: true,
+      });
+
+      // Mock trace context
+      mockFetchTraceContext.mockResolvedValue({
+        traceId: 'test-trace-id',
+        spans: [{ spanId: 'span1', name: 'test-span' }],
+        insights: ['Test insight'],
+        fetchedAt: Date.now(),
+      });
+
+      const result = await runMetaAgentRedteam({
+        context: {
+          vars: { query: 'test' },
+          prompt: { raw: 'test', label: 'test' },
+          originalProvider: mockTargetProvider,
+          traceparent: '00-trace123-span456-01',
+        },
+        filters: undefined,
+        injectVar: 'query',
+        numIterations: 1,
+        options: undefined,
+        prompt: { raw: 'test', label: 'test' },
+        agentProvider: mockAgentProvider,
+        gradingProvider: mockGradingProvider,
+        targetProvider: mockTargetProvider,
+        test: undefined,
+        vars: { query: 'test' },
+      });
+
+      // Should call fetchTraceContext
+      expect(mockFetchTraceContext).toHaveBeenCalled();
+
+      // Metadata should have trace data
+      expect(result.metadata.traceSnapshots).toBeDefined();
+      expect(result.metadata.traceSnapshots).toHaveLength(1);
+      expect(result.metadata.redteamHistory[0].trace).toBeDefined();
+      expect(result.metadata.redteamHistory[0].traceSummary).toBe('Trace summary');
+    });
+
+    it('should NOT fetch trace context when traceparent is missing', async () => {
+      // Enable tracing
+      mockResolveTracingOptions.mockReturnValue({
+        enabled: true,
+        includeInAttack: true,
+        includeInGrading: true,
+        includeInternalSpans: false,
+        maxSpans: 50,
+        maxDepth: 5,
+        maxRetries: 3,
+        retryDelayMs: 500,
+        sanitizeAttributes: true,
+      });
+
+      const result = await runMetaAgentRedteam({
+        context: {
+          vars: { query: 'test' },
+          prompt: { raw: 'test', label: 'test' },
+          originalProvider: mockTargetProvider,
+          // No traceparent
+        },
+        filters: undefined,
+        injectVar: 'query',
+        numIterations: 1,
+        options: undefined,
+        prompt: { raw: 'test', label: 'test' },
+        agentProvider: mockAgentProvider,
+        gradingProvider: mockGradingProvider,
+        targetProvider: mockTargetProvider,
+        test: undefined,
+        vars: { query: 'test' },
+      });
+
+      // Should NOT call fetchTraceContext when traceparent is missing
+      expect(mockFetchTraceContext).not.toHaveBeenCalled();
+
+      // Metadata should not have trace snapshots
+      expect(result.metadata.traceSnapshots).toBeUndefined();
+    });
+
+    it('should include trace summary in cloud request when includeInAttack is true', async () => {
+      const cloudRequests: any[] = [];
+
+      // Enable tracing
+      mockResolveTracingOptions.mockReturnValue({
+        enabled: true,
+        includeInAttack: true,
+        includeInGrading: false,
+        includeInternalSpans: false,
+        maxSpans: 50,
+        maxDepth: 5,
+        maxRetries: 3,
+        retryDelayMs: 500,
+        sanitizeAttributes: true,
+      });
+
+      mockFetchTraceContext.mockResolvedValue({
+        traceId: 'test-trace-id',
+        spans: [{ spanId: 'span1', name: 'test-span' }],
+        insights: [],
+        fetchedAt: Date.now(),
+      });
+
+      // Capture cloud requests
+      mockAgentProvider.callApi = vi.fn().mockImplementation(async function (input: any) {
+        cloudRequests.push(JSON.parse(input as string));
+        return {
+          output: { result: 'Attack prompt' },
+          tokenUsage: { total: 100, prompt: 50, completion: 50 },
+        };
+      }) as any;
+
+      await runMetaAgentRedteam({
+        context: {
+          vars: { query: 'test' },
+          prompt: { raw: 'test', label: 'test' },
+          originalProvider: mockTargetProvider,
+          traceparent: '00-trace123-span456-01',
+        },
+        filters: undefined,
+        injectVar: 'query',
+        numIterations: 2,
+        options: undefined,
+        prompt: { raw: 'test', label: 'test' },
+        agentProvider: mockAgentProvider,
+        gradingProvider: mockGradingProvider,
+        targetProvider: mockTargetProvider,
+        test: undefined,
+        vars: { query: 'test' },
+      });
+
+      // Second request should include trace summary from first iteration
+      expect(cloudRequests.length).toBeGreaterThanOrEqual(2);
+      expect(cloudRequests[1].traceSummary).toBe('Trace summary');
+    });
+
+    it('should pass trace context to grader when includeInGrading is true', async () => {
+      // Enable tracing with includeInGrading
+      mockResolveTracingOptions.mockReturnValue({
+        enabled: true,
+        includeInAttack: false,
+        includeInGrading: true,
+        includeInternalSpans: false,
+        maxSpans: 50,
+        maxDepth: 5,
+        maxRetries: 3,
+        retryDelayMs: 500,
+        sanitizeAttributes: true,
+      });
+
+      mockFetchTraceContext.mockResolvedValue({
+        traceId: 'test-trace-id',
+        spans: [{ spanId: 'span1', name: 'test-span' }],
+        insights: [],
+        fetchedAt: Date.now(),
+      });
+
+      const mockGrader = {
+        getResult: vi.fn<any>().mockResolvedValue({
+          grade: { pass: true, score: 0, reason: 'Test' },
+          rubric: 'test rubric',
+        }),
+      };
+      mockGetGraderById.mockReturnValue(mockGrader);
+
+      await runMetaAgentRedteam({
+        context: {
+          vars: { query: 'test' },
+          prompt: { raw: 'test', label: 'test' },
+          originalProvider: mockTargetProvider,
+          traceparent: '00-trace123-span456-01',
+        },
+        filters: undefined,
+        injectVar: 'query',
+        numIterations: 1,
+        options: undefined,
+        prompt: { raw: 'test', label: 'test' },
+        agentProvider: mockAgentProvider,
+        gradingProvider: mockGradingProvider,
+        targetProvider: mockTargetProvider,
+        test: {
+          vars: { query: 'test' },
+          assert: [{ type: 'promptfoo:redteam:harmful', metric: 'Harmful' }],
+        } as AtomicTestCase,
+        vars: { query: 'test' },
+      });
+
+      // Grader should be called with trace context
+      expect(mockGrader.getResult).toHaveBeenCalled();
+      const graderCall = mockGrader.getResult.mock.calls[0];
+
+      // 8th argument is the gradingContext
+      const gradingContext = graderCall[7] as { traceContext?: unknown; traceSummary?: string };
+      expect(gradingContext).toBeDefined();
+      expect(gradingContext.traceContext).toBeDefined();
+      expect(gradingContext.traceSummary).toBe('Trace summary');
+    });
+
+    it('should handle fetchTraceContext returning null gracefully', async () => {
+      // Enable tracing
+      mockResolveTracingOptions.mockReturnValue({
+        enabled: true,
+        includeInAttack: true,
+        includeInGrading: true,
+        includeInternalSpans: false,
+        maxSpans: 50,
+        maxDepth: 5,
+        maxRetries: 3,
+        retryDelayMs: 500,
+        sanitizeAttributes: true,
+      });
+
+      // Return null (no trace found)
+      mockFetchTraceContext.mockResolvedValue(null);
+
+      const result = await runMetaAgentRedteam({
+        context: {
+          vars: { query: 'test' },
+          prompt: { raw: 'test', label: 'test' },
+          originalProvider: mockTargetProvider,
+          traceparent: '00-trace123-span456-01',
+        },
+        filters: undefined,
+        injectVar: 'query',
+        numIterations: 1,
+        options: undefined,
+        prompt: { raw: 'test', label: 'test' },
+        agentProvider: mockAgentProvider,
+        gradingProvider: mockGradingProvider,
+        targetProvider: mockTargetProvider,
+        test: undefined,
+        vars: { query: 'test' },
+      });
+
+      // Should complete without error
+      expect(result.metadata.finalIteration).toBe(1);
+      // No trace data should be present
+      expect(result.metadata.traceSnapshots).toBeUndefined();
     });
   });
 });

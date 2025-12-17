@@ -1,7 +1,6 @@
-import { matchesPattern } from '../util/tracing';
-
 import type { AssertionParams, GradingResult } from '../types/index';
 import type { TraceSpan } from '../types/tracing';
+import { matchesPattern } from './traceUtils';
 
 interface TraceErrorSpansValue {
   max_count?: number;
@@ -29,9 +28,13 @@ function isErrorSpan(span: TraceSpan): boolean {
       }
     }
 
-    // Check for HTTP status codes in attributes
-    if (span.attributes['http.status_code'] && span.attributes['http.status_code'] >= 400) {
-      return true;
+    // Check for HTTP status codes in attributes (handle both string and number types)
+    const httpStatusCode = span.attributes['http.status_code'];
+    if (httpStatusCode !== undefined && httpStatusCode !== null) {
+      const statusCodeNum = Number(httpStatusCode);
+      if (!isNaN(statusCodeNum) && statusCodeNum >= 400) {
+        return true;
+      }
     }
 
     // Check for OTEL standard error attributes

@@ -380,6 +380,8 @@ interface SettingsState {
   setShowPrompts: (showPrompts: boolean) => void;
   showPassFail: boolean;
   setShowPassFail: (showPassFail: boolean) => void;
+  showPassReasons: boolean;
+  setShowPassReasons: (showPassReasons: boolean) => void;
 
   inComparisonMode: boolean;
   setInComparisonMode: (inComparisonMode: boolean) => void;
@@ -415,6 +417,8 @@ export const useResultsViewSettingsStore = create<SettingsState>()(
       setShowPrompts: (showPrompts: boolean) => set(() => ({ showPrompts })),
       showPassFail: true,
       setShowPassFail: (showPassFail: boolean) => set(() => ({ showPassFail })),
+      showPassReasons: false,
+      setShowPassReasons: (showPassReasons: boolean) => set(() => ({ showPassReasons })),
 
       inComparisonMode: false,
       setInComparisonMode: (inComparisonMode: boolean) => set(() => ({ inComparisonMode })),

@@ -67,7 +67,7 @@ redteam:
 
 Use the optional `redteam.frameworks` array when you only care about a subset of the built-in compliance programs. This filters which frameworks appear in the generated report, `promptfoo redteam run`, and future automation surfaces.
 
-Exmaples of allowed framework IDs:
+Examples of allowed framework IDs:
 
 - `mitre:atlas`
 - `nist:ai:measure`
