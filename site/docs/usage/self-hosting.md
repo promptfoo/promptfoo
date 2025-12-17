@@ -554,11 +554,11 @@ The server component is optional; you can run evals locally or in CI/CD without 
 
 ### Results Not Appearing in Self-Hosted UI
 
-**Problem**: Running `promptfoo eval` opens results at `localhost:15500` instead of showing them in the self-hosted UI.
+**Problem**: Running `promptfoo eval` stores results locally instead of showing them in the self-hosted UI.
 
 **Solution**:
 
-1. The local viewer (`localhost:15500`) is the default behavior when running `promptfoo eval`
+1. By default, `promptfoo eval` stores results locally (run `promptfoo view` to view them)
 2. To upload results to your self-hosted instance, run `promptfoo share` after eval
 3. Configure your self-hosted instance using ONE of these methods:
 
