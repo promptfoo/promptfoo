@@ -153,10 +153,7 @@ export async function storageRefToBase64(ref: MediaStorageRef): Promise<string> 
  * });
  * ```
  */
-export async function createMediaData(
-  data: Buffer,
-  metadata: MediaMetadata,
-): Promise<MediaData> {
+export async function createMediaData(data: Buffer, metadata: MediaMetadata): Promise<MediaData> {
   const { ref } = await storeMedia(data, metadata);
   const format = ref.key.split('.').pop() || metadata.contentType.split('/')[1] || 'bin';
   return {
@@ -190,4 +187,3 @@ export function isMediaStorageEnabled(): boolean {
   const inline = getEnvString('PROMPTFOO_INLINE_MEDIA');
   return inline !== 'true' && inline !== '1';
 }
-

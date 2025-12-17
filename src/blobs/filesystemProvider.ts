@@ -5,7 +5,13 @@ import * as path from 'node:path';
 import logger from '../logger';
 import { getConfigDirectoryPath } from '../util/config/manage';
 import { BLOB_SCHEME, DEFAULT_FILESYSTEM_SUBDIR } from './constants';
-import type { BlobMetadata, BlobRef, BlobStorageProvider, BlobStoreResult, StoredBlob } from './types';
+import type {
+  BlobMetadata,
+  BlobRef,
+  BlobStorageProvider,
+  BlobStoreResult,
+  StoredBlob,
+} from './types';
 
 interface FilesystemProviderConfig {
   basePath?: string;

@@ -74,11 +74,15 @@ async function maybeStore(
 
   // Try uploading to the cloud server when logged into Promptfoo Cloud
   if (shouldAttemptRemoteBlobUpload()) {
-    const remote = await uploadBlobRemote(parsed.buffer, parsed.mimeType || 'application/octet-stream', {
-      ...context,
-      location,
-      kind,
-    });
+    const remote = await uploadBlobRemote(
+      parsed.buffer,
+      parsed.mimeType || 'application/octet-stream',
+      {
+        ...context,
+        location,
+        kind,
+      },
+    );
     if (remote?.ref) {
       return remote.ref;
     }
@@ -110,8 +114,13 @@ async function externalizeDataUrls(
       return { value, mutated: false };
     }
     const storedRef =
-      (await maybeStore(parsed.buffer.toString('base64'), parsed.mimeType, context, location, getKindFromMimeType(parsed.mimeType))) ||
-      null;
+      (await maybeStore(
+        parsed.buffer.toString('base64'),
+        parsed.mimeType,
+        context,
+        location,
+        getKindFromMimeType(parsed.mimeType),
+      )) || null;
     if (!storedRef) {
       return { value, mutated: false };
     }

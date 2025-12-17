@@ -4,18 +4,11 @@
  * Serves media files stored in the local filesystem storage.
  */
 
-import type {
-  Request,
-  Response,
-} from 'express';
+import type { Request, Response } from 'express';
 import express from 'express';
 
 import logger from '../../logger';
-import {
-  getMediaStorage,
-  mediaExists,
-  retrieveMedia,
-} from '../../storage';
+import { getMediaStorage, mediaExists, retrieveMedia } from '../../storage';
 
 export const mediaRouter = express.Router();
 

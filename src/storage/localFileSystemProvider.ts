@@ -288,4 +288,3 @@ export class LocalFileSystemProvider implements MediaStorageProvider {
     return { fileCount, totalSizeBytes };
   }
 }
-

@@ -89,10 +89,7 @@ export function getBlobUrl(blobRef: string): string | null {
  * @param mimeType - MIME type for base64 data URLs (e.g., 'audio/mp3')
  * @returns URL for use in media elements
  */
-export function resolveMediaUrl(
-  value: string | undefined,
-  mimeType: string,
-): string | null {
+export function resolveMediaUrl(value: string | undefined, mimeType: string): string | null {
   if (!value) {
     return null;
   }
@@ -187,4 +184,3 @@ export async function resolveImageUrl(
 ): Promise<string | null> {
   return resolveImageUrlSync(data, format);
 }
-

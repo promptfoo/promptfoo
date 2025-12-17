@@ -66,9 +66,7 @@ export function resolveAudioSource(
   }
 
   const format = audio?.format || 'mp3';
-  const src = data.startsWith('data:audio')
-    ? data
-    : `data:audio/${format};base64,${data}`;
+  const src = data.startsWith('data:audio') ? data : `data:audio/${format};base64,${data}`;
 
   return {
     src,

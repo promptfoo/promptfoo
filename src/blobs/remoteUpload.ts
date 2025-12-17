@@ -30,7 +30,13 @@ export function shouldAttemptRemoteBlobUpload(): boolean {
 export async function uploadBlobRemote(
   buffer: Buffer,
   mimeType: string,
-  context?: { evalId?: string; testIdx?: number; promptIdx?: number; location?: string; kind?: string },
+  context?: {
+    evalId?: string;
+    testIdx?: number;
+    promptIdx?: number;
+    location?: string;
+    kind?: string;
+  },
 ): Promise<BlobStoreResult | null> {
   const url = buildRemoteUrl();
   const apiKey = cloudConfig.getApiKey();

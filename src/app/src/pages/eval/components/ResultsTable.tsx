@@ -785,10 +785,14 @@ function ResultsTable({
                   // Check if value is a storage ref or base64 for audio/image
                   const isAudioContent =
                     strategyId === 'audio' ||
-                    (typeof value === 'string' && (isStorageRef(value) || isBlobRef(value)) && value.includes('audio/'));
+                    (typeof value === 'string' &&
+                      (isStorageRef(value) || isBlobRef(value)) &&
+                      value.includes('audio/'));
                   const isImageContent =
                     strategyId === 'image' ||
-                    (typeof value === 'string' && (isStorageRef(value) || isBlobRef(value)) && value.includes('image/'));
+                    (typeof value === 'string' &&
+                      (isStorageRef(value) || isBlobRef(value)) &&
+                      value.includes('image/'));
 
                   return (
                     <div className="cell" data-capture="true">
@@ -800,7 +804,8 @@ function ResultsTable({
                       ) : isImageContent ? (
                         /* For image: show image or placeholder */
                         <Box>
-                          {typeof value === 'string' && (isStorageRef(value) || isBlobRef(value)) ? (
+                          {typeof value === 'string' &&
+                          (isStorageRef(value) || isBlobRef(value)) ? (
                             <Typography variant="caption" color="text.secondary">
                               Image preview not yet supported for storage refs
                             </Typography>
@@ -1466,9 +1471,9 @@ function ResultsTable({
 
                     let cellContent = flexRender(cell.column.columnDef.cell, cell.getContext());
                     const value = cell.getValue();
-                    const imgSrc = typeof value === 'string' ? resolveImageSource(value) : undefined;
+                    const imgSrc =
+                      typeof value === 'string' ? resolveImageSource(value) : undefined;
                     if (imgSrc) {
-
                       // If this is a variable column for the inject var, try to show the original image text
                       let originalImageText: string | undefined;
                       const columnId = String(cell.column.id);

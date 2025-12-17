@@ -163,4 +163,3 @@ export interface MediaData {
   /** Storage reference (new mode) */
   storageRef?: MediaStorageRef;
 }
-

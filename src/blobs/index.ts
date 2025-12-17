@@ -7,7 +7,12 @@ import { blobAssetsTable, blobReferencesTable } from '../database/tables';
 import type { BlobStorageProvider, BlobStoreResult, StoredBlob } from './types';
 
 export { BLOB_MAX_SIZE, BLOB_MIN_SIZE, BLOB_SCHEME } from './constants';
-export { type BlobRef, type BlobStorageProvider, type BlobStoreResult, type StoredBlob } from './types';
+export {
+  type BlobRef,
+  type BlobStorageProvider,
+  type BlobStoreResult,
+  type StoredBlob,
+} from './types';
 
 let defaultProvider: BlobStorageProvider | null = null;
 
@@ -36,7 +41,13 @@ export function resetBlobStorageProvider(): void {
 export async function storeBlob(
   data: Buffer,
   mimeType: string,
-  refContext?: { evalId?: string; testIdx?: number; promptIdx?: number; location?: string; kind?: string },
+  refContext?: {
+    evalId?: string;
+    testIdx?: number;
+    promptIdx?: number;
+    location?: string;
+    kind?: string;
+  },
 ): Promise<BlobStoreResult> {
   const provider = getBlobStorageProvider();
   const result = await provider.store(data, mimeType);

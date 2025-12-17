@@ -6,14 +6,8 @@
  */
 
 import logger from '../logger';
-import {
-  isMediaStorageEnabled,
-  storeMedia,
-} from '../storage';
-import type {
-  AtomicTestCase,
-  ProviderResponse,
-} from '../types';
+import { isMediaStorageEnabled, storeMedia } from '../storage';
+import type { AtomicTestCase, ProviderResponse } from '../types';
 
 /** Prefix for storage references */
 const STORAGE_REF_PREFIX = 'storageRef:';
@@ -43,7 +37,10 @@ function isLikelyBase64Media(value: string): boolean {
 /**
  * Extract format from data URL or guess from context
  */
-function getMediaFormat(value: string, hint?: 'audio' | 'image'): { format: string; mimeType: string } {
+function getMediaFormat(
+  value: string,
+  hint?: 'audio' | 'image',
+): { format: string; mimeType: string } {
   // Check data URL
   const dataUrlMatch = value.match(/^data:(audio|image)\/([^;,]+)/);
   if (dataUrlMatch) {
@@ -99,7 +96,7 @@ export function parseStorageRef(ref: string): string | null {
 
 /**
  * Sanitize a test case by replacing base64 media vars with storage refs.
- * 
+ *
  * Uses metadata set by strategies to know exactly which var contains media:
  * - audioStorageKey + audioInjectVar → replace vars[audioInjectVar]
  * - imageStorageKey + imageInjectVar → replace vars[imageInjectVar]
@@ -118,7 +115,7 @@ export async function sanitizeTestCaseForStorage(
   }
 
   const metadata = testCase.metadata || {};
-  
+
   // Get storage keys and var names from metadata (set by strategies)
   const audioStorageKey = metadata.audioStorageKey as string | undefined;
   const audioInjectVar = metadata.audioInjectVar as string | undefined;
@@ -135,14 +132,18 @@ export async function sanitizeTestCaseForStorage(
 
   // Replace audio var with storage ref
   if (audioStorageKey && audioInjectVar && sanitizedVars[audioInjectVar] !== undefined) {
-    logger.info(`[SanitizeMedia] Replacing var '${audioInjectVar}' with audio ref: ${audioStorageKey}`);
+    logger.info(
+      `[SanitizeMedia] Replacing var '${audioInjectVar}' with audio ref: ${audioStorageKey}`,
+    );
     sanitizedVars[audioInjectVar] = createStorageRef(audioStorageKey);
     modified = true;
   }
 
   // Replace image var with storage ref
   if (imageStorageKey && imageInjectVar && sanitizedVars[imageInjectVar] !== undefined) {
-    logger.info(`[SanitizeMedia] Replacing var '${imageInjectVar}' with image ref: ${imageStorageKey}`);
+    logger.info(
+      `[SanitizeMedia] Replacing var '${imageInjectVar}' with image ref: ${imageStorageKey}`,
+    );
     sanitizedVars[imageInjectVar] = createStorageRef(imageStorageKey);
     modified = true;
   }
@@ -160,10 +161,7 @@ export async function sanitizeTestCaseForStorage(
 /**
  * Store base64 audio data and return storage ref
  */
-async function storeBase64Audio(
-  audioData: string,
-  evalId?: string,
-): Promise<string | null> {
+async function storeBase64Audio(audioData: string, evalId?: string): Promise<string | null> {
   if (!isLikelyBase64Media(audioData)) {
     return null;
   }
@@ -192,7 +190,11 @@ async function storeBase64Audio(
  * These contain promptAudio.data with base64 audio
  */
 async function sanitizeRedteamHistory(
-  history: Array<{ prompt?: string; promptAudio?: { data?: string; format?: string }; [key: string]: unknown }>,
+  history: Array<{
+    prompt?: string;
+    promptAudio?: { data?: string; format?: string };
+    [key: string]: unknown;
+  }>,
   evalId?: string,
 ): Promise<{ history: typeof history; modified: boolean }> {
   let modified = false;
@@ -266,11 +268,13 @@ export async function sanitizeResponseForStorage(
 /**
  * Sanitize an entire eval result for storage
  */
-export async function sanitizeResultForStorage<T extends {
-  testCase: AtomicTestCase;
-  response?: ProviderResponse | null;
-  evalId?: string;
-}>(result: T): Promise<T> {
+export async function sanitizeResultForStorage<
+  T extends {
+    testCase: AtomicTestCase;
+    response?: ProviderResponse | null;
+    evalId?: string;
+  },
+>(result: T): Promise<T> {
   if (!isMediaStorageEnabled()) {
     return result;
   }
@@ -291,4 +295,3 @@ export async function sanitizeResultForStorage<T extends {
     response: sanitizedResponse,
   };
 }
-

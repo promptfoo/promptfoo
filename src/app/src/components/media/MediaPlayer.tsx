@@ -51,13 +51,7 @@ interface AudioPlayerProps extends MediaPlayerProps {
  * The server will either serve the file directly (OSS) or redirect to
  * a presigned URL (cloud/on-prem).
  */
-export function AudioPlayer({
-  data,
-  format = 'mp3',
-  style,
-  testId,
-  transcript,
-}: AudioPlayerProps) {
+export function AudioPlayer({ data, format = 'mp3', style, testId, transcript }: AudioPlayerProps) {
   const audioUrl = resolveAudioUrlSync(data, format);
 
   if (!audioUrl) {

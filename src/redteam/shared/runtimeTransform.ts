@@ -175,7 +175,9 @@ export async function applyRuntimeTransforms(
     }
     // Log if storage key exists (will be used by sanitizer later)
     if (audioStorageKey) {
-      logger.debug(`[RuntimeTransform] Audio stored to: ${audioStorageKey} (will be sanitized before DB save)`);
+      logger.debug(
+        `[RuntimeTransform] Audio stored to: ${audioStorageKey} (will be sanitized before DB save)`,
+      );
     }
   }
 
@@ -196,7 +198,9 @@ export async function applyRuntimeTransforms(
     }
     // Log if storage key exists (will be used by sanitizer later)
     if (imageStorageKey) {
-      logger.debug(`[RuntimeTransform] Image stored to: ${imageStorageKey} (will be sanitized before DB save)`);
+      logger.debug(
+        `[RuntimeTransform] Image stored to: ${imageStorageKey} (will be sanitized before DB save)`,
+      );
     }
   }
 

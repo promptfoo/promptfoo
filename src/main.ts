@@ -17,7 +17,6 @@ import { deleteCommand } from './commands/delete';
 import { evalCommand } from './commands/eval';
 import { exportCommand } from './commands/export';
 import { feedbackCommand } from './commands/feedback';
-import { blobCommand } from './commands/blob';
 import { generateAssertionsCommand } from './commands/generate/assertions';
 import { generateDatasetCommand } from './commands/generate/dataset';
 import { importCommand } from './commands/import';
@@ -200,7 +199,6 @@ async function main() {
 
   // Alphabetical order
   authCommand(program);
-  blobCommand(program);
   cacheCommand(program);
   codeScansCommand(program);
   configCommand(program);

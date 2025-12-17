@@ -6,4 +6,3 @@
  */
 
 export { AudioPlayer, ImageDisplay, VideoPlayer } from './MediaPlayer';
-
