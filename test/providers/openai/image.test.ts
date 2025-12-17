@@ -525,26 +525,6 @@ describe('OpenAiImageProvider', () => {
       });
     });
 
-    it('should return correct MIME type for jpeg output_format', async () => {
-      const provider = new OpenAiImageProvider('gpt-image-1', {
-        config: { apiKey: 'test-key', output_format: 'jpeg' },
-      });
-
-      const result = await provider.callApi('test prompt');
-
-      expect(result.output).toBe('data:image/jpeg;base64,base64EncodedImageData');
-    });
-
-    it('should return correct MIME type for webp output_format', async () => {
-      const provider = new OpenAiImageProvider('gpt-image-1', {
-        config: { apiKey: 'test-key', output_format: 'webp' },
-      });
-
-      const result = await provider.callApi('test prompt');
-
-      expect(result.output).toBe('data:image/webp;base64,base64EncodedImageData');
-    });
-
     it('should handle gpt-image-1 quality parameter', async () => {
       const provider = new OpenAiImageProvider('gpt-image-1', {
         config: { apiKey: 'test-key', quality: 'high' },

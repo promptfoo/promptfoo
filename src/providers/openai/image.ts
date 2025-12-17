@@ -180,7 +180,6 @@ export function formatOutput(
   data: any,
   prompt: string,
   responseFormat?: string,
-  outputFormat?: string,
 ): string | { error: string } {
   if (responseFormat === 'b64_json') {
     const b64Json = data.data[0].b64_json;
@@ -188,12 +187,8 @@ export function formatOutput(
       return { error: `No base64 image data found in response: ${JSON.stringify(data)}` };
     }
 
-    // Determine MIME type from output_format config (default to png)
-    const mimeType = outputFormat === 'jpeg' ? 'image/jpeg' :
-                     outputFormat === 'webp' ? 'image/webp' : 'image/png';
-
-    // Return raw data URL - the UI auto-detects and renders these as images
-    return `data:${mimeType};base64,${b64Json}`;
+    // Return data URL - the UI auto-detects and renders these as images
+    return `data:image/png;base64,${b64Json}`;
   } else {
     const url = data.data[0].url;
     if (!url) {
@@ -332,7 +327,6 @@ export async function processApiResponse(
   latencyMs?: number,
   quality?: string,
   n: number = 1,
-  outputFormat?: string,
 ): Promise<ProviderResponse> {
   if (data.error) {
     await data?.deleteFromCache?.();
@@ -342,7 +336,7 @@ export async function processApiResponse(
   }
 
   try {
-    const formattedOutput = formatOutput(data, prompt, responseFormat, outputFormat);
+    const formattedOutput = formatOutput(data, prompt, responseFormat);
     if (typeof formattedOutput === 'object') {
       return formattedOutput;
     }
@@ -452,7 +446,6 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
       latencyMs,
       config.quality,
       config.n || 1,
-      (config as GptImage1Options).output_format,
     );
   }
 }
