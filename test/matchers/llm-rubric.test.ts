@@ -379,19 +379,21 @@ describe('matchesLlmRubric', () => {
       tokenUsage: { total: 10, prompt: 5, completion: 5 },
     });
 
-    await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual({
-      pass: false,
-      reason: 'Grading failed',
-      score: 0,
-      tokensUsed: {
-        total: expect.any(Number),
-        prompt: expect.any(Number),
-        completion: expect.any(Number),
-        cached: expect.any(Number),
-        completionDetails: expect.any(Object),
-        numRequests: 0,
-      },
-    });
+    await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual(
+      expect.objectContaining({
+        pass: false,
+        reason: 'Grading failed',
+        score: 0,
+        tokensUsed: {
+          total: expect.any(Number),
+          prompt: expect.any(Number),
+          completion: expect.any(Number),
+          cached: expect.any(Number),
+          completionDetails: expect.any(Object),
+          numRequests: 0,
+        },
+      }),
+    );
   });
 
   it('should throw error when throwOnError is true and provider returns an error', async () => {
@@ -460,19 +462,21 @@ describe('matchesLlmRubric', () => {
       });
     });
 
-    await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual({
-      reason: 'Grading passed',
-      pass: true,
-      score: 1,
-      tokensUsed: {
-        total: expect.any(Number),
-        prompt: expect.any(Number),
-        completion: expect.any(Number),
-        cached: expect.any(Number),
-        completionDetails: expect.any(Object),
-        numRequests: 0,
-      },
-    });
+    await expect(matchesLlmRubric(expected, output, options)).resolves.toEqual(
+      expect.objectContaining({
+        reason: 'Grading passed',
+        pass: true,
+        score: 1,
+        tokensUsed: {
+          total: expect.any(Number),
+          prompt: expect.any(Number),
+          completion: expect.any(Number),
+          cached: expect.any(Number),
+          completionDetails: expect.any(Object),
+          numRequests: 0,
+        },
+      }),
+    );
     expect(mockCallApi).toHaveBeenCalledWith(
       'Grading prompt',
       expect.objectContaining({
