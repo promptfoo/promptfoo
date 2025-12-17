@@ -1153,6 +1153,32 @@
               },
               "description": "Names of people, brands, or organizations related to your LLM application"
             },
+            "contexts": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "description": "Unique identifier for the context"
+                  },
+                  "purpose": {
+                    "type": "string",
+                    "description": "Purpose/context for this context - used for generation and grading"
+                  },
+                  "vars": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    },
+                    "description": "Variables passed to provider (e.g., context_file, user_role)"
+                  }
+                },
+                "required": ["id", "purpose"],
+                "additionalProperties": false
+              },
+              "description": "Security contexts for testing multiple states - each context has its own purpose"
+            },
             "plugins": {
               "type": "array",
               "items": {
