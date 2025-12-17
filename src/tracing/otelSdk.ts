@@ -1,10 +1,10 @@
 import { diag, DiagConsoleLogger, DiagLogLevel, propagation } from '@opentelemetry/api';
 import { W3CTraceContextPropagator } from '@opentelemetry/core';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
-import { Resource } from '@opentelemetry/resources';
+import { resourceFromAttributes } from '@opentelemetry/resources';
 import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from '@opentelemetry/semantic-conventions';
-import { BatchSpanProcessor } from '@opentelemetry/sdk-trace-node';
-import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
+import { BatchSpanProcessor, NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
+import type { SpanProcessor } from '@opentelemetry/sdk-trace-base';
 
 import logger from '../logger';
 import { VERSION } from '../version';
@@ -76,18 +76,18 @@ export function initializeOtel(config: OtelConfig): void {
   logger.debug('[OtelSdk] Registered W3C Trace Context propagator');
 
   // Create resource with service info
-  const resource = new Resource({
+  const resource = resourceFromAttributes({
     [ATTR_SERVICE_NAME]: config.serviceName,
     [ATTR_SERVICE_VERSION]: VERSION,
   });
 
-  // Create trace provider
-  provider = new NodeTracerProvider({ resource });
+  // Collect span processors
+  const spanProcessors: SpanProcessor[] = [];
 
   // Add local exporter (writes to TraceStore/SQLite)
   if (config.localExport) {
     const localExporter = new LocalSpanExporter();
-    provider.addSpanProcessor(new BatchSpanProcessor(localExporter));
+    spanProcessors.push(new BatchSpanProcessor(localExporter));
     logger.debug('[OtelSdk] Added local span exporter');
   }
 
@@ -96,9 +96,12 @@ export function initializeOtel(config: OtelConfig): void {
     const otlpExporter = new OTLPTraceExporter({
       url: config.endpoint,
     });
-    provider.addSpanProcessor(new BatchSpanProcessor(otlpExporter));
+    spanProcessors.push(new BatchSpanProcessor(otlpExporter));
     logger.debug(`[OtelSdk] Added OTLP exporter to ${config.endpoint}`);
   }
+
+  // Create trace provider with resource and span processors
+  provider = new NodeTracerProvider({ resource, spanProcessors });
 
   // Register the provider globally
   provider.register();
