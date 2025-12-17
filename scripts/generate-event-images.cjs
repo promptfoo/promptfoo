@@ -20,31 +20,37 @@ const OUTPUT_DIR = path.join(__dirname, '..', 'site', 'static', 'img', 'events')
 const events = [
   {
     filename: 'bsides-seattle-2025',
-    prompt: `Create a professional hero image for BSides Seattle 2025 security conference.
+    prompt: `Create a cute, friendly hero image for BSides Seattle 2025 security conference.
 The image should feature:
-- A cute red panda character (the Promptfoo mascot) in a Pacific Northwest setting
-- The red panda should be holding a coffee cup and looking at code or security documentation
-- Seattle elements: rain drops, evergreen trees (pine/fir silhouettes), mountain silhouette in background
-- Include subtle security elements like shields, locks, or terminal windows
-- Text overlay area should be considered (darker area at bottom for "BSides Seattle 2025" and "May 10, 2025 • Seattle, WA")
-- Color palette: forest green (#059669), warm coffee browns, gray rain tones, cream accents
-- Cozy, community-driven, welcoming atmosphere
-- Modern tech illustration style, clean lines
-Style: Pacific Northwest aesthetic, cozy coffee shop vibes meets security conference, professional but approachable`
+- An adorable, expressive red panda character (the Promptfoo mascot) looking intelligent and friendly
+- The red panda should be cozy, holding a warm coffee cup, with a cheerful expression
+- Pacific Northwest setting: gentle rain, evergreen tree silhouettes, misty mountain backdrop
+- Subtle security touches: a small laptop or tablet with code visible
+- Modern tech illustration style with clean lines, professional but approachable
+- Color palette: forest green, warm coffee browns, soft gray tones, cream accents
+- Overall mood: trustworthy, technical, but friendly and welcoming
+Style: Modern tech illustration, clean lines, cute mascot character, cozy PNW coffee shop vibes, professional but approachable like a friendly tech blog`
   },
   {
     filename: 'ai-security-summit-2025',
-    prompt: `Create a professional hero image for AI Security Summit 2025 in San Francisco.
+    prompt: `Create a warm, charming illustration for AI Security Summit 2025 in San Francisco.
+
+Style (CRITICAL - match this exactly):
+- Warm, expressive children's book illustration style with soft gradients and shading
+- The red panda must have BIG, SHINY, EXPRESSIVE eyes with white highlights/reflections - full of life and personality
+- Friendly, engaging character with genuine warmth - NOT a logo, NOT an icon, a LOVABLE CHARACTER
+- Soft, warm color palette with gentle gradients - NOT flat solid colors
+- Scene should feel alive and inviting, like friends gathering
+
 The image should feature:
-- A cute red panda character (the Promptfoo mascot) surrounded by neural network visualizations
-- The red panda should look intelligent, perhaps wearing glasses, examining AI/neural patterns
-- Futuristic AI elements: floating neural nodes, glowing connections, abstract brain patterns
-- San Francisco subtle hints: Golden Gate bridge silhouette in background or city skyline
-- Text overlay area should be considered (space for "AI Security Summit 2025" and "Oct 22-23, 2025 • San Francisco, CA")
-- Color palette: deep purple (#7C3AED), electric blue (#3B82F6), neural pink (#EC4899), dark backgrounds
-- Cutting-edge, authoritative, futuristic atmosphere
-- Gradient mesh effects, glowing elements
-Style: Neural network aesthetic, futuristic AI visualization, professional tech conference imagery`
+- An adorable red panda character with big expressive eyes, wearing cute round glasses, looking curious and intelligent
+- The red panda in the center, surrounded by friendly diverse human colleagues at a table with laptops
+- Warm conversation scene - people engaged and smiling
+- Golden Gate Bridge silhouette in soft misty purple/blue background
+- Soft neural network nodes floating gently above
+- Color palette: warm purples, soft blues, orange accents, cream tones
+
+Style: Warm digital illustration like Pixar concept art, expressive characters, soft lighting, friendly and inviting atmosphere`
   },
   {
     filename: 'sector-2025',
@@ -63,23 +69,149 @@ Style: Canadian tech aesthetic, professional security conference, warm and welco
   },
   {
     filename: 'telecom-talks-2025',
-    prompt: `Create a professional hero image for Telecom Talks 2025 at SRI International in Menlo Park.
+    prompt: `Create a warm, charming illustration for Telecom Talks 2025 at SRI International.
+
+Style (CRITICAL - match this exactly):
+- Warm, expressive children's book illustration style with soft gradients and shading
+- The red panda must have BIG, SHINY, EXPRESSIVE eyes with white highlights/reflections - full of life and personality
+- Friendly, engaging character with genuine warmth - NOT a logo, NOT an icon, a LOVABLE CHARACTER
+- Soft, warm color palette with gentle gradients - NOT flat solid colors
+- Scene should feel alive and inviting
+
 The image should feature:
-- A cute red panda character (the Promptfoo mascot) surrounded by network and signal visualizations
-- The red panda should be interacting with signal waves, network topology diagrams, or fiber optic light trails
-- Telecommunications elements: signal waves, cell towers, circuit traces, data packets flowing
-- Include a subtle stage/presentation element (microphone or presentation screen) to indicate speaking role
-- Text overlay area should be considered (space for "Telecom Talks 2025" and "April 9, 2025 • Menlo Park, CA")
-- Color palette: electric cyan (#00D4FF), deep navy (#0A1628), signal green (#00FF88)
-- High-tech, infrastructure-focused, network operations center aesthetic
-- Glowing neon effects, circuit board patterns
-Style: Network monitoring aesthetic, telecommunications infrastructure, professional tech illustration with cyber glow effects`
+- An adorable red panda character with big expressive eyes, confidently presenting at a podium
+- The red panda wearing a casual t-shirt, with an enthusiastic open-mouthed smile, one paw gesturing
+- Friendly audience members visible, engaged and smiling
+- Soft teal/cyan signal waves and gentle network elements in background
+- Warm lighting like a cozy conference room
+- Color palette: soft teals, warm navy, cream tones, orange accents
+
+Style: Warm digital illustration like Pixar concept art, expressive characters, soft lighting, friendly presenter atmosphere`
+  },
+  {
+    filename: 'rsa-2025',
+    prompt: `Create a professional hero image for RSA Conference 2025 in San Francisco.
+The image should feature:
+- A cute red panda character (the Promptfoo mascot) in an enterprise security setting
+- The red panda should be presenting or demonstrating security tools to an audience
+- Corporate security elements: shields, locks, security badges, enterprise architecture diagrams
+- Moscone Center or San Francisco financial district skyline in background
+- Text overlay area should be considered (space for "RSA Conference 2025" and "April 28 - May 1, 2025 • San Francisco, CA")
+- Color palette: RSA blue (#0066CC), professional silver (#94A3B8), navy (#1e3a5f)
+- Professional, enterprise-grade, corporate but approachable atmosphere
+- Clean geometric patterns, subtle grid overlays
+Style: Enterprise security aesthetic, corporate tech conference, professional and trustworthy imagery`
+  },
+  {
+    filename: 'bsides-sf-2025',
+    prompt: `Create a professional hero image for BSides San Francisco 2025.
+The image should feature:
+- A cute red panda character (the Promptfoo mascot) in a San Francisco community setting
+- The red panda should be engaging with other hackers/community members in discussion
+- Golden Gate Bridge silhouette prominently in background with SF fog rolling in
+- Grassroots hacker community elements: laptops, coffee cups, stickers, casual setting
+- Text overlay area should be considered (space for "BSides SF 2025" and "April 26-27, 2025 • San Francisco, CA")
+- Color palette: BSides orange (#F97316), purple (#8B5CF6), fog gray tones
+- Community-driven, accessible, inclusive, hacker culture atmosphere
+- Warm community vibes with SF fog aesthetic
+Style: Grassroots hacker conference, San Francisco community, warm and inclusive imagery`
+  },
+  {
+    filename: 'rsa-2026',
+    prompt: `Create a warm, charming illustration for RSA Conference 2026 in San Francisco.
+
+Style (CRITICAL - match this exactly):
+- Warm, expressive children's book illustration style with soft gradients and shading
+- The red panda must have BIG, SHINY, EXPRESSIVE eyes with white highlights/reflections - full of life and personality
+- Friendly, engaging character with genuine warmth - NOT a logo, NOT an icon, a LOVABLE CHARACTER
+- Soft, warm color palette with gentle gradients - NOT flat solid colors
+- Scene should feel alive and inviting
+
+The image should feature:
+- An adorable red panda character with big expressive eyes, excitedly pointing at a "Save the Date" calendar
+- The red panda has a big happy smile, genuinely excited expression
+- Friendly colleagues nearby also looking excited about the upcoming event
+- San Francisco skyline with Golden Gate Bridge in soft blue/purple misty background
+- Gentle floating security shield icons
+- Color palette: soft blues, warm cyans, professional navy, cream and orange accents
+
+Style: Warm digital illustration like Pixar concept art, expressive characters, soft lighting, excited anticipation atmosphere`
+  },
+  {
+    filename: 'bsides-sf-2026',
+    prompt: `Create a professional hero image for BSides San Francisco 2026.
+The image should feature:
+- A cute red panda character (the Promptfoo mascot) in a futuristic San Francisco setting
+- The red panda should be inviting viewers to join, looking welcoming and excited
+- Golden Gate Bridge with futuristic overlay, SF fog with neon accents
+- Forward-looking community elements: save the date energy, excitement for upcoming event
+- Text overlay area should be considered (space for "BSides SF 2026" and "April 25-26, 2026 • San Francisco, CA")
+- Color palette: BSides orange (#F97316), neon purple (#8B5CF6), electric accents
+- Exciting, community anticipation, grassroots energy for upcoming event
+- Warm SF community vibes with futuristic accents
+Style: Future hacker community gathering, San Francisco, anticipation and welcoming imagery`
+  },
+  {
+    filename: 'scaleup-ai-2025',
+    prompt: `Create a professional hero image for ScaleUp:AI 2025, an Insight Partners venture capital thought leadership series.
+The image should feature:
+- A cute red panda character (the Promptfoo mascot) in a sophisticated, professional setting
+- The red panda should appear confident and visionary, perhaps at a podium or in a modern office with city views
+- Venture capital / investment aesthetic: sleek modern architecture, glass buildings, upward growth charts
+- Abstract elements suggesting scale and growth: ascending lines, geometric shapes, network nodes
+- Text overlay area should be considered (space for "ScaleUp:AI 2025" and "Insight Partners")
+- Color palette: deep indigo (#4F46E5), professional slate (#475569), clean whites
+- Sophisticated, authoritative, thought leadership atmosphere
+- Clean geometric patterns, subtle gradient overlays
+Style: Venture capital thought leadership, professional media feature, sophisticated tech investment aesthetic`
+  },
+  {
+    filename: 'defcon-2025',
+    prompt: `Create a warm, charming illustration for DEF CON 33 (2025), the hacker conference in Las Vegas.
+
+Style (CRITICAL - match this exactly):
+- Warm, expressive children's book illustration style with soft gradients and shading
+- The red panda must have BIG, SHINY, EXPRESSIVE eyes with white highlights/reflections - full of life and personality
+- Friendly, engaging character with genuine warmth - NOT a logo, NOT an icon, a LOVABLE CHARACTER
+- Soft, warm color palette with gentle gradients - NOT flat solid colors
+- Scene should feel alive and inviting, like friends at a fun gathering
+
+The image should feature:
+- An adorable red panda character with big expressive eyes, wearing a cozy hoodie, with a playful mischievous grin
+- The red panda sitting with friendly diverse hacker friends around a table with laptops
+- Everyone engaged in fun conversation, some typing, warm camaraderie
+- Soft green terminal windows glowing gently in background
+- Conference badges visible, warm lighting
+- Color palette: soft greens, warm teals, muted cyans, cream tones on cozy dark background
+
+Style: Warm digital illustration like Pixar concept art, expressive characters, soft lighting, fun hacker friends gathering atmosphere`
+  },
+  {
+    filename: 'blackhat-2025',
+    prompt: `Create a warm, charming illustration for Black Hat USA 2025 cybersecurity conference in Las Vegas.
+
+Style (CRITICAL - match this exactly):
+- Warm, expressive children's book illustration style with soft gradients and shading
+- The red panda must have BIG, SHINY, EXPRESSIVE eyes with white highlights/reflections - full of life and personality
+- Friendly, engaging character with genuine warmth - NOT a logo, NOT an icon, a LOVABLE CHARACTER
+- Soft, warm color palette with gentle gradients - NOT flat solid colors
+- Scene should feel alive and inviting
+
+The image should feature:
+- An adorable red panda character with big expressive eyes, wearing a conference badge, looking confident and friendly
+- The red panda at a demo booth, engaging warmly with interested attendees
+- Friendly professionals gathered around, some holding coffee cups, engaged in conversation
+- Soft security visualizations and gentle data charts in background
+- Warm booth lighting, professional but welcoming atmosphere
+- Color palette: warm grays, soft crimson red accents, cream tones, professional but cozy
+
+Style: Warm digital illustration like Pixar concept art, expressive characters, soft lighting, friendly professional conference atmosphere`
   }
 ];
 
 async function generateImage(prompt) {
   const data = JSON.stringify({
-    model: 'gpt-image-1',
+    model: 'gpt-image-1.5',
     prompt: prompt,
     size: '1536x1024', // Wider aspect ratio for hero images
     quality: 'high',

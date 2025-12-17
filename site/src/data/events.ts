@@ -102,6 +102,8 @@ export const events: Event[] = [
       'Meet the Promptfoo team at RSA Conference 2026. See live AI red teaming demos and learn how enterprises secure their AI applications.',
     fullDescription:
       'Join us at RSA Conference 2026 for live AI red teaming demonstrations, security consultations, and the latest in LLM vulnerability research. Meet our security experts and see how Fortune 500 companies protect their AI applications.',
+    cardImage: '/img/events/rsa-2026.jpg',
+    heroImage: '/img/events/rsa-2026.jpg',
     highlights: [
       {
         icon: '🎯',
@@ -119,6 +121,7 @@ export const events: Event[] = [
         description: 'Limited edition Promptfoo gear',
       },
     ],
+    customPageUrl: '/events/rsa-2026',
   },
   {
     id: 'bsides-sf-2026',
@@ -139,6 +142,8 @@ export const events: Event[] = [
       'Join us at BSides SF 2026 for hands-on AI security workshops and community discussions.',
     fullDescription:
       'Connect with the Promptfoo team and the security community at BSides SF 2026. Experience hands-on workshops, participate in AI security challenges, and learn about the latest threats to LLM applications.',
+    cardImage: '/img/events/bsides-sf-2026.jpg',
+    heroImage: '/img/events/bsides-sf-2026.jpg',
     highlights: [
       {
         icon: '🛠️',
@@ -156,9 +161,56 @@ export const events: Event[] = [
         description: 'AI red teaming CTF challenges',
       },
     ],
+    customPageUrl: '/events/bsides-sf-2026',
   },
 
   // Past Events (2025)
+  {
+    id: 'scaleup-ai-2025',
+    slug: 'scaleup-ai-2025',
+    name: 'Promptfoo at ScaleUp:AI 2025',
+    shortName: 'ScaleUp:AI 2025',
+    status: 'past',
+    type: 'webinar',
+    startDate: '2025-12-03',
+    endDate: '2025-12-03',
+    location: {
+      venue: 'Insight Partners',
+      city: 'New York',
+      state: 'NY',
+      country: 'USA',
+    },
+    description:
+      'Featured in Insight Partners\' ScaleUp:AI 2025 Partner Series. CEO Ian Webster discusses how Promptfoo is restoring trust and security in generative AI.',
+    fullDescription:
+      'Ian Webster, CEO and co-founder of Promptfoo, was featured in Insight Partners\' ScaleUp:AI 2025 Partner Series, discussing how Promptfoo is defining the standard for enterprise AI security. The feature explores the company\'s journey from open-source tool to serving 200,000+ developers and 80+ Fortune 500 companies.',
+    cardImage: '/img/events/scaleup-ai-2025.jpg',
+    heroImage: '/img/events/scaleup-ai-2025.jpg',
+    highlights: [
+      {
+        icon: '🔐',
+        title: 'AI Security',
+        description: 'Closing the gap in AI defenses',
+      },
+      {
+        icon: '📈',
+        title: 'Growth Story',
+        description: 'From open source to enterprise',
+      },
+      {
+        icon: '🔮',
+        title: 'Future Vision',
+        description: 'Multi-agent security landscape',
+      },
+    ],
+    customPageUrl: '/events/scaleup-ai-2025',
+    externalLinks: [
+      {
+        label: 'Read Full Article',
+        url: 'https://www.insightpartners.com/ideas/scaleup-ai-promptfoo-trust-security-generative-ai/',
+      },
+    ],
+  },
   {
     id: 'blackhat-2025',
     slug: 'blackhat-2025',
@@ -178,8 +230,8 @@ export const events: Event[] = [
     description: 'Meet us at booth #4712 for live AI red teaming demos and security consultations.',
     fullDescription:
       'Join us at Black Hat USA 2025 for live AI red teaming demos, security consultations, and the latest in LLM vulnerability research. Visit our booth to see how Fortune 500 companies protect their AI applications.',
-    cardImage: '/img/events/blackhat-2025.png',
-    heroImage: '/img/events/blackhat-2025.png',
+    cardImage: '/img/events/blackhat-2025.jpg',
+    heroImage: '/img/events/blackhat-2025.jpg',
     highlights: [
       {
         icon: '🎯',
@@ -236,8 +288,8 @@ export const events: Event[] = [
       'Join hackers, security researchers, and the open source community for the AI security party of DEF CON.',
     fullDescription:
       "Join hackers, security researchers, and the open source community for the AI security event of DEF CON at the galaxy's most iconic cantina. Free drinks, great vibes, and security war stories.",
-    cardImage: '/img/events/defcon-2025.png',
-    heroImage: '/img/events/defcon-2025.png',
+    cardImage: '/img/events/defcon-2025.jpg',
+    heroImage: '/img/events/defcon-2025.jpg',
     highlights: [
       {
         icon: '🍺',
@@ -277,6 +329,8 @@ export const events: Event[] = [
       'We showcased AI red teaming capabilities and security solutions at RSA Conference 2025.',
     fullDescription:
       'Promptfoo was at RSA Conference 2025 in the Early Stage Expo. We demonstrated our AI red teaming platform and connected with security professionals about protecting LLM applications.',
+    cardImage: '/img/events/rsa-2025.jpg',
+    heroImage: '/img/events/rsa-2025.jpg',
     highlights: [
       {
         icon: '🎯',
@@ -294,6 +348,7 @@ export const events: Event[] = [
         description: 'Shared latest security findings',
       },
     ],
+    customPageUrl: '/events/rsa-2025',
   },
   {
     id: 'bsides-sf-2025',
@@ -313,6 +368,8 @@ export const events: Event[] = [
     description: 'We connected with the security community at BSides SF 2025 during RSA week.',
     fullDescription:
       'Promptfoo joined the BSides SF 2025 community event during RSA week. We participated in security discussions and connected with researchers working on AI security challenges.',
+    cardImage: '/img/events/bsides-sf-2025.jpg',
+    heroImage: '/img/events/bsides-sf-2025.jpg',
     highlights: [
       {
         icon: '🤝',
@@ -325,6 +382,7 @@ export const events: Event[] = [
         description: 'AI security conversations',
       },
     ],
+    customPageUrl: '/events/bsides-sf-2025',
   },
   {
     id: 'bsides-seattle-2025',
@@ -333,8 +391,8 @@ export const events: Event[] = [
     shortName: 'BSides Seattle 2025',
     status: 'past',
     type: 'conference',
-    startDate: '2025-05-10',
-    endDate: '2025-05-10',
+    startDate: '2025-04-18',
+    endDate: '2025-04-19',
     location: {
       venue: 'The Collective Seattle',
       city: 'Seattle',
