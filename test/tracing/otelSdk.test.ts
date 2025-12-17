@@ -52,12 +52,9 @@ vi.mock('@opentelemetry/core', () => ({
 }));
 
 vi.mock('@opentelemetry/resources', () => ({
-  Resource: class MockResource {
-    attributes: Record<string, unknown>;
-    constructor(attrs: Record<string, unknown>) {
-      this.attributes = attrs;
-      resourceCalls.push(attrs);
-    }
+  resourceFromAttributes: (attrs: Record<string, unknown>) => {
+    resourceCalls.push(attrs);
+    return { attributes: attrs };
   },
 }));
 
@@ -165,7 +162,10 @@ describe('otelSdk', () => {
       initializeOtel(defaultConfig);
 
       expect(localExporterCalls.length).toBe(1);
-      expect(mockAddSpanProcessor).toHaveBeenCalled();
+      // In v2 API, span processors are passed in constructor
+      const constructorOptions = nodeTracerProviderCalls[0] as { spanProcessors?: unknown[] };
+      expect(constructorOptions.spanProcessors).toBeDefined();
+      expect(constructorOptions.spanProcessors!.length).toBe(1);
     });
 
     it('should add OTLP exporter when endpoint is configured', () => {
@@ -176,8 +176,9 @@ describe('otelSdk', () => {
 
       expect(otlpExporterCalls.length).toBe(1);
       expect(otlpExporterCalls[0]).toEqual({ url: 'http://localhost:4318/v1/traces' });
-      // Both local and OTLP exporters
-      expect(mockAddSpanProcessor).toHaveBeenCalledTimes(2);
+      // Both local and OTLP exporters - check spanProcessors in constructor
+      const constructorOptions = nodeTracerProviderCalls[0] as { spanProcessors?: unknown[] };
+      expect(constructorOptions.spanProcessors!.length).toBe(2);
     });
 
     it('should skip local export when localExport is false', () => {
@@ -188,8 +189,9 @@ describe('otelSdk', () => {
       });
 
       expect(localExporterCalls.length).toBe(0);
-      // Only OTLP exporter
-      expect(mockAddSpanProcessor).toHaveBeenCalledTimes(1);
+      // Only OTLP exporter - check spanProcessors in constructor
+      const constructorOptions = nodeTracerProviderCalls[0] as { spanProcessors?: unknown[] };
+      expect(constructorOptions.spanProcessors!.length).toBe(1);
     });
 
     it('should enable debug logging when debug is true', () => {
