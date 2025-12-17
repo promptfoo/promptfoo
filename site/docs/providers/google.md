@@ -280,6 +280,10 @@ You can use it by specifying one of the [available models](https://ai.google.dev
 
 ### Chat and Multimodal Models
 
+- `google:gemini-3-flash-preview` - Gemini 3.0 Flash preview with frontier intelligence, Pro-grade reasoning at Flash-level speed, thinking, and grounding ($0.50/1M input, $3/1M output)
+- `google:gemini-3-flash` - Gemini 3.0 Flash with frontier intelligence and Pro-grade reasoning at Flash-level speed
+- `google:gemini-3-flash-lite` - Cost-efficient Gemini 3.0 Flash variant optimized for high-volume, latency-sensitive tasks
+- `google:gemini-3-pro` - Gemini 3.0 Pro with advanced reasoning, multimodal understanding, and agentic capabilities
 - `google:gemini-3-pro-preview` - Gemini 3.0 Pro preview with advanced reasoning, multimodal understanding, and agentic capabilities
 - `google:gemini-2.5-pro` - Gemini 2.5 Pro model with enhanced reasoning, coding, and multimodal understanding
 - `google:gemini-2.5-flash` - Gemini 2.5 Flash model with enhanced reasoning and thinking capabilities
@@ -408,7 +412,31 @@ providers:
 
 ### Thinking Configuration
 
-For models that support thinking capabilities (like Gemini 2.5 Flash), you can configure the thinking budget:
+For models that support thinking capabilities, you can configure how the model reasons through problems.
+
+#### Gemini 3 Models (thinkingLevel)
+
+Gemini 3 models use `thinkingLevel` for more granular control:
+
+```yaml
+providers:
+  - id: google:gemini-3-flash-preview
+    config:
+      generationConfig:
+        thinkingConfig:
+          thinkingLevel: MEDIUM # MINIMAL, LOW, MEDIUM, or HIGH
+```
+
+| Level   | Description                                                |
+| ------- | ---------------------------------------------------------- |
+| MINIMAL | Fewest tokens. Best for low-complexity tasks (Flash only). |
+| LOW     | Fewer tokens. Suitable for simpler tasks.                  |
+| MEDIUM  | Balanced approach for moderate complexity (Flash only).    |
+| HIGH    | More tokens for deep reasoning. Default.                   |
+
+#### Gemini 2.5 Models (thinkingBudget)
+
+Gemini 2.5 models use `thinkingBudget`:
 
 ```yaml
 providers:
@@ -422,6 +450,8 @@ providers:
 ```
 
 The thinking configuration allows the model to show its reasoning process before providing the final answer, which can be helpful for complex tasks that require step-by-step thinking.
+
+**Note:** You cannot use both `thinkingLevel` and `thinkingBudget` in the same request.
 
 You can also specify a response schema for structured output:
 
@@ -509,6 +539,36 @@ providers:
 For more details on capabilities and configuration options, see the [Gemini API documentation](https://ai.google.dev/docs).
 
 ## Model Examples
+
+### Gemini 3 Flash Preview
+
+Gemini 3.0 Flash with frontier intelligence, Pro-grade reasoning, and thinking capabilities:
+
+```yaml
+providers:
+  - id: google:gemini-3-flash-preview
+    config:
+      temperature: 0.7
+      maxOutputTokens: 4096
+      generationConfig:
+        thinkingConfig:
+          thinkingLevel: MEDIUM # MINIMAL, LOW, MEDIUM, or HIGH
+```
+
+Thinking levels for Gemini 3 Flash: MINIMAL (fastest), LOW, MEDIUM (balanced), HIGH (most thorough).
+
+### Gemini 3 Flash Lite
+
+Cost-efficient Gemini 3.0 Flash for high-volume, latency-sensitive tasks:
+
+```yaml
+providers:
+  - id: google:gemini-3-flash-lite
+    config:
+      temperature: 0.7
+      maxOutputTokens: 2048
+      topP: 0.9
+```
 
 ### Gemini 3 Pro Preview
 
