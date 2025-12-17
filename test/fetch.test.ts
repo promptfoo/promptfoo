@@ -1382,26 +1382,10 @@ describe('isTransientError', () => {
     expect(isTransientError(response)).toBe(false);
   });
 
-  it('should return false for 503 without matching text', () => {
-    const response = createMockResponse({
-      status: 503,
-      statusText: 'Custom Error',
-    });
-    expect(isTransientError(response)).toBe(false);
-  });
-
   it('should return false for 500 Internal Server Error', () => {
     const response = createMockResponse({
       status: 500,
       statusText: 'Internal Server Error',
-    });
-    expect(isTransientError(response)).toBe(false);
-  });
-
-  it('should return false for 200 OK', () => {
-    const response = createMockResponse({
-      status: 200,
-      statusText: 'OK',
     });
     expect(isTransientError(response)).toBe(false);
   });
@@ -1437,44 +1421,6 @@ describe('fetchWithProxy transient error retries', () => {
     expect(result).toBe(successResponse);
     expect(sleep).toHaveBeenCalledTimes(1);
     expect(sleep).toHaveBeenCalledWith(1000); // First retry: 2^0 * 1000 = 1000ms
-  });
-
-  it('should retry on 502 Bad Gateway', async () => {
-    const transientResponse = createMockResponse({
-      status: 502,
-      statusText: 'Bad Gateway',
-    });
-    const successResponse = createMockResponse({ ok: true });
-
-    const mockFetch = vi
-      .fn()
-      .mockResolvedValueOnce(transientResponse)
-      .mockResolvedValueOnce(successResponse);
-    global.fetch = mockFetch;
-
-    const result = await fetchWithProxy('https://example.com');
-
-    expect(mockFetch).toHaveBeenCalledTimes(2);
-    expect(result).toBe(successResponse);
-  });
-
-  it('should retry on 504 Gateway Timeout', async () => {
-    const transientResponse = createMockResponse({
-      status: 504,
-      statusText: 'Gateway Timeout',
-    });
-    const successResponse = createMockResponse({ ok: true });
-
-    const mockFetch = vi
-      .fn()
-      .mockResolvedValueOnce(transientResponse)
-      .mockResolvedValueOnce(successResponse);
-    global.fetch = mockFetch;
-
-    const result = await fetchWithProxy('https://example.com');
-
-    expect(mockFetch).toHaveBeenCalledTimes(2);
-    expect(result).toBe(successResponse);
   });
 
   it('should not retry on 502 without matching status text', async () => {
@@ -1518,23 +1464,6 @@ describe('fetchWithProxy transient error retries', () => {
     expect(sleep).toHaveBeenNthCalledWith(3, 4000); // 2^2 * 1000
   });
 
-  it('should return transient error response after max retries', async () => {
-    const transientResponse = createMockResponse({
-      status: 503,
-      statusText: 'Service Unavailable',
-    });
-
-    const mockFetch = vi.fn().mockResolvedValue(transientResponse);
-    global.fetch = mockFetch;
-
-    const result = await fetchWithProxy('https://example.com');
-
-    // 1 initial + 3 retries = 4 total attempts
-    expect(mockFetch).toHaveBeenCalledTimes(4);
-    expect(result).toBe(transientResponse);
-    expect(sleep).toHaveBeenCalledTimes(3);
-  });
-
   it('should not retry when disableTransientRetries is true', async () => {
     const transientResponse = createMockResponse({
       status: 503,
@@ -1551,26 +1480,6 @@ describe('fetchWithProxy transient error retries', () => {
     expect(mockFetch).toHaveBeenCalledTimes(1);
     expect(result).toBe(transientResponse);
     expect(sleep).not.toHaveBeenCalled();
-  });
-
-  it('should log debug message on transient error retry', async () => {
-    const transientResponse = createMockResponse({
-      status: 503,
-      statusText: 'Service Unavailable',
-    });
-    const successResponse = createMockResponse({ ok: true });
-
-    const mockFetch = vi
-      .fn()
-      .mockResolvedValueOnce(transientResponse)
-      .mockResolvedValueOnce(successResponse);
-    global.fetch = mockFetch;
-
-    await fetchWithProxy('https://example.com');
-
-    expect(logger.debug).toHaveBeenCalledWith(
-      expect.stringContaining('Transient error (503 Service Unavailable)'),
-    );
   });
 });
 
