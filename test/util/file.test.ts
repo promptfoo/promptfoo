@@ -6,9 +6,15 @@ import { globSync, hasMagic } from 'glob';
 import yaml from 'js-yaml';
 import cliState from '../../src/cliState';
 import {
+  extractFileReferences,
+  formatFileNotFoundError,
+  formatFileReadError,
+  formatMissingFileReferencesError,
   getResolvedRelativePath,
   maybeLoadConfigFromExternalFile,
   maybeLoadFromExternalFile,
+  resolveFileProtocolPath,
+  validateFileReferences,
 } from '../../src/util/file';
 import {
   isAudioFile,
@@ -1001,6 +1007,323 @@ describe('file utilities', () => {
         expect(result.tests[0].vars.data).toBe('file://data.json');
         expect(fs.readFileSync).not.toHaveBeenCalled();
       });
+    });
+  });
+
+  describe('extractFileReferences', () => {
+    it('should extract file:// references from a string', () => {
+      const result = extractFileReferences('file://path/to/file.py');
+      expect(result).toHaveLength(1);
+      expect(result[0]).toEqual({
+        original: 'file://path/to/file.py',
+        filePath: 'path/to/file.py',
+        functionName: undefined,
+        configPath: 'root',
+      });
+    });
+
+    it('should extract file:// references with function names', () => {
+      const result = extractFileReferences('file://path/to/file.py:my_function');
+      expect(result).toHaveLength(1);
+      expect(result[0]).toEqual({
+        original: 'file://path/to/file.py:my_function',
+        filePath: 'path/to/file.py',
+        functionName: 'my_function',
+        configPath: 'root',
+      });
+    });
+
+    it('should extract file:// references from nested objects', () => {
+      const config = {
+        providers: [{ id: 'file://provider.py' }],
+        prompts: ['file://prompt.txt'],
+        tests: [
+          {
+            vars: {
+              data: 'file://data.json',
+            },
+          },
+        ],
+      };
+      const result = extractFileReferences(config);
+      expect(result).toHaveLength(3);
+      expect(result.map((r) => r.original)).toEqual([
+        'file://provider.py',
+        'file://prompt.txt',
+        'file://data.json',
+      ]);
+      expect(result.map((r) => r.configPath)).toEqual([
+        'providers[0].id',
+        'prompts[0]',
+        'tests[0].vars.data',
+      ]);
+    });
+
+    it('should return empty array for configs without file:// references', () => {
+      const config = {
+        providers: ['openai:gpt-4o'],
+        prompts: ['Hello {{name}}'],
+      };
+      const result = extractFileReferences(config);
+      expect(result).toHaveLength(0);
+    });
+
+    it('should handle arrays at root level', () => {
+      const result = extractFileReferences(['file://a.py', 'file://b.py']);
+      expect(result).toHaveLength(2);
+      expect(result[0].configPath).toBe('[0]');
+      expect(result[1].configPath).toBe('[1]');
+    });
+
+    it('should handle null and undefined values', () => {
+      const config = {
+        a: null,
+        b: undefined,
+        c: 'file://test.py',
+      };
+      const result = extractFileReferences(config);
+      expect(result).toHaveLength(1);
+      expect(result[0].original).toBe('file://test.py');
+    });
+  });
+
+  describe('validateFileReferences', () => {
+    beforeEach(() => {
+      vi.resetAllMocks();
+      vi.mocked(hasMagic).mockImplementation((pattern: string | string[]) => {
+        const p = Array.isArray(pattern) ? pattern.join('') : pattern;
+        return p.includes('*') || p.includes('?') || p.includes('[') || p.includes('{');
+      });
+    });
+
+    it('should return valid=true when all files exist', () => {
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+
+      const config = {
+        providers: ['file://provider.py'],
+        prompts: ['file://prompt.txt'],
+      };
+      const result = validateFileReferences(config, '/base/path');
+
+      expect(result.valid).toBe(true);
+      expect(result.missingFiles).toHaveLength(0);
+      expect(result.validFiles).toHaveLength(2);
+    });
+
+    it('should return valid=false when files are missing', () => {
+      vi.mocked(fs.existsSync).mockImplementation((p) => {
+        return !String(p).includes('missing');
+      });
+
+      const config = {
+        providers: ['file://provider.py'],
+        prompts: ['file://missing.txt'],
+      };
+      const result = validateFileReferences(config, '/base/path');
+
+      expect(result.valid).toBe(false);
+      expect(result.missingFiles).toHaveLength(1);
+      expect(result.missingFiles[0].reference.original).toBe('file://missing.txt');
+      expect(result.validFiles).toHaveLength(1);
+    });
+
+    it('should skip glob patterns', () => {
+      vi.mocked(fs.existsSync).mockReturnValue(false);
+
+      const config = {
+        tests: 'file://tests/*.yaml',
+      };
+      const result = validateFileReferences(config, '/base/path');
+
+      expect(result.valid).toBe(true);
+      expect(result.missingFiles).toHaveLength(0);
+      expect(fs.existsSync).not.toHaveBeenCalled();
+    });
+
+    it('should skip Nunjucks templates in file paths', () => {
+      vi.mocked(fs.existsSync).mockReturnValue(false);
+
+      const config = {
+        prompts: ['file://{{env.PROMPT_DIR}}/prompt.txt'],
+      };
+      const result = validateFileReferences(config, '/base/path');
+
+      expect(result.valid).toBe(true);
+      expect(result.missingFiles).toHaveLength(0);
+      expect(fs.existsSync).not.toHaveBeenCalled();
+    });
+
+    it('should resolve paths relative to basePath', () => {
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+
+      const config = {
+        providers: ['file://provider.py'],
+      };
+      validateFileReferences(config, '/my/base/path');
+
+      expect(fs.existsSync).toHaveBeenCalledWith(
+        expect.stringContaining(path.join('/my/base/path', 'provider.py')),
+      );
+    });
+
+    it('should handle absolute paths', () => {
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+
+      const config = {
+        providers: ['file:///absolute/path/provider.py'],
+      };
+      validateFileReferences(config, '/base/path');
+
+      expect(fs.existsSync).toHaveBeenCalledWith('/absolute/path/provider.py');
+    });
+
+    it('should report multiple missing files', () => {
+      vi.mocked(fs.existsSync).mockReturnValue(false);
+
+      const config = {
+        providers: ['file://missing1.py'],
+        prompts: ['file://missing2.txt'],
+        tests: [{ vars: { data: 'file://missing3.json' } }],
+      };
+      const result = validateFileReferences(config, '/base/path');
+
+      expect(result.valid).toBe(false);
+      expect(result.missingFiles).toHaveLength(3);
+    });
+  });
+
+  describe('resolveFileProtocolPath', () => {
+    it('should resolve relative paths with basePath', () => {
+      const result = resolveFileProtocolPath('file://path/to/file.yaml', '/base');
+      expect(result).toBe(path.join('/base', 'path/to/file.yaml'));
+    });
+
+    it('should resolve relative paths with cwd when no basePath', () => {
+      const result = resolveFileProtocolPath('file://path/to/file.yaml');
+      expect(result).toBe(path.join(process.cwd(), 'path/to/file.yaml'));
+    });
+
+    it('should handle absolute paths', () => {
+      const result = resolveFileProtocolPath('file:///absolute/path/file.yaml', '/base');
+      expect(result).toBe('/absolute/path/file.yaml');
+    });
+
+    it('should strip file:// prefix', () => {
+      const result = resolveFileProtocolPath('file://test.yaml', '/base');
+      expect(result).not.toContain('file://');
+    });
+  });
+
+  describe('formatFileNotFoundError', () => {
+    it('should format error with basePath', () => {
+      const result = formatFileNotFoundError({
+        filePath: '/path/to/missing.yaml',
+        basePath: '/base',
+      });
+      expect(result).toContain('File not found');
+      expect(result).toContain('missing.yaml');
+      expect(result).toContain('Please verify that');
+      expect(result).toContain('/base');
+    });
+
+    it('should format error without basePath', () => {
+      const result = formatFileNotFoundError({
+        filePath: '/path/to/missing.yaml',
+      });
+      expect(result).toContain('File not found');
+      expect(result).toContain('current directory');
+    });
+
+    it('should include docs URL when provided', () => {
+      const result = formatFileNotFoundError({
+        filePath: '/path/to/missing.yaml',
+        docsUrl: 'https://example.com/docs',
+      });
+      expect(result).toContain('https://example.com/docs');
+      expect(result).toContain('For more information');
+    });
+
+    it('should not include docs section when no URL', () => {
+      const result = formatFileNotFoundError({
+        filePath: '/path/to/missing.yaml',
+      });
+      expect(result).not.toContain('For more information');
+    });
+  });
+
+  describe('formatFileReadError', () => {
+    it('should format error with Error object', () => {
+      const result = formatFileReadError({
+        filePath: '/path/to/file.yaml',
+        error: new Error('Permission denied'),
+      });
+      expect(result).toContain('Failed to read file');
+      expect(result).toContain('file.yaml');
+      expect(result).toContain('Permission denied');
+    });
+
+    it('should format error with string error', () => {
+      const result = formatFileReadError({
+        filePath: '/path/to/file.yaml',
+        error: 'Something went wrong',
+      });
+      expect(result).toContain('Failed to read file');
+      expect(result).toContain('Something went wrong');
+    });
+  });
+
+  describe('formatMissingFileReferencesError', () => {
+    it('should format error for missing files', () => {
+      const validationResult = {
+        valid: false,
+        missingFiles: [
+          {
+            reference: {
+              original: 'file://missing.py',
+              filePath: 'missing.py',
+              configPath: 'providers[0]',
+            },
+            resolvedPath: '/base/missing.py',
+          },
+        ],
+        validFiles: [],
+      };
+      const result = formatMissingFileReferencesError(validationResult, '/base');
+      expect(result).toContain('File reference errors found');
+      expect(result).toContain('file://missing.py');
+      expect(result).toContain('providers[0]');
+      expect(result).toContain('/base/missing.py');
+      expect(result).toContain('Please verify that');
+    });
+
+    it('should format error for multiple missing files', () => {
+      const validationResult = {
+        valid: false,
+        missingFiles: [
+          {
+            reference: {
+              original: 'file://missing1.py',
+              filePath: 'missing1.py',
+              configPath: 'providers[0]',
+            },
+            resolvedPath: '/base/missing1.py',
+          },
+          {
+            reference: {
+              original: 'file://missing2.txt',
+              filePath: 'missing2.txt',
+              configPath: 'prompts[0]',
+            },
+            resolvedPath: '/base/missing2.txt',
+          },
+        ],
+        validFiles: [],
+      };
+      const result = formatMissingFileReferencesError(validationResult, '/base');
+      expect(result).toContain('file://missing1.py');
+      expect(result).toContain('file://missing2.txt');
+      expect(result).toContain('providers[0]');
+      expect(result).toContain('prompts[0]');
     });
   });
 });
