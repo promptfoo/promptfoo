@@ -344,6 +344,8 @@ export const events: Event[] = [
     description: 'We engaged with the Pacific Northwest security community at BSides Seattle 2025.',
     fullDescription:
       'Promptfoo participated in BSides Seattle 2025, engaging with the Pacific Northwest security community and discussing the latest in AI security threats and mitigations.',
+    cardImage: '/img/events/bsides-seattle-2025.jpg',
+    heroImage: '/img/events/bsides-seattle-2025.jpg',
     highlights: [
       {
         icon: '🌲',
@@ -377,6 +379,8 @@ export const events: Event[] = [
       'Ian Webster joined Swisscom on stage to discuss AI security in telecommunications.',
     fullDescription:
       'Promptfoo CEO Ian Webster joined Swisscom on stage at Telecom Talks 2025 to discuss the unique challenges of securing AI systems in telecommunications infrastructure.',
+    cardImage: '/img/events/telecom-talks-2025.jpg',
+    heroImage: '/img/events/telecom-talks-2025.jpg',
     highlights: [
       {
         icon: '📡',
@@ -410,6 +414,8 @@ export const events: Event[] = [
       "Canada's largest IT security conference. Arsenal demos and enterprise AI security discussions.",
     fullDescription:
       "Promptfoo was selected for the SecTor Arsenal, showcasing open-source AI security tools to Canada's enterprise security community at Canada's largest IT security conference.",
+    cardImage: '/img/events/sector-2025.jpg',
+    heroImage: '/img/events/sector-2025.jpg',
     highlights: [
       {
         icon: '🍁',
@@ -443,6 +449,8 @@ export const events: Event[] = [
       'Two days of AI security research, expert panels, and cutting-edge demonstrations.',
     fullDescription:
       'Ian Webster joined industry leaders as a panel speaker at AI Security Summit 2025 to discuss the evolving landscape of LLM vulnerabilities and practical defense strategies.',
+    cardImage: '/img/events/ai-security-summit-2025.jpg',
+    heroImage: '/img/events/ai-security-summit-2025.jpg',
     highlights: [
       {
         icon: '🧠',

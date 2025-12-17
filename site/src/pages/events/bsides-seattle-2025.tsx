@@ -41,6 +41,8 @@ export default function BSidesSeattle2025(): React.ReactElement {
         <meta property="og:type" content="website" />
         <meta property="og:url" content="/events/bsides-seattle-2025" />
         <meta name="twitter:card" content="summary_large_image" />
+        <meta property="og:image" content="https://www.promptfoo.dev/img/events/bsides-seattle-2025.jpg" />
+        <meta name="twitter:image" content="https://www.promptfoo.dev/img/events/bsides-seattle-2025.jpg" />
         <meta
           name="keywords"
           content="BSides Seattle 2025, security conference, AI security, LLM security, Pacific Northwest, Seattle"
@@ -69,6 +71,15 @@ export default function BSidesSeattle2025(): React.ReactElement {
         {/* Hero Section */}
         <section className={styles.hero}>
           <div className={styles.heroBackground}>
+            {/* Hero Image */}
+            <div className={styles.heroImageContainer}>
+              <img
+                src="/img/events/bsides-seattle-2025.jpg"
+                alt="BSides Seattle 2025"
+                className={styles.heroImage}
+              />
+              <div className={styles.heroImageOverlay} />
+            </div>
             {/* Mountain Silhouette */}
             <div className={styles.mountainSilhouette}>
               <svg viewBox="0 0 1440 320" preserveAspectRatio="none">

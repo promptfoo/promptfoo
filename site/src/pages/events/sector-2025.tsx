@@ -38,6 +38,8 @@ export default function SecTor2025(): React.ReactElement {
         <meta property="og:type" content="website" />
         <meta property="og:url" content="/events/sector-2025" />
         <meta name="twitter:card" content="summary_large_image" />
+        <meta property="og:image" content="https://www.promptfoo.dev/img/events/sector-2025.jpg" />
+        <meta name="twitter:image" content="https://www.promptfoo.dev/img/events/sector-2025.jpg" />
         <meta
           name="keywords"
           content="SecTor 2025, Toronto security conference, Arsenal, AI security tools, Canada cybersecurity, LLM security"
@@ -46,6 +48,16 @@ export default function SecTor2025(): React.ReactElement {
       </Head>
 
       <main className={styles.sectorPage}>
+        {/* Hero Image Background */}
+        <div className={styles.heroImageContainer}>
+          <img
+            src="/img/events/sector-2025.jpg"
+            alt="SecTor 2025"
+            className={styles.heroImage}
+          />
+          <div className={styles.heroImageOverlay} />
+        </div>
+
         {/* Maple Leaf Pattern Background */}
         <div className={styles.maplePattern}>
           {[...Array(8)].map((_, i) => (

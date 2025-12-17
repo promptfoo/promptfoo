@@ -174,6 +174,8 @@ export default function AISecuritySummit2025(): React.ReactElement {
         <meta property="og:type" content="website" />
         <meta property="og:url" content="/events/ai-security-summit-2025" />
         <meta name="twitter:card" content="summary_large_image" />
+        <meta property="og:image" content="https://www.promptfoo.dev/img/events/ai-security-summit-2025.jpg" />
+        <meta name="twitter:image" content="https://www.promptfoo.dev/img/events/ai-security-summit-2025.jpg" />
         <meta
           name="keywords"
           content="AI Security Summit 2025, LLM security, AI red teaming, San Francisco, AI vulnerabilities, machine learning security"
@@ -182,6 +184,16 @@ export default function AISecuritySummit2025(): React.ReactElement {
       </Head>
 
       <main className={styles.summitPage}>
+        {/* Hero Image Background */}
+        <div className={styles.heroImageContainer}>
+          <img
+            src="/img/events/ai-security-summit-2025.jpg"
+            alt="AI Security Summit 2025"
+            className={styles.heroImage}
+          />
+          <div className={styles.heroImageOverlay} />
+        </div>
+
         {/* Neural Network Background */}
         <div className={styles.neuralBackground}>
           <NeuralNetwork />

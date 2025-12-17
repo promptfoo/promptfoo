@@ -114,6 +114,8 @@ export default function TelecomTalks2025(): React.ReactElement {
         <meta property="og:type" content="website" />
         <meta property="og:url" content="/events/telecom-talks-2025" />
         <meta name="twitter:card" content="summary_large_image" />
+        <meta property="og:image" content="https://www.promptfoo.dev/img/events/telecom-talks-2025.jpg" />
+        <meta name="twitter:image" content="https://www.promptfoo.dev/img/events/telecom-talks-2025.jpg" />
         <meta
           name="keywords"
           content="Telecom Talks 2025, telecommunications security, AI security, LLM security, Swisscom, 5G security"
@@ -122,6 +124,16 @@ export default function TelecomTalks2025(): React.ReactElement {
       </Head>
 
       <main className={styles.telecomPage}>
+        {/* Hero Image Background */}
+        <div className={styles.heroImageContainer}>
+          <img
+            src="/img/events/telecom-talks-2025.jpg"
+            alt="Telecom Talks 2025"
+            className={styles.heroImage}
+          />
+          <div className={styles.heroImageOverlay} />
+        </div>
+
         {/* Circuit Pattern Background */}
         <div className={styles.circuitPattern}>
           <svg className={styles.circuitSvg} viewBox="0 0 100 100" preserveAspectRatio="none">
