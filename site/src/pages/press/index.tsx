@@ -39,10 +39,10 @@ const ArticleLink = ({ article }: { article: Article }) => (
 const getPodcastLinkText = (link: string): string => {
   try {
     const hostname = new URL(link).hostname;
-    if (hostname.endsWith('spotify.com')) {
+    if (hostname === 'spotify.com' || hostname === 'open.spotify.com') {
       return 'Listen on Spotify →';
     }
-    if (hostname.endsWith('youtube.com') || hostname.endsWith('youtu.be')) {
+    if (hostname === 'youtube.com' || hostname === 'www.youtube.com' || hostname === 'youtu.be') {
       return 'Watch on YouTube →';
     }
   } catch {
