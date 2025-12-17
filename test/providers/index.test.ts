@@ -1466,10 +1466,9 @@ prompts:
 
     const basePath = path.join(path.sep, 'test');
     const providerOptions = { id: 'anthropic:claude-3', prompts: ['claude_prompt'] };
-    const result = resolveProviderConfigs(
-      ['openai:gpt-4', providerOptions, 'file://./phi3.yaml'],
-      { basePath },
-    );
+    const result = resolveProviderConfigs(['openai:gpt-4', providerOptions, 'file://./phi3.yaml'], {
+      basePath,
+    });
 
     expect(Array.isArray(result)).toBe(true);
     expect((result as any[]).length).toBe(3);
