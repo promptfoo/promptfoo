@@ -68,7 +68,9 @@ describe('ProviderTypeSelector', () => {
     // The selected provider at the top should still show (always expanded)
     const pythonProviders = screen.getAllByText('Python Provider');
     expect(pythonProviders.length).toBeGreaterThan(0);
-    const pythonDescriptions = screen.getAllByText('Custom Python provider for specialized integrations');
+    const pythonDescriptions = screen.getAllByText(
+      'Custom Python provider for specialized integrations',
+    );
     expect(pythonDescriptions.length).toBeGreaterThan(0);
   });
 
@@ -447,7 +449,9 @@ describe('ProviderTypeSelector', () => {
 
     const pythonProviders = screen.getAllByText('Python Provider');
     expect(pythonProviders.length).toBeGreaterThan(0);
-    const pythonDescriptions = screen.getAllByText('Custom Python provider for specialized integrations');
+    const pythonDescriptions = screen.getAllByText(
+      'Custom Python provider for specialized integrations',
+    );
     expect(pythonDescriptions.length).toBeGreaterThan(0);
   });
 
@@ -511,7 +515,9 @@ describe('ProviderTypeSelector', () => {
 
     const langchainLabels = screen.getAllByText('LangChain');
     expect(langchainLabels.length).toBeGreaterThan(0);
-    const langchainDescriptions = screen.getAllByText('Framework for developing applications powered by language models');
+    const langchainDescriptions = screen.getAllByText(
+      'Framework for developing applications powered by language models',
+    );
     expect(langchainDescriptions.length).toBeGreaterThan(0);
   });
 
@@ -627,7 +633,9 @@ describe('ProviderTypeSelector', () => {
 
     const langchainLabels = screen.getAllByText('LangChain');
     expect(langchainLabels.length).toBeGreaterThan(0);
-    const langchainDescriptions = screen.getAllByText('Framework for developing applications powered by language models');
+    const langchainDescriptions = screen.getAllByText(
+      'Framework for developing applications powered by language models',
+    );
     expect(langchainDescriptions.length).toBeGreaterThan(0);
   });
 
@@ -681,7 +689,9 @@ describe('ProviderTypeSelector', () => {
 
     const langchainLabels = screen.getAllByText('LangChain');
     expect(langchainLabels.length).toBeGreaterThan(0);
-    const langchainDescriptions = screen.getAllByText('Framework for developing applications powered by language models');
+    const langchainDescriptions = screen.getAllByText(
+      'Framework for developing applications powered by language models',
+    );
     expect(langchainDescriptions.length).toBeGreaterThan(0);
   });
 

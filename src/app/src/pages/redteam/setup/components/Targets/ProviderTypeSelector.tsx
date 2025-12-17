@@ -1018,161 +1018,162 @@ export default function ProviderTypeSelector({
 
       {/* Search, filters, and provider list - always visible */}
       <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 3 }}>
-            <TextField
-              variant="outlined"
-              placeholder="Search providers..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <SearchIcon />
-                  </InputAdornment>
-                ),
+        <TextField
+          variant="outlined"
+          placeholder="Search providers..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon />
+              </InputAdornment>
+            ),
+          }}
+          sx={{ minWidth: 300, flexShrink: 0 }}
+        />
+
+        <Box sx={{ flex: 1 }}>
+          <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 1 }}>
+            <Chip
+              label="All Tags"
+              variant={selectedTag === undefined ? 'filled' : 'outlined'}
+              color={selectedTag === undefined ? 'primary' : 'default'}
+              onClick={() => setSelectedTag(undefined)}
+              sx={{
+                cursor: 'pointer',
+                '&:hover': {
+                  bgcolor: selectedTag === undefined ? 'primary.dark' : 'action.hover',
+                },
               }}
-              sx={{ minWidth: 300, flexShrink: 0 }}
             />
-
-            <Box sx={{ flex: 1 }}>
-              <Stack direction="row" sx={{ flexWrap: 'wrap', gap: 1 }}>
-                <Chip
-                  label="All Tags"
-                  variant={selectedTag === undefined ? 'filled' : 'outlined'}
-                  color={selectedTag === undefined ? 'primary' : 'default'}
-                  onClick={() => setSelectedTag(undefined)}
-                  sx={{
-                    cursor: 'pointer',
-                    '&:hover': {
-                      bgcolor: selectedTag === undefined ? 'primary.dark' : 'action.hover',
-                    },
-                  }}
-                />
-                {tagFilters.map((filter) => (
-                  <Chip
-                    key={filter.key}
-                    label={filter.label}
-                    variant={selectedTag === filter.key ? 'filled' : 'outlined'}
-                    color={selectedTag === filter.key ? 'primary' : 'default'}
-                    onClick={() => handleTagToggle(filter.key)}
-                    sx={{
-                      cursor: 'pointer',
-                      '&:hover': {
-                        bgcolor: selectedTag === filter.key ? 'primary.dark' : 'action.hover',
-                      },
-                    }}
-                  />
-                ))}
-              </Stack>
-            </Box>
+            {tagFilters.map((filter) => (
+              <Chip
+                key={filter.key}
+                label={filter.label}
+                variant={selectedTag === filter.key ? 'filled' : 'outlined'}
+                color={selectedTag === filter.key ? 'primary' : 'default'}
+                onClick={() => handleTagToggle(filter.key)}
+                sx={{
+                  cursor: 'pointer',
+                  '&:hover': {
+                    bgcolor: selectedTag === filter.key ? 'primary.dark' : 'action.hover',
+                  },
+                }}
+              />
+            ))}
           </Stack>
+        </Box>
+      </Stack>
 
-          {/* Scrollable provider list with clear container styling */}
-          <Paper
-            variant="outlined"
-            sx={{
-              maxHeight: '400px',
-              overflowY: 'auto',
-              p: 2,
-              bgcolor: 'background.paper',
-              borderRadius: 2,
-              border: '1px solid',
-              borderColor: 'divider',
-            }}
-          >
-            <FormControl component="fieldset" sx={{ width: '100%' }}>
-              <Stack spacing={1}>
-                {filteredProviderOptions.map((option) => (
-                  <Paper
-                    key={option.value}
-                    ref={selectedProviderType === option.value ? selectedCardRef : null}
-                    variant="outlined"
-                    onClick={() => handleProviderTypeSelect(option.value)}
+      {/* Scrollable provider list with clear container styling */}
+      <Paper
+        variant="outlined"
+        sx={{
+          maxHeight: '400px',
+          overflowY: 'auto',
+          p: 2,
+          bgcolor: 'background.paper',
+          borderRadius: 2,
+          border: '1px solid',
+          borderColor: 'divider',
+        }}
+      >
+        <FormControl component="fieldset" sx={{ width: '100%' }}>
+          <Stack spacing={1}>
+            {filteredProviderOptions.map((option) => (
+              <Paper
+                key={option.value}
+                ref={selectedProviderType === option.value ? selectedCardRef : null}
+                variant="outlined"
+                onClick={() => handleProviderTypeSelect(option.value)}
+                sx={{
+                  border: '1px solid',
+                  borderColor: selectedProviderType === option.value ? 'primary.main' : 'divider',
+                  borderWidth: selectedProviderType === option.value ? 2 : 1,
+                  borderRadius: 2,
+                  bgcolor:
+                    selectedProviderType === option.value
+                      ? 'rgba(25, 118, 210, 0.04)'
+                      : 'transparent',
+                  '&:hover': {
+                    bgcolor: 'rgba(0, 0, 0, 0.04)',
+                    cursor: 'pointer',
+                    borderColor:
+                      selectedProviderType === option.value
+                        ? 'primary.main'
+                        : theme.palette.action.hover,
+                  },
+                  p: selectedProviderType === option.value ? '15px' : 2,
+                  transition: 'background-color 0.2s',
+                  display: 'flex',
+                  alignItems: 'center',
+                  width: '100%',
+                }}
+              >
+                <Radio
+                  checked={selectedProviderType === option.value}
+                  onChange={() => handleProviderTypeSelect(option.value)}
+                  value={option.value}
+                  name="provider-type-radio"
+                  sx={{ mr: 2, flexShrink: 0 }}
+                  size="small"
+                />
+
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <Typography
+                    variant="subtitle1"
                     sx={{
-                      border: '1px solid',
-                      borderColor: selectedProviderType === option.value ? 'primary.main' : 'divider',
-                      borderWidth: selectedProviderType === option.value ? 2 : 1,
-                      borderRadius: 2,
-                      bgcolor:
-                        selectedProviderType === option.value
-                          ? 'rgba(25, 118, 210, 0.04)'
-                          : 'transparent',
-                      '&:hover': {
-                        bgcolor: 'rgba(0, 0, 0, 0.04)',
-                        cursor: 'pointer',
-                        borderColor:
-                          selectedProviderType === option.value
-                            ? 'primary.main'
-                            : theme.palette.action.hover,
-                      },
-                      p: selectedProviderType === option.value ? '15px' : 2,
-                      transition: 'background-color 0.2s',
-                      display: 'flex',
-                      alignItems: 'center',
-                      width: '100%',
+                      fontWeight: selectedProviderType === option.value ? 600 : 500,
+                      color:
+                        selectedProviderType === option.value ? 'primary.main' : 'text.primary',
+                      mb: 0.5,
                     }}
                   >
-                    <Radio
-                      checked={selectedProviderType === option.value}
-                      onChange={() => handleProviderTypeSelect(option.value)}
-                      value={option.value}
-                      name="provider-type-radio"
-                      sx={{ mr: 2, flexShrink: 0 }}
-                      size="small"
-                    />
+                    {option.label}
+                  </Typography>
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      color: 'text.secondary',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      display: '-webkit-box',
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: 'vertical',
+                    }}
+                  >
+                    {option.description}
+                  </Typography>
+                </Box>
 
-                    <Box sx={{ flex: 1, minWidth: 0 }}>
-                      <Typography
-                        variant="subtitle1"
-                        sx={{
-                          fontWeight: selectedProviderType === option.value ? 600 : 500,
-                          color: selectedProviderType === option.value ? 'primary.main' : 'text.primary',
-                          mb: 0.5,
-                        }}
+                <Box sx={{ display: 'flex', alignItems: 'center', flexShrink: 0, ml: 2 }}>
+                  {/* Documentation link */}
+                  {hasSpecificDocumentation(option.value) && (
+                    <Tooltip title={`View ${option.label} documentation`}>
+                      <IconButton
+                        size="small"
+                        component={Link}
+                        href={getProviderDocumentationUrl(option.value)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        sx={{ mr: 1, color: 'text.secondary' }}
                       >
-                        {option.label}
-                      </Typography>
-                      <Typography
-                        variant="body2"
-                        sx={{
-                          color: 'text.secondary',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          display: '-webkit-box',
-                          WebkitLineClamp: 2,
-                          WebkitBoxOrient: 'vertical',
-                        }}
-                      >
-                        {option.description}
-                      </Typography>
-                    </Box>
+                        <HelpOutlineIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  )}
 
-                    <Box sx={{ display: 'flex', alignItems: 'center', flexShrink: 0, ml: 2 }}>
-                      {/* Documentation link */}
-                      {hasSpecificDocumentation(option.value) && (
-                        <Tooltip title={`View ${option.label} documentation`}>
-                          <IconButton
-                            size="small"
-                            component={Link}
-                            href={getProviderDocumentationUrl(option.value)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                            sx={{ mr: 1, color: 'text.secondary' }}
-                          >
-                            <HelpOutlineIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                      )}
-
-                      {selectedProviderType === option.value && (
-                        <CheckCircleIcon color="primary" fontSize="small" />
-                      )}
-                    </Box>
-                  </Paper>
-                ))}
-              </Stack>
-            </FormControl>
-          </Paper>
+                  {selectedProviderType === option.value && (
+                    <CheckCircleIcon color="primary" fontSize="small" />
+                  )}
+                </Box>
+              </Paper>
+            ))}
+          </Stack>
+        </FormControl>
+      </Paper>
     </Box>
   );
 }
