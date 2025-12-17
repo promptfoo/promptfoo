@@ -9,8 +9,9 @@ interface EventCardProps {
 }
 
 export default function EventCard({ event }: EventCardProps): React.ReactElement {
-  const hasExistingPage = event.slug === 'blackhat-2025' || event.slug === 'defcon-2025';
-  const eventUrl = `/events/${event.slug}`;
+  const hasExistingPage =
+    event.customPageUrl || event.slug === 'blackhat-2025' || event.slug === 'defcon-2025';
+  const eventUrl = event.customPageUrl || `/events/${event.slug}`;
 
   const CardContent = () => (
     <>

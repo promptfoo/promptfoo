@@ -70,6 +70,7 @@ export interface Event {
   photos?: string[];
   resources?: EventResource[];
   externalLinks?: { label: string; url: string }[];
+  customPageUrl?: string; // Custom dedicated page URL for special events
 }
 
 // Helper to determine event status based on date
@@ -355,6 +356,106 @@ export const events: Event[] = [
         description: 'Shared LLM security insights',
       },
     ],
+    customPageUrl: '/events/bsides-seattle-2025',
+  },
+  {
+    id: 'telecom-talks-2025',
+    slug: 'telecom-talks-2025',
+    name: 'Promptfoo at Telecom Talks 2025',
+    shortName: 'Telecom Talks 2025',
+    status: 'past',
+    type: 'conference',
+    startDate: '2025-04-09',
+    endDate: '2025-04-09',
+    location: {
+      venue: 'SRI International',
+      city: 'Menlo Park',
+      state: 'CA',
+      country: 'USA',
+    },
+    description:
+      'Ian Webster joined Swisscom on stage to discuss AI security in telecommunications.',
+    fullDescription:
+      'Promptfoo CEO Ian Webster joined Swisscom on stage at Telecom Talks 2025 to discuss the unique challenges of securing AI systems in telecommunications infrastructure.',
+    highlights: [
+      {
+        icon: '📡',
+        title: 'Joint Session',
+        description: 'On stage with Swisscom',
+      },
+      {
+        icon: '🌐',
+        title: 'Telecom Focus',
+        description: 'Carrier-grade AI security',
+      },
+    ],
+    customPageUrl: '/events/telecom-talks-2025',
+  },
+  {
+    id: 'sector-2025',
+    slug: 'sector-2025',
+    name: 'Promptfoo at SecTor 2025',
+    shortName: 'SecTor 2025',
+    status: getEventStatus('2025-10-02'),
+    type: 'conference',
+    startDate: '2025-09-30',
+    endDate: '2025-10-02',
+    location: {
+      venue: 'Metro Toronto Convention Centre',
+      city: 'Toronto',
+      state: 'ON',
+      country: 'Canada',
+    },
+    description:
+      "Canada's largest IT security conference. Arsenal demos and enterprise AI security discussions.",
+    fullDescription:
+      "Promptfoo was selected for the SecTor Arsenal, showcasing open-source AI security tools to Canada's enterprise security community at Canada's largest IT security conference.",
+    highlights: [
+      {
+        icon: '🍁',
+        title: 'Arsenal Listing',
+        description: 'Selected for SecTor Arsenal',
+      },
+      {
+        icon: '🇨🇦',
+        title: 'Canadian Enterprise',
+        description: 'Major banks and government',
+      },
+    ],
+    customPageUrl: '/events/sector-2025',
+  },
+  {
+    id: 'ai-security-summit-2025',
+    slug: 'ai-security-summit-2025',
+    name: 'Promptfoo at AI Security Summit 2025',
+    shortName: 'AI Security Summit 2025',
+    status: getEventStatus('2025-10-23'),
+    type: 'conference',
+    startDate: '2025-10-22',
+    endDate: '2025-10-23',
+    location: {
+      venue: 'Westin St. Francis',
+      city: 'San Francisco',
+      state: 'CA',
+      country: 'USA',
+    },
+    description:
+      'Two days of AI security research, expert panels, and cutting-edge demonstrations.',
+    fullDescription:
+      'Ian Webster joined industry leaders as a panel speaker at AI Security Summit 2025 to discuss the evolving landscape of LLM vulnerabilities and practical defense strategies.',
+    highlights: [
+      {
+        icon: '🧠',
+        title: 'Panel Speaker',
+        description: 'Ian Webster on expert panel',
+      },
+      {
+        icon: '🔬',
+        title: 'Research',
+        description: 'Latest AI security findings',
+      },
+    ],
+    customPageUrl: '/events/ai-security-summit-2025',
   },
 ];
 
