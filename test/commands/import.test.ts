@@ -1,4 +1,4 @@
-import { MockInstance, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 
@@ -26,7 +26,6 @@ vi.mock('../../src/telemetry', () => ({
 
 describe('importCommand', () => {
   let program: Command;
-  let mockExit: MockInstance;
   let tempFilePath: string;
 
   beforeAll(async () => {
@@ -35,9 +34,7 @@ describe('importCommand', () => {
 
   beforeEach(async () => {
     program = new Command();
-    mockExit = vi.spyOn(process, 'exit').mockImplementation(function () {
-      return undefined as never;
-    });
+    process.exitCode = undefined;
 
     // Clear all tables before each test
     const db = getDb();
@@ -52,6 +49,7 @@ describe('importCommand', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+    process.exitCode = undefined;
 
     // Clean up temp file if it exists
     if (tempFilePath && fs.existsSync(tempFilePath)) {
@@ -77,7 +75,7 @@ describe('importCommand', () => {
       expect(logger.error).toHaveBeenCalledWith(
         expect.stringMatching(/Failed to import eval.*ENOENT/),
       );
-      expect(mockExit).toHaveBeenCalledWith(1);
+      expect(process.exitCode).toBe(1);
     });
 
     it('should handle invalid JSON', async () => {
@@ -91,7 +89,7 @@ describe('importCommand', () => {
       expect(logger.error).toHaveBeenCalledWith(
         expect.stringMatching(/Failed to import eval.*SyntaxError/),
       );
-      expect(mockExit).toHaveBeenCalledWith(1);
+      expect(process.exitCode).toBe(1);
     });
   });
 
@@ -106,7 +104,7 @@ describe('importCommand', () => {
       await program.parseAsync(['node', 'test', 'import', sampleFilePath]);
 
       // Check if the import process exited with an error
-      expect(mockExit).not.toHaveBeenCalledWith(1);
+      expect(process.exitCode).toBeUndefined();
 
       // The evalId should now be preserved from the export file
       const importedEval = await Eval.findById(sampleData.evalId);
@@ -182,10 +180,11 @@ describe('importCommand', () => {
 
       // First import should succeed
       await program.parseAsync(['node', 'test', 'import', sampleFilePath]);
-      expect(mockExit).not.toHaveBeenCalledWith(1);
+      expect(process.exitCode).toBeUndefined();
 
-      // Reset mocks for second import
+      // Reset mocks and exitCode for second import
       vi.clearAllMocks();
+      process.exitCode = undefined;
 
       // Second import should fail with collision error
       const program2 = new Command();
@@ -195,7 +194,7 @@ describe('importCommand', () => {
       expect(logger.error).toHaveBeenCalledWith(
         expect.stringContaining(`Eval ${sampleData.evalId} already exists`),
       );
-      expect(mockExit).toHaveBeenCalledWith(1);
+      expect(process.exitCode).toBe(1);
     });
 
     it('should allow import with --new-id flag when eval already exists', async () => {
@@ -206,17 +205,18 @@ describe('importCommand', () => {
 
       // First import should succeed
       await program.parseAsync(['node', 'test', 'import', sampleFilePath]);
-      expect(mockExit).not.toHaveBeenCalledWith(1);
+      expect(process.exitCode).toBeUndefined();
 
-      // Reset mocks for second import
+      // Reset mocks and exitCode for second import
       vi.clearAllMocks();
+      process.exitCode = undefined;
 
       // Second import with --new-id should succeed
       const program2 = new Command();
       importCommand(program2);
       await program2.parseAsync(['node', 'test', 'import', '--new-id', sampleFilePath]);
 
-      expect(mockExit).not.toHaveBeenCalledWith(1);
+      expect(process.exitCode).toBeUndefined();
       expect(logger.info).toHaveBeenCalledWith(
         expect.stringMatching(/has been successfully imported/),
       );
@@ -230,6 +230,93 @@ describe('importCommand', () => {
       const newEval = allEvals.find((e) => e.id !== sampleData.evalId);
       expect(originalEval).toBeDefined();
       expect(newEval).toBeDefined();
+    });
+
+    it('should replace existing eval with --force flag', async () => {
+      const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
+      const sampleData = JSON.parse(fs.readFileSync(sampleFilePath, 'utf-8'));
+
+      importCommand(program);
+
+      // First import should succeed
+      await program.parseAsync(['node', 'test', 'import', sampleFilePath]);
+      expect(process.exitCode).toBeUndefined();
+
+      // Verify the eval exists
+      const firstImport = await Eval.findById(sampleData.evalId);
+      expect(firstImport).toBeDefined();
+
+      // Reset mocks and exitCode for second import
+      vi.clearAllMocks();
+      process.exitCode = undefined;
+
+      // Second import with --force should succeed and replace existing
+      const program2 = new Command();
+      importCommand(program2);
+      await program2.parseAsync(['node', 'test', 'import', '--force', sampleFilePath]);
+
+      expect(process.exitCode).toBeUndefined();
+      expect(logger.info).toHaveBeenCalledWith(`Replacing existing eval ${sampleData.evalId}`);
+      expect(logger.info).toHaveBeenCalledWith(
+        expect.stringMatching(/has been successfully imported/),
+      );
+
+      // Should still have only 1 eval in database (replaced, not duplicated)
+      const allEvals = await Eval.getMany(10);
+      expect(allEvals.length).toBe(1);
+      expect(allEvals[0].id).toBe(sampleData.evalId);
+
+      // Verify the eval data is correct
+      const replacedEval = await Eval.findById(sampleData.evalId);
+      expect(replacedEval).toBeDefined();
+      expect(replacedEval!.config.description).toBe(sampleData.config.description);
+    });
+
+    it('should import normally with --force flag when eval does not exist', async () => {
+      const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
+      const sampleData = JSON.parse(fs.readFileSync(sampleFilePath, 'utf-8'));
+
+      importCommand(program);
+
+      // Import with --force when no eval exists should succeed normally
+      await program.parseAsync(['node', 'test', 'import', '--force', sampleFilePath]);
+
+      expect(process.exitCode).toBeUndefined();
+      // Should NOT log "Replacing existing eval" since there was nothing to replace
+      expect(logger.info).not.toHaveBeenCalledWith(
+        expect.stringContaining('Replacing existing eval'),
+      );
+      expect(logger.info).toHaveBeenCalledWith(
+        expect.stringMatching(/has been successfully imported/),
+      );
+
+      // Verify the eval was imported with original ID
+      const importedEval = await Eval.findById(sampleData.evalId);
+      expect(importedEval).toBeDefined();
+      expect(importedEval!.id).toBe(sampleData.evalId);
+    });
+
+    it('should show updated error message mentioning --force option', async () => {
+      const sampleFilePath = path.join(__dirname, '../__fixtures__/sample-export.json');
+
+      importCommand(program);
+
+      // First import should succeed
+      await program.parseAsync(['node', 'test', 'import', sampleFilePath]);
+      expect(process.exitCode).toBeUndefined();
+
+      // Reset mocks and exitCode for second import
+      vi.clearAllMocks();
+      process.exitCode = undefined;
+
+      // Second import without flags should fail with error mentioning both options
+      const program2 = new Command();
+      importCommand(program2);
+      await program2.parseAsync(['node', 'test', 'import', sampleFilePath]);
+
+      expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('--new-id'));
+      expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('--force'));
+      expect(process.exitCode).toBe(1);
     });
   });
 });

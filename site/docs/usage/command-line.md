@@ -272,18 +272,19 @@ Deletes a specific resource.
 
 Import an eval file from JSON format.
 
-| Option     | Description                                                  |
-| ---------- | ------------------------------------------------------------ |
-| `--new-id` | Generate a new eval ID instead of preserving the original ID |
+| Option     | Description                                                                           |
+| ---------- | ------------------------------------------------------------------------------------- |
+| `--new-id` | Generate a new eval ID instead of preserving the original (creates a duplicate eval)  |
+| `--force`  | Replace an existing eval with the same ID                                             |
 
 When importing an eval, the following data is preserved from the export:
 
-- **Eval ID** - The original eval ID is preserved by default
-- **Timestamp** - The original creation timestamp is preserved
-- **Author** - The original author is preserved
+- **Eval ID** - Preserved by default. Use `--new-id` to generate a new ID, or `--force` to replace an existing eval.
+- **Timestamp** - The original creation timestamp is always preserved (even with `--new-id` or `--force`)
+- **Author** - The original author is always preserved (even with `--new-id` or `--force`)
 - **Config, results, and all test data** - Fully preserved
 
-If an eval with the same ID already exists, the import will fail with an error. Use `--new-id` to import a duplicate with a new ID.
+If an eval with the same ID already exists, the import will fail with an error unless you specify `--new-id` (to create a duplicate with a new ID) or `--force` (to replace the existing eval).
 
 Example:
 
@@ -291,8 +292,11 @@ Example:
 # Import an eval, preserving the original ID
 promptfoo import my-eval.json
 
-# Import even if an eval with this ID exists (creates new ID)
+# Import even if an eval with this ID exists (creates duplicate with new ID)
 promptfoo import --new-id my-eval.json
+
+# Replace an existing eval with updated data
+promptfoo import --force my-eval.json
 ```
 
 ## `promptfoo export`

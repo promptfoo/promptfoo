@@ -66,6 +66,7 @@ export function importCommand(program: Command) {
     .command('import <file>')
     .description('Import an eval record from a JSON file')
     .option('--new-id', 'Generate a new eval ID instead of preserving the original')
+    .option('--force', 'Replace existing eval with the same ID')
     .action(async (file, cmdObj) => {
       const db = getDb();
       let evalId: string;
@@ -82,8 +83,16 @@ export function importCommand(program: Command) {
         if (importId && !cmdObj.newId) {
           const existing = await Eval.findById(importId);
           if (existing) {
-            logger.error(`Eval ${importId} already exists. Use --new-id to import with a new ID.`);
-            process.exit(1);
+            if (cmdObj.force) {
+              logger.info(`Replacing existing eval ${importId}`);
+              await existing.delete();
+            } else {
+              logger.error(
+                `Eval ${importId} already exists. Use --new-id to import with a new ID, or --force to replace it.`,
+              );
+              process.exitCode = 1;
+              return;
+            }
           }
         }
 
@@ -123,7 +132,7 @@ export function importCommand(program: Command) {
         logger.info(`Eval with ID ${evalId} has been successfully imported.`);
       } catch (error) {
         logger.error(`Failed to import eval: ${error}`);
-        process.exit(1);
+        process.exitCode = 1;
       }
     });
 }
