@@ -138,7 +138,7 @@ export default function RSA2025(): React.ReactElement {
                     d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
                   />
                 </svg>
-                <span>Early Stage Expo</span>
+                <span>Expo Floor</span>
               </div>
             </div>
             <div className={styles.heroCtas}>
@@ -184,16 +184,16 @@ export default function RSA2025(): React.ReactElement {
               <div className={styles.recapIcon}>📊</div>
               <h3>Research Sharing</h3>
               <p>
-                Shared our latest findings on LLM vulnerabilities, including prompt injection
-                patterns and data exfiltration techniques.
+                Shared practical testing patterns: prompt injection regression tests, RAG data exfil
+                probes, and how to operationalize red teaming in CI.
               </p>
             </div>
             <div className={styles.recapCard}>
               <div className={styles.recapIcon}>🏆</div>
-              <h3>Early Stage Expo</h3>
+              <h3>Expo Floor Presence</h3>
               <p>
-                Featured in RSA's Early Stage Expo, showcasing our open-source AI security platform
-                to the global security community.
+                Showcased our open-source AI security platform to the global security community at
+                RSA Conference's expo floor.
               </p>
             </div>
           </div>
@@ -225,10 +225,10 @@ export default function RSA2025(): React.ReactElement {
             </div>
             <div className={styles.showcaseItem}>
               <div className={styles.showcaseNumber}>03</div>
-              <h3>Enterprise Compliance</h3>
+              <h3>Audit-Friendly Reporting</h3>
               <p>
-                SOC 2 compliant platform with detailed audit trails, helping enterprises meet
-                regulatory requirements for AI governance.
+                Detailed test logs and repeatable security checks, helping enterprises document AI
+                security for governance and compliance reviews.
               </p>
             </div>
             <div className={styles.showcaseItem}>

@@ -303,46 +303,46 @@ export default function SecTor2025(): React.ReactElement {
                 <div className={styles.statLabel}>Days</div>
               </div>
               <div className={styles.stat}>
-                <div className={styles.statNumber}>1000+</div>
-                <div className={styles.statLabel}>Attendees</div>
+                <div className={styles.statNumber}>Toronto</div>
+                <div className={styles.statLabel}>Location</div>
               </div>
               <div className={styles.stat}>
-                <div className={styles.statNumber}>∞</div>
-                <div className={styles.statLabel}>Tim Hortons</div>
+                <div className={styles.statNumber}>Oct 1–2</div>
+                <div className={styles.statLabel}>Arsenal Lab</div>
               </div>
               <div className={styles.stat}>
-                <div className={styles.statNumber}>0°C</div>
-                <div className={styles.statLabel}>Expected Weather</div>
+                <div className={styles.statNumber}>MTCC</div>
+                <div className={styles.statLabel}>Venue</div>
               </div>
             </div>
           </div>
         </section>
 
-        {/* Testimonials */}
+        {/* Common Themes */}
         <section className={styles.testimonialsSection}>
           <div className={styles.container}>
-            <h2 className={styles.sectionTitle}>What We Heard</h2>
+            <h2 className={styles.sectionTitle}>Common Themes</h2>
             <div className={styles.testimonialsGrid}>
               <blockquote className={styles.testimonial}>
                 <p>
-                  "Finally an AI security tool that fits our compliance requirements. The detailed
-                  reports make our auditors happy, eh."
+                  Teams were looking for AI security tools that fit their compliance requirements,
+                  with detailed reports suitable for auditors.
                 </p>
-                <cite>— Security Director, Major Canadian Bank</cite>
+                <cite>Theme: Financial services</cite>
               </blockquote>
               <blockquote className={styles.testimonial}>
                 <p>
-                  "We've been looking for ways to test our AI assistants. This is exactly what our
-                  GRC team needed to see."
+                  Government teams wanted ways to test AI assistants while meeting Canadian privacy
+                  regulations and GRC requirements.
                 </p>
-                <cite>— CISO, Provincial Government</cite>
+                <cite>Theme: Public sector</cite>
               </blockquote>
               <blockquote className={styles.testimonial}>
                 <p>
-                  "Open source is key for us. Being able to audit the testing methodology ourselves
-                  is non-negotiable."
+                  Open source was important—being able to audit the testing methodology was a key
+                  requirement for many teams.
                 </p>
-                <cite>— Security Architect, Tech Company</cite>
+                <cite>Theme: Enterprise security</cite>
               </blockquote>
             </div>
           </div>
