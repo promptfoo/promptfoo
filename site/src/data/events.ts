@@ -174,8 +174,7 @@ export const events: Event[] = [
       country: 'USA',
     },
     booth: 'Booth #4712',
-    description:
-      'Meet us at booth #4712 for live AI red teaming demos and security consultations.',
+    description: 'Meet us at booth #4712 for live AI red teaming demos and security consultations.',
     fullDescription:
       'Join us at Black Hat USA 2025 for live AI red teaming demos, security consultations, and the latest in LLM vulnerability research. Visit our booth to see how Fortune 500 companies protect their AI applications.',
     cardImage: '/img/events/blackhat-2025.png',
@@ -310,8 +309,7 @@ export const events: Event[] = [
       state: 'CA',
       country: 'USA',
     },
-    description:
-      'We connected with the security community at BSides SF 2025 during RSA week.',
+    description: 'We connected with the security community at BSides SF 2025 during RSA week.',
     fullDescription:
       'Promptfoo joined the BSides SF 2025 community event during RSA week. We participated in security discussions and connected with researchers working on AI security challenges.',
     highlights: [

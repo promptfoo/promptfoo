@@ -43,9 +43,7 @@ export default function EventsPage(): React.ReactElement {
 
     // Apply year filter
     if (yearFilter !== 'all') {
-      result = result.filter(
-        (event) => new Date(event.startDate).getFullYear() === yearFilter,
-      );
+      result = result.filter((event) => new Date(event.startDate).getFullYear() === yearFilter);
     }
 
     return result;
@@ -59,9 +57,7 @@ export default function EventsPage(): React.ReactElement {
 
     // If year filter is applied, filter counts
     if (yearFilter !== 'all') {
-      allEvents = events.filter(
-        (event) => new Date(event.startDate).getFullYear() === yearFilter,
-      );
+      allEvents = events.filter((event) => new Date(event.startDate).getFullYear() === yearFilter);
       upcomingEvents = upcomingEvents.filter(
         (event) => new Date(event.startDate).getFullYear() === yearFilter,
       );
