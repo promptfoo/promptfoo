@@ -136,7 +136,7 @@ export interface GenAISpanContext {
   // Request body (will be truncated to MAX_BODY_LENGTH)
   requestBody?: string;
 
-  /** Whether to sanitize sensitive data (API keys, secrets) from bodies. Defaults to false. */
+  /** Whether to sanitize sensitive data (API keys, secrets) from bodies. Defaults to true. */
   sanitizeBodies?: boolean;
 }
 
@@ -333,9 +333,9 @@ function sanitizeBody(body: string): string {
  * Optionally sanitizes sensitive data first if sanitize=true.
  *
  * @param body - The body string to process
- * @param sanitize - Whether to sanitize sensitive data (defaults to false)
+ * @param sanitize - Whether to sanitize sensitive data (defaults to true)
  */
-function truncateBody(body: string, sanitize: boolean = false): string {
+function truncateBody(body: string, sanitize: boolean = true): string {
   // Sanitize sensitive data if requested
   const processed = sanitize ? sanitizeBody(body) : body;
 
@@ -343,7 +343,7 @@ function truncateBody(body: string, sanitize: boolean = false): string {
   if (processed.length <= MAX_BODY_LENGTH) {
     return processed;
   }
-  return processed.slice(0, MAX_BODY_LENGTH - 13) + '... [truncated]';
+  return processed.slice(0, MAX_BODY_LENGTH - 15) + '... [truncated]';
 }
 
 /**
@@ -351,12 +351,12 @@ function truncateBody(body: string, sanitize: boolean = false): string {
  *
  * @param span - The span to update
  * @param result - The result data containing token usage and response metadata
- * @param sanitize - Whether to sanitize sensitive data from response body (defaults to false)
+ * @param sanitize - Whether to sanitize sensitive data from response body (defaults to true)
  */
 export function setGenAIResponseAttributes(
   span: Span,
   result: GenAISpanResult,
-  sanitize: boolean = false,
+  sanitize: boolean = true,
 ): void {
   // Token usage
   if (result.tokenUsage) {
