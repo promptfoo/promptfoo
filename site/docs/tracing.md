@@ -5,30 +5,11 @@ description: Implement OpenTelemetry tracing in your LLM evaluations to monitor 
 
 # Tracing
 
-Promptfoo supports OpenTelemetry (OTLP) tracing to help you understand the internal operations of your LLM providers during evaluations.
-
-This feature allows you to collect detailed performance metrics and debug complex provider implementations.
+Promptfoo acts as an OpenTelemetry receiver, collecting traces from your LLM providers and displaying them in the web UI. Use any OpenTelemetry SDK in any language—no external collector required.
 
 ![traces in promptfoo](/img/docs/trace.png)
 
-## Overview
-
-Promptfoo acts as an **OpenTelemetry receiver**, collecting traces from your providers and displaying them in the web UI. This eliminates the need for external observability infrastructure during development and testing.
-
-Tracing provides visibility into:
-
-- **Provider execution flow**: See how your providers process requests internally
-- **Performance bottlenecks**: Identify slow operations in RAG pipelines or multi-step workflows
-- **Error tracking**: Trace failures to specific operations
-- **Resource usage**: Monitor external API calls, database queries, and other operations
-
-### Key Features
-
-- **Standard OpenTelemetry support**: Use any OpenTelemetry SDK in any language
-- **Built-in OTLP receiver**: No external collector required for basic usage
-- **Web UI visualization**: View traces directly in the Promptfoo interface
-- **Automatic correlation**: Traces are linked to specific test cases and evaluations
-- **Flexible forwarding**: Send traces to Jaeger, Tempo, or any OTLP-compatible backend
+Tracing helps you debug RAG pipelines, identify slow operations, trace errors to specific steps, and monitor external API calls. Traces are automatically linked to test cases, and you can forward them to Jaeger, Tempo, or any OTLP-compatible backend.
 
 ## Built-in Provider Instrumentation
 
@@ -123,86 +104,59 @@ tracing:
 
 ### 2. Instrument Your Provider
 
-Promptfoo passes a W3C trace context to providers via the `traceparent` field. Use this to create child spans:
+Promptfoo passes a W3C trace context via `traceparent`. Extract it to create child spans:
 
 ```javascript
-const { trace, context, SpanStatusCode } = require('@opentelemetry/api');
+const { trace, context } = require('@opentelemetry/api');
 const { NodeTracerProvider } = require('@opentelemetry/sdk-trace-node');
 const { OTLPTraceExporter } = require('@opentelemetry/exporter-trace-otlp-http');
 const { SimpleSpanProcessor } = require('@opentelemetry/sdk-trace-base');
 const { resourceFromAttributes } = require('@opentelemetry/resources');
-const { ATTR_SERVICE_NAME } = require('@opentelemetry/semantic-conventions');
 
-// Initialize tracer with v2 API
-const exporter = new OTLPTraceExporter({
-  url: 'http://localhost:4318/v1/traces',
-});
+// highlight-start
+// Initialize OpenTelemetry (runs once at module load)
 const provider = new NodeTracerProvider({
-  resource: resourceFromAttributes({
-    [ATTR_SERVICE_NAME]: 'my-provider',
-  }),
-  spanProcessors: [new SimpleSpanProcessor(exporter)],
+  resource: resourceFromAttributes({ 'service.name': 'my-provider' }),
+  spanProcessors: [new SimpleSpanProcessor(new OTLPTraceExporter({
+    url: 'http://localhost:4318/v1/traces',
+  }))],
 });
 provider.register();
-
 const tracer = trace.getTracer('my-provider');
+// highlight-end
 
 module.exports = {
   async callApi(prompt, promptfooContext) {
-    // Parse trace context from Promptfoo
-    if (promptfooContext.traceparent) {
-      const activeContext = trace.propagation.extract(context.active(), {
-        traceparent: promptfooContext.traceparent,
-      });
+    // Extract Promptfoo's trace context
+    const ctx = trace.propagation.extract(context.active(), {
+      traceparent: promptfooContext.traceparent,
+    });
 
-      return context.with(activeContext, async () => {
-        const span = tracer.startSpan('provider.call');
+    return context.with(ctx, async () => {
+      const span = tracer.startSpan('provider.call');
+      span.setAttribute('prompt.length', prompt.length);
 
-        try {
-          // Your provider logic here
-          span.setAttribute('prompt.length', prompt.length);
+      const result = await yourLLMCall(prompt);
 
-          const result = await yourLLMCall(prompt);
-
-          span.setStatus({ code: SpanStatusCode.OK });
-          return { output: result };
-        } catch (error) {
-          span.recordException(error);
-          span.setStatus({
-            code: SpanStatusCode.ERROR,
-            message: error.message,
-          });
-          throw error;
-        } finally {
-          span.end();
-        }
-      });
-    }
-
-    // Fallback for when tracing is disabled
-    return { output: await yourLLMCall(prompt) };
+      span.end();
+      return { output: result };
+    });
   },
 };
 ```
 
+For complete examples with error handling and advanced patterns, see the [OpenTelemetry tracing example](https://github.com/promptfoo/promptfoo/tree/main/examples/opentelemetry-tracing).
+
 ### 3. View Traces
 
-After running an evaluation, view traces in the web UI:
+Run your evaluation and open the web UI:
 
-1. Run your evaluation:
+```bash
+promptfoo eval
+promptfoo view
+```
 
-   ```bash
-   promptfoo eval
-   ```
-
-2. Open the web UI:
-
-   ```bash
-   promptfoo view
-   ```
-
-3. Click the magnifying glass (🔎) icon on any test result
-4. Scroll to the "Trace Timeline" section
+In the results table, click the **magnifying glass icon** (🔎) on any test result to open the details panel, then scroll to **Trace Timeline**.
 
 ## Configuration Reference
 
@@ -269,14 +223,7 @@ tracing:
 
 ### JavaScript/TypeScript
 
-For complete provider implementation details, see the [JavaScript Provider documentation](/docs/providers/custom-api/). For tracing-specific examples, see the [OpenTelemetry tracing example](https://github.com/promptfoo/promptfoo/tree/main/examples/opentelemetry-tracing).
-
-Key points:
-
-- Use `SimpleSpanProcessor` for immediate trace export
-- Extract the W3C trace context from `traceparent`
-- Create child spans for each operation
-- Set appropriate span attributes and status
+See the [Quick Start](#2-instrument-your-provider) above and the [OpenTelemetry tracing example](https://github.com/promptfoo/promptfoo/tree/main/examples/opentelemetry-tracing) for complete implementations.
 
 ### Python
 
@@ -318,19 +265,7 @@ def call_api(prompt, context):
 
 ## Trace Visualization
 
-Promptfoo includes a built-in trace viewer that displays all collected telemetry data. Since Promptfoo functions as an OTLP receiver, you can view traces directly without configuring external tools like Jaeger or Grafana Tempo.
-
-The web UI displays traces as a hierarchical timeline showing:
-
-- **Span hierarchy**: Parent-child relationships between operations
-- **Duration bars**: Visual representation of operation timing
-- **Status indicators**: Success (green), error (red), or unset (gray)
-- **Hover details**: Span attributes, duration, and timestamps
-- **Relative timing**: See which operations run in parallel vs. sequentially
-- **Expandable details**: Click any span to reveal full attribute information
-- **Export functionality**: Download traces as JSON for external analysis
-
-### Understanding the Timeline
+The web UI displays traces as a hierarchical timeline. Each span shows its duration as a horizontal bar, with width proportional to execution time. Status is color-coded: green (success), red (error), gray (unset).
 
 ```
 [Root Span: provider.call (500ms)]
@@ -339,34 +274,9 @@ The web UI displays traces as a hierarchical timeline showing:
   └─[LLM Generation (300ms)]
 ```
 
-Each bar's width represents its duration relative to the total trace time. Hover over any span to see:
+Hover over any span to see timestamps, duration, and attributes. Click the expand icon to open the details panel with full span metadata, including `promptfoo.request.body` and `promptfoo.response.body` for debugging.
 
-- Exact start and end timestamps
-- Duration in milliseconds or seconds
-- Custom attributes you've added
-- Error messages (if any)
-
-### Span Details Panel
-
-Click the expand icon on any span to reveal a detailed attributes panel showing:
-
-- **Span ID** and **Parent Span ID** for tracing relationships
-- **Start** and **End** timestamps with precision
-- **Duration** in a human-readable format
-- **Status** (OK, ERROR, or UNSET)
-- **All span attributes** including GenAI attributes, custom attributes, and Promptfoo-specific data
-
-This is useful for inspecting the full request/response bodies (`promptfoo.request.body` and `promptfoo.response.body`) and debugging provider behavior.
-
-### Exporting Traces
-
-Click the **Export Traces** button to download all traces for the current evaluation or test case as a JSON file. The export includes:
-
-- Evaluation ID and test case ID
-- Export timestamp
-- Complete trace data with all spans and attributes
-
-The exported JSON can be imported into external tools like Jaeger, Grafana Tempo, or custom analysis scripts.
+Click **Export Traces** to download traces as JSON for import into Jaeger, Grafana Tempo, or custom analysis tools.
 
 ## Best Practices
 
@@ -504,67 +414,12 @@ OTEL_LOG_LEVEL=debug promptfoo eval
 
 ## Integration Examples
 
-### RAG Pipeline Tracing
+For complete working examples, see the [OpenTelemetry tracing example](https://github.com/promptfoo/promptfoo/tree/main/examples/opentelemetry-tracing) which demonstrates:
 
-```javascript
-async function ragPipeline(query, context) {
-  const span = tracer.startSpan('rag.pipeline');
-
-  try {
-    // Retrieval phase
-    const retrieveSpan = tracer.startSpan('rag.retrieve', { parent: span });
-    const documents = await vectorSearch(query);
-    retrieveSpan.setAttribute('documents.count', documents.length);
-    retrieveSpan.end();
-
-    // Reranking phase
-    const rerankSpan = tracer.startSpan('rag.rerank', { parent: span });
-    const ranked = await rerank(query, documents);
-    rerankSpan.setAttribute('documents.reranked', ranked.length);
-    rerankSpan.end();
-
-    // Generation phase
-    const generateSpan = tracer.startSpan('llm.generate', { parent: span });
-    const response = await llm.generate(query, ranked);
-    generateSpan.setAttribute('response.tokens', response.tokenCount);
-    generateSpan.end();
-
-    span.setStatus({ code: SpanStatusCode.OK });
-    return response;
-  } catch (error) {
-    span.recordException(error);
-    span.setStatus({ code: SpanStatusCode.ERROR });
-    throw error;
-  } finally {
-    span.end();
-  }
-}
-```
-
-### Multi-Model Comparison
-
-```javascript
-async function compareModels(prompt, context) {
-  const span = tracer.startSpan('compare.models');
-
-  const models = ['gpt-4', 'claude-3', 'llama-3'];
-  const promises = models.map(async (model) => {
-    const modelSpan = tracer.startSpan(`model.${model}`, { parent: span });
-    try {
-      const result = await callModel(model, prompt);
-      modelSpan.setAttribute('model.name', model);
-      modelSpan.setAttribute('response.latency', result.latency);
-      return result;
-    } finally {
-      modelSpan.end();
-    }
-  });
-
-  const results = await Promise.all(promises);
-  span.end();
-  return results;
-}
-```
+- **RAG pipeline tracing**: Query analysis → document retrieval → context augmentation → reasoning → response generation
+- **Nested spans**: Parent-child relationships for complex workflows
+- **Custom attributes**: Token counts, document relevance scores, processing times
+- **Parallel operations**: Tracing concurrent document retrievals
 
 ## Red Team Tracing
 
