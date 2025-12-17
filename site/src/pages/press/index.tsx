@@ -37,11 +37,16 @@ const ArticleLink = ({ article }: { article: Article }) => (
 );
 
 const getPodcastLinkText = (link: string): string => {
-  if (link.includes('spotify.com')) {
-    return 'Listen on Spotify →';
-  }
-  if (link.includes('youtube.com') || link.includes('youtu.be')) {
-    return 'Watch on YouTube →';
+  try {
+    const hostname = new URL(link).hostname;
+    if (hostname.endsWith('spotify.com')) {
+      return 'Listen on Spotify →';
+    }
+    if (hostname.endsWith('youtube.com') || hostname.endsWith('youtu.be')) {
+      return 'Watch on YouTube →';
+    }
+  } catch {
+    // Invalid URL, use default text
   }
   return 'Listen to episode →';
 };
