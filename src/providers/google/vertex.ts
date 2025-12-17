@@ -98,12 +98,13 @@ class VertexGenericProvider implements ApiProvider {
   }
 
   getApiKey(): string | undefined {
+    // For Vertex provider, prioritize VERTEX_API_KEY over GEMINI_API_KEY
     return (
       this.config.apiKey ||
-      this.env?.GEMINI_API_KEY ||
       this.env?.VERTEX_API_KEY ||
-      getEnvString('GEMINI_API_KEY') ||
-      getEnvString('VERTEX_API_KEY')
+      this.env?.GEMINI_API_KEY ||
+      getEnvString('VERTEX_API_KEY') ||
+      getEnvString('GEMINI_API_KEY')
     );
   }
 
