@@ -279,9 +279,13 @@ export interface CompletionOptions {
   streaming?: boolean;
 
   /**
-   * Whether to use Vertex AI express mode with API key authentication.
-   * Express mode uses a simplified endpoint without project/location.
-   * When enabled, uses the API key from VERTEX_API_KEY or GEMINI_API_KEY.
+   * Control Vertex AI express mode (API key authentication).
+   *
+   * Express mode is AUTOMATIC when an API key is available and no explicit
+   * projectId or credentials are configured. Set to `false` to force OAuth
+   * authentication even when an API key is present.
+   *
+   * @default undefined (automatic detection)
    * @see https://cloud.google.com/vertex-ai/generative-ai/docs/start/express-mode
    */
   expressMode?: boolean;

@@ -262,10 +262,10 @@ export VERTEX_PROJECT_ID="your-project-id"
 
 #### Option 5: Express Mode API Key (Quick Start)
 
-Vertex AI Express Mode provides a simplified authentication using an API key. This is ideal for quick testing and development:
+Vertex AI Express Mode provides simplified authentication using an API key. **Express mode is automatic** when you have an API key and no explicit `projectId` or `credentials` configured.
 
 1. Create an API key in the [Google Cloud Console](https://console.cloud.google.com/apis/credentials) or [Vertex AI Studio](https://console.cloud.google.com/vertex-ai)
-2. Set the environment variable and enable express mode:
+2. Set the environment variable:
 
 ```bash
 export VERTEX_API_KEY="your-express-mode-api-key"
@@ -277,8 +277,8 @@ export GEMINI_API_KEY="your-express-mode-api-key"
 providers:
   - id: vertex:gemini-3-flash-preview
     config:
-      expressMode: true
       temperature: 0.7
+      # No expressMode needed - it's automatic with API key!
 ```
 
 Express mode benefits:
@@ -286,6 +286,9 @@ Express mode benefits:
 - No project ID or region required
 - Simpler setup for quick testing
 - Works with Gemini models
+- Automatic detection (no config flag needed)
+
+To force OAuth authentication when you have an API key set, use `expressMode: false`.
 
 #### 6. Environment Variables
 
@@ -579,7 +582,7 @@ defaultTest:
 | `responseSchema`                   | JSON schema for structured output (supports `file://`) | None                                 |
 | `toolConfig`                       | Tool/function calling config                           | None                                 |
 | `systemInstruction`                | System prompt (supports `{{var}}` and `file://`)       | None                                 |
-| `expressMode`                      | Use express mode with API key (no OAuth required)      | `false`                              |
+| `expressMode`                      | Set to `false` to force OAuth when API key is present  | Auto-detected                        |
 
 :::note
 Not all models support all parameters. See [Google's documentation](https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/overview) for model-specific details.
@@ -817,7 +820,6 @@ providers:
   # Gemini 3 Flash supports: MINIMAL, LOW, MEDIUM, HIGH
   - id: vertex:gemini-3-flash-preview
     config:
-      expressMode: true # Optional: use express mode with API key
       generationConfig:
         thinkingConfig:
           thinkingLevel: MEDIUM # Balanced approach for moderate complexity

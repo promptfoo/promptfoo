@@ -345,13 +345,25 @@ export class VertexChatProvider extends VertexGenericProvider {
 
   /**
    * Check if express mode should be used (API key without OAuth)
-   * Express mode uses a simplified endpoint format without project/location
+   * Express mode uses a simplified endpoint format without project/location.
+   *
+   * Express mode is AUTOMATIC when:
+   * 1. API key is available (VERTEX_API_KEY or GEMINI_API_KEY), AND
+   * 2. No explicit projectId in config, AND
+   * 3. No explicit credentials in config, AND
+   * 4. User hasn't explicitly disabled it (expressMode !== false)
+   *
+   * This mirrors how AWS Bedrock handles authentication - automatic detection
+   * of the simplest auth method available.
    */
   private isExpressMode(): boolean {
-    // Express mode if API key is available and explicitly enabled or no credentials
-    return (
-      Boolean(this.getApiKey()) && (this.config.expressMode === true || !this.config.credentials)
-    );
+    const hasApiKey = Boolean(this.getApiKey());
+    const hasExplicitProjectId = Boolean(this.config.projectId);
+    const hasExplicitCredentials = Boolean(this.config.credentials);
+    const explicitlyDisabled = this.config.expressMode === false;
+
+    // Express mode is automatic when API key is available and no explicit OAuth config
+    return hasApiKey && !hasExplicitProjectId && !hasExplicitCredentials && !explicitlyDisabled;
   }
 
   async callGeminiApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
