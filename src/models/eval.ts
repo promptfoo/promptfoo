@@ -289,9 +289,14 @@ export default class Eval {
     const datasetId = datasetResults[0]?.datasetId;
 
     // Extract durationMs from results column (for V4 evals)
+    // Validate that it's a finite positive number to guard against corrupted data
     const resultsObj = eval_.results as Record<string, unknown> | undefined;
+    const rawDurationMs =
+      resultsObj && 'durationMs' in resultsObj ? resultsObj.durationMs : undefined;
     const durationMs =
-      resultsObj && 'durationMs' in resultsObj ? (resultsObj.durationMs as number) : undefined;
+      typeof rawDurationMs === 'number' && Number.isFinite(rawDurationMs) && rawDurationMs >= 0
+        ? rawDurationMs
+        : undefined;
 
     const evalInstance = new Eval(eval_.config, {
       id: eval_.id,

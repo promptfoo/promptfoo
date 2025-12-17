@@ -77,10 +77,22 @@ const ResponsiveStack = styled(Stack)(({ theme }) => ({
 }));
 
 /**
+ * Validates that a duration value is a finite positive number.
+ */
+function isValidDuration(ms: unknown): ms is number {
+  return typeof ms === 'number' && Number.isFinite(ms) && ms >= 0;
+}
+
+/**
  * Formats a duration in milliseconds to a human-readable string.
+ * Returns null for invalid inputs (NaN, Infinity, negative, non-number).
  * Examples: "342ms", "2.3s", "1m 45s", "1h 23m"
  */
-function formatDuration(ms: number): string {
+function formatDuration(ms: number): string | null {
+  if (!isValidDuration(ms)) {
+    return null;
+  }
+
   if (ms < 1000) {
     return `${Math.round(ms)}ms`;
   }
@@ -888,24 +900,28 @@ export default function ResultsView({
                 }}
               />
             )}
-            {stats?.durationMs != null && (
-              <Tooltip title="Total evaluation duration (wall-clock time)" placement="bottom">
-                <Chip
-                  size="small"
-                  icon={<AccessTimeIcon sx={{ fontSize: '1rem' }} />}
-                  label={formatDuration(stats.durationMs)}
-                  sx={(theme) => ({
-                    backgroundColor: alpha(theme.palette.success.main, 0.08),
-                    color: theme.palette.success.main,
-                    border: `1px solid ${alpha(theme.palette.success.main, 0.2)}`,
-                    fontWeight: 500,
-                    '& .MuiChip-icon': {
+            {(() => {
+              const formattedDuration =
+                stats?.durationMs != null ? formatDuration(stats.durationMs) : null;
+              return formattedDuration ? (
+                <Tooltip title="Total evaluation duration (wall-clock time)" placement="bottom">
+                  <Chip
+                    size="small"
+                    icon={<AccessTimeIcon sx={{ fontSize: '1rem' }} />}
+                    label={formattedDuration}
+                    sx={(theme) => ({
+                      backgroundColor: alpha(theme.palette.success.main, 0.08),
                       color: theme.palette.success.main,
-                    },
-                  })}
-                />
-              </Tooltip>
-            )}
+                      border: `1px solid ${alpha(theme.palette.success.main, 0.2)}`,
+                      fontWeight: 500,
+                      '& .MuiChip-icon': {
+                        color: theme.palette.success.main,
+                      },
+                    })}
+                  />
+                </Tooltip>
+              ) : null;
+            })()}
             <Box flexGrow={1} />
             <Box display="flex" justifyContent="flex-end">
               <ResponsiveStack direction="row" spacing={2}>
