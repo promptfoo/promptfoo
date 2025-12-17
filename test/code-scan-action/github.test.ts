@@ -32,12 +32,42 @@ vi.mock('@actions/github', () => ({
   },
 }));
 
+// Mock diff that includes src/auth.ts with lines 40-100 in scope
+const mockDiff = `diff --git a/src/auth.ts b/src/auth.ts
+index abc123..def456 100644
+--- a/src/auth.ts
++++ b/src/auth.ts
+@@ -40,60 +40,60 @@
+ context line 40
+ context line 41
+ context line 42
++added line 43
+ context line 44
+ context line 45
+ context line 46
+ context line 47
+ context line 48
+ context line 49
+ context line 50
+ context line 51
+ context line 52
+ context line 53
+ context line 54
+ context line 55
+ context line 56
+ context line 57
+ context line 58
+ context line 59
+ context line 60
+`;
+
 // Mock Octokit
 vi.mock('@octokit/rest', () => {
   return {
     Octokit: vi.fn().mockImplementation(() => ({
       pulls: {
         createReview: vi.fn().mockResolvedValue({}),
+        get: vi.fn().mockResolvedValue({ data: mockDiff }),
       },
       issues: {
         createComment: vi.fn().mockResolvedValue({}),
@@ -89,6 +119,7 @@ describe('GitHub API Client', () => {
         return {
           pulls: {
             createReview: mockCreateReview,
+            get: vi.fn().mockResolvedValue({ data: mockDiff }),
           },
         } as unknown as Octokit;
       });
@@ -127,6 +158,7 @@ describe('GitHub API Client', () => {
         return {
           pulls: {
             createReview: mockCreateReview,
+            get: vi.fn().mockResolvedValue({ data: mockDiff }),
           },
         } as unknown as Octokit;
       });
@@ -166,6 +198,7 @@ describe('GitHub API Client', () => {
         return {
           pulls: {
             createReview: mockCreateReview,
+            get: vi.fn().mockResolvedValue({ data: mockDiff }),
           },
         } as unknown as Octokit;
       });
@@ -205,6 +238,7 @@ describe('GitHub API Client', () => {
         return {
           pulls: {
             createReview: mockCreateReview,
+            get: vi.fn().mockResolvedValue({ data: mockDiff }),
           },
         } as unknown as Octokit;
       });
@@ -272,6 +306,7 @@ describe('GitHub API Client', () => {
         return {
           pulls: {
             createReview: mockCreateReview,
+            get: vi.fn().mockResolvedValue({ data: mockDiff }),
           },
         } as unknown as Octokit;
       });
@@ -314,6 +349,7 @@ describe('GitHub API Client', () => {
         return {
           pulls: {
             createReview: mockCreateReview,
+            get: vi.fn().mockResolvedValue({ data: mockDiff }),
           },
           issues: {
             createComment: mockCreateComment,
