@@ -187,7 +187,6 @@ export function formatOutput(
       return { error: `No base64 image data found in response: ${JSON.stringify(data)}` };
     }
 
-    // Return data URL - the UI auto-detects and renders these as images
     return `data:image/png;base64,${b64Json}`;
   } else {
     const url = data.data[0].url;
