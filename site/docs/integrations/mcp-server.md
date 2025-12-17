@@ -49,7 +49,7 @@ npx promptfoo@latest mcp --transport http --port 3100
 
 **For regular usage:** Always use `npx promptfoo@latest` as shown above.
 
-**For promptfoo contributors:** The `.cursor/mcp.json` in the promptfoo repository uses development commands (`ts-node src/main.ts`) to run from source code. Don't copy that configuration for regular usage.
+**For promptfoo contributors:** The `.cursor/mcp.json` in the promptfoo repository uses the compiled build (`node dist/src/main.js`). Don't copy that configuration for regular usage.
 
 :::
 
