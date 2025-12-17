@@ -285,7 +285,7 @@ Express mode benefits:
 
 - No project ID or region required
 - Simpler setup for quick testing
-- Works with Gemini 3 models
+- Works with Gemini models
 
 #### 6. Environment Variables
 
@@ -579,6 +579,7 @@ defaultTest:
 | `responseSchema`                   | JSON schema for structured output (supports `file://`) | None                                 |
 | `toolConfig`                       | Tool/function calling config                           | None                                 |
 | `systemInstruction`                | System prompt (supports `{{var}}` and `file://`)       | None                                 |
+| `expressMode`                      | Use express mode with API key (no OAuth required)      | `false`                              |
 
 :::note
 Not all models support all parameters. See [Google's documentation](https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/overview) for model-specific details.

@@ -566,9 +566,10 @@ providers:
       maxOutputTokens: 4096
       generationConfig:
         thinkingConfig:
-          thinkingLevel: HIGH # Enhanced extended thinking for complex reasoning
-          # thinkingBudget: 4096 # Alternative: Use budget instead of level
+          thinkingLevel: HIGH # LOW or HIGH (Pro only supports these two levels)
 ```
+
+Thinking levels for Gemini 3 Pro: LOW (faster, simpler tasks), HIGH (deep reasoning, default).
 
 ### Gemini 2.5 Pro
 
