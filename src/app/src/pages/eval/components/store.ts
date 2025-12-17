@@ -268,9 +268,9 @@ interface TableState {
 
   /**
    * Evaluation-level statistics including durationMs (wall-clock time).
+   * Set automatically by fetchEvalData from API response.
    */
   stats: EvaluateStats | null;
-  setStats: (stats: EvaluateStats | null) => void;
 
   fetchEvalData: (id: string, options?: FetchEvalOptions) => Promise<EvalTableDTO | null>;
   isFetching: boolean;
@@ -542,7 +542,6 @@ export const useTableStore = create<TableState>()(
       set(() => ({ filteredMetrics: metrics })),
 
     stats: null,
-    setStats: (stats: EvaluateStats | null) => set(() => ({ stats })),
 
     highlightedResultsCount: 0,
 

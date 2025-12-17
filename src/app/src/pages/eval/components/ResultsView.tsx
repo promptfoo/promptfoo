@@ -32,7 +32,7 @@ import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
 import Stack from '@mui/material/Stack';
-import { styled } from '@mui/material/styles';
+import { alpha, styled } from '@mui/material/styles';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
@@ -87,11 +87,22 @@ function formatDuration(ms: number): string {
   if (ms < 60000) {
     return `${(ms / 1000).toFixed(1)}s`;
   }
-  const minutes = Math.floor(ms / 60000);
-  const seconds = Math.round((ms % 60000) / 1000);
+
+  // Calculate minutes and seconds, handling rounding overflow
+  let minutes = Math.floor(ms / 60000);
+  let seconds = Math.round((ms % 60000) / 1000);
+
+  // Handle edge case where seconds rounds to 60
+  if (seconds === 60) {
+    minutes += 1;
+    seconds = 0;
+  }
+
   if (minutes < 60) {
     return seconds > 0 ? `${minutes}m ${seconds}s` : `${minutes}m`;
   }
+
+  // Calculate hours and remaining minutes
   const hours = Math.floor(minutes / 60);
   const remainingMinutes = minutes % 60;
   return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
@@ -883,15 +894,15 @@ export default function ResultsView({
                   size="small"
                   icon={<AccessTimeIcon sx={{ fontSize: '1rem' }} />}
                   label={formatDuration(stats.durationMs)}
-                  sx={{
-                    backgroundColor: 'rgba(76, 175, 80, 0.08)',
-                    color: 'rgba(76, 175, 80, 1)',
-                    border: '1px solid rgba(76, 175, 80, 0.2)',
+                  sx={(theme) => ({
+                    backgroundColor: alpha(theme.palette.success.main, 0.08),
+                    color: theme.palette.success.main,
+                    border: `1px solid ${alpha(theme.palette.success.main, 0.2)}`,
                     fontWeight: 500,
                     '& .MuiChip-icon': {
-                      color: 'rgba(76, 175, 80, 1)',
+                      color: theme.palette.success.main,
                     },
-                  }}
+                  })}
                 />
               </Tooltip>
             )}

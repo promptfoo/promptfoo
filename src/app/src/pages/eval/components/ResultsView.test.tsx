@@ -1737,4 +1737,41 @@ describe('ResultsView Duration Display', () => {
       expect(screen.getByText('2m 5s')).toBeInTheDocument();
     });
   });
+
+  it('should handle edge case where seconds round to 60', async () => {
+    vi.mocked(useTableStore).mockReturnValue({
+      author: 'Test Author',
+      table: {
+        head: {
+          prompts: [{ label: 'Test', provider: 'openai:gpt-4', raw: 'Test' }],
+          vars: ['input'],
+        },
+        body: [],
+      },
+      config: { description: 'Test Evaluation' },
+      setConfig: vi.fn(),
+      evalId: 'test-eval-id',
+      setAuthor: vi.fn(),
+      filteredResultsCount: 10,
+      totalResultsCount: 15,
+      highlightedResultsCount: 0,
+      filters: { appliedCount: 0, values: {} },
+      removeFilter: vi.fn(),
+      // 119500ms = 1m 59.5s, which rounds to 60s, should display as 2m
+      stats: { successes: 10, failures: 5, errors: 0, tokenUsage: {} as any, durationMs: 119500 },
+    });
+
+    renderWithRouter(
+      <ResultsView
+        recentEvals={mockRecentEvals}
+        onRecentEvalSelected={mockOnRecentEvalSelected}
+        defaultEvalId="test-eval-id"
+      />,
+    );
+
+    // Should display 2m (not "1m 60s")
+    await waitFor(() => {
+      expect(screen.getByText('2m')).toBeInTheDocument();
+    });
+  });
 });
