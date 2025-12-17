@@ -12,13 +12,10 @@ The `vertex` provider enables integration with Google's [Vertex AI](https://clou
 
 ### Gemini Models
 
-**Gemini 3.0:**
+**Gemini 3.0 (Preview):**
 
 - `vertex:gemini-3-flash-preview` - Frontier intelligence with Pro-grade reasoning at Flash-level speed, thinking, and grounding ($0.50/1M input, $3/1M output)
-- `vertex:gemini-3-flash` - Frontier intelligence with Pro-grade reasoning at Flash-level speed
-- `vertex:gemini-3-flash-lite` - Cost-efficient Gemini 3.0 Flash for high-volume, latency-sensitive tasks
-- `vertex:gemini-3-pro` - Advanced reasoning, multimodal understanding, and agentic capabilities
-- `vertex:gemini-3-pro-preview` - Gemini 3.0 Pro preview with advanced reasoning
+- `vertex:gemini-3-pro-preview` - Advanced reasoning, multimodal understanding, and agentic capabilities
 
 **Gemini 2.5:**
 

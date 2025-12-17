@@ -281,9 +281,6 @@ You can use it by specifying one of the [available models](https://ai.google.dev
 ### Chat and Multimodal Models
 
 - `google:gemini-3-flash-preview` - Gemini 3.0 Flash preview with frontier intelligence, Pro-grade reasoning at Flash-level speed, thinking, and grounding ($0.50/1M input, $3/1M output)
-- `google:gemini-3-flash` - Gemini 3.0 Flash with frontier intelligence and Pro-grade reasoning at Flash-level speed
-- `google:gemini-3-flash-lite` - Cost-efficient Gemini 3.0 Flash variant optimized for high-volume, latency-sensitive tasks
-- `google:gemini-3-pro` - Gemini 3.0 Pro with advanced reasoning, multimodal understanding, and agentic capabilities
 - `google:gemini-3-pro-preview` - Gemini 3.0 Pro preview with advanced reasoning, multimodal understanding, and agentic capabilities
 - `google:gemini-2.5-pro` - Gemini 2.5 Pro model with enhanced reasoning, coding, and multimodal understanding
 - `google:gemini-2.5-flash` - Gemini 2.5 Flash model with enhanced reasoning and thinking capabilities
@@ -556,19 +553,6 @@ providers:
 ```
 
 Thinking levels for Gemini 3 Flash: MINIMAL (fastest), LOW, MEDIUM (balanced), HIGH (most thorough).
-
-### Gemini 3 Flash Lite
-
-Cost-efficient Gemini 3.0 Flash for high-volume, latency-sensitive tasks:
-
-```yaml
-providers:
-  - id: google:gemini-3-flash-lite
-    config:
-      temperature: 0.7
-      maxOutputTokens: 2048
-      topP: 0.9
-```
 
 ### Gemini 3 Pro Preview
 
