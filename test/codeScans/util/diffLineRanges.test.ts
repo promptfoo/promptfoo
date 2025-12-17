@@ -107,7 +107,13 @@ deleted file mode 100644
 
 describe('clampCommentLines', () => {
   const ranges = new Map([
-    ['src/foo.ts', [{ start: 10, end: 20 }, { start: 50, end: 60 }]],
+    [
+      'src/foo.ts',
+      [
+        { start: 10, end: 20 },
+        { start: 50, end: 60 },
+      ],
+    ],
   ]);
 
   it('should return line unchanged if valid (single-line)', () => {

@@ -92,20 +92,12 @@ async function getPRDiffRanges(
  * Clamp a comment's line numbers to valid diff ranges.
  * Returns the adjusted comment, or null if lines cannot be clamped.
  */
-function clampCommentToValidRange(
-  comment: Comment,
-  validRanges: FileLineRanges,
-): Comment | null {
+function clampCommentToValidRange(comment: Comment, validRanges: FileLineRanges): Comment | null {
   if (!comment.file || comment.line == null) {
     return comment;
   }
 
-  const clamped = clampCommentLines(
-    comment.file,
-    comment.startLine,
-    comment.line,
-    validRanges,
-  );
+  const clamped = clampCommentLines(comment.file, comment.startLine, comment.line, validRanges);
 
   if (!clamped) {
     // File not in diff - return null to convert to general comment
@@ -295,7 +287,11 @@ export async function postReviewComments(
     core.info(`✅ Posted ${invalidLineComments.length} fallback comment(s)`);
   }
 
-  if (lineComments.length === 0 && generalComments.length === 0 && invalidLineComments.length === 0) {
+  if (
+    lineComments.length === 0 &&
+    generalComments.length === 0 &&
+    invalidLineComments.length === 0
+  ) {
     core.warning('No valid comments to post');
   }
 }

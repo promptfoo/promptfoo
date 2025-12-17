@@ -156,11 +156,7 @@ export function extractValidLineRanges(unifiedDiff: string): FileLineRanges {
  * @param ranges - Map of file paths to valid line ranges
  * @returns true if the line is within a valid range
  */
-export function isLineInDiff(
-  filepath: string,
-  line: number,
-  ranges: FileLineRanges,
-): boolean {
+export function isLineInDiff(filepath: string, line: number, ranges: FileLineRanges): boolean {
   const fileRanges = ranges.get(filepath);
   if (!fileRanges) {
     return false;
