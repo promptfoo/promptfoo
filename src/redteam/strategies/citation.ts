@@ -63,6 +63,20 @@ async function generateCitations(
         `Got remote citation generation result for case ${Number(index) + 1}: ${JSON.stringify(data)}`,
       );
 
+      // Check for API error response (matching GCG pattern)
+      if (data.error) {
+        logger.error(`[Citation] Error in citation generation: ${data.error}`);
+        logger.debug(`[Citation] Response: ${JSON.stringify(data)}`);
+        return;
+      }
+
+      // Validate response structure before accessing
+      if (!data.result?.citation) {
+        logger.error(`[Citation] Invalid response structure - missing citation data`);
+        logger.debug(`[Citation] Response: ${JSON.stringify(data)}`);
+        return;
+      }
+
       const originalText = String(testCase.vars[injectVar]);
 
       const citationTestCase = {
