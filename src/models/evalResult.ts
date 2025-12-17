@@ -8,7 +8,7 @@ import { hashPrompt } from '../prompts/utils';
 import { type EvaluateResult } from '../types/index';
 import { isApiProvider, isProviderOptions } from '../types/providers';
 import { safeJsonStringify } from '../util/json';
-import { extractAndStoreBinaryData } from '../blobs/extractor';
+import { extractAndStoreBinaryData, isBlobStorageEnabled } from '../blobs/extractor';
 import { getCurrentTimestamp } from '../util/time';
 
 import {
@@ -128,7 +128,7 @@ export default class EvalResult {
     const db = getDb();
     const returnResults: EvalResult[] = [];
     for (const result of results) {
-      const processedResponse = getEnvBool('PROMPTFOO_BLOB_STORAGE_ENABLED', false)
+      const processedResponse = isBlobStorageEnabled()
         ? await extractAndStoreBinaryData(result.response, {
             evalId,
             testIdx: result.testIdx,

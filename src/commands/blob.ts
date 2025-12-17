@@ -9,6 +9,7 @@ import { CreateBucketCommand, S3Client } from '@aws-sdk/client-s3';
 import logger from '../logger';
 import telemetry from '../telemetry';
 import { getConfigDirectoryPath } from '../util/config/manage';
+import { fetchWithProxy } from '../util/fetch';
 
 const DEFAULT_IMAGE = 'rustfs/rustfs:latest';
 const DEFAULT_PORT = 9000;
@@ -45,7 +46,7 @@ function getDefaultDirs() {
 async function ensureDockerAvailable() {
   try {
     await execa('docker', ['--version'], { stdio: 'ignore' });
-  } catch (error) {
+  } catch (_error) {
     throw new Error(
       'Docker is required for rustfs helper. Please install Docker or start your own S3 endpoint.',
     );
@@ -79,7 +80,7 @@ async function waitForEndpoint(endpoint: string) {
   const maxAttempts = 20;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      const res = await fetch(endpoint, { method: 'HEAD' });
+      const res = await fetchWithProxy(endpoint, { method: 'HEAD' });
       if (res.ok || res.status >= 200) {
         return;
       }
@@ -186,18 +187,8 @@ async function startRustfs(opts: BlobOptions) {
   logger.info(
     `Default credentials: ${accessKey}/${secretKey} — bucket "${bucket}" ensured (created if missing).`,
   );
-  logger.info('Configure promptfoo env for rustfs (example):');
   logger.info(
-    [
-      'PROMPTFOO_BLOB_STORAGE_ENABLED=true',
-      'PROMPTFOO_BLOB_STORAGE_TYPE=s3',
-      `PROMPTFOO_BLOB_S3_ENDPOINT=http://localhost:${port}`,
-      'PROMPTFOO_BLOB_S3_BUCKET=promptfoo-dev',
-      'PROMPTFOO_BLOB_S3_REGION=us-east-1',
-      'PROMPTFOO_BLOB_S3_ACCESS_KEY=rustfsadmin',
-      'PROMPTFOO_BLOB_S3_SECRET_KEY=rustfsadmin',
-      'PROMPTFOO_BLOB_S3_PATH_STYLE=true',
-    ].join('\n'),
+    'Configure your Promptfoo Cloud/on-prem external media storage settings to use this RustFS endpoint.',
   );
 }
 

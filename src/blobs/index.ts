@@ -1,12 +1,10 @@
-import { getEnvString } from '../envars';
 import logger from '../logger';
 import { randomUUID } from 'node:crypto';
 
 import { FilesystemBlobStorageProvider } from './filesystemProvider';
 import { getDb } from '../database';
 import { blobAssetsTable, blobReferencesTable } from '../database/tables';
-import { createS3Provider } from './s3Provider';
-import type { BlobRef, BlobStorageProvider, BlobStoreResult, StoredBlob } from './types';
+import type { BlobStorageProvider, BlobStoreResult, StoredBlob } from './types';
 
 export { BLOB_MAX_SIZE, BLOB_MIN_SIZE, BLOB_SCHEME } from './constants';
 export { type BlobRef, type BlobStorageProvider, type BlobStoreResult, type StoredBlob } from './types';
@@ -14,12 +12,8 @@ export { type BlobRef, type BlobStorageProvider, type BlobStoreResult, type Stor
 let defaultProvider: BlobStorageProvider | null = null;
 
 function createDefaultProvider(): BlobStorageProvider {
-  const storageType = getEnvString('PROMPTFOO_BLOB_STORAGE_TYPE');
-  if (storageType === 's3') {
-    return createS3Provider();
-  }
-  const basePath = getEnvString('PROMPTFOO_BLOB_PATH');
-  return new FilesystemBlobStorageProvider(basePath ? { basePath } : undefined);
+  // OSS: filesystem-only media storage. Cloud/on-prem can override by calling setBlobStorageProvider().
+  return new FilesystemBlobStorageProvider();
 }
 
 export function getBlobStorageProvider(): BlobStorageProvider {

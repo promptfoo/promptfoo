@@ -1,16 +1,10 @@
-import { getEnvBool, getEnvString } from '../envars';
 import { cloudConfig } from '../globalConfig/cloud';
 import { isLoggedIntoCloud } from '../globalConfig/accounts';
 import logger from '../logger';
 import type { BlobStoreResult } from './types';
 
 function buildRemoteUrl(): string | null {
-  if (getEnvBool('PROMPTFOO_DISABLE_REMOTE_BLOB_UPLOAD', false)) {
-    return null;
-  }
-
-  const override = getEnvString('PROMPTFOO_BLOB_REMOTE_URL');
-  const baseUrl = override || cloudConfig.getApiHost();
+  const baseUrl = cloudConfig.getApiHost();
   const apiKey = cloudConfig.getApiKey();
 
   if (!baseUrl || !apiKey || !isLoggedIntoCloud()) {

@@ -231,7 +231,7 @@ export class HydraProvider implements ApiProvider {
     let lastTargetResponse: TargetResponse | undefined = undefined;
     let backtrackCount = 0;
 
-    let redteamHistory: Array<{
+    const redteamHistory: Array<{
       prompt: string;
       promptAudio?: MediaData;
       promptImage?: MediaData;
