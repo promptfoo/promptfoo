@@ -271,11 +271,7 @@
 }
 
 .arsenalCard {
-  background: linear-gradient(
-    135deg,
-    rgba(178, 34, 52, 0.1) 0%,
-    rgba(178, 34, 52, 0.05) 100%
-  );
+  background: linear-gradient(135deg, rgba(178, 34, 52, 0.1) 0%, rgba(178, 34, 52, 0.05) 100%);
   border: 1px solid rgba(178, 34, 52, 0.3);
   border-radius: 24px;
   padding: 3rem;
@@ -356,11 +352,7 @@
 .whySection {
   position: relative;
   padding: 6rem 1.5rem;
-  background: linear-gradient(
-    180deg,
-    rgba(178, 34, 52, 0.05) 0%,
-    transparent 100%
-  );
+  background: linear-gradient(180deg, rgba(178, 34, 52, 0.05) 0%, transparent 100%);
   z-index: 1;
 }
 
@@ -421,11 +413,7 @@
 }
 
 .conversationCard {
-  background: linear-gradient(
-    135deg,
-    rgba(178, 34, 52, 0.08) 0%,
-    rgba(178, 34, 52, 0.03) 100%
-  );
+  background: linear-gradient(135deg, rgba(178, 34, 52, 0.08) 0%, rgba(178, 34, 52, 0.03) 100%);
   border: 1px solid rgba(178, 34, 52, 0.2);
   border-radius: 16px;
   padding: 2rem;
@@ -544,11 +532,7 @@
   margin: 0 auto;
   text-align: center;
   padding: 3rem;
-  background: linear-gradient(
-    135deg,
-    rgba(178, 34, 52, 0.15) 0%,
-    rgba(178, 34, 52, 0.05) 100%
-  );
+  background: linear-gradient(135deg, rgba(178, 34, 52, 0.15) 0%, rgba(178, 34, 52, 0.05) 100%);
   border: 1px solid rgba(178, 34, 52, 0.3);
   border-radius: 24px;
   position: relative;

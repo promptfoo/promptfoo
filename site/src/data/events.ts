@@ -181,9 +181,9 @@ export const events: Event[] = [
       country: 'USA',
     },
     description:
-      'Featured in Insight Partners\' ScaleUp:AI 2025 Partner Series. CEO Ian Webster discusses how Promptfoo is restoring trust and security in generative AI.',
+      "Featured in Insight Partners' ScaleUp:AI 2025 Partner Series. CEO Ian Webster discusses how Promptfoo is restoring trust and security in generative AI.",
     fullDescription:
-      'Ian Webster, CEO and co-founder of Promptfoo, was featured in Insight Partners\' ScaleUp:AI 2025 Partner Series, discussing how Promptfoo is defining the standard for enterprise AI security. The feature explores the company\'s journey from open-source tool to serving 200,000+ developers and 80+ Fortune 500 companies.',
+      "Ian Webster, CEO and co-founder of Promptfoo, was featured in Insight Partners' ScaleUp:AI 2025 Partner Series, discussing how Promptfoo is defining the standard for enterprise AI security. The feature explores the company's journey from open-source tool to serving 200,000+ developers and 80+ Fortune 500 companies.",
     cardImage: '/img/events/scaleup-ai-2025.jpg',
     heroImage: '/img/events/scaleup-ai-2025.jpg',
     highlights: [

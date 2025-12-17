@@ -1,18 +1,10 @@
 .main {
   padding: 0;
-  background: linear-gradient(
-    180deg,
-    rgba(248, 250, 252, 0.5) 0%,
-    transparent 30%
-  );
+  background: linear-gradient(180deg, rgba(248, 250, 252, 0.5) 0%, transparent 30%);
 }
 
 [data-theme='dark'] .main {
-  background: linear-gradient(
-    180deg,
-    rgba(15, 23, 42, 0.3) 0%,
-    transparent 30%
-  );
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.3) 0%, transparent 30%);
 }
 
 .container {
@@ -81,11 +73,7 @@
 .sectionLine {
   flex: 1;
   height: 1px;
-  background: linear-gradient(
-    90deg,
-    var(--ifm-color-emphasis-200) 0%,
-    transparent 100%
-  );
+  background: linear-gradient(90deg, var(--ifm-color-emphasis-200) 0%, transparent 100%);
 }
 
 /* Events Grid */
@@ -99,11 +87,7 @@
 .empty {
   text-align: center;
   padding: 5rem 2rem;
-  background: linear-gradient(
-    135deg,
-    rgba(248, 250, 252, 0.8) 0%,
-    rgba(241, 245, 249, 0.6) 100%
-  );
+  background: linear-gradient(135deg, rgba(248, 250, 252, 0.8) 0%, rgba(241, 245, 249, 0.6) 100%);
   border-radius: 16px;
   position: relative;
 }
@@ -114,11 +98,7 @@
   inset: 0;
   border-radius: 16px;
   padding: 1px;
-  background: linear-gradient(
-    135deg,
-    rgba(148, 163, 184, 0.2) 0%,
-    rgba(148, 163, 184, 0.05) 100%
-  );
+  background: linear-gradient(135deg, rgba(148, 163, 184, 0.2) 0%, rgba(148, 163, 184, 0.05) 100%);
   mask:
     linear-gradient(#fff 0 0) content-box,
     linear-gradient(#fff 0 0);
@@ -131,11 +111,7 @@
 }
 
 [data-theme='dark'] .empty {
-  background: linear-gradient(
-    135deg,
-    rgba(30, 41, 59, 0.5) 0%,
-    rgba(15, 23, 42, 0.7) 100%
-  );
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.5) 0%, rgba(15, 23, 42, 0.7) 100%);
 }
 
 .empty p {
@@ -176,12 +152,7 @@
 .cta {
   margin-top: 5rem;
   padding: 3.5rem;
-  background: linear-gradient(
-    135deg,
-    #f0f7ff 0%,
-    #e0edff 50%,
-    #f5f9ff 100%
-  );
+  background: linear-gradient(135deg, #f0f7ff 0%, #e0edff 50%, #f5f9ff 100%);
   border-radius: 20px;
   text-align: center;
   position: relative;

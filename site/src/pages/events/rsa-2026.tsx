@@ -48,12 +48,16 @@ function CountdownTimer(): React.ReactElement {
       </div>
       <div className={styles.countdownSeparator}>:</div>
       <div className={styles.countdownItem}>
-        <span className={styles.countdownNumber}>{timeLeft.minutes.toString().padStart(2, '0')}</span>
+        <span className={styles.countdownNumber}>
+          {timeLeft.minutes.toString().padStart(2, '0')}
+        </span>
         <span className={styles.countdownLabel}>Minutes</span>
       </div>
       <div className={styles.countdownSeparator}>:</div>
       <div className={styles.countdownItem}>
-        <span className={styles.countdownNumber}>{timeLeft.seconds.toString().padStart(2, '0')}</span>
+        <span className={styles.countdownNumber}>
+          {timeLeft.seconds.toString().padStart(2, '0')}
+        </span>
         <span className={styles.countdownLabel}>Seconds</span>
       </div>
     </div>
@@ -209,9 +213,7 @@ export default function RSA2026(): React.ReactElement {
         <section id="highlights" className={styles.highlightsSection}>
           <div className={styles.sectionHeader}>
             <h2 className={styles.sectionTitle}>What to Expect</h2>
-            <p className={styles.sectionSubtitle}>
-              Join us for the premier AI security experience
-            </p>
+            <p className={styles.sectionSubtitle}>Join us for the premier AI security experience</p>
           </div>
 
           <div className={styles.highlightsGrid}>
@@ -227,24 +229,24 @@ export default function RSA2026(): React.ReactElement {
               <div className={styles.highlightIcon}>🔒</div>
               <h3>Free Security Assessment</h3>
               <p>
-                Get a complimentary AI vulnerability assessment for your organization.
-                Walk away with actionable insights to protect your AI applications.
+                Get a complimentary AI vulnerability assessment for your organization. Walk away
+                with actionable insights to protect your AI applications.
               </p>
             </div>
             <div className={styles.highlightCard}>
               <div className={styles.highlightIcon}>👥</div>
               <h3>Expert Consultations</h3>
               <p>
-                Meet our security researchers and discuss your specific AI security
-                challenges. Get personalized recommendations from the team.
+                Meet our security researchers and discuss your specific AI security challenges. Get
+                personalized recommendations from the team.
               </p>
             </div>
             <div className={styles.highlightCard}>
               <div className={styles.highlightIcon}>🎁</div>
               <h3>Exclusive Swag</h3>
               <p>
-                Limited edition Promptfoo gear for conference attendees. First come,
-                first served at our booth.
+                Limited edition Promptfoo gear for conference attendees. First come, first served at
+                our booth.
               </p>
             </div>
           </div>
@@ -254,9 +256,7 @@ export default function RSA2026(): React.ReactElement {
         <section className={styles.showcaseSection}>
           <div className={styles.sectionHeader}>
             <h2 className={styles.sectionTitle}>What We'll Showcase</h2>
-            <p className={styles.sectionSubtitle}>
-              Enterprise-grade AI security solutions
-            </p>
+            <p className={styles.sectionSubtitle}>Enterprise-grade AI security solutions</p>
           </div>
 
           <div className={styles.showcaseGrid}>
@@ -264,32 +264,32 @@ export default function RSA2026(): React.ReactElement {
               <div className={styles.showcaseNumber}>01</div>
               <h3>Next-Gen Red Teaming</h3>
               <p>
-                Our latest AI-powered attack simulations that go beyond traditional prompt
-                injection to test complex agent systems and multi-model architectures.
+                Our latest AI-powered attack simulations that go beyond traditional prompt injection
+                to test complex agent systems and multi-model architectures.
               </p>
             </div>
             <div className={styles.showcaseItem}>
               <div className={styles.showcaseNumber}>02</div>
               <h3>Continuous Monitoring</h3>
               <p>
-                Real-time AI security monitoring that detects anomalies, policy violations,
-                and potential attacks in production environments.
+                Real-time AI security monitoring that detects anomalies, policy violations, and
+                potential attacks in production environments.
               </p>
             </div>
             <div className={styles.showcaseItem}>
               <div className={styles.showcaseNumber}>03</div>
               <h3>Compliance Automation</h3>
               <p>
-                Automated compliance reporting for AI governance frameworks, including
-                EU AI Act, NIST AI RMF, and industry-specific regulations.
+                Automated compliance reporting for AI governance frameworks, including EU AI Act,
+                NIST AI RMF, and industry-specific regulations.
               </p>
             </div>
             <div className={styles.showcaseItem}>
               <div className={styles.showcaseNumber}>04</div>
               <h3>Enterprise Integrations</h3>
               <p>
-                Seamless integration with your existing security stack—SIEM, SOAR, and
-                vulnerability management platforms.
+                Seamless integration with your existing security stack—SIEM, SOAR, and vulnerability
+                management platforms.
               </p>
             </div>
           </div>
@@ -300,8 +300,8 @@ export default function RSA2026(): React.ReactElement {
           <div className={styles.ctaContent}>
             <h2 className={styles.ctaTitle}>Don't Miss Out</h2>
             <p className={styles.ctaText}>
-              RSA Conference is the world's largest gathering of security professionals.
-              Schedule a meeting now to guarantee time with our team.
+              RSA Conference is the world's largest gathering of security professionals. Schedule a
+              meeting now to guarantee time with our team.
             </p>
             <div className={styles.ctaButtons}>
               <Link to="/contact" className={styles.ctaPrimary}>

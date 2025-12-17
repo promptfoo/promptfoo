@@ -41,8 +41,14 @@ export default function BSidesSeattle2025(): React.ReactElement {
         <meta property="og:type" content="website" />
         <meta property="og:url" content="/events/bsides-seattle-2025" />
         <meta name="twitter:card" content="summary_large_image" />
-        <meta property="og:image" content="https://www.promptfoo.dev/img/events/bsides-seattle-2025.jpg" />
-        <meta name="twitter:image" content="https://www.promptfoo.dev/img/events/bsides-seattle-2025.jpg" />
+        <meta
+          property="og:image"
+          content="https://www.promptfoo.dev/img/events/bsides-seattle-2025.jpg"
+        />
+        <meta
+          name="twitter:image"
+          content="https://www.promptfoo.dev/img/events/bsides-seattle-2025.jpg"
+        />
         <meta
           name="keywords"
           content="BSides Seattle 2025, security conference, AI security, LLM security, Pacific Northwest, Seattle"
@@ -106,7 +112,12 @@ export default function BSidesSeattle2025(): React.ReactElement {
               </p>
               <div className={styles.eventDetails}>
                 <div className={styles.detail}>
-                  <svg className={styles.icon} viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                  <svg
+                    className={styles.icon}
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                  >
                     <path
                       strokeLinecap="round"
                       strokeLinejoin="round"
@@ -117,7 +128,12 @@ export default function BSidesSeattle2025(): React.ReactElement {
                   <span>April 18-19, 2025</span>
                 </div>
                 <div className={styles.detail}>
-                  <svg className={styles.icon} viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                  <svg
+                    className={styles.icon}
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                  >
                     <path
                       strokeLinecap="round"
                       strokeLinejoin="round"
@@ -134,7 +150,12 @@ export default function BSidesSeattle2025(): React.ReactElement {
                   <span>The Collective Seattle</span>
                 </div>
                 <div className={styles.detail}>
-                  <svg className={styles.icon} viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                  <svg
+                    className={styles.icon}
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                  >
                     <path
                       strokeLinecap="round"
                       strokeLinejoin="round"
@@ -247,36 +268,6 @@ export default function BSidesSeattle2025(): React.ReactElement {
           </div>
         </section>
 
-        {/* Community Moments */}
-        <section className={styles.momentsSection}>
-          <div className={styles.container}>
-            <h2 className={styles.sectionTitle}>Community Moments</h2>
-            <div className={styles.quotesGrid}>
-              <blockquote className={styles.quote}>
-                <p>
-                  "Finally, someone explaining AI security in a way that actually makes sense.
-                  Promptfoo's approach is refreshingly practical."
-                </p>
-                <cite>— Security Engineer, Seattle Startup</cite>
-              </blockquote>
-              <blockquote className={styles.quote}>
-                <p>
-                  "The red teaming workshop was exactly what our team needed. We found three issues
-                  in our chatbot the same week."
-                </p>
-                <cite>— DevSecOps Lead, Fortune 500</cite>
-              </blockquote>
-              <blockquote className={styles.quote}>
-                <p>
-                  "Love seeing security tools that are actually open source. The community around
-                  Promptfoo is growing fast."
-                </p>
-                <cite>— Independent Security Researcher</cite>
-              </blockquote>
-            </div>
-          </div>
-        </section>
-
         {/* PNW Security Scene */}
         <section className={styles.sceneSection}>
           <div className={styles.container}>
@@ -315,7 +306,10 @@ export default function BSidesSeattle2025(): React.ReactElement {
                 <Link to="https://discord.gg/promptfoo" className={styles.primaryButton}>
                   Join Discord
                 </Link>
-                <Link to="https://github.com/promptfoo/promptfoo" className={styles.secondaryButton}>
+                <Link
+                  to="https://github.com/promptfoo/promptfoo"
+                  className={styles.secondaryButton}
+                >
                   Star on GitHub
                 </Link>
               </div>

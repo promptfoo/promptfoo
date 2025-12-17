@@ -79,7 +79,8 @@
 }
 
 @keyframes floatOrb {
-  0%, 100% {
+  0%,
+  100% {
     transform: translate(0, 0) scale(1);
     opacity: 0.3;
   }

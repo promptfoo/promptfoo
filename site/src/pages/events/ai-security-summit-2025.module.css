@@ -251,11 +251,7 @@
   grid-template-columns: 1fr 1fr;
   gap: 3rem;
   align-items: center;
-  background: linear-gradient(
-    135deg,
-    rgba(124, 58, 237, 0.1) 0%,
-    rgba(59, 130, 246, 0.05) 100%
-  );
+  background: linear-gradient(135deg, rgba(124, 58, 237, 0.1) 0%, rgba(59, 130, 246, 0.05) 100%);
   border: 1px solid rgba(124, 58, 237, 0.3);
   border-radius: 24px;
   padding: 3rem;
@@ -384,11 +380,7 @@
 }
 
 .themeCard {
-  background: linear-gradient(
-    135deg,
-    rgba(124, 58, 237, 0.1) 0%,
-    rgba(59, 130, 246, 0.05) 100%
-  );
+  background: linear-gradient(135deg, rgba(124, 58, 237, 0.1) 0%, rgba(59, 130, 246, 0.05) 100%);
   border: 1px solid rgba(124, 58, 237, 0.2);
   border-radius: 16px;
   padding: 2rem;
@@ -558,11 +550,7 @@
 }
 
 .testimonial {
-  background: linear-gradient(
-    135deg,
-    rgba(124, 58, 237, 0.08) 0%,
-    rgba(59, 130, 246, 0.04) 100%
-  );
+  background: linear-gradient(135deg, rgba(124, 58, 237, 0.08) 0%, rgba(59, 130, 246, 0.04) 100%);
   border: 1px solid rgba(124, 58, 237, 0.2);
   border-radius: 16px;
   padding: 2rem;

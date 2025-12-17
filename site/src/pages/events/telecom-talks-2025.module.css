@@ -359,11 +359,7 @@
 }
 
 .sessionCard {
-  background: linear-gradient(
-    135deg,
-    rgba(0, 212, 255, 0.1) 0%,
-    rgba(0, 255, 136, 0.05) 100%
-  );
+  background: linear-gradient(135deg, rgba(0, 212, 255, 0.1) 0%, rgba(0, 255, 136, 0.05) 100%);
   border: 1px solid rgba(0, 212, 255, 0.3);
   border-radius: 20px;
   padding: 3rem;
@@ -629,11 +625,7 @@
   margin: 0 auto;
   text-align: center;
   padding: 3rem;
-  background: linear-gradient(
-    135deg,
-    rgba(0, 212, 255, 0.1) 0%,
-    rgba(0, 255, 136, 0.05) 100%
-  );
+  background: linear-gradient(135deg, rgba(0, 212, 255, 0.1) 0%, rgba(0, 255, 136, 0.05) 100%);
   border: 1px solid rgba(0, 212, 255, 0.3);
   border-radius: 20px;
   position: relative;

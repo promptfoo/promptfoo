@@ -160,9 +160,7 @@ export default function RSA2025(): React.ReactElement {
         <section id="recap" className={styles.recapSection}>
           <div className={styles.sectionHeader}>
             <h2 className={styles.sectionTitle}>Event Recap</h2>
-            <p className={styles.sectionSubtitle}>
-              Highlights from RSA Conference 2025
-            </p>
+            <p className={styles.sectionSubtitle}>Highlights from RSA Conference 2025</p>
           </div>
 
           <div className={styles.recapGrid}>
@@ -178,8 +176,8 @@ export default function RSA2025(): React.ReactElement {
               <div className={styles.recapIcon}>🤝</div>
               <h3>Enterprise Connections</h3>
               <p>
-                Connected with Fortune 500 security teams, discussing their AI security
-                challenges and how Promptfoo helps protect production AI systems.
+                Connected with Fortune 500 security teams, discussing their AI security challenges
+                and how Promptfoo helps protect production AI systems.
               </p>
             </div>
             <div className={styles.recapCard}>
@@ -194,8 +192,8 @@ export default function RSA2025(): React.ReactElement {
               <div className={styles.recapIcon}>🏆</div>
               <h3>Early Stage Expo</h3>
               <p>
-                Featured in RSA's Early Stage Expo, showcasing our open-source AI security
-                platform to the global security community.
+                Featured in RSA's Early Stage Expo, showcasing our open-source AI security platform
+                to the global security community.
               </p>
             </div>
           </div>
@@ -205,9 +203,7 @@ export default function RSA2025(): React.ReactElement {
         <section className={styles.showcaseSection}>
           <div className={styles.sectionHeader}>
             <h2 className={styles.sectionTitle}>What We Showcased</h2>
-            <p className={styles.sectionSubtitle}>
-              Enterprise-grade AI security solutions
-            </p>
+            <p className={styles.sectionSubtitle}>Enterprise-grade AI security solutions</p>
           </div>
 
           <div className={styles.showcaseGrid}>
@@ -223,8 +219,8 @@ export default function RSA2025(): React.ReactElement {
               <div className={styles.showcaseNumber}>02</div>
               <h3>Continuous Red Teaming</h3>
               <p>
-                CI/CD integration for continuous AI security testing, ensuring every deployment
-                is protected against emerging threats.
+                CI/CD integration for continuous AI security testing, ensuring every deployment is
+                protected against emerging threats.
               </p>
             </div>
             <div className={styles.showcaseItem}>
@@ -239,8 +235,8 @@ export default function RSA2025(): React.ReactElement {
               <div className={styles.showcaseNumber}>04</div>
               <h3>Custom Attack Vectors</h3>
               <p>
-                Industry-specific attack simulations tailored to financial services, healthcare,
-                and other regulated industries.
+                Industry-specific attack simulations tailored to financial services, healthcare, and
+                other regulated industries.
               </p>
             </div>
           </div>

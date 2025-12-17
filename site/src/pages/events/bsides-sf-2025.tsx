@@ -38,8 +38,14 @@ export default function BSidesSF2025(): React.ReactElement {
         <meta property="og:type" content="website" />
         <meta property="og:url" content="/events/bsides-sf-2025" />
         <meta name="twitter:card" content="summary_large_image" />
-        <meta property="og:image" content="https://www.promptfoo.dev/img/events/bsides-sf-2025.jpg" />
-        <meta name="twitter:image" content="https://www.promptfoo.dev/img/events/bsides-sf-2025.jpg" />
+        <meta
+          property="og:image"
+          content="https://www.promptfoo.dev/img/events/bsides-sf-2025.jpg"
+        />
+        <meta
+          name="twitter:image"
+          content="https://www.promptfoo.dev/img/events/bsides-sf-2025.jpg"
+        />
         <meta
           name="keywords"
           content="BSides SF 2025, BSides San Francisco, security conference, AI security, hacker community, RSA week"
@@ -114,8 +120,8 @@ export default function BSidesSF2025(): React.ReactElement {
               <span className={styles.highlight}>First</span>
             </h1>
             <p className={styles.heroSubtitle}>
-              We connected with the security community at BSides San Francisco 2025, the
-              grassroots conference that brings hackers together during RSA week.
+              We connected with the security community at BSides San Francisco 2025, the grassroots
+              conference that brings hackers together during RSA week.
             </p>
             <div className={styles.eventDetails}>
               <div className={styles.detail}>
@@ -166,9 +172,7 @@ export default function BSidesSF2025(): React.ReactElement {
         <section id="recap" className={styles.recapSection}>
           <div className={styles.sectionHeader}>
             <h2 className={styles.sectionTitle}>Event Recap</h2>
-            <p className={styles.sectionSubtitle}>
-              The best of BSides SF 2025
-            </p>
+            <p className={styles.sectionSubtitle}>The best of BSides SF 2025</p>
           </div>
 
           <div className={styles.recapGrid}>
@@ -176,32 +180,32 @@ export default function BSidesSF2025(): React.ReactElement {
               <div className={styles.recapIcon}>🤝</div>
               <h3>Community Connections</h3>
               <p>
-                Met with security researchers, bug bounty hunters, and AI enthusiasts who
-                are pushing the boundaries of AI security research.
+                Met with security researchers, bug bounty hunters, and AI enthusiasts who are
+                pushing the boundaries of AI security research.
               </p>
             </div>
             <div className={styles.recapCard}>
               <div className={styles.recapIcon}>💬</div>
               <h3>AI Security Discussions</h3>
               <p>
-                Engaged in deep conversations about LLM vulnerabilities, prompt injection,
-                and the future of AI red teaming with the community.
+                Engaged in deep conversations about LLM vulnerabilities, prompt injection, and the
+                future of AI red teaming with the community.
               </p>
             </div>
             <div className={styles.recapCard}>
               <div className={styles.recapIcon}>🎤</div>
               <h3>Hallway Track</h3>
               <p>
-                Some of the best conversations happened between sessions—the hallway track
-                is where the real magic of BSides happens.
+                Some of the best conversations happened between sessions—the hallway track is where
+                the real magic of BSides happens.
               </p>
             </div>
             <div className={styles.recapCard}>
               <div className={styles.recapIcon}>🍻</div>
               <h3>After-Hours Networking</h3>
               <p>
-                Connected with the community at evening events, building relationships that
-                extend beyond the conference.
+                Connected with the community at evening events, building relationships that extend
+                beyond the conference.
               </p>
             </div>
           </div>
@@ -211,9 +215,7 @@ export default function BSidesSF2025(): React.ReactElement {
         <section className={styles.whySection}>
           <div className={styles.sectionHeader}>
             <h2 className={styles.sectionTitle}>Why We Love BSides</h2>
-            <p className={styles.sectionSubtitle}>
-              The heart of the security community
-            </p>
+            <p className={styles.sectionSubtitle}>The heart of the security community</p>
           </div>
 
           <div className={styles.whyGrid}>
@@ -221,16 +223,16 @@ export default function BSidesSF2025(): React.ReactElement {
               <div className={styles.whyNumber}>01</div>
               <h3>Grassroots Energy</h3>
               <p>
-                BSides captures the authentic hacker spirit—community-organized, volunteer-run,
-                and focused on sharing knowledge over selling products.
+                BSides captures the authentic hacker spirit—community-organized, volunteer-run, and
+                focused on sharing knowledge over selling products.
               </p>
             </div>
             <div className={styles.whyItem}>
               <div className={styles.whyNumber}>02</div>
               <h3>Diverse Perspectives</h3>
               <p>
-                From first-time speakers to industry veterans, BSides brings together voices
-                you won't hear at bigger corporate conferences.
+                From first-time speakers to industry veterans, BSides brings together voices you
+                won't hear at bigger corporate conferences.
               </p>
             </div>
             <div className={styles.whyItem}>
@@ -257,8 +259,8 @@ export default function BSidesSF2025(): React.ReactElement {
           <div className={styles.ctaContent}>
             <h2 className={styles.ctaTitle}>See You at BSides SF 2026</h2>
             <p className={styles.ctaText}>
-              We'll be back for BSides SF 2026. Join us for more community connections,
-              AI security discussions, and the hallway track conversations that make BSides special.
+              We'll be back for BSides SF 2026. Join us for more community connections, AI security
+              discussions, and the hallway track conversations that make BSides special.
             </p>
             <div className={styles.ctaButtons}>
               <Link to="/events/bsides-sf-2026" className={styles.ctaPrimary}>

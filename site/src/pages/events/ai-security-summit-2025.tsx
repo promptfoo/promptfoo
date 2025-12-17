@@ -87,7 +87,7 @@ function NeuralNetwork(): React.ReactElement {
               nodes[i].x,
               nodes[i].y,
               nodes[j].x,
-              nodes[j].y
+              nodes[j].y,
             );
             gradient.addColorStop(0, `rgba(124, 58, 237, ${opacity})`);
             gradient.addColorStop(0.5, `rgba(59, 130, 246, ${opacity})`);
@@ -112,7 +112,7 @@ function NeuralNetwork(): React.ReactElement {
           0,
           node.x,
           node.y,
-          node.radius * 2
+          node.radius * 2,
         );
         gradient.addColorStop(0, `rgba(124, 58, 237, ${pulse})`);
         gradient.addColorStop(0.5, `rgba(59, 130, 246, ${pulse * 0.6})`);
@@ -137,7 +137,7 @@ function NeuralNetwork(): React.ReactElement {
     };
   }, []);
 
-  return <canvas ref={canvasRef} className={styles.neuralCanvas} />;
+  return <canvas ref={canvasRef} className={styles.neuralCanvas} aria-hidden="true" />;
 }
 
 export default function AISecuritySummit2025(): React.ReactElement {
@@ -174,8 +174,14 @@ export default function AISecuritySummit2025(): React.ReactElement {
         <meta property="og:type" content="website" />
         <meta property="og:url" content="/events/ai-security-summit-2025" />
         <meta name="twitter:card" content="summary_large_image" />
-        <meta property="og:image" content="https://www.promptfoo.dev/img/events/ai-security-summit-2025.jpg" />
-        <meta name="twitter:image" content="https://www.promptfoo.dev/img/events/ai-security-summit-2025.jpg" />
+        <meta
+          property="og:image"
+          content="https://www.promptfoo.dev/img/events/ai-security-summit-2025.jpg"
+        />
+        <meta
+          name="twitter:image"
+          content="https://www.promptfoo.dev/img/events/ai-security-summit-2025.jpg"
+        />
         <meta
           name="keywords"
           content="AI Security Summit 2025, LLM security, AI red teaming, San Francisco, AI vulnerabilities, machine learning security"
@@ -282,8 +288,8 @@ export default function AISecuritySummit2025(): React.ReactElement {
                 <p className={styles.speakerRole}>CEO & Co-founder, Promptfoo</p>
                 <p className={styles.speakerBio}>
                   Ian joined industry leaders to discuss the evolving landscape of LLM
-                  vulnerabilities, emerging attack vectors, and practical defense strategies
-                  for enterprise AI deployments.
+                  vulnerabilities, emerging attack vectors, and practical defense strategies for
+                  enterprise AI deployments.
                 </p>
                 <div className={styles.speakerTopics}>
                   <span className={styles.topic}>LLM Security</span>
@@ -320,8 +326,8 @@ export default function AISecuritySummit2025(): React.ReactElement {
                 <div className={styles.themeIcon}>🔐</div>
                 <h3>Defense Strategies</h3>
                 <p>
-                  Building robust guardrails and implementing comprehensive red teaming programs
-                  to secure AI applications at scale.
+                  Building robust guardrails and implementing comprehensive red teaming programs to
+                  secure AI applications at scale.
                 </p>
               </div>
               <div className={styles.themeCard}>
@@ -353,8 +359,8 @@ export default function AISecuritySummit2025(): React.ReactElement {
                 <div className={styles.researchNumber}>01</div>
                 <h3>Automated Red Teaming</h3>
                 <p>
-                  Demonstrated how open-source tools can systematically discover vulnerabilities
-                  in LLM applications through automated adversarial testing.
+                  Demonstrated how open-source tools can systematically discover vulnerabilities in
+                  LLM applications through automated adversarial testing.
                 </p>
                 <Link to="/docs/red-team/quickstart/" className={styles.researchLink}>
                   Try it yourself →
@@ -375,8 +381,8 @@ export default function AISecuritySummit2025(): React.ReactElement {
                 <div className={styles.researchNumber}>03</div>
                 <h3>Data Exfiltration</h3>
                 <p>
-                  Showcased novel methods attackers use to extract sensitive information from
-                  RAG systems and enterprise chatbots.
+                  Showcased novel methods attackers use to extract sensitive information from RAG
+                  systems and enterprise chatbots.
                 </p>
                 <Link to="/docs/red-team/plugins/pii/" className={styles.researchLink}>
                   Explore plugins →
@@ -410,50 +416,23 @@ export default function AISecuritySummit2025(): React.ReactElement {
           </div>
         </section>
 
-        {/* Testimonials */}
-        <section className={styles.testimonialsSection}>
-          <div className={styles.container}>
-            <h2 className={styles.sectionTitle}>What People Said</h2>
-            <div className={styles.testimonialsGrid}>
-              <blockquote className={styles.testimonial}>
-                <p>
-                  "The panel on LLM vulnerabilities was eye-opening. Finally, security research
-                  that matches the pace of AI development."
-                </p>
-                <cite>— Security Architect, Tech Giant</cite>
-              </blockquote>
-              <blockquote className={styles.testimonial}>
-                <p>
-                  "Promptfoo's approach to automated red teaming is exactly what our team needed
-                  to scale our AI security testing."
-                </p>
-                <cite>— CISO, Fortune 100</cite>
-              </blockquote>
-              <blockquote className={styles.testimonial}>
-                <p>
-                  "The most practical AI security content I've seen. Left with actionable
-                  strategies we implemented the following week."
-                </p>
-                <cite>— ML Security Lead, Startup</cite>
-              </blockquote>
-            </div>
-          </div>
-        </section>
-
         {/* Final CTA */}
         <section className={styles.finalCta}>
           <div className={styles.container}>
             <div className={styles.ctaCard}>
               <h2>Secure Your AI</h2>
               <p>
-                Start red teaming your LLM applications today with Promptfoo's open-source
-                security testing framework.
+                Start red teaming your LLM applications today with Promptfoo's open-source security
+                testing framework.
               </p>
               <div className={styles.ctaButtons}>
                 <Link to="/docs/red-team/quickstart/" className={styles.primaryButton}>
                   Get Started
                 </Link>
-                <Link to="https://github.com/promptfoo/promptfoo" className={styles.secondaryButton}>
+                <Link
+                  to="https://github.com/promptfoo/promptfoo"
+                  className={styles.secondaryButton}
+                >
                   Star on GitHub
                 </Link>
               </div>

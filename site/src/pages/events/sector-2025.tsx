@@ -50,11 +50,7 @@ export default function SecTor2025(): React.ReactElement {
       <main className={styles.sectorPage}>
         {/* Hero Image Background */}
         <div className={styles.heroImageContainer}>
-          <img
-            src="/img/events/sector-2025.jpg"
-            alt="SecTor 2025"
-            className={styles.heroImage}
-          />
+          <img src="/img/events/sector-2025.jpg" alt="SecTor 2025" className={styles.heroImage} />
           <div className={styles.heroImageOverlay} />
         </div>
 
@@ -122,8 +118,8 @@ export default function SecTor2025(): React.ReactElement {
               <span className={styles.highlight}>Security</span>
             </h1>
             <p className={styles.heroSubtitle}>
-              Canada's largest IT security conference. We brought open-source AI security tools
-              to the Arsenal and connected with enterprise security teams across the country.
+              Canada's largest IT security conference. We brought open-source AI security tools to
+              the Arsenal and connected with enterprise security teams across the country.
             </p>
             <div className={styles.eventDetails}>
               <div className={styles.detail}>
@@ -329,22 +325,22 @@ export default function SecTor2025(): React.ReactElement {
             <div className={styles.testimonialsGrid}>
               <blockquote className={styles.testimonial}>
                 <p>
-                  "Finally an AI security tool that fits our compliance requirements. The
-                  detailed reports make our auditors happy, eh."
+                  "Finally an AI security tool that fits our compliance requirements. The detailed
+                  reports make our auditors happy, eh."
                 </p>
                 <cite>— Security Director, Major Canadian Bank</cite>
               </blockquote>
               <blockquote className={styles.testimonial}>
                 <p>
-                  "We've been looking for ways to test our AI assistants. This is exactly what
-                  our GRC team needed to see."
+                  "We've been looking for ways to test our AI assistants. This is exactly what our
+                  GRC team needed to see."
                 </p>
                 <cite>— CISO, Provincial Government</cite>
               </blockquote>
               <blockquote className={styles.testimonial}>
                 <p>
-                  "Open source is key for us. Being able to audit the testing methodology
-                  ourselves is non-negotiable."
+                  "Open source is key for us. Being able to audit the testing methodology ourselves
+                  is non-negotiable."
                 </p>
                 <cite>— Security Architect, Tech Company</cite>
               </blockquote>
@@ -359,8 +355,8 @@ export default function SecTor2025(): React.ReactElement {
               <div className={styles.ctaMaple}>🍁</div>
               <h2>Merci • Thank You</h2>
               <p>
-                Thanks to the SecTor team and everyone who stopped by the Arsenal. We're excited
-                to continue working with the Canadian security community.
+                Thanks to the SecTor team and everyone who stopped by the Arsenal. We're excited to
+                continue working with the Canadian security community.
               </p>
               <div className={styles.ctaButtons}>
                 <Link to="/docs/red-team/quickstart/" className={styles.primaryButton}>

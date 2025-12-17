@@ -53,7 +53,10 @@ export default function BlackHat2025(): React.ReactElement {
           property="og:description"
           content="Visit booth #4712 at Black Hat USA 2025. See live demos of AI vulnerability testing, automated red teaming, and LLM security scanning. Schedule your meeting Aug 5-7 in Las Vegas."
         />
-        <meta property="og:image" content="/img/events/blackhat-2025.png" />
+        <meta
+          property="og:image"
+          content="https://www.promptfoo.dev/img/events/blackhat-2025.jpg"
+        />
         <meta property="og:image:width" content="1200" />
         <meta property="og:image:height" content="630" />
         <meta property="og:url" content="/events/blackhat-2025" />
@@ -66,7 +69,10 @@ export default function BlackHat2025(): React.ReactElement {
           name="twitter:description"
           content="Visit booth #4712. Live demos of AI vulnerability testing & automated red teaming. Aug 5-7, Las Vegas."
         />
-        <meta name="twitter:image" content="/img/events/blackhat-2025.png" />
+        <meta
+          name="twitter:image"
+          content="https://www.promptfoo.dev/img/events/blackhat-2025.jpg"
+        />
         <meta name="twitter:site" content="@promptfoo" />
 
         <meta

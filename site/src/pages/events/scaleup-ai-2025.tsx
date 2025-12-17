@@ -38,8 +38,14 @@ export default function ScaleUpAI2025(): React.ReactElement {
         <meta property="og:type" content="website" />
         <meta property="og:url" content="/events/scaleup-ai-2025" />
         <meta name="twitter:card" content="summary_large_image" />
-        <meta property="og:image" content="https://www.promptfoo.dev/img/events/scaleup-ai-2025.jpg" />
-        <meta name="twitter:image" content="https://www.promptfoo.dev/img/events/scaleup-ai-2025.jpg" />
+        <meta
+          property="og:image"
+          content="https://www.promptfoo.dev/img/events/scaleup-ai-2025.jpg"
+        />
+        <meta
+          name="twitter:image"
+          content="https://www.promptfoo.dev/img/events/scaleup-ai-2025.jpg"
+        />
         <meta
           name="keywords"
           content="ScaleUp:AI 2025, Insight Partners, AI security, Promptfoo, Ian Webster, venture capital, AI investment"
@@ -63,12 +69,7 @@ export default function ScaleUpAI2025(): React.ReactElement {
           <svg className={styles.patternSvg} viewBox="0 0 100 100" preserveAspectRatio="none">
             <defs>
               <pattern id="grid" x="0" y="0" width="10" height="10" patternUnits="userSpaceOnUse">
-                <path
-                  d="M10 0 L0 0 L0 10"
-                  stroke="currentColor"
-                  strokeWidth="0.3"
-                  fill="none"
-                />
+                <path d="M10 0 L0 0 L0 10" stroke="currentColor" strokeWidth="0.3" fill="none" />
               </pattern>
             </defs>
             <rect width="100%" height="100%" fill="url(#grid)" />
@@ -180,9 +181,7 @@ export default function ScaleUpAI2025(): React.ReactElement {
         <section id="highlights" className={styles.highlightsSection}>
           <div className={styles.sectionHeader}>
             <h2 className={styles.sectionTitle}>Key Takeaways</h2>
-            <p className={styles.sectionSubtitle}>
-              Insights from the ScaleUp:AI feature
-            </p>
+            <p className={styles.sectionSubtitle}>Insights from the ScaleUp:AI feature</p>
           </div>
 
           <div className={styles.highlightsGrid}>
@@ -225,9 +224,7 @@ export default function ScaleUpAI2025(): React.ReactElement {
         <section className={styles.keyPointsSection}>
           <div className={styles.sectionHeader}>
             <h2 className={styles.sectionTitle}>From the Article</h2>
-            <p className={styles.sectionSubtitle}>
-              Why AI security matters now
-            </p>
+            <p className={styles.sectionSubtitle}>Why AI security matters now</p>
           </div>
 
           <div className={styles.keyPointsGrid}>
@@ -307,8 +304,8 @@ export default function ScaleUpAI2025(): React.ReactElement {
           <div className={styles.ctaContent}>
             <h2 className={styles.ctaTitle}>Ready to Secure Your AI?</h2>
             <p className={styles.ctaText}>
-              Join 200,000+ developers and 80+ Fortune 500 companies who trust Promptfoo to find
-              and fix vulnerabilities in their AI applications.
+              Join 200,000+ developers and 80+ Fortune 500 companies who trust Promptfoo to find and
+              fix vulnerabilities in their AI applications.
             </p>
             <div className={styles.ctaButtons}>
               <Link to="/docs" className={styles.ctaPrimary}>

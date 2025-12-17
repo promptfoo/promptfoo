@@ -4,11 +4,7 @@
   align-items: center;
   gap: 1.5rem;
   padding: 1rem 1.5rem;
-  background: linear-gradient(
-    135deg,
-    rgba(255, 255, 255, 0.8) 0%,
-    rgba(248, 250, 252, 0.9) 100%
-  );
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.8) 0%, rgba(248, 250, 252, 0.9) 100%);
   border-radius: 14px;
   margin-bottom: 2.5rem;
   position: relative;
@@ -41,11 +37,7 @@
 }
 
 [data-theme='dark'] .filters {
-  background: linear-gradient(
-    135deg,
-    rgba(30, 41, 59, 0.6) 0%,
-    rgba(15, 23, 42, 0.8) 100%
-  );
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.6) 0%, rgba(15, 23, 42, 0.8) 100%);
   box-shadow:
     0 1px 3px rgba(0, 0, 0, 0.1),
     0 4px 12px rgba(0, 0, 0, 0.15);

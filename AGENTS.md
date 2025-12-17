@@ -193,6 +193,7 @@ EOF
 ```
 
 **Do NOT:**
+
 - Commit screenshots to the branch
 - Upload to GitHub release assets
 - Use GitHub's internal upload endpoints (require browser cookies, not PATs)

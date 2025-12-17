@@ -22,11 +22,7 @@
   inset: 0;
   border-radius: 16px;
   padding: 1px;
-  background: linear-gradient(
-    135deg,
-    rgba(255, 255, 255, 0.1) 0%,
-    rgba(255, 255, 255, 0.05) 100%
-  );
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.05) 100%);
   mask:
     linear-gradient(#fff 0 0) content-box,
     linear-gradient(#fff 0 0);
@@ -51,11 +47,7 @@
 
 .card:hover::before {
   opacity: 1;
-  background: linear-gradient(
-    135deg,
-    var(--ifm-color-primary) 0%,
-    rgba(37, 99, 235, 0.3) 100%
-  );
+  background: linear-gradient(135deg, var(--ifm-color-primary) 0%, rgba(37, 99, 235, 0.3) 100%);
 }
 
 [data-theme='dark'] .card {
@@ -86,12 +78,7 @@
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(
-    to bottom,
-    transparent 0%,
-    transparent 50%,
-    rgba(0, 0, 0, 0.03) 100%
-  );
+  background: linear-gradient(to bottom, transparent 0%, transparent 50%, rgba(0, 0, 0, 0.03) 100%);
   pointer-events: none;
   transition: opacity 0.3s ease;
 }
@@ -117,12 +104,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(
-    135deg,
-    var(--ifm-color-primary) 0%,
-    #1d4ed8 50%,
-    #1e40af 100%
-  );
+  background: linear-gradient(135deg, var(--ifm-color-primary) 0%, #1d4ed8 50%, #1e40af 100%);
   position: relative;
   overflow: hidden;
 }
@@ -134,16 +116,13 @@
   left: -50%;
   width: 200%;
   height: 200%;
-  background: radial-gradient(
-    circle at center,
-    rgba(255, 255, 255, 0.1) 0%,
-    transparent 50%
-  );
+  background: radial-gradient(circle at center, rgba(255, 255, 255, 0.1) 0%, transparent 50%);
   animation: shimmer 3s ease-in-out infinite;
 }
 
 @keyframes shimmer {
-  0%, 100% {
+  0%,
+  100% {
     transform: translate(-10%, -10%) rotate(0deg);
     opacity: 0.5;
   }
@@ -282,11 +261,7 @@
 }
 
 .card[data-event-status='past'] .imageContainer::after {
-  background: linear-gradient(
-    to bottom,
-    transparent 0%,
-    rgba(0, 0, 0, 0.05) 100%
-  );
+  background: linear-gradient(to bottom, transparent 0%, rgba(0, 0, 0, 0.05) 100%);
 }
 
 /* Dark mode adjustments */

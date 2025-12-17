@@ -29,28 +29,43 @@ The image should feature:
 - Modern tech illustration style with clean lines, professional but approachable
 - Color palette: forest green, warm coffee browns, soft gray tones, cream accents
 - Overall mood: trustworthy, technical, but friendly and welcoming
-Style: Modern tech illustration, clean lines, cute mascot character, cozy PNW coffee shop vibes, professional but approachable like a friendly tech blog`
+Style: Modern tech illustration, clean lines, cute mascot character, cozy PNW coffee shop vibes, professional but approachable like a friendly tech blog`,
   },
   {
     filename: 'ai-security-summit-2025',
-    prompt: `Create a warm, charming illustration for AI Security Summit 2025 in San Francisco.
+    prompt: `Create a clean, modern flat graphic illustration for AI Security Summit 2025 in San Francisco.
 
-Style (CRITICAL - match this exactly):
-- Warm, expressive children's book illustration style with soft gradients and shading
-- The red panda must have BIG, SHINY, EXPRESSIVE eyes with white highlights/reflections - full of life and personality
-- Friendly, engaging character with genuine warmth - NOT a logo, NOT an icon, a LOVABLE CHARACTER
-- Soft, warm color palette with gentle gradients - NOT flat solid colors
-- Scene should feel alive and inviting, like friends gathering
+STYLE (match RSA Conference and Black Hat poster style):
+- Clean, polished flat illustration - NOT painterly, NOT watercolor
+- Smooth gradient background filling entire image
+- Limited color palette: deep PURPLE (#7C3AED) and BLUE (#3B82F6) gradients, with pink/magenta accents
+- Clean digital look, professional and sleek
 
-The image should feature:
-- An adorable red panda character with big expressive eyes, wearing cute round glasses, looking curious and intelligent
-- The red panda in the center, surrounded by friendly diverse human colleagues at a table with laptops
-- Warm conversation scene - people engaged and smiling
-- Golden Gate Bridge silhouette in soft misty purple/blue background
-- Soft neural network nodes floating gently above
-- Color palette: warm purples, soft blues, orange accents, cream tones
+BACKGROUND (must fill entire image):
+- Deep purple to blue gradient filling the entire background
+- San Francisco skyline silhouette with Golden Gate Bridge in darker purple shade
+- Floating neural network nodes and connection lines as subtle decorative elements
+- Abstract AI brain or circuit pattern overlay
 
-Style: Warm digital illustration like Pixar concept art, expressive characters, soft lighting, friendly and inviting atmosphere`
+RED PANDA CHARACTER:
+- Round face with cream/white patches on cheeks and forehead
+- Small simple BLACK DOT EYES
+- Small black nose
+- Friendly OPEN MOUTH smile showing warmth
+- Wearing cute round GLASSES (this is an AI summit - smart look)
+- Purple or blue blazer/jacket - professional but techy
+- Standing at left, gesturing toward presentation screen
+
+COMPOSITION:
+- Red panda on left at a sleek podium
+- Large screen on right showing: AI brain icon, neural network diagram, security shield with AI chip
+- SOLID dark silhouettes of 3-4 attendees in foreground (clean shapes, not sketchy)
+- Laptop on podium
+- Everything should feel COMPLETE and POLISHED
+
+TEXT: "AI SECURITY SUMMIT 2025" at top, "San Francisco, CA" below
+
+Style: Premium tech conference, clean flat illustration with rich purple/blue filled background`,
   },
   {
     filename: 'sector-2025',
@@ -65,28 +80,46 @@ The image should feature:
 - Color palette: deep crimson red (#B22234), white, dark slate backgrounds, warm accents
 - Professional, internationally respected, but with Canadian warmth
 - Northern lights inspired subtle gradient in sky
-Style: Canadian tech aesthetic, professional security conference, warm and welcoming despite dark theme`
+Style: Canadian tech aesthetic, professional security conference, warm and welcoming despite dark theme`,
   },
   {
     filename: 'telecom-talks-2025',
-    prompt: `Create a warm, charming illustration for Telecom Talks 2025 at SRI International.
+    prompt: `Create a clean, modern flat graphic illustration for Telecom Talks 2025 - a panel discussion with Swisscom.
 
-Style (CRITICAL - match this exactly):
-- Warm, expressive children's book illustration style with soft gradients and shading
-- The red panda must have BIG, SHINY, EXPRESSIVE eyes with white highlights/reflections - full of life and personality
-- Friendly, engaging character with genuine warmth - NOT a logo, NOT an icon, a LOVABLE CHARACTER
-- Soft, warm color palette with gentle gradients - NOT flat solid colors
-- Scene should feel alive and inviting
+STYLE (match RSA Conference poster style):
+- Clean, polished flat illustration - NOT vintage, NOT heavy texture
+- Smooth subtle gradients in background
+- The red panda should have a subtle dark outline/stroke to pop from background
+- Limited color palette: Swiss-inspired - deep blue, white, red accents, with teal telecom accent
+- Clean digital look, minimal texture
 
-The image should feature:
-- An adorable red panda character with big expressive eyes, confidently presenting at a podium
-- The red panda wearing a casual t-shirt, with an enthusiastic open-mouthed smile, one paw gesturing
-- Friendly audience members visible, engaged and smiling
-- Soft teal/cyan signal waves and gentle network elements in background
-- Warm lighting like a cozy conference room
-- Color palette: soft teals, warm navy, cream tones, orange accents
+RED PANDA CHARACTER (critical details):
+- Round face with cream/white patches on cheeks and forehead
+- Small simple black dot eyes
+- Small black nose
+- Friendly OPEN MOUTH smile (like RSA image - warm, welcoming)
+- Dark reddish-brown and orange fur as flat color shapes
+- Subtle dark outline around the character
+- Wearing a casual polo shirt or blazer
 
-Style: Warm digital illustration like Pixar concept art, expressive characters, soft lighting, friendly presenter atmosphere`
+SCENE - PANEL DISCUSSION (this is key):
+- Show a PANEL setup: long table/desk with 3 panelists seated behind it
+- Red panda in the CENTER as a panelist, with 2 stylized human panelists on either side
+- Each panelist has a small microphone in front of them
+- Name placards on the table in front of each panelist
+- Behind them: large screen showing smartphone icons, 5G signal waves, network diagrams
+- Swiss Alps silhouette subtly visible through/behind the screen
+- Small Swiss cross (white cross on red) as a subtle badge or logo element on the screen
+- Audience silhouettes in foreground watching the panel
+
+TELECOM ELEMENTS:
+- Smartphone icons, cell signal bars, 5G text
+- Network tower silhouette
+- Signal wave arcs
+
+TEXT AREA: Space at top for "TELECOM TALKS 2025" and "Panel with Swisscom • SRI International"
+
+Style: Clean modern tech illustration like RSA Conference poster, polished and professional`,
   },
   {
     filename: 'rsa-2025',
@@ -100,7 +133,7 @@ The image should feature:
 - Color palette: RSA blue (#0066CC), professional silver (#94A3B8), navy (#1e3a5f)
 - Professional, enterprise-grade, corporate but approachable atmosphere
 - Clean geometric patterns, subtle grid overlays
-Style: Enterprise security aesthetic, corporate tech conference, professional and trustworthy imagery`
+Style: Enterprise security aesthetic, corporate tech conference, professional and trustworthy imagery`,
   },
   {
     filename: 'bsides-sf-2025',
@@ -114,28 +147,40 @@ The image should feature:
 - Color palette: BSides orange (#F97316), purple (#8B5CF6), fog gray tones
 - Community-driven, accessible, inclusive, hacker culture atmosphere
 - Warm community vibes with SF fog aesthetic
-Style: Grassroots hacker conference, San Francisco community, warm and inclusive imagery`
+Style: Grassroots hacker conference, San Francisco community, warm and inclusive imagery`,
   },
   {
     filename: 'rsa-2026',
-    prompt: `Create a warm, charming illustration for RSA Conference 2026 in San Francisco.
+    prompt: `Create a clean, modern flat graphic illustration for RSA Conference 2026 - a "Save the Date" announcement. The ENTIRE IMAGE must have a BLUE background - NO WHITE.
 
-Style (CRITICAL - match this exactly):
-- Warm, expressive children's book illustration style with soft gradients and shading
-- The red panda must have BIG, SHINY, EXPRESSIVE eyes with white highlights/reflections - full of life and personality
-- Friendly, engaging character with genuine warmth - NOT a logo, NOT an icon, a LOVABLE CHARACTER
-- Soft, warm color palette with gentle gradients - NOT flat solid colors
-- Scene should feel alive and inviting
+CRITICAL - BACKGROUND COLOR:
+- The ENTIRE background must be filled with RSA BLUE gradient - absolutely NO white or empty space
+- Rich blue (#0066CC) at top fading to deep navy (#1a365d) at bottom
+- This is the most important requirement - the background must be COMPLETELY FILLED with blue
 
-The image should feature:
-- An adorable red panda character with big expressive eyes, excitedly pointing at a "Save the Date" calendar
-- The red panda has a big happy smile, genuinely excited expression
-- Friendly colleagues nearby also looking excited about the upcoming event
-- San Francisco skyline with Golden Gate Bridge in soft blue/purple misty background
-- Gentle floating security shield icons
-- Color palette: soft blues, warm cyans, professional navy, cream and orange accents
+BACKGROUND ELEMENTS:
+- San Francisco skyline silhouette in darker blue shade (Golden Gate Bridge, Transamerica Pyramid, Moscone Center)
+- Subtle grid pattern or circuit lines overlay in lighter blue
+- Floating security shield icons scattered around
 
-Style: Warm digital illustration like Pixar concept art, expressive characters, soft lighting, excited anticipation atmosphere`
+RED PANDA CHARACTER:
+- Round face with cream/white patches on cheeks and forehead
+- Small simple BLACK DOT EYES
+- Small black nose
+- Friendly OPEN MOUTH smile - excited expression
+- Wearing blue blazer over white shirt
+- Standing at left side, pointing excitedly at a calendar/sign
+
+COMPOSITION:
+- Red panda on left pointing at a "SAVE THE DATE" sign/calendar in center-right
+- The sign shows "April 27-30, 2026" and "San Francisco"
+- 2-3 excited colleagues as solid darker blue silhouettes
+- Shield icons with checkmarks floating
+- Everything on the BLUE background - no white areas
+
+TEXT: "RSA CONFERENCE 2026" at top in white, "Save the Date" below
+
+Style: Must look like RSA 2025 poster - rich blue filled background, clean flat illustration, professional but exciting`,
   },
   {
     filename: 'bsides-sf-2026',
@@ -149,7 +194,7 @@ The image should feature:
 - Color palette: BSides orange (#F97316), neon purple (#8B5CF6), electric accents
 - Exciting, community anticipation, grassroots energy for upcoming event
 - Warm SF community vibes with futuristic accents
-Style: Future hacker community gathering, San Francisco, anticipation and welcoming imagery`
+Style: Future hacker community gathering, San Francisco, anticipation and welcoming imagery`,
   },
   {
     filename: 'scaleup-ai-2025',
@@ -163,55 +208,86 @@ The image should feature:
 - Color palette: deep indigo (#4F46E5), professional slate (#475569), clean whites
 - Sophisticated, authoritative, thought leadership atmosphere
 - Clean geometric patterns, subtle gradient overlays
-Style: Venture capital thought leadership, professional media feature, sophisticated tech investment aesthetic`
+Style: Venture capital thought leadership, professional media feature, sophisticated tech investment aesthetic`,
   },
   {
     filename: 'defcon-2025',
-    prompt: `Create a warm, charming illustration for DEF CON 33 (2025), the hacker conference in Las Vegas.
+    prompt: `Create a clean, modern flat graphic illustration for DEF CON 33 (2025) hacker conference. The ENTIRE IMAGE must have a DARK background - NO WHITE.
 
-Style (CRITICAL - match this exactly):
-- Warm, expressive children's book illustration style with soft gradients and shading
-- The red panda must have BIG, SHINY, EXPRESSIVE eyes with white highlights/reflections - full of life and personality
-- Friendly, engaging character with genuine warmth - NOT a logo, NOT an icon, a LOVABLE CHARACTER
-- Soft, warm color palette with gentle gradients - NOT flat solid colors
-- Scene should feel alive and inviting, like friends at a fun gathering
+CRITICAL - BACKGROUND COLOR:
+- The ENTIRE background must be filled with DARK CHARCOAL to BLACK gradient - absolutely NO white or light areas
+- Dark charcoal (#1a1a2e) at top fading to near-black (#0d0d0d) at bottom
+- This is the most important requirement - the background must be COMPLETELY DARK like Black Hat poster
 
-The image should feature:
-- An adorable red panda character with big expressive eyes, wearing a cozy hoodie, with a playful mischievous grin
-- The red panda sitting with friendly diverse hacker friends around a table with laptops
-- Everyone engaged in fun conversation, some typing, warm camaraderie
-- Soft green terminal windows glowing gently in background
-- Conference badges visible, warm lighting
-- Color palette: soft greens, warm teals, muted cyans, cream tones on cozy dark background
+BACKGROUND ELEMENTS:
+- Las Vegas skyline silhouette in slightly lighter dark gray (Stratosphere tower, casino hotels)
+- Green (#00FF41) circuit traces and network lines as pattern overlay
+- Matrix-style subtle code/text falling in background
+- Terminal window shapes floating
 
-Style: Warm digital illustration like Pixar concept art, expressive characters, soft lighting, fun hacker friends gathering atmosphere`
+RED PANDA CHARACTER:
+- Round face with cream/white patches on cheeks and forehead
+- Small simple BLACK DOT EYES
+- Small black nose
+- Friendly OPEN MOUTH smile - playful mischievous grin
+- Wearing dark gray HOODIE
+- Green DEF CON badge on lanyard
+- Sitting at center with laptop
+
+COMPOSITION:
+- Red panda at center-left at table with open laptop showing green terminal text
+- 2-3 hacker friends as stylized flat characters (not just silhouettes) sitting around with laptops
+- Everyone wearing hoodies, has badges
+- Skull stickers on laptops
+- SOLID dark silhouettes of crowd in far background
+- Warm community gathering feel despite dark colors
+
+TEXT: "DEF CON 33" in neon green at top, "August 7-10, 2025 • Las Vegas" below
+
+Style: Must look like Black Hat poster - dark filled background, clean flat illustration, hacker aesthetic with green accents`,
   },
   {
     filename: 'blackhat-2025',
-    prompt: `Create a warm, charming illustration for Black Hat USA 2025 cybersecurity conference in Las Vegas.
+    prompt: `Create a clean, modern flat graphic illustration for Black Hat USA 2025 in Las Vegas. Match the polished style of RSA Conference posters.
 
-Style (CRITICAL - match this exactly):
-- Warm, expressive children's book illustration style with soft gradients and shading
-- The red panda must have BIG, SHINY, EXPRESSIVE eyes with white highlights/reflections - full of life and personality
-- Friendly, engaging character with genuine warmth - NOT a logo, NOT an icon, a LOVABLE CHARACTER
-- Soft, warm color palette with gentle gradients - NOT flat solid colors
-- Scene should feel alive and inviting
+BACKGROUND (critical - must fill entire image):
+- DARK gradient background filling the ENTIRE image - deep charcoal gray at top fading to dark gray
+- Las Vegas skyline silhouette across the bottom/middle in darker shade (Stratosphere tower, casino hotel shapes, desert mountains)
+- The background must be FILLED with color, not white/empty
+- Subtle grid lines or circuit pattern overlay in the dark background
 
-The image should feature:
-- An adorable red panda character with big expressive eyes, wearing a conference badge, looking confident and friendly
-- The red panda at a demo booth, engaging warmly with interested attendees
-- Friendly professionals gathered around, some holding coffee cups, engaged in conversation
-- Soft security visualizations and gentle data charts in background
-- Warm booth lighting, professional but welcoming atmosphere
-- Color palette: warm grays, soft crimson red accents, cream tones, professional but cozy
+COLOR PALETTE (strict):
+- Background: dark charcoal grays and blacks
+- Accents: CRIMSON RED (#DC143C) for highlights and icons
+- White/light gray for text and secondary elements
+- The red panda's orange fur should POP against the dark background
 
-Style: Warm digital illustration like Pixar concept art, expressive characters, soft lighting, friendly professional conference atmosphere`
-  }
+RED PANDA CHARACTER:
+- Round face with cream/white patches on cheeks and forehead
+- Small simple BLACK DOT EYES
+- Small black nose
+- Friendly OPEN MOUTH smile showing warmth
+- Dark reddish-brown and bright orange fur as flat color shapes
+- Wearing dark blazer over black shirt - very professional
+- Red lanyard with badge visible
+- Standing at left-center, gesturing toward a presentation screen
+
+COMPOSITION:
+- Red panda on left side at a sleek demo podium/booth
+- Large presentation SCREEN on the right showing: security shield icon, lock icon, threat graph with red data points, profile/identity card icon
+- SOLID dark silhouettes of 3-4 attendees in foreground watching (not sketchy outlines - clean solid shapes like RSA image)
+- Laptop on podium showing dashboard
+- Everything should feel COMPLETE and POLISHED, not sparse
+
+TEXT: "BLACK HAT USA 2025" at top, "August 2-7, 2025 • Las Vegas, NV" below
+
+Style: Premium, dark, professional - like a high-end security conference. Clean flat illustration with rich dark filled background like RSA poster style.`,
+  },
 ];
 
 async function generateImage(prompt) {
   const data = JSON.stringify({
-    model: 'gpt-image-1.5',
+    model: 'gpt-image-1',
     prompt: prompt,
     size: '1536x1024', // Wider aspect ratio for hero images
     quality: 'high',
@@ -294,7 +370,9 @@ async function processEvent(event) {
 
     // Convert PNG to JPEG using sips (macOS) or ImageMagick
     try {
-      execSync(`sips -s format jpeg -s formatOptions 85 "${pngPath}" --out "${jpgPath}"`, { stdio: 'pipe' });
+      execSync(`sips -s format jpeg -s formatOptions 85 "${pngPath}" --out "${jpgPath}"`, {
+        stdio: 'pipe',
+      });
       console.log(`[${event.filename}] Converted to JPEG`);
 
       // Remove PNG after successful conversion
@@ -325,12 +403,12 @@ async function main() {
 
   if (args.length > 0 && args[0] !== '--all') {
     const eventName = args[0];
-    const found = events.find(e => e.filename === eventName || e.filename.includes(eventName));
+    const found = events.find((e) => e.filename === eventName || e.filename.includes(eventName));
     if (found) {
       eventsToProcess = [found];
     } else {
       console.error(`Event not found: ${eventName}`);
-      console.log('Available events:', events.map(e => e.filename).join(', '));
+      console.log('Available events:', events.map((e) => e.filename).join(', '));
       process.exit(1);
     }
   }

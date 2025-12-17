@@ -42,7 +42,7 @@ export default function Defcon2025(): React.ReactElement {
           property="og:description"
           content="The AI security party you don't want to miss at DEFCON 33. Join hackers, researchers, and the Promptfoo team for drinks and demos. August 9, 2025 in Las Vegas."
         />
-        <meta property="og:image" content="/img/events/defcon-2025.png" />
+        <meta property="og:image" content="https://www.promptfoo.dev/img/events/defcon-2025.jpg" />
         <meta property="og:image:width" content="1200" />
         <meta property="og:image:height" content="630" />
         <meta property="og:url" content="/events/defcon-2025" />
@@ -55,7 +55,7 @@ export default function Defcon2025(): React.ReactElement {
           name="twitter:description"
           content="The AI security party at DEFCON 33. Free drinks, live demos. August 9, Las Vegas."
         />
-        <meta name="twitter:image" content="/img/events/defcon-2025.png" />
+        <meta name="twitter:image" content="https://www.promptfoo.dev/img/events/defcon-2025.jpg" />
         <meta name="twitter:site" content="@promptfoo" />
 
         <meta

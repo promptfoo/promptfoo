@@ -352,20 +352,12 @@
 .spiritSection {
   position: relative;
   padding: 6rem 1.5rem;
-  background: linear-gradient(
-    180deg,
-    rgba(254, 243, 199, 0.3) 0%,
-    rgba(254, 243, 199, 0.1) 100%
-  );
+  background: linear-gradient(180deg, rgba(254, 243, 199, 0.3) 0%, rgba(254, 243, 199, 0.1) 100%);
   z-index: 2;
 }
 
 [data-theme='dark'] .spiritSection {
-  background: linear-gradient(
-    180deg,
-    rgba(30, 41, 59, 0.5) 0%,
-    rgba(15, 23, 42, 0.8) 100%
-  );
+  background: linear-gradient(180deg, rgba(30, 41, 59, 0.5) 0%, rgba(15, 23, 42, 0.8) 100%);
 }
 
 .spiritGrid {
@@ -449,11 +441,7 @@
 }
 
 .sharedCard {
-  background: linear-gradient(
-    135deg,
-    rgba(5, 150, 105, 0.05) 0%,
-    rgba(5, 150, 105, 0.02) 100%
-  );
+  background: linear-gradient(135deg, rgba(5, 150, 105, 0.05) 0%, rgba(5, 150, 105, 0.02) 100%);
   border-radius: 16px;
   padding: 2rem;
   border: 1px solid rgba(5, 150, 105, 0.15);
@@ -464,11 +452,7 @@
 }
 
 [data-theme='dark'] .sharedCard {
-  background: linear-gradient(
-    135deg,
-    rgba(5, 150, 105, 0.1) 0%,
-    rgba(5, 150, 105, 0.05) 100%
-  );
+  background: linear-gradient(135deg, rgba(5, 150, 105, 0.1) 0%, rgba(5, 150, 105, 0.05) 100%);
   border-color: rgba(5, 150, 105, 0.2);
 }
 
@@ -530,20 +514,12 @@
 .momentsSection {
   position: relative;
   padding: 6rem 1.5rem;
-  background: linear-gradient(
-    180deg,
-    #f8fafc 0%,
-    rgba(254, 243, 199, 0.2) 100%
-  );
+  background: linear-gradient(180deg, #f8fafc 0%, rgba(254, 243, 199, 0.2) 100%);
   z-index: 2;
 }
 
 [data-theme='dark'] .momentsSection {
-  background: linear-gradient(
-    180deg,
-    #1e293b 0%,
-    rgba(30, 41, 59, 0.8) 100%
-  );
+  background: linear-gradient(180deg, #1e293b 0%, rgba(30, 41, 59, 0.8) 100%);
 }
 
 .quotesGrid {
@@ -646,21 +622,13 @@
   margin: 0 auto;
   text-align: center;
   padding: 3rem;
-  background: linear-gradient(
-    135deg,
-    rgba(254, 243, 199, 0.5) 0%,
-    rgba(254, 243, 199, 0.2) 100%
-  );
+  background: linear-gradient(135deg, rgba(254, 243, 199, 0.5) 0%, rgba(254, 243, 199, 0.2) 100%);
   border-radius: 20px;
   border: 1px solid rgba(146, 64, 14, 0.15);
 }
 
 [data-theme='dark'] .ctaCard {
-  background: linear-gradient(
-    135deg,
-    rgba(30, 41, 59, 0.8) 0%,
-    rgba(30, 41, 59, 0.5) 100%
-  );
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.8) 0%, rgba(30, 41, 59, 0.5) 100%);
   border-color: rgba(251, 191, 36, 0.2);
 }
 

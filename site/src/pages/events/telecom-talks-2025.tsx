@@ -114,8 +114,14 @@ export default function TelecomTalks2025(): React.ReactElement {
         <meta property="og:type" content="website" />
         <meta property="og:url" content="/events/telecom-talks-2025" />
         <meta name="twitter:card" content="summary_large_image" />
-        <meta property="og:image" content="https://www.promptfoo.dev/img/events/telecom-talks-2025.jpg" />
-        <meta name="twitter:image" content="https://www.promptfoo.dev/img/events/telecom-talks-2025.jpg" />
+        <meta
+          property="og:image"
+          content="https://www.promptfoo.dev/img/events/telecom-talks-2025.jpg"
+        />
+        <meta
+          name="twitter:image"
+          content="https://www.promptfoo.dev/img/events/telecom-talks-2025.jpg"
+        />
         <meta
           name="keywords"
           content="Telecom Talks 2025, telecommunications security, AI security, LLM security, Swisscom, 5G security"
@@ -138,7 +144,14 @@ export default function TelecomTalks2025(): React.ReactElement {
         <div className={styles.circuitPattern}>
           <svg className={styles.circuitSvg} viewBox="0 0 100 100" preserveAspectRatio="none">
             <defs>
-              <pattern id="circuit" x="0" y="0" width="20" height="20" patternUnits="userSpaceOnUse">
+              <pattern
+                id="circuit"
+                x="0"
+                y="0"
+                width="20"
+                height="20"
+                patternUnits="userSpaceOnUse"
+              >
                 <path
                   d="M10 0 L10 8 M0 10 L8 10 M12 10 L20 10 M10 12 L10 20"
                   stroke="currentColor"
@@ -285,8 +298,8 @@ export default function TelecomTalks2025(): React.ReactElement {
               <p className={styles.sessionDescription}>
                 Ian Webster joined Swisscom's security team on stage to discuss the unique
                 challenges of securing AI systems in telecommunications infrastructure. From
-                customer service chatbots to network operations assistants, telecom companies
-                are deploying LLMs at scale—and facing new security challenges.
+                customer service chatbots to network operations assistants, telecom companies are
+                deploying LLMs at scale—and facing new security challenges.
               </p>
               <div className={styles.sessionSpeakers}>
                 <div className={styles.speaker}>
@@ -337,16 +350,16 @@ export default function TelecomTalks2025(): React.ReactElement {
                 <div className={styles.challengeIcon}>📱</div>
                 <h3>Customer Data</h3>
                 <p>
-                  Call records, location data, billing information. AI systems processing this
-                  data need rigorous security testing.
+                  Call records, location data, billing information. AI systems processing this data
+                  need rigorous security testing.
                 </p>
               </div>
               <div className={styles.challengeCard}>
                 <div className={styles.challengeIcon}>⚡</div>
                 <h3>Critical Infrastructure</h3>
                 <p>
-                  Networks that power emergency services, hospitals, and financial systems.
-                  The stakes for AI security couldn't be higher.
+                  Networks that power emergency services, hospitals, and financial systems. The
+                  stakes for AI security couldn't be higher.
                 </p>
               </div>
             </div>
@@ -364,8 +377,8 @@ export default function TelecomTalks2025(): React.ReactElement {
                   <h3>Carrier-Grade LLM Security</h3>
                   <p>
                     How major telecom providers are approaching AI security at scale, including
-                    lessons learned from early deployments and best practices emerging across
-                    the industry.
+                    lessons learned from early deployments and best practices emerging across the
+                    industry.
                   </p>
                 </div>
               </div>
@@ -374,8 +387,8 @@ export default function TelecomTalks2025(): React.ReactElement {
                 <div className={styles.discussionContent}>
                   <h3>Network API Protection</h3>
                   <p>
-                    Strategies for securing AI-powered network APIs against prompt injection,
-                    data exfiltration, and unauthorized access attempts.
+                    Strategies for securing AI-powered network APIs against prompt injection, data
+                    exfiltration, and unauthorized access attempts.
                   </p>
                 </div>
               </div>
@@ -430,7 +443,10 @@ export default function TelecomTalks2025(): React.ReactElement {
                 <Link to="/docs/red-team/quickstart/" className={styles.primaryButton}>
                   Get Started
                 </Link>
-                <Link to="https://github.com/promptfoo/promptfoo" className={styles.secondaryButton}>
+                <Link
+                  to="https://github.com/promptfoo/promptfoo"
+                  className={styles.secondaryButton}
+                >
                   View Source
                 </Link>
               </div>

@@ -9,8 +9,7 @@ interface EventCardProps {
 }
 
 export default function EventCard({ event }: EventCardProps): React.ReactElement {
-  const hasExistingPage =
-    event.customPageUrl || event.slug === 'blackhat-2025' || event.slug === 'defcon-2025';
+  const hasCustomPage = Boolean(event.customPageUrl);
   const eventUrl = event.customPageUrl || `/events/${event.slug}`;
 
   const CardContent = () => (
@@ -82,7 +81,7 @@ export default function EventCard({ event }: EventCardProps): React.ReactElement
     </>
   );
 
-  if (hasExistingPage) {
+  if (hasCustomPage) {
     return (
       <Link to={eventUrl} className={styles.card}>
         <CardContent />
