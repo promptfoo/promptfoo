@@ -4,6 +4,7 @@ import { IS_RUNNING_LOCALLY } from '@app/constants';
 import { useToast } from '@app/hooks/useToast';
 import { useStore as useMainStore } from '@app/stores/evalConfig';
 import { callApi, fetchUserEmail, updateEvalAuthor } from '@app/utils/api';
+import { formatDuration } from '@app/utils/date';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import ClearIcon from '@mui/icons-material/Clear';
@@ -75,50 +76,6 @@ const ResponsiveStack = styled(Stack)(({ theme }) => ({
     flexDirection: 'column',
   },
 }));
-
-/**
- * Validates that a duration value is a finite positive number.
- */
-function isValidDuration(ms: unknown): ms is number {
-  return typeof ms === 'number' && Number.isFinite(ms) && ms >= 0;
-}
-
-/**
- * Formats a duration in milliseconds to a human-readable string.
- * Returns null for invalid inputs (NaN, Infinity, negative, non-number).
- * Examples: "342ms", "2.3s", "1m 45s", "1h 23m"
- */
-function formatDuration(ms: number): string | null {
-  if (!isValidDuration(ms)) {
-    return null;
-  }
-
-  if (ms < 1000) {
-    return `${Math.round(ms)}ms`;
-  }
-  if (ms < 60000) {
-    return `${(ms / 1000).toFixed(1)}s`;
-  }
-
-  // Calculate minutes and seconds, handling rounding overflow
-  let minutes = Math.floor(ms / 60000);
-  let seconds = Math.round((ms % 60000) / 1000);
-
-  // Handle edge case where seconds rounds to 60
-  if (seconds === 60) {
-    minutes += 1;
-    seconds = 0;
-  }
-
-  if (minutes < 60) {
-    return seconds > 0 ? `${minutes}m ${seconds}s` : `${minutes}m`;
-  }
-
-  // Calculate hours and remaining minutes
-  const hours = Math.floor(minutes / 60);
-  const remainingMinutes = minutes % 60;
-  return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
-}
 
 interface ResultsViewProps {
   recentEvals: ResultLightweightWithLabel[];
