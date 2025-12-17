@@ -212,7 +212,9 @@ export class NscaleImageProvider extends OpenAiImageProvider {
 
     try {
       const formattedOutput = formatOutput(data, prompt, responseFormat);
-      if (typeof formattedOutput === 'object') {
+
+      // Check if it's an error
+      if (typeof formattedOutput === 'object' && 'error' in formattedOutput) {
         return formattedOutput;
       }
 
@@ -222,7 +224,6 @@ export class NscaleImageProvider extends OpenAiImageProvider {
         output: formattedOutput,
         cached,
         cost,
-        ...(responseFormat === 'b64_json' ? { isBase64: true, format: 'json' } : {}),
       };
     } catch (err) {
       await data?.deleteFromCache?.();
