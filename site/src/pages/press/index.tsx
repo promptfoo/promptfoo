@@ -22,7 +22,7 @@ import {
   type EducationalResource,
   type Podcast,
   type TechnicalContent,
-} from './data';
+} from './_data';
 import styles from './styles.module.css';
 
 const ArticleLink = ({ article }: { article: Article }) => (
