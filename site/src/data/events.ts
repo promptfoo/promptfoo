@@ -268,6 +268,7 @@ export const events: Event[] = [
       },
     ],
     meetingUrl: 'https://cal.com/team/promptfoo/promptfoo-at-blackhat',
+    customPageUrl: '/events/blackhat-2025',
   },
   {
     id: 'defcon-2025',
@@ -308,6 +309,7 @@ export const events: Event[] = [
       },
     ],
     registrationUrl: 'https://lu.ma/ljm23pj6?tk=qGE9ez&utm_source=pf-web',
+    customPageUrl: '/events/defcon-2025',
   },
   {
     id: 'rsa-2025',
