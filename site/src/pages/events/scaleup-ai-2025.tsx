@@ -307,7 +307,7 @@ export default function ScaleUpAI2025(): React.ReactElement {
               fix vulnerabilities in their AI applications.
             </p>
             <div className={styles.ctaButtons}>
-              <Link to="/docs" className={styles.ctaPrimary}>
+              <Link to="/docs/intro" className={styles.ctaPrimary}>
                 Get Started Free
               </Link>
               <Link to="/contact" className={styles.ctaSecondary}>

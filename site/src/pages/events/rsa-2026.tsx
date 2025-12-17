@@ -307,7 +307,7 @@ export default function RSA2026(): React.ReactElement {
               <Link to="/contact" className={styles.ctaPrimary}>
                 Schedule a Meeting
               </Link>
-              <Link to="/docs" className={styles.ctaSecondary}>
+              <Link to="/docs/intro" className={styles.ctaSecondary}>
                 Explore Documentation
               </Link>
             </div>
