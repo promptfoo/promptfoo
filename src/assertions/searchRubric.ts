@@ -6,6 +6,7 @@ export async function handleSearchRubric({
   baseType: _baseType,
   inverse,
   provider,
+  providerCallContext,
   renderedValue,
   test,
   providerResponse,
@@ -21,6 +22,7 @@ export async function handleSearchRubric({
     test.vars,
     assertion,
     provider,
+    providerCallContext,
   );
 
   if (inverse) {

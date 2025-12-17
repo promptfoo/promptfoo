@@ -5,7 +5,7 @@ import invariant from '../../util/invariant';
 import { matchesConversationRelevance } from '../matchers/deepeval';
 import type { Message } from '../matchers/deepeval';
 import { ConversationRelevancyTemplate } from '../matchers/conversationRelevancyTemplate';
-import { getAndCheckProvider } from '../../matchers';
+import { getAndCheckProvider, callProviderWithContext } from '../../matchers';
 import { getDefaultProviders } from '../../providers/defaults';
 import { extractJsonObjects } from '../../util/json';
 import { createEmptyTokenUsage, accumulateTokenUsage } from '../../util/tokenUsageUtils';
@@ -16,6 +16,7 @@ export const handleConversationRelevance = async ({
   assertion,
   outputString,
   prompt,
+  providerCallContext,
   test,
 }: AssertionParams): Promise<GradingResult> => {
   let messages: Message[] = [];
@@ -50,6 +51,7 @@ export const handleConversationRelevance = async ({
       1.0, // Use 1.0 threshold for individual windows
       test.vars,
       test.options,
+      providerCallContext,
     );
 
     if (result.pass) {
@@ -84,7 +86,13 @@ export const handleConversationRelevance = async ({
     );
 
     const reasonPrompt = ConversationRelevancyTemplate.generateReason(score, irrelevancies);
-    const resp = await textProvider.callApi(reasonPrompt);
+    const resp = await callProviderWithContext(
+      textProvider,
+      reasonPrompt,
+      'conversation-relevance-reason',
+      { score, irrelevancies },
+      providerCallContext,
+    );
 
     if (resp.output && typeof resp.output === 'string') {
       try {
