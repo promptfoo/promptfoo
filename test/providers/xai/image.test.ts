@@ -319,7 +319,7 @@ describe('XAI Image Provider', () => {
   });
 
   describe('Response format handling', () => {
-    it('should handle base64 response format', async () => {
+    it('should handle base64 response format and return data URL', async () => {
       const provider = new XAIImageProvider('grok-2-image', {
         config: { apiKey: mockApiKey, response_format: 'b64_json' },
       });
@@ -328,11 +328,10 @@ describe('XAI Image Provider', () => {
 
       const result = await provider.callApi('test prompt');
 
+      // Now returns data URL format instead of JSON with metadata
       expect(result).toEqual({
-        output: JSON.stringify(mockBase64Response.data),
+        output: 'data:image/png;base64,base64EncodedImageData',
         cached: false,
-        isBase64: true,
-        format: 'json',
         cost: 0.07,
       });
 

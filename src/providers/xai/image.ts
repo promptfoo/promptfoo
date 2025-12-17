@@ -146,7 +146,6 @@ export class XAIImageProvider extends OpenAiImageProvider {
         output: formattedOutput,
         cached,
         cost,
-        ...(responseFormat === 'b64_json' ? { isBase64: true, format: 'json' } : {}),
       };
     } catch (err) {
       await data?.deleteFromCache?.();
