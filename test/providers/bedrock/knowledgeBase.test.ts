@@ -236,6 +236,11 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
         knowledgeBaseConfiguration: {
           knowledgeBaseId: 'kb-123',
           modelArn: 'us.anthropic.claude-3-7-sonnet-20241022-v2:0',
+          retrievalConfiguration: {
+            vectorSearchConfiguration: {
+              numberOfResults: 5,
+            },
+          },
         },
       },
     };
@@ -296,6 +301,11 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
         knowledgeBaseConfiguration: {
           knowledgeBaseId: 'kb-123',
           modelArn: 'custom:model:arn',
+          retrievalConfiguration: {
+            vectorSearchConfiguration: {
+              numberOfResults: 5,
+            },
+          },
         },
       },
     };
@@ -329,6 +339,94 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
         knowledgeBaseConfiguration: {
           knowledgeBaseId: 'kb-123',
           modelArn: 'arn:aws:bedrock:us-east-1::foundation-model/amazon.nova-lite-v1:0',
+          retrievalConfiguration: {
+            vectorSearchConfiguration: {
+              numberOfResults: 5,
+            },
+          },
+        },
+      },
+    };
+
+    expect(RetrieveAndGenerateCommand).toHaveBeenCalledWith(expectedCommand);
+  });
+
+  it('should use default numberOfResults of 5 when not provided', async () => {
+    const mockResponse = {
+      output: {
+        text: 'This is the response from the knowledge base',
+      },
+      citations: [],
+    };
+
+    mockSend.mockResolvedValueOnce(mockResponse);
+
+    const provider = new AwsBedrockKnowledgeBaseProvider(
+      'us.anthropic.claude-3-7-sonnet-20241022-v2:0',
+      {
+        config: {
+          knowledgeBaseId: 'kb-123',
+          region: 'us-east-1',
+        },
+      },
+    );
+
+    await provider.callApi('What is the capital of France?');
+
+    const expectedCommand = {
+      input: { text: 'What is the capital of France?' },
+      retrieveAndGenerateConfiguration: {
+        type: 'KNOWLEDGE_BASE',
+        knowledgeBaseConfiguration: {
+          knowledgeBaseId: 'kb-123',
+          modelArn: 'us.anthropic.claude-3-7-sonnet-20241022-v2:0',
+          retrievalConfiguration: {
+            vectorSearchConfiguration: {
+              numberOfResults: 5,
+            },
+          },
+        },
+      },
+    };
+
+    expect(RetrieveAndGenerateCommand).toHaveBeenCalledWith(expectedCommand);
+  });
+
+  it('should use custom numberOfResults when provided', async () => {
+    const mockResponse = {
+      output: {
+        text: 'This is the response from the knowledge base',
+      },
+      citations: [],
+    };
+
+    mockSend.mockResolvedValueOnce(mockResponse);
+
+    const provider = new AwsBedrockKnowledgeBaseProvider(
+      'us.anthropic.claude-3-7-sonnet-20241022-v2:0',
+      {
+        config: {
+          knowledgeBaseId: 'kb-123',
+          region: 'us-east-1',
+          numberOfResults: 10,
+        },
+      },
+    );
+
+    await provider.callApi('What is the capital of France?');
+
+    const expectedCommand = {
+      input: { text: 'What is the capital of France?' },
+      retrieveAndGenerateConfiguration: {
+        type: 'KNOWLEDGE_BASE',
+        knowledgeBaseConfiguration: {
+          knowledgeBaseId: 'kb-123',
+          modelArn: 'us.anthropic.claude-3-7-sonnet-20241022-v2:0',
+          retrievalConfiguration: {
+            vectorSearchConfiguration: {
+              numberOfResults: 10,
+            },
+          },
         },
       },
     };
@@ -408,6 +506,44 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
     const mockResponse = {
       output: {
         text: 'Response with custom model ARN',
+      },
+      citations: [],
+    };
+    mockSend.mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('What is the capital of France?');
+
+    expect(mockGet).toHaveBeenCalledWith(
+      expect.stringMatching(/^bedrock-kb:.*:What is the capital of France\?$/),
+    );
+
+    expect(mockSet).toHaveBeenCalledWith(
+      expect.stringMatching(/^bedrock-kb:.*:What is the capital of France\?$/),
+      expect.any(String),
+    );
+
+    mockIsCacheEnabled.mockReturnValue(false);
+  });
+
+  it('should include numberOfResults in cache key when provided', async () => {
+    mockIsCacheEnabled.mockReturnValue(true);
+
+    const provider = new AwsBedrockKnowledgeBaseProvider(
+      'us.anthropic.claude-3-7-sonnet-20241022-v2:0',
+      {
+        config: {
+          knowledgeBaseId: 'kb-123',
+          region: 'us-east-1',
+          numberOfResults: 10,
+        },
+      },
+    );
+
+    mockGet.mockResolvedValueOnce(null);
+
+    const mockResponse = {
+      output: {
+        text: 'Response with custom numberOfResults',
       },
       citations: [],
     };
