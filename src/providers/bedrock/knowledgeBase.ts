@@ -28,6 +28,7 @@ interface BedrockKnowledgeBaseOptions {
   max_tokens?: number;
   top_p?: number;
   top_k?: number;
+  numberOfResults?: number;
 }
 
 // Define citation types for metadata
@@ -198,6 +199,14 @@ export class AwsBedrockKnowledgeBaseProvider
     if (this.kbConfig.modelArn || this.modelName !== 'default') {
       knowledgeBaseConfiguration.modelArn = modelArn;
     }
+
+    // Add retrieval configuration with numberOfResults (default: 5)
+    const numberOfResults = this.kbConfig.numberOfResults ?? 5;
+    knowledgeBaseConfiguration.retrievalConfiguration = {
+      vectorSearchConfiguration: {
+        numberOfResults,
+      },
+    };
 
     const params: RetrieveAndGenerateCommandInput = {
       input: { text: prompt },
