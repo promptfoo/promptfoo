@@ -1705,6 +1705,9 @@ describe('doGenerateRedteam', () => {
     });
 
     it('should use single purpose mode when no contexts are defined', async () => {
+      // Reset MCP tools mock to prevent interference from other tests
+      vi.mocked(extractMcpToolsInfo).mockResolvedValue('');
+
       vi.mocked(configModule.resolveConfigs).mockResolvedValue({
         basePath: '/mock/path',
         testSuite: {
