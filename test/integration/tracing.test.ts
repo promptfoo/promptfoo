@@ -26,8 +26,9 @@ describe('OpenTelemetry Tracing Integration', () => {
   beforeAll(() => {
     // Set up an in-memory exporter for testing
     memoryExporter = new InMemorySpanExporter();
-    tracerProvider = new NodeTracerProvider({});
-    tracerProvider.addSpanProcessor(new SimpleSpanProcessor(memoryExporter));
+    tracerProvider = new NodeTracerProvider({
+      spanProcessors: [new SimpleSpanProcessor(memoryExporter)],
+    });
     tracerProvider.register();
   });
 

@@ -52,12 +52,9 @@ vi.mock('@opentelemetry/core', () => ({
 }));
 
 vi.mock('@opentelemetry/resources', () => ({
-  Resource: class MockResource {
-    attributes: Record<string, unknown>;
-    constructor(attrs: Record<string, unknown>) {
-      this.attributes = attrs;
-      resourceCalls.push(attrs);
-    }
+  resourceFromAttributes: (attrs: Record<string, unknown>) => {
+    resourceCalls.push(attrs);
+    return { attributes: attrs };
   },
 }));
 
@@ -165,7 +162,11 @@ describe('otelSdk', () => {
       initializeOtel(defaultConfig);
 
       expect(localExporterCalls.length).toBe(1);
-      expect(mockAddSpanProcessor).toHaveBeenCalled();
+      // Span processors are now passed via constructor, so we check the constructor args
+      expect(nodeTracerProviderCalls.length).toBe(1);
+      const constructorArg = nodeTracerProviderCalls[0] as { spanProcessors?: unknown[] };
+      expect(constructorArg.spanProcessors).toBeDefined();
+      expect(constructorArg.spanProcessors?.length).toBeGreaterThanOrEqual(1);
     });
 
     it('should add OTLP exporter when endpoint is configured', () => {
@@ -176,8 +177,9 @@ describe('otelSdk', () => {
 
       expect(otlpExporterCalls.length).toBe(1);
       expect(otlpExporterCalls[0]).toEqual({ url: 'http://localhost:4318/v1/traces' });
-      // Both local and OTLP exporters
-      expect(mockAddSpanProcessor).toHaveBeenCalledTimes(2);
+      // Both local and OTLP exporters - now passed via constructor
+      const constructorArg = nodeTracerProviderCalls[0] as { spanProcessors?: unknown[] };
+      expect(constructorArg.spanProcessors?.length).toBe(2);
     });
 
     it('should skip local export when localExport is false', () => {
@@ -188,8 +190,9 @@ describe('otelSdk', () => {
       });
 
       expect(localExporterCalls.length).toBe(0);
-      // Only OTLP exporter
-      expect(mockAddSpanProcessor).toHaveBeenCalledTimes(1);
+      // Only OTLP exporter - now passed via constructor
+      const constructorArg = nodeTracerProviderCalls[0] as { spanProcessors?: unknown[] };
+      expect(constructorArg.spanProcessors?.length).toBe(1);
     });
 
     it('should enable debug logging when debug is true', () => {
