@@ -362,6 +362,7 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
     author: eval_.author || null,
     version: eval_.version(),
     id,
+    stats: eval_.getStats(),
   } as EvalTableDTO);
 });
 

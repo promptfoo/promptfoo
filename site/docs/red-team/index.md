@@ -276,7 +276,7 @@ This kind of prompt let users sidestep OpenAI's alignment and Clyde's content fi
 
 There were many teams involved in this report and others in the same vein: engineering, product, security, legal, policy, and marketing.
 
-- Adopting an evaluation framework (in fact, they used an early version of Promptfoo!). An evaluation framwork is a way to automatically run inputs through an LLM and test its outputs.
+- Adopting an evaluation framework (in fact, they used an early version of Promptfoo!). An evaluation framework is a way to automatically run inputs through an LLM and test its outputs.
 - Setting a convention in which every prompt/workflow change required an evaluation.
 - Making evaluations as automatic and frictionless as possible.
 

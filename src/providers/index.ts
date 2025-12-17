@@ -20,7 +20,12 @@ import { providerMap } from './registry';
 
 import type { EnvOverrides } from '../types/env';
 import type { LoadApiProviderContext, TestSuiteConfig } from '../types/index';
-import type { ApiProvider, ProviderOptions, ProviderOptionsMap } from '../types/providers';
+import type {
+  ApiProvider,
+  ProviderFunction,
+  ProviderOptions,
+  ProviderOptionsMap,
+} from '../types/providers';
 
 // FIXME(ian): Make loadApiProvider handle all the different provider types (string, ProviderOptions, ApiProvider, etc), rather than the callers.
 export async function loadApiProvider(
@@ -222,65 +227,65 @@ function loadProviderConfigsFromFile(filePath: string, basePath?: string): Provi
 }
 
 /**
+ * Checks if a string is a file:// reference to a YAML/JSON config file.
+ */
+function isFileReference(str: string): boolean {
+  return (
+    str.startsWith('file://') &&
+    (str.endsWith('.yaml') || str.endsWith('.yml') || str.endsWith('.json'))
+  );
+}
+
+/**
  * Resolves raw provider configurations, loading file:// references.
- * Returns ProviderOptions[] with all fields intact (including `prompts`).
- * Does NOT instantiate providers - only resolves config.
+ * Preserves non-file providers (strings, functions) in their original form
+ * so they can be properly handled by loadApiProviders.
  *
- * This is used to build the provider-prompt map before evaluation,
- * ensuring that `prompts` filters from external files are respected.
+ * This is used to:
+ * 1. Build the provider-prompt map (respecting `prompts` filters from external files)
+ * 2. Enable --filter-providers to match resolved provider ids/labels from files
+ * 3. Pass to loadApiProviders without re-reading files
  */
 export function resolveProviderConfigs(
   providerPaths: TestSuiteConfig['providers'],
   options: { basePath?: string } = {},
-): ProviderOptions[] {
+): TestSuiteConfig['providers'] {
   const { basePath } = options;
 
   if (typeof providerPaths === 'string') {
-    if (
-      providerPaths.startsWith('file://') &&
-      (providerPaths.endsWith('.yaml') ||
-        providerPaths.endsWith('.yml') ||
-        providerPaths.endsWith('.json'))
-    ) {
+    if (isFileReference(providerPaths)) {
       return loadProviderConfigsFromFile(providerPaths, basePath);
     }
-    return [{ id: providerPaths }];
+    // Keep non-file strings as-is for loadApiProviders to handle
+    return providerPaths;
   }
 
   if (typeof providerPaths === 'function') {
-    const label = (providerPaths as { label?: string }).label;
-    return [{ id: label ?? 'custom-function' }];
+    // Keep functions as-is for loadApiProviders to handle
+    return providerPaths;
   }
 
   if (!Array.isArray(providerPaths)) {
-    return [];
+    return providerPaths;
   }
 
-  const results: ProviderOptions[] = [];
+  const results: (string | ProviderFunction | ProviderOptions | ProviderOptionsMap)[] = [];
 
-  for (let idx = 0; idx < providerPaths.length; idx++) {
-    const provider = providerPaths[idx];
-
+  for (const provider of providerPaths) {
     if (typeof provider === 'string') {
-      if (
-        provider.startsWith('file://') &&
-        (provider.endsWith('.yaml') || provider.endsWith('.yml') || provider.endsWith('.json'))
-      ) {
+      if (isFileReference(provider)) {
+        // Resolve file:// references to ProviderOptions[]
         results.push(...loadProviderConfigsFromFile(provider, basePath));
       } else {
-        results.push({ id: provider });
+        // Keep non-file strings as-is
+        results.push(provider);
       }
     } else if (typeof provider === 'function') {
-      const label = (provider as { label?: string }).label;
-      results.push({ id: label ?? `custom-function-${idx}` });
-    } else if ((provider as ProviderOptions).id) {
-      // ProviderOptions object - keep as-is
-      results.push(provider as ProviderOptions);
+      // Keep functions as-is
+      results.push(provider);
     } else {
-      // ProviderOptionsMap: { "provider-id": { ... } }
-      const id = Object.keys(provider)[0];
-      const providerObject = (provider as ProviderOptionsMap)[id];
-      results.push({ ...providerObject, id: providerObject.id || id });
+      // Keep ProviderOptions and ProviderOptionsMap as-is
+      results.push(provider);
     }
   }
 
@@ -289,7 +294,7 @@ export function resolveProviderConfigs(
 
 /**
  * Helper function to load providers from a file path.
- * This can handle both single provider and multiple providers in a file.
+ * Uses loadProviderConfigsFromFile to read configs, then instantiates them.
  */
 async function loadProvidersFromFile(
   filePath: string,
@@ -299,18 +304,9 @@ async function loadProvidersFromFile(
   } = {},
 ): Promise<ApiProvider[]> {
   const { basePath, env } = options;
+  const configs = loadProviderConfigsFromFile(filePath, basePath);
   const relativePath = filePath.slice('file://'.length);
-  const modulePath = path.isAbsolute(relativePath)
-    ? relativePath
-    : path.join(basePath || process.cwd(), relativePath);
 
-  const rawContent = yaml.load(fs.readFileSync(modulePath, 'utf8'));
-  const fileContent = maybeLoadConfigFromExternalFile(rawContent) as
-    | ProviderOptions
-    | ProviderOptions[];
-  invariant(fileContent, `Provider config ${relativePath} is undefined`);
-
-  const configs = [fileContent].flat() as ProviderOptions[];
   return Promise.all(
     configs.map((config) => {
       invariant(config.id, `Provider config in ${relativePath} must have an id`);

@@ -1,5 +1,9 @@
+import { useCallback } from 'react';
+
+import DownloadIcon from '@mui/icons-material/Download';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
 import TraceTimeline from './TraceTimeline';
 
@@ -24,6 +28,27 @@ export default function TraceView({
   promptIndex,
   traces = [],
 }: TraceViewProps) {
+  const handleExportTraces = useCallback(
+    (tracesToExport: Trace[]) => {
+      const exportData = {
+        evaluationId,
+        testCaseId,
+        exportedAt: new Date().toISOString(),
+        traces: tracesToExport,
+      };
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `traces-${evaluationId}${testCaseId ? `-${testCaseId}` : ''}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    },
+    [evaluationId, testCaseId],
+  );
+
   if (!evaluationId) {
     return null;
   }
@@ -107,6 +132,16 @@ export default function TraceView({
 
   return (
     <Box>
+      <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
+        <Button
+          variant="outlined"
+          size="small"
+          startIcon={<DownloadIcon />}
+          onClick={() => handleExportTraces(filteredTraces)}
+        >
+          Export Traces
+        </Button>
+      </Box>
       {filteredTraces.map((trace, index) => (
         <Box
           key={`trace-${trace.traceId}-${index}`}

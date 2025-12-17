@@ -11,6 +11,7 @@ import { fromError } from 'zod-validation-error';
 import { readAssertions } from '../../assertions/index';
 import { validateAssertions } from '../../assertions/validateAssertions';
 import cliState from '../../cliState';
+import { filterProviderConfigs } from '../../commands/eval/filterProviders';
 import { filterTests } from '../../commands/eval/filterTests';
 import { getEnvBool, isCI } from '../../envars';
 import { importModule } from '../../esm';
@@ -609,13 +610,32 @@ export async function resolveConfigs(
 
   invariant(Array.isArray(config.providers), 'providers must be an array');
 
-  // Resolve provider configs to get ProviderOptions[] with all fields (including `prompts`)
-  // This is needed before building the prompt map so that `prompts` filters from external files are respected
+  // Resolve provider configs: loads file:// references while preserving non-file providers.
+  // This enables:
+  // 1. Building the provider-prompt map with `prompts` filters from external files (#1307)
+  // 2. Filtering by resolved provider ids/labels (not just file paths)
+  // 3. Avoiding double file I/O (files are read once here, not again in loadApiProviders)
   const resolvedProviderConfigs = resolveProviderConfigs(config.providers, { basePath });
 
+  // Filter providers BEFORE instantiation to avoid loading providers that won't be used.
+  // Filtering on resolved configs allows matching by provider id/label from file-based providers.
+  const filterOption = cmdObj.filterProviders || cmdObj.filterTargets;
+  const filteredProviderConfigs = filterProviderConfigs(resolvedProviderConfigs, filterOption);
+
+  if (
+    filterOption &&
+    Array.isArray(filteredProviderConfigs) &&
+    filteredProviderConfigs.length === 0
+  ) {
+    logger.warn(
+      `No providers matched the filter "${filterOption}". Check your --filter-providers/--filter-targets value.`,
+    );
+  }
+
   // Parse prompts, providers, and tests
+  // Pass filtered resolved configs to avoid re-reading files
   const parsedPrompts = await readPrompts(config.prompts, cmdObj.prompts ? undefined : basePath);
-  const parsedProviders = await loadApiProviders(config.providers, {
+  const parsedProviders = await loadApiProviders(filteredProviderConfigs, {
     env: config.env,
     basePath,
   });
@@ -666,10 +686,11 @@ export async function resolveConfigs(
     }
   }
 
-  // Build provider-prompt map using resolved configs (not raw config with file:// strings)
+  // Build provider-prompt map using filtered resolved configs (not raw config with file:// strings)
   // This ensures that `prompts` filters from external provider files are respected (#1307)
+  // and that the map is consistent with the filtered providers
   const parsedProviderPromptMap = readProviderPromptMap(
-    { providers: resolvedProviderConfigs },
+    { providers: filteredProviderConfigs },
     parsedPrompts,
   );
 

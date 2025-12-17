@@ -1340,10 +1340,11 @@ describe('resolveProviderConfigs', () => {
     vi.clearAllMocks();
   });
 
-  it('should resolve string provider to ProviderOptions with id', () => {
+  it('should preserve string providers as-is', () => {
     const result = resolveProviderConfigs(['openai:gpt-4']);
 
-    expect(result).toEqual([{ id: 'openai:gpt-4' }]);
+    // Non-file string providers are preserved for loadApiProviders to handle
+    expect(result).toEqual(['openai:gpt-4']);
   });
 
   it('should pass through ProviderOptions objects unchanged', () => {
@@ -1358,58 +1359,49 @@ describe('resolveProviderConfigs', () => {
     expect(result).toEqual([providerOptions]);
   });
 
-  it('should handle ProviderOptionsMap format', () => {
-    const result = resolveProviderConfigs([
-      {
-        'openai:gpt-4': {
-          prompts: ['prompt1'],
-          label: 'GPT-4 Model',
-        },
-      },
-    ]);
-
-    expect(result).toEqual([
-      {
-        id: 'openai:gpt-4',
+  it('should preserve ProviderOptionsMap format', () => {
+    const providerMap = {
+      'openai:gpt-4': {
         prompts: ['prompt1'],
         label: 'GPT-4 Model',
       },
-    ]);
+    };
+    const result = resolveProviderConfigs([providerMap]);
+
+    // ProviderOptionsMap is preserved for loadApiProviders to handle
+    expect(result).toEqual([providerMap]);
   });
 
-  it('should handle ProviderOptionsMap with explicit id', () => {
-    const result = resolveProviderConfigs([
-      {
-        'openai:gpt-4': {
-          id: 'custom-id',
-          prompts: ['prompt1'],
-        },
-      },
-    ]);
-
-    expect(result).toEqual([
-      {
+  it('should preserve ProviderOptionsMap with explicit id', () => {
+    const providerMap = {
+      'openai:gpt-4': {
         id: 'custom-id',
         prompts: ['prompt1'],
       },
-    ]);
+    };
+    const result = resolveProviderConfigs([providerMap]);
+
+    // ProviderOptionsMap is preserved for loadApiProviders to handle
+    expect(result).toEqual([providerMap]);
   });
 
-  it('should handle function providers', () => {
+  it('should preserve function providers as-is', () => {
     const providerFn = (() => Promise.resolve({ output: 'test' })) as ProviderFunction;
 
     const result = resolveProviderConfigs([providerFn]);
 
-    expect(result).toEqual([{ id: 'custom-function-0' }]);
+    // Functions are preserved for loadApiProviders to handle
+    expect(result).toEqual([providerFn]);
   });
 
-  it('should handle function providers with label', () => {
+  it('should preserve function providers with label as-is', () => {
     const providerFn = (() => Promise.resolve({ output: 'test' })) as ProviderFunction;
     (providerFn as any).label = 'My Custom Function';
 
     const result = resolveProviderConfigs([providerFn]);
 
-    expect(result).toEqual([{ id: 'My Custom Function' }]);
+    // Functions are preserved for loadApiProviders to handle
+    expect(result).toEqual([providerFn]);
   });
 
   it('should resolve file:// YAML references and preserve prompts field', () => {
@@ -1458,12 +1450,13 @@ config:
       basePath,
     });
 
-    expect(result).toHaveLength(2);
-    expect(result[0]).toEqual({ id: 'ollama:phi3', prompts: ['phi3_prompt'] });
-    expect(result[1]).toEqual({ id: 'ollama:gemma', prompts: ['gemma_prompt'] });
+    expect(Array.isArray(result)).toBe(true);
+    expect((result as any[]).length).toBe(2);
+    expect((result as any[])[0]).toEqual({ id: 'ollama:phi3', prompts: ['phi3_prompt'] });
+    expect((result as any[])[1]).toEqual({ id: 'ollama:gemma', prompts: ['gemma_prompt'] });
   });
 
-  it('should handle mixed provider types', () => {
+  it('should handle mixed provider types preserving non-file providers', () => {
     const yamlContent = `
 id: ollama:phi3
 prompts:
@@ -1472,28 +1465,30 @@ prompts:
     mockFsReadFileSync.mockReturnValue(yamlContent);
 
     const basePath = path.join(path.sep, 'test');
+    const providerOptions = { id: 'anthropic:claude-3', prompts: ['claude_prompt'] };
     const result = resolveProviderConfigs(
-      [
-        'openai:gpt-4',
-        { id: 'anthropic:claude-3', prompts: ['claude_prompt'] },
-        'file://./phi3.yaml',
-      ],
+      ['openai:gpt-4', providerOptions, 'file://./phi3.yaml'],
       { basePath },
     );
 
-    expect(result).toHaveLength(3);
-    expect(result[0]).toEqual({ id: 'openai:gpt-4' });
-    expect(result[1]).toEqual({ id: 'anthropic:claude-3', prompts: ['claude_prompt'] });
-    expect(result[2]).toEqual({ id: 'ollama:phi3', prompts: ['phi3_prompt'] });
+    expect(Array.isArray(result)).toBe(true);
+    expect((result as any[]).length).toBe(3);
+    // String providers are preserved as-is
+    expect((result as any[])[0]).toEqual('openai:gpt-4');
+    // ProviderOptions are preserved as-is
+    expect((result as any[])[1]).toEqual(providerOptions);
+    // file:// references are resolved to ProviderOptions
+    expect((result as any[])[2]).toEqual({ id: 'ollama:phi3', prompts: ['phi3_prompt'] });
   });
 
-  it('should handle single string provider (not array)', () => {
+  it('should preserve single string provider (not array)', () => {
     const result = resolveProviderConfigs('openai:gpt-4');
 
-    expect(result).toEqual([{ id: 'openai:gpt-4' }]);
+    // Single non-file string is preserved as-is
+    expect(result).toEqual('openai:gpt-4');
   });
 
-  it('should handle single file:// string provider (not array)', () => {
+  it('should resolve single file:// string provider (not array)', () => {
     const yamlContent = `
 id: ollama:phi3
 prompts:
@@ -1504,21 +1499,25 @@ prompts:
     const basePath = path.join(path.sep, 'test');
     const result = resolveProviderConfigs('file://./phi3.yaml', { basePath });
 
+    // file:// references are resolved to array of ProviderOptions
     expect(result).toEqual([{ id: 'ollama:phi3', prompts: ['phi3_prompt'] }]);
   });
 
-  it('should handle single function provider (not array)', () => {
+  it('should preserve single function provider (not array)', () => {
     const providerFn = (() => Promise.resolve({ output: 'test' })) as ProviderFunction;
 
     const result = resolveProviderConfigs(providerFn);
 
-    expect(result).toEqual([{ id: 'custom-function' }]);
+    // Functions are preserved as-is
+    expect(result).toBe(providerFn);
   });
 
-  it('should return empty array for invalid input', () => {
-    const result = resolveProviderConfigs({} as any);
+  it('should return input as-is for non-array, non-string, non-function input', () => {
+    const emptyObj = {} as any;
+    const result = resolveProviderConfigs(emptyObj);
 
-    expect(result).toEqual([]);
+    // Non-standard input is returned as-is
+    expect(result).toBe(emptyObj);
   });
 
   it('should handle absolute file paths', () => {
