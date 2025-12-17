@@ -224,7 +224,7 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
         {showTargetTypeSection && (
           <Box sx={{ mt: 4 }} gap={4}>
             <Typography variant="h5" sx={{ fontWeight: 'bold', mb: 2, mt: 4 }}>
-              Select Target Type
+              Target Type
             </Typography>
             <Box sx={{ my: 2 }}>
               <Typography variant="body1">
