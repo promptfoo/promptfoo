@@ -185,6 +185,8 @@ describe('doGenerateRedteam', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // Reset mock implementations that persist across tests (clearAllMocks only clears call history)
+    vi.mocked(extractMcpToolsInfo).mockReset();
     mockProvider = {
       id: () => 'test-provider',
       callApi: vi.fn().mockResolvedValue({ output: 'test output' }),
