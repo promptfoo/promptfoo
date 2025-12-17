@@ -738,6 +738,9 @@ export async function matchesLlmRubric(
         rejectedPrediction: 0,
       },
     },
+    metadata: {
+      renderedGradingPrompt: prompt,
+    },
   };
 }
 
