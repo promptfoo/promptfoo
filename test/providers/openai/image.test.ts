@@ -260,7 +260,7 @@ describe('OpenAiImageProvider', () => {
   });
 
   describe('Response format handling', () => {
-    it('should handle base64 response format and return data URL', async () => {
+    it('should handle base64 response format and return structured b64_json', async () => {
       const provider = new OpenAiImageProvider('dall-e-3', {
         config: { apiKey: 'test-key', response_format: 'b64_json' },
       });
@@ -270,7 +270,7 @@ describe('OpenAiImageProvider', () => {
       const result = await provider.callApi('test prompt');
 
       expect(result).toEqual({
-        output: 'data:image/png;base64,base64EncodedImageData',
+        output: { b64_json: 'base64EncodedImageData' },
         cached: false,
         cost: 0.04, // Default cost for DALL-E 3 standard 1024x1024
       });
@@ -511,7 +511,7 @@ describe('OpenAiImageProvider', () => {
       expect(body.model).toBe('gpt-image-1');
     });
 
-    it('should always treat gpt-image-1 response as b64_json and return data URL', async () => {
+    it('should always treat gpt-image-1 response as b64_json and return structured output', async () => {
       const provider = new OpenAiImageProvider('gpt-image-1', {
         config: { apiKey: 'test-key' },
       });
@@ -519,7 +519,7 @@ describe('OpenAiImageProvider', () => {
       const result = await provider.callApi('test prompt');
 
       expect(result).toEqual({
-        output: 'data:image/png;base64,base64EncodedImageData',
+        output: { b64_json: 'base64EncodedImageData' },
         cached: false,
         cost: 0.011, // Default cost for gpt-image-1 low 1024x1024
       });
@@ -680,7 +680,7 @@ describe('OpenAiImageProvider', () => {
       expect(body.model).toBe('gpt-image-1-mini');
     });
 
-    it('should always treat gpt-image-1-mini response as b64_json and return data URL', async () => {
+    it('should always treat gpt-image-1-mini response as b64_json and return structured output', async () => {
       const provider = new OpenAiImageProvider('gpt-image-1-mini', {
         config: { apiKey: 'test-key' },
       });
@@ -688,7 +688,7 @@ describe('OpenAiImageProvider', () => {
       const result = await provider.callApi('test prompt');
 
       expect(result).toEqual({
-        output: 'data:image/png;base64,base64EncodedImageData',
+        output: { b64_json: 'base64EncodedImageData' },
         cached: false,
         cost: 0.005, // Default cost for gpt-image-1-mini low 1024x1024
       });
@@ -809,7 +809,7 @@ describe('OpenAiImageProvider', () => {
       expect(body.model).toBe('gpt-image-1.5');
     });
 
-    it('should always treat gpt-image-1.5 response as b64_json and return data URL', async () => {
+    it('should always treat gpt-image-1.5 response as b64_json and return structured output', async () => {
       const provider = new OpenAiImageProvider('gpt-image-1.5', {
         config: { apiKey: 'test-key' },
       });
@@ -817,7 +817,7 @@ describe('OpenAiImageProvider', () => {
       const result = await provider.callApi('test prompt');
 
       expect(result).toEqual({
-        output: 'data:image/png;base64,base64EncodedImageData',
+        output: { b64_json: 'base64EncodedImageData' },
         cached: false,
         cost: 0.064, // Default cost for gpt-image-1.5 low 1024x1024
       });

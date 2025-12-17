@@ -187,6 +187,15 @@ function EvalOutputCell({
     setCommentText(newCommentText);
   };
 
+  // Check if output is a b64_json image object (from image generation providers)
+  const b64JsonImage =
+    typeof output.text === 'object' &&
+    output.text !== null &&
+    'b64_json' in output.text &&
+    typeof (output.text as { b64_json?: unknown }).b64_json === 'string'
+      ? (output.text as { b64_json: string }).b64_json
+      : null;
+
   const text = typeof output.text === 'string' ? output.text : JSON.stringify(output.text);
   let node: React.ReactNode | undefined;
   let failReasons: string[] = [];
@@ -286,6 +295,17 @@ function EvalOutputCell({
     } catch (error) {
       console.error('Invalid regular expression:', (error as Error).message);
     }
+  } else if (b64JsonImage) {
+    // Render base64 image from structured output (e.g., from GPT Image models)
+    const imgSrc = `data:image/png;base64,${b64JsonImage}`;
+    node = (
+      <img
+        src={imgSrc}
+        alt={output.prompt}
+        style={{ width: '100%' }}
+        onClick={() => toggleLightbox(imgSrc)}
+      />
+    );
   } else if (
     text?.match(/^data:(image\/[a-z]+|application\/octet-stream|image\/svg\+xml);(base64,)?/)
   ) {

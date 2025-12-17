@@ -136,7 +136,9 @@ export class XAIImageProvider extends OpenAiImageProvider {
 
     try {
       const formattedOutput = formatOutput(data, prompt, responseFormat);
-      if (typeof formattedOutput === 'object') {
+
+      // Check if it's an error
+      if (typeof formattedOutput === 'object' && 'error' in formattedOutput) {
         return formattedOutput;
       }
 

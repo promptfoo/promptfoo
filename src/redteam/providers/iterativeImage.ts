@@ -323,15 +323,30 @@ async function runRedteamConversation({
 
       accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
 
-      // Match both http/https URLs and data URLs (base64)
-      const httpUrlRegex = /(https?:\/\/[^\s)]+)/g;
-      const dataUrlRegex = /(data:image\/[^;]+;base64,[A-Za-z0-9+/=]+)/g;
+      // Extract image URL from response
+      // Supports: http URLs (DALL-E), data URLs, or structured { b64_json: "..." } output
+      let imageUrl: string | undefined;
 
-      const httpUrls = targetResponse.output.match(httpUrlRegex);
-      const dataUrls = targetResponse.output.match(dataUrlRegex);
+      if (
+        typeof targetResponse.output === 'object' &&
+        targetResponse.output !== null &&
+        'b64_json' in targetResponse.output
+      ) {
+        // Structured b64_json output from GPT Image models
+        const b64Json = (targetResponse.output as { b64_json: string }).b64_json;
+        imageUrl = `data:image/png;base64,${b64Json}`;
+      } else if (typeof targetResponse.output === 'string') {
+        // String output - check for URLs
+        const httpUrlRegex = /(https?:\/\/[^\s)]+)/g;
+        const dataUrlRegex = /(data:image\/[^;]+;base64,[A-Za-z0-9+/=]+)/g;
 
-      // Prefer http URLs, fall back to data URLs
-      const imageUrl = httpUrls?.[0] || dataUrls?.[0];
+        const httpUrls = targetResponse.output.match(httpUrlRegex);
+        const dataUrls = targetResponse.output.match(dataUrlRegex);
+
+        // Prefer http URLs, fall back to data URLs
+        imageUrl = httpUrls?.[0] || dataUrls?.[0];
+      }
+
       let imageDescription;
 
       if (imageUrl) {

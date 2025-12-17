@@ -180,14 +180,14 @@ export function formatOutput(
   data: any,
   prompt: string,
   responseFormat?: string,
-): string | { error: string } {
+): string | { b64_json: string } | { error: string } {
   if (responseFormat === 'b64_json') {
     const b64Json = data.data[0].b64_json;
     if (!b64Json) {
       return { error: `No base64 image data found in response: ${JSON.stringify(data)}` };
     }
 
-    return `data:image/png;base64,${b64Json}`;
+    return { b64_json: b64Json };
   } else {
     const url = data.data[0].url;
     if (!url) {
@@ -336,7 +336,9 @@ export async function processApiResponse(
 
   try {
     const formattedOutput = formatOutput(data, prompt, responseFormat);
-    if (typeof formattedOutput === 'object') {
+
+    // Check if it's an error
+    if (typeof formattedOutput === 'object' && 'error' in formattedOutput) {
       return formattedOutput;
     }
 
