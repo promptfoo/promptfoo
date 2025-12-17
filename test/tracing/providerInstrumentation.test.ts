@@ -47,8 +47,9 @@ describe('Phase 5: Provider Instrumentation Validation', () => {
 
   beforeAll(() => {
     memoryExporter = new InMemorySpanExporter();
-    tracerProvider = new NodeTracerProvider({});
-    tracerProvider.addSpanProcessor(new SimpleSpanProcessor(memoryExporter));
+    tracerProvider = new NodeTracerProvider({
+      spanProcessors: [new SimpleSpanProcessor(memoryExporter)],
+    });
     tracerProvider.register();
   });
 
@@ -307,7 +308,7 @@ describe('Phase 5: Provider Instrumentation Validation', () => {
       expect(chatSpan).toBeDefined();
 
       // Verify parent-child relationship
-      expect(embeddingSpan!.parentSpanId).toBe(chatSpan!.spanContext().spanId);
+      expect(embeddingSpan!.parentSpanContext?.spanId).toBe(chatSpan!.spanContext().spanId);
       expect(embeddingSpan!.spanContext().traceId).toBe(chatSpan!.spanContext().traceId);
     });
   });

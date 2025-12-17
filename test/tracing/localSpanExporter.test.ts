@@ -55,7 +55,10 @@ describe('LocalSpanExporter', () => {
         traceFlags: 1,
         isRemote: false,
       }),
-      parentSpanId: overrides.parentSpanId ?? undefined,
+      // v2 API uses parentSpanContext instead of parentSpanId
+      parentSpanContext: overrides.parentSpanId
+        ? { spanId: overrides.parentSpanId, traceId: overrides.traceId ?? 'trace-id-123', traceFlags: 1 }
+        : undefined,
       name: overrides.name ?? 'test-span',
       startTime: overrides.startTime ?? [1000, 500000000], // 1000.5 seconds
       endTime: overrides.endTime ?? [1001, 200000000], // 1001.2 seconds
