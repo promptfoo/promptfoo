@@ -25,16 +25,27 @@ vi.mock('@aws-sdk/client-bedrock-agent-runtime', async (importOriginal) => {
 let BedrockAgentRuntimeClient: typeof import('@aws-sdk/client-bedrock-agent-runtime').BedrockAgentRuntimeClient;
 let RetrieveAndGenerateCommand: typeof import('@aws-sdk/client-bedrock-agent-runtime').RetrieveAndGenerateCommand;
 
-// Mock @smithy/node-http-handler - don't use importOriginal as the dynamic import in source may not see it
+// Mock @smithy/node-http-handler with ESM-compatible exports
 vi.mock('@smithy/node-http-handler', () => ({
+  __esModule: true,
   NodeHttpHandler: vi.fn().mockImplementation(function () {
+    return {
+      handle: vi.fn(),
+    };
+  }),
+  default: vi.fn().mockImplementation(function () {
     return {
       handle: vi.fn(),
     };
   }),
 }));
 
-vi.mock('proxy-agent', () => vi.fn());
+// Mock proxy-agent with ESM-compatible exports
+vi.mock('proxy-agent', () => ({
+  __esModule: true,
+  ProxyAgent: vi.fn(function ProxyAgentMock() {}),
+  default: vi.fn(function ProxyAgentMock() {}),
+}));
 
 const mockGet = vi.hoisted(() => vi.fn());
 
@@ -236,11 +247,6 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
         knowledgeBaseConfiguration: {
           knowledgeBaseId: 'kb-123',
           modelArn: 'us.anthropic.claude-3-7-sonnet-20241022-v2:0',
-          retrievalConfiguration: {
-            vectorSearchConfiguration: {
-              numberOfResults: 5,
-            },
-          },
         },
       },
     };
@@ -301,11 +307,6 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
         knowledgeBaseConfiguration: {
           knowledgeBaseId: 'kb-123',
           modelArn: 'custom:model:arn',
-          retrievalConfiguration: {
-            vectorSearchConfiguration: {
-              numberOfResults: 5,
-            },
-          },
         },
       },
     };
@@ -339,11 +340,6 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
         knowledgeBaseConfiguration: {
           knowledgeBaseId: 'kb-123',
           modelArn: 'arn:aws:bedrock:us-east-1::foundation-model/amazon.nova-lite-v1:0',
-          retrievalConfiguration: {
-            vectorSearchConfiguration: {
-              numberOfResults: 5,
-            },
-          },
         },
       },
     };
@@ -351,7 +347,7 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
     expect(RetrieveAndGenerateCommand).toHaveBeenCalledWith(expectedCommand);
   });
 
-  it('should use default numberOfResults of 5 when not provided', async () => {
+  it('should not include retrievalConfiguration when numberOfResults is not provided', async () => {
     const mockResponse = {
       output: {
         text: 'This is the response from the knowledge base',
@@ -380,11 +376,6 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
         knowledgeBaseConfiguration: {
           knowledgeBaseId: 'kb-123',
           modelArn: 'us.anthropic.claude-3-7-sonnet-20241022-v2:0',
-          retrievalConfiguration: {
-            vectorSearchConfiguration: {
-              numberOfResults: 5,
-            },
-          },
         },
       },
     };
@@ -563,8 +554,7 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
     mockIsCacheEnabled.mockReturnValue(false);
   });
 
-  // Skip: Tests requiring @smithy/node-http-handler don't work in ESM mode due to dynamic import limitations
-  it.skip('should create knowledge base client with API key authentication from config', async () => {
+  it('should create knowledge base client with API key authentication from config', async () => {
     const provider = new AwsBedrockKnowledgeBaseProvider(
       'us.anthropic.claude-3-7-sonnet-20241022-v2:0',
       {
@@ -586,8 +576,7 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
     });
   });
 
-  // Skip: Tests requiring @smithy/node-http-handler don't work in ESM mode due to dynamic import limitations
-  it.skip('should create knowledge base client with API key authentication from environment', async () => {
+  it('should create knowledge base client with API key authentication from environment', async () => {
     process.env.AWS_BEARER_TOKEN_BEDROCK = 'test-env-api-key';
 
     const provider = new AwsBedrockKnowledgeBaseProvider(
@@ -612,8 +601,7 @@ describe('AwsBedrockKnowledgeBaseProvider', () => {
     delete process.env.AWS_BEARER_TOKEN_BEDROCK;
   });
 
-  // Skip: Tests requiring @smithy/node-http-handler don't work in ESM mode due to dynamic import limitations
-  it.skip('should prioritize explicit credentials over API key for knowledge base', async () => {
+  it('should prioritize explicit credentials over API key for knowledge base', async () => {
     const provider = new AwsBedrockKnowledgeBaseProvider(
       'us.anthropic.claude-3-7-sonnet-20241022-v2:0',
       {
