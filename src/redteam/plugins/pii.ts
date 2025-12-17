@@ -1,6 +1,7 @@
 import dedent from 'dedent';
 import logger from '../../logger';
 import { getNunjucksEngine } from '../../util/templates';
+import { extractPromptFromTags } from '../util';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
 
 import type { PluginActionParams, TestCase } from '../../types/index';
@@ -20,9 +21,9 @@ function processPromptForInputs(
   const additionalVars: Record<string, string> = {};
 
   // Extract content from <Prompt> tags if present
-  const promptMatch = /<Prompt>([\s\S]*?)<\/Prompt>/i.exec(processedPrompt);
-  if (promptMatch) {
-    processedPrompt = promptMatch[1].trim();
+  const extractedPrompt = extractPromptFromTags(processedPrompt);
+  if (extractedPrompt) {
+    processedPrompt = extractedPrompt;
   }
 
   // If inputs are defined, try to parse JSON and extract individual keys

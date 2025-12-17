@@ -83,7 +83,7 @@ function computeModifiersFromConfig(config: PluginConfig | undefined): Record<st
   }
   if (config?.inputs && Object.keys(config.inputs).length > 0) {
     const schema = Object.entries(config.inputs as Record<string, string>)
-      .map(([k, description]) => `"${k}": "<${description}>"`)
+      .map(([k, description]) => `"${k}": "${description}"`)
       .join(', ');
     modifiers.outputFormat = `Output each test case as JSON wrapped in <Prompt> tags: <Prompt>{${schema}}</Prompt>`;
   }

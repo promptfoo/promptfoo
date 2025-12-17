@@ -9,6 +9,43 @@ import { getRemoteGenerationUrl, neverGenerateRemote } from './remoteGeneration'
 import type { CallApiContextParams, ProviderResponse } from '../types/index';
 
 /**
+ * Regex pattern for matching <Prompt> tags in multi-input redteam generation output.
+ * Used to extract prompt content from LLM-generated outputs.
+ */
+const PROMPT_TAG_REGEX = /<Prompt>([\s\S]*?)<\/Prompt>/i;
+const PROMPT_TAG_REGEX_GLOBAL = /<Prompt>([\s\S]*?)<\/Prompt>/gi;
+
+/**
+ * Extracts the content from the first <Prompt> tag in a string.
+ * Used for multi-input mode where prompts are wrapped in <Prompt> tags.
+ *
+ * @param text - The text to extract the prompt from
+ * @returns The extracted prompt content (trimmed), or null if no <Prompt> tag found
+ */
+export function extractPromptFromTags(text: string): string | null {
+  const match = PROMPT_TAG_REGEX.exec(text);
+  return match ? match[1].trim() : null;
+}
+
+/**
+ * Extracts content from all <Prompt> tags in a string.
+ * Used when parsing multiple generated prompts from LLM output.
+ *
+ * @param text - The text to extract prompts from
+ * @returns Array of extracted prompt contents (trimmed)
+ */
+export function extractAllPromptsFromTags(text: string): string[] {
+  const results: string[] = [];
+  let match;
+
+  while ((match = PROMPT_TAG_REGEX_GLOBAL.exec(text)) !== null) {
+    results.push(match[1].trim());
+  }
+
+  return results;
+}
+
+/**
  * Normalizes different types of apostrophes to a standard single quote
  */
 export function normalizeApostrophes(str: string): string {

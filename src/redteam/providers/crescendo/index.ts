@@ -21,7 +21,7 @@ import {
   type TransformResult,
 } from '../../shared/runtimeTransform';
 import { Strategies } from '../../strategies';
-import { getSessionId, isBasicRefusal } from '../../util';
+import { extractPromptFromTags, getSessionId, isBasicRefusal } from '../../util';
 import { getGoalRubric } from '../prompts';
 import {
   externalizeResponseForRedteamHistory,
@@ -783,9 +783,9 @@ export class CrescendoProvider implements ApiProvider {
   ): Promise<{ response: TargetResponse; transformResult?: TransformResult }> {
     // Extract JSON from <Prompt> tags if present (multi-input mode)
     let processedPrompt = attackPrompt;
-    const promptMatch = /<Prompt>([\s\S]*?)<\/Prompt>/i.exec(attackPrompt);
-    if (promptMatch) {
-      processedPrompt = promptMatch[1].trim();
+    const extractedPrompt = extractPromptFromTags(attackPrompt);
+    if (extractedPrompt) {
+      processedPrompt = extractedPrompt;
     }
 
     // Build updated vars - handle multi-input mode

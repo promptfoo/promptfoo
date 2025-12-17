@@ -22,7 +22,7 @@ import {
   type TransformResult,
 } from '../shared/runtimeTransform';
 import { Strategies } from '../strategies';
-import { getSessionId } from '../util';
+import { extractPromptFromTags, getSessionId } from '../util';
 import {
   ATTACKER_SYSTEM_PROMPT,
   CLOUD_ATTACKER_SYSTEM_PROMPT,
@@ -291,9 +291,9 @@ export async function runRedteamConversation({
     }
 
     // Extract JSON from <Prompt> tags if present (multi-input mode)
-    const promptMatch = /<Prompt>([\s\S]*?)<\/Prompt>/i.exec(newInjectVar);
-    if (promptMatch) {
-      newInjectVar = promptMatch[1].trim();
+    const extractedPrompt = extractPromptFromTags(newInjectVar);
+    if (extractedPrompt) {
+      newInjectVar = extractedPrompt;
     }
 
     // Update the application prompt with the new injection.

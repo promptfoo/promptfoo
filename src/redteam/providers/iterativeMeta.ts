@@ -18,6 +18,7 @@ import {
   type TransformResult,
 } from '../shared/runtimeTransform';
 import { Strategies } from '../strategies';
+import { extractPromptFromTags } from '../util';
 import {
   createIterationContext,
   externalizeResponseForRedteamHistory,
@@ -246,9 +247,9 @@ export async function runMetaAgentRedteam({
     }
 
     // Extract JSON from <Prompt> tags if present (multi-input mode)
-    const promptMatch = /<Prompt>([\s\S]*?)<\/Prompt>/i.exec(attackPrompt);
-    if (promptMatch) {
-      attackPrompt = promptMatch[1].trim();
+    const extractedPrompt = extractPromptFromTags(attackPrompt);
+    if (extractedPrompt) {
+      attackPrompt = extractedPrompt;
     }
 
     // ═══════════════════════════════════════════════════════════════════════

@@ -7,7 +7,8 @@ import invariant from '../../util/invariant';
 import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import { redteamProviderManager } from '../providers/shared';
-import { getShortPluginId, isBasicRefusal, isEmptyResponse, removePrefix } from '../util';
+import { getShortPluginId, isBasicRefusal, isEmptyResponse, removePrefix,   extractAllPromptsFromTags,
+ } from '../util';
 
 import type { TraceContextData } from '../../tracing/traceContext';
 import type {
@@ -150,11 +151,9 @@ export function parseGeneratedInputs(
   const inputKeys = Object.keys(inputs);
 
   // Extract JSON from <Prompt> tags
-  const promptRegex = /<Prompt>([\s\S]*?)<\/Prompt>/gi;
-  let match;
+  const promptStrings = extractAllPromptsFromTags(generatedOutput);
 
-  while ((match = promptRegex.exec(generatedOutput)) !== null) {
-    const jsonStr = match[1].trim();
+  for (const jsonStr of promptStrings) {
     try {
       const parsed = JSON.parse(jsonStr);
 
@@ -397,7 +396,7 @@ export abstract class RedteamPluginBase {
     // Add inputs as a modifier if defined - instructs LLM to output JSON wrapped in <Prompt> tags
     if (config.inputs && Object.keys(config.inputs).length > 0) {
       const schema = Object.entries(config.inputs)
-        .map(([key, description]) => `"${key}": "<${description}>"`)
+        .map(([key, description]) => `"${key}": "${description}"`)
         .join(', ');
       modifiers.outputFormat = `Output each test case as JSON wrapped in <Prompt> tags: <Prompt>{${schema}}</Prompt>`;
     }

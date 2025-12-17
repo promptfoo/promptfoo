@@ -255,7 +255,7 @@ export const RedteamConfigSchema = z
         "Variable to inject. Can be a string or array of strings. If string, it's transformed to an array. Inferred from the prompts by default.",
       ),
     inputs: InputsSchema.optional().describe(
-      'Multi-variable inputs for test case generation. Keys are variable names, values are descriptions. When specified, the first key becomes the primary injectVar.',
+      'Multi-variable inputs for test case generation. Keys are variable names, values are descriptions.',
     ),
     purpose: z
       .string()

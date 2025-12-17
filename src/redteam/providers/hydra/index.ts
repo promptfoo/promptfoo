@@ -20,7 +20,7 @@ import {
   type TransformResult,
 } from '../../shared/runtimeTransform';
 import { Strategies } from '../../strategies';
-import { getSessionId, isBasicRefusal } from '../../util';
+import { extractPromptFromTags, getSessionId, isBasicRefusal } from '../../util';
 import {
   buildGraderResultAssertion,
   externalizeResponseForRedteamHistory,
@@ -376,9 +376,9 @@ export class HydraProvider implements ApiProvider {
       // Extract JSON from <Prompt> tags if present (multi-input mode)
       // Do this BEFORE adding to conversation history so we don't store the tags
       let processedMessage = nextMessage;
-      const promptMatch = /<Prompt>([\s\S]*?)<\/Prompt>/i.exec(nextMessage);
-      if (promptMatch) {
-        processedMessage = promptMatch[1].trim();
+      const extractedPrompt = extractPromptFromTags(nextMessage);
+      if (extractedPrompt) {
+        processedMessage = extractedPrompt;
       }
 
       // Add message to conversation history (without <Prompt> tags)

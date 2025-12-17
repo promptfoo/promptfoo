@@ -23,7 +23,7 @@ import {
   type TransformResult,
 } from '../shared/runtimeTransform';
 import { Strategies } from '../strategies';
-import { getSessionId } from '../util';
+import { extractPromptFromTags, getSessionId } from '../util';
 import { getGoalRubric } from './prompts';
 import { getLastMessageContent, tryUnblocking } from './shared';
 import { formatTraceForMetadata, formatTraceSummary } from './traceFormatting';
@@ -359,9 +359,9 @@ export default class GoatProvider implements ApiProvider {
 
         // Extract JSON from <Prompt> tags if present (multi-input mode)
         let processedMessage = attackerMessage.content;
-        const promptMatch = /<Prompt>([\s\S]*?)<\/Prompt>/i.exec(attackerMessage.content);
-        if (promptMatch) {
-          processedMessage = promptMatch[1].trim();
+        const extractedPrompt = extractPromptFromTags(attackerMessage.content);
+        if (extractedPrompt) {
+          processedMessage = extractedPrompt;
         }
 
         // Build target vars - handle multi-input mode
