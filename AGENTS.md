@@ -163,6 +163,40 @@ git push -u origin feature/your-branch-name # Push branch
 See `docs/agents/git-workflow.md` for full workflow.
 See `docs/agents/pr-conventions.md` for PR title format and scope selection (especially THE REDTEAM RULE).
 
+## Screenshots for Pull Requests
+
+GitHub has no official API for uploading images to PR descriptions. When asked to add screenshots to a PR:
+
+1. **Take the screenshot** using browser tools or other methods
+2. **Upload to freeimage.host** (no API key required):
+
+```bash
+curl -s -X POST \
+  -F "source=@/path/to/screenshot.png" \
+  -F "type=file" \
+  -F "action=upload" \
+  "https://freeimage.host/api/1/upload?key=6d207e02198a847aa98d0a2a901485a5" \
+  | jq -r '.image.url'
+```
+
+3. **Update the PR body** with the returned URL:
+
+```bash
+gh pr edit <PR_NUMBER> --body "$(cat <<'EOF'
+## Summary
+...
+## Screenshot
+![Screenshot](https://iili.io/XXXXXXX.png)
+...
+EOF
+)"
+```
+
+**Do NOT:**
+- Commit screenshots to the branch
+- Upload to GitHub release assets
+- Use GitHub's internal upload endpoints (require browser cookies, not PATs)
+
 ## Code Style Guidelines
 
 - Use TypeScript with strict type checking
