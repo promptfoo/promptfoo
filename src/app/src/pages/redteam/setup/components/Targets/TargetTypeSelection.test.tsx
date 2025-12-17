@@ -74,7 +74,7 @@ describe('TargetTypeSelection', () => {
 
     // Initially, no footer Next button should be present
     expect(screen.queryByRole('button', { name: /Next.*Configure/i })).not.toBeInTheDocument();
-    expect(screen.queryByText('Select Target Type')).not.toBeInTheDocument();
+    expect(screen.queryByText('Target Type')).not.toBeInTheDocument();
 
     const nameInput = screen.getByRole('textbox', { name: 'Target Name' });
     fireEvent.change(nameInput, { target: { value: 'My Test API' } });
@@ -88,7 +88,7 @@ describe('TargetTypeSelection', () => {
     fireEvent.click(inlineNextButton);
 
     await waitFor(() => {
-      expect(screen.getByText('Select Target Type')).toBeInTheDocument();
+      expect(screen.getByText('Target Type')).toBeInTheDocument();
     });
     expect(onNext).not.toHaveBeenCalled();
     expect(mockRecordEvent).toHaveBeenCalledWith('feature_used', {
@@ -99,19 +99,14 @@ describe('TargetTypeSelection', () => {
     const footerNextButton = await screen.findByRole('button', { name: /Next.*Configure/i });
     expect(footerNextButton).toBeEnabled();
 
-    // After target type section is revealed, component defaults to HTTP provider in collapsed state
+    // After target type section is revealed, component defaults to HTTP provider
     // Wait a moment for the provider selector to initialize
     await waitFor(() => {
-      // Check if we're in collapsed view by looking for the checkmark icon and HTTP provider text
-      expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeInTheDocument();
+      expect(screen.getAllByText('HTTP/HTTPS Endpoint').length).toBeGreaterThan(0);
     });
 
-    // The Change button should be visible in the collapsed view
-    const changeButton = await screen.findByRole('button', { name: 'Change' });
-    fireEvent.click(changeButton);
-
-    const openAICard = await screen.findByText('OpenAI');
-    fireEvent.click(openAICard.closest('div.MuiPaper-root') as HTMLElement);
+    const openAICards = await screen.findAllByText('OpenAI');
+    fireEvent.click(openAICards[0].closest('div.MuiPaper-root') as HTMLElement);
 
     await waitFor(() => {
       expect(mockRecordEvent).toHaveBeenCalledWith('feature_used', {
@@ -131,7 +126,7 @@ describe('TargetTypeSelection', () => {
 
     // Initially, no footer Next button should be present, and no target type section
     expect(screen.queryByRole('button', { name: /Next.*Configure/i })).not.toBeInTheDocument();
-    expect(screen.queryByText('Select Target Type')).not.toBeInTheDocument();
+    expect(screen.queryByText('Target Type')).not.toBeInTheDocument();
   });
 
   it('should update the selectedTarget and providerType when a new provider type is selected and record telemetry event', async () => {
@@ -161,14 +156,10 @@ describe('TargetTypeSelection', () => {
     fireEvent.click(inlineNextButton);
 
     await waitFor(() => {
-      expect(screen.getByText('Select Target Type')).toBeInTheDocument();
+      expect(screen.getByText('Target Type')).toBeInTheDocument();
     });
 
-    // After target type section is revealed, component defaults to HTTP provider in collapsed state
-    // Click "Change" button to expand the provider selector
-    const changeButton = await screen.findByRole('button', { name: 'Change' });
-    fireEvent.click(changeButton);
-
+    // Select OpenAI provider from the target type list
     const openAICard = await screen.findByText('OpenAI');
     fireEvent.click(openAICard.closest('div.MuiPaper-root') as HTMLElement);
 
@@ -201,7 +192,7 @@ describe('TargetTypeSelection', () => {
     fireEvent.click(inlineNextButton);
 
     await waitFor(() => {
-      expect(screen.getByText('Select Target Type')).toBeInTheDocument();
+      expect(screen.getByText('Target Type')).toBeInTheDocument();
     });
 
     // Now the footer Next button should be present
@@ -227,7 +218,7 @@ describe('TargetTypeSelection', () => {
     fireEvent.click(inlineNextButton);
 
     await waitFor(() => {
-      expect(screen.getByText('Select Target Type')).toBeInTheDocument();
+      expect(screen.getByText('Target Type')).toBeInTheDocument();
     });
 
     // Now the footer Next button should be present
@@ -235,7 +226,7 @@ describe('TargetTypeSelection', () => {
 
     fireEvent.change(nameInput, { target: { value: 'New Target Name' } });
 
-    expect(screen.getByText('Select Target Type')).toBeInTheDocument();
+    expect(screen.getByText('Target Type')).toBeInTheDocument();
 
     expect(footerNextButton).toBeEnabled();
 
@@ -273,54 +264,27 @@ describe('TargetTypeSelection', () => {
     fireEvent.click(inlineNextButton);
 
     await waitFor(() => {
-      expect(screen.getByText('Select Target Type')).toBeInTheDocument();
+      expect(screen.getByText('Target Type')).toBeInTheDocument();
     });
 
     await waitFor(() => {
-      expect(screen.getByText('OpenAI')).toBeInTheDocument();
+      expect(screen.getAllByText('OpenAI').length).toBeGreaterThan(0);
     });
 
-    const changeButton = await screen.findByRole('button', { name: 'Change' });
-    fireEvent.click(changeButton);
-
-    mockUseRedTeamConfig.mockReturnValue({
-      config: {
-        target: {
-          id: 'file:///path/to/langchain_agent.py',
-          label: '',
-          config: {
-            framework: 'langchain',
-          },
-        },
-      },
-      updateConfig: mockUpdateConfig,
-      providerType: 'langchain',
-      setProviderType: mockSetProviderType,
-    });
-
-    renderComponent();
+    // Select LangChain provider from the list
+    const langchainCards = screen.getAllByText('LangChain');
+    fireEvent.click(langchainCards[0].closest('div.MuiPaper-root') as HTMLElement);
 
     await waitFor(() => {
-      expect(screen.getByText('LangChain')).toBeInTheDocument();
+      expect(mockSetProviderType).toHaveBeenCalledWith('langchain');
     });
 
-    mockUseRedTeamConfig.mockReturnValue({
-      config: {
-        target: {
-          id: 'openai:gpt-4.1',
-          label: '',
-          config: {},
-        },
-      },
-      updateConfig: mockUpdateConfig,
-      providerType: 'openai',
-      setProviderType: mockSetProviderType,
-    });
-
-    renderComponent();
+    // Select OpenAI provider from the list
+    const openaiCards = screen.getAllByText('OpenAI');
+    fireEvent.click(openaiCards[0].closest('div.MuiPaper-root') as HTMLElement);
 
     await waitFor(() => {
-      expect(screen.getByText('OpenAI')).toBeInTheDocument();
+      expect(mockSetProviderType).toHaveBeenCalledWith('openai');
     });
   });
 });

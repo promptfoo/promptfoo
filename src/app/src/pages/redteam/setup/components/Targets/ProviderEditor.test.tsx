@@ -116,11 +116,7 @@ describe('ProviderEditor', () => {
     const configEditor = screen.getByTestId('provider-config-editor');
     expect(configEditor).toHaveAttribute('data-providertype', 'http');
 
-    // Component starts in collapsed view showing the selected provider, click Change to expand
-    const changeButton = screen.getByRole('button', { name: 'Change' });
-    fireEvent.click(changeButton);
-
-    // Now we can find the OpenAI provider in the expanded view
+    // Find the OpenAI provider
     const openAiProviderCard = screen.getByText('OpenAI').closest('div.MuiPaper-root');
     expect(openAiProviderCard).toBeInTheDocument();
     fireEvent.click(openAiProviderCard!);
