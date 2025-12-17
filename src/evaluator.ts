@@ -1861,6 +1861,9 @@ class Evaluator {
     const endTime = Date.now();
     const totalEvalTimeMs = endTime - startTime;
 
+    // Store the duration on the eval record for persistence
+    this.evalRecord.setDurationMs(totalEvalTimeMs);
+
     // Calculate aggregated metrics
     const totalCost = prompts.reduce((acc, p) => acc + (p.metrics?.cost || 0), 0);
     const totalRequests = this.stats.tokenUsage.numRequests;
@@ -1969,6 +1972,11 @@ class Evaluator {
       isPromptfooSampleTarget: testSuite.providers.some(isPromptfooSampleTarget),
       isRedteam: Boolean(options.isRedteam),
     });
+
+    // Save the eval record to persist durationMs
+    if (this.evalRecord.persisted) {
+      await this.evalRecord.save();
+    }
 
     // Update database signal file after all results are written, passing the eval ID
     updateSignalFile(this.evalRecord.id);
