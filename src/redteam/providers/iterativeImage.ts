@@ -323,11 +323,18 @@ async function runRedteamConversation({
 
       accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
 
-      const urlRegex = /(https?:\/\/[^\s)]+)/g;
-      const url = targetResponse.output.match(urlRegex);
+      // Match both http/https URLs and data URLs (base64)
+      const httpUrlRegex = /(https?:\/\/[^\s)]+)/g;
+      const dataUrlRegex = /(data:image\/[^;]+;base64,[A-Za-z0-9+/=]+)/g;
+
+      const httpUrls = targetResponse.output.match(httpUrlRegex);
+      const dataUrls = targetResponse.output.match(dataUrlRegex);
+
+      // Prefer http URLs, fall back to data URLs
+      const imageUrl = httpUrls?.[0] || dataUrls?.[0];
       let imageDescription;
 
-      if (url && url.length > 0) {
+      if (imageUrl) {
         try {
           const visionResponse = await visionProvider.callApi(
             JSON.stringify([
@@ -345,7 +352,7 @@ async function runRedteamConversation({
                   {
                     type: 'image_url',
                     image_url: {
-                      url: url[0],
+                      url: imageUrl,
                       detail: 'high',
                     },
                   },
@@ -444,7 +451,7 @@ async function runRedteamConversation({
         previousOutputs.push({
           prompt: targetPrompt,
           output: targetResponse.output,
-          imageUrl: url[0],
+          imageUrl,
           imageDescription,
           score,
           scoreComponents,
@@ -455,7 +462,7 @@ async function runRedteamConversation({
           highestScore = score;
           bestResponse = {
             ...targetResponse,
-            imageUrl: url[0],
+            imageUrl,
             imageDescription,
             score,
             scoreComponents,
