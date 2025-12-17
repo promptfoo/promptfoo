@@ -1,0 +1,804 @@
+/* Telecom Talks 2025 - Network/Signal Theme */
+/* Color Palette: Electric cyan (#00D4FF), deep navy (#0A1628), signal green (#00FF88) */
+
+.telecomPage {
+  position: relative;
+  overflow-x: hidden;
+  background: linear-gradient(180deg, #0a1628 0%, #0d1f3c 50%, #0a1628 100%);
+  min-height: 100vh;
+}
+
+/* Circuit Pattern Background */
+.circuitPattern {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.15;
+}
+
+.circuitSvg {
+  width: 100%;
+  height: 100%;
+  color: #00d4ff;
+}
+
+/* Signal Wave Background */
+.signalBackground {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.signalCanvas {
+  width: 100%;
+  height: 100%;
+}
+
+/* Hero Section */
+.hero {
+  position: relative;
+  min-height: 90vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6rem 1.5rem 4rem;
+  z-index: 1;
+}
+
+.heroContent {
+  text-align: center;
+  max-width: 800px;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1.25rem;
+  background: linear-gradient(135deg, rgba(0, 212, 255, 0.2) 0%, rgba(0, 255, 136, 0.1) 100%);
+  border: 1px solid rgba(0, 212, 255, 0.4);
+  color: #00d4ff;
+  border-radius: 100px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  margin-bottom: 1.5rem;
+  backdrop-filter: blur(8px);
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+}
+
+.signalIcon {
+  font-size: 1.125rem;
+}
+
+.heroTitle {
+  font-size: 4rem;
+  font-weight: 800;
+  color: #f8fafc;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  margin: 0 0 1.5rem 0;
+}
+
+.highlight {
+  background: linear-gradient(135deg, #00d4ff 0%, #00ff88 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.heroSubtitle {
+  font-size: 1.25rem;
+  color: #94a3b8;
+  max-width: 600px;
+  margin: 0 auto 2rem;
+  line-height: 1.7;
+}
+
+/* Event Details */
+.eventDetails {
+  display: flex;
+  justify-content: center;
+  gap: 2rem;
+  margin-bottom: 2.5rem;
+  flex-wrap: wrap;
+}
+
+.detail {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #cbd5e1;
+  font-size: 0.9375rem;
+  font-weight: 500;
+}
+
+.icon {
+  width: 1.25rem;
+  height: 1.25rem;
+  color: #00d4ff;
+}
+
+/* Buttons */
+.heroButtons {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.primaryButton {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.875rem 2rem;
+  background: linear-gradient(135deg, #00d4ff 0%, #00b4d8 100%);
+  color: #0a1628;
+  border-radius: 10px;
+  font-size: 1rem;
+  font-weight: 700;
+  text-decoration: none;
+  box-shadow:
+    0 4px 14px rgba(0, 212, 255, 0.4),
+    0 0 20px rgba(0, 212, 255, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  transition:
+    transform 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 0.2s ease;
+  cursor: pointer;
+  border: none;
+}
+
+.primaryButton:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 8px 20px rgba(0, 212, 255, 0.5),
+    0 0 30px rgba(0, 212, 255, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  color: #0a1628;
+  text-decoration: none;
+}
+
+.secondaryButton {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.875rem 2rem;
+  background: rgba(0, 212, 255, 0.1);
+  color: #00d4ff;
+  border: 1px solid rgba(0, 212, 255, 0.4);
+  border-radius: 10px;
+  font-size: 1rem;
+  font-weight: 600;
+  text-decoration: none;
+  backdrop-filter: blur(8px);
+  transition:
+    transform 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 0.2s ease,
+    background 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.secondaryButton:hover {
+  transform: translateY(-2px);
+  border-color: #00d4ff;
+  background: rgba(0, 212, 255, 0.2);
+  box-shadow: 0 0 20px rgba(0, 212, 255, 0.2);
+  text-decoration: none;
+  color: #00d4ff;
+}
+
+/* Container */
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 1.5rem;
+}
+
+/* Section Titles */
+.sectionTitle {
+  font-size: 2.5rem;
+  font-weight: 800;
+  color: #f8fafc;
+  text-align: center;
+  margin: 0 0 1rem 0;
+  letter-spacing: -0.02em;
+}
+
+.sectionSubtitle {
+  font-size: 1.125rem;
+  color: #94a3b8;
+  text-align: center;
+  max-width: 600px;
+  margin: 0 auto 3rem;
+  line-height: 1.7;
+}
+
+/* Terminal Section */
+.terminalSection {
+  position: relative;
+  padding: 4rem 1.5rem;
+  z-index: 1;
+}
+
+.terminal {
+  background: rgba(10, 22, 40, 0.9);
+  border: 1px solid rgba(0, 212, 255, 0.3);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow:
+    0 4px 24px rgba(0, 0, 0, 0.3),
+    0 0 40px rgba(0, 212, 255, 0.1);
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.terminalHeader {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  background: rgba(0, 212, 255, 0.1);
+  border-bottom: 1px solid rgba(0, 212, 255, 0.2);
+}
+
+.terminalDots {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.terminalDots span {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: rgba(0, 212, 255, 0.4);
+}
+
+.terminalDots span:first-child {
+  background: #ff5f57;
+}
+
+.terminalDots span:nth-child(2) {
+  background: #ffbd2e;
+}
+
+.terminalDots span:last-child {
+  background: #28ca41;
+}
+
+.terminalTitle {
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 0.8125rem;
+  color: #64748b;
+}
+
+.terminalBody {
+  padding: 1.5rem;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 0.875rem;
+  line-height: 1.8;
+}
+
+.logLine {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.timestamp {
+  color: #64748b;
+  flex-shrink: 0;
+}
+
+.logSuccess {
+  color: #00ff88;
+  font-weight: 600;
+  flex-shrink: 0;
+  min-width: 80px;
+}
+
+.logInfo {
+  color: #00d4ff;
+  font-weight: 600;
+  flex-shrink: 0;
+  min-width: 80px;
+}
+
+.logWarning {
+  color: #fbbf24;
+  font-weight: 600;
+  flex-shrink: 0;
+  min-width: 80px;
+}
+
+.logText {
+  color: #cbd5e1;
+}
+
+/* Session Section */
+.sessionSection {
+  position: relative;
+  padding: 6rem 1.5rem;
+  z-index: 1;
+}
+
+.sessionCard {
+  background: linear-gradient(
+    135deg,
+    rgba(0, 212, 255, 0.1) 0%,
+    rgba(0, 255, 136, 0.05) 100%
+  );
+  border: 1px solid rgba(0, 212, 255, 0.3);
+  border-radius: 20px;
+  padding: 3rem;
+  position: relative;
+  overflow: hidden;
+}
+
+.sessionCard::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #00d4ff 0%, #00ff88 50%, #00d4ff 100%);
+}
+
+.sessionMeta {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.sessionBadge {
+  display: inline-block;
+  padding: 0.375rem 1rem;
+  background: linear-gradient(135deg, #00d4ff 0%, #00ff88 100%);
+  color: #0a1628;
+  border-radius: 100px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.sessionTime {
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 0.8125rem;
+  color: #64748b;
+}
+
+.sessionTitle {
+  font-size: 1.75rem;
+  font-weight: 800;
+  color: #f8fafc;
+  margin: 0 0 1rem 0;
+}
+
+.sessionDescription {
+  font-size: 1.0625rem;
+  color: #94a3b8;
+  line-height: 1.7;
+  margin: 0 0 2rem 0;
+  max-width: 700px;
+}
+
+.sessionSpeakers {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.speaker {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.speakerAvatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #00d4ff 0%, #00ff88 100%);
+  color: #0a1628;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.875rem;
+}
+
+.speakerName {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #f8fafc;
+}
+
+.speakerCompany {
+  font-size: 0.8125rem;
+  color: #64748b;
+}
+
+.speakerDivider {
+  font-size: 1.5rem;
+  color: #00d4ff;
+  font-weight: 300;
+}
+
+/* Challenges Section */
+.challengesSection {
+  position: relative;
+  padding: 6rem 1.5rem;
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    rgba(0, 212, 255, 0.05) 50%,
+    transparent 100%
+  );
+  z-index: 1;
+}
+
+.challengesGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1.5rem;
+}
+
+.challengeCard {
+  background: rgba(10, 22, 40, 0.8);
+  border: 1px solid rgba(0, 212, 255, 0.2);
+  border-radius: 16px;
+  padding: 2rem;
+  text-align: center;
+  transition:
+    transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 0.3s ease,
+    box-shadow 0.3s ease;
+}
+
+.challengeCard:hover {
+  transform: translateY(-4px);
+  border-color: rgba(0, 212, 255, 0.5);
+  box-shadow:
+    0 12px 32px rgba(0, 212, 255, 0.15),
+    0 0 20px rgba(0, 212, 255, 0.1);
+}
+
+.challengeIcon {
+  font-size: 2.5rem;
+  margin-bottom: 1rem;
+}
+
+.challengeCard h3 {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: #f8fafc;
+  margin: 0 0 0.75rem 0;
+}
+
+.challengeCard p {
+  font-size: 0.875rem;
+  color: #94a3b8;
+  line-height: 1.65;
+  margin: 0;
+}
+
+/* Discussions Section */
+.discussionsSection {
+  position: relative;
+  padding: 6rem 1.5rem;
+  z-index: 1;
+}
+
+.discussionsList {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.discussionItem {
+  display: flex;
+  gap: 2rem;
+  align-items: flex-start;
+  background: rgba(0, 212, 255, 0.05);
+  border: 1px solid rgba(0, 212, 255, 0.2);
+  border-radius: 16px;
+  padding: 2rem;
+  transition:
+    border-color 0.3s ease,
+    box-shadow 0.3s ease;
+}
+
+.discussionItem:hover {
+  border-color: rgba(0, 212, 255, 0.4);
+  box-shadow: 0 0 20px rgba(0, 212, 255, 0.1);
+}
+
+.discussionNumber {
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 2rem;
+  font-weight: 800;
+  color: #00d4ff;
+  opacity: 0.6;
+  flex-shrink: 0;
+}
+
+.discussionContent h3 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #f8fafc;
+  margin: 0 0 0.75rem 0;
+}
+
+.discussionContent p {
+  font-size: 0.9375rem;
+  color: #94a3b8;
+  line-height: 1.7;
+  margin: 0;
+}
+
+/* Stats Section */
+.statsSection {
+  position: relative;
+  padding: 4rem 1.5rem;
+  background: linear-gradient(135deg, rgba(0, 212, 255, 0.1) 0%, rgba(0, 255, 136, 0.05) 100%);
+  border-top: 1px solid rgba(0, 212, 255, 0.2);
+  border-bottom: 1px solid rgba(0, 212, 255, 0.2);
+  z-index: 1;
+}
+
+.statsGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 2rem;
+}
+
+.stat {
+  text-align: center;
+}
+
+.statNumber {
+  font-size: 3.5rem;
+  font-weight: 800;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  background: linear-gradient(135deg, #00d4ff 0%, #00ff88 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  line-height: 1;
+  margin-bottom: 0.5rem;
+}
+
+.statLabel {
+  font-size: 1rem;
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+/* Final CTA */
+.finalCta {
+  position: relative;
+  padding: 6rem 1.5rem;
+  z-index: 1;
+}
+
+.ctaCard {
+  max-width: 600px;
+  margin: 0 auto;
+  text-align: center;
+  padding: 3rem;
+  background: linear-gradient(
+    135deg,
+    rgba(0, 212, 255, 0.1) 0%,
+    rgba(0, 255, 136, 0.05) 100%
+  );
+  border: 1px solid rgba(0, 212, 255, 0.3);
+  border-radius: 20px;
+  position: relative;
+}
+
+.ctaCard::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: 20px;
+  padding: 1px;
+  background: linear-gradient(135deg, rgba(0, 212, 255, 0.5) 0%, rgba(0, 255, 136, 0.3) 100%);
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  pointer-events: none;
+  opacity: 0.5;
+}
+
+.ctaCard h2 {
+  font-size: 2rem;
+  font-weight: 800;
+  color: #f8fafc;
+  margin: 0 0 1rem 0;
+}
+
+.ctaCard p {
+  font-size: 1.0625rem;
+  color: #94a3b8;
+  margin: 0 0 2rem 0;
+  line-height: 1.7;
+}
+
+.ctaButtons {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+/* Responsive Design */
+@media (max-width: 1024px) {
+  .challengesGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .hero {
+    min-height: auto;
+    padding: 5rem 1rem 3rem;
+  }
+
+  .heroTitle {
+    font-size: 2.5rem;
+  }
+
+  .heroSubtitle {
+    font-size: 1rem;
+  }
+
+  .eventDetails {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .terminalSection {
+    padding: 3rem 1rem;
+  }
+
+  .terminalBody {
+    padding: 1rem;
+    font-size: 0.75rem;
+  }
+
+  .logLine {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .challengesGrid {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+  }
+
+  .statsGrid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.5rem;
+  }
+
+  .sessionSection,
+  .challengesSection,
+  .discussionsSection,
+  .finalCta {
+    padding: 4rem 1rem;
+  }
+
+  .sectionTitle {
+    font-size: 1.75rem;
+  }
+
+  .sessionCard {
+    padding: 2rem;
+  }
+
+  .sessionTitle {
+    font-size: 1.5rem;
+  }
+
+  .sessionSpeakers {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+
+  .speakerDivider {
+    display: none;
+  }
+
+  .discussionItem {
+    flex-direction: column;
+    gap: 1rem;
+    padding: 1.5rem;
+  }
+
+  .statNumber {
+    font-size: 2.5rem;
+  }
+
+  .ctaCard {
+    padding: 2rem 1.5rem;
+  }
+
+  .ctaButtons {
+    flex-direction: column;
+  }
+
+  .primaryButton,
+  .secondaryButton {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 480px) {
+  .heroTitle {
+    font-size: 2rem;
+  }
+
+  .badge {
+    font-size: 0.8125rem;
+    padding: 0.5rem 1rem;
+  }
+
+  .challengeCard {
+    padding: 1.5rem;
+  }
+
+  .challengeIcon {
+    font-size: 2rem;
+  }
+}
+
+/* Touch device optimization */
+@media (hover: none) {
+  .primaryButton:hover,
+  .secondaryButton:hover {
+    transform: none;
+  }
+
+  .primaryButton:active,
+  .secondaryButton:active {
+    transform: scale(0.98);
+  }
+
+  .challengeCard:hover,
+  .discussionItem:hover {
+    transform: none;
+  }
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .signalCanvas {
+    display: none;
+  }
+
+  .primaryButton,
+  .secondaryButton,
+  .challengeCard,
+  .discussionItem {
+    transition: none;
+  }
+}
