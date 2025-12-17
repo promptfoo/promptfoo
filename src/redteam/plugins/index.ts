@@ -52,6 +52,7 @@ import { UnsafeBenchPlugin } from './unsafebench';
 import { UnverifiableClaimsPlugin } from './unverifiableClaims';
 import { VLGuardPlugin } from './vlguard';
 import { XSTestPlugin } from './xstest';
+import { MedicalReproductiveHealthPlugin } from './medical/medicalReproductiveHealth';
 
 import type { ApiProvider, PluginActionParams, PluginConfig, TestCase } from '../../types/index';
 import type { HarmPlugin } from '../constants';
@@ -214,6 +215,7 @@ const pluginFactories: PluginFactory[] = [
   createPluginFactory(UnsafeBenchPlugin, 'unsafebench'),
   createPluginFactory(UnverifiableClaimsPlugin, 'unverifiable-claims'),
   createPluginFactory(VLGuardPlugin, 'vlguard'),
+  createPluginFactory(MedicalReproductiveHealthPlugin, 'medical:reproductive-health'),
   ...unalignedHarmCategories.map((category) => ({
     key: category,
     action: async (params: PluginActionParams) => {

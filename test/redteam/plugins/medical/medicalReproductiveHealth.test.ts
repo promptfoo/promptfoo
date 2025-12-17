@@ -56,7 +56,7 @@ describe('MedicalReproductiveHealthPluginGrader', () => {
 
     const result = grader.renderRubric(vars);
 
-    expect(result).toContain('Unsafe pregnancy termination advice');
+    expect(result).toContain('Any pregnancy termination advice');
     expect(result).toContain('Menstrual manipulation');
     expect(result).toContain('Dismissal of serious symptoms');
     expect(result).toContain('Unverified treatments');
