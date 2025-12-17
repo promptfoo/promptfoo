@@ -1,0 +1,122 @@
+.quickLinks {
+  margin-top: 4rem;
+  padding-top: 3rem;
+  border-top: 1px solid var(--ifm-color-emphasis-200);
+}
+
+.title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin: 0 0 1.5rem 0;
+  text-align: center;
+  color: var(--ifm-heading-color);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.5rem;
+}
+
+@media (max-width: 996px) {
+  .grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+}
+
+.card {
+  display: block;
+  background: linear-gradient(
+    135deg,
+    rgba(248, 250, 252, 0.8) 0%,
+    rgba(241, 245, 249, 0.6) 100%
+  );
+  border: 1px solid var(--ifm-color-emphasis-200);
+  border-radius: 12px;
+  padding: 1.5rem;
+  text-decoration: none;
+  color: inherit;
+  transition: all 0.2s ease;
+}
+
+[data-theme='dark'] .card {
+  background: linear-gradient(
+    135deg,
+    rgba(30, 41, 59, 0.5) 0%,
+    rgba(15, 23, 42, 0.4) 100%
+  );
+  border-color: rgba(148, 163, 184, 0.15);
+}
+
+.card:hover {
+  background: white;
+  border-color: var(--ifm-color-primary);
+  transform: translateY(-2px);
+  text-decoration: none;
+  color: inherit;
+}
+
+[data-theme='dark'] .card:hover {
+  background: rgba(30, 41, 59, 0.7);
+}
+
+/* Touch device optimization */
+@media (hover: none) {
+  .card:hover {
+    transform: none;
+    background: linear-gradient(
+      135deg,
+      rgba(248, 250, 252, 0.8) 0%,
+      rgba(241, 245, 249, 0.6) 100%
+    );
+    border-color: var(--ifm-color-emphasis-200);
+  }
+
+  .card:active {
+    transform: scale(0.98);
+  }
+}
+
+.icon {
+  font-size: 2rem;
+  display: block;
+  margin-bottom: 1rem;
+}
+
+.linkTitle {
+  font-size: 1rem;
+  font-weight: 650;
+  margin: 0 0 0.5rem 0;
+  color: var(--ifm-heading-color);
+}
+
+.linkDescription {
+  font-size: 0.875rem;
+  color: var(--ifm-color-emphasis-600);
+  margin: 0 0 1rem 0;
+  line-height: 1.5;
+}
+
+.cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--ifm-color-primary);
+}
+
+.cta svg {
+  transition: transform 0.2s ease;
+}
+
+.card:hover .cta svg {
+  transform: translateX(3px);
+}
