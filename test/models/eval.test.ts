@@ -235,6 +235,65 @@ describe('evaluator', () => {
       const persistedEval2 = await Eval.findById(eval1.id);
       expect(persistedEval2?.vars).toEqual(vars);
     });
+
+    it('should handle NaN durationMs in database by returning undefined', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 0 });
+
+      // Inject NaN as durationMs in the results column
+      const db = getDb();
+      await db.run(
+        `UPDATE evals SET results = json_set(results, '$.durationMs', 'NaN') WHERE id = '${eval1.id}'`,
+      );
+
+      const persistedEval = await Eval.findById(eval1.id);
+      const stats = persistedEval?.getStats();
+      // NaN should be filtered out, resulting in undefined
+      expect(stats?.durationMs).toBeUndefined();
+    });
+
+    it('should handle negative durationMs in database by returning undefined', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 0 });
+
+      // Inject negative number as durationMs
+      const db = getDb();
+      await db.run(
+        `UPDATE evals SET results = json_set(results, '$.durationMs', -5000) WHERE id = '${eval1.id}'`,
+      );
+
+      const persistedEval = await Eval.findById(eval1.id);
+      const stats = persistedEval?.getStats();
+      // Negative should be filtered out, resulting in undefined
+      expect(stats?.durationMs).toBeUndefined();
+    });
+
+    it('should handle string durationMs in database by returning undefined', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 0 });
+
+      // Inject string as durationMs
+      const db = getDb();
+      await db.run(
+        `UPDATE evals SET results = json_set(results, '$.durationMs', '"not a number"') WHERE id = '${eval1.id}'`,
+      );
+
+      const persistedEval = await Eval.findById(eval1.id);
+      const stats = persistedEval?.getStats();
+      // String should be filtered out, resulting in undefined
+      expect(stats?.durationMs).toBeUndefined();
+    });
+
+    it('should preserve valid durationMs from database', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 0 });
+
+      // Inject valid durationMs
+      const db = getDb();
+      await db.run(
+        `UPDATE evals SET results = json_set(results, '$.durationMs', 12345) WHERE id = '${eval1.id}'`,
+      );
+
+      const persistedEval = await Eval.findById(eval1.id);
+      const stats = persistedEval?.getStats();
+      expect(stats?.durationMs).toBe(12345);
+    });
   });
 
   describe('getStats', () => {
