@@ -200,13 +200,15 @@ export class AwsBedrockKnowledgeBaseProvider
       knowledgeBaseConfiguration.modelArn = modelArn;
     }
 
-    // Add retrieval configuration with numberOfResults (default: 5)
-    const numberOfResults = this.kbConfig.numberOfResults ?? 5;
-    knowledgeBaseConfiguration.retrievalConfiguration = {
-      vectorSearchConfiguration: {
-        numberOfResults,
-      },
-    };
+    // Only add retrieval configuration when numberOfResults is explicitly configured
+    // This preserves backwards compatibility with AWS default behavior
+    if (this.kbConfig.numberOfResults !== undefined) {
+      knowledgeBaseConfiguration.retrievalConfiguration = {
+        vectorSearchConfiguration: {
+          numberOfResults: this.kbConfig.numberOfResults,
+        },
+      };
+    }
 
     const params: RetrieveAndGenerateCommandInput = {
       input: { text: prompt },
