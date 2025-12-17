@@ -5,6 +5,7 @@ import { evalsTable } from '../database/tables';
 import logger from '../logger';
 import Eval, { createEvalId } from '../models/eval';
 import EvalResult from '../models/evalResult';
+import telemetry from '../telemetry';
 import type { Command } from 'commander';
 
 /**
@@ -130,6 +131,13 @@ export function importCommand(program: Command) {
         }
 
         logger.info(`Eval with ID ${evalId} has been successfully imported.`);
+
+        telemetry.record('command_used', {
+          name: 'import',
+          evalId,
+          newId: cmdObj.newId || false,
+          force: cmdObj.force || false,
+        });
       } catch (error) {
         logger.error(`Failed to import eval: ${error}`);
         process.exitCode = 1;
