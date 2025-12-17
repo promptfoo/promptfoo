@@ -290,7 +290,7 @@ Express mode benefits:
 
 To force OAuth authentication when you have an API key set, use `expressMode: false`.
 
-#### 6. Environment Variables
+#### Environment Variables
 
 Promptfoo automatically loads environment variables from your shell or a `.env` file. Create a `.env` file in your project root:
 
@@ -583,6 +583,7 @@ defaultTest:
 | `toolConfig`                       | Tool/function calling config                           | None                                 |
 | `systemInstruction`                | System prompt (supports `{{var}}` and `file://`)       | None                                 |
 | `expressMode`                      | Set to `false` to force OAuth when API key is present  | Auto-detected                        |
+| `streaming`                        | Use streaming API (`streamGenerateContent`)            | `false`                              |
 
 :::note
 Not all models support all parameters. See [Google's documentation](https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/overview) for model-specific details.

@@ -143,7 +143,7 @@ Compare different Gemini models:
 providers:
   - google:gemini-2.5-flash
   - google:gemini-2.5-pro
-  - google:gemini-2.5-flash
+  - google:gemini-2.0-flash
 
 prompts:
   - 'Explain {{concept}} in simple terms'
@@ -233,7 +233,7 @@ export GOOGLE_API_KEY="your_api_key_here"
 2. **Test your API key directly**:
 
    ```bash
-   curl -X POST "https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=$GOOGLE_API_KEY" \
+   curl -X POST "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=$GOOGLE_API_KEY" \
      -H "Content-Type: application/json" \
      -d '{"contents":[{"parts":[{"text":"Hello"}]}]}'
    ```
@@ -273,8 +273,6 @@ providers:
 ```
 
 See the [Vertex AI provider documentation](/docs/providers/vertex) for detailed setup instructions.
-
-You can use it by specifying one of the [available models](https://ai.google.dev/models). Currently, the following models are supported:
 
 ## Available Models
 
