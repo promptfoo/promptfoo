@@ -14,6 +14,7 @@ import {
   type TestCase,
 } from '../../src/types/index';
 import {
+  filterRuntimeVars,
   maybeLoadToolsFromExternalFile,
   parsePathOrGlob,
   providerToIdentifier,
@@ -798,6 +799,134 @@ describe('util', () => {
 
       // Should match because both have same vars after filtering
       expect(resultIsForTestCase(result, testCase)).toBe(true);
+    });
+
+    it('matches when result.vars has sessionId runtime variable from GOAT/Crescendo providers', async () => {
+      // This tests the fix for multi-turn strategy providers (GOAT, Crescendo, SIMBA)
+      // that add sessionId to vars during execution
+      const testCase: TestCase = {
+        provider: 'provider',
+        vars: {
+          prompt: 'test prompt',
+          goal: 'test goal',
+        },
+      };
+
+      const result = {
+        provider: 'provider',
+        vars: {
+          prompt: 'test prompt',
+          goal: 'test goal',
+          sessionId: 'goat-session-abc123', // Added by GOAT provider during evaluation
+        },
+      } as any as EvaluateResult;
+
+      // Should match because sessionId is filtered out
+      expect(resultIsForTestCase(result, testCase)).toBe(true);
+    });
+
+    it('matches when result.vars has both _conversation and sessionId runtime variables', async () => {
+      const testCase: TestCase = {
+        provider: 'provider',
+        vars: {
+          input: 'hello',
+        },
+      };
+
+      const result = {
+        provider: 'provider',
+        vars: {
+          input: 'hello',
+          _conversation: [{ role: 'user', content: 'hi' }],
+          sessionId: 'session-xyz789',
+        },
+      } as any as EvaluateResult;
+
+      // Should match because both runtime vars are filtered out
+      expect(resultIsForTestCase(result, testCase)).toBe(true);
+    });
+
+    it('matches when testCase also has sessionId (both filtered)', async () => {
+      // Edge case: if user explicitly sets sessionId in test config, it should still match
+      const testCase: TestCase = {
+        provider: 'provider',
+        vars: {
+          prompt: 'test',
+          sessionId: 'user-defined-session',
+        },
+      };
+
+      const result = {
+        provider: 'provider',
+        vars: {
+          prompt: 'test',
+          sessionId: 'different-runtime-session',
+        },
+      } as any as EvaluateResult;
+
+      // Should match because sessionId is filtered from both sides
+      expect(resultIsForTestCase(result, testCase)).toBe(true);
+    });
+  });
+
+  describe('filterRuntimeVars', () => {
+    it('should filter out _conversation', () => {
+      const vars = { input: 'hello', _conversation: [{ role: 'user', content: 'hi' }] };
+      const result = filterRuntimeVars(vars);
+      expect(result).toEqual({ input: 'hello' });
+      expect(result).not.toHaveProperty('_conversation');
+    });
+
+    it('should filter out sessionId', () => {
+      const vars = { input: 'hello', sessionId: 'test-session-123' };
+      const result = filterRuntimeVars(vars);
+      expect(result).toEqual({ input: 'hello' });
+      expect(result).not.toHaveProperty('sessionId');
+    });
+
+    it('should filter out multiple runtime vars', () => {
+      const vars = {
+        input: 'hello',
+        goal: 'test goal',
+        _conversation: [],
+        sessionId: 'test-session-123',
+      };
+      const result = filterRuntimeVars(vars);
+      expect(result).toEqual({ input: 'hello', goal: 'test goal' });
+      expect(result).not.toHaveProperty('_conversation');
+      expect(result).not.toHaveProperty('sessionId');
+    });
+
+    it('should handle undefined vars', () => {
+      expect(filterRuntimeVars(undefined)).toBeUndefined();
+    });
+
+    it('should handle empty vars', () => {
+      expect(filterRuntimeVars({})).toEqual({});
+    });
+
+    it('should not mutate original vars', () => {
+      const vars = { input: 'hello', sessionId: 'test-123', _conversation: [] };
+      const original = { ...vars };
+      filterRuntimeVars(vars);
+      expect(vars).toEqual(original);
+    });
+
+    it('should preserve all non-runtime vars', () => {
+      const vars = {
+        input: 'hello',
+        output: 'world',
+        context: 'some context',
+        nested: { key: 'value' },
+        sessionId: 'to-be-removed',
+      };
+      const result = filterRuntimeVars(vars);
+      expect(result).toEqual({
+        input: 'hello',
+        output: 'world',
+        context: 'some context',
+        nested: { key: 'value' },
+      });
     });
   });
 

@@ -341,7 +341,7 @@ npm run dev
 This will host the web UI at http://localhost:3000. This allows you to hack on the React app quickly (with fast refresh). If you want to run the web UI without the express server, you can run:
 
 ```bash
-npm run dev:web
+npm run dev:app
 ```
 
 To test the entire thing end-to-end, we recommend building the entire project and linking it to promptfoo:

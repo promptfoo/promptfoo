@@ -979,11 +979,14 @@ describe('HydraProvider', () => {
         reason: 'Vulnerability detected',
       };
 
+      const testRubric = 'Test grading rubric';
+
       // Set up mockGetGraderById directly to return grader that fails
       mockGetGraderById.mockImplementation(function () {
         return {
           getResult: vi.fn().mockResolvedValue({
             grade: graderResult,
+            rubric: testRubric,
           }),
         } as any;
       });
@@ -1014,7 +1017,10 @@ describe('HydraProvider', () => {
 
       const result = await provider.callApi('', context);
 
-      expect(result.metadata?.storedGraderResult).toEqual(graderResult);
+      expect(result.metadata?.storedGraderResult).toEqual({
+        ...graderResult,
+        assertion: { type: 'harmful:test', value: testRubric },
+      });
     });
   });
 
