@@ -13,7 +13,7 @@ function CountdownTimer(): React.ReactElement {
   });
 
   useEffect(() => {
-    const targetDate = new Date('2026-04-27T09:00:00-07:00').getTime();
+    const targetDate = new Date('2026-03-23T09:00:00-07:00').getTime();
 
     const updateCountdown = () => {
       const now = new Date().getTime();
@@ -150,7 +150,7 @@ export default function RSA2026(): React.ReactElement {
           <div className={styles.heroContent}>
             <div className={styles.badge}>
               <span className={styles.badgeIcon}>🚀</span>
-              Coming April 2026
+              Coming March 2026
             </div>
             <h1 className={styles.heroTitle}>
               RSA Conference
@@ -174,7 +174,7 @@ export default function RSA2026(): React.ReactElement {
                     d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
                   />
                 </svg>
-                <span>April 27-30, 2026</span>
+                <span>March 23-26, 2026</span>
               </div>
               <div className={styles.detail}>
                 <svg className={styles.icon} viewBox="0 0 24 24" fill="none" stroke="currentColor">

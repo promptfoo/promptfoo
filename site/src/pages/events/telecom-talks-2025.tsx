@@ -103,13 +103,13 @@ export default function TelecomTalks2025(): React.ReactElement {
   return (
     <Layout
       title="Telecom Talks 2025"
-      description="Promptfoo at Telecom Talks 2025. Ian Webster on stage with Swisscom discussing AI security in telecommunications."
+      description="Promptfoo at Telecom Talks 2025. Ian Webster on stage with Swisscom Outpost discussing AI security in telecommunications."
     >
       <Head>
         <meta property="og:title" content="Promptfoo at Telecom Talks 2025" />
         <meta
           property="og:description"
-          content="AI security for telecommunications. Ian Webster joined Swisscom on stage at Telecom Talks 2025 in Menlo Park."
+          content="AI security for telecommunications. Ian Webster joined Swisscom Outpost on stage at Telecom Talks 2025 in Menlo Park."
         />
         <meta property="og:type" content="website" />
         <meta property="og:url" content="/events/telecom-talks-2025" />
@@ -183,8 +183,8 @@ export default function TelecomTalks2025(): React.ReactElement {
               <span className={styles.highlight}>Signal</span>
             </h1>
             <p className={styles.heroSubtitle}>
-              AI security meets telecommunications. We joined Swisscom on stage to discuss
-              protecting the networks that connect the world.
+              AI security meets telecom. Ian Webster joined Swisscom Outpost on stage to discuss
+              practical GenAI security challenges for real deployments.
             </p>
             <div className={styles.eventDetails}>
               <div className={styles.detail}>
@@ -224,7 +224,7 @@ export default function TelecomTalks2025(): React.ReactElement {
                     d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"
                   />
                 </svg>
-                <span>On Stage with Swisscom</span>
+                <span>On Stage with Swisscom Outpost</span>
               </div>
             </div>
             <div className={styles.heroButtons}>
@@ -256,29 +256,28 @@ export default function TelecomTalks2025(): React.ReactElement {
               </div>
               <div className={styles.terminalBody}>
                 <div className={styles.logLine}>
-                  <span className={styles.timestamp}>[09:00:00]</span>
-                  <span className={styles.logSuccess}>CONNECTED</span>
+                  <span className={styles.timestamp}>[CONNECTED]</span>
+                  <span className={styles.logSuccess}>LOCATION</span>
                   <span className={styles.logText}>Telecom Talks 2025 • SRI International</span>
                 </div>
                 <div className={styles.logLine}>
-                  <span className={styles.timestamp}>[10:30:00]</span>
-                  <span className={styles.logInfo}>SESSION</span>
-                  <span className={styles.logText}>Ian Webster + Swisscom • AI Security Panel</span>
+                  <span className={styles.timestamp}>[SESSION]</span>
+                  <span className={styles.logInfo}>PANEL</span>
+                  <span className={styles.logText}>
+                    GenAI security challenges with Swisscom Outpost
+                  </span>
                 </div>
                 <div className={styles.logLine}>
-                  <span className={styles.timestamp}>[11:45:00]</span>
-                  <span className={styles.logWarning}>DEMO</span>
-                  <span className={styles.logText}>Live LLM red teaming demonstration</span>
+                  <span className={styles.timestamp}>[DEMO]</span>
+                  <span className={styles.logWarning}>LIVE</span>
+                  <span className={styles.logText}>LLM red teaming concepts and failure modes</span>
                 </div>
                 <div className={styles.logLine}>
-                  <span className={styles.timestamp}>[14:00:00]</span>
-                  <span className={styles.logSuccess}>NETWORK</span>
-                  <span className={styles.logText}>Connecting with telecom security leaders</span>
-                </div>
-                <div className={styles.logLine}>
-                  <span className={styles.timestamp}>[17:00:00]</span>
-                  <span className={styles.logInfo}>STATUS</span>
-                  <span className={styles.logText}>Signal strength: Maximum 📶</span>
+                  <span className={styles.timestamp}>[NETWORK]</span>
+                  <span className={styles.logSuccess}>CONNECT</span>
+                  <span className={styles.logText}>
+                    Conversations with telecom security leaders
+                  </span>
                 </div>
               </div>
             </div>
@@ -292,7 +291,9 @@ export default function TelecomTalks2025(): React.ReactElement {
             <div className={styles.sessionCard}>
               <div className={styles.sessionMeta}>
                 <span className={styles.sessionBadge}>Joint Presentation</span>
-                <span className={styles.sessionTime}>April 9, 2025 • 10:30 AM PST</span>
+                <span className={styles.sessionTime}>
+                  April 9, 2025 • SRI International, Menlo Park
+                </span>
               </div>
               <h3 className={styles.sessionTitle}>AI Security in Telecommunications</h3>
               <p className={styles.sessionDescription}>
@@ -313,7 +314,7 @@ export default function TelecomTalks2025(): React.ReactElement {
                 <div className={styles.speaker}>
                   <div className={styles.speakerAvatar}>SC</div>
                   <div>
-                    <div className={styles.speakerName}>Swisscom</div>
+                    <div className={styles.speakerName}>Swisscom Outpost</div>
                     <div className={styles.speakerCompany}>Security Team</div>
                   </div>
                 </div>

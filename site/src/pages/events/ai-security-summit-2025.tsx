@@ -163,13 +163,13 @@ export default function AISecuritySummit2025(): React.ReactElement {
   return (
     <Layout
       title="AI Security Summit 2025"
-      description="Promptfoo at AI Security Summit 2025 in San Francisco. Panel discussions, live demos, and cutting-edge AI security research."
+      description="Promptfoo at AI Security Summit 2025 (Oct 22–23) at The Westin St. Francis, San Francisco. Ian Webster joins the panel 'Using AI for Offensive Security Testing.'"
     >
       <Head>
         <meta property="og:title" content="Promptfoo at AI Security Summit 2025" />
         <meta
           property="og:description"
-          content="Join us at AI Security Summit 2025. Expert panels on LLM vulnerabilities, red teaming demonstrations, and the future of AI security."
+          content="Promptfoo at AI Security Summit 2025 (Oct 22–23, San Francisco). Community sponsor with Ian Webster on the panel 'Using AI for Offensive Security Testing.'"
         />
         <meta property="og:type" content="website" />
         <meta property="og:url" content="/events/ai-security-summit-2025" />
@@ -218,8 +218,8 @@ export default function AISecuritySummit2025(): React.ReactElement {
               <span className={styles.gradientText}>AI Security</span>
             </h1>
             <p className={styles.heroSubtitle}>
-              Two days of groundbreaking research, expert panels, and hands-on demonstrations
-              shaping the future of AI security.
+              Two days of leadership talks and practitioner sessions focused on real-world AI
+              security. Catch Ian Webster on the panel "Using AI for Offensive Security Testing."
             </p>
             <div className={styles.eventDetails}>
               <div className={styles.detail}>
@@ -287,9 +287,9 @@ export default function AISecuritySummit2025(): React.ReactElement {
                 <h3 className={styles.speakerName}>Ian Webster</h3>
                 <p className={styles.speakerRole}>CEO & Co-founder, Promptfoo</p>
                 <p className={styles.speakerBio}>
-                  Ian joined industry leaders to discuss the evolving landscape of LLM
-                  vulnerabilities, emerging attack vectors, and practical defense strategies for
-                  enterprise AI deployments.
+                  Ian joined industry leaders for the panel "Using AI for Offensive Security
+                  Testing," covering how teams can use automation to discover LLM and agent
+                  vulnerabilities earlier in the lifecycle.
                 </p>
                 <div className={styles.speakerTopics}>
                   <span className={styles.topic}>LLM Security</span>
@@ -397,16 +397,16 @@ export default function AISecuritySummit2025(): React.ReactElement {
           <div className={styles.container}>
             <div className={styles.statsGrid}>
               <div className={styles.stat}>
-                <div className={styles.statNumber}>500+</div>
-                <div className={styles.statLabel}>Attendees</div>
+                <div className={styles.statNumber}>Oct 22–23</div>
+                <div className={styles.statLabel}>Dates</div>
+              </div>
+              <div className={styles.stat}>
+                <div className={styles.statNumber}>SF</div>
+                <div className={styles.statLabel}>Westin St. Francis</div>
               </div>
               <div className={styles.stat}>
                 <div className={styles.statNumber}>2</div>
                 <div className={styles.statLabel}>Days</div>
-              </div>
-              <div className={styles.stat}>
-                <div className={styles.statNumber}>30+</div>
-                <div className={styles.statLabel}>Sessions</div>
               </div>
               <div className={styles.stat}>
                 <div className={styles.statNumber}>1</div>

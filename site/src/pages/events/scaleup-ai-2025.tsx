@@ -144,7 +144,7 @@ export default function ScaleUpAI2025(): React.ReactElement {
             </div>
             <div className={styles.heroCtas}>
               <a
-                href="https://www.insightpartners.com/ideas/scaleup-ai-promptfoo-trust-security-generative-ai/"
+                href="https://www.insightpartners.com/ideas/promptfoo-scale-up-ai/"
                 target="_blank"
                 rel="noopener noreferrer"
                 className={styles.primaryCta}
@@ -166,9 +166,8 @@ export default function ScaleUpAI2025(): React.ReactElement {
         <section className={styles.quoteSection}>
           <div className={styles.quoteContent}>
             <blockquote className={styles.quote}>
-              "I think AI is underhyped in terms of the change that it will create in business and
-              large enterprises and consumer habits. The whole software industry looks so different
-              five years, 10 years from now."
+              "AI is underhyped. The software industry looks so different five to ten years from
+              now."
             </blockquote>
             <div className={styles.quoteAttribution}>
               <div className={styles.quoteAuthor}>Ian Webster</div>
@@ -205,8 +204,8 @@ export default function ScaleUpAI2025(): React.ReactElement {
               <div className={styles.highlightIcon}>📈</div>
               <h3>Rapid Adoption</h3>
               <p>
-                200,000+ developers and 80+ Fortune 500 companies trust Promptfoo. Series A funding
-                of $18.4M led by Insight Partners fuels continued growth.
+                As featured by Insight Partners: 200,000+ developers and 80+ Fortune 500 companies
+                use Promptfoo, backed by an $18.4M Series A led by Insight.
               </p>
             </div>
             <div className={styles.highlightCard}>
@@ -288,7 +287,7 @@ export default function ScaleUpAI2025(): React.ReactElement {
                 transformative technology companies.
               </p>
               <a
-                href="https://www.insightpartners.com/ideas/scaleup-ai-promptfoo-trust-security-generative-ai/"
+                href="https://www.insightpartners.com/ideas/promptfoo-scale-up-ai/"
                 target="_blank"
                 rel="noopener noreferrer"
                 className={styles.aboutLink}

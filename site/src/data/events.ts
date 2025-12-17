@@ -90,8 +90,8 @@ export const events: Event[] = [
     shortName: 'RSA 2026',
     status: 'upcoming',
     type: 'conference',
-    startDate: '2026-04-27',
-    endDate: '2026-04-30',
+    startDate: '2026-03-23',
+    endDate: '2026-03-26',
     location: {
       venue: 'Moscone Center',
       city: 'San Francisco',
@@ -130,8 +130,8 @@ export const events: Event[] = [
     shortName: 'BSides SF 2026',
     status: 'upcoming',
     type: 'conference',
-    startDate: '2026-04-25',
-    endDate: '2026-04-26',
+    startDate: '2026-03-21',
+    endDate: '2026-03-22',
     location: {
       venue: 'City View at Metreon',
       city: 'San Francisco',
@@ -207,7 +207,7 @@ export const events: Event[] = [
     externalLinks: [
       {
         label: 'Read Full Article',
-        url: 'https://www.insightpartners.com/ideas/scaleup-ai-promptfoo-trust-security-generative-ai/',
+        url: 'https://www.insightpartners.com/ideas/promptfoo-scale-up-ai/',
       },
     ],
   },
@@ -324,11 +324,11 @@ export const events: Event[] = [
       state: 'CA',
       country: 'USA',
     },
-    booth: 'Early Stage Expo',
+    booth: 'Expo Floor',
     description:
       'We showcased AI red teaming capabilities and security solutions at RSA Conference 2025.',
     fullDescription:
-      'Promptfoo was at RSA Conference 2025 in the Early Stage Expo. We demonstrated our AI red teaming platform and connected with security professionals about protecting LLM applications.',
+      'Promptfoo was at RSA Conference 2025 on the Expo Floor. We demonstrated our AI red teaming platform and connected with security professionals about protecting LLM applications.',
     cardImage: '/img/events/rsa-2025.jpg',
     heroImage: '/img/events/rsa-2025.jpg',
     highlights: [
@@ -394,14 +394,14 @@ export const events: Event[] = [
     startDate: '2025-04-18',
     endDate: '2025-04-19',
     location: {
-      venue: 'The Collective Seattle',
-      city: 'Seattle',
+      venue: 'Building 92 (Microsoft Visitor Center)',
+      city: 'Redmond',
       state: 'WA',
       country: 'USA',
     },
     description: 'We engaged with the Pacific Northwest security community at BSides Seattle 2025.',
     fullDescription:
-      'Promptfoo participated in BSides Seattle 2025, engaging with the Pacific Northwest security community and discussing the latest in AI security threats and mitigations.',
+      'Promptfoo participated in BSides Seattle 2025 at Building 92, engaging with the Pacific Northwest security community and discussing the latest in AI security threats and mitigations.',
     cardImage: '/img/events/bsides-seattle-2025.jpg',
     heroImage: '/img/events/bsides-seattle-2025.jpg',
     highlights: [
@@ -434,16 +434,16 @@ export const events: Event[] = [
       country: 'USA',
     },
     description:
-      'Ian Webster joined Swisscom on stage to discuss AI security in telecommunications.',
+      'Ian Webster joined Swisscom Outpost on stage to discuss AI security in telecommunications.',
     fullDescription:
-      'Promptfoo CEO Ian Webster joined Swisscom on stage at Telecom Talks 2025 to discuss the unique challenges of securing AI systems in telecommunications infrastructure.',
+      'Promptfoo CEO Ian Webster joined Swisscom Outpost on stage at Telecom Talks 2025 to discuss the unique challenges of securing AI systems in telecommunications infrastructure.',
     cardImage: '/img/events/telecom-talks-2025.jpg',
     heroImage: '/img/events/telecom-talks-2025.jpg',
     highlights: [
       {
         icon: '📡',
         title: 'Joint Session',
-        description: 'On stage with Swisscom',
+        description: 'On stage with Swisscom Outpost',
       },
       {
         icon: '🌐',

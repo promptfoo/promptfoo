@@ -30,7 +30,7 @@ export default function BSidesSeattle2025(): React.ReactElement {
   return (
     <Layout
       title="Promptfoo at BSides Seattle 2025"
-      description="Promptfoo joined the Pacific Northwest security community at BSides Seattle 2025. Workshops, demos, and great conversations over coffee."
+      description="Promptfoo sponsored BSides Seattle 2025 and joined the PNW security community in Redmond. Demos, hallway conversations, and practical AI security."
     >
       <Head>
         <meta property="og:title" content="Promptfoo at BSides Seattle 2025" />
@@ -107,8 +107,8 @@ export default function BSidesSeattle2025(): React.ReactElement {
                 <span className={styles.highlight}>Coffee</span>
               </h1>
               <p className={styles.heroSubtitle}>
-                We joined the Pacific Northwest security community for a day of hands-on learning,
-                great conversations, and way too much caffeine.
+                We sponsored and joined the Pacific Northwest security community for two days of
+                hands-on learning, great conversations, and way too much caffeine.
               </p>
               <div className={styles.eventDetails}>
                 <div className={styles.detail}>
@@ -147,7 +147,7 @@ export default function BSidesSeattle2025(): React.ReactElement {
                       d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
                     />
                   </svg>
-                  <span>The Collective Seattle</span>
+                  <span>Building 92, Redmond, WA</span>
                 </div>
                 <div className={styles.detail}>
                   <svg
@@ -226,18 +226,18 @@ export default function BSidesSeattle2025(): React.ReactElement {
         {/* What We Shared Section */}
         <section className={styles.sharedSection}>
           <div className={styles.container}>
-            <h2 className={styles.sectionTitle}>What We Shared</h2>
+            <h2 className={styles.sectionTitle}>What We Talked About</h2>
             <div className={styles.sharedGrid}>
               <div className={styles.sharedCard}>
                 <div className={styles.sharedIcon}>🎯</div>
-                <h3>AI Red Teaming Workshop</h3>
+                <h3>AI Red Teaming Walkthroughs</h3>
                 <p>
-                  Hands-on session showing attendees how to find vulnerabilities in LLM applications
-                  using open source tools.
+                  Quick walkthroughs and examples showing how to find vulnerabilities in LLM
+                  applications using open source tools.
                 </p>
                 <div className={styles.sharedMeta}>
-                  <span className={styles.tag}>Workshop</span>
-                  <span className={styles.tag}>Hands-on</span>
+                  <span className={styles.tag}>Demos</span>
+                  <span className={styles.tag}>Examples</span>
                 </div>
               </div>
               <div className={styles.sharedCard}>
