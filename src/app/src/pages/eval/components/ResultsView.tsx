@@ -4,6 +4,8 @@ import { IS_RUNNING_LOCALLY } from '@app/constants';
 import { useToast } from '@app/hooks/useToast';
 import { useStore as useMainStore } from '@app/stores/evalConfig';
 import { callApi, fetchUserEmail, updateEvalAuthor } from '@app/utils/api';
+import { formatDuration } from '@app/utils/date';
+import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import ClearIcon from '@mui/icons-material/Clear';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
@@ -31,7 +33,7 @@ import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
 import Stack from '@mui/material/Stack';
-import { styled } from '@mui/material/styles';
+import { alpha, styled } from '@mui/material/styles';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
@@ -190,6 +192,7 @@ export default function ResultsView({
     highlightedResultsCount,
     filters,
     removeFilter,
+    stats,
   } = useTableStore();
 
   const { filterMode, setFilterMode } = useFilterMode();
@@ -854,6 +857,28 @@ export default function ResultsView({
                 }}
               />
             )}
+            {(() => {
+              const formattedDuration =
+                stats?.durationMs != null ? formatDuration(stats.durationMs) : null;
+              return formattedDuration ? (
+                <Tooltip title="Total evaluation duration (wall-clock time)" placement="bottom">
+                  <Chip
+                    size="small"
+                    icon={<AccessTimeIcon sx={{ fontSize: '1rem' }} />}
+                    label={formattedDuration}
+                    sx={(theme) => ({
+                      backgroundColor: alpha(theme.palette.success.main, 0.08),
+                      color: theme.palette.success.main,
+                      border: `1px solid ${alpha(theme.palette.success.main, 0.2)}`,
+                      fontWeight: 500,
+                      '& .MuiChip-icon': {
+                        color: theme.palette.success.main,
+                      },
+                    })}
+                  />
+                </Tooltip>
+              ) : null;
+            })()}
             <Box flexGrow={1} />
             <Box display="flex" justifyContent="flex-end">
               <ResponsiveStack direction="row" spacing={2}>

@@ -1,12 +1,13 @@
 /**
- * Utility functions for tracing operations
+ * Shared utilities for trace assertions
  */
 
 /**
- * Matches a span name against a glob-like pattern
- * Supports * (any characters) and ? (single character) wildcards
- * @param spanName - The span name to test
- * @param pattern - The glob-like pattern to match against
+ * Match a span name against a glob-like pattern.
+ * Supports * (any characters) and ? (single character) wildcards.
+ *
+ * @param spanName - The span name to match
+ * @param pattern - The glob pattern to match against
  * @returns true if the span name matches the pattern
  */
 export function matchesPattern(spanName: string, pattern: string): boolean {
