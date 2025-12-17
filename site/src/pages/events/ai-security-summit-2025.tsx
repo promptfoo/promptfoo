@@ -16,7 +16,7 @@ interface NeuralNode {
 function NeuralNetwork(): React.ReactElement {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const nodesRef = useRef<NeuralNode[]>([]);
-  const animationRef = useRef<number>();
+  const animationRef = useRef<number | null>(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
