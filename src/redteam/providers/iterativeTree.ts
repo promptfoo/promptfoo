@@ -58,6 +58,7 @@ import {
   createIterationContext,
   getTargetResponse,
   redteamProviderManager,
+  externalizeResponseForRedteamHistory,
   type TargetResponse,
 } from './shared';
 
@@ -605,12 +606,17 @@ async function runRedteamConversation({
           [injectVar], // Skip template rendering for injection variable to prevent double-evaluation
         );
 
-        const targetResponse = await getTargetResponse(
+        let targetResponse = await getTargetResponse(
           targetProvider,
           targetPrompt,
           iterationContext,
           options,
         );
+        targetResponse = await externalizeResponseForRedteamHistory(targetResponse, {
+          evalId: context?.evaluationId,
+          testIdx: context?.testIdx,
+          promptIdx: context?.promptIdx,
+        });
         lastResponse = targetResponse;
         // Do not throw on error. Record and continue so we can surface mapped output while marking error later.
         if (targetResponse.error) {

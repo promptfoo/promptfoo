@@ -30,6 +30,7 @@ import { Strategies } from '../strategies';
 import {
   createIterationContext,
   getTargetResponse,
+  externalizeResponseForRedteamHistory,
   redteamProviderManager,
   type TargetResponse,
 } from './shared';
@@ -279,12 +280,17 @@ export async function runMetaAgentRedteam({
     });
 
     // Execute attack against target
-    const targetResponse: TargetResponse = await getTargetResponse(
+    let targetResponse: TargetResponse = await getTargetResponse(
       targetProvider,
       targetPrompt,
       iterationContext,
       options,
     );
+    targetResponse = await externalizeResponseForRedteamHistory(targetResponse, {
+      evalId: context?.evaluationId,
+      testIdx: context?.testIdx,
+      promptIdx: context?.promptIdx,
+    });
     lastResponse = targetResponse;
     accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
 

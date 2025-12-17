@@ -3,6 +3,7 @@ import { storeBlob, type BlobRef } from './index';
 import { getEnvBool } from '../envars';
 import logger from '../logger';
 import type { ProviderResponse } from '../types/providers';
+import { shouldAttemptRemoteBlobUpload, uploadBlobRemote } from './remoteUpload';
 
 interface BlobContext {
   evalId?: string;
@@ -71,6 +72,22 @@ async function maybeStore(
     return null;
   }
 
+  // Try uploading to the cloud server when logged into Promptfoo Cloud
+  if (shouldAttemptRemoteBlobUpload()) {
+    const remote = await uploadBlobRemote(parsed.buffer, parsed.mimeType || 'application/octet-stream', {
+      ...context,
+      location,
+      kind,
+    });
+    if (remote?.ref) {
+      return remote.ref;
+    }
+  }
+
+  if (!isBlobStorageEnabled()) {
+    return null;
+  }
+
   const { ref } = await storeBlob(parsed.buffer, parsed.mimeType || 'application/octet-stream', {
     ...context,
     location,
@@ -92,12 +109,13 @@ async function externalizeDataUrls(
     if (!parsed || !shouldExternalize(parsed.buffer)) {
       return { value, mutated: false };
     }
-    const { ref } = await storeBlob(parsed.buffer, parsed.mimeType, {
-      ...context,
-      location,
-      kind: getKindFromMimeType(parsed.mimeType),
-    });
-    return { value: ref.uri, mutated: true };
+    const storedRef =
+      (await maybeStore(parsed.buffer.toString('base64'), parsed.mimeType, context, location, getKindFromMimeType(parsed.mimeType))) ||
+      null;
+    if (!storedRef) {
+      return { value, mutated: false };
+    }
+    return { value: storedRef.uri, mutated: true };
   }
 
   if (Array.isArray(value)) {
@@ -145,7 +163,7 @@ export async function extractAndStoreBinaryData(
   response: ProviderResponse | null | undefined,
   context?: BlobContext,
 ): Promise<ProviderResponse | null | undefined> {
-  if (!isBlobStorageEnabled() || !response) {
+  if (!response) {
     return response;
   }
 
@@ -174,9 +192,10 @@ export async function extractAndStoreBinaryData(
   }
 
   // Turns audio (multi-turn)
-  if (Array.isArray(response.turns)) {
+  const turns = (response as any).turns as any[] | undefined;
+  if (Array.isArray(turns)) {
     const updatedTurns = await Promise.all(
-      response.turns.map(async (turn, idx) => {
+      turns.map(async (turn: any, idx: number) => {
         if (turn?.audio?.data && typeof turn.audio.data === 'string') {
           const stored = await maybeStore(
             turn.audio.data,
@@ -200,21 +219,84 @@ export async function extractAndStoreBinaryData(
         return turn;
       }),
     );
-    next.turns = updatedTurns;
+    (next as any).turns = updatedTurns;
   }
 
   // Output data URL (images/audio) inside string
   if (typeof response.output === 'string' && isDataUrl(response.output)) {
     const parsed = extractBase64(response.output);
     if (parsed && shouldExternalize(parsed.buffer)) {
-      const stored = await storeBlob(parsed.buffer, parsed.mimeType, {
-        ...blobContext,
+      const stored = await maybeStore(
+        parsed.buffer.toString('base64'),
+        parsed.mimeType,
+        blobContext,
+        'response.output',
+        getKindFromMimeType(parsed.mimeType),
+      );
+      if (stored) {
+        next.output = stored.uri;
+        mutated = true;
+        logger.debug('[BlobExtractor] Stored output blob', { ...context, hash: stored.hash });
+      }
+    }
+  }
+
+  // OpenAI (and similar) image responses often arrive as JSON strings with b64_json fields.
+  // Try to parse and externalize b64_json when it looks like an image payload.
+  if (
+    typeof response.output === 'string' &&
+    response.output.trim().startsWith('{') &&
+    ((response.isBase64 && response.format === 'json') ||
+      response.output.includes('"b64_json"') ||
+      response.output.includes('b64_json'))
+  ) {
+    try {
+      const parsed = JSON.parse(response.output) as { data?: Array<Record<string, any>> };
+      if (Array.isArray(parsed.data)) {
+        let jsonMutated = false;
+        const storedUris: string[] = [];
+        for (const item of parsed.data) {
+          if (item?.b64_json && typeof item.b64_json === 'string') {
+            const stored = await maybeStore(
+              item.b64_json,
+              'image/png',
+              blobContext,
+              'response.output.data[].b64_json',
+              'image',
+            );
+            if (stored) {
+              item.b64_json = stored.uri;
+              storedUris.push(stored.uri);
+              jsonMutated = true;
+              mutated = true;
+              logger.debug('[BlobExtractor] Stored image blob from b64_json', {
+                ...context,
+                hash: stored.hash,
+              });
+            }
+          }
+        }
+        if (jsonMutated) {
+          // Prefer a simple blob ref output so graders/UI don't have to parse JSON
+          if (storedUris.length === 1) {
+            next.output = storedUris[0];
+          } else if (storedUris.length > 1) {
+            next.output = JSON.stringify(storedUris);
+          } else {
+            next.output = JSON.stringify(parsed);
+          }
+          next.metadata = {
+            ...(response.metadata || {}),
+            blobUris: storedUris,
+            originalFormat: response.format,
+          };
+        }
+      }
+    } catch (err) {
+      logger.debug('[BlobExtractor] Failed to parse base64 JSON output', {
+        error: err instanceof Error ? err.message : String(err),
         location: 'response.output',
-        kind: getKindFromMimeType(parsed.mimeType),
       });
-      next.output = stored.ref.uri;
-      mutated = true;
-      logger.debug('[BlobExtractor] Stored output blob', { ...context, hash: stored.ref.hash });
     }
   }
 

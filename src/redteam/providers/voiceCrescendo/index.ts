@@ -32,7 +32,12 @@ import { shouldGenerateRemote } from '../../remoteGeneration';
 import { textToAudio } from '../../strategies/simpleAudio';
 import type { AudioGradingConfig, BaseRedteamMetadata } from '../../types';
 import { isBasicRefusal } from '../../util';
-import { redteamProviderManager, type TargetResponse, getTargetResponse } from '../shared';
+import {
+  redteamProviderManager,
+  type TargetResponse,
+  getTargetResponse,
+  externalizeResponseForRedteamHistory,
+} from '../shared';
 
 const DEFAULT_MAX_TURNS = 8;
 const DEFAULT_MAX_BACKTRACKS = 5;
@@ -371,7 +376,12 @@ export class VoiceCrescendoProvider implements ApiProvider {
       transcript: textPrompt,
     });
 
-    return getTargetResponse(targetProvider, prompt, context);
+    const response = await getTargetResponse(targetProvider, prompt, context);
+    return externalizeResponseForRedteamHistory(response, {
+      evalId: context?.evaluationId,
+      testIdx: context?.testIdx,
+      promptIdx: context?.promptIdx,
+    });
   }
 
   /**

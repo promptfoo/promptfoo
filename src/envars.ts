@@ -34,6 +34,11 @@ type EnvVars = {
    */
   PROMPTFOO_DISABLE_REMOTE_GENERATION?: boolean;
   /**
+   * Disable uploading extracted blobs to a logged-in Promptfoo Cloud server.
+   * When disabled, blob extraction will only use local storage if configured.
+   */
+  PROMPTFOO_DISABLE_REMOTE_BLOB_UPLOAD?: boolean;
+  /**
    * Disable remote generation for red team features only (subset of PROMPTFOO_DISABLE_REMOTE_GENERATION).
    * Affects: Harmful content generation, red team strategies, red team simulated users.
    * Does NOT affect: Regular (non-redteam) SimulatedUser usage.
@@ -88,6 +93,11 @@ type EnvVars = {
   PROMPTFOO_BLOB_MAX_SIZE?: number;
   PROMPTFOO_BLOB_PATH?: string;
   PROMPTFOO_BLOB_STORAGE_TYPE?: 'filesystem' | 's3';
+  /**
+   * Override the cloud API base URL specifically for remote blob uploads.
+   * Defaults to the API host saved in `~/.promptfoo/promptfoo.yaml`.
+   */
+  PROMPTFOO_BLOB_REMOTE_URL?: string;
   PROMPTFOO_BLOB_S3_ENDPOINT?: string;
   PROMPTFOO_BLOB_S3_REGION?: string;
   PROMPTFOO_BLOB_S3_BUCKET?: string;

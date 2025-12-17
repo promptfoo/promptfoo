@@ -40,6 +40,7 @@ import { getSessionId, isBasicRefusal } from '../../util';
 import { getGoalRubric } from '../prompts';
 import type { Message } from '../shared';
 import {
+  externalizeResponseForRedteamHistory,
   getLastMessageContent,
   getTargetResponse,
   isValidChatMessageArray,
@@ -900,7 +901,12 @@ export class CrescendoProvider implements ApiProvider {
     }
 
     const iterationStart = Date.now();
-    const targetResponse = await getTargetResponse(provider, finalTargetPrompt, context, options);
+    let targetResponse = await getTargetResponse(provider, finalTargetPrompt, context, options);
+    targetResponse = await externalizeResponseForRedteamHistory(targetResponse, {
+      evalId: context?.evaluationId,
+      testIdx: context?.testIdx,
+      promptIdx: context?.promptIdx,
+    });
     logger.debug(`[Crescendo] Target response: ${JSON.stringify(targetResponse)}`);
 
     invariant(

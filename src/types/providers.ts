@@ -1,5 +1,7 @@
 import type winston from 'winston';
 
+import type { BlobRef } from '../blobs/types';
+
 import type { EnvOverrides } from './env';
 import type { Prompt } from './prompts';
 import type { NunjucksFilterMap, TokenUsage } from './shared';
@@ -67,6 +69,16 @@ export interface CallApiContextParams {
   // Evaluation metadata (for manual correlation if needed)
   evaluationId?: string;
   testCaseId?: string;
+  /**
+   * Index of the test case within the current evaluation (row in results table).
+   * Used for correlating blob references and other per-result metadata.
+   */
+  testIdx?: number;
+  /**
+   * Index of the prompt within the current evaluation (column in results table).
+   * Used for correlating blob references and other per-result metadata.
+   */
+  promptIdx?: number;
   repeatIndex?: number;
 }
 
@@ -124,6 +136,15 @@ export interface ProviderResponse {
   cached?: boolean;
   cost?: number;
   error?: string;
+  /**
+   * Indicates that `output` contains base64-encoded binary data (often as JSON like OpenAI `b64_json`).
+   * Used to enable blob externalization and avoid token bloat in downstream grading/agentic strategies.
+   */
+  isBase64?: boolean;
+  /**
+   * Optional format hint for `output` (e.g. `'json'` when `output` is a JSON string).
+   */
+  format?: string;
   logProbs?: number[];
   latencyMs?: number;
   metadata?: {

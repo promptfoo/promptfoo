@@ -46,6 +46,7 @@ import {
   createIterationContext,
   getTargetResponse,
   redteamProviderManager,
+  externalizeResponseForRedteamHistory,
   type TargetResponse,
 } from './shared';
 import { formatTraceForMetadata, formatTraceSummary } from './traceFormatting';
@@ -339,12 +340,18 @@ export async function runRedteamConversation({
     );
 
     const iterationStart = Date.now();
-    const targetResponse: TargetResponse = await getTargetResponse(
+    let targetResponse: TargetResponse = await getTargetResponse(
       targetProvider,
       targetPrompt,
       iterationContext,
       options,
     );
+    // Externalize blobs before they hit history/prompts
+    targetResponse = await externalizeResponseForRedteamHistory(targetResponse, {
+      evalId: context?.evaluationId,
+      testIdx: context?.testIdx,
+      promptIdx: context?.promptIdx,
+    });
     lastResponse = targetResponse;
     accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
     logger.debug('[Iterative] Raw target response', { response: targetResponse });
