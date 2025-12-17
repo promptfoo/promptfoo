@@ -130,13 +130,19 @@ const { trace, context, SpanStatusCode } = require('@opentelemetry/api');
 const { NodeTracerProvider } = require('@opentelemetry/sdk-trace-node');
 const { OTLPTraceExporter } = require('@opentelemetry/exporter-trace-otlp-http');
 const { SimpleSpanProcessor } = require('@opentelemetry/sdk-trace-base');
+const { resourceFromAttributes } = require('@opentelemetry/resources');
 
-// Initialize tracer
-const provider = new NodeTracerProvider();
-const exporter = new OTLPTraceExporter({
-  url: 'http://localhost:4318/v1/traces',
+// Initialize tracer (SDK 2.x API - pass spanProcessors to constructor)
+const provider = new NodeTracerProvider({
+  resource: resourceFromAttributes({ 'service.name': 'my-provider' }),
+  spanProcessors: [
+    new SimpleSpanProcessor(
+      new OTLPTraceExporter({
+        url: 'http://localhost:4318/v1/traces',
+      }),
+    ),
+  ],
 });
-provider.addSpanProcessor(new SimpleSpanProcessor(exporter));
 provider.register();
 
 const tracer = trace.getTracer('my-provider');
