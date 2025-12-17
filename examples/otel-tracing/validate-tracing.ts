@@ -1,4 +1,4 @@
-#!/usr/bin/env npx ts-node
+#!/usr/bin/env npx tsx
 /**
  * OTEL Tracing Validation Script
  *
@@ -7,7 +7,7 @@
  * expected attributes.
  *
  * Usage:
- *   npx ts-node examples/otel-tracing/validate-tracing.ts
+ *   npx tsx examples/otel-tracing/validate-tracing.ts
  *
  * Prerequisites:
  *   - Set OPENAI_API_KEY environment variable

@@ -76,7 +76,7 @@
     "test": "vitest run",
     "tsc": "tsc",
     "mcp": "node dist/src/main.js mcp",
-    "depcheck": "depcheck --ignores=\"@types/*,@biomejs/biome,prettier,shx,concurrently,madge,knip,vite,typescript,tshy,gcp-metadata,@opencode-ai/sdk,ts-node,@actions/core,@actions/github,@octokit/rest,nock\" --ignore-dirs=\"dist,site,examples,node_modules\""
+    "depcheck": "depcheck --ignores=\"@types/*,@biomejs/biome,prettier,shx,concurrently,madge,knip,vite,typescript,tshy,gcp-metadata,@opencode-ai/sdk,@actions/core,@actions/github,@octokit/rest,nock\" --ignore-dirs=\"dist,site,examples\""
   },
   "overrides": {
     "uri-js": "npm:uri-js-replace",
@@ -165,7 +165,6 @@
     "source-map-support": "^0.5.21",
     "supertest": "^7.1.4",
     "ts-dedent": "^2.2.0",
-    "ts-node": "^10.9.2",
     "tsdown": "^0.17.0-beta.5",
     "typescript": "^5.9.3",
     "vitest": "^4.0.14",
