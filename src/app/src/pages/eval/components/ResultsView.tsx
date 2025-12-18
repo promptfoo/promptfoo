@@ -279,8 +279,9 @@ export default function ResultsView({
   const handleShare = async (id: string): Promise<string> => {
     try {
       if (!IS_RUNNING_LOCALLY) {
-        // For non-local instances, just return the URL directly
-        return `${window.location.host}/eval/?evalId=${id}`;
+        // For non-local instances, include base path in the URL
+        const basePath = import.meta.env.VITE_PUBLIC_BASENAME || '';
+        return `${window.location.host}${basePath}/eval/?evalId=${id}`;
       }
 
       const response = await callApi('/results/share', {

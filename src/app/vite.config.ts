@@ -162,5 +162,6 @@ export default defineConfig({
     'import.meta.env.VITE_POSTHOG_HOST': JSON.stringify(
       process.env.PROMPTFOO_POSTHOG_HOST || 'https://a.promptfoo.app',
     ),
+    'import.meta.env.VITE_PUBLIC_BASENAME': JSON.stringify(process.env.VITE_PUBLIC_BASENAME || ''),
   },
 });
