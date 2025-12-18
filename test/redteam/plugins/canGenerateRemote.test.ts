@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
-import { Plugins } from '../../../src/redteam/plugins/index';
 import { BeavertailsPlugin } from '../../../src/redteam/plugins/beavertails';
 import { CustomPlugin } from '../../../src/redteam/plugins/custom';
 import { CyberSecEvalPlugin } from '../../../src/redteam/plugins/cyberseceval';
 import { DoNotAnswerPlugin } from '../../../src/redteam/plugins/donotanswer';
 import { HarmbenchPlugin } from '../../../src/redteam/plugins/harmbench';
+import { Plugins } from '../../../src/redteam/plugins/index';
 import { IntentPlugin } from '../../../src/redteam/plugins/intent';
 import { PlinyPlugin } from '../../../src/redteam/plugins/pliny';
 import { UnsafeBenchPlugin } from '../../../src/redteam/plugins/unsafebench';

@@ -29,10 +29,9 @@ import { resolveConfigs } from '../../util/config/load';
 import { writePromptfooConfig } from '../../util/config/writer';
 import { getCustomPolicies } from '../../util/generation';
 import { printBorder, setupEnv } from '../../util/index';
-import { promptfooCommand } from '../../util/promptfooCommand';
 import invariant from '../../util/invariant';
+import { promptfooCommand } from '../../util/promptfooCommand';
 import { RedteamConfigSchema, RedteamGenerateOptionsSchema } from '../../validators/redteam';
-import { synthesize } from '../index';
 import {
   ADDITIONAL_STRATEGIES,
   DEFAULT_STRATEGIES,
@@ -43,6 +42,7 @@ import {
   type Severity,
 } from '../constants';
 import { extractMcpToolsInfo } from '../extraction/mcpTools';
+import { synthesize } from '../index';
 import { isValidPolicyObject } from '../plugins/policy/utils';
 import { shouldGenerateRemote } from '../remoteGeneration';
 import type { Command } from 'commander';

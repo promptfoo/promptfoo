@@ -1,7 +1,7 @@
 import dedent from 'dedent';
 import invariant from '../../../util/invariant';
 import { type PolicyObject } from '../../types';
-import { RedteamGraderBase, RedteamPluginBase, type RedteamGradingContext } from '../base';
+import { RedteamGraderBase, type RedteamGradingContext, RedteamPluginBase } from '../base';
 import { POLICY_METRIC_PREFIX } from './constants';
 import { isValidPolicyObject, makeInlinePolicyId } from './utils';
 

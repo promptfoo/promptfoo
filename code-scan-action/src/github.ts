@@ -8,16 +8,16 @@ import * as core from '@actions/core';
 import * as github from '@actions/github';
 import { Octokit } from '@octokit/rest';
 import {
+  clampCommentLines,
+  extractValidLineRanges,
+  type FileLineRanges,
+} from '../../src/codeScan/util/diffLineRanges';
+import {
   type Comment,
   type FileChange,
   FileChangeStatus,
   type PullRequestContext,
 } from '../../src/types/codeScan';
-import {
-  extractValidLineRanges,
-  clampCommentLines,
-  type FileLineRanges,
-} from '../../src/codeScan/util/diffLineRanges';
 
 /**
  * Get GitHub context from the current workflow

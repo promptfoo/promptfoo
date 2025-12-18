@@ -12,8 +12,8 @@ import { EvalResultsFilterMode } from '../../types/index';
 import { deleteEval, deleteEvals, updateResult, writeResultsToDatabase } from '../../util/database';
 import invariant from '../../util/invariant';
 import { ApiSchemas } from '../apiSchemas';
-import { evalTableToCsv, evalTableToJson } from '../utils/evalTableUtils';
 import { setDownloadHeaders } from '../utils/downloadHelpers';
+import { evalTableToCsv, evalTableToJson } from '../utils/evalTableUtils';
 import type { Request, Response } from 'express';
 
 import type {

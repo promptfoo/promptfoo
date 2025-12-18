@@ -1,7 +1,7 @@
+import { ToastProvider } from '@app/contexts/ToastContext';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ProviderSelector from './ProviderSelector';
-import { ToastProvider } from '@app/contexts/ToastContext';
 
 vi.mock('../../../store/providersStore', () => ({
   useProvidersStore: vi.fn(() => ({

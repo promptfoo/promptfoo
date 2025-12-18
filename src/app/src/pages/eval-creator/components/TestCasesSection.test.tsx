@@ -1,9 +1,9 @@
-import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { vi, describe, it, expect, beforeEach } from 'vitest';
-import TestCasesSection from './TestCasesSection';
 import { useStore } from '@app/stores/evalConfig';
 import { testCaseFromCsvRow } from '@promptfoo/csv';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import * as yaml from 'js-yaml';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import TestCasesSection from './TestCasesSection';
 
 // Mock the store
 vi.mock('@app/stores/evalConfig');

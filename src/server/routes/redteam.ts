@@ -1,14 +1,17 @@
+import dedent from 'dedent';
 import { Router } from 'express';
 import { v4 as uuidv4 } from 'uuid';
+import { z } from 'zod';
 import cliState from '../../cliState';
 import logger from '../../logger';
+import { OpenAiChatCompletionProvider } from '../../providers/openai/chat';
 import {
-  REDTEAM_MODEL,
   ALL_PLUGINS,
   ALL_STRATEGIES,
   isMultiTurnStrategy,
   type MultiTurnStrategy,
   type Plugin,
+  REDTEAM_MODEL,
   type Strategy,
 } from '../../redteam/constants';
 import { PluginFactory, Plugins } from '../../redteam/plugins/index';
@@ -16,24 +19,21 @@ import { redteamProviderManager } from '../../redteam/providers/shared';
 import { getRemoteGenerationUrl } from '../../redteam/remoteGeneration';
 import { doRedteamRun } from '../../redteam/shared';
 import { Strategies } from '../../redteam/strategies/index';
-import { fetchWithProxy } from '../../util/fetch/index';
-import { evalJobs } from './eval';
-import { OpenAiChatCompletionProvider } from '../../providers/openai/chat';
-import type { Request, Response } from 'express';
-import dedent from 'dedent';
-import { z } from 'zod';
+import { type Strategy as StrategyFactory } from '../../redteam/strategies/types';
 import {
   ConversationMessageSchema,
   PluginConfigSchema,
   StrategyConfigSchema,
 } from '../../redteam/types';
-import { type Strategy as StrategyFactory } from '../../redteam/strategies/types';
+import { fetchWithProxy } from '../../util/fetch/index';
 import {
   extractGeneratedPrompt,
   generateMultiTurnPrompt,
   getPluginConfigurationError,
   RemoteGenerationDisabledError,
 } from '../services/redteamTestCaseGenerationService';
+import { evalJobs } from './eval';
+import type { Request, Response } from 'express';
 
 export const redteamRouter = Router();
 

@@ -1,5 +1,4 @@
 import { v4 as uuidv4 } from 'uuid';
-
 import { renderPrompt } from '../../../evaluatorHelpers';
 import logger from '../../../logger';
 import { PromptfooChatCompletionProvider } from '../../../providers/promptfoo';
@@ -8,17 +7,6 @@ import {
   fetchTraceContext,
   type TraceContextData,
 } from '../../../tracing/traceContext';
-import type {
-  ApiProvider,
-  AtomicTestCase,
-  CallApiContextParams,
-  CallApiOptionsParams,
-  GradingResult,
-  NunjucksFilterMap,
-  Prompt,
-  ProviderResponse,
-  TokenUsage,
-} from '../../../types/index';
 import invariant from '../../../util/invariant';
 import { isValidJson } from '../../../util/json';
 import { sleep } from '../../../util/time';
@@ -31,7 +19,6 @@ import {
   type TransformResult,
 } from '../../shared/runtimeTransform';
 import { Strategies } from '../../strategies';
-import type { BaseRedteamMetadata } from '../../types';
 import { getSessionId, isBasicRefusal } from '../../util';
 import { isBlobStorageEnabled } from '../../../blobs/extractor';
 import { shouldAttemptRemoteBlobUpload } from '../../../blobs/remoteUpload';
@@ -45,6 +32,19 @@ import {
 } from '../shared';
 import { formatTraceForMetadata, formatTraceSummary } from '../traceFormatting';
 import { resolveTracingOptions } from '../tracingOptions';
+
+import type {
+  ApiProvider,
+  AtomicTestCase,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  GradingResult,
+  NunjucksFilterMap,
+  Prompt,
+  ProviderResponse,
+  TokenUsage,
+} from '../../../types/index';
+import type { BaseRedteamMetadata } from '../../types';
 
 const DEFAULT_MAX_TURNS = 10;
 const DEFAULT_MAX_BACKTRACKS = 10;

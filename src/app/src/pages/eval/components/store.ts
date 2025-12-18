@@ -1,18 +1,18 @@
-import { callApi } from '@app/utils/api';
 import { HIDDEN_METADATA_KEYS } from '@app/constants';
+import { callApi } from '@app/utils/api';
 import { Severity } from '@promptfoo/redteam/constants';
 import {
   isPolicyMetric,
   isValidPolicyObject,
-  makeInlinePolicyId,
   makeDefaultPolicyName,
+  makeInlinePolicyId,
 } from '@promptfoo/redteam/plugins/policy/utils';
 import { getRiskCategorySeverityMap } from '@promptfoo/redteam/sharedFrontend';
 import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
 import { v4 as uuidv4 } from 'uuid';
 import { create } from 'zustand';
 import { persist, subscribeWithSelector } from 'zustand/middleware';
-import type { PolicyObject, Policy } from '@promptfoo/redteam/types';
+import type { Policy, PolicyObject } from '@promptfoo/redteam/types';
 import type {
   EvalResultsFilterMode,
   EvalTableDTO,

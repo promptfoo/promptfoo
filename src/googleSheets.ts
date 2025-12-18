@@ -1,7 +1,7 @@
 import logger from './logger';
+import { fetchWithProxy } from './util/fetch/index';
 
 import type { CsvRow } from './types/index';
-import { fetchWithProxy } from './util/fetch/index';
 
 export async function checkGoogleSheetAccess(url: string) {
   try {

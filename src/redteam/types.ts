@@ -1,8 +1,8 @@
 import { z } from 'zod';
-
-import type { ApiProvider, ProviderOptions } from '../types/providers';
 import { type FrameworkComplianceId, type Plugin, Severity, SeveritySchema } from './constants';
 import { isValidPolicyId } from './plugins/policy/validators';
+
+import type { ApiProvider, ProviderOptions } from '../types/providers';
 
 // Modifiers are used to modify the behavior of the plugin.
 // They let the user specify additional instructions for the plugin,
