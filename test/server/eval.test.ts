@@ -252,4 +252,97 @@ describe('eval routes', () => {
       expect(res.body.keys).toEqual([]);
     });
   });
+
+  describe('PATCH /:id/author', () => {
+    it('should update author with a valid email', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+
+      const res = await request(app)
+        .patch(`/api/eval/${eval_.id}/author`)
+        .send({ author: 'newauthor@example.com' });
+
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveProperty('message', 'Author updated successfully');
+
+      const updatedEval = await Eval.findById(eval_.id);
+      invariant(updatedEval, 'Eval is required');
+      expect(updatedEval.author).toBe('newauthor@example.com');
+    });
+
+    it('should clear author when empty string is sent', async () => {
+      // First create an eval with an author
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+
+      // Set an author first
+      await request(app)
+        .patch(`/api/eval/${eval_.id}/author`)
+        .send({ author: 'existing@example.com' });
+
+      // Verify author was set
+      let updatedEval = await Eval.findById(eval_.id);
+      invariant(updatedEval, 'Eval is required');
+      expect(updatedEval.author).toBe('existing@example.com');
+
+      // Now clear the author with empty string
+      const res = await request(app).patch(`/api/eval/${eval_.id}/author`).send({ author: '' });
+
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveProperty('message', 'Author cleared successfully');
+
+      updatedEval = await Eval.findById(eval_.id);
+      invariant(updatedEval, 'Eval is required');
+      expect(updatedEval.author).toBeUndefined();
+    });
+
+    it('should return 404 for non-existent eval', async () => {
+      const res = await request(app)
+        .patch('/api/eval/non-existent-id/author')
+        .send({ author: 'test@example.com' });
+
+      expect(res.status).toBe(404);
+      expect(res.body).toHaveProperty('error', 'Eval not found');
+    });
+
+    it('should return 400 for invalid email format', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+
+      const res = await request(app)
+        .patch(`/api/eval/${eval_.id}/author`)
+        .send({ author: 'not-a-valid-email' });
+
+      expect(res.status).toBe(400);
+    });
+
+    it('should return 400 when author field is missing', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+
+      const res = await request(app).patch(`/api/eval/${eval_.id}/author`).send({});
+
+      expect(res.status).toBe(400);
+    });
+
+    it('should preserve other eval fields when updating author', async () => {
+      const eval_ = await EvalFactory.create();
+      testEvalIds.add(eval_.id);
+
+      const originalDescription = eval_.config?.description;
+      const originalPromptCount = eval_.prompts.length;
+
+      const res = await request(app)
+        .patch(`/api/eval/${eval_.id}/author`)
+        .send({ author: 'newauthor@example.com' });
+
+      expect(res.status).toBe(200);
+
+      const updatedEval = await Eval.findById(eval_.id);
+      invariant(updatedEval, 'Eval is required');
+      expect(updatedEval.author).toBe('newauthor@example.com');
+      expect(updatedEval.config?.description).toBe(originalDescription);
+      expect(updatedEval.prompts.length).toBe(originalPromptCount);
+    });
+  });
 });
