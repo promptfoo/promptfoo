@@ -67,11 +67,6 @@ type EnvVars = {
   PROMPTFOO_TELEMETRY_DEBUG?: boolean;
   PROMPTFOO_TRACING_ENABLED?: boolean;
   PROMPTFOO_ENABLE_UNBLOCKING?: boolean;
-  /**
-   * Store large binary media (images/audio) on the local filesystem and replace inline base64
-   * payloads with `promptfoo://blob/<hash>` references.
-   */
-  PROMPTFOO_USE_FILESYSTEM_FOR_MEDIA?: boolean;
 
   //=========================================================================
   // OpenTelemetry tracing configuration

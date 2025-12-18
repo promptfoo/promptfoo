@@ -326,5 +326,6 @@ export async function extractAndStoreBinaryData(
 }
 
 export function isBlobStorageEnabled(): boolean {
-  return getEnvBool('PROMPTFOO_USE_FILESYSTEM_FOR_MEDIA', false);
+  // Single toggle: default to externalize; opt out with PROMPTFOO_INLINE_MEDIA=true
+  return !getEnvBool('PROMPTFOO_INLINE_MEDIA', false);
 }
