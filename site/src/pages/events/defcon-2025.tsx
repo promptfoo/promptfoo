@@ -45,7 +45,7 @@ export default function Defcon2025(): React.ReactElement {
         <meta property="og:image" content="https://www.promptfoo.dev/img/events/defcon-2025.jpg" />
         <meta property="og:image:width" content="1200" />
         <meta property="og:image:height" content="630" />
-        <meta property="og:url" content="/events/defcon-2025" />
+        <meta property="og:url" content="https://www.promptfoo.dev/events/defcon-2025" />
         <meta property="og:type" content="website" />
         <meta property="og:site_name" content="Promptfoo" />
 
@@ -62,7 +62,7 @@ export default function Defcon2025(): React.ReactElement {
           name="keywords"
           content="DEF CON 33, DEF CON 2025, AI security party, hacker party, LLM security, prompt injection, red team, Las Vegas"
         />
-        <link rel="canonical" href="https://promptfoo.dev/events/defcon-2025" />
+        <link rel="canonical" href="https://www.promptfoo.dev/events/defcon-2025" />
       </Head>
       <main className={styles.defconPage}>
         {/* Hero Section */}

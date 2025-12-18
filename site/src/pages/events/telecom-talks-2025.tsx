@@ -1,84 +1,8 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect } from 'react';
 import Head from '@docusaurus/Head';
 import Link from '@docusaurus/Link';
 import Layout from '@theme/Layout';
 import styles from './telecom-talks-2025.module.css';
-
-function SignalWave(): React.ReactElement {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) {
-      return;
-    }
-
-    const ctx = canvas.getContext('2d');
-    if (!ctx) {
-      return;
-    }
-
-    let animationId: number;
-    let time = 0;
-
-    const resize = () => {
-      canvas.width = canvas.offsetWidth * window.devicePixelRatio;
-      canvas.height = canvas.offsetHeight * window.devicePixelRatio;
-      ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
-    };
-
-    resize();
-    window.addEventListener('resize', resize);
-
-    const animate = () => {
-      if (!ctx || !canvas) {
-        return;
-      }
-
-      ctx.clearRect(0, 0, canvas.offsetWidth, canvas.offsetHeight);
-      time += 0.02;
-
-      // Draw multiple signal waves
-      const waves = [
-        { color: 'rgba(0, 212, 255, 0.3)', amplitude: 30, frequency: 0.02, phase: 0 },
-        { color: 'rgba(0, 255, 136, 0.2)', amplitude: 20, frequency: 0.015, phase: 2 },
-        { color: 'rgba(0, 212, 255, 0.15)', amplitude: 40, frequency: 0.01, phase: 4 },
-      ];
-
-      for (const wave of waves) {
-        ctx.beginPath();
-        ctx.strokeStyle = wave.color;
-        ctx.lineWidth = 2;
-
-        for (let x = 0; x < canvas.offsetWidth; x++) {
-          const y =
-            canvas.offsetHeight / 2 +
-            Math.sin(x * wave.frequency + time + wave.phase) * wave.amplitude +
-            Math.sin(x * wave.frequency * 2 + time * 1.5) * (wave.amplitude / 3);
-
-          if (x === 0) {
-            ctx.moveTo(x, y);
-          } else {
-            ctx.lineTo(x, y);
-          }
-        }
-
-        ctx.stroke();
-      }
-
-      animationId = requestAnimationFrame(animate);
-    };
-
-    animate();
-
-    return () => {
-      window.removeEventListener('resize', resize);
-      cancelAnimationFrame(animationId);
-    };
-  }, []);
-
-  return <canvas ref={canvasRef} className={styles.signalCanvas} />;
-}
 
 export default function TelecomTalks2025(): React.ReactElement {
   useEffect(() => {
@@ -112,7 +36,7 @@ export default function TelecomTalks2025(): React.ReactElement {
           content="AI security for telecommunications. Ian Webster joined Swisscom Outpost on stage at Telecom Talks 2025 in Menlo Park."
         />
         <meta property="og:type" content="website" />
-        <meta property="og:url" content="/events/telecom-talks-2025" />
+        <meta property="og:url" content="https://www.promptfoo.dev/events/telecom-talks-2025" />
         <meta name="twitter:card" content="summary_large_image" />
         <meta
           property="og:image"
@@ -126,66 +50,37 @@ export default function TelecomTalks2025(): React.ReactElement {
           name="keywords"
           content="Telecom Talks 2025, telecommunications security, AI security, LLM security, Swisscom, 5G security"
         />
-        <link rel="canonical" href="https://promptfoo.dev/events/telecom-talks-2025" />
+        <link rel="canonical" href="https://www.promptfoo.dev/events/telecom-talks-2025" />
       </Head>
 
       <main className={styles.telecomPage}>
-        {/* Hero Image Background */}
-        <div className={styles.heroImageContainer}>
+        {/* Hero Banner */}
+        <section className={styles.heroBanner}>
           <img
             src="/img/events/telecom-talks-2025.jpg"
             alt="Telecom Talks 2025"
-            className={styles.heroImage}
+            className={styles.bannerImage}
           />
-          <div className={styles.heroImageOverlay} />
-        </div>
-
-        {/* Circuit Pattern Background */}
-        <div className={styles.circuitPattern}>
-          <svg className={styles.circuitSvg} viewBox="0 0 100 100" preserveAspectRatio="none">
-            <defs>
-              <pattern
-                id="circuit"
-                x="0"
-                y="0"
-                width="20"
-                height="20"
-                patternUnits="userSpaceOnUse"
-              >
-                <path
-                  d="M10 0 L10 8 M0 10 L8 10 M12 10 L20 10 M10 12 L10 20"
-                  stroke="currentColor"
-                  strokeWidth="0.5"
-                  fill="none"
-                />
-                <circle cx="10" cy="10" r="2" fill="currentColor" />
-              </pattern>
-            </defs>
-            <rect width="100%" height="100%" fill="url(#circuit)" />
-          </svg>
-        </div>
-
-        {/* Signal Wave Animation */}
-        <div className={styles.signalBackground}>
-          <SignalWave />
-        </div>
-
-        {/* Hero Section */}
-        <section className={styles.hero}>
-          <div className={styles.heroContent}>
+          <div className={styles.bannerOverlay} />
+          <div className={styles.bannerContent}>
             <div className={styles.badge}>
-              <span className={styles.signalIcon}>📡</span>
+              <span className={styles.badgeIcon}>📡</span>
               Telecom Talks 2025
             </div>
             <h1 className={styles.heroTitle}>
-              Securing the
-              <br />
-              <span className={styles.highlight}>Signal</span>
+              Securing the <span className={styles.highlight}>Signal</span>
             </h1>
+          </div>
+        </section>
+
+        {/* Hero Content */}
+        <section className={styles.heroContent}>
+          <div className={styles.container}>
             <p className={styles.heroSubtitle}>
               AI security meets telecom. Ian Webster joined Swisscom Outpost on stage to discuss
               practical GenAI security challenges for real deployments.
             </p>
+
             <div className={styles.eventDetails}>
               <div className={styles.detail}>
                 <svg className={styles.icon} viewBox="0 0 24 24" fill="none" stroke="currentColor">
@@ -227,15 +122,16 @@ export default function TelecomTalks2025(): React.ReactElement {
                 <span>On Stage with Swisscom Outpost</span>
               </div>
             </div>
-            <div className={styles.heroButtons}>
+
+            <div className={styles.heroCtas}>
               <a
                 href="#session"
-                className={styles.primaryButton}
+                className={styles.primaryCta}
                 onClick={(e) => handleSmoothScroll(e, '#session')}
               >
                 View Session
               </a>
-              <Link to="/docs/red-team/" className={styles.secondaryButton}>
+              <Link to="/docs/red-team/" className={styles.secondaryCta}>
                 Explore Red Teaming
               </Link>
             </div>
@@ -285,9 +181,11 @@ export default function TelecomTalks2025(): React.ReactElement {
         </section>
 
         {/* Session Section */}
-        <section className={styles.sessionSection} id="session">
+        <section id="session" className={styles.sessionSection}>
           <div className={styles.container}>
-            <h2 className={styles.sectionTitle}>The Session</h2>
+            <div className={styles.sectionHeader}>
+              <h2 className={styles.sectionTitle}>The Session</h2>
+            </div>
             <div className={styles.sessionCard}>
               <div className={styles.sessionMeta}>
                 <span className={styles.sessionBadge}>Joint Presentation</span>
@@ -326,10 +224,12 @@ export default function TelecomTalks2025(): React.ReactElement {
         {/* Telecom Challenges Section */}
         <section className={styles.challengesSection}>
           <div className={styles.container}>
-            <h2 className={styles.sectionTitle}>Telecom Security Challenges</h2>
-            <p className={styles.sectionSubtitle}>
-              Why AI security is critical for the telecommunications industry.
-            </p>
+            <div className={styles.sectionHeader}>
+              <h2 className={styles.sectionTitle}>Telecom Security Challenges</h2>
+              <p className={styles.sectionSubtitle}>
+                Why AI security is critical for the telecommunications industry.
+              </p>
+            </div>
             <div className={styles.challengesGrid}>
               <div className={styles.challengeCard}>
                 <div className={styles.challengeIcon}>🌐</div>
@@ -370,7 +270,9 @@ export default function TelecomTalks2025(): React.ReactElement {
         {/* Key Discussions */}
         <section className={styles.discussionsSection}>
           <div className={styles.container}>
-            <h2 className={styles.sectionTitle}>Key Discussions</h2>
+            <div className={styles.sectionHeader}>
+              <h2 className={styles.sectionTitle}>Key Discussions</h2>
+            </div>
             <div className={styles.discussionsList}>
               <div className={styles.discussionItem}>
                 <div className={styles.discussionNumber}>01</div>
@@ -431,27 +333,44 @@ export default function TelecomTalks2025(): React.ReactElement {
           </div>
         </section>
 
-        {/* Final CTA */}
-        <section className={styles.finalCta}>
+        {/* CTA Section */}
+        <section className={styles.ctaSection}>
           <div className={styles.container}>
-            <div className={styles.ctaCard}>
-              <h2>Establish Connection</h2>
-              <p>
+            <div className={styles.ctaContent}>
+              <h2 className={styles.ctaTitle}>Establish Connection</h2>
+              <p className={styles.ctaText}>
                 Ready to secure your telecom AI deployments? Start testing with Promptfoo's
                 open-source red teaming framework.
               </p>
               <div className={styles.ctaButtons}>
-                <Link to="/docs/red-team/quickstart/" className={styles.primaryButton}>
+                <Link to="/docs/red-team/quickstart/" className={styles.primaryCta}>
                   Get Started
                 </Link>
                 <Link
                   to="https://github.com/promptfoo/promptfoo"
-                  className={styles.secondaryButton}
+                  className={styles.secondaryCta}
                 >
                   View Source
                 </Link>
               </div>
             </div>
+          </div>
+        </section>
+
+        {/* Footer Navigation */}
+        <section className={styles.footerNav}>
+          <div className={styles.container}>
+            <Link to="/events" className={styles.backLink}>
+              <svg className={styles.backIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M15 19l-7-7 7-7"
+                />
+              </svg>
+              Back to All Events
+            </Link>
           </div>
         </section>
       </main>

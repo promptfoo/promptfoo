@@ -59,7 +59,7 @@ export default function BlackHat2025(): React.ReactElement {
         />
         <meta property="og:image:width" content="1200" />
         <meta property="og:image:height" content="630" />
-        <meta property="og:url" content="/events/blackhat-2025" />
+        <meta property="og:url" content="https://www.promptfoo.dev/events/blackhat-2025" />
         <meta property="og:type" content="website" />
         <meta property="og:site_name" content="Promptfoo" />
 
@@ -79,7 +79,7 @@ export default function BlackHat2025(): React.ReactElement {
           name="keywords"
           content="Black Hat USA 2025, AI security, LLM security, prompt injection, jailbreaking, red teaming, AI vulnerability testing, OWASP LLM Top 10"
         />
-        <link rel="canonical" href="https://promptfoo.dev/events/blackhat-2025" />
+        <link rel="canonical" href="https://www.promptfoo.dev/events/blackhat-2025" />
       </Head>
       <main className={styles.blackhatPage}>
         {/* Hero Section */}

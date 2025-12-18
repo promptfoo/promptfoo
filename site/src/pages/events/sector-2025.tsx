@@ -36,7 +36,7 @@ export default function SecTor2025(): React.ReactElement {
           content="Join Promptfoo at SecTor 2025 in Toronto. Arsenal demos, LLM security tools, and enterprise AI security discussions."
         />
         <meta property="og:type" content="website" />
-        <meta property="og:url" content="/events/sector-2025" />
+        <meta property="og:url" content="https://www.promptfoo.dev/events/sector-2025" />
         <meta name="twitter:card" content="summary_large_image" />
         <meta property="og:image" content="https://www.promptfoo.dev/img/events/sector-2025.jpg" />
         <meta name="twitter:image" content="https://www.promptfoo.dev/img/events/sector-2025.jpg" />
@@ -44,83 +44,37 @@ export default function SecTor2025(): React.ReactElement {
           name="keywords"
           content="SecTor 2025, Toronto security conference, Arsenal, AI security tools, Canada cybersecurity, LLM security"
         />
-        <link rel="canonical" href="https://promptfoo.dev/events/sector-2025" />
+        <link rel="canonical" href="https://www.promptfoo.dev/events/sector-2025" />
       </Head>
 
       <main className={styles.sectorPage}>
-        {/* Hero Image Background */}
-        <div className={styles.heroImageContainer}>
-          <img src="/img/events/sector-2025.jpg" alt="SecTor 2025" className={styles.heroImage} />
-          <div className={styles.heroImageOverlay} />
-        </div>
-
-        {/* Maple Leaf Pattern Background */}
-        <div className={styles.maplePattern}>
-          {[...Array(8)].map((_, i) => (
-            <svg
-              key={i}
-              className={styles.mapleLeaf}
-              viewBox="0 0 100 100"
-              style={{
-                left: `${10 + (i % 4) * 25}%`,
-                top: `${20 + Math.floor(i / 4) * 40}%`,
-                animationDelay: `${i * 0.5}s`,
-              }}
-            >
-              <path
-                fill="currentColor"
-                d="M50 0 L55 35 L95 30 L65 50 L80 90 L50 65 L20 90 L35 50 L5 30 L45 35 Z"
-              />
-            </svg>
-          ))}
-        </div>
-
-        {/* Hero Section */}
-        <section className={styles.hero}>
-          {/* Toronto Skyline Silhouette */}
-          <div className={styles.skyline}>
-            <svg viewBox="0 0 1440 200" preserveAspectRatio="none">
-              {/* CN Tower */}
-              <rect x="700" y="20" width="8" height="180" fill="currentColor" />
-              <polygon points="696,20 712,20 708,0 700,0" fill="currentColor" />
-              <ellipse cx="704" cy="80" rx="20" ry="8" fill="currentColor" />
-              <ellipse cx="704" cy="120" rx="12" ry="5" fill="currentColor" />
-              {/* Buildings */}
-              <rect x="100" y="120" width="60" height="80" fill="currentColor" />
-              <rect x="170" y="100" width="50" height="100" fill="currentColor" />
-              <rect x="230" y="130" width="70" height="70" fill="currentColor" />
-              <rect x="320" y="90" width="45" height="110" fill="currentColor" />
-              <rect x="380" y="110" width="55" height="90" fill="currentColor" />
-              <rect x="450" y="85" width="40" height="115" fill="currentColor" />
-              <rect x="500" y="100" width="65" height="100" fill="currentColor" />
-              <rect x="580" y="130" width="50" height="70" fill="currentColor" />
-              <rect x="640" y="110" width="40" height="90" fill="currentColor" />
-              <rect x="750" y="100" width="55" height="100" fill="currentColor" />
-              <rect x="820" y="80" width="45" height="120" fill="currentColor" />
-              <rect x="880" y="120" width="60" height="80" fill="currentColor" />
-              <rect x="960" y="95" width="50" height="105" fill="currentColor" />
-              <rect x="1030" y="110" width="70" height="90" fill="currentColor" />
-              <rect x="1120" y="130" width="55" height="70" fill="currentColor" />
-              <rect x="1200" y="100" width="45" height="100" fill="currentColor" />
-              <rect x="1260" y="120" width="60" height="80" fill="currentColor" />
-              <rect x="1340" y="140" width="50" height="60" fill="currentColor" />
-            </svg>
-          </div>
-
-          <div className={styles.heroContent}>
+        {/* Hero Banner */}
+        <section className={styles.heroBanner}>
+          <img
+            src="/img/events/sector-2025.jpg"
+            alt="SecTor 2025"
+            className={styles.bannerImage}
+          />
+          <div className={styles.bannerOverlay} />
+          <div className={styles.bannerContent}>
             <div className={styles.badge}>
-              <span className={styles.mapleIcon}>🍁</span>
+              <span className={styles.badgeIcon}>🍁</span>
               SecTor 2025 • Toronto
             </div>
             <h1 className={styles.heroTitle}>
-              North of the Border
-              <br />
-              <span className={styles.highlight}>Security</span>
+              North of the Border <span className={styles.highlight}>Security</span>
             </h1>
+          </div>
+        </section>
+
+        {/* Hero Content */}
+        <section className={styles.heroContent}>
+          <div className={styles.container}>
             <p className={styles.heroSubtitle}>
               Canada's largest IT security conference. We brought open-source AI security tools to
               the Arsenal and connected with enterprise security teams across the country.
             </p>
+
             <div className={styles.eventDetails}>
               <div className={styles.detail}>
                 <svg className={styles.icon} viewBox="0 0 24 24" fill="none" stroke="currentColor">
@@ -162,15 +116,16 @@ export default function SecTor2025(): React.ReactElement {
                 <span>Arsenal Listing</span>
               </div>
             </div>
-            <div className={styles.heroButtons}>
+
+            <div className={styles.heroCtas}>
               <a
                 href="#arsenal"
-                className={styles.primaryButton}
+                className={styles.primaryCta}
                 onClick={(e) => handleSmoothScroll(e, '#arsenal')}
               >
                 See the Arsenal
               </a>
-              <Link to="/docs/red-team/" className={styles.secondaryButton}>
+              <Link to="/docs/red-team/" className={styles.secondaryCta}>
                 Try Promptfoo
               </Link>
             </div>
@@ -178,13 +133,15 @@ export default function SecTor2025(): React.ReactElement {
         </section>
 
         {/* Arsenal Section */}
-        <section className={styles.arsenalSection} id="arsenal">
+        <section id="arsenal" className={styles.arsenalSection}>
           <div className={styles.container}>
-            <h2 className={styles.sectionTitle}>Arsenal Showcase</h2>
-            <p className={styles.sectionSubtitle}>
-              Promptfoo was selected for the SecTor Arsenal, showcasing open-source security tools
-              to Canada's enterprise security community.
-            </p>
+            <div className={styles.sectionHeader}>
+              <h2 className={styles.sectionTitle}>Arsenal Showcase</h2>
+              <p className={styles.sectionSubtitle}>
+                Promptfoo was selected for the SecTor Arsenal, showcasing open-source security tools
+                to Canada's enterprise security community.
+              </p>
+            </div>
             <div className={styles.arsenalCard}>
               <div className={styles.arsenalBadge}>SecTor Arsenal 2025</div>
               <h3 className={styles.arsenalTitle}>Promptfoo: Open-Source LLM Red Teaming</h3>
@@ -223,7 +180,9 @@ export default function SecTor2025(): React.ReactElement {
         {/* Why SecTor Section */}
         <section className={styles.whySection}>
           <div className={styles.container}>
-            <h2 className={styles.sectionTitle}>Why SecTor</h2>
+            <div className={styles.sectionHeader}>
+              <h2 className={styles.sectionTitle}>Why SecTor</h2>
+            </div>
             <div className={styles.whyGrid}>
               <div className={styles.whyCard}>
                 <div className={styles.whyEmoji}>🇨🇦</div>
@@ -256,7 +215,9 @@ export default function SecTor2025(): React.ReactElement {
         {/* Conversations Section */}
         <section className={styles.conversationsSection}>
           <div className={styles.container}>
-            <h2 className={styles.sectionTitle}>Key Conversations</h2>
+            <div className={styles.sectionHeader}>
+              <h2 className={styles.sectionTitle}>Key Conversations</h2>
+            </div>
             <div className={styles.conversationsGrid}>
               <div className={styles.conversationCard}>
                 <div className={styles.conversationIcon}>🏦</div>
@@ -319,25 +280,27 @@ export default function SecTor2025(): React.ReactElement {
         </section>
 
         {/* Common Themes */}
-        <section className={styles.testimonialsSection}>
+        <section className={styles.themesSection}>
           <div className={styles.container}>
-            <h2 className={styles.sectionTitle}>Common Themes</h2>
-            <div className={styles.testimonialsGrid}>
-              <blockquote className={styles.testimonial}>
+            <div className={styles.sectionHeader}>
+              <h2 className={styles.sectionTitle}>Common Themes</h2>
+            </div>
+            <div className={styles.themesGrid}>
+              <blockquote className={styles.themeQuote}>
                 <p>
                   Teams were looking for AI security tools that fit their compliance requirements,
                   with detailed reports suitable for auditors.
                 </p>
                 <cite>Theme: Financial services</cite>
               </blockquote>
-              <blockquote className={styles.testimonial}>
+              <blockquote className={styles.themeQuote}>
                 <p>
                   Government teams wanted ways to test AI assistants while meeting Canadian privacy
                   regulations and GRC requirements.
                 </p>
                 <cite>Theme: Public sector</cite>
               </blockquote>
-              <blockquote className={styles.testimonial}>
+              <blockquote className={styles.themeQuote}>
                 <p>
                   Open source was important—being able to audit the testing methodology was a key
                   requirement for many teams.
@@ -348,25 +311,42 @@ export default function SecTor2025(): React.ReactElement {
           </div>
         </section>
 
-        {/* Final CTA */}
-        <section className={styles.finalCta}>
+        {/* CTA Section */}
+        <section className={styles.ctaSection}>
           <div className={styles.container}>
-            <div className={styles.ctaCard}>
+            <div className={styles.ctaContent}>
               <div className={styles.ctaMaple}>🍁</div>
-              <h2>Merci • Thank You</h2>
-              <p>
+              <h2 className={styles.ctaTitle}>Merci • Thank You</h2>
+              <p className={styles.ctaText}>
                 Thanks to the SecTor team and everyone who stopped by the Arsenal. We're excited to
                 continue working with the Canadian security community.
               </p>
               <div className={styles.ctaButtons}>
-                <Link to="/docs/red-team/quickstart/" className={styles.primaryButton}>
+                <Link to="/docs/red-team/quickstart/" className={styles.primaryCta}>
                   Get Started
                 </Link>
-                <Link to="https://discord.gg/promptfoo" className={styles.secondaryButton}>
+                <Link to="https://discord.gg/promptfoo" className={styles.secondaryCta}>
                   Join Discord
                 </Link>
               </div>
             </div>
+          </div>
+        </section>
+
+        {/* Footer Navigation */}
+        <section className={styles.footerNav}>
+          <div className={styles.container}>
+            <Link to="/events" className={styles.backLink}>
+              <svg className={styles.backIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M15 19l-7-7 7-7"
+                />
+              </svg>
+              Back to All Events
+            </Link>
           </div>
         </section>
       </main>

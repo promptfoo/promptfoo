@@ -96,7 +96,7 @@ export default function BSidesSF2026(): React.ReactElement {
           content="Join Promptfoo at BSides San Francisco 2026. Community-driven security and AI workshops."
         />
         <meta property="og:type" content="website" />
-        <meta property="og:url" content="/events/bsides-sf-2026" />
+        <meta property="og:url" content="https://www.promptfoo.dev/events/bsides-sf-2026" />
         <meta name="twitter:card" content="summary_large_image" />
         <meta
           property="og:image"
@@ -110,76 +110,32 @@ export default function BSidesSF2026(): React.ReactElement {
           name="keywords"
           content="BSides SF 2026, BSides San Francisco, security conference, AI security, hacker community, RSA week"
         />
-        <link rel="canonical" href="https://promptfoo.dev/events/bsides-sf-2026" />
+        <link rel="canonical" href="https://www.promptfoo.dev/events/bsides-sf-2026" />
       </Head>
 
       <main className={styles.bsidesPage}>
-        {/* Hero Image Background */}
-        <div className={styles.heroImageContainer}>
+        {/* Hero Banner */}
+        <section className={styles.heroBanner}>
           <img
             src="/img/events/bsides-sf-2026.jpg"
             alt="BSides SF 2026"
-            className={styles.heroImage}
+            className={styles.bannerImage}
           />
-          <div className={styles.heroImageOverlay} />
-        </div>
-
-        {/* Animated Fog Effect */}
-        <div className={styles.fogEffect}>
-          <div className={styles.fogLayer1} />
-          <div className={styles.fogLayer2} />
-          <div className={styles.fogLayer3} />
-        </div>
-
-        {/* Golden Gate Silhouette */}
-        <div className={styles.bridgeSilhouette}>
-          <svg viewBox="0 0 1440 200" preserveAspectRatio="none">
-            {/* Main towers */}
-            <rect x="300" y="20" width="20" height="180" fill="currentColor" />
-            <rect x="1120" y="20" width="20" height="180" fill="currentColor" />
-            {/* Tower tops */}
-            <rect x="295" y="10" width="30" height="20" fill="currentColor" />
-            <rect x="1115" y="10" width="30" height="20" fill="currentColor" />
-            {/* Main cables */}
-            <path
-              d="M0,100 Q160,180 310,50 Q720,200 1130,50 Q1280,180 1440,100"
-              stroke="currentColor"
-              strokeWidth="6"
-              fill="none"
-            />
-            {/* Deck */}
-            <rect x="0" y="160" width="1440" height="12" fill="currentColor" />
-            {/* Vertical cables */}
-            {[...Array(20)].map((_, i) => {
-              const x = 50 + i * 70;
-              const cableHeight = Math.abs(Math.sin((i / 19) * Math.PI) * 80) + 40;
-              return (
-                <line
-                  key={i}
-                  x1={x}
-                  y1={160 - cableHeight}
-                  x2={x}
-                  y2={160}
-                  stroke="currentColor"
-                  strokeWidth="2"
-                />
-              );
-            })}
-          </svg>
-        </div>
-
-        {/* Hero Section */}
-        <section className={styles.hero}>
-          <div className={styles.heroContent}>
+          <div className={styles.bannerOverlay} />
+          <div className={styles.bannerContent}>
             <div className={styles.badge}>
               <span className={styles.badgeIcon}>🌉</span>
               Coming March 2026
             </div>
             <h1 className={styles.heroTitle}>
-              BSides
-              <br />
-              <span className={styles.highlight}>San Francisco</span>
+              BSides <span className={styles.highlight}>San Francisco</span>
             </h1>
+          </div>
+        </section>
+
+        {/* Hero Content */}
+        <section className={styles.heroContent}>
+          <div className={styles.container}>
             <p className={styles.heroSubtitle}>
               The grassroots security conference that brings hackers together during RSA week. Join
               us for AI security workshops and community connections.
@@ -234,122 +190,130 @@ export default function BSidesSF2026(): React.ReactElement {
 
         {/* Highlights Section */}
         <section id="highlights" className={styles.highlightsSection}>
-          <div className={styles.sectionHeader}>
-            <h2 className={styles.sectionTitle}>What to Expect</h2>
-            <p className={styles.sectionSubtitle}>Community-driven AI security experiences</p>
-          </div>
+          <div className={styles.container}>
+            <div className={styles.sectionHeader}>
+              <h2 className={styles.sectionTitle}>What to Expect</h2>
+              <p className={styles.sectionSubtitle}>Community-driven AI security experiences</p>
+            </div>
 
-          <div className={styles.highlightsGrid}>
-            <div className={styles.highlightCard}>
-              <div className={styles.highlightIcon}>🛠️</div>
-              <h3>Hands-On Workshops</h3>
-              <p>
-                Interactive AI security workshops where you'll learn to identify and exploit LLM
-                vulnerabilities using open-source tools.
-              </p>
-            </div>
-            <div className={styles.highlightCard}>
-              <div className={styles.highlightIcon}>🤝</div>
-              <h3>Community Connections</h3>
-              <p>
-                Meet security researchers, bug bounty hunters, and AI enthusiasts who are pushing
-                the boundaries of what's possible.
-              </p>
-            </div>
-            <div className={styles.highlightCard}>
-              <div className={styles.highlightIcon}>🏆</div>
-              <h3>CTF Challenges</h3>
-              <p>
-                Test your skills against AI security challenges. Prizes for top performers and
-                bragging rights for everyone who participates.
-              </p>
-            </div>
-            <div className={styles.highlightCard}>
-              <div className={styles.highlightIcon}>🎤</div>
-              <h3>Lightning Talks</h3>
-              <p>
-                Quick-fire presentations on the latest AI security research, tools, and techniques
-                from community members.
-              </p>
+            <div className={styles.highlightsGrid}>
+              <div className={styles.highlightCard}>
+                <div className={styles.cardIcon}>🛠️</div>
+                <h3>Hands-On Workshops</h3>
+                <p>
+                  Interactive AI security workshops where you'll learn to identify and exploit LLM
+                  vulnerabilities using open-source tools.
+                </p>
+              </div>
+              <div className={styles.highlightCard}>
+                <div className={styles.cardIcon}>🤝</div>
+                <h3>Community Connections</h3>
+                <p>
+                  Meet security researchers, bug bounty hunters, and AI enthusiasts who are pushing
+                  the boundaries of what's possible.
+                </p>
+              </div>
+              <div className={styles.highlightCard}>
+                <div className={styles.cardIcon}>🏆</div>
+                <h3>CTF Challenges</h3>
+                <p>
+                  Test your skills against AI security challenges. Prizes for top performers and
+                  bragging rights for everyone who participates.
+                </p>
+              </div>
+              <div className={styles.highlightCard}>
+                <div className={styles.cardIcon}>🎤</div>
+                <h3>Lightning Talks</h3>
+                <p>
+                  Quick-fire presentations on the latest AI security research, tools, and techniques
+                  from community members.
+                </p>
+              </div>
             </div>
           </div>
         </section>
 
         {/* Why BSides Section */}
         <section className={styles.whySection}>
-          <div className={styles.sectionHeader}>
-            <h2 className={styles.sectionTitle}>The BSides Spirit</h2>
-            <p className={styles.sectionSubtitle}>Where the security community comes together</p>
-          </div>
+          <div className={styles.container}>
+            <div className={styles.sectionHeader}>
+              <h2 className={styles.sectionTitle}>The BSides Spirit</h2>
+              <p className={styles.sectionSubtitle}>Where the security community comes together</p>
+            </div>
 
-          <div className={styles.whyGrid}>
-            <div className={styles.whyItem}>
-              <div className={styles.whyNumber}>01</div>
-              <h3>Grassroots Energy</h3>
-              <p>
-                Community-organized, volunteer-run, and focused on sharing knowledge over selling
-                products. This is the real hacker conference experience.
-              </p>
-            </div>
-            <div className={styles.whyItem}>
-              <div className={styles.whyNumber}>02</div>
-              <h3>Diverse Voices</h3>
-              <p>
-                From first-time speakers to industry veterans, BSides amplifies voices you won't
-                hear at bigger corporate conferences.
-              </p>
-            </div>
-            <div className={styles.whyItem}>
-              <div className={styles.whyNumber}>03</div>
-              <h3>Open Source Culture</h3>
-              <p>
-                A community that values transparency, collaboration, and giving back. Right at home
-                for an open-source security company like Promptfoo.
-              </p>
-            </div>
-            <div className={styles.whyItem}>
-              <div className={styles.whyNumber}>04</div>
-              <h3>Hallway Track</h3>
-              <p>
-                The best conversations happen between sessions. BSides creates the space for genuine
-                discussions about security challenges.
-              </p>
+            <div className={styles.whyGrid}>
+              <div className={styles.whyItem}>
+                <div className={styles.whyNumber}>01</div>
+                <h3>Grassroots Energy</h3>
+                <p>
+                  Community-organized, volunteer-run, and focused on sharing knowledge over selling
+                  products. This is the real hacker conference experience.
+                </p>
+              </div>
+              <div className={styles.whyItem}>
+                <div className={styles.whyNumber}>02</div>
+                <h3>Diverse Voices</h3>
+                <p>
+                  From first-time speakers to industry veterans, BSides amplifies voices you won't
+                  hear at bigger corporate conferences.
+                </p>
+              </div>
+              <div className={styles.whyItem}>
+                <div className={styles.whyNumber}>03</div>
+                <h3>Open Source Culture</h3>
+                <p>
+                  A community that values transparency, collaboration, and giving back. Right at home
+                  for an open-source security company like Promptfoo.
+                </p>
+              </div>
+              <div className={styles.whyItem}>
+                <div className={styles.whyNumber}>04</div>
+                <h3>Hallway Track</h3>
+                <p>
+                  The best conversations happen between sessions. BSides creates the space for genuine
+                  discussions about security challenges.
+                </p>
+              </div>
             </div>
           </div>
         </section>
 
         {/* CTA Section */}
         <section className={styles.ctaSection}>
-          <div className={styles.ctaContent}>
-            <h2 className={styles.ctaTitle}>Save the Date</h2>
-            <p className={styles.ctaText}>
-              BSides SF 2026 happens just before RSA Conference. Join us for the community warmup
-              before the big show.
-            </p>
-            <div className={styles.ctaButtons}>
-              <Link to="/contact" className={styles.ctaPrimary}>
-                Stay Updated
-              </Link>
-              <Link to="/events/rsa-2026" className={styles.ctaSecondary}>
-                RSA 2026 Details
-              </Link>
+          <div className={styles.container}>
+            <div className={styles.ctaContent}>
+              <h2 className={styles.ctaTitle}>Save the Date</h2>
+              <p className={styles.ctaText}>
+                BSides SF 2026 happens just before RSA Conference. Join us for the community warmup
+                before the big show.
+              </p>
+              <div className={styles.ctaButtons}>
+                <Link to="/contact" className={styles.primaryCta}>
+                  Stay Updated
+                </Link>
+                <Link to="/events/rsa-2026" className={styles.secondaryCta}>
+                  RSA 2026 Details
+                </Link>
+              </div>
             </div>
           </div>
         </section>
 
         {/* Footer Navigation */}
         <section className={styles.footerNav}>
-          <Link to="/events" className={styles.backLink}>
-            <svg className={styles.backIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M15 19l-7-7 7-7"
-              />
-            </svg>
-            Back to All Events
-          </Link>
+          <div className={styles.container}>
+            <Link to="/events" className={styles.backLink}>
+              <svg className={styles.backIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M15 19l-7-7 7-7"
+                />
+              </svg>
+              Back to All Events
+            </Link>
+          </div>
         </section>
       </main>
     </Layout>

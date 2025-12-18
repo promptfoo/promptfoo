@@ -1,144 +1,8 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect } from 'react';
 import Head from '@docusaurus/Head';
 import Link from '@docusaurus/Link';
 import Layout from '@theme/Layout';
 import styles from './ai-security-summit-2025.module.css';
-
-interface NeuralNode {
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  radius: number;
-  pulsePhase: number;
-}
-
-function NeuralNetwork(): React.ReactElement {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const nodesRef = useRef<NeuralNode[]>([]);
-  const animationRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) {
-      return;
-    }
-
-    const ctx = canvas.getContext('2d');
-    if (!ctx) {
-      return;
-    }
-
-    const resizeCanvas = () => {
-      canvas.width = canvas.offsetWidth * window.devicePixelRatio;
-      canvas.height = canvas.offsetHeight * window.devicePixelRatio;
-      ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
-    };
-
-    resizeCanvas();
-    window.addEventListener('resize', resizeCanvas);
-
-    // Initialize nodes
-    const nodeCount = 40;
-    nodesRef.current = Array.from({ length: nodeCount }, () => ({
-      x: Math.random() * canvas.offsetWidth,
-      y: Math.random() * canvas.offsetHeight,
-      vx: (Math.random() - 0.5) * 0.5,
-      vy: (Math.random() - 0.5) * 0.5,
-      radius: Math.random() * 3 + 2,
-      pulsePhase: Math.random() * Math.PI * 2,
-    }));
-
-    const animate = () => {
-      if (!ctx || !canvas) {
-        return;
-      }
-
-      ctx.clearRect(0, 0, canvas.offsetWidth, canvas.offsetHeight);
-
-      const nodes = nodesRef.current;
-      const time = Date.now() * 0.001;
-
-      // Update nodes
-      for (const node of nodes) {
-        node.x += node.vx;
-        node.y += node.vy;
-        node.pulsePhase += 0.02;
-
-        // Bounce off edges
-        if (node.x < 0 || node.x > canvas.offsetWidth) {
-          node.vx *= -1;
-        }
-        if (node.y < 0 || node.y > canvas.offsetHeight) {
-          node.vy *= -1;
-        }
-      }
-
-      // Draw connections
-      for (let i = 0; i < nodes.length; i++) {
-        for (let j = i + 1; j < nodes.length; j++) {
-          const dx = nodes[i].x - nodes[j].x;
-          const dy = nodes[i].y - nodes[j].y;
-          const distance = Math.sqrt(dx * dx + dy * dy);
-
-          if (distance < 150) {
-            const opacity = (1 - distance / 150) * 0.4;
-            const gradient = ctx.createLinearGradient(
-              nodes[i].x,
-              nodes[i].y,
-              nodes[j].x,
-              nodes[j].y,
-            );
-            gradient.addColorStop(0, `rgba(124, 58, 237, ${opacity})`);
-            gradient.addColorStop(0.5, `rgba(59, 130, 246, ${opacity})`);
-            gradient.addColorStop(1, `rgba(236, 72, 153, ${opacity})`);
-
-            ctx.beginPath();
-            ctx.moveTo(nodes[i].x, nodes[i].y);
-            ctx.lineTo(nodes[j].x, nodes[j].y);
-            ctx.strokeStyle = gradient;
-            ctx.lineWidth = 1;
-            ctx.stroke();
-          }
-        }
-      }
-
-      // Draw nodes
-      for (const node of nodes) {
-        const pulse = Math.sin(node.pulsePhase) * 0.3 + 0.7;
-        const gradient = ctx.createRadialGradient(
-          node.x,
-          node.y,
-          0,
-          node.x,
-          node.y,
-          node.radius * 2,
-        );
-        gradient.addColorStop(0, `rgba(124, 58, 237, ${pulse})`);
-        gradient.addColorStop(0.5, `rgba(59, 130, 246, ${pulse * 0.6})`);
-        gradient.addColorStop(1, 'rgba(236, 72, 153, 0)');
-
-        ctx.beginPath();
-        ctx.arc(node.x, node.y, node.radius * (0.8 + pulse * 0.4), 0, Math.PI * 2);
-        ctx.fillStyle = gradient;
-        ctx.fill();
-      }
-
-      animationRef.current = requestAnimationFrame(animate);
-    };
-
-    animate();
-
-    return () => {
-      window.removeEventListener('resize', resizeCanvas);
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
-      }
-    };
-  }, []);
-
-  return <canvas ref={canvasRef} className={styles.neuralCanvas} aria-hidden="true" />;
-}
 
 export default function AISecuritySummit2025(): React.ReactElement {
   useEffect(() => {
@@ -172,7 +36,10 @@ export default function AISecuritySummit2025(): React.ReactElement {
           content="Promptfoo at AI Security Summit 2025 (Oct 22–23, San Francisco). Community sponsor with Ian Webster on the panel 'Using AI for Offensive Security Testing.'"
         />
         <meta property="og:type" content="website" />
-        <meta property="og:url" content="/events/ai-security-summit-2025" />
+        <meta
+          property="og:url"
+          content="https://www.promptfoo.dev/events/ai-security-summit-2025"
+        />
         <meta name="twitter:card" content="summary_large_image" />
         <meta
           property="og:image"
@@ -186,41 +53,37 @@ export default function AISecuritySummit2025(): React.ReactElement {
           name="keywords"
           content="AI Security Summit 2025, LLM security, AI red teaming, San Francisco, AI vulnerabilities, machine learning security"
         />
-        <link rel="canonical" href="https://promptfoo.dev/events/ai-security-summit-2025" />
+        <link rel="canonical" href="https://www.promptfoo.dev/events/ai-security-summit-2025" />
       </Head>
 
       <main className={styles.summitPage}>
-        {/* Hero Image Background */}
-        <div className={styles.heroImageContainer}>
+        {/* Hero Banner */}
+        <section className={styles.heroBanner}>
           <img
             src="/img/events/ai-security-summit-2025.jpg"
             alt="AI Security Summit 2025"
-            className={styles.heroImage}
+            className={styles.bannerImage}
           />
-          <div className={styles.heroImageOverlay} />
-        </div>
-
-        {/* Neural Network Background */}
-        <div className={styles.neuralBackground}>
-          <NeuralNetwork />
-        </div>
-
-        {/* Hero Section */}
-        <section className={styles.hero}>
-          <div className={styles.heroContent}>
+          <div className={styles.bannerOverlay} />
+          <div className={styles.bannerContent}>
             <div className={styles.badge}>
               <span className={styles.badgeIcon}>🧠</span>
               AI Security Summit 2025
             </div>
             <h1 className={styles.heroTitle}>
-              The Future of
-              <br />
-              <span className={styles.gradientText}>AI Security</span>
+              The Future of <span className={styles.highlight}>AI Security</span>
             </h1>
+          </div>
+        </section>
+
+        {/* Hero Content */}
+        <section className={styles.heroContent}>
+          <div className={styles.container}>
             <p className={styles.heroSubtitle}>
               Two days of leadership talks and practitioner sessions focused on real-world AI
               security. Catch Ian Webster on the panel "Using AI for Offensive Security Testing."
             </p>
+
             <div className={styles.eventDetails}>
               <div className={styles.detail}>
                 <svg className={styles.icon} viewBox="0 0 24 24" fill="none" stroke="currentColor">
@@ -262,15 +125,16 @@ export default function AISecuritySummit2025(): React.ReactElement {
                 <span>Panel Speaker</span>
               </div>
             </div>
-            <div className={styles.heroButtons}>
+
+            <div className={styles.heroCtas}>
               <a
                 href="#highlights"
-                className={styles.primaryButton}
+                className={styles.primaryCta}
                 onClick={(e) => handleSmoothScroll(e, '#highlights')}
               >
                 View Highlights
               </a>
-              <Link to="/docs/red-team/" className={styles.secondaryButton}>
+              <Link to="/docs/red-team/" className={styles.secondaryCta}>
                 Learn Red Teaming
               </Link>
             </div>
@@ -280,7 +144,9 @@ export default function AISecuritySummit2025(): React.ReactElement {
         {/* Speaker Spotlight */}
         <section className={styles.speakerSection} id="highlights">
           <div className={styles.container}>
-            <h2 className={styles.sectionTitle}>Speaker Spotlight</h2>
+            <div className={styles.sectionHeader}>
+              <h2 className={styles.sectionTitle}>Speaker Spotlight</h2>
+            </div>
             <div className={styles.speakerCard}>
               <div className={styles.speakerInfo}>
                 <div className={styles.speakerBadge}>Panel Speaker</div>
@@ -297,11 +163,6 @@ export default function AISecuritySummit2025(): React.ReactElement {
                   <span className={styles.topic}>Enterprise AI</span>
                 </div>
               </div>
-              <div className={styles.speakerVisual}>
-                <div className={styles.visualOrb}>
-                  <div className={styles.orbInner} />
-                </div>
-              </div>
             </div>
           </div>
         </section>
@@ -309,13 +170,15 @@ export default function AISecuritySummit2025(): React.ReactElement {
         {/* Key Themes */}
         <section className={styles.themesSection}>
           <div className={styles.container}>
-            <h2 className={styles.sectionTitle}>Key Themes</h2>
-            <p className={styles.sectionSubtitle}>
-              Critical topics shaping the AI security landscape in 2025 and beyond.
-            </p>
+            <div className={styles.sectionHeader}>
+              <h2 className={styles.sectionTitle}>Key Themes</h2>
+              <p className={styles.sectionSubtitle}>
+                Critical topics shaping the AI security landscape in 2025 and beyond.
+              </p>
+            </div>
             <div className={styles.themesGrid}>
               <div className={styles.themeCard}>
-                <div className={styles.themeIcon}>🎯</div>
+                <div className={styles.cardIcon}>🎯</div>
                 <h3>Adversarial AI</h3>
                 <p>
                   Understanding how attackers exploit LLMs through prompt injection, jailbreaking,
@@ -323,7 +186,7 @@ export default function AISecuritySummit2025(): React.ReactElement {
                 </p>
               </div>
               <div className={styles.themeCard}>
-                <div className={styles.themeIcon}>🔐</div>
+                <div className={styles.cardIcon}>🔐</div>
                 <h3>Defense Strategies</h3>
                 <p>
                   Building robust guardrails and implementing comprehensive red teaming programs to
@@ -331,7 +194,7 @@ export default function AISecuritySummit2025(): React.ReactElement {
                 </p>
               </div>
               <div className={styles.themeCard}>
-                <div className={styles.themeIcon}>🏢</div>
+                <div className={styles.cardIcon}>🏢</div>
                 <h3>Enterprise Readiness</h3>
                 <p>
                   Navigating compliance requirements, governance frameworks, and security best
@@ -339,7 +202,7 @@ export default function AISecuritySummit2025(): React.ReactElement {
                 </p>
               </div>
               <div className={styles.themeCard}>
-                <div className={styles.themeIcon}>🔮</div>
+                <div className={styles.cardIcon}>🔮</div>
                 <h3>Future Threats</h3>
                 <p>
                   Anticipating emerging vulnerabilities in multimodal models, agents, and
@@ -353,7 +216,9 @@ export default function AISecuritySummit2025(): React.ReactElement {
         {/* Research Highlights */}
         <section className={styles.researchSection}>
           <div className={styles.container}>
-            <h2 className={styles.sectionTitle}>Research Highlights</h2>
+            <div className={styles.sectionHeader}>
+              <h2 className={styles.sectionTitle}>Research Highlights</h2>
+            </div>
             <div className={styles.researchGrid}>
               <div className={styles.researchCard}>
                 <div className={styles.researchNumber}>01</div>
@@ -417,26 +282,43 @@ export default function AISecuritySummit2025(): React.ReactElement {
         </section>
 
         {/* Final CTA */}
-        <section className={styles.finalCta}>
+        <section className={styles.ctaSection}>
           <div className={styles.container}>
-            <div className={styles.ctaCard}>
-              <h2>Secure Your AI</h2>
-              <p>
+            <div className={styles.ctaContent}>
+              <h2 className={styles.ctaTitle}>Secure Your AI</h2>
+              <p className={styles.ctaText}>
                 Start red teaming your LLM applications today with Promptfoo's open-source security
                 testing framework.
               </p>
               <div className={styles.ctaButtons}>
-                <Link to="/docs/red-team/quickstart/" className={styles.primaryButton}>
+                <Link to="/docs/red-team/quickstart/" className={styles.primaryCta}>
                   Get Started
                 </Link>
                 <Link
                   to="https://github.com/promptfoo/promptfoo"
-                  className={styles.secondaryButton}
+                  className={styles.secondaryCta}
                 >
                   Star on GitHub
                 </Link>
               </div>
             </div>
+          </div>
+        </section>
+
+        {/* Footer Navigation */}
+        <section className={styles.footerNav}>
+          <div className={styles.container}>
+            <Link to="/events" className={styles.backLink}>
+              <svg className={styles.backIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M15 19l-7-7 7-7"
+                />
+              </svg>
+              Back to All Events
+            </Link>
           </div>
         </section>
       </main>

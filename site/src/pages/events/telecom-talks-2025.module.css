@@ -2,120 +2,72 @@
 /* Color Palette: Electric cyan (#00D4FF), deep navy (#0A1628), signal green (#00FF88) */
 
 .telecomPage {
-  position: relative;
-  overflow-x: hidden;
-  background: linear-gradient(180deg, #0a1628 0%, #0d1f3c 50%, #0a1628 100%);
+  background: #0a1628;
   min-height: 100vh;
 }
 
-/* Hero Image Background */
-.heroImageContainer {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  z-index: 0;
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 1.5rem;
 }
 
-.heroImage {
+/* Hero Banner */
+.heroBanner {
+  position: relative;
+  height: 400px;
+  overflow: hidden;
+}
+
+.bannerImage {
   width: 100%;
   height: 100%;
   object-fit: cover;
   object-position: center;
 }
 
-.heroImageOverlay {
+.bannerOverlay {
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  background: linear-gradient(
-    180deg,
-    rgba(10, 22, 40, 0.85) 0%,
-    rgba(13, 31, 60, 0.7) 50%,
-    rgba(10, 22, 40, 0.9) 100%
-  );
+  background: linear-gradient(180deg, rgba(10, 22, 40, 0.4) 0%, rgba(10, 22, 40, 0.7) 100%);
 }
 
-/* Circuit Pattern Background */
-.circuitPattern {
-  position: fixed;
-  top: 0;
+.bannerContent {
+  position: absolute;
+  bottom: 0;
   left: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-  z-index: 0;
-  opacity: 0.15;
-}
-
-.circuitSvg {
-  width: 100%;
-  height: 100%;
-  color: #00d4ff;
-}
-
-/* Signal Wave Background */
-.signalBackground {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-  z-index: 0;
-}
-
-.signalCanvas {
-  width: 100%;
-  height: 100%;
-}
-
-/* Hero Section */
-.hero {
-  position: relative;
-  min-height: 90vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 6rem 1.5rem 4rem;
-  z-index: 1;
-}
-
-.heroContent {
-  text-align: center;
-  max-width: 800px;
+  right: 0;
+  padding: 3rem;
+  background: linear-gradient(0deg, rgba(10, 22, 40, 0.95) 0%, transparent 100%);
 }
 
 .badge {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.625rem 1.25rem;
-  background: linear-gradient(135deg, rgba(0, 212, 255, 0.2) 0%, rgba(0, 255, 136, 0.1) 100%);
+  padding: 0.5rem 1rem;
+  background: rgba(0, 212, 255, 0.2);
   border: 1px solid rgba(0, 212, 255, 0.4);
-  color: #00d4ff;
+  color: #67e8f9;
   border-radius: 100px;
   font-size: 0.875rem;
   font-weight: 600;
-  margin-bottom: 1.5rem;
-  backdrop-filter: blur(8px);
-  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  margin-bottom: 1rem;
 }
 
-.signalIcon {
-  font-size: 1.125rem;
+.badgeIcon {
+  font-size: 1rem;
 }
 
 .heroTitle {
-  font-size: 4rem;
+  font-size: clamp(2rem, 6vw, 3.5rem);
   font-weight: 800;
-  color: #f8fafc;
-  letter-spacing: -0.03em;
   line-height: 1.1;
-  margin: 0 0 1.5rem 0;
+  color: #f1f5f9;
+  margin: 0;
 }
 
 .highlight {
@@ -123,6 +75,13 @@
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+}
+
+/* Hero Content Section */
+.heroContent {
+  padding: 3rem 0;
+  text-align: center;
+  border-bottom: 1px solid rgba(0, 212, 255, 0.1);
 }
 
 .heroSubtitle {
@@ -133,13 +92,12 @@
   line-height: 1.7;
 }
 
-/* Event Details */
 .eventDetails {
   display: flex;
+  flex-wrap: wrap;
   justify-content: center;
   gap: 2rem;
-  margin-bottom: 2.5rem;
-  flex-wrap: wrap;
+  margin-bottom: 2rem;
 }
 
 .detail {
@@ -147,114 +105,58 @@
   align-items: center;
   gap: 0.5rem;
   color: #cbd5e1;
-  font-size: 0.9375rem;
-  font-weight: 500;
+  font-size: 0.95rem;
 }
 
 .icon {
   width: 1.25rem;
   height: 1.25rem;
+  stroke-width: 2;
   color: #00d4ff;
 }
 
-/* Buttons */
-.heroButtons {
+.heroCtas {
   display: flex;
   justify-content: center;
   gap: 1rem;
   flex-wrap: wrap;
 }
 
-.primaryButton {
-  display: inline-flex;
-  align-items: center;
+.primaryCta {
   padding: 0.875rem 2rem;
   background: linear-gradient(135deg, #00d4ff 0%, #00b4d8 100%);
   color: #0a1628;
-  border-radius: 10px;
-  font-size: 1rem;
   font-weight: 700;
+  border-radius: 8px;
   text-decoration: none;
-  box-shadow:
-    0 4px 14px rgba(0, 212, 255, 0.4),
-    0 0 20px rgba(0, 212, 255, 0.2),
-    inset 0 1px 0 rgba(255, 255, 255, 0.2);
-  transition:
-    transform 0.2s cubic-bezier(0.4, 0, 0.2, 1),
-    box-shadow 0.2s ease;
-  cursor: pointer;
-  border: none;
+  transition: all 0.3s ease;
 }
 
-.primaryButton:hover {
+.primaryCta:hover {
   transform: translateY(-2px);
-  box-shadow:
-    0 8px 20px rgba(0, 212, 255, 0.5),
-    0 0 30px rgba(0, 212, 255, 0.3),
-    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  box-shadow: 0 8px 30px rgba(0, 212, 255, 0.4);
   color: #0a1628;
-  text-decoration: none;
 }
 
-.secondaryButton {
-  display: inline-flex;
-  align-items: center;
+.secondaryCta {
   padding: 0.875rem 2rem;
-  background: rgba(0, 212, 255, 0.1);
-  color: #00d4ff;
-  border: 1px solid rgba(0, 212, 255, 0.4);
-  border-radius: 10px;
-  font-size: 1rem;
+  background: transparent;
+  color: #67e8f9;
   font-weight: 600;
+  border-radius: 8px;
   text-decoration: none;
-  backdrop-filter: blur(8px);
-  transition:
-    transform 0.2s cubic-bezier(0.4, 0, 0.2, 1),
-    border-color 0.2s ease,
-    background 0.2s ease,
-    box-shadow 0.2s ease;
+  border: 1px solid rgba(0, 212, 255, 0.4);
+  transition: all 0.3s ease;
 }
 
-.secondaryButton:hover {
-  transform: translateY(-2px);
-  border-color: #00d4ff;
-  background: rgba(0, 212, 255, 0.2);
-  box-shadow: 0 0 20px rgba(0, 212, 255, 0.2);
-  text-decoration: none;
-  color: #00d4ff;
-}
-
-/* Container */
-.container {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 0 1.5rem;
-}
-
-/* Section Titles */
-.sectionTitle {
-  font-size: 2.5rem;
-  font-weight: 800;
-  color: #f8fafc;
-  text-align: center;
-  margin: 0 0 1rem 0;
-  letter-spacing: -0.02em;
-}
-
-.sectionSubtitle {
-  font-size: 1.125rem;
-  color: #94a3b8;
-  text-align: center;
-  max-width: 600px;
-  margin: 0 auto 3rem;
-  line-height: 1.7;
+.secondaryCta:hover {
+  background: rgba(0, 212, 255, 0.1);
+  color: white;
 }
 
 /* Terminal Section */
 .terminalSection {
-  position: relative;
-  padding: 4rem 1.5rem;
-  z-index: 1;
+  padding: 4rem 0;
 }
 
 .terminal {
@@ -262,9 +164,7 @@
   border: 1px solid rgba(0, 212, 255, 0.3);
   border-radius: 12px;
   overflow: hidden;
-  box-shadow:
-    0 4px 24px rgba(0, 0, 0, 0.3),
-    0 0 40px rgba(0, 212, 255, 0.1);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
   max-width: 800px;
   margin: 0 auto;
 }
@@ -351,18 +251,44 @@
   color: #cbd5e1;
 }
 
-/* Session Section */
-.sessionSection {
-  position: relative;
-  padding: 6rem 1.5rem;
-  z-index: 1;
+/* Sections */
+.sessionSection,
+.challengesSection,
+.discussionsSection,
+.statsSection,
+.ctaSection {
+  padding: 4rem 0;
 }
 
+.sessionSection {
+  background: rgba(0, 212, 255, 0.02);
+}
+
+.sectionHeader {
+  text-align: center;
+  margin-bottom: 3rem;
+}
+
+.sectionTitle {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #f1f5f9;
+  margin-bottom: 0.75rem;
+}
+
+.sectionSubtitle {
+  font-size: 1.1rem;
+  color: #94a3b8;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+/* Session Card */
 .sessionCard {
   background: linear-gradient(135deg, rgba(0, 212, 255, 0.1) 0%, rgba(0, 255, 136, 0.05) 100%);
   border: 1px solid rgba(0, 212, 255, 0.3);
-  border-radius: 20px;
-  padding: 3rem;
+  border-radius: 16px;
+  padding: 2rem;
   position: relative;
   overflow: hidden;
 }
@@ -381,7 +307,7 @@
   display: flex;
   align-items: center;
   gap: 1rem;
-  margin-bottom: 1.5rem;
+  margin-bottom: 1rem;
   flex-wrap: wrap;
 }
 
@@ -404,17 +330,17 @@
 }
 
 .sessionTitle {
-  font-size: 1.75rem;
+  font-size: 1.5rem;
   font-weight: 800;
   color: #f8fafc;
-  margin: 0 0 1rem 0;
+  margin-bottom: 0.75rem;
 }
 
 .sessionDescription {
-  font-size: 1.0625rem;
+  font-size: 1rem;
   color: #94a3b8;
   line-height: 1.7;
-  margin: 0 0 2rem 0;
+  margin-bottom: 1.5rem;
   max-width: 700px;
 }
 
@@ -461,100 +387,77 @@
   font-weight: 300;
 }
 
-/* Challenges Section */
+/* Challenges Grid */
 .challengesSection {
-  position: relative;
-  padding: 6rem 1.5rem;
-  background: linear-gradient(
-    180deg,
-    transparent 0%,
-    rgba(0, 212, 255, 0.05) 50%,
-    transparent 100%
-  );
-  z-index: 1;
+  background: rgba(0, 212, 255, 0.02);
 }
 
 .challengesGrid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 1.5rem;
 }
 
 .challengeCard {
-  background: rgba(10, 22, 40, 0.8);
-  border: 1px solid rgba(0, 212, 255, 0.2);
-  border-radius: 16px;
-  padding: 2rem;
+  background: rgba(10, 22, 40, 0.6);
+  border: 1px solid rgba(0, 212, 255, 0.15);
+  border-radius: 12px;
+  padding: 1.5rem;
   text-align: center;
-  transition:
-    transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-    border-color 0.3s ease,
-    box-shadow 0.3s ease;
+  transition: all 0.3s ease;
 }
 
 .challengeCard:hover {
-  transform: translateY(-4px);
-  border-color: rgba(0, 212, 255, 0.5);
-  box-shadow:
-    0 12px 32px rgba(0, 212, 255, 0.15),
-    0 0 20px rgba(0, 212, 255, 0.1);
+  border-color: rgba(0, 212, 255, 0.3);
+  transform: translateY(-2px);
 }
 
 .challengeIcon {
-  font-size: 2.5rem;
+  font-size: 2rem;
   margin-bottom: 1rem;
 }
 
 .challengeCard h3 {
   font-size: 1.125rem;
-  font-weight: 700;
-  color: #f8fafc;
-  margin: 0 0 0.75rem 0;
+  font-weight: 600;
+  color: #f1f5f9;
+  margin-bottom: 0.5rem;
 }
 
 .challengeCard p {
-  font-size: 0.875rem;
+  font-size: 0.9rem;
   color: #94a3b8;
-  line-height: 1.65;
+  line-height: 1.6;
   margin: 0;
 }
 
-/* Discussions Section */
-.discussionsSection {
-  position: relative;
-  padding: 6rem 1.5rem;
-  z-index: 1;
-}
-
+/* Discussions List */
 .discussionsList {
   display: flex;
   flex-direction: column;
-  gap: 2rem;
+  gap: 1.5rem;
   max-width: 800px;
   margin: 0 auto;
 }
 
 .discussionItem {
   display: flex;
-  gap: 2rem;
+  gap: 1.5rem;
   align-items: flex-start;
   background: rgba(0, 212, 255, 0.05);
-  border: 1px solid rgba(0, 212, 255, 0.2);
-  border-radius: 16px;
-  padding: 2rem;
-  transition:
-    border-color 0.3s ease,
-    box-shadow 0.3s ease;
+  border: 1px solid rgba(0, 212, 255, 0.15);
+  border-radius: 12px;
+  padding: 1.5rem;
+  transition: all 0.3s ease;
 }
 
 .discussionItem:hover {
-  border-color: rgba(0, 212, 255, 0.4);
-  box-shadow: 0 0 20px rgba(0, 212, 255, 0.1);
+  border-color: rgba(0, 212, 255, 0.3);
 }
 
 .discussionNumber {
   font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-  font-size: 2rem;
+  font-size: 1.5rem;
   font-weight: 800;
   color: #00d4ff;
   opacity: 0.6;
@@ -562,14 +465,14 @@
 }
 
 .discussionContent h3 {
-  font-size: 1.25rem;
+  font-size: 1.125rem;
   font-weight: 700;
   color: #f8fafc;
-  margin: 0 0 0.75rem 0;
+  margin: 0 0 0.5rem 0;
 }
 
 .discussionContent p {
-  font-size: 0.9375rem;
+  font-size: 0.9rem;
   color: #94a3b8;
   line-height: 1.7;
   margin: 0;
@@ -577,26 +480,24 @@
 
 /* Stats Section */
 .statsSection {
-  position: relative;
-  padding: 4rem 1.5rem;
   background: linear-gradient(135deg, rgba(0, 212, 255, 0.1) 0%, rgba(0, 255, 136, 0.05) 100%);
-  border-top: 1px solid rgba(0, 212, 255, 0.2);
-  border-bottom: 1px solid rgba(0, 212, 255, 0.2);
-  z-index: 1;
+  border-top: 1px solid rgba(0, 212, 255, 0.15);
+  border-bottom: 1px solid rgba(0, 212, 255, 0.15);
 }
 
 .statsGrid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 2rem;
-}
-
-.stat {
   text-align: center;
 }
 
+.stat {
+  padding: 1.5rem;
+}
+
 .statNumber {
-  font-size: 3.5rem;
+  font-size: 2.5rem;
   font-weight: 800;
   font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
   background: linear-gradient(135deg, #00d4ff 0%, #00ff88 100%);
@@ -608,59 +509,34 @@
 }
 
 .statLabel {
-  font-size: 1rem;
+  font-size: 0.9rem;
   color: #94a3b8;
-  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
-/* Final CTA */
-.finalCta {
-  position: relative;
-  padding: 6rem 1.5rem;
-  z-index: 1;
-}
-
-.ctaCard {
+/* CTA Section */
+.ctaContent {
   max-width: 600px;
   margin: 0 auto;
   text-align: center;
-  padding: 3rem;
-  background: linear-gradient(135deg, rgba(0, 212, 255, 0.1) 0%, rgba(0, 255, 136, 0.05) 100%);
-  border: 1px solid rgba(0, 212, 255, 0.3);
-  border-radius: 20px;
-  position: relative;
+  background: linear-gradient(135deg, rgba(0, 212, 255, 0.08) 0%, rgba(0, 255, 136, 0.05) 100%);
+  border: 1px solid rgba(0, 212, 255, 0.2);
+  border-radius: 16px;
+  padding: 3rem 2rem;
 }
 
-.ctaCard::before {
-  content: '';
-  position: absolute;
-  inset: -1px;
-  border-radius: 20px;
-  padding: 1px;
-  background: linear-gradient(135deg, rgba(0, 212, 255, 0.5) 0%, rgba(0, 255, 136, 0.3) 100%);
-  mask:
-    linear-gradient(#fff 0 0) content-box,
-    linear-gradient(#fff 0 0);
-  mask-composite: exclude;
-  -webkit-mask:
-    linear-gradient(#fff 0 0) content-box,
-    linear-gradient(#fff 0 0);
-  -webkit-mask-composite: xor;
-  pointer-events: none;
-  opacity: 0.5;
+.ctaTitle {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: #f1f5f9;
+  margin-bottom: 0.75rem;
 }
 
-.ctaCard h2 {
-  font-size: 2rem;
-  font-weight: 800;
-  color: #f8fafc;
-  margin: 0 0 1rem 0;
-}
-
-.ctaCard p {
-  font-size: 1.0625rem;
+.ctaText {
+  font-size: 1rem;
   color: #94a3b8;
-  margin: 0 0 2rem 0;
+  margin-bottom: 1.5rem;
   line-height: 1.7;
 }
 
@@ -671,34 +547,65 @@
   flex-wrap: wrap;
 }
 
-/* Responsive Design */
-@media (max-width: 1024px) {
-  .challengesGrid {
-    grid-template-columns: repeat(2, 1fr);
-  }
+/* Footer Navigation */
+.footerNav {
+  padding: 2rem 0 3rem;
+  border-top: 1px solid rgba(0, 212, 255, 0.1);
 }
 
+.backLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #94a3b8;
+  text-decoration: none;
+  font-weight: 500;
+  transition: color 0.2s ease;
+}
+
+.backLink:hover {
+  color: #00d4ff;
+}
+
+.backIcon {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+/* Responsive */
 @media (max-width: 768px) {
-  .hero {
-    min-height: auto;
-    padding: 5rem 1rem 3rem;
+  .heroBanner {
+    height: 300px;
+  }
+
+  .bannerContent {
+    padding: 2rem 1.5rem;
   }
 
   .heroTitle {
-    font-size: 2.5rem;
+    font-size: 2rem;
   }
 
   .heroSubtitle {
-    font-size: 1rem;
+    font-size: 1.1rem;
   }
 
   .eventDetails {
     flex-direction: column;
-    gap: 0.75rem;
+    align-items: center;
+    gap: 1rem;
   }
 
-  .terminalSection {
-    padding: 3rem 1rem;
+  .heroCtas {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .primaryCta,
+  .secondaryCta {
+    width: 100%;
+    max-width: 280px;
+    text-align: center;
   }
 
   .terminalBody {
@@ -711,33 +618,12 @@
     gap: 0.5rem;
   }
 
-  .challengesGrid {
-    grid-template-columns: 1fr;
-    gap: 1.5rem;
-  }
-
-  .statsGrid {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 1.5rem;
-  }
-
-  .sessionSection,
-  .challengesSection,
-  .discussionsSection,
-  .finalCta {
-    padding: 4rem 1rem;
-  }
-
-  .sectionTitle {
-    font-size: 1.75rem;
-  }
-
   .sessionCard {
-    padding: 2rem;
+    padding: 1.5rem;
   }
 
   .sessionTitle {
-    font-size: 1.5rem;
+    font-size: 1.25rem;
   }
 
   .sessionSpeakers {
@@ -756,72 +642,21 @@
     padding: 1.5rem;
   }
 
-  .statNumber {
-    font-size: 2.5rem;
-  }
-
-  .ctaCard {
+  .ctaContent {
     padding: 2rem 1.5rem;
   }
 
   .ctaButtons {
     flex-direction: column;
+    align-items: center;
   }
 
-  .primaryButton,
-  .secondaryButton {
-    width: 100%;
-    justify-content: center;
-  }
-}
-
-@media (max-width: 480px) {
-  .heroTitle {
-    font-size: 2rem;
-  }
-
-  .badge {
-    font-size: 0.8125rem;
-    padding: 0.5rem 1rem;
-  }
-
-  .challengeCard {
-    padding: 1.5rem;
-  }
-
-  .challengeIcon {
-    font-size: 2rem;
-  }
-}
-
-/* Touch device optimization */
-@media (hover: none) {
-  .primaryButton:hover,
-  .secondaryButton:hover {
-    transform: none;
-  }
-
-  .primaryButton:active,
-  .secondaryButton:active {
-    transform: scale(0.98);
-  }
-
-  .challengeCard:hover,
-  .discussionItem:hover {
-    transform: none;
-  }
-}
-
-/* Reduced motion */
-@media (prefers-reduced-motion: reduce) {
-  .signalCanvas {
-    display: none;
-  }
-
-  .primaryButton,
-  .secondaryButton,
-  .challengeCard,
-  .discussionItem {
-    transition: none;
+  .terminalSection,
+  .sessionSection,
+  .challengesSection,
+  .discussionsSection,
+  .statsSection,
+  .ctaSection {
+    padding: 3rem 0;
   }
 }

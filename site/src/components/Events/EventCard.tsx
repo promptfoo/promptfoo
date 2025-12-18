@@ -9,8 +9,8 @@ interface EventCardProps {
 }
 
 export default function EventCard({ event }: EventCardProps): React.ReactElement {
-  const hasCustomPage = Boolean(event.customPageUrl);
-  const eventUrl = event.customPageUrl || `/events/${event.slug}`;
+  // All events are linkable - either to their custom page or the events listing with hash
+  const eventUrl = event.customPageUrl || `/events#${event.id}`;
 
   const CardContent = () => (
     <>
@@ -81,18 +81,9 @@ export default function EventCard({ event }: EventCardProps): React.ReactElement
     </>
   );
 
-  if (hasCustomPage) {
-    return (
-      <Link to={eventUrl} className={styles.card}>
-        <CardContent />
-      </Link>
-    );
-  }
-
-  // For events without their own page, link to the events listing with hash
   return (
-    <div className={styles.card} data-event-id={event.id}>
+    <Link to={eventUrl} className={styles.card}>
       <CardContent />
-    </div>
+    </Link>
   );
 }

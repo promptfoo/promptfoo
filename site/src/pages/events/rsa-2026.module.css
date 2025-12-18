@@ -1,172 +1,73 @@
-/* RSA 2026 - Future Enterprise Security Theme */
+/* RSA 2026 - Clean Banner Design */
 /* Color Palette: RSA blue (#0066CC), cyber cyan (#06B6D4), professional navy (#1e3a5f) */
 
 .rsaPage {
-  position: relative;
-  overflow-x: hidden;
-  background: linear-gradient(180deg, #0a0f1a 0%, #1e3a5f 50%, #0a0f1a 100%);
+  background: #0a0f1a;
   min-height: 100vh;
 }
 
-/* Hero Image Background */
-.heroImageContainer {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  z-index: 0;
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 1.5rem;
 }
 
-.heroImage {
+/* Hero Banner */
+.heroBanner {
+  position: relative;
+  height: 400px;
+  overflow: hidden;
+}
+
+.bannerImage {
   width: 100%;
   height: 100%;
   object-fit: cover;
   object-position: center;
 }
 
-.heroImageOverlay {
+.bannerOverlay {
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  background: linear-gradient(
-    180deg,
-    rgba(10, 15, 26, 0.88) 0%,
-    rgba(30, 58, 95, 0.75) 50%,
-    rgba(10, 15, 26, 0.92) 100%
-  );
+  background: linear-gradient(180deg, rgba(10, 15, 26, 0.4) 0%, rgba(10, 15, 26, 0.7) 100%);
 }
 
-/* Animated Grid Background */
-.gridPattern {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-  z-index: 1;
-  overflow: hidden;
-}
-
-.gridLines {
+.bannerContent {
   position: absolute;
-  top: 0;
+  bottom: 0;
   left: 0;
-  width: 100%;
-  height: 100%;
-  background-image:
-    linear-gradient(rgba(6, 182, 212, 0.1) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(6, 182, 212, 0.1) 1px, transparent 1px);
-  background-size: 50px 50px;
-}
-
-.scanLine {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 2px;
-  background: linear-gradient(90deg, transparent, rgba(6, 182, 212, 0.5), transparent);
-  animation: scan 8s linear infinite;
-}
-
-@keyframes scan {
-  from {
-    top: 0;
-  }
-  to {
-    top: 100%;
-  }
-}
-
-/* Shield Pattern Background */
-.shieldPattern {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-  z-index: 1;
-  overflow: hidden;
-}
-
-.shield {
-  position: absolute;
-  width: 50px;
-  height: 60px;
-  color: rgba(6, 182, 212, 0.06);
-  animation: floatShield 12s ease-in-out infinite;
-}
-
-@keyframes floatShield {
-  0%,
-  100% {
-    transform: translateY(0) rotate(0deg) scale(1);
-    opacity: 0.4;
-  }
-  50% {
-    transform: translateY(-20px) rotate(8deg) scale(1.1);
-    opacity: 0.8;
-  }
-}
-
-/* Hero Section */
-.hero {
-  position: relative;
-  min-height: 90vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 6rem 1.5rem 4rem;
-  z-index: 2;
-}
-
-.heroContent {
-  text-align: center;
-  max-width: 800px;
+  right: 0;
+  padding: 3rem;
+  background: linear-gradient(0deg, rgba(10, 15, 26, 0.95) 0%, transparent 100%);
 }
 
 .badge {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.625rem 1.25rem;
-  background: linear-gradient(135deg, rgba(6, 182, 212, 0.3) 0%, rgba(0, 102, 204, 0.2) 100%);
-  border: 1px solid rgba(6, 182, 212, 0.5);
+  padding: 0.5rem 1rem;
+  background: rgba(6, 182, 212, 0.2);
+  border: 1px solid rgba(6, 182, 212, 0.4);
   color: #67e8f9;
   border-radius: 100px;
   font-size: 0.875rem;
   font-weight: 600;
-  margin-bottom: 1.5rem;
-  backdrop-filter: blur(8px);
-  animation: pulse 3s ease-in-out infinite;
-}
-
-@keyframes pulse {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0 rgba(6, 182, 212, 0.4);
-  }
-  50% {
-    box-shadow: 0 0 20px 5px rgba(6, 182, 212, 0.2);
-  }
+  margin-bottom: 1rem;
 }
 
 .badgeIcon {
-  font-size: 1.125rem;
+  font-size: 1rem;
 }
 
 .heroTitle {
-  font-size: clamp(2.5rem, 8vw, 4.5rem);
+  font-size: clamp(2rem, 6vw, 3.5rem);
   font-weight: 800;
   line-height: 1.1;
-  margin-bottom: 1.5rem;
   color: #f1f5f9;
-  letter-spacing: -0.02em;
+  margin: 0;
 }
 
 .highlight {
@@ -174,6 +75,13 @@
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+}
+
+/* Hero Content Section */
+.heroContent {
+  padding: 3rem 0;
+  text-align: center;
+  border-bottom: 1px solid rgba(6, 182, 212, 0.1);
 }
 
 .heroSubtitle {
@@ -190,7 +98,7 @@
   justify-content: center;
   align-items: center;
   gap: 0.5rem;
-  margin-bottom: 2.5rem;
+  margin-bottom: 2rem;
   flex-wrap: wrap;
 }
 
@@ -199,7 +107,7 @@
   flex-direction: column;
   align-items: center;
   background: rgba(6, 182, 212, 0.1);
-  border: 1px solid rgba(6, 182, 212, 0.3);
+  border: 1px solid rgba(6, 182, 212, 0.2);
   border-radius: 12px;
   padding: 1rem 1.25rem;
   min-width: 80px;
@@ -238,8 +146,8 @@
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 1.5rem;
-  margin-bottom: 2.5rem;
+  gap: 2rem;
+  margin-bottom: 2rem;
 }
 
 .detail {
@@ -247,7 +155,7 @@
   align-items: center;
   gap: 0.5rem;
   color: #cbd5e1;
-  font-size: 0.9rem;
+  font-size: 0.95rem;
 }
 
 .icon {
@@ -272,7 +180,6 @@
   border-radius: 8px;
   text-decoration: none;
   transition: all 0.3s ease;
-  border: 1px solid rgba(6, 182, 212, 0.5);
 }
 
 .primaryCta:hover {
@@ -283,79 +190,80 @@
 
 .secondaryCta {
   padding: 0.875rem 2rem;
-  background: rgba(0, 102, 204, 0.1);
+  background: transparent;
   color: #93c5fd;
   font-weight: 600;
   border-radius: 8px;
   text-decoration: none;
-  border: 1px solid rgba(0, 102, 204, 0.3);
+  border: 1px solid rgba(0, 102, 204, 0.4);
   transition: all 0.3s ease;
 }
 
 .secondaryCta:hover {
-  background: rgba(0, 102, 204, 0.2);
+  background: rgba(0, 102, 204, 0.1);
   color: white;
 }
 
-/* Highlights Section */
+/* Sections */
+.highlightsSection,
+.showcaseSection,
+.ctaSection {
+  padding: 4rem 0;
+}
+
 .highlightsSection {
-  position: relative;
-  padding: 6rem 1.5rem;
-  z-index: 2;
+  background: rgba(6, 182, 212, 0.02);
 }
 
 .sectionHeader {
   text-align: center;
-  margin-bottom: 4rem;
+  margin-bottom: 3rem;
 }
 
 .sectionTitle {
-  font-size: 2.5rem;
+  font-size: 2rem;
   font-weight: 700;
   color: #f1f5f9;
-  margin-bottom: 1rem;
+  margin-bottom: 0.75rem;
 }
 
 .sectionSubtitle {
-  font-size: 1.125rem;
+  font-size: 1.1rem;
   color: #94a3b8;
   max-width: 500px;
   margin: 0 auto;
 }
 
+/* Highlights Grid */
 .highlightsGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 1.5rem;
-  max-width: 1200px;
-  margin: 0 auto;
 }
 
 .highlightCard {
-  background: linear-gradient(135deg, rgba(6, 182, 212, 0.1) 0%, rgba(0, 102, 204, 0.1) 100%);
-  border: 1px solid rgba(6, 182, 212, 0.2);
-  border-radius: 16px;
-  padding: 2rem;
-  text-align: center;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(6, 182, 212, 0.15);
+  border-radius: 12px;
+  padding: 1.5rem;
   transition: all 0.3s ease;
 }
 
 .highlightCard:hover {
-  transform: translateY(-4px);
-  border-color: rgba(6, 182, 212, 0.4);
-  box-shadow: 0 20px 40px rgba(6, 182, 212, 0.15);
+  border-color: rgba(6, 182, 212, 0.3);
+  transform: translateY(-2px);
 }
 
 .highlightIcon {
-  font-size: 2.5rem;
+  font-size: 2rem;
   margin-bottom: 1rem;
 }
 
 .highlightCard h3 {
-  font-size: 1.25rem;
+  font-size: 1.125rem;
   font-weight: 600;
   color: #f1f5f9;
-  margin-bottom: 0.75rem;
+  margin-bottom: 0.5rem;
 }
 
 .highlightCard p {
@@ -365,42 +273,35 @@
   margin: 0;
 }
 
-/* Showcase Section */
-.showcaseSection {
-  position: relative;
-  padding: 6rem 1.5rem;
-  background: rgba(6, 182, 212, 0.03);
-  z-index: 2;
-}
-
+/* Showcase Grid */
 .showcaseGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 2rem;
-  max-width: 1200px;
-  margin: 0 auto;
 }
 
 .showcaseItem {
-  padding: 2rem;
+  padding: 1.5rem 0;
+  border-left: 2px solid rgba(6, 182, 212, 0.3);
+  padding-left: 1.5rem;
 }
 
 .showcaseNumber {
-  font-size: 3rem;
+  font-size: 2.5rem;
   font-weight: 800;
   background: linear-gradient(135deg, #06b6d4 0%, #0066cc 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
-  margin-bottom: 1rem;
+  margin-bottom: 0.75rem;
   line-height: 1;
 }
 
 .showcaseItem h3 {
-  font-size: 1.25rem;
+  font-size: 1.125rem;
   font-weight: 600;
   color: #f1f5f9;
-  margin-bottom: 0.75rem;
+  margin-bottom: 0.5rem;
 }
 
 .showcaseItem p {
@@ -411,33 +312,27 @@
 }
 
 /* CTA Section */
-.ctaSection {
-  position: relative;
-  padding: 6rem 1.5rem;
-  z-index: 2;
-}
-
 .ctaContent {
-  max-width: 700px;
+  max-width: 600px;
   margin: 0 auto;
   text-align: center;
-  background: linear-gradient(135deg, rgba(6, 182, 212, 0.1) 0%, rgba(0, 102, 204, 0.1) 100%);
-  border: 1px solid rgba(6, 182, 212, 0.3);
-  border-radius: 24px;
-  padding: 4rem 2rem;
+  background: linear-gradient(135deg, rgba(6, 182, 212, 0.08) 0%, rgba(0, 102, 204, 0.08) 100%);
+  border: 1px solid rgba(6, 182, 212, 0.2);
+  border-radius: 16px;
+  padding: 3rem 2rem;
 }
 
 .ctaTitle {
-  font-size: 2rem;
+  font-size: 1.75rem;
   font-weight: 700;
   color: #f1f5f9;
-  margin-bottom: 1rem;
+  margin-bottom: 0.75rem;
 }
 
 .ctaText {
-  font-size: 1.1rem;
+  font-size: 1rem;
   color: #94a3b8;
-  margin-bottom: 2rem;
+  margin-bottom: 1.5rem;
   line-height: 1.7;
 }
 
@@ -471,7 +366,7 @@
   font-weight: 600;
   border-radius: 8px;
   text-decoration: none;
-  border: 1px solid rgba(0, 102, 204, 0.5);
+  border: 1px solid rgba(0, 102, 204, 0.4);
   transition: all 0.3s ease;
 }
 
@@ -482,9 +377,8 @@
 
 /* Footer Navigation */
 .footerNav {
-  position: relative;
-  padding: 2rem 1.5rem 4rem;
-  z-index: 2;
+  padding: 2rem 0 3rem;
+  border-top: 1px solid rgba(6, 182, 212, 0.1);
 }
 
 .backLink {
@@ -508,9 +402,6 @@
 
 /* Reduced Motion */
 @media (prefers-reduced-motion: reduce) {
-  .shield,
-  .scanLine,
-  .badge,
   .countdownSeparator {
     animation: none;
   }
@@ -518,8 +409,16 @@
 
 /* Responsive */
 @media (max-width: 768px) {
+  .heroBanner {
+    height: 300px;
+  }
+
+  .bannerContent {
+    padding: 2rem 1.5rem;
+  }
+
   .heroTitle {
-    font-size: 2.5rem;
+    font-size: 2rem;
   }
 
   .heroSubtitle {
@@ -555,14 +454,16 @@
   }
 
   .primaryCta,
-  .secondaryCta {
+  .secondaryCta,
+  .ctaPrimary,
+  .ctaSecondary {
     width: 100%;
     max-width: 280px;
     text-align: center;
   }
 
   .ctaContent {
-    padding: 3rem 1.5rem;
+    padding: 2rem 1.5rem;
   }
 
   .ctaButtons {
@@ -570,10 +471,9 @@
     align-items: center;
   }
 
-  .ctaPrimary,
-  .ctaSecondary {
-    width: 100%;
-    max-width: 280px;
-    text-align: center;
+  .highlightsSection,
+  .showcaseSection,
+  .ctaSection {
+    padding: 3rem 0;
   }
 }
