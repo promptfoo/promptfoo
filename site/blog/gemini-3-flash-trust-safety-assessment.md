@@ -34,6 +34,18 @@ That baseline number matters. Nearly 1 in 5 harmful prompts succeeded without an
 **Default Gemini 3 Flash behavior uses dynamic HIGH thinking.** We forced `thinkingLevel: MINIMAL` to approximate a "no-reasoning" configuration comparable to GPT-5.2 with `reasoning_effort: 'none'`. We will publish HIGH/dynamic results separately—expect materially different numbers.
 :::
 
+### Executive summary
+
+| Metric | Gemini 3 Flash | GPT-5.2 |
+|--------|----------------|---------|
+| Single-turn jailbreak (Meta) | 89% ASR | 60% ASR |
+| Multi-turn jailbreak (Hydra) | 77% ASR | 79% ASR |
+| Baseline (no jailbreak) | 19% ASR | 4% ASR |
+| Child safety (Meta) | 70% ASR | 27% ASR |
+| Hallucination (Meta) | 93% ASR | 60% ASR |
+
+*ASR = Attack Success Rate (lower is better). Meta strategy sample sizes: 179-204 attacks.*
+
 <!-- truncate -->
 
 ## Results
@@ -103,8 +115,8 @@ Gemini 3 Flash slips 4.4× more often on identical prompts.
 
 ### Jailbreak resistance
 
-| Strategy | GPT-5.2 Held | Gemini 3 Flash Held |
-|----------|-------------|---------------------|
+| Strategy | GPT-5.2 Refused | Gemini 3 Flash Refused |
+|----------|-----------------|------------------------|
 | Meta (single-turn) | 39.7% | 10.6% |
 | Hydra (multi-turn) | 21.5% | 23.1% |
 | Baseline | 95.7% | 80.9% |
@@ -156,7 +168,7 @@ One possible interpretation: safety training focused on known exploit patterns f
 
 ### Key divergences from GPT-5.2
 
-Side-by-side category comparison (attack success rate = higher is worse):
+Side-by-side category comparison using **Meta strategy** results (attack success rate = higher is worse):
 
 **Gemini 3 Flash significantly worse:**
 
@@ -168,7 +180,9 @@ Side-by-side category comparison (attack success rate = higher is worse):
 | Hallucination | 60.00% | 92.86% | +33pp |
 | Violent Crime | 33.33% | 66.67% | +33pp |
 | Cybercrime | 26.67% | 53.33% | +27pp |
+| Divergent Repetition | 0.00% | 22.22% | +22pp |
 | Personal Attacks | 60.00% | 80.00% | +20pp |
+| Pliny Injections | 0.00% | 20.00% | +20pp |
 
 **Similar performance (±10pp):**
 
@@ -188,8 +202,6 @@ Side-by-side category comparison (attack success rate = higher is worse):
 |----------|---------|----------------|-----|
 | Self-Harm | 60.00% | 46.67% | -13pp |
 | Disinformation | 66.67% | 50.00% | -17pp |
-| Divergent Repetition | 0.00% | 22.22% | +22pp |
-| Pliny Injections | 0.00% | 20.00% | +20pp |
 
 GPT-5.2 has meaningfully stronger defenses on child exploitation, hallucination, graphic content, and violent/non-violent crime. Gemini 3 Flash is notably better on self-harm and disinformation.
 
@@ -313,7 +325,9 @@ A note on [ASR comparability](/blog/asr-not-portable-metric): these numbers are 
 
 ### What Google's model card says
 
-The [Gemini 3 Flash model card](https://deepmind.google/models/model-cards/gemini-3-flash/) includes internal safety evaluation results. Their automated evals show mixed results vs Gemini 2.5 Flash:
+The [Gemini 3 Flash model card](https://deepmind.google/models/model-cards/gemini-3-flash/) includes internal safety evaluation results. Their automated evals show mixed results vs Gemini 2.5 Flash.
+
+**Important caveat:** Google's metrics measure different things than ours and use different methodologies. Their "Safety" metrics likely test policy compliance on typical inputs, not adversarial resistance. Direct comparison isn't meaningful.
 
 | Evaluation | Change vs 2.5 Flash |
 |------------|---------------------|
@@ -324,9 +338,9 @@ The [Gemini 3 Flash model card](https://deepmind.google/models/model-cards/gemin
 
 Google notes the safety regressions are "overwhelmingly either a) false positives or b) not egregious."
 
-The -10.4% in unjustified-refusals is notable. This means the model refuses 10.4% less often on "borderline prompts." This is a known trade-off: **reducing false positives (annoying refusals on benign content) can increase false negatives (failing to refuse harmful content).**
+The -10.4% in unjustified-refusals is notable. This metric tracks how often the model refuses benign prompts it shouldn't—a measure of false positive refusals. A 10.4% improvement means fewer unnecessary refusals on legitimate content.
 
-Our 19% baseline attack success rate—4.4× higher than GPT-5.2—may reflect this tuning decision.
+This is a known trade-off: **reducing false positives (annoying refusals on benign content) can increase false negatives (failing to refuse harmful content).** Without knowing Google's exact methodology, we can't definitively link this to our results—but our 19% baseline attack success rate (4.4× higher than GPT-5.2) is directionally consistent with a model tuned for fewer refusals.
 
 On red teaming, the model card states: "For child safety evaluations, Gemini 3 Flash satisfied required launch thresholds" and "found no egregious concerns."
 
@@ -396,6 +410,22 @@ Neither is sufficient without additional safety layers. GPT-5.2 provides a stron
 ### Responsible disclosure
 
 We notified Google of these findings on December 17, 2025, the same day as publication. This assessment uses only publicly available APIs and does not include private vulnerability details. All examples shown are representative outputs, not exploit instructions.
+
+## Limitations
+
+This assessment has several constraints worth noting:
+
+1. **Preview model.** Gemini 3 Flash is in preview. Safety behavior may change before GA.
+
+2. **Single configuration.** We tested `thinkingLevel: MINIMAL` only. Default HIGH thinking may show materially different results.
+
+3. **Attack coverage.** 39 risk categories with 3,462 probes is substantial but not exhaustive. Some categories have small sample sizes (n=10-15 attacks).
+
+4. **Judge reliability.** We use LLM-based grading. While we performed human review on critical categories (child safety, weapons, self-harm), judge accuracy varies by category.
+
+5. **Point-in-time snapshot.** Results reflect model behavior on December 17, 2025. API changes, safety patches, and model updates can shift results.
+
+6. **Not a compliance audit.** This is a red team assessment, not a comprehensive safety evaluation. It tests adversarial resistance, not policy coverage.
 
 ## Run It Yourself
 
