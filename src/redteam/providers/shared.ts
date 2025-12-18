@@ -47,14 +47,38 @@ async function loadRedteamProvider({
     // Async import to avoid circular dependency
     ret = (await loadApiProvidersModule.loadApiProviders([redteamProvider]))[0];
   } else {
-    const defaultModel = preferSmallModel ? ATTACKER_MODEL_SMALL : ATTACKER_MODEL;
-    logger.debug(`Using default redteam provider: ${defaultModel}`);
-    ret = new OpenAiChatCompletionProvider(defaultModel, {
-      config: {
-        temperature: TEMPERATURE,
-        response_format: jsonOnly ? { type: 'json_object' } : undefined,
-      },
-    });
+    // No explicit provider - check defaults system for credential-based selection
+    // Only use defaults for the base case (no jsonOnly, no preferSmallModel)
+    // This ensures jsonOnly/preferSmallModel options are properly applied
+    if (!jsonOnly && !preferSmallModel) {
+      try {
+        const { getDefaultProviders } = await import('../../providers/defaults');
+        const defaults = await getDefaultProviders();
+        if (defaults.redteamProvider) {
+          logger.debug(
+            `[loadRedteamProvider] Using redteam provider from defaults: ${defaults.redteamProvider.id()}`,
+          );
+          ret = defaults.redteamProvider;
+        }
+      } catch {
+        // Defaults system unavailable, fall through to OpenAI fallback
+      }
+    }
+
+    // Fall back to OpenAI if no defaults provider or if jsonOnly/preferSmallModel requested
+    if (!ret) {
+      const defaultModel = preferSmallModel ? ATTACKER_MODEL_SMALL : ATTACKER_MODEL;
+      logger.debug(`Using default redteam provider: ${defaultModel}`, {
+        jsonOnly,
+        preferSmallModel,
+      });
+      ret = new OpenAiChatCompletionProvider(defaultModel, {
+        config: {
+          temperature: TEMPERATURE,
+          response_format: jsonOnly ? { type: 'json_object' } : undefined,
+        },
+      });
+    }
   }
   return ret;
 }
@@ -475,8 +499,8 @@ export async function tryUnblocking({
     // Create unblocking provider
     const unblockingProvider = new PromptfooChatCompletionProvider({
       task: 'blocking-question-analysis',
-      jsonOnly: true,
-      preferSmallModel: false,
+      enforceJson: true,
+      preferSmall: false,
     });
 
     const unblockingRequest = {

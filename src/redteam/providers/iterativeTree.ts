@@ -993,13 +993,13 @@ class RedteamIterativeTreeProvider implements ApiProvider {
     if (shouldGenerateRemote()) {
       gradingProvider = new PromptfooChatCompletionProvider({
         task: 'judge',
-        jsonOnly: true,
-        preferSmallModel: false,
+        enforceJson: true,
+        preferSmall: false,
       });
       redteamProvider = new PromptfooChatCompletionProvider({
         task: 'iterative:tree',
-        jsonOnly: true,
-        preferSmallModel: false,
+        enforceJson: true,
+        preferSmall: false,
       });
     } else {
       redteamProvider = await redteamProviderManager.getProvider({

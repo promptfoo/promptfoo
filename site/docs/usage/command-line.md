@@ -1,7 +1,8 @@
 ---
+title: Command line
 sidebar_position: 10
 sidebar_label: Command line
-description: Explore promptfoo CLI commands for LLM testing - run evaluations, generate datasets, scan models for vulnerabilities, and automate testing workflows via command line
+description: Explore promptfoo CLI commands for LLM testing - run evals, generate datasets, scan models for vulnerabilities, and automate testing workflows via command line
 ---
 
 # Command line
@@ -629,24 +630,24 @@ Only a configuration file or target can be specified
 
 Generate adversarial test cases to challenge your prompts and models.
 
-| Option                           | Description                                                          | Default              |
-| -------------------------------- | -------------------------------------------------------------------- | -------------------- |
-| `-c, --config <path>`            | Path to configuration file                                           | promptfooconfig.yaml |
-| `-o, --output <path>`            | Path to write the generated test cases                               | redteam.yaml         |
-| `-w, --write`                    | Write the generated test cases directly to the config file           | false                |
-| `--purpose <purpose>`            | High-level description of the system's purpose                       | Inferred from config |
-| `--provider <provider>`          | Provider to use for generating adversarial tests                     |                      |
-| `--injectVar <varname>`          | Override the `{{variable}}` that represents user input in the prompt | `prompt`             |
-| `--plugins <plugins>`            | Comma-separated list of plugins to use                               | default              |
-| `--strategies <strategies>`      | Comma-separated list of strategies to use                            | default              |
-| `-n, --num-tests <number>`       | Number of test cases to generate per plugin                          |                      |
-| `--language <language>`          | Specify the language for generated tests                             | English              |
-| `--no-cache`                     | Do not read or write results to disk cache                           | false                |
-| `-j, --max-concurrency <number>` | Maximum number of concurrent API calls                               |                      |
-| `--delay <number>`               | Delay in milliseconds between plugin API calls                       |                      |
-| `--remote`                       | Force remote inference wherever possible                             | false                |
-| `--force`                        | Force generation even if no changes are detected                     | false                |
-| `--burp-escape-json`             | Escape special characters in .burp output for JSON payloads          | false                |
+| Option                           | Description                                                                                                                                               | Default              |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------- |
+| `-c, --config <path>`            | Path to configuration file                                                                                                                                | promptfooconfig.yaml |
+| `-o, --output <path>`            | Path to write the generated test cases                                                                                                                    | redteam.yaml         |
+| `-w, --write`                    | Write the generated test cases directly to the config file                                                                                                | false                |
+| `--purpose <purpose>`            | High-level description of the system's purpose                                                                                                            | Inferred from config |
+| `--provider <provider>`          | Provider to use for generating adversarial tests. This overrides the default provider that is automatically selected based on your environment variables. |                      |
+| `--injectVar <varname>`          | Override the `{{variable}}` that represents user input in the prompt                                                                                      | `prompt`             |
+| `--plugins <plugins>`            | Comma-separated list of plugins to use                                                                                                                    | default              |
+| `--strategies <strategies>`      | Comma-separated list of strategies to use                                                                                                                 | default              |
+| `-n, --num-tests <number>`       | Number of test cases to generate per plugin                                                                                                               |                      |
+| `--language <language>`          | Specify the language for generated tests                                                                                                                  | English              |
+| `--no-cache`                     | Do not read or write results to disk cache                                                                                                                | false                |
+| `-j, --max-concurrency <number>` | Maximum number of concurrent API calls                                                                                                                    |                      |
+| `--delay <number>`               | Delay in milliseconds between plugin API calls                                                                                                            |                      |
+| `--remote`                       | Force remote inference wherever possible                                                                                                                  | false                |
+| `--force`                        | Force generation even if no changes are detected                                                                                                          | false                |
+| `--burp-escape-json`             | Escape special characters in .burp output for JSON payloads                                                                                               | false                |
 
 For example, let's suppose we have the following `promptfooconfig.yaml`:
 

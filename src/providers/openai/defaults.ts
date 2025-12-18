@@ -17,3 +17,8 @@ export const DefaultWebSearchProvider = new OpenAiResponsesProvider('gpt-5.1', {
     tools: [{ type: 'web_search_preview' }],
   },
 });
+export const DefaultRedteamProvider = new OpenAiChatCompletionProvider('gpt-4.1-2025-04-14', {
+  config: {
+    temperature: 0.7,
+  },
+});

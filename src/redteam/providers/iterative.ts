@@ -680,13 +680,13 @@ class RedteamIterativeProvider implements ApiProvider {
     if (shouldGenerateRemote()) {
       this.gradingProvider = new PromptfooChatCompletionProvider({
         task: 'judge',
-        jsonOnly: true,
-        preferSmallModel: false,
+        enforceJson: true,
+        preferSmall: false,
       });
       this.redteamProvider = new PromptfooChatCompletionProvider({
         task: 'iterative',
-        jsonOnly: true,
-        preferSmallModel: false,
+        enforceJson: true,
+        preferSmall: false,
       });
     } else {
       this.redteamProvider = config.redteamProvider;

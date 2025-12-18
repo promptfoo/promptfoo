@@ -130,8 +130,8 @@ export class HydraProvider implements ApiProvider {
 
     this.agentProvider = new PromptfooChatCompletionProvider({
       task: 'hydra-decision',
-      jsonOnly: true,
-      preferSmallModel: false,
+      enforceJson: true,
+      preferSmall: false,
     });
 
     logger.debug('[Hydra] Provider initialized', {
