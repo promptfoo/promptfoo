@@ -16,6 +16,7 @@ import type { PolicyObject, Policy } from '@promptfoo/redteam/types';
 import type {
   EvalResultsFilterMode,
   EvalTableDTO,
+  EvaluateStats,
   EvaluateSummaryV2,
   EvaluateTable,
   PromptMetrics,
@@ -265,6 +266,12 @@ interface TableState {
   filteredMetrics: PromptMetrics[] | null;
   setFilteredMetrics: (metrics: PromptMetrics[] | null) => void;
 
+  /**
+   * Evaluation-level statistics including durationMs (wall-clock time).
+   * Set automatically by fetchEvalData from API response.
+   */
+  stats: EvaluateStats | null;
+
   fetchEvalData: (id: string, options?: FetchEvalOptions) => Promise<EvalTableDTO | null>;
   isFetching: boolean;
   isStreaming: boolean;
@@ -373,6 +380,8 @@ interface SettingsState {
   setShowPrompts: (showPrompts: boolean) => void;
   showPassFail: boolean;
   setShowPassFail: (showPassFail: boolean) => void;
+  showPassReasons: boolean;
+  setShowPassReasons: (showPassReasons: boolean) => void;
 
   inComparisonMode: boolean;
   setInComparisonMode: (inComparisonMode: boolean) => void;
@@ -408,6 +417,8 @@ export const useResultsViewSettingsStore = create<SettingsState>()(
       setShowPrompts: (showPrompts: boolean) => set(() => ({ showPrompts })),
       showPassFail: true,
       setShowPassFail: (showPassFail: boolean) => set(() => ({ showPassFail })),
+      showPassReasons: false,
+      setShowPassReasons: (showPassReasons: boolean) => set(() => ({ showPassReasons })),
 
       inComparisonMode: false,
       setInComparisonMode: (inComparisonMode: boolean) => set(() => ({ inComparisonMode })),
@@ -530,6 +541,8 @@ export const useTableStore = create<TableState>()(
     setFilteredMetrics: (metrics: PromptMetrics[] | null) =>
       set(() => ({ filteredMetrics: metrics })),
 
+    stats: null,
+
     highlightedResultsCount: 0,
 
     isFetching: false,
@@ -628,6 +641,8 @@ export const useTableStore = create<TableState>()(
             shouldHighlightSearchText: searchText !== '',
             // Store filtered metrics from backend (null when no filters or feature disabled)
             filteredMetrics: data.filteredMetrics || null,
+            // Store evaluation-level stats including durationMs
+            stats: data.stats || null,
             filters: {
               ...prevState.filters,
               options: {

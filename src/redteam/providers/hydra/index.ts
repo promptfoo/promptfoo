@@ -3,6 +3,11 @@ import { v4 as uuidv4 } from 'uuid';
 import { renderPrompt } from '../../../evaluatorHelpers';
 import logger from '../../../logger';
 import { PromptfooChatCompletionProvider } from '../../../providers/promptfoo';
+import {
+  extractTraceIdFromTraceparent,
+  fetchTraceContext,
+  type TraceContextData,
+} from '../../../tracing/traceContext';
 import type {
   ApiProvider,
   AtomicTestCase,
@@ -35,6 +40,8 @@ import {
   type Message,
   type TargetResponse,
 } from '../shared';
+import { formatTraceForMetadata, formatTraceSummary } from '../traceFormatting';
+import { resolveTracingOptions } from '../tracingOptions';
 
 const DEFAULT_MAX_TURNS = 10;
 const DEFAULT_MAX_BACKTRACKS = 10;
@@ -48,6 +55,7 @@ interface HydraMetadata extends BaseRedteamMetadata {
     turn: number;
     message: string;
     response: string;
+    traceSummary?: string;
   }>;
   totalSuccessfulAttacks?: number;
   storedGraderResult?: GradingResult;
@@ -59,8 +67,11 @@ interface HydraMetadata extends BaseRedteamMetadata {
     outputAudio?: MediaData;
     outputImage?: MediaData;
     graderPassed: boolean | undefined;
+    trace?: Record<string, unknown>;
+    traceSummary?: string;
   }>;
   sessionIds: string[];
+  traceSnapshots?: Record<string, unknown>[];
 }
 
 interface HydraResponse extends ProviderResponse {
@@ -186,18 +197,34 @@ export class HydraProvider implements ApiProvider {
     }
     const scanId = context?.evaluationId || this.scanId;
 
+    // Resolve tracing options
+    const tracingOptions = resolveTracingOptions({
+      strategyId: 'hydra',
+      test,
+      config: this.config as unknown as Record<string, unknown>,
+    });
+    const shouldFetchTrace =
+      tracingOptions.enabled && (tracingOptions.includeInAttack || tracingOptions.includeInGrading);
+    const traceSnapshots: TraceContextData[] = [];
+
     logger.debug('[Hydra] Starting attack', {
       goal,
       scanId,
       maxTurns: this.maxTurns,
       stateful: this.stateful,
+      tracingEnabled: tracingOptions.enabled,
     });
 
     // Reset state
     this.conversationHistory = [];
     this.sessionId = undefined;
     const sessionIds: string[] = [];
-    const successfulAttacks: Array<{ turn: number; message: string; response: string }> = [];
+    const successfulAttacks: Array<{
+      turn: number;
+      message: string;
+      response: string;
+      traceSummary?: string;
+    }> = [];
 
     const totalTokenUsage: TokenUsage = createEmptyTokenUsage();
     const testRunId = `${context?.evaluationId || 'local'}-tc${context?.testCaseId || uuidv4().slice(0, 8)}`;
@@ -217,6 +244,8 @@ export class HydraProvider implements ApiProvider {
       outputAudio?: MediaData;
       outputImage?: MediaData;
       graderPassed: boolean | undefined;
+      trace?: Record<string, unknown>;
+      traceSummary?: string;
     }> = [];
     let lastTransformResult: TransformResult | undefined;
 
@@ -228,6 +257,9 @@ export class HydraProvider implements ApiProvider {
     if (!assertToUse) {
       assertToUse = test?.assert?.find((a: { type: string }) => a.type);
     }
+
+    // Track the previous turn's trace summary for attack generation
+    let previousTraceSummary: string | undefined;
 
     for (let turn = 1; turn <= this.maxTurns; turn++) {
       logger.debug(`[Hydra] Turn ${turn}/${this.maxTurns}`);
@@ -262,6 +294,10 @@ export class HydraProvider implements ApiProvider {
         maxTurns: this.maxTurns,
         excludeTargetOutputFromAgenticAttackGeneration:
           this.excludeTargetOutputFromAgenticAttackGeneration,
+        // Include trace summary from previous turn if tracing is enabled for attack generation
+        ...(tracingOptions.includeInAttack && previousTraceSummary
+          ? { traceSummary: previousTraceSummary }
+          : {}),
       };
 
       // Get next message from cloud
@@ -445,6 +481,7 @@ export class HydraProvider implements ApiProvider {
       }
 
       // Get target response
+      const iterationStart = Date.now();
       const targetResponse = await getTargetResponse(
         targetProvider,
         finalTargetPrompt,
@@ -454,9 +491,38 @@ export class HydraProvider implements ApiProvider {
       lastTargetResponse = targetResponse;
       accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
 
+      // Fetch trace context if tracing is enabled
+      let traceContext: TraceContextData | null = null;
+      let computedTraceSummary: string | undefined;
+      if (shouldFetchTrace) {
+        const traceparent = context?.traceparent ?? undefined;
+        const traceId = traceparent ? extractTraceIdFromTraceparent(traceparent) : null;
+
+        if (traceId) {
+          traceContext = await fetchTraceContext(traceId, {
+            earliestStartTime: iterationStart,
+            includeInternalSpans: tracingOptions.includeInternalSpans,
+            maxSpans: tracingOptions.maxSpans,
+            maxDepth: tracingOptions.maxDepth,
+            maxRetries: tracingOptions.maxRetries,
+            retryDelayMs: tracingOptions.retryDelayMs,
+            spanFilter: tracingOptions.spanFilter,
+            sanitizeAttributes: tracingOptions.sanitizeAttributes,
+          });
+
+          if (traceContext) {
+            traceSnapshots.push(traceContext);
+            if (tracingOptions.includeInAttack || tracingOptions.includeInGrading) {
+              computedTraceSummary = formatTraceSummary(traceContext);
+            }
+          }
+        }
+      }
+
       logger.debug('[Hydra] Received target response', {
         turn,
         responseLength: targetResponse.output?.length,
+        hasTrace: !!traceContext,
       });
 
       if (targetResponse.error) {
@@ -540,6 +606,15 @@ export class HydraProvider implements ApiProvider {
       // Grade the response
       let graderResult: GradingResult | undefined = undefined;
 
+      // Prepare trace summaries for attack generation and grading
+      const attackTraceSummary = tracingOptions.includeInAttack ? computedTraceSummary : undefined;
+      const gradingTraceSummary = tracingOptions.includeInGrading
+        ? computedTraceSummary
+        : undefined;
+
+      // Update previous trace summary for next turn's attack generation
+      previousTraceSummary = attackTraceSummary;
+
       if (test && assertToUse) {
         const grader = getGraderById(assertToUse.type);
         if (grader) {
@@ -549,6 +624,14 @@ export class HydraProvider implements ApiProvider {
             test,
             targetProvider,
             assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
+            undefined, // additionalRubric
+            undefined, // skipRefusalCheck
+            tracingOptions.includeInGrading
+              ? {
+                  traceContext,
+                  traceSummary: gradingTraceSummary,
+                }
+              : undefined,
           );
           graderResult = grade;
           storedGraderResult = {
@@ -574,6 +657,8 @@ export class HydraProvider implements ApiProvider {
           : undefined,
         // Note: outputImage would come from provider if model responds with image
         graderPassed: graderResult?.pass,
+        trace: traceContext ? formatTraceForMetadata(traceContext) : undefined,
+        traceSummary: computedTraceSummary,
       });
 
       // Check if vulnerability was achieved
@@ -583,6 +668,7 @@ export class HydraProvider implements ApiProvider {
           turn,
           message: nextMessage,
           response: targetResponse.output,
+          traceSummary: computedTraceSummary,
         });
         stopReason = 'Grader failed';
 
@@ -646,6 +732,10 @@ export class HydraProvider implements ApiProvider {
         storedGraderResult,
         redteamHistory,
         sessionIds,
+        traceSnapshots:
+          traceSnapshots.length > 0
+            ? traceSnapshots.map((t) => formatTraceForMetadata(t))
+            : undefined,
       },
       tokenUsage: totalTokenUsage,
       guardrails: lastTargetResponse?.guardrails,
