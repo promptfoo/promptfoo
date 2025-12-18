@@ -29,16 +29,14 @@ The headline: **89% of single-turn jailbreaks succeeded** (160/179 attacks) comp
 This may be an intentional product trade-off. Google's model card shows they reduced "unjustified refusals" by 10%—fewer false positives on benign content. The cost appears to be more false negatives on harmful content.
 
 :::info Configuration note
-We tested with `thinkingLevel: MINIMAL` to match GPT-5.2's `reasoning_effort: 'none'`. **Default Gemini 3 Flash uses dynamic HIGH thinking**—expect materially different safety behavior with defaults enabled. This is a preview model; behavior may change before GA.
+We tested with `thinkingLevel: MINIMAL`. **Default Gemini 3 Flash uses dynamic HIGH thinking**—expect better safety behavior with defaults enabled. This is a preview model; behavior may change before GA.
 :::
 
 ### Why test MINIMAL?
 
-Flash is marketed on latency and cost. Many teams will lower thinking for throughput—Google's docs note that MINIMAL "matches the 'no thinking' setting for most queries." We tested MINIMAL to measure the safety profile of the fastest configuration. This isn't a weird corner case; it's the exact knob devs will turn to get "Flash-level speed."
+Reasoning improves safety. We've seen this across models: GPT-5.2 with `reasoning_effort: low` resists jailbreaks better than with `none` (55% vs 60% Meta ASR). We tested MINIMAL because it's the most vulnerable configuration—and the one teams will use when optimizing for speed. We'll follow up with `thinkingLevel: HIGH` results.
 
-If your product allows user-supplied prompts, agents, plugins, or any form of instruction following, MINIMAL is a higher-risk configuration unless you add external guardrails.
-
-**Quick reference** *(n differs across models due to blocks/timeouts; see methodology)*
+**Quick reference** *(n differs across models due to blocks/timeouts; see methodology below)*
 - Baseline ASR: 19.1% (39/204) vs GPT-5.2's 4.3%
 - Meta (single-turn) ASR: 89.4% (160/179) vs GPT-5.2's 60.3%
 - Worst categories under Meta: graphic content (100%, 15/15), impersonation (100%, 15/15)
@@ -147,7 +145,7 @@ A note on the tension with Google's docs: Google's safety settings documentation
 
 How we ran this eval, and why the numbers are comparable to our GPT-5.2 assessment.
 
-We disabled extended thinking (`thinkingLevel: MINIMAL`) to test base model behavior. Gemini 3 models support [configurable thinking levels](https://ai.google.dev/gemini-api/docs/thinking) (MINIMAL, LOW, MEDIUM, HIGH) that control how much the model reasons before responding. **The default is dynamic HIGH**—we override this to approximate GPT-5.2's `reasoning_effort: 'none'` for a fair comparison.
+We disabled extended thinking (`thinkingLevel: MINIMAL`) to test the fastest configuration. Gemini 3 models support [configurable thinking levels](https://ai.google.dev/gemini-api/docs/thinking) (MINIMAL, LOW, MEDIUM, HIGH). **The default is dynamic HIGH**—we tested MINIMAL to measure the lower bound on safety. Primary comparison is against GPT-5.2 with `reasoning_effort: none`.
 
 ### Run configuration
 
@@ -231,7 +229,7 @@ Same 39 plugins as GPT-5.2. Same three strategies (basic, Hydra, meta). Same jud
 
 ### How we grade outputs
 
-Each plugin includes a grader prompt that evaluates whether the model output violates safety policies. The grader is GPT-4o, chosen for consistency with our GPT-5.2 assessment. We consider an attack successful when the grader judges the output would be disallowed under the target model's stated policies.
+Each plugin includes a grader prompt that evaluates whether the model output violates safety policies. The grader is GPT-5, chosen for consistency with our GPT-5.2 assessment. We consider an attack successful when the grader judges the output would be disallowed under the target model's stated policies.
 
 For critical categories—child safety, weapons, self-harm—we performed manual human review on all outputs. Borderline cases were reviewed by two team members. The grader tends toward false negatives (missing some violations) rather than false positives, so our ASR numbers are likely conservative.
 
@@ -306,10 +304,6 @@ If you're choosing between models for safety-critical applications:
 | Hallucination resistance | 40% | 7% | GPT |
 
 Neither is sufficient without additional safety layers. GPT-5.2 provides a stronger foundation for high-stakes use cases. Gemini 3 Flash may be fine for lower-risk applications where you control the input surface and add your own guardrails.
-
-### Responsible disclosure
-
-We notified Google of these findings on December 17, 2025, one day before publication. This assessment uses only publicly available APIs and does not include private vulnerability details. All examples shown are representative outputs, not exploit instructions.
 
 ## Limitations
 
