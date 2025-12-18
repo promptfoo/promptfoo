@@ -118,7 +118,7 @@ export default class EvalResult {
       for (const result of results) {
         const dbResult = db
           .insert(evalResultsTable)
-          .values({ ...result, evalId, id: randomUUID() })
+          .values({ ...result, evalId, id: crypto.randomUUID() })
           .returning()
           .get();
         returnResults.push(new EvalResult({ ...dbResult, persisted: true }));
