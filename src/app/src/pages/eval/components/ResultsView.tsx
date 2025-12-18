@@ -212,7 +212,11 @@ export default function ResultsView({
   const { updateConfig } = useMainStore();
 
   const { showToast } = useToast();
-  const { data: cloudConfig, isLoading: isCloudConfigLoading } = useCloudConfig();
+  const {
+    data: cloudConfig,
+    isLoading: isCloudConfigLoading,
+    error: cloudConfigError,
+  } = useCloudConfig();
   const [searchText, setSearchText] = React.useState(searchParams.get('search') || '');
   const [debouncedSearchValue] = useDebounce(searchText, 1000);
 
@@ -592,6 +596,11 @@ export default function ResultsView({
     if (isCloudConfigLoading) {
       return false;
     }
+    // If cloud config fetch failed, default to not editable for security
+    // We can't determine if cloud is enabled, so assume it might be
+    if (cloudConfigError) {
+      return false;
+    }
     if (!cloudConfig?.isEnabled) {
       return true;
     }
@@ -600,7 +609,7 @@ export default function ResultsView({
       return true;
     }
     return author === currentUserEmail;
-  }, [isCloudConfigLoading, cloudConfig?.isEnabled, author, currentUserEmail]);
+  }, [isCloudConfigLoading, cloudConfigError, cloudConfig?.isEnabled, author, currentUserEmail]);
 
   const handleSearchKeyDown = React.useCallback<React.KeyboardEventHandler>(
     (event) => {
