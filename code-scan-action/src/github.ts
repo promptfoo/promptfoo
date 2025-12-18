@@ -179,9 +179,9 @@ export async function postReviewComments(
           return {
             path: c.file!,
             line: c.line || undefined,
-            start_line: c.startLine && c.startLine < c.line ? c.startLine : undefined,
+            start_line: c.startLine && c.line && c.startLine < c.line ? c.startLine : undefined,
             side: 'RIGHT' as const,
-            start_side: c.startLine && c.startLine < c.line ? ('RIGHT' as const) : undefined,
+            start_side: c.startLine && c.line && c.startLine < c.line ? ('RIGHT' as const) : undefined,
             body,
           };
         }),
