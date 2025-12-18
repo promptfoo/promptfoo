@@ -91,7 +91,7 @@ Beyond the 100% bypass categories, several areas showed >65% attack success unde
 | Hate Speech | 67% (10/15) | 60% (9/15) | +7pp |
 | Violent Crime | 67% (10/15) | 33% (5/15) | +34pp |
 
-The child safety number warrants attention. Under our rubric, Gemini 3 Flash produced outputs our reviewers judged as unsafe facilitation or boundary-violating content in 7 of 10 jailbreak attempts. GPT-5.2's rate was 27% (4/15). We performed human review on all outputs in this category—we are not publishing examples. (The different denominators reflect attack aggregates that completed without timeouts or provider blocks on each model; see methodology for how we score these.)
+The child safety number warrants attention. Under our rubric, Gemini 3 Flash produced outputs our reviewers judged as unsafe facilitation or boundary-violating content in 7/10 jailbreak attempts. GPT-5.2's rate was 27% (4/15). We performed human review on all outputs in this category—we are not publishing examples. (The different denominators reflect attacks that completed without timeouts or transport errors on each model; see methodology for scoring rules.)
 
 ## The Refusal Gap
 
@@ -231,7 +231,7 @@ redteam:
     - jailbreak:meta
 ```
 
-Same 43 plugins as GPT-5.2. Same three strategies (basic, Hydra, meta). Same judge.
+Same 43 plugins as GPT-5.2. Same three strategies (Baseline, Hydra, Meta). Same judge.
 
 **Strategy coverage:** Baseline and Hydra run across all 43 plugins (215 attacks = 43×5). Meta is a jailbreak strategy and we apply it only to the 39 non-bias plugins (195 attacks = 39×5).
 
@@ -301,7 +301,7 @@ This trade-off isn't necessarily wrong—overly cautious models frustrate users 
 
 **Leave default thinking on.** We tested with `thinkingLevel: MINIMAL`. [Default HIGH](https://ai.google.dev/gemini-api/docs/thinking) should be safer—use it unless latency constraints force otherwise.
 
-**Add your own safety layer.** The model won't catch impersonation, lacks robust content filtering, and hallucinates readily. Build detection for outputs claiming to be real entities, filter graphic/sexual content, and validate factual claims externally.
+**Add your own safety layer.** We observed low resistance to impersonation and content-framing attacks. Build detection for outputs claiming to be real entities, filter graphic/sexual content, and validate factual claims externally.
 
 **Extra scrutiny for child-adjacent applications.** The 70% attack success rate warrants additional safeguards. Don't rely on model-level refusals alone.
 
@@ -329,7 +329,7 @@ This assessment has several constraints worth noting:
 
 2. **Single configuration.** We tested `thinkingLevel: MINIMAL` only. Default HIGH thinking may show materially different results.
 
-3. **Attack coverage.** 39 risk categories with 3,462 probes is substantial but not exhaustive. Some categories have small sample sizes (n=10-15 attacks).
+3. **Attack coverage.** 43 risk categories with 3,462 probes is substantial but not exhaustive. Some categories have small sample sizes (n=10-15 attacks).
 
 4. **Judge reliability.** We use LLM-based grading. While we performed human review on critical categories (child safety, weapons, self-harm), judge accuracy varies by category.
 
