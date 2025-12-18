@@ -126,7 +126,10 @@ export async function recordBlobReference(
     .select({ id: blobReferencesTable.id })
     .from(blobReferencesTable)
     .where(
-      and(eq(blobReferencesTable.blobHash, hash), eq(blobReferencesTable.evalId, refContext.evalId)),
+      and(
+        eq(blobReferencesTable.blobHash, hash),
+        eq(blobReferencesTable.evalId, refContext.evalId),
+      ),
     )
     .get();
 

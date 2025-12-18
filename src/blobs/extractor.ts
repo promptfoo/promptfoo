@@ -1,7 +1,7 @@
 import { getEnvBool } from '../envars';
 import logger from '../logger';
 import { BLOB_MAX_SIZE, BLOB_MIN_SIZE } from './constants';
-import { recordBlobReference, type BlobRef, storeBlob } from './index';
+import { type BlobRef, recordBlobReference, storeBlob } from './index';
 import { shouldAttemptRemoteBlobUpload, uploadBlobRemote } from './remoteUpload';
 
 import type { ProviderResponse } from '../types/providers';

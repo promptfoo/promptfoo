@@ -18,8 +18,7 @@ function normalizePath(path: string): string {
 
 function getApiBaseUrl(): string {
   const { apiBaseUrl } = useApiConfig.getState();
-  const base =
-    apiBaseUrl || import.meta.env.VITE_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL || '';
+  const base = apiBaseUrl || import.meta.env.VITE_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL || '';
   return base.replace(/\/+$/, '');
 }
 
@@ -125,7 +124,5 @@ export function resolveImageSource(
 export function normalizeMediaText(text: string): string {
   return text
     .replace(BLOB_URI_REGEX, (_match, hash) => withApiBase(`/api/blobs/${hash}`))
-    .replace(STORAGE_REF_REGEX, (_match, path) =>
-      withApiBase(`/api/media/${normalizePath(path)}`),
-    );
+    .replace(STORAGE_REF_REGEX, (_match, path) => withApiBase(`/api/media/${normalizePath(path)}`));
 }
