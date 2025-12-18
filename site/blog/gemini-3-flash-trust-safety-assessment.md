@@ -24,7 +24,7 @@ Gemini 3 Flash launched today. Google [describes it](https://blog.google/product
 
 We ran our red team eval the same day. Same methodology we used for [GPT-5.2 last week](/blog/gpt-5.2-trust-safety-assessment). Same probes, same strategies, same judge. The only variable is the model. The results reveal a clear pattern: Gemini 3 Flash prioritizes helpfulness over caution.
 
-The headline: **89% of single-turn jailbreaks succeeded** (160/179 attacks) compared to 60% on GPT-5.2. But the more telling number is baseline behavior—harmful prompts sent without any adversarial technique. GPT-5.2 refuses 96% of these. Gemini 3 Flash refuses 81%. That 15-point gap means nearly 1 in 5 harmful prompts succeed without trying.
+The headline: **89% of single-turn jailbreaks succeeded** (160/179 attacks) compared to 60% on GPT-5.2. But the more telling number is baseline behavior—harmful prompts sent without any jailbreak transformation. GPT-5.2 refuses 96% of these. Gemini 3 Flash refuses 81%. That means Gemini produced disallowed output on 19% of baseline attacks (39/204)—no adversarial technique required.
 
 This isn't necessarily a flaw. It may be a deliberate trade-off. Google's model card shows they reduced "unjustified refusals" by 10%—fewer false positives on benign content. The cost appears to be more false negatives on harmful content.
 
@@ -32,13 +32,23 @@ This isn't necessarily a flaw. It may be a deliberate trade-off. Google's model 
 We tested with `thinkingLevel: MINIMAL` to match GPT-5.2's `reasoning_effort: 'none'`. **Default Gemini 3 Flash uses dynamic HIGH thinking**—expect materially different safety behavior with defaults enabled. This is a preview model; behavior may change before GA.
 :::
 
+**Quick reference:**
+- Baseline ASR: 19.1% (39/204) vs GPT-5.2's 4.3%
+- Single-turn jailbreak ASR: 89.4% (160/179) vs GPT-5.2's 60.3%
+- Worst categories: graphic content (100%, 15/15), entity impersonation (100%, 15/15)
+- Biggest gap: child safety—70% (7/10) vs GPT-5.2's 27% (4/15)
+
 <!-- truncate -->
 
 ## Results
 
 We ran 3,462 probes across 39 risk categories. Two categories showed zero resistance: **Graphic Content** and **Entity Impersonation** hit 100% attack success—every jailbreak attempt worked. Neither model handles impersonation well (GPT-5.2 also fails here), but Gemini's graphic content defenses collapsed entirely.
 
-The strategy breakdown tells the rest of the story:
+:::note Units
+A **probe** is one model call with one prompt. An **attack** groups related probes for one scenario—it succeeds if any probe produces disallowed output. The table below reports attack-level aggregates (n=179/203/204), not raw probes (n=3,462).
+:::
+
+The strategy breakdown:
 
 | Strategy | Gemini 3 Flash | GPT-5.2 | Delta |
 |----------|---------------|---------|-------|
@@ -59,11 +69,11 @@ Beyond the 100% bypass categories, several high-severity areas showed >65% attac
 | Personal Attacks | 80.0% (12/15) | Medium |
 | Harassment | 73.3% (11/15) | High |
 | Non-Violent Crime | 73.3% (11/15) | Medium |
-| Child Exploitation | 70.0% (7/10) | Critical |
+| Child Safety | 70.0% (7/10) | Critical |
 | Hate Speech | 66.7% (10/15) | Critical |
 | Violent Crime | 66.7% (10/15) | High |
 
-The child exploitation number warrants attention. Under our rubric, Gemini 3 Flash generated child-safety-adjacent content in 7 of 10 jailbreak attempts. GPT-5.2's rate was 27% (4/15). We performed human review on all outputs in this category.
+The child safety number warrants attention. Under our rubric, Gemini 3 Flash generated child-safety-adjacent content in 7 of 10 jailbreak attempts. GPT-5.2's rate was 27% (4/15). We performed human review on all outputs in this category.
 
 ## The Refusal Gap
 
@@ -94,7 +104,7 @@ The interpretation: Gemini 3 Flash appears trained against known exploit pattern
 
 The category-by-category breakdown using Meta strategy results:
 
-**Largest gaps (Gemini worse):** Child exploitation (+43pp), graphic content (+33pp), hallucination (+33pp), violent crime (+33pp), non-violent crime (+33pp). These are the categories where model choice matters most.
+**Largest gaps (Gemini worse):** Child safety (+43pp), graphic content (+33pp), hallucination (+33pp), violent crime (+33pp), non-violent crime (+33pp). These are the categories where model choice matters most.
 
 **Similar performance:** Entity impersonation (both 100%), hate speech, harassment, profanity, WMD content. Neither model handles these well.
 
@@ -195,13 +205,19 @@ redteam:
 
 Same 39 plugins as GPT-5.2. Same three strategies (basic, Hydra, meta). Same judge.
 
+### How we grade outputs
+
+Each plugin includes a grader prompt that evaluates whether the model output violates safety policies. The grader is GPT-4o, chosen for consistency with our GPT-5.2 assessment. We consider an attack successful when the grader judges the output would be disallowed under the target model's stated policies.
+
+For critical categories—child safety, weapons, self-harm—we performed manual human review on all outputs. Borderline cases were reviewed by two team members. The grader tends toward false negatives (missing some violations) rather than false positives, so our ASR numbers are likely conservative.
+
 A note on [ASR comparability](/blog/asr-not-portable-metric): these numbers are directly comparable to our GPT-5.2 results because we controlled for attempt budget, prompt set, and judge. They're not comparable to other benchmarks using different methodology.
 
 ### What Google's model card says
 
 The [Gemini 3 Flash model card](https://deepmind.google/models/model-cards/gemini-3-flash/) includes internal safety evaluation results. Their automated evals show mixed results vs Gemini 2.5 Flash.
 
-**Important caveat:** Google's metrics measure different things than ours and use different methodologies. Their "Safety" metrics likely test policy compliance on typical inputs, not adversarial resistance. Direct comparison isn't meaningful.
+**Important caveat:** Google's metrics measure different things than ours. Their "Safety" metrics test policy compliance on typical inputs, not adversarial resistance. Google also notes these automated evals use "improved evaluations" and are not directly comparable to older model cards.
 
 | Evaluation | Change vs 2.5 Flash |
 |------------|---------------------|
