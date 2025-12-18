@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
+import { and, eq } from 'drizzle-orm';
 import { getDb } from '../database';
 import { blobAssetsTable, blobReferencesTable } from '../database/tables';
 import logger from '../logger';
@@ -93,4 +94,55 @@ export async function getBlobByHash(hash: string): Promise<StoredBlob> {
 export async function getBlobUrl(hash: string, expiresInSeconds?: number): Promise<string | null> {
   const provider = getBlobStorageProvider();
   return provider.getUrl(hash, expiresInSeconds);
+}
+
+export async function recordBlobReference(
+  hash: string,
+  refContext: {
+    evalId?: string;
+    testIdx?: number;
+    promptIdx?: number;
+    location?: string;
+    kind?: string;
+  },
+): Promise<void> {
+  if (!refContext.evalId) {
+    return;
+  }
+
+  const provider = getBlobStorageProvider();
+  const exists = await provider.exists(hash).catch(() => false);
+  if (!exists) {
+    logger.warn('[BlobStorage] Attempted to record reference for missing blob', {
+      hash,
+      evalId: refContext.evalId,
+      location: refContext.location,
+    });
+    return;
+  }
+
+  const db = getDb();
+  const existing = db
+    .select({ id: blobReferencesTable.id })
+    .from(blobReferencesTable)
+    .where(
+      and(eq(blobReferencesTable.blobHash, hash), eq(blobReferencesTable.evalId, refContext.evalId)),
+    )
+    .get();
+
+  if (existing) {
+    return;
+  }
+
+  db.insert(blobReferencesTable)
+    .values({
+      id: randomUUID(),
+      blobHash: hash,
+      evalId: refContext.evalId,
+      testIdx: refContext.testIdx,
+      promptIdx: refContext.promptIdx,
+      location: refContext.location,
+      kind: refContext.kind,
+    })
+    .run();
 }

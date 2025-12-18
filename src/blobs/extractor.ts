@@ -1,7 +1,7 @@
 import { getEnvBool } from '../envars';
 import logger from '../logger';
 import { BLOB_MAX_SIZE, BLOB_MIN_SIZE } from './constants';
-import { type BlobRef, storeBlob } from './index';
+import { recordBlobReference, type BlobRef, storeBlob } from './index';
 import { shouldAttemptRemoteBlobUpload, uploadBlobRemote } from './remoteUpload';
 
 import type { ProviderResponse } from '../types/providers';
@@ -13,6 +13,9 @@ interface BlobContext {
 }
 
 type BlobKind = 'audio' | 'image';
+
+const BLOB_URI_REGEX = /^promptfoo:\/\/blob\/([a-f0-9]{64})$/i;
+const BLOB_HASH_REGEX = /^[a-f0-9]{64}$/i;
 
 function isDataUrl(value: string): boolean {
   return /^data:(audio|image)\/[^;]+;base64,/.test(value);
@@ -322,10 +325,68 @@ export async function extractAndStoreBinaryData(
     }
   }
 
-  return mutated ? next : response;
+  const finalResponse = mutated ? next : response;
+  if (blobContext.evalId) {
+    await recordExistingBlobReferences(finalResponse, blobContext, 'response');
+  }
+
+  return finalResponse;
 }
 
 export function isBlobStorageEnabled(): boolean {
   // Single toggle: default to externalize; opt out with PROMPTFOO_INLINE_MEDIA=true
   return !getEnvBool('PROMPTFOO_INLINE_MEDIA', false);
+}
+
+function parseBlobHashFromValue(value: unknown): string | null {
+  if (!value) {
+    return null;
+  }
+
+  if (typeof value === 'string') {
+    const match = value.match(BLOB_URI_REGEX);
+    return match ? match[1] : null;
+  }
+
+  if (typeof value === 'object') {
+    const candidate = value as { uri?: string; hash?: string };
+    if (candidate.hash && BLOB_HASH_REGEX.test(candidate.hash)) {
+      return candidate.hash;
+    }
+    if (candidate.uri && typeof candidate.uri === 'string') {
+      const match = candidate.uri.match(BLOB_URI_REGEX);
+      if (match) {
+        return match[1];
+      }
+    }
+  }
+
+  return null;
+}
+
+async function recordExistingBlobReferences(
+  value: unknown,
+  context: BlobContext,
+  location: string,
+): Promise<void> {
+  const hash = parseBlobHashFromValue(value);
+  if (hash) {
+    await recordBlobReference(hash, { ...context, location });
+    return;
+  }
+
+  if (Array.isArray(value)) {
+    await Promise.all(
+      value.map((child, idx) =>
+        recordExistingBlobReferences(child, context, `${location}[${idx}]`),
+      ),
+    );
+    return;
+  }
+
+  if (value && typeof value === 'object') {
+    for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+      await recordExistingBlobReferences(child, context, location ? `${location}.${key}` : key);
+    }
+  }
 }

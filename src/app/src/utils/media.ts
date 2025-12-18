@@ -1,3 +1,5 @@
+import useApiConfig from '@app/stores/apiConfig';
+
 const BLOB_URI_PREFIX = 'promptfoo://blob/';
 const STORAGE_REF_PREFIX = 'storageRef:';
 const BLOB_URI_REGEX = /promptfoo:\/\/blob\/([a-f0-9]{32,64})/gi;
@@ -14,18 +16,30 @@ function normalizePath(path: string): string {
   return path.replace(/^\//, '');
 }
 
+function getApiBaseUrl(): string {
+  const { apiBaseUrl } = useApiConfig.getState();
+  const base =
+    apiBaseUrl || import.meta.env.VITE_PUBLIC_PROMPTFOO_REMOTE_API_BASE_URL || '';
+  return base.replace(/\/+$/, '');
+}
+
+function withApiBase(apiPath: string): string {
+  const base = getApiBaseUrl();
+  return base ? `${base}${apiPath}` : apiPath;
+}
+
 export function resolveBlobUri(uri?: string | null): string | undefined {
   if (!uri) {
     return undefined;
   }
 
   if (uri.startsWith(BLOB_URI_PREFIX)) {
-    return `/api/blobs/${uri.slice(BLOB_URI_PREFIX.length)}`;
+    return withApiBase(`/api/blobs/${uri.slice(BLOB_URI_PREFIX.length)}`);
   }
 
   if (uri.startsWith(STORAGE_REF_PREFIX)) {
     const path = normalizePath(uri.slice(STORAGE_REF_PREFIX.length));
-    return `/api/media/${path}`;
+    return withApiBase(`/api/media/${path}`);
   }
 
   if (/^(https?:)?\/\//.test(uri) || uri.startsWith('/') || uri.startsWith('data:')) {
@@ -86,7 +100,8 @@ export function resolveImageSource(
       return image;
     }
     // Allow base64-ish payloads that are purely non-whitespace and use common base64/url-safe chars
-    if (/^[A-Za-z0-9+/=_-]+$/.test(image)) {
+    // Require a minimum length to avoid misclassifying short strings (e.g., session IDs) as images.
+    if (image.length >= 60 && /^[A-Za-z0-9+/=_-]+$/.test(image)) {
       return `data:image/png;base64,${image}`;
     }
     return undefined;
@@ -109,6 +124,8 @@ export function resolveImageSource(
 
 export function normalizeMediaText(text: string): string {
   return text
-    .replace(BLOB_URI_REGEX, (_match, hash) => `/api/blobs/${hash}`)
-    .replace(STORAGE_REF_REGEX, (_match, path) => `/api/media/${normalizePath(path)}`);
+    .replace(BLOB_URI_REGEX, (_match, hash) => withApiBase(`/api/blobs/${hash}`))
+    .replace(STORAGE_REF_REGEX, (_match, path) =>
+      withApiBase(`/api/media/${normalizePath(path)}`),
+    );
 }
