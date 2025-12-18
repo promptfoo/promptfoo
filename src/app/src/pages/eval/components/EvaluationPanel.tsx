@@ -1,6 +1,10 @@
 import { useState } from 'react';
 import CheckIcon from '@mui/icons-material/Check';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import Accordion from '@mui/material/Accordion';
+import AccordionDetails from '@mui/material/AccordionDetails';
+import AccordionSummary from '@mui/material/AccordionSummary';
 import Box from '@mui/material/Box';
 import IconButton from '@mui/material/IconButton';
 import Paper from '@mui/material/Paper';
@@ -10,6 +14,7 @@ import TableCell from '@mui/material/TableCell';
 import TableContainer from '@mui/material/TableContainer';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
+import Typography from '@mui/material/Typography';
 import { ellipsize } from '../../../../../util/text';
 import type { GradingResult } from '@promptfoo/types';
 
@@ -165,6 +170,58 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
   );
 }
 
+function formatGradingPrompt(prompt: string): string {
+  try {
+    const parsed = JSON.parse(prompt);
+    return JSON.stringify(parsed, null, 2);
+  } catch {
+    return prompt;
+  }
+}
+
+function GradingPromptSection({ gradingResults }: { gradingResults?: GradingResult[] }) {
+  const promptsWithData = gradingResults?.filter((r) => r.metadata?.renderedGradingPrompt) || [];
+
+  if (promptsWithData.length === 0) {
+    return null;
+  }
+
+  return (
+    <Box sx={{ mt: 2 }}>
+      <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 500 }}>
+        Grading Prompts
+      </Typography>
+      {promptsWithData.map((result, i) => (
+        <Accordion key={i} sx={{ mb: 1 }}>
+          <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+            <Typography variant="body2">
+              {result.assertion?.type || 'Assertion'} - Full Grading Prompt
+            </Typography>
+          </AccordionSummary>
+          <AccordionDetails>
+            <Box
+              component="pre"
+              sx={{
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+                fontSize: '0.75rem',
+                maxHeight: '400px',
+                overflow: 'auto',
+                bgcolor: 'grey.100',
+                p: 2,
+                borderRadius: 1,
+                m: 0,
+              }}
+            >
+              {formatGradingPrompt(result.metadata?.renderedGradingPrompt || '')}
+            </Box>
+          </AccordionDetails>
+        </Accordion>
+      ))}
+    </Box>
+  );
+}
+
 interface EvaluationPanelProps {
   gradingResults?: GradingResult[];
 }
@@ -173,6 +230,7 @@ export function EvaluationPanel({ gradingResults }: EvaluationPanelProps) {
   return (
     <Box>
       <AssertionResults gradingResults={gradingResults} />
+      <GradingPromptSection gradingResults={gradingResults} />
     </Box>
   );
 }
