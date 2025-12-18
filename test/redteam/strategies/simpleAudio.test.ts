@@ -70,7 +70,7 @@ describe('audio strategy', () => {
   describe('textToAudio', () => {
     it('should convert text to base64 string using remote API', async () => {
       const text = 'Hello, world!';
-      const base64 = await textToAudio(text, 'en');
+      const result = await textToAudio(text, 'en');
 
       expect(mockFetchWithCache).toHaveBeenCalledWith(
         expect.any(String),
@@ -81,7 +81,11 @@ describe('audio strategy', () => {
         }),
         expect.any(Number),
       );
-      expect(base64).toBe('bW9ja2VkLWF1ZGlvLWJhc2U2NC1kYXRh');
+      expect(result).toEqual(
+        expect.objectContaining({
+          base64: 'bW9ja2VkLWF1ZGlvLWJhc2U2NC1kYXRh',
+        }),
+      );
     });
 
     it('should throw an error if remote generation is disabled', async () => {
@@ -171,12 +175,14 @@ describe('audio strategy', () => {
 
       const result = await addAudioToBase64([testCase], 'prompt');
 
-      expect(result[0].metadata).toEqual({
+      expect(result[0].metadata).toEqual(
+        expect.objectContaining({
         harmCategory: 'Illegal Activities',
         otherField: 'value',
         strategyId: 'audio',
         originalText: 'Harmful content',
-      });
+        }),
+      );
       expect(result[0].assert).toEqual([
         {
           metric: 'harmful/Audio-Encoded',
@@ -194,10 +200,12 @@ describe('audio strategy', () => {
 
       const result = await addAudioToBase64([testCase], 'prompt');
 
-      expect(result[0].metadata).toEqual({
+      expect(result[0].metadata).toEqual(
+        expect.objectContaining({
         strategyId: 'audio',
         originalText: 'Simple content',
-      });
+        }),
+      );
       expect(result[0].assert).toBeUndefined();
     });
 

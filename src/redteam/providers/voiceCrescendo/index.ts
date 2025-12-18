@@ -349,8 +349,8 @@ export class VoiceCrescendoProvider implements ApiProvider {
    */
   private async textToAudio(text: string): Promise<string> {
     try {
-      const audioBase64 = await textToAudio(text, this.config.language || 'en');
-      return audioBase64;
+      const audio = await textToAudio(text, this.config.language || 'en');
+      return audio.base64;
     } catch (error) {
       logger.error(`[VoiceCrescendo] Failed to convert text to audio: ${error}`);
       throw error;

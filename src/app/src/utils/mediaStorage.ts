@@ -18,6 +18,9 @@ import useApiConfig from '@app/stores/apiConfig';
 const STORAGE_REF_PREFIX = 'storageRef:';
 const BLOB_REF_PREFIX = 'promptfoo://blob/';
 
+export type StorageRefString = `${typeof STORAGE_REF_PREFIX}${string}`;
+export type BlobRefString = `${typeof BLOB_REF_PREFIX}${string}`;
+
 /**
  * Get the base URL for the API.
  * Uses the same apiBaseUrl as callApi to ensure correct routing
@@ -31,11 +34,11 @@ function getApiBaseUrl(): string {
 /**
  * Check if a value is a storage reference
  */
-export function isStorageRef(value: unknown): value is string {
+export function isStorageRef(value: unknown): value is StorageRefString {
   return typeof value === 'string' && value.startsWith(STORAGE_REF_PREFIX);
 }
 
-export function isBlobRef(value: unknown): value is string {
+export function isBlobRef(value: unknown): value is BlobRefString {
   return typeof value === 'string' && value.startsWith(BLOB_REF_PREFIX);
 }
 
