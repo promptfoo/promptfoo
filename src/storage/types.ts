@@ -1,10 +1,8 @@
 /**
- * Media storage abstraction for promptfoo.
+ * Media storage abstraction for promptfoo (OSS).
  *
- * This module provides a unified interface for storing and retrieving media files
- * (audio, images, video) across different storage backends:
- * - Local filesystem (OSS default)
- * - S3-compatible storage (cloud)
+ * OSS uses only the local filesystem for media storage. Cloud deployments can override
+ * the provider, but cloud-specific types (e.g., S3) live in the cloud repo.
  */
 
 /**
@@ -42,7 +40,7 @@ export interface MediaMetadata {
  * Reference to stored media - this replaces inline base64 data
  */
 export interface MediaStorageRef {
-  /** Storage provider identifier (e.g., 'local', 's3') */
+  /** Storage provider identifier (filesystem in OSS) */
   provider: string;
   /** Unique key/path in the storage backend */
   key: string;
@@ -63,26 +61,6 @@ export interface StoreResult {
 }
 
 /**
- * Configuration for S3-compatible storage
- */
-export interface S3StorageConfig {
-  /** S3 bucket name */
-  bucket: string;
-  /** AWS region (e.g., 'us-east-1') */
-  region: string;
-  /** Custom endpoint URL for S3-compatible services (MinIO, R2, etc.) */
-  endpoint?: string;
-  /** Access key ID */
-  accessKeyId: string;
-  /** Secret access key */
-  secretAccessKey: string;
-  /** Use path-style URLs (required for MinIO) */
-  forcePathStyle?: boolean;
-  /** Prefix for all keys (e.g., 'media/') */
-  keyPrefix?: string;
-}
-
-/**
  * Configuration for local filesystem storage
  */
 export interface LocalStorageConfig {
@@ -91,9 +69,9 @@ export interface LocalStorageConfig {
 }
 
 /**
- * Union of all storage configurations
+ * Storage configuration
  */
-export type StorageConfig = S3StorageConfig | LocalStorageConfig;
+export type StorageConfig = LocalStorageConfig;
 
 /**
  * Storage provider interface
