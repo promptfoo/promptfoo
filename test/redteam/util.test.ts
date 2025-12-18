@@ -9,6 +9,7 @@ import {
   normalizeApostrophes,
   removePrefix,
 } from '../../src/redteam/util';
+
 import type { CallApiContextParams, ProviderResponse } from '../../src/types/index';
 
 vi.mock('../../src/cache');

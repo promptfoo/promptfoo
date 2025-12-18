@@ -1,4 +1,4 @@
-import { vi, describe, it, expect } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { matchesClassification } from '../../src/matchers';
 import { HuggingfaceTextClassificationProvider } from '../../src/providers/huggingface';
 

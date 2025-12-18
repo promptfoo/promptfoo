@@ -1,7 +1,7 @@
 import logger from '../logger';
 import { getSessionId } from '../redteam/util';
-import invariant from '../util/invariant';
 import { maybeLoadConfigFromExternalFile } from '../util/file';
+import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
 import { sleep } from '../util/time';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';

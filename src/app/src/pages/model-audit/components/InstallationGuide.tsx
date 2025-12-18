@@ -1,3 +1,5 @@
+import { useEffect, useRef, useState } from 'react';
+
 import {
   CheckCircle as CheckCircleIcon,
   ContentCopy as ContentCopyIcon,
@@ -15,7 +17,6 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material';
-import { useEffect, useRef, useState } from 'react';
 
 interface InstallationGuideProps {
   onRetryCheck: () => void;

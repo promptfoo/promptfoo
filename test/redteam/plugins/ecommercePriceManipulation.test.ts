@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  EcommercePriceManipulationPlugin,
   EcommercePriceManipulationGrader,
+  EcommercePriceManipulationPlugin,
 } from '../../../src/redteam/plugins/ecommerce/ecommercePriceManipulation';
 
 import type { ApiProvider } from '../../../src/types/index';

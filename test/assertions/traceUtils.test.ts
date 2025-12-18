@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { matchesPattern } from '../../src/util/tracing';
+import { matchesPattern } from '../../src/assertions/traceUtils';
 
 describe('tracing utilities', () => {
   describe('matchesPattern', () => {

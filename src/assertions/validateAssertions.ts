@@ -1,7 +1,7 @@
 import { fromError } from 'zod-validation-error';
 import {
-  AssertionOrSetSchema,
   type Assertion,
+  AssertionOrSetSchema,
   type AssertionSet,
   type TestCase,
 } from '../types/index';

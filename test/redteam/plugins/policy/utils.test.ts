@@ -1,7 +1,5 @@
-import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
-import { validate as isUUID } from 'uuid';
-import { sha256 } from '../../../../src/util/createHash';
-import { PolicyObjectSchema } from '../../../../src/redteam/types';
+import { validate as isUUID, v4 as uuidv4 } from 'uuid';
+import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { POLICY_METRIC_PREFIX } from '../../../../src/redteam/plugins/policy/constants';
 import {
   deserializePolicyIdFromMetric,
@@ -12,7 +10,8 @@ import {
   makeCustomPolicyCloudUrl,
   makeInlinePolicyId,
 } from '../../../../src/redteam/plugins/policy/utils';
-import { v4 as uuidv4 } from 'uuid';
+import { PolicyObjectSchema } from '../../../../src/redteam/types';
+import { sha256 } from '../../../../src/util/createHash';
 
 // Mock dependencies
 vi.mock('uuid', () => ({

@@ -1,13 +1,12 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { ThemeProvider } from '@mui/material/styles';
-import { Severity, severityDisplayNames } from '@promptfoo/redteam/constants';
-import FrameworkCard from './FrameworkCard';
 
 import { createAppTheme } from '@app/components/PageShell';
+import { alpha, ThemeProvider } from '@mui/material/styles';
+import { Severity, severityDisplayNames } from '@promptfoo/redteam/constants';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { alpha } from '@mui/material/styles';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import FrameworkCard from './FrameworkCard';
 import { type CategoryStats } from './FrameworkComplianceUtils';
 
 // Mock react-router-dom

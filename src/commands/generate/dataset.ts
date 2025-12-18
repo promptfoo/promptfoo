@@ -8,9 +8,9 @@ import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { synthesizeFromTestSuite } from '../../testCase/synthesis';
 import { type TestSuite, type UnifiedConfig } from '../../types/index';
+import { resolveConfigs } from '../../util/config/load';
 import { printBorder, setupEnv } from '../../util/index';
 import { promptfooCommand } from '../../util/promptfooCommand';
-import { resolveConfigs } from '../../util/config/load';
 import type { Command } from 'commander';
 
 interface DatasetGenerateOptions {
