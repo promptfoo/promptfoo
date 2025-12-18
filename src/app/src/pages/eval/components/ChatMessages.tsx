@@ -1,4 +1,6 @@
 import { useMemo } from 'react';
+
+import { resolveAudioSource, resolveImageSource } from '@app/utils/media';
 import Box from '@mui/material/Box';
 import { grey, red } from '@mui/material/colors';
 import Paper from '@mui/material/Paper';
@@ -6,7 +8,6 @@ import Stack from '@mui/material/Stack';
 import { keyframes, useTheme } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
 import invariant from 'tiny-invariant';
-import { resolveAudioSource, resolveImageSource } from '@app/utils/media';
 
 const bounce = keyframes`
   0%, 100% {

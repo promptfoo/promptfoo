@@ -32,9 +32,9 @@ import {
   buildGraderResultAssertion,
   checkPenalizedPhrases,
   createIterationContext,
+  externalizeResponseForRedteamHistory,
   getTargetResponse,
   redteamProviderManager,
-  externalizeResponseForRedteamHistory,
   type TargetResponse,
 } from './shared';
 import { formatTraceForMetadata, formatTraceSummary } from './traceFormatting';

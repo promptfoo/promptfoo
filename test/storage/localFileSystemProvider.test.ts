@@ -3,7 +3,6 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
-
 import { LocalFileSystemProvider } from '../../src/storage/localFileSystemProvider';
 
 function createTempDir(prefix: string): string {

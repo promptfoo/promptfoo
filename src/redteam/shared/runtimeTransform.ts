@@ -9,6 +9,7 @@
  */
 
 import logger from '../../logger';
+
 import type { MediaData } from '../../storage/types';
 import type { TestCaseWithPlugin } from '../../types';
 // Import type only to avoid circular dependency - actual Strategies loaded dynamically

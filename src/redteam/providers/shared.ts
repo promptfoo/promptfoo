@@ -1,5 +1,7 @@
 import { randomUUID } from 'crypto';
 
+import { extractAndStoreBinaryData, isBlobStorageEnabled } from '../../blobs/extractor';
+import { shouldAttemptRemoteBlobUpload } from '../../blobs/remoteUpload';
 import cliState from '../../cliState';
 import { getEnvBool } from '../../envars';
 import logger from '../../logger';
@@ -13,9 +15,9 @@ import {
   type CallApiOptionsParams,
   type EvaluateResult,
   type GuardrailResponse,
-  type ProviderResponse,
   isApiProvider,
   isProviderOptions,
+  type ProviderResponse,
   type RedteamFileConfig,
   type TokenUsage,
 } from '../../types/index';
@@ -28,8 +30,6 @@ import { ATTACKER_MODEL, ATTACKER_MODEL_SMALL, TEMPERATURE } from './constants';
 
 import type { TraceContextData } from '../../tracing/traceContext';
 import type { RedteamHistoryEntry } from '../types';
-import { extractAndStoreBinaryData, isBlobStorageEnabled } from '../../blobs/extractor';
-import { shouldAttemptRemoteBlobUpload } from '../../blobs/remoteUpload';
 
 async function loadRedteamProvider({
   provider,

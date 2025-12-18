@@ -3,7 +3,6 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
-
 import { FilesystemBlobStorageProvider } from '../../src/blobs/filesystemProvider';
 
 function createTempDir(prefix: string): string {

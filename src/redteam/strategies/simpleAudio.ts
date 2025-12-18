@@ -1,14 +1,14 @@
 import { Presets, SingleBar } from 'cli-progress';
-
 import { fetchWithCache } from '../../cache';
 import { VERSION } from '../../constants';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
 import { isMediaStorageEnabled, storeMedia } from '../../storage';
-import type { TestCase } from '../../types/index';
 import invariant from '../../util/invariant';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
+
+import type { TestCase } from '../../types/index';
 
 /**
  * Result of text-to-audio conversion

@@ -1,9 +1,10 @@
-import { BLOB_MAX_SIZE, BLOB_MIN_SIZE } from './constants';
-import { storeBlob, type BlobRef } from './index';
 import { getEnvBool } from '../envars';
 import logger from '../logger';
-import type { ProviderResponse } from '../types/providers';
+import { BLOB_MAX_SIZE, BLOB_MIN_SIZE } from './constants';
+import { type BlobRef, storeBlob } from './index';
 import { shouldAttemptRemoteBlobUpload, uploadBlobRemote } from './remoteUpload';
+
+import type { ProviderResponse } from '../types/providers';
 
 interface BlobContext {
   evalId?: string;

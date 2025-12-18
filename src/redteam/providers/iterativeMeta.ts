@@ -21,8 +21,8 @@ import {
 import { Strategies } from '../strategies';
 import {
   createIterationContext,
-  getTargetResponse,
   externalizeResponseForRedteamHistory,
+  getTargetResponse,
   redteamProviderManager,
   type TargetResponse,
 } from './shared';

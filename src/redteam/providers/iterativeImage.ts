@@ -10,8 +10,8 @@ import { TokenUsageTracker } from '../../util/tokenUsage';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import {
   createIterationContext,
-  getTargetResponse,
   externalizeResponseForRedteamHistory,
+  getTargetResponse,
   redteamProviderManager,
   type TargetResponse,
 } from './shared';

@@ -22,7 +22,6 @@
 
 import { getEnvString } from '../envars';
 import logger from '../logger';
-
 import { LocalFileSystemProvider } from './localFileSystemProvider';
 
 import type {
@@ -34,8 +33,8 @@ import type {
   StoreResult,
 } from './types';
 
-export * from './types';
 export { LocalFileSystemProvider } from './localFileSystemProvider';
+export * from './types';
 
 // Singleton instance
 let defaultProvider: MediaStorageProvider | null = null;

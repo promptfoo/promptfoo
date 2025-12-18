@@ -9,6 +9,7 @@ import {
   runAssertions,
   runCompareAssertion,
 } from './assertions/index';
+import { extractAndStoreBinaryData } from './blobs/extractor';
 import { getCache } from './cache';
 import cliState from './cliState';
 import { DEFAULT_MAX_CONCURRENCY, FILE_METADATA_KEY } from './constants';
@@ -48,7 +49,6 @@ import {
   type TestSuite,
 } from './types/index';
 import { isApiProvider } from './types/providers';
-import { extractAndStoreBinaryData } from './blobs/extractor';
 import { JsonlFileWriter } from './util/exportToFile/writeToFile';
 import { loadFunction, parseFileUrl } from './util/functions/loadFunction';
 import invariant from './util/invariant';

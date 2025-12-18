@@ -1,4 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
+import { isBlobStorageEnabled } from '../../../blobs/extractor';
+import { shouldAttemptRemoteBlobUpload } from '../../../blobs/remoteUpload';
 import { renderPrompt } from '../../../evaluatorHelpers';
 import logger from '../../../logger';
 import { PromptfooChatCompletionProvider } from '../../../providers/promptfoo';
@@ -20,8 +22,6 @@ import {
 } from '../../shared/runtimeTransform';
 import { Strategies } from '../../strategies';
 import { getSessionId, isBasicRefusal } from '../../util';
-import { isBlobStorageEnabled } from '../../../blobs/extractor';
-import { shouldAttemptRemoteBlobUpload } from '../../../blobs/remoteUpload';
 import {
   buildGraderResultAssertion,
   externalizeResponseForRedteamHistory,

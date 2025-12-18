@@ -41,9 +41,9 @@ import {
 import {
   checkPenalizedPhrases,
   createIterationContext,
+  externalizeResponseForRedteamHistory,
   getTargetResponse,
   redteamProviderManager,
-  externalizeResponseForRedteamHistory,
   type TargetResponse,
 } from './shared';
 import type { Environment } from 'nunjucks';

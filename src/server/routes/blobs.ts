@@ -1,12 +1,11 @@
-import type { Request, Response } from 'express';
-import express from 'express';
 import { eq } from 'drizzle-orm';
-
+import express from 'express';
 import { getBlobByHash, getBlobUrl } from '../../blobs';
 import { isBlobStorageEnabled } from '../../blobs/extractor';
 import { getDb } from '../../database';
 import { blobAssetsTable, blobReferencesTable } from '../../database/tables';
 import logger from '../../logger';
+import type { Request, Response } from 'express';
 
 export const blobsRouter = express.Router();
 

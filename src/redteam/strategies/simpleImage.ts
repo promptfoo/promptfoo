@@ -1,10 +1,10 @@
 import { Presets, SingleBar } from 'cli-progress';
-
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
 import { isMediaStorageEnabled, storeMedia } from '../../storage';
-import type { TestCase } from '../../types/index';
 import invariant from '../../util/invariant';
+
+import type { TestCase } from '../../types/index';
 
 const SVG_WIDTH = 800;
 const SVG_MIN_HEIGHT = 400;
