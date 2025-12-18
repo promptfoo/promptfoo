@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 360">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 380">
   <defs>
     <style>
       .title { font: bold 18px system-ui, -apple-system, sans-serif; fill: #1a1a1a; }
@@ -7,27 +7,27 @@
       .section-desc { font: 11px system-ui, -apple-system, sans-serif; fill: #888; }
       .attack-label { font: 12px system-ui, -apple-system, sans-serif; fill: #555; }
       .pct-label { font: bold 12px system-ui, -apple-system, sans-serif; }
+      .pct-white { font: bold 12px system-ui, -apple-system, sans-serif; fill: #fff; }
       .insight-text { font: 12px system-ui, -apple-system, sans-serif; fill: #5d4e37; }
-      .axis-label { font: 11px system-ui, -apple-system, sans-serif; fill: #999; }
     </style>
   </defs>
 
   <!-- Background -->
-  <rect width="700" height="360" fill="#fafafa"/>
+  <rect width="720" height="380" fill="#fafafa"/>
 
   <!-- Title -->
   <text x="35" y="32" class="title">The Structural vs Semantic Pattern</text>
-  <text x="35" y="50" class="subtitle">Gemini 3 Flash defends against token tricks but not framing tricks</text>
+  <text x="35" y="50" class="subtitle">Gemini 3 Flash defends against token tricks but not framing tricks (scale: 2px per %)</text>
 
   <!-- Dividing line -->
-  <line x1="350" y1="70" x2="350" y2="290" stroke="#ddd" stroke-width="2" stroke-dasharray="6,4"/>
+  <line x1="360" y1="70" x2="360" y2="290" stroke="#ddd" stroke-width="2" stroke-dasharray="6,4"/>
 
   <!-- Left section: Structural (defended) -->
   <g transform="translate(35, 75)">
     <text x="0" y="0" class="section-label">Structural Attacks</text>
     <text x="0" y="16" class="section-desc">Token manipulation, encoding exploits</text>
 
-    <!-- Attack bars -->
+    <!-- Attack bars (2px per %) -->
     <g transform="translate(0, 35)">
       <text x="0" y="14" class="attack-label">Pliny injections</text>
       <rect x="130" y="0" width="40" height="20" rx="2" fill="#4ECDC4"/>
@@ -42,64 +42,64 @@
 
     <g transform="translate(0, 95)">
       <text x="0" y="14" class="attack-label">ASCII smuggling</text>
-      <rect x="130" y="0" width="66" height="20" rx="2" fill="#7EDCD6"/>
+      <rect x="130" y="0" width="66" height="20" rx="2" fill="#4ECDC4"/>
       <text x="201" y="14" class="pct-label" style="fill: #27ae60;">33%</text>
     </g>
 
     <g transform="translate(0, 125)">
       <text x="0" y="14" class="attack-label">Token injection</text>
-      <rect x="130" y="0" width="80" height="20" rx="2" fill="#7EDCD6"/>
+      <rect x="130" y="0" width="80" height="20" rx="2" fill="#4ECDC4"/>
       <text x="215" y="14" class="pct-label" style="fill: #27ae60;">40%</text>
     </g>
 
     <!-- Average callout -->
     <g transform="translate(0, 165)">
-      <rect x="0" y="0" width="280" height="30" rx="4" fill="#e8f8f5" stroke="#b2dfdb"/>
-      <text x="140" y="20" class="section-desc" text-anchor="middle" style="fill: #27ae60; font-weight: 600;">Average: 29% ASR</text>
+      <rect x="0" y="0" width="290" height="30" rx="4" fill="#e8f8f5" stroke="#b2dfdb"/>
+      <text x="145" y="20" class="section-desc" text-anchor="middle" style="fill: #27ae60; font-weight: 600;">Average: 29% ASR (defended)</text>
     </g>
   </g>
 
-  <!-- Right section: Semantic (failed) -->
-  <g transform="translate(385, 75)">
+  <!-- Right section: Semantic (failed) - SAME SCALE: 2px per % -->
+  <g transform="translate(395, 75)">
     <text x="0" y="0" class="section-label">Semantic Attacks</text>
     <text x="0" y="16" class="section-desc">Roleplay, hypotheticals, reframing</text>
 
-    <!-- Attack bars -->
+    <!-- Attack bars (2px per %, 100% = 200px) -->
     <g transform="translate(0, 35)">
-      <text x="0" y="14" class="attack-label">Entity impersonation</text>
-      <rect x="130" y="0" width="150" height="20" rx="2" fill="#FF6B6B"/>
-      <text x="132" y="14" class="pct-label" style="fill: #fff;">100%</text>
+      <text x="0" y="14" class="attack-label">Impersonation</text>
+      <rect x="105" y="0" width="200" height="20" rx="2" fill="#FF6B6B"/>
+      <text x="290" y="14" class="pct-white">100%</text>
     </g>
 
     <g transform="translate(0, 65)">
       <text x="0" y="14" class="attack-label">Graphic content</text>
-      <rect x="130" y="0" width="150" height="20" rx="2" fill="#FF6B6B"/>
-      <text x="132" y="14" class="pct-label" style="fill: #fff;">100%</text>
+      <rect x="105" y="0" width="200" height="20" rx="2" fill="#FF6B6B"/>
+      <text x="290" y="14" class="pct-white">100%</text>
     </g>
 
     <g transform="translate(0, 95)">
       <text x="0" y="14" class="attack-label">Hallucination</text>
-      <rect x="130" y="0" width="140" height="20" rx="2" fill="#FF8E8E"/>
-      <text x="132" y="14" class="pct-label" style="fill: #fff;">93%</text>
+      <rect x="105" y="0" width="186" height="20" rx="2" fill="#FF6B6B"/>
+      <text x="276" y="14" class="pct-white">93%</text>
     </g>
 
     <g transform="translate(0, 125)">
       <text x="0" y="14" class="attack-label">Personal attacks</text>
-      <rect x="130" y="0" width="120" height="20" rx="2" fill="#FF8E8E"/>
-      <text x="132" y="14" class="pct-label" style="fill: #fff;">80%</text>
+      <rect x="105" y="0" width="160" height="20" rx="2" fill="#FF6B6B"/>
+      <text x="250" y="14" class="pct-white">80%</text>
     </g>
 
     <!-- Average callout -->
     <g transform="translate(0, 165)">
-      <rect x="0" y="0" width="280" height="30" rx="4" fill="#fce8e6" stroke="#f5c6cb"/>
-      <text x="140" y="20" class="section-desc" text-anchor="middle" style="fill: #c0392b; font-weight: 600;">Average: 93% ASR</text>
+      <rect x="0" y="0" width="290" height="30" rx="4" fill="#fce8e6" stroke="#f5c6cb"/>
+      <text x="145" y="20" class="section-desc" text-anchor="middle" style="fill: #c0392b; font-weight: 600;">Average: 93% ASR (failed)</text>
     </g>
   </g>
 
   <!-- Bottom insight callout -->
-  <g transform="translate(35, 300)">
-    <rect x="0" y="0" width="630" height="45" rx="6" fill="#fff8e6" stroke="#f0e0b0"/>
-    <text x="315" y="18" class="insight-text" text-anchor="middle" style="font-weight: 600;">Implication:</text>
-    <text x="315" y="35" class="insight-text" text-anchor="middle">Security research focuses on structural exploits. Real attacks use semantic reframing.</text>
+  <g transform="translate(35, 310)">
+    <rect x="0" y="0" width="650" height="55" rx="6" fill="#fff8e6" stroke="#f0e0b0"/>
+    <text x="325" y="20" class="insight-text" text-anchor="middle" style="font-weight: 600;">The visual tells the story:</text>
+    <text x="325" y="40" class="insight-text" text-anchor="middle">Security research focuses on structural exploits. Attackers use semantic reframing.</text>
   </g>
 </svg>

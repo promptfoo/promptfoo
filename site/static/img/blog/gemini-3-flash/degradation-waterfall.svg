@@ -56,41 +56,41 @@
   <!-- GPT-5.2 line and points -->
   <g>
     <!-- Connecting lines -->
-    <path d="M 200 126 L 400 184 L 600 210" stroke="#4ECDC4" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M 200 126 L 400 204 L 600 230" stroke="#4ECDC4" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
 
     <!-- Points -->
     <circle cx="200" cy="126" r="8" fill="#4ECDC4"/>
-    <circle cx="400" cy="184" r="8" fill="#4ECDC4"/>
-    <circle cx="600" cy="210" r="8" fill="#4ECDC4"/>
+    <circle cx="400" cy="204" r="8" fill="#4ECDC4"/>
+    <circle cx="600" cy="230" r="8" fill="#4ECDC4"/>
 
     <!-- Labels -->
     <text x="200" y="115" class="pct-label" text-anchor="middle">95.7%</text>
-    <text x="400" y="173" class="pct-label" text-anchor="middle">39.7%</text>
-    <text x="600" y="230" class="pct-label" text-anchor="middle">21.5%</text>
+    <text x="400" y="193" class="pct-label" text-anchor="middle">39.7%</text>
+    <text x="600" y="250" class="pct-label" text-anchor="middle">21.5%</text>
 
     <!-- Drop annotations -->
-    <text x="300" y="170" class="drop-label" text-anchor="middle">-56pp</text>
-    <text x="500" y="212" class="drop-label" text-anchor="middle">-18pp</text>
+    <text x="300" y="180" class="drop-label" text-anchor="middle">-56pp</text>
+    <text x="500" y="232" class="drop-label" text-anchor="middle">-18pp</text>
   </g>
 
   <!-- Gemini 3 Flash line and points -->
   <g>
     <!-- Connecting lines -->
-    <path d="M 200 147 L 400 245 L 600 238" stroke="#FF6B6B" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M 200 147 L 400 245 L 600 228" stroke="#FF6B6B" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
 
     <!-- Points -->
     <circle cx="200" cy="147" r="8" fill="#FF6B6B"/>
     <circle cx="400" cy="245" r="8" fill="#FF6B6B"/>
-    <circle cx="600" cy="238" r="8" fill="#FF6B6B"/>
+    <circle cx="600" cy="228" r="8" fill="#FF6B6B"/>
 
     <!-- Labels -->
     <text x="200" y="165" class="pct-label" text-anchor="middle">80.9%</text>
     <text x="400" y="263" class="pct-label" text-anchor="middle">10.6%</text>
-    <text x="600" y="256" class="pct-label" text-anchor="middle">23.1%</text>
+    <text x="620" y="222" class="pct-label" text-anchor="start">23.1%</text>
 
     <!-- Drop annotations -->
     <text x="300" y="215" class="drop-label" text-anchor="middle">-70pp</text>
-    <text x="500" y="256" class="drop-label" text-anchor="middle">+13pp</text>
+    <text x="500" y="252" class="drop-label" text-anchor="middle">+13pp</text>
   </g>
 
   <!-- Legend -->

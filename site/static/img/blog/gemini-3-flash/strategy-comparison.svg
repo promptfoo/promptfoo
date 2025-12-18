@@ -36,7 +36,7 @@
     <text x="255" y="320">25%</text>
     <text x="355" y="320">50%</text>
     <text x="455" y="320">75%</text>
-    <text x="550" y="320">100%</text>
+    <text x="555" y="320">100%</text>
   </g>
 
   <!-- Grid lines -->
