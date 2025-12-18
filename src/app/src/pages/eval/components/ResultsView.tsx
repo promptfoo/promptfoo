@@ -1,6 +1,7 @@
 import React from 'react';
 
 import { IS_RUNNING_LOCALLY } from '@app/constants';
+import useCloudConfig from '@app/hooks/useCloudConfig';
 import { useToast } from '@app/hooks/useToast';
 import { useStore as useMainStore } from '@app/stores/evalConfig';
 import { callApi, fetchUserEmail, updateEvalAuthor } from '@app/utils/api';
@@ -211,6 +212,7 @@ export default function ResultsView({
   const { updateConfig } = useMainStore();
 
   const { showToast } = useToast();
+  const { data: cloudConfig } = useCloudConfig();
   const [searchText, setSearchText] = React.useState(searchParams.get('search') || '');
   const [debouncedSearchValue] = useDebounce(searchText, 1000);
 
@@ -581,6 +583,20 @@ export default function ResultsView({
     }
   };
 
+  // Determine if the current user can edit the author field
+  // When cloud is enabled, only allow editing your own evals or unclaimed evals
+  // When cloud is disabled, allow editing (no identity system to verify ownership)
+  const canEditAuthor = React.useMemo(() => {
+    if (!cloudConfig?.isEnabled) {
+      return true;
+    }
+    // Cloud is enabled - only allow editing if no author or author matches current user
+    if (!author) {
+      return true;
+    }
+    return author === currentUserEmail;
+  }, [cloudConfig?.isEnabled, author, currentUserEmail]);
+
   const handleSearchKeyDown = React.useCallback<React.KeyboardEventHandler>(
     (event) => {
       if (event.key === 'Escape') {
@@ -660,7 +676,8 @@ export default function ResultsView({
               author={author}
               onEditAuthor={handleEditAuthor}
               currentUserEmail={currentUserEmail}
-              editable
+              editable={canEditAuthor}
+              isCloudEnabled={cloudConfig?.isEnabled ?? false}
             />
             {Object.keys(config?.tags || {}).map((tag) => (
               <Chip
