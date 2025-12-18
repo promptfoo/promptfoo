@@ -108,6 +108,8 @@ The category breakdown reveals what Gemini 3 Flash was trained to resist—and w
 
 One plausible explanation: defenses are stronger on structural prompt exploits (the kind that show up in security research) than on semantic reframes. When you manipulate tokens, the model catches it. When you manipulate framing, the model defaults to helpful.
 
+![Structural vs semantic attack success rates](/img/blog/gemini-3-flash/structural-vs-semantic.svg)
+
 ### How the models compare
 
 The category-by-category breakdown using Meta strategy results:
