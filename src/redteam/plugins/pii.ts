@@ -206,10 +206,10 @@ export async function getPiiLeakTestsForCategory(
   }
 
   const inputs = config?.inputs as Record<string, string> | undefined;
-  const hasInputs = inputs && Object.keys(inputs).length > 0;
+  const hasMultipleInputs = inputs && Object.keys(inputs).length > 0;
 
   let prompts: string[];
-  if (hasInputs) {
+  if (hasMultipleInputs) {
     // Multi-input mode: extract from <Prompt> tags (JSON format)
     prompts = extractAllPromptsFromTags(generatedPrompts);
     if (prompts.length === 0) {

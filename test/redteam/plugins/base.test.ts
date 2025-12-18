@@ -304,7 +304,10 @@ describe('RedteamPluginBase', () => {
     it('should handle prompts with colons', () => {
       const input = 'Prompt: Hello: World\nPrompt: Question: How are you?';
       const result = parseGeneratedPrompts(input);
-      expect(result).toEqual([{ __prompt: 'Hello: World' }, { __prompt: 'Question: How are you?' }]);
+      expect(result).toEqual([
+        { __prompt: 'Hello: World' },
+        { __prompt: 'Question: How are you?' },
+      ]);
     });
 
     it('should handle empty input', () => {

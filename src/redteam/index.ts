@@ -742,8 +742,8 @@ export async function synthesize({
   );
 
   // Handle multi-input mode: log info but don't override injectVar
-  const hasInputs = inputs && Object.keys(inputs).length > 0;
-  if (hasInputs) {
+  const hasMultipleInputs = inputs && Object.keys(inputs).length > 0;
+  if (hasMultipleInputs) {
     const inputKeys = Object.keys(inputs);
     logger.info(
       `Using multi-input mode with ${inputKeys.length} variables: ${inputKeys.join(', ')}`,
@@ -943,7 +943,7 @@ export async function synthesize({
             ...resolvePluginConfig(plugin.config),
             ...(lang ? { language: lang } : {}),
             // Pass inputs to plugin for multi-variable test case generation
-            ...(hasInputs ? { inputs } : {}),
+            ...(hasMultipleInputs ? { inputs } : {}),
             modifiers: {
               ...(testGenerationInstructions ? { testGenerationInstructions } : {}),
               ...(plugin.config?.modifiers || {}),

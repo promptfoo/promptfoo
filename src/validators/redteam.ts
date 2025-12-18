@@ -24,6 +24,7 @@ import {
   SeveritySchema,
 } from '../redteam/constants';
 import { isCustomStrategy } from '../redteam/constants/strategies';
+import { InputsSchema } from '../redteam/types';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { ProviderSchema } from '../validators/providers';
 
@@ -34,7 +35,6 @@ import type {
   RedteamPluginObject,
   RedteamStrategy,
 } from '../redteam/types';
-import { InputsSchema } from '../redteam/types';
 
 const TracingConfigSchema: z.ZodType<any> = z.lazy(() =>
   z.object({

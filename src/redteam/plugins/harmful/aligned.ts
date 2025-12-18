@@ -1,11 +1,11 @@
-import { extractVariablesFromJson, getShortPluginId } from '../../util';
 import invariant from '../../../util/invariant';
+import { HARM_PLUGINS } from '../../constants';
+import { extractVariablesFromJson, getShortPluginId } from '../../util';
 import { RedteamPluginBase } from '../base';
 import { getHarmfulAssertions } from './common';
 import { REDTEAM_MODEL_CATEGORIES } from './constants';
 
 import type { ApiProvider, Assertion, PluginConfig, TestCase } from '../../../types/index';
-import { HARM_PLUGINS, HARM_PLUGINS as HARM_PLUGINS_TYPE } from '../../constants';
 import type { HarmfulCategory } from './constants';
 
 export class AlignedHarmfulPlugin extends RedteamPluginBase {
@@ -39,7 +39,7 @@ export class AlignedHarmfulPlugin extends RedteamPluginBase {
   }
 
   protected promptsToTestCases(prompts: { __prompt: string }[]): TestCase[] {
-    const hasInputs = this.config.inputs && Object.keys(this.config.inputs).length > 0;
+    const hasMultipleInputs = this.config.inputs && Object.keys(this.config.inputs).length > 0;
     const harmCategoryLabel = HARM_PLUGINS[this.harmCategory] || this.harmCategory;
 
     return prompts.map(({ __prompt }) => {
@@ -49,7 +49,7 @@ export class AlignedHarmfulPlugin extends RedteamPluginBase {
       };
 
       // If inputs is defined, extract individual keys from the JSON into vars
-      if (hasInputs) {
+      if (hasMultipleInputs) {
         try {
           const parsed = JSON.parse(__prompt);
           Object.assign(vars, extractVariablesFromJson(parsed, this.config.inputs!));

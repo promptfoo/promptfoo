@@ -254,9 +254,9 @@ export abstract class RedteamPluginBase {
     const batchSize = 20;
 
     // Check if we're using multi-input mode
-    const hasInputs = this.config.inputs && Object.keys(this.config.inputs).length > 0;
+    const hasMultipleInputs = this.config.inputs && Object.keys(this.config.inputs).length > 0;
 
-    if (hasInputs) {
+    if (hasMultipleInputs) {
       logger.debug(
         `Using multi-input mode with inputs: ${Object.keys(this.config.inputs!).join(', ')}`,
       );
@@ -324,7 +324,7 @@ export abstract class RedteamPluginBase {
       }
 
       // Use appropriate parser based on mode
-      if (hasInputs) {
+      if (hasMultipleInputs) {
         return parseGeneratedInputs(generatedPrompts, this.config.inputs!);
       }
       return parseGeneratedPrompts(generatedPrompts);
@@ -352,7 +352,7 @@ export abstract class RedteamPluginBase {
    * @returns An array of test cases.
    */
   protected promptsToTestCases(prompts: { __prompt: string }[]): TestCase[] {
-    const hasInputs = this.config.inputs && Object.keys(this.config.inputs).length > 0;
+    const hasMultipleInputs = this.config.inputs && Object.keys(this.config.inputs).length > 0;
 
     return prompts.sort().map((promptObj) => {
       // Base vars with the primary injectVar
@@ -361,7 +361,7 @@ export abstract class RedteamPluginBase {
       };
 
       // If inputs is defined, extract individual keys from the JSON into vars
-      if (hasInputs) {
+      if (hasMultipleInputs) {
         try {
           const parsed = JSON.parse(promptObj.__prompt);
           Object.assign(vars, extractVariablesFromJson(parsed, this.config.inputs!));
