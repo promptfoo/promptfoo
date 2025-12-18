@@ -1,14 +1,14 @@
-import { MockedFunction, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, MockedFunction, vi } from 'vitest';
+import * as cache from '../../../src/cache';
 import logger from '../../../src/logger';
+import * as imageDatasetUtils from '../../../src/redteam/plugins/imageDatasetUtils';
 import {
-  VLGuardPlugin,
-  VLGuardGrader,
-  VLGuardDatasetManager,
   VALID_CATEGORIES,
   VALID_SUBCATEGORIES,
+  VLGuardDatasetManager,
+  VLGuardGrader,
+  VLGuardPlugin,
 } from '../../../src/redteam/plugins/vlguard';
-import * as cache from '../../../src/cache';
-import * as imageDatasetUtils from '../../../src/redteam/plugins/imageDatasetUtils';
 
 import type { ApiProvider, AtomicTestCase } from '../../../src/types/index';
 

@@ -1,6 +1,6 @@
-import { Mocked, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
+import { afterEach, beforeEach, describe, expect, it, Mocked, vi } from 'vitest';
 import { runMetaAgentRedteam } from '../../../src/redteam/providers/iterativeMeta';
+
 import type { ApiProvider, AtomicTestCase, ProviderResponse } from '../../../src/types/index';
 
 const mockGetProvider = vi.hoisted(() => vi.fn<() => Promise<any>>());

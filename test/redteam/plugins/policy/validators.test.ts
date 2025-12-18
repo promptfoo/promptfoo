@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { validate as isUUID } from 'uuid';
+import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import {
   isValidInlinePolicyId,
   isValidPolicyId,

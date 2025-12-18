@@ -16,13 +16,6 @@ import dedent from 'dedent';
 import { v4 as uuidv4 } from 'uuid';
 import logger from '../../../logger';
 import { PromptfooChatCompletionProvider } from '../../../providers/promptfoo';
-import type {
-  ApiProvider,
-  CallApiContextParams,
-  CallApiOptionsParams,
-  ProviderResponse,
-  TokenUsage,
-} from '../../../types/index';
 import { extractFirstJsonObject } from '../../../util/json';
 import { getNunjucksEngine } from '../../../util/templates';
 import { sleep } from '../../../util/time';
@@ -30,9 +23,17 @@ import { TokenUsageTracker } from '../../../util/tokenUsage';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../../util/tokenUsageUtils';
 import { shouldGenerateRemote } from '../../remoteGeneration';
 import { textToAudio } from '../../strategies/simpleAudio';
-import type { AudioGradingConfig, BaseRedteamMetadata } from '../../types';
 import { isBasicRefusal } from '../../util';
-import { redteamProviderManager, type TargetResponse, getTargetResponse } from '../shared';
+import { getTargetResponse, redteamProviderManager, type TargetResponse } from '../shared';
+
+import type {
+  ApiProvider,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  ProviderResponse,
+  TokenUsage,
+} from '../../../types/index';
+import type { AudioGradingConfig, BaseRedteamMetadata } from '../../types';
 
 const DEFAULT_MAX_TURNS = 8;
 const DEFAULT_MAX_BACKTRACKS = 5;

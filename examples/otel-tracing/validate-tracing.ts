@@ -1,4 +1,5 @@
 #!/usr/bin/env npx tsx
+
 /**
  * OTEL Tracing Validation Script
  *

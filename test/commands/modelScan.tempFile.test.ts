@@ -1,5 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import os from 'os';
+
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock fs module before importing the module under test
 vi.mock('fs', async (importOriginal) => {
@@ -45,8 +46,8 @@ vi.mock('../../src/globalConfig/accounts', () => ({
   getAuthor: vi.fn().mockReturnValue('test-author'),
 }));
 
-import logger from '../../src/logger';
 import { createTempOutputPath, supportsCliUiWithOutput } from '../../src/commands/modelScan';
+import logger from '../../src/logger';
 
 describe('supportsCliUiWithOutput', () => {
   it('should return false for null version', () => {

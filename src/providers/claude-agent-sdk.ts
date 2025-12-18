@@ -1,6 +1,6 @@
-import fs from 'fs';
-import os from 'os';
-import path from 'path';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
 import dedent from 'dedent';
 import cliState from '../cliState';
@@ -16,22 +16,22 @@ import type {
   CanUseTool,
   HookCallbackMatcher,
   HookEvent,
-  Options as QueryOptions,
   OutputFormat,
   PermissionResult,
+  Options as QueryOptions,
   SandboxSettings,
   SettingSource,
   SpawnedProcess,
   SpawnOptions,
 } from '@anthropic-ai/claude-agent-sdk';
 
+import type { EnvOverrides } from '../types/env';
 import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderResponse,
 } from '../types/index';
-import type { EnvOverrides } from '../types/env';
 
 /**
  * Claude Agent SDK Provider
