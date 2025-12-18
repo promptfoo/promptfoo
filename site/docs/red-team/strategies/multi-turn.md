@@ -191,6 +191,5 @@ The backtracking automation also saves an enormous amount of time compared to ma
 - [Iterative Jailbreaks](iterative.md) - Single-turn version of this approach
 - [Tree-based Jailbreaks](tree.md) - Alternative approach to jailbreaking
 - [The Crescendo Attack](https://crescendo-the-multiturn-jailbreak.github.io//) from Microsoft Research
-- [Simba Red Team Agent](simba.md) - Autonomous multi-phase red teaming agent
 
 For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.

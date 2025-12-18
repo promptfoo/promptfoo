@@ -1,5 +1,5 @@
-import type React from 'react';
 import { useEffect, useMemo, useState } from 'react';
+import type React from 'react';
 
 import { HIDDEN_METADATA_KEYS } from '@app/constants';
 import CheckIcon from '@mui/icons-material/Check';
@@ -12,16 +12,16 @@ import Paper from '@mui/material/Paper';
 import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
 import Typography from '@mui/material/Typography';
-import type { GradingResult } from '@promptfoo/types';
-
-import type { Trace } from '../../../components/traces/TraceView';
-import type { CloudConfigData } from '../../../hooks/useCloudConfig';
 import ChatMessages, { type Message } from './ChatMessages';
 import { DebuggingPanel } from './DebuggingPanel';
 import { EvaluationPanel } from './EvaluationPanel';
 import { type ExpandedMetadataState, MetadataPanel } from './MetadataPanel';
 import { OutputsPanel } from './OutputsPanel';
 import { PromptEditor } from './PromptEditor';
+import type { GradingResult } from '@promptfoo/types';
+
+import type { Trace } from '../../../components/traces/TraceView';
+import type { CloudConfigData } from '../../../hooks/useCloudConfig';
 import type { ResultsFilterOperator, ResultsFilterType } from './store';
 
 const copyButtonSx = {

@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { processPrompts } from '../../src/prompts/index';
 

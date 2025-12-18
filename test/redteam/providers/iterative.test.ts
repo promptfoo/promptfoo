@@ -1,8 +1,8 @@
-import { Mocked, beforeEach, describe, expect, it, vi } from 'vitest';
-
+import { beforeEach, describe, expect, it, Mocked, vi } from 'vitest';
 import RedteamIterativeProvider, {
   runRedteamConversation,
 } from '../../../src/redteam/providers/iterative';
+
 import type { ApiProvider, AtomicTestCase, ProviderResponse } from '../../../src/types/index';
 
 const mockGetProvider = vi.hoisted(() => vi.fn());
@@ -240,6 +240,7 @@ describe('RedteamIterativeProvider', () => {
         score: 0,
         reason: 'Jailbreak detected by grader',
         tokensUsed: { total: 100, prompt: 50, completion: 50 },
+        assertion: { type: 'promptfoo:redteam:test-plugin', value: 'test rubric' },
       });
       expect(mockGrader.getResult).toHaveBeenCalledWith(
         'test',
@@ -776,6 +777,7 @@ describe('RedteamIterativeProvider', () => {
         pass: false,
         score: 0,
         reason: 'Grader detected jailbreak',
+        assertion: { type: 'promptfoo:redteam:test-plugin', value: 'test rubric' },
       });
     });
 

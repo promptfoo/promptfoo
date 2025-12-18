@@ -18,7 +18,10 @@ The Indirect Prompt Injection plugin generates adversarial user inputs that are 
 To include the Indirect Prompt Injection plugin in your LLM red teaming setup, let's imagine you have a system prompt that includes a variable for the user's name:
 
 ```yaml
-systemPrompt: 'You are a travel agent specialized in budget trips to Europe. The user's name is {{name}}. \n\nUser query: {{query}}'
+systemPrompt: |
+  You are a travel agent specialized in budget trips to Europe. The user's name is {{name}}.
+
+  User query: {{query}}
 ```
 
 You can then configure the Indirect Prompt Injection plugin to test for vulnerabilities by specifying the variable that will contain untrusted data:

@@ -1,10 +1,8 @@
-import type { Mock } from 'vitest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ApiProvider, CallApiContextParams } from '../../../src/types/index';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const mockFetchWithProxy = vi.fn<any>();
+const mockFetchWithProxy = vi.fn();
 
 vi.mock('../../../src/util/fetch/index', () => ({
   fetchWithProxy: (...args: unknown[]) => mockFetchWithProxy(...args),
@@ -30,8 +28,7 @@ vi.mock('../../../src/redteam/remoteGeneration', () => ({
 describe('AuthoritativeMarkupInjectionProvider', () => {
   let AuthoritativeMarkupInjectionProvider: typeof import('../../../src/redteam/providers/authoritativeMarkupInjection').default;
   let mockTargetProvider: ApiProvider;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let mockCallApi: Mock<any>;
+  let mockCallApi: ReturnType<typeof vi.fn>;
 
   const createMockContext = (targetProvider: ApiProvider): CallApiContextParams => ({
     originalProvider: targetProvider,

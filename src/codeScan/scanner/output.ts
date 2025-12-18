@@ -6,17 +6,17 @@
 
 import chalk from 'chalk';
 import ora from 'ora';
-import logger from '../../logger';
-import { formatDuration } from '../../util/formatDuration';
 import { TERMINAL_MAX_WIDTH } from '../../constants';
-import { printBorder } from '../../util/index';
+import logger from '../../logger';
 import {
   CodeScanSeverity,
-  formatSeverity,
   countBySeverity,
+  formatSeverity,
   getSeverityRank,
   type ScanResponse,
 } from '../../types/codeScan';
+import { formatDuration } from '../../util/formatDuration';
+import { printBorder } from '../../util/index';
 
 /**
  * Options for output display

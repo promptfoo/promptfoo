@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-
 import { handleToolCallF1 } from '../../src/assertions/toolCallF1';
 
 import type { ApiProvider, AssertionParams, AtomicTestCase } from '../../src/types/index';

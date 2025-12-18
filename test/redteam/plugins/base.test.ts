@@ -1,19 +1,19 @@
-import { Mock, MockInstance, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import dedent from 'dedent';
-
+import { afterEach, beforeEach, describe, expect, it, Mock, MockInstance, vi } from 'vitest';
 import { matchesLlmRubric } from '../../../src/matchers';
 import {
   parseGeneratedPrompts,
   RedteamGraderBase,
   RedteamPluginBase,
 } from '../../../src/redteam/plugins/base';
+import { maybeLoadFromExternalFile } from '../../../src/util/file';
+
 import type {
   ApiProvider,
   Assertion,
   AtomicTestCase,
   GradingResult,
 } from '../../../src/types/index';
-import { maybeLoadFromExternalFile } from '../../../src/util/file';
 
 vi.mock('../../../src/matchers', async (importOriginal) => {
   return {
