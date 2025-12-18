@@ -1,5 +1,4 @@
 import dedent from 'dedent';
-
 import { VERSION } from '../../constants';
 import {
   DEFAULT_MULTI_TURN_MAX_TURNS,
@@ -7,10 +6,11 @@ import {
   type Plugin,
 } from '../../redteam/constants';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../../redteam/remoteGeneration';
-import type { ConversationMessage } from '../../redteam/types';
 import { sha256 } from '../../util/createHash';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { extractFirstJsonObject } from '../../util/json';
+
+import type { ConversationMessage } from '../../redteam/types';
 
 const MULTI_TURN_EMAIL = 'anonymous@promptfoo.dev';
 

@@ -1,9 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 
 import dotenv from 'dotenv';
 import { globSync } from 'glob';
+import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from 'vitest';
 import { getDb } from '../../src/database/index';
 import * as googleSheets from '../../src/googleSheets';
 import Eval from '../../src/models/eval';
@@ -14,6 +14,7 @@ import {
   type TestCase,
 } from '../../src/types/index';
 import {
+  createOutputMetadata,
   filterRuntimeVars,
   maybeLoadToolsFromExternalFile,
   parsePathOrGlob,
@@ -27,7 +28,6 @@ import {
   varsMatch,
   writeMultipleOutputs,
   writeOutput,
-  createOutputMetadata,
 } from '../../src/util/index';
 import { TestGrader } from './utils';
 

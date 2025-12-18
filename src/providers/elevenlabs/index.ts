@@ -8,102 +8,103 @@
  * - Supporting APIs: Audio processing and conversation management
  */
 
-export { ElevenLabsTTSProvider } from './tts';
-export { ElevenLabsSTTProvider } from './stt';
 export { ElevenLabsAgentsProvider } from './agents';
-export { ElevenLabsHistoryProvider } from './history';
-export { ElevenLabsIsolationProvider } from './isolation';
-export { ElevenLabsAlignmentProvider } from './alignment';
-export { ElevenLabsClient } from './client';
-export { ElevenLabsWebSocketClient } from './websocket-client';
-export { ElevenLabsCache } from './cache';
-export { CostTracker } from './cost-tracker';
-export { ElevenLabsAPIError, ElevenLabsRateLimitError, ElevenLabsAuthError } from './errors';
 export {
-  POPULAR_VOICES,
-  getAvailableVoices,
-  getVoice,
-  resolveVoiceId,
-  getRecommendedSettings,
-  getPopularVoicesByCategory,
-} from './tts/voices';
-export {
-  createPronunciationDictionary,
-  applyPronunciationDictionary,
-  applyPronunciationDictionaries,
-  getPronunciationDictionary,
-  listPronunciationDictionaries,
-  deletePronunciationDictionary,
-  createTechPronunciationDictionary,
-  COMMON_TECH_PRONUNCIATIONS,
-} from './tts/pronunciation';
-export {
-  designVoice,
-  remixVoice,
-  cloneVoice,
-  deleteVoice,
-  getVoiceGenerationStatus,
-  designVoiceFromTemplate,
-  VOICE_DESIGN_TEMPLATES,
-} from './tts/voice-design';
-export type {
-  ElevenLabsBaseConfig,
-  AudioData,
-  UsageMetrics,
-  CostMetrics,
-  ElevenLabsProviderOptions,
-} from './types';
-export type {
-  ElevenLabsTTSConfig,
-  TTSModel,
-  OutputFormat,
-  VoiceSettings,
-  TTSResponse,
-  TTSStreamConfig,
-  StreamingChunk,
-  PronunciationRule,
-  VoiceDesignConfig,
-  VoiceRemixConfig,
-} from './tts/types';
-export type {
-  ElevenLabsSTTConfig,
-  STTModel,
-  AudioFormat,
-  STTResponse,
-  DiarizationSegment,
-  WERResult,
-  AudioFileMetadata,
-} from './stt/types';
-export type { VoiceInfo } from './tts/voices';
-export type { WebSocketClientConfig, StreamingMessage } from './websocket-client';
-export type { PronunciationDictionary } from './tts/pronunciation';
-export type { GeneratedVoice } from './tts/voice-design';
-export type {
-  ElevenLabsAgentsConfig,
-  AgentConfig,
-  AgentTool,
-  SimulatedUser,
-  EvaluationCriterion,
-  ToolMockConfig,
-  AgentSimulationResponse,
-  ConversationTurn,
-  ToolCall,
-  ConversationAnalysis,
-  EvaluationResult,
-} from './agents/types';
-export {
-  COMMON_EVALUATION_CRITERIA,
   buildCriteriaFromPresets,
+  COMMON_EVALUATION_CRITERIA,
 } from './agents/evaluation';
 export { COMMON_AGENT_TOOLS } from './agents/tools';
+export { ElevenLabsAlignmentProvider } from './alignment';
+export { ElevenLabsCache } from './cache';
+export { ElevenLabsClient } from './client';
+export { CostTracker } from './cost-tracker';
+export { ElevenLabsAPIError, ElevenLabsAuthError, ElevenLabsRateLimitError } from './errors';
+export { ElevenLabsHistoryProvider } from './history';
+export { ElevenLabsIsolationProvider } from './isolation';
+export { ElevenLabsSTTProvider } from './stt';
+export { ElevenLabsTTSProvider } from './tts';
+export {
+  applyPronunciationDictionaries,
+  applyPronunciationDictionary,
+  COMMON_TECH_PRONUNCIATIONS,
+  createPronunciationDictionary,
+  createTechPronunciationDictionary,
+  deletePronunciationDictionary,
+  getPronunciationDictionary,
+  listPronunciationDictionaries,
+} from './tts/pronunciation';
+export {
+  cloneVoice,
+  deleteVoice,
+  designVoice,
+  designVoiceFromTemplate,
+  getVoiceGenerationStatus,
+  remixVoice,
+  VOICE_DESIGN_TEMPLATES,
+} from './tts/voice-design';
+export {
+  getAvailableVoices,
+  getPopularVoicesByCategory,
+  getRecommendedSettings,
+  getVoice,
+  POPULAR_VOICES,
+  resolveVoiceId,
+} from './tts/voices';
+export { ElevenLabsWebSocketClient } from './websocket-client';
+
+export type {
+  AgentConfig,
+  AgentSimulationResponse,
+  AgentTool,
+  ConversationAnalysis,
+  ConversationTurn,
+  ElevenLabsAgentsConfig,
+  EvaluationCriterion,
+  EvaluationResult,
+  SimulatedUser,
+  ToolCall,
+  ToolMockConfig,
+} from './agents/types';
+export type {
+  AlignmentResponse,
+  CharacterAlignment,
+  ForcedAlignmentConfig,
+  WordAlignment,
+} from './alignment/types';
 export type {
   ConversationHistoryConfig,
   ConversationHistoryResponse,
 } from './history/types';
 export type { AudioIsolationConfig } from './isolation/types';
 export type {
-  ForcedAlignmentConfig,
-  AlignmentResponse,
-  WordAlignment,
-  CharacterAlignment,
-} from './alignment/types';
+  AudioFileMetadata,
+  AudioFormat,
+  DiarizationSegment,
+  ElevenLabsSTTConfig,
+  STTModel,
+  STTResponse,
+  WERResult,
+} from './stt/types';
+export type { PronunciationDictionary } from './tts/pronunciation';
+export type {
+  ElevenLabsTTSConfig,
+  OutputFormat,
+  PronunciationRule,
+  StreamingChunk,
+  TTSModel,
+  TTSResponse,
+  TTSStreamConfig,
+  VoiceDesignConfig,
+  VoiceRemixConfig,
+  VoiceSettings,
+} from './tts/types';
+export type { GeneratedVoice } from './tts/voice-design';
+export type { VoiceInfo } from './tts/voices';
+export type {
+  AudioData,
+  CostMetrics,
+  ElevenLabsBaseConfig,
+  ElevenLabsProviderOptions,
+  UsageMetrics,
+} from './types';
+export type { StreamingMessage, WebSocketClientConfig } from './websocket-client';

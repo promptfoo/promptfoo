@@ -1,8 +1,8 @@
 import { sha256 } from '../../../util/createHash';
+import invariant from '../../../util/invariant';
 import { type Policy, PolicyObject, PolicyObjectSchema } from '../../types';
 import { POLICY_METRIC_PREFIX } from './constants';
 import { isValidReusablePolicyId } from './validators';
-import invariant from '../../../util/invariant';
 
 /**
  * Checks if a metric is a policy metric.

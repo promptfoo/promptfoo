@@ -3,10 +3,8 @@ import React from 'react';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-
-import type { ProviderOptions } from '@promptfoo/types';
-
 import CommonConfigurationOptions from './CommonConfigurationOptions';
+import type { ProviderOptions } from '@promptfoo/types';
 
 vi.mock('./ExtensionEditor', () => ({
   default: () => <div data-testid="mock-extension-editor" />,

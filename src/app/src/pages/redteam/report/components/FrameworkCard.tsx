@@ -1,3 +1,5 @@
+import { useCallback, useMemo } from 'react';
+
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import InfoIcon from '@mui/icons-material/Info';
 import Box from '@mui/material/Box';
@@ -15,10 +17,12 @@ import {
   OWASP_API_TOP_10_NAMES,
   OWASP_LLM_TOP_10_NAMES,
   riskCategorySeverityMap,
-  severityDisplayNames,
   Severity,
+  severityDisplayNames,
 } from '@promptfoo/redteam/constants';
+import { calculateAttackSuccessRate } from '@promptfoo/redteam/metrics';
 import { getSeverityColor, getSeverityContrastText } from '../utils/color';
+import { compareByASRDescending } from '../utils/utils';
 import {
   type CategoryStats,
   categorizePlugins,
@@ -26,9 +30,6 @@ import {
   FRAMEWORK_DESCRIPTIONS,
 } from './FrameworkComplianceUtils';
 import FrameworkPluginResult from './FrameworkPluginResult';
-import { useCallback, useMemo } from 'react';
-import { calculateAttackSuccessRate } from '@promptfoo/redteam/metrics';
-import { compareByASRDescending } from '../utils/utils';
 
 interface FrameworkCardProps {
   evalId: string;

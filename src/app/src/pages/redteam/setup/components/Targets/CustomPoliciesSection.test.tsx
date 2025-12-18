@@ -2,13 +2,12 @@ import { ToastProvider } from '@app/contexts/ToastContext';
 import { useToast } from '@app/hooks/useToast';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
-import type { DefinedUseQueryResult } from '@tanstack/react-query';
-import type { ApiHealthResult } from '@app/hooks/useApiHealth';
-
+import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
-import { CustomPoliciesSection } from './CustomPoliciesSection';
 import { TestCaseGenerationProvider } from '../TestCaseGenerationProvider';
+import { CustomPoliciesSection } from './CustomPoliciesSection';
+import type { ApiHealthResult } from '@app/hooks/useApiHealth';
+import type { DefinedUseQueryResult } from '@tanstack/react-query';
 
 vi.mock('../../hooks/useRedTeamConfig');
 vi.mock('@app/hooks/useTelemetry', () => ({

@@ -1,11 +1,12 @@
 import React from 'react';
+
 import Head from '@docusaurus/Head';
 import Link from '@docusaurus/Link';
+import ArticleIcon from '@mui/icons-material/Article';
+import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import BiotechIcon from '@mui/icons-material/Biotech';
-import BuildIcon from '@mui/icons-material/Build';
 import GitHubIcon from '@mui/icons-material/GitHub';
 import VolumeOffIcon from '@mui/icons-material/VolumeOff';
-import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import Layout from '@theme/Layout';
 import clsx from 'clsx';
 import LogoContainer from '../../components/LogoContainer';
@@ -120,6 +121,29 @@ function VulnerabilityTypesSection() {
   );
 }
 
+function ProofBannerSection() {
+  return (
+    <section className={styles.proofBanner}>
+      <div className={clsx('container', styles.proofBannerContainer)}>
+        <ArticleIcon className={styles.proofBannerIcon} />
+        <div className={styles.proofBannerContent}>
+          <h3 className={styles.proofBannerTitle}>See it in action</h3>
+          <p className={styles.proofBannerText}>
+            We tested the scanner against real CVEs in LangChain, Vanna.AI, and LlamaIndex. Read the
+            technical deep dive to see how it catches vulnerabilities that other tools miss.
+          </p>
+        </div>
+        <Link
+          className={clsx('button button--secondary', styles.proofBannerButton)}
+          to="/blog/building-a-security-scanner-for-llm-apps"
+        >
+          Read the technical breakdown
+        </Link>
+      </div>
+    </section>
+  );
+}
+
 function BenefitsSection() {
   return (
     <section className={styles.benefitsSection}>
@@ -209,6 +233,7 @@ export default function GitHubAction(): React.ReactElement {
         <GitHubActionHeader />
         <main className={styles.mainContent}>
           <VulnerabilityTypesSection />
+          <ProofBannerSection />
           <BenefitsSection />
           <CallToActionSection />
         </main>

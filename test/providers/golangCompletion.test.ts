@@ -1,7 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { GolangProvider } from '../../src/providers/golangCompletion';
 
 // Hoisted mock functions
