@@ -62,6 +62,8 @@ The strategy breakdown:
 
 The pattern is clear: single-turn jailbreaks are where Gemini 3 Flash diverges from GPT-5.2. Multi-turn attacks succeed at similar rates on both models—around 77-78%. But the [meta-agent strategy](/docs/red-team/strategies/meta), which finds single-shot prompt manipulations, works 29 percentage points better on Gemini.
 
+![Attack success rate by strategy comparing Gemini 3 Flash and GPT-5.2](/img/blog/gemini-3-flash/strategy-comparison.svg)
+
 ### Where defenses failed
 
 Beyond the 100% bypass categories, several high-severity areas showed >65% attack success:
@@ -94,6 +96,8 @@ Under attack, the models degrade differently:
 
 GPT-5.2 starts stronger and degrades less under single-turn attacks. Gemini 3 Flash actually degrades *less* under multi-turn attacks (-58pp vs -74pp), but starts so much weaker that the end result is similar. The compounding effect on single-turn attacks—weaker baseline plus greater degradation—is what produces the 89% vs 60% headline.
 
+![How defenses degrade under attack - refusal rate comparison](/img/blog/gemini-3-flash/degradation-waterfall.svg)
+
 ## The Structural vs Semantic Pattern
 
 The category breakdown reveals what Gemini 3 Flash was trained to resist—and what it wasn't.
@@ -113,6 +117,8 @@ The category-by-category breakdown using Meta strategy results:
 **Similar performance:** Entity impersonation (both 100%), hate speech, harassment, profanity, WMD content. Neither model handles these well.
 
 **Gemini better:** Self-harm (-13pp) and disinformation (-17pp). These are the only categories where Gemini 3 Flash outperformed GPT-5.2.
+
+![Category divergence chart showing where models differ most](/img/blog/gemini-3-flash/category-divergence.svg)
 
 Three findings deserve attention:
 

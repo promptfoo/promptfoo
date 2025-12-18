@@ -1,0 +1,112 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 380">
+  <defs>
+    <style>
+      .title { font: bold 18px system-ui, -apple-system, sans-serif; fill: #1a1a1a; }
+      .subtitle { font: 13px system-ui, -apple-system, sans-serif; fill: #666; }
+      .model-label { font: bold 14px system-ui, -apple-system, sans-serif; fill: #333; }
+      .stage-label { font: 12px system-ui, -apple-system, sans-serif; fill: #666; }
+      .pct-label { font: bold 12px system-ui, -apple-system, sans-serif; fill: #333; }
+      .drop-label { font: 11px system-ui, -apple-system, sans-serif; fill: #999; }
+      .axis-label { font: 11px system-ui, -apple-system, sans-serif; fill: #999; }
+    </style>
+    <!-- Gradient for Gemini -->
+    <linearGradient id="geminiGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#FF6B6B"/>
+      <stop offset="100%" style="stop-color:#FF8E8E"/>
+    </linearGradient>
+    <!-- Gradient for GPT -->
+    <linearGradient id="gptGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#4ECDC4"/>
+      <stop offset="100%" style="stop-color:#7EDCD6"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="700" height="380" fill="#fafafa"/>
+
+  <!-- Title -->
+  <text x="35" y="32" class="title">How Defenses Degrade Under Attack</text>
+  <text x="35" y="50" class="subtitle">Refusal rate drops as attack sophistication increases</text>
+
+  <!-- Stage labels -->
+  <g class="stage-label" text-anchor="middle">
+    <text x="200" y="85">Baseline</text>
+    <text x="200" y="100">(no attack)</text>
+    <text x="400" y="85">After Meta</text>
+    <text x="400" y="100">(single-turn)</text>
+    <text x="600" y="85">After Hydra</text>
+    <text x="600" y="100">(multi-turn)</text>
+  </g>
+
+  <!-- Y-axis: 0-100% refusal rate -->
+  <g class="axis-label">
+    <text x="65" y="125" text-anchor="end">100%</text>
+    <text x="65" y="195" text-anchor="end">50%</text>
+    <text x="65" y="265" text-anchor="end">0%</text>
+    <text x="35" y="195" text-anchor="middle" transform="rotate(-90, 35, 195)">Refusal Rate</text>
+  </g>
+
+  <!-- Grid lines -->
+  <g stroke="#e8e8e8" stroke-width="1" stroke-dasharray="4,4">
+    <line x1="80" y1="120" x2="660" y2="120"/>
+    <line x1="80" y1="190" x2="660" y2="190"/>
+    <line x1="80" y1="260" x2="660" y2="260"/>
+  </g>
+
+  <!-- GPT-5.2 line and points -->
+  <g>
+    <!-- Connecting lines -->
+    <path d="M 200 126 L 400 184 L 600 210" stroke="#4ECDC4" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <!-- Points -->
+    <circle cx="200" cy="126" r="8" fill="#4ECDC4"/>
+    <circle cx="400" cy="184" r="8" fill="#4ECDC4"/>
+    <circle cx="600" cy="210" r="8" fill="#4ECDC4"/>
+
+    <!-- Labels -->
+    <text x="200" y="115" class="pct-label" text-anchor="middle">95.7%</text>
+    <text x="400" y="173" class="pct-label" text-anchor="middle">39.7%</text>
+    <text x="600" y="230" class="pct-label" text-anchor="middle">21.5%</text>
+
+    <!-- Drop annotations -->
+    <text x="300" y="170" class="drop-label" text-anchor="middle">-56pp</text>
+    <text x="500" y="212" class="drop-label" text-anchor="middle">-18pp</text>
+  </g>
+
+  <!-- Gemini 3 Flash line and points -->
+  <g>
+    <!-- Connecting lines -->
+    <path d="M 200 147 L 400 245 L 600 238" stroke="#FF6B6B" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <!-- Points -->
+    <circle cx="200" cy="147" r="8" fill="#FF6B6B"/>
+    <circle cx="400" cy="245" r="8" fill="#FF6B6B"/>
+    <circle cx="600" cy="238" r="8" fill="#FF6B6B"/>
+
+    <!-- Labels -->
+    <text x="200" y="165" class="pct-label" text-anchor="middle">80.9%</text>
+    <text x="400" y="263" class="pct-label" text-anchor="middle">10.6%</text>
+    <text x="600" y="256" class="pct-label" text-anchor="middle">23.1%</text>
+
+    <!-- Drop annotations -->
+    <text x="300" y="215" class="drop-label" text-anchor="middle">-70pp</text>
+    <text x="500" y="256" class="drop-label" text-anchor="middle">+13pp</text>
+  </g>
+
+  <!-- Legend -->
+  <g transform="translate(80, 300)">
+    <rect x="0" y="0" width="180" height="60" rx="6" fill="#fff" stroke="#e5e5e5"/>
+    <circle cx="20" cy="20" r="6" fill="#4ECDC4"/>
+    <text x="35" y="24" class="model-label" style="font-weight: normal; font-size: 12px;">GPT-5.2</text>
+    <circle cx="20" cy="42" r="6" fill="#FF6B6B"/>
+    <text x="35" y="46" class="model-label" style="font-weight: normal; font-size: 12px;">Gemini 3 Flash</text>
+  </g>
+
+  <!-- Key insight callout -->
+  <g transform="translate(300, 300)">
+    <rect x="0" y="0" width="340" height="60" rx="6" fill="#fff8e6" stroke="#f0e0b0"/>
+    <text x="15" y="22" class="stage-label" style="fill: #8b7355; font-weight: 600;">Key insight:</text>
+    <text x="15" y="40" class="stage-label" style="fill: #8b7355;">Gemini starts weaker AND drops more under</text>
+    <text x="15" y="54" class="stage-label" style="fill: #8b7355;">single-turn attacks = compounding effect</text>
+  </g>
+</svg>
