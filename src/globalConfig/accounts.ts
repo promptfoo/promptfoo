@@ -1,5 +1,3 @@
-import { randomUUID } from 'crypto';
-
 import input from '@inquirer/input';
 import chalk from 'chalk';
 import { z } from 'zod';
@@ -24,7 +22,7 @@ import type { GlobalConfig } from '../configTypes';
 export function getUserId(): string {
   let globalConfig = readGlobalConfig();
   if (!globalConfig?.id) {
-    const newId = randomUUID();
+    const newId = crypto.randomUUID();
     globalConfig = { ...globalConfig, id: newId };
     writeGlobalConfig(globalConfig);
     return newId;
