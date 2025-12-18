@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  extractConfigBadges,
-  findProviderConfig,
-  getProviderDisplayName,
-} from './providerConfig';
+import { extractConfigBadges, findProviderConfig, getProviderDisplayName } from './providerConfig';
 
 describe('findProviderConfig', () => {
   it('returns none when providersArray is undefined', () => {
@@ -98,9 +94,7 @@ describe('extractConfigBadges', () => {
       config: { reasoning_effort: 'high' },
     };
     const badges = extractConfigBadges('openai:o1', config);
-    expect(badges).toContainEqual(
-      expect.objectContaining({ label: 'reasoning', value: 'high' }),
-    );
+    expect(badges).toContainEqual(expect.objectContaining({ label: 'reasoning', value: 'high' }));
   });
 
   it('extracts Google thinkingConfig badges', () => {
@@ -115,9 +109,7 @@ describe('extractConfigBadges', () => {
       },
     };
     const badges = extractConfigBadges('google:gemini-2.0-flash', config);
-    expect(badges).toContainEqual(
-      expect.objectContaining({ label: 'thinking', value: 'medium' }),
-    );
+    expect(badges).toContainEqual(expect.objectContaining({ label: 'thinking', value: 'medium' }));
   });
 
   it('extracts Anthropic thinking badge', () => {
