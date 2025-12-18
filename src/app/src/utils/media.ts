@@ -88,7 +88,8 @@ export function resolveImageSource(
     if (/^[a-zA-Z0-9+/]+={0,2}$/.test(image)) {
       return `data:image/png;base64,${image}`;
     }
-    return undefined;
+    // Fallback: treat arbitrary string as base64 payload for display
+    return `data:image/png;base64,${image}`;
   }
 
   const blobUrl = resolveBlobRef(image?.blobRef);
