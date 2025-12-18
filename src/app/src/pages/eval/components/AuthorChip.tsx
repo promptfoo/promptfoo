@@ -103,25 +103,7 @@ export const AuthorChip = ({
       // Cloud mode: action buttons, no free text
       return (
         <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', width: '400px' }}>
-          {!author ? (
-            // Unclaimed eval
-            <>
-              <Typography variant="body2" sx={{ mb: 2 }}>
-                This eval has no author assigned.
-              </Typography>
-              <Button
-                variant="contained"
-                onClick={() => handleCloudAction(currentUserEmail || '')}
-                disabled={isLoading || !currentUserEmail}
-              >
-                {isLoading ? (
-                  <CircularProgress size={24} />
-                ) : (
-                  `Claim as mine (${currentUserEmail})`
-                )}
-              </Button>
-            </>
-          ) : (
+          {author ? (
             // Your eval (author === currentUserEmail, since we can only edit our own)
             <>
               <Typography variant="body2" sx={{ mb: 2 }}>
@@ -134,6 +116,20 @@ export const AuthorChip = ({
                 disabled={isLoading}
               >
                 {isLoading ? <CircularProgress size={24} /> : 'Remove my name'}
+              </Button>
+            </>
+          ) : (
+            // Unclaimed eval
+            <>
+              <Typography variant="body2" sx={{ mb: 2 }}>
+                This eval has no author assigned.
+              </Typography>
+              <Button
+                variant="contained"
+                onClick={() => handleCloudAction(currentUserEmail || '')}
+                disabled={isLoading || !currentUserEmail}
+              >
+                {isLoading ? <CircularProgress size={24} /> : `Claim as mine (${currentUserEmail})`}
               </Button>
             </>
           )}
