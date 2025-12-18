@@ -49,7 +49,7 @@ We particularly welcome contributions in the following areas:
    npm install
    ```
 
-   3.2 Setup using `devcontainer` (requires Docker and VSCode)
+   3.2 Set up using `devcontainer` (requires Docker and VSCode)
 
    Open the repository in VSCode and click on the "Reopen in Container" button. This will build a Docker container with all the necessary dependencies.
 
