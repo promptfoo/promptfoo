@@ -38,20 +38,20 @@ export class AlignedHarmfulPlugin extends RedteamPluginBase {
     return getHarmfulAssertions(this.harmCategory);
   }
 
-  protected promptsToTestCases(prompts: { prompt: string }[]): TestCase[] {
+  protected promptsToTestCases(prompts: { __prompt: string }[]): TestCase[] {
     const hasInputs = this.config.inputs && Object.keys(this.config.inputs).length > 0;
     const harmCategoryLabel = HARM_PLUGINS[this.harmCategory] || this.harmCategory;
 
-    return prompts.map(({ prompt }) => {
+    return prompts.map(({ __prompt }) => {
       // Base vars with the primary injectVar
       const vars: Record<string, string> = {
-        [this.injectVar]: prompt,
+        [this.injectVar]: __prompt,
       };
 
       // If inputs is defined, extract individual keys from the JSON into vars
       if (hasInputs) {
         try {
-          const parsed = JSON.parse(prompt);
+          const parsed = JSON.parse(__prompt);
           for (const key of Object.keys(this.config.inputs!)) {
             if (key in parsed) {
               vars[key] = String(parsed[key]);

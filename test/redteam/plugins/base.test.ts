@@ -280,31 +280,31 @@ describe('RedteamPluginBase', () => {
     it('should parse simple prompts correctly', () => {
       const input = 'Prompt: Hello world\nPrompt: How are you?';
       const result = parseGeneratedPrompts(input);
-      expect(result).toEqual([{ prompt: 'Hello world' }, { prompt: 'How are you?' }]);
+      expect(result).toEqual([{ __prompt: 'Hello world' }, { __prompt: 'How are you?' }]);
     });
 
     it('should handle prompts with quotation marks', () => {
       const input = 'Prompt: "Hello world"\nPrompt: "How are you?"';
       const result = parseGeneratedPrompts(input);
-      expect(result).toEqual([{ prompt: 'Hello world' }, { prompt: 'How are you?' }]);
+      expect(result).toEqual([{ __prompt: 'Hello world' }, { __prompt: 'How are you?' }]);
     });
 
     it('should ignore lines without "Prompt:"', () => {
       const input = 'Prompt: Valid prompt\nInvalid line\nPrompt: Another valid prompt';
       const result = parseGeneratedPrompts(input);
-      expect(result).toEqual([{ prompt: 'Valid prompt' }, { prompt: 'Another valid prompt' }]);
+      expect(result).toEqual([{ __prompt: 'Valid prompt' }, { __prompt: 'Another valid prompt' }]);
     });
 
     it('should handle prompts with numbers', () => {
       const input = 'Prompt: 1. First prompt\nPrompt: 2. Second prompt';
       const result = parseGeneratedPrompts(input);
-      expect(result).toEqual([{ prompt: 'First prompt' }, { prompt: 'Second prompt' }]);
+      expect(result).toEqual([{ __prompt: 'First prompt' }, { __prompt: 'Second prompt' }]);
     });
 
     it('should handle prompts with colons', () => {
       const input = 'Prompt: Hello: World\nPrompt: Question: How are you?';
       const result = parseGeneratedPrompts(input);
-      expect(result).toEqual([{ prompt: 'Hello: World' }, { prompt: 'Question: How are you?' }]);
+      expect(result).toEqual([{ __prompt: 'Hello: World' }, { __prompt: 'Question: How are you?' }]);
     });
 
     it('should handle empty input', () => {
@@ -323,15 +323,15 @@ describe('RedteamPluginBase', () => {
       const input = 'Prompt:    Whitespace at start and end    \nPrompt:\tTabbed prompt\t';
       const result = parseGeneratedPrompts(input);
       expect(result).toEqual([
-        { prompt: 'Whitespace at start and end' },
-        { prompt: 'Tabbed prompt' },
+        { __prompt: 'Whitespace at start and end' },
+        { __prompt: 'Tabbed prompt' },
       ]);
     });
 
     it('should handle prompts with multiple lines', () => {
       const input = 'Prompt: First line\nSecond line\nPrompt: Another prompt';
       const result = parseGeneratedPrompts(input);
-      expect(result).toEqual([{ prompt: 'First line' }, { prompt: 'Another prompt' }]);
+      expect(result).toEqual([{ __prompt: 'First line' }, { __prompt: 'Another prompt' }]);
     });
 
     it('should handle numbered lists with various formats', () => {
@@ -346,13 +346,13 @@ describe('RedteamPluginBase', () => {
       `;
       const result = parseGeneratedPrompts(input);
       expect(result).toEqual([
-        { prompt: 'First item' },
-        { prompt: 'Second item' },
-        { prompt: 'Third item' },
-        { prompt: 'Fourth item with: colon' },
-        { prompt: 'Fifth item with "quotes"' },
-        { prompt: 'Sixth item' },
-        { prompt: 'Seventh item' },
+        { __prompt: 'First item' },
+        { __prompt: 'Second item' },
+        { __prompt: 'Third item' },
+        { __prompt: 'Fourth item with: colon' },
+        { __prompt: 'Fifth item with "quotes"' },
+        { __prompt: 'Sixth item' },
+        { __prompt: 'Seventh item' },
       ]);
     });
 
@@ -365,17 +365,17 @@ describe('RedteamPluginBase', () => {
       `;
       const result = parseGeneratedPrompts(input);
       expect(result).toEqual([
-        { prompt: 'Outer "inner "nested" quote"' },
-        { prompt: "Outer 'inner 'nested' quote'" },
-        { prompt: 'Single quoted "double nested" prompt' },
-        { prompt: "Double quoted 'single nested' prompt" },
+        { __prompt: 'Outer "inner "nested" quote"' },
+        { __prompt: "Outer 'inner 'nested' quote'" },
+        { __prompt: 'Single quoted "double nested" prompt' },
+        { __prompt: "Double quoted 'single nested' prompt" },
       ]);
     });
 
     it('should handle prompts with multiple spaces between words', () => {
       const input = 'Prompt: Multiple    spaces    between    words';
       const result = parseGeneratedPrompts(input);
-      expect(result).toEqual([{ prompt: 'Multiple    spaces    between    words' }]);
+      expect(result).toEqual([{ __prompt: 'Multiple    spaces    between    words' }]);
     });
 
     it('should handle a mix of valid and invalid prompts', () => {
@@ -389,9 +389,9 @@ describe('RedteamPluginBase', () => {
       `;
       const result = parseGeneratedPrompts(input);
       expect(result).toEqual([
-        { prompt: 'Valid prompt 1' },
-        { prompt: 'Valid prompt 2' },
-        { prompt: 'Valid prompt 3' },
+        { __prompt: 'Valid prompt 1' },
+        { __prompt: 'Valid prompt 2' },
+        { __prompt: 'Valid prompt 3' },
       ]);
     });
 
@@ -399,8 +399,8 @@ describe('RedteamPluginBase', () => {
       const input = 'Prompt: ** Leading asterisk\nPrompt: Trailing * middle * asterisk *';
       const result = parseGeneratedPrompts(input);
       expect(result).toEqual([
-        { prompt: 'Leading asterisk' },
-        { prompt: 'Trailing * middle * asterisk' },
+        { __prompt: 'Leading asterisk' },
+        { __prompt: 'Trailing * middle * asterisk' },
       ]);
     });
 
@@ -417,12 +417,12 @@ Please analyze these logs and suggest fixes.`;
       const result = parseGeneratedPrompts(input);
       expect(result).toEqual([
         {
-          prompt: `[2024-06-10 14:23:12] INFO api.gateway - Request processed
+          __prompt: `[2024-06-10 14:23:12] INFO api.gateway - Request processed
 [2024-06-10 14:23:14] ERROR auth.service - JWT validation failed
 Please analyze these logs and suggest fixes.`,
         },
         {
-          prompt: `[2024-06-11 16:45:02] INFO payment.processor - Payment completed
+          __prompt: `[2024-06-11 16:45:02] INFO payment.processor - Payment completed
 [2024-06-11 16:45:04] ERROR file.manager - Permission denied
 Please analyze these logs and suggest fixes.`,
         },
@@ -438,8 +438,8 @@ Please analyze these logs and suggest fixes.`;
 
       const result = parseGeneratedPrompts(input);
       expect(result).toHaveLength(1);
-      expect(result[0].prompt).toContain('DISABLE_AUTH=true');
-      expect(result[0].prompt).toContain('Please analyze these logs and suggest fixes.');
+      expect(result[0].__prompt).toContain('DISABLE_AUTH=true');
+      expect(result[0].__prompt).toContain('Please analyze these logs and suggest fixes.');
     });
 
     it('should handle PromptBlock with whitespace', () => {
@@ -452,8 +452,8 @@ Another block   `;
 
       const result = parseGeneratedPrompts(input);
       expect(result).toEqual([
-        { prompt: 'Content with leading spaces\nMulti-line content\nMore content' },
-        { prompt: 'Content with trailing spaces in marker\nAnother block' },
+        { __prompt: 'Content with leading spaces\nMulti-line content\nMore content' },
+        { __prompt: 'Content with trailing spaces in marker\nAnother block' },
       ]);
     });
 
@@ -465,9 +465,9 @@ Prompt: Traditional single-line prompt 3`;
 
       const result = parseGeneratedPrompts(input);
       expect(result).toEqual([
-        { prompt: 'Traditional single-line prompt 1' },
-        { prompt: 'Traditional single-line prompt 2' },
-        { prompt: 'Traditional single-line prompt 3' },
+        { __prompt: 'Traditional single-line prompt 1' },
+        { __prompt: 'Traditional single-line prompt 2' },
+        { __prompt: 'Traditional single-line prompt 3' },
       ]);
     });
 
@@ -494,8 +494,8 @@ Please analyze these logs and suggest any necessary fixes.`;
 
       const result = parseGeneratedPrompts(input);
       expect(result).toHaveLength(2);
-      expect(result[0].prompt).toContain('permissions to 0777');
-      expect(result[1].prompt).toContain('disabling STRICT_VALIDATION');
+      expect(result[0].__prompt).toContain('permissions to 0777');
+      expect(result[1].__prompt).toContain('disabling STRICT_VALIDATION');
     });
   });
 
@@ -517,23 +517,23 @@ AGENT: Let me look that up for you. Can you tell me the amount and date?`;
     expect(result).toHaveLength(2);
 
     // First conversation
-    expect(result[0].prompt).toContain('AGENT: Hello, how can I help');
-    expect(result[0].prompt).toContain("CUSTOMER: I'm looking to update");
-    expect(result[0].prompt).toContain('phone number');
-    expect(result[0].prompt.split('\n')).toHaveLength(5); // Multi-line conversation
+    expect(result[0].__prompt).toContain('AGENT: Hello, how can I help');
+    expect(result[0].__prompt).toContain("CUSTOMER: I'm looking to update");
+    expect(result[0].__prompt).toContain('phone number');
+    expect(result[0].__prompt.split('\n')).toHaveLength(5); // Multi-line conversation
 
     // Second conversation
-    expect(result[1].prompt).toContain('AGENT: Hello, how can I help');
-    expect(result[1].prompt).toContain('CUSTOMER: I have a question');
-    expect(result[1].prompt).toContain('monthly statement');
-    expect(result[1].prompt.split('\n')).toHaveLength(5); // Multi-line conversation
+    expect(result[1].__prompt).toContain('AGENT: Hello, how can I help');
+    expect(result[1].__prompt).toContain('CUSTOMER: I have a question');
+    expect(result[1].__prompt).toContain('monthly statement');
+    expect(result[1].__prompt.split('\n')).toHaveLength(5); // Multi-line conversation
 
     // Ensure "Prompt:" prefix is removed from both
-    expect(result[0].prompt).not.toContain('Prompt:');
-    expect(result[1].prompt).not.toContain('Prompt:');
+    expect(result[0].__prompt).not.toContain('Prompt:');
+    expect(result[1].__prompt).not.toContain('Prompt:');
 
     // Ensure prompts are properly separated
-    expect(result[0].prompt).not.toEqual(result[1].prompt);
+    expect(result[0].__prompt).not.toEqual(result[1].__prompt);
   });
 });
 

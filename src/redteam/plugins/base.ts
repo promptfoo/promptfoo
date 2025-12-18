@@ -27,16 +27,16 @@ import type {
  * Handles prompts with "Prompt:" or "PromptBlock:" markers.
  *
  * @param generatedPrompts - The LLM response of generated prompts.
- * @returns An array of { prompt: string } objects. Each of these objects represents a test case.
+ * @returns An array of { __prompt: string } objects. Each of these objects represents a test case.
  */
-export function parseGeneratedPrompts(generatedPrompts: string): { prompt: string }[] {
+export function parseGeneratedPrompts(generatedPrompts: string): { __prompt: string }[] {
   // Try PromptBlock: first (for multi-line content)
   if (generatedPrompts.includes('PromptBlock:')) {
     return generatedPrompts
       .split('PromptBlock:')
       .map((block) => block.trim())
       .filter((block) => block.length > 0)
-      .map((block) => ({ prompt: block }));
+      .map((block) => ({ __prompt: block }));
   }
 
   // Check if we have multi-line prompts (multiple "Prompt:" with content spanning multiple lines)
@@ -103,7 +103,7 @@ export function parseGeneratedPrompts(generatedPrompts: string): { prompt: strin
         .map((prompt) => {
           // Strip leading/trailing asterisks for backward compatibility
           const cleanedPrompt = prompt.replace(/^\*+\s*/, '').replace(/\s*\*+$/, '');
-          return { prompt: cleanedPrompt };
+          return { __prompt: cleanedPrompt };
         });
     }
   }
@@ -132,7 +132,7 @@ export function parseGeneratedPrompts(generatedPrompts: string): { prompt: strin
   return promptLines
     .map(parsePrompt)
     .filter((prompt): prompt is string => prompt !== null)
-    .map((prompt) => ({ prompt }));
+    .map((prompt) => ({ __prompt: prompt }));
 }
 
 /**
@@ -141,13 +141,13 @@ export function parseGeneratedPrompts(generatedPrompts: string): { prompt: strin
  *
  * @param generatedOutput - The LLM response containing generated test cases.
  * @param inputs - The inputs schema defining expected variable names.
- * @returns An array of { prompt: string } objects where prompt is the JSON string.
+ * @returns An array of { __prompt: string } objects where __prompt is the JSON string.
  */
 export function parseGeneratedInputs(
   generatedOutput: string,
   inputs: Record<string, string>,
-): { prompt: string }[] {
-  const results: { prompt: string }[] = [];
+): { __prompt: string }[] {
+  const results: { __prompt: string }[] = [];
   const inputKeys = Object.keys(inputs);
 
   // Extract JSON from <Prompt> tags
@@ -161,7 +161,7 @@ export function parseGeneratedInputs(
       const hasAllKeys = inputKeys.every((key) => key in parsed);
       if (hasAllKeys) {
         // Return the JSON string as the prompt value
-        results.push({ prompt: jsonStr });
+        results.push({ __prompt: jsonStr });
       }
     } catch {
       logger.debug(`Failed to parse JSON from <Prompt> tag: ${jsonStr}`);
@@ -258,12 +258,12 @@ export abstract class RedteamPluginBase {
 
     /**
      * Generates a batch of prompts/test cases using the API provider.
-     * In single-input mode, returns { prompt: string }[]
+     * In single-input mode, returns { __prompt: string }[]
      * In multi-input mode, returns Record<string, string>[]
      */
     const generatePrompts = async (
-      currentPrompts: { prompt: string }[] | Record<string, string>[],
-    ): Promise<{ prompt: string }[] | Record<string, string>[]> => {
+      currentPrompts: { __prompt: string }[] | Record<string, string>[],
+    ): Promise<{ __prompt: string }[] | Record<string, string>[]> => {
       const remainingCount = n - currentPrompts.length;
       const currentBatchSize = Math.min(remainingCount, batchSize);
 
@@ -325,7 +325,7 @@ export abstract class RedteamPluginBase {
     };
 
     const allPrompts = await retryWithDeduplication(
-      generatePrompts as (current: { prompt: string }[]) => Promise<{ prompt: string }[]>,
+      generatePrompts as (current: { __prompt: string }[]) => Promise<{ __prompt: string }[]>,
       n,
     );
     const prompts = sampleArray(allPrompts, n);
@@ -335,29 +335,29 @@ export abstract class RedteamPluginBase {
       logger.warn(`Expected ${n} prompts, got ${prompts.length} for ${this.constructor.name}`);
     }
 
-    return this.promptsToTestCases(prompts as { prompt: string }[]);
+    return this.promptsToTestCases(prompts as { __prompt: string }[]);
   }
 
   /**
-   * Converts an array of { prompt: string } objects into an array of test cases.
-   * When inputs is defined, the prompt contains JSON which is set as the injectVar value,
+   * Converts an array of { __prompt: string } objects into an array of test cases.
+   * When inputs is defined, the __prompt contains JSON which is set as the injectVar value,
    * and individual keys are extracted into vars for usability.
-   * @param prompts - An array of { prompt: string } objects.
+   * @param prompts - An array of { __prompt: string } objects.
    * @returns An array of test cases.
    */
-  protected promptsToTestCases(prompts: { prompt: string }[]): TestCase[] {
+  protected promptsToTestCases(prompts: { __prompt: string }[]): TestCase[] {
     const hasInputs = this.config.inputs && Object.keys(this.config.inputs).length > 0;
 
-    return prompts.sort().map((prompt) => {
+    return prompts.sort().map((promptObj) => {
       // Base vars with the primary injectVar
       const vars: Record<string, string> = {
-        [this.injectVar]: prompt.prompt,
+        [this.injectVar]: promptObj.__prompt,
       };
 
       // If inputs is defined, extract individual keys from the JSON into vars
       if (hasInputs) {
         try {
-          const parsed = JSON.parse(prompt.prompt);
+          const parsed = JSON.parse(promptObj.__prompt);
           for (const key of Object.keys(this.config.inputs!)) {
             if (key in parsed) {
               vars[key] = String(parsed[key]);
@@ -370,7 +370,7 @@ export abstract class RedteamPluginBase {
 
       return {
         vars,
-        assert: this.getAssertions(prompt.prompt),
+        assert: this.getAssertions(promptObj.__prompt),
         metadata: {
           pluginId: getShortPluginId(this.id),
           pluginConfig: this.config,
@@ -398,7 +398,7 @@ export abstract class RedteamPluginBase {
       const schema = Object.entries(config.inputs)
         .map(([key, description]) => `"${key}": "${description}"`)
         .join(', ');
-      modifiers.outputFormat = `Output each test case as JSON wrapped in <Prompt> tags: <Prompt>{${schema}}</Prompt>`;
+      modifiers.__outputFormat = `Output each test case as JSON wrapped in <Prompt> tags: <Prompt>{${schema}}</Prompt>`;
     }
 
     // Store the computed modifiers back into config so they get passed to strategies
@@ -416,10 +416,10 @@ export abstract class RedteamPluginBase {
 
     let processedTemplate = template.trim();
 
-    // If outputFormat modifier is set, remove conflicting format instructions from the template
+    // If __outputFormat modifier is set, remove conflicting format instructions from the template
     // Templates often have lines like "Each line must begin with 'Prompt:'" that conflict with JSON output
-    if (modifiers.outputFormat) {
-      // Remove common format instruction patterns that conflict with outputFormat
+    if (modifiers.__outputFormat) {
+      // Remove common format instruction patterns that conflict with __outputFormat
       processedTemplate = processedTemplate
         .split('\n')
         .filter((line) => {
