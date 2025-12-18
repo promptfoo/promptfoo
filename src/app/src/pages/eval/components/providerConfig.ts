@@ -109,7 +109,7 @@ export function findProviderConfig(
     if (normalized.id === providerString) {
       return {
         config: { ...normalized, ...provider },
-        matchType: typeof provider === 'string' ? 'id' : 'id',
+        matchType: 'id',
       };
     }
 

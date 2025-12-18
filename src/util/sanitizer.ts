@@ -127,8 +127,9 @@ export function looksLikeSecret(value: string): boolean {
     return true;
   }
 
-  // Long base64-like strings (likely tokens/keys) - 40+ chars of alphanumeric
-  if (/^[a-zA-Z0-9+/=_-]{40,}$/.test(value)) {
+  // Long base64-like strings (likely tokens/keys) - 64+ chars of alphanumeric
+  // Using 64 chars to reduce false positives on concatenated IDs, base64 content, or long model names
+  if (/^[a-zA-Z0-9+/=_-]{64,}$/.test(value)) {
     return true;
   }
 

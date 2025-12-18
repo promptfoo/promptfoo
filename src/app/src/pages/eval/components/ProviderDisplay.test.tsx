@@ -142,12 +142,15 @@ describe('sanitizeConfig', () => {
 
     it('redacts long alphanumeric strings (likely tokens)', () => {
       const config = {
-        possibleToken: 'abcdefghijklmnopqrstuvwxyz1234567890ABCD',
+        // 64+ chars to trigger redaction (threshold is 64 to reduce false positives)
+        possibleToken: 'abcdefghijklmnopqrstuvwxyz1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZab',
         shortValue: 'abc123',
+        mediumValue: 'abcdefghijklmnopqrstuvwxyz1234567890ABCD', // 40 chars - not redacted
       };
       const result = sanitizeConfig(config);
       expect(result.possibleToken).toBe('[REDACTED]');
       expect(result.shortValue).toBe('abc123');
+      expect(result.mediumValue).toBe('abcdefghijklmnopqrstuvwxyz1234567890ABCD');
     });
 
     it('redacts AWS access keys', () => {

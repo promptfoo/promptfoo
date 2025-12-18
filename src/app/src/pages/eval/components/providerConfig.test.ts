@@ -64,8 +64,8 @@ describe('findProviderConfig', () => {
       },
     ];
     const result = findProviderConfig('google:gemini-2.0-flash', providers);
-    // Record-style definitions are normalized and matched by id
-    expect(result.matchType).not.toBe('none');
+    // Record-style definitions get normalized to have an id, so they match in the first pass
+    expect(result.matchType).toBe('id');
     expect(result.config.id).toBe('google:gemini-2.0-flash');
     expect(result.config.config.generationConfig.thinkingConfig.thinkingLevel).toBe('HIGH');
   });
