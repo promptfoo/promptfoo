@@ -9,7 +9,7 @@ When Mistral was released, it was the "best 7B model to date" based on a [number
 
 When it comes to building LLM apps, there is no one-size-fits-all benchmark. To maximize the quality of your LLM application, consider building your own benchmark to supplement public benchmarks. This guide describes how to compare Mixtral 8x7b vs Mistral 7B vs Llama 3.1 8B using the `promptfoo` CLI.
 
-The end result is a view that compares the performance of Mistral, Mixtral, and Llama side-by-side:
+The result is a view that compares the performance of Mistral, Mixtral, and Llama side-by-side:
 
 ![mistral, mixtral, and llama comparison](/img/docs/mistral-vs-mixtral-vs-llama.png)
 

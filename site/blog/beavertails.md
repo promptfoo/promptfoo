@@ -27,7 +27,7 @@ Promptfoo allows you to run these evaluations on your **actual application** rat
 
 We'll use PKU-Alignment's BeaverTails dataset to test models against harmful content across multiple categories including discrimination, violence, drug abuse, and more. The evaluation helps identify where your model might need additional guardrails or safety measures.
 
-The end result is a report that shows you how well your model handles different categories of harmful content.
+The result is a report that shows how well your model handles different categories of harmful content.
 
 ![BeaverTails results](/img/blog/beavertails/beavertails-eval.png)
 

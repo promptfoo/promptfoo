@@ -67,7 +67,7 @@ When reviewing an eval, there are also multiple ways that you can export the res
 
 ## Filtering and Sorting Findings
 
-The "Evals" section will display all of the evaluations and let you filter and sort through them based on the eval ID, date the scan was created, author, description, plugin, strategy, pass rate, or number of tests. You can then download the evals as a CSV file.
+The "Evals" section displays all evaluations and lets you filter and sort through them based on the eval ID, date the scan was created, author, description, plugin, strategy, pass rate, or number of tests. You can then download the evals as a CSV file.
 
 ![Filtering evaluations interface](/img/enterprise-docs/filter-evals.png)
 

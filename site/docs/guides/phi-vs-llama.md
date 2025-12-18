@@ -85,7 +85,7 @@ tests:
 
 ### Add assertions (optional)
 
-You can add automated checks with the `assert` property in order to automatically make sure the outputs are correct.
+You can add automated checks with the `assert` property to automatically make sure the outputs are correct.
 
 ```yaml
 tests:

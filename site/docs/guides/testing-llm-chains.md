@@ -15,7 +15,7 @@ This page explains how to test an LLM chain. At a high level, you have these opt
 
 - Break the chain into separate calls, and test those. This is useful if your testing strategy is closer to unit tests, rather than end to end tests.
 
-- Test the full end-to-end chain, with a single input and single output. This is useful if you only care about the end result, and are not interested in how the LLM chain got there.
+- Test the full end-to-end chain, with a single input and single output. This is useful if you only care about the final result, and are not interested in how the LLM chain got there.
 
 ## Unit testing LLM chains
 
@@ -84,9 +84,9 @@ tests:
 For an in-depth look at configuration, see the [guide](/docs/configuration/guide). Note the following:
 
 - **prompts**: `prompt.txt` is just a file that contains `{{question}}`, since we're passing the question directly through to the provider.
-- **providers**: We list GPT-4 in order to compare its outputs with LangChain's LLMMathChain. We also use the `exec` directive to make promptfoo run the Python script in its eval.
+- **providers**: We list GPT-4 to compare its outputs with LangChain's LLMMathChain. We also use the `exec` directive to make promptfoo run the Python script in its eval.
 
-In this example, the end result is a side-by-side comparison of GPT-4 vs. LangChain math performance:
+In this example, the result is a side-by-side comparison of GPT-4 vs. LangChain math performance:
 
 ![langchain eval](/img/docs/langchain-eval.png)
 

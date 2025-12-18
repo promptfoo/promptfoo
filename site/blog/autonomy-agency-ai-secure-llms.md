@@ -96,7 +96,7 @@ Unless we get to the point where LLMs are fully simulating or are more advanced 
 
 Systems exhibit goals and preferences—for better [or for worse](https://www.anthropic.com/research/agentic-misalignment).
 
-At present, from an AI security point of view, all we care about is potential damage that can be caused by an LLM. Whether damage is from software or a human doesn't really matter as long as we can predict it in order to prevent it. However, the most capable malicious entities are humans using tools. AI is used in cyber attacks and 'vibe hacking' is on the rise. It's made experts more powerful than they were previously. Essentially, LLMs have lowered the barriers to breaking the law.
+At present, from an AI security point of view, all we care about is potential damage that can be caused by an LLM. Whether damage is from software or a human doesn't really matter as long as we can predict it to prevent it. However, the most capable malicious entities are humans using tools. AI is used in cyber attacks and 'vibe hacking' is on the rise. It's made experts more powerful than they were previously. Essentially, LLMs have lowered the barriers to breaking the law.
 
 All this increased agency affects the following:
 

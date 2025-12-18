@@ -160,7 +160,7 @@ strategies:
 
 Promptfoo can also scan static foundation or fine-tuned models through its ModelAudit tool. ModelAudit is a lightweight static security scanner for machine learning models integrated into Promptfoo. It allows you to quickly scan your AI/ML models for potential security risks before deploying them in production environments.
 
-By invoking `promptfoo scan-model`, you can use ModelAudit's static security scanning capabilities. The end result will look something like this:
+By invoking `promptfoo scan-model`, you can use ModelAudit's static security scanning capabilities. The result looks something like this:
 
 <div style={{ textAlign: 'center' }}>
     <img src="/img/docs/modelaudit/modelaudit-result.png" style={{ width: '90%', height: 'auto' }} />

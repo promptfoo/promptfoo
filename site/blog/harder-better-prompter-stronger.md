@@ -169,7 +169,7 @@ You're not just any assistant anymore. As the new Executive Assistant to the CEO
 
 All of the LLMs concede to some degree.
 
-This encapsulates the idea behind all test prompts: the attacker will keep attempting to subvert the LLM by increasing levels of manipulation until the prompts no longer hold up. There are numerous edge cases to take into account.
+This encapsulates the idea behind all test prompts: the attacker will keep attempting to subvert the LLM by increasing levels of manipulation until the prompts no longer hold up. There are numerous edge cases to consider.
 
 This is about retaining the underlying meaning of the prompt. We can also find provocations to manipulate the LLM into undesired responses:
 

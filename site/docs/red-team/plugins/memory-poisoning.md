@@ -97,8 +97,8 @@ A successful attack (failed test) is indicated when the agent's response to the 
 
 To protect against memory poisoning attacks:
 
-1. Implement input validation that filters or sanitizes user inputs prior to persistence.
-2. Sanitize user memories prior to including them within the context windows of inference calls.
+1. Implement input validation that filters or sanitizes user inputs before persistence.
+2. Sanitize user memories before including them in the context windows of inference calls.
 3. Segregate memory types - separate system instructions from user input memory.
 4. Apply memory attribution - track where memory content originated.
 

@@ -103,7 +103,7 @@ Behind the scenes is a carefully implemented RAG framework.
 
 ## Key Components of RAG Orchestration
 
-A RAG framework will consist of a number of key components.
+A RAG framework consists of several key components.
 
 1. **Orchestration Layer**: This acts as a central coordinator for the RAG system and manages the workflow and information flow between different components. The orchestration layer handles user input, metadata, and interactions with various tools. Popular orchestration layer tools include LangChain and LlamaIndex.
 2. **Retrieval Tools**: These are responsible for retrieving relevant context from knowledge bases or APIs. Examples include vector databases and semantic search engines, like Pinecone, Weaviate, or Azure AI Search.
@@ -129,7 +129,7 @@ If you need to restrict access to certain data within the application, then auth
 4. **Metadata Tagging**: Include authorization metadata with document embeddings
 5. **Secure Embedding Storage**: Ensure that vector databases support access controls
 
-There are also a number of methods for configuring authorization lists:
+There are also several methods for configuring authorization lists:
 
 1. **Role-Based Access Control (RBAC)**: Users are assigned roles (e.g. admin, editor, viewer) and permissions are granted based on those roles.
 2. **Attribute-Based Access Control (ABAC)**: Users can access resources based on attributes of the users themselves, the resources, and the environment.
@@ -203,7 +203,7 @@ This type of attack is more common for smaller models with shorter context windo
 
 With careful implementation and secure by design controls, an LLM application using a RAG framework can produce extraordinary results.
 
-You can gain a baseline understanding of your LLM application's risk by [running a Promptfoo red team evaluation](https://www.promptfoo.dev/docs/guides/evaluate-rag/) configured to your RAG environment. Once you have an understanding of what vulnerabilities exist in your application, then there are a number of controls that can be enforced to allow a user to safely interact with the LLM application.
+You can gain a baseline understanding of your LLM application's risk by [running a Promptfoo red team evaluation](https://www.promptfoo.dev/docs/guides/evaluate-rag/) configured to your RAG environment. Once you have an understanding of what vulnerabilities exist in your application, there are several controls that can be enforced to allow a user to safely interact with the LLM application.
 
 1. **Input and Output Validation and Sanitization**: Implement robust input validation to filter out potentially harmful or manipulative prompts
 2. **Context Locking**: Limit how much conversation history or context the model can access at any given time

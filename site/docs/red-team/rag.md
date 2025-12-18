@@ -9,7 +9,7 @@ Retrieval-Augmented Generation (RAG) is an increasingly popular LLM-based archit
 
 For each attack type, we explain how to detect the vulnerability by testing your application with Promptfoo, an open-source LLM red teaming tool.
 
-The end result is a report that looks like this:
+The result is a report that looks like this:
 
 ![llm red team report for RAG](/img/riskreport-1@2x.png)
 

@@ -9,7 +9,7 @@ This guide will walk you through how to compare OpenAI's GPT-3.5 and GPT-4 using
 
 Generic benchmarks are for generic use cases. If you're building an LLM app, you should evaluate these models on your own data and make an informed decision based on your specific needs.
 
-The end result will be a side-by-side comparison that looks like this:
+The result is a side-by-side comparison that looks like this:
 
 ![gpt 3.5 vs gpt 4](/img/docs/gpt-3.5-vs-gpt-4.png)
 

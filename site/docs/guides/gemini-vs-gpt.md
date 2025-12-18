@@ -11,7 +11,7 @@ So, the sensible thing to do is run an eval on your own data.
 
 This guide will walk you through the steps to compare Google's `gemini-pro` model with OpenAI's GPT-3.5 and GPT-4 using the `promptfoo` CLI on custom test cases.
 
-The end result is a locally hosted CLI and web view that lets you compare model outputs side-by-side:
+The result is a locally hosted CLI and web view that lets you compare model outputs side-by-side:
 
 ![vertex vs gpt performance](/img/docs/vertex-vs-gpt.png)
 

@@ -92,7 +92,7 @@ The Attacker LLM has access to a toolbox of various red teaming techniques. This
 
 ### Chain-of-Thought Prompting
 
-GOAT utilizes a structured, iterative process known as Chain-of-Thought (CoT) prompting. For every turn in the conversation, the Attacker LLM goes through three key steps: **Observation**, **Thought**, and **Strategy**.
+GOAT uses a structured, iterative process known as Chain-of-Thought (CoT) prompting. For every turn in the conversation, the Attacker LLM goes through three key steps: **Observation**, **Thought**, and **Strategy**.
 
 - **Observation**: The Attacker LLM starts by observing the target model's response to its latest prompt. Did the target provide a useful piece of information, or did it refuse the request?
 - **Thought**: Based on the observation, the Attacker LLM thinks through what this means for the current conversation. It considers whether it's getting closer to the adversarial goal or if it needs to adjust its approach.

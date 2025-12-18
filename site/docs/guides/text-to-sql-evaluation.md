@@ -9,7 +9,7 @@ Promptfoo is a command-line tool that allows you to test and validate text-to-SQ
 
 This guide will walk you through setting up an eval harness that will help you improve the quality of your text-to-SQL prompts.
 
-The end result is a view that looks like this:
+The result is a view that looks like this:
 
 ![text to sql evaluation](/img/docs/text-to-sql-eval.png)
 

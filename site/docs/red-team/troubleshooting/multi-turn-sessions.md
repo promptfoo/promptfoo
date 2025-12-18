@@ -5,7 +5,7 @@ description: Red team multi-turn conversation attacks by exploiting session mana
 
 # Session Management
 
-Session management is important for our multi-turn strategies like Crescendo and GOAT. In these cases you want to make sure that the target system is able to maintain context between turns.
+Session management is important for our multi-turn strategies like Crescendo and GOAT. In these cases you want to make sure that the target system can maintain context between turns.
 
 There are two ways sessions can be generated:
 

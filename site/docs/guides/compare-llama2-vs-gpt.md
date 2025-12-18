@@ -9,7 +9,7 @@ This guide describes how to compare three models - Llama 3.1 405B, GPT 4o, and g
 
 LLM use cases vary widely and there is no one-size-fits-all benchmark. We'll use some dummy test cases from the [Hacker News thread on Llama](https://news.ycombinator.com/item?id=36774627), but you can substitute your own.
 
-The end result is a view that compares the performance of Llama and GPT side-by-side:
+The result is a view that compares the performance of Llama and GPT side-by-side:
 
 ![llama2 and gpt comparison](/img/docs/llama-gpt-comparison.png)
 

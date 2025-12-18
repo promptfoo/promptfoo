@@ -21,7 +21,7 @@ tags: [technical-guide, case-study, red-teaming]
 
 Promptfoo is an open-source framework for testing LLM applications against security, privacy, and policy risks. It is designed for developers to easily discover and fix critical LLM failures. Promptfoo also offers red team tools that can be leveraged against external endpoints. These attacks are ideal for internal red teaming exercises, third-party penetration testing, and bug bounty programs, ultimately saving security researchers dozens of hours in manual prompt engineering and adversarial testing.
 
-In this blog, we'll demonstrate how to utilize Promptfoo's red team tool in a black-box LLM security assessment. Using Wiz's AI CTF, [Prompt Airlines](https://promptairlines.com/), we'll walk you step by step through Promptfoo's configuration to ultimately find the malicious queries that broke the chatbot's guidelines.
+In this blog, we'll demonstrate how to use Promptfoo's red team tool in a black-box LLM security assessment. Using Wiz's AI CTF, [Prompt Airlines](https://promptairlines.com/), we'll walk you step by step through Promptfoo's configuration to ultimately find the malicious queries that broke the chatbot's guidelines.
 
 <!-- truncate -->
 

@@ -80,7 +80,7 @@ You might see where I'm going with this. Even if the labs could figure out some 
 
 ## Geopolitics and safety
 
-The result of blocking offensive red teaming could well be the worst of both worlds. Aggressive state actors like China will still get access to models which can conduct attacks (they have a number of highly capable labs of their own). In the meantime, security teams will be hobbled. They'll be bringing knives to a gun fight.
+The result of blocking offensive red teaming could well be the worst of both worlds. Aggressive state actors like China will still get access to models which can conduct attacks (they have several highly capable labs of their own). In the meantime, security teams will be hobbled. They'll be bringing knives to a gun fight.
 
 Perhaps now you can better appreciate the factors which are pulling Anthropic in multiple directions, and why they can't simply "fix it". There are no easy answers here.
 

@@ -123,7 +123,7 @@ To share reports with your team or stakeholders:
 2. The report will be formatted for printing and opened in a print dialog
 3. Save as PDF or print directly
 
-The PDF format is optimized for sharing with technical and non-technical audiences.
+The PDF is optimized for sharing with technical and non-technical audiences.
 
 ### System Prompt Hardening
 

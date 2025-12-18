@@ -602,7 +602,7 @@ Providing this context helps the red teaming tool generate meaningful and realis
 
 In this step, you:
 
-- Selected the r**ecommended** plugin set for broad coverage.
+- Selected the **recommended** plugin set for broad coverage.
 - Picked **Custom** strategies like Basic, Single-shot Optimization, Composite Jailbreaks, etc.
 - Reviewed all configurations, including Purpose, Features, Domain, Rules, and Sample Data to ensure the system only tests mock recruitment queries and filter
   <img width="800" alt="Plugin configuration in Promptfoo" src="/img/docs/crewai/plugin-config.png" />

@@ -33,7 +33,7 @@ We believe in a pragmatic approach to AI security that hinges on fortifying the 
 
 ## How we got here
 
-As an engineering leader at Discord, I started the Platform Ecosystem org and spent years building Developer APIs at scale. When I switched to leading a team that built LLM-based products for millions of users, I learned firsthand that the most difficult part of shipping AI is making sure that the end result is safe, secure, and reliable. Because the surface area of LLMs is so large, traditional testing and security methods were not effective.
+As an engineering leader at Discord, I started the Platform Ecosystem org and spent years building Developer APIs at scale. When I switched to leading a team that built LLM-based products for millions of users, I learned firsthand that the most difficult part of shipping AI is making sure that the result is safe, secure, and reliable. Because the surface area of LLMs is so large, traditional testing and security methods were not effective.
 
 I designed the first version of Promptfoo for people like me — application developers — with a focus on making it as easy as possible to test, discover, and fix LLM failures.
 

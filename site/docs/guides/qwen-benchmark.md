@@ -7,7 +7,7 @@ description: Compare Qwen-2-72B vs GPT-4o vs Llama-3-70B performance on customer
 
 As a product developer using LLMs, you are likely focused on a specific use case. Generic benchmarks are easily gamed and often not applicable to specific product needs. The best way to improve quality in your LLM app is to construct your own benchmark.
 
-In this guide, we'll walk through the steps to compare Qwen-2-72B, GPT-4o, and Llama-3-70B. The end result is a side-by-side comparison view that looks like this:
+In this guide, we'll walk through the steps to compare Qwen-2-72B, GPT-4o, and Llama-3-70B. The result is a side-by-side comparison view that looks like this:
 
 ![qwen vs gpt vs llama](/img/docs/qwen-eval-webui.png)
 

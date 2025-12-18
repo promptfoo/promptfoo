@@ -13,10 +13,12 @@
     "write-translations": "docusaurus write-translations",
     "write-heading-ids": "docusaurus write-heading-ids",
     "typecheck": "tsc",
-    "format": "prettier --ignore-path .gitignore -w ."
+    "format": "prettier --ignore-path .gitignore -w .",
+    "spellcheck": "cspell \"**/*.{md,mdx}\" --config cspell.json --no-progress"
   },
   "devDependencies": {
     "@calcom/embed-react": "^1.5.3",
+    "cspell": "^8.17.5",
     "@docusaurus/core": "^3.9.2",
     "@docusaurus/module-type-aliases": "^3.9.2",
     "@docusaurus/plugin-client-redirects": "^3.9.2",

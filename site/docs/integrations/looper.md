@@ -9,7 +9,7 @@ This guide shows you how to integrate **Promptfoo** evaluations into a Looper CI
 
 ## Prerequisites
 
-- A working Looperinstallation with workflow execution enabled
+- A working Looper installation with workflow execution enabled
 - A build image (or declared tools) that provides **Node 22+** and **jq 1.6+**
 - `promptfooconfig.yaml` and your prompt fixtures (`prompts/**/*.json`) committed to the repository
 

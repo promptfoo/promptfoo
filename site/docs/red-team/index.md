@@ -35,7 +35,7 @@ This process is how the big foundation labs - OpenAI, Anthropic, Microsoft, and 
 
 This is a new field and standards are emerging around the world, ranging from [OWASP LLM Top 10](https://owasp.org/www-project-top-10-for-large-language-model-applications/) to [NIST's AI Risk Management Framework](https://www.nist.gov/itl/ai-risk-management-framework) and the [EU AI Act](https://www.europarl.europa.eu/topics/en/article/20230601STO93804/eu-ai-act-first-regulation-on-artificial-intelligence).
 
-From what we've seen so far, most regulations/standards support a systematic benchmarking/red teaming process that quantifies risk via testing prior to deployment.
+From what we've seen so far, most regulations/standards support a systematic benchmarking/red teaming process that quantifies risk via testing before deployment.
 
 ## How LLM red teaming works
 
@@ -54,7 +54,7 @@ Once a process is set up, it can be applied in two primary ways:
 - **One-off runs**: Generate a comprehensive report that allows you to examine vulnerabilities and suggested mitigations.
 - **CI/CD integration**: Continuously monitor for vulnerabilities in your deployment pipeline, ensuring ongoing safety as your application evolves.
 
-The magic moment for managing AI risk usually comes after an organization is able to set up some continuous measurement of AI risk: whether through CI/CD, internal requirements, or some other form of scheduled runs.
+The magic moment for managing AI risk usually comes after an organization sets up continuous measurement of AI risk: whether through CI/CD, internal requirements, or some other form of scheduled runs.
 
 <div style={{ maxWidth: 760, margin: '0 auto' }}>
   ![llm security continuous monitoring](/img/continuous-monitoring.png)
@@ -210,7 +210,7 @@ Before running a red team, define a systematic process that encompasses:
    - **Continuous integration/deployment (CI/CD) checks** to catch regressions and anomalies.
    - **Post-deployment monitoring** to establish a feedback loop and maintain an understanding of how your application is behaving in production.
 
-3. **Resource allocation**: Balance the depth of testing with available time and resources. Certain automated attack strategies consume a large number of tokens, and a single red team can range anywhere from a few cents to hundreds of dollars!
+3. **Resource allocation**: Balance the depth of testing with available time and resources. Certain automated attack strategies consume many tokens, and a single red team can range anywhere from a few cents to hundreds of dollars!
 
 4. **Regulatory compliance**: Consider any industry-specific or regional requirements (e.g., GDPR, HIPAA) as well as standards (e.g. NIST AI RMF, OWASP LLM).
 

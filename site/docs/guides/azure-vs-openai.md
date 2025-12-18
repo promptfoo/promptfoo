@@ -16,7 +16,7 @@ Whether you use GPT through the OpenAI or Azure APIs, the results are pretty sim
 
 This guide will walk you through a systematic approach to comparing these models using the `promptfoo` CLI tool.
 
-The end result will be a side-by-side comparison view that looks like this, which includes timing information and outputs.
+The result is a side-by-side comparison view that looks like this, which includes timing information and outputs.
 
 ![openai and azure comparison](/img/docs/openai-vs-azure-comparison.png)
 
@@ -98,7 +98,7 @@ npx promptfoo@latest eval --no-cache
 
 This will run the test cases against both models and output the results.
 
-We've added the `--no-cache` directive because we care about timings (in order to see which provider is faster), so we don't want any
+We've added the `--no-cache` directive because we care about timings (to see which provider is faster), so we don't want any
 
 ## Step 4: Review results and analyze
 

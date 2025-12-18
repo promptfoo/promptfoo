@@ -11,7 +11,7 @@ imageAlt: 'Illustration of LLM system cards timeline 2022-2025'
 
 ## What are system cards, anyway?
 
-A system card accompanies a LLM release with system-level information about the model's deployment.
+A system card accompanies an LLM release with system-level information about the model's deployment.
 
 A system card is not to be confused with a model card, which conveys information about the model itself. Hooray for being given far more than a list of features and inadequate documentation along with the expectation of churning out a working implementation of some tool by the end of the week.
 

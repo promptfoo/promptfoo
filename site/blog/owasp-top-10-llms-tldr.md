@@ -51,7 +51,7 @@ Let's unpack them in an orderly fashion.
 
 ### 1. Prompt injection
 
-Prompts are instructions fed to a LLM to make it do something.
+Prompts are instructions fed to an LLM to make it do something.
 
 'Quiz me on Gen Z lingo so the next time I go into class I know when they make fun of me. Today they kept calling me a goat.'
 

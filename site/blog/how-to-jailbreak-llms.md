@@ -340,7 +340,7 @@ def unicode_normalization_example():
 
 #### Whitespace Manipulation
 
-This approach uses various Unicode whitespace characters to alter how text is processed. It exploits the fact that many models treat different types of whitespace characters similarly while filters might not.
+This approach uses various Unicode whitespace characters to alter how text is processed. It exploits how many models treat different types of whitespace characters similarly while filters might not.
 
 ```python
 def whitespace_manipulation():
@@ -422,7 +422,7 @@ def innocent_looking_function():
 
 #### Comment Embedding
 
-Similar to code block manipulation, this technique hides content within comments. It exploits the fact that comments might be processed differently than regular text by the model.
+Similar to code block manipulation, this technique hides content within comments. It exploits how comments might be processed differently than regular text by the model.
 
 ```javascript
 // Using comments to hide content

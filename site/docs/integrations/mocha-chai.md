@@ -8,7 +8,7 @@ import TabItem from '@theme/TabItem';
 
 # Testing prompts with Mocha/Chai
 
-`promptfoo` can be integrated with test frameworks like [Mocha](https://mochajs.org/) and assertion libraries like [Chai](https://www.chaijs.com/) in order to evaluate prompts as part of existing testing and CI workflows.
+`promptfoo` can be integrated with test frameworks like [Mocha](https://mochajs.org/) and assertion libraries like [Chai](https://www.chaijs.com/) to evaluate prompts as part of existing testing and CI workflows.
 
 This guide includes examples that show how to create Mocha test cases for desired prompt quality using semantic similarity and LLM grading.
 
@@ -139,7 +139,7 @@ Assertion.addAsyncMethod(
 
 ## Writing tests
 
-Our test code will use the custom chai assertions in order to run a few test cases.
+Our test code will use the custom chai assertions to run a few test cases.
 
 Create a new file called `index.test.js` and add the following code:
 

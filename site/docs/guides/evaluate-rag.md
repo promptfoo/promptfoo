@@ -21,7 +21,7 @@ There are several criteria used to evaluate RAG applications:
   - **Answer relevance**: Measures how directly the answer addresses the question. See [`answer-relevance`](/docs/configuration/expected-outputs/model-graded/) or [`similar`](/docs/configuration/expected-outputs/similar/) metric.
 - Context-based
   - **Context adherence** (also called Grounding or Faithfulness): Measures whether LLM outputs are based on the provided context. See [`context-adherence`](/docs/configuration/expected-outputs/model-graded/) metric.
-  - **Context recall**: Measures whether the context contains the correct information, compared to a provided ground truth, in order to produce an answer. See [`context-recall`](/docs/configuration/expected-outputs/model-graded/) metric.
+  - **Context recall**: Measures whether the context contains the correct information, compared to a provided ground truth, to produce an answer. See [`context-recall`](/docs/configuration/expected-outputs/model-graded/) metric.
   - **Context relevance**: Measures how much of the context is necessary to answer a given query. See [`context-relevance`](/docs/configuration/expected-outputs/model-graded/) metric.
 - **Custom metrics**: You know your application better than anyone else. Create test cases that focus on things that matter to you (examples include: whether a certain document is cited, whether the response is too long, etc.)
 
@@ -31,7 +31,7 @@ You can also jump to the [full RAG example](https://github.com/promptfoo/promptf
 
 ## Evaluating document retrieval
 
-Document retrieval is the first step of a RAG. It is possible to eval the retrieval step in isolation, in order to ensure that you are fetching the best documents.
+Document retrieval is the first step of a RAG. It is possible to eval the retrieval step in isolation to ensure that you are fetching the best documents.
 
 Suppose we have a simple file `retrieve.py`, which takes a query and outputs a list of documents and their contents:
 

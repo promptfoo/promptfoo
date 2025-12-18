@@ -442,7 +442,7 @@ module.exports = extensionHook;
 
 These hooks provide powerful extensibility to your promptfoo evaluations, allowing you to implement custom logic for setup, teardown, logging, or integration with other systems. The extension function receives the `hookName` and a `context` object, which contains relevant data for each hook type. You can use this information to perform actions specific to each stage of the evaluation process.
 
-The beforeAll and beforeEach hooks may mutate specific properties of their respective `context` arguments in order to modify evaluation state. To persist these changes, the hook must return the modified context.
+The beforeAll and beforeEach hooks may mutate specific properties of their respective `context` arguments to modify evaluation state. To persist these changes, the hook must return the modified context.
 
 #### beforeAll
 
@@ -507,7 +507,7 @@ graph LR
 
 ### Complete Example: RAG System Evaluation
 
-This example demonstrates how different transforms work together in a RAG evaluation :
+This example demonstrates how different transforms work together in a RAG evaluation:
 
 ```yaml
 providers:
@@ -656,7 +656,7 @@ interface TestSuiteConfig {
   // Path to write output. Writes to console/web viewer if not set.
   outputPath?: FilePath | FilePath[];
 
-  // Determines whether or not sharing is enabled.
+  // Determines whether sharing is enabled.
   sharing?:
     | boolean
     | {

@@ -102,7 +102,7 @@ When content is flagged, the assertion provides specific feedback about whether 
 
 You only need this when you're not using Promptfoo's built-in Azure OpenAI or AWS Bedrock providers. For custom HTTP targets or other non-built-in providers, normalize your provider response into the `guardrails` shape described below.
 
-In order for this assertion to work, your target's response object must include a top-level `guardrails` field. The assertion reads only the following fields:
+For this assertion to work, your target's response object must include a top-level `guardrails` field. The assertion reads only the following fields:
 
 - `flagged` (boolean)
 - `flaggedInput` (boolean)

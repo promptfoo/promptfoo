@@ -9,7 +9,7 @@ While public benchmarks provide a general sense of capability, the only way to t
 
 This guide will show you how to perform a custom benchmark on Cohere's Command-R/Command-R Plus, comparing it to GPT-4 and Claude Opus on the use cases that matter most to you.
 
-The end result is a side-by-side comparison view that looks like this:
+The result is a side-by-side comparison view that looks like this:
 
 ![cohere vs gpt, cohere vs claude](/img/docs/cohere-gpt-claude.png)
 

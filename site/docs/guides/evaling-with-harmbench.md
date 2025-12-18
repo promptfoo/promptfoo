@@ -20,7 +20,7 @@ This guide will show you how to use Promptfoo to run HarmBench evaluations again
 
 This is important because your application's prompt engineering and context can significantly impact model behavior. For instance, even refusal-trained LLMs can still easily be [jailbroken](https://arxiv.org/abs/2410.13886) when operating as an agent in a web browser. Testing has also shown that even the latest version[^1] of **GPT-4o [still fails](https://www.promptfoo.app/eval/eval-hu9-2025-02-03T17:21:33) ~6% of HarmBench's attacks**.
 
-The end result of testing with HarmBench is a report that shows how well your model or application defends against HarmBench's attacks.
+The result of testing with HarmBench is a report that shows how well your model or application defends against HarmBench's attacks.
 ![harmbench evaluation results](/img/docs/harmbench-results.png)
 
 ## Configure the evaluation
@@ -55,7 +55,7 @@ npx promptfoo@latest view
 
 You can see an example of the results below as well as the full results of a sample evaluation [here](https://www.promptfoo.app/eval/eval-m9D-2025-01-30T17:29:53). In the example we highlighted above, we're doing a comparative analysis of our internal sample application (powered by `gpt-5-mini`) against the vanilla version of `gpt-5-mini` from OpenAI.
 
-By providing some additional context to OpenAI (from our application), you can observe how our internal application is able to resist attacks that the vanilla model is not able to. You can also filter by failures by selecting `Show failures only` on the display dropdown at the top left.
+By providing some additional context to OpenAI (from our application), you can observe how our internal application can resist attacks that the vanilla model cannot. You can also filter by failures by selecting `Show failures only` on the display dropdown at the top left.
 
 ## Testing different targets
 

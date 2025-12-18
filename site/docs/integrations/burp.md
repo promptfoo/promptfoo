@@ -7,7 +7,7 @@ description: Test LLM applications for jailbreak vulnerabilities by integrating 
 
 This guide shows how to integrate Promptfoo's application-level jailbreak creation with Burp Suite's Intruder feature for security testing of LLM-powered applications.
 
-The end result is a Burp Suite Intruder configuration that can be used to test for LLM jailbreak vulnerabilities.
+The result is a Burp Suite Intruder configuration that can be used to test for LLM jailbreak vulnerabilities.
 
 ![Burp Suite Intruder](/img/docs/burp/burp-jailbreak-intruder.png)
 

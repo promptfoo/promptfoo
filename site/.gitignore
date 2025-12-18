@@ -9,6 +9,10 @@
 .cache-loader
 /static/docs
 
+# Vale (grammar checker downloaded packages)
+.vale/styles/proselint
+.vale/styles/write-good
+
 # Misc
 .DS_Store
 .env.local

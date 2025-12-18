@@ -26,7 +26,7 @@ Importantly, Promptfoo also allows you to run these evaluations **on your applic
 
 We'll use Meta's [CyberSecEval benchmark](https://ai.meta.com/research/publications/cyberseceval-3-advancing-the-evaluation-of-cybersecurity-risks-and-capabilities-in-large-language-models/) to test models against prompt injection vulnerabilities. According to Meta, even state-of-the-art models show between 25% and 50% successful prompt injection rates, making this evaluation critical for production deployments.
 
-The end result is a report that shows you how well your model is able to defend against prompt injection attacks.
+The result is a report that shows how well your model defends against prompt injection attacks.
 
 ![CyberSecEval report](/img/blog/cyberseceval/cyberseceval-report.png)
 

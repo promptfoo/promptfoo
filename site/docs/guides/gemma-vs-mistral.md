@@ -7,7 +7,7 @@ description: Compare Gemma vs Mistral vs Mixtral performance on your custom data
 
 When comparing the performance of LLMs, it's best not to rely on generic benchmarks. This guide shows you how to set up a comprehensive benchmark that compares Gemma vs Mistral vs Mixtral.
 
-The end result is a side-by-side comparison of these models on tasks that matter to you:
+The result is a side-by-side comparison of these models on tasks that matter to you:
 
 ![gemma vs mistral vs mixtral](/img/docs/gemma-vs-mistral.png)
 

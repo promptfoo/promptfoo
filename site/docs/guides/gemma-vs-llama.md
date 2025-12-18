@@ -7,7 +7,7 @@ description: Compare Google Gemma vs Meta Llama performance on custom datasets u
 
 Comparing Google's Gemma and Meta's Llama involves more than just looking at their specs and reading about generic benchmarks. The true measure of their usefulness comes down to how they perform on the _specific tasks you need them for_, in the context of your specific application.
 
-This guide will walk you through the process of benchmarking Gemma and Llama using `promptfoo`. The end result is a side-by-side comparison that looks like this:
+This guide will walk you through the process of benchmarking Gemma and Llama using `promptfoo`. The result is a side-by-side comparison that looks like this:
 
 ![gemma vs llama](/img/docs/gemma-vs-llama.png)
 
@@ -209,6 +209,6 @@ After running the evaluation, you'll have a dataset that compares the responses 
   - It seems like Gemma is more likely to respond verbosely and include markdown formatting.
   - Llama has a weird habit of roleplaying (e.g. extra output such as `*adjusts glasses*`) and by default prefers to preface responses with "Of course!"
 
-Consider the implications of these results for your specific application or use case. Although Gemma outperforms Llama on generic test sets, you must create your own test set in order to really pick a winner!
+Consider the implications of these results for your specific application or use case. Although Gemma outperforms Llama on generic test sets, you must create your own test set to really pick a winner!
 
 To learn more about setting up promptfoo, see [Getting Started](/docs/getting-started) or our more detailed [Configuration Guide](/docs/configuration/guide).

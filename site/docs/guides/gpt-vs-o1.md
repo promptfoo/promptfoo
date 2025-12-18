@@ -11,7 +11,7 @@ While it scores higher on generic benchmarks, there are many real-world cases wh
 
 This guide describes through how to compare `o1-preview` and `o1-mini` against `gpt-5` using promptfoo, with a focus on performance, cost, and latency.
 
-The end result will be a side-by-side comparison that looks similar to this:
+The result is a side-by-side comparison that looks similar to this:
 
 ![o1 vs gpt-5 comparison](/img/docs/o1-vs-gpt.png)
 

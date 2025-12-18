@@ -21,7 +21,7 @@ tags: [security-vulnerability, best-practices, owasp, unbounded-consumption]
 
 # Beyond DoS: How Unbounded Consumption is Reshaping LLM Security
 
-The recent release of the [2025 OWASP Top 10 for LLMs](https://genai.owasp.org/resource/owasp-top-10-for-llm-applications-2025/) brought a number of changes in the top risks for LLM applications. One of the changes from the 2023 version was the removal of LLM04: Model Denial of Service (DoS), which was replaced in the 2025 version with LLM10: Unbounded Consumption.
+The recent release of the [2025 OWASP Top 10 for LLMs](https://genai.owasp.org/resource/owasp-top-10-for-llm-applications-2025/) brought several changes to the top risks for LLM applications. One of the changes from the 2023 version was the removal of LLM04: Model Denial of Service (DoS), which was replaced in the 2025 version with LLM10: Unbounded Consumption.
 
 So what is the difference between Model Denial of Service (DoS) and Unbounded Consumption? And how do you mitigate risks? We'll break it down in this article.
 
@@ -55,7 +55,7 @@ Denial of Service (DoS) attacks are now within the scope of unbounded consumptio
 
 ### Causes of Unbounded Consumption
 
-LLM applications are vulnerable to unbounded consumption under a number of conditions:
+LLM applications are vulnerable to unbounded consumption under several conditions:
 
 - The application does not enforce proper input validation to ensure prompts don't exceed reasonable context windows.
 - The application does not have strong rate limiting or user quotas.

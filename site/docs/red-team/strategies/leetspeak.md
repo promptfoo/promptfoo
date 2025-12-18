@@ -6,7 +6,7 @@ description: Evaluate AI robustness against leetspeak obfuscation techniques usi
 
 # Leetspeak Strategy
 
-The Leetspeak strategy tests an AI system's ability to resist encoded inputs that might bypass security controls by replacing letters with visually similar numbers or symbols (e.g., a→4, e→3, t→7), leveraging the fact that models frequently encounter this internet-native text transformation during pretraining but safety training often fails to catch these character substitutions.
+The Leetspeak strategy tests an AI system's ability to resist encoded inputs that might bypass security controls by replacing letters with visually similar numbers or symbols (e.g., a→4, e→3, t→7), leveraging that models frequently encounter this internet-native text transformation during pretraining but safety training often fails to catch these character substitutions.
 
 ## Implementation
 

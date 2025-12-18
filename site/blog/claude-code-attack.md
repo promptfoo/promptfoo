@@ -308,7 +308,7 @@ The tools used in attacks—Read, Grep, Bash—are exactly what the agent is _su
 
 ## Defending Against Espionage Attacks
 
-The bottom line is that there's nothing special about the jailbreak technique used in this campaign, other than the fact that Anthropic chose to publicize it.
+The bottom line is that there's nothing special about the jailbreak technique used in this campaign, except that Anthropic chose to publicize it.
 
 There are certainly threat actors and black hats who are using AI to do bad things. If you leave your AI agent open to the public internet, and give it the ability to use a shell and network, you will get a bad result.
 

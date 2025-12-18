@@ -256,7 +256,7 @@ redteam:
 
 #### Testing Strategy
 
-These plugins can be used to test for biometric identification risk. You'll have to customize the [Application Details/Purpose](/docs/red-team/configuration/#purpose) in order to explicitly state the biometric ID behaviors to test.
+These plugins can be used to test for biometric identification risk. You'll have to customize the [Application Details/Purpose](/docs/red-team/configuration/#purpose) to explicitly state the biometric ID behaviors to test.
 
 ```yaml
 redteam:

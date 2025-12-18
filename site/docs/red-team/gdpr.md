@@ -23,7 +23,7 @@ This guide focuses on seven key GDPR articles that are particularly relevant for
 
 ## Scanning for GDPR Compliance
 
-Promptfoo helps identify potential GDPR compliance issues through comprehensive red teaming. The end result is a detailed report that maps your AI system's compliance with GDPR requirements.
+Promptfoo helps identify potential GDPR compliance issues through comprehensive red teaming. The result is a detailed report that maps your AI system's compliance with GDPR requirements.
 
 To set up the scan through the Promptfoo UI, select the GDPR option in the list of presets on the Plugins page.
 

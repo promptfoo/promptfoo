@@ -31,7 +31,7 @@ To prevent these issues, this guide explores the types and causes of misinformat
 
 ## Types of Misinformation in LLMs
 
-Misinformation can be caused by a number of factors, ranging from prompting, model configurations, knowledge cutoffs, or lack of external sources. They can broadly be categorized into five different risks:
+Misinformation can be caused by several factors, ranging from prompting, model configurations, knowledge cutoffs, or lack of external sources. They can broadly be categorized into five different risks:
 
 1. **Hallucination**: The model's output directly contradicts established facts while asserting it is the truth.  
    For example, the model might assert that the Battle of Waterloo occurred in 1715, not 1815.

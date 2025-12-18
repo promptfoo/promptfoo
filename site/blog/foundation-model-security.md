@@ -52,7 +52,7 @@ You can gain a sense of an LLM's performance and security through its system mod
 
 Regardless of the robustness of testing, all LLMs have model-layer vulnerabilities, such as prompt injections and jailbreaks, hate speech, hallucinations, specialized advice, and PII leaks from training data. You can learn more about these vulnerabilities in Promptfoo's documentation. As models continue to improve in reasoning, the success rate of these attacks will lower.
 
-You can gain a general sense of which models are more prone to jailbreaking on EasyJailbreak, which measures LLMs on a number of jailbreaking benchmarks. For example, you can assess a model based on its resistance to multilingual jailbreak attempts or DeepInception, where you can jailbreak an LLM through nested character roleplay and imaginative scenarios.
+You can gain a general sense of which models are more prone to jailbreaking on EasyJailbreak, which measures LLMs on several jailbreaking benchmarks. For example, you can assess a model based on its resistance to multilingual jailbreak attempts or DeepInception, where you can jailbreak an LLM through nested character roleplay and imaginative scenarios.
 
 ![easy jailbreak leaderboard](/img/blog/foundation-model-security/easy_jailbreak_leaderboard.png)
 

@@ -99,7 +99,7 @@ assert:
 
 ### Contains-All
 
-The `contains-all` assertion checks if the LLM output contains all of the specified values.
+The `contains-all` assertion checks if the LLM output contains all specified values.
 
 Example:
 
@@ -152,7 +152,7 @@ assert:
   - type: contains-json
 ```
 
-You may optionally set a `value` as a JSON schema in order to validate the JSON contents:
+You may optionally set a `value` as a JSON schema to validate the JSON contents:
 
 ```yaml
 assert:

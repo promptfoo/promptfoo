@@ -11,7 +11,7 @@ Best-of-N (BoN) is a simple but effective black-box jailbreaking algorithm that 
 Introduced by [Hughes et al. (2024)](https://arxiv.org/abs/2412.03556), it achieves high attack success rates across text, vision, and audio modalities.
 
 :::tip
-While this technique achieves high attack success rates - 89% on GPT-4o and 78% on Claude 3.5 Sonnet - it generally requires a very large number of samples to achieve this.
+While this technique achieves high attack success rates - 89% on GPT-4o and 78% on Claude 3.5 Sonnet - it generally requires many samples to achieve this.
 :::
 
 Use it like so in your `promptfooconfig.yaml`:

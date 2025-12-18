@@ -51,7 +51,7 @@ So what AI systems does the EU specifically ban? [Article 5 of the EU AI Act](ht
 - AI systems intended to infer emotions in the workplace or education institutions
 - The use of biometric data to categorize or deduce a person's race, political opinions, trade union membership, religious or philosophical beliefs, sex life or sexual orientation
 
-From a deployment perspective, there are a number of use cases that could trespass into the hazard zone of prohibited AI systems in the EU:
+From a deployment perspective, there are several use cases that could trespass into the hazard zone of prohibited AI systems in the EU:
 
 - Using LLMs for social engineering to phish for sensitive information such as bank account details, credit card numbers, date of birth, or social security numbers
 - Skewing LLM responses in a children's app for extreme or violent points of view

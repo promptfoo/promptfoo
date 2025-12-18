@@ -311,6 +311,10 @@ jobs:
         working-directory: site
         run: npm run typecheck
 
+      - name: Spell Check
+        working-directory: site
+        run: npm run spellcheck
+
       - name: Build Documentation
         working-directory: site
         run: npm run build

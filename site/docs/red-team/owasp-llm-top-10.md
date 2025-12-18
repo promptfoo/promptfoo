@@ -28,7 +28,7 @@ This guide will walk through how to use Promptfoo's features to test for and mit
 
 Promptfoo is an open-source tool that helps identify and remediate many of the vulnerabilities outlined in the OWASP LLM Top 10. OWASP has also [listed Promptfoo](https://genai.owasp.org/ai-security-solutions-landscape/) as a security solution for Generative AI.
 
-The end result is a comprehensive report card that enumerates the OWASP Top 10 vulnerabilities and their severities:
+The result is a comprehensive report card that enumerates the OWASP Top 10 vulnerabilities and their severities:
 
 ![Promptfoo OWASP LLM Top 10](/img/docs/compliance.png)
 

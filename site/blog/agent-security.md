@@ -59,11 +59,11 @@ All AI agents must be granted a degree of autonomy to make decisions and execute
 
 ### Reasoning and Planning
 
-Agents must evaluate problems and identify necessary actions to achieve goals. This involves understanding context, breaking down complex tasks, and determining the optimal sequence of actions. Not all models are capable of reasoning and planning, so it's important to select a model that is capable of handling the complexity of the task at hand.
+Agents must evaluate problems and identify necessary actions to achieve goals. This involves understanding context, breaking down complex tasks, and determining the optimal sequence of actions. Not all models can reason and plan, so it's important to select a model that can handle the complexity of the task at hand.
 
 ### Tools
 
-In order for an AI agent to execute on tasks, it must invoke tools. These tools could be as simple as Python functions or as complex as third-party APIs and database queries. When creating an AI agent, you will need to register the tools with the agent.
+For an AI agent to execute on tasks, it must invoke tools. These tools could be as simple as Python functions or as complex as third-party APIs and database queries. When creating an AI agent, you will need to register the tools with the agent.
 
 Providing these tools does not mean the AI agent will invoke those tools at every response. Instead, you can structure the AI agent to "reason" and determine whether the tool should be invoked. For some models, you can also force the model to call a function.
 
@@ -136,7 +136,7 @@ By design, AI agents require more sophisticated reasoning and planning to execut
 
 ### Multi-Turn Conversational Attacks
 
-Not all attacks can be executed in a single prompt. LLM agents may be vulnerable to multi-step attacks where the attacker sequences through a conversation until it is able to complete an attack. These multi-turn, conversational strategies are effective at coercing agents into generating harmful output or executing on tasks in stateful applications by gradually convincing the AI agent to act against its intended purpose over time.
+Not all attacks can be executed in a single prompt. LLM agents may be vulnerable to multi-step attacks where the attacker sequences through a conversation until they complete an attack. These multi-turn, conversational strategies are effective at coercing agents into generating harmful output or executing on tasks in stateful applications by gradually convincing the AI agent to act against its intended purpose over time.
 
 ![Multi-Turn Conversational Attacks](/img/blog/agent-security/conversation.png)
 

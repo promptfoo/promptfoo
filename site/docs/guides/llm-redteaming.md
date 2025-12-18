@@ -44,7 +44,7 @@ This guide shows you how to automatically generate adversarial tests specificall
 
 The tool also allows for custom policy violations tailored to your specific use case. For a full list of supported vulnerability types, see [Types of LLM vulnerabilities](/docs/red-team/llm-vulnerability-types/).
 
-The end result is a view that summarizes your LLM app's vulnerabilities:
+The result is a view that summarizes your LLM app's vulnerabilities:
 
 ![llm red team report](/img/riskreport-1@2x.png)
 
@@ -161,7 +161,7 @@ LLMs are configured with the `targets` property in `promptfooconfig.yaml`. An LL
 
 Promptfoo supports [many LLM providers](/docs/providers) including OpenAI, Anthropic, Mistral, Azure, Groq, Perplexity, Cohere, and more. In most cases all you need to do is set the appropriate API key environment variable.
 
-You should choose at least one target. If desired, set multiple in order to compare their performance in the red team eval. In this example, we’re comparing performance of GPT, Claude, and Llama:
+You should choose at least one target. If desired, set multiple to compare their performance in the red team eval. In this example, we’re comparing performance of GPT, Claude, and Llama:
 
 ```yaml
 targets:

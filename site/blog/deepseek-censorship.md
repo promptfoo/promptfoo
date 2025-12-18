@@ -150,7 +150,7 @@ This means that the censorship is brittle and can be trivially bypassed. Common 
 - Omitting China-specific context. For example, some questions can be switched to be about the U.S., North Korea, or other oppressive regimes (even hypothetical ones).
   ![DeepSeek Refusal on North Korea](/img/blog/deepseek/north_korea.png)
 
-  This is aided by the fact that DeepSeek automatically assumes U.S. context if you don't ask specifically about China - presumably a side effect of U.S.-centric training data (or because it may have been [trained on ChatGPT](https://techcrunch.com/2024/12/27/why-deepseeks-new-ai-model-thinks-its-chatgpt/?guccounter=1)).
+  This is aided by DeepSeek automatically assuming U.S. context if you don't ask specifically about China - presumably a side effect of U.S.-centric training data (or because it may have been [trained on ChatGPT](https://techcrunch.com/2024/12/27/why-deepseeks-new-ai-model-thinks-its-chatgpt/?guccounter=1)).
   ![DeepSeek Assuming U.S. Context](/img/blog/deepseek/US_context.png)
 
 - Wrapping the prompt as a request for benign historical context. The conversational red teamers quickly found that generalizing the question would elicit a full response.

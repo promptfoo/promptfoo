@@ -11,7 +11,7 @@ How well do these models actually perform for _your specific needs_? As a develo
 
 In this guide, we'll walk through how to create your own personalized benchmark comparing DBRX, Mixtral 8x7b, and GPT-3.5 on use cases that are relevant to you.
 
-The end result will be a custom benchmark that looks similar to this:
+The result is a custom benchmark that looks similar to this:
 
 ![dbrx, mixtral, and gpt comparison](/img/docs/dbrx-mixtral-gpt-comparison.png)
 
@@ -214,7 +214,7 @@ In the very basic example we ran above, DBRX tends to answer verbosely, which ca
 
 ![dbrx eval failures](/img/docs/dbrx-mixtral-gpt-comparison-failures.png)
 
-This doesn't mean DBRX is not capable of answering well - it probably just means we need to tweak the prompt a bit in order to get output quality similar to the other models.
+This doesn't mean DBRX is not capable of answering well - it probably just means we need to tweak the prompt a bit to get output quality similar to the other models.
 
 Our benchmark for our custom use case rated DBRX at 66%, Mixtral at 100%, and GPT 3.5 at 83%. While public benchmarks can provide a general sense of model performance, they are no substitute for running a benchmark on your own data and use cases.
 

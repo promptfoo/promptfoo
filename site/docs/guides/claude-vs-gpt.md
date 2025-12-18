@@ -9,7 +9,7 @@ When evaluating the performance of LLMs, generic benchmarks will only get you so
 
 You should test these models on tasks that are relevant to your specific use case, rather than relying solely on public benchmarks.
 
-This guide will walk you through setting up a comparison between Anthropic's Claude 3.7 and OpenAI's GPT-4.1 using `promptfoo`. The end result is a side-by-side evaluation of how these models perform on custom tasks:
+This guide will walk you through setting up a comparison between Anthropic's Claude 3.7 and OpenAI's GPT-4.1 using `promptfoo`. The result is a side-by-side evaluation of how these models perform on custom tasks:
 
 ![Claude 3.5 vs GPT-4.1 comparison](/img/docs/claude3.5-vs-gpt4o.png)
 

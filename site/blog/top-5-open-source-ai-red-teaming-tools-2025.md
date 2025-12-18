@@ -57,7 +57,7 @@ Red-teaming efforts exist to uncover security vulnerabilities so that blue team 
 
 A couple of the top priorities in AI security are to protect sensitive data and stay within the confines of appropriate role-based access controls; security vulnerabilities regarding these tend to do the most damage. What constitutes harmful behavior may vary between organizations.
 
-Organizations must consider how to protect sensitive data and users throughout an entire AI system's lifecycle. All connection points need to be secured in order to reduce risk. The threat landscape can be large and often a red team process structured with scoping and strategy incorporates this to produce the best outcomes.
+Organizations must consider how to protect sensitive data and users throughout an entire AI system's lifecycle. All connection points need to be secured to reduce risk. The threat landscape can be large and often a red team process structured with scoping and strategy incorporates this to produce the best outcomes.
 
 ### Why do they need to be open source?
 
@@ -119,7 +119,7 @@ Test-driven development is the way of life for automated red teaming, my friend.
 
 ### Output scoring and reporting
 
-Auditing and reports are a common expectation of AI security in order to measure progress and compliance. Understanding outputs is naturally a part of the process. Useful software will help you:
+Auditing and reports are a common expectation of AI security to measure progress and compliance. Understanding outputs is naturally a part of the process. Useful software will help you:
 
 - Prioritise issues and triage severity through scoring.
 - Measure model robustness using quantitative scoring.

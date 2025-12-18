@@ -43,7 +43,7 @@ If it doesn't find anything, you'll get an emotionally satisfying `👍 All Clea
 
 ## Focus matters
 
-We've been using this scanner in our own repos for several weeks now, and it's already flagged some issues that might have slipped through otherwise. We use other automatic code review tools, and we also require that every PR is reviewed by a 100% human engineer. But in a number of the cases that the Promptfoo scanner has found an issue, it was the only reviewer, human or bot, which flagged that particular issue.
+We've been using this scanner in our own repos for several weeks now, and it's already flagged some issues that might have slipped through otherwise. We use other automatic code review tools, and we also require that every PR is reviewed by a 100% human engineer. But in several cases where the Promptfoo scanner found an issue, it was the only reviewer, human or bot, that flagged that particular issue.
 
 I think one reason for this is, in a single word: _focus_. Because the scanner has a single job to do, and is designed to find a small set of specific problematic patterns, it's more effective at finding those patterns than either a human or LLM that's doing a more general review.
 

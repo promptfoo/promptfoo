@@ -35,7 +35,7 @@ This is especially helpful when a scan seems stuck or you want to understand wha
 
 ## Out of memory error
 
-If you have a large number of tests or your tests have large outputs, you may encounter an out of memory error. There are several ways to handle this:
+If you have many tests or your tests have large outputs, you may encounter an out of memory error. There are several ways to handle this:
 
 ### Basic setup
 
