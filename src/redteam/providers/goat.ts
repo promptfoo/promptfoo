@@ -23,7 +23,7 @@ import {
   type TransformResult,
 } from '../shared/runtimeTransform';
 import { Strategies } from '../strategies';
-import { getSessionId } from '../util';
+import { getSessionId, stripPromptBlockPrefix } from '../util';
 import { getGoalRubric } from './prompts';
 import { getLastMessageContent, tryUnblocking } from './shared';
 import { formatTraceForMetadata, formatTraceSummary } from './traceFormatting';
@@ -346,12 +346,14 @@ export default class GoatProvider implements ApiProvider {
           continue;
         }
         const attackerMessage = data.message;
+        // Strip PromptBlock prefix that may have been added due to testGenerationInstructions
+        const attackerContent = stripPromptBlockPrefix(attackerMessage?.content);
 
-        previousAttackerMessage = attackerMessage?.content;
+        previousAttackerMessage = attackerContent;
 
         const targetVars = {
           ...context.vars,
-          [this.config.injectVar]: attackerMessage.content,
+          [this.config.injectVar]: attackerContent,
         };
 
         const renderedAttackerPrompt = await renderPrompt(

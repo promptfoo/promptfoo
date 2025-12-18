@@ -8,6 +8,7 @@ import {
   isEmptyResponse,
   normalizeApostrophes,
   removePrefix,
+  stripPromptBlockPrefix,
 } from '../../src/redteam/util';
 import type { CallApiContextParams, ProviderResponse } from '../../src/types/index';
 
@@ -40,6 +41,64 @@ describe('removePrefix', () => {
 
   it('should handle prefix that is the entire string', () => {
     expect(removePrefix('Prompt:', 'Prompt')).toBe('');
+  });
+});
+
+describe('stripPromptBlockPrefix', () => {
+  it('should strip PromptBlock: prefix from the start of a string', () => {
+    expect(stripPromptBlockPrefix('PromptBlock: Hello world')).toBe('Hello world');
+  });
+
+  it('should handle PromptBlock: with no space after colon', () => {
+    expect(stripPromptBlockPrefix('PromptBlock:Hello world')).toBe('Hello world');
+  });
+
+  it('should handle PromptBlock: with multiple spaces after colon', () => {
+    expect(stripPromptBlockPrefix('PromptBlock:   Hello world')).toBe('Hello world');
+  });
+
+  it('should be case insensitive', () => {
+    expect(stripPromptBlockPrefix('promptblock: Hello world')).toBe('Hello world');
+    expect(stripPromptBlockPrefix('PROMPTBLOCK: Hello world')).toBe('Hello world');
+    expect(stripPromptBlockPrefix('PromptBLOCK: Hello world')).toBe('Hello world');
+  });
+
+  it('should return the same string if no PromptBlock: prefix', () => {
+    expect(stripPromptBlockPrefix('Hello world')).toBe('Hello world');
+    expect(stripPromptBlockPrefix('Prompt: Hello world')).toBe('Prompt: Hello world');
+  });
+
+  it('should only strip PromptBlock: from the start, not middle', () => {
+    const input = 'Hello PromptBlock: world';
+    expect(stripPromptBlockPrefix(input)).toBe('Hello PromptBlock: world');
+  });
+
+  it('should handle empty strings', () => {
+    expect(stripPromptBlockPrefix('')).toBe('');
+  });
+
+  it('should handle null/undefined inputs', () => {
+    expect(stripPromptBlockPrefix(null as any)).toBe(null);
+    expect(stripPromptBlockPrefix(undefined as any)).toBe(undefined);
+  });
+
+  it('should handle PromptBlock: as the entire string', () => {
+    expect(stripPromptBlockPrefix('PromptBlock:')).toBe('');
+    expect(stripPromptBlockPrefix('PromptBlock: ')).toBe('');
+  });
+
+  it('should preserve multi-line content after stripping', () => {
+    const input = `PromptBlock: Line 1
+Line 2
+Line 3`;
+    const expected = `Line 1
+Line 2
+Line 3`;
+    expect(stripPromptBlockPrefix(input)).toBe(expected);
+  });
+
+  it('should handle content with special characters after PromptBlock:', () => {
+    expect(stripPromptBlockPrefix('PromptBlock: Hello! @#$%^&*()')).toBe('Hello! @#$%^&*()');
   });
 });
 

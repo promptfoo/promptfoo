@@ -32,7 +32,7 @@ import {
 } from '../../shared/runtimeTransform';
 import { Strategies } from '../../strategies';
 import type { BaseRedteamMetadata } from '../../types';
-import { getSessionId, isBasicRefusal } from '../../util';
+import { getSessionId, isBasicRefusal, stripPromptBlockPrefix } from '../../util';
 import {
   buildGraderResultAssertion,
   getTargetResponse,
@@ -343,6 +343,9 @@ export class HydraProvider implements ApiProvider {
         logger.info('[Hydra] Missing message from agent', { turn });
         continue;
       }
+
+      // Strip PromptBlock prefix that may have been added due to testGenerationInstructions
+      nextMessage = stripPromptBlockPrefix(nextMessage);
 
       // Add message to conversation history
       this.conversationHistory.push({

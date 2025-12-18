@@ -47,7 +47,7 @@ import {
 } from '../shared/runtimeTransform';
 import { Strategies } from '../strategies';
 import type { BaseRedteamMetadata } from '../types';
-import { getSessionId } from '../util';
+import { getSessionId, stripPromptBlockPrefix } from '../util';
 import {
   ATTACKER_SYSTEM_PROMPT,
   CLOUD_ATTACKER_SYSTEM_PROMPT,
@@ -544,10 +544,12 @@ async function runRedteamConversation({
         });
         const iterationVars = iterationContext?.vars || {};
 
-        const { improvement, prompt: newInjectVar } = await getNewPrompt(redteamProvider, [
+        const { improvement, prompt: rawNewInjectVar } = await getNewPrompt(redteamProvider, [
           ...redteamHistory,
           { role: 'assistant', content: node.prompt },
         ]);
+        // Strip PromptBlock prefix that may have been added due to testGenerationInstructions
+        const newInjectVar = stripPromptBlockPrefix(rawNewInjectVar);
 
         attempts++;
         logger.debug(

@@ -36,7 +36,7 @@ import {
 } from '../../shared/runtimeTransform';
 import { Strategies } from '../../strategies';
 import type { BaseRedteamMetadata } from '../../types';
-import { getSessionId, isBasicRefusal } from '../../util';
+import { getSessionId, isBasicRefusal, stripPromptBlockPrefix } from '../../util';
 import { getGoalRubric } from '../prompts';
 import type { Message } from '../shared';
 import {
@@ -749,7 +749,8 @@ export class CrescendoProvider implements ApiProvider {
     });
 
     return {
-      generatedQuestion: parsedOutput.generatedQuestion,
+      // Strip PromptBlock prefix that may have been added due to testGenerationInstructions
+      generatedQuestion: stripPromptBlockPrefix(parsedOutput.generatedQuestion),
     };
   }
 
