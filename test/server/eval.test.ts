@@ -1,4 +1,4 @@
-import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
@@ -6,6 +6,16 @@ import EvalResult from '../../src/models/evalResult';
 import { createApp } from '../../src/server/server';
 import invariant from '../../src/util/invariant';
 import EvalFactory from '../factories/evalFactory';
+
+// Mock getUserEmail and setUserEmail to prevent side effects from polluting global state
+vi.mock('../../src/globalConfig/accounts', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../../src/globalConfig/accounts')>();
+  return {
+    ...original,
+    getUserEmail: vi.fn().mockReturnValue(null),
+    setUserEmail: vi.fn(),
+  };
+});
 
 describe('eval routes', () => {
   let app: ReturnType<typeof createApp>;

@@ -37,6 +37,15 @@ vi.mock('../../../src/redteam/remoteGeneration', async (importOriginal) => {
   };
 });
 
+// Mock getUserEmail to return null for consistent test behavior
+vi.mock('../../../src/globalConfig/accounts', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../../../src/globalConfig/accounts')>();
+  return {
+    ...original,
+    getUserEmail: vi.fn().mockReturnValue(null),
+  };
+});
+
 describe('fetchRemoteGeneration', () => {
   beforeAll(() => {
     delete process.env.PROMPTFOO_REMOTE_GENERATION_URL;
