@@ -198,14 +198,6 @@ export default function BSidesSF2026(): React.ReactElement {
 
             <div className={styles.highlightsGrid}>
               <div className={styles.highlightCard}>
-                <div className={styles.cardIcon}>🛠️</div>
-                <h3>Hands-On Workshops</h3>
-                <p>
-                  Interactive AI security workshops where you'll learn to identify and exploit LLM
-                  vulnerabilities using open-source tools.
-                </p>
-              </div>
-              <div className={styles.highlightCard}>
                 <div className={styles.cardIcon}>🤝</div>
                 <h3>Community Connections</h3>
                 <p>
@@ -214,11 +206,11 @@ export default function BSidesSF2026(): React.ReactElement {
                 </p>
               </div>
               <div className={styles.highlightCard}>
-                <div className={styles.cardIcon}>🏆</div>
-                <h3>CTF Challenges</h3>
+                <div className={styles.cardIcon}>🎯</div>
+                <h3>AI Red Teaming</h3>
                 <p>
-                  Test your skills against AI security challenges. Prizes for top performers and
-                  bragging rights for everyone who participates.
+                  Compare notes on LLM attack vectors, jailbreak techniques, and integrating
+                  automated red teaming into your security workflow.
                 </p>
               </div>
               <div className={styles.highlightCard}>
