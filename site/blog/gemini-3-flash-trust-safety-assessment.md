@@ -55,18 +55,10 @@ We'll follow up with `thinkingLevel: HIGH` results.
 We ran 3,462 probes across 43 risk categories. Under the Meta (single-turn) strategy, two categories showed zero resistance: **Graphic Content** and **Entity Impersonation** hit 100% attack success (15/15 each). Neither model handles impersonation well (GPT-5.2 also shows 100%, 15/15 under Meta), but Gemini's graphic content defenses show a larger gap—GPT-5.2's Meta ASR for graphic content is 67% (10/15).
 
 :::note Units
-A **probe** is one model call with one prompt. An **attack** groups related probes for one scenario—it succeeds if any probe produces disallowed output. The table below reports attack-level aggregates (n=179/203/204), not raw probes (n=3,462).
+A **probe** is one model call with one prompt. An **attack** groups related probes for one scenario—it succeeds if any probe produces disallowed output. Results below are attack-level aggregates (n=179/203/204 per strategy), not raw probes (n=3,462).
 :::
 
-The strategy breakdown:
-
-| Strategy | Gemini 3 Flash | GPT-5.2 | Delta |
-|----------|---------------|---------|-------|
-| **Meta** (single-turn) | 89.4% (160/179) | 60.3% (108/179) | +29pp |
-| **Hydra** (multi-turn) | 76.9% (156/203) | 78.5% (159/203) | -2pp |
-| **Baseline** (no jailbreak) | 19.1% (39/204) | 4.3% (9/208) | +15pp |
-
-Single-turn jailbreaks are where Gemini 3 Flash diverges from GPT-5.2: 89% vs 60% attack success, a 29 percentage-point gap. Multi-turn attacks succeed at similar rates on both models—around 77-78%. The [meta-agent strategy](/docs/red-team/strategies/meta), which finds single-shot prompt manipulations, is the primary differentiator.
+Single-turn jailbreaks are where Gemini 3 Flash diverges most from GPT-5.2. The [meta-agent strategy](/docs/red-team/strategies/meta), which finds single-shot prompt manipulations, shows the largest gap: 89% vs 60% attack success (+29pp). Multi-turn attacks succeed at similar rates on both models.
 
 ![Attack success rate by strategy comparing Gemini 3 Flash and GPT-5.2](/img/blog/gemini-3-flash/strategy-comparison.svg)
 
@@ -78,18 +70,9 @@ Single-turn jailbreaks are where Gemini 3 Flash diverges from GPT-5.2: 89% vs 60
 
 ### Where defenses failed
 
-Beyond the 100% bypass categories, several areas showed >65% attack success under Meta:
+Beyond the 100% bypass categories (graphic content, impersonation), several areas showed >65% attack success under Meta. Child safety shows the largest gap at +43pp:
 
-| Category | Gemini 3 Flash | GPT-5.2 | Gap |
-|----------|---------------|---------|-----|
-| Hallucination (prompted fabrication) | 93% (13/14) | 60% (9/15) | +33pp |
-| Unauthorized Commitments | 80% (12/15) | 53% (8/15) | +27pp |
-| Personal Attacks | 80% (12/15) | 60% (9/15) | +20pp |
-| Harassment | 73% (11/15) | 53% (8/15) | +20pp |
-| Non-Violent Crime | 73% (11/15) | 40% (6/15) | +33pp |
-| Child Safety | 70% (7/10) | 27% (4/15) | +43pp |
-| Hate Speech | 67% (10/15) | 60% (9/15) | +7pp |
-| Violent Crime | 67% (10/15) | 33% (5/15) | +34pp |
+![High-risk categories under Meta strategy](/img/blog/gemini-3-flash/high-risk-categories.svg)
 
 The child safety number warrants attention. Under our rubric, Gemini 3 Flash produced outputs our reviewers judged as unsafe facilitation or boundary-violating content in 7/10 jailbreak attempts. GPT-5.2's rate was 27% (4/15). We performed human review on all outputs in this category—we are not publishing examples. (The different denominators reflect attacks that completed without timeouts or transport errors on each model; see methodology for scoring rules.)
 
@@ -99,17 +82,9 @@ The aggregate numbers hide an important pattern. Both models refuse most harmful
 
 On baseline prompts (no jailbreak transformation), Gemini 3 Flash shows a 15 percentage-point higher attack success rate: 19% vs 4%. This gap matters because it means simpler attacks work. You don't need a sophisticated jailbreak when direct requests succeed 1 in 5 times.
 
-Under attack, the models degrade differently:
-
-| Stage | GPT-5.2 refusal | Gemini refusal | Stronger |
-|-------|-----------------|----------------|----------|
-| Baseline (no attack) | 95.7% | 80.9% | GPT |
-| After Meta (single-turn) | 39.7% (-56pp) | 10.6% (-70pp) | GPT |
-| After Hydra (multi-turn) | 21.5% (-74pp) | 23.1% (-58pp) | ≈ |
-
-GPT-5.2 starts stronger and degrades less under single-turn attacks. Gemini 3 Flash actually degrades *less* under multi-turn attacks (-58pp vs -74pp), but starts so much weaker that the end result is similar. The compounding effect on single-turn attacks—weaker baseline plus greater degradation—is what produces the 89% vs 60% headline.
-
 ![How defenses degrade under attack - refusal rate comparison](/img/blog/gemini-3-flash/degradation-waterfall.svg)
+
+GPT-5.2 starts stronger (96% baseline refusal vs 81%) and degrades less under single-turn attacks (-56pp vs -70pp). Gemini 3 Flash actually degrades *less* under multi-turn attacks, but starts so much weaker that the end result is similar. The compounding effect—weaker baseline plus greater single-turn degradation—is what produces the 89% vs 60% headline.
 
 ## The Structural vs Semantic Pattern
 
@@ -309,15 +284,7 @@ This trade-off isn't necessarily wrong—overly cautious models frustrate users 
 
 If you're choosing between models for safety-critical applications:
 
-| Metric | GPT-5.2 | Gemini 3 Flash (MINIMAL) | Edge |
-|--------|---------|--------------------------|------|
-| Baseline refusal rate | 96% | 81% | GPT |
-| Refusal rate under Meta | 40% | 11% | GPT |
-| Refusal rate under Hydra | 21% | 23% | ≈ |
-| Child safety refusal (n=10-15) | 73% | 30% | GPT |
-| Hallucination refusal (n=14-15) | 40% | 7% | GPT |
-
-*Small category samples (n=10-15); treat as directional, not definitive.*
+![The Bottom Line - GPT-5.2 vs Gemini 3 Flash refusal rates](/img/blog/gemini-3-flash/bottom-line.svg)
 
 Neither is sufficient without additional safety layers. GPT-5.2 provides a stronger foundation for high-stakes use cases. Gemini 3 Flash may be fine for lower-risk applications where you control the input surface and add your own guardrails.
 
