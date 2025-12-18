@@ -24,8 +24,8 @@ import {
   buildGraderResultAssertion,
   getLastMessageContent,
   getTargetResponse,
-  redteamProviderManager,
   type Message,
+  redteamProviderManager,
   type TargetResponse,
   tryUnblocking,
 } from '../shared';

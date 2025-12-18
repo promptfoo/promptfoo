@@ -28,8 +28,8 @@ import {
   getLastMessageContent,
   getTargetResponse,
   isValidChatMessageArray,
-  redteamProviderManager,
   type Message,
+  redteamProviderManager,
   type TargetResponse,
   tryUnblocking,
 } from '../shared';
