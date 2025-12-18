@@ -205,6 +205,22 @@ export function removePrefix(str: string, prefix: string) {
 }
 
 /**
+ * Strips the "PromptBlock:" prefix from a string if present.
+ * This is used by agentic strategies to clean up attack prompts that may have
+ * been generated with the PromptBlock prefix due to testGenerationInstructions.
+ *
+ * @param prompt - The prompt string that may contain a PromptBlock prefix.
+ * @returns The prompt with the PromptBlock prefix removed.
+ */
+export function stripPromptBlockPrefix(prompt: string): string {
+  if (!prompt) {
+    return prompt;
+  }
+  // Match "PromptBlock:" at the start, with optional whitespace after
+  return prompt.replace(/^PromptBlock:\s*/i, '').trim();
+}
+
+/**
  * Extracts the short name from a fully qualified plugin ID.
  * Removes the 'promptfoo:redteam:' prefix if present.
  * @param pluginId The full plugin ID

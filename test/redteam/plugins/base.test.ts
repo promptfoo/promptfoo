@@ -274,6 +274,37 @@ describe('RedteamPluginBase', () => {
       expect(provider.callApi).toHaveBeenCalledWith(expect.stringContaining('<Modifiers>'));
       expect(provider.callApi).toHaveBeenCalledWith(expect.stringContaining('language: German'));
     });
+
+    it('should append PromptBlock instruction when testGenerationInstructions is present', async () => {
+      const plugin = new TestPlugin(provider, 'test purpose', 'testVar', {
+        modifiers: {
+          testGenerationInstructions: 'Generate prompts that ask about health plans',
+        },
+      });
+
+      await plugin.generateTests(1);
+      expect(provider.callApi).toHaveBeenCalledWith(expect.stringContaining('<Modifiers>'));
+      expect(provider.callApi).toHaveBeenCalledWith(
+        expect.stringContaining('Generate prompts that ask about health plans'),
+      );
+      expect(provider.callApi).toHaveBeenCalledWith(
+        expect.stringContaining('Each generated prompt MUST start with "PromptBlock:"'),
+      );
+    });
+
+    it('should not append PromptBlock instruction when testGenerationInstructions is not present', async () => {
+      const plugin = new TestPlugin(provider, 'test purpose', 'testVar', {
+        modifiers: {
+          otherModifier: 'some value',
+        },
+      });
+
+      await plugin.generateTests(1);
+      expect(provider.callApi).toHaveBeenCalledWith(expect.stringContaining('<Modifiers>'));
+      expect(provider.callApi).toHaveBeenCalledWith(
+        expect.not.stringContaining('Each generated prompt MUST start with "PromptBlock:"'),
+      );
+    });
   });
 
   describe('parseGeneratedPrompts', () => {

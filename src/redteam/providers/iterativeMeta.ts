@@ -39,6 +39,7 @@ import {
   type TargetResponse,
 } from './shared';
 import { formatTraceForMetadata, formatTraceSummary } from './traceFormatting';
+import { stripPromptBlockPrefix } from '../util';
 import { resolveTracingOptions } from './tracingOptions';
 
 // Meta-agent based iterative testing - cloud handles memory and strategic decisions
@@ -242,6 +243,9 @@ export async function runMetaAgentRedteam({
       logger.info(`[IterativeMeta] ${i + 1}/${numIterations} - Missing attack prompt`);
       continue;
     }
+
+    // Strip PromptBlock prefix that may have been added due to testGenerationInstructions
+    attackPrompt = stripPromptBlockPrefix(attackPrompt);
 
     // ═══════════════════════════════════════════════════════════════════════
     // Apply per-turn layer transforms if configured (e.g., audio, base64)

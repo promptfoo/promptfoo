@@ -324,6 +324,14 @@ export abstract class RedteamPluginBase {
       return template;
     }
 
+    // When testGenerationInstructions is present, append PromptBlock format instruction
+    // to ensure consistent parsing. The PromptBlock prefix will be stripped by agentic
+    // strategies before sending attacks to the target.
+    if (modifiers.testGenerationInstructions) {
+      modifiers.testGenerationInstructions +=
+        '\n\nIMPORTANT: Each generated prompt MUST start with "PromptBlock:"';
+    }
+
     // Append all modifiers
     const modifierSection = Object.entries(modifiers)
       .filter(([_, value]) => typeof value !== 'undefined' && value !== '')

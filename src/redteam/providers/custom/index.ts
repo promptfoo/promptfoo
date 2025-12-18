@@ -31,7 +31,7 @@ import {
 } from '../../shared/runtimeTransform';
 import { Strategies } from '../../strategies';
 import type { BaseRedteamMetadata } from '../../types';
-import { getSessionId, isBasicRefusal } from '../../util';
+import { getSessionId, isBasicRefusal, stripPromptBlockPrefix } from '../../util';
 import { EVAL_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT } from '../crescendo/prompts';
 import { getGoalRubric } from '../prompts';
 import type { Message } from '../shared';
@@ -751,7 +751,8 @@ export class CustomProvider implements ApiProvider {
     });
 
     return {
-      generatedQuestion: parsedOutput.generatedQuestion,
+      // Strip PromptBlock prefix that may have been added due to testGenerationInstructions
+      generatedQuestion: stripPromptBlockPrefix(parsedOutput.generatedQuestion),
       tokenUsage: response.tokenUsage,
     };
   }

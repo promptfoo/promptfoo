@@ -35,7 +35,7 @@ import {
   type TransformResult,
 } from '../shared/runtimeTransform';
 import { Strategies } from '../strategies';
-import { getSessionId } from '../util';
+import { getSessionId, stripPromptBlockPrefix } from '../util';
 import {
   ATTACKER_SYSTEM_PROMPT,
   CLOUD_ATTACKER_SYSTEM_PROMPT,
@@ -286,6 +286,9 @@ export async function runRedteamConversation({
       });
       continue;
     }
+
+    // Strip PromptBlock prefix that may have been added due to testGenerationInstructions
+    newInjectVar = stripPromptBlockPrefix(newInjectVar);
 
     // Update the application prompt with the new injection.
     logger.debug(`[Iterative] New injectVar: ${newInjectVar}, improvement: ${improvement}`);
