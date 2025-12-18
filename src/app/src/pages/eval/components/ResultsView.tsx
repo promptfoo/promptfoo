@@ -212,7 +212,7 @@ export default function ResultsView({
   const { updateConfig } = useMainStore();
 
   const { showToast } = useToast();
-  const { data: cloudConfig } = useCloudConfig();
+  const { data: cloudConfig, isLoading: isCloudConfigLoading } = useCloudConfig();
   const [searchText, setSearchText] = React.useState(searchParams.get('search') || '');
   const [debouncedSearchValue] = useDebounce(searchText, 1000);
 
@@ -587,6 +587,11 @@ export default function ResultsView({
   // When cloud is enabled, only allow editing your own evals or unclaimed evals
   // When cloud is disabled, allow editing (no identity system to verify ownership)
   const canEditAuthor = React.useMemo(() => {
+    // While cloud config is loading, default to not editable to prevent race condition
+    // where a non-owner could edit before cloud restrictions are applied
+    if (isCloudConfigLoading) {
+      return false;
+    }
     if (!cloudConfig?.isEnabled) {
       return true;
     }
@@ -595,7 +600,7 @@ export default function ResultsView({
       return true;
     }
     return author === currentUserEmail;
-  }, [cloudConfig?.isEnabled, author, currentUserEmail]);
+  }, [isCloudConfigLoading, cloudConfig?.isEnabled, author, currentUserEmail]);
 
   const handleSearchKeyDown = React.useCallback<React.KeyboardEventHandler>(
     (event) => {
