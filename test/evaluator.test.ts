@@ -1,8 +1,8 @@
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { randomUUID } from 'crypto';
 import fs from 'fs';
 
 import { glob } from 'glob';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../src/cliState';
 import { DEFAULT_MAX_CONCURRENCY, FILE_METADATA_KEY } from '../src/constants';
 import {

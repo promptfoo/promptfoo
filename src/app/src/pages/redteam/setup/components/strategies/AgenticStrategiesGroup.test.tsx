@@ -1,6 +1,7 @@
-import { render, screen, fireEvent, within } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { fireEvent, render, screen, within } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AgenticStrategiesGroup } from './AgenticStrategiesGroup';
+
 import type { StrategyCardData } from './types';
 
 // Mock StrategyItem component

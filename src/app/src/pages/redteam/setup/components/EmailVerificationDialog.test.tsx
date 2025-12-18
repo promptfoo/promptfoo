@@ -1,7 +1,8 @@
+import type { ComponentProps } from 'react';
+
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { ComponentProps } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EmailVerificationDialog } from './EmailVerificationDialog';
 

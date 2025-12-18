@@ -378,7 +378,7 @@ async function processEvent(event) {
       // Remove PNG after successful conversion
       fs.unlinkSync(pngPath);
       console.log(`[${event.filename}] Cleaned up PNG`);
-    } catch (convertError) {
+    } catch (_convertError) {
       // Try ImageMagick as fallback
       try {
         execSync(`convert "${pngPath}" -quality 85 "${jpgPath}"`, { stdio: 'pipe' });

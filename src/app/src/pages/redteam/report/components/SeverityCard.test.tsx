@@ -1,10 +1,10 @@
 import { renderWithProviders } from '@app/utils/testutils';
 import { red } from '@mui/material/colors';
+import { useTheme } from '@mui/material/styles';
 import { Severity } from '@promptfoo/redteam/constants';
 import { fireEvent, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import SeverityCard from './SeverityCard';
-import { useTheme } from '@mui/material/styles';
 
 describe('SeverityCard', () => {
   const mockNavigateToIssues = vi.fn();

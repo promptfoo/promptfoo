@@ -1,15 +1,15 @@
 import { Buffer } from 'node:buffer';
 import { randomUUID } from 'node:crypto';
 
-import type {
-  BedrockRuntimeClient,
-  InvokeModelWithBidirectionalStreamInput,
-} from '@aws-sdk/client-bedrock-runtime';
 import { firstValueFrom, Subject } from 'rxjs';
 import { take } from 'rxjs/operators';
 import logger from '../../logger';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
 import { AwsBedrockGenericProvider } from './base';
+import type {
+  BedrockRuntimeClient,
+  InvokeModelWithBidirectionalStreamInput,
+} from '@aws-sdk/client-bedrock-runtime';
 import type { BedrockAmazonNovaSonicGenerationOptions } from '.';
 
 import type {

@@ -1,14 +1,13 @@
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import ChecksSection from './ChecksSection';
 import ResultsTab from './ResultsTab';
 import ScanStatistics from './ScanStatistics';
 import SecurityFindings from './SecurityFindings';
-import ChecksSection from './ChecksSection';
 
-import type { ScanResult, ScanIssue } from '../ModelAudit.types';
+import type { ScanIssue, ScanResult } from '../ModelAudit.types';
 
 vi.mock('./ScanStatistics', () => ({
   default: vi.fn(({ onSeverityClick }) => (

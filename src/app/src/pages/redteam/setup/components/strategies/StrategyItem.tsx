@@ -1,3 +1,5 @@
+import { useCallback, useMemo } from 'react';
+
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import Box from '@mui/material/Box';
 import Checkbox from '@mui/material/Checkbox';
@@ -14,12 +16,12 @@ import {
   MULTI_MODAL_STRATEGIES,
   type Plugin,
 } from '@promptfoo/redteam/constants';
+import { type RedteamStrategyObject, type StrategyConfig } from '@promptfoo/redteam/types';
+import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import { TestCaseGenerateButton } from './../TestCaseDialog';
 import { useTestCaseGeneration } from './../TestCaseGenerationProvider';
+
 import type { StrategyCardData } from './types';
-import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
-import { useCallback, useMemo } from 'react';
-import { type StrategyConfig, type RedteamStrategyObject } from '@promptfoo/redteam/types';
 
 const DEFAULT_TEST_GENERATION_PLUGIN = 'harmful:hate';
 

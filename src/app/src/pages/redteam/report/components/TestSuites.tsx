@@ -35,6 +35,9 @@ import { getStrategyIdFromTest } from './shared';
 import type { RedteamPluginObject } from '@promptfoo/redteam/types';
 import './TestSuites.css';
 
+import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
+import { formatASRForDisplay } from '@app/utils/redteam';
+import { calculateAttackSuccessRate } from '@promptfoo/redteam/metrics';
 import {
   formatPolicyIdentifierAsMetric,
   isValidPolicyObject,
@@ -44,10 +47,7 @@ import {
   calculatePluginRiskScore,
   prepareTestResultsFromStats,
 } from '@promptfoo/redteam/riskScoring';
-import { calculateAttackSuccessRate } from '@promptfoo/redteam/metrics';
-import { formatASRForDisplay } from '@app/utils/redteam';
 import { type TestResultStats } from './FrameworkComplianceUtils';
-import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
 
 interface TestSuitesProps {
   evalId: string;

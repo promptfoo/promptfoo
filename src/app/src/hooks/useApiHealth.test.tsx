@@ -1,9 +1,10 @@
+import React from 'react';
+
 import { callApi } from '@app/utils/api';
-import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useApiHealth } from './useApiHealth';
-import React from 'react';
 
 // Mock the API call
 vi.mock('@app/utils/api', () => ({

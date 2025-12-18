@@ -12,7 +12,7 @@ import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import { importModule } from '../esm';
 import logger from '../logger';
-import { withGenAISpan, type GenAISpanContext, type GenAISpanResult } from '../tracing/genaiTracer';
+import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
 import { maybeLoadConfigFromExternalFile, maybeLoadFromExternalFile } from '../util/file';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { renderVarsInObject } from '../util/index';

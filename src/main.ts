@@ -1,13 +1,11 @@
 import { realpathSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
 import { Command } from 'commander';
 import { getGlobalDispatcher } from 'undici';
-
-import { VERSION } from './version';
 import { checkNodeVersion } from './checkNodeVersion';
 import cliState from './cliState';
-import telemetry from './telemetry';
 import { codeScansCommand } from './codeScan/index';
 import { authCommand } from './commands/auth';
 import { cacheCommand } from './commands/cache';
@@ -40,10 +38,12 @@ import { redteamReportCommand } from './redteam/commands/report';
 import { redteamRunCommand } from './redteam/commands/run';
 import { redteamSetupCommand } from './redteam/commands/setup';
 import { simbaCommand } from './redteam/commands/simba';
+import telemetry from './telemetry';
 import { checkForUpdates } from './updates';
 import { loadDefaultConfig } from './util/config/default';
 import { printErrorInformation } from './util/errors/index';
 import { setupEnv } from './util/index';
+import { VERSION } from './version';
 
 /**
  * Normalize env paths from CLI input.

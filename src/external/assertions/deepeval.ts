@@ -1,14 +1,16 @@
 // These assertions are ported from DeepEval.
 // https://docs.confident-ai.com/docs/metrics-conversation-relevancy. See APACHE_LICENSE for license.
-import type { AssertionParams, GradingResult } from '../../types/index';
-import invariant from '../../util/invariant';
-import { matchesConversationRelevance } from '../matchers/deepeval';
-import type { Message } from '../matchers/deepeval';
-import { ConversationRelevancyTemplate } from '../matchers/conversationRelevancyTemplate';
-import { getAndCheckProvider, callProviderWithContext } from '../../matchers';
+
+import { callProviderWithContext, getAndCheckProvider } from '../../matchers';
 import { getDefaultProviders } from '../../providers/defaults';
+import invariant from '../../util/invariant';
 import { extractJsonObjects } from '../../util/json';
-import { createEmptyTokenUsage, accumulateTokenUsage } from '../../util/tokenUsageUtils';
+import { accumulateTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import { ConversationRelevancyTemplate } from '../matchers/conversationRelevancyTemplate';
+import { matchesConversationRelevance } from '../matchers/deepeval';
+
+import type { AssertionParams, GradingResult } from '../../types/index';
+import type { Message } from '../matchers/deepeval';
 
 const DEFAULT_WINDOW_SIZE = 5;
 

@@ -1,4 +1,4 @@
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { matchesModeration } from '../../src/matchers';
 import { OpenAiModerationProvider } from '../../src/providers/openai/moderation';
 import { ReplicateModerationProvider } from '../../src/providers/replicate';

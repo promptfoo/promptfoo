@@ -15,14 +15,14 @@ import { SpanKind, SpanStatusCode } from '@opentelemetry/api';
 import { InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
 import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
 import {
   GenAIAttributes,
-  PromptfooAttributes,
-  getTraceparent,
   getCurrentTraceId,
+  getTraceparent,
+  PromptfooAttributes,
   withGenAISpan,
 } from '../../src/tracing/genaiTracer';
+
 import type { GenAISpanContext, GenAISpanResult } from '../../src/tracing/genaiTracer';
 
 // Mock external dependencies for provider tests

@@ -1,8 +1,8 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 
 import { BaseNumberInput } from '@app/components/form/input/BaseNumberInput';
 import { COMMON_LANGUAGE_NAMES, normalizeLanguage } from '@app/constants/languages';
-import { FormControlLabel, Switch, Autocomplete, TextField, Chip } from '@mui/material';
+import { Autocomplete, Chip, FormControlLabel, Switch, TextField } from '@mui/material';
 import Box from '@mui/material/Box';
 import Stack from '@mui/material/Stack';
 import Tooltip from '@mui/material/Tooltip';
