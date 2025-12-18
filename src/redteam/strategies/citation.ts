@@ -67,6 +67,9 @@ async function generateCitations(
       if (data.error) {
         logger.error(`[Citation] Error in citation generation: ${data.error}`);
         logger.debug(`[Citation] Response: ${JSON.stringify(data)}`);
+        if (progressBar) {
+          progressBar.increment(1);
+        }
         return;
       }
 
@@ -74,6 +77,9 @@ async function generateCitations(
       if (!data.result?.citation) {
         logger.error(`[Citation] Invalid response structure - missing citation data`);
         logger.debug(`[Citation] Response: ${JSON.stringify(data)}`);
+        if (progressBar) {
+          progressBar.increment(1);
+        }
         return;
       }
 
