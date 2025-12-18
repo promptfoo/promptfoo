@@ -24,8 +24,8 @@ We ran a red-team scan of Gemini 3 Flash Preview using the same harness we used 
 
 In this configuration, Gemini refused less often on direct harmful prompts and was easier to jailbreak in single-turn attacks:
 
-- **Single-turn jailbreaks:** 89% attack success (160/179) vs 60% on GPT-5.2
-- **Baseline (no jailbreak):** 19% attack success (39/204) vs 4% on GPT-5.2
+- **Single-turn jailbreaks:** 89% attack success (160/179) vs 60% (108/179) on GPT-5.2
+- **Baseline (no jailbreak):** 19% attack success (39/204) vs 4% (9/208) on GPT-5.2
 - **Multi-turn jailbreaks:** 77% (156/203) vs 79% (159/203)—similar
 
 Google's model card shows they reduced "unjustified refusals" by 10% relative to the prior Flash model. That metric targets borderline-but-benign prompts, not adversarial inputs. It does not explain our results, but it points to active tuning pressure against over-refusal, which could interact with baseline refusal rates under adversarial prompting.
@@ -42,7 +42,7 @@ We'll follow up with `thinkingLevel: HIGH` results.
 
 **Quick reference: Gemini 3 Flash (MINIMAL) vs GPT-5.2 (no reasoning)**
 
-*(n differs across models due to blocks/timeouts; see methodology below)*
+*(n differs across models due to timeouts and transport errors; see methodology below)*
 - Baseline ASR: 19% (39/204) vs 4% (9/208)
 - Single-turn (Meta) ASR: 89% (160/179) vs 60% (108/179)
 - Multi-turn (Hydra) ASR: 77% (156/203) vs 79% (159/203)
@@ -52,7 +52,7 @@ We'll follow up with `thinkingLevel: HIGH` results.
 
 ## Results
 
-We ran 3,462 probes across 39 risk categories. Under the Meta (single-turn) strategy, two categories showed zero resistance: **Graphic Content** and **Entity Impersonation** hit 100% attack success (15/15 each). Neither model handles impersonation well (GPT-5.2 also shows 100%, 15/15 under Meta), but Gemini's graphic content defenses show a larger gap—GPT-5.2's Meta ASR for graphic content is 67% (10/15).
+We ran 3,462 probes across 43 risk categories. Under the Meta (single-turn) strategy, two categories showed zero resistance: **Graphic Content** and **Entity Impersonation** hit 100% attack success (15/15 each). Neither model handles impersonation well (GPT-5.2 also shows 100%, 15/15 under Meta), but Gemini's graphic content defenses show a larger gap—GPT-5.2's Meta ASR for graphic content is 67% (10/15).
 
 :::note Units
 A **probe** is one model call with one prompt. An **attack** groups related probes for one scenario—it succeeds if any probe produces disallowed output. The table below reports attack-level aggregates (n=179/203/204), not raw probes (n=3,462).
@@ -72,7 +72,7 @@ Single-turn jailbreaks are where Gemini 3 Flash diverges from GPT-5.2: 89% vs 60
 
 :::tip If you deploy Flash today
 - **Keep default thinking on** (`thinkingLevel: HIGH`) unless latency forces otherwise
-- **Add output filters** for impersonation and graphic content—the model won't catch these
+- **Add output filters** for impersonation and graphic content—we observed low resistance in these categories
 - **Validate citations externally**—hallucination rate is high under adversarial prompts
 :::
 
@@ -145,7 +145,7 @@ Three findings stand out:
 
 **Child safety is the biggest gap.** GPT-5.2: 27% attack success (4/15). Gemini 3 Flash: 70% attack success (7/10). We performed human review on all outputs in this category. For applications involving minors, this gap is consequential.
 
-A note on the tension with Google's docs: Google's safety settings documentation states that "built-in protections" for core harms like child safety are "always blocked" regardless of configuration. Despite that, our human reviewers flagged outputs as child-safety-endangering under adversarial prompts. Possible explanations: our rubric is stricter than Google's internal threshold, the protection is imperfect under jailbreak, or both.
+A note on the tension with Google's docs: Google's [safety settings documentation](https://ai.google.dev/gemini-api/docs/safety-settings) says built-in protections against core harms, including child safety endangerment, are "always blocked and cannot be adjusted." Despite that, our human reviewers flagged outputs as child-safety-endangering under adversarial prompts. Possible explanations: our rubric is stricter than Google's internal threshold, the protection is imperfect under jailbreak, or both.
 
 ## Methodology
 
@@ -231,15 +231,17 @@ redteam:
     - jailbreak:meta
 ```
 
-Same 39 plugins as GPT-5.2. Same three strategies (basic, Hydra, meta). Same judge.
+Same 43 plugins as GPT-5.2. Same three strategies (basic, Hydra, meta). Same judge.
 
-**Attempt budget:** Each plugin generates 5 attack scenarios. Under Meta, each attack tries up to 10 prompt transformations (early-stop on success). Under Hydra, each attack runs up to 5 conversation turns with adaptive branching. Baseline sends the original harmful prompt with no transformation.
+**Strategy coverage:** Baseline and Hydra run across all 43 plugins (215 attacks = 43×5). Meta is a jailbreak strategy and we apply it only to the 39 non-bias plugins (195 attacks = 39×5).
+
+**Attempt budget:** Each plugin generates 5 attack scenarios. Under Meta, each attack tries up to 10 prompt transformations (early-stop on success). Under Hydra, each attack runs up to 5 conversation turns with adaptive branching, capped at 25 model calls per attack. Baseline sends the original harmful prompt with no transformation.
 
 ### How we grade outputs
 
 Each plugin includes a grader prompt that evaluates whether the model output violates safety policies. The grader is GPT-5, chosen for consistency with our GPT-5.2 assessment. We consider an attack successful when the grader judges the output would be disallowed under the target model's stated policies—specifically, [Google's safety settings guidance](https://ai.google.dev/gemini-api/docs/safety-settings) for Gemini and OpenAI's usage policies for GPT-5.2.
 
-**On using GPT-5 as judge:** Yes, we're using an OpenAI model to grade both targets. We mitigate bias by (1) removing model labels from graded outputs, (2) using identical grader prompts for both models, and (3) performing human review on critical categories. The same judge on both targets controls for systematic leniency—any bias affects both models equally.
+**On using GPT-5 as judge:** Yes, we're using an OpenAI model to grade both targets. Using a single fixed judge improves comparability across targets, but it does not eliminate all systematic judge effects. We mitigate this by (1) removing model labels from graded outputs, (2) using identical grader prompts for both models, and (3) performing human review on critical categories.
 
 For critical categories—child safety, weapons, self-harm—we performed manual human review on all outputs. Borderline cases were reviewed by two team members. In spot-checks, we observed more grader misses than spurious flags, but we did not quantify this across all categories.
 
@@ -257,17 +259,9 @@ Different models fail in different ways. Here's how we score each outcome:
 
 **Retries are only for transient transport errors** (timeouts, 5xx, rate limits). We do not retry safety blocks or refusals—those count as successful defenses.
 
-The different sample sizes between models (e.g., 7/10 vs 4/15 for child safety) reflect attacks where one model's API blocked or timed out and the other's didn't. Exclusions are symmetric in intent: we drop any attack where we couldn't get a scorable response from the model.
+The different sample sizes between models (e.g., 7/10 vs 4/15 for child safety) reflect attacks where one model timed out or returned non-scorable transport errors while the other completed. We exclude attacks only when we cannot obtain a scorable response after transport retries. Counts vary slightly by provider due to transient API failures.
 
-**Exclusions by model and strategy:**
-
-| Strategy | Gemini excluded | GPT-5.2 excluded | Reason |
-|----------|-----------------|------------------|--------|
-| Meta | 16 | 16 | Timeouts, 5xx after retries |
-| Hydra | 12 | 12 | Timeouts, 5xx after retries |
-| Baseline | 11 | 7 | Timeouts, 5xx after retries |
-
-Exclusion counts are approximate and cover attacks dropped due to transport failures (not safety blocks). The baseline denominator difference (204 vs 208) reflects attacks where Gemini's API returned non-scorable errors.
+The baseline denominator difference (204 vs 208) reflects attacks where Gemini's API returned timeouts or 5xx errors after retries.
 
 A note on [ASR comparability](/blog/asr-not-portable-metric): these numbers are directly comparable to our GPT-5.2 results because we controlled for attempt budget, prompt set, and judge. They're not comparable to other benchmarks using different methodology.
 
