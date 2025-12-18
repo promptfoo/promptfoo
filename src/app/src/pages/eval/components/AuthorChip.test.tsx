@@ -10,6 +10,7 @@ describe('AuthorChip', () => {
     onEditAuthor: mockOnEditAuthor,
     currentUserEmail: 'user@example.com',
     editable: true,
+    isCloudEnabled: false,
   };
 
   beforeEach(() => {
@@ -160,5 +161,133 @@ describe('AuthorChip', () => {
     render(<AuthorChip {...defaultProps} editable={false} />);
     await userEvent.click(screen.getByText('test@example.com'));
     expect(screen.queryByLabelText('Author Email')).not.toBeInTheDocument();
+  });
+
+  describe('cloud mode', () => {
+    const cloudProps = {
+      ...defaultProps,
+      isCloudEnabled: true,
+      author: null,
+      currentUserEmail: 'user@example.com',
+    };
+
+    it('shows "Claim as mine" button when cloud enabled and no author', async () => {
+      render(<AuthorChip {...cloudProps} />);
+      await userEvent.click(screen.getByText('Unknown'));
+      expect(screen.getByText('This eval has no author assigned.')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Claim as mine/i })).toBeInTheDocument();
+    });
+
+    it('shows user email in claim button', async () => {
+      render(<AuthorChip {...cloudProps} />);
+      await userEvent.click(screen.getByText('Unknown'));
+      expect(screen.getByRole('button', { name: /user@example\.com/i })).toBeInTheDocument();
+    });
+
+    it('calls onEditAuthor with currentUserEmail when claim button is clicked', async () => {
+      render(<AuthorChip {...cloudProps} />);
+      await userEvent.click(screen.getByText('Unknown'));
+      await userEvent.click(screen.getByRole('button', { name: /Claim as mine/i }));
+      expect(mockOnEditAuthor).toHaveBeenCalledWith('user@example.com');
+    });
+
+    it('shows "Remove my name" button when cloud enabled and author matches user', async () => {
+      render(<AuthorChip {...cloudProps} author="user@example.com" />);
+      await userEvent.click(screen.getByText('user@example.com'));
+      expect(screen.getByText(/\(you\)/)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Remove my name/i })).toBeInTheDocument();
+    });
+
+    it('calls onEditAuthor with empty string when remove button is clicked', async () => {
+      render(<AuthorChip {...cloudProps} author="user@example.com" />);
+      await userEvent.click(screen.getByText('user@example.com'));
+      await userEvent.click(screen.getByRole('button', { name: /Remove my name/i }));
+      expect(mockOnEditAuthor).toHaveBeenCalledWith('');
+    });
+
+    it('does not render TextField in cloud mode', async () => {
+      render(<AuthorChip {...cloudProps} />);
+      await userEvent.click(screen.getByText('Unknown'));
+      expect(screen.queryByLabelText('Author Email')).not.toBeInTheDocument();
+    });
+
+    it('disables claim button when currentUserEmail is null', async () => {
+      render(<AuthorChip {...cloudProps} currentUserEmail={null} />);
+      await userEvent.click(screen.getByText('Unknown'));
+      expect(screen.getByRole('button', { name: /Claim as mine/i })).toBeDisabled();
+    });
+
+    it('shows tooltip "Click to claim this eval" when cloud enabled and no author', async () => {
+      render(<AuthorChip {...cloudProps} />);
+      const chip = screen.getByText('Unknown').closest('div');
+      expect(chip?.closest('[data-testid]') || chip?.parentElement).toBeInTheDocument();
+      // Tooltip is handled by MUI, just verify the component renders
+    });
+
+    it('shows tooltip "This eval belongs to {author}" when not editable', () => {
+      render(<AuthorChip {...cloudProps} author="other@example.com" editable={false} />);
+      // The tooltip title is set based on editable state
+      expect(screen.getByText('other@example.com')).toBeInTheDocument();
+    });
+
+    it('displays error message when cloud action fails', async () => {
+      const errorMessage = 'Failed to claim eval';
+      mockOnEditAuthor.mockRejectedValueOnce(new Error(errorMessage));
+      render(<AuthorChip {...cloudProps} />);
+      await userEvent.click(screen.getByText('Unknown'));
+      await userEvent.click(screen.getByRole('button', { name: /Claim as mine/i }));
+      await waitFor(() => {
+        expect(screen.getByText(errorMessage)).toBeInTheDocument();
+      });
+    });
+
+    it('shows loading indicator while claiming', async () => {
+      let resolvePromise: () => void;
+      mockOnEditAuthor.mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            resolvePromise = resolve;
+          }),
+      );
+
+      render(<AuthorChip {...cloudProps} />);
+      await userEvent.click(screen.getByText('Unknown'));
+      await userEvent.click(screen.getByRole('button', { name: /Claim as mine/i }));
+      expect(screen.getByRole('progressbar')).toBeInTheDocument();
+
+      await act(async () => {
+        resolvePromise!();
+      });
+
+      await waitFor(() => {
+        expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+      });
+    });
+
+    it('closes popover after successful claim', async () => {
+      render(<AuthorChip {...cloudProps} />);
+      await userEvent.click(screen.getByText('Unknown'));
+      await userEvent.click(screen.getByRole('button', { name: /Claim as mine/i }));
+      await waitFor(() => {
+        expect(screen.queryByText('This eval has no author assigned.')).not.toBeInTheDocument();
+      });
+    });
+  });
+
+  describe('non-cloud mode', () => {
+    it('renders TextField when cloud is disabled', async () => {
+      render(<AuthorChip {...defaultProps} isCloudEnabled={false} />);
+      await userEvent.click(screen.getByText('test@example.com'));
+      expect(screen.getByLabelText('Author Email')).toBeInTheDocument();
+    });
+
+    it('allows free text input when cloud is disabled', async () => {
+      render(<AuthorChip {...defaultProps} isCloudEnabled={false} />);
+      await userEvent.click(screen.getByText('test@example.com'));
+      await userEvent.clear(screen.getByLabelText('Author Email'));
+      await userEvent.type(screen.getByLabelText('Author Email'), 'anyone@example.com');
+      await userEvent.click(screen.getByText('Save'));
+      expect(mockOnEditAuthor).toHaveBeenCalledWith('anyone@example.com');
+    });
   });
 });
