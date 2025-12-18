@@ -13,24 +13,13 @@ import type {
   ResultSuggestion,
   TestCase,
 } from '../../types/index';
-import {
-  retryWithDeduplication,
-  sampleArray,
-} from '../../util/generation';
+import { retryWithDeduplication, sampleArray } from '../../util/generation';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import invariant from '../../util/invariant';
-import {
-  extractVariablesFromTemplate,
-  getNunjucksEngine,
-} from '../../util/templates';
+import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import { redteamProviderManager } from '../providers/shared';
-import {
-  getShortPluginId,
-  isBasicRefusal,
-  isEmptyResponse,
-  removePrefix,
-} from '../util';
+import { getShortPluginId, isBasicRefusal, isEmptyResponse, removePrefix } from '../util';
 
 /**
  * Parses the LLM response of generated prompts into an array of objects.
