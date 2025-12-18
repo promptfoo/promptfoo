@@ -166,8 +166,8 @@ export default function ScaleUpAI2025(): React.ReactElement {
                 <div className={styles.cardIcon}>🔐</div>
                 <h3>Closing the Security Gap</h3>
                 <p>
-                  Traditional cybersecurity tools were built for predictable software. LLMs operate in
-                  natural language—attackers can manipulate them simply by talking to them.
+                  Traditional cybersecurity tools were built for predictable software. LLMs operate
+                  in natural language—attackers can manipulate them simply by talking to them.
                 </p>
               </div>
               <div className={styles.highlightCard}>
@@ -229,16 +229,16 @@ export default function ScaleUpAI2025(): React.ReactElement {
                 <div className={styles.keyPointNumber}>03</div>
                 <h3>The Urgency</h3>
                 <p>
-                  "Global 2000 companies are going to be buying or making decisions in the AI security
-                  space in the next 12 months. There's no time to lose."
+                  "Global 2000 companies are going to be buying or making decisions in the AI
+                  security space in the next 12 months. There's no time to lose."
                 </p>
               </div>
               <div className={styles.keyPoint}>
                 <div className={styles.keyPointNumber}>04</div>
                 <h3>The Vision</h3>
                 <p>
-                  "If we want to see a world where AI really benefits people and companies, we need to
-                  put those tools in the hands of developers." Building AI that's intelligent and
+                  "If we want to see a world where AI really benefits people and companies, we need
+                  to put those tools in the hands of developers." Building AI that's intelligent and
                   accountable.
                 </p>
               </div>
@@ -277,8 +277,8 @@ export default function ScaleUpAI2025(): React.ReactElement {
             <div className={styles.ctaContent}>
               <h2 className={styles.ctaTitle}>Ready to Secure Your AI?</h2>
               <p className={styles.ctaText}>
-                Join 200,000+ developers and 80+ Fortune 500 companies who trust Promptfoo to find and
-                fix vulnerabilities in their AI applications.
+                Join 200,000+ developers and 80+ Fortune 500 companies who trust Promptfoo to find
+                and fix vulnerabilities in their AI applications.
               </p>
               <div className={styles.ctaButtons}>
                 <Link to="/docs/intro" className={styles.primaryCta}>
@@ -296,7 +296,12 @@ export default function ScaleUpAI2025(): React.ReactElement {
         <section className={styles.footerNav}>
           <div className={styles.container}>
             <Link to="/events" className={styles.backLink}>
-              <svg className={styles.backIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <svg
+                className={styles.backIcon}
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+              >
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"

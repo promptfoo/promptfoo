@@ -98,7 +98,7 @@
 }
 
 .highlight {
-  background: linear-gradient(135deg, #6F4E37 0%, #8B7355 100%);
+  background: linear-gradient(135deg, #6f4e37 0%, #8b7355 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -278,7 +278,7 @@
 .statNumber {
   font-size: 2.5rem;
   font-weight: 800;
-  background: linear-gradient(135deg, #22c55e 0%, #6F4E37 100%);
+  background: linear-gradient(135deg, #22c55e 0%, #6f4e37 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;

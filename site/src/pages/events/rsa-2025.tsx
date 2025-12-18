@@ -141,8 +141,8 @@ export default function RSA2025(): React.ReactElement {
                 <div className={styles.cardIcon}>🤝</div>
                 <h3>Enterprise Connections</h3>
                 <p>
-                  Connected with Fortune 500 security teams, discussing their AI security
-                  challenges and how Promptfoo helps protect production AI systems.
+                  Connected with Fortune 500 security teams, discussing their AI security challenges
+                  and how Promptfoo helps protect production AI systems.
                 </p>
               </div>
               <div className={styles.recapCard}>
@@ -157,8 +157,8 @@ export default function RSA2025(): React.ReactElement {
                 <div className={styles.cardIcon}>🏆</div>
                 <h3>Expo Floor Presence</h3>
                 <p>
-                  Showcased our open-source AI security platform to the global security community
-                  at RSA Conference's expo floor.
+                  Showcased our open-source AI security platform to the global security community at
+                  RSA Conference's expo floor.
                 </p>
               </div>
             </div>
@@ -186,16 +186,16 @@ export default function RSA2025(): React.ReactElement {
                 <div className={styles.showcaseNumber}>02</div>
                 <h3>Continuous Red Teaming</h3>
                 <p>
-                  CI/CD integration for continuous AI security testing, ensuring every deployment
-                  is protected against emerging threats.
+                  CI/CD integration for continuous AI security testing, ensuring every deployment is
+                  protected against emerging threats.
                 </p>
               </div>
               <div className={styles.showcaseItem}>
                 <div className={styles.showcaseNumber}>03</div>
                 <h3>Audit-Friendly Reporting</h3>
                 <p>
-                  Detailed test logs and repeatable security checks, helping enterprises document
-                  AI security for governance and compliance reviews.
+                  Detailed test logs and repeatable security checks, helping enterprises document AI
+                  security for governance and compliance reviews.
                 </p>
               </div>
               <div className={styles.showcaseItem}>
@@ -235,7 +235,12 @@ export default function RSA2025(): React.ReactElement {
         <section className={styles.footerNav}>
           <div className={styles.container}>
             <Link to="/events" className={styles.backLink}>
-              <svg className={styles.backIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <svg
+                className={styles.backIcon}
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+              >
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"

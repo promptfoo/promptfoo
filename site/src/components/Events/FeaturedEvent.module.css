@@ -243,22 +243,71 @@
   pointer-events: none;
 }
 
-.image {
+.imageContainer {
+  position: relative;
   width: 100%;
   max-width: 380px;
-  height: auto;
   border-radius: 16px;
-  box-shadow:
-    0 8px 32px rgba(0, 0, 0, 0.12),
-    0 2px 8px rgba(0, 0, 0, 0.08);
-  position: relative;
+  overflow: hidden;
   z-index: 1;
 }
 
-[data-theme='dark'] .image {
+.image {
+  width: 100%;
+  height: auto;
+  display: block;
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.12),
+    0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+/* Image Overlay (for BSides SF 2026) */
+.imageOverlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-end;
+  background: linear-gradient(
+    135deg,
+    rgba(10, 15, 26, 0.7) 0%,
+    rgba(10, 15, 26, 0.3) 40%,
+    transparent 60%
+  );
+  padding: 1.25rem;
+}
+
+.overlayTitle {
+  font-size: 1.75rem;
+  font-weight: 800;
+  color: #f97316;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.7);
+  margin-bottom: 0.125rem;
+}
+
+.overlayMeta {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: #ffffff;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.7);
+}
+
+.overlayVenue {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.9);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.7);
+}
+
+[data-theme='dark'] .imageContainer {
   box-shadow:
     0 8px 32px rgba(0, 0, 0, 0.5),
     0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+
+[data-theme='dark'] .image {
+  box-shadow: none;
 }
 
 .placeholderImage {
@@ -320,7 +369,7 @@
     display: none;
   }
 
-  .image,
+  .imageContainer,
   .placeholderImage {
     max-width: 340px;
   }
@@ -369,9 +418,21 @@
     padding: 1rem 1.5rem;
   }
 
-  .image,
+  .imageContainer,
   .placeholderImage {
     max-width: 100%;
+  }
+
+  .overlayTitle {
+    font-size: 1.5rem;
+  }
+
+  .overlayMeta {
+    font-size: 0.875rem;
+  }
+
+  .overlayVenue {
+    font-size: 0.75rem;
   }
 
   .placeholderIcon {

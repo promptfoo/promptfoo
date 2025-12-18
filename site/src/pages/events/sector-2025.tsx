@@ -50,11 +50,7 @@ export default function SecTor2025(): React.ReactElement {
       <main className={styles.sectorPage}>
         {/* Hero Banner */}
         <section className={styles.heroBanner}>
-          <img
-            src="/img/events/sector-2025.jpg"
-            alt="SecTor 2025"
-            className={styles.bannerImage}
-          />
+          <img src="/img/events/sector-2025.jpg" alt="SecTor 2025" className={styles.bannerImage} />
           <div className={styles.bannerOverlay} />
           <div className={styles.bannerContent}>
             <div className={styles.badge}>
@@ -337,7 +333,12 @@ export default function SecTor2025(): React.ReactElement {
         <section className={styles.footerNav}>
           <div className={styles.container}>
             <Link to="/events" className={styles.backLink}>
-              <svg className={styles.backIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <svg
+                className={styles.backIcon}
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+              >
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"

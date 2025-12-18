@@ -77,6 +77,31 @@
   background-clip: text;
 }
 
+.heroMeta {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  flex-wrap: wrap;
+}
+
+.heroDate {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #fdba74;
+}
+
+.heroDivider {
+  color: rgba(249, 115, 22, 0.5);
+  font-size: 0.875rem;
+}
+
+.heroVenue {
+  font-size: 1.125rem;
+  font-weight: 500;
+  color: #e2e8f0;
+}
+
 /* Hero Content Section */
 .heroContent {
   padding: 3rem 0;
@@ -387,6 +412,20 @@
 
   .heroTitle {
     font-size: 2rem;
+  }
+
+  .heroMeta {
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .heroDivider {
+    display: none;
+  }
+
+  .heroDate,
+  .heroVenue {
+    font-size: 1rem;
   }
 
   .heroSubtitle {

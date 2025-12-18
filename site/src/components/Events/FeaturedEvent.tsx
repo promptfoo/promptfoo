@@ -136,15 +136,24 @@ export default function FeaturedEvent({ event }: FeaturedEventProps): React.Reac
         </div>
 
         <div className={styles.imageWrapper}>
-          {event.heroImage ? (
-            <img src={event.heroImage} alt={event.name} className={styles.image} />
-          ) : (
-            <div className={styles.placeholderImage}>
-              <span className={styles.placeholderIcon}>
-                {event.type === 'conference' ? '🎪' : event.type === 'party' ? '🎉' : '📅'}
-              </span>
-            </div>
-          )}
+          <div className={styles.imageContainer}>
+            {event.heroImage ? (
+              <img src={event.heroImage} alt={event.name} className={styles.image} />
+            ) : (
+              <div className={styles.placeholderImage}>
+                <span className={styles.placeholderIcon}>
+                  {event.type === 'conference' ? '🎪' : event.type === 'party' ? '🎉' : '📅'}
+                </span>
+              </div>
+            )}
+            {event.id === 'bsides-sf-2026' && (
+              <div className={styles.imageOverlay}>
+                <span className={styles.overlayTitle}>BSidesSF 2026</span>
+                <span className={styles.overlayMeta}>March 21-22, 2026</span>
+                <span className={styles.overlayVenue}>City View at Metreon, SF</span>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </section>

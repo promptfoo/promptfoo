@@ -125,11 +125,16 @@ export default function BSidesSF2026(): React.ReactElement {
           <div className={styles.bannerContent}>
             <div className={styles.badge}>
               <span className={styles.badgeIcon}>🌉</span>
-              Coming March 2026
+              BSidesSF 2026
             </div>
             <h1 className={styles.heroTitle}>
               BSides <span className={styles.highlight}>San Francisco</span>
             </h1>
+            <div className={styles.heroMeta}>
+              <span className={styles.heroDate}>March 21-22, 2026</span>
+              <span className={styles.heroDivider}>•</span>
+              <span className={styles.heroVenue}>City View at Metreon</span>
+            </div>
           </div>
         </section>
 
@@ -254,16 +259,16 @@ export default function BSidesSF2026(): React.ReactElement {
                 <div className={styles.whyNumber}>03</div>
                 <h3>Open Source Culture</h3>
                 <p>
-                  A community that values transparency, collaboration, and giving back. Right at home
-                  for an open-source security company like Promptfoo.
+                  A community that values transparency, collaboration, and giving back. Right at
+                  home for an open-source security company like Promptfoo.
                 </p>
               </div>
               <div className={styles.whyItem}>
                 <div className={styles.whyNumber}>04</div>
                 <h3>Hallway Track</h3>
                 <p>
-                  The best conversations happen between sessions. BSides creates the space for genuine
-                  discussions about security challenges.
+                  The best conversations happen between sessions. BSides creates the space for
+                  genuine discussions about security challenges.
                 </p>
               </div>
             </div>
@@ -295,7 +300,12 @@ export default function BSidesSF2026(): React.ReactElement {
         <section className={styles.footerNav}>
           <div className={styles.container}>
             <Link to="/events" className={styles.backLink}>
-              <svg className={styles.backIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <svg
+                className={styles.backIcon}
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+              >
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"

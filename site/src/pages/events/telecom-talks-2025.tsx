@@ -346,10 +346,7 @@ export default function TelecomTalks2025(): React.ReactElement {
                 <Link to="/docs/red-team/quickstart/" className={styles.primaryCta}>
                   Get Started
                 </Link>
-                <Link
-                  to="https://github.com/promptfoo/promptfoo"
-                  className={styles.secondaryCta}
-                >
+                <Link to="https://github.com/promptfoo/promptfoo" className={styles.secondaryCta}>
                   View Source
                 </Link>
               </div>
@@ -361,7 +358,12 @@ export default function TelecomTalks2025(): React.ReactElement {
         <section className={styles.footerNav}>
           <div className={styles.container}>
             <Link to="/events" className={styles.backLink}>
-              <svg className={styles.backIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <svg
+                className={styles.backIcon}
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+              >
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
