@@ -13,10 +13,12 @@ import { transformMCPConfigToClaudeCode } from './mcp/transform';
 import { MCPConfig } from './mcp/types';
 import type {
   AgentDefinition,
+  CanUseTool,
   HookCallbackMatcher,
   HookEvent,
   Options as QueryOptions,
   OutputFormat,
+  PermissionResult,
   SandboxSettings,
   SettingSource,
   SpawnedProcess,
@@ -374,6 +376,100 @@ export interface ClaudeCodeOptions {
    * ```
    */
   spawn_claude_code_process?: (options: SpawnOptions) => SpawnedProcess;
+
+  /**
+   * Configuration for handling AskUserQuestion tool in automated evaluations.
+   * Since there's no human to answer questions, this provides automated responses.
+   *
+   * @example
+   * ```yaml
+   * ask_user_question:
+   *   behavior: first_option  # Always select the first option
+   * ```
+   */
+  ask_user_question?: {
+    /**
+     * Default behavior for answering questions:
+     * - 'first_option': Always select the first option (default)
+     * - 'random': Randomly select from available options
+     * - 'deny': Deny the tool use (agent cannot ask questions)
+     */
+    behavior?: 'first_option' | 'random' | 'deny';
+  };
+}
+
+/**
+ * Type for AskUserQuestion tool input from the SDK
+ */
+interface AskUserQuestionToolInput {
+  questions: Array<{
+    question: string;
+    header: string;
+    options: Array<{ label: string; description: string }>;
+    multiSelect: boolean;
+  }>;
+  answers?: Record<string, string>;
+}
+
+/**
+ * Creates a canUseTool callback for handling AskUserQuestion tool in automated evaluations.
+ * This provides automated responses to questions that would normally require user input.
+ *
+ * The callback wraps an optional user-provided canUseTool and handles AskUserQuestion specifically,
+ * deferring to the wrapped callback for all other tools.
+ */
+function createAskUserQuestionCanUseTool(
+  behavior: 'first_option' | 'random' | 'deny' = 'first_option',
+  wrappedCanUseTool?: CanUseTool,
+): CanUseTool {
+  return async (toolName, input, options): Promise<PermissionResult> => {
+    // Only handle AskUserQuestion tool
+    if (toolName !== 'AskUserQuestion') {
+      // Defer to wrapped callback or allow by default
+      if (wrappedCanUseTool) {
+        return wrappedCanUseTool(toolName, input, options);
+      }
+      return { behavior: 'allow', updatedInput: input };
+    }
+
+    // Deny the tool use if configured to do so
+    if (behavior === 'deny') {
+      return {
+        behavior: 'deny',
+        message: 'AskUserQuestion is disabled in automated evaluation mode',
+      };
+    }
+
+    const toolInput = input as unknown as AskUserQuestionToolInput;
+    const answers: Record<string, string> = {};
+
+    // Generate answers for each question based on the configured behavior
+    for (const question of toolInput.questions) {
+      if (!question.options || question.options.length === 0) {
+        continue;
+      }
+
+      let selectedLabels: string[];
+      if (behavior === 'random') {
+        const randomIndex = Math.floor(Math.random() * question.options.length);
+        selectedLabels = [question.options[randomIndex].label];
+      } else {
+        // first_option (default)
+        selectedLabels = [question.options[0].label];
+      }
+
+      // Multi-select answers are comma-separated strings per SDK documentation
+      answers[question.question] = selectedLabels.join(', ');
+    }
+
+    return {
+      behavior: 'allow',
+      updatedInput: {
+        questions: toolInput.questions, // Pass through original questions
+        answers,
+      },
+    };
+  };
 }
 
 export class ClaudeCodeSDKProvider implements ApiProvider {
@@ -519,6 +615,13 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       isTempDir = true;
     }
 
+    // Create canUseTool callback for ask_user_question convenience option
+    // AskUserQuestion is handled via canUseTool per SDK documentation
+    let canUseTool: CanUseTool | undefined;
+    if (config.ask_user_question) {
+      canUseTool = createAskUserQuestionCanUseTool(config.ask_user_question.behavior);
+    }
+
     // Just the keys we'll use to compute the cache key first
     // Lets us avoid unnecessary work and cleanup if there's a cache hit
     const cacheKeyQueryOptions: Omit<
@@ -628,9 +731,10 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       abortController,
       mcpServers,
       cwd: workingDir,
-      // stderr and spawnClaudeCodeProcess callbacks are not included in cache key since they're functions
+      // Callbacks are not included in cache key since they're functions
       stderr: config.stderr,
       spawnClaudeCodeProcess: config.spawn_claude_code_process,
+      canUseTool,
     };
     const queryParams = { prompt, options };
 
