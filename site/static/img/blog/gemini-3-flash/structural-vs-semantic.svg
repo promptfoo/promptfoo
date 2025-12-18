@@ -16,7 +16,7 @@
   <rect width="720" height="380" fill="#fafafa"/>
 
   <!-- Title -->
-  <text x="35" y="32" class="title">The Structural vs Semantic Pattern</text>
+  <text x="35" y="32" class="title">Structural vs Content-Framing Attacks</text>
   <text x="35" y="50" class="subtitle">Gemini 3 Flash (MINIMAL) — defends token tricks, fails framing tricks (scale: 2px per %)</text>
 
   <!-- Dividing line -->
@@ -100,6 +100,6 @@
   <g transform="translate(35, 310)">
     <rect x="0" y="0" width="650" height="55" rx="6" fill="#fff8e6" stroke="#f0e0b0"/>
     <text x="325" y="20" class="insight-text" text-anchor="middle" style="font-weight: 600;">The visual tells the story:</text>
-    <text x="325" y="40" class="insight-text" text-anchor="middle">Security research focuses on structural exploits. Attackers use semantic reframing.</text>
+    <text x="325" y="40" class="insight-text" text-anchor="middle">Security research focuses on structural exploits. Attackers use content-framing.</text>
   </g>
 </svg>

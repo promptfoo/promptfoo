@@ -66,7 +66,7 @@
     <!-- Labels -->
     <text x="200" y="115" class="pct-label" text-anchor="middle">95.7%</text>
     <text x="400" y="193" class="pct-label" text-anchor="middle">39.7%</text>
-    <text x="600" y="250" class="pct-label" text-anchor="middle">21.5%</text>
+    <text x="600" y="218" class="pct-label" text-anchor="middle">21.5%</text>
 
     <!-- Drop annotations -->
     <text x="300" y="180" class="drop-label" text-anchor="middle">-56pp</text>
@@ -86,7 +86,7 @@
     <!-- Labels -->
     <text x="200" y="165" class="pct-label" text-anchor="middle">80.9%</text>
     <text x="400" y="263" class="pct-label" text-anchor="middle">10.6%</text>
-    <text x="620" y="222" class="pct-label" text-anchor="start">23.1%</text>
+    <text x="600" y="246" class="pct-label" text-anchor="middle">23.1%</text>
 
     <!-- Drop annotations -->
     <text x="300" y="215" class="drop-label" text-anchor="middle">-70pp</text>

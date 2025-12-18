@@ -9,7 +9,7 @@
       .pct-label { font: bold 12px system-ui, -apple-system, sans-serif; fill: #333; }
       .pct-label-light { font: bold 12px system-ui, -apple-system, sans-serif; fill: #fff; }
       .winner { font: bold 13px system-ui, -apple-system, sans-serif; }
-      .winner-gpt { fill: #3498db; }
+      .winner-gpt { fill: #4ECDC4; }
       .winner-tie { fill: #7f8c8d; }
       .legend-text { font: 12px system-ui, -apple-system, sans-serif; fill: #555; }
       .footer { font: 11px system-ui, -apple-system, sans-serif; fill: #888; font-style: italic; }

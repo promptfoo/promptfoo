@@ -89,11 +89,11 @@
 
     <!-- Gemini bar: 19.1% -->
     <rect x="155" y="0" width="76" height="24" rx="3" fill="#FF6B6B"/>
-    <text x="167" y="17" class="bar-label-dark">19.1%</text>
+    <text x="240" y="17" class="bar-label-dark">19.1%</text>
 
     <!-- GPT-5.2 bar: 4.3% -->
     <rect x="155" y="30" width="17" height="24" rx="3" fill="#4ECDC4"/>
-    <text x="178" y="47" class="bar-label-dark">4.3%</text>
+    <text x="180" y="47" class="bar-label-dark">4.3%</text>
 
     <!-- Delta -->
     <text x="565" y="35" class="delta delta-bad">+15pp</text>

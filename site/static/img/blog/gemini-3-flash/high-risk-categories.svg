@@ -52,11 +52,11 @@
     <!-- Gemini: 70% = 280px -->
     <rect x="160" y="4" width="280" height="16" rx="2" fill="#FF6B6B"/>
     <text x="448" y="16" class="bar-label">70%</text>
-    <text x="462" y="16" class="sample-size">(7/10)</text>
+    <text x="478" y="16" class="sample-size">(7/10)</text>
     <!-- GPT: 27% = 108px -->
     <rect x="160" y="24" width="108" height="16" rx="2" fill="#4ECDC4"/>
     <text x="276" y="36" class="bar-label">27%</text>
-    <text x="298" y="36" class="sample-size">(4/15)</text>
+    <text x="306" y="36" class="sample-size">(4/15)</text>
     <!-- Gap -->
     <text x="590" y="28" class="gap-label gap-severe">+43pp</text>
   </g>
@@ -67,11 +67,11 @@
     <!-- Gemini: 67% = 268px -->
     <rect x="160" y="4" width="268" height="16" rx="2" fill="#FF6B6B"/>
     <text x="436" y="16" class="bar-label">67%</text>
-    <text x="458" y="16" class="sample-size">(10/15)</text>
+    <text x="470" y="16" class="sample-size">(10/15)</text>
     <!-- GPT: 33% = 132px -->
     <rect x="160" y="24" width="132" height="16" rx="2" fill="#4ECDC4"/>
     <text x="300" y="36" class="bar-label">33%</text>
-    <text x="322" y="36" class="sample-size">(5/15)</text>
+    <text x="334" y="36" class="sample-size">(5/15)</text>
     <!-- Gap -->
     <text x="590" y="28" class="gap-label gap-severe">+34pp</text>
   </g>
@@ -82,11 +82,11 @@
     <!-- Gemini: 73% = 292px -->
     <rect x="160" y="4" width="292" height="16" rx="2" fill="#FF6B6B"/>
     <text x="460" y="16" class="bar-label">73%</text>
-    <text x="482" y="16" class="sample-size">(11/15)</text>
+    <text x="494" y="16" class="sample-size">(11/15)</text>
     <!-- GPT: 40% = 160px -->
     <rect x="160" y="24" width="160" height="16" rx="2" fill="#4ECDC4"/>
     <text x="328" y="36" class="bar-label">40%</text>
-    <text x="350" y="36" class="sample-size">(6/15)</text>
+    <text x="362" y="36" class="sample-size">(6/15)</text>
     <!-- Gap -->
     <text x="590" y="28" class="gap-label gap-severe">+33pp</text>
   </g>
@@ -96,12 +96,12 @@
     <text x="150" y="24" class="category">Hallucination</text>
     <!-- Gemini: 93% = 372px -->
     <rect x="160" y="4" width="372" height="16" rx="2" fill="#FF6B6B"/>
-    <text x="516" y="16" class="bar-label-light" style="fill: #fff;">93%</text>
-    <text x="538" y="16" class="sample-size" style="fill: #fcc;">(13/14)</text>
+    <text x="540" y="16" class="bar-label">93%</text>
+    <text x="574" y="16" class="sample-size">(13/14)</text>
     <!-- GPT: 60% = 240px -->
     <rect x="160" y="24" width="240" height="16" rx="2" fill="#4ECDC4"/>
     <text x="408" y="36" class="bar-label">60%</text>
-    <text x="430" y="36" class="sample-size">(9/15)</text>
+    <text x="442" y="36" class="sample-size">(9/15)</text>
     <!-- Gap -->
     <text x="590" y="28" class="gap-label gap-severe">+33pp</text>
   </g>
@@ -112,11 +112,11 @@
     <!-- Gemini: 80% = 320px -->
     <rect x="160" y="4" width="320" height="16" rx="2" fill="#FF6B6B"/>
     <text x="488" y="16" class="bar-label">80%</text>
-    <text x="510" y="16" class="sample-size">(12/15)</text>
+    <text x="522" y="16" class="sample-size">(12/15)</text>
     <!-- GPT: 53% = 212px -->
     <rect x="160" y="24" width="212" height="16" rx="2" fill="#4ECDC4"/>
     <text x="380" y="36" class="bar-label">53%</text>
-    <text x="402" y="36" class="sample-size">(8/15)</text>
+    <text x="414" y="36" class="sample-size">(8/15)</text>
     <!-- Gap -->
     <text x="590" y="28" class="gap-label gap-moderate">+27pp</text>
   </g>
@@ -127,11 +127,11 @@
     <!-- Gemini: 80% = 320px -->
     <rect x="160" y="4" width="320" height="16" rx="2" fill="#FF6B6B"/>
     <text x="488" y="16" class="bar-label">80%</text>
-    <text x="510" y="16" class="sample-size">(12/15)</text>
+    <text x="522" y="16" class="sample-size">(12/15)</text>
     <!-- GPT: 60% = 240px -->
     <rect x="160" y="24" width="240" height="16" rx="2" fill="#4ECDC4"/>
     <text x="408" y="36" class="bar-label">60%</text>
-    <text x="430" y="36" class="sample-size">(9/15)</text>
+    <text x="442" y="36" class="sample-size">(9/15)</text>
     <!-- Gap -->
     <text x="590" y="28" class="gap-label gap-moderate">+20pp</text>
   </g>
@@ -142,11 +142,11 @@
     <!-- Gemini: 73% = 292px -->
     <rect x="160" y="4" width="292" height="16" rx="2" fill="#FF6B6B"/>
     <text x="460" y="16" class="bar-label">73%</text>
-    <text x="482" y="16" class="sample-size">(11/15)</text>
+    <text x="494" y="16" class="sample-size">(11/15)</text>
     <!-- GPT: 53% = 212px -->
     <rect x="160" y="24" width="212" height="16" rx="2" fill="#4ECDC4"/>
     <text x="380" y="36" class="bar-label">53%</text>
-    <text x="402" y="36" class="sample-size">(8/15)</text>
+    <text x="414" y="36" class="sample-size">(8/15)</text>
     <!-- Gap -->
     <text x="590" y="28" class="gap-label gap-moderate">+20pp</text>
   </g>
@@ -157,11 +157,11 @@
     <!-- Gemini: 67% = 268px -->
     <rect x="160" y="4" width="268" height="16" rx="2" fill="#FF6B6B"/>
     <text x="436" y="16" class="bar-label">67%</text>
-    <text x="458" y="16" class="sample-size">(10/15)</text>
+    <text x="470" y="16" class="sample-size">(10/15)</text>
     <!-- GPT: 60% = 240px -->
     <rect x="160" y="24" width="240" height="16" rx="2" fill="#4ECDC4"/>
     <text x="408" y="36" class="bar-label">60%</text>
-    <text x="430" y="36" class="sample-size">(9/15)</text>
+    <text x="442" y="36" class="sample-size">(9/15)</text>
     <!-- Gap -->
     <text x="590" y="28" class="gap-label gap-minor">+7pp</text>
   </g>
