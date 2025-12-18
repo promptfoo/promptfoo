@@ -314,6 +314,10 @@ export interface BedrockAmazonNovaSonicGenerationOptions extends BedrockOptions 
     }[];
     toolChoice?: 'any' | 'auto' | string; // Tool name
   };
+  /** Session timeout in milliseconds (default: 300000 = 5 minutes) */
+  sessionTimeout?: number;
+  /** Request timeout in milliseconds (default: 120000 = 2 minutes) */
+  requestTimeout?: number;
 }
 
 /**
@@ -415,6 +419,7 @@ export interface IBedrockModel {
     prompt: string,
     stop: string[],
     modelName?: string,
+    vars?: Record<string, string | object>,
   ) => Promise<any>;
   output: (config: BedrockOptions, responseJson: any) => any;
   tokenUsage?: (responseJson: any, promptText: string) => TokenUsage;
@@ -1239,6 +1244,7 @@ export const BEDROCK_MODEL = {
       prompt: string,
       _stop?: string[],
       _modelName?: string,
+      vars?: Record<string, string | object>,
     ) => {
       let messages;
       let systemPrompt;
@@ -1310,7 +1316,7 @@ export const BEDROCK_MODEL = {
       addConfigParam(
         params,
         'tools',
-        await maybeLoadToolsFromExternalFile(config?.tools),
+        await maybeLoadToolsFromExternalFile(config?.tools, vars),
         undefined,
         undefined,
       );
@@ -1489,6 +1495,7 @@ export const BEDROCK_MODEL = {
       prompt: string,
       stop?: string[],
       _modelName?: string,
+      vars?: Record<string, string | object>,
     ) => {
       const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
       const lastMessage = messages[messages.length - 1].content;
@@ -1514,7 +1521,7 @@ export const BEDROCK_MODEL = {
       addConfigParam(params, 'presence_penalty', config?.presence_penalty);
       addConfigParam(params, 'seed', config?.seed);
       addConfigParam(params, 'return_prompt', config?.return_prompt);
-      addConfigParam(params, 'tools', await maybeLoadToolsFromExternalFile(config?.tools));
+      addConfigParam(params, 'tools', await maybeLoadToolsFromExternalFile(config?.tools, vars));
       addConfigParam(params, 'tool_results', config?.tool_results);
       addConfigParam(params, 'stop_sequences', stop);
       addConfigParam(params, 'raw_prompting', config?.raw_prompting);
@@ -1861,6 +1868,7 @@ ${prompt}
       prompt: string,
       stop?: string[],
       _modelName?: string,
+      vars?: Record<string, string | object>,
     ) => {
       const messages = parseChatPrompt(prompt, [{ role: 'user', content: prompt }]);
 
@@ -1901,7 +1909,7 @@ ${prompt}
       addConfigParam(
         params,
         'tools',
-        await maybeLoadToolsFromExternalFile(config?.tools),
+        await maybeLoadToolsFromExternalFile(config?.tools, vars),
         undefined,
         undefined,
       );
@@ -2241,6 +2249,7 @@ export class AwsBedrockCompletionProvider extends AwsBedrockGenericProvider impl
       prompt,
       stop,
       this.modelName,
+      context?.vars,
     );
 
     logger.debug('Calling Amazon Bedrock API', { params });

@@ -1,21 +1,8 @@
 import dedent from 'dedent';
 import { v4 as uuidv4 } from 'uuid';
-
 import { renderPrompt } from '../../../evaluatorHelpers';
 import logger from '../../../logger';
 import { PromptfooChatCompletionProvider } from '../../../providers/promptfoo';
-import type {
-  ApiProvider,
-  AtomicTestCase,
-  CallApiContextParams,
-  CallApiOptionsParams,
-  GradingResult,
-  NunjucksFilterMap,
-  Prompt,
-  ProviderResponse,
-  RedteamFileConfig,
-  TokenUsage,
-} from '../../../types/index';
 import invariant from '../../../util/invariant';
 import { extractFirstJsonObject } from '../../../util/json';
 import { getNunjucksEngine } from '../../../util/templates';
@@ -30,18 +17,32 @@ import {
   type TransformResult,
 } from '../../shared/runtimeTransform';
 import { Strategies } from '../../strategies';
-import type { BaseRedteamMetadata } from '../../types';
 import { getSessionId, isBasicRefusal } from '../../util';
 import { EVAL_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT } from '../crescendo/prompts';
 import { getGoalRubric } from '../prompts';
-import type { Message } from '../shared';
 import {
+  buildGraderResultAssertion,
   getLastMessageContent,
   getTargetResponse,
   redteamProviderManager,
   type TargetResponse,
   tryUnblocking,
 } from '../shared';
+
+import type {
+  ApiProvider,
+  AtomicTestCase,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  GradingResult,
+  NunjucksFilterMap,
+  Prompt,
+  ProviderResponse,
+  RedteamFileConfig,
+  TokenUsage,
+} from '../../../types/index';
+import type { BaseRedteamMetadata } from '../../types';
+import type { Message } from '../shared';
 
 const DEFAULT_MAX_TURNS = 10;
 const DEFAULT_MAX_BACKTRACKS = 10;
@@ -515,7 +516,7 @@ export class CustomProvider implements ApiProvider {
         if (test && assertToUse) {
           const grader = getGraderById(assertToUse.type);
           if (grader) {
-            const { grade } = await grader.getResult(
+            const { grade, rubric } = await grader.getResult(
               attackPrompt,
               lastResponse.output,
               test,
@@ -524,7 +525,10 @@ export class CustomProvider implements ApiProvider {
               additionalRubric,
             );
             graderPassed = grade.pass;
-            storedGraderResult = grade;
+            storedGraderResult = {
+              ...grade,
+              assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
+            };
           }
         }
 

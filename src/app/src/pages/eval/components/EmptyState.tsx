@@ -1,3 +1,4 @@
+import logo from '@app/assets/logo.svg';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import LaunchIcon from '@mui/icons-material/Launch';
 import SecurityIcon from '@mui/icons-material/Security';
@@ -8,7 +9,6 @@ import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import { useNavigate } from 'react-router-dom';
-import logo from '@app/assets/logo.svg';
 
 const EmptyState = () => {
   const navigate = useNavigate();

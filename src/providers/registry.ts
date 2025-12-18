@@ -1,6 +1,6 @@
-import dedent from 'dedent';
 import path from 'path';
 
+import dedent from 'dedent';
 import { importModule } from '../esm';
 import logger from '../logger';
 import { MemoryPoisoningProvider } from '../redteam/providers/agentic/memoryPoisoning';
@@ -16,8 +16,6 @@ import RedteamIterativeMetaProvider from '../redteam/providers/iterativeMeta';
 import RedteamIterativeTreeProvider from '../redteam/providers/iterativeTree';
 import RedteamMischievousUserProvider from '../redteam/providers/mischievousUser';
 import SimbaProvider from '../redteam/providers/simba';
-import type { LoadApiProviderContext } from '../types/index';
-import type { ApiProvider, ProviderOptions } from '../types/providers';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { AI21ChatCompletionProvider } from './ai21';
 import { AlibabaChatCompletionProvider, AlibabaEmbeddingProvider } from './alibaba';
@@ -31,8 +29,8 @@ import { AzureEmbeddingProvider } from './azure/embedding';
 import { AzureFoundryAgentProvider } from './azure/foundry-agent';
 import { AzureModerationProvider } from './azure/moderation';
 import { AzureResponsesProvider } from './azure/responses';
-import { AwsBedrockCompletionProvider, AwsBedrockEmbeddingProvider } from './bedrock/index';
 import { AwsBedrockConverseProvider } from './bedrock/converse';
+import { AwsBedrockCompletionProvider, AwsBedrockEmbeddingProvider } from './bedrock/index';
 import { BrowserProvider } from './browser';
 import { createCerebrasProvider } from './cerebras';
 import { ClouderaAiChatCompletionProvider } from './cloudera';
@@ -41,12 +39,12 @@ import { DatabricksMosaicAiChatCompletionProvider } from './databricks';
 import { createDeepSeekProvider } from './deepseek';
 import { EchoProvider } from './echo';
 import {
-  ElevenLabsTTSProvider,
-  ElevenLabsSTTProvider,
   ElevenLabsAgentsProvider,
+  ElevenLabsAlignmentProvider,
   ElevenLabsHistoryProvider,
   ElevenLabsIsolationProvider,
-  ElevenLabsAlignmentProvider,
+  ElevenLabsSTTProvider,
+  ElevenLabsTTSProvider,
 } from './elevenlabs';
 import { createEnvoyProvider } from './envoy';
 import { FalImageGenerationProvider } from './fal';
@@ -114,6 +112,9 @@ import { WebSocketProvider } from './websocket';
 import { createXAIProvider } from './xai/chat';
 import { createXAIImageProvider } from './xai/image';
 import { createXAIResponsesProvider } from './xai/responses';
+
+import type { LoadApiProviderContext } from '../types/index';
+import type { ApiProvider, ProviderOptions } from '../types/providers';
 
 interface ProviderFactory {
   test: (providerPath: string) => boolean;
@@ -205,6 +206,26 @@ export const providerMap: ProviderFactory[] = [
         return new AlibabaEmbeddingProvider(modelName || modelType, providerOptions);
       }
       return new AlibabaChatCompletionProvider(modelName || modelType, providerOptions);
+    },
+  },
+  {
+    test: (providerPath: string) =>
+      providerPath.startsWith('opencode:') || providerPath === 'opencode',
+    create: async (
+      providerPath: string,
+      providerOptions: ProviderOptions,
+      context: LoadApiProviderContext,
+    ) => {
+      const { OpenCodeSDKProvider } = await import('./opencode-sdk');
+
+      // opencode:sdk or opencode - uses OpenCode's configured default model
+      // Model selection is configured via OpenCode CLI: opencode config set model <provider/model>
+      return new OpenCodeSDKProvider({
+        ...providerOptions,
+        id: providerPath,
+        config: providerOptions.config,
+        env: context.env,
+      });
     },
   },
   {

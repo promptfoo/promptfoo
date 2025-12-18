@@ -1,8 +1,8 @@
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { randomUUID } from 'crypto';
 import fs from 'fs';
 
-import glob from 'glob';
+import { glob } from 'glob';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../src/cliState';
 import { DEFAULT_MAX_CONCURRENCY, FILE_METADATA_KEY } from '../src/constants';
 import {
@@ -203,8 +203,10 @@ vi.mock('glob', () => {
     const p = Array.isArray(pattern) ? pattern.join('') : pattern;
     return p.includes('*') || p.includes('?') || p.includes('[') || p.includes('{');
   });
+  const glob = Object.assign(vi.fn(), { globSync, hasMagic, sync: globSync });
   return {
     default: { globSync, hasMagic },
+    glob,
     globSync,
     hasMagic,
   };
@@ -339,6 +341,11 @@ describe('evaluator', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // Reset runExtensionHook to default implementation (other tests may have overridden it)
+    vi.mocked(runExtensionHook).mockReset();
+    vi.mocked(runExtensionHook).mockImplementation(
+      async (_extensions, _hookName, context) => context,
+    );
     // Reset cliState for each test to ensure clean state
     cliState.resume = false;
     cliState.basePath = '';
@@ -1805,6 +1812,7 @@ describe('evaluator', () => {
       defaultKey: 'defaultValue',
       configKey: 'configValue',
       testKey: 'testValue',
+      conversationId: '__scenario_0__', // Auto-generated for scenario isolation
     });
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(2);
@@ -2521,6 +2529,131 @@ describe('evaluator', () => {
     );
   });
 
+  it('should maintain separate conversation histories between scenarios without explicit conversationId', async () => {
+    // This test verifies the fix for GitHub issue #384:
+    // Scenarios should have isolated _conversation state by default
+    const mockApiProvider = {
+      id: () => 'test-provider',
+      callApi: vi.fn().mockImplementation((_prompt) => ({
+        output: 'Test output',
+      })),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [
+        {
+          raw: '{% for completion in _conversation %}Previous: {{ completion.input }} -> {{ completion.output }}\n{% endfor %}Current: {{ question }}',
+          label: 'Conversation test',
+        },
+      ],
+      scenarios: [
+        {
+          // First scenario - conversation about books
+          config: [{}],
+          tests: [
+            { vars: { question: 'Recommend a sci-fi book' } },
+            { vars: { question: 'Tell me more about it' } },
+          ],
+        },
+        {
+          // Second scenario - conversation about recipes
+          // Should NOT include history from first scenario
+          config: [{}],
+          tests: [
+            { vars: { question: 'Suggest a pasta recipe' } },
+            { vars: { question: 'How long does it take?' } },
+          ],
+        },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+
+    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(4);
+
+    // First scenario, first question - no history
+    const firstCall = mockApiProvider.callApi.mock.calls[0][0];
+    expect(firstCall).toContain('Current: Recommend a sci-fi book');
+    expect(firstCall).not.toContain('Previous:');
+
+    // First scenario, second question - should have first scenario's history
+    const secondCall = mockApiProvider.callApi.mock.calls[1][0];
+    expect(secondCall).toContain('Previous: ');
+    expect(secondCall).toContain('Recommend a sci-fi book');
+    expect(secondCall).toContain('Current: Tell me more about it');
+
+    // Second scenario, first question - should NOT have first scenario's history
+    // This is the key assertion that verifies the fix for issue #384
+    const thirdCall = mockApiProvider.callApi.mock.calls[2][0];
+    expect(thirdCall).toContain('Current: Suggest a pasta recipe');
+    expect(thirdCall).not.toContain('Previous:');
+    expect(thirdCall).not.toContain('sci-fi');
+    expect(thirdCall).not.toContain('Recommend');
+
+    // Second scenario, second question - should only have second scenario's history
+    const fourthCall = mockApiProvider.callApi.mock.calls[3][0];
+    expect(fourthCall).toContain('Previous: ');
+    expect(fourthCall).toContain('Suggest a pasta recipe');
+    expect(fourthCall).toContain('Current: How long does it take?');
+    expect(fourthCall).not.toContain('sci-fi');
+  });
+
+  it('should allow scenarios to share conversation history with explicit conversationId', async () => {
+    // This test verifies that users can still explicitly share conversations across scenarios
+    const mockApiProvider = {
+      id: () => 'test-provider',
+      callApi: vi.fn().mockImplementation((_prompt) => ({
+        output: 'Test output',
+      })),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [
+        {
+          raw: '{% for completion in _conversation %}Previous: {{ completion.input }}\n{% endfor %}Current: {{ question }}',
+          label: 'Conversation test',
+        },
+      ],
+      scenarios: [
+        {
+          config: [{}],
+          tests: [
+            {
+              vars: { question: 'Question from scenario 1' },
+              metadata: { conversationId: 'shared-conversation' },
+            },
+          ],
+        },
+        {
+          config: [{}],
+          tests: [
+            {
+              vars: { question: 'Question from scenario 2' },
+              metadata: { conversationId: 'shared-conversation' },
+            },
+          ],
+        },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+
+    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(2);
+
+    // First scenario - no history
+    const firstCall = mockApiProvider.callApi.mock.calls[0][0];
+    expect(firstCall).not.toContain('Previous:');
+
+    // Second scenario - SHOULD have first scenario's history because they share conversationId
+    const secondCall = mockApiProvider.callApi.mock.calls[1][0];
+    expect(secondCall).toContain('Previous: ');
+    expect(secondCall).toContain('Question from scenario 1');
+  });
+
   it('evaluates with provider delay', async () => {
     const mockApiProvider: ApiProvider = {
       id: vi.fn().mockReturnValue('test-provider'),
@@ -2744,6 +2877,7 @@ describe('evaluator', () => {
       }),
       save: vi.fn().mockResolvedValue(undefined),
       setVars: vi.fn().mockResolvedValue(undefined),
+      setDurationMs: vi.fn(),
     };
 
     const testSuite: TestSuite = {
@@ -2828,6 +2962,7 @@ describe('evaluator', () => {
       }),
       save: vi.fn().mockResolvedValue(undefined),
       setVars: vi.fn().mockResolvedValue(undefined),
+      setDurationMs: vi.fn(),
     };
 
     const testSuite: TestSuite = {
@@ -4032,6 +4167,11 @@ describe('evaluator defaultTest merging', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // Reset runExtensionHook to default implementation (other tests may have overridden it)
+    vi.mocked(runExtensionHook).mockReset();
+    vi.mocked(runExtensionHook).mockImplementation(
+      async (_extensions, _hookName, context) => context,
+    );
   });
 
   it('should merge defaultTest.options.provider with test case options', async () => {
@@ -4144,6 +4284,11 @@ describe('Evaluator with external defaultTest', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // Reset runExtensionHook to default implementation (other tests may have overridden it)
+    vi.mocked(runExtensionHook).mockReset();
+    vi.mocked(runExtensionHook).mockImplementation(
+      async (_extensions, _hookName, context) => context,
+    );
   });
 
   it('should handle string defaultTest gracefully', async () => {
@@ -4364,6 +4509,11 @@ describe('defaultTest normalization for extensions', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // Reset runExtensionHook to default implementation (other tests may have overridden it)
+    vi.mocked(runExtensionHook).mockReset();
+    vi.mocked(runExtensionHook).mockImplementation(
+      async (_extensions, _hookName, context) => context,
+    );
   });
 
   it('should initialize defaultTest when undefined and extensions are present', async () => {
@@ -4373,7 +4523,7 @@ describe('defaultTest normalization for extensions', () => {
     const mockedRunExtensionHook = vi.mocked(runExtensionHook);
     mockedRunExtensionHook.mockImplementation(async (_extensions, hookName, context) => {
       if (hookName === 'beforeAll') {
-        capturedSuite = context.suite;
+        capturedSuite = (context as { suite: TestSuite }).suite;
       }
       return context;
     });
@@ -4401,7 +4551,7 @@ describe('defaultTest normalization for extensions', () => {
     const mockedRunExtensionHook = vi.mocked(runExtensionHook);
     mockedRunExtensionHook.mockImplementation(async (_extensions, hookName, context) => {
       if (hookName === 'beforeAll') {
-        capturedSuite = context.suite;
+        capturedSuite = (context as { suite: TestSuite }).suite;
       }
       return context;
     });
@@ -4422,8 +4572,9 @@ describe('defaultTest normalization for extensions', () => {
 
     expect(capturedSuite).toBeDefined();
     expect(capturedSuite!.defaultTest).toBeDefined();
-    expect(capturedSuite!.defaultTest!.vars).toEqual({ defaultVar: 'defaultValue' });
-    expect(capturedSuite!.defaultTest!.assert).toEqual([]);
+    const defaultTest = capturedSuite!.defaultTest as Record<string, unknown>;
+    expect(defaultTest.vars).toEqual({ defaultVar: 'defaultValue' });
+    expect(defaultTest.assert).toEqual([]);
   });
 
   it('should preserve existing defaultTest.assert when extensions are present', async () => {
@@ -4433,7 +4584,7 @@ describe('defaultTest normalization for extensions', () => {
     const mockedRunExtensionHook = vi.mocked(runExtensionHook);
     mockedRunExtensionHook.mockImplementation(async (_extensions, hookName, context) => {
       if (hookName === 'beforeAll') {
-        capturedSuite = context.suite;
+        capturedSuite = (context as { suite: TestSuite }).suite;
       }
       return context;
     });
@@ -4457,8 +4608,9 @@ describe('defaultTest normalization for extensions', () => {
     await evaluate(testSuite, evalRecord, {});
 
     expect(capturedSuite).toBeDefined();
-    expect(capturedSuite!.defaultTest!.assert).toBe(existingAssertions); // Same reference
-    expect(capturedSuite!.defaultTest!.assert).toHaveLength(2);
+    const defaultTest = capturedSuite!.defaultTest as Record<string, unknown>;
+    expect(defaultTest.assert).toBe(existingAssertions); // Same reference
+    expect(defaultTest.assert).toHaveLength(2);
   });
 
   it('should not modify defaultTest when no extensions are present', async () => {
@@ -4492,7 +4644,9 @@ describe('defaultTest normalization for extensions', () => {
       if (hookName === 'beforeAll') {
         // Simulate what an extension would do - push to assert array
         // This should work because defaultTest.assert is guaranteed to be an array
-        context.suite.defaultTest!.assert!.push({ type: 'is-json' as const });
+        const suite = (context as { suite: TestSuite }).suite;
+        const defaultTest = suite.defaultTest as Exclude<typeof suite.defaultTest, string>;
+        defaultTest!.assert!.push({ type: 'is-json' as const });
       }
       return context;
     });

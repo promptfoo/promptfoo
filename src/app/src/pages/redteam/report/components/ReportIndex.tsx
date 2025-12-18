@@ -19,9 +19,9 @@ import {
   GridToolbarFilterButton,
   GridToolbarQuickFilter,
 } from '@mui/x-data-grid';
+import { formatASRForDisplay, getASRColor } from '@promptfoo/app/src/utils/redteam';
 import { useNavigate } from 'react-router-dom';
 import type { EvalSummary } from '@promptfoo/types';
-import { getASRColor, formatASRForDisplay } from '@promptfoo/app/src/utils/redteam';
 
 function CustomToolbar() {
   return (

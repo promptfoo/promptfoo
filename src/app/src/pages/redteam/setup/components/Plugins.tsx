@@ -2,13 +2,17 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { useApiHealth } from '@app/hooks/useApiHealth';
 import { useTelemetry } from '@app/hooks/useTelemetry';
+import InfoIcon from '@mui/icons-material/Info';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Divider from '@mui/material/Divider';
+import IconButton from '@mui/material/IconButton';
+import Stack from '@mui/material/Stack';
 import { alpha } from '@mui/material/styles';
 import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
+import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import {
   categoryAliases,
@@ -18,18 +22,15 @@ import {
 } from '@promptfoo/redteam/constants';
 import { Link as RouterLink } from 'react-router-dom';
 import { useRecentlyUsedPlugins, useRedTeamConfig } from '../hooks/useRedTeamConfig';
-import PageWrapper from './PageWrapper';
-import PluginsTab from './PluginsTab';
+import { countSelectedCustomIntents, countSelectedCustomPolicies } from '../utils/plugins';
 import CustomPromptsTab from './CustomIntentsTab';
 import CustomPoliciesTab from './CustomPoliciesTab';
-import type { PluginConfig } from '@promptfoo/redteam/types';
-import { countSelectedCustomIntents, countSelectedCustomPolicies } from '../utils/plugins';
-import type { LocalPluginConfig } from '../types';
-import Stack from '@mui/material/Stack';
-import Tooltip from '@mui/material/Tooltip';
-import IconButton from '@mui/material/IconButton';
-import InfoIcon from '@mui/icons-material/Info';
+import PageWrapper from './PageWrapper';
+import PluginsTab from './PluginsTab';
 import { TestCaseGenerationProvider } from './TestCaseGenerationProvider';
+import type { PluginConfig } from '@promptfoo/redteam/types';
+
+import type { LocalPluginConfig } from '../types';
 
 interface PluginsProps {
   onNext: () => void;
@@ -228,7 +229,7 @@ export default function Plugins({ onNext, onBack }: PluginsProps) {
       // Combine all plugins
       const allPlugins = [...regularPlugins, ...policyPlugins, ...intentPlugins];
 
-      // Update the global config
+      // updatePlugins handles deduplication by comparing merged output vs current state
       updatePlugins(allPlugins as Array<string | { id: string; config: any }>);
     }
   }, [selectedPlugins, pluginConfig, hasUserInteracted, config.plugins, updatePlugins]);

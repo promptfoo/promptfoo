@@ -1,7 +1,8 @@
-import type { CallApiContextParams, CallApiOptionsParams } from '../../types/index';
 import { OpenAiChatCompletionProvider } from '../openai/chat';
-import type { GroqCompletionOptions, GroqProviderOptions } from './types';
 import { groqSupportsTemperature, isGroqReasoningModel } from './util';
+
+import type { CallApiContextParams, CallApiOptionsParams } from '../../types/index';
+import type { GroqCompletionOptions, GroqProviderOptions } from './types';
 
 const GROQ_API_BASE_URL = 'https://api.groq.com/openai/v1';
 

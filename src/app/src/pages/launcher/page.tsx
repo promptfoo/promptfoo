@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 
 import logoPanda from '@app/assets/logo.svg';
+import { useApiHealth } from '@app/hooks/useApiHealth';
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import useApiConfig from '@app/stores/apiConfig';
 import LanguageIcon from '@mui/icons-material/Language';
@@ -16,7 +17,6 @@ import Typography from '@mui/material/Typography';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import { useNavigate } from 'react-router-dom';
 import DarkModeToggle from '../../components/DarkMode';
-import { useApiHealth } from '@app/hooks/useApiHealth';
 
 const DEFAULT_LOCAL_API_URL = 'http://localhost:15500';
 

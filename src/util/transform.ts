@@ -1,50 +1,12 @@
-import { createRequire } from 'node:module';
 import cliState from '../cliState';
 import { importModule } from '../esm';
 import logger from '../logger';
 import { runPython } from '../python/pythonUtils';
-import { safeJoin } from './pathUtils';
 import { isJavascriptFile } from './fileExtensions';
+import { safeJoin } from './pathUtils';
+import { getProcessShim } from './processShim';
 
 import type { Vars } from '../types/index';
-
-// Create a require function for ESM compatibility
-// This allows inline transforms to use require() even in ESM context
-const esmRequire = createRequire(import.meta.url);
-
-// Create a proxy for process that shims process.mainModule.require for backwards compatibility
-// This allows code written for CommonJS (using process.mainModule.require) to work in ESM
-const processWithMainModule = new Proxy(process, {
-  get(target, prop) {
-    if (prop === 'mainModule') {
-      // Return a shim that provides the require function
-      // This matches the CommonJS process.mainModule structure
-      return {
-        require: esmRequire,
-        // Include other mainModule properties that might be accessed
-        exports: {},
-        id: '.',
-        filename: '',
-        loaded: true,
-        children: [],
-        paths: [],
-      };
-    }
-    return Reflect.get(target, prop);
-  },
-});
-
-/**
- * Returns the shimmed process object with mainModule.require for ESM compatibility.
- * Use this when creating inline functions that need access to require().
- *
- * @example
- * const fn = new Function('data', 'process', `return process.mainModule.require('fs')`);
- * fn(data, getProcessShim());
- */
-export function getProcessShim(): typeof process {
-  return processWithMainModule;
-}
 
 export type TransformContext = object;
 
@@ -216,9 +178,9 @@ export async function transform(
     throw new Error(`Invalid transform function for ${codeOrFilepath}`);
   }
 
-  // Pass processWithMainModule for ESM compatibility in inline transforms
+  // Pass the process shim for ESM compatibility in inline transforms
   // This allows inline code to use process.mainModule.require just like in CommonJS
-  const ret = await Promise.resolve(postprocessFn(transformInput, context, processWithMainModule));
+  const ret = await Promise.resolve(postprocessFn(transformInput, context, getProcessShim()));
 
   if (validateReturn && (ret === null || ret === undefined)) {
     throw new Error(`Transform function did not return a value\n\n${codeOrFilepath}`);

@@ -1,6 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { WatsonXAI } from '@ibm-cloud/watsonx-ai';
 import { BearerTokenAuthenticator, IamAuthenticator } from 'ibm-cloud-sdk-core';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache, getCache, isCacheEnabled } from '../../src/cache';
 import * as envarsModule from '../../src/envars';
 import logger from '../../src/logger';
@@ -420,6 +420,14 @@ describe('WatsonXProvider', () => {
       });
       vi.mocked(isCacheEnabled).mockImplementation(function () {
         return true;
+      });
+
+      // Must mock WatsonXAI.newInstance to ensure test isolation
+      const mockedWatsonXAIClient: Partial<any> = {
+        generateText: vi.fn(),
+      };
+      vi.mocked(WatsonXAI.newInstance).mockImplementation(function () {
+        return mockedWatsonXAIClient as any;
       });
 
       const provider = new WatsonXProvider(modelName, { config });

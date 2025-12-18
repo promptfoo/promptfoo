@@ -1153,6 +1153,32 @@
               },
               "description": "Names of people, brands, or organizations related to your LLM application"
             },
+            "contexts": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "description": "Unique identifier for the context"
+                  },
+                  "purpose": {
+                    "type": "string",
+                    "description": "Purpose/context for this context - used for generation and grading"
+                  },
+                  "vars": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    },
+                    "description": "Variables passed to provider (e.g., context_file, user_role)"
+                  }
+                },
+                "required": ["id", "purpose"],
+                "additionalProperties": false
+              },
+              "description": "Security contexts for testing multiple states - each context has its own purpose"
+            },
             "plugins": {
               "type": "array",
               "items": {
@@ -1314,6 +1340,7 @@
                           "nist:ai:measure:4.3",
                           "off-topic",
                           "overreliance",
+                          "owasp:agentic",
                           "owasp:agentic:redteam",
                           "owasp:agentic:t01",
                           "owasp:agentic:t02",
@@ -1321,8 +1348,15 @@
                           "owasp:agentic:t04",
                           "owasp:agentic:t05",
                           "owasp:agentic:t06",
+                          "owasp:agentic:t07",
                           "owasp:agentic:t08",
+                          "owasp:agentic:t09",
                           "owasp:agentic:t10",
+                          "owasp:agentic:t11",
+                          "owasp:agentic:t12",
+                          "owasp:agentic:t13",
+                          "owasp:agentic:t14",
+                          "owasp:agentic:t15",
                           "owasp:api",
                           "owasp:api:01",
                           "owasp:api:02",
@@ -1550,6 +1584,7 @@
                               "nist:ai:measure:4.3",
                               "off-topic",
                               "overreliance",
+                              "owasp:agentic",
                               "owasp:agentic:redteam",
                               "owasp:agentic:t01",
                               "owasp:agentic:t02",
@@ -1557,8 +1592,15 @@
                               "owasp:agentic:t04",
                               "owasp:agentic:t05",
                               "owasp:agentic:t06",
+                              "owasp:agentic:t07",
                               "owasp:agentic:t08",
+                              "owasp:agentic:t09",
                               "owasp:agentic:t10",
+                              "owasp:agentic:t11",
+                              "owasp:agentic:t12",
+                              "owasp:agentic:t13",
+                              "owasp:agentic:t14",
+                              "owasp:agentic:t15",
                               "owasp:api",
                               "owasp:api:01",
                               "owasp:api:02",
@@ -2056,7 +2098,17 @@
               "type": "boolean"
             },
             "envPath": {
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              ]
             }
           },
           "additionalProperties": false

@@ -1,12 +1,12 @@
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import { MULTI_MODAL_STRATEGIES } from '@promptfoo/redteam/constants';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import Strategies from './Strategies';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 // Mock only external dependencies and hooks
 vi.mock('../hooks/useRedTeamConfig');

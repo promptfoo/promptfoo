@@ -1,5 +1,4 @@
 import dedent from 'dedent';
-
 import { getEnvInt } from '../../envars';
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
@@ -9,18 +8,6 @@ import {
   fetchTraceContext,
   type TraceContextData,
 } from '../../tracing/traceContext';
-import type {
-  ApiProvider,
-  AtomicTestCase,
-  CallApiContextParams,
-  CallApiOptionsParams,
-  GradingResult,
-  GuardrailResponse,
-  NunjucksFilterMap,
-  Prompt,
-  RedteamFileConfig,
-  TokenUsage,
-} from '../../types/index';
 import invariant from '../../util/invariant';
 import { extractFirstJsonObject } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
@@ -42,6 +29,7 @@ import {
   JUDGE_SYSTEM_PROMPT,
 } from './prompts';
 import {
+  buildGraderResultAssertion,
   checkPenalizedPhrases,
   createIterationContext,
   getTargetResponse,
@@ -50,6 +38,19 @@ import {
 } from './shared';
 import { formatTraceForMetadata, formatTraceSummary } from './traceFormatting';
 import { resolveTracingOptions } from './tracingOptions';
+
+import type {
+  ApiProvider,
+  AtomicTestCase,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  GradingResult,
+  GuardrailResponse,
+  NunjucksFilterMap,
+  Prompt,
+  RedteamFileConfig,
+  TokenUsage,
+} from '../../types/index';
 
 // Based on: https://arxiv.org/abs/2312.02119
 
@@ -434,7 +435,7 @@ export async function runRedteamConversation({
         const graderTraceSummary = tracingOptions.includeInGrading
           ? computedTraceSummary
           : undefined;
-        const { grade } = await grader.getResult(
+        const { grade, rubric } = await grader.getResult(
           newInjectVar,
           targetResponse.output,
           iterationTest,
@@ -449,7 +450,10 @@ export async function runRedteamConversation({
               }
             : undefined,
         );
-        storedGraderResult = grade;
+        storedGraderResult = {
+          ...grade,
+          assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
+        };
       }
     }
     // Calculate the score

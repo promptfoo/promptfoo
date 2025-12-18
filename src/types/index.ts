@@ -77,7 +77,7 @@ export const CommandLineOptionsSchema = z.object({
   promptSuffix: z.string().optional(),
   retryErrors: z.boolean().optional(),
 
-  envPath: z.string().optional(),
+  envPath: z.union([z.string(), z.array(z.string())]).optional(),
 });
 
 export type CommandLineOptions = z.infer<typeof CommandLineOptionsSchema>;
@@ -144,6 +144,7 @@ export interface RunEvalOptions {
   delay: number;
 
   test: AtomicTestCase;
+  testSuite?: TestSuite;
   nunjucksFilters?: NunjucksFilterMap;
   evaluateOptions?: EvaluateOptions;
 
@@ -342,6 +343,7 @@ export interface EvaluateStats {
   failures: number;
   errors: number;
   tokenUsage: Required<TokenUsage>;
+  durationMs?: number;
 }
 
 export interface EvaluateSummaryV3 {
@@ -369,6 +371,7 @@ export type EvalTableDTO = {
   author: string | null;
   version: number;
   id: string;
+  stats?: EvaluateStats;
 };
 
 export interface ResultSuggestion {
@@ -415,6 +418,8 @@ export interface GradingResult {
     contextUnits?: string[];
     // Rendered assertion value with substituted variables (for display in UI)
     renderedAssertionValue?: string;
+    // Full grading prompt sent to the grading LLM (for debugging)
+    renderedGradingPrompt?: string;
     [key: string]: any;
   };
 }
@@ -523,7 +528,7 @@ export const AssertionTypeSchema = z.union([
 
 export type AssertionType = z.infer<typeof AssertionTypeSchema>;
 
-const AssertionSetSchema = z.object({
+export const AssertionSetSchema = z.object({
   type: z.literal('assert-set'),
   // Sub assertions to be run for this assertion set
   assert: z.array(z.lazy(() => AssertionSchema)),
@@ -576,6 +581,13 @@ export const AssertionSchema = z.object({
 });
 
 export type Assertion = z.infer<typeof AssertionSchema>;
+
+/**
+ * Schema for validating individual assertions (regular or assert-set).
+ * Used for runtime validation of user-provided config.
+ */
+export const AssertionOrSetSchema = z.union([AssertionSetSchema, AssertionSchema]);
+export type AssertionOrSet = z.infer<typeof AssertionOrSetSchema>;
 
 export interface AssertionValueFunctionContext {
   prompt: string | undefined;

@@ -1,9 +1,5 @@
-import { Mocked, beforeEach, describe, expect, it, vi } from 'vitest';
-
 import { v4 as uuidv4 } from 'uuid';
-
-import type { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
-import type { TreeSearchOutput } from '../../../src/redteam/providers/iterativeTree';
+import { beforeEach, describe, expect, it, Mocked, vi } from 'vitest';
 import {
   createTreeNode,
   evaluateResponse,
@@ -19,6 +15,10 @@ import {
   JUDGE_SYSTEM_PROMPT,
 } from '../../../src/redteam/providers/prompts';
 import { getTargetResponse } from '../../../src/redteam/providers/shared';
+import { getNunjucksEngine } from '../../../src/util/templates';
+
+import type { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
+import type { TreeSearchOutput } from '../../../src/redteam/providers/iterativeTree';
 import type {
   ApiProvider,
   AtomicTestCase,
@@ -26,7 +26,6 @@ import type {
   CallApiOptionsParams,
   GradingResult,
 } from '../../../src/types/index';
-import { getNunjucksEngine } from '../../../src/util/templates';
 
 vi.mock('../../../src/providers/openai');
 // Note: We don't mock '../../../src/util/templates' because tests need the real nunjucks engine

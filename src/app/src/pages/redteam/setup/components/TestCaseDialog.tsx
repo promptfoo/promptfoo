@@ -1,7 +1,15 @@
 import React, { useMemo, useState } from 'react';
 
+import { BaseNumberInput } from '@app/components/form/input/BaseNumberInput';
+import { useApiHealth } from '@app/hooks/useApiHealth';
+import ChatMessages, {
+  type LoadedMessage,
+  type LoadingMessage,
+  type Message,
+} from '@app/pages/eval/components/ChatMessages';
 import MagicWandIcon from '@mui/icons-material/AutoFixHigh';
 import Alert from '@mui/material/Alert';
+import Autocomplete from '@mui/material/Autocomplete';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
@@ -9,11 +17,13 @@ import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
+import Divider from '@mui/material/Divider';
 import IconButton from '@mui/material/IconButton';
 import Link from '@mui/material/Link';
-import Tooltip from '@mui/material/Tooltip';
-import Divider from '@mui/material/Divider';
 import Stack from '@mui/material/Stack';
+import TextField from '@mui/material/TextField';
+import Tooltip from '@mui/material/Tooltip';
+import Typography from '@mui/material/Typography';
 import {
   categoryAliases,
   displayNameOverrides,
@@ -21,22 +31,15 @@ import {
   type Plugin,
   type Strategy,
 } from '@promptfoo/redteam/constants';
-import { BaseNumberInput } from '@app/components/form/input/BaseNumberInput';
 import {
   getPluginDocumentationUrl,
   hasSpecificPluginDocumentation,
 } from './pluginDocumentationMap';
-import { useApiHealth } from '@app/hooks/useApiHealth';
-import Chip from '@mui/material/Chip';
-import ChatMessages, {
-  type LoadedMessage,
-  type LoadingMessage,
-  type Message,
-} from '@app/pages/eval/components/ChatMessages';
+
 import type {
   GeneratedTestCase,
-  TargetResponse,
   TargetPlugin,
+  TargetResponse,
   TargetStrategy,
 } from './testCaseGenerationTypes';
 
@@ -49,10 +52,13 @@ interface TestCaseDialogProps {
   generatedTestCases: GeneratedTestCase[];
   targetResponses: TargetResponse[];
   isRunningTest?: boolean;
-  onRegenerate: () => void;
+  onRegenerate: (newPluginId?: string) => void;
   onContinue: (additionalTurns: number) => void;
   currentTurn: number;
   maxTurns: number;
+  availablePlugins: string[];
+  // Whether to allow changing the plugin (only on strategies page)
+  allowPluginChange?: boolean;
 }
 
 export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
@@ -68,6 +74,8 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
   onContinue,
   currentTurn,
   maxTurns,
+  availablePlugins,
+  allowPluginChange = false,
 }) => {
   const pluginName = plugin?.id ?? '';
   const pluginDisplayName =
@@ -102,9 +110,17 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
       const targetResponse = targetResponses[i];
 
       if (targetResponse) {
+        const output = targetResponse.output;
+        const content =
+          typeof output === 'string'
+            ? output
+            : output != null
+              ? JSON.stringify(output)
+              : (targetResponse.error ?? 'No response from target');
+
         messages.push({
           role: 'assistant' as const,
-          content: targetResponse.output ?? targetResponse.error ?? 'No response from target',
+          content,
           contentType: 'text' as const,
         } as LoadedMessage);
       }
@@ -156,28 +172,65 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
           flexDirection: 'row',
           justifyContent: 'space-between',
           alignItems: 'center',
-          gap: 1,
+          gap: 2,
           px: 3,
           py: 2,
         }}
       >
-        <DialogTitle
-          sx={{
-            // Override the default padding to set it consistently on the parent container
-            p: 0,
-          }}
-        >
-          Test Case
-        </DialogTitle>
-        <Box sx={{ display: 'flex', gap: 1 }}>
-          <Chip
-            label={`Strategy: ${strategyDisplayName}${maxTurns > 1 ? ` (${maxTurns} turns)` : ''}`}
-            data-testid="strategy-chip"
-          />
-          <Chip label={`Plugin: ${pluginDisplayName}`} data-testid="plugin-chip" />
+        <Box>
+          <DialogTitle
+            sx={{
+              // Override the default padding to set it consistently on the parent container
+              p: 0,
+            }}
+          >
+            {allowPluginChange
+              ? `${strategyDisplayName}${maxTurns > 1 ? ` (${maxTurns} turns)` : ''}`
+              : pluginDisplayName}
+          </DialogTitle>
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            data-testid={allowPluginChange ? 'strategy-chip' : 'plugin-chip'}
+          >
+            {allowPluginChange ? 'Strategy Preview' : 'Plugin Preview'}
+          </Typography>
         </Box>
+        {allowPluginChange && (
+          <Autocomplete
+            size="small"
+            value={pluginName}
+            onChange={(_, newValue) => {
+              if (newValue && newValue !== pluginName) {
+                onRegenerate(newValue);
+              }
+            }}
+            options={availablePlugins}
+            getOptionLabel={(option) =>
+              (displayNameOverrides as Record<string, string>)[option] ||
+              (categoryAliases as Record<string, string>)[option] ||
+              option
+            }
+            disableClearable
+            slotProps={{
+              popper: {
+                sx: { zIndex: 10001 },
+              },
+            }}
+            sx={{ minWidth: 280 }}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                variant="outlined"
+                size="small"
+                label="Plugin"
+                data-testid="plugin-dropdown"
+              />
+            )}
+          />
+        )}
       </Box>
-      <DialogContent>
+      <DialogContent sx={{ minHeight: 200 }}>
         <Stack direction="column" gap={2}>
           <ChatMessages
             messages={turnMessages}
@@ -232,7 +285,7 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
             </>
           )}
           <Button
-            onClick={onRegenerate}
+            onClick={() => onRegenerate()}
             variant={canAddAdditionalTurns ? 'outlined' : 'contained'}
             loading={isGenerating || isRunningTest}
           >

@@ -7,6 +7,7 @@ import cliState from './cliState';
 import { getEnvBool, getEnvString } from './envars';
 import { getConfigDirectoryPath } from './util/config/manage';
 import { safeJsonStringify } from './util/json';
+import { getLogFiles } from './util/logFiles';
 import { sanitizeObject, sanitizeUrl } from './util/sanitizer';
 
 const MAX_LOG_FILES = 50;
@@ -207,15 +208,7 @@ function setupLogDirectory(): string {
 
   // Clean up old log files
   try {
-    const logFiles = fs
-      .readdirSync(logDir)
-      .filter((file) => file.startsWith('promptfoo-') && file.endsWith('.log'))
-      .map((file) => ({
-        name: file,
-        path: path.join(logDir, file),
-        mtime: fs.statSync(path.join(logDir, file)).mtime,
-      }))
-      .sort((a, b) => b.mtime.getTime() - a.mtime.getTime()); // Sort by newest first
+    const logFiles = getLogFiles(logDir);
 
     // Remove old files
     if (logFiles.length >= MAX_LOG_FILES) {
@@ -466,20 +459,41 @@ export async function closeLogger(): Promise<void> {
       return;
     }
 
-    // Wait for all file transports to finish flushing
-    // Winston 3.19.0+ properly waits for file writes to complete before emitting 'finish'
-    await Promise.all(
-      fileTransports.map(
-        (transport) =>
-          new Promise<void>((resolve) => {
-            transport.once('finish', resolve);
-            transport.end();
-          }),
-      ),
-    );
-
-    // Remove transports to allow process to exit (prevents event loop hanging)
+    // Add temporary error handlers to catch "write after end" errors during shutdown.
+    // This can happen due to a race condition where the pipe from winston's Transform
+    // stream still has data when _final() calls transport.end(). The error handlers
+    // prevent this from becoming an uncaught exception that crashes the process.
+    const errorHandlers = new Map<winston.transport, (err: Error) => void>();
     for (const transport of fileTransports) {
+      const handler = (err: Error) => {
+        // Silently ignore "write after end" errors during shutdown - this is expected
+        // when the logger has buffered data that races with transport closing
+        if (err?.message?.includes('write after end')) {
+          return;
+        }
+        console.error(`Transport error during shutdown: ${err}`);
+      };
+      errorHandlers.set(transport, handler);
+      transport.on('error', handler);
+    }
+
+    // Use winstonLogger.end() instead of ending transports directly.
+    // This properly triggers winston's _final() method which:
+    // 1. Waits for all piped data to flush through the transform stream
+    // 2. Calls transport.end() on each transport in sequence
+    // 3. Waits for each transport's 'finish' event before proceeding
+    // This significantly reduces "write after end" errors from data still in the pipeline.
+    await new Promise<void>((resolve) => {
+      winstonLogger.once('finish', resolve);
+      winstonLogger.end();
+    });
+
+    // Remove error handlers and file transports
+    for (const transport of fileTransports) {
+      const handler = errorHandlers.get(transport);
+      if (handler) {
+        transport.off('error', handler);
+      }
       winstonLogger.remove(transport);
     }
   } catch (error) {
