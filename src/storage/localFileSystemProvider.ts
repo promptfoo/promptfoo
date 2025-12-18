@@ -111,7 +111,16 @@ export class LocalFileSystemProvider implements MediaStorageProvider {
    * Get the full path for a storage key
    */
   private getFilePath(key: string): string {
-    return path.join(this.basePath, key);
+    // Prevent directory traversal and ensure all paths are under the base path
+    const targetPath = path.resolve(this.basePath, key);
+    // Ensure basePath has trailing separator for strict prefix check
+    const safeBase = path.resolve(this.basePath) + path.sep;
+    if (!targetPath.startsWith(safeBase)) {
+      throw new Error(
+        `[LocalStorage] Invalid media key: path traversal attempt detected ("${key}")`,
+      );
+    }
+    return targetPath;
   }
 
   /**
@@ -202,8 +211,12 @@ export class LocalFileSystemProvider implements MediaStorageProvider {
   }
 
   async exists(key: string): Promise<boolean> {
-    const filePath = this.getFilePath(key);
-    return fs.existsSync(filePath);
+    try {
+      const filePath = this.getFilePath(key);
+      return fs.existsSync(filePath);
+    } catch {
+      return false;
+    }
   }
 
   async delete(key: string): Promise<void> {
@@ -233,11 +246,15 @@ export class LocalFileSystemProvider implements MediaStorageProvider {
   async getUrl(key: string, _expiresIn?: number): Promise<string | null> {
     // For local storage, return a file:// URL or null
     // The web UI will need to handle this via the API
-    const filePath = this.getFilePath(key);
-    if (fs.existsSync(filePath)) {
-      return `file://${filePath}`;
+    try {
+      const filePath = this.getFilePath(key);
+      if (fs.existsSync(filePath)) {
+        return `file://${filePath}`;
+      }
+      return null;
+    } catch {
+      return null;
     }
-    return null;
   }
 
   async findByHash(contentHash: string): Promise<string | null> {

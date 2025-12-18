@@ -17,6 +17,8 @@ interface FilesystemProviderConfig {
   basePath?: string;
 }
 
+const BLOB_HASH_REGEX = /^[a-f0-9]{64}$/i;
+
 function computeHash(data: Buffer): string {
   return createHash('sha256').update(data).digest('hex');
 }
@@ -28,15 +30,11 @@ function buildUri(hash: string): string {
 export class FilesystemBlobStorageProvider implements BlobStorageProvider {
   readonly providerId = 'filesystem';
   private readonly basePath: string;
-  private readonly hashIndexPath: string;
-  private hashIndex: Map<string, string> = new Map();
 
   constructor(config?: FilesystemProviderConfig) {
     const defaultBase = path.join(getConfigDirectoryPath(true), DEFAULT_FILESYSTEM_SUBDIR);
-    this.basePath = config?.basePath || defaultBase;
-    this.hashIndexPath = path.join(this.basePath, 'hash-index.json');
+    this.basePath = path.resolve(config?.basePath || defaultBase);
     this.ensureDirectory();
-    this.loadHashIndex();
   }
 
   private ensureDirectory(): void {
@@ -46,33 +44,37 @@ export class FilesystemBlobStorageProvider implements BlobStorageProvider {
     }
   }
 
-  private loadHashIndex(): void {
-    try {
-      if (fs.existsSync(this.hashIndexPath)) {
-        const data = fs.readFileSync(this.hashIndexPath, 'utf8');
-        this.hashIndex = new Map(Object.entries(JSON.parse(data)));
-      }
-    } catch (error) {
-      logger.warn('[BlobFS] Failed to load hash index, starting empty', { error });
-      this.hashIndex = new Map();
+  private assertValidHash(hash: string): void {
+    if (!BLOB_HASH_REGEX.test(hash)) {
+      throw new Error(`[BlobFS] Invalid blob hash: "${hash}"`);
     }
   }
 
-  private saveHashIndex(): void {
-    try {
-      const payload = JSON.stringify(Object.fromEntries(this.hashIndex), null, 2);
-      fs.writeFileSync(this.hashIndexPath, payload, 'utf8');
-    } catch (error) {
-      logger.warn('[BlobFS] Failed to save hash index', { error });
+  private resolvePathInBase(unsafePath: string): string {
+    const targetPath = path.isAbsolute(unsafePath)
+      ? path.resolve(unsafePath)
+      : path.resolve(this.basePath, unsafePath);
+
+    const safeBase = path.resolve(this.basePath) + path.sep;
+    if (!targetPath.startsWith(safeBase)) {
+      throw new Error('[BlobFS] Path traversal attempt detected');
     }
+
+    return targetPath;
   }
 
-  private hashToPath(hash: string): string {
-    const dir = path.join(this.basePath, hash.slice(0, 2), hash.slice(2, 4));
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
+  private hashToPath(hash: string, options?: { ensureDir?: boolean }): string {
+    this.assertValidHash(hash);
+
+    const dirRelative = path.join(hash.slice(0, 2), hash.slice(2, 4));
+    const dirPath = this.resolvePathInBase(dirRelative);
+
+    if (options?.ensureDir && !fs.existsSync(dirPath)) {
+      fs.mkdirSync(dirPath, { recursive: true });
     }
-    return path.join(dir, hash);
+
+    const fileRelative = path.join(dirRelative, hash);
+    return this.resolvePathInBase(fileRelative);
   }
 
   private metadataPath(filePath: string): string {
@@ -81,14 +83,19 @@ export class FilesystemBlobStorageProvider implements BlobStorageProvider {
 
   async store(data: Buffer, mimeType: string): Promise<BlobStoreResult> {
     const hash = computeHash(data);
-    const existingKey = this.hashIndex.get(hash);
-    if (existingKey && (await this.exists(hash))) {
-      const meta = this.readMetadata(existingKey);
-      const ref = this.buildRef(hash, mimeType, data.length, meta?.provider ?? this.providerId);
+    const filePath = this.hashToPath(hash, { ensureDir: true });
+
+    if (fs.existsSync(filePath)) {
+      const meta = this.readMetadata(filePath);
+      const ref = this.buildRef(
+        hash,
+        meta?.mimeType ?? mimeType,
+        meta?.sizeBytes ?? data.length,
+        meta?.provider ?? this.providerId,
+      );
       return { ref, deduplicated: true };
     }
 
-    const filePath = this.hashToPath(hash);
     fs.writeFileSync(filePath, data);
 
     const metadata: BlobMetadata = {
@@ -99,8 +106,6 @@ export class FilesystemBlobStorageProvider implements BlobStorageProvider {
       key: filePath,
     };
     fs.writeFileSync(this.metadataPath(filePath), JSON.stringify(metadata, null, 2));
-    this.hashIndex.set(hash, filePath);
-    this.saveHashIndex();
 
     return {
       ref: this.buildRef(hash, mimeType, data.length, this.providerId),
@@ -109,42 +114,44 @@ export class FilesystemBlobStorageProvider implements BlobStorageProvider {
   }
 
   async getByHash(hash: string): Promise<StoredBlob> {
-    const filePath = this.hashIndex.get(hash) || this.hashToPath(hash);
+    const filePath = this.hashToPath(hash);
     if (!fs.existsSync(filePath)) {
       throw new Error(`Blob not found: ${hash}`);
     }
     const data = fs.readFileSync(filePath);
-    const metadata = this.readMetadata(filePath) || {
-      mimeType: 'application/octet-stream',
-      sizeBytes: data.length,
-      createdAt: new Date().toISOString(),
-      provider: this.providerId,
-      key: filePath,
-    };
+    const metadata =
+      this.readMetadata(filePath) ||
+      ({
+        mimeType: 'application/octet-stream',
+        sizeBytes: data.length,
+        createdAt: new Date().toISOString(),
+        provider: this.providerId,
+        key: filePath,
+      } satisfies BlobMetadata);
     return { data, metadata };
   }
 
   async exists(hash: string): Promise<boolean> {
-    const filePath = this.hashIndex.get(hash);
-    if (!filePath) {
+    try {
+      const filePath = this.hashToPath(hash);
+      return fs.existsSync(filePath);
+    } catch {
       return false;
     }
-    return fs.existsSync(filePath);
   }
 
   async deleteByHash(hash: string): Promise<void> {
-    const filePath = this.hashIndex.get(hash);
-    if (!filePath) {
-      return;
-    }
-    this.hashIndex.delete(hash);
-    this.saveHashIndex();
-    const metaPath = this.metadataPath(filePath);
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
-    }
-    if (fs.existsSync(metaPath)) {
-      fs.unlinkSync(metaPath);
+    try {
+      const filePath = this.hashToPath(hash);
+      const metaPath = this.metadataPath(filePath);
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+      if (fs.existsSync(metaPath)) {
+        fs.unlinkSync(metaPath);
+      }
+    } catch {
+      // Ignore invalid hashes/path traversal attempts
     }
   }
 
@@ -164,7 +171,8 @@ export class FilesystemBlobStorageProvider implements BlobStorageProvider {
   }
 
   private readMetadata(filePath: string): BlobMetadata | null {
-    const metaPath = this.metadataPath(filePath);
+    const safeFilePath = this.resolvePathInBase(filePath);
+    const metaPath = this.metadataPath(safeFilePath);
     if (!fs.existsSync(metaPath)) {
       return null;
     }
