@@ -59,9 +59,9 @@
     </g>
   </g>
 
-  <!-- Right section: Semantic (failed) - SAME SCALE: 2px per % -->
+  <!-- Right section: Content-framing (failed) - SAME SCALE: 2px per % -->
   <g transform="translate(395, 75)">
-    <text x="0" y="0" class="section-label">Semantic Attacks</text>
+    <text x="0" y="0" class="section-label">Content-Framing Attacks</text>
     <text x="0" y="16" class="section-desc">Roleplay, hypotheticals, reframing</text>
 
     <!-- Attack bars (2px per %, 100% = 200px) -->

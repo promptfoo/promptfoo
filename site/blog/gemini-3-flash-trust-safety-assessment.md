@@ -117,11 +117,11 @@ The category breakdown reveals what Gemini 3 Flash was trained to resist—and w
 
 **Structural attacks** (token manipulation, encoding tricks, format exploits): Divergent repetition (22% ASR), Pliny injections (20%), ASCII smuggling (33%), special token injection (40%). These are the attacks that show up in security research—adversarial prompting through format manipulation.
 
-**Semantic attacks** (content reframing, roleplay, hypotheticals): Graphic content (100% ASR), entity impersonation (100%), hallucination (93%), personal attacks (80%). These reframe harmful requests as fiction, thought experiments, or "just asking questions."
+**Content-framing attacks** (roleplay, hypotheticals, reframing): Graphic content (100% ASR), entity impersonation (100%), hallucination (93%), personal attacks (80%). These reframe harmful requests as fiction, thought experiments, or "just asking questions."
 
-The pattern: defenses are stronger on structural prompt exploits than on semantic reframes. When you manipulate tokens, the model catches it. When you manipulate framing, the model defaults to helpful.
+The pattern: defenses are stronger on structural prompt exploits than on content-framing. When you manipulate tokens, the model catches it. When you manipulate framing, the model defaults to helpful.
 
-Quantified: **average ASR on structural attacks is 29%** (unweighted mean of 4 categories), **average ASR on semantic attacks is 93%** (unweighted mean of 4 categories).
+Quantified: **average ASR on structural attacks is 29%**, **average ASR on content-framing attacks is 93%** (both unweighted means of 4 categories). This is a small, hand-picked subset of categories meant to illustrate a pattern, not a comprehensive taxonomy.
 
 ![Structural vs semantic attack success rates](/img/blog/gemini-3-flash/structural-vs-semantic.svg)
 
@@ -291,7 +291,7 @@ On red teaming, the model card states: "For child safety evaluations, Gemini 3 F
 
 ## What This Means
 
-Google positions Gemini 3 Flash as competitive with frontier models on capability benchmarks while offering better speed and cost. We focused on what happens to safety when you optimize for speed.
+Google's [launch post](https://blog.google/products/gemini/gemini-3-flash/) emphasizes speed, cost, and benchmark performance. We focused on what happens to adversarial safety under a speed-first configuration.
 
 In this configuration, Gemini 3 Flash is more permissive in refusal behavior—especially at MINIMAL thinking. One plausible explanation: the model-card shows Google reduced unjustified refusals by 10%. Our results may show the other side of that trade-off.
 
