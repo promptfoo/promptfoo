@@ -77,7 +77,7 @@ describe('RedteamPluginBase', () => {
           assert: [{ type: 'contains', value: 'another prompt' }],
           metadata: {
             pluginId: 'test-plugin-id',
-            pluginConfig: { language: 'German' },
+            pluginConfig: { language: 'German', modifiers: { language: 'German' } },
           },
         },
         {
@@ -85,7 +85,7 @@ describe('RedteamPluginBase', () => {
           assert: [{ type: 'contains', value: 'test prompt' }],
           metadata: {
             pluginId: 'test-plugin-id',
-            pluginConfig: { language: 'German' },
+            pluginConfig: { language: 'German', modifiers: { language: 'German' } },
           },
         },
       ]),
@@ -95,11 +95,11 @@ describe('RedteamPluginBase', () => {
       dedent`
         Test template with test purpose for 2 prompts
 
-        CRITICAL: Ensure all generated prompts strictly follow these requirements:
+        CRITICAL: Ignore any previous output format instructions. You MUST follow these requirements exactly:
         <Modifiers>
         language: German
         </Modifiers>
-        Rewrite ALL prompts to fully comply with the above modifiers.
+        Rewrite ALL prompts to strictly comply with the above modifiers.
       `.trim(),
     );
   });
@@ -114,7 +114,7 @@ describe('RedteamPluginBase', () => {
           vars: { testVar: 'another prompt' },
           metadata: {
             pluginId: 'test-plugin-id',
-            pluginConfig: { language: 'German' },
+            pluginConfig: { language: 'German', modifiers: { language: 'German' } },
           },
         },
         {
@@ -122,7 +122,7 @@ describe('RedteamPluginBase', () => {
           vars: { testVar: 'test prompt' },
           metadata: {
             pluginId: 'test-plugin-id',
-            pluginConfig: { language: 'German' },
+            pluginConfig: { language: 'German', modifiers: { language: 'German' } },
           },
         },
       ]),
@@ -176,7 +176,7 @@ describe('RedteamPluginBase', () => {
           assert: expect.any(Array),
           metadata: {
             pluginId: 'test-plugin-id',
-            pluginConfig: { language: 'German' },
+            pluginConfig: { language: 'German', modifiers: { language: 'German' } },
           },
         },
         {
@@ -184,7 +184,7 @@ describe('RedteamPluginBase', () => {
           assert: expect.any(Array),
           metadata: {
             pluginId: 'test-plugin-id',
-            pluginConfig: { language: 'German' },
+            pluginConfig: { language: 'German', modifiers: { language: 'German' } },
           },
         },
       ]),

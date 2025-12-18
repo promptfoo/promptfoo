@@ -1096,7 +1096,7 @@
               "propertyNames": {
                 "pattern": "^[a-zA-Z_][a-zA-Z0-9_]*$"
               },
-              "description": "Multi-variable inputs for test case generation. Keys are variable names, values are descriptions. When specified, the first key becomes the primary injectVar."
+              "description": "Multi-variable inputs for test case generation. Keys are variable names, values are descriptions."
             },
             "purpose": {
               "type": "string",

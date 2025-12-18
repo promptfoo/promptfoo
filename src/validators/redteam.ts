@@ -36,7 +36,6 @@ import type {
 } from '../redteam/types';
 import { InputsSchema } from '../redteam/types';
 
-
 const TracingConfigSchema: z.ZodType<any> = z.lazy(() =>
   z.object({
     enabled: z.boolean().optional(),
