@@ -85,11 +85,11 @@ export function resolveImageSource(
     if (image.startsWith('data:')) {
       return image;
     }
-    if (/^[a-zA-Z0-9+/]+={0,2}$/.test(image)) {
+    // Allow base64-ish payloads that are purely non-whitespace and use common base64/url-safe chars
+    if (/^[A-Za-z0-9+/=_-]+$/.test(image)) {
       return `data:image/png;base64,${image}`;
     }
-    // Fallback: treat arbitrary string as base64 payload for display
-    return `data:image/png;base64,${image}`;
+    return undefined;
   }
 
   const blobUrl = resolveBlobRef(image?.blobRef);
