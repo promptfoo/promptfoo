@@ -177,10 +177,10 @@ describe('audio strategy', () => {
 
       expect(result[0].metadata).toEqual(
         expect.objectContaining({
-        harmCategory: 'Illegal Activities',
-        otherField: 'value',
-        strategyId: 'audio',
-        originalText: 'Harmful content',
+          harmCategory: 'Illegal Activities',
+          otherField: 'value',
+          strategyId: 'audio',
+          originalText: 'Harmful content',
         }),
       );
       expect(result[0].assert).toEqual([
@@ -202,8 +202,8 @@ describe('audio strategy', () => {
 
       expect(result[0].metadata).toEqual(
         expect.objectContaining({
-        strategyId: 'audio',
-        originalText: 'Simple content',
+          strategyId: 'audio',
+          originalText: 'Simple content',
         }),
       );
       expect(result[0].assert).toBeUndefined();
