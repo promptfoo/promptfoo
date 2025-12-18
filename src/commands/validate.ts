@@ -2,7 +2,6 @@ import chalk from 'chalk';
 import dedent from 'dedent';
 import { fromError } from 'zod-validation-error';
 import { disableCache } from '../cache';
-import { isUuid } from '../util/uuid';
 import cliState from '../cliState';
 import logger from '../logger';
 import { loadApiProvider, loadApiProviders } from '../providers/index';
@@ -11,6 +10,7 @@ import { getProviderFromCloud } from '../util/cloud';
 import { resolveConfigs } from '../util/config/load';
 import { isHttpProvider, patchHttpConfigForValidation } from '../util/httpProvider';
 import { setupEnv } from '../util/index';
+import { isUuid } from '../util/uuid';
 import { testProviderConnectivity, testProviderSession } from '../validators/testProvider';
 import type { Command } from 'commander';
 
