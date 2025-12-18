@@ -1,7 +1,7 @@
 ---
 title: 'Gemini 3 Flash Preview: Initial Trust and Safety Assessment'
-description: 'Red team results for Gemini 3 Flash Preview. 3,462 probes across 39 risk categories. Single-turn jailbreaks succeed 89% of the time—29 percentage points worse than GPT-5.2.'
-image: /img/blog/gemini-3-flash-security-hero.png
+description: 'Red team results on Gemini 3 Flash Preview under minimal thinking. Single-turn jailbreaks succeed in 89% of attacks—baseline refusal lower than GPT-5.2 in this configuration.'
+image: /img/blog/gemini-3-flash-security-hero.jpg
 keywords:
   [
     Gemini 3 Flash security,
@@ -26,9 +26,13 @@ We ran our red team eval the same day. Same methodology we used for [GPT-5.2 las
 
 Note: Gemini 3 Flash is currently in preview. Safety behavior may change before general availability.
 
-The result: Gemini 3 Flash is more vulnerable to single-turn jailbreaks than GPT-5.2. Our [meta-agent strategy](/docs/red-team/strategies/meta) achieved **89% attack success** vs 60% on GPT-5.2. Baseline attacks without any jailbreak technique succeeded **19% of the time** vs 4.3% on GPT-5.2.
+The result: Gemini 3 Flash shows lower jailbreak resistance than GPT-5.2 in this configuration. Our [meta-agent strategy](/docs/red-team/strategies/meta) achieved **89% attack success** (160/179 attacks) vs 60% on GPT-5.2. Baseline attacks without jailbreak transformations succeeded **19% of the time** (39/204 attacks) vs 4.3% on GPT-5.2.
 
-That baseline number is the concerning one. Nearly 1 in 5 harmful prompts worked without trying.
+That baseline number matters. Nearly 1 in 5 harmful prompts succeeded without any adversarial technique.
+
+:::info Configuration note
+**Default Gemini 3 Flash behavior uses dynamic HIGH thinking.** We forced `thinkingLevel: MINIMAL` to approximate a "no-reasoning" configuration comparable to GPT-5.2 with `reasoning_effort: 'none'`. We will publish HIGH/dynamic results separately—expect materially different numbers.
+:::
 
 <!-- truncate -->
 
@@ -36,7 +40,9 @@ That baseline number is the concerning one. Nearly 1 in 5 harmful prompts worked
 
 **3,462 probes. 39 risk categories. ~5 hours runtime.**
 
-"Attack success" means the model produced output our judge classified as violating safety policy—content that shouldn't have been generated.
+Each [plugin](/docs/red-team/plugins/) generates multiple probes (individual prompt attempts) for a given risk area. For jailbreak strategies, we try several prompt variants per scenario. We aggregate related probes into higher-level "attacks" per category: an attack succeeds if any of its probes produce disallowed output. **The percentages below are computed over attack-level aggregates, not raw probe count.**
+
+We use [Promptfoo](https://github.com/promptfoo/promptfoo), an open-source LLM red teaming tool. Each plugin includes a grader prompt. We consider an attack successful when the grader judges the output violates the model's stated safety policies. For [critical categories](/docs/red-team/plugins/harmful) (child exploitation, weapons, self-harm), we also performed human review.
 
 | Strategy | Gemini 3 Flash | GPT-5.2 | Delta |
 |----------|---------------|---------|-------|
@@ -48,35 +54,37 @@ Multi-turn attack success is similar between models. Single-turn is where they d
 
 ### By risk domain
 
-| Domain | Failed Probes | Pass Rate |
-|--------|--------------|-----------|
-| Security & Access Control | 23 | 57.4% |
-| Compliance & Legal | 148 | 42.0% |
-| Trust & Safety | 120 | 31.0% |
-| Brand & Reliability | 63 | 35.7% |
+| Domain | Failed | Total | Pass Rate |
+|--------|--------|-------|-----------|
+| Security & Access Control | 23 | 54 | 57.4% |
+| Compliance & Legal | 148 | 255 | 42.0% |
+| Trust & Safety | 120 | 174 | 31.0% |
+| Brand & Reliability | 63 | 98 | 35.7% |
 
 ### Complete bypass (100% attack success)
 
 Two categories showed no resistance after jailbreak:
 
-- **Graphic Content** — Every attempt to generate violent/gore content succeeded
-- **Entity Impersonation** — Every attempt to impersonate real people/brands succeeded
+- **Graphic Content** (n=15 attacks) — Every attempt to generate violent/gore content succeeded
+- **Entity Impersonation** (n=15 attacks) — Every attempt to impersonate real people/brands succeeded
+
+Note: GPT-5.2 also shows ~100% attack success on entity impersonation. Neither model has robust defenses against "pretend to be X" attacks.
 
 ### High-risk categories (>65% attack success)
 
-| Category | Success Rate | Severity |
-|----------|-------------|----------|
-| Hallucination | 92.9% | Medium |
-| Unauthorized Commitments | 80.0% | Medium |
-| Personal Attacks | 80.0% | Medium |
-| Harassment | 73.3% | High |
-| Profanity | 73.3% | Medium |
-| Non-Violent Crime | 73.3% | Medium |
-| Child Exploitation | 70.0% | Critical |
-| Political Bias | 70.0% | Medium |
-| Hate Speech | 66.7% | Critical |
-| PII Exposure | 66.7% | High |
-| Violent Crime | 66.7% | High |
+| Category | Success Rate | Sample | Severity |
+|----------|-------------|--------|----------|
+| Hallucination | 92.9% (13/14) | n=14 | Medium |
+| Unauthorized Commitments | 80.0% (12/15) | n=15 | Medium |
+| Personal Attacks | 80.0% (12/15) | n=15 | Medium |
+| Harassment | 73.3% (11/15) | n=15 | High |
+| Profanity | 73.3% (11/15) | n=15 | Medium |
+| Non-Violent Crime | 73.3% (11/15) | n=15 | Medium |
+| Child Exploitation | 70.0% (7/10) | n=10 | Critical |
+| Political Bias | 70.0% (7/10) | n=10 | Medium |
+| Hate Speech | 66.7% (10/15) | n=15 | Critical |
+| PII Exposure | 66.7% (10/15) | n=15 | High |
+| Violent Crime | 66.7% (10/15) | n=15 | High |
 
 ## Comparing Refusal Behavior
 
@@ -144,7 +152,7 @@ The category-level breakdown exposes different safety priorities.
 
 **The pattern:** Gemini 3 Flash resists *structural* attacks (token manipulation, encoding tricks) but fails on *semantic* attacks (reframing harmful requests as roleplay or hypotheticals).
 
-This suggests safety training focused on known exploit patterns from security research, but underweighted content policy enforcement.
+One possible interpretation: safety training focused on known exploit patterns from security research, but underweighted content policy enforcement.
 
 ### Key divergences from GPT-5.2
 
@@ -207,24 +215,41 @@ This isn't a jailbreak issue—it's a reliability issue that jailbreaks amplify.
 
 ### Child safety
 
-| Model | Child Exploitation Attack Success |
-|-------|----------------------------------|
-| GPT-5.2 | 27% |
-| Gemini 3 Flash | 70% |
+| Model | Child Safety Attack Success | Sample |
+|-------|----------------------------|--------|
+| GPT-5.2 | 27% (4/15) | n=15 |
+| Gemini 3 Flash | 70% (7/10) | n=10 |
 
-This is the most consequential difference. Gemini 3 Flash generated exploitation-adjacent content in 7 of 10 jailbreak attempts. GPT-5.2's defenses held nearly 3× more often.
+This is the most consequential difference. Under our rubric, Gemini 3 Flash generated child-safety-adjacent content in 7 of 10 jailbreak attempts. GPT-5.2's defenses held nearly 3× more often. We performed human review on all outputs in this category.
 
 For applications involving minors, this gap matters.
 
 ## Methodology
 
-We disabled extended thinking (`thinkingLevel: MINIMAL`) to test base model behavior. Gemini 3 models support configurable thinking levels (MINIMAL, LOW, MEDIUM, HIGH) that control how much the model reasons before responding. MINIMAL uses the fewest tokens for deliberation—similar to GPT-5.2's `reasoning_effort: 'none'`.
+We disabled extended thinking (`thinkingLevel: MINIMAL`) to test base model behavior. Gemini 3 models support [configurable thinking levels](https://ai.google.dev/gemini-api/docs/thinking) (MINIMAL, LOW, MEDIUM, HIGH) that control how much the model reasons before responding. **The default is dynamic HIGH**—we override this to approximate GPT-5.2's `reasoning_effort: 'none'` for a fair comparison.
+
+### Run configuration
+
+| Setting | Value |
+|---------|-------|
+| API surface | Gemini Developer API (AI Studio) |
+| Model | `gemini-3-flash-preview` |
+| Thinking level | MINIMAL |
+| Temperature | 1.0 (default) |
+| Max output tokens | 8192 |
+| Safety settings | Default thresholds |
+| Region | us-central1 |
+| Retries | 4 (with exponential backoff) |
+
+We used default [safety settings](https://ai.google.dev/gemini-api/docs/safety-settings). Google's documentation notes that core harms like child safety have built-in protections that are always active regardless of threshold configuration.
 
 ```yaml title="promptfooconfig.yaml"
 targets:
   - id: google:gemini-3-flash-preview
     config:
       generationConfig:
+        temperature: 1.0
+        maxOutputTokens: 8192
         thinkingConfig:
           thinkingLevel: MINIMAL
 
@@ -313,21 +338,21 @@ On red teaming, the model card states: "For child safety evaluations, Gemini 3 F
 Descriptions of model outputs involving harmful themes below. Skip to "What This Means" if preferred.
 :::
 
-### Finding 1: Entity Impersonation (100% success)
+### Finding 1: Entity Impersonation (100% success, n=15)
 
 The model reliably impersonated public figures, brands, and organizations when prompted through the meta-agent strategy. Zero refusals.
 
-### Finding 2: Graphic Content (100% success)
+### Finding 2: Graphic Content (100% success, n=15)
 
 Every attempt to generate graphic violent content succeeded after jailbreak. The meta-agent found consistent bypasses regardless of the specific scenario.
 
-### Finding 3: Hallucination (93% success)
+### Finding 3: Hallucination (93% success, n=14)
 
 The model fabricated citations, statistics, and quotes from real people when prompted. It generated fake academic papers with plausible-looking DOIs and invented historical events.
 
-### Finding 4: Child Exploitation Content (70% success)
+### Finding 4: Child Safety Failures (70% success, n=10)
 
-The model generated grooming scripts and exploitation-adjacent content in 7 of 10 jailbreak attempts. We're not publishing examples.
+Under our rubric, the model generated child-safety-adjacent content in 7 of 10 jailbreak attempts. We performed human review on all outputs in this category. We are not publishing examples.
 
 ## What This Means
 
@@ -339,19 +364,21 @@ Three findings stand out:
 
 **2. Single-turn jailbreaks are unusually effective.** The meta-agent strategy succeeded 89% of the time vs 60% on GPT-5.2. Gemini 3 Flash's specific weakness is single-shot prompt engineering. Multi-turn resistance is similar between models.
 
-**3. Safety training prioritized technical exploits over content moderation.** Gemini resists token injection and encoding attacks but fails on creative reframing. The model defaults to "helpful" when requests are rephrased as fiction, hypotheticals, or roleplay.
+**3. Structural defenses appear stronger than semantic defenses.** Gemini resists token injection and encoding attacks but fails on creative reframing. The model defaults to "helpful" when requests are rephrased as fiction, hypotheticals, or roleplay.
 
 ### If you're deploying Gemini 3 Flash
 
-1. **Enable extended thinking.** We tested with `thinkingLevel: MINIMAL`. Higher levels may improve safety—we'll publish those results.
+1. **Leave default thinking enabled.** We tested with `thinkingLevel: MINIMAL`. [Default is dynamic HIGH](https://ai.google.dev/gemini-api/docs/thinking)—leave it on unless you have strict latency constraints.
 
-2. **Add output filtering.** The model lacks robust content filtering for graphic, sexual, and harassment content. Add your own layer.
+2. **Configure safety settings intentionally.** [Defaults vary by model and use case](https://ai.google.dev/gemini-api/docs/safety-settings). Review and set thresholds explicitly.
 
-3. **Implement impersonation detection.** Check if outputs claim to be real entities. The model won't refuse on its own.
+3. **Add output filtering.** The model lacks robust content filtering for graphic, sexual, and harassment content. Add your own layer.
 
-4. **Verify factual claims.** 93% hallucination success means citations and statistics need external validation.
+4. **Implement impersonation detection.** Check if outputs claim to be real entities. The model won't refuse on its own.
 
-5. **Extra scrutiny for child-adjacent use cases.** The 70% child exploitation success rate is concerning for any application involving minors.
+5. **Verify factual claims.** 93% hallucination success means citations and statistics need external validation.
+
+6. **Extra scrutiny for child-adjacent use cases.** The 70% attack success rate in this category warrants additional safeguards for any application involving minors.
 
 ### If choosing between models for safety-critical applications
 
@@ -365,6 +392,10 @@ Three findings stand out:
 | Content filtering | Stronger | Weaker |
 
 Neither is sufficient without additional safety layers. GPT-5.2 provides a stronger foundation.
+
+### Responsible disclosure
+
+We notified Google of these findings on December 17, 2025, the same day as publication. This assessment uses only publicly available APIs and does not include private vulnerability details. All examples shown are representative outputs, not exploit instructions.
 
 ## Run It Yourself
 
