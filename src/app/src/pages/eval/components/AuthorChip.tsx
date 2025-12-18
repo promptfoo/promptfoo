@@ -129,7 +129,13 @@ export const AuthorChip = ({
                 onClick={() => handleCloudAction(currentUserEmail || '')}
                 disabled={isLoading || !currentUserEmail}
               >
-                {isLoading ? <CircularProgress size={24} /> : `Claim as mine (${currentUserEmail})`}
+                {isLoading ? (
+                  <CircularProgress size={24} />
+                ) : currentUserEmail ? (
+                  `Claim as mine (${currentUserEmail})`
+                ) : (
+                  'Loading...'
+                )}
               </Button>
             </>
           )}

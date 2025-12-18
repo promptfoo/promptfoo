@@ -211,10 +211,11 @@ describe('AuthorChip', () => {
       expect(screen.queryByLabelText('Author Email')).not.toBeInTheDocument();
     });
 
-    it('disables claim button when currentUserEmail is null', async () => {
+    it('disables claim button and shows loading text when currentUserEmail is null', async () => {
       render(<AuthorChip {...cloudProps} currentUserEmail={null} />);
       await userEvent.click(screen.getByText('Unknown'));
-      expect(screen.getByRole('button', { name: /Claim as mine/i })).toBeDisabled();
+      // Button shows "Loading..." instead of "Claim as mine (null)" when email not available
+      expect(screen.getByRole('button', { name: /Loading/i })).toBeDisabled();
     });
 
     it('shows tooltip "Click to claim this eval" when cloud enabled and no author', async () => {
