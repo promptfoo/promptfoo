@@ -282,7 +282,7 @@ There were many teams involved in this report and others in the same vein: engin
 
 This gave all stakeholders a quantitative, data-driven way to measure changes in risk and flag unusual fluctuations.
 
-In addition to red teaming, Discord deployed passive moderation and observability tools to detect trends in adversarial inputs, and developed dedicating reporting mecahnisms.
+In addition to red teaming, Discord deployed passive moderation and observability tools to detect trends in adversarial inputs, and developed dedicated reporting mechanisms.
 
 ### Key Takeaways
 

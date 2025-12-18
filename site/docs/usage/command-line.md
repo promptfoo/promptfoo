@@ -370,9 +370,9 @@ Login to the promptfoo cloud.
 
 | Option                | Description                                                                |
 | --------------------- | -------------------------------------------------------------------------- |
-| `-o, --org <orgId>`   | The organization ID to login to                                            |
+| `-o, --org <orgId>`   | The organization ID to log in to                                           |
 | `-h, --host <host>`   | The host of the promptfoo instance (API URL if different from the app URL) |
-| `-k, --api-key <key>` | Login using an API key                                                     |
+| `-k, --api-key <key>` | Log in using an API key                                                    |
 
 After login, if you have multiple teams, you can switch between them using the `teams` subcommand.
 
