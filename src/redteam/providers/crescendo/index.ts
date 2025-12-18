@@ -21,7 +21,12 @@ import {
   type TransformResult,
 } from '../../shared/runtimeTransform';
 import { Strategies } from '../../strategies';
-import { extractPromptFromTags, getSessionId, isBasicRefusal } from '../../util';
+import {
+  extractPromptFromTags,
+  extractVariablesFromJson,
+  getSessionId,
+  isBasicRefusal,
+} from '../../util';
 import { getGoalRubric } from '../prompts';
 import {
   externalizeResponseForRedteamHistory,
@@ -798,11 +803,7 @@ export class CrescendoProvider implements ApiProvider {
     if (this.config.inputs && Object.keys(this.config.inputs).length > 0) {
       try {
         const parsed = JSON.parse(processedPrompt);
-        for (const key of Object.keys(this.config.inputs)) {
-          if (key in parsed) {
-            updatedVars[key] = String(parsed[key]);
-          }
-        }
+        Object.assign(updatedVars, extractVariablesFromJson(parsed, this.config.inputs));
       } catch {
         // If parsing fails, processedPrompt is plain text - keep original vars
       }

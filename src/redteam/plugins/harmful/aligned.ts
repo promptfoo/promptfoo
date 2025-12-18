@@ -1,4 +1,4 @@
-import { getShortPluginId } from '../../util';
+import { extractVariablesFromJson, getShortPluginId } from '../../util';
 import invariant from '../../../util/invariant';
 import { RedteamPluginBase } from '../base';
 import { getHarmfulAssertions } from './common';
@@ -52,11 +52,7 @@ export class AlignedHarmfulPlugin extends RedteamPluginBase {
       if (hasInputs) {
         try {
           const parsed = JSON.parse(__prompt);
-          for (const key of Object.keys(this.config.inputs!)) {
-            if (key in parsed) {
-              vars[key] = String(parsed[key]);
-            }
-          }
+          Object.assign(vars, extractVariablesFromJson(parsed, this.config.inputs!));
         } catch {
           // If parsing fails, just use the raw prompt
         }

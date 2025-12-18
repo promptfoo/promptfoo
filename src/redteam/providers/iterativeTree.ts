@@ -31,7 +31,7 @@ import {
   type TransformResult,
 } from '../shared/runtimeTransform';
 import { Strategies } from '../strategies';
-import { extractPromptFromTags, getSessionId } from '../util';
+import { extractPromptFromTags, extractVariablesFromJson, getSessionId } from '../util';
 import {
   ATTACKER_SYSTEM_PROMPT,
   CLOUD_ATTACKER_SYSTEM_PROMPT,
@@ -614,11 +614,7 @@ async function runRedteamConversation({
           try {
             // Use the original newInjectVar (before escaping) for parsing
             const parsed = JSON.parse(newInjectVar);
-            for (const key of Object.keys(inputs)) {
-              if (key in parsed) {
-                updatedVars[key] = String(parsed[key]);
-              }
-            }
+            Object.assign(updatedVars, extractVariablesFromJson(parsed, inputs));
           } catch {
             // If parsing fails, it's plain text - keep original vars
           }
@@ -930,11 +926,7 @@ async function runRedteamConversation({
   if (inputs && Object.keys(inputs).length > 0) {
     try {
       const parsed = JSON.parse(bestPrompt);
-      for (const key of Object.keys(inputs)) {
-        if (key in parsed) {
-          finalUpdatedVars[key] = String(parsed[key]);
-        }
-      }
+      Object.assign(finalUpdatedVars, extractVariablesFromJson(parsed, inputs));
     } catch {
       // If parsing fails, it's plain text - keep original vars
     }

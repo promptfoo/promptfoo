@@ -20,7 +20,12 @@ import {
   type TransformResult,
 } from '../../shared/runtimeTransform';
 import { Strategies } from '../../strategies';
-import { extractPromptFromTags, getSessionId, isBasicRefusal } from '../../util';
+import {
+  extractPromptFromTags,
+  extractVariablesFromJson,
+  getSessionId,
+  isBasicRefusal,
+} from '../../util';
 import {
   buildGraderResultAssertion,
   externalizeResponseForRedteamHistory,
@@ -409,11 +414,7 @@ export class HydraProvider implements ApiProvider {
         if (this.config.inputs && Object.keys(this.config.inputs).length > 0) {
           try {
             const parsed = JSON.parse(processedMessage);
-            for (const key of Object.keys(this.config.inputs)) {
-              if (key in parsed) {
-                updatedVars[key] = String(parsed[key]);
-              }
-            }
+            Object.assign(updatedVars, extractVariablesFromJson(parsed, this.config.inputs));
           } catch {
             // If parsing fails, processedMessage is plain text - keep original vars
           }

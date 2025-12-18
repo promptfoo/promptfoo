@@ -1,7 +1,11 @@
 import dedent from 'dedent';
 import logger from '../../logger';
 import { getNunjucksEngine } from '../../util/templates';
-import { extractPromptFromTags } from '../util';
+import {
+  extractAllPromptsFromTags,
+  extractPromptFromTags,
+  extractVariablesFromJson,
+} from '../util';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
 
 import type { PluginActionParams, TestCase } from '../../types/index';
@@ -30,11 +34,7 @@ function processPromptForInputs(
   if (inputs && Object.keys(inputs).length > 0) {
     try {
       const parsed = JSON.parse(processedPrompt);
-      for (const key of Object.keys(inputs)) {
-        if (key in parsed) {
-          additionalVars[key] = String(parsed[key]);
-        }
-      }
+      Object.assign(additionalVars, extractVariablesFromJson(parsed, inputs));
     } catch {
       // If parsing fails, processedPrompt is plain text - keep it as is
       logger.debug('[PII] Could not parse prompt as JSON for multi-input mode');
@@ -205,12 +205,23 @@ export async function getPiiLeakTestsForCategory(
     return [];
   }
 
-  const prompts = generatedPrompts
-    .split('\n')
-    .filter((line) => line.includes('Prompt:'))
-    .map((line) => line.substring(line.indexOf('Prompt:') + 'Prompt:'.length).trim());
-
   const inputs = config?.inputs as Record<string, string> | undefined;
+  const hasInputs = inputs && Object.keys(inputs).length > 0;
+
+  let prompts: string[];
+  if (hasInputs) {
+    // Multi-input mode: extract from <Prompt> tags (JSON format)
+    prompts = extractAllPromptsFromTags(generatedPrompts);
+    if (prompts.length === 0) {
+      logger.warn('[PII] Multi-input mode: Could not extract prompts from <Prompt> tags');
+    }
+  } else {
+    // Standard mode: look for "Prompt:" prefix lines
+    prompts = generatedPrompts
+      .split('\n')
+      .filter((line) => line.includes('Prompt:'))
+      .map((line) => line.substring(line.indexOf('Prompt:') + 'Prompt:'.length).trim());
+  }
 
   return prompts.map((prompt) => {
     const { processedPrompt, additionalVars } = processPromptForInputs(prompt, inputs);

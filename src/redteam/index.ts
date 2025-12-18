@@ -37,7 +37,7 @@ import { redteamProviderManager } from './providers/shared';
 import { getRemoteHealthUrl, shouldGenerateRemote } from './remoteGeneration';
 import { loadStrategy, Strategies, validateStrategies } from './strategies/index';
 import { pluginMatchesStrategyTargets } from './strategies/util';
-import { extractGoalFromPrompt, getShortPluginId } from './util';
+import { extractGoalFromPrompt, extractVariablesFromJson, getShortPluginId } from './util';
 
 import type { TestCase, TestCaseWithPlugin } from '../types/index';
 import type { RedteamPluginObject, RedteamStrategyObject, SynthesizeOptions } from './types';
@@ -351,11 +351,7 @@ async function applyStrategies(
             try {
               const parsed = JSON.parse(String(t.vars[injectVar]));
               updatedVars = { ...t.vars };
-              for (const key of Object.keys(inputs)) {
-                if (key in parsed) {
-                  updatedVars[key] = String(parsed[key]);
-                }
-              }
+              Object.assign(updatedVars, extractVariablesFromJson(parsed, inputs));
             } catch {
               // If parsing fails, keep original vars
             }

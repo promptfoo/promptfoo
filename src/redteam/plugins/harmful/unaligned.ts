@@ -3,7 +3,7 @@ import logger from '../../../logger';
 import { PromptfooHarmfulCompletionProvider } from '../../../providers/promptfoo';
 import { retryWithDeduplication, sampleArray } from '../../../util/generation';
 import { sleep } from '../../../util/time';
-import { extractPromptFromTags } from '../../util';
+import { extractPromptFromTags, extractVariablesFromJson } from '../../util';
 import { createTestCase } from './common';
 
 import type { PluginActionParams, TestCase } from '../../../types/index';
@@ -31,11 +31,7 @@ function processPromptForInputs(
   if (inputs && Object.keys(inputs).length > 0) {
     try {
       const parsed = JSON.parse(processedPrompt);
-      for (const key of Object.keys(inputs)) {
-        if (key in parsed) {
-          additionalVars[key] = String(parsed[key]);
-        }
-      }
+      Object.assign(additionalVars, extractVariablesFromJson(parsed, inputs));
     } catch {
       // If parsing fails, processedPrompt is plain text - keep it as is
       logger.debug('[Harmful] Could not parse prompt as JSON for multi-input mode');

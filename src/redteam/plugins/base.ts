@@ -7,8 +7,14 @@ import invariant from '../../util/invariant';
 import { extractVariablesFromTemplate, getNunjucksEngine } from '../../util/templates';
 import { sleep } from '../../util/time';
 import { redteamProviderManager } from '../providers/shared';
-import { getShortPluginId, isBasicRefusal, isEmptyResponse, removePrefix,   extractAllPromptsFromTags,
- } from '../util';
+import {
+  extractAllPromptsFromTags,
+  extractVariablesFromJson,
+  getShortPluginId,
+  isBasicRefusal,
+  isEmptyResponse,
+  removePrefix,
+} from '../util';
 
 import type { TraceContextData } from '../../tracing/traceContext';
 import type {
@@ -358,11 +364,7 @@ export abstract class RedteamPluginBase {
       if (hasInputs) {
         try {
           const parsed = JSON.parse(promptObj.__prompt);
-          for (const key of Object.keys(this.config.inputs!)) {
-            if (key in parsed) {
-              vars[key] = String(parsed[key]);
-            }
-          }
+          Object.assign(vars, extractVariablesFromJson(parsed, this.config.inputs!));
         } catch {
           // If parsing fails, just use the raw prompt
         }

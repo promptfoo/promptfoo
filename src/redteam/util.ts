@@ -46,6 +46,29 @@ export function extractAllPromptsFromTags(text: string): string[] {
 }
 
 /**
+ * Extracts variables from a parsed JSON object for multi-input mode.
+ * Properly stringifies objects/arrays instead of returning "[object Object]".
+ *
+ * @param parsed - The parsed JSON object containing input values
+ * @param inputs - The inputs config specifying which keys to extract
+ * @returns An object with the extracted variables as strings
+ */
+export function extractVariablesFromJson(
+  parsed: Record<string, unknown>,
+  inputs: Record<string, string>,
+): Record<string, string> {
+  const extractedVars: Record<string, string> = {};
+  for (const key of Object.keys(inputs)) {
+    if (key in parsed) {
+      const value = parsed[key];
+      extractedVars[key] =
+        typeof value === 'object' && value !== null ? JSON.stringify(value) : String(value);
+    }
+  }
+  return extractedVars;
+}
+
+/**
  * Normalizes different types of apostrophes to a standard single quote
  */
 export function normalizeApostrophes(str: string): string {

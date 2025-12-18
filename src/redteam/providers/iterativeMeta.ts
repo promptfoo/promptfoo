@@ -18,7 +18,7 @@ import {
   type TransformResult,
 } from '../shared/runtimeTransform';
 import { Strategies } from '../strategies';
-import { extractPromptFromTags } from '../util';
+import { extractPromptFromTags, extractVariablesFromJson } from '../util';
 import {
   createIterationContext,
   externalizeResponseForRedteamHistory,
@@ -308,11 +308,7 @@ export async function runMetaAgentRedteam({
     if (inputs && Object.keys(inputs).length > 0) {
       try {
         const parsed = JSON.parse(finalAttackPrompt);
-        for (const key of Object.keys(inputs)) {
-          if (key in parsed) {
-            updatedVars[key] = String(parsed[key]);
-          }
-        }
+        Object.assign(updatedVars, extractVariablesFromJson(parsed, inputs));
       } catch {
         // If parsing fails, attackPrompt is plain text - keep original vars
       }

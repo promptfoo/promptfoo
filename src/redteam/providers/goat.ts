@@ -23,7 +23,7 @@ import {
   type TransformResult,
 } from '../shared/runtimeTransform';
 import { Strategies } from '../strategies';
-import { extractPromptFromTags, getSessionId } from '../util';
+import { extractPromptFromTags, extractVariablesFromJson, getSessionId } from '../util';
 import { getGoalRubric } from './prompts';
 import { getLastMessageContent, tryUnblocking } from './shared';
 import { formatTraceForMetadata, formatTraceSummary } from './traceFormatting';
@@ -374,11 +374,7 @@ export default class GoatProvider implements ApiProvider {
         if (this.config.inputs && Object.keys(this.config.inputs).length > 0) {
           try {
             const parsed = JSON.parse(processedMessage);
-            for (const key of Object.keys(this.config.inputs)) {
-              if (key in parsed) {
-                targetVars[key] = String(parsed[key]);
-              }
-            }
+            Object.assign(targetVars, extractVariablesFromJson(parsed, this.config.inputs));
           } catch {
             // If parsing fails, processedMessage is plain text - keep original vars
           }
