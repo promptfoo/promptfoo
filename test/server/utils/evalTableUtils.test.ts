@@ -97,6 +97,9 @@ describe('evalTableUtils', () => {
         expect(lines[0]).toContain('var2');
         expect(lines[0]).toContain('[openai:gpt-4] Prompt 1');
         expect(lines[0]).toContain('[anthropic:claude] Prompt 2');
+        expect(lines[0]).toContain('Status');
+        expect(lines[0]).toContain('Score');
+        expect(lines[0]).toContain('Named Scores');
         expect(lines[0]).toContain('Grader Reason');
         expect(lines[0]).toContain('Comment');
       });
@@ -127,14 +130,20 @@ describe('evalTableUtils', () => {
         expect(lines[0].startsWith('var1')).toBe(true);
       });
 
-      it('should format output with pass/fail/error prefixes', () => {
+      it('should format output with separate status column', () => {
         const csv = evalTableToCsv(mockTable);
         const lines = csv.split('\n');
 
-        expect(lines[1]).toContain('[PASS] Success output');
-        expect(lines[1]).toContain('[FAIL] Failed output');
-        expect(lines[2]).toContain('[ERROR] Error output');
-        expect(lines[2]).toContain('[PASS] Another success');
+        // Output text should be clean (no prefix)
+        expect(lines[1]).toContain('Success output');
+        expect(lines[1]).toContain('Failed output');
+        expect(lines[2]).toContain('Error output');
+        expect(lines[2]).toContain('Another success');
+
+        // Status should be in separate columns
+        expect(lines[1]).toContain('PASS');
+        expect(lines[1]).toContain('FAIL');
+        expect(lines[2]).toContain('ERROR');
       });
 
       it('should include grader reason and comments', () => {
@@ -145,6 +154,66 @@ describe('evalTableUtils', () => {
         expect(lines[1]).toContain('Well formatted');
         expect(lines[1]).toContain('Missing required field');
         expect(lines[1]).toContain('Needs improvement');
+      });
+
+      it('should include named scores as JSON', () => {
+        const tableWithNamedScores = {
+          ...mockTable,
+          body: [
+            {
+              ...mockTable.body[0],
+              outputs: [
+                {
+                  pass: true,
+                  text: 'Output with named scores',
+                  score: 0.85,
+                  namedScores: {
+                    clarity: 0.9,
+                    accuracy: 0.8,
+                    relevance: 0.85,
+                  },
+                } as unknown as EvaluateTableOutput,
+              ],
+            },
+          ],
+        };
+
+        const csv = evalTableToCsv(tableWithNamedScores);
+        const lines = csv.split('\n');
+
+        // Named scores should be JSON formatted
+        expect(lines[1]).toContain('clarity');
+        expect(lines[1]).toContain('accuracy');
+        expect(lines[1]).toContain('relevance');
+        expect(lines[1]).toContain('0.9');
+        expect(lines[1]).toContain('0.8');
+        expect(lines[1]).toContain('0.85');
+      });
+
+      it('should handle empty named scores', () => {
+        const tableWithEmptyNamedScores = {
+          ...mockTable,
+          body: [
+            {
+              ...mockTable.body[0],
+              outputs: [
+                {
+                  pass: true,
+                  text: 'Output without named scores',
+                  score: 1.0,
+                  namedScores: {},
+                } as unknown as EvaluateTableOutput,
+              ],
+            },
+          ],
+        };
+
+        const csv = evalTableToCsv(tableWithEmptyNamedScores);
+        const lines = csv.split('\n');
+
+        // Empty named scores should result in empty string, not '{}'
+        expect(lines[1]).toContain('Output without named scores');
+        expect(lines[1]).not.toContain('{}');
       });
 
       it('should handle null and undefined outputs', () => {
@@ -165,9 +234,10 @@ describe('evalTableUtils', () => {
         const csv = evalTableToCsv(tableWithNullOutputs);
         const lines = csv.split('\n');
 
-        // Should have empty values for null/undefined outputs
-        expect(lines[1]).toContain(',,'); // Empty values for null output
-        expect(lines[1]).toContain('[PASS] Valid output');
+        // Should have empty values for null/undefined outputs (6 empty columns per null output)
+        expect(lines[1]).toContain(',,,,,,'); // Empty values for null output
+        expect(lines[1]).toContain('Valid output');
+        expect(lines[1]).toContain('PASS');
       });
 
       it('should handle outputs without gradingResult', () => {
@@ -189,8 +259,11 @@ describe('evalTableUtils', () => {
         const csv = evalTableToCsv(tableWithoutGrading);
         const lines = csv.split('\n');
 
-        // Should have empty values for grader columns
-        expect(lines[1]).toContain('[PASS] Output without grading,,');
+        // Should have output, status, score (empty), and empty grader columns
+        expect(lines[1]).toContain('Output without grading');
+        expect(lines[1]).toContain('PASS');
+        // Empty score and grader columns at the end
+        expect(lines[1]).toMatch(/PASS,.*,,$/);
       });
     });
 

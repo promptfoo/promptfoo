@@ -2,7 +2,6 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
-import { stringify } from 'csv-stringify/sync';
 import dedent from 'dedent';
 import dotenv from 'dotenv';
 import deepEqual from 'fast-deep-equal';
@@ -27,8 +26,6 @@ import {
   type TestCase,
 } from '../types/index';
 import invariant from '../util/invariant';
-import { getHeaderForTable } from './exportToFile/getHeaderForTable';
-import { convertTestResultsToTableRow } from './exportToFile/index';
 import { runPython } from '../python/pythonUtils';
 import { maybeLoadFromExternalFile } from './file';
 import { isJavascriptFile } from './fileExtensions';
@@ -36,9 +33,9 @@ import { parseFileUrl } from './functions/loadFunction';
 import cliState from '../cliState';
 import { safeResolve } from './pathUtils';
 import { getNunjucksEngine } from './templates';
+import { generateEvalCsv } from '../server/utils/evalTableUtils';
 
 import type Eval from '../models/eval';
-import type EvalResult from '../models/evalResult';
 import type { Vars } from '../types/index';
 
 const outputToSimpleString = (output: EvaluateTableOutput) => {
@@ -172,32 +169,9 @@ export async function writeOutput(
   const metadata = createOutputMetadata(evalRecord);
 
   if (outputExtension === 'csv') {
-    // Write headers first
-    const headers = getHeaderForTable(evalRecord);
-
-    const headerCsv = stringify([
-      [...headers.vars, ...headers.prompts.map((prompt) => `[${prompt.provider}] ${prompt.label}`)],
-    ]);
-    fs.writeFileSync(outputPath, headerCsv);
-
-    // Write body rows in batches
-    for await (const batchResults of evalRecord.fetchResultsBatched()) {
-      // we need split the batch into rows by testIdx
-      const tableRows: Record<number, EvalResult[]> = {};
-      for (const result of batchResults) {
-        if (!(result.testIdx in tableRows)) {
-          tableRows[result.testIdx] = [];
-        }
-        tableRows[result.testIdx].push(result);
-      }
-      const batchCsv = stringify(
-        Object.values(tableRows).map((results) => {
-          const row = convertTestResultsToTableRow(results, headers.vars);
-          return [...row.vars, ...row.outputs.map(outputToSimpleString)];
-        }),
-      );
-      fs.appendFileSync(outputPath, batchCsv);
-    }
+    // Use shared generateEvalCsv - single source of truth for CSV generation
+    const csvData = await generateEvalCsv(evalRecord);
+    fs.writeFileSync(outputPath, csvData);
   } else if (outputExtension === 'json') {
     await writeJsonOutputSafely(outputPath, evalRecord, shareableUrl);
   } else if (outputExtension === 'yaml' || outputExtension === 'yml' || outputExtension === 'txt') {
