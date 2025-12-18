@@ -59,7 +59,6 @@ import {
   createEmptyTokenUsage,
 } from './util/tokenUsageUtils';
 import { type TransformContext, TransformInputType, transform } from './util/transform';
-import type winston from 'winston';
 
 import type Eval from './models/eval';
 import type {
@@ -145,6 +144,7 @@ export async function runEval({
   registers,
   isRedteam,
   abortSignal,
+  iterationCallback,
 }: RunEvalOptions): Promise<EvaluateResult[]> {
   // Use the original prompt to set the label, not renderedPrompt
   const promptLabel = prompt.label;
@@ -234,6 +234,9 @@ export async function runEval({
         logger: testLogger,
         getCache,
         repeatIndex,
+
+        // Callback for multi-turn strategy iteration progress
+        iterationCallback,
       };
 
       if (repeatIndex > 0) {
@@ -1047,157 +1050,176 @@ class Evaluator {
       });
       evalStep.test = beforeEachOut.test;
 
+      // Notify reporters that a test is starting
+      if (!isWebUI && this.reporterManager.count > 0) {
+        await this.reporterManager.onTestStart(evalStep, index);
+
+        // Add iteration callback for multi-turn strategies to report progress
+        evalStep.iterationCallback = (
+          currentIteration: number,
+          totalIterations: number,
+          description?: string,
+        ) => {
+          this.reporterManager.onIterationProgress({
+            testIndex: index,
+            currentIteration,
+            totalIterations,
+            description,
+          });
+        };
+      }
+
       const rows = await runEval(evalStep);
 
       // Logs are now attached directly in runEval via test-scoped child logger
       for (const row of rows) {
         for (const varName of Object.keys(row.vars)) {
-            vars.add(varName);
-          }
-          // Print token usage for model-graded assertions and add to stats
-          if (row.gradingResult?.tokensUsed && row.testCase?.assert) {
-            for (const assertion of row.testCase.assert) {
-              if (MODEL_GRADED_ASSERTION_TYPES.has(assertion.type as AssertionType)) {
-                const tokensUsed = row.gradingResult.tokensUsed;
+          vars.add(varName);
+        }
+        // Print token usage for model-graded assertions and add to stats
+        if (row.gradingResult?.tokensUsed && row.testCase?.assert) {
+          for (const assertion of row.testCase.assert) {
+            if (MODEL_GRADED_ASSERTION_TYPES.has(assertion.type as AssertionType)) {
+              const tokensUsed = row.gradingResult.tokensUsed;
 
-                if (!this.stats.tokenUsage.assertions) {
-                  this.stats.tokenUsage.assertions = createEmptyAssertions();
-                }
-
-                // Accumulate assertion tokens using the specialized assertion function
-                accumulateAssertionTokenUsage(this.stats.tokenUsage.assertions, tokensUsed);
-
-                break;
+              if (!this.stats.tokenUsage.assertions) {
+                this.stats.tokenUsage.assertions = createEmptyAssertions();
               }
+
+              // Accumulate assertion tokens using the specialized assertion function
+              accumulateAssertionTokenUsage(this.stats.tokenUsage.assertions, tokensUsed);
+
+              break;
             }
-          }
-
-          // capture metrics
-          if (row.success) {
-            this.stats.successes++;
-          } else if (row.failureReason === ResultFailureReason.ERROR) {
-            this.stats.errors++;
-          } else {
-            this.stats.failures++;
-          }
-
-          if (row.tokenUsage) {
-            accumulateResponseTokenUsage(this.stats.tokenUsage, { tokenUsage: row.tokenUsage });
-          }
-
-          if (evalStep.test.assert?.some((a) => a.type === 'select-best')) {
-            rowsWithSelectBestAssertion.add(row.testIdx);
-          }
-          if (evalStep.test.assert?.some((a) => a.type === 'max-score')) {
-            rowsWithMaxScoreAssertion.add(row.testIdx);
-          }
-          for (const assert of evalStep.test.assert || []) {
-            if (assert.type) {
-              assertionTypes.add(assert.type);
-            }
-          }
-
-          numComplete++;
-
-          try {
-            await this.evalRecord.addResult(row);
-          } catch (error) {
-            const resultSummary = summarizeEvaluateResultForLogging(row);
-            logger.error(`Error saving result: ${error} ${safeJsonStringify(resultSummary)}`);
-          }
-
-          for (const writer of this.fileWriters) {
-            await writer.write(row);
-          }
-
-          if (row.metadata?.simbaSessionId) {
-            this.evalRecord.config.metadata ??= {};
-            this.evalRecord.config.metadata.simbaSessionId = row.metadata.simbaSessionId;
-          }
-
-          const { promptIdx } = row;
-          const metrics = prompts[promptIdx].metrics;
-          invariant(metrics, 'Expected prompt.metrics to be set');
-          metrics.score += row.score;
-          for (const [key, value] of Object.entries(row.namedScores)) {
-            // Update named score value
-            metrics.namedScores[key] = (metrics.namedScores[key] || 0) + value;
-
-            // Count assertions contributing to this named score
-            let contributingAssertions = 0;
-            row.gradingResult?.componentResults?.forEach((result) => {
-              if (result.assertion?.metric === key) {
-                contributingAssertions++;
-              }
-            });
-
-            metrics.namedScoresCount[key] =
-              (metrics.namedScoresCount[key] || 0) + (contributingAssertions || 1);
-          }
-
-          if (testSuite.derivedMetrics) {
-            const math = await import('mathjs');
-            for (const metric of testSuite.derivedMetrics) {
-              if (metrics.namedScores[metric.name] === undefined) {
-                metrics.namedScores[metric.name] = 0;
-              }
-              try {
-                if (typeof metric.value === 'function') {
-                  metrics.namedScores[metric.name] = metric.value(metrics.namedScores, evalStep);
-                } else {
-                  const evaluatedValue = math.evaluate(metric.value, metrics.namedScores);
-                  metrics.namedScores[metric.name] = evaluatedValue;
-                }
-              } catch (error) {
-                logger.debug(
-                  `Could not evaluate derived metric '${metric.name}': ${(error as Error).message}`,
-                );
-              }
-            }
-          }
-          metrics.testPassCount += row.success ? 1 : 0;
-          if (!row.success) {
-            if (row.failureReason === ResultFailureReason.ERROR) {
-              metrics.testErrorCount += 1;
-            } else {
-              metrics.testFailCount += 1;
-            }
-          }
-          metrics.assertPassCount +=
-            row.gradingResult?.componentResults?.filter((r) => r.pass).length || 0;
-          metrics.assertFailCount +=
-            row.gradingResult?.componentResults?.filter((r) => !r.pass).length || 0;
-          metrics.totalLatencyMs += row.latencyMs || 0;
-          accumulateResponseTokenUsage(metrics.tokenUsage, row.response);
-
-          // Add assertion token usage to the metrics
-          if (row.gradingResult?.tokensUsed) {
-            updateAssertionMetrics(metrics, row.gradingResult.tokensUsed);
-          }
-
-          metrics.cost += row.cost || 0;
-
-          await runExtensionHook(testSuite.extensions, 'afterEach', {
-            test: evalStep.test,
-            result: row,
-          });
-
-          // Call reporter onTestResult (if reporters are configured and not WebUI)
-          if (!isWebUI && this.reporterManager.count > 0) {
-            await this.reporterManager.onTestResult({
-              result: row,
-              evalStep,
-              metrics,
-              completed: numComplete,
-              total: runEvalOptions.length,
-              index: typeof index === 'number' ? index : 0,
-            });
-          }
-
-          if (options.progressCallback) {
-            options.progressCallback(numComplete, runEvalOptions.length, index, evalStep, metrics);
           }
         }
+
+        // capture metrics
+        if (row.success) {
+          this.stats.successes++;
+        } else if (row.failureReason === ResultFailureReason.ERROR) {
+          this.stats.errors++;
+        } else {
+          this.stats.failures++;
+        }
+
+        if (row.tokenUsage) {
+          accumulateResponseTokenUsage(this.stats.tokenUsage, { tokenUsage: row.tokenUsage });
+        }
+
+        if (evalStep.test.assert?.some((a) => a.type === 'select-best')) {
+          rowsWithSelectBestAssertion.add(row.testIdx);
+        }
+        if (evalStep.test.assert?.some((a) => a.type === 'max-score')) {
+          rowsWithMaxScoreAssertion.add(row.testIdx);
+        }
+        for (const assert of evalStep.test.assert || []) {
+          if (assert.type) {
+            assertionTypes.add(assert.type);
+          }
+        }
+
+        numComplete++;
+
+        try {
+          await this.evalRecord.addResult(row);
+        } catch (error) {
+          const resultSummary = summarizeEvaluateResultForLogging(row);
+          logger.error(`Error saving result: ${error} ${safeJsonStringify(resultSummary)}`);
+        }
+
+        for (const writer of this.fileWriters) {
+          await writer.write(row);
+        }
+
+        if (row.metadata?.simbaSessionId) {
+          this.evalRecord.config.metadata ??= {};
+          this.evalRecord.config.metadata.simbaSessionId = row.metadata.simbaSessionId;
+        }
+
+        const { promptIdx } = row;
+        const metrics = prompts[promptIdx].metrics;
+        invariant(metrics, 'Expected prompt.metrics to be set');
+        metrics.score += row.score;
+        for (const [key, value] of Object.entries(row.namedScores)) {
+          // Update named score value
+          metrics.namedScores[key] = (metrics.namedScores[key] || 0) + value;
+
+          // Count assertions contributing to this named score
+          let contributingAssertions = 0;
+          row.gradingResult?.componentResults?.forEach((result) => {
+            if (result.assertion?.metric === key) {
+              contributingAssertions++;
+            }
+          });
+
+          metrics.namedScoresCount[key] =
+            (metrics.namedScoresCount[key] || 0) + (contributingAssertions || 1);
+        }
+
+        if (testSuite.derivedMetrics) {
+          const math = await import('mathjs');
+          for (const metric of testSuite.derivedMetrics) {
+            if (metrics.namedScores[metric.name] === undefined) {
+              metrics.namedScores[metric.name] = 0;
+            }
+            try {
+              if (typeof metric.value === 'function') {
+                metrics.namedScores[metric.name] = metric.value(metrics.namedScores, evalStep);
+              } else {
+                const evaluatedValue = math.evaluate(metric.value, metrics.namedScores);
+                metrics.namedScores[metric.name] = evaluatedValue;
+              }
+            } catch (error) {
+              logger.debug(
+                `Could not evaluate derived metric '${metric.name}': ${(error as Error).message}`,
+              );
+            }
+          }
+        }
+        metrics.testPassCount += row.success ? 1 : 0;
+        if (!row.success) {
+          if (row.failureReason === ResultFailureReason.ERROR) {
+            metrics.testErrorCount += 1;
+          } else {
+            metrics.testFailCount += 1;
+          }
+        }
+        metrics.assertPassCount +=
+          row.gradingResult?.componentResults?.filter((r) => r.pass).length || 0;
+        metrics.assertFailCount +=
+          row.gradingResult?.componentResults?.filter((r) => !r.pass).length || 0;
+        metrics.totalLatencyMs += row.latencyMs || 0;
+        accumulateResponseTokenUsage(metrics.tokenUsage, row.response);
+
+        // Add assertion token usage to the metrics
+        if (row.gradingResult?.tokensUsed) {
+          updateAssertionMetrics(metrics, row.gradingResult.tokensUsed);
+        }
+
+        metrics.cost += row.cost || 0;
+
+        await runExtensionHook(testSuite.extensions, 'afterEach', {
+          test: evalStep.test,
+          result: row,
+        });
+
+        // Call reporter onTestResult (if reporters are configured and not WebUI)
+        if (!isWebUI && this.reporterManager.count > 0) {
+          await this.reporterManager.onTestResult({
+            result: row,
+            evalStep,
+            metrics,
+            completed: numComplete,
+            total: runEvalOptions.length,
+            index: typeof index === 'number' ? index : 0,
+          });
+        }
+
+        if (options.progressCallback) {
+          options.progressCallback(numComplete, runEvalOptions.length, index, evalStep, metrics);
+        }
+      }
     };
 
     // Add a wrapper function that implements timeout

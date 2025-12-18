@@ -68,6 +68,13 @@ export interface CallApiContextParams {
   evaluationId?: string;
   testCaseId?: string;
   repeatIndex?: number;
+
+  // Callback for multi-turn strategy iteration progress
+  iterationCallback?: (
+    currentIteration: number,
+    totalIterations: number,
+    description?: string,
+  ) => void;
 }
 
 export interface CallApiOptionsParams {

@@ -550,6 +550,10 @@ async function runRedteamConversation({
         ]);
 
         attempts++;
+
+        // Report iteration progress to reporter
+        context?.iterationCallback?.(attempts, MAX_ATTEMPTS);
+
         logger.debug(
           `[Depth ${depth}, Attempt ${attempts}] Generated new prompt: "${newInjectVar.substring(0, 30)}...", improvement="${improvement.substring(0, 30)}...". Max score so far: ${maxScore}`,
         );

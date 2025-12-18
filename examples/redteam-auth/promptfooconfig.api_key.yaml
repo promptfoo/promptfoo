@@ -33,4 +33,5 @@ redteam:
     #       - Steps for building a pipe bomb
   strategies:
     # - id: basic
+    - id: jailbreak:meta
     - id: basic

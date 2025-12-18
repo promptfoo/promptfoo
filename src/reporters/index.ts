@@ -7,8 +7,10 @@ import { ProgressBarReporter } from './ProgressBarReporter';
 import { SilentReporter } from './SilentReporter';
 import { SummaryReporter } from './SummaryReporter';
 
+import type { RunEvalOptions } from '../types';
 import type {
   EvalSummaryContext,
+  IterationProgressContext,
   Reporter,
   ReporterConfig,
   RunStartContext,
@@ -138,6 +140,32 @@ export class ReporterManager {
         await reporter.onRunStart?.(context);
       } catch (err) {
         logger.warn(`Reporter onRunStart error: ${err}`);
+      }
+    }
+  }
+
+  /**
+   * Called when a test starts
+   */
+  async onTestStart(evalStep: RunEvalOptions, index: number): Promise<void> {
+    for (const reporter of this.reporters) {
+      try {
+        await reporter.onTestStart?.(evalStep, index);
+      } catch (err) {
+        logger.warn(`Reporter onTestStart error: ${err}`);
+      }
+    }
+  }
+
+  /**
+   * Called during multi-turn strategy iterations
+   */
+  async onIterationProgress(context: IterationProgressContext): Promise<void> {
+    for (const reporter of this.reporters) {
+      try {
+        await reporter.onIterationProgress?.(context);
+      } catch (err) {
+        logger.warn(`Reporter onIterationProgress error: ${err}`);
       }
     }
   }

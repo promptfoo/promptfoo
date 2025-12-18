@@ -282,9 +282,7 @@ export class WebSocketProvider implements ApiProvider {
               reject(new Error(`Failed to process response: ${(err as Error).message}`));
             }
           } catch (err) {
-            log.debug(
-              `[WebSocket Provider]: Error processing response: ${(err as Error).message}`,
-            );
+            log.debug(`[WebSocket Provider]: Error processing response: ${(err as Error).message}`);
             ws.close();
             reject(new Error(`Failed to process response: ${(err as Error).message}`));
           }

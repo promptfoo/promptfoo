@@ -418,8 +418,9 @@ export interface ChildLogger {
 const MAX_CHILD_LOG_ENTRIES = 50;
 
 /**
- * Creates a child logger method that captures logs to a buffer
- * and also logs normally to Winston (file transports, console).
+ * Creates a child logger method that captures logs to a buffer and writes
+ * to file transports, but skips console output. Console output will be
+ * displayed by the reporter when the test completes.
  */
 function createChildLogMethod(
   level: keyof typeof LOG_LEVELS,
@@ -440,20 +441,36 @@ function createChildLogMethod(
       logBuffer.push({ level, message: fullMessage, timestamp: Date.now() });
     }
 
-    // Also log normally to file transports and console
+    // Log to file transports only (skip console to avoid duplicate output)
+    // The reporter will display captured logs when the test completes
     const location = level === 'debug' || isDebugEnabled() ? getCallerLocation() : '';
     if (level === 'debug') {
       initializeSourceMapSupport();
     }
 
-    if (!context) {
-      winstonLogger[level]({ message, location });
-      return;
-    }
+    const fullMessage = context
+      ? `${message}\n${safeJsonStringify(sanitizeContext(context), true)}`
+      : message;
 
-    const sanitized = sanitizeContext(context);
-    const contextStr = safeJsonStringify(sanitized, true);
-    winstonLogger[level]({ message: `${message}\n${contextStr}`, location });
+    // Write directly to file transports, skipping console
+    // We need to format the message ourselves since we're bypassing Winston's pipeline
+    const timestamp = new Date().toISOString();
+    const locationStr = location ? ` ${location}` : '';
+    const formattedMessage = `${timestamp} [${level.toUpperCase()}]${locationStr}: ${fullMessage}`;
+
+    for (const transport of winstonLogger.transports) {
+      if (!(transport instanceof winston.transports.Console)) {
+        const info = {
+          level,
+          message: fullMessage,
+          location,
+          [Symbol.for('level')]: level,
+          // Pre-formatted message for the transport to write directly
+          [Symbol.for('message')]: formattedMessage,
+        };
+        transport.log?.(info, () => {});
+      }
+    }
   };
 }
 

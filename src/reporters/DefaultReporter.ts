@@ -3,7 +3,24 @@ import { isCI } from '../envars';
 import { ResultFailureReason } from '../types/index';
 import { OutputController } from './OutputController';
 
-import type { EvalSummaryContext, Reporter, RunStartContext, TestResultContext } from './types';
+import type { RunEvalOptions } from '../types';
+import type {
+  EvalSummaryContext,
+  IterationProgressContext,
+  Reporter,
+  RunStartContext,
+  TestResultContext,
+} from './types';
+
+/**
+ * Info about a test currently in progress
+ */
+interface InProgressTest {
+  index: number;
+  description: string;
+  provider: string;
+  startTime: number;
+}
 
 /**
  * Options for the DefaultReporter
@@ -40,6 +57,16 @@ export class DefaultReporter implements Reporter {
   private errorCount = 0;
   private totalTests = 0;
 
+  // Iteration progress tracking (for multi-turn strategies)
+  // Map of testIndex -> iteration state, to handle concurrent tests
+  private iterationProgress: Map<number, { current: number; total: number }> = new Map();
+
+  // Track tests currently in progress with their details
+  private testsInProgress: Map<number, InProgressTest> = new Map();
+
+  // Track how many lines the status block takes (for clearing)
+  private statusLineCount = 0;
+
   constructor(options: DefaultReporterOptions = {}) {
     const isTTY = Boolean(process.stdout.isTTY) && !isCI();
 
@@ -58,8 +85,19 @@ export class DefaultReporter implements Reporter {
     this.failCount = 0;
     this.errorCount = 0;
     this.totalTests = context.totalTests;
+    this.testsInProgress.clear();
+    this.iterationProgress.clear();
 
-    // Start output capture if enabled
+    // Print initial header BEFORE starting output capture
+    const testType = this.isRedteam ? 'red team ' : '';
+    process.stdout.write(chalk.dim(`\nRunning ${context.totalTests} ${testType}tests...\n\n`));
+
+    // Print initial status line (will be cleared/replaced as tests complete)
+    if (this.options.showStatus) {
+      this.reprintStatusDirect();
+    }
+
+    // Start output capture AFTER printing header
     if (this.options.captureOutput) {
       this.outputController.startCapture();
       // Suppress auto-flush - we'll display buffered output with each test result
@@ -69,14 +107,57 @@ export class DefaultReporter implements Reporter {
         () => this.reprintStatus(),
       );
     }
+  }
 
-    // Print initial header
-    const testType = this.isRedteam ? 'red team ' : '';
-    process.stdout.write(chalk.dim(`\nRunning ${context.totalTests} ${testType}tests...\n\n`));
+  onTestStart(evalStep: RunEvalOptions, index: number): void {
+    // Extract test info for status display
+    const test = evalStep.test;
+    const provider = evalStep.provider;
 
-    // Print initial status line (will be cleared/replaced as tests complete)
+    let description: string;
+    if (this.isRedteam) {
+      const pluginId = test.metadata?.pluginId as string | undefined;
+      const strategyId = test.metadata?.strategyId as string | undefined;
+      const pluginName = pluginId ? this.getDisplayName(pluginId) : undefined;
+      const strategyName = strategyId ? this.getDisplayName(strategyId) : undefined;
+
+      if (pluginName && strategyName) {
+        description = `${pluginName} (${strategyName})`;
+      } else if (pluginName) {
+        description = pluginName;
+      } else if (strategyName) {
+        description = strategyName;
+      } else {
+        description = test.description || `Test ${index + 1}`;
+      }
+    } else {
+      description = test.description || this.formatVars(test.vars) || `Test ${index + 1}`;
+    }
+
+    this.testsInProgress.set(index, {
+      index,
+      description,
+      provider: provider.label || provider.id(),
+      startTime: Date.now(),
+    });
+
     if (this.options.showStatus) {
-      process.stdout.write(chalk.dim(`Running test 1 of ${this.totalTests}...\n`));
+      this.clearStatus();
+      this.reprintStatus();
+    }
+  }
+
+  onIterationProgress(context: IterationProgressContext): void {
+    // Update iteration tracking for this specific test
+    this.iterationProgress.set(context.testIndex, {
+      current: context.currentIteration,
+      total: context.totalIterations,
+    });
+
+    // Update the status line to show iteration progress
+    if (this.options.showStatus) {
+      this.clearStatus();
+      this.reprintStatus();
     }
   }
 
@@ -85,6 +166,10 @@ export class DefaultReporter implements Reporter {
 
     // Clear progress bar line before printing test result
     this.clearStatus();
+
+    // Remove tracking for this completed test
+    this.iterationProgress.delete(context.index);
+    this.testsInProgress.delete(context.index);
 
     // Update stats
     const isError = result.failureReason === ResultFailureReason.ERROR;
@@ -110,14 +195,14 @@ export class DefaultReporter implements Reporter {
         result.testCase?.metadata?.strategyId ||
         result.metadata?.strategyId) as string | undefined;
       const pluginName = pluginId ? this.getDisplayName(pluginId) : undefined;
-      const strategyName = strategyId ? this.getDisplayName(strategyId) : 'Baseline';
+      const strategyName = strategyId ? this.getDisplayName(strategyId) : undefined;
 
       if (pluginName && strategyName) {
-        description = `${pluginName} (${strategyName})`;
+        description = `Plugin: ${pluginName} (Strategy: ${strategyName})`;
       } else if (pluginName) {
-        description = pluginName;
+        description = `Plugin: ${pluginName}`;
       } else if (strategyName) {
-        description = strategyName;
+        description = `Strategy: ${strategyName}`;
       } else {
         description = result.testCase.description || `Test ${context.index + 1}`;
       }
@@ -215,24 +300,83 @@ export class DefaultReporter implements Reporter {
   }
 
   /**
-   * Clear the status line
+   * Clear all status lines
    */
   private clearStatus(): void {
-    if (this.options.showStatus) {
-      // Move cursor up one line, go to beginning, and clear the line
-      this.outputController.writeToStdout('\x1b[1A\r\x1b[K');
+    if (this.options.showStatus && this.statusLineCount > 0) {
+      // Clear each line we've written: move up, go to beginning, clear line
+      for (let i = 0; i < this.statusLineCount; i++) {
+        this.outputController.writeToStdout('\x1b[1A\r\x1b[K');
+      }
+      this.statusLineCount = 0;
     }
   }
 
   /**
-   * Print the current status line
+   * Build the multi-line status block
+   * Returns an array of lines to print
+   */
+  private buildStatusLines(): string[] {
+    const lines: string[] = [];
+    const completed = this.passCount + this.failCount + this.errorCount;
+    const inProgress = this.testsInProgress.size;
+
+    // Header line: "Completed: X/Y. In Progress: Z"
+    let header = chalk.blue(
+      `Completed: ${completed}/${this.totalTests}. In Progress: ${inProgress}`,
+    );
+
+    // Add iteration summary if any tests have iterations
+    if (this.iterationProgress.size > 0) {
+      header += chalk.dim(' (multi-turn)');
+    }
+
+    lines.push(header);
+
+    // Show details for each in-progress test (limit to 10 to avoid overwhelming output)
+    const tests = Array.from(this.testsInProgress.values()).slice(0, 10);
+    for (const test of tests) {
+      const elapsed = Math.round((Date.now() - test.startTime) / 1000);
+      const iteration = this.iterationProgress.get(test.index);
+
+      let testLine = chalk.dim('  → ') + chalk.cyan(test.description);
+      testLine += chalk.dim(` [${test.provider}]`);
+
+      if (iteration) {
+        testLine += chalk.yellow(` iter ${iteration.current}/${iteration.total}`);
+      }
+
+      testLine += chalk.dim(` ${elapsed}s`);
+
+      lines.push(testLine);
+    }
+
+    // Show "+N more" if there are more tests than we're showing
+    if (this.testsInProgress.size > 10) {
+      lines.push(chalk.dim(`  ... +${this.testsInProgress.size - 10} more`));
+    }
+
+    return lines;
+  }
+
+  /**
+   * Print the current status block (through output controller)
    */
   private reprintStatus(): void {
     if (this.options.showStatus) {
-      const completed = this.passCount + this.failCount + this.errorCount;
-      const status = chalk.dim(`Running test ${completed + 1} of ${this.totalTests}...`);
-      this.outputController.writeToStdout(`${status}\n`);
+      const lines = this.buildStatusLines();
+      this.statusLineCount = lines.length;
+      this.outputController.writeToStdout(lines.join('\n') + '\n');
     }
+  }
+
+  /**
+   * Print the current status block directly to stdout (before output capture starts)
+   */
+  private reprintStatusDirect(): void {
+    const lines = this.buildStatusLines();
+    this.statusLineCount = lines.length;
+    process.stdout.write(lines.join('\n') + '\n');
   }
 
   /**

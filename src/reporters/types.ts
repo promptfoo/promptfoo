@@ -31,6 +31,20 @@ export interface RunStartContext {
 }
 
 /**
+ * Context provided during iteration progress updates (for multi-turn strategies)
+ */
+export interface IterationProgressContext {
+  /** Zero-based index of the test */
+  testIndex: number;
+  /** Current iteration (1-based) */
+  currentIteration: number;
+  /** Total iterations planned */
+  totalIterations: number;
+  /** Optional description of what's happening */
+  description?: string;
+}
+
+/**
  * Summary context provided at end of evaluation
  */
 export interface EvalSummaryContext {
@@ -61,6 +75,9 @@ export interface Reporter {
 
   /** Called when a test starts (before provider call) */
   onTestStart?(evalStep: RunEvalOptions, index: number): void | Promise<void>;
+
+  /** Called during multi-turn strategy iterations (e.g., iterative jailbreak) */
+  onIterationProgress?(context: IterationProgressContext): void | Promise<void>;
 
   /** Called when a test completes */
   onTestResult?(context: TestResultContext): void | Promise<void>;

@@ -165,6 +165,16 @@ export interface RunEvalOptions {
    * This is passed to the provider's callApi function
    */
   abortSignal?: AbortSignal;
+
+  /**
+   * Callback for multi-turn strategy iteration progress updates
+   * Called by iterative strategies to report current iteration status
+   */
+  iterationCallback?: (
+    currentIteration: number,
+    totalIterations: number,
+    description?: string,
+  ) => void;
 }
 
 const EvaluateOptionsSchema = z.object({

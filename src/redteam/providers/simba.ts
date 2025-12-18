@@ -455,6 +455,9 @@ export default class SimbaProvider implements ApiProvider {
       while (true) {
         iteration++;
 
+        // Report iteration progress to reporter
+        context?.iterationCallback?.(iteration, maxIterations);
+
         if (iteration > maxIterations) {
           logger.warn(
             `${LOGGER_PREFIX} Reached maximum iterations, this is likely a bug in the provider. Stopping session`,
