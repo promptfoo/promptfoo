@@ -29,11 +29,9 @@ vi.mock('../../src/globalConfig/cloud', async (importOriginal) => {
     },
   };
 });
-vi.mock('uuid', async (importOriginal) => {
-  return {
-    ...(await importOriginal()),
-    v4: vi.fn(() => 'test-uuid-1234'),
-  };
+vi.stubGlobal('crypto', {
+  ...crypto,
+  randomUUID: vi.fn(() => 'test-uuid-1234'),
 });
 
 describe('Provider Test Functions', () => {
