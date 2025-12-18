@@ -56,32 +56,50 @@ export async function storeBlob(
 
   // Track asset and reference in DB for dedup/auth/cascade
   const db = getDb();
-  db.transaction(() => {
-    db.insert(blobAssetsTable)
-      .values({
-        hash: result.ref.hash,
-        sizeBytes: result.ref.sizeBytes,
-        mimeType: result.ref.mimeType,
-        provider: result.ref.provider,
-      })
-      .onConflictDoNothing()
-      .run();
-
-    if (refContext?.evalId) {
-      db.insert(blobReferencesTable)
+  try {
+    db.transaction(() => {
+      const assetInsert = db
+        .insert(blobAssetsTable)
         .values({
-          id: randomUUID(),
-          blobHash: result.ref.hash,
-          evalId: refContext.evalId,
-          testIdx: refContext.testIdx,
-          promptIdx: refContext.promptIdx,
-          location: refContext.location,
-          kind: refContext.kind,
+          hash: result.ref.hash,
+          sizeBytes: result.ref.sizeBytes,
+          mimeType: result.ref.mimeType,
+          provider: result.ref.provider,
         })
         .onConflictDoNothing()
         .run();
+
+      const refInsert =
+        refContext?.evalId &&
+        db
+          .insert(blobReferencesTable)
+          .values({
+            id: randomUUID(),
+            blobHash: result.ref.hash,
+            evalId: refContext.evalId,
+            testIdx: refContext.testIdx,
+            promptIdx: refContext.promptIdx,
+            location: refContext.location,
+            kind: refContext.kind,
+          })
+          .onConflictDoNothing()
+          .run();
+
+      // Return a non-undefined value to satisfy Drizzle's sync transaction semantics
+      return refInsert ?? assetInsert;
+    });
+  } catch (error) {
+    // Roll back filesystem write if DB persistence fails
+    try {
+      await provider.deleteByHash(result.ref.hash);
+    } catch (cleanupError) {
+      logger.warn('[BlobStorage] Failed to rollback blob after DB error', {
+        error: cleanupError,
+        hash: result.ref.hash,
+      });
     }
-  });
+    throw error;
+  }
 
   return result;
 }
