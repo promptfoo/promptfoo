@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { runCompareAssertion } from '../../src/assertions/index';
+
 import type {
   ApiProvider,
   Assertion,

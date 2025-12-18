@@ -1,6 +1,6 @@
 import fs from 'fs';
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   getSysExecutable,
   runPython,

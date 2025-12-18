@@ -1,6 +1,6 @@
 import { zodResponseFormat } from 'openai/helpers/zod.mjs';
-import type { UnifiedConfig } from 'promptfoo';
 import { TranslationResponseSchema } from './src/schemas/translation-response';
+import type { UnifiedConfig } from 'promptfoo';
 
 // Generate the response format for OpenAI
 const responseFormat = zodResponseFormat(TranslationResponseSchema, 'translation_response');

@@ -1,17 +1,19 @@
-import React, { useState, useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
+
 import Head from '@docusaurus/Head';
 import Link from '@docusaurus/Link';
 import Layout from '@theme/Layout';
 import { EventCard, EventFilters, FeaturedEvent } from '../../components/Events';
-import type { FilterStatus, FilterYear } from '../../components/Events';
 import {
+  type Event,
   events,
   getFeaturedEvent,
-  getUpcomingEvents,
   getPastEvents,
-  type Event,
+  getUpcomingEvents,
 } from '../../data/events';
 import styles from './index.module.css';
+
+import type { FilterStatus, FilterYear } from '../../components/Events';
 
 export default function EventsPage(): React.ReactElement {
   const [statusFilter, setStatusFilter] = useState<FilterStatus>('all');

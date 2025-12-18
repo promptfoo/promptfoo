@@ -11,18 +11,18 @@
 
 import path from 'path';
 
+import async from 'async';
 import binaryExtensions from 'binary-extensions';
 import { execa } from 'execa';
 import { isText } from 'istextorbinary';
-import async from 'async';
 import textExtensions from 'text-extensions';
-import { annotateDiffWithLineRanges } from './diffAnnotator';
+import logger from '../../logger';
+import { DiffProcessorError } from '../../types/codeScan';
 import { isInDenylist, MAX_BLOB_SIZE_BYTES, MAX_PATCH_SIZE_BYTES } from '../constants/filtering';
+import { annotateDiffWithLineRanges } from './diffAnnotator';
 
 import type { FileRecord } from '../../types/codeScan';
-import { DiffProcessorError } from '../../types/codeScan';
 import type { LineRange } from '../util/diffLineRanges';
-import logger from '../../logger';
 
 interface RawDiffEntry {
   path: string;

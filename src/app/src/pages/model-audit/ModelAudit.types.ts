@@ -1,4 +1,5 @@
 import type { ModelAuditCheck } from '@promptfoo/types/modelAudit';
+
 import type { ModelAuditScanResults } from '../../../../types/modelAudit';
 
 /**

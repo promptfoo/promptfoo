@@ -2,9 +2,9 @@ import chalk from 'chalk';
 import logger from '../logger';
 import Eval, { EvalQueries } from '../models/eval';
 import { wrapTable } from '../table';
-import { printBorder, setupEnv } from '../util/index';
 import { sha256 } from '../util/createHash';
 import { getPrompts, getTestCases } from '../util/database';
+import { printBorder, setupEnv } from '../util/index';
 import type { Command } from 'commander';
 
 export function listCommand(program: Command) {

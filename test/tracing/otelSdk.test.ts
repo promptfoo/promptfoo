@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
 import type { OtelConfig } from '../../src/tracing/otelConfig';
 
 // Create mock functions that will be used across tests

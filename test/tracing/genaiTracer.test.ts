@@ -1,15 +1,15 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SpanKind, SpanStatusCode } from '@opentelemetry/api';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   GenAIAttributes,
-  PromptfooAttributes,
-  withGenAISpan,
-  setGenAIResponseAttributes,
-  getTraceparent,
-  getCurrentTraceId,
-  getCurrentSpanId,
   type GenAISpanContext,
   type GenAISpanResult,
+  getCurrentSpanId,
+  getCurrentTraceId,
+  getTraceparent,
+  PromptfooAttributes,
+  setGenAIResponseAttributes,
+  withGenAISpan,
 } from '../../src/tracing/genaiTracer';
 
 // Mock @opentelemetry/api

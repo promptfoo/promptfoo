@@ -1,11 +1,11 @@
+import { HIDDEN_METADATA_KEYS } from '@app/constants';
 import { callApi } from '@app/utils/api';
 import { Severity } from '@promptfoo/redteam/constants';
-import { HIDDEN_METADATA_KEYS } from '@app/constants';
 import { act } from '@testing-library/react';
 import { v4 as uuidv4 } from 'uuid';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { type ResultsFilter, useTableStore } from './store';
-import type { EvaluateTable, PromptMetrics, ResultsFile, EvalTableDTO } from '@promptfoo/types';
+import type { EvalTableDTO, EvaluateTable, PromptMetrics, ResultsFile } from '@promptfoo/types';
 
 vi.mock('uuid', () => ({
   v4: vi.fn(),

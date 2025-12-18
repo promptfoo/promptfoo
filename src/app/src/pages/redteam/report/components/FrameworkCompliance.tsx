@@ -9,19 +9,20 @@ import Typography from '@mui/material/Typography';
 import {
   ALIASED_PLUGIN_MAPPINGS,
   FRAMEWORK_COMPLIANCE_IDS,
+  type FrameworkComplianceId,
   riskCategorySeverityMap,
   Severity,
-  type FrameworkComplianceId,
 } from '@promptfoo/redteam/constants';
-import type { UnifiedConfig } from '@promptfoo/types';
 import { getProgressColor } from '../utils/color';
 import FrameworkCard from './FrameworkCard';
 import { categorizePlugins, expandPluginCollections } from './FrameworkComplianceUtils';
 import CSVExporter from './FrameworkCsvExporter';
 import { useReportStore } from './store';
+import type { UnifiedConfig } from '@promptfoo/types';
 import './FrameworkCompliance.css';
-import { calculateAttackSuccessRate } from '@promptfoo/redteam/metrics';
+
 import { formatASRForDisplay } from '@app/utils/redteam';
+import { calculateAttackSuccessRate } from '@promptfoo/redteam/metrics';
 import { type TestResultStats } from './FrameworkComplianceUtils';
 
 interface FrameworkComplianceProps {

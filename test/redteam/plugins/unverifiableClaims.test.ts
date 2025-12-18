@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  UnverifiableClaimsPlugin,
   UnverifiableClaimsGrader,
+  UnverifiableClaimsPlugin,
 } from '../../../src/redteam/plugins/unverifiableClaims';
+
 import type { ApiProvider } from '../../../src/types/index';
 
 describe('UnverifiableClaimsPlugin', () => {

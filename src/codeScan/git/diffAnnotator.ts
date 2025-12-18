@@ -9,6 +9,7 @@
  */
 
 import { parseHunkHeader } from '../util/diffHunkParser';
+
 import type { LineRange } from '../util/diffLineRanges';
 
 export interface AnnotationResult {

@@ -2,8 +2,8 @@ import confirm from '@inquirer/confirm';
 import logger from '../logger';
 import Eval from '../models/eval';
 import telemetry from '../telemetry';
-import { setupEnv } from '../util/index';
 import { deleteAllEvals, deleteEval, getEvalFromId } from '../util/database';
+import { setupEnv } from '../util/index';
 import type { Command } from 'commander';
 
 export async function handleEvalDelete(evalId: string, _envPath?: string) {
