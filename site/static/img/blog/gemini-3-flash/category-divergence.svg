@@ -17,7 +17,7 @@
 
   <!-- Title -->
   <text x="35" y="32" class="title">Where the Models Diverge Most</text>
-  <text x="35" y="50" class="subtitle">Gap in attack success rate (Meta strategy) — positive = Gemini worse</text>
+  <text x="35" y="50" class="subtitle">Gemini 3 Flash (MINIMAL) vs GPT-5.2 under Meta — positive = Gemini worse</text>
 
   <!-- Center line (0) at x=400 -->
   <line x1="400" y1="75" x2="400" y2="370" stroke="#999" stroke-width="2"/>

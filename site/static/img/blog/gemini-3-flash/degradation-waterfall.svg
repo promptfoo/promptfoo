@@ -26,7 +26,7 @@
 
   <!-- Title -->
   <text x="35" y="32" class="title">How Defenses Degrade Under Attack</text>
-  <text x="35" y="50" class="subtitle">Refusal rate drops as attack sophistication increases</text>
+  <text x="35" y="50" class="subtitle">Gemini 3 Flash (MINIMAL) vs GPT-5.2 (no reasoning)</text>
 
   <!-- Stage labels -->
   <g class="stage-label" text-anchor="middle">
@@ -99,7 +99,7 @@
     <circle cx="20" cy="20" r="6" fill="#4ECDC4"/>
     <text x="35" y="24" class="model-label" style="font-weight: normal; font-size: 12px;">GPT-5.2</text>
     <circle cx="20" cy="42" r="6" fill="#FF6B6B"/>
-    <text x="35" y="46" class="model-label" style="font-weight: normal; font-size: 12px;">Gemini 3 Flash</text>
+    <text x="35" y="46" class="model-label" style="font-weight: normal; font-size: 12px;">Gemini (MINIMAL)</text>
   </g>
 
   <!-- Key insight callout -->

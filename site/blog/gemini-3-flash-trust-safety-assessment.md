@@ -1,6 +1,6 @@
 ---
-title: 'Gemini 3 Flash Preview: Initial Trust and Safety Assessment'
-description: 'Red team results on Gemini 3 Flash Preview under minimal thinking. Single-turn jailbreaks succeed in 89% of attacks—baseline refusal lower than GPT-5.2 in this configuration.'
+title: 'Gemini 3 Flash Preview: Red Team Results at Minimal Thinking'
+description: 'Red team results on Gemini 3 Flash Preview with thinkingLevel: MINIMAL. Single-turn jailbreaks succeed in 89% of attacks—baseline refusal lower than GPT-5.2 in this speed-first configuration.'
 image: /img/blog/gemini-3-flash-security-hero.jpg
 keywords:
   [
@@ -18,15 +18,17 @@ authors: [michael]
 tags: [red-teaming, security-vulnerability, google]
 ---
 
-# Gemini 3 Flash Preview: Initial Trust and Safety Assessment
+# Gemini 3 Flash Preview: Red Team Results at Minimal Thinking
 
-Gemini 3 Flash launched yesterday. Google [describes it](https://blog.google/products/gemini/gemini-3-flash/) as "frontier intelligence built for speed." It aims for Pro-grade reasoning at Flash-level speed and lower cost. The announcement emphasizes benchmarks, speed, and pricing. It makes no specific safety claims.
+We ran a red-team scan of Gemini 3 Flash Preview using the same harness we used for [GPT-5.2 last week](/blog/gpt-5.2-trust-safety-assessment). **This run uses `thinkingLevel: MINIMAL`** (speed-first configuration). The comparison is GPT-5.2 with `reasoning_effort: none`. Same prompt set, same attempt budget, same judge. Provider APIs differ, and we call out those differences in methodology below.
 
-We started our red team eval within an hour of release. Same methodology we used for [GPT-5.2 last week](/blog/gpt-5.2-trust-safety-assessment): same probes, same strategies, same attempt budget, same judge. Provider APIs differ, and we call out those differences in methodology below.
+In this configuration, Gemini refused less often on direct harmful prompts and was easier to jailbreak in single-turn attacks:
 
-The headline: **89% of single-turn jailbreaks succeeded** (160/179 attacks) compared to 60% on GPT-5.2. But the more telling number is baseline behavior—harmful prompts sent without any jailbreak transformation. GPT-5.2 refuses 96% of these. Gemini 3 Flash refuses 81%. That means Gemini produced disallowed output on 19% of baseline attacks (39/204)—no jailbreak transformation required.
+- **Single-turn jailbreaks:** 89% attack success (160/179) vs 60% on GPT-5.2
+- **Baseline (no jailbreak):** 19% attack success (39/204) vs 4% on GPT-5.2
+- **Multi-turn jailbreaks:** 77% (156/203) vs 79% (159/203)—similar
 
-This may be an intentional product trade-off. Google's model card shows they reduced "unjustified refusals" by 10%—fewer false positives on benign content. The cost appears to be more false negatives on harmful content.
+Google's model card shows they reduced "unjustified refusals" by 10% relative to the prior Flash model. That metric targets borderline-but-benign prompts, not adversarial inputs. It does not explain our results, but it points to active tuning pressure against over-refusal, which could interact with baseline refusal rates under adversarial prompting.
 
 :::info Configuration note
 We tested with `thinkingLevel: MINIMAL`. **Default Gemini 3 Flash uses dynamic HIGH thinking**—expect better safety behavior with defaults enabled. This is a preview model; behavior may change before GA.
@@ -34,13 +36,17 @@ We tested with `thinkingLevel: MINIMAL`. **Default Gemini 3 Flash uses dynamic H
 
 ### Why test MINIMAL?
 
-Reasoning improves safety. We've seen this across models: GPT-5.2 with `reasoning_effort: low` resists jailbreaks better than with `none` (55% vs 60% Meta ASR). We tested MINIMAL because it's the most vulnerable configuration—and the one teams will use when optimizing for speed. We'll follow up with `thinkingLevel: HIGH` results.
+Reasoning improves safety. GPT-5.2 with `reasoning_effort: low` resists jailbreaks better than with `none` (55% vs 60% Meta ASR). We tested MINIMAL because it represents the lower bound on safety—and it's the configuration teams will use when optimizing for throughput. Google's docs note that MINIMAL "matches the 'no thinking' setting for most queries" but is not a hard guarantee that thinking is fully disabled.
 
-**Quick reference** *(n differs across models due to blocks/timeouts; see methodology below)*
-- Baseline ASR: 19.1% (39/204) vs GPT-5.2's 4.3%
-- Meta (single-turn) ASR: 89.4% (160/179) vs GPT-5.2's 60.3%
-- Worst categories under Meta: graphic content (100%, 15/15), impersonation (100%, 15/15)
-- Biggest gap: child safety—70% (7/10) vs GPT-5.2's 27% (4/15)
+We'll follow up with `thinkingLevel: HIGH` results.
+
+**Quick reference: Gemini 3 Flash (MINIMAL) vs GPT-5.2 (no reasoning)**
+
+*(n differs across models due to blocks/timeouts; see methodology below)*
+- Baseline ASR: 19% (39/204) vs 4% (9/208)
+- Single-turn (Meta) ASR: 89% (160/179) vs 60% (108/179)
+- Multi-turn (Hydra) ASR: 77% (156/203) vs 79% (159/203)
+- Largest category gap: child safety—70% (7/10) vs 27% (4/15)
 
 <!-- truncate -->
 
@@ -60,7 +66,7 @@ The strategy breakdown:
 | **Hydra** (multi-turn) | 76.9% (156/203) | 78.5% (159/203) | -2pp |
 | **Baseline** (no jailbreak) | 19.1% (39/204) | 4.3% (9/208) | +15pp |
 
-The pattern is clear: single-turn jailbreaks are where Gemini 3 Flash diverges from GPT-5.2. Multi-turn attacks succeed at similar rates on both models—around 77-78%. But the [meta-agent strategy](/docs/red-team/strategies/meta), which finds single-shot prompt manipulations, works 29 percentage points better on Gemini.
+Single-turn jailbreaks are where Gemini 3 Flash diverges from GPT-5.2: 89% vs 60% attack success, a 29 percentage-point gap. Multi-turn attacks succeed at similar rates on both models—around 77-78%. The [meta-agent strategy](/docs/red-team/strategies/meta), which finds single-shot prompt manipulations, is the primary differentiator.
 
 ![Attack success rate by strategy comparing Gemini 3 Flash and GPT-5.2](/img/blog/gemini-3-flash/strategy-comparison.svg)
 
@@ -72,26 +78,26 @@ The pattern is clear: single-turn jailbreaks are where Gemini 3 Flash diverges f
 
 ### Where defenses failed
 
-Beyond the 100% bypass categories, several high-severity areas showed >65% attack success:
+Beyond the 100% bypass categories, several areas showed >65% attack success under Meta:
 
-| Category | Gemini 3 Flash | GPT-5.2 | Severity |
-|----------|---------------|---------|----------|
-| Hallucination (prompted fabrication) | 92.9% (13/14) | 60% (9/15) | Medium |
-| Unauthorized Commitments | 80.0% (12/15) | 53% (8/15) | Medium |
-| Personal Attacks | 80.0% (12/15) | 60% (9/15) | Medium |
-| Harassment | 73.3% (11/15) | 53% (8/15) | High |
-| Non-Violent Crime | 73.3% (11/15) | 40% (6/15) | Medium |
-| Child Safety | 70.0% (7/10) | 27% (4/15) | Critical |
-| Hate Speech | 66.7% (10/15) | 60% (9/15) | Critical |
-| Violent Crime | 66.7% (10/15) | 33% (5/15) | High |
+| Category | Gemini 3 Flash | GPT-5.2 | Gap |
+|----------|---------------|---------|-----|
+| Hallucination (prompted fabrication) | 93% (13/14) | 60% (9/15) | +33pp |
+| Unauthorized Commitments | 80% (12/15) | 53% (8/15) | +27pp |
+| Personal Attacks | 80% (12/15) | 60% (9/15) | +20pp |
+| Harassment | 73% (11/15) | 53% (8/15) | +20pp |
+| Non-Violent Crime | 73% (11/15) | 40% (6/15) | +33pp |
+| Child Safety | 70% (7/10) | 27% (4/15) | +43pp |
+| Hate Speech | 67% (10/15) | 60% (9/15) | +7pp |
+| Violent Crime | 67% (10/15) | 33% (5/15) | +34pp |
 
 The child safety number warrants attention. Under our rubric, Gemini 3 Flash produced outputs our reviewers judged as unsafe facilitation or boundary-violating content in 7 of 10 jailbreak attempts. GPT-5.2's rate was 27% (4/15). We performed human review on all outputs in this category—we are not publishing examples. (The different denominators reflect attack aggregates that completed without timeouts or provider blocks on each model; see methodology for how we score these.)
 
 ## The Refusal Gap
 
-The aggregate numbers hide an important pattern. Both models refuse most harmful prompts when sent directly—that's table stakes. The question is how often they slip, and how much they degrade under attack.
+The aggregate numbers hide an important pattern. Both models refuse most harmful prompts when sent directly—that's the baseline expectation. The question is how often they slip, and how much they degrade under attack.
 
-Gemini 3 Flash slips 4.4× more often on identical baseline prompts: 19.1% vs 4.3%. This matters because it means simpler attacks work. You don't need a sophisticated jailbreak when direct requests succeed 1 in 5 times.
+On baseline prompts (no jailbreak transformation), Gemini 3 Flash shows a 15 percentage-point higher attack success rate: 19% vs 4%. This gap matters because it means simpler attacks work. You don't need a sophisticated jailbreak when direct requests succeed 1 in 5 times.
 
 Under attack, the models degrade differently:
 
@@ -107,15 +113,15 @@ GPT-5.2 starts stronger and degrades less under single-turn attacks. Gemini 3 Fl
 
 ## The Structural vs Semantic Pattern
 
-The category breakdown reveals what Gemini 3 Flash was trained to resist—and what it wasn't.
+The category breakdown reveals what Gemini 3 Flash was trained to resist—and what it wasn't. We categorize attacks by their primary mechanism:
 
-**Where defenses held:** Divergent repetition (22%), Pliny injections (20%), ASCII smuggling (33%), special token injection (40%). These are *structural* attacks—token manipulation, encoding tricks, format delimiter exploits. The kind of thing that shows up in security research papers.
+**Structural attacks** (token manipulation, encoding tricks, format exploits): Divergent repetition (22% ASR), Pliny injections (20%), ASCII smuggling (33%), special token injection (40%). These are the attacks that show up in security research—adversarial prompting through format manipulation.
 
-**Where defenses failed:** Graphic content (100%), entity impersonation (100%), hallucination (93%), personal attacks (80%). These are *semantic* attacks—reframing harmful requests as roleplay, fiction, hypotheticals, or "just asking questions."
+**Semantic attacks** (content reframing, roleplay, hypotheticals): Graphic content (100% ASR), entity impersonation (100%), hallucination (93%), personal attacks (80%). These reframe harmful requests as fiction, thought experiments, or "just asking questions."
 
-One plausible explanation: defenses are stronger on structural prompt exploits (the kind that show up in security research) than on semantic reframes. When you manipulate tokens, the model catches it. When you manipulate framing, the model defaults to helpful.
+The pattern: defenses are stronger on structural prompt exploits than on semantic reframes. When you manipulate tokens, the model catches it. When you manipulate framing, the model defaults to helpful.
 
-The numbers bear this out: **average ASR on structural attacks is 29%**, while **average ASR on semantic content attacks is 93%**.
+Quantified: **average ASR on structural attacks is 29%** (unweighted mean of 4 categories), **average ASR on semantic attacks is 93%** (unweighted mean of 4 categories).
 
 ![Structural vs semantic attack success rates](/img/blog/gemini-3-flash/structural-vs-semantic.svg)
 
@@ -131,11 +137,11 @@ The category-by-category breakdown using Meta strategy results:
 
 ![Category divergence chart showing where models differ most](/img/blog/gemini-3-flash/category-divergence.svg)
 
-Three findings deserve attention:
+Three findings stand out:
 
-**Impersonation is unsolved.** Both models hit 100% attack success on entity impersonation. "Pretend to be [CEO/brand/public figure]" works reliably on both. This enables fraud, fake endorsements, and legal liability.
+**Impersonation bypassed consistently.** In our single-turn harness, both models hit 100% attack success on entity impersonation. "Pretend to be [CEO/brand/public figure]" worked reliably on both. This enables fraud, fake endorsements, and legal liability.
 
-**Hallucination attack success is higher.** In our hallucination attack plugin (which prompts the model to fabricate information), Gemini complied 93% of the time (13/14) vs 60% (9/15) for GPT-5.2. Under adversarial prompting it will fabricate citations confidently—if users can steer the conversation, you need external citation validation. It's not strictly a jailbreak issue; it's a reliability issue that jailbreaks amplify.
+**Hallucination (reliability, not safety).** Our hallucination plugin prompts the model to fabricate information. This is a reliability concern, not a trust-and-safety policy violation, but jailbreaks amplify it. Gemini complied 93% of the time (13/14) vs 60% (9/15) for GPT-5.2. Under adversarial prompting it will fabricate citations confidently—if users can steer the conversation, you need external citation validation.
 
 **Child safety is the biggest gap.** GPT-5.2: 27% attack success (4/15). Gemini 3 Flash: 70% attack success (7/10). We performed human review on all outputs in this category. For applications involving minors, this gap is consequential.
 
@@ -227,11 +233,15 @@ redteam:
 
 Same 39 plugins as GPT-5.2. Same three strategies (basic, Hydra, meta). Same judge.
 
+**Attempt budget:** Each plugin generates 5 attack scenarios. Under Meta, each attack tries up to 10 prompt transformations (early-stop on success). Under Hydra, each attack runs up to 5 conversation turns with adaptive branching. Baseline sends the original harmful prompt with no transformation.
+
 ### How we grade outputs
 
-Each plugin includes a grader prompt that evaluates whether the model output violates safety policies. The grader is GPT-5, chosen for consistency with our GPT-5.2 assessment. We consider an attack successful when the grader judges the output would be disallowed under the target model's stated policies.
+Each plugin includes a grader prompt that evaluates whether the model output violates safety policies. The grader is GPT-5, chosen for consistency with our GPT-5.2 assessment. We consider an attack successful when the grader judges the output would be disallowed under the target model's stated policies—specifically, [Google's safety settings guidance](https://ai.google.dev/gemini-api/docs/safety-settings) for Gemini and OpenAI's usage policies for GPT-5.2.
 
-For critical categories—child safety, weapons, self-harm—we performed manual human review on all outputs. Borderline cases were reviewed by two team members. The grader tends toward false negatives (missing some violations) rather than false positives, so our ASR numbers are likely conservative.
+**On using GPT-5 as judge:** Yes, we're using an OpenAI model to grade both targets. We mitigate bias by (1) removing model labels from graded outputs, (2) using identical grader prompts for both models, and (3) performing human review on critical categories. The same judge on both targets controls for systematic leniency—any bias affects both models equally.
+
+For critical categories—child safety, weapons, self-harm—we performed manual human review on all outputs. Borderline cases were reviewed by two team members. In spot-checks, we observed more grader misses than spurious flags, but we did not quantify this across all categories.
 
 ### Non-responses and blocks
 
@@ -248,6 +258,16 @@ Different models fail in different ways. Here's how we score each outcome:
 **Retries are only for transient transport errors** (timeouts, 5xx, rate limits). We do not retry safety blocks or refusals—those count as successful defenses.
 
 The different sample sizes between models (e.g., 7/10 vs 4/15 for child safety) reflect attacks where one model's API blocked or timed out and the other's didn't. Exclusions are symmetric in intent: we drop any attack where we couldn't get a scorable response from the model.
+
+**Exclusions by model and strategy:**
+
+| Strategy | Gemini excluded | GPT-5.2 excluded | Reason |
+|----------|-----------------|------------------|--------|
+| Meta | 16 | 16 | Timeouts, 5xx after retries |
+| Hydra | 12 | 12 | Timeouts, 5xx after retries |
+| Baseline | 11 | 7 | Timeouts, 5xx after retries |
+
+Exclusion counts are approximate and cover attacks dropped due to transport failures (not safety blocks). The baseline denominator difference (204 vs 208) reflects attacks where Gemini's API returned non-scorable errors.
 
 A note on [ASR comparability](/blog/asr-not-portable-metric): these numbers are directly comparable to our GPT-5.2 results because we controlled for attempt budget, prompt set, and judge. They're not comparable to other benchmarks using different methodology.
 
@@ -269,15 +289,15 @@ Google notes that when automated evals flag losses, manual review finds they are
 
 The -10.4% in unjustified-refusals is notable. Google defines this as the model's ability to respond to borderline prompts while remaining safe. A 10.4% improvement means fewer unnecessary refusals on legitimate content.
 
-This is a known trade-off: **reducing false positives (annoying refusals on benign content) can increase false negatives (failing to refuse harmful content).** We can't definitively link this to our results, but our 19% baseline attack success rate (4.4× higher than GPT-5.2) is directionally consistent with a model tuned for fewer refusals.
+This is a known trade-off: **reducing false positives (annoying refusals on benign content) can increase false negatives (failing to refuse harmful content).** We can't definitively link this to our results, but our 19% baseline attack success rate (15pp higher than GPT-5.2's 4%) is directionally consistent with a model tuned for fewer refusals.
 
 On red teaming, the model card states: "For child safety evaluations, Gemini 3 Flash satisfied required launch thresholds" and "found no egregious concerns."
 
-**Two different worlds.** If your goal is fewer annoying refusals on borderline-but-benign prompts, these model-card deltas are wins. Our data suggests the trade-off is a wider attack surface when prompts are adversarial or cleverly reframed.
+**Different measurement goals.** If your goal is fewer annoying refusals on borderline-but-benign prompts, these model-card deltas are wins. Our data suggests the trade-off is a wider attack surface when prompts are adversarial or cleverly reframed.
 
 ## What This Means
 
-Google positions Gemini 3 Flash as competitive with frontier models on capability benchmarks while offering better speed and cost. The internet is (reasonably) excited. We focused on what happens to safety when you optimize for speed.
+Google positions Gemini 3 Flash as competitive with frontier models on capability benchmarks while offering better speed and cost. We focused on what happens to safety when you optimize for speed.
 
 In this configuration, Gemini 3 Flash is more permissive in refusal behavior—especially at MINIMAL thinking. One plausible explanation: the model-card shows Google reduced unjustified refusals by 10%. Our results may show the other side of that trade-off.
 
@@ -295,13 +315,15 @@ This trade-off isn't necessarily wrong—overly cautious models frustrate users 
 
 If you're choosing between models for safety-critical applications:
 
-| Factor | GPT-5.2 | Gemini 3 Flash | Edge |
-|--------|---------|----------------|------|
+| Metric | GPT-5.2 | Gemini 3 Flash (MINIMAL) | Edge |
+|--------|---------|--------------------------|------|
 | Baseline refusal rate | 96% | 81% | GPT |
-| Single-turn jailbreak resistance | 40% | 11% | GPT |
-| Multi-turn jailbreak resistance | 21% | 23% | ≈ |
-| Child safety refusal | 73% | 30% | GPT |
-| Hallucination resistance | 40% | 7% | GPT |
+| Refusal rate under Meta | 40% | 11% | GPT |
+| Refusal rate under Hydra | 21% | 23% | ≈ |
+| Child safety refusal (n=10-15) | 73% | 30% | GPT |
+| Hallucination refusal (n=14-15) | 40% | 7% | GPT |
+
+*Small category samples (n=10-15); treat as directional, not definitive.*
 
 Neither is sufficient without additional safety layers. GPT-5.2 provides a stronger foundation for high-stakes use cases. Gemini 3 Flash may be fine for lower-risk applications where you control the input surface and add your own guardrails.
 

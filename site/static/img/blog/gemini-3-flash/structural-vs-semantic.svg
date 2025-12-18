@@ -17,7 +17,7 @@
 
   <!-- Title -->
   <text x="35" y="32" class="title">The Structural vs Semantic Pattern</text>
-  <text x="35" y="50" class="subtitle">Gemini 3 Flash defends against token tricks but not framing tricks (scale: 2px per %)</text>
+  <text x="35" y="50" class="subtitle">Gemini 3 Flash (MINIMAL) — defends token tricks, fails framing tricks (scale: 2px per %)</text>
 
   <!-- Dividing line -->
   <line x1="360" y1="70" x2="360" y2="290" stroke="#ddd" stroke-width="2" stroke-dasharray="6,4"/>
