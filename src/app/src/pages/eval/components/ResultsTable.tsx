@@ -31,7 +31,6 @@ import {
   getCoreRowModel,
   useReactTable,
 } from '@tanstack/react-table';
-import yaml from 'js-yaml';
 import ReactMarkdown from 'react-markdown';
 import { Link, useNavigate } from 'react-router-dom';
 import remarkGfm from 'remark-gfm';
@@ -41,6 +40,7 @@ import EvalOutputCell from './EvalOutputCell';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import { useFilterMode } from './FilterModeProvider';
 import MarkdownErrorBoundary from './MarkdownErrorBoundary';
+import { ProviderDisplay } from './ProviderDisplay';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import TruncatedText from './TruncatedText';
 import type { CellContext, ColumnDef, VisibilityState } from '@tanstack/table-core';
@@ -926,42 +926,26 @@ function ResultsTable({
                   ) : null}
                 </div>
               ) : null;
-              const providerConfig = Array.isArray(config?.providers)
-                ? config.providers[idx]
-                : undefined;
+              // Get provider string, handling both string and object formats
+              const providerString =
+                typeof prompt.provider === 'string'
+                  ? prompt.provider
+                  : typeof prompt.provider === 'object' && prompt.provider !== null
+                    ? (prompt.provider as any).id || JSON.stringify(prompt.provider)
+                    : String(prompt.provider || 'Unknown provider');
 
-              let providerParts: string[] = [];
-              try {
-                if (prompt.provider && typeof prompt.provider === 'string') {
-                  providerParts = prompt.provider.split(':');
-                } else if (prompt.provider) {
-                  const providerObj = prompt.provider as any; // Use any for flexible typing
-                  const providerId =
-                    typeof providerObj === 'object' && providerObj !== null
-                      ? providerObj.id || JSON.stringify(providerObj)
-                      : String(providerObj);
-                  providerParts = [providerId];
-                }
-              } catch (error) {
-                console.error('Error parsing provider:', error);
-                providerParts = ['Error parsing provider'];
-              }
-
-              const providerDisplay = (
-                <Tooltip title={providerConfig ? <pre>{yaml.dump(providerConfig)}</pre> : ''}>
-                  {providerParts.length > 1 ? (
-                    <>
-                      {providerParts[0]}:<strong>{providerParts.slice(1).join(':')}</strong>
-                    </>
-                  ) : (
-                    <strong>{providerParts[0] || 'Unknown provider'}</strong>
-                  )}
-                </Tooltip>
-              );
               return (
                 <div className="output-header">
                   <div className="pills collapse-font-small">
-                    {prompt.provider ? <div className="provider">{providerDisplay}</div> : null}
+                    {prompt.provider ? (
+                      <div className="provider">
+                        <ProviderDisplay
+                          providerString={providerString}
+                          providersArray={config?.providers as any[] | undefined}
+                          fallbackIndex={idx}
+                        />
+                      </div>
+                    ) : null}
                     <div className="summary">
                       <div
                         className={`highlight ${
