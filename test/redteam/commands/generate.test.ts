@@ -1,27 +1,30 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import fs from 'fs';
+import fs from 'node:fs';
 
 import { Command } from 'commander';
 import * as yaml from 'js-yaml';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { DEFAULT_MAX_CONCURRENCY } from '../../../src/constants';
 import { getAuthor, getUserEmail } from '../../../src/globalConfig/accounts';
 import { cloudConfig } from '../../../src/globalConfig/cloud';
 import logger from '../../../src/logger';
-import { synthesize } from '../../../src/redteam/index';
 import { doTargetPurposeDiscovery } from '../../../src/redteam/commands/discover';
 import { doGenerateRedteam, redteamGenerateCommand } from '../../../src/redteam/commands/generate';
 import { Severity } from '../../../src/redteam/constants';
 import { extractMcpToolsInfo } from '../../../src/redteam/extraction/mcpTools';
-import { getConfigFromCloud } from '../../../src/util/cloud';
-import { checkCloudPermissions, ConfigPermissionError } from '../../../src/util/cloud';
+import { synthesize } from '../../../src/redteam/index';
+import type { RedteamCliGenerateOptions, RedteamPluginObject } from '../../../src/redteam/types';
+import type { ApiProvider } from '../../../src/types/index';
+import {
+  checkCloudPermissions,
+  ConfigPermissionError,
+  getConfigFromCloud,
+} from '../../../src/util/cloud';
 import * as configModule from '../../../src/util/config/load';
 import { readConfig } from '../../../src/util/config/load';
 import { writePromptfooConfig } from '../../../src/util/config/writer';
 
-import type { RedteamCliGenerateOptions, RedteamPluginObject } from '../../../src/redteam/types';
-import type { ApiProvider } from '../../../src/types/index';
-import { DEFAULT_MAX_CONCURRENCY } from '../../../src/constants';
-
-vi.mock('fs');
+vi.mock('node:fs');
 vi.mock('../../../src/redteam', () => ({
   synthesize: vi.fn().mockResolvedValue({ testCases: [] }),
 }));
@@ -182,6 +185,8 @@ describe('doGenerateRedteam', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // Reset mock implementations that persist across tests (clearAllMocks only clears call history)
+    vi.mocked(extractMcpToolsInfo).mockReset();
     mockProvider = {
       id: () => 'test-provider',
       callApi: vi.fn().mockResolvedValue({ output: 'test output' }),
@@ -1489,6 +1494,394 @@ describe('doGenerateRedteam', () => {
           delay: 200, // redteamConfig wins over commandLineOptions
         }),
       );
+    });
+  });
+
+  describe('contexts support', () => {
+    it('should generate tests for each context when contexts are defined', async () => {
+      vi.mocked(configModule.resolveConfigs).mockResolvedValue({
+        basePath: '/mock/path',
+        testSuite: {
+          providers: [
+            {
+              id: () => 'test-provider',
+              callApi: vi.fn().mockResolvedValue({ output: 'test output' }),
+            },
+          ],
+          prompts: [{ raw: 'Test prompt', label: 'Test prompt' }],
+          tests: [],
+        },
+        config: {
+          redteam: {
+            numTests: 2,
+            plugins: ['harmful:hate'] as any,
+            strategies: [],
+            contexts: [
+              { id: 'context1', purpose: 'Context 1 purpose', vars: { role: 'user' } },
+              { id: 'context2', purpose: 'Context 2 purpose', vars: { role: 'admin' } },
+            ],
+          },
+        },
+      });
+
+      vi.mocked(synthesize).mockResolvedValue({
+        testCases: [
+          {
+            vars: { input: 'Test input' },
+            assert: [{ type: 'equals', value: 'Test output' }],
+            metadata: { pluginId: 'harmful:hate' },
+          },
+        ],
+        purpose: 'Test purpose',
+        entities: ['Test entity'],
+        injectVar: 'input',
+      });
+
+      const options: RedteamCliGenerateOptions = {
+        output: 'output.yaml',
+        config: 'config.yaml',
+        cache: true,
+        defaultConfig: {},
+        write: true,
+      };
+
+      await doGenerateRedteam(options);
+
+      // synthesize should be called once for each context
+      expect(synthesize).toHaveBeenCalledTimes(2);
+
+      // First call should use context1's purpose
+      expect(synthesize).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({
+          purpose: expect.stringContaining('Context 1 purpose'),
+        }),
+      );
+
+      // Second call should use context2's purpose
+      expect(synthesize).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({
+          purpose: expect.stringContaining('Context 2 purpose'),
+        }),
+      );
+    });
+
+    it('should tag test cases with context metadata', async () => {
+      vi.mocked(configModule.resolveConfigs).mockResolvedValue({
+        basePath: '/mock/path',
+        testSuite: {
+          providers: [
+            {
+              id: () => 'test-provider',
+              callApi: vi.fn().mockResolvedValue({ output: 'test output' }),
+            },
+          ],
+          prompts: [{ raw: 'Test prompt', label: 'Test prompt' }],
+          tests: [],
+        },
+        config: {
+          redteam: {
+            numTests: 1,
+            plugins: ['harmful:hate'] as any,
+            strategies: [],
+            contexts: [
+              { id: 'test_context', purpose: 'Test context purpose', vars: { key: 'value' } },
+            ],
+          },
+        },
+      });
+
+      vi.mocked(synthesize).mockResolvedValue({
+        testCases: [
+          {
+            vars: { input: 'Test input' },
+            assert: [{ type: 'equals', value: 'Test output' }],
+            metadata: { pluginId: 'harmful:hate' },
+          },
+        ],
+        purpose: 'Test purpose',
+        entities: ['Test entity'],
+        injectVar: 'input',
+      });
+
+      const options: RedteamCliGenerateOptions = {
+        output: 'output.yaml',
+        config: 'config.yaml',
+        cache: true,
+        defaultConfig: {},
+        write: true,
+      };
+
+      await doGenerateRedteam(options);
+
+      // Verify the written config includes context metadata in test cases
+      expect(writePromptfooConfig).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tests: expect.arrayContaining([
+            expect.objectContaining({
+              metadata: expect.objectContaining({
+                contextId: 'test_context',
+                purpose: 'Test context purpose',
+                contextVars: { key: 'value' },
+              }),
+            }),
+          ]),
+        }),
+        'output.yaml',
+        expect.any(Array),
+      );
+    });
+
+    it('should merge context vars into test case vars', async () => {
+      vi.mocked(configModule.resolveConfigs).mockResolvedValue({
+        basePath: '/mock/path',
+        testSuite: {
+          providers: [
+            {
+              id: () => 'test-provider',
+              callApi: vi.fn().mockResolvedValue({ output: 'test output' }),
+            },
+          ],
+          prompts: [{ raw: 'Test prompt', label: 'Test prompt' }],
+          tests: [],
+        },
+        config: {
+          redteam: {
+            numTests: 1,
+            plugins: ['harmful:hate'] as any,
+            strategies: [],
+            contexts: [
+              {
+                id: 'ctx',
+                purpose: 'Context purpose',
+                vars: { context_file: 'data.json', role: 'admin' },
+              },
+            ],
+          },
+        },
+      });
+
+      vi.mocked(synthesize).mockResolvedValue({
+        testCases: [
+          {
+            vars: { input: 'Test input', existingVar: 'existing' },
+            assert: [{ type: 'equals', value: 'Test output' }],
+            metadata: { pluginId: 'harmful:hate' },
+          },
+        ],
+        purpose: 'Test purpose',
+        entities: ['Test entity'],
+        injectVar: 'input',
+      });
+
+      const options: RedteamCliGenerateOptions = {
+        output: 'output.yaml',
+        config: 'config.yaml',
+        cache: true,
+        defaultConfig: {},
+        write: true,
+      };
+
+      await doGenerateRedteam(options);
+
+      // Verify context vars are merged into test case vars
+      expect(writePromptfooConfig).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tests: expect.arrayContaining([
+            expect.objectContaining({
+              vars: expect.objectContaining({
+                input: 'Test input',
+                existingVar: 'existing',
+                context_file: 'data.json',
+                role: 'admin',
+              }),
+            }),
+          ]),
+        }),
+        'output.yaml',
+        expect.any(Array),
+      );
+    });
+
+    it('should use single purpose mode when no contexts are defined', async () => {
+      // Reset MCP tools mock to prevent interference from other tests
+      vi.mocked(extractMcpToolsInfo).mockResolvedValue('');
+
+      vi.mocked(configModule.resolveConfigs).mockResolvedValue({
+        basePath: '/mock/path',
+        testSuite: {
+          providers: [
+            {
+              id: () => 'test-provider',
+              callApi: vi.fn().mockResolvedValue({ output: 'test output' }),
+            },
+          ],
+          prompts: [{ raw: 'Test prompt', label: 'Test prompt' }],
+          tests: [],
+        },
+        config: {
+          redteam: {
+            purpose: 'Single purpose',
+            numTests: 1,
+            plugins: ['harmful:hate'] as any,
+            strategies: [],
+            // No contexts defined
+          },
+        },
+      });
+
+      vi.mocked(synthesize).mockResolvedValue({
+        testCases: [
+          {
+            vars: { input: 'Test input' },
+            assert: [{ type: 'equals', value: 'Test output' }],
+            metadata: { pluginId: 'harmful:hate' },
+          },
+        ],
+        purpose: 'Single purpose',
+        entities: ['Test entity'],
+        injectVar: 'input',
+      });
+
+      const options: RedteamCliGenerateOptions = {
+        output: 'output.yaml',
+        config: 'config.yaml',
+        cache: true,
+        defaultConfig: {},
+        write: true,
+      };
+
+      await doGenerateRedteam(options);
+
+      // synthesize should be called only once
+      expect(synthesize).toHaveBeenCalledTimes(1);
+      expect(synthesize).toHaveBeenCalledWith(
+        expect.objectContaining({
+          purpose: 'Single purpose',
+        }),
+      );
+    });
+
+    it('should handle contexts with empty vars', async () => {
+      vi.mocked(configModule.resolveConfigs).mockResolvedValue({
+        basePath: '/mock/path',
+        testSuite: {
+          providers: [
+            {
+              id: () => 'test-provider',
+              callApi: vi.fn().mockResolvedValue({ output: 'test output' }),
+            },
+          ],
+          prompts: [{ raw: 'Test prompt', label: 'Test prompt' }],
+          tests: [],
+        },
+        config: {
+          redteam: {
+            numTests: 1,
+            plugins: ['harmful:hate'] as any,
+            strategies: [],
+            contexts: [{ id: 'no_vars_context', purpose: 'Context without vars' }],
+          },
+        },
+      });
+
+      vi.mocked(synthesize).mockResolvedValue({
+        testCases: [
+          {
+            vars: { input: 'Test input' },
+            assert: [{ type: 'equals', value: 'Test output' }],
+            metadata: { pluginId: 'harmful:hate' },
+          },
+        ],
+        purpose: 'Test purpose',
+        entities: ['Test entity'],
+        injectVar: 'input',
+      });
+
+      const options: RedteamCliGenerateOptions = {
+        output: 'output.yaml',
+        config: 'config.yaml',
+        cache: true,
+        defaultConfig: {},
+        write: true,
+      };
+
+      await doGenerateRedteam(options);
+
+      expect(synthesize).toHaveBeenCalledTimes(1);
+
+      // Test case should have context metadata without contextVars
+      expect(writePromptfooConfig).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tests: expect.arrayContaining([
+            expect.objectContaining({
+              metadata: expect.objectContaining({
+                contextId: 'no_vars_context',
+                purpose: 'Context without vars',
+              }),
+            }),
+          ]),
+        }),
+        'output.yaml',
+        expect.any(Array),
+      );
+    });
+
+    it('should log context generation progress', async () => {
+      vi.mocked(configModule.resolveConfigs).mockResolvedValue({
+        basePath: '/mock/path',
+        testSuite: {
+          providers: [
+            {
+              id: () => 'test-provider',
+              callApi: vi.fn().mockResolvedValue({ output: 'test output' }),
+            },
+          ],
+          prompts: [{ raw: 'Test prompt', label: 'Test prompt' }],
+          tests: [],
+        },
+        config: {
+          redteam: {
+            numTests: 1,
+            plugins: ['harmful:hate'] as any,
+            strategies: [],
+            contexts: [
+              { id: 'ctx1', purpose: 'Purpose 1' },
+              { id: 'ctx2', purpose: 'Purpose 2' },
+            ],
+          },
+        },
+      });
+
+      vi.mocked(synthesize).mockResolvedValue({
+        testCases: [
+          {
+            vars: { input: 'Test input' },
+            assert: [{ type: 'equals', value: 'Test output' }],
+            metadata: { pluginId: 'harmful:hate' },
+          },
+        ],
+        purpose: 'Test purpose',
+        entities: [],
+        injectVar: 'input',
+      });
+
+      const options: RedteamCliGenerateOptions = {
+        output: 'output.yaml',
+        config: 'config.yaml',
+        cache: true,
+        defaultConfig: {},
+        write: true,
+      };
+
+      await doGenerateRedteam(options);
+
+      // Verify logging calls
+      expect(logger.info).toHaveBeenCalledWith('Generating tests for 2 contexts...');
+      expect(logger.info).toHaveBeenCalledWith('  Generating tests for context: ctx1');
+      expect(logger.info).toHaveBeenCalledWith('  Generating tests for context: ctx2');
+      expect(logger.info).toHaveBeenCalledWith('Generated 2 total test cases across 2 contexts');
     });
   });
 });

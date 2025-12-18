@@ -144,6 +144,7 @@ export interface RunEvalOptions {
   delay: number;
 
   test: AtomicTestCase;
+  testSuite?: TestSuite;
   nunjucksFilters?: NunjucksFilterMap;
   evaluateOptions?: EvaluateOptions;
 
@@ -343,6 +344,7 @@ export interface EvaluateStats {
   failures: number;
   errors: number;
   tokenUsage: Required<TokenUsage>;
+  durationMs?: number;
 }
 
 export interface EvaluateSummaryV3 {
@@ -370,6 +372,7 @@ export type EvalTableDTO = {
   author: string | null;
   version: number;
   id: string;
+  stats?: EvaluateStats;
 };
 
 export interface ResultSuggestion {
@@ -416,6 +419,8 @@ export interface GradingResult {
     contextUnits?: string[];
     // Rendered assertion value with substituted variables (for display in UI)
     renderedAssertionValue?: string;
+    // Full grading prompt sent to the grading LLM (for debugging)
+    renderedGradingPrompt?: string;
     [key: string]: any;
   };
 }

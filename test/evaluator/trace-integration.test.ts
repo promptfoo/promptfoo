@@ -37,6 +37,7 @@ describe('evaluator trace integration', () => {
     addPrompts: vi.fn(),
     fetchResultsByTestIdx: vi.fn(),
     setVars: vi.fn(),
+    setDurationMs: vi.fn(),
     results: [],
     prompts: [],
     persisted: false,

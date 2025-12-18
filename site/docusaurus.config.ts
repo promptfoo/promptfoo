@@ -224,6 +224,11 @@ const config: Config = {
               description: 'Media coverage and press releases',
             },
             {
+              href: '/events/',
+              label: 'Events',
+              description: 'Meet the team at conferences and events',
+            },
+            {
               href: '/careers/',
               label: 'Careers',
               description: 'Join our growing team',
@@ -352,6 +357,10 @@ const config: Config = {
             {
               label: 'Press',
               to: '/press/',
+            },
+            {
+              label: 'Events',
+              to: '/events/',
             },
             {
               label: 'Contact',

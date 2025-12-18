@@ -4,6 +4,11 @@ import { getEnvInt } from '../../envars';
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
+import {
+  extractTraceIdFromTraceparent,
+  fetchTraceContext,
+  type TraceContextData,
+} from '../../tracing/traceContext';
 import type {
   ApiProvider,
   AtomicTestCase,
@@ -34,6 +39,8 @@ import {
   redteamProviderManager,
   type TargetResponse,
 } from './shared';
+import { formatTraceForMetadata, formatTraceSummary } from './traceFormatting';
+import { resolveTracingOptions } from './tracingOptions';
 
 // Meta-agent based iterative testing - cloud handles memory and strategic decisions
 
@@ -53,8 +60,11 @@ interface IterativeMetaMetadata {
     score: number;
     graderPassed: boolean | undefined;
     guardrails: GuardrailResponse | undefined;
+    trace?: Record<string, unknown>;
+    traceSummary?: string;
   }[];
   sessionIds: string[];
+  traceSnapshots?: Record<string, unknown>[];
 }
 
 function getIterativeMetaGoalRubric(goal: string | undefined): string {
@@ -116,6 +126,16 @@ export async function runMetaAgentRedteam({
   // Generate unique test run ID
   const testRunId = `${context?.evaluationId || 'local'}-tc${context?.testCaseId || uuidv4().slice(0, 8)}`;
 
+  // Resolve tracing options
+  const tracingOptions = resolveTracingOptions({
+    strategyId: 'iterative-meta',
+    test,
+    config: {},
+  });
+  const shouldFetchTrace =
+    tracingOptions.enabled && (tracingOptions.includeInAttack || tracingOptions.includeInGrading);
+  const traceSnapshots: TraceContextData[] = [];
+
   const sessionIds: string[] = [];
   const totalTokenUsage = createEmptyTokenUsage();
 
@@ -127,6 +147,9 @@ export async function runMetaAgentRedteam({
   let stopReason: 'Grader failed' | 'Agent abandoned' | 'Max iterations reached' =
     'Max iterations reached';
   let lastResponse: TargetResponse | undefined = undefined;
+
+  // Track the previous iteration's trace summary for attack generation
+  let previousTraceSummary: string | undefined;
 
   const redteamHistory: IterativeMetaMetadata['redteamHistory'] = [];
 
@@ -169,6 +192,10 @@ export async function runMetaAgentRedteam({
               graderReason: storedGraderResult?.reason,
             }
           : undefined,
+      // Include trace summary from previous iteration if tracing is enabled for attack generation
+      ...(tracingOptions.includeInAttack && previousTraceSummary
+        ? { traceSummary: previousTraceSummary }
+        : {}),
     };
 
     // Get strategic decision from cloud
@@ -280,22 +307,55 @@ export async function runMetaAgentRedteam({
     });
 
     // Execute attack against target
-    let targetResponse: TargetResponse = await getTargetResponse(
+    const iterationStart = Date.now();
+    const initialTargetResponse: TargetResponse = await getTargetResponse(
       targetProvider,
       targetPrompt,
       iterationContext,
       options,
     );
-    targetResponse = await externalizeResponseForRedteamHistory(targetResponse, {
-      evalId: context?.evaluationId,
-      testIdx: context?.testIdx,
-      promptIdx: context?.promptIdx,
-    });
+    const targetResponse: TargetResponse = await externalizeResponseForRedteamHistory(
+      initialTargetResponse,
+      {
+        evalId: context?.evaluationId,
+        testIdx: context?.testIdx,
+        promptIdx: context?.promptIdx,
+      },
+    );
     lastResponse = targetResponse;
     accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
 
+    // Fetch trace context if tracing is enabled
+    let traceContext: TraceContextData | null = null;
+    let computedTraceSummary: string | undefined;
+    if (shouldFetchTrace) {
+      const traceparent = context?.traceparent ?? undefined;
+      const traceId = traceparent ? extractTraceIdFromTraceparent(traceparent) : null;
+
+      if (traceId) {
+        traceContext = await fetchTraceContext(traceId, {
+          earliestStartTime: iterationStart,
+          includeInternalSpans: tracingOptions.includeInternalSpans,
+          maxSpans: tracingOptions.maxSpans,
+          maxDepth: tracingOptions.maxDepth,
+          maxRetries: tracingOptions.maxRetries,
+          retryDelayMs: tracingOptions.retryDelayMs,
+          spanFilter: tracingOptions.spanFilter,
+          sanitizeAttributes: tracingOptions.sanitizeAttributes,
+        });
+
+        if (traceContext) {
+          traceSnapshots.push(traceContext);
+          if (tracingOptions.includeInAttack || tracingOptions.includeInGrading) {
+            computedTraceSummary = formatTraceSummary(traceContext);
+          }
+        }
+      }
+    }
+
     logger.debug('[IterativeMeta] Raw target response', {
       responseLength: targetResponse.output?.length,
+      hasTrace: !!traceContext,
     });
 
     if (targetResponse.error) {
@@ -325,6 +385,13 @@ export async function runMetaAgentRedteam({
     // Grade the response
     let graderResult: GradingResult | undefined = undefined;
 
+    // Prepare trace summaries for attack generation and grading
+    const attackTraceSummary = tracingOptions.includeInAttack ? computedTraceSummary : undefined;
+    const gradingTraceSummary = tracingOptions.includeInGrading ? computedTraceSummary : undefined;
+
+    // Update previous trace summary for next iteration's attack generation
+    previousTraceSummary = attackTraceSummary;
+
     let assertToUse = test?.assert?.find(
       (a: { type: string }) => a.type && a.type.includes(test.metadata?.pluginId),
     );
@@ -349,6 +416,13 @@ export async function runMetaAgentRedteam({
           gradingProvider,
           assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
           additionalRubric,
+          undefined, // skipRefusalCheck
+          tracingOptions.includeInGrading
+            ? {
+                traceContext,
+                traceSummary: gradingTraceSummary,
+              }
+            : undefined,
         );
         graderResult = {
           ...grade,
@@ -385,6 +459,8 @@ export async function runMetaAgentRedteam({
       score: 0, // Not used in meta strategy
       graderPassed: graderResult?.pass,
       guardrails: undefined,
+      trace: traceContext ? formatTraceForMetadata(traceContext) : undefined,
+      traceSummary: computedTraceSummary,
     });
 
     // Check if vulnerability was achieved
@@ -414,6 +490,10 @@ export async function runMetaAgentRedteam({
       stopReason,
       redteamHistory,
       sessionIds,
+      traceSnapshots:
+        traceSnapshots.length > 0
+          ? traceSnapshots.map((t) => formatTraceForMetadata(t))
+          : undefined,
     },
     tokenUsage: totalTokenUsage,
   };

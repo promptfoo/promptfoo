@@ -5,9 +5,15 @@ import cliState from '../../cliState';
 import { getEnvString } from '../../envars';
 import { importModule } from '../../esm';
 import logger from '../../logger';
+import {
+  withGenAISpan,
+  type GenAISpanContext,
+  type GenAISpanResult,
+} from '../../tracing/genaiTracer';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util/index';
+import { fetchWithProxy } from '../../util/fetch/index';
 import { isValidJson } from '../../util/json';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToGoogle } from '../mcp/transform';
@@ -92,12 +98,13 @@ class VertexGenericProvider implements ApiProvider {
   }
 
   getApiKey(): string | undefined {
+    // For Vertex provider, prioritize VERTEX_API_KEY over GEMINI_API_KEY
     return (
       this.config.apiKey ||
-      this.env?.GEMINI_API_KEY ||
       this.env?.VERTEX_API_KEY ||
-      getEnvString('GEMINI_API_KEY') ||
-      getEnvString('VERTEX_API_KEY')
+      this.env?.GEMINI_API_KEY ||
+      getEnvString('VERTEX_API_KEY') ||
+      getEnvString('GEMINI_API_KEY')
     );
   }
 
@@ -164,6 +171,53 @@ export class VertexChatProvider extends VertexGenericProvider {
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+    // Determine the system based on model name
+    let system = 'vertex';
+    if (this.modelName.includes('claude')) {
+      system = 'vertex:anthropic';
+    } else if (this.modelName.includes('gemini')) {
+      system = 'vertex:gemini';
+    } else if (this.modelName.includes('llama')) {
+      system = 'vertex:llama';
+    } else {
+      system = 'vertex:palm2';
+    }
+
+    // Set up tracing context
+    const spanContext: GenAISpanContext = {
+      system,
+      operationName: 'chat',
+      model: this.modelName,
+      providerId: this.id(),
+      temperature: this.config.temperature,
+      topP: this.config.topP,
+      maxTokens: this.config.maxOutputTokens || this.config.max_tokens,
+      testIndex: context?.test?.vars?.__testIdx as number | undefined,
+      promptLabel: context?.prompt?.label,
+      // W3C Trace Context for linking to evaluation trace
+      traceparent: context?.traceparent,
+    };
+
+    // Result extractor to set response attributes on the span
+    const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
+      const result: GenAISpanResult = {};
+      if (response.tokenUsage) {
+        result.tokenUsage = {
+          prompt: response.tokenUsage.prompt,
+          completion: response.tokenUsage.completion,
+          total: response.tokenUsage.total,
+        };
+      }
+      return result;
+    };
+
+    return withGenAISpan(spanContext, () => this.callApiInternal(prompt, context), resultExtractor);
+  }
+
+  private async callApiInternal(
+    prompt: string,
+    context?: CallApiContextParams,
+  ): Promise<ProviderResponse> {
     if (this.modelName.includes('claude')) {
       return this.callClaudeApi(prompt, context);
     } else if (this.modelName.includes('gemini')) {
@@ -289,6 +343,29 @@ export class VertexChatProvider extends VertexGenericProvider {
     }
   }
 
+  /**
+   * Check if express mode should be used (API key without OAuth)
+   * Express mode uses a simplified endpoint format without project/location.
+   *
+   * Express mode is AUTOMATIC when:
+   * 1. API key is available (VERTEX_API_KEY or GEMINI_API_KEY), AND
+   * 2. No explicit projectId in config, AND
+   * 3. No explicit credentials in config, AND
+   * 4. User hasn't explicitly disabled it (expressMode !== false)
+   *
+   * This mirrors how AWS Bedrock handles authentication - automatic detection
+   * of the simplest auth method available.
+   */
+  private isExpressMode(): boolean {
+    const hasApiKey = Boolean(this.getApiKey());
+    const hasExplicitProjectId = Boolean(this.config.projectId);
+    const hasExplicitCredentials = Boolean(this.config.credentials);
+    const explicitlyDisabled = this.config.expressMode === false;
+
+    // Express mode is automatic when API key is available and no explicit OAuth config
+    return hasApiKey && !hasExplicitProjectId && !hasExplicitCredentials && !explicitlyDisabled;
+  }
+
   async callGeminiApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     if (this.initializationPromise) {
       await this.initializationPromise;
@@ -396,23 +473,51 @@ export class VertexChatProvider extends VertexGenericProvider {
     if (response === undefined) {
       let data;
       try {
-        const client = await this.getClientWithCredentials();
-        const projectId = await this.getProjectId();
         // Default to non-streaming (generateContent) since:
         // 1. Model Armor floor settings only work with non-streaming endpoint
         // 2. Promptfoo collects full responses for evaluation anyway
         // Set streaming: true to use streamGenerateContent if needed
         const endpoint = config.streaming === true ? 'streamGenerateContent' : 'generateContent';
-        const url = `https://${this.getApiHost()}/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/${this.getPublisher()}/models/${
-          this.modelName
-        }:${endpoint}`;
-        const res = await client.request({
-          url,
-          method: 'POST',
-          data: body,
-          timeout: REQUEST_TIMEOUT_MS,
-        });
-        data = res.data as GeminiApiResponse;
+
+        // Check if we should use express mode (API key without OAuth)
+        if (this.isExpressMode()) {
+          // Express mode: use simplified endpoint with API key
+          const apiKey = this.getApiKey();
+          const url = `https://aiplatform.googleapis.com/${this.getApiVersion()}/publishers/${this.getPublisher()}/models/${this.modelName}:${endpoint}?key=${apiKey}`;
+
+          const res = await fetchWithProxy(url, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(body),
+            signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+          });
+
+          if (!res.ok) {
+            const errorData = await res.json().catch(() => null);
+            logger.debug(`Gemini API express mode error:\n${JSON.stringify(errorData)}`);
+            return {
+              error: `API call error: ${res.status} ${res.statusText}${errorData ? `: ${JSON.stringify(errorData)}` : ''}`,
+            };
+          }
+
+          data = (await res.json()) as GeminiApiResponse;
+        } else {
+          // Standard mode: use OAuth and full endpoint
+          const client = await this.getClientWithCredentials();
+          const projectId = await this.getProjectId();
+          const url = `https://${this.getApiHost()}/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/${this.getPublisher()}/models/${
+            this.modelName
+          }:${endpoint}`;
+          const res = await client.request({
+            url,
+            method: 'POST',
+            data: body,
+            timeout: REQUEST_TIMEOUT_MS,
+          });
+          data = res.data as GeminiApiResponse;
+        }
       } catch (err) {
         const geminiError = err as GaxiosError;
         if (
@@ -522,25 +627,17 @@ export class VertexChatProvider extends VertexGenericProvider {
             }
             return { error: finishReason, guardrails };
           } else if (candidate.finishReason && candidate.finishReason === 'MAX_TOKENS') {
-            // Concatenate the text generated so far before returning
+            // MAX_TOKENS is treated as a successful completion with the generated output
             if (candidate.content?.parts) {
               output = mergeParts(output, formatCandidateContents(candidate));
             }
             const outputTokens = datum.usageMetadata?.candidatesTokenCount || 0;
-            const outputStr = typeof output === 'string' ? output : JSON.stringify(output);
-            const truncatedOutput =
-              outputStr && outputStr.length > 500
-                ? `${outputStr.slice(0, 500)}... (truncated)`
-                : outputStr || '';
-            logger.error(`Gemini API: MAX_TOKENS reached`, {
+            logger.debug(`Gemini API: MAX_TOKENS reached`, {
               finishReason: candidate.finishReason,
               outputTokens,
               totalTokens: datum.usageMetadata?.totalTokenCount || 0,
             });
-            return {
-              // Prompt and thinking tokens are not included in the token limit
-              error: `Gemini API error due to reaching maximum token limit. ${outputTokens} output tokens used. Output generated: ${truncatedOutput}`,
-            };
+            // Continue processing - do not return error
           } else if (candidate.finishReason && candidate.finishReason !== 'STOP') {
             logger.error(`Gemini API error due to finish reason: ${candidate.finishReason}.`);
             // e.g. MALFORMED_FUNCTION_CALL

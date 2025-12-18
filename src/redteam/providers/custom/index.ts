@@ -36,6 +36,7 @@ import { EVAL_SYSTEM_PROMPT, REFUSAL_SYSTEM_PROMPT } from '../crescendo/prompts'
 import { getGoalRubric } from '../prompts';
 import type { Message } from '../shared';
 import {
+  buildGraderResultAssertion,
   externalizeResponseForRedteamHistory,
   getLastMessageContent,
   getTargetResponse,
@@ -516,7 +517,7 @@ export class CustomProvider implements ApiProvider {
         if (test && assertToUse) {
           const grader = getGraderById(assertToUse.type);
           if (grader) {
-            const { grade } = await grader.getResult(
+            const { grade, rubric } = await grader.getResult(
               attackPrompt,
               lastResponse.output,
               test,
@@ -525,7 +526,10 @@ export class CustomProvider implements ApiProvider {
               additionalRubric,
             );
             graderPassed = grade.pass;
-            storedGraderResult = grade;
+            storedGraderResult = {
+              ...grade,
+              assertion: buildGraderResultAssertion(grade.assertion, assertToUse, rubric),
+            };
           }
         }
 
