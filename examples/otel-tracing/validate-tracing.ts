@@ -19,8 +19,9 @@ import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
 
 // Set up OTEL before importing providers
 const memoryExporter = new InMemorySpanExporter();
-const tracerProvider = new NodeTracerProvider({});
-tracerProvider.addSpanProcessor(new SimpleSpanProcessor(memoryExporter));
+const tracerProvider = new NodeTracerProvider({
+  spanProcessors: [new SimpleSpanProcessor(memoryExporter)],
+});
 tracerProvider.register();
 
 // Now import providers (after OTEL is set up)

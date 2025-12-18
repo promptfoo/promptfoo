@@ -13,6 +13,7 @@ import {
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util/index';
+import { fetchWithProxy } from '../../util/fetch/index';
 import { isValidJson } from '../../util/json';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToGoogle } from '../mcp/transform';
@@ -97,12 +98,13 @@ class VertexGenericProvider implements ApiProvider {
   }
 
   getApiKey(): string | undefined {
+    // For Vertex provider, prioritize VERTEX_API_KEY over GEMINI_API_KEY
     return (
       this.config.apiKey ||
-      this.env?.GEMINI_API_KEY ||
       this.env?.VERTEX_API_KEY ||
-      getEnvString('GEMINI_API_KEY') ||
-      getEnvString('VERTEX_API_KEY')
+      this.env?.GEMINI_API_KEY ||
+      getEnvString('VERTEX_API_KEY') ||
+      getEnvString('GEMINI_API_KEY')
     );
   }
 
@@ -341,6 +343,29 @@ export class VertexChatProvider extends VertexGenericProvider {
     }
   }
 
+  /**
+   * Check if express mode should be used (API key without OAuth)
+   * Express mode uses a simplified endpoint format without project/location.
+   *
+   * Express mode is AUTOMATIC when:
+   * 1. API key is available (VERTEX_API_KEY or GEMINI_API_KEY), AND
+   * 2. No explicit projectId in config, AND
+   * 3. No explicit credentials in config, AND
+   * 4. User hasn't explicitly disabled it (expressMode !== false)
+   *
+   * This mirrors how AWS Bedrock handles authentication - automatic detection
+   * of the simplest auth method available.
+   */
+  private isExpressMode(): boolean {
+    const hasApiKey = Boolean(this.getApiKey());
+    const hasExplicitProjectId = Boolean(this.config.projectId);
+    const hasExplicitCredentials = Boolean(this.config.credentials);
+    const explicitlyDisabled = this.config.expressMode === false;
+
+    // Express mode is automatic when API key is available and no explicit OAuth config
+    return hasApiKey && !hasExplicitProjectId && !hasExplicitCredentials && !explicitlyDisabled;
+  }
+
   async callGeminiApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     if (this.initializationPromise) {
       await this.initializationPromise;
@@ -448,23 +473,51 @@ export class VertexChatProvider extends VertexGenericProvider {
     if (response === undefined) {
       let data;
       try {
-        const client = await this.getClientWithCredentials();
-        const projectId = await this.getProjectId();
         // Default to non-streaming (generateContent) since:
         // 1. Model Armor floor settings only work with non-streaming endpoint
         // 2. Promptfoo collects full responses for evaluation anyway
         // Set streaming: true to use streamGenerateContent if needed
         const endpoint = config.streaming === true ? 'streamGenerateContent' : 'generateContent';
-        const url = `https://${this.getApiHost()}/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/${this.getPublisher()}/models/${
-          this.modelName
-        }:${endpoint}`;
-        const res = await client.request({
-          url,
-          method: 'POST',
-          data: body,
-          timeout: REQUEST_TIMEOUT_MS,
-        });
-        data = res.data as GeminiApiResponse;
+
+        // Check if we should use express mode (API key without OAuth)
+        if (this.isExpressMode()) {
+          // Express mode: use simplified endpoint with API key
+          const apiKey = this.getApiKey();
+          const url = `https://aiplatform.googleapis.com/${this.getApiVersion()}/publishers/${this.getPublisher()}/models/${this.modelName}:${endpoint}?key=${apiKey}`;
+
+          const res = await fetchWithProxy(url, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(body),
+            signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+          });
+
+          if (!res.ok) {
+            const errorData = await res.json().catch(() => null);
+            logger.debug(`Gemini API express mode error:\n${JSON.stringify(errorData)}`);
+            return {
+              error: `API call error: ${res.status} ${res.statusText}${errorData ? `: ${JSON.stringify(errorData)}` : ''}`,
+            };
+          }
+
+          data = (await res.json()) as GeminiApiResponse;
+        } else {
+          // Standard mode: use OAuth and full endpoint
+          const client = await this.getClientWithCredentials();
+          const projectId = await this.getProjectId();
+          const url = `https://${this.getApiHost()}/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/${this.getPublisher()}/models/${
+            this.modelName
+          }:${endpoint}`;
+          const res = await client.request({
+            url,
+            method: 'POST',
+            data: body,
+            timeout: REQUEST_TIMEOUT_MS,
+          });
+          data = res.data as GeminiApiResponse;
+        }
       } catch (err) {
         const geminiError = err as GaxiosError;
         if (

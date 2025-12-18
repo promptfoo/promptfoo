@@ -418,6 +418,8 @@ export interface GradingResult {
     contextUnits?: string[];
     // Rendered assertion value with substituted variables (for display in UI)
     renderedAssertionValue?: string;
+    // Full grading prompt sent to the grading LLM (for debugging)
+    renderedGradingPrompt?: string;
     [key: string]: any;
   };
 }

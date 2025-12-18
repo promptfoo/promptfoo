@@ -114,7 +114,7 @@ export class LocalSpanExporter implements SpanExporter {
 
     return {
       spanId: spanContext.spanId,
-      parentSpanId: span.parentSpanId || undefined,
+      parentSpanId: span.parentSpanContext?.spanId || undefined,
       name: span.name,
       startTime: startTimeMs,
       endTime: endTimeMs,

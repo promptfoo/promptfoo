@@ -32,9 +32,10 @@ describe('OTEL Tracing Performance Benchmarks', () => {
 
   beforeAll(() => {
     memoryExporter = new InMemorySpanExporter();
-    tracerProvider = new NodeTracerProvider({});
     // Use SimpleSpanProcessor for consistent test behavior
-    tracerProvider.addSpanProcessor(new SimpleSpanProcessor(memoryExporter));
+    tracerProvider = new NodeTracerProvider({
+      spanProcessors: [new SimpleSpanProcessor(memoryExporter)],
+    });
     tracerProvider.register();
   });
 
@@ -314,16 +315,17 @@ describe('BatchSpanProcessor Performance', () => {
 
   beforeAll(() => {
     memoryExporter = new InMemorySpanExporter();
-    tracerProvider = new NodeTracerProvider({});
     // Use BatchSpanProcessor like production
-    tracerProvider.addSpanProcessor(
-      new BatchSpanProcessor(memoryExporter, {
-        maxQueueSize: 2048,
-        maxExportBatchSize: 512,
-        scheduledDelayMillis: 5000,
-        exportTimeoutMillis: 30000,
-      }),
-    );
+    tracerProvider = new NodeTracerProvider({
+      spanProcessors: [
+        new BatchSpanProcessor(memoryExporter, {
+          maxQueueSize: 2048,
+          maxExportBatchSize: 512,
+          scheduledDelayMillis: 5000,
+          exportTimeoutMillis: 30000,
+        }),
+      ],
+    });
     tracerProvider.register();
   });
 

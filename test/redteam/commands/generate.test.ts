@@ -185,6 +185,8 @@ describe('doGenerateRedteam', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // Reset mock implementations that persist across tests (clearAllMocks only clears call history)
+    vi.mocked(extractMcpToolsInfo).mockReset();
     mockProvider = {
       id: () => 'test-provider',
       callApi: vi.fn().mockResolvedValue({ output: 'test output' }),
@@ -1703,6 +1705,9 @@ describe('doGenerateRedteam', () => {
     });
 
     it('should use single purpose mode when no contexts are defined', async () => {
+      // Reset MCP tools mock to prevent interference from other tests
+      vi.mocked(extractMcpToolsInfo).mockResolvedValue('');
+
       vi.mocked(configModule.resolveConfigs).mockResolvedValue({
         basePath: '/mock/path',
         testSuite: {
