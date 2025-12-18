@@ -708,11 +708,7 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     // macOS: /Users/username/
     // Linux: /home/username/
     // Windows: C:\Users\username\
-    const homePatterns = [
-      /^\/Users\/[^/]+\//,
-      /^\/home\/[^/]+\//,
-      /^[A-Z]:\\Users\\[^\\]+\\/i,
-    ];
+    const homePatterns = [/^\/Users\/[^/]+\//, /^\/home\/[^/]+\//, /^[A-Z]:\\Users\\[^\\]+\\/i];
 
     let sanitized = filePath;
     for (const pattern of homePatterns) {
@@ -730,16 +726,24 @@ export class OpenAICodexSDKProvider implements ApiProvider {
     switch (item.type) {
       case 'command_execution':
         // Sanitize commands as they may contain credentials (API keys in curl, env vars, etc.)
-        if (item.command) attrs['codex.command'] = this.sanitizeText(item.command, 2000);
+        if (item.command) {
+          attrs['codex.command'] = this.sanitizeText(item.command, 2000);
+        }
         break;
       case 'mcp_tool_call':
         // Server and tool names are safe identifiers, no sanitization needed
-        if (item.server) attrs['codex.mcp.server'] = item.server;
-        if (item.tool) attrs['codex.mcp.tool'] = item.tool;
+        if (item.server) {
+          attrs['codex.mcp.server'] = item.server;
+        }
+        if (item.tool) {
+          attrs['codex.mcp.tool'] = item.tool;
+        }
         break;
       case 'web_search':
         // Sanitize search queries as they may contain sensitive information
-        if (item.query) attrs['codex.search.query'] = this.sanitizeText(item.query, 500);
+        if (item.query) {
+          attrs['codex.search.query'] = this.sanitizeText(item.query, 500);
+        }
         break;
     }
 
@@ -754,15 +758,21 @@ export class OpenAICodexSDKProvider implements ApiProvider {
 
     switch (item.type) {
       case 'command_execution':
-        if (item.exit_code !== undefined) attrs['codex.exit_code'] = item.exit_code;
-        if (item.status) attrs['codex.status'] = item.status;
+        if (item.exit_code !== undefined) {
+          attrs['codex.exit_code'] = item.exit_code;
+        }
+        if (item.status) {
+          attrs['codex.status'] = item.status;
+        }
         // Sanitize and truncate output to prevent secret leakage
         if (item.aggregated_output) {
           attrs['codex.output'] = this.sanitizeText(item.aggregated_output, 1000);
         }
         break;
       case 'file_change':
-        if (item.status) attrs['codex.status'] = item.status;
+        if (item.status) {
+          attrs['codex.status'] = item.status;
+        }
         if (item.changes?.length) {
           attrs['codex.files_changed'] = item.changes.length;
           // Sanitize paths to remove usernames/PII and truncate total length
@@ -771,19 +781,29 @@ export class OpenAICodexSDKProvider implements ApiProvider {
         }
         break;
       case 'mcp_tool_call':
-        if (item.status) attrs['codex.status'] = item.status;
-        if (item.error?.message) attrs['codex.error'] = this.sanitizeText(item.error.message, 500);
+        if (item.status) {
+          attrs['codex.status'] = item.status;
+        }
+        if (item.error?.message) {
+          attrs['codex.error'] = this.sanitizeText(item.error.message, 500);
+        }
         break;
       case 'agent_message':
         // Sanitize and truncate message
-        if (item.text) attrs['codex.message'] = this.sanitizeText(item.text, 500);
+        if (item.text) {
+          attrs['codex.message'] = this.sanitizeText(item.text, 500);
+        }
         break;
       case 'reasoning':
         // Sanitize and truncate reasoning
-        if (item.text) attrs['codex.reasoning'] = this.sanitizeText(item.text, 500);
+        if (item.text) {
+          attrs['codex.reasoning'] = this.sanitizeText(item.text, 500);
+        }
         break;
       case 'error':
-        if (item.message) attrs['codex.error'] = this.sanitizeText(item.message, 500);
+        if (item.message) {
+          attrs['codex.error'] = this.sanitizeText(item.message, 500);
+        }
         break;
     }
 
@@ -863,7 +883,8 @@ export class OpenAICodexSDKProvider implements ApiProvider {
       // Extract reasoning summary from raw response if available
       if (response.raw) {
         try {
-          const rawData = typeof response.raw === 'string' ? JSON.parse(response.raw) : response.raw;
+          const rawData =
+            typeof response.raw === 'string' ? JSON.parse(response.raw) : response.raw;
           // Include reasoning in additional attributes
           if (rawData.reasoningTexts?.length > 0) {
             result.additionalAttributes = {
