@@ -6,10 +6,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [0.120.7](https://github.com/promptfoo/promptfoo/compare/0.120.6...0.120.7) (2025-12-19)
 
-
 ### Features
 
-* blob storage ([#6708](https://github.com/promptfoo/promptfoo/issues/6708)) ([73fcd51](https://github.com/promptfoo/promptfoo/commit/73fcd5183bfaa37b76326f21eaeaaaddee264bb9))
+- blob storage ([#6708](https://github.com/promptfoo/promptfoo/issues/6708)) ([73fcd51](https://github.com/promptfoo/promptfoo/commit/73fcd5183bfaa37b76326f21eaeaaaddee264bb9))
 
 ## [0.120.6](https://github.com/promptfoo/promptfoo/compare/0.120.5...0.120.6) (2025-12-19)
 
