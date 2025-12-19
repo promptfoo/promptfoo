@@ -1,5 +1,6 @@
 import React from 'react';
 
+import Link from '@docusaurus/Link';
 import { HtmlClassNameProvider, PageMetadata, ThemeClassNames } from '@docusaurus/theme-common';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import BlogPostGrid from '@site/src/components/Blog/BlogPostGrid';
@@ -10,6 +11,21 @@ import SearchMetadata from '@theme/SearchMetadata';
 import clsx from 'clsx';
 import styles from './styles.module.css';
 import type { Props } from '@theme/BlogListPage';
+import type { PropBlogPostContent } from '@docusaurus/plugin-content-blog';
+
+// Format tag label: "red-teaming" → "Red Teaming", "ai-security" → "AI Security"
+function formatTagLabel(label: string): string {
+  const acronyms = ['ai', 'llm', 'owasp', 'mcp', 'rag', 'agi', 'a2a', 'eu'];
+  return label
+    .split('-')
+    .map((word) => {
+      if (acronyms.includes(word.toLowerCase())) {
+        return word.toUpperCase();
+      }
+      return word.charAt(0).toUpperCase() + word.slice(1);
+    })
+    .join(' ');
+}
 
 function BlogListPageMetadata(props: Props): React.ReactElement {
   const { metadata } = props;
@@ -29,56 +45,38 @@ function BlogListPageMetadata(props: Props): React.ReactElement {
   );
 }
 
-// Curated featured posts data (edit these to change featured posts)
-const FEATURED_POSTS = [
-  {
-    slug: 'building-a-security-scanner-for-llm-apps',
-    title: 'Building a Security Scanner for LLM Apps',
-    description:
-      'We built a GitHub Action that scans pull requests for LLM-specific vulnerabilities. Learn why traditional security tools miss these issues and how we trace data flows to find prompt injection risks.',
-    image: '/img/blog/building-a-security-scanner-for-llm-apps/call-graph-io-flows.png',
-    permalink: '/blog/building-a-security-scanner-for-llm-apps/',
-    date: '2025-12-16',
-    author: 'Dane Schneider',
-    tag: 'code-scanning',
-  },
-  {
-    slug: 'asr-not-portable-metric',
-    title: "Why Attack Success Rate (ASR) Isn't Comparable Across Jailbreak Papers",
-    description:
-      'Attack Success Rate (ASR) is the most commonly reported metric for LLM red teaming, but it changes with attempt budget, prompt sets, and judge choice.',
-    image: '/img/blog/asr-not-portable-metric/asr-header.jpg',
-    permalink: '/blog/asr-not-portable-metric/',
-    date: '2025-12-12',
-    author: "Michael D'Angelo",
-    tag: 'research-analysis',
-  },
-];
-
 function BlogListPageContent(props: Props): React.ReactElement {
   const { metadata, items, sidebar } = props;
   const isFirstPage = metadata.page === 1;
+
+  // Find featured posts from frontmatter (posts with featured: true)
+  const featuredPosts = React.useMemo(() => {
+    if (!isFirstPage) {
+      return [];
+    }
+    return items
+      .filter((item) => item.content.frontMatter.featured === true)
+      .map((item) => item.content);
+  }, [items, isFirstPage]);
 
   // Filter out featured posts from the grid only on page 1
   const displayPosts = React.useMemo(() => {
     if (!isFirstPage) {
       return items;
     }
-    return items.filter(
-      (item) => !FEATURED_POSTS.some((fp) => item.content.metadata.permalink.includes(fp.slug)),
-    );
+    return items.filter((item) => item.content.frontMatter.featured !== true);
   }, [items, isFirstPage]);
 
   // Dynamic title based on page (use • to match BlogPostGrid parsing)
-  const gridTitle = isFirstPage ? 'Latest Posts' : `Archive • Page ${metadata.page}`;
+  const gridTitle = isFirstPage ? 'Latest Posts' : `Older Posts • Page ${metadata.page}`;
 
   return (
     <BlogLayout sidebar={sidebar}>
       <div className={styles.blogListPage}>
-        {isFirstPage && (
+        {isFirstPage && featuredPosts.length > 0 && (
           <div className={styles.featuredSection}>
-            {FEATURED_POSTS.map((post, idx) => (
-              <FeaturedBlogPostStatic key={idx} post={post} />
+            {featuredPosts.map((post) => (
+              <FeaturedBlogPost key={post.metadata.permalink} post={post} />
             ))}
           </div>
         )}
@@ -89,40 +87,52 @@ function BlogListPageContent(props: Props): React.ReactElement {
   );
 }
 
-// Static featured post component for curated posts
-function FeaturedBlogPostStatic({
-  post,
-}: {
-  post: (typeof FEATURED_POSTS)[0];
-}): React.ReactElement {
-  const formattedDate = new Date(post.date).toLocaleDateString('en-US', {
+// Featured post component using actual blog post data
+function FeaturedBlogPost({ post }: { post: PropBlogPostContent }): React.ReactElement {
+  const { metadata } = post;
+  const { title, date, permalink, tags, description } = metadata;
+  const author = metadata.authors[0];
+
+  const formattedDate = new Date(date).toLocaleDateString('en-US', {
     timeZone: 'UTC',
     month: 'short',
     day: 'numeric',
     year: 'numeric',
   });
 
+  // Get the first tag if available
+  const primaryTag = tags && tags.length > 0 ? tags[0] : null;
+
+  // Truncate description to first 2 sentences for preview
+  const previewDescription = description
+    ? description.split('. ').slice(0, 2).join('. ') + (description.includes('. ') ? '.' : '')
+    : null;
+
   return (
-    <a href={post.permalink} className={styles.featuredPostLink}>
+    <Link to={permalink} className={styles.featuredPostLink}>
       <div className={styles.featuredPost}>
         <div className={styles.featuredBadge}>Featured</div>
-        <div className={styles.featuredPostImage}>
-          <img src={post.image} alt={post.title} loading="lazy" />
-        </div>
+        {metadata.frontMatter.image && (
+          <div className={styles.featuredPostImage}>
+            <img src={metadata.frontMatter.image} alt={title} loading="lazy" />
+          </div>
+        )}
         <div className={styles.featuredPostContent}>
           <div className={styles.featuredPostHeader}>
-            <span className={styles.tag}>{post.tag}</span>
-            <h2 className={styles.featuredTitle}>{post.title}</h2>
+            {primaryTag && <span className={styles.tag}>{formatTagLabel(primaryTag.label)}</span>}
+            <h2 className={styles.featuredTitle}>{title}</h2>
           </div>
-          <p className={styles.preview}>{post.description}</p>
+          {previewDescription && <p className={styles.preview}>{previewDescription}</p>}
           <div className={styles.featuredPostMeta}>
-            <span className={styles.author}>
-              {post.author} · {formattedDate}
-            </span>
+            {author && (
+              <span className={styles.author}>
+                {author.name} · {formattedDate}
+              </span>
+            )}
           </div>
         </div>
       </div>
-    </a>
+    </Link>
   );
 }
 

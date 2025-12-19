@@ -21,14 +21,14 @@
   background-color: var(--ifm-color-primary);
 }
 
-/* Style for the archive page indicator */
-.blogPostGridTitle[data-is-archive='true'] {
+/* Style for paginated pages (page 2+) */
+.blogPostGridTitle[data-is-paginated='true'] {
   display: flex;
   align-items: center;
   gap: 0.75rem;
 }
 
-.blogPostGridTitle[data-is-archive='true']::after {
+.blogPostGridTitle[data-is-paginated='true']::after {
   width: 40px;
 }
 
