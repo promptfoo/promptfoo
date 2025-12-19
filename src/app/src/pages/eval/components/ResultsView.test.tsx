@@ -2186,7 +2186,7 @@ describe('ResultsView canEditAuthor Logic', () => {
     expect(lastCall.isCloudEnabled).toBe(true);
   });
 
-  it('should set editable=true when cloud enabled and author matches current user', async () => {
+  it('should set editable=false when cloud enabled and author matches current user (no self-removal)', async () => {
     mockUseCloudConfig.mockReturnValue({
       data: { appUrl: 'https://app.promptfoo.com', isEnabled: true },
       isLoading: false,
@@ -2194,6 +2194,8 @@ describe('ResultsView canEditAuthor Logic', () => {
       refetch: vi.fn(),
     });
     // fetchUserEmail mock returns 'test@example.com'
+    // Even though author matches current user, editing is disabled in cloud mode
+    // (users cannot remove their own authorship)
     setupTableStore('test@example.com');
 
     await act(async () => {
@@ -2213,7 +2215,7 @@ describe('ResultsView canEditAuthor Logic', () => {
     });
 
     const lastCall = mockAuthorChipProps.mock.calls[mockAuthorChipProps.mock.calls.length - 1][0];
-    expect(lastCall.editable).toBe(true);
+    expect(lastCall.editable).toBe(false);
     expect(lastCall.isCloudEnabled).toBe(true);
   });
 

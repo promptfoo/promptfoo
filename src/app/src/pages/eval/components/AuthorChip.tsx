@@ -90,55 +90,43 @@ export const AuthorChip = ({
 
   const getTooltipTitle = () => {
     if (!editable) {
-      return author ? `This eval belongs to ${author}` : 'Author';
+      if (!author) {
+        return 'Author';
+      }
+      // Show friendlier message when viewing your own eval
+      if (isCloudEnabled && author === currentUserEmail) {
+        return 'Your eval';
+      }
+      return `This eval belongs to ${author}`;
     }
     if (isCloudEnabled) {
-      return author ? 'Click to manage authorship' : 'Click to claim this eval';
+      // In cloud mode, editable=true only when no author (claiming)
+      return 'Click to claim this eval';
     }
     return author ? 'Click to edit author' : 'Click to set author';
   };
 
   const renderPopoverContent = () => {
     if (isCloudEnabled) {
-      // Cloud mode: action buttons, no free text
+      // Cloud mode: only shows claim UI (popover only opens for unclaimed evals)
       return (
         <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', width: '400px' }}>
-          {author ? (
-            // Your eval (author === currentUserEmail, since we can only edit our own)
-            <>
-              <Typography variant="body2" sx={{ mb: 2 }}>
-                <strong>Author:</strong> {author} (you)
-              </Typography>
-              <Button
-                variant="outlined"
-                color="warning"
-                onClick={() => handleCloudAction('')}
-                disabled={isLoading}
-              >
-                {isLoading ? <CircularProgress size={24} /> : 'Remove my name'}
-              </Button>
-            </>
-          ) : (
-            // Unclaimed eval
-            <>
-              <Typography variant="body2" sx={{ mb: 2 }}>
-                This eval has no author assigned.
-              </Typography>
-              <Button
-                variant="contained"
-                onClick={() => handleCloudAction(currentUserEmail || '')}
-                disabled={isLoading || !currentUserEmail}
-              >
-                {isLoading ? (
-                  <CircularProgress size={24} />
-                ) : currentUserEmail ? (
-                  `Claim as mine (${currentUserEmail})`
-                ) : (
-                  'Loading...'
-                )}
-              </Button>
-            </>
-          )}
+          <Typography variant="body2" sx={{ mb: 2 }}>
+            This eval has no author assigned.
+          </Typography>
+          <Button
+            variant="contained"
+            onClick={() => handleCloudAction(currentUserEmail || '')}
+            disabled={isLoading || !currentUserEmail}
+          >
+            {isLoading ? (
+              <CircularProgress size={24} />
+            ) : currentUserEmail ? (
+              `Claim as mine (${currentUserEmail})`
+            ) : (
+              'Loading...'
+            )}
+          </Button>
           {error && (
             <Typography color="error" variant="caption" sx={{ mt: 1 }}>
               {error}

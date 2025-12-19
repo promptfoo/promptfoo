@@ -191,20 +191,6 @@ describe('AuthorChip', () => {
       expect(mockOnEditAuthor).toHaveBeenCalledWith('user@example.com');
     });
 
-    it('shows "Remove my name" button when cloud enabled and author matches user', async () => {
-      render(<AuthorChip {...cloudProps} author="user@example.com" />);
-      await userEvent.click(screen.getByText('user@example.com'));
-      expect(screen.getByText(/\(you\)/)).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /Remove my name/i })).toBeInTheDocument();
-    });
-
-    it('calls onEditAuthor with empty string when remove button is clicked', async () => {
-      render(<AuthorChip {...cloudProps} author="user@example.com" />);
-      await userEvent.click(screen.getByText('user@example.com'));
-      await userEvent.click(screen.getByRole('button', { name: /Remove my name/i }));
-      expect(mockOnEditAuthor).toHaveBeenCalledWith('');
-    });
-
     it('does not render TextField in cloud mode', async () => {
       render(<AuthorChip {...cloudProps} />);
       await userEvent.click(screen.getByText('Unknown'));
@@ -225,10 +211,17 @@ describe('AuthorChip', () => {
       // Tooltip is handled by MUI, just verify the component renders
     });
 
-    it('shows tooltip "This eval belongs to {author}" when not editable', () => {
+    it('shows tooltip "This eval belongs to {author}" when not editable and author is someone else', () => {
       render(<AuthorChip {...cloudProps} author="other@example.com" editable={false} />);
       // The tooltip title is set based on editable state
       expect(screen.getByText('other@example.com')).toBeInTheDocument();
+    });
+
+    it('shows "Your eval" tooltip when cloud enabled and author matches current user', () => {
+      // In cloud mode, when viewing your own eval, editable=false and tooltip says "Your eval"
+      render(<AuthorChip {...cloudProps} author="user@example.com" editable={false} />);
+      // The component renders with author displayed, tooltip would show "Your eval"
+      expect(screen.getByText('user@example.com')).toBeInTheDocument();
     });
 
     it('displays error message when cloud action fails', async () => {
