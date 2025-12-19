@@ -522,6 +522,20 @@ export class VertexChatProvider extends VertexGenericProvider {
         }
       } catch (err) {
         const geminiError = err as GaxiosError;
+        logger.debug(`Gemini API error:\n${JSON.stringify(geminiError.response?.data || err)}`);
+
+        // Check for authentication errors that require re-login
+        const authError = geminiError.response?.data?.error;
+        if (
+          authError === 'invalid_grant' ||
+          geminiError.response?.data?.error_subtype === 'invalid_rapt'
+        ) {
+          return {
+            error:
+              'Vertex AI authentication expired. Please re-authenticate by running: gcloud auth application-default login',
+          };
+        }
+
         if (
           geminiError.response &&
           geminiError.response.data &&
@@ -537,7 +551,6 @@ export class VertexChatProvider extends VertexGenericProvider {
             error: `API call error: Status ${status}, Code ${code}, Message:\n\n${message}`,
           };
         }
-        logger.debug(`Gemini API error:\n${JSON.stringify(err)}`);
         return {
           error: `API call error: ${String(err)}`,
         };

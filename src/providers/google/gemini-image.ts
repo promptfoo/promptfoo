@@ -188,9 +188,24 @@ export class GeminiImageProvider implements ApiProvider {
 
       return this.processResponse(response.data, false, latencyMs);
     } catch (err: any) {
-      if (err.response?.data?.error) {
+      logger.debug(`Vertex AI error details: ${JSON.stringify(err.response?.data || err.message)}`);
+
+      // Check for authentication errors that require re-login
+      const errorData = err.response?.data?.error;
+      if (errorData === 'invalid_grant' || err.response?.data?.error_subtype === 'invalid_rapt') {
         return {
-          error: `Vertex AI error: ${err.response.data.error.message || 'Unknown error'}`,
+          error:
+            'Vertex AI authentication expired. Please re-authenticate by running: gcloud auth application-default login',
+        };
+      }
+
+      if (errorData) {
+        const errorMessage =
+          typeof errorData === 'string'
+            ? errorData
+            : errorData.message || JSON.stringify(errorData);
+        return {
+          error: `Vertex AI error: ${errorMessage}`,
         };
       }
       return {
