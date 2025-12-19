@@ -2,6 +2,7 @@ import Clone from 'rfdc';
 import { z } from 'zod';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
+import type { EnvOverrides } from '../../types/env';
 import { extractBase64FromDataUrl, isDataUrl, parseDataUrl } from '../../util/dataUrl';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { renderVarsInObject } from '../../util/index';
@@ -368,7 +369,7 @@ export async function getGoogleClient({ credentials }: { credentials?: string } 
  */
 export async function resolveProjectId(
   config: { projectId?: string; credentials?: string },
-  env?: Record<string, string>,
+  env?: EnvOverrides,
 ): Promise<string> {
   const processedCredentials = loadCredentials(config.credentials);
   const { projectId: googleProjectId } = await getGoogleClient({
