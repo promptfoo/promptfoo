@@ -1,5 +1,3 @@
-import { randomUUID } from 'crypto';
-
 import { and, eq, gte, inArray, lt } from 'drizzle-orm';
 import { extractAndStoreBinaryData, isBlobStorageEnabled } from '../blobs/extractor';
 import { getDb } from '../database/index';
@@ -95,7 +93,7 @@ export default class EvalResult {
     });
 
     const args = {
-      id: randomUUID(),
+      id: crypto.randomUUID(),
       evalId,
       testCase: preSanitizeTestCase,
       promptIdx: result.promptIdx,
@@ -126,6 +124,7 @@ export default class EvalResult {
   static async createManyFromEvaluateResult(results: EvaluateResult[], evalId: string) {
     const db = getDb();
     const returnResults: EvalResult[] = [];
+    const processedResults: EvaluateResult[] = [];
     for (const result of results) {
       const processedResponse = isBlobStorageEnabled()
         ? await extractAndStoreBinaryData(result.response, {
@@ -134,14 +133,19 @@ export default class EvalResult {
             promptIdx: result.promptIdx,
           })
         : result.response;
-
-      const dbResult = db
-        .insert(evalResultsTable)
-        .values({ ...result, response: processedResponse, evalId, id: randomUUID() })
-        .returning()
-        .get();
-      returnResults.push(new EvalResult({ ...dbResult, persisted: true }));
+      processedResults.push({ ...result, response: processedResponse });
     }
+
+    db.transaction(() => {
+      for (const result of processedResults) {
+        const dbResult = db
+          .insert(evalResultsTable)
+          .values({ ...result, evalId, id: crypto.randomUUID() })
+          .returning()
+          .get();
+        returnResults.push(new EvalResult({ ...dbResult, persisted: true }));
+      }
+    });
     return returnResults;
   }
 

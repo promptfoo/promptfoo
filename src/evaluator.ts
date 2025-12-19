@@ -1,5 +1,3 @@
-import { randomUUID } from 'crypto';
-
 import async from 'async';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
@@ -979,7 +977,7 @@ class Evaluator {
         if (inputTransform) {
           const transformContext: TransformContext = {
             prompt: {},
-            uuid: randomUUID(),
+            uuid: crypto.randomUUID(),
           };
           const transformedVars: Vars = await transform(
             inputTransform,

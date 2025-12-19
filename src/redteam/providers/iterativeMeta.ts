@@ -1,4 +1,3 @@
-import { v4 as uuidv4 } from 'uuid';
 import { getEnvInt } from '../../envars';
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
@@ -124,7 +123,7 @@ export async function runMetaAgentRedteam({
   const additionalRubric = getIterativeMetaGoalRubric(goal);
 
   // Generate unique test run ID
-  const testRunId = `${context?.evaluationId || 'local'}-tc${context?.testCaseId || uuidv4().slice(0, 8)}`;
+  const testRunId = `${context?.evaluationId || 'local'}-tc${context?.testCaseId || crypto.randomUUID().slice(0, 8)}`;
 
   // Resolve tracing options
   const tracingOptions = resolveTracingOptions({

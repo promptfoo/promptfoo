@@ -109,8 +109,28 @@ async function sendEvalRecord(
 ): Promise<string> {
   // Fetch traces for the eval
   const traces = await evalRecord.getTraces();
-  const evalDataWithoutResults = { ...evalRecord, results: [], traces };
-  const jsonData = JSON.stringify(evalDataWithoutResults);
+
+  // Inject current team ID into config metadata if cloud is enabled
+  // This ensures the eval is created in the correct team (not the default team)
+  let evalData: Record<string, unknown> = { ...evalRecord, results: [], traces };
+  if (cloudConfig.isEnabled()) {
+    const currentOrgId = cloudConfig.getCurrentOrganizationId();
+    const currentTeamId = cloudConfig.getCurrentTeamId(currentOrgId);
+    if (currentTeamId) {
+      evalData = {
+        ...evalData,
+        config: {
+          ...(evalRecord.config || {}),
+          metadata: {
+            ...(evalRecord.config?.metadata || {}),
+            teamId: currentTeamId,
+          },
+        },
+      };
+    }
+  }
+
+  const jsonData = JSON.stringify(evalData);
 
   logger.debug(
     `Sending initial eval data to ${url} - eval ${evalRecord.id} with ${evalRecord.prompts.length} prompts ${traces.length > 0 ? `and trace data` : ''}`,
@@ -492,19 +512,27 @@ export async function createShareableUrl(
 }
 
 /**
- * Checks whether an eval has been shared.
+ * Checks whether an eval has been shared to the current team.
  * @param eval_ The eval to check.
- * @returns True if the eval has been shared, false otherwise.
+ * @returns True if the eval has been shared to the current team, false otherwise.
  */
 export async function hasEvalBeenShared(eval_: Eval): Promise<boolean> {
   try {
-    // GET /api/results/:id
-    const res = await makeCloudRequest(`results/${eval_.id}`, 'GET');
+    // Get current team ID to scope the check to current team only
+    // This prevents false positives when eval exists in a different team
+    const currentOrgId = cloudConfig.getCurrentOrganizationId();
+    const currentTeamId = cloudConfig.getCurrentTeamId(currentOrgId);
+
+    // GET /api/results/:id with optional teamId scope
+    const url = currentTeamId
+      ? `results/${eval_.id}?teamId=${currentTeamId}`
+      : `results/${eval_.id}`;
+    const res = await makeCloudRequest(url, 'GET');
     switch (res.status) {
-      // 200: Eval already exists i.e. it has been shared before.
+      // 200: Eval already exists in the current team.
       case 200:
         return true;
-      // 404: Eval not found i.e. it has not been shared before.
+      // 404: Eval not found in the current team.
       case 404:
         return false;
       default:

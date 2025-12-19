@@ -1,4 +1,3 @@
-import { v4 as uuidv4 } from 'uuid';
 import { beforeEach, describe, expect, it, Mocked, vi } from 'vitest';
 import {
   createTreeNode,
@@ -568,7 +567,7 @@ describe('TreeNode', () => {
     });
 
     it('should use provided UUID if given', () => {
-      const customId = uuidv4();
+      const customId = crypto.randomUUID();
       const node = createTreeNode('prompt', 5, 0, customId);
       expect(node.id).toBe(customId);
     });
@@ -577,8 +576,8 @@ describe('TreeNode', () => {
 
 describe('Tree Structure', () => {
   it('should track parent-child relationships in treeOutputs', async () => {
-    const parentId = uuidv4();
-    const childId = uuidv4();
+    const parentId = crypto.randomUUID();
+    const childId = crypto.randomUUID();
     const parentNode = createTreeNode('parent', 5, 0, parentId);
     const childNode = createTreeNode('child', 7, 1, childId);
 
@@ -789,10 +788,10 @@ describe('Tree Structure and Metadata', () => {
   });
 
   it('should track tree structure across multiple depths', () => {
-    const rootId = uuidv4();
-    const child1Id = uuidv4();
-    const child2Id = uuidv4();
-    const grandchild1Id = uuidv4();
+    const rootId = crypto.randomUUID();
+    const child1Id = crypto.randomUUID();
+    const child2Id = crypto.randomUUID();
+    const grandchild1Id = crypto.randomUUID();
 
     const treeOutputs: TreeSearchOutput[] = [
       {

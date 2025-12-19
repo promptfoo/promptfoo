@@ -1,4 +1,3 @@
-import { validate as isUUID, v4 as uuidv4 } from 'uuid';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { POLICY_METRIC_PREFIX } from '../../../../src/redteam/plugins/policy/constants';
 import {
@@ -12,11 +11,11 @@ import {
 } from '../../../../src/redteam/plugins/policy/utils';
 import { PolicyObjectSchema } from '../../../../src/redteam/types';
 import { sha256 } from '../../../../src/util/createHash';
+import { isUuid } from '../../../../src/util/uuid';
 
 // Mock dependencies
-vi.mock('uuid', () => ({
-  validate: vi.fn(),
-  v4: vi.fn(),
+vi.mock('../../../../src/util/uuid', () => ({
+  isUuid: vi.fn(),
 }));
 
 vi.mock('../../../../src/util/createHash', () => ({
@@ -51,7 +50,6 @@ describe('Policy Utils', () => {
 
     it('should deserialize a policy ID and remove strategy suffix', () => {
       const mockUuid = '550e8400-e29b-41d4-a716-446655440000';
-      (uuidv4 as Mock).mockReturnValue(mockUuid);
 
       const result = deserializePolicyIdFromMetric(`${POLICY_METRIC_PREFIX}:${mockUuid}/jailbreak`);
       expect(result).toBe(mockUuid);
@@ -59,7 +57,6 @@ describe('Policy Utils', () => {
 
     it('should handle multiple strategy suffixes', () => {
       const mockUuid = '550e8400-e29b-41d4-a716-446655440000';
-      (uuidv4 as Mock).mockReturnValue(mockUuid);
 
       const result = deserializePolicyIdFromMetric(
         `${POLICY_METRIC_PREFIX}:${mockUuid}/jailbreak/extra`,
@@ -104,10 +101,11 @@ describe('Policy Utils', () => {
     });
 
     it('should preserve strategy suffix from originalMetric', () => {
+      const mockUuid = '550e8400-e29b-41d4-a716-446655440000';
       expect(
-        formatPolicyIdentifierAsMetric('test-policy', `PolicyViolation:${uuidv4()}/jailbreak`),
+        formatPolicyIdentifierAsMetric('test-policy', `PolicyViolation:${mockUuid}/jailbreak`),
       ).toBe('Policy/jailbreak: test-policy');
-      expect(formatPolicyIdentifierAsMetric('my-policy', `PolicyViolation:${uuidv4()}/GOAT`)).toBe(
+      expect(formatPolicyIdentifierAsMetric('my-policy', `PolicyViolation:${mockUuid}/GOAT`)).toBe(
         'Policy/GOAT: my-policy',
       );
     });
@@ -147,20 +145,20 @@ describe('Policy Utils', () => {
 
   describe('determinePolicyTypeFromId', () => {
     it('should return "reusable" for valid UUIDs', () => {
-      (isUUID as Mock).mockReturnValue(true);
+      (isUuid as Mock).mockReturnValue(true);
       expect(determinePolicyTypeFromId('550e8400-e29b-41d4-a716-446655440000')).toBe('reusable');
-      expect(isUUID).toHaveBeenCalledWith('550e8400-e29b-41d4-a716-446655440000');
+      expect(isUuid).toHaveBeenCalledWith('550e8400-e29b-41d4-a716-446655440000');
     });
 
     it('should return "inline" for non-UUID strings', () => {
-      (isUUID as Mock).mockReturnValue(false);
+      (isUuid as Mock).mockReturnValue(false);
       expect(determinePolicyTypeFromId('hash123456')).toBe('inline');
       expect(determinePolicyTypeFromId('not-a-uuid')).toBe('inline');
       expect(determinePolicyTypeFromId('')).toBe('inline');
     });
 
     it('should handle edge cases', () => {
-      (isUUID as Mock).mockReturnValue(false);
+      (isUuid as Mock).mockReturnValue(false);
       expect(determinePolicyTypeFromId('123')).toBe('inline');
       expect(determinePolicyTypeFromId('550e8400')).toBe('inline');
     });
