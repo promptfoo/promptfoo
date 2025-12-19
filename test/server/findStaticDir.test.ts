@@ -1,5 +1,6 @@
-import type { PathLike } from 'node:fs';
 import path from 'node:path';
+import type { PathLike } from 'node:fs';
+
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock fs before importing the module - spread original to keep other functions working
@@ -53,6 +54,7 @@ vi.mock('../../src/globalConfig/cloud', () => ({
 }));
 
 import fs from 'node:fs';
+
 import { getDirectory } from '../../src/esm';
 import logger from '../../src/logger';
 import { findStaticDir } from '../../src/server/server';
