@@ -66,8 +66,20 @@ To protect against divergent repetition attacks:
 2. Implement output filters to detect and prevent repetitive patterns
 3. Include PII filters to prevent sensitive data leakage
 
+## Relationship to Resource Exhaustion
+
+The Divergent Repetition plugin focuses on **training data leakage** (OWASP LLM06).
+
+For testing **excessive token generation** and cost overruns (OWASP LLM04), see the [Resource Exhaustion](resource-exhaustion.md) plugin.
+
+| Plugin                 | OWASP | Focus                    |
+| ---------------------- | ----- | ------------------------ |
+| `divergent-repetition` | LLM06 | Training data leakage    |
+| `resource-exhaustion`  | LLM04 | Token count, cost impact |
+
 ## Related Concepts
 
+- [Resource Exhaustion](resource-exhaustion.md) - DoS through excessive generation
 - [Prompt Extraction](prompt-extraction.md)
 - [Cross-Session Leak](cross-session-leak.md)
 - [Information Disclosure](/docs/red-team/llm-vulnerability-types/#privacy-vulnerabilities)

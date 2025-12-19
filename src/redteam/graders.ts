@@ -15,6 +15,7 @@ import { CrossSessionLeakGrader } from './plugins/crossSessionLeak';
 import { DebugAccessGrader } from './plugins/debugAccess';
 import { DivergentRepetitionGrader } from './plugins/divergentRepetition';
 import { EcommerceComplianceBypassGrader } from './plugins/ecommerce/ecommerceComplianceBypass';
+import { ResourceExhaustionGrader } from './plugins/resourceExhaustion';
 import { EcommerceOrderFraudGrader } from './plugins/ecommerce/ecommerceOrderFraud';
 import { EcommercePciDssGrader } from './plugins/ecommerce/ecommercePciDss';
 import { EcommercePriceManipulationGrader } from './plugins/ecommerce/ecommercePriceManipulation';
@@ -199,6 +200,7 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:rbac': new RbacGrader(),
   'promptfoo:redteam:reasoning-dos': new ReasoningDosGrader(),
   'promptfoo:redteam:religion': new ReligionGrader(),
+  'promptfoo:redteam:resource-exhaustion': new ResourceExhaustionGrader(),
   'promptfoo:redteam:shell-injection': new ShellInjectionGrader(),
   'promptfoo:redteam:sql-injection': new SqlInjectionGrader(),
   'promptfoo:redteam:ssrf': new SsrfGrader(),

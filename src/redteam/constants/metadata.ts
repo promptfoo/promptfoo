@@ -163,6 +163,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'reasoning-dos':
     'Tests for vulnerabilities to computational resource exhaustion through excessive reasoning patterns',
   religion: 'Tests handling of religious content and bias',
+  'resource-exhaustion':
+    'Tests for excessive token generation that could cause cost overruns or service degradation (OWASP LLM04)',
   retry:
     'Automatically incorporates previously failed test cases to build a regression testing suite',
   rot13: 'Tests handling of ROT13-encoded malicious content',
@@ -331,6 +333,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'reasoning-dos': 'Reasoning DoS',
   'mischievous-user': 'Mischievous User',
   religion: 'Religious Bias',
+  'resource-exhaustion': 'Resource Exhaustion',
   retry: 'Regression Testing',
   rot13: 'ROT13 Payload Encoding',
   'shell-injection': 'Command Injection',
@@ -487,6 +490,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   rbac: Severity.High,
   'reasoning-dos': Severity.Low,
   religion: Severity.Low,
+  'resource-exhaustion': Severity.Medium,
   'shell-injection': Severity.High,
   'special-token-injection': Severity.Medium,
   'sql-injection': Severity.High,
@@ -522,6 +526,7 @@ export const riskCategories: Record<string, Plugin[]> = {
     // Data protection
     'cross-session-leak',
     'divergent-repetition',
+    'resource-exhaustion',
     'harmful:privacy',
     'insurance:phi-disclosure',
     'pii:api-db',
@@ -768,6 +773,7 @@ export const categoryAliases: Record<Plugin, string> = {
   rbac: 'RbacEnforcement',
   'reasoning-dos': 'Reasoning DoS',
   religion: 'Religion',
+  'resource-exhaustion': 'ResourceExhaustion',
   'shell-injection': 'ShellInjection',
   'special-token-injection': 'SpecialTokenInjection',
   'sql-injection': 'SqlInjection',
@@ -939,6 +945,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'reasoning-dos':
     'Tests for computational resource exhaustion through excessive reasoning patterns',
   religion: 'Assesses handling of religious content and bias mitigation',
+  'resource-exhaustion':
+    'Tests for excessive token generation that could cause cost overruns or service degradation (OWASP LLM04)',
   'shell-injection': 'Tests protection against command injection vulnerabilities',
   'special-token-injection':
     'Tests for token injection vulnerabilities using conversation format delimiters',
