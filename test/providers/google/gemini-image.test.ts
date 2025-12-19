@@ -198,6 +198,97 @@ describe('GeminiImageProvider', () => {
       expect(result.error).toContain('Failed to call Vertex AI');
       expect(result.error).toContain('Google auth library not found');
     });
+
+    it('should return helpful error message when OAuth credentials expire (invalid_grant)', async () => {
+      const provider = new GeminiImageProvider('gemini-3-pro-image-preview', {
+        config: {
+          projectId: 'test-project',
+        },
+      });
+
+      const mockClient = {
+        request: vi.fn().mockRejectedValue({
+          response: {
+            data: {
+              error: 'invalid_grant',
+              error_description: 'reauth related error (invalid_rapt)',
+              error_subtype: 'invalid_rapt',
+            },
+          },
+        }),
+      };
+
+      mockGetGoogleClient.mockResolvedValue({
+        client: mockClient as any,
+        projectId: 'test-project',
+      });
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.error).toBe(
+        'Vertex AI authentication expired. Please re-authenticate by running: gcloud auth application-default login',
+      );
+    });
+
+    it('should return helpful error message for invalid_rapt error subtype', async () => {
+      const provider = new GeminiImageProvider('gemini-3-pro-image-preview', {
+        config: {
+          projectId: 'test-project',
+        },
+      });
+
+      const mockClient = {
+        request: vi.fn().mockRejectedValue({
+          response: {
+            data: {
+              error: 'some_other_error',
+              error_subtype: 'invalid_rapt',
+            },
+          },
+        }),
+      };
+
+      mockGetGoogleClient.mockResolvedValue({
+        client: mockClient as any,
+        projectId: 'test-project',
+      });
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.error).toBe(
+        'Vertex AI authentication expired. Please re-authenticate by running: gcloud auth application-default login',
+      );
+    });
+
+    it('should handle Vertex AI API errors with structured error response', async () => {
+      const provider = new GeminiImageProvider('gemini-3-pro-image-preview', {
+        config: {
+          projectId: 'test-project',
+        },
+      });
+
+      const mockClient = {
+        request: vi.fn().mockRejectedValue({
+          response: {
+            data: {
+              error: {
+                message: 'Model not found',
+                code: 404,
+              },
+            },
+          },
+        }),
+      };
+
+      mockGetGoogleClient.mockResolvedValue({
+        client: mockClient as any,
+        projectId: 'test-project',
+      });
+
+      const result = await provider.callApi('Test prompt');
+
+      expect(result.error).toBe('Vertex AI error: Model not found');
+    });
   });
 
   describe('Image configuration', () => {

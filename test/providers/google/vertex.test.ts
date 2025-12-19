@@ -252,6 +252,57 @@ describe('VertexChatProvider.callGeminiApi', () => {
     });
   });
 
+  it('should return helpful error message when OAuth credentials expire (invalid_grant)', async () => {
+    const mockError = {
+      response: {
+        data: {
+          error: 'invalid_grant',
+          error_description: 'reauth related error (invalid_rapt)',
+          error_subtype: 'invalid_rapt',
+        },
+      },
+    };
+
+    vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+      client: {
+        request: vi.fn().mockRejectedValue(mockError),
+      } as unknown as JSONClient,
+      projectId: 'test-project-id',
+    });
+
+    const response = await provider.callGeminiApi('test prompt');
+
+    expect(response).toEqual({
+      error:
+        'Vertex AI authentication expired. Please re-authenticate by running: gcloud auth application-default login',
+    });
+  });
+
+  it('should return helpful error message for invalid_rapt error subtype', async () => {
+    const mockError = {
+      response: {
+        data: {
+          error: 'some_other_error',
+          error_subtype: 'invalid_rapt',
+        },
+      },
+    };
+
+    vi.spyOn(vertexUtil, 'getGoogleClient').mockResolvedValue({
+      client: {
+        request: vi.fn().mockRejectedValue(mockError),
+      } as unknown as JSONClient,
+      projectId: 'test-project-id',
+    });
+
+    const response = await provider.callGeminiApi('test prompt');
+
+    expect(response).toEqual({
+      error:
+        'Vertex AI authentication expired. Please re-authenticate by running: gcloud auth application-default login',
+    });
+  });
+
   it('should handle function calling configuration', async () => {
     const tools = [
       {
