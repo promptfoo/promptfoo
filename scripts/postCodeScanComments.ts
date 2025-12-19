@@ -46,6 +46,12 @@ interface ScanData {
 }
 
 /**
+ * Dangerous URL schemes that could be used for XSS or code execution.
+ * These are blocked unconditionally in scan result content.
+ */
+const DANGEROUS_URL_SCHEMES = ['javascript:', 'vbscript:', 'data:'] as const;
+
+/**
  * Sanitizes content to prevent potential security issues.
  * Removes or escapes potentially dangerous patterns while preserving markdown.
  */
@@ -54,11 +60,12 @@ function sanitizeContent(content: string): string {
     return '';
   }
 
-  // Remove dangerous URL schemes that could be used for XSS or code execution
-  // Handles: javascript:, vbscript:, and data: (except safe image formats)
-  let sanitized = content.replace(/javascript:/gi, 'blocked:');
-  sanitized = sanitized.replace(/vbscript:/gi, 'blocked:');
-  sanitized = sanitized.replace(/data:(?!image\/(png|jpeg|gif|webp|svg\+xml))/gi, 'blocked:');
+  // Block all dangerous URL schemes unconditionally
+  let sanitized = content;
+  for (const scheme of DANGEROUS_URL_SCHEMES) {
+    // Case-insensitive replacement of each dangerous scheme
+    sanitized = sanitized.replace(new RegExp(scheme, 'gi'), 'blocked:');
+  }
 
   // Limit content length to prevent abuse
   const maxLength = 10000;
