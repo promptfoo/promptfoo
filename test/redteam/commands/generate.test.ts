@@ -2404,16 +2404,16 @@ describe('target ID extraction for retry strategy', () => {
   let mockProvider: ApiProvider;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     mockProvider = {
       id: () => 'test-provider',
-      callApi: jest.fn().mockResolvedValue({ output: 'test output' }),
-      cleanup: jest.fn().mockResolvedValue(undefined),
+      callApi: vi.fn().mockResolvedValue({ output: 'test output' }),
+      cleanup: vi.fn().mockResolvedValue(undefined),
     };
 
-    jest.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({}));
-    jest.mocked(synthesize).mockResolvedValue({
+    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({}));
+    vi.mocked(synthesize).mockResolvedValue({
       testCases: [],
       purpose: 'Test purpose',
       entities: [],
@@ -2422,7 +2422,7 @@ describe('target ID extraction for retry strategy', () => {
   });
 
   it('should extract target IDs from string providers', async () => {
-    jest.mocked(configModule.resolveConfigs).mockResolvedValue({
+    vi.mocked(configModule.resolveConfigs).mockResolvedValue({
       basePath: '/mock/path',
       testSuite: {
         providers: [mockProvider],
@@ -2456,7 +2456,7 @@ describe('target ID extraction for retry strategy', () => {
   });
 
   it('should extract target IDs from object providers with id property', async () => {
-    jest.mocked(configModule.resolveConfigs).mockResolvedValue({
+    vi.mocked(configModule.resolveConfigs).mockResolvedValue({
       basePath: '/mock/path',
       testSuite: {
         providers: [mockProvider],
@@ -2493,7 +2493,7 @@ describe('target ID extraction for retry strategy', () => {
   });
 
   it('should handle mixed string and object providers', async () => {
-    jest.mocked(configModule.resolveConfigs).mockResolvedValue({
+    vi.mocked(configModule.resolveConfigs).mockResolvedValue({
       basePath: '/mock/path',
       testSuite: {
         providers: [mockProvider],
@@ -2531,7 +2531,7 @@ describe('target ID extraction for retry strategy', () => {
   });
 
   it('should return empty array when no providers configured', async () => {
-    jest.mocked(configModule.resolveConfigs).mockResolvedValue({
+    vi.mocked(configModule.resolveConfigs).mockResolvedValue({
       basePath: '/mock/path',
       testSuite: {
         providers: [mockProvider],
@@ -2564,7 +2564,7 @@ describe('target ID extraction for retry strategy', () => {
   });
 
   it('should filter out providers without id', async () => {
-    jest.mocked(configModule.resolveConfigs).mockResolvedValue({
+    vi.mocked(configModule.resolveConfigs).mockResolvedValue({
       basePath: '/mock/path',
       testSuite: {
         providers: [mockProvider],

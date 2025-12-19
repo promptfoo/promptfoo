@@ -154,21 +154,20 @@ describe('deduplicateTests', () => {
 });
 
 describe('addRetryTestCases', () => {
-  const { getDb } = await vi.importMock<typeof import('../../../src/database/index')>(
-    '../../../src/database/index',
-  );
-  const { cloudConfig } = await vi.importMock<typeof import('../../../src/globalConfig/cloud')>(
-    '../../../src/globalConfig/cloud',
-  );
-
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
+    const { cloudConfig } = await import('../../../src/globalConfig/cloud');
     vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
   });
 
   afterEach(() => {
     vi.resetAllMocks();
   });
+
+  async function getMockDb() {
+    const { getDb } = await import('../../../src/database/index');
+    return vi.mocked(getDb);
+  }
 
   it('should throw error when no targetIds provided', async () => {
     const testCases: TestCaseWithPlugin[] = [
@@ -192,7 +191,8 @@ describe('addRetryTestCases', () => {
       orderBy: vi.fn().mockReturnThis(),
       limit: vi.fn().mockResolvedValue([]),
     };
-    vi.mocked(getDb).mockReturnValue(mockDb as any);
+    const getDb = await getMockDb();
+    getDb.mockReturnValue(mockDb as any);
 
     const testCases: TestCaseWithPlugin[] = [
       {
@@ -239,7 +239,8 @@ describe('addRetryTestCases', () => {
           },
         ]),
     };
-    vi.mocked(getDb).mockReturnValue(mockDb as any);
+    const getDb = await getMockDb();
+    getDb.mockReturnValue(mockDb as any);
 
     const testCases: TestCaseWithPlugin[] = [
       {
@@ -288,7 +289,8 @@ describe('addRetryTestCases', () => {
           },
         ]),
     };
-    vi.mocked(getDb).mockReturnValue(mockDb as any);
+    const getDb = await getMockDb();
+    getDb.mockReturnValue(mockDb as any);
 
     const testCases: TestCaseWithPlugin[] = [
       {
@@ -345,7 +347,8 @@ describe('addRetryTestCases', () => {
           },
         ]),
     };
-    vi.mocked(getDb).mockReturnValue(mockDb as any);
+    const getDb = await getMockDb();
+    getDb.mockReturnValue(mockDb as any);
 
     const testCases: TestCaseWithPlugin[] = [
       {
@@ -404,7 +407,8 @@ describe('addRetryTestCases', () => {
           },
         ]),
     };
-    vi.mocked(getDb).mockReturnValue(mockDb as any);
+    const getDb = await getMockDb();
+    getDb.mockReturnValue(mockDb as any);
 
     const testCases: TestCaseWithPlugin[] = [
       {
@@ -446,7 +450,8 @@ describe('addRetryTestCases', () => {
           },
         ]),
     };
-    vi.mocked(getDb).mockReturnValue(mockDb as any);
+    const getDb = await getMockDb();
+    getDb.mockReturnValue(mockDb as any);
 
     const testCases: TestCaseWithPlugin[] = [
       {
@@ -497,7 +502,8 @@ describe('addRetryTestCases', () => {
           },
         ]),
     };
-    vi.mocked(getDb).mockReturnValue(mockDb as any);
+    const getDb = await getMockDb();
+    getDb.mockReturnValue(mockDb as any);
 
     const testCases: TestCaseWithPlugin[] = [
       {
