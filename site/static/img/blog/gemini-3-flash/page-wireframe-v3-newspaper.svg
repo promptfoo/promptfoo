@@ -1,0 +1,261 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 2200">
+  <defs>
+    <style>
+      .page-bg { fill: #fff; }
+      .content-area { fill: none; stroke: none; }
+
+      /* Typography */
+      .headline { font: bold 32px Georgia, 'Times New Roman', serif; fill: #1a1a1a; }
+      .deck { font: 300 18px Georgia, 'Times New Roman', serif; fill: #444; }
+      .byline { font: 12px system-ui, -apple-system, sans-serif; fill: #666; }
+      .section-head { font: bold 14px system-ui, -apple-system, sans-serif; fill: #c41e3a; letter-spacing: 1px; }
+      .subhead { font: bold 20px Georgia, 'Times New Roman', serif; fill: #1a1a1a; }
+      .body { font: 16px Georgia, 'Times New Roman', serif; fill: #333; }
+      .body-small { font: 14px Georgia, 'Times New Roman', serif; fill: #333; }
+      .caption { font: 12px system-ui, -apple-system, sans-serif; fill: #666; }
+      .label { font: 11px system-ui, -apple-system, sans-serif; fill: #888; }
+      .kicker { font: bold 11px system-ui, -apple-system, sans-serif; fill: #c41e3a; letter-spacing: 2px; }
+
+      /* Pull quote */
+      .pull-quote { font: italic 24px Georgia, 'Times New Roman', serif; fill: #1a1a1a; }
+      .pull-quote-line { stroke: #c41e3a; stroke-width: 3; }
+      .pull-quote-attr { font: 12px system-ui, sans-serif; fill: #666; }
+
+      /* Key findings box */
+      .findings-box { fill: #f8f8f8; stroke: none; }
+      .findings-border { fill: none; stroke: #c41e3a; stroke-width: 3; }
+      .findings-title { font: bold 12px system-ui, -apple-system, sans-serif; fill: #c41e3a; letter-spacing: 1px; }
+      .findings-stat { font: bold 28px system-ui, -apple-system, sans-serif; fill: #1a1a1a; }
+      .findings-label { font: 12px system-ui, -apple-system, sans-serif; fill: #555; }
+
+      /* Visualization area */
+      .viz-area { fill: #fafafa; stroke: #e0e0e0; stroke-width: 1; }
+      .viz-label { font: 11px system-ui, -apple-system, sans-serif; fill: #666; }
+
+      /* Methodology box */
+      .method-box { fill: #f5f5f5; stroke: #ddd; stroke-width: 1; }
+      .method-title { font: bold 11px system-ui, -apple-system, sans-serif; fill: #333; }
+      .method-text { font: 11px system-ui, -apple-system, sans-serif; fill: #555; }
+
+      /* Callout box */
+      .callout-box { fill: #fffbeb; stroke: #f59e0b; stroke-width: 1; }
+      .callout-title { font: bold 12px system-ui, -apple-system, sans-serif; fill: #92400e; }
+      .callout-text { font: 13px system-ui, -apple-system, sans-serif; fill: #78350f; }
+
+      /* Related stories */
+      .related-bg { fill: #f8f8f8; }
+      .related-title { font: bold 11px system-ui, -apple-system, sans-serif; fill: #666; letter-spacing: 1px; }
+      .related-link { font: 15px Georgia, serif; fill: #1a1a1a; }
+      .related-meta { font: 11px system-ui, sans-serif; fill: #888; }
+
+      /* Dividers */
+      .divider { stroke: #e0e0e0; stroke-width: 1; }
+      .divider-bold { stroke: #1a1a1a; stroke-width: 2; }
+
+      /* Drop cap */
+      .drop-cap { font: bold 72px Georgia, serif; fill: #1a1a1a; }
+
+      /* Sticky nav hint */
+      .sticky-hint { fill: #f0f0f0; stroke: #ddd; }
+      .sticky-text { font: 10px system-ui, sans-serif; fill: #888; }
+
+      /* Annotations for wireframe */
+      .annotation { font: bold 10px system-ui, sans-serif; fill: #7c3aed; }
+      .annotation-box { fill: #ede9fe; stroke: #a78bfa; stroke-width: 1; stroke-dasharray: 4,2; rx: 4; }
+    </style>
+  </defs>
+
+  <!-- Page background -->
+  <rect width="900" height="2200" class="page-bg"/>
+
+  <!-- Title bar -->
+  <text x="450" y="25" text-anchor="middle" class="annotation">NEWSPAPER-STYLE LAYOUT — The Markup / Ars Technica / Bloomberg inspired</text>
+
+  <!-- ============ HEADER AREA ============ -->
+
+  <!-- Kicker -->
+  <text x="100" y="70" class="kicker">RED TEAM ASSESSMENT</text>
+
+  <!-- Main Headline -->
+  <text x="100" y="115" class="headline">Gemini 3 Flash Shows Wider</text>
+  <text x="100" y="155" class="headline">Attack Surface in Speed Mode</text>
+
+  <!-- Deck (subheadline) -->
+  <text x="100" y="190" class="deck">With extended thinking disabled, Google's new model refused</text>
+  <text x="100" y="212" class="deck">harmful prompts less often than GPT-5.2 in our tests</text>
+
+  <!-- Byline -->
+  <line x1="100" y1="235" x2="800" y2="235" class="divider-bold"/>
+  <text x="100" y="255" class="byline">By Michael D'Angelo  •  December 18, 2025  •  12 min read</text>
+  <line x1="100" y1="270" x2="800" y2="270" class="divider"/>
+
+  <!-- ============ HERO VISUALIZATION ============ -->
+
+  <rect x="100" y="290" width="700" height="200" class="viz-area" rx="4"/>
+  <text x="450" y="400" text-anchor="middle" class="viz-label">HERO: bottom-line.svg — Executive comparison at a glance</text>
+  <text x="795" y="310" text-anchor="end" class="caption">Source: Promptfoo red team evaluation</text>
+
+  <!-- Annotation -->
+  <rect x="810" y="350" width="80" height="45" class="annotation-box"/>
+  <text x="850" y="370" text-anchor="middle" class="annotation">Lead with</text>
+  <text x="850" y="385" text-anchor="middle" class="annotation">the visual</text>
+
+  <!-- ============ LEDE + KEY FINDINGS SIDEBAR ============ -->
+
+  <!-- Key Findings Box (right rail) -->
+  <rect x="590" y="510" width="210" height="280" class="findings-box"/>
+  <line x1="590" y1="510" x2="590" y2="790" class="findings-border" stroke-width="3"/>
+  <text x="605" y="535" class="findings-title">KEY FINDINGS</text>
+
+  <text x="605" y="575" class="findings-stat">89%</text>
+  <text x="605" y="595" class="findings-label">Single-turn jailbreak success</text>
+  <text x="605" y="610" class="findings-label">(vs 60% for GPT-5.2)</text>
+
+  <line x1="605" y1="625" x2="785" y2="625" class="divider"/>
+
+  <text x="605" y="660" class="findings-stat">+43pp</text>
+  <text x="605" y="680" class="findings-label">Child safety gap</text>
+  <text x="605" y="695" class="findings-label">70% vs 27% attack success</text>
+
+  <line x1="605" y1="710" x2="785" y2="710" class="divider"/>
+
+  <text x="605" y="745" class="findings-stat">19%</text>
+  <text x="605" y="765" class="findings-label">Baseline slip rate</text>
+  <text x="605" y="780" class="findings-label">(vs 4% for GPT-5.2)</text>
+
+  <!-- Annotation -->
+  <rect x="810" y="580" width="80" height="55" class="annotation-box"/>
+  <text x="850" y="600" text-anchor="middle" class="annotation">Sidebar</text>
+  <text x="850" y="615" text-anchor="middle" class="annotation">key stats</text>
+  <text x="850" y="630" text-anchor="middle" class="annotation">(sticky?)</text>
+
+  <!-- Lede paragraph with drop cap -->
+  <text x="100" y="555" class="drop-cap">W</text>
+  <text x="165" y="540" class="body">e ran the same red-team harness against Gemini 3 Flash</text>
+  <text x="165" y="562" class="body">Preview that we used for GPT-5.2 last week—same prompts,</text>
+  <text x="100" y="584" class="body">same judge, same attempt budget. With extended thinking disabled</text>
+  <text x="100" y="606" class="body">(thinkingLevel: MINIMAL), Google's model showed a wider attack</text>
+  <text x="100" y="628" class="body">surface: 89% of single-turn jailbreaks succeeded, compared to</text>
+  <text x="100" y="650" class="body">60% for GPT-5.2.</text>
+
+  <!-- Second paragraph -->
+  <text x="100" y="690" class="body">The gap matters most in high-stakes categories. Child safety</text>
+  <text x="100" y="712" class="body">showed a 43 percentage-point difference. Graphic content and</text>
+  <text x="100" y="734" class="body">impersonation hit 100% bypass rates under our Meta strategy.</text>
+
+  <!-- Configuration callout -->
+  <rect x="100" y="760" width="470" height="65" class="callout-box" rx="4"/>
+  <text x="115" y="783" class="callout-title">⚠ Configuration note</text>
+  <text x="115" y="803" class="callout-text">We tested thinkingLevel: MINIMAL, not the default HIGH.</text>
+  <text x="115" y="818" class="callout-text">Expect better safety with defaults enabled.</text>
+
+  <!-- ============ SECTION: THE GAP ============ -->
+
+  <line x1="100" y1="850" x2="800" y2="850" class="divider"/>
+  <text x="100" y="880" class="section-head">THE GAP</text>
+  <text x="100" y="910" class="subhead">Why the baseline matters</text>
+
+  <text x="100" y="950" class="body">On direct harmful prompts—no jailbreak transformation—Gemini</text>
+  <text x="100" y="972" class="body">3 Flash allowed 19% through. GPT-5.2 allowed 4%. This means</text>
+  <text x="100" y="994" class="body">simpler attacks work. You don't need a sophisticated jailbreak</text>
+  <text x="100" y="1016" class="body">when direct requests succeed one in five times.</text>
+
+  <!-- Pull Quote -->
+  <line x1="100" y1="1050" x2="100" y2="1120" class="pull-quote-line"/>
+  <text x="120" y="1080" class="pull-quote">"You don't need a sophisticated</text>
+  <text x="120" y="1110" class="pull-quote">jailbreak when 1 in 5 direct</text>
+  <text x="120" y="1140" class="pull-quote">requests succeed."</text>
+
+  <!-- Annotation -->
+  <rect x="810" y="1070" width="80" height="40" class="annotation-box"/>
+  <text x="850" y="1090" text-anchor="middle" class="annotation">Pull quote</text>
+  <text x="850" y="1105" text-anchor="middle" class="annotation">for impact</text>
+
+  <!-- Degradation chart -->
+  <rect x="100" y="1170" width="700" height="180" class="viz-area" rx="4"/>
+  <text x="450" y="1270" text-anchor="middle" class="viz-label">degradation-waterfall.svg — How defenses erode under attack</text>
+  <text x="795" y="1190" text-anchor="end" class="caption">Refusal rate (higher = better)</text>
+
+  <!-- ============ SECTION: THE PATTERN ============ -->
+
+  <line x1="100" y1="1380" x2="800" y2="1380" class="divider"/>
+  <text x="100" y="1410" class="section-head">THE PATTERN</text>
+  <text x="100" y="1440" class="subhead">What Gemini was trained to resist—and what it wasn't</text>
+
+  <text x="100" y="1480" class="body">The category breakdown reveals a clear pattern. Structural attacks—</text>
+  <text x="100" y="1502" class="body">token manipulation, encoding tricks—averaged 29% success. Content-</text>
+  <text x="100" y="1524" class="body">framing attacks—roleplay, hypotheticals—averaged 93%.</text>
+
+  <!-- Inline mini-stat callout -->
+  <rect x="100" y="1545" width="320" height="50" fill="#f8f8f8" rx="4"/>
+  <text x="115" y="1575" class="body-small" style="font-weight: bold;">Structural: 29% ASR</text>
+  <text x="280" y="1575" class="body-small">vs</text>
+  <text x="310" y="1575" class="body-small" style="font-weight: bold;">Content-framing: 93% ASR</text>
+
+  <!-- Pattern chart -->
+  <rect x="100" y="1610" width="700" height="160" class="viz-area" rx="4"/>
+  <text x="450" y="1700" text-anchor="middle" class="viz-label">structural-vs-semantic.svg — The defense asymmetry</text>
+
+  <!-- ============ METHODOLOGY (Collapsed) ============ -->
+
+  <rect x="100" y="1800" width="700" height="50" class="method-box" rx="4"/>
+  <text x="120" y="1830" class="method-title">▶ METHODOLOGY: How we ran this evaluation</text>
+  <text x="580" y="1830" class="method-text">43 plugins • 3,462 probes • GPT-5 judge</text>
+
+  <!-- Annotation -->
+  <rect x="810" y="1800" width="80" height="50" class="annotation-box"/>
+  <text x="850" y="1820" text-anchor="middle" class="annotation">Collapsed</text>
+  <text x="850" y="1835" text-anchor="middle" class="annotation">by default</text>
+  <text x="850" y="1850" text-anchor="middle" class="annotation">(expandable)</text>
+
+  <!-- ============ SECTION: WHAT THIS MEANS ============ -->
+
+  <line x1="100" y1="1880" x2="800" y2="1880" class="divider"/>
+  <text x="100" y="1910" class="section-head">WHAT THIS MEANS</text>
+  <text x="100" y="1940" class="subhead">Recommendations for deployment</text>
+
+  <text x="100" y="1980" class="body">If you're deploying Gemini 3 Flash, leave default thinking enabled.</text>
+  <text x="100" y="2002" class="body">Add your own safety layer for impersonation and content-framing</text>
+  <text x="100" y="2024" class="body">attacks. For child-adjacent applications, the 70% attack success</text>
+  <text x="100" y="2046" class="body">rate warrants additional safeguards beyond model-level refusals.</text>
+
+  <!-- Compact recommendations -->
+  <rect x="100" y="2070" width="340" height="35" fill="#f0fdf4" stroke="#86efac" rx="4"/>
+  <text x="115" y="2093" class="body-small">✓ Keep thinkingLevel: HIGH (default)</text>
+
+  <rect x="460" y="2070" width="340" height="35" fill="#f0fdf4" stroke="#86efac" rx="4"/>
+  <text x="475" y="2093" class="body-small">✓ Add impersonation detection</text>
+
+  <rect x="100" y="2110" width="340" height="35" fill="#fef9c3" stroke="#fde047" rx="4"/>
+  <text x="115" y="2133" class="body-small">⚠ Extra scrutiny: child safety (70% ASR)</text>
+
+  <rect x="460" y="2110" width="340" height="35" fill="#f0fdf4" stroke="#86efac" rx="4"/>
+  <text x="475" y="2133" class="body-small">✓ Validate citations externally</text>
+
+  <!-- ============ RELATED STORIES ============ -->
+
+  <rect x="50" y="2165" width="850" height="85" class="related-bg"/>
+  <line x1="100" y1="2165" x2="800" y2="2165" class="divider-bold"/>
+
+  <text x="100" y="2190" class="related-title">RELATED</text>
+
+  <text x="100" y="2215" class="related-link">GPT-5.2 Trust and Safety Assessment →</text>
+  <text x="100" y="2232" class="related-meta">Same methodology, different model • Dec 11, 2025</text>
+
+  <text x="450" y="2215" class="related-link">Why ASR Isn't Comparable Across Papers →</text>
+  <text x="450" y="2232" class="related-meta">How to interpret attack success rates</text>
+
+  <!-- ============ LEGEND ============ -->
+
+  <rect x="50" y="2260" width="850" height="80" fill="#fafafa" stroke="#e0e0e0" rx="4"/>
+  <text x="70" y="2285" class="annotation">LAYOUT PRINCIPLES</text>
+
+  <text x="70" y="2310" class="label">1. Lead with visual summary (bottom-line.svg as hero)</text>
+  <text x="70" y="2325" class="label">2. Key stats in sidebar rail, possibly sticky on scroll</text>
+
+  <text x="350" y="2310" class="label">3. Pull quotes for dramatic findings</text>
+  <text x="350" y="2325" class="label">4. Methodology collapsed/expandable</text>
+
+  <text x="600" y="2310" class="label">5. Only 2-3 inline charts (not 6)</text>
+  <text x="600" y="2325" class="label">6. Flowing prose, not boxy grids</text>
+</svg>

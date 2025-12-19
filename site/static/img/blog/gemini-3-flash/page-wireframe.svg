@@ -1,0 +1,169 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 1400">
+  <defs>
+    <style>
+      .frame { fill: #fff; stroke: #ddd; stroke-width: 1; }
+      .section { fill: #f8f9fa; stroke: #dee2e6; stroke-width: 1; rx: 4; }
+      .section-new { fill: #e8f5e9; stroke: #81c784; stroke-width: 2; rx: 4; }
+      .section-moved { fill: #fff3e0; stroke: #ffb74d; stroke-width: 2; rx: 4; }
+      .svg-placeholder { fill: #e3f2fd; stroke: #64b5f6; stroke-width: 1; rx: 4; }
+      .text-block { fill: #f5f5f5; stroke: #e0e0e0; stroke-width: 1; rx: 2; }
+      .callout { fill: #fff8e1; stroke: #ffd54f; stroke-width: 1; rx: 4; }
+      .code-block { fill: #263238; stroke: #455a64; stroke-width: 1; rx: 4; }
+      .divider { stroke: #bdbdbd; stroke-width: 2; stroke-dasharray: 8,4; }
+      .truncate { stroke: #f44336; stroke-width: 3; }
+
+      .title { font: bold 16px system-ui, -apple-system, sans-serif; fill: #1a1a1a; }
+      .section-title { font: bold 13px system-ui, -apple-system, sans-serif; fill: #333; }
+      .label { font: 11px system-ui, -apple-system, sans-serif; fill: #666; }
+      .label-small { font: 10px system-ui, -apple-system, sans-serif; fill: #888; }
+      .annotation { font: bold 11px system-ui, -apple-system, sans-serif; fill: #2e7d32; }
+      .annotation-move { font: bold 11px system-ui, -apple-system, sans-serif; fill: #e65100; }
+      .truncate-label { font: bold 12px system-ui, -apple-system, sans-serif; fill: #d32f2f; }
+    </style>
+  </defs>
+
+  <!-- Background -->
+  <rect width="900" height="1400" fill="#fafafa"/>
+
+  <!-- Title -->
+  <text x="450" y="30" text-anchor="middle" class="title">PROPOSED PAGE LAYOUT — Gemini 3 Flash Blog Post</text>
+
+  <!-- Page frame -->
+  <rect x="50" y="50" width="800" height="1320" class="frame" rx="8"/>
+
+  <!-- ========== ABOVE FOLD ========== -->
+  <text x="70" y="75" class="section-title">ABOVE FOLD</text>
+
+  <!-- Hero: Title -->
+  <rect x="70" y="85" width="760" height="40" class="section"/>
+  <text x="450" y="110" text-anchor="middle" class="label">H1: Gemini 3 Flash Preview: Red Team Results at Minimal Thinking</text>
+
+  <!-- Intro paragraph -->
+  <rect x="70" y="130" width="760" height="35" class="text-block"/>
+  <text x="80" y="152" class="label-small">Intro paragraph: "We ran a red-team scan... same harness as GPT-5.2..."</text>
+
+  <!-- Headline stats (3 bullets) -->
+  <rect x="70" y="170" width="760" height="50" class="text-block"/>
+  <text x="80" y="188" class="label-small">• Single-turn jailbreaks: 89% vs 60%</text>
+  <text x="80" y="200" class="label-small">• Baseline: 19% vs 4%</text>
+  <text x="80" y="212" class="label-small">• Multi-turn: 77% vs 79% (similar)</text>
+
+  <!-- ★ NEW: Bottom Line SVG moved here -->
+  <rect x="70" y="225" width="760" height="100" class="section-new"/>
+  <rect x="90" y="240" width="720" height="70" class="svg-placeholder"/>
+  <text x="450" y="280" text-anchor="middle" class="label">bottom-line.svg (EXECUTIVE SUMMARY)</text>
+  <text x="840" y="275" text-anchor="end" class="annotation">★ MOVED UP</text>
+
+  <!-- Config note callout -->
+  <rect x="70" y="330" width="760" height="45" class="callout"/>
+  <text x="80" y="350" class="label-small">:::info Configuration note</text>
+  <text x="80" y="365" class="label-small">We tested with thinkingLevel: MINIMAL. Default uses HIGH thinking...</text>
+
+  <!-- Why test MINIMAL -->
+  <rect x="70" y="380" width="760" height="50" class="text-block"/>
+  <text x="80" y="400" class="section-title">Why test MINIMAL?</text>
+  <text x="80" y="418" class="label-small">Reasoning improves safety. We tested MINIMAL because it's the speed-first config...</text>
+
+  <!-- Quick reference (tightened) -->
+  <rect x="70" y="435" width="760" height="45" class="section"/>
+  <text x="80" y="455" class="section-title">Quick reference</text>
+  <text x="80" y="470" class="label-small">Baseline ASR: 19% vs 4% | Meta ASR: 89% vs 60% | Hydra: 77% vs 79% | Child safety gap: +43pp</text>
+
+  <!-- TRUNCATE LINE -->
+  <line x1="50" y1="495" x2="850" y2="495" class="truncate"/>
+  <text x="450" y="510" text-anchor="middle" class="truncate-label">─── TRUNCATE (fold) ───</text>
+
+  <!-- ========== FINDINGS ========== -->
+  <text x="70" y="540" class="section-title">FINDINGS</text>
+
+  <!-- Results section -->
+  <rect x="70" y="550" width="760" height="90" class="section"/>
+  <text x="80" y="570" class="section-title">Results</text>
+  <rect x="90" y="580" width="720" height="50" class="svg-placeholder"/>
+  <text x="450" y="610" text-anchor="middle" class="label">strategy-comparison.svg</text>
+
+  <!-- Tip callout -->
+  <rect x="70" y="645" width="760" height="35" class="callout"/>
+  <text x="80" y="667" class="label-small">:::tip If you deploy Flash today — Keep default thinking on, Add output filters...</text>
+
+  <!-- Where defenses failed -->
+  <rect x="70" y="685" width="760" height="80" class="section"/>
+  <text x="80" y="705" class="section-title">Where defenses failed</text>
+  <rect x="90" y="715" width="720" height="40" class="svg-placeholder"/>
+  <text x="450" y="740" text-anchor="middle" class="label">high-risk-categories.svg</text>
+
+  <!-- The Refusal Gap -->
+  <rect x="70" y="770" width="760" height="80" class="section"/>
+  <text x="80" y="790" class="section-title">The Refusal Gap</text>
+  <rect x="90" y="800" width="720" height="40" class="svg-placeholder"/>
+  <text x="450" y="825" text-anchor="middle" class="label">degradation-waterfall.svg</text>
+
+  <!-- Structural vs Semantic -->
+  <rect x="70" y="855" width="760" height="80" class="section"/>
+  <text x="80" y="875" class="section-title">The Structural vs Content-Framing Pattern</text>
+  <rect x="90" y="885" width="720" height="40" class="svg-placeholder"/>
+  <text x="450" y="910" text-anchor="middle" class="label">structural-vs-semantic.svg</text>
+
+  <!-- How models compare -->
+  <rect x="70" y="940" width="760" height="90" class="section"/>
+  <text x="80" y="960" class="section-title">How the models compare</text>
+  <rect x="90" y="970" width="720" height="40" class="svg-placeholder"/>
+  <text x="450" y="995" text-anchor="middle" class="label">category-divergence.svg</text>
+  <text x="80" y="1023" class="label-small">Three findings: Impersonation bypassed | Hallucination gap | Child safety biggest divergence</text>
+
+  <!-- Divider -->
+  <line x1="70" y1="1045" x2="830" y2="1045" class="divider"/>
+
+  <!-- ========== RECOMMENDATIONS ========== -->
+  <text x="70" y="1065" class="section-title">RECOMMENDATIONS</text>
+
+  <rect x="70" y="1075" width="760" height="70" class="section"/>
+  <text x="80" y="1095" class="section-title">What This Means + If you're deploying Gemini 3 Flash</text>
+  <text x="80" y="1115" class="label-small">Leave default thinking on | Add your own safety layer | Extra scrutiny for child-adjacent apps</text>
+  <text x="80" y="1135" class="label-small">(bottom-line.svg removed from here — now at top)</text>
+
+  <!-- Divider -->
+  <line x1="70" y1="1155" x2="830" y2="1155" class="divider"/>
+
+  <!-- ========== TECHNICAL APPENDIX ========== -->
+  <text x="70" y="1175" class="section-title">TECHNICAL APPENDIX</text>
+
+  <!-- Methodology (MOVED) -->
+  <rect x="70" y="1185" width="760" height="100" class="section-moved"/>
+  <text x="80" y="1205" class="section-title">Methodology</text>
+  <text x="80" y="1225" class="label-small">Run configuration table | Scoring rules | Google model card comparison</text>
+  <rect x="90" y="1240" width="300" height="30" class="code-block"/>
+  <text x="100" y="1260" class="label-small" style="fill: #90caf9;">YAML config snippet</text>
+  <text x="840" y="1240" text-anchor="end" class="annotation-move">★ MOVED FROM MIDDLE</text>
+
+  <!-- Limitations + Run It Yourself + Related -->
+  <rect x="70" y="1290" width="245" height="60" class="section"/>
+  <text x="80" y="1310" class="section-title">Limitations</text>
+  <text x="80" y="1330" class="label-small">6 caveats</text>
+
+  <rect x="325" y="1290" width="245" height="60" class="section"/>
+  <text x="335" y="1310" class="section-title">Run It Yourself</text>
+  <text x="335" y="1330" class="label-small">npx promptfoo...</text>
+
+  <rect x="580" y="1290" width="250" height="60" class="section"/>
+  <text x="590" y="1310" class="section-title">What's Next + Related</text>
+  <text x="590" y="1330" class="label-small">HIGH results | Links</text>
+
+  <!-- Legend -->
+  <g transform="translate(50, 1370)">
+    <rect x="0" y="0" width="16" height="12" class="section-new"/>
+    <text x="22" y="10" class="label-small">NEW position (moved up)</text>
+
+    <rect x="180" y="0" width="16" height="12" class="section-moved"/>
+    <text x="202" y="10" class="label-small">MOVED (relocated to end)</text>
+
+    <rect x="380" y="0" width="16" height="12" class="svg-placeholder"/>
+    <text x="402" y="10" class="label-small">SVG graphic</text>
+
+    <rect x="520" y="0" width="16" height="12" class="callout"/>
+    <text x="542" y="10" class="label-small">Callout/tip</text>
+
+    <line x1="660" y1="6" x2="690" y2="6" class="truncate"/>
+    <text x="700" y="10" class="label-small">Truncate line</text>
+  </g>
+</svg>
