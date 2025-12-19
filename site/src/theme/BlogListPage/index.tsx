@@ -57,23 +57,32 @@ const FEATURED_POSTS = [
 
 function BlogListPageContent(props: Props): React.ReactElement {
   const { metadata, items, sidebar } = props;
+  const isFirstPage = metadata.page === 1;
 
-  // Filter out featured posts from the grid on all pages
+  // Filter out featured posts from the grid only on page 1
   const displayPosts = React.useMemo(() => {
+    if (!isFirstPage) {
+      return items;
+    }
     return items.filter(
       (item) => !FEATURED_POSTS.some((fp) => item.content.metadata.permalink.includes(fp.slug)),
     );
-  }, [items]);
+  }, [items, isFirstPage]);
+
+  // Dynamic title based on page (use • to match BlogPostGrid parsing)
+  const gridTitle = isFirstPage ? 'Latest Posts' : `Archive • Page ${metadata.page}`;
 
   return (
     <BlogLayout sidebar={sidebar}>
       <div className={styles.blogListPage}>
-        <div className={styles.featuredSection}>
-          {FEATURED_POSTS.map((post, idx) => (
-            <FeaturedBlogPostStatic key={idx} post={post} />
-          ))}
-        </div>
-        <BlogPostGrid posts={displayPosts.map((item) => item.content)} title="Latest Posts" />
+        {isFirstPage && (
+          <div className={styles.featuredSection}>
+            {FEATURED_POSTS.map((post, idx) => (
+              <FeaturedBlogPostStatic key={idx} post={post} />
+            ))}
+          </div>
+        )}
+        <BlogPostGrid posts={displayPosts.map((item) => item.content)} title={gridTitle} />
       </div>
       <BlogListPaginator metadata={metadata} />
     </BlogLayout>
