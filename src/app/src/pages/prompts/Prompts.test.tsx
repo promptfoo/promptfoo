@@ -1,9 +1,9 @@
-import { render, screen, fireEvent, within, RenderResult } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
+import { createTheme, ThemeProvider } from '@mui/material/styles';
+import { fireEvent, RenderResult, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
-import type { ServerPromptWithMetadata } from '@promptfoo/types';
+import { describe, expect, it, vi } from 'vitest';
 import Prompts from './Prompts';
+import type { ServerPromptWithMetadata } from '@promptfoo/types';
 
 vi.mock('./PromptDialog', () => ({
   default: ({

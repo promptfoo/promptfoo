@@ -1,7 +1,7 @@
-import { Mocked, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import path from 'path';
 
 import dedent from 'dedent';
+import { afterEach, beforeEach, describe, expect, it, Mocked, vi } from 'vitest';
 import WebSocket from 'ws';
 import cliState from '../../../src/cliState';
 import { importModule } from '../../../src/esm';

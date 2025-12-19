@@ -1,6 +1,7 @@
 import React from 'react';
 
 import { DEFAULT_CONFIG, useStore } from '@app/stores/evalConfig';
+import { callApi } from '@app/utils/api';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { render, screen, waitFor, waitForElementToBeRemoved, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -14,7 +15,6 @@ import type {
   Scenario,
   TestCase,
 } from '@promptfoo/types';
-import { callApi } from '@app/utils/api';
 
 // Mock useToast hook
 const showToastMock = vi.fn();

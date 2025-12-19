@@ -1,5 +1,6 @@
 import { OpenAiChatCompletionProvider } from './openai/chat';
 
+import type { EnvOverrides } from '../types/env';
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -7,7 +8,6 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../types/index';
-import type { EnvOverrides } from '../types/env';
 import type { OpenAiCompletionOptions } from './openai/types';
 
 /**

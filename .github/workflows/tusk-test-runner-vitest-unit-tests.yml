@@ -24,6 +24,7 @@ jobs:
   test-action:
     name: Tusk Test Runner
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     env:
       PROMPTFOO_DISABLE_TELEMETRY: 1

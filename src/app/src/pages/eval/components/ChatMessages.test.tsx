@@ -1,7 +1,6 @@
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-
 import ChatMessages, { type Message } from './ChatMessages';
 
 const renderWithTheme = (component: React.ReactNode) => {

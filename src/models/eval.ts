@@ -1,5 +1,3 @@
-import { randomUUID } from 'crypto';
-
 import { and, desc, eq, sql } from 'drizzle-orm';
 import { DEFAULT_QUERY_LIMIT } from '../constants';
 import { getDb } from '../database/index';
@@ -407,7 +405,7 @@ export default class Eval {
       if (opts?.results && opts.results.length > 0) {
         const res = db
           .insert(evalResultsTable)
-          .values(opts.results?.map((r) => ({ ...r, evalId, id: randomUUID() })))
+          .values(opts.results?.map((r) => ({ ...r, evalId, id: crypto.randomUUID() })))
           .run();
         logger.debug(`Inserted ${res.changes} eval results`);
       }
@@ -1279,7 +1277,7 @@ export default class Eval {
         const now = Date.now();
         const copiedResults = batch.map((result) => ({
           ...result,
-          id: randomUUID(),
+          id: crypto.randomUUID(),
           evalId: newEvalId,
           createdAt: now,
           updatedAt: now,

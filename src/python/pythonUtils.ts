@@ -1,16 +1,17 @@
+import { execFile } from 'child_process';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { promisify } from 'util';
 
 import { PythonShell } from 'python-shell';
 import { getEnvBool, getEnvString } from '../envars';
 import { getWrapperDir } from '../esm';
 import logger from '../logger';
 import { safeJsonStringify } from '../util/json';
-import { execFile } from 'child_process';
-import { promisify } from 'util';
 
 const execFileAsync = promisify(execFile);
+
 import type { Options as PythonShellOptions } from 'python-shell';
 
 /**

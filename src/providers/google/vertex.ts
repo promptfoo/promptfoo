@@ -6,14 +6,14 @@ import { getEnvString } from '../../envars';
 import { importModule } from '../../esm';
 import logger from '../../logger';
 import {
-  withGenAISpan,
   type GenAISpanContext,
   type GenAISpanResult,
+  withGenAISpan,
 } from '../../tracing/genaiTracer';
+import { fetchWithProxy } from '../../util/fetch/index';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util/index';
-import { fetchWithProxy } from '../../util/fetch/index';
 import { isValidJson } from '../../util/json';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToGoogle } from '../mcp/transform';

@@ -6,13 +6,13 @@
  * ```
  */
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { within } from '@testing-library/dom';
-import { callApi } from '@app/utils/api';
-import { TestCaseGenerationProvider, useTestCaseGeneration } from './TestCaseGenerationProvider';
 import { ToastProvider } from '@app/contexts/ToastContext';
+import { callApi } from '@app/utils/api';
 import { Plugin, Strategy } from '@promptfoo/redteam/constants';
+import { within } from '@testing-library/dom';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { TestCaseGenerationProvider, useTestCaseGeneration } from './TestCaseGenerationProvider';
 
 // ===================================================================
 // Mocks

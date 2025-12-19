@@ -1,5 +1,6 @@
-import Cal, { getCalApi } from '@calcom/embed-react';
 import React, { useEffect } from 'react';
+
+import Cal, { getCalApi } from '@calcom/embed-react';
 import Head from '@docusaurus/Head';
 import Link from '@docusaurus/Link';
 import AssessmentIcon from '@mui/icons-material/Assessment';

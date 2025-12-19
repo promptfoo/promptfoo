@@ -1,4 +1,4 @@
-import { Mock, MockedFunction, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, Mock, MockedFunction, vi } from 'vitest';
 import type { Request, Response } from 'express';
 
 import type { CompletedPrompt } from '../../../src/types/index';
@@ -22,8 +22,8 @@ vi.mock('../../../src/server/utils/downloadHelpers', async (importOriginal) => {
 
 // Import after mocking
 import Eval from '../../../src/models/eval';
-import { evalTableToCsv, evalTableToJson } from '../../../src/server/utils/evalTableUtils';
 import { setDownloadHeaders } from '../../../src/server/utils/downloadHelpers';
+import { evalTableToCsv, evalTableToJson } from '../../../src/server/utils/evalTableUtils';
 
 // Setup mocked functions
 const mockedEvalFindById = vi.fn() as MockedFunction<typeof Eval.findById>;

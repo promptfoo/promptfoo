@@ -1,4 +1,4 @@
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Special test for METEOR assertion integration
 // Uses vi.resetModules() + dynamic imports which can be slow on Windows

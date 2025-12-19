@@ -1,6 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 import path from 'path';
 
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { providerMap } from '../../src/providers/registry';
 
 import type { LoadApiProviderContext } from '../../src/types/index';

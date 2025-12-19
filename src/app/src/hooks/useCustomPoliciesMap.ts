@@ -2,14 +2,14 @@
  * @fileoverview Hooks for working w/ custom policies. Sharable between Promptfoo OSS and Promptfoo Cloud.
  */
 
-import { type PolicyObject } from '@promptfoo/redteam/types';
+import { useMemo } from 'react';
+
 import {
   isValidPolicyObject,
-  makeInlinePolicyId,
   makeDefaultPolicyName,
+  makeInlinePolicyId,
 } from '@promptfoo/redteam/plugins/policy/utils';
-import { type RedteamPluginObject } from '@promptfoo/redteam/types';
-import { useMemo } from 'react';
+import { type PolicyObject, type RedteamPluginObject } from '@promptfoo/redteam/types';
 
 /**
  * Reads custom policies from the table store and returns a map of policy IDs to policy objects.

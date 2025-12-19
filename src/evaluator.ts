@@ -1,5 +1,3 @@
-import { randomUUID } from 'crypto';
-
 import async from 'async';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
@@ -32,8 +30,8 @@ import {
   startOtlpReceiverIfNeeded,
   stopOtlpReceiverIfNeeded,
 } from './tracing/evaluatorTracing';
-import { initializeOtel, shutdownOtel, flushOtel } from './tracing/otelSdk';
 import { getDefaultOtelConfig } from './tracing/otelConfig';
+import { flushOtel, initializeOtel, shutdownOtel } from './tracing/otelSdk';
 import {
   type Assertion,
   type AssertionType,
@@ -969,7 +967,7 @@ class Evaluator {
         if (inputTransform) {
           const transformContext: TransformContext = {
             prompt: {},
-            uuid: randomUUID(),
+            uuid: crypto.randomUUID(),
           };
           const transformedVars: Vars = await transform(
             inputTransform,
