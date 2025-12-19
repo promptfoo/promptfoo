@@ -133,7 +133,7 @@ export default class EvalResult {
             promptIdx: result.promptIdx,
           })
         : result.response;
-      processedResults.push({ ...result, response: processedResponse });
+      processedResults.push({ ...result, response: processedResponse ?? undefined });
     }
 
     db.transaction(() => {
