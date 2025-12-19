@@ -1,4 +1,3 @@
-import { v4 as uuidv4 } from 'uuid';
 import { renderPrompt } from '../../../evaluatorHelpers';
 import logger from '../../../logger';
 import { PromptfooChatCompletionProvider } from '../../../providers/promptfoo';
@@ -193,7 +192,7 @@ export class HydraProvider implements ApiProvider {
   }): Promise<HydraResponse> {
     // Initialize scanId: use evaluationId if available, otherwise use instance scanId or generate new one
     if (!this.scanId) {
-      this.scanId = context?.evaluationId || uuidv4();
+      this.scanId = context?.evaluationId || crypto.randomUUID();
     }
     const scanId = context?.evaluationId || this.scanId;
 
@@ -227,7 +226,7 @@ export class HydraProvider implements ApiProvider {
     }> = [];
 
     const totalTokenUsage: TokenUsage = createEmptyTokenUsage();
-    const testRunId = `${context?.evaluationId || 'local'}-tc${context?.testCaseId || uuidv4().slice(0, 8)}`;
+    const testRunId = `${context?.evaluationId || 'local'}-tc${context?.testCaseId || crypto.randomUUID().slice(0, 8)}`;
 
     let vulnerabilityAchieved = false;
     let stopReason: 'Grader failed' | 'Max turns reached' | 'Max backtracks reached' =

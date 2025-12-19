@@ -13,7 +13,6 @@
  */
 
 import dedent from 'dedent';
-import { v4 as uuidv4 } from 'uuid';
 import logger from '../../../logger';
 import { PromptfooChatCompletionProvider } from '../../../providers/promptfoo';
 import { extractFirstJsonObject } from '../../../util/json';
@@ -204,7 +203,7 @@ class VoiceMemorySystem {
 
   duplicateConversationExcludingLastTurn(conversationId: string): string {
     const original = this.getConversation(conversationId);
-    const newId = uuidv4();
+    const newId = crypto.randomUUID();
     const newConversation = original.slice(0, -2); // Remove last user + assistant
     this.conversations.set(newId, [...newConversation]);
     return newId;
@@ -238,7 +237,7 @@ export class VoiceCrescendoProvider implements ApiProvider {
     this.maxBacktracks = config.maxBacktracks || DEFAULT_MAX_BACKTRACKS;
     this.nunjucks = getNunjucksEngine();
     this.memory = new VoiceMemorySystem();
-    this.conversationId = uuidv4();
+    this.conversationId = crypto.randomUUID();
     this.delayBetweenTurns = config.delayBetweenTurns || 500;
 
     logger.debug('[VoiceCrescendo] Provider initialized', { config });

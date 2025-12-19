@@ -38,17 +38,13 @@ vi.mock('../../../src/logger', () => ({
   },
   getLogLevel: vi.fn().mockReturnValue('info'),
 }));
-vi.mock('uuid', async (importOriginal) => {
-  return {
-    ...(await importOriginal()),
-
-    validate: vi.fn((str: string) => {
-      // Simple UUID validation for testing
-      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-      return uuidRegex.test(str);
-    }),
-  };
-});
+vi.mock('../../../src/util/uuid', () => ({
+  isUuid: vi.fn((str: string) => {
+    // Simple UUID validation for testing
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    return uuidRegex.test(str);
+  }),
+}));
 vi.mock('../../../src/util', async (importOriginal) => {
   return {
     ...(await importOriginal()),
