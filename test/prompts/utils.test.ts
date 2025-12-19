@@ -188,6 +188,7 @@ describe('hashPrompt', () => {
     expect(
       hashPrompt({
         id: 'prompt-id',
+        label: '',
         raw: 'Prompt Raw',
       }),
     ).toBe(sha256('prompt-id'));
