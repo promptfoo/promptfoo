@@ -131,8 +131,8 @@ export default function RSA2026(): React.ReactElement {
         <section className={styles.heroContent}>
           <div className={styles.container}>
             <p className={styles.heroSubtitle}>
-              The world's leading cybersecurity conference. Meet us for live AI red teaming demos,
-              free security assessments, and expert consultations.
+              Meet our team for live demos of our AI security platform—red teaming, evals,
+              guardrails, and foundation model security reports for your AI applications.
             </p>
 
             <CountdownTimer />
@@ -169,16 +169,15 @@ export default function RSA2026(): React.ReactElement {
             </div>
 
             <div className={styles.heroCtas}>
+              <p className={styles.ctaBlurb}>Book a time to talk to us</p>
               <a
-                href="#highlights"
+                href="https://cal.com/team/promptfoo/intro2"
+                target="_blank"
+                rel="noopener noreferrer"
                 className={styles.primaryCta}
-                onClick={(e) => handleSmoothScroll(e, '#highlights')}
               >
-                What to Expect
-              </a>
-              <Link to="/contact" className={styles.secondaryCta}>
                 Schedule a Meeting
-              </Link>
+              </a>
             </div>
           </div>
         </section>
@@ -196,79 +195,26 @@ export default function RSA2026(): React.ReactElement {
             <div className={styles.highlightsGrid}>
               <div className={styles.highlightCard}>
                 <div className={styles.highlightIcon}>🎯</div>
-                <h3>Live Red Teaming Demos</h3>
+                <h3>AI Red Teaming</h3>
                 <p>
-                  Watch real-time AI vulnerability demonstrations. See how we identify prompt
-                  injection, jailbreaks, and data exfiltration in production AI systems.
+                  See live demos of LLM attack vectors, jailbreak techniques, and how to integrate
+                  automated red teaming into your workflow.
                 </p>
               </div>
               <div className={styles.highlightCard}>
-                <div className={styles.highlightIcon}>🔒</div>
-                <h3>Free Security Assessment</h3>
+                <div className={styles.highlightIcon}>🤝</div>
+                <h3>Connect with AI Experts</h3>
                 <p>
-                  Get a complimentary AI vulnerability assessment for your organization. Walk away
-                  with actionable insights to protect your AI applications.
+                  Meet AI security professionals working on evals, guardrails, and MCP
+                  security—learn how they're protecting AI applications in production.
                 </p>
               </div>
               <div className={styles.highlightCard}>
-                <div className={styles.highlightIcon}>👥</div>
-                <h3>Expert Consultations</h3>
+                <div className={styles.highlightIcon}>🎬</div>
+                <h3>See it in Action</h3>
                 <p>
-                  Meet our security researchers and discuss your specific AI security challenges.
-                  Get personalized recommendations from the team.
-                </p>
-              </div>
-              <div className={styles.highlightCard}>
-                <div className={styles.highlightIcon}>🎁</div>
-                <h3>Exclusive Swag</h3>
-                <p>
-                  Limited edition Promptfoo gear for conference attendees. First come, first served
-                  at our booth.
-                </p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* What We'll Showcase */}
-        <section className={styles.showcaseSection}>
-          <div className={styles.container}>
-            <div className={styles.sectionHeader}>
-              <h2 className={styles.sectionTitle}>What We'll Showcase</h2>
-              <p className={styles.sectionSubtitle}>Enterprise-grade AI security solutions</p>
-            </div>
-
-            <div className={styles.showcaseGrid}>
-              <div className={styles.showcaseItem}>
-                <div className={styles.showcaseNumber}>01</div>
-                <h3>Next-Gen Red Teaming</h3>
-                <p>
-                  Our latest AI-powered attack simulations that go beyond traditional prompt
-                  injection to test complex agent systems and multi-model architectures.
-                </p>
-              </div>
-              <div className={styles.showcaseItem}>
-                <div className={styles.showcaseNumber}>02</div>
-                <h3>Continuous Monitoring</h3>
-                <p>
-                  Real-time AI security monitoring that detects anomalies, policy violations, and
-                  potential attacks in production environments.
-                </p>
-              </div>
-              <div className={styles.showcaseItem}>
-                <div className={styles.showcaseNumber}>03</div>
-                <h3>Compliance Automation</h3>
-                <p>
-                  Automated compliance reporting for AI governance frameworks, including EU AI Act,
-                  NIST AI RMF, and industry-specific regulations.
-                </p>
-              </div>
-              <div className={styles.showcaseItem}>
-                <div className={styles.showcaseNumber}>04</div>
-                <h3>Enterprise Integrations</h3>
-                <p>
-                  Seamless integration with your existing security stack—SIEM, SOAR, and
-                  vulnerability management platforms.
+                  Quick-fire demos on the latest AI security research, tools, and techniques from
+                  the AI security and red teaming experts.
                 </p>
               </div>
             </div>
@@ -278,19 +224,34 @@ export default function RSA2026(): React.ReactElement {
         {/* CTA Section */}
         <section className={styles.ctaSection}>
           <div className={styles.container}>
-            <div className={styles.ctaContent}>
-              <h2 className={styles.ctaTitle}>Don't Miss Out</h2>
-              <p className={styles.ctaText}>
-                RSA Conference is the world's largest gathering of security professionals. Schedule
-                a meeting now to guarantee time with our team.
-              </p>
-              <div className={styles.ctaButtons}>
-                <Link to="/contact" className={styles.ctaPrimary}>
+            <div className={styles.ctaGrid}>
+              <div className={styles.ctaCard}>
+                <h3 className={styles.ctaCardTitle}>Attending RSA?</h3>
+                <p className={styles.ctaCardText}>
+                  Book a time to meet with our AI security and red teaming experts at the event.
+                </p>
+                <a
+                  href="https://cal.com/team/promptfoo/intro2"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={styles.primaryCta}
+                >
                   Schedule a Meeting
-                </Link>
-                <Link to="/docs/intro" className={styles.ctaSecondary}>
-                  Explore Documentation
-                </Link>
+                </a>
+              </div>
+              <div className={styles.ctaCard}>
+                <h3 className={styles.ctaCardTitle}>Can't make it?</h3>
+                <p className={styles.ctaCardText}>
+                  Join our Discord community to connect with our team and our community.
+                </p>
+                <a
+                  href="https://discord.com/invite/promptfoo"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={styles.secondaryCta}
+                >
+                  Join our Discord
+                </a>
               </div>
             </div>
           </div>

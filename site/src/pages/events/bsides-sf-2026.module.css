@@ -192,9 +192,15 @@
 
 .heroCtas {
   display: flex;
-  justify-content: center;
-  gap: 1rem;
-  flex-wrap: wrap;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.ctaBlurb {
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.7);
+  margin: 0;
 }
 
 .primaryCta {
@@ -337,35 +343,38 @@
 }
 
 /* CTA Section */
-.ctaContent {
-  max-width: 600px;
+.ctaGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 2rem;
+  max-width: 800px;
   margin: 0 auto;
+}
+
+.ctaCard {
   text-align: center;
   background: linear-gradient(135deg, rgba(249, 115, 22, 0.08) 0%, rgba(139, 92, 246, 0.08) 100%);
   border: 1px solid rgba(249, 115, 22, 0.2);
   border-radius: 16px;
-  padding: 3rem 2rem;
+  padding: 2rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
-.ctaTitle {
-  font-size: 1.75rem;
+.ctaCardTitle {
+  font-size: 1.25rem;
   font-weight: 700;
   color: #f1f5f9;
-  margin-bottom: 0.75rem;
+  margin: 0 0 0.75rem 0;
 }
 
-.ctaText {
-  font-size: 1rem;
+.ctaCardText {
+  font-size: 0.95rem;
   color: #94a3b8;
   margin-bottom: 1.5rem;
-  line-height: 1.7;
-}
-
-.ctaButtons {
-  display: flex;
-  justify-content: center;
-  gap: 1rem;
-  flex-wrap: wrap;
+  line-height: 1.6;
+  flex-grow: 1;
 }
 
 /* Footer Navigation */
@@ -467,13 +476,13 @@
     text-align: center;
   }
 
-  .ctaContent {
-    padding: 2rem 1.5rem;
+  .ctaGrid {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
   }
 
-  .ctaButtons {
-    flex-direction: column;
-    align-items: center;
+  .ctaCard {
+    padding: 1.5rem 1.25rem;
   }
 
   .highlightsSection,
