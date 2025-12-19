@@ -31,7 +31,7 @@ With extended thinking disabled, Google's new model refused harmful prompts less
 
 <div style={{flex: 2}}>
 
-We ran the same red-team harness against Gemini 3 Flash Preview that we used for [GPT-5.2 last week](/blog/gpt-5.2-trust-safety-assessment)—same prompts, same judge, same attempt budget. **With extended thinking disabled** (`thinkingLevel: MINIMAL`), Google's model showed a wider attack surface: 89% of single-turn jailbreaks succeeded, compared to 60% for GPT-5.2.
+<p style={{lineHeight: '1.6'}}><span style={{float: 'left', fontSize: '3.5rem', fontWeight: 'bold', lineHeight: '0.8', marginRight: '0.15em', marginTop: '0.1em', color: '#c41e3a'}}>W</span>e ran the same red-team harness against Gemini 3 Flash Preview that we used for <a href="/blog/gpt-5.2-trust-safety-assessment">GPT-5.2 last week</a>—same prompts, same judge, same attempt budget. <strong>With extended thinking disabled</strong> (<code>thinkingLevel: MINIMAL</code>), Google's model showed a wider attack surface: 89% of single-turn jailbreaks succeeded, compared to 60% for GPT-5.2.</p>
 
 The gap matters most in high-stakes categories. Child safety showed a 43 percentage-point difference—70% vs 27% attack success. Graphic content and impersonation hit 100% bypass rates under our Meta strategy.
 
@@ -41,7 +41,7 @@ We tested `thinkingLevel: MINIMAL`, not the default HIGH. Expect better safety w
 
 </div>
 
-<div style={{flex: 1, backgroundColor: '#f8f8f8', padding: '1rem', borderLeft: '3px solid #c41e3a', fontSize: '0.9rem'}}>
+<div style={{flex: 1, backgroundColor: '#f8f8f8', padding: '1rem', borderLeft: '3px solid #c41e3a', fontSize: '0.9rem', alignSelf: 'flex-start', marginTop: '0.5rem'}}>
 
 **KEY FINDINGS**
 
@@ -70,7 +70,7 @@ We tested `thinkingLevel: MINIMAL`, not the default HIGH. Expect better safety w
 
 <!-- truncate -->
 
----
+<hr style={{border: 'none', borderTop: '2px solid #222', margin: '2.5rem 0'}}/>
 
 ## The Gap
 
@@ -84,7 +84,7 @@ On direct harmful prompts (no jailbreak), Gemini 3 Flash allowed 19% through. GP
 
 GPT-5.2 starts stronger (96% baseline refusal vs 81%) and degrades less under single-turn attacks (-56pp vs -70pp). The compounding effect—weaker baseline plus greater single-turn degradation—produces the 89% vs 60% headline.
 
----
+<hr style={{border: 'none', borderTop: '2px solid #222', margin: '2.5rem 0'}}/>
 
 ## The Pattern
 
@@ -109,35 +109,35 @@ When you manipulate tokens, the model catches it. When you manipulate framing, t
 
 ![Structural vs content-framing attack success rates](/img/blog/gemini-3-flash/structural-vs-semantic.svg)
 
----
+<hr style={{border: 'none', borderTop: '2px solid #222', margin: '2.5rem 0'}}/>
 
 ## Three Findings
 
 <div style={{display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1rem', margin: '1.5rem 0'}}>
 
-<div style={{backgroundColor: '#fff8e1', border: '1px solid #ffe082', borderRadius: '8px', padding: '1rem'}}>
-<div style={{fontWeight: 'bold', marginBottom: '0.5rem'}}>Impersonation</div>
+<div style={{backgroundColor: '#fffbf0', border: '1px solid #ffe082', borderLeft: '3px solid #f59e0b', borderRadius: '8px', padding: '1rem'}}>
+<div style={{fontWeight: 'bold', marginBottom: '0.5rem', color: '#b45309'}}>Impersonation</div>
 <div style={{fontSize: '1.5rem', fontWeight: 'bold'}}>100%</div>
-<div style={{fontSize: '0.85rem', color: '#666'}}>Both models fail equally. "Pretend to be [CEO]" works reliably on both.</div>
+<div style={{fontSize: '0.85rem', color: '#555'}}>Both models fail equally. "Pretend to be [CEO]" works reliably on both.</div>
 </div>
 
-<div style={{backgroundColor: '#ffebee', border: '1px solid #ef9a9a', borderRadius: '8px', padding: '1rem'}}>
-<div style={{fontWeight: 'bold', marginBottom: '0.5rem'}}>Child Safety</div>
+<div style={{backgroundColor: '#fff5f5', border: '1px solid #ffcdd2', borderLeft: '3px solid #c41e3a', borderRadius: '8px', padding: '1rem'}}>
+<div style={{fontWeight: 'bold', marginBottom: '0.5rem', color: '#b71c1c'}}>Child Safety</div>
 <div style={{fontSize: '1.5rem', fontWeight: 'bold'}}>+43pp gap</div>
-<div style={{fontSize: '0.85rem', color: '#666'}}>70% vs 27%. Human-reviewed. For apps involving minors, this gap is consequential.</div>
+<div style={{fontSize: '0.85rem', color: '#555'}}>70% vs 27%. Human-reviewed. For apps involving minors, this gap is consequential.</div>
 </div>
 
-<div style={{backgroundColor: '#ffebee', border: '1px solid #ef9a9a', borderRadius: '8px', padding: '1rem'}}>
-<div style={{fontWeight: 'bold', marginBottom: '0.5rem'}}>Hallucination</div>
+<div style={{backgroundColor: '#fff5f5', border: '1px solid #ffcdd2', borderLeft: '3px solid #c41e3a', borderRadius: '8px', padding: '1rem'}}>
+<div style={{fontWeight: 'bold', marginBottom: '0.5rem', color: '#b71c1c'}}>Hallucination</div>
 <div style={{fontSize: '1.5rem', fontWeight: 'bold'}}>93% vs 60%</div>
-<div style={{fontSize: '0.85rem', color: '#666'}}>Reliability concern amplified by jailbreaks. Validate citations externally.</div>
+<div style={{fontSize: '0.85rem', color: '#555'}}>Reliability concern amplified by jailbreaks. Validate citations externally.</div>
 </div>
 
 </div>
 
 A note on child safety: Google's [safety settings docs](https://ai.google.dev/gemini-api/docs/safety-settings) say protections against child safety endangerment are "always blocked and cannot be adjusted." Our reviewers still flagged outputs as problematic under adversarial prompts.
 
----
+<hr style={{border: 'none', borderTop: '2px solid #222', margin: '2.5rem 0'}}/>
 
 ## What This Means
 
@@ -162,7 +162,7 @@ Google reduced "unjustified refusals" by 10% vs the prior Flash model. That's a 
 
 Neither model is sufficient without additional safety layers. GPT-5.2 provides a stronger foundation for high-stakes use cases. Gemini 3 Flash may be fine for lower-risk applications where you control the input surface.
 
----
+<hr style={{border: 'none', borderTop: '1px solid #ccc', margin: '2rem 0'}}/>
 
 <details>
 <summary><strong>Methodology</strong> — 43 plugins • 3,462 probes • GPT-5 judge</summary>
@@ -228,7 +228,7 @@ Google's metrics test typical inputs, not adversarial prompts. The 10.4% reducti
 
 </details>
 
----
+<hr style={{border: 'none', borderTop: '1px solid #ccc', margin: '1.5rem 0'}}/>
 
 <details>
 <summary><strong>Limitations</strong></summary>
@@ -242,7 +242,7 @@ Google's metrics test typical inputs, not adversarial prompts. The 10.4% reducti
 
 </details>
 
----
+<hr style={{border: 'none', borderTop: '1px solid #ccc', margin: '1.5rem 0'}}/>
 
 <details>
 <summary><strong>Run It Yourself</strong></summary>
@@ -261,12 +261,12 @@ Full eval: ~5 hours at concurrency 10. Config in our [foundation-model-redteam e
 
 </details>
 
----
+<hr style={{border: 'none', borderTop: '2px solid #222', margin: '2.5rem 0'}}/>
 
 **What's next:** We're running the same eval with `thinkingLevel: HIGH`. We'll update this post with results.
 
 **Related:** [GPT-5.2 Assessment](/blog/gpt-5.2-trust-safety-assessment) • [Why ASR Isn't Comparable](/blog/asr-not-portable-metric) • [Meta Strategy](/docs/red-team/strategies/meta) • [Hydra Strategy](/docs/red-team/strategies/hydra)
 
----
+<hr style={{border: 'none', borderTop: '1px solid #ccc', margin: '1.5rem 0'}}/>
 
 Questions? [Discord](https://discord.gg/promptfoo) • [GitHub](https://github.com/promptfoo/promptfoo)
