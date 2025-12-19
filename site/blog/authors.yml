@@ -55,7 +55,7 @@ michael:
 shuo:
   name: Guangshuo Zang
   title: Staff Engineer
-  url: https://github.com/guangshuo
+  url: https://github.com/mrflounder
   image_url: /img/team/shuo.jpeg
 
 steve:
@@ -66,8 +66,8 @@ steve:
 
 tabs:
   name: Tabs Fakier
-  title: Founding Developer Advocate
-  url: https://github.com/tabsfakier
+  title: Contributor
+  url: https://github.com/ladyofcode
   image_url: /img/team/tabs.jpeg
 
 vanessa:
@@ -87,9 +87,3 @@ will:
   title: Senior Engineer
   url: https://github.com/willholley
   image_url: /img/team/will.jpeg
-
-drishti-portkey:
-  name: Drishti Shah
-  title: Guest Author (Portkey)
-  url: https://portkey.ai
-  image_url: /img/logo-panda.svg

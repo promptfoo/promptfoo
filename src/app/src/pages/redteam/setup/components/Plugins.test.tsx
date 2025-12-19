@@ -7,8 +7,8 @@ import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { useRecentlyUsedPlugins, useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import Plugins from './Plugins';
 import { TestCaseGenerationProvider } from './TestCaseGenerationProvider';
-import type { DefinedUseQueryResult } from '@tanstack/react-query';
 import type { ApiHealthResult } from '@app/hooks/useApiHealth';
+import type { DefinedUseQueryResult } from '@tanstack/react-query';
 
 vi.mock('../hooks/useRedTeamConfig', async () => {
   const actual = await vi.importActual('../hooks/useRedTeamConfig');
@@ -1015,6 +1015,126 @@ describe('Plugins', () => {
         pluginId: 'harmful:hate',
         config: pluginConfig,
       });
+    });
+  });
+
+  // Test for infinite loop fix - updatePlugins compares merged output vs current state
+  describe('Plugin sync effect stability', () => {
+    it('should not cause infinite re-renders when selecting presets', async () => {
+      // Set up config with existing intent plugin
+      const configWithIntent = {
+        plugins: [
+          { id: 'intent', config: { intent: ['test intent'] } },
+          { id: 'policy', config: { policy: 'test policy' } },
+        ],
+      };
+
+      mockUseRedTeamConfig.mockReturnValue({
+        config: configWithIntent,
+        updatePlugins: mockUpdatePlugins,
+      });
+
+      renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
+
+      // Select a preset to trigger user interaction and the sync effect
+      const recommendedPreset = screen.getByText('Recommended');
+      fireEvent.click(recommendedPreset);
+
+      // updatePlugins should be called a bounded number of times (not infinite)
+      // The fix in updatePlugins compares merged output vs current state to prevent loops
+      await waitFor(() => {
+        expect(mockUpdatePlugins.mock.calls.length).toBeLessThan(5);
+      });
+    });
+
+    it('should preserve policy and intent plugins when syncing regular plugins', async () => {
+      const intentPlugin = { id: 'intent', config: { intent: ['test intent'] } };
+      const policyPlugin = { id: 'policy', config: { policy: 'test policy' } };
+
+      const configWithCustomPlugins = {
+        plugins: [intentPlugin, policyPlugin],
+      };
+
+      mockUseRedTeamConfig.mockReturnValue({
+        config: configWithCustomPlugins,
+        updatePlugins: mockUpdatePlugins,
+      });
+
+      renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
+
+      // Select a preset to add regular plugins
+      const minimalPreset = screen.getByText('Minimal Test');
+      fireEvent.click(minimalPreset);
+
+      await waitFor(() => {
+        expect(mockUpdatePlugins).toHaveBeenCalled();
+      });
+
+      // Check that updatePlugins was called with both regular and custom plugins
+      const lastCall = mockUpdatePlugins.mock.calls[mockUpdatePlugins.mock.calls.length - 1];
+      const pluginsArg = lastCall[0];
+
+      // Should contain policy and intent plugins from config.plugins
+      const hasPolicy = pluginsArg.some((p: any) => typeof p === 'object' && p.id === 'policy');
+      const hasIntent = pluginsArg.some((p: any) => typeof p === 'object' && p.id === 'intent');
+
+      expect(hasPolicy).toBe(true);
+      expect(hasIntent).toBe(true);
+    });
+
+    it('should not cause re-render loop when config.plugins changes from updatePlugins', async () => {
+      // This test verifies the fix for the infinite loop bug
+      // The bug was: effect depends on config.plugins -> calls updatePlugins ->
+      // config.plugins changes -> effect runs again -> infinite loop
+      // The fix: updatePlugins compares merged output vs current state,
+      // returning early if they're equal to prevent unnecessary state changes.
+
+      let updateCallCount = 0;
+      const trackingUpdatePlugins = vi.fn(() => {
+        updateCallCount++;
+      });
+
+      mockUseRedTeamConfig.mockReturnValue({
+        config: { plugins: [] },
+        updatePlugins: trackingUpdatePlugins,
+      });
+
+      renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
+
+      // Trigger user interaction
+      const minimalPreset = screen.getByText('Minimal Test');
+      fireEvent.click(minimalPreset);
+
+      // Wait a bit for any potential infinite loops to manifest
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      });
+
+      // With the infinite loop bug, updateCallCount would be very high or the test would hang
+      // With the fix in updatePlugins, it should be called at most once or twice
+      expect(updateCallCount).toBeLessThan(5);
+    });
+
+    it('should not call updatePlugins without user interaction', async () => {
+      // Without user interaction (hasUserInteracted is false), the sync effect
+      // should not call updatePlugins
+      const existingPlugins = ['bola', { id: 'harmful:hate', config: { numTests: 5 } }];
+
+      mockUseRedTeamConfig.mockReturnValue({
+        config: { plugins: existingPlugins },
+        updatePlugins: mockUpdatePlugins,
+      });
+
+      renderWithProviders(<Plugins onNext={mockOnNext} onBack={mockOnBack} />);
+
+      // Trigger user interaction without changing plugins
+      // (just selecting plugins that are already selected shouldn't trigger update)
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      });
+
+      // Without user interaction (hasUserInteracted is false), updatePlugins should not be called
+      expect(mockUpdatePlugins).not.toHaveBeenCalled();
     });
   });
 });

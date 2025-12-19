@@ -1,10 +1,10 @@
-import { Mock, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TextEncoder } from 'util';
 
 import { BedrockRuntimeClient } from '@aws-sdk/client-bedrock-runtime';
 import { NodeHttp2Handler } from '@smithy/node-http-handler';
+import { afterEach, beforeEach, describe, expect, it, Mock, vi } from 'vitest';
 import { disableCache, enableCache } from '../../../src/cache';
-import { NovaSonicProvider } from '../../../src/providers/bedrock/nova-sonic';
+import { categorizeError, NovaSonicProvider } from '../../../src/providers/bedrock/nova-sonic';
 
 vi.mock('@smithy/node-http-handler', async (importOriginal) => {
   return {
@@ -413,5 +413,164 @@ describe('NovaSonic Provider', () => {
       expect(result.error).toBe('Network error');
       expect(result.metadata).toEqual({});
     });
+  });
+
+  describe('Custom Timeout Configuration', () => {
+    it('should use custom sessionTimeout and requestTimeout values', async () => {
+      vi.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
+
+      const customProvider = new NovaSonicProvider('amazon.nova-sonic-v1:0', {
+        config: {
+          region: 'us-east-1',
+          sessionTimeout: 600000,
+          requestTimeout: 180000,
+        },
+      });
+
+      await (customProvider as any).getBedrockClient();
+
+      expect(NodeHttp2Handler).toHaveBeenCalledWith({
+        requestTimeout: 180000,
+        sessionTimeout: 600000,
+        disableConcurrentStreams: false,
+        maxConcurrentStreams: 20,
+      });
+    });
+
+    it('should use default timeouts when not specified', async () => {
+      vi.spyOn(NovaSonicProvider.prototype, 'callApi').mockRestore();
+
+      const defaultProvider = new NovaSonicProvider('amazon.nova-sonic-v1:0', {
+        config: { region: 'us-east-1' },
+      });
+
+      await (defaultProvider as any).getBedrockClient();
+
+      expect(NodeHttp2Handler).toHaveBeenCalledWith({
+        requestTimeout: 300000,
+        sessionTimeout: 300000,
+        disableConcurrentStreams: false,
+        maxConcurrentStreams: 20,
+      });
+    });
+  });
+});
+
+describe('categorizeError', () => {
+  it('should categorize connection errors (ECONNREFUSED)', () => {
+    const error = new Error('connect ECONNREFUSED 127.0.0.1:443');
+    const result = categorizeError(error);
+
+    expect(result.type).toBe('connection');
+    expect(result.message).toBe(
+      'Failed to connect to AWS Bedrock. Check your network and AWS configuration.',
+    );
+    expect(result.originalError).toBe(error);
+  });
+
+  it('should categorize connection errors (ENOTFOUND)', () => {
+    const error = new Error('getaddrinfo ENOTFOUND bedrock.us-east-1.amazonaws.com');
+    const result = categorizeError(error);
+
+    expect(result.type).toBe('connection');
+    expect(result.message).toBe(
+      'Failed to connect to AWS Bedrock. Check your network and AWS configuration.',
+    );
+  });
+
+  it('should categorize timeout errors', () => {
+    const error = new Error('Request timeout after 30000ms');
+    const result = categorizeError(error);
+
+    expect(result.type).toBe('timeout');
+    expect(result.message).toBe('Request timed out. The operation took too long to complete.');
+  });
+
+  it('should categorize timed out errors', () => {
+    const error = new Error('Connection timed out');
+    const result = categorizeError(error);
+
+    expect(result.type).toBe('timeout');
+  });
+
+  it('should categorize aborted errors as timeout', () => {
+    const error = new Error('Request aborted');
+    const result = categorizeError(error);
+
+    expect(result.type).toBe('timeout');
+  });
+
+  it('should categorize session errors', () => {
+    const error = new Error('Session not found');
+    const result = categorizeError(error);
+
+    expect(result.type).toBe('session');
+    expect(result.message).toBe(
+      'Session error. The bidirectional stream session may have been invalidated.',
+    );
+  });
+
+  it('should categorize parsing errors (JSON)', () => {
+    const error = new Error('Unexpected token in JSON at position 0');
+    const result = categorizeError(error);
+
+    expect(result.type).toBe('parsing');
+    expect(result.message).toBe(
+      'Failed to parse response from Bedrock. The response format was unexpected.',
+    );
+  });
+
+  it('should categorize parsing errors (parse)', () => {
+    const error = new Error('Failed to parse response');
+    const result = categorizeError(error);
+
+    expect(result.type).toBe('parsing');
+  });
+
+  it('should categorize API/auth errors (access)', () => {
+    const error = new Error('Access denied to bedrock:InvokeModel');
+    const result = categorizeError(error);
+
+    expect(result.type).toBe('api');
+    expect(result.message).toBe(
+      'AWS authentication error. Check your credentials and permissions.',
+    );
+  });
+
+  it('should categorize API/auth errors (credential)', () => {
+    const error = new Error('Invalid credential provided');
+    const result = categorizeError(error);
+
+    expect(result.type).toBe('api');
+  });
+
+  it('should categorize API/auth errors (auth)', () => {
+    const error = new Error('Authentication failed');
+    const result = categorizeError(error);
+
+    expect(result.type).toBe('api');
+  });
+
+  it('should return unknown for unrecognized errors', () => {
+    const error = new Error('Some random error occurred in the system');
+    const result = categorizeError(error);
+
+    expect(result.type).toBe('unknown');
+    expect(result.message).toBe('Some random error occurred in the system');
+    expect(result.originalError).toBe(error);
+  });
+
+  it('should handle non-Error objects', () => {
+    const result = categorizeError('string error');
+
+    expect(result.type).toBe('unknown');
+    expect(result.message).toBe('string error');
+  });
+
+  it('should handle null/undefined', () => {
+    const result = categorizeError(null);
+
+    expect(result.type).toBe('unknown');
+    expect(result.message).toBe('null');
   });
 });

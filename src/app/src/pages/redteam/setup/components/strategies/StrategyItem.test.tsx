@@ -1,8 +1,8 @@
-import { fireEvent, render, screen } from '@testing-library/react';
-import { vi } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { StrategyItem } from './StrategyItem';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { TestCaseGenerationProvider } from '../TestCaseGenerationProvider';
+import { StrategyItem } from './StrategyItem';
 
 import type { StrategyCardData } from './types';
 

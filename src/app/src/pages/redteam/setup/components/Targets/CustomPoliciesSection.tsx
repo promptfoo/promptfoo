@@ -27,12 +27,12 @@ import {
   useGridApiRef,
 } from '@mui/x-data-grid';
 import { makeDefaultPolicyName, makeInlinePolicyId } from '@promptfoo/redteam/plugins/policy/utils';
-import type { PolicyObject } from '@promptfoo/redteam/types';
 import { parse } from 'csv-parse/browser/esm/sync';
 import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import { TestCaseGenerateButton } from '../TestCaseDialog';
 import { useTestCaseGeneration } from '../TestCaseGenerationProvider';
 import { PolicySuggestionsSidebar } from './PolicySuggestionsSidebar';
+import type { PolicyObject } from '@promptfoo/redteam/types';
 
 // Augment the toolbar props interface
 declare module '@mui/x-data-grid' {

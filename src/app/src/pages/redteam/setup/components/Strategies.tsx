@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import { Link as RouterLink } from 'react-router-dom';
-
 import { useApiHealth } from '@app/hooks/useApiHealth';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
@@ -21,25 +19,26 @@ import {
   strategyDescriptions,
   strategyDisplayNames,
 } from '@promptfoo/redteam/constants';
-import type { RedteamStrategyObject } from '@promptfoo/redteam/types';
-
+import { Link as RouterLink } from 'react-router-dom';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import EstimationsDisplay from './EstimationsDisplay';
 import PageWrapper from './PageWrapper';
+import StrategyConfigDialog from './StrategyConfigDialog';
 import { AgenticStrategiesGroup } from './strategies/AgenticStrategiesGroup';
 import { PresetSelector } from './strategies/PresetSelector';
 import { RecommendedOptions } from './strategies/RecommendedOptions';
 import { StrategySection } from './strategies/StrategySection';
 import { SystemConfiguration } from './strategies/SystemConfiguration';
-import type { ConfigDialogState, StrategyCardData } from './strategies/types';
-import { TestCaseGenerationProvider } from './TestCaseGenerationProvider';
 import { type PresetId, STRATEGY_PRESETS, type StrategyPreset } from './strategies/types';
 import {
   getStrategyId,
   isStrategyConfigured,
   STRATEGIES_REQUIRING_CONFIG,
 } from './strategies/utils';
-import StrategyConfigDialog from './StrategyConfigDialog';
+import { TestCaseGenerationProvider } from './TestCaseGenerationProvider';
+import type { RedteamStrategyObject } from '@promptfoo/redteam/types';
+
+import type { ConfigDialogState, StrategyCardData } from './strategies/types';
 
 // ------------------------------------------------------------------
 // Types & Interfaces
@@ -657,7 +656,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
         </Alert>
       )}
 
-      <TestCaseGenerationProvider redTeamConfig={config}>
+      <TestCaseGenerationProvider redTeamConfig={config} allowPluginChange>
         <Box>
           <EstimationsDisplay config={config} />
 

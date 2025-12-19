@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 // Using a mock type since this is a test - don't import complex frontend types
 interface ScanResult {

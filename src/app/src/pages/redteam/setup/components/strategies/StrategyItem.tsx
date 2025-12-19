@@ -1,3 +1,5 @@
+import { useCallback, useMemo } from 'react';
+
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import Box from '@mui/material/Box';
 import Checkbox from '@mui/material/Checkbox';
@@ -12,15 +14,16 @@ import {
   CONFIGURABLE_STRATEGIES,
   DEFAULT_STRATEGIES,
   MULTI_MODAL_STRATEGIES,
+  type Plugin,
 } from '@promptfoo/redteam/constants';
+import { type RedteamStrategyObject, type StrategyConfig } from '@promptfoo/redteam/types';
+import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import { TestCaseGenerateButton } from './../TestCaseDialog';
 import { useTestCaseGeneration } from './../TestCaseGenerationProvider';
-import type { StrategyCardData } from './types';
-import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
-import { useCallback, useMemo } from 'react';
-import { type StrategyConfig, type RedteamStrategyObject } from '@promptfoo/redteam/types';
 
-const TEST_GENERATION_PLUGIN = 'harmful:hate';
+import type { StrategyCardData } from './types';
+
+const DEFAULT_TEST_GENERATION_PLUGIN = 'harmful:hate';
 
 // Strategies that do not support test case generation
 // These strategies will have the test case generation button disabled in the UI
@@ -63,6 +66,17 @@ export function StrategyItem({
     );
   }, [config, strategy.id]) as StrategyConfig;
 
+  // Select a random plugin from the user's configured plugins, or fall back to default
+  const testGenerationPlugin = useMemo(() => {
+    const plugins =
+      config.plugins?.map((p) => (typeof p === 'string' ? p : p.id)).filter(Boolean) ?? [];
+    if (plugins.length === 0) {
+      return DEFAULT_TEST_GENERATION_PLUGIN;
+    }
+    const randomIndex = Math.floor(Math.random() * plugins.length);
+    return plugins[randomIndex] as Plugin;
+  }, [config.plugins]);
+
   const requiresConfig = isSelected && !isConfigured;
 
   const hasSettingsButton =
@@ -103,10 +117,10 @@ export function StrategyItem({
 
   const handleTestCaseGeneration = useCallback(async () => {
     await generateTestCase(
-      { id: TEST_GENERATION_PLUGIN, config: {}, isStatic: true },
+      { id: testGenerationPlugin, config: {}, isStatic: true },
       { id: strategy.id, config: strategyConfig, isStatic: false },
     );
-  }, [strategyConfig, generateTestCase, strategy.id]);
+  }, [strategyConfig, generateTestCase, strategy.id, testGenerationPlugin]);
 
   const handleToggle = useCallback(() => {
     // If selecting simba for the first time, auto-open config dialog

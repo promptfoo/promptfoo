@@ -9,9 +9,9 @@ import path from 'node:path';
 
 import express from 'express';
 import { Server as SocketIOServer } from 'socket.io';
-import { fromError } from 'zod-validation-error/v3';
+import { fromError } from 'zod-validation-error';
 import { getDefaultPort, VERSION } from '../constants';
-import { setupSignalWatcher } from '../database/signal';
+import { readSignalEvalId, setupSignalWatcher } from '../database/signal';
 import { getDirectory } from '../esm';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
@@ -31,8 +31,10 @@ import {
 } from '../util/database';
 import invariant from '../util/invariant';
 import { BrowserBehavior, BrowserBehaviorNames, openBrowser } from '../util/server';
+import { blobsRouter } from './routes/blobs';
 import { configsRouter } from './routes/configs';
 import { evalRouter } from './routes/eval';
+import { mediaRouter } from './routes/media';
 import { modelAuditRouter } from './routes/modelAudit';
 import { providersRouter } from './routes/providers';
 import { redteamRouter } from './routes/redteam';
@@ -230,6 +232,8 @@ export function createApp() {
   });
 
   app.use('/api/eval', evalRouter);
+  app.use('/api/media', mediaRouter);
+  app.use('/api/blobs', blobsRouter);
   app.use('/api/providers', providersRouter);
   app.use('/api/redteam', redteamRouter);
   app.use('/api/user', userRouter);
@@ -289,15 +293,18 @@ export async function startServer(
 
   await runDbMigrations();
 
-  setupSignalWatcher(async () => {
-    const latestEval = await Eval.latest();
-    const results = await latestEval?.getResultsCount();
+  const watcher = setupSignalWatcher(async () => {
+    // Try to get the specific eval that was updated from the signal file
+    const signalEvalId = readSignalEvalId();
+    const updatedEval = signalEvalId ? await Eval.findById(signalEvalId) : await Eval.latest();
+
+    const results = await updatedEval?.getResultsCount();
 
     if (results && results > 0) {
-      logger.info(
-        `Emitting update for eval: ${latestEval?.config?.description || latestEval?.id || 'unknown'}`,
+      logger.debug(
+        `Emitting update for eval: ${updatedEval?.config?.description || updatedEval?.id || 'unknown'}`,
       );
-      io.emit('update', latestEval);
+      io.emit('update', updatedEval);
       allPrompts = null;
     }
   });
@@ -306,17 +313,64 @@ export async function startServer(
     socket.emit('init', await Eval.latest());
   });
 
-  httpServer
-    .listen(port, () => {
-      const url = `http://localhost:${port}`;
-      logger.info(`Server running at ${url} and monitoring for new evals.`);
-      openBrowser(browserBehavior, port).catch((error) => {
-        logger.error(
-          `Failed to handle browser behavior (${BrowserBehaviorNames[browserBehavior]}): ${error instanceof Error ? error.message : error}`,
-        );
+  // Return a Promise that only resolves when the server shuts down
+  // This keeps long-running commands (like `view`) running until SIGINT/SIGTERM
+  return new Promise<void>((resolve) => {
+    httpServer
+      .listen(port, () => {
+        const url = `http://localhost:${port}`;
+        logger.info(`Server running at ${url} and monitoring for new evals.`);
+        openBrowser(browserBehavior, port).catch((error) => {
+          logger.error(
+            `Failed to handle browser behavior (${BrowserBehaviorNames[browserBehavior]}): ${error instanceof Error ? error.message : error}`,
+          );
+        });
+        // Don't resolve - server runs until shutdown signal
+      })
+      .on('error', (error: NodeJS.ErrnoException) => {
+        // handleServerError calls process.exit(1), so this error handler
+        // only provides logging before the process terminates
+        handleServerError(error, port);
       });
-    })
-    .on('error', (error: NodeJS.ErrnoException) => {
-      handleServerError(error, port);
-    });
+
+    // Register shutdown handlers to gracefully close the server
+    // Use once() to prevent handler accumulation if startServer is called multiple times
+    const shutdown = () => {
+      logger.info('Shutting down server...');
+
+      // Close the file watcher first to stop monitoring
+      watcher.close();
+
+      // Set a timeout in case connections don't close gracefully
+      const SHUTDOWN_TIMEOUT_MS = 5000;
+      const forceCloseTimeout = setTimeout(() => {
+        logger.warn('Server close timeout - forcing shutdown');
+        resolve();
+      }, SHUTDOWN_TIMEOUT_MS);
+
+      // Close Socket.io connections (this also closes the underlying HTTP server)
+      io.close(() => {
+        // Socket.io's close() already closes the HTTP server, so check if it's still listening
+        // before attempting to close it again to avoid "Server is not running" errors
+        if (!httpServer.listening) {
+          clearTimeout(forceCloseTimeout);
+          logger.info('Server closed');
+          resolve();
+          return;
+        }
+
+        httpServer.close((err) => {
+          clearTimeout(forceCloseTimeout);
+          if (err) {
+            logger.warn(`Error closing server: ${err.message}`);
+          }
+          logger.info('Server closed');
+          resolve();
+        });
+      });
+    };
+
+    process.once('SIGINT', shutdown);
+    process.once('SIGTERM', shutdown);
+  });
 }

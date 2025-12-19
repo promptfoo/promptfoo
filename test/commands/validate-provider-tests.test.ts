@@ -1,5 +1,5 @@
-import { Mock, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Command } from 'commander';
+import { beforeEach, describe, expect, it, Mock, vi } from 'vitest';
 import { doValidate, doValidateTarget, validateCommand } from '../../src/commands/validate';
 import logger from '../../src/logger';
 import { loadApiProvider, loadApiProviders } from '../../src/providers/index';
@@ -21,17 +21,13 @@ vi.mock('../../src/telemetry', () => ({
     send: vi.fn(),
   },
 }));
-vi.mock('uuid', async (importOriginal) => {
-  return {
-    ...(await importOriginal()),
-
-    validate: vi.fn((str: string) => {
-      // Check if the string looks like a UUID
-      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-      return uuidRegex.test(str);
-    }),
-  };
-});
+vi.mock('../../src/util/uuid', () => ({
+  isUuid: vi.fn((str: string) => {
+    // Check if the string looks like a UUID
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    return uuidRegex.test(str);
+  }),
+}));
 
 describe('Validate Command Provider Tests', () => {
   let program: Command;
@@ -92,16 +88,19 @@ describe('Validate Command Provider Tests', () => {
 
       await doValidateTarget({ target: 'http://example.com' }, defaultConfig);
 
-      expect(loadApiProvider).toHaveBeenCalledWith('http://example.com', {
-        options: {
-          config: {
-            maxRetries: 1,
-            headers: {
-              'x-promptfoo-silent': 'true',
+      expect(loadApiProvider).toHaveBeenCalledWith(
+        'http://example.com',
+        expect.objectContaining({
+          options: {
+            config: {
+              maxRetries: 1,
+              headers: {
+                'x-promptfoo-silent': 'true',
+              },
             },
           },
-        },
-      });
+        }),
+      );
       expect(testProviderConnectivity).toHaveBeenCalledWith(mockHttpProvider);
       expect(testProviderSession).toHaveBeenCalledWith(mockHttpProvider, undefined, {
         skipConfigValidation: true,
@@ -159,7 +158,7 @@ describe('Validate Command Provider Tests', () => {
 
       await doValidateTarget({ target: 'echo' }, defaultConfig);
 
-      expect(loadApiProvider).toHaveBeenCalledWith('echo');
+      expect(loadApiProvider).toHaveBeenCalledWith('echo', expect.objectContaining({}));
       expect(mockEchoProvider.callApi).toHaveBeenCalledWith('Hello, world!', expect.any(Object));
       expect(testProviderConnectivity).not.toHaveBeenCalled();
       expect(testProviderSession).not.toHaveBeenCalled();
@@ -179,9 +178,12 @@ describe('Validate Command Provider Tests', () => {
       await doValidateTarget({ target: cloudUUID }, defaultConfig);
 
       expect(getProviderFromCloud).toHaveBeenCalledWith(cloudUUID);
-      expect(loadApiProvider).toHaveBeenCalledWith('openai:gpt-4', {
-        options: mockProviderOptions,
-      });
+      expect(loadApiProvider).toHaveBeenCalledWith(
+        'openai:gpt-4',
+        expect.objectContaining({
+          options: mockProviderOptions,
+        }),
+      );
       expect(logger.info).toHaveBeenCalledWith('Testing provider...');
       expect(mockOpenAIProvider.callApi).toHaveBeenCalled();
     });
@@ -329,7 +331,7 @@ describe('Validate Command Provider Tests', () => {
 
       await doValidateTarget({ target: 'echo' }, defaultConfig);
 
-      expect(loadApiProvider).toHaveBeenCalledWith('echo');
+      expect(loadApiProvider).toHaveBeenCalledWith('echo', expect.objectContaining({}));
       expect(mockEchoProvider.callApi).toHaveBeenCalled();
       expect(logger.info).toHaveBeenCalledWith('Testing provider...');
       expect(process.exitCode).toBe(0);
@@ -348,9 +350,12 @@ describe('Validate Command Provider Tests', () => {
       await doValidateTarget({ target: cloudUUID }, defaultConfig);
 
       expect(getProviderFromCloud).toHaveBeenCalledWith(cloudUUID);
-      expect(loadApiProvider).toHaveBeenCalledWith('openai:gpt-4', {
-        options: mockProviderOptions,
-      });
+      expect(loadApiProvider).toHaveBeenCalledWith(
+        'openai:gpt-4',
+        expect.objectContaining({
+          options: mockProviderOptions,
+        }),
+      );
       expect(logger.info).toHaveBeenCalledWith('Testing provider...');
       expect(mockOpenAIProvider.callApi).toHaveBeenCalled();
       expect(process.exitCode).toBe(0);

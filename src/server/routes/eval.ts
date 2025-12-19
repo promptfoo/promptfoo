@@ -1,8 +1,7 @@
 import dedent from 'dedent';
 import { Router } from 'express';
-import { v4 as uuidv4 } from 'uuid';
 import { z } from 'zod';
-import { fromZodError } from 'zod-validation-error/v3';
+import { fromZodError } from 'zod-validation-error';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
 import promptfoo from '../../index';
 import logger from '../../logger';
@@ -12,8 +11,8 @@ import { EvalResultsFilterMode } from '../../types/index';
 import { deleteEval, deleteEvals, updateResult, writeResultsToDatabase } from '../../util/database';
 import invariant from '../../util/invariant';
 import { ApiSchemas } from '../apiSchemas';
-import { evalTableToCsv, evalTableToJson } from '../utils/evalTableUtils';
 import { setDownloadHeaders } from '../utils/downloadHelpers';
+import { evalTableToCsv, evalTableToJson } from '../utils/evalTableUtils';
 import type { Request, Response } from 'express';
 
 import type {
@@ -33,7 +32,7 @@ export const evalJobs = new Map<string, Job>();
 
 evalRouter.post('/job', (req: Request, res: Response): void => {
   const { evaluateOptions, ...testSuite } = req.body as EvaluateTestSuiteWithEvaluateOptions;
-  const id = uuidv4();
+  const id = crypto.randomUUID();
   evalJobs.set(id, {
     evalId: null,
     status: 'in-progress',
@@ -362,6 +361,7 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
     author: eval_.author || null,
     version: eval_.version(),
     id,
+    stats: eval_.getStats(),
   } as EvalTableDTO);
 });
 

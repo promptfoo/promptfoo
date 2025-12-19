@@ -1,4 +1,4 @@
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../src/database/index';
 import { getUserEmail } from '../../src/globalConfig/accounts';
 import { runDbMigrations } from '../../src/migrate';
@@ -235,6 +235,65 @@ describe('evaluator', () => {
       const persistedEval2 = await Eval.findById(eval1.id);
       expect(persistedEval2?.vars).toEqual(vars);
     });
+
+    it('should handle NaN durationMs in database by returning undefined', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 0 });
+
+      // Inject NaN as durationMs in the results column
+      const db = getDb();
+      await db.run(
+        `UPDATE evals SET results = json_set(results, '$.durationMs', 'NaN') WHERE id = '${eval1.id}'`,
+      );
+
+      const persistedEval = await Eval.findById(eval1.id);
+      const stats = persistedEval?.getStats();
+      // NaN should be filtered out, resulting in undefined
+      expect(stats?.durationMs).toBeUndefined();
+    });
+
+    it('should handle negative durationMs in database by returning undefined', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 0 });
+
+      // Inject negative number as durationMs
+      const db = getDb();
+      await db.run(
+        `UPDATE evals SET results = json_set(results, '$.durationMs', -5000) WHERE id = '${eval1.id}'`,
+      );
+
+      const persistedEval = await Eval.findById(eval1.id);
+      const stats = persistedEval?.getStats();
+      // Negative should be filtered out, resulting in undefined
+      expect(stats?.durationMs).toBeUndefined();
+    });
+
+    it('should handle string durationMs in database by returning undefined', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 0 });
+
+      // Inject string as durationMs
+      const db = getDb();
+      await db.run(
+        `UPDATE evals SET results = json_set(results, '$.durationMs', '"not a number"') WHERE id = '${eval1.id}'`,
+      );
+
+      const persistedEval = await Eval.findById(eval1.id);
+      const stats = persistedEval?.getStats();
+      // String should be filtered out, resulting in undefined
+      expect(stats?.durationMs).toBeUndefined();
+    });
+
+    it('should preserve valid durationMs from database', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 0 });
+
+      // Inject valid durationMs
+      const db = getDb();
+      await db.run(
+        `UPDATE evals SET results = json_set(results, '$.durationMs', 12345) WHERE id = '${eval1.id}'`,
+      );
+
+      const persistedEval = await Eval.findById(eval1.id);
+      const stats = persistedEval?.getStats();
+      expect(stats?.durationMs).toBe(12345);
+    });
   });
 
   describe('getStats', () => {
@@ -374,6 +433,28 @@ describe('evaluator', () => {
           rejectedPrediction: 0,
         },
       });
+    });
+
+    it('should include durationMs when set', () => {
+      const eval1 = new Eval({});
+      eval1.setDurationMs(12345);
+
+      const stats = eval1.getStats();
+      expect(stats.durationMs).toBe(12345);
+    });
+
+    it('should return undefined durationMs when not set', () => {
+      const eval1 = new Eval({});
+
+      const stats = eval1.getStats();
+      expect(stats.durationMs).toBeUndefined();
+    });
+
+    it('should preserve durationMs when passed via constructor', () => {
+      const eval1 = new Eval({}, { durationMs: 54321 });
+
+      const stats = eval1.getStats();
+      expect(stats.durationMs).toBe(54321);
     });
   });
 

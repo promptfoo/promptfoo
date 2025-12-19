@@ -1,11 +1,11 @@
-import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as fs from 'fs';
 
 import cliProgress from 'cli-progress';
 import yaml from 'js-yaml';
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../src/logger';
 import { loadApiProvider } from '../../src/providers/index';
-import { HARM_PLUGINS, PII_PLUGINS, getDefaultNFanout } from '../../src/redteam/constants';
+import { getDefaultNFanout, HARM_PLUGINS, PII_PLUGINS } from '../../src/redteam/constants';
 import { extractEntities } from '../../src/redteam/extraction/entities';
 import { extractSystemPurpose } from '../../src/redteam/extraction/purpose';
 import {
@@ -19,7 +19,6 @@ import { getRemoteHealthUrl, shouldGenerateRemote } from '../../src/redteam/remo
 import { Strategies, validateStrategies } from '../../src/redteam/strategies/index';
 import { checkRemoteHealth } from '../../src/util/apiHealth';
 import { extractVariablesFromTemplates } from '../../src/util/templates';
-
 import { stripAnsi } from '../util/utils';
 
 vi.mock('cli-progress');
@@ -858,6 +857,126 @@ describe('synthesize', () => {
         expect(tc.metadata?.pluginConfig).toBeDefined();
         expect(tc.metadata?.pluginConfig).toEqual({ someConfig: 'value' });
         expect(tc.metadata?.pluginId).toBe('contracts');
+      });
+    });
+
+    it('should handle strategies that return undefined test cases', async () => {
+      const mockPluginAction = vi.fn().mockResolvedValue([
+        { vars: { query: 'test1' }, metadata: { pluginId: 'test-plugin' } },
+        { vars: { query: 'test2' }, metadata: { pluginId: 'test-plugin' } },
+      ]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'mockPlugin' });
+
+      // Mock a strategy that returns an array with some undefined values
+      const mockStrategyAction = vi.fn().mockReturnValue([
+        { vars: { query: 'strategy test 1' }, metadata: { strategyId: 'test-strategy' } },
+        undefined, // This undefined should be filtered out
+        { vars: { query: 'strategy test 2' }, metadata: { strategyId: 'test-strategy' } },
+        undefined, // This undefined should be filtered out
+      ]);
+
+      vi.spyOn(Strategies, 'find').mockReturnValue({
+        id: 'test-strategy',
+        action: mockStrategyAction,
+      });
+
+      const result = await synthesize({
+        language: 'en',
+        numTests: 2,
+        plugins: [{ id: 'test-plugin', numTests: 2 }],
+        prompts: ['Test prompt'],
+        strategies: [{ id: 'test-strategy' }],
+        targetLabels: ['test-provider'],
+      });
+
+      // Should have 2 base tests + 2 strategy tests (undefined values filtered out)
+      expect(result.testCases).toHaveLength(4);
+
+      // Verify that no undefined values made it through
+      expect(result.testCases.every((tc) => tc !== undefined && tc !== null)).toBe(true);
+
+      // Verify strategy tests are present (only the non-undefined ones)
+      const strategyTests = result.testCases.filter((tc) => tc.metadata?.strategyId);
+      expect(strategyTests).toHaveLength(2);
+    });
+
+    it('should handle strategies that return all undefined test cases', async () => {
+      const mockPluginAction = vi
+        .fn()
+        .mockResolvedValue([{ vars: { query: 'test1' }, metadata: { pluginId: 'test-plugin' } }]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'mockPlugin' });
+
+      // Mock a strategy that returns only undefined values
+      const mockStrategyAction = vi.fn().mockReturnValue([undefined, undefined, undefined]);
+
+      vi.spyOn(Strategies, 'find').mockReturnValue({
+        id: 'failing-strategy',
+        action: mockStrategyAction,
+      });
+
+      const result = await synthesize({
+        language: 'en',
+        numTests: 1,
+        plugins: [{ id: 'test-plugin', numTests: 1 }],
+        prompts: ['Test prompt'],
+        strategies: [{ id: 'failing-strategy' }],
+        targetLabels: ['test-provider'],
+      });
+
+      // Should only have the base test (no strategy tests since all were undefined)
+      expect(result.testCases).toHaveLength(1);
+      expect(result.testCases[0].metadata?.pluginId).toBe('test-plugin');
+      expect(result.testCases[0].metadata?.strategyId).toBeUndefined();
+    });
+
+    it('should preserve language metadata when filtering undefined strategy test cases', async () => {
+      const mockPluginAction = vi
+        .fn()
+        .mockResolvedValue([
+          { vars: { query: 'test1' }, metadata: { pluginId: 'test-plugin', language: 'fr' } },
+        ]);
+      vi.spyOn(Plugins, 'find').mockReturnValue({ action: mockPluginAction, key: 'mockPlugin' });
+
+      // Mock a strategy that returns mixed undefined and valid test cases with language metadata
+      const mockStrategyAction = vi.fn().mockReturnValue([
+        {
+          vars: { query: 'strategy test 1' },
+          metadata: { strategyId: 'test-strategy', language: 'fr' },
+        },
+        undefined,
+        {
+          vars: { query: 'strategy test 2' },
+          metadata: { strategyId: 'test-strategy', language: 'fr' },
+        },
+      ]);
+
+      vi.spyOn(Strategies, 'find').mockReturnValue({
+        id: 'test-strategy',
+        action: mockStrategyAction,
+      });
+
+      const result = await synthesize({
+        language: 'fr',
+        numTests: 1,
+        plugins: [{ id: 'test-plugin', numTests: 1 }],
+        prompts: ['Test prompt'],
+        strategies: [{ id: 'test-strategy' }],
+        targetLabels: ['test-provider'],
+      });
+
+      // Should have 1 base test + 2 strategy tests
+      expect(result.testCases).toHaveLength(3);
+
+      // All test cases should have language metadata preserved
+      result.testCases.forEach((tc) => {
+        expect(tc.metadata?.language).toBe('fr');
+      });
+
+      // Verify strategy tests preserved language
+      const strategyTests = result.testCases.filter((tc) => tc.metadata?.strategyId);
+      expect(strategyTests).toHaveLength(2);
+      strategyTests.forEach((tc) => {
+        expect(tc.metadata?.language).toBe('fr');
       });
     });
   });

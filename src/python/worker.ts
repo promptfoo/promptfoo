@@ -1,7 +1,9 @@
-import { PythonShell } from 'python-shell';
 import fs from 'fs';
-import path from 'path';
 import os from 'os';
+import path from 'path';
+
+import { PythonShell } from 'python-shell';
+import { getWrapperDir } from '../esm';
 import logger from '../logger';
 import { REQUEST_TIMEOUT_MS } from '../providers/shared';
 import { safeJsonStringify } from '../util/json';
@@ -33,7 +35,7 @@ export class PythonWorker {
   }
 
   private async startWorker(): Promise<void> {
-    const wrapperPath = path.join(__dirname, 'persistent_wrapper.py');
+    const wrapperPath = path.join(getWrapperDir('python'), 'persistent_wrapper.py');
 
     // Validate and resolve Python path using smart detection (tries python3, then python)
     const resolvedPythonPath = await validatePythonPath(

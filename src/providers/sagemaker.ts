@@ -1,12 +1,13 @@
 import crypto from 'crypto';
 
 import z from 'zod';
-import { fromError } from 'zod-validation-error/v3';
+import { fromError } from 'zod-validation-error';
 import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
 import logger from '../logger';
 import telemetry from '../telemetry';
 import { transform } from '../util/transform';
 
+import type { EnvOverrides } from '../types/env';
 import type {
   ApiEmbeddingProvider,
   ApiProvider,
@@ -16,7 +17,6 @@ import type {
   ProviderOptions,
   ProviderResponse,
 } from '../types/index';
-import type { EnvOverrides } from '../types/env';
 import type { TransformContext } from '../util/transform';
 
 /**
@@ -816,6 +816,7 @@ export class SageMakerCompletionProvider extends SageMakerGenericProvider implem
           completion: completionTokens,
           total: promptTokens + completionTokens,
           cached: 0, // No caching for this request
+          numRequests: 1,
         },
         metadata: {
           latencyMs: _latency,
@@ -1043,6 +1044,7 @@ export class SageMakerEmbeddingProvider
               tokenUsage: {
                 prompt: Math.ceil(text.length / 4), // Approximate token count
                 cached: 0,
+                numRequests: 1,
               },
               metadata: {
                 transformed: isTransformed,
@@ -1087,6 +1089,7 @@ export class SageMakerEmbeddingProvider
         tokenUsage: {
           prompt: Math.ceil(text.length / 4), // Approximate token count
           cached: 0,
+          numRequests: 1,
         },
         metadata: {
           transformed: isTransformed,

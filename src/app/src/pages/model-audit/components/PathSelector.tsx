@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 
 import { callApi } from '@app/utils/api';
 import {
@@ -25,13 +25,13 @@ import IconButton from '@mui/material/IconButton';
 import InputAdornment from '@mui/material/InputAdornment';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
+import { useTheme } from '@mui/material/styles';
 import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import { useTheme } from '@mui/material/styles';
-import { useModelAuditStore } from '../store';
+import { useModelAuditConfigStore } from '../stores';
 
 import type { ScanPath } from '../ModelAudit.types';
 
@@ -74,7 +74,7 @@ export default function PathSelector({
   const [isChecking, setIsChecking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const { recentScans, clearRecentScans, removeRecentPath } = useModelAuditStore();
+  const { recentScans, clearRecentScans, removeRecentPath } = useModelAuditConfigStore();
   const [hoveredChipIndex, setHoveredChipIndex] = useState<number | null>(null);
 
   // Removed file input refs - using only drag-drop and manual input
@@ -435,10 +435,11 @@ export default function PathSelector({
                   {recentScans
                     .flatMap((scan) => scan.paths.map((path) => ({ ...path, scanId: scan.id })))
                     .filter(
-                      (path, index, self) => index === self.findIndex((p) => p.path === path.path),
+                      (path, index: number, self) =>
+                        index === self.findIndex((p) => p.path === path.path),
                     )
                     .slice(0, 8)
-                    .map((path, index) => (
+                    .map((path, index: number) => (
                       <Chip
                         key={`${path.path}-${index}`}
                         label={path.name || path.path}

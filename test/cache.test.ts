@@ -1,4 +1,5 @@
 import fs from 'fs';
+
 import {
   afterAll,
   afterEach,
@@ -6,10 +7,9 @@ import {
   describe,
   expect,
   it,
-  vi,
   type MockInstance,
+  vi,
 } from 'vitest';
-
 import {
   clearCache,
   disableCache,
@@ -89,6 +89,7 @@ vi.mock('keyv', () => {
 vi.mock('keyv-file', () => {
   return {
     __esModule: true,
+    KeyvFile: class MockKeyvFile {},
     default: class MockKeyvFile {},
   };
 });

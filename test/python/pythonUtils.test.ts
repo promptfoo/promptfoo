@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Create mock for execFileAsync - must be hoisted for vi.mock factory
@@ -449,6 +450,31 @@ describe('Python Utils', () => {
         expect.objectContaining({
           scriptPath: expect.any(String),
           args: expect.arrayContaining([path.resolve(scriptPath), 'test_method']),
+        }),
+      );
+    });
+
+    it('should use python subdirectory for wrapper.py scriptPath', async () => {
+      vi.mocked(fs.writeFileSync).mockImplementation(() => {});
+      vi.mocked(fs.readFileSync).mockReturnValue(
+        JSON.stringify({ type: 'final_result', data: 'test_result' }),
+      );
+      vi.mocked(fs.unlinkSync).mockImplementation(() => {});
+      mockExecFileAsync.mockResolvedValue({ stdout: 'Python 3.8.10\n', stderr: '' });
+
+      mockPythonShellInstance.end.mockImplementation((callback: any) => {
+        callback(null);
+      });
+
+      const scriptPath = '/path/to/script.py';
+      await pythonUtils.runPython(scriptPath, 'test_method', ['arg1', 'arg2']);
+
+      // Verify PythonShell was called with scriptPath ending in 'python'
+      // This works for both development (src/python/) and production (dist/src/python/)
+      expect(PythonShell).toHaveBeenCalledWith(
+        'wrapper.py',
+        expect.objectContaining({
+          scriptPath: expect.stringMatching(/python$/),
         }),
       );
     });

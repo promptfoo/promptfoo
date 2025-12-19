@@ -3,27 +3,9 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import util from 'util';
-import { getDirectory } from '../esm';
-
-/**
- * BUILD_FORMAT is a compile-time constant injected by tsup during the build process.
- * @see src/migrate.ts for detailed documentation on BUILD_FORMAT values and usage.
- */
-declare const BUILD_FORMAT: 'esm' | 'cjs' | undefined;
-
-/**
- * Lazy initialization wrapper for getDirectory() to avoid module-level side effects.
- * @see src/migrate.ts for detailed documentation on why this pattern is used.
- */
-let currentDir: string | undefined;
-function getCurrentDir(): string {
-  if (!currentDir) {
-    currentDir = getDirectory();
-  }
-  return currentDir;
-}
 
 import { getCache, isCacheEnabled } from '../cache';
+import { getWrapperDir } from '../esm';
 import logger from '../logger';
 import { sha256 } from '../util/createHash';
 import { parsePathOrGlob } from '../util/index';
@@ -147,7 +129,7 @@ export class GolangProvider implements ApiProvider {
         // Copy wrapper.go to the same directory as the script
         const tempWrapperPath = path.join(scriptDir, 'wrapper.go');
         fs.mkdirSync(scriptDir, { recursive: true });
-        fs.copyFileSync(path.join(getCurrentDir(), '../golang/wrapper.go'), tempWrapperPath);
+        fs.copyFileSync(path.join(getWrapperDir('golang'), 'wrapper.go'), tempWrapperPath);
 
         const executablePath = path.join(tempDir, 'golang_wrapper');
         const tempScriptPath = path.join(tempDir, relativeScriptPath);

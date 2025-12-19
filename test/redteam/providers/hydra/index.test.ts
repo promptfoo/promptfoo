@@ -1,7 +1,8 @@
-import { Mock, Mocked, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, Mock, Mocked, vi } from 'vitest';
 import * as evaluatorHelpers from '../../../../src/evaluatorHelpers';
 import { PromptfooChatCompletionProvider } from '../../../../src/providers/promptfoo';
 import { shouldGenerateRemote } from '../../../../src/redteam/remoteGeneration';
+
 import type { ApiProvider, CallApiContextParams, GradingResult } from '../../../../src/types/index';
 
 // Import HydraProvider dynamically after mocks are set up
@@ -10,6 +11,34 @@ let HydraProvider: typeof import('../../../../src/redteam/providers/hydra/index'
 // Hoisted mocks
 const mockGetGraderById = vi.hoisted(() => vi.fn());
 const mockIsBasicRefusal = vi.hoisted(() => vi.fn());
+
+// Tracing mocks
+const mockResolveTracingOptions = vi.hoisted(() =>
+  vi.fn(() => ({
+    enabled: false,
+    includeInAttack: true,
+    includeInGrading: true,
+    includeInternalSpans: false,
+    maxSpans: 50,
+    maxDepth: 5,
+    maxRetries: 3,
+    retryDelayMs: 500,
+    sanitizeAttributes: true,
+  })),
+);
+const mockFetchTraceContext = vi.hoisted(() => vi.fn());
+const mockFormatTraceSummary = vi.hoisted(() => vi.fn(() => 'Trace summary'));
+const mockFormatTraceForMetadata = vi.hoisted(() => vi.fn(() => ({ traceId: 'test-trace-id' })));
+const mockExtractTraceIdFromTraceparent = vi.hoisted(() => vi.fn(() => 'test-trace-id'));
+
+// Hoisted mock for applyRuntimeTransforms
+const mockApplyRuntimeTransforms = vi.hoisted(() =>
+  vi.fn().mockImplementation(async ({ prompt }) => ({
+    transformedPrompt: prompt,
+    audio: undefined,
+    image: undefined,
+  })),
+);
 
 vi.mock('../../../../src/providers/promptfoo', async (importOriginal) => {
   return {
@@ -41,6 +70,28 @@ vi.mock('../../../../src/redteam/util', async () => ({
   ...(await vi.importActual('../../../../src/redteam/util')),
   isBasicRefusal: mockIsBasicRefusal,
   getSessionId: vi.fn(),
+}));
+
+vi.mock('../../../../src/redteam/shared/runtimeTransform', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    applyRuntimeTransforms: mockApplyRuntimeTransforms,
+  };
+});
+
+// Tracing module mocks
+vi.mock('../../../../src/redteam/providers/tracingOptions', () => ({
+  resolveTracingOptions: mockResolveTracingOptions,
+}));
+
+vi.mock('../../../../src/tracing/traceContext', () => ({
+  fetchTraceContext: mockFetchTraceContext,
+  extractTraceIdFromTraceparent: mockExtractTraceIdFromTraceparent,
+}));
+
+vi.mock('../../../../src/redteam/providers/traceFormatting', () => ({
+  formatTraceSummary: mockFormatTraceSummary,
+  formatTraceForMetadata: mockFormatTraceForMetadata,
 }));
 
 describe('HydraProvider', () => {
@@ -97,6 +148,22 @@ describe('HydraProvider', () => {
     vi.mocked(evaluatorHelpers.renderPrompt).mockResolvedValue('rendered prompt');
 
     mockIsBasicRefusal.mockReturnValue(false);
+
+    // Reset tracing mocks to default (disabled) state
+    mockResolveTracingOptions.mockReturnValue({
+      enabled: false,
+      includeInAttack: true,
+      includeInGrading: true,
+      includeInternalSpans: false,
+      maxSpans: 50,
+      maxDepth: 5,
+      maxRetries: 3,
+      retryDelayMs: 500,
+      sanitizeAttributes: true,
+    });
+    mockFetchTraceContext.mockReset();
+    mockFormatTraceSummary.mockReturnValue('Trace summary');
+    mockFormatTraceForMetadata.mockReturnValue({ traceId: 'test-trace-id' });
   });
 
   afterEach(() => {
@@ -209,7 +276,8 @@ describe('HydraProvider', () => {
       expect(result.metadata?.hydraBacktrackCount).toBe(0);
       expect(result.metadata?.hydraResult).toBe(false);
       expect(result.metadata?.stopReason).toBe('Max turns reached');
-      expect(result.tokenUsage?.total).toBe(150);
+      // agent (100) + target (50) + learning update (100) = 250
+      expect(result.tokenUsage?.total).toBe(250);
     });
 
     it('should detect vulnerability when grader fails', async () => {
@@ -891,6 +959,12 @@ describe('HydraProvider', () => {
         expect.anything(),
         mockTargetProvider,
         undefined,
+        undefined, // additionalRubric
+        undefined, // skipRefusalCheck
+        expect.objectContaining({
+          traceContext: null,
+          traceSummary: undefined,
+        }),
       );
     });
 
@@ -962,11 +1036,14 @@ describe('HydraProvider', () => {
         reason: 'Vulnerability detected',
       };
 
+      const testRubric = 'Test grading rubric';
+
       // Set up mockGetGraderById directly to return grader that fails
       mockGetGraderById.mockImplementation(function () {
         return {
           getResult: vi.fn().mockResolvedValue({
             grade: graderResult,
+            rubric: testRubric,
           }),
         } as any;
       });
@@ -997,7 +1074,10 @@ describe('HydraProvider', () => {
 
       const result = await provider.callApi('', context);
 
-      expect(result.metadata?.storedGraderResult).toEqual(graderResult);
+      expect(result.metadata?.storedGraderResult).toEqual({
+        ...graderResult,
+        assertion: { type: 'harmful:test', value: testRubric },
+      });
     });
   });
 
@@ -1356,11 +1436,11 @@ describe('HydraProvider', () => {
             { role: 'assistant', content: 'Target response' },
           ]),
           redteamHistory: expect.arrayContaining([
-            {
+            expect.objectContaining({
               prompt: 'Attack message',
               output: 'Target response',
               graderPassed: true,
-            },
+            }),
           ]),
           sessionIds: ['session-123'],
           storedGraderResult: expect.any(Object),
@@ -1400,6 +1480,493 @@ describe('HydraProvider', () => {
 
       expect(result.output).toBe('Target response');
       expect(result.error).toBe('Some error occurred');
+    });
+  });
+
+  describe('perTurnLayers configuration', () => {
+    it('should accept _perTurnLayers in config', () => {
+      const provider = new HydraProvider({
+        injectVar: 'input',
+        _perTurnLayers: [{ id: 'audio' }, { id: 'image' }],
+      });
+
+      expect(provider['perTurnLayers']).toEqual([{ id: 'audio' }, { id: 'image' }]);
+    });
+
+    it('should default perTurnLayers to empty array when not provided', () => {
+      const provider = new HydraProvider({
+        injectVar: 'input',
+      });
+
+      expect(provider['perTurnLayers']).toEqual([]);
+    });
+
+    it('should not apply transforms when perTurnLayers is empty', async () => {
+      mockAgentProvider.callApi.mockResolvedValue({
+        output: 'Attack message',
+        tokenUsage: { total: 100, prompt: 50, completion: 50 },
+      });
+
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'Target response',
+      });
+
+      const provider = new HydraProvider({
+        injectVar: 'input',
+        maxTurns: 1,
+        // No _perTurnLayers provided - defaults to empty
+      });
+
+      const context: CallApiContextParams = {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'test goal' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        test: {
+          assert: [{ type: 'harmful:test' }],
+          metadata: { goal: 'test goal', pluginId: 'harmful:test' },
+        } as any,
+      };
+
+      const result = await provider.callApi('', context);
+
+      // Verify redteamHistory exists but promptAudio/promptImage are undefined
+      expect(result.metadata?.redteamHistory).toBeDefined();
+      if (result.metadata?.redteamHistory && result.metadata.redteamHistory.length > 0) {
+        expect(result.metadata.redteamHistory[0].promptAudio).toBeUndefined();
+        expect(result.metadata.redteamHistory[0].promptImage).toBeUndefined();
+      }
+    });
+
+    it('should include redteamHistory with media fields when perTurnLayers is configured', async () => {
+      // Configure the hoisted mock to return audio/image data for this test
+      mockApplyRuntimeTransforms.mockResolvedValueOnce({
+        transformedPrompt: 'transformed attack',
+        audio: { data: 'base64-audio-data', format: 'mp3' },
+        image: { data: 'base64-image-data', format: 'png' },
+      });
+
+      mockAgentProvider.callApi.mockResolvedValue({
+        output: 'Attack message',
+        tokenUsage: { total: 100, prompt: 50, completion: 50 },
+      });
+
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'Target response',
+        audio: { data: 'response-audio-data', format: 'wav' },
+      });
+
+      const provider = new HydraProvider({
+        injectVar: 'input',
+        maxTurns: 1,
+        _perTurnLayers: [{ id: 'audio' }],
+      });
+
+      const context: CallApiContextParams = {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'test goal' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        test: {
+          assert: [{ type: 'harmful:test' }],
+          metadata: { goal: 'test goal', pluginId: 'harmful:test' },
+        } as any,
+      };
+
+      const result = await provider.callApi('', context);
+
+      // Verify redteamHistory is populated
+      expect(result.metadata?.redteamHistory).toBeDefined();
+      expect(Array.isArray(result.metadata?.redteamHistory)).toBe(true);
+    });
+
+    it('should include outputAudio in redteamHistory when target returns audio', async () => {
+      mockAgentProvider.callApi.mockResolvedValue({
+        output: 'Attack message',
+        tokenUsage: { total: 100, prompt: 50, completion: 50 },
+      });
+
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'Target response',
+        audio: { data: 'output-audio-base64', format: 'wav' },
+      });
+
+      const provider = new HydraProvider({
+        injectVar: 'input',
+        maxTurns: 1,
+      });
+
+      const context: CallApiContextParams = {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'test goal' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        test: {
+          assert: [{ type: 'harmful:test' }],
+          metadata: { goal: 'test goal', pluginId: 'harmful:test' },
+        } as any,
+      };
+
+      const result = await provider.callApi('', context);
+
+      // Verify outputAudio is captured in redteamHistory
+      expect(result.metadata?.redteamHistory).toBeDefined();
+      if (result.metadata?.redteamHistory && result.metadata.redteamHistory.length > 0) {
+        expect(result.metadata.redteamHistory[0].outputAudio).toEqual({
+          data: 'output-audio-base64',
+          format: 'wav',
+        });
+      }
+    });
+  });
+
+  describe('Tracing Support', () => {
+    it('should NOT fetch trace context when tracing is disabled (default)', async () => {
+      mockAgentProvider.callApi.mockResolvedValue({
+        output: 'Attack message',
+        tokenUsage: { total: 100, prompt: 50, completion: 50 },
+      });
+
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'Target response',
+      });
+
+      const provider = new HydraProvider({
+        injectVar: 'input',
+        maxTurns: 1,
+      });
+
+      const context: CallApiContextParams = {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'test goal' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        test: {
+          assert: [{ type: 'harmful:test' }],
+          metadata: { goal: 'test goal', pluginId: 'harmful:test' },
+        } as any,
+        traceparent: '00-trace123-span456-01',
+      };
+
+      const result = await provider.callApi('', context);
+
+      // Should NOT call fetchTraceContext when tracing is disabled
+      expect(mockFetchTraceContext).not.toHaveBeenCalled();
+
+      // Metadata should not have trace snapshots
+      expect(result.metadata?.traceSnapshots).toBeUndefined();
+    });
+
+    it('should fetch trace context when tracing is enabled', async () => {
+      // Enable tracing
+      mockResolveTracingOptions.mockReturnValue({
+        enabled: true,
+        includeInAttack: true,
+        includeInGrading: true,
+        includeInternalSpans: false,
+        maxSpans: 50,
+        maxDepth: 5,
+        maxRetries: 3,
+        retryDelayMs: 500,
+        sanitizeAttributes: true,
+      });
+
+      // Mock trace context
+      mockFetchTraceContext.mockResolvedValue({
+        traceId: 'test-trace-id',
+        spans: [{ spanId: 'span1', name: 'test-span' }],
+        insights: ['Test insight'],
+        fetchedAt: Date.now(),
+      });
+
+      mockAgentProvider.callApi.mockResolvedValue({
+        output: 'Attack message',
+        tokenUsage: { total: 100, prompt: 50, completion: 50 },
+      });
+
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'Target response',
+      });
+
+      const provider = new HydraProvider({
+        injectVar: 'input',
+        maxTurns: 1,
+      });
+
+      const context: CallApiContextParams = {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'test goal' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        test: {
+          assert: [{ type: 'harmful:test' }],
+          metadata: { goal: 'test goal', pluginId: 'harmful:test' },
+        } as any,
+        traceparent: '00-trace123-span456-01',
+      };
+
+      const result = await provider.callApi('', context);
+
+      // Should call fetchTraceContext
+      expect(mockFetchTraceContext).toHaveBeenCalled();
+
+      // Metadata should have trace snapshots
+      expect(result.metadata?.traceSnapshots).toBeDefined();
+      expect(result.metadata?.traceSnapshots).toHaveLength(1);
+    });
+
+    it('should NOT fetch trace context when traceparent is missing', async () => {
+      // Enable tracing
+      mockResolveTracingOptions.mockReturnValue({
+        enabled: true,
+        includeInAttack: true,
+        includeInGrading: true,
+        includeInternalSpans: false,
+        maxSpans: 50,
+        maxDepth: 5,
+        maxRetries: 3,
+        retryDelayMs: 500,
+        sanitizeAttributes: true,
+      });
+
+      mockAgentProvider.callApi.mockResolvedValue({
+        output: 'Attack message',
+        tokenUsage: { total: 100, prompt: 50, completion: 50 },
+      });
+
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'Target response',
+      });
+
+      const provider = new HydraProvider({
+        injectVar: 'input',
+        maxTurns: 1,
+      });
+
+      const context: CallApiContextParams = {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'test goal' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        test: {
+          assert: [{ type: 'harmful:test' }],
+          metadata: { goal: 'test goal', pluginId: 'harmful:test' },
+        } as any,
+        // No traceparent
+      };
+
+      const result = await provider.callApi('', context);
+
+      // Should NOT call fetchTraceContext when traceparent is missing
+      expect(mockFetchTraceContext).not.toHaveBeenCalled();
+
+      // Metadata should not have trace snapshots
+      expect(result.metadata?.traceSnapshots).toBeUndefined();
+    });
+
+    it('should call formatTraceSummary when tracing is enabled and trace is fetched', async () => {
+      // Enable tracing
+      mockResolveTracingOptions.mockReturnValue({
+        enabled: true,
+        includeInAttack: true,
+        includeInGrading: true,
+        includeInternalSpans: false,
+        maxSpans: 50,
+        maxDepth: 5,
+        maxRetries: 3,
+        retryDelayMs: 500,
+        sanitizeAttributes: true,
+      });
+
+      mockFetchTraceContext.mockResolvedValue({
+        traceId: 'test-trace-id',
+        spans: [{ spanId: 'span1', name: 'test-span' }],
+        insights: [],
+        fetchedAt: Date.now(),
+      });
+
+      mockAgentProvider.callApi.mockResolvedValue({
+        output: 'Attack message',
+        tokenUsage: { total: 100, prompt: 50, completion: 50 },
+      });
+
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'Target response',
+      });
+
+      const provider = new HydraProvider({
+        injectVar: 'input',
+        maxTurns: 1,
+      });
+
+      const context: CallApiContextParams = {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'test goal' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        test: {
+          assert: [{ type: 'harmful:test' }],
+          metadata: { goal: 'test goal', pluginId: 'harmful:test' },
+        } as any,
+        traceparent: '00-trace123-span456-01',
+      };
+
+      await provider.callApi('', context);
+
+      // formatTraceSummary should be called when trace is fetched
+      expect(mockFormatTraceSummary).toHaveBeenCalled();
+    });
+
+    it('should call formatTraceForMetadata when trace is stored in metadata', async () => {
+      // Enable tracing
+      mockResolveTracingOptions.mockReturnValue({
+        enabled: true,
+        includeInAttack: true,
+        includeInGrading: true,
+        includeInternalSpans: false,
+        maxSpans: 50,
+        maxDepth: 5,
+        maxRetries: 3,
+        retryDelayMs: 500,
+        sanitizeAttributes: true,
+      });
+
+      mockFetchTraceContext.mockResolvedValue({
+        traceId: 'test-trace-id',
+        spans: [{ spanId: 'span1', name: 'test-span' }],
+        insights: [],
+        fetchedAt: Date.now(),
+      });
+
+      mockAgentProvider.callApi.mockResolvedValue({
+        output: 'Attack message',
+        tokenUsage: { total: 100, prompt: 50, completion: 50 },
+      });
+
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'Target response',
+      });
+
+      const provider = new HydraProvider({
+        injectVar: 'input',
+        maxTurns: 1,
+      });
+
+      const context: CallApiContextParams = {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'test goal' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        test: {
+          assert: [{ type: 'harmful:test' }],
+          metadata: { goal: 'test goal', pluginId: 'harmful:test' },
+        } as any,
+        traceparent: '00-trace123-span456-01',
+      };
+
+      await provider.callApi('', context);
+
+      // formatTraceForMetadata should be called for storing trace
+      expect(mockFormatTraceForMetadata).toHaveBeenCalled();
+    });
+
+    it('should handle fetchTraceContext returning null gracefully', async () => {
+      // Enable tracing
+      mockResolveTracingOptions.mockReturnValue({
+        enabled: true,
+        includeInAttack: true,
+        includeInGrading: true,
+        includeInternalSpans: false,
+        maxSpans: 50,
+        maxDepth: 5,
+        maxRetries: 3,
+        retryDelayMs: 500,
+        sanitizeAttributes: true,
+      });
+
+      // Return null (no trace found)
+      mockFetchTraceContext.mockResolvedValue(null);
+
+      mockAgentProvider.callApi.mockResolvedValue({
+        output: 'Attack message',
+        tokenUsage: { total: 100, prompt: 50, completion: 50 },
+      });
+
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'Target response',
+      });
+
+      const provider = new HydraProvider({
+        injectVar: 'input',
+        maxTurns: 1,
+      });
+
+      const context: CallApiContextParams = {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'test goal' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        test: {
+          assert: [{ type: 'harmful:test' }],
+          metadata: { goal: 'test goal', pluginId: 'harmful:test' },
+        } as any,
+        traceparent: '00-trace123-span456-01',
+      };
+
+      const result = await provider.callApi('', context);
+
+      // Should complete without error
+      expect(result.metadata?.hydraRoundsCompleted).toBeDefined();
+      // No trace snapshots should be present
+      expect(result.metadata?.traceSnapshots).toBeUndefined();
+    });
+
+    it('should include trace data in redteamHistory entries when tracing is enabled', async () => {
+      // Enable tracing
+      mockResolveTracingOptions.mockReturnValue({
+        enabled: true,
+        includeInAttack: true,
+        includeInGrading: true,
+        includeInternalSpans: false,
+        maxSpans: 50,
+        maxDepth: 5,
+        maxRetries: 3,
+        retryDelayMs: 500,
+        sanitizeAttributes: true,
+      });
+
+      mockFetchTraceContext.mockResolvedValue({
+        traceId: 'test-trace-id',
+        spans: [{ spanId: 'span1', name: 'test-span' }],
+        insights: [],
+        fetchedAt: Date.now(),
+      });
+
+      mockAgentProvider.callApi.mockResolvedValue({
+        output: 'Attack message',
+        tokenUsage: { total: 100, prompt: 50, completion: 50 },
+      });
+
+      mockTargetProvider.callApi.mockResolvedValue({
+        output: 'Target response',
+      });
+
+      const provider = new HydraProvider({
+        injectVar: 'input',
+        maxTurns: 1,
+      });
+
+      const context: CallApiContextParams = {
+        originalProvider: mockTargetProvider,
+        vars: { input: 'test goal' },
+        prompt: { raw: 'test prompt', label: 'test' },
+        test: {
+          assert: [{ type: 'harmful:test' }],
+          metadata: { goal: 'test goal', pluginId: 'harmful:test' },
+        } as any,
+        traceparent: '00-trace123-span456-01',
+      };
+
+      const result = await provider.callApi('', context);
+
+      // redteamHistory should have trace data
+      expect(result.metadata?.redteamHistory).toBeDefined();
+      if (result.metadata?.redteamHistory && result.metadata.redteamHistory.length > 0) {
+        const entry = result.metadata.redteamHistory[0];
+        expect(entry.trace).toBeDefined();
+        expect(entry.traceSummary).toBe('Trace summary');
+      }
     });
   });
 });

@@ -6,8 +6,8 @@ import {
   setDefaultEmbeddingProviders,
 } from '../../src/providers/defaults';
 import {
-  DefaultGradingProvider as GoogleAiStudioGradingProvider,
   DefaultGradingJsonProvider as GoogleAiStudioGradingJsonProvider,
+  DefaultGradingProvider as GoogleAiStudioGradingProvider,
   DefaultLlmRubricProvider as GoogleAiStudioLlmRubricProvider,
   DefaultSuggestionsProvider as GoogleAiStudioSuggestionsProvider,
   DefaultSynthesizeProvider as GoogleAiStudioSynthesizeProvider,
@@ -22,8 +22,8 @@ import {
 } from '../../src/providers/mistral/defaults';
 import { DefaultModerationProvider } from '../../src/providers/openai/defaults';
 
-import type { ApiProvider } from '../../src/types/index';
 import type { EnvOverrides } from '../../src/types/env';
+import type { ApiProvider } from '../../src/types/index';
 
 vi.mock('../../src/providers/google/util', async (importOriginal) => {
   return {

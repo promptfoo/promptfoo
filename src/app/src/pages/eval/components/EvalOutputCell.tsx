@@ -1,8 +1,9 @@
 import React, { useMemo } from 'react';
 
-import { useShiftKey } from '@app/hooks/useShiftKey';
-import { useEvalOperations } from '@app/hooks/useEvalOperations';
 import useCloudConfig from '@app/hooks/useCloudConfig';
+import { useEvalOperations } from '@app/hooks/useEvalOperations';
+import { useShiftKey } from '@app/hooks/useShiftKey';
+import { normalizeMediaText, resolveAudioSource, resolveImageSource } from '@app/utils/media';
 import {
   Check,
   ContentCopy,
@@ -41,11 +42,25 @@ function scoreToString(score: number | null) {
 
 /**
  * Detects if the provider is an image generation provider.
- * Image providers follow the pattern like 'openai:image:dall-e-3'.
+ * Image providers follow patterns like:
+ * - 'openai:image:dall-e-3' (OpenAI DALL-E)
+ * - 'google:image:imagen-3.0' (Google Imagen)
+ * - 'google:gemini-2.5-flash-image' (Gemini native image generation)
  * Used to skip truncation for image content since truncating `![alt](url)` breaks rendering.
  */
 export function isImageProvider(provider: string | undefined): boolean {
-  return provider?.includes(':image:') ?? false;
+  if (!provider) {
+    return false;
+  }
+  // Check for :image: namespace (OpenAI DALL-E, Google Imagen)
+  if (provider.includes(':image:')) {
+    return true;
+  }
+  // Check for Gemini native image models (e.g., google:gemini-2.5-flash-image)
+  if (provider.startsWith('google:') && provider.includes('-image')) {
+    return true;
+  }
+  return false;
 }
 
 const tooltipSlotProps: TooltipProps['slotProps'] = {
@@ -101,8 +116,15 @@ function EvalOutputCell({
   showDiffs: boolean;
   searchText?: string;
 }) {
-  const { renderMarkdown, prettifyJson, showPrompts, showPassFail, maxImageWidth, maxImageHeight } =
-    useResultsViewSettingsStore();
+  const {
+    renderMarkdown,
+    prettifyJson,
+    showPrompts,
+    showPassFail,
+    showPassReasons,
+    maxImageWidth,
+    maxImageHeight,
+  } = useResultsViewSettingsStore();
 
   const { shouldHighlightSearchText, addFilter, resetFilters } = useTableStore();
   const { data: cloudConfig } = useCloudConfig();
@@ -165,15 +187,37 @@ function EvalOutputCell({
   };
 
   const text = typeof output.text === 'string' ? output.text : JSON.stringify(output.text);
+  const normalizedText = normalizeMediaText(text);
+  const inlineImageSrc = resolveImageSource(text);
+  const outputAudioSource = resolveAudioSource(output.audio);
   let node: React.ReactNode | undefined;
   let failReasons: string[] = [];
+  let passReasons: string[] = [];
 
-  // Extract failure reasons from component results
+  // Extract response audio from the last turn of redteamHistory for display in the cell
+  const redteamHistory = output.metadata?.redteamHistory || output.metadata?.redteamTreeHistory;
+  const lastTurn = redteamHistory?.[redteamHistory.length - 1];
+  const responseAudio = lastTurn?.outputAudio as
+    | { data?: string; format?: string; blobRef?: { uri?: string; hash?: string } }
+    | undefined;
+  const responseAudioSource = resolveAudioSource(responseAudio);
+
+  // Extract failure and pass reasons from component results
   if (output.gradingResult?.componentResults) {
     failReasons = output.gradingResult.componentResults
       .filter((result) => (result ? !result.pass : false))
       .map((result) => result.reason)
       .filter((reason) => reason); // Filter out empty/undefined reasons
+
+    passReasons = output.gradingResult.componentResults
+      .filter((result) => (result ? result.pass : false))
+      .map((result) => result.reason)
+      .filter((reason) => reason); // Filter out empty/undefined reasons
+  }
+
+  // Include provider-level error if present (e.g., from Python provider returning error)
+  if (output.error) {
+    failReasons.unshift(output.error);
   }
 
   if (showDiffs && firstOutput) {
@@ -248,33 +292,40 @@ function EvalOutputCell({
       console.error('Invalid regular expression:', (error as Error).message);
     }
   } else if (
-    text?.match(/^data:(image\/[a-z]+|application\/octet-stream|image\/svg\+xml);(base64,)?/)
+    text?.match(/^data:(image\/[a-z]+|application\/octet-stream|image\/svg\+xml);(base64,)?/) ||
+    inlineImageSrc
   ) {
+    const src = inlineImageSrc || text;
     node = (
       <img
-        src={text}
+        src={src}
         alt={output.prompt}
         style={{ width: '100%' }}
-        onClick={() => toggleLightbox(text)}
+        onClick={() => toggleLightbox(src)}
       />
     );
   } else if (output.audio) {
-    node = (
-      <div className="audio-output">
-        <audio controls style={{ width: '100%' }} data-testid="audio-player">
-          <source
-            src={`data:audio/${output.audio.format || 'wav'};base64,${output.audio.data}`}
-            type={`audio/${output.audio.format || 'wav'}`}
-          />
-          Your browser does not support the audio element.
-        </audio>
-        {output.audio.transcript && (
-          <div className="transcript">
-            <strong>Transcript:</strong> {output.audio.transcript}
-          </div>
-        )}
-      </div>
-    );
+    if (outputAudioSource) {
+      node = (
+        <div className="audio-output">
+          <audio controls style={{ width: '100%' }} data-testid="audio-player">
+            <source src={outputAudioSource.src} type={outputAudioSource.type || 'audio/mpeg'} />
+            Your browser does not support the audio element.
+          </audio>
+          {output.audio.transcript && (
+            <div className="transcript">
+              <strong>Transcript:</strong> {output.audio.transcript}
+            </div>
+          )}
+        </div>
+      );
+    } else if (output.audio.transcript) {
+      node = (
+        <div className="transcript">
+          <strong>Transcript:</strong> {output.audio.transcript}
+        </div>
+      );
+    }
   } else if ((prettifyJson || renderMarkdown) && !showDiffs) {
     // When both prettifyJson and renderMarkdown are enabled,
     // display as JSON if it's a valid object/array, otherwise render as Markdown
@@ -294,6 +345,8 @@ function EvalOutputCell({
       node = (
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
+          // Allow data: URIs for inline images (e.g., from Gemini image generation)
+          urlTransform={(url) => url}
           components={{
             img: ({ src, alt }) => (
               <img
@@ -306,7 +359,7 @@ function EvalOutputCell({
             ),
           }}
         >
-          {text}
+          {normalizedText}
         </ReactMarkdown>
       );
     }
@@ -722,17 +775,41 @@ function EvalOutputCell({
               <FailReasonCarousel failReasons={failReasons} />
             </span>
           )}
+          {showPassReasons && passReasons.length > 0 && (
+            <div className="pass-reasons">
+              {passReasons.map((reason, index) => (
+                <div key={index} className="pass-reason">
+                  {reason}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
       {showPrompts && firstOutput.prompt && (
         <div className="prompt">
           <span className="pill">Prompt</span>
-          {output.prompt}
+          {typeof output.prompt === 'string'
+            ? output.prompt
+            : JSON.stringify(output.prompt, null, 2)}
+        </div>
+      )}
+      {/* Show response audio from redteam history if available (target's audio response) */}
+      {responseAudioSource?.src && (
+        <div className="response-audio" style={{ marginBottom: '8px' }}>
+          <audio
+            controls
+            style={{ width: '100%', height: '32px' }}
+            data-testid="response-audio-player"
+          >
+            <source src={responseAudioSource.src} type={responseAudioSource.type || 'audio/mpeg'} />
+            Your browser does not support the audio element.
+          </audio>
         </div>
       )}
       <div style={contentStyle}>
         <TruncatedText
-          text={node || text}
+          text={node || normalizedText}
           maxLength={renderMarkdown && isImageProvider(output.provider) ? 0 : maxTextLength}
         />
       </div>

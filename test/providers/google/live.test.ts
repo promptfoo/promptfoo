@@ -1,12 +1,14 @@
-import { Mocked, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import path from 'path';
 
 import dedent from 'dedent';
+import { afterEach, beforeEach, describe, expect, it, Mocked, vi } from 'vitest';
 import WebSocket from 'ws';
 import cliState from '../../../src/cliState';
 import { importModule } from '../../../src/esm';
 import { fetchJson, GoogleLiveProvider, tryGetThenPost } from '../../../src/providers/google/live';
 import * as fetchModule from '../../../src/util/fetch/index';
+
+const mockFetchWithProxy = vi.mocked(fetchModule.fetchWithProxy);
 
 // Mock setTimeout globally to speed up tests
 const originalSetTimeout = global.setTimeout;
@@ -96,6 +98,9 @@ describe('GoogleLiveProvider', () => {
   let provider: GoogleLiveProvider;
 
   beforeEach(async () => {
+    // Reset fetchWithProxy mock to prevent test pollution from async callbacks
+    mockFetchWithProxy.mockReset();
+
     mockWs = {
       on: vi.fn(),
       send: vi.fn(),
@@ -555,8 +560,6 @@ describe('GoogleLiveProvider', () => {
   });
 
   it('should handle function tool calls to a spawned stateful api', async () => {
-    const mockFetchWithProxy = vi.mocked(fetchModule.fetchWithProxy);
-
     vi.mocked(WebSocket).mockImplementation(function () {
       setImmediate(() => {
         mockWs.onopen?.({ type: 'open', target: mockWs } as WebSocket.Event);
@@ -1416,12 +1419,6 @@ describe('GoogleLiveProvider', () => {
   });
 
   describe('fetchJson', () => {
-    const mockFetchWithProxy = vi.mocked(fetchModule.fetchWithProxy);
-
-    beforeEach(() => {
-      mockFetchWithProxy.mockReset();
-    });
-
     it('should successfully fetch and parse JSON', async () => {
       const mockData = { success: true, data: 'test data' };
       mockFetchWithProxy.mockResolvedValue({
@@ -1487,12 +1484,6 @@ describe('GoogleLiveProvider', () => {
   });
 
   describe('tryGetThenPost', () => {
-    const mockFetchWithProxy = vi.mocked(fetchModule.fetchWithProxy);
-
-    beforeEach(() => {
-      mockFetchWithProxy.mockReset();
-    });
-
     it('should successfully fetch with GET when no data provided', async () => {
       const mockData = { result: 'success' };
       mockFetchWithProxy.mockResolvedValue({

@@ -1,5 +1,3 @@
-import { randomUUID } from 'crypto';
-
 import { and, desc, eq, sql } from 'drizzle-orm';
 import { DEFAULT_QUERY_LIMIT } from '../constants';
 import { getDb } from '../database/index';
@@ -43,7 +41,11 @@ import { convertTestResultsToTableRow } from '../util/exportToFile/index';
 import invariant from '../util/invariant';
 import { getCurrentTimestamp } from '../util/time';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
-import { getCachedResultsCount, queryTestIndicesOptimized } from './evalPerformance';
+import {
+  getCachedResultsCount,
+  getTotalResultRowCount,
+  queryTestIndicesOptimized,
+} from './evalPerformance';
 import EvalResult from './evalResult';
 
 import type { EvalResultsFilterMode, TraceData } from '../types/index';
@@ -244,6 +246,7 @@ export default class Eval {
   _resultsLoaded: boolean = false;
   runtimeOptions?: Partial<import('../types').EvaluateOptions>;
   _shared: boolean = false;
+  durationMs?: number;
 
   static async latest() {
     const db = getDb();
@@ -283,6 +286,16 @@ export default class Eval {
     const eval_ = evalData[0];
     const datasetId = datasetResults[0]?.datasetId;
 
+    // Extract durationMs from results column (for V4 evals)
+    // Validate that it's a finite positive number to guard against corrupted data
+    const resultsObj = eval_.results as Record<string, unknown> | undefined;
+    const rawDurationMs =
+      resultsObj && 'durationMs' in resultsObj ? resultsObj.durationMs : undefined;
+    const durationMs =
+      typeof rawDurationMs === 'number' && Number.isFinite(rawDurationMs) && rawDurationMs >= 0
+        ? rawDurationMs
+        : undefined;
+
     const evalInstance = new Eval(eval_.config, {
       id: eval_.id,
       createdAt: new Date(eval_.createdAt),
@@ -293,6 +306,7 @@ export default class Eval {
       persisted: true,
       vars: eval_.vars || [],
       runtimeOptions: (eval_ as any).runtimeOptions,
+      durationMs,
     });
     if (eval_.results && 'table' in eval_.results) {
       evalInstance.oldResults = eval_.results as EvaluateSummaryV2;
@@ -391,7 +405,7 @@ export default class Eval {
       if (opts?.results && opts.results.length > 0) {
         const res = db
           .insert(evalResultsTable)
-          .values(opts.results?.map((r) => ({ ...r, evalId, id: randomUUID() })))
+          .values(opts.results?.map((r) => ({ ...r, evalId, id: crypto.randomUUID() })))
           .run();
         logger.debug(`Inserted ${res.changes} eval results`);
       }
@@ -461,6 +475,7 @@ export default class Eval {
       persisted?: boolean;
       vars?: string[];
       runtimeOptions?: Partial<import('../types').EvaluateOptions>;
+      durationMs?: number;
     },
   ) {
     const createdAt = opts?.createdAt || new Date();
@@ -475,6 +490,7 @@ export default class Eval {
     this._resultsLoaded = false;
     this.vars = opts?.vars || [];
     this.runtimeOptions = opts?.runtimeOptions;
+    this.durationMs = opts?.durationMs;
   }
 
   version() {
@@ -510,6 +526,9 @@ export default class Eval {
     if (this.useOldResults()) {
       invariant(this.oldResults, 'Old results not found');
       updateObj.results = this.oldResults;
+    } else if (this.durationMs !== undefined) {
+      // For V4 evals, store durationMs in the results column
+      updateObj.results = { durationMs: this.durationMs };
     }
     db.update(evalsTable).set(updateObj).where(eq(evalsTable.id, this.id)).run();
     this.persisted = true;
@@ -521,6 +540,10 @@ export default class Eval {
 
   addVar(varName: string) {
     this.vars.push(varName);
+  }
+
+  setDurationMs(durationMs: number) {
+    this.durationMs = durationMs;
   }
 
   getPrompts() {
@@ -548,8 +571,8 @@ export default class Eval {
       this.results.push(newResult);
     }
     if (this.persisted) {
-      // Notify watchers that new results are available
-      updateSignalFile();
+      // Notify watchers that new results are available, passing the eval ID
+      updateSignalFile(this.id);
     }
   }
 
@@ -560,8 +583,17 @@ export default class Eval {
   }
 
   async getResultsCount(): Promise<number> {
-    // Use cached count for better performance
+    // Returns distinct test count (unique test cases) - used for UI display
     return getCachedResultsCount(this.id);
+  }
+
+  /**
+   * Get the total count of all result rows for this eval.
+   * Use this when iterating over all results (e.g., for sharing progress).
+   * This may be higher than getResultsCount() when there are multiple prompts/providers.
+   */
+  async getTotalResultRowCount(): Promise<number> {
+    return getTotalResultRowCount(this.id);
   }
 
   async fetchResultsByTestIdx(testIdx: number) {
@@ -990,6 +1022,7 @@ export default class Eval {
       failures: 0,
       errors: 0,
       tokenUsage: createEmptyTokenUsage(),
+      durationMs: this.durationMs,
     };
 
     for (const prompt of this.prompts) {
@@ -1243,7 +1276,7 @@ export default class Eval {
         const now = Date.now();
         const copiedResults = batch.map((result) => ({
           ...result,
-          id: randomUUID(),
+          id: crypto.randomUUID(),
           evalId: newEvalId,
           createdAt: now,
           updatedAt: now,

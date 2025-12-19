@@ -14,6 +14,8 @@
 import fs from 'fs';
 import path from 'path';
 
+import { beforeAll, describe, expect, it } from 'vitest';
+
 const distDir = path.resolve(__dirname, '../../dist/src');
 const buildExists = fs.existsSync(distDir);
 

@@ -1,10 +1,10 @@
+import * as ReactDOM from 'react-dom/client';
+
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import type { AssertionType, GradingResult } from '@promptfoo/types';
-import * as ReactDOM from 'react-dom/client';
-import { v4 as uuidv4 } from 'uuid';
 
 // Mock the Citations component to verify it receives the correct props
 vi.mock('./Citations', () => ({
@@ -900,7 +900,7 @@ describe('EvalOutputPromptDialog cloud config', () => {
       cloudConfig: customCloudConfig,
       metadata: {
         policyName: 'Test Policy',
-        policyId: uuidv4(),
+        policyId: crypto.randomUUID(),
       },
     };
 
@@ -930,6 +930,135 @@ describe('EvalOutputPromptDialog cloud config', () => {
     // Should just show the policy name without link
     expect(screen.getByText('Test Policy')).toBeInTheDocument();
     expect(screen.queryByText('View policy in Promptfoo Cloud')).not.toBeInTheDocument();
+  });
+});
+
+describe('EvalOutputPromptDialog redteamHistory messages rendering', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should display Messages tab when redteamHistory has entries', async () => {
+    const propsWithRedteamHistory = {
+      ...defaultProps,
+      metadata: {
+        redteamHistory: [
+          { prompt: 'Attack prompt 1', output: 'Target response 1' },
+          { prompt: 'Attack prompt 2', output: 'Target response 2' },
+        ],
+      },
+    };
+
+    render(<EvalOutputPromptDialog {...propsWithRedteamHistory} />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Messages' })).toBeInTheDocument();
+    });
+  });
+
+  it('should render redteamHistory messages with promptAudio and promptImage', async () => {
+    const propsWithAudioImage = {
+      ...defaultProps,
+      metadata: {
+        redteamHistory: [
+          {
+            prompt: 'Attack with audio',
+            promptAudio: { data: 'audiodata', format: 'mp3' },
+            output: 'Target response',
+          },
+          {
+            prompt: 'Attack with image',
+            promptImage: { data: 'imagedata', format: 'png' },
+            output: 'Target response 2',
+          },
+        ],
+      },
+    };
+
+    render(<EvalOutputPromptDialog {...propsWithAudioImage} />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Messages' })).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Messages' }));
+
+    // Verify the messages are rendered (ChatMessages component handles audio/image)
+    expect(screen.getByText('Attack with audio')).toBeInTheDocument();
+    expect(screen.getByText('Attack with image')).toBeInTheDocument();
+  });
+
+  it('should render redteamHistory messages with outputAudio and outputImage', async () => {
+    const propsWithOutputMedia = {
+      ...defaultProps,
+      metadata: {
+        redteamHistory: [
+          {
+            prompt: 'Attack prompt',
+            output: 'Response with audio',
+            outputAudio: { data: 'responseaudio', format: 'wav' },
+          },
+          {
+            prompt: 'Attack prompt 2',
+            output: 'Response with image',
+            outputImage: { data: 'responseimage', format: 'jpeg' },
+          },
+        ],
+      },
+    };
+
+    render(<EvalOutputPromptDialog {...propsWithOutputMedia} />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Messages' })).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Messages' }));
+
+    expect(screen.getByText('Response with audio')).toBeInTheDocument();
+    expect(screen.getByText('Response with image')).toBeInTheDocument();
+  });
+
+  it('should display Messages tab when redteamTreeHistory is present', async () => {
+    const propsWithTreeHistory = {
+      ...defaultProps,
+      metadata: {
+        redteamTreeHistory: [{ prompt: 'Tree attack prompt', output: 'Tree response' }],
+      },
+    };
+
+    render(<EvalOutputPromptDialog {...propsWithTreeHistory} />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Messages' })).toBeInTheDocument();
+    });
+  });
+
+  it('should filter out entries without prompt or output from redteamHistory', async () => {
+    const propsWithIncompleteEntries = {
+      ...defaultProps,
+      metadata: {
+        redteamHistory: [
+          { prompt: 'Valid prompt', output: 'Valid output' },
+          { prompt: 'Prompt without output' }, // Missing output
+          { output: 'Output without prompt' }, // Missing prompt
+        ],
+      },
+    };
+
+    render(<EvalOutputPromptDialog {...propsWithIncompleteEntries} />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('tab', { name: 'Messages' })).toBeInTheDocument();
+    });
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Messages' }));
+
+    // Only the valid entry should be rendered
+    expect(screen.getByText('Valid prompt')).toBeInTheDocument();
+    expect(screen.getByText('Valid output')).toBeInTheDocument();
+    expect(screen.queryByText('Prompt without output')).not.toBeInTheDocument();
+    expect(screen.queryByText('Output without prompt')).not.toBeInTheDocument();
   });
 });
 
@@ -1017,5 +1146,38 @@ describe('EvalOutputPromptDialog traces tab visibility', () => {
       expect(screen.getByRole('tab', { name: 'Prompt & Output' })).toBeInTheDocument();
     });
     expect(screen.queryByRole('tab', { name: 'Traces' })).not.toBeInTheDocument();
+  });
+
+  describe('object content handling (issue #768)', () => {
+    it('safely renders prompt when passed as object instead of string', async () => {
+      // This tests the fix for GitHub issue #768 where custom providers
+      // return objects for output/prompt causing React Error #31
+      const propsWithObjectPrompt = {
+        ...defaultProps,
+        // Simulate object being passed where string is expected (runtime type mismatch)
+        prompt: { statement: 'test statement', reason: 'test reason', verdict: 'pass' } as any,
+      };
+
+      // Should not throw React Error #31
+      expect(() => render(<EvalOutputPromptDialog {...propsWithObjectPrompt} />)).not.toThrow();
+
+      await waitFor(() => {
+        // Object should be serialized to JSON string
+        expect(screen.getByText(/test statement/)).toBeInTheDocument();
+      });
+    });
+
+    it('safely renders output when passed as object instead of string', async () => {
+      const propsWithObjectOutput = {
+        ...defaultProps,
+        output: { statement: 'output statement', reason: 'output reason', verdict: 'fail' } as any,
+      };
+
+      expect(() => render(<EvalOutputPromptDialog {...propsWithObjectOutput} />)).not.toThrow();
+
+      await waitFor(() => {
+        expect(screen.getByText(/output statement/)).toBeInTheDocument();
+      });
+    });
   });
 });

@@ -66,7 +66,18 @@ const NavSection = styled(Box)({
 
 function NavLink({ href, label }: { href: string; label: string }) {
   const location = useLocation();
-  const isActive = location.pathname.startsWith(href);
+
+  // Special handling for Model Audit to activate on both /model-audit and /model-audit/:id
+  let isActive: boolean;
+  if (href === '/model-audit') {
+    isActive =
+      location.pathname === '/model-audit' ||
+      (location.pathname.startsWith('/model-audit/') &&
+        !location.pathname.startsWith('/model-audit/setup') &&
+        !location.pathname.startsWith('/model-audit/history'));
+  } else {
+    isActive = location.pathname.startsWith(href);
+  }
 
   return (
     <NavButton component={RouterLink} to={href} className={isActive ? 'active' : ''}>
@@ -75,14 +86,14 @@ function NavLink({ href, label }: { href: string; label: string }) {
   );
 }
 
-type ActiveMenu = 'create' | 'evals' | null;
+type ActiveMenu = 'create' | 'evals' | 'audit' | null;
 
 // Shared constants
 const DROPDOWN_CLOSE_DELAY = 150;
 
 // Custom hook for delayed menu close functionality
 function useDelayedClose(
-  menuType: 'create' | 'evals',
+  menuType: 'create' | 'evals' | 'audit',
   setActiveMenu: React.Dispatch<React.SetStateAction<ActiveMenu>>,
 ) {
   const closeTimerRef = React.useRef<number | null>(null);
@@ -145,7 +156,7 @@ function CreateDropdown({
     scheduleClose();
   };
 
-  const isActive = ['/setup', '/redteam/setup'].some((route) =>
+  const isActive = ['/setup', '/redteam/setup', '/model-audit/setup'].some((route) =>
     location.pathname.startsWith(route),
   );
 
@@ -159,6 +170,11 @@ function CreateDropdown({
       href: '/redteam/setup',
       label: 'Red Team',
       description: 'Set up security testing scenarios',
+    },
+    {
+      href: '/model-audit/setup',
+      label: 'Model Audit',
+      description: 'Configure and run a model security scan',
     },
   ];
 
@@ -487,10 +503,10 @@ export default function Navigation({ onToggleDarkMode }: { onToggleDarkMode: () 
             <Logo />
             <CreateDropdown activeMenu={activeMenu} setActiveMenu={setActiveMenu} />
             <EvalsDropdown activeMenu={activeMenu} setActiveMenu={setActiveMenu} />
+            <NavLink href="/model-audit" label="Model Audit" />
             <NavLink href="/prompts" label="Prompts" />
             <NavLink href="/datasets" label="Datasets" />
             <NavLink href="/history" label="History" />
-            <NavLink href="/model-audit" label="Model Audit" />
           </NavSection>
           <NavSection>
             <IconButton onClick={handleModalToggle} color="inherit">

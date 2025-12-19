@@ -1,10 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
 import { clearCache } from '../../src/cache';
 import {
+  createTrueFoundryProvider,
   TrueFoundryEmbeddingProvider,
   TrueFoundryProvider,
-  createTrueFoundryProvider,
 } from '../../src/providers/truefoundry';
 import * as fetchModule from '../../src/util/fetch/index';
 
@@ -219,6 +218,7 @@ describe('TrueFoundry', () => {
             total: 10,
             prompt: 5,
             completion: 5,
+            numRequests: 1,
           },
           cached: false,
           cost: undefined,
@@ -367,6 +367,7 @@ describe('TrueFoundry', () => {
           tokenUsage: {
             total: 10,
             cached: 10,
+            numRequests: 1,
           },
         });
         expect(cachedResult.latencyMs).toBeGreaterThanOrEqual(0);
@@ -507,6 +508,7 @@ describe('TrueFoundry', () => {
           total: 5,
           prompt: 5,
           completion: 0,
+          numRequests: 1,
         },
       });
       expect(result.latencyMs).toBeGreaterThanOrEqual(0);

@@ -1,10 +1,10 @@
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import { categoryDescriptions, riskCategories } from '@promptfoo/redteam/constants';
+import { type CategoryStats } from './FrameworkComplianceUtils';
 import RiskCard from './RiskCard';
 import type { TopLevelCategory } from '@promptfoo/redteam/constants';
 import type { GradingResult } from '@promptfoo/types';
-import { type CategoryStats } from './FrameworkComplianceUtils';
 
 const RiskCategories = ({
   categoryStats,

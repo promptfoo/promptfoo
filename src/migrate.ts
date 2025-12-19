@@ -1,6 +1,7 @@
-import * as path from 'path';
-import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import * as path from 'path';
+
 import { getDirectory } from './esm';
 
 /**
@@ -50,14 +51,19 @@ export async function runDbMigrations(): Promise<void> {
       try {
         const db = getDb();
 
-        // Use __dirname in CJS context (Jest/tests) or getDirectory() in ESM
-        const dir = typeof __dirname !== 'undefined' ? __dirname : getCurrentDir();
+        // Use getCurrentDir() which handles both ESM and CJS contexts
+        const dir = getCurrentDir();
         let migrationsFolder: string;
         if (dir.includes('dist/src')) {
-          // When running from bundled server (e.g., dist/src/server/index.js)
-          // Navigate to project root and find drizzle folder
+          // When running from bundled dist (e.g., npx promptfoo or dist/src/main.js)
+          // Navigate to project root and find drizzle folder in dist
           const projectRoot = dir.split('dist/src')[0];
-          migrationsFolder = path.join(projectRoot, 'drizzle');
+          migrationsFolder = path.join(projectRoot, 'dist', 'drizzle');
+        }
+        // PF Cloud runtime scans:
+        else if (dir.includes('dist/server/src')) {
+          const projectRoot = dir.split('dist/server/src')[0];
+          migrationsFolder = path.join(projectRoot, 'dist', 'promptfoo', 'drizzle');
         } else {
           // When running from source (e.g., src/migrate.ts)
           migrationsFolder = path.join(dir, '..', 'drizzle');

@@ -7,6 +7,7 @@ import CircularProgress from '@mui/material/CircularProgress';
 import Stack from '@mui/material/Stack';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
+import InstallationGuide from './InstallationGuide';
 import PathSelector from './PathSelector';
 
 import type { ScanPath } from '../ModelAudit.types';
@@ -24,7 +25,9 @@ interface ConfigurationTabProps {
   installationStatus?: {
     checking: boolean;
     installed: boolean | null;
+    error?: string | null;
   };
+  onRetryInstallationCheck?: () => void;
 }
 
 export default function ConfigurationTab({
@@ -38,10 +41,12 @@ export default function ConfigurationTab({
   onClearError,
   currentWorkingDir,
   installationStatus,
+  onRetryInstallationCheck,
 }: ConfigurationTabProps) {
   const isCheckingInstallation = installationStatus?.checking ?? false;
   const isNotInstalled = installationStatus?.installed === false;
   const installationUnknown = installationStatus?.installed === null;
+  const installationError = installationStatus?.error ?? null;
 
   const scanButtonDisabled = isScanning || paths.length === 0 || isCheckingInstallation;
 
@@ -123,6 +128,16 @@ export default function ConfigurationTab({
           <Alert severity="error" onClose={onClearError} sx={{ mt: 2 }}>
             {error}
           </Alert>
+        )}
+
+        {isNotInstalled && onRetryInstallationCheck && (
+          <Box sx={{ mt: 3 }}>
+            <InstallationGuide
+              onRetryCheck={onRetryInstallationCheck}
+              isChecking={isCheckingInstallation}
+              error={installationError}
+            />
+          </Box>
         )}
       </Box>
     </Box>

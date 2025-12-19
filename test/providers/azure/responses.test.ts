@@ -1,10 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
-import { AzureResponsesProvider } from '../../../src/providers/azure/responses';
-import { fetchWithCache } from '../../../src/cache';
-import { maybeLoadFromExternalFile } from '../../../src/util/file';
 import fs from 'fs';
 
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { fetchWithCache } from '../../../src/cache';
+import { AzureResponsesProvider } from '../../../src/providers/azure/responses';
+import { maybeLoadFromExternalFile } from '../../../src/util/file';
 import type { Mocked, MockedFunction } from 'vitest';
 
 // Mock external dependencies

@@ -1,4 +1,5 @@
 import { readFileSync } from 'fs';
+
 import { defineConfig } from 'tsdown';
 
 // Read package.json for version constants
@@ -12,6 +13,8 @@ const versionDefines = {
   __PROMPTFOO_ENGINES_NODE__: JSON.stringify(packageJson.engines.node),
 };
 
+// All configs use clean: false. Use `npm run build:clean` for explicit cleaning.
+// This prevents race conditions when multiple configs share the same outDir.
 export default defineConfig([
   // Server (ESM only) - stable path for workflows
   {
@@ -40,7 +43,7 @@ export default defineConfig([
     format: ['esm'],
     target: 'node20',
     outDir: 'dist/src',
-    clean: true,
+    clean: false,
     shims: true, // Provides __dirname, __filename shims automatically
     sourcemap: true,
     fixedExtension: false, // Use .js extension for ESM since package.json has type: module

@@ -1,4 +1,5 @@
 import invariant from '../util/invariant';
+
 import type { AssertionParams, GradingResult } from '../types/index';
 
 // Type definitions for natural package (since it's optional)
@@ -13,13 +14,14 @@ type DataRecord = {
 let PorterStemmer: Stemmer | undefined;
 let WordNet: (new () => any) | undefined;
 
-function ensureNaturalPackage() {
+async function ensureNaturalPackage(): Promise<void> {
   if (PorterStemmer && WordNet) {
     return;
   }
 
   try {
-    const natural = require('natural');
+    // Dynamic import for ESM compatibility
+    const natural = await import('natural');
     PorterStemmer = natural.PorterStemmer;
     WordNet = natural.WordNet;
   } catch (_err) {
@@ -88,12 +90,12 @@ function matchExactEnums(
   return [wordMatch, candidateCopy, referenceCopy];
 }
 
-function matchStemEnums(
+async function matchStemEnums(
   enumCandidateList: WordPair[],
   enumReferenceList: WordPair[],
   stemmer?: Stemmer,
-): [MatchPair[], WordPair[], WordPair[]] {
-  ensureNaturalPackage();
+): Promise<[MatchPair[], WordPair[], WordPair[]]> {
+  await ensureNaturalPackage();
   invariant(PorterStemmer, 'PorterStemmer should be loaded');
 
   const actualStemmer = stemmer || PorterStemmer;
@@ -119,7 +121,7 @@ async function matchSynonymEnums(
   enumReferenceList: WordPair[],
   wordnet?: any,
 ): Promise<[MatchPair[], WordPair[], WordPair[]]> {
-  ensureNaturalPackage();
+  await ensureNaturalPackage();
   invariant(WordNet, 'WordNet should be loaded');
 
   const actualWordNet = wordnet || new WordNet();
@@ -189,10 +191,8 @@ async function calculateSingleMeteorScore(
   );
 
   // Stage 2: Stem matches
-  const [stemMatches, remainingCandidateAfterStem, remainingReferenceAfterStem] = matchStemEnums(
-    remainingCandidate,
-    remainingReference,
-  );
+  const [stemMatches, remainingCandidateAfterStem, remainingReferenceAfterStem] =
+    await matchStemEnums(remainingCandidate, remainingReference);
 
   // Stage 3: Synonym matches
   const [synonymMatches, ,] = await matchSynonymEnums(

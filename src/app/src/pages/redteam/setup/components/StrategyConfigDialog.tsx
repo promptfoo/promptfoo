@@ -3,6 +3,9 @@ import React from 'react';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import DeleteIcon from '@mui/icons-material/Delete';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import WarningAmberIcon from '@mui/icons-material/WarningAmber';
+import Alert from '@mui/material/Alert';
 import Autocomplete from '@mui/material/Autocomplete';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -17,6 +20,7 @@ import Switch from '@mui/material/Switch';
 import TextField from '@mui/material/TextField';
 import ToggleButton from '@mui/material/ToggleButton';
 import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
+import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import {
   ADDITIONAL_STRATEGIES,
@@ -25,9 +29,9 @@ import {
   MULTI_TURN_STRATEGIES,
   type MultiTurnStrategy,
 } from '@promptfoo/redteam/constants/strategies';
+import { STRATEGIES_REQUIRING_CONFIG } from './strategies/utils';
 
 import type { StrategyCardData } from './strategies/types';
-import { STRATEGIES_REQUIRING_CONFIG } from './strategies/utils';
 
 const DEFAULT_SIMBA_GOALS = [
   'Generate harmful content',
@@ -185,6 +189,67 @@ export default function StrategyConfigDialog({
     }
 
     return messages.length > 0 ? messages.join('. ') : null;
+  };
+
+  // Check for ordering warnings (not blocking, just advisory)
+  const getOrderingWarnings = (): string[] => {
+    const warnings: string[] = [];
+    const agenticIndex = steps.findIndex(isAgenticStrategy);
+    const multiModalIndex = steps.findIndex(isMultiModalStrategy);
+
+    // Warning: Agentic strategy should be first
+    if (agenticIndex > 0) {
+      warnings.push(
+        'Agentic strategies work best as the first step. Transforms before an agentic strategy will modify the attack goal, not each turn.',
+      );
+    }
+
+    // Warning: Transform between agentic and multi-modal
+    if (agenticIndex !== -1 && multiModalIndex !== -1 && multiModalIndex - agenticIndex > 1) {
+      warnings.push(
+        'Transforms between agentic and multi-modal will encode the attack text. The audio/image will contain the encoded text, not the original attack.',
+      );
+    }
+
+    return warnings;
+  };
+
+  // Get contextual help based on current configuration
+  const getLayerModeDescription = (): { title: string; description: string } => {
+    const hasAgentic = steps.some(isAgenticStrategy);
+    const hasMultiModal = steps.some(isMultiModalStrategy);
+
+    if (hasAgentic && hasMultiModal) {
+      return {
+        title: 'Multi-Turn + Multi-Modal Attack',
+        description:
+          'The agentic strategy will orchestrate the attack, and each turn will be converted to audio/image before sending to the target.',
+      };
+    }
+    if (hasAgentic) {
+      return {
+        title: 'Multi-Turn Agentic Attack',
+        description:
+          'The agentic strategy will orchestrate a multi-turn conversation to achieve the attack goal.',
+      };
+    }
+    if (hasMultiModal) {
+      return {
+        title: 'Multi-Modal Transform',
+        description: 'Test cases will be converted to audio/image format before evaluation.',
+      };
+    }
+    if (steps.length > 0) {
+      return {
+        title: 'Transform Chain',
+        description: `Test cases will be transformed through ${steps.length} step${steps.length > 1 ? 's' : ''} sequentially before evaluation.`,
+      };
+    }
+    return {
+      title: 'Configure Layer Strategy',
+      description:
+        'Add steps to create transform chains or combine agentic strategies with multi-modal output.',
+    };
   };
 
   React.useEffect(() => {
@@ -994,12 +1059,32 @@ export default function StrategyConfigDialog({
         </Box>
       );
     } else if (strategy === 'layer') {
+      const modeInfo = getLayerModeDescription();
+      const orderingWarnings = getOrderingWarnings();
+
       return (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <Typography variant="body2" color="text.secondary">
-            Configure the Layer strategy by adding transformation steps that will be applied
-            sequentially. Each step receives the output from the previous step.
-          </Typography>
+          {/* Mode description */}
+          <Alert severity="info" icon={<InfoOutlinedIcon fontSize="small" />} sx={{ py: 0.5 }}>
+            <Typography variant="body2" sx={{ fontWeight: 600 }}>
+              {modeInfo.title}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              {modeInfo.description}
+            </Typography>
+          </Alert>
+
+          {/* Ordering warnings */}
+          {orderingWarnings.map((warning, idx) => (
+            <Alert
+              key={idx}
+              severity="warning"
+              icon={<WarningAmberIcon fontSize="small" />}
+              sx={{ py: 0.5 }}
+            >
+              <Typography variant="body2">{warning}</Typography>
+            </Alert>
+          ))}
 
           <Box>
             <Typography variant="body2" sx={{ mb: 1.5, fontWeight: 600 }}>
@@ -1134,28 +1219,32 @@ export default function StrategyConfigDialog({
                           />
                         )}
                         {isAgentic && (
-                          <Chip
-                            label="agentic"
-                            size="small"
-                            sx={{
-                              height: 20,
-                              fontSize: '0.7rem',
-                              bgcolor: 'primary.main',
-                              color: 'primary.contrastText',
-                            }}
-                          />
+                          <Tooltip title="Orchestrates multi-turn or multi-attempt attacks. Should be first step.">
+                            <Chip
+                              label="agentic"
+                              size="small"
+                              sx={{
+                                height: 20,
+                                fontSize: '0.7rem',
+                                bgcolor: 'primary.main',
+                                color: 'primary.contrastText',
+                              }}
+                            />
+                          </Tooltip>
                         )}
                         {isMultiModal && (
-                          <Chip
-                            label="multi-modal"
-                            size="small"
-                            sx={{
-                              height: 20,
-                              fontSize: '0.7rem',
-                              bgcolor: 'secondary.main',
-                              color: 'secondary.contrastText',
-                            }}
-                          />
+                          <Tooltip title="Converts text to audio or image. Must be last step.">
+                            <Chip
+                              label="multi-modal"
+                              size="small"
+                              sx={{
+                                height: 20,
+                                fontSize: '0.7rem',
+                                bgcolor: 'secondary.main',
+                                color: 'secondary.contrastText',
+                              }}
+                            />
+                          </Tooltip>
                         )}
                       </Typography>
                       <Box sx={{ display: 'flex', gap: 0.5 }}>

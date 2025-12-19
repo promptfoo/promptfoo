@@ -1,14 +1,12 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { Command } from 'commander';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { redteamReportCommand } from '../../../src/redteam/commands/report';
 import { startServer } from '../../../src/server/server';
-import telemetry from '../../../src/telemetry';
-import { setupEnv } from '../../../src/util/index';
 import { setConfigDirectoryPath } from '../../../src/util/config/manage';
+import { setupEnv } from '../../../src/util/index';
 import { BrowserBehavior, checkServerRunning, openBrowser } from '../../../src/util/server';
 
 vi.mock('../../../src/server/server');
-vi.mock('../../../src/telemetry');
 vi.mock('../../../src/util');
 vi.mock('../../../src/util/config/manage', () => ({
   getConfigDirectoryPath: vi.fn().mockReturnValue('/tmp/test-config'),
@@ -48,9 +46,6 @@ describe('redteamReportCommand', () => {
     await cmd.parseAsync(['node', 'test', 'testdir', '--port', '3000']);
 
     expect(setupEnv).toHaveBeenCalledWith(undefined);
-    expect(telemetry.record).toHaveBeenCalledWith('command_used', {
-      name: 'redteam report',
-    });
     expect(setConfigDirectoryPath).toHaveBeenCalledWith('testdir');
     expect(startServer).toHaveBeenCalledWith('3000', BrowserBehavior.OPEN_TO_REPORT);
   });

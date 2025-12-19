@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest';
 import { handleFinishReason } from '../../src/assertions/finishReason';
 
 import type { AssertionParams } from '../../src/types/index';

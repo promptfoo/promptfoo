@@ -1,7 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { GolangProvider } from '../../src/providers/golangCompletion';
 
 // Hoisted mock functions
@@ -580,7 +580,8 @@ describe('GolangProvider', () => {
       mockExistsSync.mockImplementation(function (p: fs.PathLike) {
         const pathStr = p.toString();
         checkedPaths.push(pathStr);
-        return pathStr.endsWith('/absolute/path/to/go.mod');
+        // Return true for go.mod and wrapper.go files
+        return pathStr.endsWith('/absolute/path/to/go.mod') || pathStr.includes('wrapper.go');
       });
 
       mockDirname.mockImplementation(function (p: string) {

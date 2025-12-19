@@ -1,10 +1,9 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
-import { describe, it, expect, vi, beforeAll } from 'vitest';
-import '@testing-library/jest-dom';
 
-import PluginStrategyFlow from './PluginStrategyFlow';
 import { type EvaluateResult, type GradingResult } from '@promptfoo/types';
+import { render, screen } from '@testing-library/react';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
+import PluginStrategyFlow from './PluginStrategyFlow';
 
 vi.mock('recharts', () => ({
   ResponsiveContainer: ({ children }: { children: React.ReactNode }) => (

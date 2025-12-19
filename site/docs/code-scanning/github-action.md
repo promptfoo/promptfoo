@@ -7,11 +7,13 @@ description: Automatically scan pull requests for LLM security vulnerabilities w
 
 # GitHub Action
 
-Automatically scan pull requests for LLM security vulnerabilities using the [promptfoo Code Scan Action](https://github.com/promptfoo/code-scan-action).
+Automatically scan pull requests for LLM security vulnerabilities with promptfoo's [code scanning GitHub action.](/code-scanning/github-action/)
 
-After scanning, the action posts findings with severity levels and suggested fixes as PR review comments.
+The scanner analyzes code changes for prompt injection, PII exposure, excessive agency, and other LLM-specific risks. After scanning, findings are posted with severity levels and suggested fixes as PR review comments.
 
-![Code Scan Action results on PR](../assets/code-scanner-example.png)
+<img src="/img/docs/code-scanning/github.png" alt="Code Scan Action results on PR" style={{borderRadius: '8px', border: '1px solid rgba(0,0,0,0.1)', boxShadow: '0 2px 8px rgba(0,0,0,0.08)'}} />
+<br/>
+<br/>
 
 ## Quick Start
 
@@ -20,7 +22,7 @@ The easiest way to get started is by installing the Promptfoo Scanner GitHub App
 1. **Install the GitHub App**: Go to [github.com/apps/promptfoo-scanner](https://github.com/apps/promptfoo-scanner) and install the app
 2. **Select repositories**: Choose which repositories to enable scanning for
 3. **Submit your email or sign in**: You'll be redirected to promptfoo.dev to either submit your email or sign in to your account (an account is not required—just a valid email address)
-4. **Review the setup PR**: A pull request will be automatically opened in each respository you selected in step 2—it adds the Code Scan Action workflow to `.github/workflows/promptfoo-code-scan.yml`
+4. **Review the setup PR**: A pull request will be automatically opened in each repository you selected in step 2—it adds the Code Scan Action workflow to `.github/workflows/promptfoo-code-scan.yml`
 5. **Merge the PR**: you can tweak the workflow configuration if desired, and merge when ready.
 
 Once merged, the scanner will automatically run on future pull requests, posting review comments for any security issues found.
