@@ -1651,6 +1651,9 @@ class Evaluator {
         for (let index = 0; index < resultsToCompare.length; index++) {
           const result = resultsToCompare[index];
           const gradingResult = gradingResults[index];
+          const wasSuccess = result.success;
+          const wasScore = result.score;
+          const metrics = prompts[result.promptIdx]?.metrics;
           if (result.gradingResult) {
             result.gradingResult.tokensUsed = result.gradingResult.tokensUsed || {
               total: 0,
@@ -1701,6 +1704,31 @@ class Evaluator {
             result.gradingResult.componentResults.push(gradingResult);
           } else {
             result.gradingResult = gradingResult;
+            result.success = result.success && gradingResult.pass;
+            result.gradingResult.pass = result.success;
+            if (!gradingResult.pass) {
+              result.score = result.gradingResult.score = gradingResult.score;
+            }
+          }
+          if (metrics) {
+            metrics.assertPassCount += gradingResult.pass ? 1 : 0;
+            metrics.assertFailCount += gradingResult.pass ? 0 : 1;
+            if (gradingResult.tokensUsed) {
+              updateAssertionMetrics(metrics, gradingResult.tokensUsed);
+            }
+            if (!gradingResult.pass && result.score !== wasScore) {
+              metrics.score += result.score - wasScore;
+            }
+          }
+          if (wasSuccess && !result.success) {
+            result.failureReason = ResultFailureReason.ASSERT;
+            result.error = gradingResult.reason;
+            if (metrics) {
+              metrics.testPassCount -= 1;
+              metrics.testFailCount += 1;
+            }
+            this.stats.successes -= 1;
+            this.stats.failures += 1;
           }
           if (this.evalRecord.persisted) {
             await result.save();
@@ -1767,11 +1795,20 @@ class Evaluator {
             // Preserve existing gradingResult data and add max-score result to componentResults
             const existingComponentResults = result.gradingResult?.componentResults || [];
             const existingGradingResult = result.gradingResult;
+            const wasSuccess = result.success;
+            const metrics = prompts[result.promptIdx]?.metrics;
+            const comparisonPassed = maxScoreGradingResult.pass;
+            const previousPass = existingGradingResult?.pass ?? result.success;
+            const nextPass = previousPass && comparisonPassed;
 
             result.gradingResult = {
-              pass: maxScoreGradingResult.pass,
-              score: maxScoreGradingResult.score,
-              reason: maxScoreGradingResult.reason,
+              ...(existingGradingResult || {}),
+              pass: nextPass,
+              score: existingGradingResult?.score ?? result.score,
+              reason:
+                !comparisonPassed && previousPass
+                  ? maxScoreGradingResult.reason
+                  : existingGradingResult?.reason,
               componentResults: [...existingComponentResults, maxScoreGradingResult],
               namedScores: {
                 ...(existingGradingResult?.namedScores || {}),
@@ -1781,8 +1818,25 @@ class Evaluator {
               assertion: maxScoreAssertion,
             };
 
-            // Don't overwrite overall success/score - max-score is just another assertion
-            // The overall result should be determined by all assertions, not just max-score
+            // Max-score is an additional assertion, so overall pass depends on existing asserts too.
+            result.success = nextPass;
+            if (metrics) {
+              metrics.assertPassCount += comparisonPassed ? 1 : 0;
+              metrics.assertFailCount += comparisonPassed ? 0 : 1;
+              if (maxScoreGradingResult.tokensUsed) {
+                updateAssertionMetrics(metrics, maxScoreGradingResult.tokensUsed);
+              }
+            }
+            if (wasSuccess && !result.success) {
+              result.failureReason = ResultFailureReason.ASSERT;
+              result.error = maxScoreGradingResult.reason;
+              if (metrics) {
+                metrics.testPassCount -= 1;
+                metrics.testFailCount += 1;
+              }
+              this.stats.successes -= 1;
+              this.stats.failures += 1;
+            }
 
             if (this.evalRecord.persisted) {
               await result.save();

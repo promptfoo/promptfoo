@@ -2233,6 +2233,41 @@ describe('evaluator', () => {
     expect(mockApiProviderNoOutput.callApi).toHaveBeenCalledTimes(1);
   });
 
+  it('should apply max-score to overall pass/fail and stats', async () => {
+    const maxScoreProvider: ApiProvider = {
+      id: vi.fn().mockReturnValue('max-score-provider'),
+      callApi: vi.fn().mockResolvedValue({
+        output: 'hello world',
+        tokenUsage: { total: 1, prompt: 1, completion: 0, cached: 0, numRequests: 1 },
+      }),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [maxScoreProvider],
+      prompts: [toPrompt('Prompt A'), toPrompt('Prompt B')],
+      tests: [
+        {
+          assert: [{ type: 'contains', value: 'hello' }, { type: 'max-score' }],
+        },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+    const summary = await evalRecord.toEvaluateSummary();
+    const results = summary.results
+      .filter((result) => result.testIdx === 0)
+      .sort((a, b) => a.promptIdx - b.promptIdx);
+
+    expect(results).toHaveLength(2);
+    expect(results[0].success).toBe(true);
+    expect(results[1].success).toBe(false);
+    expect(results[1].failureReason).toBe(ResultFailureReason.ASSERT);
+    expect(summary.stats.successes).toBe(1);
+    expect(summary.stats.failures).toBe(1);
+    expect(summary.stats.errors).toBe(0);
+  });
+
   it('should apply prompt config to provider call', async () => {
     const mockApiProvider: ApiProvider = {
       id: vi.fn().mockReturnValue('test-provider'),
