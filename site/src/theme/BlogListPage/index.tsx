@@ -45,11 +45,11 @@ const FEATURED_POSTS = [
     slug: 'asr-not-portable-metric',
     title: "Why Attack Success Rate (ASR) Isn't Comparable Across Jailbreak Papers",
     description:
-      "Attack Success Rate (ASR) is the most commonly reported metric for LLM red teaming, but it changes with attempt budget, prompt sets, and judge choice.",
+      'Attack Success Rate (ASR) is the most commonly reported metric for LLM red teaming, but it changes with attempt budget, prompt sets, and judge choice.',
     image: '/img/blog/asr-not-portable-metric/asr-header.jpg',
     permalink: '/blog/asr-not-portable-metric/',
     date: '2025-12-12',
-    author: 'Michael D\'Angelo',
+    author: "Michael D'Angelo",
     tag: 'research-analysis',
   },
 ];
@@ -60,7 +60,7 @@ function BlogListPageContent(props: Props): React.ReactElement {
   // Filter out featured posts from the grid on all pages
   const displayPosts = React.useMemo(() => {
     return items.filter(
-      (item) => !FEATURED_POSTS.some((fp) => item.content.metadata.permalink.includes(fp.slug))
+      (item) => !FEATURED_POSTS.some((fp) => item.content.metadata.permalink.includes(fp.slug)),
     );
   }, [items]);
 
