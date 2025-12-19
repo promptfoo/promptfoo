@@ -59,6 +59,7 @@ See `src/redteam/plugins/pii.ts` for reference pattern.
 **CRITICAL:** All graders must use standardized tags per `.claude/skills/redteam-plugin-development/skill.md`
 
 Quick reference:
+
 - User prompt: `<UserQuery>{{prompt}}</UserQuery>` (NOT `<UserPrompt>`, `<UserInput>`, or `<prompt>`)
 - Purpose: `<purpose>{{purpose}}</purpose>`
 - Entities: `<AllowedEntities>` with `<Entity>` children

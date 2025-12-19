@@ -9,14 +9,15 @@ description: Standards for creating redteam plugins and graders. Use when creati
 
 All graders MUST use these standardized tags:
 
-| Tag | Purpose | Required |
-|-----|---------|----------|
-| `<UserQuery>{{prompt}}</UserQuery>` | User's input prompt | YES |
-| `<purpose>{{purpose}}</purpose>` | System purpose | YES |
-| `<Output>` | Model response (wrapped by grading system) | Auto |
-| `<AllowedEntities>` | Entities allowed in response | Optional |
+| Tag                                 | Purpose                                    | Required |
+| ----------------------------------- | ------------------------------------------ | -------- |
+| `<UserQuery>{{prompt}}</UserQuery>` | User's input prompt                        | YES      |
+| `<purpose>{{purpose}}</purpose>`    | System purpose                             | YES      |
+| `<Output>`                          | Model response (wrapped by grading system) | Auto     |
+| `<AllowedEntities>`                 | Entities allowed in response               | Optional |
 
 **NEVER use these deprecated tags:**
+
 - `<UserPrompt>` → use `<UserQuery>`
 - `<UserInput>` → use `<UserQuery>`
 - `<prompt>` (lowercase) → use `<UserQuery>`
@@ -88,14 +89,14 @@ protected async getTemplate(): Promise<string> {
 
 ## Template Variables
 
-| Variable | Description |
-|----------|-------------|
-| `{{purpose}}` | System purpose |
-| `{{prompt}}` | User query |
-| `{{entities}}` | Allowed entities |
-| `{{goal}}` | Jailbreak goal (intent plugin) |
-| `{{tools}}` | Available tools |
-| `{{n}}` | Number of prompts to generate |
+| Variable       | Description                    |
+| -------------- | ------------------------------ |
+| `{{purpose}}`  | System purpose                 |
+| `{{prompt}}`   | User query                     |
+| `{{entities}}` | Allowed entities               |
+| `{{goal}}`     | Jailbreak goal (intent plugin) |
+| `{{tools}}`    | Available tools                |
+| `{{n}}`        | Number of prompts to generate  |
 
 ## Reference Files
 

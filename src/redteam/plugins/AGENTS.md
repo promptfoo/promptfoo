@@ -4,8 +4,8 @@ See `.claude/skills/redteam-plugin-development/skill.md` for full standards.
 
 ## Quick Tag Reference
 
-| Correct | Incorrect |
-|---------|-----------|
+| Correct       | Incorrect                                 |
+| ------------- | ----------------------------------------- |
 | `<UserQuery>` | `<UserPrompt>`, `<UserInput>`, `<prompt>` |
 
 ## Key Files
