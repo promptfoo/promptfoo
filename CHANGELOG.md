@@ -6,31 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [0.120.6](https://github.com/promptfoo/promptfoo/compare/0.120.5...0.120.6) (2025-12-19)
 
-
 ### Features
 
-* **auth:** add interactive team selection during login ([#6760](https://github.com/promptfoo/promptfoo/issues/6760)) ([11c7037](https://github.com/promptfoo/promptfoo/commit/11c7037d229d0cfb335fc2e3419de6c210fec7bc))
-* **bedrock:** configurable numberOfResults for Bedrock Knowledge Base ([#6738](https://github.com/promptfoo/promptfoo/issues/6738)) ([f8f0b8b](https://github.com/promptfoo/promptfoo/commit/f8f0b8bf647fc28c9256e01aa28c46f1b1a1cdeb))
-* **grading:** store and display full grading prompt in UI ([#6736](https://github.com/promptfoo/promptfoo/issues/6736)) ([b38642a](https://github.com/promptfoo/promptfoo/commit/b38642a288f05721425f53c530d9a57a07d3a24a))
-* **providers:** add Gemini 3 Flash Preview support with Vertex AI express mode ([#6739](https://github.com/promptfoo/promptfoo/issues/6739)) ([ad0dff5](https://github.com/promptfoo/promptfoo/commit/ad0dff5767cac47e780e759b3903bba04828192c))
-* **providers:** adds support for OpenAI GPT Image 1.5 ([#6713](https://github.com/promptfoo/promptfoo/issues/6713)) ([4d96061](https://github.com/promptfoo/promptfoo/commit/4d960619ebe6d6615422506a7c2614e3deddde56))
-* **redteam:** add contexts for testing different app states ([#6716](https://github.com/promptfoo/promptfoo/issues/6716)) ([55c0e3e](https://github.com/promptfoo/promptfoo/commit/55c0e3edaa4ec4e80530ac7253be56afa1f1b594))
-* **redteam:** add tracing support to Hydra and IterativeMeta providers ([#6718](https://github.com/promptfoo/promptfoo/issues/6718)) ([54a66af](https://github.com/promptfoo/promptfoo/commit/54a66afd2f4669662e47b4bcb5d5a0ef1afd6241))
-* **site:** add proof banner linking to code scanning blog post ([#6753](https://github.com/promptfoo/promptfoo/issues/6753)) ([3b104ae](https://github.com/promptfoo/promptfoo/commit/3b104ae3bda7924c8732d8ed4a21a8c400d1449e))
-* **tracing:** add OpenTelemetry tracing integration with GenAI semantic conventions ([#6536](https://github.com/promptfoo/promptfoo/issues/6536)) ([784599f](https://github.com/promptfoo/promptfoo/commit/784599f17e52351046d8612503339103abd82c67))
-* **webui:** display evaluation duration in web UI ([#6691](https://github.com/promptfoo/promptfoo/issues/6691)) ([762c16e](https://github.com/promptfoo/promptfoo/commit/762c16e12065c403136ad3fec49b4927176b896a))
-
+- **auth:** add interactive team selection during login ([#6760](https://github.com/promptfoo/promptfoo/issues/6760)) ([11c7037](https://github.com/promptfoo/promptfoo/commit/11c7037d229d0cfb335fc2e3419de6c210fec7bc))
+- **bedrock:** configurable numberOfResults for Bedrock Knowledge Base ([#6738](https://github.com/promptfoo/promptfoo/issues/6738)) ([f8f0b8b](https://github.com/promptfoo/promptfoo/commit/f8f0b8bf647fc28c9256e01aa28c46f1b1a1cdeb))
+- **grading:** store and display full grading prompt in UI ([#6736](https://github.com/promptfoo/promptfoo/issues/6736)) ([b38642a](https://github.com/promptfoo/promptfoo/commit/b38642a288f05721425f53c530d9a57a07d3a24a))
+- **providers:** add Gemini 3 Flash Preview support with Vertex AI express mode ([#6739](https://github.com/promptfoo/promptfoo/issues/6739)) ([ad0dff5](https://github.com/promptfoo/promptfoo/commit/ad0dff5767cac47e780e759b3903bba04828192c))
+- **providers:** adds support for OpenAI GPT Image 1.5 ([#6713](https://github.com/promptfoo/promptfoo/issues/6713)) ([4d96061](https://github.com/promptfoo/promptfoo/commit/4d960619ebe6d6615422506a7c2614e3deddde56))
+- **redteam:** add contexts for testing different app states ([#6716](https://github.com/promptfoo/promptfoo/issues/6716)) ([55c0e3e](https://github.com/promptfoo/promptfoo/commit/55c0e3edaa4ec4e80530ac7253be56afa1f1b594))
+- **redteam:** add tracing support to Hydra and IterativeMeta providers ([#6718](https://github.com/promptfoo/promptfoo/issues/6718)) ([54a66af](https://github.com/promptfoo/promptfoo/commit/54a66afd2f4669662e47b4bcb5d5a0ef1afd6241))
+- **site:** add proof banner linking to code scanning blog post ([#6753](https://github.com/promptfoo/promptfoo/issues/6753)) ([3b104ae](https://github.com/promptfoo/promptfoo/commit/3b104ae3bda7924c8732d8ed4a21a8c400d1449e))
+- **tracing:** add OpenTelemetry tracing integration with GenAI semantic conventions ([#6536](https://github.com/promptfoo/promptfoo/issues/6536)) ([784599f](https://github.com/promptfoo/promptfoo/commit/784599f17e52351046d8612503339103abd82c67))
+- **webui:** display evaluation duration in web UI ([#6691](https://github.com/promptfoo/promptfoo/issues/6691)) ([762c16e](https://github.com/promptfoo/promptfoo/commit/762c16e12065c403136ad3fec49b4927176b896a))
 
 ### Bug Fixes
 
-* **bedrock:** improve Knowledge Base provider backwards compatibility ([#6744](https://github.com/promptfoo/promptfoo/issues/6744)) ([7531d45](https://github.com/promptfoo/promptfoo/commit/7531d45115b008edd7ff416a19ec42f5d59814de))
-* **ci:** use valid Vitest 4 reporter in Tusk workflow ([#6766](https://github.com/promptfoo/promptfoo/issues/6766)) ([53da876](https://github.com/promptfoo/promptfoo/commit/53da876fe5a693f353d350fb3294baa42b2e0782))
-* **cli:** preserve evalId, createdAt, and author on import ([#6690](https://github.com/promptfoo/promptfoo/issues/6690)) ([f5445c1](https://github.com/promptfoo/promptfoo/commit/f5445c11d6c42ca2565a50343b1b0205dde19a88))
-* **code-scan:** add null check to fix action build ([#6750](https://github.com/promptfoo/promptfoo/issues/6750)) ([1b8a1e3](https://github.com/promptfoo/promptfoo/commit/1b8a1e3da7bb63b582ee7d7b9d276180bace6f70))
-* **code-scan:** ensure valid line numbers for github comments ([#6722](https://github.com/promptfoo/promptfoo/issues/6722)) ([40138ce](https://github.com/promptfoo/promptfoo/commit/40138cea62cd00515ea4b9c54ac93f50909a0f49))
-* **providers:** add vars support to dynamic tool loading for Anthropic and Bedrock ([#6679](https://github.com/promptfoo/promptfoo/issues/6679)) ([accbfef](https://github.com/promptfoo/promptfoo/commit/accbfef2af4bd8927b85a9df373710188f1eab52))
-* **python:** increase test timeout for worker integration tests ([#6754](https://github.com/promptfoo/promptfoo/issues/6754)) ([03f4cc9](https://github.com/promptfoo/promptfoo/commit/03f4cc95124e9ec2f50be582a0513b59470b748f))
-* **redteam:** add missing prompt variable to policy grader rubric ([#6734](https://github.com/promptfoo/promptfoo/issues/6734)) ([d47008a](https://github.com/promptfoo/promptfoo/commit/d47008adfb1cded3be5c580bf438d7d61b2488ef))
+- **bedrock:** improve Knowledge Base provider backwards compatibility ([#6744](https://github.com/promptfoo/promptfoo/issues/6744)) ([7531d45](https://github.com/promptfoo/promptfoo/commit/7531d45115b008edd7ff416a19ec42f5d59814de))
+- **ci:** use valid Vitest 4 reporter in Tusk workflow ([#6766](https://github.com/promptfoo/promptfoo/issues/6766)) ([53da876](https://github.com/promptfoo/promptfoo/commit/53da876fe5a693f353d350fb3294baa42b2e0782))
+- **cli:** preserve evalId, createdAt, and author on import ([#6690](https://github.com/promptfoo/promptfoo/issues/6690)) ([f5445c1](https://github.com/promptfoo/promptfoo/commit/f5445c11d6c42ca2565a50343b1b0205dde19a88))
+- **code-scan:** add null check to fix action build ([#6750](https://github.com/promptfoo/promptfoo/issues/6750)) ([1b8a1e3](https://github.com/promptfoo/promptfoo/commit/1b8a1e3da7bb63b582ee7d7b9d276180bace6f70))
+- **code-scan:** ensure valid line numbers for github comments ([#6722](https://github.com/promptfoo/promptfoo/issues/6722)) ([40138ce](https://github.com/promptfoo/promptfoo/commit/40138cea62cd00515ea4b9c54ac93f50909a0f49))
+- **providers:** add vars support to dynamic tool loading for Anthropic and Bedrock ([#6679](https://github.com/promptfoo/promptfoo/issues/6679)) ([accbfef](https://github.com/promptfoo/promptfoo/commit/accbfef2af4bd8927b85a9df373710188f1eab52))
+- **python:** increase test timeout for worker integration tests ([#6754](https://github.com/promptfoo/promptfoo/issues/6754)) ([03f4cc9](https://github.com/promptfoo/promptfoo/commit/03f4cc95124e9ec2f50be582a0513b59470b748f))
+- **redteam:** add missing prompt variable to policy grader rubric ([#6734](https://github.com/promptfoo/promptfoo/issues/6734)) ([d47008a](https://github.com/promptfoo/promptfoo/commit/d47008adfb1cded3be5c580bf438d7d61b2488ef))
 
 ## [0.120.5](https://github.com/promptfoo/promptfoo/compare/0.120.4...0.120.5) (2025-12-16)
 
