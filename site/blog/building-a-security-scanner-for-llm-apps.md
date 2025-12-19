@@ -2,6 +2,7 @@
 title: 'Building a Security Scanner for LLM Apps'
 description: 'We built a GitHub Action that scans pull requests for LLM-specific vulnerabilities. Learn why traditional security tools miss these issues and how we trace data flows to find prompt injection risks.'
 image: /img/blog/building-a-security-scanner-for-llm-apps/call-graph-io-flows.png
+featured: true
 keywords:
   [
     LLM security,
@@ -16,7 +17,7 @@ keywords:
   ]
 date: 2025-12-16
 authors: [dane]
-tags: [company-update, code-scanning, ai-security, llm-security, prompt-injection]
+tags: [company-update, code-scanning, ai-security, prompt-injection]
 ---
 
 import styles from './building-a-security-scanner/styles/styles.module.css';
