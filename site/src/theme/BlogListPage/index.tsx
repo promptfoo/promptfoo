@@ -10,8 +10,8 @@ import BlogListPaginator from '@theme/BlogListPaginator';
 import SearchMetadata from '@theme/SearchMetadata';
 import clsx from 'clsx';
 import styles from './styles.module.css';
-import type { Props } from '@theme/BlogListPage';
 import type { PropBlogPostContent } from '@docusaurus/plugin-content-blog';
+import type { Props } from '@theme/BlogListPage';
 
 // Format tag label: "red-teaming" → "Red Teaming", "ai-security" → "AI Security"
 function formatTagLabel(label: string): string {
@@ -55,7 +55,7 @@ function BlogListPageContent(props: Props): React.ReactElement {
       return [];
     }
     return items
-      .filter((item) => item.content.frontMatter.featured === true)
+      .filter((item) => (item.content.frontMatter as { featured?: boolean }).featured === true)
       .map((item) => item.content);
   }, [items, isFirstPage]);
 
@@ -64,7 +64,9 @@ function BlogListPageContent(props: Props): React.ReactElement {
     if (!isFirstPage) {
       return items;
     }
-    return items.filter((item) => item.content.frontMatter.featured !== true);
+    return items.filter(
+      (item) => (item.content.frontMatter as { featured?: boolean }).featured !== true,
+    );
   }, [items, isFirstPage]);
 
   // Dynamic title based on page (use • to match BlogPostGrid parsing)

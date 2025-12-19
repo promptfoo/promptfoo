@@ -1,7 +1,8 @@
 import React from 'react';
+
 import Link from '@docusaurus/Link';
-import type { Props } from '@theme/BlogListPaginator';
 import styles from './styles.module.css';
+import type { Props } from '@theme/BlogListPaginator';
 
 export default function BlogListPaginator(props: Props): React.ReactElement {
   const { metadata } = props;
