@@ -32,6 +32,17 @@ inputs:
     description: 'GitHub token for authentication (default: github.token)'
     required: false
     default: ${{ github.token }}
+  output-file:
+    description: 'Path to save scan results as JSON (for workflow_run comment posting)'
+    required: false
+
+outputs:
+  results-file:
+    description: 'Path to the scan results JSON file (when output-file is used)'
+  has-findings:
+    description: 'Whether findings were detected (true/false)'
+  findings-count:
+    description: 'Number of findings detected'
 
 runs:
   using: 'node20'

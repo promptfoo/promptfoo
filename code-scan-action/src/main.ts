@@ -28,6 +28,7 @@ async function run(): Promise<void> {
     const guidanceText = core.getInput('guidance');
     const guidanceFile = core.getInput('guidance-file');
     const githubToken = core.getInput('github-token', { required: true });
+    const outputFile = core.getInput('output-file');
 
     // Validate guidance inputs are mutually exclusive
     if (guidanceText && guidanceFile) {
@@ -203,6 +204,43 @@ async function run(): Promise<void> {
 
     const { comments, commentsPosted, review } = scanResponse;
     core.info(`📊 Found ${comments.length} comments${review ? ' and review summary' : ''}`);
+
+    // Set outputs for downstream workflows
+    core.setOutput('has-findings', comments.length > 0 ? 'true' : 'false');
+    core.setOutput('findings-count', comments.length.toString());
+
+    // If output-file is specified, save results for workflow_run comment posting
+    if (outputFile) {
+      const outputData = {
+        scanResponse,
+        prContext: {
+          owner: context.owner,
+          repo: context.repo,
+          number: context.number,
+          sha: context.sha,
+        },
+        minimumSeverity,
+        timestamp: new Date().toISOString(),
+      };
+
+      fs.writeFileSync(outputFile, JSON.stringify(outputData, null, 2));
+      core.setOutput('results-file', outputFile);
+      core.info(`📁 Scan results saved to ${outputFile}`);
+
+      if (comments.length > 0) {
+        core.info('💡 Results saved for workflow_run comment posting');
+        core.info('   Use the promptfoo-code-scan-comment workflow to post comments');
+      } else {
+        core.info('✨ No vulnerabilities found!');
+      }
+
+      // Cleanup temp config if we generated one
+      if (!configPath && finalConfigPath) {
+        fs.unlinkSync(finalConfigPath);
+      }
+
+      return; // Skip direct comment posting when output-file is used
+    }
 
     // If server didn't post comments, post them as fallback
     if ((comments.length > 0 || review) && commentsPosted === false) {

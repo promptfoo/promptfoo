@@ -9,7 +9,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: write
+      # Note: pull-requests write is not available for fork PRs
+      # Comments are posted via the workflow_run workflow instead
       id-token: write
 
     steps:
@@ -19,6 +20,17 @@ jobs:
           fetch-depth: 0
 
       - name: Run Promptfoo Code Scan
+        id: scan
         uses: promptfoo/code-scan-action@v0
         with:
           min-severity: medium
+          output-file: scan-results.json
+
+      - name: Upload scan results
+        # Upload if file exists (scan may fail before creating output)
+        if: always() && hashFiles('scan-results.json') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: code-scan-results
+          path: scan-results.json
+          retention-days: 1
