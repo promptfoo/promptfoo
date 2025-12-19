@@ -9,32 +9,32 @@ interface BlogPostCardProps {
 
 export default function BlogPostCard({ post }: BlogPostCardProps): React.ReactElement {
   const { metadata } = post;
-  const { title, date, permalink, tags, description } = metadata;
-  const author = metadata.authors[0];
+  const { title, date, permalink, tags } = metadata;
 
-  // Format date with UTC timezone to avoid timezone conversion issues
-  const formattedDate = new Date(date).toLocaleDateString(undefined, {
+  // Format date as "Dec 12, 2025" style
+  const formattedDate = new Date(date).toLocaleDateString('en-US', {
     timeZone: 'UTC',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
   });
+
+  // Get the first tag if available
+  const primaryTag = tags && tags.length > 0 ? tags[0] : null;
 
   return (
     <Link to={permalink} className={styles.blogPostCard}>
       {metadata.frontMatter.image && (
         <div className={styles.blogPostImage}>
-          <img src={metadata.frontMatter.image} alt={title} />
+          <img src={metadata.frontMatter.image} alt={title} loading="lazy" />
         </div>
       )}
       <div className={styles.blogPostContent}>
-        {/*tags && tags.length > 0 && <div className={styles.tag}>{tags[0].label}</div>*/}
+        {primaryTag && <span className={styles.tag}>{primaryTag.label}</span>}
         <h3 className={styles.title}>{title}</h3>
         <div className={styles.blogPostMeta}>
-          {author && (
-            <span className={styles.author}>
-              {author.name} · {formattedDate}
-            </span>
-          )}
+          <span className={styles.date}>{formattedDate}</span>
         </div>
-        {description && <p className={styles.preview}>{description.split('. ')[0]}.</p>}
       </div>
     </Link>
   );

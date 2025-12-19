@@ -1,65 +1,103 @@
+.featuredPostLink {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+  height: 100%;
+}
+
+.featuredPostLink:hover {
+  color: inherit;
+  text-decoration: none;
+}
+
 .featuredPost {
   display: flex;
+  flex-direction: column;
   background-color: var(--ifm-card-background-color);
   border-radius: 12px;
   overflow: hidden;
-  margin-bottom: 3rem;
-  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
   transition:
-    box-shadow 0.3s ease,
-    transform 0.3s ease;
+    box-shadow 0.2s ease,
+    transform 0.2s ease;
   position: relative;
+  height: 100%;
+  border: 1px solid var(--ifm-color-emphasis-200);
 }
 
 .featuredPost:hover {
-  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.12);
   transform: translateY(-4px);
 }
 
 .featuredBadge {
   position: absolute;
-  top: 0;
-  right: 20px;
+  top: 12px;
+  left: 12px;
   background-color: var(--ifm-color-primary);
   color: white;
-  padding: 8px 16px;
-  border-radius: 0 0 8px 8px;
-  font-weight: bold;
-  font-size: 0.8rem;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 0.7rem;
   text-transform: uppercase;
-  letter-spacing: 1px;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  letter-spacing: 0.5px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
   z-index: 2;
 }
 
+.featuredPostImage {
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  background-color: var(--ifm-color-emphasis-100);
+}
+
+.featuredPostImage img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.3s ease;
+}
+
+.featuredPost:hover .featuredPostImage img {
+  transform: scale(1.03);
+}
+
 .featuredPostContent {
-  flex: 1;
-  padding: 2.5rem;
+  padding: 1.5rem;
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
 }
 
 .featuredPostHeader {
-  margin-bottom: 1.5rem;
+  margin-bottom: 0.75rem;
 }
 
 .tag {
   display: inline-block;
-  background-color: var(--ifm-color-primary);
-  color: var(--ifm-color-white);
-  padding: 0.35rem 0.75rem;
-  border-radius: 20px;
-  font-size: 0.9rem;
-  font-weight: bold;
-  margin-bottom: 1rem;
+  background-color: var(--ifm-color-primary-lightest);
+  color: var(--ifm-color-primary-dark);
+  padding: 0.25rem 0.625rem;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  margin-bottom: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 
 .title {
-  font-size: 2.5rem;
-  font-weight: 500;
+  font-size: 1.35rem;
+  font-weight: 600;
   margin: 0;
   color: var(--ifm-heading-color);
-  line-height: 1.2;
+  line-height: 1.35;
+  transition: color 0.2s ease;
+}
+
+.featuredPost:hover .title {
+  color: var(--ifm-color-primary);
 }
 
 .title a {
@@ -68,90 +106,24 @@
 }
 
 .featuredPostMeta {
-  font-size: 1rem;
+  font-size: 0.85rem;
   color: var(--ifm-color-secondary-darkest);
-  margin-top: 1rem;
+  margin-top: auto;
+  padding-top: 1rem;
 }
 
 .author {
-  margin-right: 1rem;
-  font-weight: bold;
-}
-
-.featuredPostImage {
-  flex: 1;
-  max-width: 50%;
-}
-
-.featuredPostImage img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  transition: transform 0.5s ease;
-}
-
-.featuredPost:hover .featuredPostImage img {
-  transform: scale(1.05);
+  font-weight: 500;
 }
 
 .preview {
-  font-size: 1.1rem;
+  font-size: 0.95rem;
   color: var(--ifm-color-secondary-darkest);
-  margin-top: 1.5rem;
-  line-height: 1.6;
+  margin-top: 0.75rem;
+  line-height: 1.5;
   overflow: hidden;
   text-overflow: ellipsis;
   display: -webkit-box;
-  -webkit-line-clamp: 3;
+  -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
-}
-
-.featuredPostLink {
-  display: block;
-  text-decoration: none;
-  color: inherit;
-}
-
-.featuredPostLink:hover {
-  color: inherit;
-  text-decoration: none;
-}
-
-/* Responsive styles */
-@media (max-width: 996px) {
-  .title {
-    font-size: 2rem;
-  }
-
-  .featuredPostContent {
-    padding: 2rem;
-  }
-
-  .preview {
-    font-size: 1rem;
-  }
-}
-
-@media (max-width: 768px) {
-  .featuredPost {
-    flex-direction: column;
-  }
-
-  .featuredPostImage {
-    max-width: 100%;
-    height: 300px;
-    order: -1;
-  }
-
-  .featuredPostContent {
-    padding: 1.5rem;
-  }
-
-  .title {
-    font-size: 1.75rem;
-  }
-
-  .preview {
-    -webkit-line-clamp: 2;
-  }
 }

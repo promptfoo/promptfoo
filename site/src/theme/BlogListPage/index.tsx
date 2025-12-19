@@ -2,7 +2,6 @@ import React from 'react';
 import { PageMetadata, HtmlClassNameProvider, ThemeClassNames } from '@docusaurus/theme-common';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import BlogPostGrid from '@site/src/components/Blog/BlogPostGrid';
-import FeaturedBlogPost from '@site/src/components/Blog/FeaturedBlogPost';
 import BlogLayout from '@theme/BlogLayout';
 import type { Props } from '@theme/BlogListPage';
 import BlogListPageStructuredData from '@theme/BlogListPage/StructuredData';
@@ -29,39 +28,91 @@ function BlogListPageMetadata(props: Props): React.ReactElement {
   );
 }
 
+// Curated featured posts data (edit these to change featured posts)
+const FEATURED_POSTS = [
+  {
+    slug: 'building-a-security-scanner-for-llm-apps',
+    title: 'Building a Security Scanner for LLM Apps',
+    description:
+      'We built a GitHub Action that scans pull requests for LLM-specific vulnerabilities. Learn why traditional security tools miss these issues and how we trace data flows to find prompt injection risks.',
+    image: '/img/blog/building-a-security-scanner-for-llm-apps/call-graph-io-flows.png',
+    permalink: '/blog/building-a-security-scanner-for-llm-apps/',
+    date: '2025-12-16',
+    author: 'Dane Schneider',
+    tag: 'code-scanning',
+  },
+  {
+    slug: 'asr-not-portable-metric',
+    title: "Why Attack Success Rate (ASR) Isn't Comparable Across Jailbreak Papers",
+    description:
+      "Attack Success Rate (ASR) is the most commonly reported metric for LLM red teaming, but it changes with attempt budget, prompt sets, and judge choice.",
+    image: '/img/blog/asr-not-portable-metric/asr-header.jpg',
+    permalink: '/blog/asr-not-portable-metric/',
+    date: '2025-12-12',
+    author: 'Michael D\'Angelo',
+    tag: 'research-analysis',
+  },
+];
+
 function BlogListPageContent(props: Props): React.ReactElement {
   const { metadata, items, sidebar } = props;
 
-  // Determine appropriate title based on pagination
-  const isFirstPage = metadata.page === 1;
-  const gridTitle = isFirstPage ? 'Latest Posts' : `Archive • Page ${metadata.page}`;
-
-  // Handle posts differently based on page
-  let featuredPost = null;
-
-  // Determine which posts to display in the grid
+  // Filter out featured posts from the grid on all pages
   const displayPosts = React.useMemo(() => {
-    if (isFirstPage && items.length > 0) {
-      // For the grid, take all remaining posts after the featured one
-      return items.slice(1);
-    }
-    // For other pages, or if no items, just use all items
-    return items;
-  }, [isFirstPage, items]);
-
-  // Set featured post if on first page
-  if (isFirstPage && items.length > 0) {
-    featuredPost = items[0];
-  }
+    return items.filter(
+      (item) => !FEATURED_POSTS.some((fp) => item.content.metadata.permalink.includes(fp.slug))
+    );
+  }, [items]);
 
   return (
     <BlogLayout sidebar={sidebar}>
       <div className={styles.blogListPage}>
-        {featuredPost && <FeaturedBlogPost post={featuredPost.content} />}
-        <BlogPostGrid posts={displayPosts.map((item) => item.content)} title={gridTitle} />
+        <div className={styles.featuredSection}>
+          {FEATURED_POSTS.map((post, idx) => (
+            <FeaturedBlogPostStatic key={idx} post={post} />
+          ))}
+        </div>
+        <BlogPostGrid posts={displayPosts.map((item) => item.content)} title="Latest Posts" />
       </div>
       <BlogListPaginator metadata={metadata} />
     </BlogLayout>
+  );
+}
+
+// Static featured post component for curated posts
+function FeaturedBlogPostStatic({
+  post,
+}: {
+  post: (typeof FEATURED_POSTS)[0];
+}): React.ReactElement {
+  const formattedDate = new Date(post.date).toLocaleDateString('en-US', {
+    timeZone: 'UTC',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+
+  return (
+    <a href={post.permalink} className={styles.featuredPostLink}>
+      <div className={styles.featuredPost}>
+        <div className={styles.featuredBadge}>Featured</div>
+        <div className={styles.featuredPostImage}>
+          <img src={post.image} alt={post.title} loading="lazy" />
+        </div>
+        <div className={styles.featuredPostContent}>
+          <div className={styles.featuredPostHeader}>
+            <span className={styles.tag}>{post.tag}</span>
+            <h2 className={styles.featuredTitle}>{post.title}</h2>
+          </div>
+          <p className={styles.preview}>{post.description}</p>
+          <div className={styles.featuredPostMeta}>
+            <span className={styles.author}>
+              {post.author} · {formattedDate}
+            </span>
+          </div>
+        </div>
+      </div>
+    </a>
   );
 }
 
