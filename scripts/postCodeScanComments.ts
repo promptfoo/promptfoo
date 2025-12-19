@@ -54,11 +54,11 @@ function sanitizeContent(content: string): string {
     return '';
   }
 
-  // Remove javascript: URLs which could be used for XSS
-  let sanitized = content.replace(/javascript:/gi, 'javascript-blocked:');
-
-  // Remove data: URLs except for safe image formats
-  sanitized = sanitized.replace(/data:(?!image\/(png|jpeg|gif|webp))/gi, 'data-blocked:');
+  // Remove dangerous URL schemes that could be used for XSS or code execution
+  // Handles: javascript:, vbscript:, and data: (except safe image formats)
+  let sanitized = content.replace(/javascript:/gi, 'blocked:');
+  sanitized = sanitized.replace(/vbscript:/gi, 'blocked:');
+  sanitized = sanitized.replace(/data:(?!image\/(png|jpeg|gif|webp|svg\+xml))/gi, 'blocked:');
 
   // Limit content length to prevent abuse
   const maxLength = 10000;
