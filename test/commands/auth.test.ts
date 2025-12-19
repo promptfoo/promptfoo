@@ -1,14 +1,17 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import select from '@inquirer/select';
 import { Command } from 'commander';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { authCommand } from '../../src/commands/auth';
 import { isNonInteractive } from '../../src/envars';
 import { getUserEmail, setUserEmail } from '../../src/globalConfig/accounts';
 import { cloudConfig } from '../../src/globalConfig/cloud';
 import logger from '../../src/logger';
-import { getDefaultTeam } from '../../src/util/cloud';
+import { getDefaultTeam, getUserTeams, resolveTeamFromIdentifier } from '../../src/util/cloud';
 import { fetchWithProxy } from '../../src/util/fetch/index';
 import { openAuthBrowser } from '../../src/util/server';
 import { createMockResponse, stripAnsi } from '../util/utils';
+
+vi.mock('@inquirer/select');
 
 const mockCloudUser = {
   id: '1',
@@ -221,6 +224,176 @@ describe('auth command', () => {
 
       // Reset exitCode
       process.exitCode = 0;
+    });
+
+    it('should use --team flag to set specific team', async () => {
+      const mockTeams = [
+        {
+          id: 'team-1',
+          name: 'Default',
+          slug: 'default',
+          organizationId: '1',
+          createdAt: '2024-01-01',
+          updatedAt: '2024-01-01',
+        },
+        {
+          id: 'team-2',
+          name: 'Security Team',
+          slug: 'security',
+          organizationId: '1',
+          createdAt: '2024-01-01',
+          updatedAt: '2024-01-01',
+        },
+      ];
+
+      vi.mocked(getUserTeams).mockResolvedValue(mockTeams);
+      vi.mocked(resolveTeamFromIdentifier).mockResolvedValue({
+        ...mockTeams[1],
+        createdAt: '2024-01-01',
+      });
+
+      const loginCmd = program.commands
+        .find((cmd) => cmd.name() === 'auth')
+        ?.commands.find((cmd) => cmd.name() === 'login');
+      await loginCmd?.parseAsync(['node', 'test', '--api-key', 'test-key', '--team', 'security']);
+
+      expect(resolveTeamFromIdentifier).toHaveBeenCalledWith('security');
+      expect(cloudConfig.setCurrentTeamId).toHaveBeenCalledWith('team-2', '1');
+      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Security Team'));
+    });
+
+    it('should auto-select single team without prompting', async () => {
+      const mockTeams = [
+        {
+          id: 'team-1',
+          name: 'Only Team',
+          slug: 'only',
+          organizationId: '1',
+          createdAt: '2024-01-01',
+          updatedAt: '2024-01-01',
+        },
+      ];
+
+      vi.mocked(getUserTeams).mockResolvedValue(mockTeams);
+
+      const loginCmd = program.commands
+        .find((cmd) => cmd.name() === 'auth')
+        ?.commands.find((cmd) => cmd.name() === 'login');
+      await loginCmd?.parseAsync(['node', 'test', '--api-key', 'test-key']);
+
+      expect(select).not.toHaveBeenCalled();
+      expect(cloudConfig.setCurrentTeamId).toHaveBeenCalledWith('team-1', '1');
+      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Only Team'));
+    });
+
+    it('should prompt for team selection when multiple teams exist in interactive mode', async () => {
+      const mockTeams = [
+        {
+          id: 'team-1',
+          name: 'Default',
+          slug: 'default',
+          organizationId: '1',
+          createdAt: '2024-01-01',
+          updatedAt: '2024-01-01',
+        },
+        {
+          id: 'team-2',
+          name: 'Security Team',
+          slug: 'security',
+          organizationId: '1',
+          createdAt: '2024-01-01',
+          updatedAt: '2024-01-01',
+        },
+      ];
+
+      vi.mocked(getUserTeams).mockResolvedValue(mockTeams);
+      vi.mocked(isNonInteractive).mockReturnValue(false);
+      vi.mocked(select).mockResolvedValue('team-2');
+
+      const loginCmd = program.commands
+        .find((cmd) => cmd.name() === 'auth')
+        ?.commands.find((cmd) => cmd.name() === 'login');
+      await loginCmd?.parseAsync(['node', 'test', '--api-key', 'test-key']);
+
+      expect(select).toHaveBeenCalledWith({
+        message: 'Select a team to use:',
+        choices: expect.arrayContaining([
+          expect.objectContaining({ name: 'Default', value: 'team-1' }),
+          expect.objectContaining({ name: 'Security Team', value: 'team-2' }),
+        ]),
+      });
+      expect(cloudConfig.setCurrentTeamId).toHaveBeenCalledWith('team-2', '1');
+    });
+
+    it('should use default team with warning in non-interactive mode when multiple teams exist', async () => {
+      const mockTeams = [
+        {
+          id: 'team-1',
+          name: 'Default',
+          slug: 'default',
+          organizationId: '1',
+          createdAt: '2024-01-01',
+          updatedAt: '2024-01-01',
+        },
+        {
+          id: 'team-2',
+          name: 'Security Team',
+          slug: 'security',
+          organizationId: '1',
+          createdAt: '2024-01-01',
+          updatedAt: '2024-01-01',
+        },
+      ];
+
+      vi.mocked(getUserTeams).mockResolvedValue(mockTeams);
+      vi.mocked(isNonInteractive).mockReturnValue(true);
+      vi.mocked(getDefaultTeam).mockResolvedValue({ ...mockTeams[0], createdAt: '2024-01-01' });
+
+      const loginCmd = program.commands
+        .find((cmd) => cmd.name() === 'auth')
+        ?.commands.find((cmd) => cmd.name() === 'login');
+      await loginCmd?.parseAsync(['node', 'test', '--api-key', 'test-key']);
+
+      expect(select).not.toHaveBeenCalled();
+      expect(cloudConfig.setCurrentTeamId).toHaveBeenCalledWith('team-1', '1');
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining('You have access to 2 teams'),
+      );
+      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('--team flag'));
+    });
+
+    it('should fall back to default team when user cancels interactive selection', async () => {
+      const mockTeams = [
+        {
+          id: 'team-1',
+          name: 'Default',
+          slug: 'default',
+          organizationId: '1',
+          createdAt: '2024-01-01',
+          updatedAt: '2024-01-01',
+        },
+        {
+          id: 'team-2',
+          name: 'Security Team',
+          slug: 'security',
+          organizationId: '1',
+          createdAt: '2024-01-01',
+          updatedAt: '2024-01-01',
+        },
+      ];
+
+      vi.mocked(getUserTeams).mockResolvedValue(mockTeams);
+      vi.mocked(isNonInteractive).mockReturnValue(false);
+      vi.mocked(select).mockRejectedValue(new Error('User cancelled'));
+      vi.mocked(getDefaultTeam).mockResolvedValue({ ...mockTeams[0], createdAt: '2024-01-01' });
+
+      const loginCmd = program.commands
+        .find((cmd) => cmd.name() === 'auth')
+        ?.commands.find((cmd) => cmd.name() === 'login');
+      await loginCmd?.parseAsync(['node', 'test', '--api-key', 'test-key']);
+
+      expect(cloudConfig.setCurrentTeamId).toHaveBeenCalledWith('team-1', '1');
+      expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('(default)'));
     });
   });
 

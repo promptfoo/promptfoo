@@ -1,9 +1,8 @@
 import { render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { describe, it, expect } from 'vitest';
-import type { StandaloneEval } from '@promptfoo/util/database';
-
+import { describe, expect, it } from 'vitest';
 import History from './History';
+import type { StandaloneEval } from '@promptfoo/util/database';
 
 const mockData: StandaloneEval[] = [
   {

@@ -1,25 +1,22 @@
-import { randomUUID } from 'crypto';
-
 import { and, eq, gte, inArray, lt } from 'drizzle-orm';
 import { getDb } from '../database/index';
 import { evalResultsTable } from '../database/tables';
 import { getEnvBool } from '../envars';
 import { hashPrompt } from '../prompts/utils';
-import { type EvaluateResult } from '../types/index';
-import { isApiProvider, isProviderOptions } from '../types/providers';
-import { safeJsonStringify } from '../util/json';
-import { getCurrentTimestamp } from '../util/time';
-
 import {
-  isResultFailureReason,
-  ResultFailureReason,
   type ApiProvider,
   type AtomicTestCase,
+  type EvaluateResult,
   type GradingResult,
+  isResultFailureReason,
   type Prompt,
   type ProviderOptions,
   type ProviderResponse,
+  ResultFailureReason,
 } from '../types/index';
+import { isApiProvider, isProviderOptions } from '../types/providers';
+import { safeJsonStringify } from '../util/json';
+import { getCurrentTimestamp } from '../util/time';
 
 // Removes circular references from the provider object and ensures consistent format
 export function sanitizeProvider(
@@ -81,7 +78,7 @@ export default class EvalResult {
     } = result;
 
     const args = {
-      id: randomUUID(),
+      id: crypto.randomUUID(),
       evalId,
       testCase: {
         ...testCase,
@@ -121,7 +118,7 @@ export default class EvalResult {
       for (const result of results) {
         const dbResult = db
           .insert(evalResultsTable)
-          .values({ ...result, evalId, id: randomUUID() })
+          .values({ ...result, evalId, id: crypto.randomUUID() })
           .returning()
           .get();
         returnResults.push(new EvalResult({ ...dbResult, persisted: true }));

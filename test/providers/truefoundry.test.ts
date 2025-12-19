@@ -1,10 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
 import { clearCache } from '../../src/cache';
 import {
+  createTrueFoundryProvider,
   TrueFoundryEmbeddingProvider,
   TrueFoundryProvider,
-  createTrueFoundryProvider,
 } from '../../src/providers/truefoundry';
 import * as fetchModule from '../../src/util/fetch/index';
 

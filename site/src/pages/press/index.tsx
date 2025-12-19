@@ -12,15 +12,15 @@ import Layout from '@theme/Layout';
 import LogoPanda from '../../../static/img/logo-panda.svg';
 import { SITE_CONSTANTS } from '../../constants';
 import {
+  type Article,
   COMPANY_INFO,
   DEEPSEEK_COVERAGE,
   EDUCATIONAL_RESOURCES,
+  type EducationalResource,
   FEATURED_PODCASTS,
   FOUNDERS,
-  TECHNICAL_CONTENT,
-  type Article,
-  type EducationalResource,
   type Podcast,
+  TECHNICAL_CONTENT,
   type TechnicalContent,
 } from './_data';
 import styles from './styles.module.css';

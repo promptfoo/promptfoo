@@ -1,8 +1,10 @@
 import React from 'react';
+
 import Link from '@docusaurus/Link';
-import type { Event } from '../../data/events';
 import { formatEventDate, formatEventLocation } from '../../data/events';
 import styles from './EventCard.module.css';
+
+import type { Event } from '../../data/events';
 
 interface EventCardProps {
   event: Event;

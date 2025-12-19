@@ -1,7 +1,8 @@
 import Stack from '@mui/material/Stack';
-import type { Config } from '../types';
 import EstimatedDurationDisplay from './EstimatedDurationDisplay';
 import EstimatedProbesDisplay from './EstimatedProbesDisplay';
+
+import type { Config } from '../types';
 
 interface EstimationsDisplayProps {
   config: Config;

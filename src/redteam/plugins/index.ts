@@ -4,6 +4,7 @@ import { getEnvBool } from '../../envars';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
+import { checkRemoteHealth } from '../../util/apiHealth';
 import invariant from '../../util/invariant';
 import {
   BIAS_PLUGINS,
@@ -14,9 +15,9 @@ import {
 } from '../constants';
 import {
   getRemoteGenerationUrl,
+  getRemoteHealthUrl,
   neverGenerateRemote,
   shouldGenerateRemote,
-  getRemoteHealthUrl,
 } from '../remoteGeneration';
 import { getShortPluginId } from '../util';
 import { AegisPlugin } from './aegis';
@@ -55,8 +56,6 @@ import { XSTestPlugin } from './xstest';
 
 import type { ApiProvider, PluginActionParams, PluginConfig, TestCase } from '../../types/index';
 import type { HarmPlugin } from '../constants';
-
-import { checkRemoteHealth } from '../../util/apiHealth';
 
 export interface PluginFactory {
   key: string;

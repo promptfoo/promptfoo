@@ -1,7 +1,7 @@
 import React from 'react';
 
-import { useStore } from '@app/stores/evalConfig';
 import { useToast } from '@app/hooks/useToast';
+import { useStore } from '@app/stores/evalConfig';
 import Copy from '@mui/icons-material/ContentCopy';
 import Delete from '@mui/icons-material/Delete';
 import Edit from '@mui/icons-material/Edit';

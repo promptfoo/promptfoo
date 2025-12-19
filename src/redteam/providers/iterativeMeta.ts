@@ -1,5 +1,3 @@
-import { v4 as uuidv4 } from 'uuid';
-
 import { getEnvInt } from '../../envars';
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
@@ -9,18 +7,6 @@ import {
   fetchTraceContext,
   type TraceContextData,
 } from '../../tracing/traceContext';
-import type {
-  ApiProvider,
-  AtomicTestCase,
-  CallApiContextParams,
-  CallApiOptionsParams,
-  GradingResult,
-  GuardrailResponse,
-  NunjucksFilterMap,
-  Prompt,
-  RedteamFileConfig,
-  TokenUsage,
-} from '../../types/index';
 import invariant from '../../util/invariant';
 import { sleep } from '../../util/time';
 import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
@@ -40,6 +26,19 @@ import {
 } from './shared';
 import { formatTraceForMetadata, formatTraceSummary } from './traceFormatting';
 import { resolveTracingOptions } from './tracingOptions';
+
+import type {
+  ApiProvider,
+  AtomicTestCase,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  GradingResult,
+  GuardrailResponse,
+  NunjucksFilterMap,
+  Prompt,
+  RedteamFileConfig,
+  TokenUsage,
+} from '../../types/index';
 
 // Meta-agent based iterative testing - cloud handles memory and strategic decisions
 
@@ -123,7 +122,7 @@ export async function runMetaAgentRedteam({
   const additionalRubric = getIterativeMetaGoalRubric(goal);
 
   // Generate unique test run ID
-  const testRunId = `${context?.evaluationId || 'local'}-tc${context?.testCaseId || uuidv4().slice(0, 8)}`;
+  const testRunId = `${context?.evaluationId || 'local'}-tc${context?.testCaseId || crypto.randomUUID().slice(0, 8)}`;
 
   // Resolve tracing options
   const tracingOptions = resolveTracingOptions({

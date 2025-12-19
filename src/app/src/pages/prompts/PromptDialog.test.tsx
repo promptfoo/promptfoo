@@ -1,9 +1,9 @@
-import { act, render, screen, fireEvent } from '@testing-library/react';
+import { createTheme, ThemeProvider } from '@mui/material/styles';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { afterEach, beforeEach, describe, it, expect, vi } from 'vitest';
-import type { ServerPromptWithMetadata } from '@promptfoo/types';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import PromptDialog from './PromptDialog';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
+import type { ServerPromptWithMetadata } from '@promptfoo/types';
 
 const mockSelectedPrompt: ServerPromptWithMetadata = {
   id: 'prompt:1a2b3c4d5e6f',

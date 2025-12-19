@@ -1,11 +1,10 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-
-import StrategyStats from './StrategyStats';
-import type { EvaluateResult, GradingResult } from '@promptfoo/types';
-import { displayNameOverrides } from '@promptfoo/redteam/constants';
-import type { RedteamPluginObject, PolicyObject } from '@promptfoo/redteam/types';
 import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
+import { displayNameOverrides } from '@promptfoo/redteam/constants';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import StrategyStats from './StrategyStats';
+import type { PolicyObject, RedteamPluginObject } from '@promptfoo/redteam/types';
+import type { EvaluateResult, GradingResult } from '@promptfoo/types';
 
 vi.mock('@mui/material/styles', async () => {
   const actual = await vi.importActual('@mui/material/styles');

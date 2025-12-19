@@ -14,24 +14,9 @@
  * @module RedteamIterative
  */
 import dedent from 'dedent';
-import type { Environment } from 'nunjucks';
-import { v4 as uuidv4 } from 'uuid';
-
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
-import type {
-  ApiProvider,
-  AtomicTestCase,
-  CallApiContextParams,
-  CallApiOptionsParams,
-  GradingResult,
-  GuardrailResponse,
-  NunjucksFilterMap,
-  Prompt,
-  ProviderResponse,
-  TokenUsage,
-} from '../../types/index';
 import invariant from '../../util/invariant';
 import { extractFirstJsonObject } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
@@ -46,7 +31,6 @@ import {
   type TransformResult,
 } from '../shared/runtimeTransform';
 import { Strategies } from '../strategies';
-import type { BaseRedteamMetadata } from '../types';
 import { getSessionId } from '../util';
 import {
   ATTACKER_SYSTEM_PROMPT,
@@ -60,6 +44,21 @@ import {
   redteamProviderManager,
   type TargetResponse,
 } from './shared';
+import type { Environment } from 'nunjucks';
+
+import type {
+  ApiProvider,
+  AtomicTestCase,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  GradingResult,
+  GuardrailResponse,
+  NunjucksFilterMap,
+  Prompt,
+  ProviderResponse,
+  TokenUsage,
+} from '../../types/index';
+import type { BaseRedteamMetadata } from '../types';
 
 // Based on: https://arxiv.org/abs/2312.02119
 
@@ -364,7 +363,7 @@ export function createTreeNode(
   id?: string,
 ): TreeNode {
   return {
-    id: id || uuidv4(),
+    id: id || crypto.randomUUID(),
     prompt,
     score,
     children: [],
@@ -622,7 +621,7 @@ async function runRedteamConversation({
           treeOutputs.push({
             depth,
             graderPassed: undefined,
-            id: uuidv4(),
+            id: crypto.randomUUID(),
             improvement,
             output: typeof targetResponse.output === 'string' ? targetResponse.output : '',
             outputAudio:
@@ -731,7 +730,7 @@ async function runRedteamConversation({
           treeOutputs.push({
             depth,
             graderPassed,
-            id: uuidv4(),
+            id: crypto.randomUUID(),
             output: targetResponse.output,
             outputAudio:
               targetResponse.audio?.data && targetResponse.audio?.format
@@ -769,7 +768,7 @@ async function runRedteamConversation({
           );
           stoppingReason = 'NO_IMPROVEMENT';
           treeOutputs.push({
-            id: uuidv4(),
+            id: crypto.randomUUID(),
             prompt: targetPrompt,
             promptAudio: lastTransformResult?.audio,
             promptImage: lastTransformResult?.image,
@@ -810,7 +809,7 @@ async function runRedteamConversation({
           treeOutputs.push({
             depth,
             graderPassed,
-            id: uuidv4(),
+            id: crypto.randomUUID(),
             output: bestResponse,
             outputAudio:
               targetResponse.audio?.data && targetResponse.audio?.format
@@ -856,7 +855,7 @@ async function runRedteamConversation({
         treeOutputs.push({
           depth,
           graderPassed,
-          id: uuidv4(),
+          id: crypto.randomUUID(),
           improvement,
           output: targetResponse.output,
           outputAudio:
@@ -909,7 +908,7 @@ async function runRedteamConversation({
 
   stoppingReason = 'MAX_DEPTH';
   treeOutputs.push({
-    id: uuidv4(),
+    id: crypto.randomUUID(),
     prompt: finalTargetPrompt,
     // Note: promptAudio/promptImage not included here as this is a summary node after tree exploration
     output: bestResponse,

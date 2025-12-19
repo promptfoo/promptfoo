@@ -1,5 +1,12 @@
 import React, { useMemo, useState } from 'react';
 
+import { BaseNumberInput } from '@app/components/form/input/BaseNumberInput';
+import { useApiHealth } from '@app/hooks/useApiHealth';
+import ChatMessages, {
+  type LoadedMessage,
+  type LoadingMessage,
+  type Message,
+} from '@app/pages/eval/components/ChatMessages';
 import MagicWandIcon from '@mui/icons-material/AutoFixHigh';
 import Alert from '@mui/material/Alert';
 import Autocomplete from '@mui/material/Autocomplete';
@@ -10,12 +17,12 @@ import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
+import Divider from '@mui/material/Divider';
 import IconButton from '@mui/material/IconButton';
 import Link from '@mui/material/Link';
+import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
-import Divider from '@mui/material/Divider';
-import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import {
   categoryAliases,
@@ -24,21 +31,15 @@ import {
   type Plugin,
   type Strategy,
 } from '@promptfoo/redteam/constants';
-import { BaseNumberInput } from '@app/components/form/input/BaseNumberInput';
 import {
   getPluginDocumentationUrl,
   hasSpecificPluginDocumentation,
 } from './pluginDocumentationMap';
-import { useApiHealth } from '@app/hooks/useApiHealth';
-import ChatMessages, {
-  type LoadedMessage,
-  type LoadingMessage,
-  type Message,
-} from '@app/pages/eval/components/ChatMessages';
+
 import type {
   GeneratedTestCase,
-  TargetResponse,
   TargetPlugin,
+  TargetResponse,
   TargetStrategy,
 } from './testCaseGenerationTypes';
 

@@ -3,7 +3,6 @@ import React from 'react';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-
 import CustomTargetConfiguration from './CustomTargetConfiguration';
 
 import type { ProviderOptions } from '../../types';

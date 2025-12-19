@@ -1,7 +1,6 @@
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { vi, describe, it, expect, beforeEach } from 'vitest';
-
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import CustomMetricsDialog from './CustomMetricsDialog';
 import { useTableStore } from './store';
 import type { EvaluateTable } from '@promptfoo/types';

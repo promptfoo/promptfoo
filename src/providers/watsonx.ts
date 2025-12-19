@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { fetchWithCache, getCache, isCacheEnabled } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
-import { withGenAISpan, type GenAISpanContext, type GenAISpanResult } from '../tracing/genaiTracer';
+import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
 import invariant from '../util/invariant';
 import { createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { calculateCost, REQUEST_TIMEOUT_MS } from './shared';
@@ -12,13 +12,13 @@ import type { WatsonXAI as WatsonXAIClient } from '@ibm-cloud/watsonx-ai';
 import type { BearerTokenAuthenticator, IamAuthenticator } from 'ibm-cloud-sdk-core';
 
 import type { EnvVarKey } from '../envars';
+import type { EnvOverrides } from '../types/env';
 import type {
   ApiProvider,
   CallApiContextParams,
   ProviderResponse,
   TokenUsage,
 } from '../types/index';
-import type { EnvOverrides } from '../types/env';
 import type { ProviderOptions } from '../types/providers';
 
 interface TextGenRequestParametersModel {
