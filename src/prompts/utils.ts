@@ -87,7 +87,11 @@ export function normalizeInput(
 }
 
 export function hashPrompt(prompt: Prompt): string {
-  return prompt.id || prompt.label
-    ? sha256(prompt.label)
-    : sha256(typeof prompt.raw === 'object' ? JSON.stringify(prompt.raw) : prompt.raw);
+  if (prompt.label) {
+    return sha256(prompt.label);
+  }
+  if (prompt.id) {
+    return sha256(prompt.id);
+  }
+  return sha256(typeof prompt.raw === 'object' ? JSON.stringify(prompt.raw) : prompt.raw);
 }

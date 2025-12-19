@@ -6,7 +6,11 @@ import type { PromptSchema } from '../validators/prompts';
 type PromptModel = z.infer<typeof PromptSchema>;
 
 export function generateIdFromPrompt(prompt: PromptModel) {
-  return prompt.id || prompt.label
-    ? sha256(prompt.label)
-    : sha256(typeof prompt.raw === 'object' ? JSON.stringify(prompt.raw) : prompt.raw);
+  if (prompt.label) {
+    return sha256(prompt.label);
+  }
+  if (prompt.id) {
+    return sha256(prompt.id);
+  }
+  return sha256(typeof prompt.raw === 'object' ? JSON.stringify(prompt.raw) : prompt.raw);
 }

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { maybeFilePath, normalizeInput } from '../../src/prompts/utils';
+import { hashPrompt, maybeFilePath, normalizeInput } from '../../src/prompts/utils';
+import { sha256 } from '../../src/util/createHash';
 
 vi.mock('fs', async () => {
   const actual = await vi.importActual<typeof import('fs')>('fs');
@@ -169,5 +170,26 @@ describe('normalizeInput', () => {
         raw: 'prompts2.txt',
       },
     ]);
+  });
+});
+
+describe('hashPrompt', () => {
+  it('uses label when provided', () => {
+    expect(
+      hashPrompt({
+        id: 'prompt-id',
+        label: 'Prompt Label',
+        raw: 'Prompt Raw',
+      }),
+    ).toBe(sha256('Prompt Label'));
+  });
+
+  it('falls back to id when label is missing', () => {
+    expect(
+      hashPrompt({
+        id: 'prompt-id',
+        raw: 'Prompt Raw',
+      }),
+    ).toBe(sha256('prompt-id'));
   });
 });
