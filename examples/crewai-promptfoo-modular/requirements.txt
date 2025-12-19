@@ -1,0 +1,12 @@
+# CrewAI – Main framework used in this example
+crewai>=0.201.1
+
+# OpenAI – Official Python SDK (required for calling models)
+openai>=1.109.1
+
+# YAML parsing for agent/task configuration files
+pyyaml>=6.0.3
+
+# Optional: Environment variable management from .env files
+# Uncomment if you want to use .env files for API keys
+python-dotenv>=1.1.1
