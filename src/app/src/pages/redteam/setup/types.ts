@@ -73,6 +73,9 @@ export interface ProviderOptions {
     stateful?: boolean;
     sessionSource?: 'client' | 'server';
     streamResponse?: string;
+    // Multi-variable inputs for test case generation
+    // Keys are variable names, values are descriptions of what each variable should contain
+    inputs?: Record<string, string>;
   };
 }
 

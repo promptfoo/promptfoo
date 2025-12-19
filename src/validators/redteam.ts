@@ -24,7 +24,6 @@ import {
   SeveritySchema,
 } from '../redteam/constants';
 import { isCustomStrategy } from '../redteam/constants/strategies';
-import { InputsSchema } from '../redteam/types';
 import { isJavascriptFile } from '../util/fileExtensions';
 import { ProviderSchema } from '../validators/providers';
 
@@ -253,9 +252,6 @@ export const RedteamConfigSchema = z
       .describe(
         "Variable to inject. Can be a string or array of strings. If string, it's transformed to an array. Inferred from the prompts by default.",
       ),
-    inputs: InputsSchema.optional().describe(
-      'Multi-variable inputs for test case generation. Keys are variable names, values are descriptions.',
-    ),
     purpose: z
       .string()
       .optional()
@@ -543,7 +539,6 @@ export const RedteamConfigSchema = z
       ...(data.delay ? { delay: data.delay } : {}),
       ...(data.entities ? { entities: data.entities } : {}),
       ...(data.injectVar ? { injectVar: data.injectVar } : {}),
-      ...(data.inputs ? { inputs: data.inputs } : {}),
       ...(data.language ? { language: data.language } : {}),
       ...(data.provider ? { provider: data.provider } : {}),
       ...(data.purpose ? { purpose: data.purpose } : {}),

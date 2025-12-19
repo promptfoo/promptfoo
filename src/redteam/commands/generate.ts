@@ -373,10 +373,13 @@ export async function doGenerateRedteam(
     logger.error(`Error details: ${error instanceof Error ? error.message : String(error)}`);
   }
 
+  // Read inputs from the first target/provider config
+  const targetInputs = testSuite.providers[0]?.config?.inputs;
+
   const config = {
     injectVar: redteamConfig?.injectVar || options.injectVar,
-    // Multi-variable inputs for test case generation
-    inputs: redteamConfig?.inputs,
+    // Multi-variable inputs for test case generation (read from target config)
+    inputs: targetInputs,
     language: redteamConfig?.language || options.language,
     maxConcurrency:
       options.maxConcurrency ?? commandLineOptions?.maxConcurrency ?? DEFAULT_MAX_CONCURRENCY,
