@@ -2,7 +2,7 @@
  * Git Diff Tests
  */
 
-import { vi, describe, it, expect, beforeEach, type Mock } from 'vitest';
+import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { extractDiff, validateOnBranch } from '../../../src/codeScan/git/diff';
 import { GitError } from '../../../src/types/codeScan';
 import type { SimpleGit, StatusResult } from 'simple-git';

@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
 
 import { MODEL_AUDIT_ROUTES } from '@app/constants/routes';
 import { formatDataGridDate } from '@app/utils/date';
@@ -26,6 +25,7 @@ import {
   Stack,
   Typography,
 } from '@mui/material';
+import { Link as RouterLink, useNavigate, useParams } from 'react-router-dom';
 import { ResultPageSkeleton } from '../model-audit/components/ModelAuditSkeleton';
 import ResultsTab from '../model-audit/components/ResultsTab';
 import ScannedFilesDialog from '../model-audit/components/ScannedFilesDialog';

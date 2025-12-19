@@ -1,14 +1,14 @@
-import { diag, DiagConsoleLogger, DiagLogLevel, propagation } from '@opentelemetry/api';
+import { DiagConsoleLogger, DiagLogLevel, diag, propagation } from '@opentelemetry/api';
 import { W3CTraceContextPropagator } from '@opentelemetry/core';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import { resourceFromAttributes } from '@opentelemetry/resources';
-import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from '@opentelemetry/semantic-conventions';
 import { BatchSpanProcessor, NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
-import type { SpanProcessor } from '@opentelemetry/sdk-trace-base';
-
+import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from '@opentelemetry/semantic-conventions';
 import logger from '../logger';
 import { VERSION } from '../version';
 import { LocalSpanExporter } from './localSpanExporter';
+import type { SpanProcessor } from '@opentelemetry/sdk-trace-base';
+
 import type { OtelConfig } from './otelConfig';
 
 // Singleton instances

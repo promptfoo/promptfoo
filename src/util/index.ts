@@ -9,11 +9,13 @@ import deepEqual from 'fast-deep-equal';
 import { XMLBuilder } from 'fast-xml-parser';
 import { globSync, hasMagic } from 'glob';
 import yaml from 'js-yaml';
+import cliState from '../cliState';
 import { TERMINAL_MAX_WIDTH, VERSION } from '../constants';
 import { getEnvBool, getEnvString } from '../envars';
 import { getDirectory, importModule } from '../esm';
 import { writeCsvToGoogleSheet } from '../googleSheets';
 import logger from '../logger';
+import { runPython } from '../python/pythonUtils';
 import {
   type CsvRow,
   type EvaluateResult,
@@ -29,11 +31,9 @@ import {
 import invariant from '../util/invariant';
 import { getHeaderForTable } from './exportToFile/getHeaderForTable';
 import { convertTestResultsToTableRow } from './exportToFile/index';
-import { runPython } from '../python/pythonUtils';
 import { maybeLoadFromExternalFile } from './file';
 import { isJavascriptFile } from './fileExtensions';
 import { parseFileUrl } from './functions/loadFunction';
-import cliState from '../cliState';
 import { safeResolve } from './pathUtils';
 import { getNunjucksEngine } from './templates';
 

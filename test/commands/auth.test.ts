@@ -1,6 +1,8 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import select from '@inquirer/select';
 import { Command } from 'commander';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+import select from '@inquirer/select';
+
 import { authCommand } from '../../src/commands/auth';
 import { isNonInteractive } from '../../src/envars';
 import { getUserEmail, setUserEmail } from '../../src/globalConfig/accounts';

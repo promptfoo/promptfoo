@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as constants from '../src/constants';
 import * as envars from '../src/envars';
 import { getUserEmail } from '../src/globalConfig/accounts';

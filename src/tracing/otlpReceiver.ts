@@ -2,9 +2,9 @@ import express from 'express';
 import logger from '../logger';
 import {
   bytesToHex,
-  decodeExportTraceServiceRequest,
   type DecodedAttribute,
   type DecodedExportTraceServiceRequest,
+  decodeExportTraceServiceRequest,
 } from './protobuf';
 import { getTraceStore, type ParsedTrace, type SpanData, type TraceStore } from './store';
 

@@ -12,7 +12,6 @@ import IconButton from '@mui/material/IconButton';
 import Paper from '@mui/material/Paper';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-
 import type { PolicyObject } from '@promptfoo/redteam/types';
 
 type PolicySuggestionsSidebarProps = {

@@ -1,5 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
-
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { OpenAiImageProvider } from '../../../src/providers/openai/image';
 

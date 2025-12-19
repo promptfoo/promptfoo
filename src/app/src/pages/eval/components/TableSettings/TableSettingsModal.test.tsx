@@ -1,8 +1,9 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { useState } from 'react';
-import TableSettingsModal from './TableSettingsModal';
+
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useSettingsState } from './hooks/useSettingsState';
+import TableSettingsModal from './TableSettingsModal';
 
 vi.mock('./hooks/useSettingsState', () => ({
   useSettingsState: vi.fn(),

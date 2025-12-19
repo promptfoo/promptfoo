@@ -1,18 +1,19 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as fs from 'fs';
 
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { validateAssertions } from '../../../src/assertions/validateAssertions';
 import cliState from '../../../src/cliState';
 import { readPrompts, readProviderPromptMap } from '../../../src/prompts/index';
 import { loadApiProviders } from '../../../src/providers/index';
-import type { ApiProvider } from '../../../src/types/providers';
-import { readFilters } from '../../../src/util/index';
 // Import after mocking
 import { resolveConfigs } from '../../../src/util/config/load';
 import { maybeLoadFromExternalFile } from '../../../src/util/file';
+import { readFilters } from '../../../src/util/index';
 import { readTests } from '../../../src/util/testCaseReader';
+
+import type { ApiProvider } from '../../../src/types/providers';
 
 vi.mock('fs');
 vi.mock('glob', () => ({

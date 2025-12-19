@@ -7,8 +7,8 @@ import { OpenAiEmbeddingProvider } from './openai/embedding';
 import { OpenAiImageProvider } from './openai/image';
 import { REQUEST_TIMEOUT_MS } from './shared';
 
-import type { ApiProvider, ProviderOptions } from '../types/index';
 import type { EnvOverrides } from '../types/env';
+import type { ApiProvider, ProviderOptions } from '../types/index';
 import type { OpenAiCompletionOptions, OpenAiSharedOptions } from './openai/types';
 
 export interface CometApiModel {

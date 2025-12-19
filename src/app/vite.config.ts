@@ -1,14 +1,14 @@
 /// <reference types="vitest" />
 
+import { fileURLToPath } from 'node:url';
 import os from 'os';
 import path from 'path';
-import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 import react from '@vitejs/plugin-react';
-import { defineConfig } from 'vitest/config';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
+import { defineConfig } from 'vitest/config';
 import packageJson from '../../package.json' with { type: 'json' };
 
 // Calculate max forks for test parallelization
