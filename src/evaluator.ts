@@ -1808,7 +1808,7 @@ class Evaluator {
               reason:
                 !comparisonPassed && previousPass
                   ? maxScoreGradingResult.reason
-                  : existingGradingResult?.reason ?? '',
+                  : (existingGradingResult?.reason ?? ''),
               componentResults: [...existingComponentResults, maxScoreGradingResult],
               namedScores: {
                 ...(existingGradingResult?.namedScores || {}),
