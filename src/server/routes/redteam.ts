@@ -1,9 +1,7 @@
-import dedent from 'dedent';
 import { Router } from 'express';
 import { z } from 'zod';
 import cliState from '../../cliState';
 import logger from '../../logger';
-import { OpenAiChatCompletionProvider } from '../../providers/openai/chat';
 import {
   ALL_PLUGINS,
   ALL_STRATEGIES,
@@ -18,10 +16,6 @@ import { redteamProviderManager } from '../../redteam/providers/shared';
 import { getRemoteGenerationUrl } from '../../redteam/remoteGeneration';
 import { doRedteamRun } from '../../redteam/shared';
 import { Strategies } from '../../redteam/strategies/index';
-import { fetchWithProxy } from '../../util/fetch/index';
-import { evalJobs } from './eval';
-import type { Request, Response } from 'express';
-import { z } from 'zod';
 import { type Strategy as StrategyFactory } from '../../redteam/strategies/types';
 import {
   ConversationMessageSchema,
