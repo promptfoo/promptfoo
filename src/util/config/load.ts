@@ -17,7 +17,7 @@ import { getEnvBool, isCI } from '../../envars';
 import { importModule } from '../../esm';
 import logger from '../../logger';
 import { readPrompts, readProviderPromptMap } from '../../prompts/index';
-import { loadApiProviders } from '../../providers/index';
+import { loadApiProviders, resolveProviderConfigs } from '../../providers/index';
 import telemetry from '../../telemetry';
 import {
   type CommandLineOptions,
@@ -610,10 +610,17 @@ export async function resolveConfigs(
 
   invariant(Array.isArray(config.providers), 'providers must be an array');
 
+  // Resolve provider configs: loads file:// references while preserving non-file providers.
+  // This enables:
+  // 1. Building the provider-prompt map with `prompts` filters from external files (#1307)
+  // 2. Filtering by resolved provider ids/labels (not just file paths)
+  // 3. Avoiding double file I/O (files are read once here, not again in loadApiProviders)
+  const resolvedProviderConfigs = resolveProviderConfigs(config.providers, { basePath });
+
   // Filter providers BEFORE instantiation to avoid loading providers that won't be used.
-  // This is important when providers validate env vars or other resources on construction.
+  // Filtering on resolved configs allows matching by provider id/label from file-based providers.
   const filterOption = cmdObj.filterProviders || cmdObj.filterTargets;
-  const filteredProviderConfigs = filterProviderConfigs(config.providers, filterOption);
+  const filteredProviderConfigs = filterProviderConfigs(resolvedProviderConfigs, filterOption);
 
   if (
     filterOption &&
@@ -626,6 +633,7 @@ export async function resolveConfigs(
   }
 
   // Parse prompts, providers, and tests
+  // Pass filtered resolved configs to avoid re-reading files
   const parsedPrompts = await readPrompts(config.prompts, cmdObj.prompts ? undefined : basePath);
   const parsedProviders = await loadApiProviders(filteredProviderConfigs, {
     env: config.env,
@@ -678,7 +686,13 @@ export async function resolveConfigs(
     }
   }
 
-  const parsedProviderPromptMap = readProviderPromptMap(config, parsedPrompts);
+  // Build provider-prompt map using filtered resolved configs (not raw config with file:// strings)
+  // This ensures that `prompts` filters from external provider files are respected (#1307)
+  // and that the map is consistent with the filtered providers
+  const parsedProviderPromptMap = readProviderPromptMap(
+    { providers: filteredProviderConfigs },
+    parsedPrompts,
+  );
 
   if (parsedPrompts.length === 0) {
     logger.error('No prompts found');
