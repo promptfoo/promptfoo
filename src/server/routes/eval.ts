@@ -1,6 +1,5 @@
 import dedent from 'dedent';
 import { Router } from 'express';
-import { v4 as uuidv4 } from 'uuid';
 import { z } from 'zod';
 import { fromZodError } from 'zod-validation-error';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
@@ -33,7 +32,7 @@ export const evalJobs = new Map<string, Job>();
 
 evalRouter.post('/job', (req: Request, res: Response): void => {
   const { evaluateOptions, ...testSuite } = req.body as EvaluateTestSuiteWithEvaluateOptions;
-  const id = uuidv4();
+  const id = crypto.randomUUID();
   evalJobs.set(id, {
     evalId: null,
     status: 'in-progress',

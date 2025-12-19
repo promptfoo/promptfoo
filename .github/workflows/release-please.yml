@@ -10,6 +10,7 @@ on:
 jobs:
   release-please:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: write
       pull-requests: write
@@ -78,6 +79,7 @@ jobs:
   build:
     if: needs.release-please.outputs.release_created
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: release-please
     permissions:
       contents: read
@@ -96,6 +98,7 @@ jobs:
     if: needs.release-please.outputs.release_created
     needs: [build, release-please]
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
       packages: write

@@ -1,6 +1,5 @@
 import chalk from 'chalk';
 import dedent from 'dedent';
-import { validate as isUUID } from 'uuid';
 import { fromError } from 'zod-validation-error';
 import { disableCache } from '../cache';
 import cliState from '../cliState';
@@ -11,6 +10,7 @@ import { getProviderFromCloud } from '../util/cloud';
 import { resolveConfigs } from '../util/config/load';
 import { isHttpProvider, patchHttpConfigForValidation } from '../util/httpProvider';
 import { setupEnv } from '../util/index';
+import { isUuid } from '../util/uuid';
 import { testProviderConnectivity, testProviderSession } from '../validators/testProvider';
 import type { Command } from 'commander';
 
@@ -157,7 +157,7 @@ async function loadProvidersForTesting(
     let provider: ApiProvider;
 
     // Cloud target
-    if (isUUID(target)) {
+    if (isUuid(target)) {
       const providerOptions = await getProviderFromCloud(target);
       const patchedOptions = isHttpProvider(providerOptions)
         ? patchHttpConfigForValidation(providerOptions)
