@@ -1,5 +1,3 @@
-import { randomUUID } from 'crypto';
-
 import { and, eq, gte, inArray, lt } from 'drizzle-orm';
 import { getDb } from '../database/index';
 import { evalResultsTable } from '../database/tables';
@@ -80,7 +78,7 @@ export default class EvalResult {
     } = result;
 
     const args = {
-      id: randomUUID(),
+      id: crypto.randomUUID(),
       evalId,
       testCase: {
         ...testCase,
@@ -120,7 +118,7 @@ export default class EvalResult {
       for (const result of results) {
         const dbResult = db
           .insert(evalResultsTable)
-          .values({ ...result, evalId, id: randomUUID() })
+          .values({ ...result, evalId, id: crypto.randomUUID() })
           .returning()
           .get();
         returnResults.push(new EvalResult({ ...dbResult, persisted: true }));

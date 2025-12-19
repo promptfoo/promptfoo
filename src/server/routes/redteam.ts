@@ -1,6 +1,5 @@
 import dedent from 'dedent';
 import { Router } from 'express';
-import { v4 as uuidv4 } from 'uuid';
 import { z } from 'zod';
 import cliState from '../../cliState';
 import logger from '../../logger';
@@ -261,7 +260,7 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
   }
 
   const { config, force, verbose, delay, maxConcurrency } = req.body;
-  const id = uuidv4();
+  const id = crypto.randomUUID();
   currentJobId = id;
   currentAbortController = new AbortController();
 
