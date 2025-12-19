@@ -15,8 +15,10 @@ import EmptyState from './EmptyState';
 import ResultsView from './ResultsView';
 import { ResultsFilter, useResultsViewSettingsStore, useTableStore } from './store';
 import './Eval.css';
-import { useFilterMode } from './FilterModeProvider';
+
 import { useToast } from '@app/hooks/useToast';
+import { useFilterMode } from './FilterModeProvider';
+
 interface EvalOptions {
   /**
    * ID of a specific eval to load.

@@ -1,7 +1,6 @@
 import { createTheme, ThemeProvider } from '@mui/material/styles';
-import { render, screen, act } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-
 import ConfigurationTab from './ConfigurationTab';
 
 vi.mock('./PathSelector', () => ({

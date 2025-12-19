@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+
 import promptfoo from '../../dist/src/index.js';
 
 const prompts = [

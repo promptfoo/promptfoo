@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Create mock for execFileAsync - must be hoisted for vi.mock factory

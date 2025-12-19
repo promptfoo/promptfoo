@@ -1,8 +1,10 @@
 import React from 'react';
+
 import Link from '@docusaurus/Link';
-import type { Event } from '../../data/events';
 import { formatEventDate, formatEventLocation } from '../../data/events';
 import styles from './FeaturedEvent.module.css';
+
+import type { Event } from '../../data/events';
 
 interface FeaturedEventProps {
   event: Event;

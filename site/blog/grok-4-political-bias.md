@@ -1,6 +1,6 @@
 ---
 title: 'Evaluating political bias in LLMs'
-description: "How right-leaning is Grok?  We've released a new testing methodology alongside a dataset of 2,500 political questions."
+description: "How right-leaning is Grok? We've released a new testing methodology alongside a dataset of 2,500 political questions."
 image: /img/blog/grok-4-political-bias/charts/political-bias-likert-scale.png
 keywords:
   [

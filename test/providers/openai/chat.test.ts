@@ -1,6 +1,6 @@
 import path from 'path';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { disableCache, enableCache, fetchWithCache } from '../../../src/cache';
 import cliState from '../../../src/cliState';
 import { importModule } from '../../../src/esm';

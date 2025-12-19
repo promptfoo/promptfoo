@@ -32,8 +32,8 @@ import {
   startOtlpReceiverIfNeeded,
   stopOtlpReceiverIfNeeded,
 } from './tracing/evaluatorTracing';
-import { initializeOtel, shutdownOtel, flushOtel } from './tracing/otelSdk';
 import { getDefaultOtelConfig } from './tracing/otelConfig';
+import { flushOtel, initializeOtel, shutdownOtel } from './tracing/otelSdk';
 import {
   type Assertion,
   type AssertionType,

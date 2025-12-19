@@ -1,6 +1,6 @@
-import { MockInstance, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import fs from 'fs';
 
+import { afterEach, beforeEach, describe, expect, it, MockInstance, vi } from 'vitest';
 import { clearCache } from '../../src/cache';
 import { importModule } from '../../src/esm';
 import logger from '../../src/logger';
