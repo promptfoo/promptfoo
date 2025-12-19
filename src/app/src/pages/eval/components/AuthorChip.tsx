@@ -93,9 +93,9 @@ export const AuthorChip = ({
       if (!author) {
         return 'Author';
       }
-      // Show friendlier message when viewing your own eval
+      // For your own eval in cloud mode, just label the field
       if (isCloudEnabled && author === currentUserEmail) {
-        return 'Your eval';
+        return 'Eval author';
       }
       return `This eval belongs to ${author}`;
     }

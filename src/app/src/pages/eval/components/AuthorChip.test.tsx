@@ -217,10 +217,10 @@ describe('AuthorChip', () => {
       expect(screen.getByText('other@example.com')).toBeInTheDocument();
     });
 
-    it('shows "Your eval" tooltip when cloud enabled and author matches current user', () => {
-      // In cloud mode, when viewing your own eval, editable=false and tooltip says "Your eval"
+    it('shows "Eval author" tooltip when cloud enabled and author matches current user', () => {
+      // In cloud mode, when viewing your own eval, editable=false and tooltip says "Eval author"
       render(<AuthorChip {...cloudProps} author="user@example.com" editable={false} />);
-      // The component renders with author displayed, tooltip would show "Your eval"
+      // The component renders with author displayed, tooltip would show "Eval author"
       expect(screen.getByText('user@example.com')).toBeInTheDocument();
     });
 
