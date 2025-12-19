@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: '📸 Image Analysis + Generation Test Suite'
+description: '[google-gemini-image] Image Analysis + Generation'
 
 prompts:
   # Image analysis prompts

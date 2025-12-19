@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: '🎯 WORKING DEMO: Gemini Generates Image → Gemini Grades Image'
+description: '[google-gemini-image] Generate Image → Grade Image Demo'
 
 prompts:
   - 'Generate a professional product photograph of {{product}} on a clean white background, commercial photography style'

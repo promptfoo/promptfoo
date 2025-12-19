@@ -2251,9 +2251,13 @@ describe('util', () => {
 
     it('should throw error for SAFETY finish reason', () => {
       const candidate = {
-        finishReason: 'SAFETY',
+        finishReason: 'SAFETY' as const,
         safetyRatings: [
-          { category: 'HARM_CATEGORY_DANGEROUS', probability: 'HIGH', blocked: true },
+          {
+            category: 'HARM_CATEGORY_DANGEROUS_CONTENT' as const,
+            probability: 'HIGH' as const,
+            blocked: true,
+          },
         ],
       };
 
@@ -2264,7 +2268,7 @@ describe('util', () => {
 
     it('should throw error for RECITATION finish reason', () => {
       const candidate = {
-        finishReason: 'RECITATION',
+        finishReason: 'RECITATION' as const,
       };
 
       expect(() => formatCandidateContents(candidate)).toThrow('RECITATION');
@@ -2272,7 +2276,7 @@ describe('util', () => {
 
     it('should throw error for PROHIBITED_CONTENT finish reason', () => {
       const candidate = {
-        finishReason: 'PROHIBITED_CONTENT',
+        finishReason: 'PROHIBITED_CONTENT' as const,
       };
 
       expect(() => formatCandidateContents(candidate)).toThrow('PROHIBITED_CONTENT');
@@ -2321,10 +2325,18 @@ describe('util', () => {
 
     it('should include safety ratings in error message when blocked', () => {
       const candidate = {
-        finishReason: 'SAFETY',
+        finishReason: 'SAFETY' as const,
         safetyRatings: [
-          { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', probability: 'HIGH', blocked: true },
-          { category: 'HARM_CATEGORY_VIOLENCE', probability: 'NEGLIGIBLE', blocked: false },
+          {
+            category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT' as const,
+            probability: 'HIGH' as const,
+            blocked: true,
+          },
+          {
+            category: 'HARM_CATEGORY_HATE_SPEECH' as const,
+            probability: 'NEGLIGIBLE' as const,
+            blocked: false,
+          },
         ],
       };
 

@@ -22,7 +22,7 @@ export interface ModelArmorConfig {
 }
 
 interface Blob {
-  mimeType: string;
+  mimeType?: string; // Optional - defaults to image/png if missing
   data: string; // base64-encoded string
 }
 
@@ -185,9 +185,9 @@ export interface CompletionOptions {
 
     // Response modalities (Live API and Image generation)
     // Controls which types of output the model should generate (e.g., ['TEXT', 'IMAGE'], ['text', 'audio'])
-    // Both snake_case and camelCase are supported for compatibility
-    response_modalities?: string[];
-    responseModalities?: string[]; // Alias for response_modalities
+    // Both conventions are supported for backwards compatibility - use either one
+    response_modalities?: string[]; // snake_case - used by Live API
+    responseModalities?: string[]; // camelCase - used by Gemini image generation
 
     // Speech configuration
     speechConfig?: {

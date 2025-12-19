@@ -222,10 +222,12 @@ export class GoogleLiveProvider implements ApiProvider {
       const function_calls_total: FunctionCall[] = [];
       let statefulApiState: any = undefined;
 
-      const isTextExpected =
-        this.config.generationConfig?.response_modalities?.includes('text') ?? false;
-      const isAudioExpected =
-        this.config.generationConfig?.response_modalities?.includes('audio') ?? false;
+      // Support both snake_case and camelCase for response modalities (backwards compatibility)
+      const modalities =
+        this.config.generationConfig?.response_modalities ??
+        this.config.generationConfig?.responseModalities;
+      const isTextExpected = modalities?.includes('text') ?? false;
+      const isAudioExpected = modalities?.includes('audio') ?? false;
 
       let hasTextStreamEnded = !isTextExpected;
       let hasAudioStreamEnded = !isAudioExpected;

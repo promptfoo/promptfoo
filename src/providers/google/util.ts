@@ -33,7 +33,7 @@ interface SafetyRating {
 }
 
 interface Candidate {
-  content: Content;
+  content?: Content;
   finishReason?:
     | 'BLOCKLIST'
     | 'FINISH_REASON_UNSPECIFIED'
@@ -48,7 +48,7 @@ interface Candidate {
   groundingChunks?: Record<string, any>[];
   groundingMetadata?: Record<string, any>;
   groundingSupports?: Record<string, any>[];
-  safetyRatings: SafetyRating[];
+  safetyRatings?: SafetyRating[];
   webSearchQueries?: string[];
 }
 

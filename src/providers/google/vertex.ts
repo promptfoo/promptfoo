@@ -343,7 +343,7 @@ export class VertexChatProvider extends VertexGenericProvider {
     }
   }
 
-/**
+  /**
    * Check if express mode should be used (API key without OAuth)
    * Express mode uses a simplified endpoint format without project/location.
    *
@@ -452,6 +452,8 @@ export class VertexChatProvider extends VertexGenericProvider {
       body.generationConfig.response_schema = schema;
       body.generationConfig.response_mime_type = 'application/json';
     }
+
+    logger.debug(`Preparing to call Google Vertex API (Gemini) with body: ${JSON.stringify(body)}`);
 
     const cache = await getCache();
     const cacheKey = `vertex:${this.modelName}:${JSON.stringify(body)}`;
@@ -666,6 +668,7 @@ export class VertexChatProvider extends VertexGenericProvider {
             },
           }),
         };
+
         response = {
           cached: false,
           output,
