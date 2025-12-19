@@ -10,6 +10,8 @@ const renderWithTheme = (component: React.ReactNode) => {
   return render(<ThemeProvider theme={theme}>{component}</ThemeProvider>);
 };
 
+const FAKE_IMAGE_DATA_URL = `data:image/png;base64,${'a'.repeat(80)}`;
+
 describe('ChatMessages', () => {
   it('should render a ChatMessage for each message when messages is a non-empty array', () => {
     const mockMessages: Message[] = [
@@ -89,7 +91,7 @@ describe('ChatMessages', () => {
       {
         role: 'user',
         content: 'This is the image description',
-        image: { data: 'base64imagedata', format: 'png' },
+        image: { data: FAKE_IMAGE_DATA_URL, format: 'png' },
       },
     ];
 
@@ -98,7 +100,7 @@ describe('ChatMessages', () => {
     // Find img element by its src attribute
     const imageElement = screen.getByAltText('Input');
     expect(imageElement).toBeInTheDocument();
-    expect(imageElement).toHaveAttribute('src', 'data:image/png;base64,base64imagedata');
+    expect(imageElement).toHaveAttribute('src', FAKE_IMAGE_DATA_URL);
     expect(screen.getByText('This is the image description')).toBeInTheDocument();
   });
 
@@ -108,7 +110,7 @@ describe('ChatMessages', () => {
         role: 'user',
         content: 'Multi-modal message',
         audio: { data: 'audiodata', format: 'wav' },
-        image: { data: 'imagedata', format: 'jpeg' },
+        image: { data: FAKE_IMAGE_DATA_URL, format: 'jpeg' },
       },
     ];
 
@@ -141,14 +143,14 @@ describe('ChatMessages', () => {
       {
         role: 'user',
         content: 'Image without format',
-        image: { data: 'base64imagedata' },
+        image: { data: FAKE_IMAGE_DATA_URL },
       },
     ];
 
     renderWithTheme(<ChatMessages messages={mockMessages} />);
 
     const imageElement = screen.getByAltText('Input');
-    expect(imageElement).toHaveAttribute('src', 'data:image/png;base64,base64imagedata');
+    expect(imageElement).toHaveAttribute('src', FAKE_IMAGE_DATA_URL);
   });
 
   it('should render contentType audio as dedicated audio player', () => {
@@ -170,7 +172,7 @@ describe('ChatMessages', () => {
     const mockMessages: Message[] = [
       {
         role: 'assistant',
-        content: 'base64imagecontent',
+        content: FAKE_IMAGE_DATA_URL,
         contentType: 'image',
       },
     ];

@@ -45,6 +45,8 @@ const createJsonResponse = <T,>(data: T): Response =>
     headers: { 'Content-Type': 'application/json' },
   });
 
+const FAKE_IMAGE_DATA_URL = `data:image/png;base64,${'a'.repeat(80)}`;
+
 callApiMock.mockImplementation((path, options) => {
   if (path === '/redteam/generate-test') {
     const body = options?.body ? JSON.parse(options.body as string) : {};
@@ -58,7 +60,7 @@ callApiMock.mockImplementation((path, options) => {
     }
 
     if (strategyId === 'image') {
-      prompt = 'fake-image-base64';
+      prompt = FAKE_IMAGE_DATA_URL;
     } else if (strategyId === 'video') {
       prompt = 'fake-video-base64';
     } else if (strategyId === 'audio') {
@@ -291,7 +293,7 @@ describe('TestCaseGenerationProvider', () => {
       const imageComponent = within(testCaseDialogComponent).getByTestId('image');
       expect(imageComponent).toBeInTheDocument();
       expect(imageComponent).toHaveStyle({
-        backgroundImage: 'url(data:image/png;base64,fake-image-base64)',
+        backgroundImage: `url(${FAKE_IMAGE_DATA_URL})`,
       });
     });
 

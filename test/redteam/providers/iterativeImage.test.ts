@@ -29,6 +29,9 @@ vi.mock('../../../src/redteam/providers/shared', () => ({
     getProvider: vi.fn(),
   },
   getTargetResponse: vi.fn(),
+  externalizeResponseForRedteamHistory: vi
+    .fn()
+    .mockImplementation(async (response: unknown) => response),
   createIterationContext: vi.fn().mockResolvedValue({ vars: {} }),
 }));
 
@@ -68,7 +71,7 @@ describe('RedteamIterativeImageProvider', () => {
   });
 
   afterEach(() => {
-    vi.resetAllMocks();
+    vi.clearAllMocks();
   });
 
   it('should have correct ID', () => {
