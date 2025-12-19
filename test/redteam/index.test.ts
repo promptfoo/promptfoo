@@ -886,7 +886,7 @@ describe('synthesize', () => {
         plugins: [{ id: 'test-plugin', numTests: 2 }],
         prompts: ['Test prompt'],
         strategies: [{ id: 'test-strategy' }],
-        targetLabels: ['test-provider'],
+        targetIds: ['test-provider'],
       });
 
       // Should have 2 base tests + 2 strategy tests (undefined values filtered out)
@@ -920,7 +920,7 @@ describe('synthesize', () => {
         plugins: [{ id: 'test-plugin', numTests: 1 }],
         prompts: ['Test prompt'],
         strategies: [{ id: 'failing-strategy' }],
-        targetLabels: ['test-provider'],
+        targetIds: ['test-provider'],
       });
 
       // Should only have the base test (no strategy tests since all were undefined)
@@ -961,7 +961,7 @@ describe('synthesize', () => {
         plugins: [{ id: 'test-plugin', numTests: 1 }],
         prompts: ['Test prompt'],
         strategies: [{ id: 'test-strategy' }],
-        targetLabels: ['test-provider'],
+        targetIds: ['test-provider'],
       });
 
       // Should have 1 base test + 2 strategy tests
