@@ -17,8 +17,21 @@ jobs:
     permissions:
       pull-requests: write
       actions: read
+      contents: read
 
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
       - name: Download scan results
         id: download
         uses: actions/download-artifact@v4
@@ -30,141 +43,7 @@ jobs:
 
       - name: Post comments to PR
         if: steps.download.outcome == 'success'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-
-            // Read scan results
-            let scanData;
-            try {
-              const content = fs.readFileSync('scan-results.json', 'utf8');
-              scanData = JSON.parse(content);
-            } catch (error) {
-              core.info('No scan results found or failed to parse');
-              return;
-            }
-
-            const { scanResponse, prContext, minimumSeverity } = scanData;
-            const { comments, review } = scanResponse;
-
-            if (!comments || comments.length === 0) {
-              core.info('No findings to post');
-              return;
-            }
-
-            core.info(`Posting ${comments.length} findings to PR #${prContext.number}`);
-
-            // Format severity with emoji
-            const formatSeverity = (severity) => {
-              const severityMap = {
-                'critical': '🔴 **Critical**',
-                'high': '🟠 **High**',
-                'medium': '🟡 **Medium**',
-                'low': '🔵 **Low**'
-              };
-              return severityMap[severity?.toLowerCase()] || '';
-            };
-
-            // Separate line-specific comments from general comments
-            const lineComments = comments.filter(c => c.file && c.line);
-            const generalComments = comments.filter(c => !c.file || !c.line);
-
-            // Post review with line-specific comments
-            if (lineComments.length > 0 || review) {
-              try {
-                const reviewComments = lineComments.map(c => {
-                  let body = '';
-                  if (c.severity) {
-                    body += formatSeverity(c.severity) + ' ';
-                  }
-                  body += c.finding;
-
-                  if (c.fix) {
-                    body += `\n\n<details>\n<summary>💡 Suggested Fix</summary>\n\n${c.fix}\n</details>`;
-                  }
-                  if (c.aiAgentPrompt) {
-                    body += `\n\n<details>\n<summary>🤖 AI Agent Prompt</summary>\n\n${c.aiAgentPrompt}\n</details>`;
-                  }
-
-                  return {
-                    path: c.file,
-                    line: c.line,
-                    start_line: c.startLine && c.startLine < c.line ? c.startLine : undefined,
-                    side: 'RIGHT',
-                    start_side: c.startLine && c.startLine < c.line ? 'RIGHT' : undefined,
-                    body
-                  };
-                });
-
-                await github.rest.pulls.createReview({
-                  owner: prContext.owner,
-                  repo: prContext.repo,
-                  pull_number: prContext.number,
-                  event: 'COMMENT',
-                  body: review || undefined,
-                  comments: reviewComments.length > 0 ? reviewComments : undefined
-                });
-
-                core.info(`Posted review with ${reviewComments.length} inline comments`);
-              } catch (error) {
-                core.warning(`Failed to post inline comments: ${error.message}`);
-                core.info('Falling back to summary comment...');
-
-                // Fallback: post as summary comment
-                const summaryBody = lineComments.map(c => {
-                  const lineRange = c.startLine && c.startLine !== c.line
-                    ? `${c.file}:${c.startLine}-${c.line}`
-                    : `${c.file}:${c.line}`;
-
-                  let text = `**${lineRange}**\n\n`;
-                  if (c.severity) {
-                    text += formatSeverity(c.severity) + ' ';
-                  }
-                  text += c.finding;
-
-                  if (c.fix) {
-                    text += `\n\n<details>\n<summary>💡 Suggested Fix</summary>\n\n${c.fix}\n</details>`;
-                  }
-                  return text;
-                }).join('\n\n---\n\n');
-
-                await github.rest.issues.createComment({
-                  owner: prContext.owner,
-                  repo: prContext.repo,
-                  issue_number: prContext.number,
-                  body: `## 🔍 LLM Security Scan Results\n\n${summaryBody}`
-                });
-
-                core.info('Posted summary comment');
-              }
-            }
-
-            // Post general comments
-            for (const comment of generalComments) {
-              try {
-                let body = '';
-                if (comment.severity) {
-                  body += formatSeverity(comment.severity) + ' ';
-                }
-                body += comment.finding;
-
-                if (comment.fix) {
-                  body += `\n\n<details>\n<summary>💡 Suggested Fix</summary>\n\n${comment.fix}\n</details>`;
-                }
-                if (comment.aiAgentPrompt) {
-                  body += `\n\n<details>\n<summary>🤖 AI Agent Prompt</summary>\n\n${comment.aiAgentPrompt}\n</details>`;
-                }
-
-                await github.rest.issues.createComment({
-                  owner: prContext.owner,
-                  repo: prContext.repo,
-                  issue_number: prContext.number,
-                  body
-                });
-              } catch (error) {
-                core.warning(`Failed to post general comment: ${error.message}`);
-              }
-            }
-
-            core.info('All comments posted successfully');
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SCAN_RESULTS_PATH: scan-results.json
+        run: npx tsx scripts/postCodeScanComments.ts

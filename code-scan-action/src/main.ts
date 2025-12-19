@@ -223,9 +223,15 @@ async function run(): Promise<void> {
         timestamp: new Date().toISOString(),
       };
 
-      fs.writeFileSync(outputFile, JSON.stringify(outputData, null, 2));
-      core.setOutput('results-file', outputFile);
-      core.info(`📁 Scan results saved to ${outputFile}`);
+      try {
+        fs.writeFileSync(outputFile, JSON.stringify(outputData, null, 2));
+        core.setOutput('results-file', outputFile);
+        core.info(`📁 Scan results saved to ${outputFile}`);
+      } catch (writeError) {
+        throw new Error(
+          `Failed to write scan results to ${outputFile}: ${writeError instanceof Error ? writeError.message : String(writeError)}`,
+        );
+      }
 
       if (comments.length > 0) {
         core.info('💡 Results saved for workflow_run comment posting');
