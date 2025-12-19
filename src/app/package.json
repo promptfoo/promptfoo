@@ -9,6 +9,7 @@
     "build": "concurrently -g \"tsc -b\" \"vite build\"",
     "build:watch": "tsc -b --watch",
     "lint": "cd ../.. && npx @biomejs/biome lint src/app",
+    "lint:ci": "cd ../.. && npx @biomejs/biome ci src/app",
     "lint:circular": "cd ../.. && madge --circular --extensions ts,tsx src/app/src",
     "preview": "vite preview",
     "test": "vitest",
