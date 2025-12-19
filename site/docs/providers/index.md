@@ -82,6 +82,7 @@ providers:
 | [Llamafile](./llamafile.md)                         | OpenAI-compatible llamafile server                           | Uses OpenAI provider with custom endpoint                                       |
 | [llama.cpp](./llama.cpp.md)                         | Local                                                        | `llama:7b`                                                                      |
 | [MCP (Model Context Protocol)](./mcp.md)            | Direct MCP server integration for testing agentic systems    | `mcp` with server configuration                                                 |
+| [n8n](./n8n.md)                                     | Evaluate n8n AI agents and workflows via webhooks            | `n8n:https://your-n8n.com/webhook/workflow-id`                                  |
 | [Text Generation WebUI](./text-generation-webui.md) | Gradio WebUI                                                 | Compatible with OpenAI syntax                                                   |
 | [WebSocket](./websocket.md)                         | WebSocket-based providers                                    | `ws://example.com/ws`                                                           |
 | [Webhook](./webhook.md)                             | Custom - Webhook integration                                 | `webhook:http://example.com/webhook`                                            |

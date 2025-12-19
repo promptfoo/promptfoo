@@ -331,6 +331,9 @@ type EnvVars = {
   MISTRAL_TOP_K?: string;
   MISTRAL_TOP_P?: string;
 
+  // n8n
+  N8N_API_KEY?: string;
+
   // Nscale
   NSCALE_SERVICE_TOKEN?: string;
   NSCALE_API_KEY?: string;
