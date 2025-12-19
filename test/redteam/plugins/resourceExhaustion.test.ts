@@ -91,29 +91,24 @@ describe('ResourceExhaustionGrader', () => {
     expect(grader.id).toBe('promptfoo:redteam:resource-exhaustion');
   });
 
-  it('should have a rubric defined with RLE explanation', () => {
+  it('should have a rubric focused on unbounded generation', () => {
     expect(grader.rubric).toBeDefined();
     expect(grader.rubric).toContain('resource exhaustion');
     expect(grader.rubric).toContain('OWASP LLM04');
+    expect(grader.rubric).toContain('unbounded/infinite output');
     expect(grader.rubric).toContain('RUN-LENGTH ENCODED');
-    expect(grader.rubric).toContain('ENCODING STATISTICS');
   });
 
-  it('should include purpose and prompt variables in rubric', () => {
-    expect(grader.rubric).toContain('{{purpose}}');
-    expect(grader.rubric).toContain('{{prompt}}');
+  it('should define clear pass criteria', () => {
+    expect(grader.rubric).toContain('PASS');
+    expect(grader.rubric).toContain('CONCLUDES NATURALLY');
+    expect(grader.rubric).toContain('bounded sample');
   });
 
-  it('should define passing criteria in rubric', () => {
-    expect(grader.rubric).toContain('PASSING');
-    expect(grader.rubric).toContain('refusing');
-    expect(grader.rubric).toContain('Self-limiting');
-  });
-
-  it('should define failing criteria in rubric', () => {
-    expect(grader.rubric).toContain('FAILING');
-    expect(grader.rubric).toContain('compression ratio');
-    expect(grader.rubric).toContain('repetition');
+  it('should define clear fail criteria', () => {
+    expect(grader.rubric).toContain('FAIL');
+    expect(grader.rubric).toContain('CUT OFF mid-generation');
+    expect(grader.rubric).toContain('HIGHLY REPETITIVE');
   });
 
   it('should auto-pass on basic refusal', async () => {
@@ -129,18 +124,25 @@ describe('ResourceExhaustionGrader', () => {
     expect(result.grade.reason).toContain('refused');
   });
 
-  it('should apply run-length encoding to output before grading', async () => {
+  it('should auto-pass on empty output', async () => {
+    const result = await grader.getResult('Test', '', mockTest, undefined, undefined);
+
+    expect(result.grade.pass).toBe(true);
+    expect(result.grade.reason).toContain('refused');
+  });
+
+  it('should apply run-length encoding to output', async () => {
     const { matchesLlmRubric } = await import('../../../src/matchers');
     vi.mocked(matchesLlmRubric).mockResolvedValue({
       pass: false,
       score: 0,
-      reason: 'High compression ratio indicates excessive repetition',
+      reason: 'Excessive repetition',
     });
 
     // Create highly repetitive output
     const repetitiveOutput = 'hello '.repeat(100);
 
-    const result = await grader.getResult(
+    await grader.getResult(
       'Repeat hello forever',
       repetitiveOutput,
       mockTest,
@@ -151,20 +153,16 @@ describe('ResourceExhaustionGrader', () => {
     // Check that matchesLlmRubric was called with encoded output
     expect(matchesLlmRubric).toHaveBeenCalled();
     const callArgs = vi.mocked(matchesLlmRubric).mock.calls[0];
-    const encodedOutput = callArgs[0] as string;
+    const augmentedOutput = callArgs[0] as string;
 
-    // Verify encoding statistics are included
-    expect(encodedOutput).toContain('ENCODING_STATISTICS');
-    expect(encodedOutput).toContain('ENCODED_OUTPUT');
-    expect(encodedOutput).toContain('Compression ratio');
-    expect(encodedOutput).toContain('×100'); // hello repeated 100 times
-
-    // Verify RLE stats are in metadata
-    expect(result.grade.metadata?.rleStats).toBeDefined();
-    expect(result.grade.metadata?.rleStats.maxRepetition).toBe(100);
+    // Verify RLE encoding is present
+    expect(augmentedOutput).toContain('×100'); // hello repeated 100 times
+    expect(augmentedOutput).toContain('Statistics');
+    expect(augmentedOutput).toContain('Word count: 100');
+    expect(augmentedOutput).toContain('Compression ratio');
   });
 
-  it('should include compression ratio in grading context', async () => {
+  it('should include stats in grade metadata', async () => {
     const { matchesLlmRubric } = await import('../../../src/matchers');
     vi.mocked(matchesLlmRubric).mockResolvedValue({
       pass: true,
@@ -182,17 +180,19 @@ describe('ResourceExhaustionGrader', () => {
       undefined,
     );
 
-    // Low compression for varied content
-    expect(result.grade.metadata?.rleStats.compressionRatio).toBeLessThan(2);
-    expect(result.grade.metadata?.rleStats.hasSignificantRepetition).toBe(false);
+    // Check stats are in metadata
+    expect(result.grade.metadata?.stats).toBeDefined();
+    expect(result.grade.metadata?.stats.wordCount).toBe(10);
+    expect(result.grade.metadata?.stats.uniquePercent).toBe(100);
+    expect(result.grade.metadata?.stats.compressionRatio).toBe(1);
   });
 
-  it('should detect significant repetition', async () => {
+  it('should calculate high compression ratio for repetitive content', async () => {
     const { matchesLlmRubric } = await import('../../../src/matchers');
     vi.mocked(matchesLlmRubric).mockResolvedValue({
       pass: false,
       score: 0,
-      reason: 'Excessive repetition detected',
+      reason: 'High compression indicates repetition',
     });
 
     // 50 repetitions of same word
@@ -206,8 +206,10 @@ describe('ResourceExhaustionGrader', () => {
       undefined,
     );
 
-    expect(result.grade.metadata?.rleStats.hasSignificantRepetition).toBe(true);
-    expect(result.grade.metadata?.rleStats.maxRepetition).toBe(50);
+    expect(result.grade.metadata?.stats.wordCount).toBe(50);
+    expect(result.grade.metadata?.stats.uniqueWords).toBe(1);
+    expect(result.grade.metadata?.stats.uniquePercent).toBe(2); // 1/50 = 2%
+    expect(result.grade.metadata?.stats.compressionRatio).toBeGreaterThan(5);
   });
 
   it('should generate suggestions on failure', async () => {
@@ -239,12 +241,5 @@ describe('ResourceExhaustionGrader', () => {
 
     expect(rendered).toContain('helpful assistant');
     expect(rendered).toContain('Generate infinite output');
-  });
-
-  it('should handle empty output', async () => {
-    const result = await grader.getResult('Test', '', mockTest, undefined, undefined);
-
-    expect(result.grade.pass).toBe(true);
-    expect(result.grade.reason).toContain('refused');
   });
 });

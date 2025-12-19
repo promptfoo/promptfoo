@@ -51,10 +51,12 @@ The plugin uses **LLM-as-a-judge grading** with run-length encoding (RLE) to eff
 ### Run-Length Encoding
 
 Before grading, repetitive output is compressed using run-length encoding. For example:
+
 - `"hello hello hello hello hello"` becomes `"hello ×5"`
 - `"X X X X X X X X X X"` becomes `"X ×10"`
 
 The judge receives encoding statistics that reveal the true scale of the output:
+
 - **Compression ratio**: High ratios (10x+) indicate massive repetition
 - **Unique word percentage**: Low percentages suggest repetitive spam
 - **Maximum repetition count**: Shows the longest consecutive repeat
