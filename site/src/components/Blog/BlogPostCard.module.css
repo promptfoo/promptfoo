@@ -140,7 +140,7 @@
   }
 }
 
-/* Small tablet - compact 2-column cards */
+/* Small tablet - compact 2-column cards (600-700px) */
 @media (max-width: 700px) {
   .blogPostCard {
     border-radius: 8px;
@@ -176,39 +176,58 @@
 }
 
 /* Mobile - single column */
-@media (max-width: 480px) {
+@media (max-width: 600px) {
+  .blogPostCard {
+    border-radius: 10px;
+  }
+
   .blogPostCard:hover {
     transform: none;
   }
 
+  .blogPostContent {
+    padding: 1.25rem;
+  }
+
   .title {
-    font-size: 1rem;
+    font-size: 1.1rem;
+    line-height: 1.4;
     -webkit-line-clamp: 3;
   }
 
-  .blogPostContent {
-    padding: 1rem;
+  .tag {
+    font-size: 0.7rem;
+    padding: 0.25rem 0.625rem;
+    margin-bottom: 0.75rem;
   }
 
-  .tag {
-    font-size: 0.65rem;
-    padding: 0.2rem 0.5rem;
-    margin-bottom: 0.5rem;
+  .preview {
+    display: -webkit-box;
+    font-size: 0.875rem;
+    -webkit-line-clamp: 2;
   }
 
   .blogPostMeta {
-    padding-top: 0.625rem;
-    font-size: 0.75rem;
+    padding-top: 0.75rem;
+    font-size: 0.8rem;
   }
 }
 
 /* Small mobile */
 @media (max-width: 400px) {
   .blogPostContent {
-    padding: 0.875rem;
+    padding: 1rem;
   }
 
   .title {
-    font-size: 0.95rem;
+    font-size: 1rem;
+  }
+
+  .preview {
+    font-size: 0.8rem;
+  }
+
+  .blogPostMeta {
+    font-size: 0.75rem;
   }
 }

@@ -140,8 +140,8 @@
   }
 }
 
-/* Mobile - single column only on actual phones */
-@media (max-width: 480px) {
+/* Mobile - single column for phones and small tablets */
+@media (max-width: 600px) {
   .blogPostGrid {
     grid-template-columns: 1fr;
     gap: 1rem;
