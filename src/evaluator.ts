@@ -7,6 +7,7 @@ import {
   runAssertions,
   runCompareAssertion,
 } from './assertions/index';
+import { extractAndStoreBinaryData } from './blobs/extractor';
 import { getCache } from './cache';
 import cliState from './cliState';
 import { DEFAULT_MAX_CONCURRENCY, FILE_METADATA_KEY } from './constants';
@@ -514,7 +515,7 @@ export async function runEval({
       }
     } else {
       // Create a copy of response so we can potentially mutate it.
-      const processedResponse = { ...response };
+      let processedResponse = { ...response };
 
       // Apply provider transform first (if exists)
       if (provider.transform) {
@@ -538,6 +539,15 @@ export async function runEval({
       }
 
       invariant(processedResponse.output != null, 'Response output should not be null');
+
+      // Externalize large blobs before grading to avoid token bloat in model-graded assertions.
+      const blobbedResponse = await extractAndStoreBinaryData(processedResponse, {
+        testIdx,
+        promptIdx,
+      });
+      if (blobbedResponse) {
+        processedResponse = blobbedResponse;
+      }
 
       // Extract traceId from traceparent if available
       let traceId: string | undefined;

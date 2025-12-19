@@ -1,5 +1,7 @@
 import { randomUUID } from 'crypto';
 
+import { extractAndStoreBinaryData, isBlobStorageEnabled } from '../../blobs/extractor';
+import { shouldAttemptRemoteBlobUpload } from '../../blobs/remoteUpload';
 import cliState from '../../cliState';
 import { getEnvBool } from '../../envars';
 import logger from '../../logger';
@@ -15,6 +17,7 @@ import {
   type GuardrailResponse,
   isApiProvider,
   isProviderOptions,
+  type ProviderResponse,
   type RedteamFileConfig,
   type TokenUsage,
 } from '../../types/index';
@@ -171,23 +174,13 @@ class RedteamProviderManager {
 export const redteamProviderManager = new RedteamProviderManager();
 
 export type TargetResponse = {
-  output: string;
-  error?: string;
-  sessionId?: string;
-  tokenUsage?: TokenUsage;
-  guardrails?: GuardrailResponse;
   traceContext?: TraceContextData | null;
   traceSummary?: string;
-  audio?: {
-    data?: string;
-    transcript?: string;
-    format?: string;
-  };
   image?: {
     data?: string;
     format?: string;
   };
-};
+} & Omit<ProviderResponse, 'output'> & { output: string };
 
 /**
  * Gets the response from the target provider for a given prompt.
@@ -227,12 +220,10 @@ export async function getTargetResponse(
           : safeJsonStringify(targetRespRaw.output)) as string)
       : '';
     return {
+      ...(targetRespRaw as ProviderResponse),
       output,
       error: targetRespRaw.error,
-      sessionId: targetRespRaw.sessionId,
       tokenUsage,
-      guardrails: targetRespRaw.guardrails,
-      audio: targetRespRaw.audio,
     };
   }
 
@@ -243,21 +234,18 @@ export async function getTargetResponse(
         : safeJsonStringify(targetRespRaw.output)
     ) as string;
     return {
+      ...(targetRespRaw as ProviderResponse),
       output,
-      sessionId: targetRespRaw.sessionId,
       tokenUsage,
-      guardrails: targetRespRaw.guardrails,
-      audio: targetRespRaw.audio,
     };
   }
 
   if (targetRespRaw?.error) {
     return {
+      ...(targetRespRaw as ProviderResponse),
       output: '',
       error: targetRespRaw.error,
-      sessionId: targetRespRaw.sessionId,
       tokenUsage,
-      guardrails: targetRespRaw.guardrails,
     };
   }
 
@@ -426,6 +414,21 @@ export interface BaseRedteamResponse {
   tokenUsage: TokenUsage;
   guardrails?: GuardrailResponse;
   additionalResults?: EvaluateResult[];
+}
+
+/**
+ * Externalize large blob payloads in provider responses before they are copied into
+ * redteam conversation/history (prevents meta prompts from exploding with base64).
+ */
+export async function externalizeResponseForRedteamHistory<T extends ProviderResponse>(
+  response: T,
+  context?: { evalId?: string; testIdx?: number; promptIdx?: number },
+): Promise<T> {
+  if (!isBlobStorageEnabled() && !shouldAttemptRemoteBlobUpload()) {
+    return response;
+  }
+  const blobbed = await extractAndStoreBinaryData(response, context);
+  return (blobbed as T) || response;
 }
 
 /**
