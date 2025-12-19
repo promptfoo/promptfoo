@@ -50,6 +50,7 @@ import {
   handleIContainsAll,
   handleIContainsAny,
 } from './contains';
+import { handleContentSafety } from './contentSafety';
 import { handleContextFaithfulness } from './contextFaithfulness';
 import { handleContextRecall } from './contextRecall';
 import { handleContextRelevance } from './contextRelevance';
@@ -126,6 +127,7 @@ const ASSERTION_HANDLERS: Record<
   'contains-json': handleContainsJson,
   'contains-sql': handleContainsSql,
   'contains-xml': handleIsXml,
+  'content-safety': handleContentSafety,
   'context-faithfulness': handleContextFaithfulness,
   'context-recall': handleContextRecall,
   'context-relevance': handleContextRelevance,

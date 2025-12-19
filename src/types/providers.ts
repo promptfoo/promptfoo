@@ -36,6 +36,7 @@ export interface ModerationFlag {
   code: string;
   description: string;
   confidence: number;
+  metadata?: Record<string, any>;
 }
 
 export interface ProviderOptions {
