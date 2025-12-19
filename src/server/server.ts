@@ -90,7 +90,7 @@ export function handleServerError(error: NodeJS.ErrnoException, port: number): v
  * When bundled into dist/src/server/index.js, getDirectory() returns dist/src/server/
  * but the app is at dist/src/app/, so we need to check the parent directory.
  */
-function findStaticDir(): string {
+export function findStaticDir(): string {
   const baseDir = getDirectory();
 
   // Try the standard location first (works in development)
