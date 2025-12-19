@@ -28,12 +28,15 @@ export async function loadApiProvider(
   context: LoadApiProviderContext = {},
 ): Promise<ApiProvider> {
   const { options = {}, basePath, env } = context;
+  const mergedEnv = env || options.env ? { ...(env ?? {}), ...(options.env ?? {}) } : undefined;
 
   // Render ONLY environment variable templates at load time (e.g., {{ env.AZURE_ENDPOINT }})
   // This allows constructors to access real env values while preserving runtime templates
   // like {{ vars.* }} for per-test customization at callApi() time
-  const renderedConfig = options.config ? renderEnvOnlyInObject(options.config) : undefined;
-  const renderedId = options.id ? renderEnvOnlyInObject(options.id) : undefined;
+  const renderedConfig = options.config
+    ? renderEnvOnlyInObject(options.config, mergedEnv)
+    : undefined;
+  const renderedId = options.id ? renderEnvOnlyInObject(options.id, mergedEnv) : undefined;
 
   const providerOptions: ProviderOptions = {
     id: renderedId,
@@ -41,7 +44,7 @@ export async function loadApiProvider(
       ...renderedConfig,
       basePath,
     },
-    env,
+    env: mergedEnv,
   };
 
   // Validate linkedTargetId if present (Promptfoo Cloud feature)
@@ -49,7 +52,10 @@ export async function loadApiProvider(
     await validateLinkedTargetId(providerOptions.config.linkedTargetId);
   }
 
-  const renderedProviderPath = getNunjucksEngine().renderString(providerPath, {});
+  const renderedProviderPath = getNunjucksEngine().renderString(
+    providerPath,
+    mergedEnv ? { env: mergedEnv } : {},
+  );
 
   if (isCloudProvider(renderedProviderPath)) {
     const cloudDatabaseId = getCloudDatabaseId(renderedProviderPath);
@@ -127,7 +133,10 @@ export async function loadApiProvider(
       const ret = await factory.create(renderedProviderPath, providerOptions, context);
       ret.transform = options.transform;
       ret.delay = options.delay;
-      ret.label ||= getNunjucksEngine().renderString(String(options.label || ''), {});
+      ret.label ||= getNunjucksEngine().renderString(
+        String(options.label || ''),
+        mergedEnv ? { env: mergedEnv } : {},
+      );
       return ret;
     }
   }

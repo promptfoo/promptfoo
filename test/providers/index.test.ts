@@ -952,6 +952,52 @@ describe('loadApiProvider', () => {
     delete process.env.MY_PORT;
   });
 
+  it('supports templating in provider URL with context env overrides', async () => {
+    const provider = await loadApiProvider('https://{{ env.MY_HOST }}:{{ env.MY_PORT }}/query', {
+      env: {
+        MY_HOST: 'api.example.com',
+        MY_PORT: '8080',
+      },
+      options: {
+        config: {
+          body: {},
+        },
+      },
+    });
+
+    expect(provider.id()).toBe('https://api.example.com:8080/query');
+  });
+
+  it('uses provider env overrides when rendering provider config', async () => {
+    const provider = await loadApiProvider('echo', {
+      options: {
+        env: {
+          MY_API_KEY: 'secret',
+        },
+        config: {
+          apiKey: '{{ env.MY_API_KEY }}',
+        },
+      },
+    });
+
+    expect(provider.config.apiKey).toBe('secret');
+  });
+
+  it('passes provider env overrides to provider instances', async () => {
+    const provider = (await loadApiProvider('openai:chat', {
+      options: {
+        env: {
+          OPENAI_API_KEY: 'override-key',
+        },
+        config: {
+          apiKeyRequired: false,
+        },
+      },
+    })) as OpenAiChatCompletionProvider;
+
+    expect(provider.env?.OPENAI_API_KEY).toBe('override-key');
+  });
+
   it('loadApiProvider with yaml filepath containing multiple providers', async () => {
     const mockYamlContent = dedent`
     - id: 'openai:gpt-4o-mini'
