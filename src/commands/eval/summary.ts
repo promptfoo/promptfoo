@@ -1,5 +1,6 @@
 import chalk from 'chalk';
 import { formatDuration } from '../../util/formatDuration';
+
 import type { TokenUsage } from '../../types/index';
 import type { TokenUsageTracker } from '../../util/tokenUsage';
 

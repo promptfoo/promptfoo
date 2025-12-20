@@ -1,8 +1,9 @@
-import { describe, it, expect, beforeEach, vi, type Mock } from 'vitest';
+import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { generateEvalSummary } from '../../../src/commands/eval/summary';
+import { stripAnsi } from '../../util/utils';
+
 import type { EvalSummaryParams } from '../../../src/commands/eval/summary';
 import type { TokenUsageTracker } from '../../../src/util/tokenUsage';
-import { stripAnsi } from '../../util/utils';
 
 type MockTracker = {
   getProviderIds: Mock;
