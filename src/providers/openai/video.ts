@@ -55,15 +55,6 @@ const DEFAULT_POLL_INTERVAL_MS = 10000; // 10 seconds
 const DEFAULT_MAX_POLL_TIME_MS = 600000; // 10 minutes
 
 /**
- * File extensions for each variant type
- */
-const VARIANT_EXTENSIONS: Record<OpenAiVideoVariant, string> = {
-  video: 'mp4',
-  thumbnail: 'webp',
-  spritesheet: 'jpg',
-};
-
-/**
  * MIME types for each variant
  */
 const VARIANT_MIME_TYPES: Record<OpenAiVideoVariant, string> = {
@@ -107,19 +98,52 @@ export function generateVideoCacheKey(
 
 /**
  * Check if a cached video exists for the given cache key.
- * Uses media storage to check for existence.
+ * Uses the storage hash index to find content by request hash.
  */
-export async function checkVideoCache(cacheKey: string): Promise<boolean> {
+export async function checkVideoCache(cacheKey: string): Promise<string | null> {
   const storage = getMediaStorage();
-  const key = `video/${cacheKey}.mp4`;
-  return storage.exists(key);
+  // The cacheKey is stored as contentHash in metadata, so we can use findByHash
+  // But since we're using request-based cache keys (not content hashes), we need
+  // a different approach: store a mapping file
+  const mappingKey = `video/_cache/${cacheKey}.json`;
+  if (await storage.exists(mappingKey)) {
+    try {
+      const mappingData = await storage.retrieve(mappingKey);
+      const mapping = JSON.parse(mappingData.toString());
+      // Verify the referenced files still exist
+      if (mapping.videoKey && (await storage.exists(mapping.videoKey))) {
+        return mapping.videoKey;
+      }
+    } catch {
+      // Mapping file corrupted, treat as cache miss
+    }
+  }
+  return null;
 }
 
 /**
- * Get the storage ref key pattern for a video asset.
+ * Store cache mapping from request hash to storage keys.
  */
-function getVideoStorageKey(cacheKey: string, variant: OpenAiVideoVariant): string {
-  return `video/${cacheKey}.${VARIANT_EXTENSIONS[variant]}`;
+async function storeCacheMapping(
+  cacheKey: string,
+  videoKey: string,
+  thumbnailKey?: string,
+  spritesheetKey?: string,
+): Promise<void> {
+  const mapping = {
+    videoKey,
+    thumbnailKey,
+    spritesheetKey,
+    createdAt: new Date().toISOString(),
+  };
+
+  // Store the mapping using storeMedia
+  const mappingBuffer = Buffer.from(JSON.stringify(mapping, null, 2));
+  await storeMedia(mappingBuffer, {
+    contentType: 'application/json',
+    mediaType: 'video' as const,
+    contentHash: `cache-${cacheKey}`,
+  });
 }
 
 /**
@@ -427,20 +451,32 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
       : generateVideoCacheKey(prompt, model, size, seconds, config.input_reference);
 
     // Check for cached video (skip for remix operations)
-    if (!config.remix_video_id && (await checkVideoCache(cacheKey))) {
+    const cachedVideoKey = config.remix_video_id ? null : await checkVideoCache(cacheKey);
+    if (cachedVideoKey) {
       logger.info(`[OpenAI Video] Cache hit for video: ${cacheKey}`);
 
       const storage = getMediaStorage();
-      const videoKey = getVideoStorageKey(cacheKey, 'video');
-      const thumbnailKey = getVideoStorageKey(cacheKey, 'thumbnail');
-      const spritesheetKey = getVideoStorageKey(cacheKey, 'spritesheet');
 
-      // Build storage ref URL for video
-      const videoUrl = `storageRef:${videoKey}`;
+      // Read the cache mapping to get all stored keys
+      const mappingKey = `video/_cache/${cacheKey}.json`;
+      let thumbnailKey: string | undefined;
+      let spritesheetKey: string | undefined;
 
-      // Check for optional assets
-      const hasThumbnail = await storage.exists(thumbnailKey);
-      const hasSpritesheet = await storage.exists(spritesheetKey);
+      try {
+        const mappingData = await storage.retrieve(mappingKey);
+        const mapping = JSON.parse(mappingData.toString());
+        thumbnailKey = mapping.thumbnailKey;
+        spritesheetKey = mapping.spritesheetKey;
+      } catch {
+        // Mapping exists but couldn't be read - just use video
+      }
+
+      // Build storage ref URL for video using the actual stored key
+      const videoUrl = `storageRef:${cachedVideoKey}`;
+
+      // Check for optional assets using actual stored keys
+      const hasThumbnail = thumbnailKey && (await storage.exists(thumbnailKey));
+      const hasSpritesheet = spritesheetKey && (await storage.exists(spritesheetKey));
 
       const sanitizedPrompt = prompt
         .replace(/\r?\n|\r/g, ' ')
@@ -553,6 +589,9 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
 
     const latencyMs = Date.now() - startTime;
     const cost = calculateVideoCost(model, seconds, false);
+
+    // Store cache mapping for future lookups
+    await storeCacheMapping(cacheKey, videoRef.key, thumbnailRef?.key, spritesheetRef?.key);
 
     // Build storage ref URLs
     const videoUrl = `storageRef:${videoRef.key}`;

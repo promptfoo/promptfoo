@@ -643,19 +643,35 @@ describe('OpenAiVideoProvider', () => {
   });
 
   describe('checkVideoCache', () => {
-    it('should return true if video file exists in storage', async () => {
+    it('should return video key if cache mapping exists and video file exists', async () => {
       const mockStorage = {
-        exists: vi.fn().mockResolvedValue(true),
+        exists: vi.fn().mockImplementation((key: string) => {
+          if (key === 'video/_cache/test-cache-key.json') {
+            return Promise.resolve(true);
+          }
+          if (key === 'video/abc123def456.mp4') {
+            return Promise.resolve(true);
+          }
+          return Promise.resolve(false);
+        }),
+        retrieve: vi.fn().mockResolvedValue(
+          Buffer.from(
+            JSON.stringify({
+              videoKey: 'video/abc123def456.mp4',
+              thumbnailKey: 'video/abc123def456.webp',
+            }),
+          ),
+        ),
       };
       mockGetMediaStorage.mockReturnValue(mockStorage);
 
       const result = await checkVideoCache('test-cache-key');
 
-      expect(result).toBe(true);
-      expect(mockStorage.exists).toHaveBeenCalledWith('video/test-cache-key.mp4');
+      expect(result).toBe('video/abc123def456.mp4');
+      expect(mockStorage.exists).toHaveBeenCalledWith('video/_cache/test-cache-key.json');
     });
 
-    it('should return false if video file does not exist', async () => {
+    it('should return null if cache mapping does not exist', async () => {
       const mockStorage = {
         exists: vi.fn().mockResolvedValue(false),
       };
@@ -663,7 +679,31 @@ describe('OpenAiVideoProvider', () => {
 
       const result = await checkVideoCache('nonexistent-key');
 
-      expect(result).toBe(false);
+      expect(result).toBe(null);
+    });
+
+    it('should return null if video file no longer exists', async () => {
+      const mockStorage = {
+        exists: vi.fn().mockImplementation((key: string) => {
+          if (key === 'video/_cache/test-key.json') {
+            return Promise.resolve(true);
+          }
+          // Video file was deleted
+          return Promise.resolve(false);
+        }),
+        retrieve: vi.fn().mockResolvedValue(
+          Buffer.from(
+            JSON.stringify({
+              videoKey: 'video/deleted123.mp4',
+            }),
+          ),
+        ),
+      };
+      mockGetMediaStorage.mockReturnValue(mockStorage);
+
+      const result = await checkVideoCache('test-key');
+
+      expect(result).toBe(null);
     });
   });
 
@@ -673,9 +713,26 @@ describe('OpenAiVideoProvider', () => {
         config: { apiKey: 'test-key' },
       });
 
-      // Mock storage to indicate video exists (cache hit)
+      // Mock storage with cache mapping
       const mockStorage = {
-        exists: vi.fn().mockResolvedValue(true),
+        exists: vi.fn().mockImplementation((key: string) => {
+          // Cache mapping exists
+          if (key.includes('_cache') && key.endsWith('.json')) {
+            return Promise.resolve(true);
+          }
+          // Video file exists
+          if (key === 'video/stored123.mp4') {
+            return Promise.resolve(true);
+          }
+          return Promise.resolve(false);
+        }),
+        retrieve: vi.fn().mockResolvedValue(
+          Buffer.from(
+            JSON.stringify({
+              videoKey: 'video/stored123.mp4',
+            }),
+          ),
+        ),
       };
       mockGetMediaStorage.mockReturnValue(mockStorage);
 
@@ -689,7 +746,7 @@ describe('OpenAiVideoProvider', () => {
       expect(result.cost).toBe(0);
       expect(result.latencyMs).toBe(0);
       expect(result.video).toBeDefined();
-      expect(result.video?.url).toContain('storageRef:');
+      expect(result.video?.url).toBe('storageRef:video/stored123.mp4');
       expect(result.video?.format).toBe('mp4');
       expect(result.video?.model).toBe('sora-2');
     });
@@ -699,17 +756,39 @@ describe('OpenAiVideoProvider', () => {
         config: { apiKey: 'test-key' },
       });
 
-      // Mock storage to return true for all files
+      // Mock storage with cache mapping including all assets
       const mockStorage = {
-        exists: vi.fn().mockResolvedValue(true),
+        exists: vi.fn().mockImplementation((key: string) => {
+          if (key.includes('_cache') && key.endsWith('.json')) {
+            return Promise.resolve(true);
+          }
+          // All asset files exist
+          if (
+            key === 'video/stored123.mp4' ||
+            key === 'video/stored123.webp' ||
+            key === 'video/stored123.jpg'
+          ) {
+            return Promise.resolve(true);
+          }
+          return Promise.resolve(false);
+        }),
+        retrieve: vi.fn().mockResolvedValue(
+          Buffer.from(
+            JSON.stringify({
+              videoKey: 'video/stored123.mp4',
+              thumbnailKey: 'video/stored123.webp',
+              spritesheetKey: 'video/stored123.jpg',
+            }),
+          ),
+        ),
       };
       mockGetMediaStorage.mockReturnValue(mockStorage);
 
       const result = await provider.callApi('cached video with assets');
 
       expect(result.cached).toBe(true);
-      expect(result.video?.thumbnail).toContain('storageRef:');
-      expect(result.video?.spritesheet).toContain('storageRef:');
+      expect(result.video?.thumbnail).toBe('storageRef:video/stored123.webp');
+      expect(result.video?.spritesheet).toBe('storageRef:video/stored123.jpg');
     });
 
     it('should not include thumbnail in cached result if it does not exist', async () => {
@@ -717,14 +796,27 @@ describe('OpenAiVideoProvider', () => {
         config: { apiKey: 'test-key' },
       });
 
-      // Mock storage to return true only for video, false for thumbnail/spritesheet
+      // Mock storage with cache mapping but missing thumbnail/spritesheet files
       const mockStorage = {
         exists: vi.fn().mockImplementation((key: string) => {
-          if (key.endsWith('.mp4')) {
+          if (key.includes('_cache') && key.endsWith('.json')) {
+            return Promise.resolve(true);
+          }
+          // Only video exists
+          if (key === 'video/stored123.mp4') {
             return Promise.resolve(true);
           }
           return Promise.resolve(false);
         }),
+        retrieve: vi.fn().mockResolvedValue(
+          Buffer.from(
+            JSON.stringify({
+              videoKey: 'video/stored123.mp4',
+              thumbnailKey: 'video/stored123.webp',
+              spritesheetKey: 'video/stored123.jpg',
+            }),
+          ),
+        ),
       };
       mockGetMediaStorage.mockReturnValue(mockStorage);
 
@@ -742,7 +834,8 @@ describe('OpenAiVideoProvider', () => {
 
       // Even though storage indicates file exists, remix should not use cache
       const mockStorage = {
-        exists: vi.fn().mockResolvedValue(true),
+        exists: vi.fn().mockResolvedValue(false),
+        store: vi.fn(),
       };
       mockGetMediaStorage.mockReturnValue(mockStorage);
 
