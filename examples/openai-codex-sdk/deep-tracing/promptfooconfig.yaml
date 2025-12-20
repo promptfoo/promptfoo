@@ -1,0 +1,42 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Deep tracing with Codex SDK - captures internal agent operations'
+
+# Enable OTLP receiver to capture traces from Codex CLI
+tracing:
+  enabled: true
+  otlp:
+    http:
+      enabled: true
+      port: 4318
+      host: '127.0.0.1'
+
+prompts:
+  - |
+    Review the following git diff and provide a brief code review:
+
+    ```diff
+    {{diff}}
+    ```
+
+    Output your review in this format:
+    - Summary: (one sentence)
+    - Issues: (bullet points or "None")
+    - Verdict: APPROVE or REQUEST_CHANGES
+
+providers:
+  - id: openai:codex-sdk
+    config:
+      model: gpt-5.1-codex
+      model_reasoning_effort: medium
+      skip_git_repo_check: true
+      enable_streaming: true  # Required for deep tracing of agent operations
+      deep_tracing: true  # Enable OTEL injection for Codex CLI internal spans
+
+tests:
+  - vars:
+      diff: file://diff.patch
+    assert:
+      - type: contains-any
+        value:
+          - 'APPROVE'
+          - 'REQUEST_CHANGES'

@@ -1,0 +1,7 @@
+{
+  "main": "/Users/mdangelo/projects/promptfoo/bundle/promptfoo.mjs",
+  "output": "/Users/mdangelo/projects/promptfoo/dist-binary/promptfoo-0.120.4-darwin-arm64/sea-prep.blob",
+  "disableExperimentalSEAWarning": true,
+  "useSnapshot": false,
+  "useCodeCache": true
+}
