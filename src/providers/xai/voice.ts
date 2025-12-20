@@ -42,7 +42,7 @@ export type XAIVoice = (typeof XAI_VOICES)[number];
 export const XAI_AUDIO_FORMATS = ['audio/pcm', 'audio/pcmu', 'audio/pcma'] as const;
 export type XAIAudioFormatType = (typeof XAI_AUDIO_FORMATS)[number];
 
-export const XAI_SAMPLE_RATES = [8000, 16000, 21050, 24000, 32000, 44100, 48000] as const;
+export const XAI_SAMPLE_RATES = [8000, 16000, 22050, 24000, 32000, 44100, 48000] as const;
 export type XAISampleRate = (typeof XAI_SAMPLE_RATES)[number];
 
 // ============================================================================
@@ -246,7 +246,7 @@ export class XAIVoiceProvider implements ApiProvider {
   }
 
   protected getApiKey(): string | undefined {
-    return this.config.apiKey || getEnvString('XAI_API_KEY');
+    return this.config.apiKey || getEnvString(this.config.apiKeyEnvar ?? 'XAI_API_KEY');
   }
 
   /**

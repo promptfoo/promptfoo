@@ -13,10 +13,6 @@ vi.mock('../../../src/logger');
 describe('XAI Voice Provider', () => {
   const mockApiKey = 'test-api-key';
 
-  beforeEach(() => {
-    vi.resetAllMocks();
-  });
-
   afterEach(() => {
     vi.resetAllMocks();
   });
