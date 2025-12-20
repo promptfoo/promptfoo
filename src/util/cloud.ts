@@ -9,7 +9,7 @@ import { checkServerFeatureSupport } from './server';
 
 import type { Plugin, Severity } from '../redteam/constants';
 import type { PoliciesById } from '../redteam/types';
-import type { UnifiedConfig } from '../types/index';
+import type { EvaluateResult, UnifiedConfig } from '../types/index';
 import type { ProviderOptions } from '../types/providers';
 
 const PERMISSION_CHECK_SERVER_FEATURE_NAME = 'config-permission-check-endpoint';
@@ -699,5 +699,252 @@ export async function getOrgContext(): Promise<{
   } catch {
     // Silently fail and return null
     return null;
+  }
+}
+
+// ============================================================================
+// Cloud Resume Support
+// ============================================================================
+
+/**
+ * Fetches an eval from the cloud by its ID.
+ * Used to resume a partially completed scan.
+ * @param evalId - The ID of the eval to fetch
+ * @returns Promise resolving to the eval data including config with generated tests
+ * @throws Error if cloud is not enabled or eval not found
+ */
+export async function getEvalFromCloud(evalId: string): Promise<{
+  id: string;
+  config: UnifiedConfig;
+  createdAt: string;
+}> {
+  if (!cloudConfig.isEnabled()) {
+    throw new Error(
+      `Could not fetch eval ${evalId} from cloud. Cloud config is not enabled. Please run \`promptfoo auth login\` to login.`,
+    );
+  }
+
+  try {
+    const response = await makeRequest(`results/${evalId}`, 'GET');
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error(`Eval ${evalId} not found in cloud. It may have been deleted.`);
+      }
+      const errorMessage = await response.text();
+      throw new Error(
+        `Failed to fetch eval from cloud: ${errorMessage}. HTTP Status: ${response.status}`,
+      );
+    }
+
+    const body = await response.json();
+    logger.debug(`Eval fetched from cloud: ${evalId}`);
+
+    return {
+      id: body.id || evalId,
+      config: body.config,
+      createdAt: body.createdAt,
+    };
+  } catch (e) {
+    if (e instanceof Error && e.message.includes('not found')) {
+      throw e;
+    }
+    logger.error(`Failed to fetch eval from cloud: ${evalId}`);
+    logger.error(String(e));
+    throw new Error(`Failed to fetch eval from cloud: ${evalId}`);
+  }
+}
+
+/**
+ * Fetches the eval summary with stats from cloud.
+ * Used after resume to display combined stats for all tests.
+ * @param evalId - The ID of the eval
+ * @returns Promise resolving to eval summary with stats
+ */
+export async function getEvalSummaryFromCloud(evalId: string): Promise<{
+  totalTests: number;
+  passCount: number;
+  failCount: number;
+  errorCount: number;
+  passRate: number;
+}> {
+  if (!cloudConfig.isEnabled()) {
+    throw new Error(
+      `Could not fetch eval summary from cloud. Cloud config is not enabled. Please run \`promptfoo auth login\` to login.`,
+    );
+  }
+
+  try {
+    const response = await makeRequest(`results/${evalId}`, 'GET');
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch eval summary: HTTP ${response.status}`);
+    }
+
+    const body = await response.json();
+    const prompts = body.prompts || [];
+
+    // Calculate totals from prompt metrics
+    let totalTests = 0;
+    let passCount = 0;
+    let failCount = 0;
+    let errorCount = 0;
+
+    for (const prompt of prompts) {
+      if (prompt.metrics) {
+        passCount += prompt.metrics.testPassCount || 0;
+        failCount += prompt.metrics.testFailCount || 0;
+        errorCount += prompt.metrics.testErrorCount || 0;
+      }
+    }
+    totalTests = passCount + failCount + errorCount;
+
+    const passRate = totalTests > 0 ? (passCount / totalTests) * 100 : 0;
+
+    return {
+      totalTests,
+      passCount,
+      failCount,
+      errorCount,
+      passRate,
+    };
+  } catch (e) {
+    logger.debug(`Failed to fetch eval summary from cloud: ${e}`);
+    // Return empty stats on error - don't fail the resume
+    return {
+      totalTests: 0,
+      passCount: 0,
+      failCount: 0,
+      errorCount: 0,
+      passRate: 0,
+    };
+  }
+}
+
+/**
+ * Fetches the completed (testIdx:promptIdx) pairs for an eval from cloud.
+ * Used to skip already-completed tests when resuming a scan.
+ * @param evalId - The ID of the eval
+ * @returns Promise resolving to a Set of "testIdx:promptIdx" strings
+ * @throws Error if cloud is not enabled or request fails
+ */
+export async function getCompletedPairsFromCloud(evalId: string): Promise<Set<string>> {
+  if (!cloudConfig.isEnabled()) {
+    throw new Error(
+      `Could not fetch completed pairs from cloud. Cloud config is not enabled. Please run \`promptfoo auth login\` to login.`,
+    );
+  }
+
+  try {
+    const response = await makeRequest(`results/${evalId}/completed-pairs`, 'GET');
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        // Eval exists but no results yet - return empty set
+        logger.debug(`No completed pairs found for eval ${evalId}`);
+        return new Set();
+      }
+      const errorMessage = await response.text();
+      throw new Error(
+        `Failed to fetch completed pairs from cloud: ${errorMessage}. HTTP Status: ${response.status}`,
+      );
+    }
+
+    const body = await response.json();
+    const pairs = new Set<string>(body.pairs || []);
+    logger.debug(`Fetched ${pairs.size} completed pairs from cloud for eval ${evalId}`);
+
+    return pairs;
+  } catch (e) {
+    logger.error(`Failed to fetch completed pairs from cloud: ${evalId}`);
+    logger.error(String(e));
+    throw new Error(`Failed to fetch completed pairs from cloud: ${evalId}`);
+  }
+}
+
+/**
+ * Creates an eval in cloud with config but no results.
+ * Used to create the eval before streaming results during evaluation.
+ * @param evalData - The eval data including config
+ * @returns Promise resolving to the cloud eval ID
+ * @throws Error if cloud is not enabled or request fails
+ */
+export async function createEvalInCloud(evalData: {
+  config: UnifiedConfig;
+  createdAt: Date;
+  author?: string;
+}): Promise<string> {
+  if (!cloudConfig.isEnabled()) {
+    throw new Error(
+      `Could not create eval in cloud. Cloud config is not enabled. Please run \`promptfoo auth login\` to login.`,
+    );
+  }
+
+  try {
+    // Send eval data without results to create the eval
+    // The server requires prompts array - we send empty since eval hasn't run yet
+    const response = await makeRequest('results', 'POST', {
+      ...evalData,
+      results: [], // No results yet - they'll be streamed
+      prompts: [], // Empty - prompts will be derived from results as they stream in
+    });
+
+    if (!response.ok) {
+      const errorMessage = await response.text();
+      throw new Error(
+        `Failed to create eval in cloud: ${errorMessage}. HTTP Status: ${response.status}`,
+      );
+    }
+
+    const body = await response.json();
+    if (!body.id) {
+      throw new Error('Cloud did not return an eval ID');
+    }
+
+    logger.debug(`Created eval in cloud: ${body.id}`);
+    return body.id;
+  } catch (e) {
+    logger.error(`Failed to create eval in cloud`);
+    logger.error(String(e));
+    throw e;
+  }
+}
+
+/**
+ * Streams evaluation results back to the cloud for a specific eval.
+ * Used during resume to append new results to an existing eval.
+ * @param evalId - The ID of the eval to append results to
+ * @param results - Array of results to send
+ * @throws Error if cloud is not enabled or request fails
+ */
+export async function streamResultsToCloud(
+  evalId: string,
+  results: EvaluateResult[],
+): Promise<void> {
+  if (!cloudConfig.isEnabled()) {
+    throw new Error(
+      `Could not stream results to cloud. Cloud config is not enabled. Please run \`promptfoo auth login\` to login.`,
+    );
+  }
+
+  if (results.length === 0) {
+    return;
+  }
+
+  try {
+    const response = await makeRequest(`results/${evalId}/results`, 'POST', results);
+
+    if (!response.ok) {
+      const errorMessage = await response.text();
+      throw new Error(
+        `Failed to stream results to cloud: ${errorMessage}. HTTP Status: ${response.status}`,
+      );
+    }
+
+    logger.debug(`Streamed ${results.length} results to cloud for eval ${evalId}`);
+  } catch (e) {
+    logger.error(`Failed to stream results to cloud: ${evalId}`);
+    logger.error(String(e));
+    throw e;
   }
 }

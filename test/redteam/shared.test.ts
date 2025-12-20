@@ -5,8 +5,9 @@ import path from 'path';
 import * as yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, MockInstance, vi } from 'vitest';
 import { doGenerateRedteam } from '../../src/redteam/commands/generate';
-import { doRedteamRun } from '../../src/redteam/shared';
+import { doRedteamResume, doRedteamRun } from '../../src/redteam/shared';
 import { checkRemoteHealth } from '../../src/util/apiHealth';
+import { createEvalInCloud, streamResultsToCloud } from '../../src/util/cloud';
 import { loadDefaultConfig } from '../../src/util/config/default';
 import { initVerboseToggle } from '../../src/util/verboseToggle';
 import FakeDataFactory from '../factories/data/fakeDataFactory';
@@ -14,6 +15,16 @@ import FakeDataFactory from '../factories/data/fakeDataFactory';
 vi.mock('../../src/redteam/commands/generate');
 vi.mock('../../src/util/verboseToggle', () => ({
   initVerboseToggle: vi.fn(),
+}));
+vi.mock('../../src/util/cloud', () => ({
+  createEvalInCloud: vi.fn(),
+  streamResultsToCloud: vi.fn(),
+}));
+vi.mock('../../src/globalConfig/cloud', () => ({
+  cloudConfig: {
+    isEnabled: vi.fn().mockReturnValue(false),
+    getAppUrl: vi.fn().mockReturnValue('https://app.promptfoo.dev'),
+  },
 }));
 vi.mock('../../src/commands/eval', async (importOriginal) => {
   return {
@@ -384,5 +395,195 @@ describe('doRedteamRun', () => {
       // Just verifying no errors - cleanup should be handled gracefully
       expect(initVerboseToggle).toHaveBeenCalled();
     });
+  });
+
+  describe('cloud streaming integration', () => {
+    const mockConfig = {
+      prompts: ['Test prompt'],
+      vars: {},
+      providers: [{ id: 'test-provider' }],
+      tests: [{ vars: { prompt: 'test' } }],
+    };
+
+    beforeEach(async () => {
+      const { cloudConfig } = await import('../../src/globalConfig/cloud');
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
+      vi.mocked(createEvalInCloud).mockResolvedValue('cloud-eval-123');
+      vi.mocked(streamResultsToCloud).mockResolvedValue(undefined);
+      vi.mocked(yaml.load).mockReturnValue(mockConfig);
+    });
+
+    it('should create cloud eval when loadedFromCloud is true and cloud is enabled', async () => {
+      await doRedteamRun({
+        liveRedteamConfig: mockConfig,
+        loadedFromCloud: true,
+      });
+
+      expect(createEvalInCloud).toHaveBeenCalledWith({
+        config: mockConfig,
+        createdAt: expect.any(Date),
+      });
+    });
+
+    it('should not create cloud eval when loadedFromCloud is false', async () => {
+      await doRedteamRun({
+        liveRedteamConfig: mockConfig,
+        loadedFromCloud: false,
+      });
+
+      expect(createEvalInCloud).not.toHaveBeenCalled();
+    });
+
+    it('should not create cloud eval when cloud is not enabled', async () => {
+      const { cloudConfig } = await import('../../src/globalConfig/cloud');
+      vi.mocked(cloudConfig.isEnabled).mockReturnValue(false);
+
+      await doRedteamRun({
+        liveRedteamConfig: mockConfig,
+        loadedFromCloud: true,
+      });
+
+      expect(createEvalInCloud).not.toHaveBeenCalled();
+    });
+
+    it('should handle cloud eval creation failure gracefully', async () => {
+      vi.mocked(createEvalInCloud).mockRejectedValue(new Error('Cloud error'));
+
+      // Should not throw
+      await expect(
+        doRedteamRun({
+          liveRedteamConfig: mockConfig,
+          loadedFromCloud: true,
+        }),
+      ).resolves.not.toThrow();
+    });
+  });
+});
+
+describe('doRedteamResume', () => {
+  const mockDate = new Date('2023-01-01T00:00:00.000Z');
+  let dateNowSpy: MockInstance;
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+
+    dateNowSpy = vi.spyOn(Date, 'now').mockReturnValue(mockDate.getTime());
+    vi.mocked(loadDefaultConfig).mockResolvedValue({
+      defaultConfig: {},
+      defaultConfigPath: 'promptfooconfig.yaml',
+    });
+    vi.mocked(fs.existsSync).mockImplementation(() => true);
+    vi.mocked(fs.mkdirSync).mockImplementation(() => '');
+    vi.mocked(fs.writeFileSync).mockImplementation(() => {});
+    vi.mocked(fs.unlinkSync).mockImplementation(() => {});
+    vi.mocked(yaml.dump).mockImplementation(() => 'mocked-yaml-content');
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
+    dateNowSpy.mockRestore();
+  });
+
+  const mockConfig = {
+    prompts: ['Test prompt'],
+    vars: {},
+    providers: [{ id: 'test-provider' }],
+    tests: [{ vars: { prompt: 'test' } }],
+  };
+
+  it('should write config to temporary file', async () => {
+    await doRedteamResume({
+      liveRedteamConfig: mockConfig,
+      resumeEvalId: 'eval-123',
+    });
+
+    expect(fs.writeFileSync).toHaveBeenCalledWith(
+      expect.stringContaining('redteam-resume-'),
+      'mocked-yaml-content',
+    );
+  });
+
+  it('should clean up temporary file after completion', async () => {
+    await doRedteamResume({
+      liveRedteamConfig: mockConfig,
+      resumeEvalId: 'eval-123',
+    });
+
+    expect(fs.unlinkSync).toHaveBeenCalled();
+  });
+
+  it('should pass resultStreamCallback to doEval', async () => {
+    const mockCallback = vi.fn();
+    const { doEval } = await import('../../src/commands/eval');
+
+    await doRedteamResume({
+      liveRedteamConfig: mockConfig,
+      resumeEvalId: 'eval-123',
+      resultStreamCallback: mockCallback,
+    });
+
+    expect(doEval).toHaveBeenCalledWith(
+      expect.objectContaining({
+        write: false, // Should not write to local DB
+      }),
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({
+        resultStreamCallback: mockCallback,
+      }),
+    );
+  });
+
+  it('should set write: false to avoid local DB writes', async () => {
+    const { doEval } = await import('../../src/commands/eval');
+
+    await doRedteamResume({
+      liveRedteamConfig: mockConfig,
+      resumeEvalId: 'eval-123',
+    });
+
+    expect(doEval).toHaveBeenCalledWith(
+      expect.objectContaining({
+        write: false,
+      }),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  it('should initialize verbose toggle when logCallback is not provided', async () => {
+    await doRedteamResume({
+      liveRedteamConfig: mockConfig,
+      resumeEvalId: 'eval-123',
+    });
+
+    expect(initVerboseToggle).toHaveBeenCalled();
+  });
+
+  it('should NOT initialize verbose toggle when logCallback is provided', async () => {
+    const mockLogCallback = vi.fn();
+
+    await doRedteamResume({
+      liveRedteamConfig: mockConfig,
+      resumeEvalId: 'eval-123',
+      logCallback: mockLogCallback,
+    });
+
+    expect(initVerboseToggle).not.toHaveBeenCalled();
+  });
+
+  it('should handle cleanup errors gracefully', async () => {
+    vi.mocked(fs.unlinkSync).mockImplementation(() => {
+      throw new Error('Cleanup error');
+    });
+
+    // Should not throw
+    await expect(
+      doRedteamResume({
+        liveRedteamConfig: mockConfig,
+        resumeEvalId: 'eval-123',
+      }),
+    ).resolves.not.toThrow();
   });
 });

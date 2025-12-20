@@ -350,12 +350,14 @@ describe('evaluator', () => {
     cliState.resume = false;
     cliState.basePath = '';
     cliState.webUI = false;
+    cliState.cloudCompletedPairs = undefined;
   });
 
   afterEach(() => {
     vi.clearAllMocks();
     // Reset cliState after each test
     cliState.resume = false;
+    cliState.cloudCompletedPairs = undefined;
     if (global.gc) {
       global.gc(); // Force garbage collection
     }
@@ -4499,6 +4501,112 @@ describe('Evaluator with external defaultTest', () => {
       // Always restore original state
       cliState.resume = originalResume;
     }
+  });
+
+  it('should use cloudCompletedPairs when resuming from cloud', async () => {
+    // Store original states
+    const originalResume = cliState.resume;
+    const originalCloudPairs = cliState.cloudCompletedPairs;
+
+    try {
+      // Create a test suite with 2 prompts and 2 tests = 4 total combinations
+      const testSuite: TestSuite = {
+        providers: [mockApiProvider],
+        prompts: [
+          { raw: 'Test prompt 1', label: 'test1' },
+          { raw: 'Test prompt 2', label: 'test2' },
+        ],
+        tests: [{ vars: { var: 'value1' } }, { vars: { var: 'value2' } }],
+      };
+
+      // Create eval record without persisting to local DB
+      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+      evalRecord.persisted = false; // Simulate cloud-only eval
+
+      // Enable resume mode with cloud-sourced completed pairs
+      // Mark test 0 prompt 0 and test 1 prompt 0 as complete (2 of 4 combinations)
+      cliState.resume = true;
+      cliState.cloudCompletedPairs = new Set(['0:0', '1:0']);
+
+      // Run evaluation with resume
+      await evaluate(testSuite, evalRecord, {});
+      const summary = await evalRecord.toEvaluateSummary();
+
+      // Should only run the 2 remaining combinations (0:1 and 1:1 - test 0 prompt 1, test 1 prompt 1)
+      // The summary.results should have only 2 results
+      expect(summary.results.length).toBe(2);
+
+      // Verify the completed pairs were skipped - all results should be for promptIdx 1
+      for (const result of summary.results) {
+        expect(result.promptIdx).toBe(1);
+      }
+    } finally {
+      // Restore original state
+      cliState.resume = originalResume;
+      cliState.cloudCompletedPairs = originalCloudPairs;
+    }
+  });
+
+  it('should call resultStreamCallback for each result', async () => {
+    const streamedResults: any[] = [];
+    const mockStreamCallback = vi.fn(async (result) => {
+      streamedResults.push(result);
+    });
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [{ raw: 'Test prompt 1', label: 'test1' }],
+      tests: [{ vars: { var: 'value1' } }, { vars: { var: 'value2' } }],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    // Run evaluation with resultStreamCallback
+    await evaluate(testSuite, evalRecord, {
+      resultStreamCallback: mockStreamCallback,
+    });
+    const summary = await evalRecord.toEvaluateSummary();
+
+    // Should have streamed all results
+    expect(mockStreamCallback).toHaveBeenCalledTimes(2);
+    expect(streamedResults.length).toBe(2);
+
+    // Each streamed result should have the required fields
+    for (const result of streamedResults) {
+      expect(result).toHaveProperty('success');
+      expect(result).toHaveProperty('testIdx');
+      expect(result).toHaveProperty('promptIdx');
+    }
+
+    // Summary should also have 2 results
+    expect(summary.results.length).toBe(2);
+  });
+
+  it('should handle resultStreamCallback errors gracefully', async () => {
+    const mockStreamCallback = vi.fn(async () => {
+      throw new Error('Stream error');
+    });
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [{ raw: 'Test prompt 1', label: 'test1' }],
+      tests: [{ vars: { var: 'value1' } }],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+    // Run evaluation - should not throw despite callback error
+    await evaluate(testSuite, evalRecord, {
+      resultStreamCallback: mockStreamCallback,
+    });
+    const summary = await evalRecord.toEvaluateSummary();
+
+    // Callback was called but threw
+    expect(mockStreamCallback).toHaveBeenCalled();
+
+    // Evaluation should still complete successfully
+    expect(summary.results.length).toBe(1);
+    expect(summary.results[0].success).toBe(true);
   });
 });
 
