@@ -72,6 +72,22 @@ export abstract class BaseVoiceConnection extends EventEmitter {
   abstract requestResponse(): void;
 
   /**
+   * Cancel the current response.
+   * Not all providers support this.
+   */
+  cancelResponse(): void {
+    // Default implementation does nothing
+  }
+
+  /**
+   * Clear the audio buffer.
+   * Not all providers support this.
+   */
+  clearAudioBuffer(): void {
+    // Default implementation does nothing
+  }
+
+  /**
    * Handle incoming WebSocket messages.
    * Should parse messages and emit appropriate events.
    */

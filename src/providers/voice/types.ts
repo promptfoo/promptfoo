@@ -37,46 +37,28 @@ export interface AudioChunk {
 // ─────────────────────────────────────────────────────────────
 
 /**
- * A single turn in the voice conversation.
+ * A single turn in the voice conversation (simplified for transcript).
  */
 export interface VoiceTurn {
   /** Who spoke during this turn */
   speaker: 'user' | 'agent';
-  /** Audio chunks that make up this turn */
-  audioChunks: AudioChunk[];
-  /** Transcript of what was said */
-  transcript: string;
-  /** Start time in ms since conversation start */
-  startTime: number;
-  /** End time in ms since conversation start */
-  endTime: number;
-  /** Whether this turn was interrupted by the other party */
-  interrupted: boolean;
-  /** Token usage for this turn (if available) */
-  tokenUsage?: TokenUsage;
+  /** Text content of the turn */
+  text: string;
+  /** Timestamp when this turn occurred */
+  timestamp?: number;
 }
 
 /**
- * Current state of the conversation.
+ * Current state of the conversation (state machine).
  */
-export interface ConversationState {
-  /** All completed turns */
-  turns: VoiceTurn[];
-  /** Who is currently speaking */
-  currentSpeaker: 'user' | 'agent' | null;
-  /** Is the user currently generating audio */
-  isUserSpeaking: boolean;
-  /** Is the agent currently generating audio */
-  isAgentSpeaking: boolean;
-  /** Accumulated transcript for current user turn */
-  userTranscriptBuffer: string;
-  /** Accumulated transcript for current agent turn */
-  agentTranscriptBuffer: string;
-  /** Number of completed turns */
-  turnCount: number;
-  /** Conversation start time (epoch ms) */
-  startTime: number;
-}
+export type ConversationState =
+  | 'idle'
+  | 'connecting'
+  | 'connected'
+  | 'configuring'
+  | 'active'
+  | 'completed'
+  | 'error';
 
 /**
  * Reason the conversation ended.
@@ -92,23 +74,30 @@ export type StopReason =
  * Result of a completed voice conversation.
  */
 export interface ConversationResult {
+  /** Whether the conversation succeeded */
+  success: boolean;
+  /** Reason the conversation stopped */
+  stopReason: StopReason;
+  /** Full transcript formatted for output */
+  transcript: string;
   /** All turns in the conversation */
   turns: VoiceTurn[];
-  /** Full transcript formatted for output */
-  fullTranscript: string;
-  /** Full audio recording (if enabled) */
-  audioRecording?: Buffer;
-  /** Aggregated token usage */
-  tokenUsage: TokenUsage;
+  /** Number of turns */
+  turnCount: number;
   /** Total duration in milliseconds */
   duration: number;
-  /** Why the conversation ended */
-  stopReason: StopReason;
+  /** Full audio from target agent (WAV format) */
+  targetAudio?: Buffer;
+  /** Full audio from simulated user (WAV format) */
+  simulatedUserAudio?: Buffer;
+  /** Aggregated token usage */
+  tokenUsage?: TokenUsage;
   /** Additional metadata */
-  metadata: {
-    userProvider: string;
-    targetProvider: string;
-    turnCount: number;
+  metadata?: {
+    targetProvider?: string;
+    simulatedUserProvider?: string;
+    maxTurns?: number;
+    timeoutMs?: number;
   };
 }
 
@@ -117,11 +106,16 @@ export interface ConversationResult {
 // ─────────────────────────────────────────────────────────────
 
 /**
+ * Turn detection mode.
+ */
+export type TurnDetectionMode = 'server_vad' | 'silence' | 'hybrid';
+
+/**
  * Configuration for turn detection.
  */
 export interface TurnDetectionConfig {
   /** Detection mode */
-  mode: 'server_vad' | 'silence' | 'hybrid';
+  mode: TurnDetectionMode;
   /** Silence duration before turn ends (ms) */
   silenceThresholdMs: number;
   /** VAD sensitivity threshold (0-1) */
@@ -160,43 +154,43 @@ export type VoiceProviderType = 'openai' | 'google';
  */
 export interface VoiceProviderConfig {
   /** Provider type */
-  provider: VoiceProviderType;
+  provider: VoiceProviderType | string;
   /** Model to use (e.g., 'gpt-4o-realtime-preview') */
   model?: string;
   /** Voice ID */
-  voice: string;
+  voice?: string;
   /** API key (optional, uses env var if not set) */
   apiKey?: string;
   /** System instructions for the voice agent */
-  instructions: string;
+  instructions?: string;
   /** Turn detection configuration */
-  turnDetection: TurnDetectionConfig;
+  turnDetection?: TurnDetectionConfig;
   /** Audio format */
-  audioFormat: AudioFormat;
+  audioFormat?: AudioFormat;
   /** Sample rate in Hz */
-  sampleRate: number;
+  sampleRate?: number;
 }
 
 /**
  * Configuration for the voice conversation orchestrator.
  */
 export interface OrchestratorConfig {
+  /** Configuration for the target voice provider */
+  targetConfig: VoiceProviderConfig;
   /** Configuration for the simulated user provider */
-  userConfig: VoiceProviderConfig;
-  /** The target provider being tested */
-  targetProvider: unknown; // ApiProvider - avoid circular import
-  /** System prompt for the target agent */
-  targetSystemPrompt: string;
+  simulatedUserConfig: VoiceProviderConfig;
+  /** Turn detection configuration */
+  turnDetection: TurnDetectionConfig;
   /** Maximum turns per speaker */
-  maxTurns: number;
+  maxTurns?: number;
   /** Overall timeout in milliseconds */
-  timeoutMs: number;
+  timeoutMs?: number;
+  /** Whether the target speaks first (default: true) */
+  targetSpeaksFirst?: boolean;
   /** Allow interruptions (barge-in) */
-  enableInterruptions: boolean;
+  enableInterruptions?: boolean;
   /** Record full audio for playback */
-  recordFullAudio: boolean;
-  /** Transcribe audio in real-time */
-  transcribeInRealtime: boolean;
+  recordFullAudio?: boolean;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -226,14 +220,47 @@ export interface SimulatedVoiceUserConfig {
   maxTurns?: number;
   /** Overall timeout in milliseconds */
   timeoutMs?: number;
-  /** Voice ID for the simulated user */
-  voice?: string;
-  /** Provider for user voice generation */
-  voiceProvider?: VoiceProviderType;
-  /** Model to use for user voice */
-  model?: string;
-  /** Turn detection configuration */
-  turnDetection?: Partial<TurnDetectionConfig>;
+  /** Audio sample rate */
+  sampleRate?: number;
+  /** Audio format */
+  audioFormat?: AudioFormat;
+
+  // Target provider config
+  /** Provider for the target agent */
+  targetProvider?: VoiceProviderType | string;
+  /** Model for the target agent */
+  targetModel?: string;
+  /** API key for the target provider */
+  targetApiKey?: string;
+  /** Voice for the target agent */
+  targetVoice?: string;
+
+  // Simulated user provider config
+  /** Provider for the simulated user */
+  simulatedUserProvider?: VoiceProviderType | string;
+  /** Model for the simulated user */
+  simulatedUserModel?: string;
+  /** API key for the simulated user provider */
+  simulatedUserApiKey?: string;
+  /** Voice for the simulated user */
+  simulatedUserVoice?: string;
+
+  // Turn detection config
+  /** Turn detection mode */
+  turnDetectionMode?: TurnDetectionMode;
+  /** Silence threshold in ms */
+  silenceThresholdMs?: number;
+  /** VAD threshold (0-1) */
+  vadThreshold?: number;
+  /** Minimum turn duration in ms */
+  minTurnDurationMs?: number;
+  /** Maximum turn duration in ms */
+  maxTurnDurationMs?: number;
+  /** Prefix padding in ms */
+  prefixPaddingMs?: number;
+
+  /** Whether the target speaks first */
+  targetSpeaksFirst?: boolean;
   /** Allow interruptions */
   enableInterruptions?: boolean;
   /** Record full conversation audio */
@@ -243,16 +270,13 @@ export interface SimulatedVoiceUserConfig {
 /**
  * Default configuration for SimulatedVoiceUser.
  */
-export const DEFAULT_SIMULATED_VOICE_USER_CONFIG: Required<SimulatedVoiceUserConfig> = {
-  instructions: '{{instructions}}',
+export const DEFAULT_SIMULATED_VOICE_USER_CONFIG: Required<
+  Pick<SimulatedVoiceUserConfig, 'maxTurns' | 'timeoutMs' | 'sampleRate' | 'audioFormat'>
+> = {
   maxTurns: 10,
   timeoutMs: 120000,
-  voice: 'coral',
-  voiceProvider: 'openai',
-  model: 'gpt-4o-realtime-preview',
-  turnDetection: DEFAULT_TURN_DETECTION,
-  enableInterruptions: false,
-  recordConversation: false,
+  sampleRate: 24000,
+  audioFormat: 'pcm16',
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -263,8 +287,21 @@ export const DEFAULT_SIMULATED_VOICE_USER_CONFIG: Required<SimulatedVoiceUserCon
  * Base WebSocket message structure.
  */
 export interface RealtimeMessage {
-  type: string;
+  type?: string;
   event_id?: string;
+  // OpenAI specific
+  session?: Record<string, unknown>;
+  delta?: string;
+  audio?: string;
+  transcript?: string;
+  error?: Record<string, unknown>;
+  // Google specific
+  setupComplete?: boolean;
+  serverContent?: Record<string, unknown>;
+  toolCall?: Record<string, unknown>;
+  realtimeInput?: Record<string, unknown>;
+  candidates?: Array<Record<string, unknown>>;
+  streamingCustomOp?: Record<string, unknown>;
   [key: string]: unknown;
 }
 

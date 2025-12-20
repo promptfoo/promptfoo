@@ -1426,6 +1426,17 @@ export const providerMap: ProviderFactory[] = [
     },
   },
   {
+    test: (providerPath: string) => providerPath === 'promptfoo:simulated-voice-user',
+    create: async (
+      _providerPath: string,
+      providerOptions: ProviderOptions,
+      _context: LoadApiProviderContext,
+    ) => {
+      const { SimulatedVoiceUser } = await import('./voice/simulatedVoiceUser');
+      return new SimulatedVoiceUser(providerOptions);
+    },
+  },
+  {
     test: (providerPath: string) => providerPath.startsWith('promptfoo:model:'),
     create: async (
       providerPath: string,
