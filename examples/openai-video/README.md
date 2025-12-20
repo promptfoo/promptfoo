@@ -57,5 +57,5 @@ Generated videos are stored in the promptfoo media storage (`~/.promptfoo/media/
 ## Notes
 
 - Video generation can take 1-5 minutes per video
-- Videos are cached based on content hash to avoid regeneration on subsequent runs
+- Videos are cached based on request parameters (prompt, model, size, seconds) to avoid regeneration
 - The web viewer supports video playback with controls and metadata display
