@@ -1,3 +1,4 @@
+import dedent from 'dedent';
 import { and, desc, eq, sql } from 'drizzle-orm';
 import { getDb } from '../../database/index';
 import { evalResultsTable } from '../../database/tables';
@@ -17,13 +18,6 @@ const SINGLE_TURN_STRATEGIES = AGENTIC_STRATEGIES.filter(
 
 function isSingleTurnStrategy(strategyId: string | undefined): boolean {
   return strategyId ? SINGLE_TURN_STRATEGIES.includes(strategyId as any) : false;
-}
-
-/**
- * Check if we should use cloud mode for fetching failed test cases
- */
-function isCloudMode(): boolean {
-  return cloudConfig.isEnabled();
 }
 
 export function deduplicateTests(tests: TestCase[]): TestCase[] {
@@ -47,14 +41,14 @@ async function getFailedTestCases(
   limit: number = 100,
 ): Promise<TestCase[]> {
   logger.debug(
-    `Searching for failed test cases: plugin='${pluginId}', targetId='${targetId}', limit=${limit}, cloudMode=${isCloudMode()}`,
+    `Searching for failed test cases: plugin='${pluginId}', targetId='${targetId}', limit=${limit}, cloudMode=${cloudConfig.isEnabled()}`,
   );
 
   const allTestCases: TestCase[] = [];
 
   try {
     // Try to fetch from cloud API if available
-    if (isCloudMode()) {
+    if (cloudConfig.isEnabled()) {
       logger.debug(
         `Fetching failed test cases from cloud API: plugin='${pluginId}', targetId='${targetId}'`,
       );
@@ -80,13 +74,13 @@ async function getFailedTestCases(
 
           // Log details of cloud test cases
           cloudTestCases.forEach((tc: TestCase, idx: number) => {
-            logger.debug(`  [CLOUD] Test ${idx + 1}/${cloudTestCases.length}:`);
-            logger.debug(`    pluginId: ${tc.metadata?.pluginId}`);
-            logger.debug(`    strategyId: ${tc.metadata?.strategyId || '(none)'}`);
-            logger.debug(`    provider: ${JSON.stringify(tc.provider, null, 2)}`);
-            logger.debug(
-              `    provider.config.injectVar: ${(tc.provider as any)?.config?.injectVar}`,
-            );
+            logger.debug(dedent`
+              [CLOUD] Test ${idx + 1}/${cloudTestCases.length}:
+                pluginId: ${tc.metadata?.pluginId}
+                strategyId: ${tc.metadata?.strategyId || '(none)'}
+                provider: ${JSON.stringify(tc.provider, null, 2)}
+                provider.config.injectVar: ${(tc.provider as any)?.config?.injectVar}
+            `);
           });
         } else {
           logger.error(
@@ -160,13 +154,11 @@ async function getFailedTestCases(
                 ...testCase.vars,
                 [injectVar]: redteamFinalPrompt,
               };
-              logger.debug(
-                `  [SINGLE-TURN] Replaced prompt with redteamFinalPrompt for ${strategyId}`,
-              );
-              logger.debug(
-                `    Original: ${String(testCase.vars[injectVar]).substring(0, 100)}...`,
-              );
-              logger.debug(`    Final: ${redteamFinalPrompt.substring(0, 100)}...`);
+              logger.debug(dedent`
+                [SINGLE-TURN] Replaced prompt with redteamFinalPrompt for ${strategyId}
+                  Original: ${String(testCase.vars[injectVar]).substring(0, 100)}...
+                  Final: ${redteamFinalPrompt.substring(0, 100)}...
+              `);
             } else {
               logger.warn(
                 `[RETRY] Single-turn strategy '${strategyId}' has no redteamFinalPrompt in response, using original prompt`,
@@ -189,22 +181,13 @@ async function getFailedTestCases(
             })),
           } as TestCase;
 
-          logger.debug(
-            `Retrieved test case - pluginId: ${result.metadata?.pluginId}, strategyId: ${result.metadata?.strategyId}`,
-          );
-          logger.debug(
-            `  Prompt: ${JSON.stringify(result.vars?.prompt || result.vars)?.substring(0, 200)}...`,
-          );
-
-          // Log the FULL provider info from the database
-          logger.debug(`  [DB] Provider stored in database:`);
-          logger.debug(`    ${JSON.stringify(testCase.provider, null, 2)}`);
-          logger.debug(
-            `  [DB] Provider.config.injectVar: ${(testCase.provider as any)?.config?.injectVar}`,
-          );
-          logger.debug(
-            `  [DB] Provider.config.maxTurns: ${(testCase.provider as any)?.config?.maxTurns}`,
-          );
+          logger.debug(dedent`
+            Retrieved test case - pluginId: ${result.metadata?.pluginId}, strategyId: ${result.metadata?.strategyId}
+              Prompt: ${JSON.stringify(result.vars?.prompt || result.vars)?.substring(0, 200)}...
+              [DB] Provider stored in database: ${JSON.stringify(testCase.provider, null, 2)}
+              [DB] Provider.config.injectVar: ${(testCase.provider as any)?.config?.injectVar}
+              [DB] Provider.config.maxTurns: ${(testCase.provider as any)?.config?.maxTurns}
+          `);
 
           return result;
         } catch (e) {
@@ -237,12 +220,14 @@ export async function addRetryTestCases(
   _injectVar: string, // Unused - provider config (including injectVar) comes from stored test cases
   config: Record<string, unknown>,
 ): Promise<TestCase[]> {
-  logger.debug('========================================');
-  logger.debug('[RETRY STRATEGY] Starting addRetryTestCases');
-  logger.debug('========================================');
-  logger.debug(`[INPUT] config: ${JSON.stringify(config, null, 2)}`);
-  logger.debug(`[INPUT] Number of input testCases: ${testCases.length}`);
-  logger.debug('Adding retry test cases from previous failures');
+  logger.debug(dedent`
+    ========================================
+    [RETRY STRATEGY] Starting addRetryTestCases
+    ========================================
+    [INPUT] config: ${JSON.stringify(config, null, 2)}
+    [INPUT] Number of input testCases: ${testCases.length}
+    Adding retry test cases from previous failures
+  `);
 
   // Group test cases by plugin ID
   const testsByPlugin = new Map<string, TestCaseWithPlugin[]>();
@@ -286,20 +271,20 @@ export async function addRetryTestCases(
           | { id?: string; config?: Record<string, unknown> }
           | undefined;
 
-        logger.debug(`----------------------------------------`);
-        logger.debug(
-          `[PROCESSING] Test ${index + 1}/${failedTests.length} for plugin '${pluginId}'`,
-        );
-        logger.debug(`  strategyId: ${strategyId || '(none - plugin only)'}`);
-        logger.debug(`  prompt: ${promptPreview}...`);
-        logger.debug(`  [STORED] test.provider: ${JSON.stringify(test.provider, null, 2)}`);
+        logger.debug(dedent`
+          ----------------------------------------
+          [PROCESSING] Test ${index + 1}/${failedTests.length} for plugin '${pluginId}'
+            strategyId: ${strategyId || '(none - plugin only)'}
+            prompt: ${promptPreview}...
+            [STORED] test.provider: ${JSON.stringify(test.provider, null, 2)}
+        `);
 
         // If test already has a complete provider with injectVar, use it directly
         if (existingProvider && existingProvider.config?.injectVar) {
-          logger.debug(
-            `  [ACTION] Using stored provider as-is (already has injectVar: '${existingProvider.config.injectVar}')`,
-          );
-          logger.debug(`  [RESULT] provider: ${JSON.stringify(test.provider, null, 2)}`);
+          logger.debug(dedent`
+            [ACTION] Using stored provider as-is (already has injectVar: '${existingProvider.config.injectVar}')
+            [RESULT] provider: ${JSON.stringify(test.provider, null, 2)}
+          `);
           return test;
         }
 
@@ -314,9 +299,11 @@ export async function addRetryTestCases(
         }
 
         // Strip the provider - these run directly against the target
-        logger.debug(`  [ACTION] Stripping provider (no complete provider with injectVar found)`);
+        logger.debug(dedent`
+          [ACTION] Stripping provider (no complete provider with injectVar found)
+          [RESULT] provider: undefined (stripped)
+        `);
         const { provider: _provider, ...testWithoutProvider } = test;
-        logger.debug(`  [RESULT] provider: undefined (stripped)`);
         return testWithoutProvider;
       });
 
@@ -335,26 +322,7 @@ export async function addRetryTestCases(
     },
   }));
 
-  logger.debug('========================================');
-  logger.debug('[RETRY STRATEGY] Final Output Summary');
-  logger.debug('========================================');
-  logger.debug(`Total retry test cases returned: ${marked.length}`);
-
-  marked.forEach((test, index) => {
-    const promptPreview = JSON.stringify(test.vars?.prompt || test.vars)?.substring(0, 80);
-    const metadata = test.metadata as Record<string, unknown> | undefined;
-    logger.debug(`----------------------------------------`);
-    logger.debug(`[OUTPUT] Test ${index + 1}/${marked.length}`);
-    logger.debug(`  pluginId: ${metadata?.pluginId}`);
-    logger.debug(`  strategyId: ${metadata?.strategyId || '(none)'}`);
-    logger.debug(`  retry: ${metadata?.retry}`);
-    logger.debug(`  prompt: ${promptPreview}...`);
-    logger.debug(`  provider: ${JSON.stringify(test.provider, null, 2)}`);
-  });
-
-  logger.debug('========================================');
-  logger.debug('[RETRY STRATEGY] End');
-  logger.debug('========================================');
+  logger.debug(`[RETRY STRATEGY] Returning ${marked.length} retry test cases`);
 
   return marked;
 }
