@@ -138,8 +138,9 @@ export async function checkVideoCache(cacheKey: string): Promise<string | null> 
         return mapping.videoKey;
       }
     }
-  } catch {
+  } catch (err) {
     // Mapping file corrupted, treat as cache miss
+    logger.debug(`[OpenAI Video] Cache mapping read failed: ${err}`);
   }
 
   return null;
@@ -224,7 +225,7 @@ export function calculateVideoCost(
  * to ~/.promptfoo/output/video/{uuid}/ and served via API routes.
  */
 export class OpenAiVideoProvider extends OpenAiGenericProvider {
-  declare config: OpenAiVideoOptions;
+  config: OpenAiVideoOptions;
   private providerId?: string;
 
   constructor(
@@ -242,6 +243,17 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
 
   toString(): string {
     return `[OpenAI Video Provider ${this.modelName}]`;
+  }
+
+  /**
+   * Build authorization headers for API requests
+   */
+  private getAuthHeaders(): Record<string, string> {
+    const organization = this.getOrganization();
+    return {
+      Authorization: `Bearer ${this.getApiKey()}`,
+      ...(organization ? { 'OpenAI-Organization': organization } : {}),
+    };
   }
 
   /**
@@ -287,8 +299,7 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${this.getApiKey()}`,
-      ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization()! } : {}),
+      ...this.getAuthHeaders(),
       ...config.headers,
     };
 
@@ -331,11 +342,7 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
   ): Promise<{ job: OpenAiVideoJob; error?: string }> {
     const startTime = Date.now();
     const url = `${this.getApiUrl()}/videos/${videoId}`;
-
-    const headers: Record<string, string> = {
-      Authorization: `Bearer ${this.getApiKey()}`,
-      ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization()! } : {}),
-    };
+    const headers = this.getAuthHeaders();
 
     while (Date.now() - startTime < maxPollTimeMs) {
       try {
@@ -394,11 +401,7 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
     evalId?: string,
   ): Promise<{ storageRef?: MediaStorageRef; error?: string }> {
     const url = `${this.getApiUrl()}/videos/${soraVideoId}/content${variant !== 'video' ? `?variant=${variant}` : ''}`;
-
-    const headers: Record<string, string> = {
-      Authorization: `Bearer ${this.getApiKey()}`,
-      ...(this.getOrganization() ? { 'OpenAI-Organization': this.getOrganization()! } : {}),
-    };
+    const headers = this.getAuthHeaders();
 
     try {
       const response = await fetchWithProxy(url, { method: 'GET', headers });
@@ -488,8 +491,9 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
         const mapping = JSON.parse(mappingData);
         thumbnailKey = mapping.thumbnailKey;
         spritesheetKey = mapping.spritesheetKey;
-      } catch {
+      } catch (err) {
         // Mapping exists but couldn't be read - just use video
+        logger.debug(`[OpenAI Video] Failed to read cache mapping for thumbnails: ${err}`);
       }
 
       // Build storage ref URL for video using the actual stored key
