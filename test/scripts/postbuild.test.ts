@@ -1,7 +1,8 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
-import path from 'node:path';
 import os from 'node:os';
+import path from 'node:path';
+
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 // We need to test the postbuild module, but it runs on import
 // So we'll test the exported function after mocking

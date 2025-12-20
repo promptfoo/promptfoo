@@ -1,7 +1,7 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
+import { createTheme, ThemeProvider } from '@mui/material/styles';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 import SuggestionsDialog from './SuggestionsDialog';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
 import type { GradingResult } from '@promptfoo/types';
 
 const theme = createTheme();

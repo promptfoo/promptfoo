@@ -1,3 +1,6 @@
+import fs from 'fs';
+import * as path from 'path';
+
 import {
   afterAll,
   beforeAll,
@@ -5,11 +8,9 @@ import {
   describe,
   expect,
   it,
-  vi,
   type MockedFunction,
+  vi,
 } from 'vitest';
-import fs from 'fs';
-import * as path from 'path';
 import { doEval } from '../../src/commands/eval';
 import { setupEnv } from '../../src/util/index';
 

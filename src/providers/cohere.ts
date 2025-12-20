@@ -1,9 +1,10 @@
 import { fetchWithCache } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
-import { withGenAISpan, type GenAISpanContext, type GenAISpanResult } from '../tracing/genaiTracer';
+import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
 import { REQUEST_TIMEOUT_MS } from './shared';
 
+import type { EnvOverrides } from '../types/env';
 import type {
   ApiEmbeddingProvider,
   ApiProvider,
@@ -12,7 +13,6 @@ import type {
   ProviderResponse,
   TokenUsage,
 } from '../types/index';
-import type { EnvOverrides } from '../types/env';
 
 interface CohereChatOptions {
   apiKey?: string;

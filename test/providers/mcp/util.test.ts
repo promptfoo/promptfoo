@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-
 import { getAuthHeaders } from '../../../src/providers/mcp/util';
 
 import type { MCPServerConfig } from '../../../src/providers/mcp/types';

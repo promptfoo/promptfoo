@@ -31,8 +31,10 @@ import {
 } from '../util/database';
 import invariant from '../util/invariant';
 import { BrowserBehavior, BrowserBehaviorNames, openBrowser } from '../util/server';
+import { blobsRouter } from './routes/blobs';
 import { configsRouter } from './routes/configs';
 import { evalRouter } from './routes/eval';
+import { mediaRouter } from './routes/media';
 import { modelAuditRouter } from './routes/modelAudit';
 import { providersRouter } from './routes/providers';
 import { redteamRouter } from './routes/redteam';
@@ -208,7 +210,7 @@ export function createApp() {
     invariant(eval_, 'Eval not found');
 
     try {
-      const url = await createShareableUrl(eval_, true);
+      const url = await createShareableUrl(eval_, { showAuth: true });
       logger.debug(`Generated share URL for eval ${id}: ${stripAuthFromUrl(url || '')}`);
       res.json({ url });
     } catch (error) {
@@ -230,6 +232,8 @@ export function createApp() {
   });
 
   app.use('/api/eval', evalRouter);
+  app.use('/api/media', mediaRouter);
+  app.use('/api/blobs', blobsRouter);
   app.use('/api/providers', providersRouter);
   app.use('/api/redteam', redteamRouter);
   app.use('/api/user', userRouter);

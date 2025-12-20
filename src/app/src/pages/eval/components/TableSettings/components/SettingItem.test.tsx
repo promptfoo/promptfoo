@@ -1,12 +1,13 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
-import { createTheme, ThemeProvider } from '@mui/material/styles';
-import SettingItem from './SettingItem';
-import ViewListIcon from '@mui/icons-material/ViewList';
+
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import ViewListIcon from '@mui/icons-material/ViewList';
 import { alpha } from '@mui/material';
+import { createTheme, ThemeProvider } from '@mui/material/styles';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { describe, expect, it, vi } from 'vitest';
+import SettingItem from './SettingItem';
 
 vi.mock('@mui/material/Tooltip', async () => {
   const ActualTooltip =

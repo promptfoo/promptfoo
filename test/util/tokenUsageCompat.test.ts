@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import type { SpanData } from '../../src/tracing/store';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { TokenUsageTracker } from '../../src/util/tokenUsage';
 import {
   aggregateUsageFromSpans,
   extractUsageFromSpan,
@@ -9,7 +9,8 @@ import {
   getTokenUsageFromEvaluation,
   getTokenUsageFromTrace,
 } from '../../src/util/tokenUsageCompat';
-import { TokenUsageTracker } from '../../src/util/tokenUsage';
+
+import type { SpanData } from '../../src/tracing/store';
 
 // Mock the TraceStore
 vi.mock('../../src/tracing/store', () => ({

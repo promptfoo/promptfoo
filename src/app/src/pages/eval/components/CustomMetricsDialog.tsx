@@ -1,5 +1,6 @@
 import React from 'react';
 
+import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
 import FilterAltIcon from '@mui/icons-material/FilterAlt';
 import Box from '@mui/material/Box';
 import { green, orange, red } from '@mui/material/colors';
@@ -20,9 +21,8 @@ import {
   formatPolicyIdentifierAsMetric,
   isPolicyMetric,
 } from '@promptfoo/redteam/plugins/policy/utils';
-import { useTableStore } from './store';
-import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
 import { useApplyFilterFromMetric } from './hooks';
+import { useTableStore } from './store';
 
 type MetricScore = {
   score: number;

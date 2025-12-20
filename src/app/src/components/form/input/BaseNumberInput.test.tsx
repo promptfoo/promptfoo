@@ -1,8 +1,9 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+
+import { createTheme, ThemeProvider } from '@mui/material/styles';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { BaseNumberInput } from './BaseNumberInput';
 
 const renderWithTheme = (component: React.ReactNode) => {

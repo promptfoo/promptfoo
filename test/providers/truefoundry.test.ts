@@ -1,10 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
 import { clearCache } from '../../src/cache';
 import {
+  createTrueFoundryProvider,
   TrueFoundryEmbeddingProvider,
   TrueFoundryProvider,
-  createTrueFoundryProvider,
 } from '../../src/providers/truefoundry';
 import * as fetchModule from '../../src/util/fetch/index';
 
@@ -365,10 +364,10 @@ describe('TrueFoundry', () => {
           guardrails: {
             flagged: false,
           },
+          // Cached responses don't count as new requests, so numRequests is not included
           tokenUsage: {
             total: 10,
             cached: 10,
-            numRequests: 1,
           },
         });
         expect(cachedResult.latencyMs).toBeGreaterThanOrEqual(0);

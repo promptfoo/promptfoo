@@ -1,5 +1,4 @@
 import dedent from 'dedent';
-
 import { getEnvInt } from '../../envars';
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
@@ -9,18 +8,6 @@ import {
   fetchTraceContext,
   type TraceContextData,
 } from '../../tracing/traceContext';
-import type {
-  ApiProvider,
-  AtomicTestCase,
-  CallApiContextParams,
-  CallApiOptionsParams,
-  GradingResult,
-  GuardrailResponse,
-  NunjucksFilterMap,
-  Prompt,
-  RedteamFileConfig,
-  TokenUsage,
-} from '../../types/index';
 import invariant from '../../util/invariant';
 import { extractFirstJsonObject } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
@@ -45,12 +32,26 @@ import {
   buildGraderResultAssertion,
   checkPenalizedPhrases,
   createIterationContext,
+  externalizeResponseForRedteamHistory,
   getTargetResponse,
   redteamProviderManager,
   type TargetResponse,
 } from './shared';
 import { formatTraceForMetadata, formatTraceSummary } from './traceFormatting';
 import { resolveTracingOptions } from './tracingOptions';
+
+import type {
+  ApiProvider,
+  AtomicTestCase,
+  CallApiContextParams,
+  CallApiOptionsParams,
+  GradingResult,
+  GuardrailResponse,
+  NunjucksFilterMap,
+  Prompt,
+  RedteamFileConfig,
+  TokenUsage,
+} from '../../types/index';
 
 // Based on: https://arxiv.org/abs/2312.02119
 
@@ -340,12 +341,18 @@ export async function runRedteamConversation({
     );
 
     const iterationStart = Date.now();
-    const targetResponse: TargetResponse = await getTargetResponse(
+    let targetResponse: TargetResponse = await getTargetResponse(
       targetProvider,
       targetPrompt,
       iterationContext,
       options,
     );
+    // Externalize blobs before they hit history/prompts
+    targetResponse = await externalizeResponseForRedteamHistory(targetResponse, {
+      evalId: context?.evaluationId,
+      testIdx: context?.testIdx,
+      promptIdx: context?.promptIdx,
+    });
     lastResponse = targetResponse;
     accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
     logger.debug('[Iterative] Raw target response', { response: targetResponse });

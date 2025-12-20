@@ -5,7 +5,6 @@ import path from 'path';
 import chalk from 'chalk';
 import dedent from 'dedent';
 import yaml from 'js-yaml';
-import { validate as uuidValidate } from 'uuid';
 import { z } from 'zod';
 import { fromError } from 'zod-validation-error';
 import { disableCache } from '../../cache';
@@ -29,10 +28,10 @@ import { resolveConfigs } from '../../util/config/load';
 import { writePromptfooConfig } from '../../util/config/writer';
 import { getCustomPolicies } from '../../util/generation';
 import { printBorder, setupEnv } from '../../util/index';
-import { promptfooCommand } from '../../util/promptfooCommand';
 import invariant from '../../util/invariant';
+import { promptfooCommand } from '../../util/promptfooCommand';
+import { isUuid } from '../../util/uuid';
 import { RedteamConfigSchema, RedteamGenerateOptionsSchema } from '../../validators/redteam';
-import { synthesize } from '../index';
 import {
   ADDITIONAL_STRATEGIES,
   DEFAULT_STRATEGIES,
@@ -43,6 +42,7 @@ import {
   type Severity,
 } from '../constants';
 import { extractMcpToolsInfo } from '../extraction/mcpTools';
+import { synthesize } from '../index';
 import { isValidPolicyObject } from '../plugins/policy/utils';
 import { shouldGenerateRemote } from '../remoteGeneration';
 import type { Command } from 'commander';
@@ -770,10 +770,10 @@ export function redteamGenerateCommand(
     .option('--burp-escape-json', 'Escape quotes in Burp payloads', false)
     .action(async (opts: Partial<RedteamCliGenerateOptions>): Promise<void> => {
       // Handle cloud config with target
-      if (opts.config && uuidValidate(opts.config)) {
+      if (opts.config && isUuid(opts.config)) {
         // If target is provided, it must be a valid UUID. This check is nested because the target flag is mutually inclusive with a config that's set to a
         // Cloud-defined config UUID i.e. a cloud target cannot be used with a local config.
-        if (opts.target && !uuidValidate(opts.target)) {
+        if (opts.target && !isUuid(opts.target)) {
           throw new Error('Invalid target ID, it must be a valid UUID');
         }
         const configObj = await getConfigFromCloud(opts.config, opts.target);
@@ -781,7 +781,7 @@ export function redteamGenerateCommand(
         // backwards compatible for old cloud servers
         if (
           opts.target &&
-          uuidValidate(opts.target) &&
+          isUuid(opts.target) &&
           (!configObj.targets || configObj.targets?.length === 0)
         ) {
           configObj.targets = [{ id: `${CLOUD_PROVIDER_PREFIX}${opts.target}`, config: {} }];

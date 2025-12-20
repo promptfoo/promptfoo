@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+
 import styles from './MCPMessageExplorer.module.css';
 
 type MessageType = 'request' | 'response' | 'notification';

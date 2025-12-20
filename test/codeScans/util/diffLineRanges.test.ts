@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  clampCommentLines,
   extractValidLineRanges,
   isLineInDiff,
-  clampCommentLines,
 } from '../../../src/codeScan/util/diffLineRanges';
 
 describe('extractValidLineRanges', () => {

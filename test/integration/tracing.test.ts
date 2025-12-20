@@ -9,11 +9,10 @@ import { SpanStatusCode } from '@opentelemetry/api';
 import { InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
 import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
 import {
   GenAIAttributes,
-  PromptfooAttributes,
   getGenAITracer,
+  PromptfooAttributes,
   withGenAISpan,
 } from '../../src/tracing/genaiTracer';
 

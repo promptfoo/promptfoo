@@ -2,7 +2,6 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import { EvaluationPanel } from './EvaluationPanel';
-
 import type { GradingResult } from '@promptfoo/types';
 
 describe('EvaluationPanel', () => {

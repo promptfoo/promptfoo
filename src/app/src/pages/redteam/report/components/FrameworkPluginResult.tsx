@@ -1,18 +1,18 @@
-import { useTheme } from '@mui/material/styles';
-import { useNavigate } from 'react-router-dom';
-import { riskCategorySeverityMap, Severity } from '@promptfoo/redteam/constants';
-import { getSeverityColor } from '../utils/color';
-import ListItem from '@mui/material/ListItem';
-import ListItemIcon from '@mui/material/ListItemIcon';
-import ListItemText from '@mui/material/ListItemText';
-import Box from '@mui/material/Box';
-import Typography from '@mui/material/Typography';
-import Tooltip from '@mui/material/Tooltip';
+import { formatASRForDisplay } from '@app/utils/redteam';
 import CancelIcon from '@mui/icons-material/Cancel';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import InfoIcon from '@mui/icons-material/Info';
+import Box from '@mui/material/Box';
+import ListItem from '@mui/material/ListItem';
+import ListItemIcon from '@mui/material/ListItemIcon';
+import ListItemText from '@mui/material/ListItemText';
+import { useTheme } from '@mui/material/styles';
+import Tooltip from '@mui/material/Tooltip';
+import Typography from '@mui/material/Typography';
+import { riskCategorySeverityMap, Severity } from '@promptfoo/redteam/constants';
+import { useNavigate } from 'react-router-dom';
+import { getSeverityColor } from '../utils/color';
 import { getPluginDisplayName } from './FrameworkComplianceUtils';
-import { formatASRForDisplay } from '@app/utils/redteam';
 
 export interface FrameworkPluginResultProps {
   evalId: string;

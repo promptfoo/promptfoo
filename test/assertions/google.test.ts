@@ -1,6 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 import fs from 'fs';
 
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { runAssertion } from '../../src/assertions/index';
 import { AIStudioChatProvider } from '../../src/providers/google/ai.studio';
 import { GoogleLiveProvider } from '../../src/providers/google/live';

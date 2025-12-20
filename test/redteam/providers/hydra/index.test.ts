@@ -1,7 +1,8 @@
-import { Mock, Mocked, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, Mock, Mocked, vi } from 'vitest';
 import * as evaluatorHelpers from '../../../../src/evaluatorHelpers';
 import { PromptfooChatCompletionProvider } from '../../../../src/providers/promptfoo';
 import { shouldGenerateRemote } from '../../../../src/redteam/remoteGeneration';
+
 import type { ApiProvider, CallApiContextParams, GradingResult } from '../../../../src/types/index';
 
 // Import HydraProvider dynamically after mocks are set up

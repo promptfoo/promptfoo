@@ -8,13 +8,13 @@ import { getEnvString } from '../../envars';
 import { importModule, resolvePackageEntryPoint } from '../../esm';
 import logger from '../../logger';
 
+import type { EnvOverrides } from '../../types/env';
 import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderResponse,
 } from '../../types/index';
-import type { EnvOverrides } from '../../types/env';
 
 /**
  * OpenAI Codex SDK Provider
