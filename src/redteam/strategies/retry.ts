@@ -1,4 +1,3 @@
-import dedent from 'dedent';
 import { and, desc, eq, sql } from 'drizzle-orm';
 import { getDb } from '../../database/index';
 import { evalResultsTable } from '../../database/tables';
@@ -40,19 +39,11 @@ async function getFailedTestCases(
   targetId: string,
   limit: number = 100,
 ): Promise<TestCase[]> {
-  logger.debug(
-    `Searching for failed test cases: plugin='${pluginId}', targetId='${targetId}', limit=${limit}, cloudMode=${cloudConfig.isEnabled()}`,
-  );
-
   const allTestCases: TestCase[] = [];
 
   try {
     // Try to fetch from cloud API if available
     if (cloudConfig.isEnabled()) {
-      logger.debug(
-        `Fetching failed test cases from cloud API: plugin='${pluginId}', targetId='${targetId}'`,
-      );
-
       try {
         // makeRequest already prepends the apiHost and /api/v1/, so just pass the path
         // Use GET with query params
@@ -67,21 +58,6 @@ async function getFailedTestCases(
           const data = await response.json();
           const cloudTestCases = data.testCases || [];
           allTestCases.push(...cloudTestCases);
-
-          logger.debug(
-            `Retrieved ${cloudTestCases.length} failed test cases from cloud for plugin '${pluginId}' and target '${targetId}'`,
-          );
-
-          // Log details of cloud test cases
-          cloudTestCases.forEach((tc: TestCase, idx: number) => {
-            logger.debug(dedent`
-              [CLOUD] Test ${idx + 1}/${cloudTestCases.length}:
-                pluginId: ${tc.metadata?.pluginId}
-                strategyId: ${tc.metadata?.strategyId || '(none)'}
-                provider: ${JSON.stringify(tc.provider, null, 2)}
-                provider.config.injectVar: ${(tc.provider as any)?.config?.injectVar}
-            `);
-          });
         } else {
           logger.error(
             `Failed to fetch failed test cases from cloud API: ${response.status} ${response.statusText}`,
@@ -93,10 +69,6 @@ async function getFailedTestCases(
     }
 
     // Always also check local SQLite database
-    logger.debug(
-      `Fetching failed test cases from local SQLite database: plugin='${pluginId}', targetId='${targetId}'`,
-    );
-
     const db = getDb();
 
     const targetResults = await db
@@ -113,7 +85,6 @@ async function getFailedTestCases(
       .limit(1);
 
     if (targetResults.length === 0) {
-      logger.debug(`No failed test cases found for targetId '${targetId}'`);
       return [];
     }
 
@@ -154,15 +125,6 @@ async function getFailedTestCases(
                 ...testCase.vars,
                 [injectVar]: redteamFinalPrompt,
               };
-              logger.debug(dedent`
-                [SINGLE-TURN] Replaced prompt with redteamFinalPrompt for ${strategyId}
-                  Original: ${String(testCase.vars[injectVar]).substring(0, 100)}...
-                  Final: ${redteamFinalPrompt.substring(0, 100)}...
-              `);
-            } else {
-              logger.warn(
-                `[RETRY] Single-turn strategy '${strategyId}' has no redteamFinalPrompt in response, using original prompt`,
-              );
             }
           }
 
@@ -181,14 +143,6 @@ async function getFailedTestCases(
             })),
           } as TestCase;
 
-          logger.debug(dedent`
-            Retrieved test case - pluginId: ${result.metadata?.pluginId}, strategyId: ${result.metadata?.strategyId}
-              Prompt: ${JSON.stringify(result.vars?.prompt || result.vars)?.substring(0, 200)}...
-              [DB] Provider stored in database: ${JSON.stringify(testCase.provider, null, 2)}
-              [DB] Provider.config.injectVar: ${(testCase.provider as any)?.config?.injectVar}
-              [DB] Provider.config.maxTurns: ${(testCase.provider as any)?.config?.maxTurns}
-          `);
-
           return result;
         } catch (e) {
           logger.debug(`Failed to parse test case: ${e}`);
@@ -199,16 +153,8 @@ async function getFailedTestCases(
 
     allTestCases.push(...localTestCases);
 
-    logger.debug(
-      `Found ${results.length} failed test cases in local SQLite for plugin '${pluginId}' and target '${targetId}'`,
-    );
-
     // Deduplicate combined results from both cloud and local
-    const unique = deduplicateTests(allTestCases);
-    logger.debug(
-      `Total: ${allTestCases.length} failed test cases (cloud + local), ${unique.length} unique`,
-    );
-    return unique;
+    return deduplicateTests(allTestCases);
   } catch (error) {
     logger.error(`Error retrieving failed test cases: ${error}`);
     return [];
@@ -220,15 +166,6 @@ export async function addRetryTestCases(
   _injectVar: string, // Unused - provider config (including injectVar) comes from stored test cases
   config: Record<string, unknown>,
 ): Promise<TestCase[]> {
-  logger.debug(dedent`
-    ========================================
-    [RETRY STRATEGY] Starting addRetryTestCases
-    ========================================
-    [INPUT] config: ${JSON.stringify(config, null, 2)}
-    [INPUT] Number of input testCases: ${testCases.length}
-    Adding retry test cases from previous failures
-  `);
-
   // Group test cases by plugin ID
   const testsByPlugin = new Map<string, TestCaseWithPlugin[]>();
   for (const test of testCases) {
@@ -250,8 +187,6 @@ export async function addRetryTestCases(
     'No target IDs found in config. The retry strategy requires at least one target ID to be specified.',
   );
 
-  logger.debug(`Processing target IDs: ${targetIds.join(', ')}`);
-
   // For each plugin, get its failed test cases
   const retryTestCases: TestCase[] = [];
   for (const targetId of targetIds) {
@@ -264,45 +199,17 @@ export async function addRetryTestCases(
 
       // Use the stored provider from the database if it exists and has injectVar
       // Only add injectVar if it's missing from an agentic strategy test
-      const testsWithProvider = failedTests.map((test, index) => {
-        const strategyId = test.metadata?.strategyId;
-        const promptPreview = JSON.stringify(test.vars?.prompt || test.vars)?.substring(0, 100);
+      const testsWithProvider = failedTests.map((test) => {
         const existingProvider = test.provider as
           | { id?: string; config?: Record<string, unknown> }
           | undefined;
 
-        logger.debug(dedent`
-          ----------------------------------------
-          [PROCESSING] Test ${index + 1}/${failedTests.length} for plugin '${pluginId}'
-            strategyId: ${strategyId || '(none - plugin only)'}
-            prompt: ${promptPreview}...
-            [STORED] test.provider: ${JSON.stringify(test.provider, null, 2)}
-        `);
-
         // If test already has a complete provider with injectVar, use it directly
-        if (existingProvider && existingProvider.config?.injectVar) {
-          logger.debug(dedent`
-            [ACTION] Using stored provider as-is (already has injectVar: '${existingProvider.config.injectVar}')
-            [RESULT] provider: ${JSON.stringify(test.provider, null, 2)}
-          `);
+        if (existingProvider?.config?.injectVar) {
           return test;
         }
 
-        // Warn if we have a provider or strategyId but can't use them properly
-        // This is unexpected - either the provider should have injectVar, or there should be no provider
-        if (existingProvider || strategyId) {
-          logger.warn(
-            `[RETRY] Test has strategyId '${strategyId || '(none)'}' but no complete provider with injectVar. ` +
-              `This test will run against the target directly, which may not be the intended behavior. ` +
-              `Provider stored: ${JSON.stringify(existingProvider)}`,
-          );
-        }
-
         // Strip the provider - these run directly against the target
-        logger.debug(dedent`
-          [ACTION] Stripping provider (no complete provider with injectVar found)
-          [RESULT] provider: undefined (stripped)
-        `);
         const { provider: _provider, ...testWithoutProvider } = test;
         return testWithoutProvider;
       });
