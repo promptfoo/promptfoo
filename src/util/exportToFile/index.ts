@@ -33,6 +33,7 @@ export function convertEvalResultToTableCell(result: EvalResult): EvaluateTableO
           id: result.response.audio.id,
           expiresAt: result.response.audio.expiresAt,
           data: result.response.audio.data,
+          blobRef: (result.response.audio as any).blobRef,
           transcript: result.response.audio.transcript,
           format: result.response.audio.format,
         }
@@ -40,7 +41,6 @@ export function convertEvalResultToTableCell(result: EvalResult): EvaluateTableO
     video: result.response?.video
       ? {
           id: result.response.video.id,
-          uuid: result.response.video.uuid,
           url: result.response.video.url,
           format: result.response.video.format,
           size: result.response.video.size,

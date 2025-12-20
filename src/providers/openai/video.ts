@@ -1,26 +1,26 @@
 import crypto from 'crypto';
 import fs from 'fs';
-import path from 'path';
-import { v4 as uuidv4 } from 'uuid';
+
 import logger from '../../logger';
-import { getConfigDirectoryPath } from '../../util/config/manage';
+import { getMediaStorage, storeMedia } from '../../storage';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { ellipsize } from '../../util/text';
 import { sleep } from '../../util/time';
 import { OpenAiGenericProvider } from '.';
 
+import type { MediaStorageRef } from '../../storage/types';
+import type { EnvOverrides } from '../../types/env';
 import type {
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderResponse,
 } from '../../types/index';
-import type { EnvOverrides } from '../../types/env';
 import type {
-  OpenAiVideoOptions,
+  OpenAiVideoDuration,
   OpenAiVideoJob,
   OpenAiVideoModel,
+  OpenAiVideoOptions,
   OpenAiVideoSize,
-  OpenAiVideoDuration,
   OpenAiVideoVariant,
 } from './types';
 
@@ -55,17 +55,21 @@ const DEFAULT_POLL_INTERVAL_MS = 10000; // 10 seconds
 const DEFAULT_MAX_POLL_TIME_MS = 600000; // 10 minutes
 
 /**
- * Video output subdirectory within .promptfoo
+ * File extensions for each variant type
  */
-const VIDEO_OUTPUT_SUBDIR = 'output/video';
+const VARIANT_EXTENSIONS: Record<OpenAiVideoVariant, string> = {
+  video: 'mp4',
+  thumbnail: 'webp',
+  spritesheet: 'jpg',
+};
 
 /**
- * File names for each variant within a video output directory
+ * MIME types for each variant
  */
-const VARIANT_FILENAMES: Record<OpenAiVideoVariant, string> = {
-  video: 'video.mp4',
-  thumbnail: 'thumbnail.webp',
-  spritesheet: 'spritesheet.jpg',
+const VARIANT_MIME_TYPES: Record<OpenAiVideoVariant, string> = {
+  video: 'video/mp4',
+  thumbnail: 'image/webp',
+  spritesheet: 'image/jpeg',
 };
 
 // =============================================================================
@@ -73,22 +77,15 @@ const VARIANT_FILENAMES: Record<OpenAiVideoVariant, string> = {
 // =============================================================================
 
 /**
- * Get the base video output directory (~/.promptfoo/output/video)
- */
-function getVideoOutputDir(): string {
-  return path.join(getConfigDirectoryPath(true), VIDEO_OUTPUT_SUBDIR);
-}
-
-/**
- * Generate a deterministic cache key from video generation parameters.
- * Uses SHA256 hash formatted as a UUID-like string for directory naming.
+ * Generate a deterministic content hash from video generation parameters.
+ * Used for cache key lookup and deduplication.
  *
  * @param prompt - The video generation prompt
  * @param model - The model name (e.g., 'sora-2')
  * @param size - Video dimensions (e.g., '1280x720')
  * @param seconds - Video duration in seconds
  * @param inputReference - Optional image reference for image-to-video
- * @returns A UUID-formatted hash string for use as cache key
+ * @returns A hex hash string for content addressing
  */
 export function generateVideoCacheKey(
   prompt: string,
@@ -105,49 +102,24 @@ export function generateVideoCacheKey(
     inputReference: inputReference || null,
   });
 
-  const hash = crypto.createHash('sha256').update(hashInput).digest('hex');
-
-  // Format as UUID-like string: 8-4-4-4-12
-  return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-${hash.slice(12, 16)}-${hash.slice(16, 20)}-${hash.slice(20, 32)}`;
+  return crypto.createHash('sha256').update(hashInput).digest('hex').slice(0, 12);
 }
 
 /**
  * Check if a cached video exists for the given cache key.
- * Returns the cache key if video exists, undefined otherwise.
+ * Uses media storage to check for existence.
  */
-export function checkVideoCache(cacheKey: string): boolean {
-  const videoPath = getVideoFilePath(cacheKey, 'video');
-  return fs.existsSync(videoPath);
+export async function checkVideoCache(cacheKey: string): Promise<boolean> {
+  const storage = getMediaStorage();
+  const key = `video/${cacheKey}.mp4`;
+  return storage.exists(key);
 }
 
 /**
- * Create a new UUID-based output directory for a video generation.
- * Structure: ~/.promptfoo/output/video/{uuid}/
- *
- * @param cacheKey - Optional deterministic cache key to use instead of random UUID
+ * Get the storage ref key pattern for a video asset.
  */
-function createVideoOutputDirectory(cacheKey?: string): string {
-  const uuid = cacheKey || uuidv4();
-  const outputDir = path.join(getVideoOutputDir(), uuid);
-  if (!fs.existsSync(outputDir)) {
-    fs.mkdirSync(outputDir, { recursive: true });
-  }
-  return uuid;
-}
-
-/**
- * Get file path for a variant within a UUID directory.
- */
-function getVideoFilePath(uuid: string, variant: OpenAiVideoVariant): string {
-  return path.join(getVideoOutputDir(), uuid, VARIANT_FILENAMES[variant]);
-}
-
-/**
- * Get the URL path for serving a video file via the API.
- * Returns relative path like: /api/output/video/{uuid}/video.mp4
- */
-export function getVideoApiPath(uuid: string, variant: OpenAiVideoVariant): string {
-  return `/api/output/video/${uuid}/${VARIANT_FILENAMES[variant]}`;
+function getVideoStorageKey(cacheKey: string, variant: OpenAiVideoVariant): string {
+  return `video/${cacheKey}.${VARIANT_EXTENSIONS[variant]}`;
 }
 
 /**
@@ -368,13 +340,14 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
   }
 
   /**
-   * Download video content (video, thumbnail, or spritesheet)
+   * Download video content and store in media storage
    */
   private async downloadVideoContent(
     soraVideoId: string,
     variant: OpenAiVideoVariant,
-    outputUuid: string,
-  ): Promise<{ filePath?: string; apiPath?: string; error?: string }> {
+    cacheKey: string,
+    evalId?: string,
+  ): Promise<{ storageRef?: MediaStorageRef; error?: string }> {
     const url = `${this.getApiUrl()}/videos/${soraVideoId}/content${variant !== 'video' ? `?variant=${variant}` : ''}`;
 
     const headers: Record<string, string> = {
@@ -392,14 +365,20 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
       }
 
       const buffer = Buffer.from(await response.arrayBuffer());
-      const filePath = getVideoFilePath(outputUuid, variant);
-      fs.writeFileSync(filePath, buffer);
+      const mimeType = VARIANT_MIME_TYPES[variant];
+      const mediaType = variant === 'video' ? 'video' : 'image';
 
-      // Return both the local file path and the API path for serving
-      const apiPath = getVideoApiPath(outputUuid, variant);
-      logger.debug(`[OpenAI Video] Downloaded ${variant} to ${filePath} (API: ${apiPath})`);
+      // Store in media storage
+      const { ref } = await storeMedia(buffer, {
+        contentType: mimeType,
+        mediaType,
+        evalId,
+        contentHash: cacheKey,
+      });
 
-      return { filePath, apiPath };
+      logger.debug(`[OpenAI Video] Stored ${variant} at ${ref.key}`);
+
+      return { storageRef: ref };
     } catch (err) {
       return {
         error: `Download error for ${variant}: ${String(err)}`,
@@ -427,6 +406,7 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
     const model = (config.model || this.modelName) as OpenAiVideoModel;
     const size = (config.size || DEFAULT_SIZE) as OpenAiVideoSize;
     const seconds = config.seconds || DEFAULT_SECONDS;
+    const evalId = context?.evaluationId;
 
     // Validate size
     const sizeValidation = validateVideoSize(size);
@@ -443,27 +423,31 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
     // Generate deterministic cache key from inputs
     // Note: remix_video_id is excluded from cache key as remixes should always regenerate
     const cacheKey = config.remix_video_id
-      ? undefined
+      ? generateVideoCacheKey(prompt, model, size, seconds)
       : generateVideoCacheKey(prompt, model, size, seconds, config.input_reference);
 
     // Check for cached video (skip for remix operations)
-    if (cacheKey && checkVideoCache(cacheKey)) {
+    if (!config.remix_video_id && (await checkVideoCache(cacheKey))) {
       logger.info(`[OpenAI Video] Cache hit for video: ${cacheKey}`);
 
-      const videoApiPath = getVideoApiPath(cacheKey, 'video');
-      const thumbnailApiPath = fs.existsSync(getVideoFilePath(cacheKey, 'thumbnail'))
-        ? getVideoApiPath(cacheKey, 'thumbnail')
-        : undefined;
-      const spritesheetApiPath = fs.existsSync(getVideoFilePath(cacheKey, 'spritesheet'))
-        ? getVideoApiPath(cacheKey, 'spritesheet')
-        : undefined;
+      const storage = getMediaStorage();
+      const videoKey = getVideoStorageKey(cacheKey, 'video');
+      const thumbnailKey = getVideoStorageKey(cacheKey, 'thumbnail');
+      const spritesheetKey = getVideoStorageKey(cacheKey, 'spritesheet');
+
+      // Build storage ref URL for video
+      const videoUrl = `storageRef:${videoKey}`;
+
+      // Check for optional assets
+      const hasThumbnail = await storage.exists(thumbnailKey);
+      const hasSpritesheet = await storage.exists(spritesheetKey);
 
       const sanitizedPrompt = prompt
         .replace(/\r?\n|\r/g, ' ')
         .replace(/\[/g, '(')
         .replace(/\]/g, ')');
       const ellipsizedPrompt = ellipsize(sanitizedPrompt, 50);
-      const output = `[Video: ${ellipsizedPrompt}](${videoApiPath})`;
+      const output = `[Video: ${ellipsizedPrompt}](${videoUrl})`;
 
       return {
         output,
@@ -472,13 +456,12 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
         cost: 0,
         video: {
           id: undefined, // No Sora ID for cached results
-          uuid: cacheKey,
-          url: videoApiPath,
+          url: videoUrl,
           format: 'mp4',
           size,
           duration: seconds,
-          thumbnail: thumbnailApiPath,
-          spritesheet: spritesheetApiPath,
+          thumbnail: hasThumbnail ? `storageRef:${thumbnailKey}` : undefined,
+          spritesheet: hasSpritesheet ? `storageRef:${spritesheetKey}` : undefined,
           model,
         },
         metadata: {
@@ -518,53 +501,63 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
       return { error: pollError };
     }
 
-    // Step 3: Create output directory using cache key (deterministic) or random UUID
-    const outputUuid = createVideoOutputDirectory(cacheKey);
-    logger.debug(`[OpenAI Video] Created video output directory: ${outputUuid}`);
+    // Step 3: Download and store video
+    logger.debug(`[OpenAI Video] Downloading and storing video assets...`);
 
-    // Step 4: Download assets
     const downloadThumbnail = config.download_thumbnail !== false;
     const downloadSpritesheet = config.download_spritesheet !== false;
 
     // Download video (required)
-    const {
-      apiPath: videoApiPath,
-      filePath: videoPath,
-      error: videoDownloadError,
-    } = await this.downloadVideoContent(videoId, 'video', outputUuid);
+    const { storageRef: videoRef, error: videoDownloadError } = await this.downloadVideoContent(
+      videoId,
+      'video',
+      cacheKey,
+      evalId,
+    );
 
-    if (videoDownloadError || !videoApiPath) {
+    if (videoDownloadError || !videoRef) {
       return { error: videoDownloadError || 'Failed to download video' };
     }
 
     // Download thumbnail (optional)
-    let thumbnailApiPath: string | undefined;
+    let thumbnailRef: MediaStorageRef | undefined;
     if (downloadThumbnail) {
-      const { apiPath, error } = await this.downloadVideoContent(videoId, 'thumbnail', outputUuid);
+      const { storageRef, error } = await this.downloadVideoContent(
+        videoId,
+        'thumbnail',
+        cacheKey,
+        evalId,
+      );
       if (error) {
         logger.warn(`[OpenAI Video] Failed to download thumbnail: ${error}`);
       } else {
-        thumbnailApiPath = apiPath;
+        thumbnailRef = storageRef;
       }
     }
 
     // Download spritesheet (optional)
-    let spritesheetApiPath: string | undefined;
+    let spritesheetRef: MediaStorageRef | undefined;
     if (downloadSpritesheet) {
-      const { apiPath, error } = await this.downloadVideoContent(
+      const { storageRef, error } = await this.downloadVideoContent(
         videoId,
         'spritesheet',
-        outputUuid,
+        cacheKey,
+        evalId,
       );
       if (error) {
         logger.warn(`[OpenAI Video] Failed to download spritesheet: ${error}`);
       } else {
-        spritesheetApiPath = apiPath;
+        spritesheetRef = storageRef;
       }
     }
 
     const latencyMs = Date.now() - startTime;
     const cost = calculateVideoCost(model, seconds, false);
+
+    // Build storage ref URLs
+    const videoUrl = `storageRef:${videoRef.key}`;
+    const thumbnailUrl = thumbnailRef ? `storageRef:${thumbnailRef.key}` : undefined;
+    const spritesheetUrl = spritesheetRef ? `storageRef:${spritesheetRef.key}` : undefined;
 
     // Format output as markdown (similar to image provider)
     const sanitizedPrompt = prompt
@@ -572,7 +565,7 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
       .replace(/\[/g, '(')
       .replace(/\]/g, ')');
     const ellipsizedPrompt = ellipsize(sanitizedPrompt, 50);
-    const output = `[Video: ${ellipsizedPrompt}](${videoApiPath})`;
+    const output = `[Video: ${ellipsizedPrompt}](${videoUrl})`;
 
     return {
       output,
@@ -581,22 +574,21 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
       cost,
       video: {
         id: videoId,
-        uuid: outputUuid,
-        url: videoApiPath,
+        url: videoUrl,
         format: 'mp4',
         size,
         duration: seconds,
-        thumbnail: thumbnailApiPath,
-        spritesheet: spritesheetApiPath,
+        thumbnail: thumbnailUrl,
+        spritesheet: spritesheetUrl,
         model,
       },
       metadata: {
         soraVideoId: videoId,
-        outputUuid,
+        cacheKey,
         model,
         size,
         seconds,
-        localPath: videoPath,
+        storageKey: videoRef.key,
       },
     };
   }

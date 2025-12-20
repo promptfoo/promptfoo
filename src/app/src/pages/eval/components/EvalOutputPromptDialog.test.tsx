@@ -1,10 +1,10 @@
+import * as ReactDOM from 'react-dom/client';
+
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import type { AssertionType, GradingResult } from '@promptfoo/types';
-import * as ReactDOM from 'react-dom/client';
-import { v4 as uuidv4 } from 'uuid';
 
 // Mock the Citations component to verify it receives the correct props
 vi.mock('./Citations', () => ({
@@ -900,7 +900,7 @@ describe('EvalOutputPromptDialog cloud config', () => {
       cloudConfig: customCloudConfig,
       metadata: {
         policyName: 'Test Policy',
-        policyId: uuidv4(),
+        policyId: crypto.randomUUID(),
       },
     };
 

@@ -1,6 +1,6 @@
 import fs from 'fs';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import { OpenAiTranscriptionProvider } from '../../../src/providers/openai/transcription';
 

@@ -29,6 +29,7 @@ vi.mock('./store', () => ({
     prettifyJson: false,
     renderMarkdown: true,
     showPassFail: true,
+    showPassReasons: false,
     showPrompts: true,
     maxImageWidth: 256,
     maxImageHeight: 256,
@@ -1808,5 +1809,74 @@ describe('EvalOutputCell thumbs up/down toggle functionality', () => {
 
     // Verify comment is passed to onRating
     expect(mockOnRating).toHaveBeenCalledWith(true, undefined, 'Important comment');
+  });
+});
+
+describe('EvalOutputCell pass reasons setting', () => {
+  const mockOnRating = vi.fn();
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  // Default mock has showPassReasons: false
+  it('should not show pass reasons when showPassReasons setting is false', () => {
+    const propsWithPassReasons: MockEvalOutputCellProps = {
+      firstOutput: {
+        cost: 0,
+        id: 'test-id',
+        latencyMs: 100,
+        namedScores: {},
+        pass: true,
+        failureReason: ResultFailureReason.NONE,
+        prompt: 'Test prompt',
+        provider: 'test-provider',
+        score: 0.9,
+        text: 'Test output text',
+        testCase: {},
+      },
+      maxTextLength: 100,
+      onRating: mockOnRating,
+      output: {
+        cost: 0,
+        gradingResult: {
+          componentResults: [
+            {
+              assertion: {
+                metric: 'accuracy',
+                type: 'llm-rubric' as AssertionType,
+                value: 'Check if response is helpful',
+              },
+              pass: true,
+              reason: 'The response was helpful and addressed all points',
+              score: 0.9,
+            },
+          ],
+          pass: true,
+          reason: 'Test passed',
+          score: 0.9,
+        },
+        id: 'test-id',
+        latencyMs: 100,
+        namedScores: {},
+        pass: true,
+        failureReason: ResultFailureReason.NONE,
+        prompt: 'Test prompt',
+        provider: 'test-provider',
+        score: 0.9,
+        text: 'Test output text',
+        testCase: {},
+      },
+      promptIndex: 0,
+      rowIndex: 0,
+      searchText: '',
+      showDiffs: false,
+      showStats: true,
+    };
+
+    const { container } = renderWithProviders(<EvalOutputCell {...propsWithPassReasons} />);
+
+    // Pass reasons should not be visible when setting is false (default)
+    expect(container.querySelector('.pass-reasons')).not.toBeInTheDocument();
   });
 });

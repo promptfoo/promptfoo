@@ -1,16 +1,15 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { MockedFunction } from 'vitest';
-
 import { execFile } from 'child_process';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as cacheModule from '../../src/cache';
 import {
   getFileHashes,
   parseScriptParts,
   ScriptCompletionProvider,
 } from '../../src/providers/scriptCompletion';
+import type { MockedFunction } from 'vitest';
 
 vi.mock('child_process', async (importOriginal) => {
   return {

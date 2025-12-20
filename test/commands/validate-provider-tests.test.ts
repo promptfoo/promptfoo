@@ -1,5 +1,5 @@
-import { Mock, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Command } from 'commander';
+import { beforeEach, describe, expect, it, Mock, vi } from 'vitest';
 import { doValidate, doValidateTarget, validateCommand } from '../../src/commands/validate';
 import logger from '../../src/logger';
 import { loadApiProvider, loadApiProviders } from '../../src/providers/index';
@@ -21,17 +21,13 @@ vi.mock('../../src/telemetry', () => ({
     send: vi.fn(),
   },
 }));
-vi.mock('uuid', async (importOriginal) => {
-  return {
-    ...(await importOriginal()),
-
-    validate: vi.fn((str: string) => {
-      // Check if the string looks like a UUID
-      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-      return uuidRegex.test(str);
-    }),
-  };
-});
+vi.mock('../../src/util/uuid', () => ({
+  isUuid: vi.fn((str: string) => {
+    // Check if the string looks like a UUID
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    return uuidRegex.test(str);
+  }),
+}));
 
 describe('Validate Command Provider Tests', () => {
   let program: Command;

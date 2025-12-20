@@ -174,6 +174,15 @@ export function validateSeverity(severity: string): CodeScanSeverity {
 // Scan Request/Response Schemas (API endpoint payload)
 // ============================================================================
 
+/**
+ * Schema for a valid line range in a file's diff.
+ * Used for validating PR comment line numbers.
+ */
+export const LineRangeSchema = z.object({
+  start: z.number(),
+  end: z.number(),
+});
+
 export const FileRecordSchema = z.object({
   path: z.string(),
   status: z.string(),
@@ -186,6 +195,8 @@ export const FileRecordSchema = z.object({
   isText: z.boolean().optional(),
   skipReason: z.string().optional(),
   patch: z.string().optional(),
+  /** Valid line ranges in the NEW file (for PR comment validation) */
+  lineRanges: z.array(LineRangeSchema).optional(),
 });
 
 export const GitMetadataSchema = z.object({
@@ -252,6 +263,8 @@ export const ScanResponseSchema = z.object({
 // ============================================================================
 // TypeScript Types (inferred from schemas)
 // ============================================================================
+
+export type LineRange = z.infer<typeof LineRangeSchema>;
 
 // Scan Request/Response
 export type FileRecord = z.infer<typeof FileRecordSchema>;

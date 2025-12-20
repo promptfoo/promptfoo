@@ -52,10 +52,10 @@ This example compares two Sora models:
 
 ## Output
 
-Generated videos are stored locally in `~/.promptfoo/output/video/` and displayed in the web viewer with playback controls.
+Generated videos are stored in the promptfoo media storage (`~/.promptfoo/media/`) and displayed in the web viewer with playback controls.
 
 ## Notes
 
 - Video generation can take 1-5 minutes per video
-- Videos are cached to avoid regeneration on subsequent runs
+- Videos are cached based on content hash to avoid regeneration on subsequent runs
 - The web viewer supports video playback with controls and metadata display

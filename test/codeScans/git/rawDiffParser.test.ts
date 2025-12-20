@@ -4,8 +4,8 @@
  * These tests verify correct handling of renamed and copied files
  */
 
-import { parseRawDiff } from '../../../src/codeScan/git/rawDiffParser';
 import { describe, expect, it } from 'vitest';
+import { parseRawDiff } from '../../../src/codeScan/git/rawDiffParser';
 
 describe('parseRawDiff', () => {
   describe('basic file operations', () => {

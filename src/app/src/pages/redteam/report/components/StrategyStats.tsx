@@ -1,5 +1,7 @@
 import React from 'react';
 
+import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
+import { formatASRForDisplay } from '@app/utils/redteam';
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
@@ -22,14 +24,12 @@ import TableRow from '@mui/material/TableRow';
 import Tabs from '@mui/material/Tabs';
 import Typography from '@mui/material/Typography';
 import { displayNameOverrides, subCategoryDescriptions } from '@promptfoo/redteam/constants';
+import { calculateAttackSuccessRate } from '@promptfoo/redteam/metrics';
+import { type RedteamPluginObject } from '@promptfoo/redteam/types';
+import { compareByASRDescending } from '../utils/utils';
+import { type CategoryStats, type TestResultStats } from './FrameworkComplianceUtils';
 import { getPluginIdFromResult, getStrategyIdFromTest } from './shared';
 import type { EvaluateResult, GradingResult } from '@promptfoo/types';
-import { calculateAttackSuccessRate } from '@promptfoo/redteam/metrics';
-import { formatASRForDisplay } from '@app/utils/redteam';
-import { type TestResultStats, type CategoryStats } from './FrameworkComplianceUtils';
-import { compareByASRDescending } from '../utils/utils';
-import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
-import { type RedteamPluginObject } from '@promptfoo/redteam/types';
 
 interface TestWithMetadata {
   prompt: string;

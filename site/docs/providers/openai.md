@@ -481,16 +481,52 @@ See the [OpenAI vision example](https://github.com/promptfoo/promptfoo/tree/main
 
 OpenAI supports image generation via `openai:image:<model>`. Supported models include:
 
-- `gpt-image-1` - OpenAI's latest and most capable image generation model
+- `gpt-image-1.5` - OpenAI's state-of-the-art image generation model with best instruction following
+- `gpt-image-1` - High-quality image generation model
 - `gpt-image-1-mini` - Cost-efficient version of GPT Image 1
 - `dall-e-3` - High quality image generation with larger resolution support
 - `dall-e-2` - Lower cost option with concurrent requests support
 
 See the [OpenAI image generation example](https://github.com/promptfoo/promptfoo/tree/main/examples/openai-images).
 
+#### GPT Image 1.5
+
+GPT Image 1.5 is OpenAI's most advanced image generation model with superior instruction following, prompt adherence, and photorealistic quality. It uses token-based pricing for more flexible cost control.
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:image:gpt-image-1.5
+    config:
+      size: 1024x1024 # 1024x1024, 1024x1536, 1536x1024, or auto
+      quality: low # low, medium, high, or auto
+      background: transparent # transparent, opaque, or auto
+      output_format: png # png, jpeg, or webp
+      output_compression: 80 # 0-100, only for jpeg/webp
+      moderation: auto # auto or low
+```
+
+| Parameter            | Description                             | Options                                       |
+| -------------------- | --------------------------------------- | --------------------------------------------- |
+| `size`               | Image dimensions                        | `1024x1024`, `1024x1536`, `1536x1024`, `auto` |
+| `quality`            | Rendering quality                       | `low`, `medium`, `high`, `auto`               |
+| `background`         | Background transparency (png/webp only) | `transparent`, `opaque`, `auto`               |
+| `output_format`      | Output image format                     | `png`, `jpeg`, `webp`                         |
+| `output_compression` | Compression level (jpeg/webp only)      | `0-100`                                       |
+| `moderation`         | Content moderation strictness           | `auto`, `low`                                 |
+
+**Pricing:**
+
+GPT Image 1.5 uses token-based pricing at $5/1M input text tokens, $10/1M output text tokens, $8/1M input image tokens, and $32/1M output image tokens. Estimated costs per image:
+
+| Quality | 1024x1024 | 1024x1536 | 1536x1024 |
+| ------- | --------- | --------- | --------- |
+| Low     | ~$0.064   | ~$0.096   | ~$0.096   |
+| Medium  | ~$0.128   | ~$0.192   | ~$0.192   |
+| High    | ~$0.192   | ~$0.288   | ~$0.288   |
+
 #### GPT Image 1
 
-GPT Image 1 is OpenAI's state-of-the-art image generation model with superior instruction following, text rendering, and real-world knowledge.
+GPT Image 1 is a high-quality image generation model with superior instruction following, text rendering, and real-world knowledge.
 
 ```yaml title="promptfooconfig.yaml"
 providers:
@@ -575,7 +611,7 @@ prompts:
   - 'In the style of Dali: {{subject}}'
 
 providers:
-  - openai:image:gpt-image-1
+  - openai:image:gpt-image-1.5
 
 tests:
   - vars:
@@ -651,7 +687,7 @@ Videos are automatically displayed in the web viewer with playback controls. The
 - Video metadata (model, size, duration)
 - Thumbnail preview (if enabled)
 
-Videos are stored locally in `~/.promptfoo/output/video/` and served via the web interface.
+Videos are stored in promptfoo's media storage (`~/.promptfoo/media/`) and served via the web interface.
 
 ### Pricing
 
@@ -713,14 +749,14 @@ Web search calls in the Responses API are billed separately from normal tokens:
 
 - The web search tool costs **$10 per 1,000 calls** for the standard tool and **$10-25 per 1,000 calls** for preview variants, plus any search content tokens where applicable
 - Each search-rubric assertion may perform one or more searches
-- Use caching (`--cache`) to avoid redundant searches during development
+- Caching is enabled by default; use `--no-cache` to force fresh searches during development
 - See [OpenAI's pricing page](https://openai.com/api/pricing/) for current rates
   :::
 
 ### Best Practices
 
 1. **Use specific search queries**: More specific queries yield better verification results
-2. **Enable caching**: Run with `npx promptfoo eval --cache` to avoid repeated searches
+2. **Use caching**: Caching is enabled by default; results are reused to avoid repeated searches
 3. **Use appropriate models**: gpt-5.1-mini is recommended for cost-effective web search
 4. **Monitor usage**: Track API costs, especially in CI/CD pipelines
 

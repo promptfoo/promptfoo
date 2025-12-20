@@ -1,10 +1,11 @@
 import React from 'react';
+
 import { useColorMode } from '@docusaurus/theme-common';
 import useIsBrowser from '@docusaurus/useIsBrowser';
 import Box from '@mui/material/Box';
 import Container from '@mui/material/Container';
-import Typography from '@mui/material/Typography';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
+import Typography from '@mui/material/Typography';
 import Layout from '@theme/Layout';
 
 const FeedbackPageContent = () => {

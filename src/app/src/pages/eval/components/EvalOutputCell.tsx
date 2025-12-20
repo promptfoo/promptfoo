@@ -1,13 +1,14 @@
 import React, { useMemo } from 'react';
 
-import { diffJson, diffSentences, diffWords } from 'diff';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-
 import useCloudConfig from '@app/hooks/useCloudConfig';
 import { useEvalOperations } from '@app/hooks/useEvalOperations';
 import { useShiftKey } from '@app/hooks/useShiftKey';
-import useApiConfig from '@app/stores/apiConfig';
+import {
+  normalizeMediaText,
+  resolveAudioSource,
+  resolveImageSource,
+  resolveVideoSource,
+} from '@app/utils/media';
 import {
   Check,
   ContentCopy,
@@ -22,7 +23,9 @@ import {
 import IconButton from '@mui/material/IconButton';
 import Tooltip, { TooltipProps } from '@mui/material/Tooltip';
 import { type EvaluateTableOutput, ResultFailureReason } from '@promptfoo/types';
-
+import { diffJson, diffSentences, diffWords } from 'diff';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import CustomMetrics from './CustomMetrics';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import FailReasonCarousel from './FailReasonCarousel';
@@ -133,13 +136,19 @@ function EvalOutputCell({
   showDiffs: boolean;
   searchText?: string;
 }) {
-  const { renderMarkdown, prettifyJson, showPrompts, showPassFail, maxImageWidth, maxImageHeight } =
-    useResultsViewSettingsStore();
+  const {
+    renderMarkdown,
+    prettifyJson,
+    showPrompts,
+    showPassFail,
+    showPassReasons,
+    maxImageWidth,
+    maxImageHeight,
+  } = useResultsViewSettingsStore();
 
   const { shouldHighlightSearchText, addFilter, resetFilters } = useTableStore();
   const { data: cloudConfig } = useCloudConfig();
   const { replayEvaluation, fetchTraces } = useEvalOperations();
-  const { apiBaseUrl } = useApiConfig();
 
   const [openPrompt, setOpen] = React.useState(false);
   const [activeRating, setActiveRating] = React.useState<boolean | null>(
@@ -198,18 +207,30 @@ function EvalOutputCell({
   };
 
   const text = typeof output.text === 'string' ? output.text : JSON.stringify(output.text);
+  const normalizedText = normalizeMediaText(text);
+  const inlineImageSrc = resolveImageSource(text);
+  const outputAudioSource = resolveAudioSource(output.audio);
   let node: React.ReactNode | undefined;
   let failReasons: string[] = [];
+  let passReasons: string[] = [];
 
   // Extract response audio from the last turn of redteamHistory for display in the cell
   const redteamHistory = output.metadata?.redteamHistory || output.metadata?.redteamTreeHistory;
   const lastTurn = redteamHistory?.[redteamHistory.length - 1];
-  const responseAudio = lastTurn?.outputAudio as { data?: string; format?: string } | undefined;
+  const responseAudio = lastTurn?.outputAudio as
+    | { data?: string; format?: string; blobRef?: { uri?: string; hash?: string } }
+    | undefined;
+  const responseAudioSource = resolveAudioSource(responseAudio);
 
-  // Extract failure reasons from component results
+  // Extract failure and pass reasons from component results
   if (output.gradingResult?.componentResults) {
     failReasons = output.gradingResult.componentResults
       .filter((result) => (result ? !result.pass : false))
+      .map((result) => result.reason)
+      .filter((reason) => reason); // Filter out empty/undefined reasons
+
+    passReasons = output.gradingResult.componentResults
+      .filter((result) => (result ? result.pass : false))
       .map((result) => result.reason)
       .filter((reason) => reason); // Filter out empty/undefined reasons
   }
@@ -291,63 +312,69 @@ function EvalOutputCell({
       console.error('Invalid regular expression:', (error as Error).message);
     }
   } else if (
-    text?.match(/^data:(image\/[a-z]+|application\/octet-stream|image\/svg\+xml);(base64,)?/)
+    text?.match(/^data:(image\/[a-z]+|application\/octet-stream|image\/svg\+xml);(base64,)?/) ||
+    inlineImageSrc
   ) {
+    const src = inlineImageSrc || text;
     node = (
       <img
-        src={text}
+        src={src}
         alt={output.prompt}
         style={{ width: '100%' }}
-        onClick={() => toggleLightbox(text)}
+        onClick={() => toggleLightbox(src)}
       />
     );
   } else if (output.audio) {
-    node = (
-      <div className="audio-output">
-        <audio controls style={{ width: '100%' }} data-testid="audio-player">
-          <source
-            src={`data:audio/${output.audio.format || 'mp3'};base64,${output.audio.data}`}
-            type={`audio/${output.audio.format || 'mp3'}`}
-          />
-          Your browser does not support the audio element.
-        </audio>
-        {output.audio.transcript && (
-          <div className="transcript">
-            <strong>Transcript:</strong> {output.audio.transcript}
-          </div>
-        )}
-      </div>
-    );
-  } else if (output.video?.url) {
-    // Video URLs are API paths like /api/output/video/{uuid}/video.mp4
-    // In dev mode, we need to prepend the apiBaseUrl to reach the backend server
-    const videoSrc = `${apiBaseUrl}${output.video.url}`;
-    const posterSrc = output.video.thumbnail ? `${apiBaseUrl}${output.video.thumbnail}` : undefined;
-    node = (
-      <div className="video-output">
-        <video
-          controls
-          style={{ width: '100%', maxWidth: '640px', borderRadius: '4px' }}
-          poster={posterSrc}
-          data-testid="video-player"
-        >
-          <source src={videoSrc} type={`video/${output.video.format || 'mp4'}`} />
-          Your browser does not support the video element.
-        </video>
-        <div
-          className="video-metadata"
-          style={{ marginTop: '8px', fontSize: '0.85em', opacity: 0.8 }}
-        >
-          {output.video.model && (
-            <span style={{ marginRight: '12px' }}>Model: {output.video.model}</span>
+    if (outputAudioSource) {
+      node = (
+        <div className="audio-output">
+          <audio controls style={{ width: '100%' }} data-testid="audio-player">
+            <source src={outputAudioSource.src} type={outputAudioSource.type || 'audio/mpeg'} />
+            Your browser does not support the audio element.
+          </audio>
+          {output.audio.transcript && (
+            <div className="transcript">
+              <strong>Transcript:</strong> {output.audio.transcript}
+            </div>
           )}
-          {output.video.size && (
-            <span style={{ marginRight: '12px' }}>Size: {output.video.size}</span>
-          )}
-          {output.video.duration && <span>Duration: {output.video.duration}s</span>}
         </div>
-      </div>
-    );
+      );
+    } else if (output.audio.transcript) {
+      node = (
+        <div className="transcript">
+          <strong>Transcript:</strong> {output.audio.transcript}
+        </div>
+      );
+    }
+  } else if (output.video) {
+    const videoSource = resolveVideoSource(output.video);
+    if (videoSource) {
+      node = (
+        <div className="video-output">
+          <video
+            controls
+            style={{ width: '100%', maxWidth: '640px', borderRadius: '4px' }}
+            poster={videoSource.poster}
+            data-testid="video-player"
+          >
+            <source src={videoSource.src} type={videoSource.type || 'video/mp4'} />
+            Your browser does not support the video element.
+          </video>
+          <div
+            className="video-metadata"
+            style={{ marginTop: '8px', fontSize: '0.85em', opacity: 0.8 }}
+          >
+            {output.video.model && (
+              <span style={{ marginRight: '12px' }}>Model: {output.video.model}</span>
+            )}
+            {output.video.size && (
+              <span style={{ marginRight: '12px' }}>Size: {output.video.size}</span>
+            )}
+            {output.video.duration && <span>Duration: {output.video.duration}s</span>}
+          </div>
+        </div>
+      );
+    }
   } else if ((prettifyJson || renderMarkdown) && !showDiffs) {
     // When both prettifyJson and renderMarkdown are enabled,
     // display as JSON if it's a valid object/array, otherwise render as Markdown
@@ -381,7 +408,7 @@ function EvalOutputCell({
             ),
           }}
         >
-          {text}
+          {normalizedText}
         </ReactMarkdown>
       );
     }
@@ -797,6 +824,15 @@ function EvalOutputCell({
               <FailReasonCarousel failReasons={failReasons} />
             </span>
           )}
+          {showPassReasons && passReasons.length > 0 && (
+            <div className="pass-reasons">
+              {passReasons.map((reason, index) => (
+                <div key={index} className="pass-reason">
+                  {reason}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
       {showPrompts && firstOutput.prompt && (
@@ -808,24 +844,21 @@ function EvalOutputCell({
         </div>
       )}
       {/* Show response audio from redteam history if available (target's audio response) */}
-      {responseAudio?.data && (
+      {responseAudioSource?.src && (
         <div className="response-audio" style={{ marginBottom: '8px' }}>
           <audio
             controls
             style={{ width: '100%', height: '32px' }}
             data-testid="response-audio-player"
           >
-            <source
-              src={`data:audio/${responseAudio.format || 'mp3'};base64,${responseAudio.data}`}
-              type={`audio/${responseAudio.format || 'mp3'}`}
-            />
+            <source src={responseAudioSource.src} type={responseAudioSource.type || 'audio/mpeg'} />
             Your browser does not support the audio element.
           </audio>
         </div>
       )}
       <div style={contentStyle}>
         <TruncatedText
-          text={node || text}
+          text={node || normalizedText}
           maxLength={
             renderMarkdown && (isImageProvider(output.provider) || isVideoProvider(output.provider))
               ? 0

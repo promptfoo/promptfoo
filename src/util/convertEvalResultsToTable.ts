@@ -101,7 +101,6 @@ export function convertResultsToTable(eval_: ResultsFile): EvaluateTable {
       video: result.response?.video
         ? {
             id: result.response.video.id,
-            uuid: result.response.video.uuid,
             url: result.response.video.url,
             format: result.response.video.format,
             size: result.response.video.size,

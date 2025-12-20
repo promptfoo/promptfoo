@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ElevenLabsAlignmentProvider } from '../../../../src/providers/elevenlabs/alignment';
+
 import type { CallApiContextParams } from '../../../../src/types/providers';
 
 // Mock dependencies

@@ -44,6 +44,7 @@ import Overview from './Overview';
 import './Report.css';
 
 import { type GridFilterModel, GridLogicOperator } from '@mui/x-data-grid';
+import { type CategoryStats, type TestResultStats } from './FrameworkComplianceUtils';
 import ReportDownloadButton from './ReportDownloadButton';
 import ReportSettingsDialogButton from './ReportSettingsDialogButton';
 import RiskCategories from './RiskCategories';
@@ -51,7 +52,6 @@ import StrategyStats from './StrategyStats';
 import { getPluginIdFromResult, getStrategyIdFromTest } from './shared';
 import TestSuites from './TestSuites';
 import ToolsDialog from './ToolsDialog';
-import { type TestResultStats, type CategoryStats } from './FrameworkComplianceUtils';
 
 const App = () => {
   const navigate = useNavigate();

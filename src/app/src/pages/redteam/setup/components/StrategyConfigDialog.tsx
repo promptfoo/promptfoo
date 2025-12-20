@@ -29,9 +29,9 @@ import {
   MULTI_TURN_STRATEGIES,
   type MultiTurnStrategy,
 } from '@promptfoo/redteam/constants/strategies';
+import { STRATEGIES_REQUIRING_CONFIG } from './strategies/utils';
 
 import type { StrategyCardData } from './strategies/types';
-import { STRATEGIES_REQUIRING_CONFIG } from './strategies/utils';
 
 const DEFAULT_SIMBA_GOALS = [
   'Generate harmful content',

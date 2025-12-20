@@ -1,5 +1,6 @@
 import type winston from 'winston';
 
+import type { BlobRef } from '../blobs/types';
 import type { EnvOverrides } from './env';
 import type { Prompt } from './prompts';
 import type { NunjucksFilterMap, TokenUsage } from './shared';
@@ -67,6 +68,16 @@ export interface CallApiContextParams {
   // Evaluation metadata (for manual correlation if needed)
   evaluationId?: string;
   testCaseId?: string;
+  /**
+   * Index of the test case within the current evaluation (row in results table).
+   * Used for correlating blob references and other per-result metadata.
+   */
+  testIdx?: number;
+  /**
+   * Index of the prompt within the current evaluation (column in results table).
+   * Used for correlating blob references and other per-result metadata.
+   */
+  promptIdx?: number;
   repeatIndex?: number;
 }
 
@@ -124,6 +135,15 @@ export interface ProviderResponse {
   cached?: boolean;
   cost?: number;
   error?: string;
+  /**
+   * Indicates that `output` contains base64-encoded binary data (often as JSON like OpenAI `b64_json`).
+   * Used to enable blob externalization and avoid token bloat in downstream grading/agentic strategies.
+   */
+  isBase64?: boolean;
+  /**
+   * Optional format hint for `output` (e.g. `'json'` when `output` is a JSON string).
+   */
+  format?: string;
   logProbs?: number[];
   latencyMs?: number;
   metadata?: {
@@ -152,6 +172,7 @@ export interface ProviderResponse {
     id?: string;
     expiresAt?: number;
     data?: string; // base64 encoded audio data
+    blobRef?: BlobRef;
     transcript?: string;
     format?: string;
     sampleRate?: number;
@@ -160,13 +181,12 @@ export interface ProviderResponse {
   };
   video?: {
     id?: string; // Provider video ID (e.g., Sora job ID)
-    uuid?: string; // Local storage UUID
-    url?: string; // API path to serve video (e.g., /api/output/video/{uuid}/video.mp4)
+    url?: string; // Storage ref URL (e.g., storageRef:video/abc123.mp4) or blob URI
     format?: string; // 'mp4'
     size?: string; // '1280x720' or '720x1280'
     duration?: number; // Seconds
-    thumbnail?: string; // API path to thumbnail
-    spritesheet?: string; // API path to spritesheet
+    thumbnail?: string; // Storage ref URL for thumbnail
+    spritesheet?: string; // Storage ref URL for spritesheet
     model?: string; // Model used (e.g., 'sora-2', 'sora-2-pro')
   };
 }

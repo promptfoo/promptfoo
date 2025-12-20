@@ -1,7 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as fs from 'fs';
 
 import yaml from 'js-yaml';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type {
   readGlobalConfig,

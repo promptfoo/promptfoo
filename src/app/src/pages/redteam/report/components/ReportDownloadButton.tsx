@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 
+import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import DownloadIcon from '@mui/icons-material/Download';
 import CircularProgress from '@mui/material/CircularProgress';
@@ -7,11 +8,10 @@ import IconButton from '@mui/material/IconButton';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import Tooltip from '@mui/material/Tooltip';
-import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
+import { displayNameOverrides } from '@promptfoo/redteam/constants';
 import { stringify } from 'csv-stringify/browser/esm/sync';
 import { getPluginIdFromResult, getStrategyIdFromTest } from '../components/shared';
 import type { EvaluateResult, ResultsFile } from '@promptfoo/types';
-import { displayNameOverrides } from '@promptfoo/redteam/constants';
 
 interface ReportDownloadButtonProps {
   evalDescription: string;

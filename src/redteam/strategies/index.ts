@@ -1,10 +1,8 @@
 import chalk from 'chalk';
 import dedent from 'dedent';
-
 import cliState from '../../cliState';
 import { importModule } from '../../esm';
 import logger from '../../logger';
-import type { RedteamStrategyObject, TestCase } from '../../types/index';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { safeJoin } from '../../util/pathUtils';
 import { strategyDisplayNames } from '../constants';
@@ -35,6 +33,8 @@ import { addAudioToBase64 } from './simpleAudio';
 import { addImageToBase64 } from './simpleImage';
 import { addVideoToBase64 } from './simpleVideo';
 import { addCompositeTestCases } from './singleTurnComposite';
+
+import type { RedteamStrategyObject, TestCase } from '../../types/index';
 import type { Strategy } from './types';
 
 export type { Strategy };
