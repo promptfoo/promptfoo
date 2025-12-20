@@ -33,6 +33,13 @@ import { STRATEGIES_REQUIRING_CONFIG } from './strategies/utils';
 
 import type { StrategyCardData } from './strategies/types';
 
+// Maximum allowed value for maxTurns/numIterations in agentic strategies
+const MAX_ITERATIONS_LIMIT = 30;
+const MAX_ITERATIONS_LIMIT_MESSAGE =
+  'This is the maximum—higher values show diminishing returns while increasing scan time and cost.';
+const MAX_ITERATIONS_ERROR_MESSAGE =
+  'Must be 30 or less. Higher values show diminishing returns while increasing scan time and cost.';
+
 const DEFAULT_SIMBA_GOALS = [
   'Generate harmful content',
   'Access HR documents labeled as confidential',
@@ -424,8 +431,25 @@ export default function StrategyConfigDialog({
     return true;
   };
 
+  // Validate that maxTurns/numIterations doesn't exceed the limit
+  const isIterationLimitValid = () => {
+    const maxTurns = localConfig.maxTurns;
+    const numIterations = localConfig.numIterations;
+    if (maxTurns !== undefined && maxTurns > MAX_ITERATIONS_LIMIT) {
+      return false;
+    }
+    if (numIterations !== undefined && numIterations > MAX_ITERATIONS_LIMIT) {
+      return false;
+    }
+    return true;
+  };
+
   const handleSave = () => {
     if (!strategy) {
+      return;
+    }
+
+    if (!isIterationLimitValid()) {
       return;
     }
 
@@ -527,8 +551,15 @@ export default function StrategyConfigDialog({
               setLocalConfig({ ...localConfig, numIterations: value });
             }}
             placeholder="Number of iterations (default: 10)"
-            InputProps={{ inputProps: { min: 3, max: 50 } }}
-            helperText="Number of iterations to try (more iterations increase chance of success)"
+            InputProps={{ inputProps: { min: 3, max: MAX_ITERATIONS_LIMIT } }}
+            error={localConfig.numIterations > MAX_ITERATIONS_LIMIT}
+            helperText={
+              localConfig.numIterations > MAX_ITERATIONS_LIMIT
+                ? MAX_ITERATIONS_ERROR_MESSAGE
+                : localConfig.numIterations >= MAX_ITERATIONS_LIMIT
+                  ? MAX_ITERATIONS_LIMIT_MESSAGE
+                  : 'Number of iterations to try (more iterations increase chance of success)'
+            }
           />
         </Box>
       );
@@ -644,8 +675,15 @@ export default function StrategyConfigDialog({
               setLocalConfig({ ...localConfig, maxTurns: value });
             }}
             placeholder="Maximum number of conversation turns (default: 10)"
-            InputProps={{ inputProps: { min: 1, max: 20 } }}
-            helperText="Maximum number of back-and-forth exchanges with the model"
+            InputProps={{ inputProps: { min: 1, max: MAX_ITERATIONS_LIMIT } }}
+            error={localConfig.maxTurns > MAX_ITERATIONS_LIMIT}
+            helperText={
+              localConfig.maxTurns > MAX_ITERATIONS_LIMIT
+                ? MAX_ITERATIONS_ERROR_MESSAGE
+                : localConfig.maxTurns >= MAX_ITERATIONS_LIMIT
+                  ? MAX_ITERATIONS_LIMIT_MESSAGE
+                  : 'Maximum number of back-and-forth exchanges with the model'
+            }
           />
 
           <FormControlLabel
@@ -791,8 +829,15 @@ export default function StrategyConfigDialog({
               });
             }}
             placeholder="Maximum conversation turns (default: 10)"
-            InputProps={{ inputProps: { min: 1, max: 30 } }}
-            helperText="Maximum number of back-and-forth exchanges with the target model."
+            InputProps={{ inputProps: { min: 1, max: MAX_ITERATIONS_LIMIT } }}
+            error={localConfig.maxTurns > MAX_ITERATIONS_LIMIT}
+            helperText={
+              localConfig.maxTurns > MAX_ITERATIONS_LIMIT
+                ? MAX_ITERATIONS_ERROR_MESSAGE
+                : localConfig.maxTurns >= MAX_ITERATIONS_LIMIT
+                  ? MAX_ITERATIONS_LIMIT_MESSAGE
+                  : 'Maximum number of back-and-forth exchanges with the target model.'
+            }
           />
 
           <FormControlLabel
@@ -843,8 +888,15 @@ export default function StrategyConfigDialog({
               }
             }}
             placeholder="5"
-            InputProps={{ inputProps: { min: 1, max: 20 } }}
-            helperText="Maximum number of back-and-forth exchanges with the model (default: 5)"
+            InputProps={{ inputProps: { min: 1, max: MAX_ITERATIONS_LIMIT } }}
+            error={localConfig.maxTurns > MAX_ITERATIONS_LIMIT}
+            helperText={
+              localConfig.maxTurns > MAX_ITERATIONS_LIMIT
+                ? MAX_ITERATIONS_ERROR_MESSAGE
+                : localConfig.maxTurns >= MAX_ITERATIONS_LIMIT
+                  ? MAX_ITERATIONS_LIMIT_MESSAGE
+                  : 'Maximum number of back-and-forth exchanges with the model (default: 5)'
+            }
           />
 
           <FormControlLabel
@@ -885,8 +937,15 @@ export default function StrategyConfigDialog({
               setLocalConfig({ ...localConfig, numIterations: value });
             }}
             placeholder="Number of iterations (default: 10)"
-            InputProps={{ inputProps: { min: 3, max: 50 } }}
-            helperText="Number of iterations for the meta-agent to attempt. Agent builds attack taxonomy and makes strategic decisions."
+            InputProps={{ inputProps: { min: 3, max: MAX_ITERATIONS_LIMIT } }}
+            error={localConfig.numIterations > MAX_ITERATIONS_LIMIT}
+            helperText={
+              localConfig.numIterations > MAX_ITERATIONS_LIMIT
+                ? MAX_ITERATIONS_ERROR_MESSAGE
+                : localConfig.numIterations >= MAX_ITERATIONS_LIMIT
+                  ? MAX_ITERATIONS_LIMIT_MESSAGE
+                  : 'Number of iterations for the meta-agent to attempt. Agent builds attack taxonomy and makes strategic decisions.'
+            }
           />
         </Box>
       );
@@ -1328,6 +1387,7 @@ export default function StrategyConfigDialog({
           disabled={
             (strategy === 'retry' && (!!error || !numTests)) ||
             !isCustomStrategyValid() ||
+            !isIterationLimitValid() ||
             (strategy === 'layer' && steps.length === 0)
           }
         >
