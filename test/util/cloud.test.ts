@@ -1685,7 +1685,7 @@ describe('cloud utils', () => {
 
       await expect(
         createEvalInCloud({
-          config: { providers: [] },
+          config: { prompts: [], providers: [] },
           createdAt: new Date(),
         }),
       ).rejects.toThrow('Could not create eval in cloud. Cloud config is not enabled.');
@@ -1700,7 +1700,7 @@ describe('cloud utils', () => {
 
       await expect(
         createEvalInCloud({
-          config: { providers: [] },
+          config: { prompts: [], providers: [] },
           createdAt: new Date(),
         }),
       ).rejects.toThrow('Failed to create eval in cloud: Internal server error');
@@ -1714,7 +1714,7 @@ describe('cloud utils', () => {
 
       await expect(
         createEvalInCloud({
-          config: { providers: [] },
+          config: { prompts: [], providers: [] },
           createdAt: new Date(),
         }),
       ).rejects.toThrow('Cloud did not return an eval ID');

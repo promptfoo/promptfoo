@@ -250,7 +250,8 @@ export async function doRedteamResume(options: RedteamResumeOptions): Promise<Ev
   fs.writeFileSync(tmpFile, yaml.dump(liveRedteamConfig));
 
   logger.debug(`Resume config written to ${tmpFile}`);
-  logger.debug(`Config has ${liveRedteamConfig.tests?.length || 0} tests`);
+  const testsCount = Array.isArray(liveRedteamConfig.tests) ? liveRedteamConfig.tests.length : 0;
+  logger.debug(`Config has ${testsCount} tests`);
 
   const { defaultConfig } = await loadDefaultConfig();
 

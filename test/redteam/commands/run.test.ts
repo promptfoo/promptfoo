@@ -260,12 +260,15 @@ describe('redteamRunCommand', () => {
       vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
 
       const mockEval = {
+        id: '12345678-1234-1234-1234-123456789012',
+        createdAt: new Date().toISOString(),
         config: {
+          prompts: ['Test prompt'],
           tests: [{ vars: { prompt: 'test' } }],
           providers: ['test-provider'],
         },
       };
-      vi.mocked(getEvalFromCloud).mockResolvedValue(mockEval);
+      vi.mocked(getEvalFromCloud).mockResolvedValue(mockEval as any);
       vi.mocked(getCompletedPairsFromCloud).mockResolvedValue(new Set(['0:0']));
       vi.mocked(streamResultsToCloud).mockResolvedValue(undefined);
 
@@ -284,12 +287,15 @@ describe('redteamRunCommand', () => {
       vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
 
       const mockEval = {
+        id: 'eval-ABC-2024-01-15T10:30:00',
+        createdAt: new Date().toISOString(),
         config: {
+          prompts: ['Test prompt'],
           tests: [{ vars: { prompt: 'test' } }],
           providers: ['test-provider'],
         },
       };
-      vi.mocked(getEvalFromCloud).mockResolvedValue(mockEval);
+      vi.mocked(getEvalFromCloud).mockResolvedValue(mockEval as any);
       vi.mocked(getCompletedPairsFromCloud).mockResolvedValue(new Set());
       vi.mocked(streamResultsToCloud).mockResolvedValue(undefined);
 
@@ -307,12 +313,15 @@ describe('redteamRunCommand', () => {
       vi.mocked(cloudConfig.isEnabled).mockReturnValue(true);
 
       const mockEval = {
+        id: '12345678-1234-1234-1234-123456789012',
+        createdAt: new Date().toISOString(),
         config: {
+          prompts: ['Test prompt'],
           tests: [], // No tests
           providers: ['test-provider'],
         },
       };
-      vi.mocked(getEvalFromCloud).mockResolvedValue(mockEval);
+      vi.mocked(getEvalFromCloud).mockResolvedValue(mockEval as any);
 
       const runCommand = program.commands.find((cmd) => cmd.name() === 'run');
       expect(runCommand).toBeDefined();

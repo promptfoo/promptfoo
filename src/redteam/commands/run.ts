@@ -87,7 +87,12 @@ export function redteamRunCommand(program: Command) {
           // Fetch the eval from cloud to get the config with generated tests
           const cloudEval = await getEvalFromCloud(opts.resume);
 
-          if (!cloudEval.config || !cloudEval.config.tests || cloudEval.config.tests.length === 0) {
+          if (
+            !cloudEval.config ||
+            !cloudEval.config.tests ||
+            !Array.isArray(cloudEval.config.tests) ||
+            cloudEval.config.tests.length === 0
+          ) {
             logger.error(
               'Cannot resume: the eval does not contain generated tests. The scan may have failed before test generation completed.',
             );
