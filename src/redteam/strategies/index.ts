@@ -5,7 +5,6 @@ import { importModule } from '../../esm';
 import logger from '../../logger';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { safeJoin } from '../../util/pathUtils';
-import { strategyDisplayNames } from '../constants';
 import { isCustomStrategy } from '../constants/strategies';
 import { addAuthoritativeMarkupInjectionTestCases } from './authoritativeMarkupInjection';
 import { addBase64Encoding } from './base64';
@@ -293,14 +292,10 @@ export const Strategies: Strategy[] = [
     },
   },
   {
+    // Deprecated: Simba strategy has been removed. This entry exists for backwards compatibility.
     id: 'simba',
     action: async (testCases, injectVar, config) => {
-      logger.debug(
-        `Adding ${strategyDisplayNames.simba} test cases to ${testCases.length} test cases`,
-      );
-      const newTestCases = await addSimbaTestCases(testCases, injectVar, config);
-      logger.debug(`Added ${newTestCases.length} ${strategyDisplayNames.simba} test cases`);
-      return newTestCases;
+      return addSimbaTestCases(testCases, injectVar, config);
     },
   },
   {
