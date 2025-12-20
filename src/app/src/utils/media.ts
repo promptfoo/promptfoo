@@ -196,7 +196,6 @@ export function resolveVideoSource(
   };
 }
 
-
 export function normalizeMediaText(text: string): string {
   return text
     .replace(BLOB_URI_REGEX, (_match, hash) => withApiBase(`/api/blobs/${hash}`))
