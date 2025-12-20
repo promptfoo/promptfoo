@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-
 import { extractConfigBadges, findProviderConfig, getProviderDisplayName } from './providerConfig';
 
 describe('findProviderConfig', () => {
@@ -80,6 +79,29 @@ describe('findProviderConfig', () => {
     const providers = [{ id: 'openai:gpt-4o' }];
     const result = findProviderConfig('unknown', providers, 5);
     expect(result.matchType).toBe('none');
+  });
+
+  it('does not spread string provider into indexed characters', () => {
+    // Bug fix: when provider is a string like "echo", spreading it would create
+    // { '0': 'e', '1': 'c', '2': 'h', '3': 'o' } which is incorrect
+    const providers = ['echo', 'openai:gpt-4o'];
+    const result = findProviderConfig('echo', providers);
+    expect(result.matchType).toBe('id');
+    expect(result.config.id).toBe('echo');
+    // Should NOT have indexed character properties
+    expect(result.config['0']).toBeUndefined();
+    expect(result.config['1']).toBeUndefined();
+    expect(result.config['2']).toBeUndefined();
+    expect(result.config['3']).toBeUndefined();
+  });
+
+  it('handles string provider in index fallback without spreading characters', () => {
+    const providers = ['echo'];
+    const result = findProviderConfig('unknown', providers, 0);
+    expect(result.matchType).toBe('index');
+    expect(result.config.id).toBe('echo');
+    // Should NOT have indexed character properties
+    expect(result.config['0']).toBeUndefined();
   });
 });
 

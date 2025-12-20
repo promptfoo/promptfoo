@@ -108,7 +108,11 @@ export function findProviderConfig(
     // Match by ID
     if (normalized.id === providerString) {
       return {
-        config: { ...normalized, ...provider },
+        // Only spread provider if it's an object (strings would spread as indexed chars)
+        config:
+          typeof provider === 'object' && provider !== null
+            ? { ...normalized, ...provider }
+            : normalized,
         matchType: 'id',
       };
     }
@@ -116,7 +120,10 @@ export function findProviderConfig(
     // Match by label
     if (normalized.label === providerString) {
       return {
-        config: { ...normalized, ...provider },
+        config:
+          typeof provider === 'object' && provider !== null
+            ? { ...normalized, ...provider }
+            : normalized,
         matchType: 'label',
       };
     }
@@ -142,7 +149,11 @@ export function findProviderConfig(
     const provider = providersArray[fallbackIndex];
     const normalized = normalizeProviderDef(provider);
     return {
-      config: normalized ? { ...normalized, ...provider } : provider,
+      // Only spread provider if it's an object (strings would spread as indexed chars)
+      config:
+        normalized && typeof provider === 'object' && provider !== null
+          ? { ...normalized, ...provider }
+          : normalized || (typeof provider === 'string' ? { id: provider } : provider),
       matchType: 'index',
     };
   }

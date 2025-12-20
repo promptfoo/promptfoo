@@ -1,17 +1,15 @@
 import { useMemo } from 'react';
 
-import Tooltip from '@mui/material/Tooltip';
 import { useTheme } from '@mui/material/styles';
-import yaml from 'js-yaml';
-
+import Tooltip from '@mui/material/Tooltip';
 // Import shared sanitization utilities from backend
 import {
-  REDACTED,
   isSecretField,
   looksLikeSecret,
   normalizeFieldName,
+  REDACTED,
 } from '@promptfoo/util/sanitizer';
-
+import yaml from 'js-yaml';
 import { findProviderConfig, getProviderDisplayName } from './providerConfig';
 
 interface ProviderDisplayProps {
@@ -144,8 +142,20 @@ export function ProviderDisplay({
     [providerString, providerConfig],
   );
 
-  // Determine if we should show the id (when label is used and differs)
-  const showId = label && providerConfig?.id && providerConfig.id !== label;
+  // Determine if we should show the id in tooltip (when label is used and id provides additional context)
+  // Don't show id if:
+  // - No label (display already shows prefix:name which equals the id)
+  // - Id equals the label (no additional info)
+  // - Id equals providerString (redundant with what's displayed)
+  // - Id equals prefix:label (label is just the name part, id is obvious)
+  const showId =
+    label &&
+    providerConfig?.id &&
+    typeof providerConfig.id === 'string' &&
+    providerConfig.id.trim() &&
+    providerConfig.id !== label &&
+    providerConfig.id !== providerString &&
+    providerConfig.id !== `${prefix}:${label}`;
   const displayId = showId ? providerConfig.id : null;
 
   // Tooltip: show id (if label used) + sanitized config
@@ -194,25 +204,39 @@ export function ProviderDisplay({
     }
   }, [providerConfig, displayId]);
 
+  // Don't render tooltip wrapper if there's no content to show
+  const content = (
+    <span style={{ cursor: tooltipContent ? 'help' : 'default' }}>
+      {label ? (
+        <strong>{label}</strong>
+      ) : (
+        <>
+          {prefix}:<strong>{name}</strong>
+        </>
+      )}
+    </span>
+  );
+
+  // Only wrap in Tooltip if there's content to display
+  if (!tooltipContent) {
+    return content;
+  }
+
   return (
     <Tooltip
       title={
-        tooltipContent ? (
-          <pre
-            style={{
-              margin: 0,
-              fontSize: '0.7rem',
-              maxHeight: '300px',
-              overflow: 'auto',
-              whiteSpace: 'pre-wrap',
-              wordBreak: 'break-word',
-            }}
-          >
-            {tooltipContent}
-          </pre>
-        ) : (
-          ''
-        )
+        <pre
+          style={{
+            margin: 0,
+            fontSize: '0.7rem',
+            maxHeight: '300px',
+            overflow: 'auto',
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-word',
+          }}
+        >
+          {tooltipContent}
+        </pre>
       }
       placement="bottom-start"
       slotProps={{
@@ -228,15 +252,7 @@ export function ProviderDisplay({
         },
       }}
     >
-      <span style={{ cursor: 'default' }}>
-        {label ? (
-          <strong>{label}</strong>
-        ) : (
-          <>
-            {prefix}:<strong>{name}</strong>
-          </>
-        )}
-      </span>
+      {content}
     </Tooltip>
   );
 }

@@ -1,8 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
-
-import { sanitizeConfig, ProviderDisplay } from './ProviderDisplay';
+import { ProviderDisplay, sanitizeConfig } from './ProviderDisplay';
 
 describe('sanitizeConfig', () => {
   describe('sensitive field names', () => {
@@ -364,6 +363,51 @@ describe('ProviderDisplay', () => {
 
       // The display should show "Fast Model"
       expect(screen.getByText('Fast Model')).toBeInTheDocument();
+    });
+
+    it('does not show tooltip when provider has no config', () => {
+      // Provider with just an id and no config should not show tooltip
+      const providers = [{ id: 'openai:gpt-4o' }];
+      renderWithProviders('openai:gpt-4o', providers);
+
+      // Should render without tooltip (no MUI Tooltip wrapper)
+      expect(screen.getByText('gpt-4o')).toBeInTheDocument();
+      // Cursor should be default (not help) since no tooltip
+      const span = screen.getByText('gpt-4o').closest('span');
+      expect(span).toHaveStyle({ cursor: 'default' });
+    });
+
+    it('does not show redundant id when label equals model name', () => {
+      // When label is just the model name (e.g., "gpt-4o"), don't show "id: openai:gpt-4o"
+      // because it's obvious the full id is prefix:label
+      const providers = [
+        {
+          id: 'openai:gpt-4o',
+          label: 'gpt-4o', // Label equals name part
+          config: { temperature: 0.7 },
+        },
+      ];
+      renderWithProviders('gpt-4o', providers);
+
+      // Should show the label
+      expect(screen.getByText('gpt-4o')).toBeInTheDocument();
+      // Should have help cursor since there's config to show (just not redundant id)
+      const span = screen.getByText('gpt-4o').closest('span');
+      expect(span).toHaveStyle({ cursor: 'help' });
+    });
+
+    it('does not show id when it equals providerString', () => {
+      // When id equals providerString, don't show id in tooltip (redundant)
+      const providers = [
+        {
+          id: 'openai:gpt-4o',
+          label: 'openai:gpt-4o', // Label equals full provider string
+          config: { temperature: 0.7 },
+        },
+      ];
+      renderWithProviders('openai:gpt-4o', providers);
+
+      expect(screen.getByText('gpt-4o')).toBeInTheDocument();
     });
   });
 });
