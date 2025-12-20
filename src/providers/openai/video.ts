@@ -11,10 +11,6 @@ import { sleep } from '../../util/time';
 import { OpenAiGenericProvider } from '.';
 
 import type { MediaStorageRef } from '../../storage/types';
-
-// Cache mapping constants
-const MEDIA_DIR = 'media';
-const CACHE_DIR = 'video/_cache';
 import type { EnvOverrides } from '../../types/env';
 import type {
   CallApiContextParams,
@@ -29,6 +25,10 @@ import type {
   OpenAiVideoSize,
   OpenAiVideoVariant,
 } from './types';
+
+// Cache mapping constants
+const MEDIA_DIR = 'media';
+const CACHE_DIR = 'video/_cache';
 
 // =============================================================================
 // Constants
