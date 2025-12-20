@@ -13,6 +13,13 @@ interface CliState {
   // Indicates an evaluation is running in resume mode
   resume?: boolean;
 
+  // Cloud resume support: the eval ID being resumed from cloud
+  cloudResumeEvalId?: string;
+
+  // Cloud resume support: set of completed (testIdx:promptIdx) pairs from cloud
+  // Used to skip already-completed tests when resuming a cloud scan
+  cloudCompletedPairs?: Set<string>;
+
   // debug log file
   debugLogFile?: string;
 

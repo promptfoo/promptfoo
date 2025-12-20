@@ -1161,10 +1161,22 @@ class Evaluator {
     }
 
     // Resume support: if CLI is in resume mode, skip already-completed (testIdx,promptIdx) pairs
-    if (cliState.resume && this.evalRecord.persisted) {
+    if (cliState.resume) {
       try {
-        const { default: EvalResult } = await import('./models/evalResult');
-        const completedPairs = await EvalResult.getCompletedIndexPairs(this.evalRecord.id);
+        let completedPairs: Set<string>;
+
+        // Check for cloud-sourced completed pairs first (used for cloud resume)
+        if (cliState.cloudCompletedPairs) {
+          logger.debug('Resuming from cloud: using cloud-sourced completed pairs');
+          completedPairs = cliState.cloudCompletedPairs;
+        } else if (this.evalRecord.persisted) {
+          // Fall back to local DB for local resume
+          const { default: EvalResult } = await import('./models/evalResult');
+          completedPairs = await EvalResult.getCompletedIndexPairs(this.evalRecord.id);
+        } else {
+          completedPairs = new Set();
+        }
+
         const originalCount = runEvalOptions.length;
         // Filter out steps that already exist in DB
         for (let i = runEvalOptions.length - 1; i >= 0; i--) {
@@ -1269,6 +1281,15 @@ class Evaluator {
         } catch (error) {
           const resultSummary = summarizeEvaluateResultForLogging(row);
           logger.error(`Error saving result: ${error} ${safeJsonStringify(resultSummary)}`);
+        }
+
+        // Stream result to cloud if callback is provided (used for cloud resume support)
+        if (options.resultStreamCallback) {
+          try {
+            await options.resultStreamCallback(row);
+          } catch (error) {
+            logger.warn(`Error streaming result to cloud: ${error}`);
+          }
         }
 
         for (const writer of this.fileWriters) {
@@ -1425,6 +1446,15 @@ class Evaluator {
 
         // Add the timeout result to the evaluation record
         await this.evalRecord.addResult(timeoutResult);
+
+        // Stream timeout result to cloud if callback is provided
+        if (options.resultStreamCallback) {
+          try {
+            await options.resultStreamCallback(timeoutResult);
+          } catch (error) {
+            logger.warn(`Error streaming timeout result to cloud: ${error}`);
+          }
+        }
 
         // Update stats
         this.stats.errors++;
@@ -1847,6 +1877,16 @@ class Evaluator {
           } as EvaluateResult;
 
           await this.evalRecord.addResult(timeoutResult);
+
+          // Stream max-duration timeout result to cloud if callback is provided
+          if (options.resultStreamCallback) {
+            try {
+              await options.resultStreamCallback(timeoutResult);
+            } catch (error) {
+              logger.warn(`Error streaming max-duration timeout result to cloud: ${error}`);
+            }
+          }
+
           this.stats.errors++;
           const { metrics } = prompts[evalStep.promptIdx];
           if (metrics) {
