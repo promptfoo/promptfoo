@@ -26,6 +26,13 @@ interface ShareDomainResult {
   isPublicShare: boolean;
 }
 
+export interface ShareOptions {
+  /** Suppress progress bar and "Sharing to:" messages for async background sharing */
+  silent?: boolean;
+  /** Show authentication info in the URL */
+  showAuth?: boolean;
+}
+
 export function isSharingEnabled(evalRecord: Eval): boolean {
   const sharingConfigOnEval =
     typeof evalRecord.config.sharing === 'object' ? evalRecord.config.sharing.apiBaseUrl : null;
@@ -239,8 +246,13 @@ async function rollbackEval(url: string, evalId: string, headers: Record<string,
   }
 }
 
-async function sendChunkedResults(evalRecord: Eval, url: string): Promise<string | null> {
+async function sendChunkedResults(
+  evalRecord: Eval,
+  url: string,
+  options: ShareOptions = {},
+): Promise<string | null> {
   const isVerbose = isDebugEnabled();
+  const { silent = false } = options;
   logger.debug(`Starting chunked results upload to ${url}`);
 
   await checkCloudPermissions(evalRecord.config);
@@ -283,9 +295,9 @@ async function sendChunkedResults(evalRecord: Eval, url: string): Promise<string
   const totalResults = await evalRecord.getTotalResultRowCount();
   logger.debug(`Total results to share: ${totalResults}`);
 
-  // Setup progress bar only if not in verbose mode or CI
+  // Setup progress bar only if not in verbose mode, CI, or silent mode
   let progressBar: cliProgress.SingleBar | null = null;
-  if (!isVerbose && !isCI()) {
+  if (!isVerbose && !isCI() && !silent) {
     progressBar = new cliProgress.SingleBar(
       {
         format: 'Sharing | {bar} | {percentage}% | {value}/{total} results',
@@ -467,26 +479,30 @@ export async function getShareableUrl(
 /**
  * Shares an eval and returns the shareable URL.
  * @param evalRecord The eval to share.
- * @param showAuth Whether to show the authentication information in the URL.
+ * @param options Share options (silent mode, showAuth).
  * @returns The shareable URL for the eval.
  */
 export async function createShareableUrl(
   evalRecord: Eval,
-  showAuth: boolean = false,
+  options: ShareOptions = {},
 ): Promise<string | null> {
+  const { silent = false, showAuth = false } = options;
+
   // If sharing is explicitly disabled, return null
   if (getEnvBool('PROMPTFOO_DISABLE_SHARING')) {
     logger.debug('Sharing is explicitly disabled, returning null');
     return null;
   }
 
-  // Show org/team context before uploading (only when cloud is enabled)
-  const orgContext = await getOrgContext();
-  if (orgContext) {
-    const teamSuffix = orgContext.teamName ? ` > ${orgContext.teamName}` : '';
-    logger.info(
-      `${chalk.dim('Sharing to:')} ${chalk.cyan(orgContext.organizationName)}${teamSuffix}`,
-    );
+  // Show org/team context before uploading (only when cloud is enabled and not silent)
+  if (!silent) {
+    const orgContext = await getOrgContext();
+    if (orgContext) {
+      const teamSuffix = orgContext.teamName ? ` > ${orgContext.teamName}` : '';
+      logger.info(
+        `${chalk.dim('Sharing to:')} ${chalk.cyan(orgContext.organizationName)}${teamSuffix}`,
+      );
+    }
   }
 
   // 1. Handle email collection
@@ -501,7 +517,7 @@ export async function createShareableUrl(
     `Sharing with ${url} canUseNewResults: ${canUseNewResults} Use old results: ${evalRecord.useOldResults()}`,
   );
 
-  const evalId = await sendChunkedResults(evalRecord, url);
+  const evalId = await sendChunkedResults(evalRecord, url, { silent });
 
   if (!evalId) {
     return null;
