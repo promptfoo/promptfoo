@@ -1,6 +1,6 @@
 import OpenAI from 'openai';
-import { renderVarsInObject } from '../../util/index';
 import { maybeLoadFromExternalFile } from '../../util/file';
+import { renderVarsInObject } from '../../util/index';
 import { getAjv, safeJsonStringify } from '../../util/json';
 import { calculateCost } from '../shared';
 

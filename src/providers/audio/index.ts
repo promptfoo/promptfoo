@@ -7,8 +7,8 @@
 
 import logger from '../../logger';
 import {
-  convertToRealtimeFormat,
   convertFromRealtimeFormat,
+  convertToRealtimeFormat,
   type SupportedInputFormat,
 } from '../../redteam/audio/format';
 
@@ -146,31 +146,52 @@ export class UnifiedAudioProvider implements AudioRealtimeProvider {
   }> {
     const targetFormat = this.audioProviderConfig.inputAudioFormat || 'pcm16';
 
+    // Helper to ensure data is a base64 string
+    const toBase64String = (data: Buffer | string): string =>
+      typeof data === 'string' ? data : data.toString('base64');
+
     // If already in the correct format, return as-is
     if (audioInput.format === targetFormat) {
       return {
-        data: audioInput.data,
+        data: toBase64String(audioInput.data),
         format: targetFormat,
       };
     }
 
     // Convert to the target format
     try {
-      const inputBuffer = Buffer.from(audioInput.data, 'base64');
-      const converted = await convertToRealtimeFormat(
+      const inputBuffer =
+        typeof audioInput.data === 'string'
+          ? Buffer.from(audioInput.data, 'base64')
+          : audioInput.data;
+
+      // Validate that the input format is supported for conversion
+      const supportedFormats: SupportedInputFormat[] = [
+        'pcm16',
+        'wav',
+        'mp3',
+        'ogg',
+        'flac',
+        'webm',
+      ];
+      if (!supportedFormats.includes(audioInput.format as SupportedInputFormat)) {
+        throw new Error(`Unsupported input format for conversion: ${audioInput.format}`);
+      }
+
+      const converted = convertToRealtimeFormat(
         inputBuffer,
         audioInput.format as SupportedInputFormat,
       );
 
       return {
-        data: converted.data.toString('base64'),
+        data: converted.toString('base64'),
         format: 'pcm16',
       };
     } catch (error) {
       logger.error(`Failed to convert audio format: ${error}`);
       // Return original audio if conversion fails
       return {
-        data: audioInput.data,
+        data: toBase64String(audioInput.data),
         format: audioInput.format,
       };
     }
@@ -277,7 +298,7 @@ export class UnifiedAudioProvider implements AudioRealtimeProvider {
 
     try {
       const inputBuffer = Buffer.from(response.audio.data, 'base64');
-      const converted = await convertFromRealtimeFormat(
+      const converted = convertFromRealtimeFormat(
         inputBuffer,
         targetFormat,
         response.audio.sampleRate || this.defaultSampleRate,
@@ -287,7 +308,7 @@ export class UnifiedAudioProvider implements AudioRealtimeProvider {
         ...response,
         audio: {
           ...response.audio,
-          data: converted.data.toString('base64'),
+          data: converted.toString('base64'),
           format: targetFormat as AudioFormat,
         },
       };

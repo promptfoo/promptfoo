@@ -206,6 +206,45 @@ export const evalsToTagsRelations = relations(evalsToTagsTable, ({ one }) => ({
   }),
 }));
 
+// ------------ Blobs ------------
+
+export const blobAssetsTable = sqliteTable(
+  'blob_assets',
+  {
+    hash: text('hash').primaryKey(),
+    sizeBytes: integer('size_bytes').notNull(),
+    mimeType: text('mime_type').notNull(),
+    provider: text('provider').notNull(),
+    createdAt: integer('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => ({
+    providerIdx: index('blob_assets_provider_idx').on(table.provider),
+    createdAtIdx: index('blob_assets_created_at_idx').on(table.createdAt),
+  }),
+);
+
+export const blobReferencesTable = sqliteTable(
+  'blob_references',
+  {
+    id: text('id').primaryKey(),
+    blobHash: text('blob_hash')
+      .notNull()
+      .references(() => blobAssetsTable.hash, { onDelete: 'cascade' }),
+    evalId: text('eval_id')
+      .notNull()
+      .references(() => evalsTable.id, { onDelete: 'cascade' }),
+    testIdx: integer('test_idx'),
+    promptIdx: integer('prompt_idx'),
+    location: text('location'), // e.g., response.audio.data, turns[0].audio.data
+    kind: text('kind'), // audio | image
+    createdAt: integer('created_at').notNull().default(sql`CURRENT_TIMESTAMP`),
+  },
+  (table) => ({
+    blobIdx: index('blob_references_blob_idx').on(table.blobHash),
+    evalIdx: index('blob_references_eval_idx').on(table.evalId),
+  }),
+);
+
 // ------------ Datasets ------------
 
 export const datasetsTable = sqliteTable(

@@ -1,5 +1,5 @@
-import { STRATEGY_EXEMPT_PLUGINS } from '../constants';
 import { isProviderOptions, type TestCaseWithPlugin } from '../../types/index';
+import { STRATEGY_EXEMPT_PLUGINS } from '../constants';
 
 import type { RedteamStrategyObject } from '../types';
 

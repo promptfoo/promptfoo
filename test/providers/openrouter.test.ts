@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache } from '../../src/cache';
-import * as fetchModule from '../../src/util/fetch/index';
 import { OpenRouterProvider } from '../../src/providers/openrouter';
+import * as fetchModule from '../../src/util/fetch/index';
 
 const OPENROUTER_API_BASE = 'https://openrouter.ai/api/v1';
 

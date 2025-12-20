@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 
 import { MODEL_AUDIT_ROUTES } from '@app/constants/routes';
 import { formatDataGridDate } from '@app/utils/date';
@@ -40,6 +39,7 @@ import {
   GridToolbarFilterButton,
   GridToolbarQuickFilter,
 } from '@mui/x-data-grid';
+import { useNavigate } from 'react-router-dom';
 import { useModelAuditHistoryStore } from '../model-audit/stores';
 
 import type { HistoricalScan } from '../model-audit/stores';

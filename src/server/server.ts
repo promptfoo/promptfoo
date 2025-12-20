@@ -11,7 +11,7 @@ import express from 'express';
 import { Server as SocketIOServer } from 'socket.io';
 import { fromError } from 'zod-validation-error';
 import { getDefaultPort, VERSION } from '../constants';
-import { setupSignalWatcher } from '../database/signal';
+import { readSignalEvalId, setupSignalWatcher } from '../database/signal';
 import { getDirectory } from '../esm';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
@@ -31,8 +31,10 @@ import {
 } from '../util/database';
 import invariant from '../util/invariant';
 import { BrowserBehavior, BrowserBehaviorNames, openBrowser } from '../util/server';
+import { blobsRouter } from './routes/blobs';
 import { configsRouter } from './routes/configs';
 import { evalRouter } from './routes/eval';
+import { mediaRouter } from './routes/media';
 import { modelAuditRouter } from './routes/modelAudit';
 import { providersRouter } from './routes/providers';
 import { redteamRouter } from './routes/redteam';
@@ -230,6 +232,8 @@ export function createApp() {
   });
 
   app.use('/api/eval', evalRouter);
+  app.use('/api/media', mediaRouter);
+  app.use('/api/blobs', blobsRouter);
   app.use('/api/providers', providersRouter);
   app.use('/api/redteam', redteamRouter);
   app.use('/api/user', userRouter);
@@ -290,14 +294,17 @@ export async function startServer(
   await runDbMigrations();
 
   const watcher = setupSignalWatcher(async () => {
-    const latestEval = await Eval.latest();
-    const results = await latestEval?.getResultsCount();
+    // Try to get the specific eval that was updated from the signal file
+    const signalEvalId = readSignalEvalId();
+    const updatedEval = signalEvalId ? await Eval.findById(signalEvalId) : await Eval.latest();
+
+    const results = await updatedEval?.getResultsCount();
 
     if (results && results > 0) {
-      logger.info(
-        `Emitting update for eval: ${latestEval?.config?.description || latestEval?.id || 'unknown'}`,
+      logger.debug(
+        `Emitting update for eval: ${updatedEval?.config?.description || updatedEval?.id || 'unknown'}`,
       );
-      io.emit('update', latestEval);
+      io.emit('update', updatedEval);
       allPrompts = null;
     }
   });

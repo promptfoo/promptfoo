@@ -36,10 +36,10 @@
     "docusaurus-plugin-image-zoom": "^3.0.1",
     "framer-motion": "^12.23.24",
     "gray-matter": "^4.0.3",
-    "lucide-react": "^0.559.0",
+    "lucide-react": "^0.561.0",
     "prism-react-renderer": "^2.4.1",
-    "react": "19.2.1",
-    "react-dom": "19.2.1",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
     "satori": "^0.18.3",
     "sharp": "^0.34.5",
     "typescript": "^5.9.3"

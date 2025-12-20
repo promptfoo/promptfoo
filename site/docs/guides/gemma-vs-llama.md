@@ -48,7 +48,7 @@ You should modify this prompt to match the use case you want to test. For exampl
 ```yaml
 prompts:
   - 'Write a tweet about {{topic}}'
-  - 'Write a instagram post about {{topic}}'
+  - 'Write an Instagram post about {{topic}}'
 ```
 
 #### Part 2: Configuring providers

@@ -1,11 +1,11 @@
-import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as fs from 'fs';
 
 import cliProgress from 'cli-progress';
 import yaml from 'js-yaml';
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../src/logger';
 import { loadApiProvider } from '../../src/providers/index';
-import { HARM_PLUGINS, PII_PLUGINS, getDefaultNFanout } from '../../src/redteam/constants';
+import { getDefaultNFanout, HARM_PLUGINS, PII_PLUGINS } from '../../src/redteam/constants';
 import { extractEntities } from '../../src/redteam/extraction/entities';
 import { extractSystemPurpose } from '../../src/redteam/extraction/purpose';
 import {
@@ -19,7 +19,6 @@ import { getRemoteHealthUrl, shouldGenerateRemote } from '../../src/redteam/remo
 import { Strategies, validateStrategies } from '../../src/redteam/strategies/index';
 import { checkRemoteHealth } from '../../src/util/apiHealth';
 import { extractVariablesFromTemplates } from '../../src/util/templates';
-
 import { stripAnsi } from '../util/utils';
 
 vi.mock('cli-progress');

@@ -30,6 +30,83 @@ Tracing provides visibility into:
 - **Automatic correlation**: Traces are linked to specific test cases and evaluations
 - **Flexible forwarding**: Send traces to Jaeger, Tempo, or any OTLP-compatible backend
 
+## Built-in Provider Instrumentation
+
+Promptfoo automatically instruments its built-in providers with OpenTelemetry spans following [GenAI Semantic Conventions](https://opentelemetry.io/docs/specs/semconv/gen-ai/). When tracing is enabled, every provider call creates spans with standardized attributes.
+
+### Supported Providers
+
+The following providers have built-in instrumentation:
+
+| Provider                                       | Automatic Tracing |
+| ---------------------------------------------- | ----------------- |
+| OpenAI                                         | ✓                 |
+| Anthropic                                      | ✓                 |
+| Azure OpenAI                                   | ✓                 |
+| AWS Bedrock                                    | ✓                 |
+| Google Vertex AI                               | ✓                 |
+| Ollama                                         | ✓                 |
+| Mistral                                        | ✓                 |
+| Cohere                                         | ✓                 |
+| Huggingface                                    | ✓                 |
+| IBM Watsonx                                    | ✓                 |
+| HTTP                                           | ✓                 |
+| OpenRouter                                     | ✓                 |
+| Replicate                                      | ✓                 |
+| OpenAI-compatible (Deepseek, Perplexity, etc.) | ✓ (inherited)     |
+| Cloudflare AI                                  | ✓ (inherited)     |
+
+### GenAI Span Attributes
+
+Each provider call creates a span with these attributes:
+
+**Request Attributes:**
+
+- `gen_ai.system` - Provider system (e.g., "openai", "anthropic", "azure", "bedrock")
+- `gen_ai.operation.name` - Operation type ("chat", "completion", "embedding")
+- `gen_ai.request.model` - Model name
+- `gen_ai.request.max_tokens` - Max tokens setting
+- `gen_ai.request.temperature` - Temperature setting
+- `gen_ai.request.top_p` - Top-p setting
+- `gen_ai.request.stop_sequences` - Stop sequences
+
+**Response Attributes:**
+
+- `gen_ai.usage.input_tokens` - Input/prompt token count
+- `gen_ai.usage.output_tokens` - Output/completion token count
+- `gen_ai.usage.total_tokens` - Total token count
+- `gen_ai.usage.cached_tokens` - Cached token count (if applicable)
+- `gen_ai.usage.reasoning_tokens` - Reasoning token count (for o1, DeepSeek-R1)
+- `gen_ai.response.finish_reasons` - Finish/stop reasons
+
+**Promptfoo-specific Attributes:**
+
+- `promptfoo.provider.id` - Provider identifier
+- `promptfoo.test.index` - Test case index
+- `promptfoo.prompt.label` - Prompt label
+- `promptfoo.cache_hit` - Whether the response was served from cache
+- `promptfoo.request.body` - The request body sent to the provider (truncated to 4KB)
+- `promptfoo.response.body` - The response body from the provider (truncated to 4KB)
+
+### Example Trace Output
+
+When calling OpenAI's GPT-4:
+
+```
+Span: chat gpt-4
+├─ gen_ai.system: openai
+├─ gen_ai.operation.name: chat
+├─ gen_ai.request.model: gpt-4
+├─ gen_ai.request.max_tokens: 1000
+├─ gen_ai.request.temperature: 0.7
+├─ gen_ai.usage.input_tokens: 150
+├─ gen_ai.usage.output_tokens: 85
+├─ gen_ai.usage.total_tokens: 235
+├─ gen_ai.response.finish_reasons: ["stop"]
+├─ promptfoo.provider.id: openai:chat:gpt-4
+└─ promptfoo.test.index: 0
+```
+
 ## Quick Start
 
 ### 1. Enable Tracing
@@ -53,13 +130,19 @@ const { trace, context, SpanStatusCode } = require('@opentelemetry/api');
 const { NodeTracerProvider } = require('@opentelemetry/sdk-trace-node');
 const { OTLPTraceExporter } = require('@opentelemetry/exporter-trace-otlp-http');
 const { SimpleSpanProcessor } = require('@opentelemetry/sdk-trace-base');
+const { resourceFromAttributes } = require('@opentelemetry/resources');
 
-// Initialize tracer
-const provider = new NodeTracerProvider();
-const exporter = new OTLPTraceExporter({
-  url: 'http://localhost:4318/v1/traces',
+// Initialize tracer (SDK 2.x API - pass spanProcessors to constructor)
+const provider = new NodeTracerProvider({
+  resource: resourceFromAttributes({ 'service.name': 'my-provider' }),
+  spanProcessors: [
+    new SimpleSpanProcessor(
+      new OTLPTraceExporter({
+        url: 'http://localhost:4318/v1/traces',
+      }),
+    ),
+  ],
 });
-provider.addSpanProcessor(new SimpleSpanProcessor(exporter));
 provider.register();
 
 const tracer = trace.getTracer('my-provider');
@@ -244,6 +327,8 @@ The web UI displays traces as a hierarchical timeline showing:
 - **Status indicators**: Success (green), error (red), or unset (gray)
 - **Hover details**: Span attributes, duration, and timestamps
 - **Relative timing**: See which operations run in parallel vs. sequentially
+- **Expandable details**: Click any span to reveal full attribute information
+- **Export functionality**: Download traces as JSON for external analysis
 
 ### Understanding the Timeline
 
@@ -260,6 +345,28 @@ Each bar's width represents its duration relative to the total trace time. Hover
 - Duration in milliseconds or seconds
 - Custom attributes you've added
 - Error messages (if any)
+
+### Span Details Panel
+
+Click the expand icon on any span to reveal a detailed attributes panel showing:
+
+- **Span ID** and **Parent Span ID** for tracing relationships
+- **Start** and **End** timestamps with precision
+- **Duration** in a human-readable format
+- **Status** (OK, ERROR, or UNSET)
+- **All span attributes** including GenAI attributes, custom attributes, and Promptfoo-specific data
+
+This is useful for inspecting the full request/response bodies (`promptfoo.request.body` and `promptfoo.response.body`) and debugging provider behavior.
+
+### Exporting Traces
+
+Click the **Export Traces** button to download all traces for the current evaluation or test case as a JSON file. The export includes:
+
+- Evaluation ID and test case ID
+- Export timestamp
+- Complete trace data with all spans and attributes
+
+The exported JSON can be imported into external tools like Jaeger, Grafana Tempo, or custom analysis scripts.
 
 ## Best Practices
 

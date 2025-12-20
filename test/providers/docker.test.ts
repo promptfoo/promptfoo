@@ -1,15 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { fetchWithCache } from '../../src/cache';
+import logger from '../../src/logger';
 import {
   createDockerProvider,
-  fetchLocalModels,
-  hasLocalModel,
-  parseProviderPath,
   DMRChatCompletionProvider,
   DMRCompletionProvider,
   DMREmbeddingProvider,
+  fetchLocalModels,
+  hasLocalModel,
+  parseProviderPath,
 } from '../../src/providers/docker';
-import { fetchWithCache } from '../../src/cache';
-import logger from '../../src/logger';
 
 vi.mock('../../src/cache');
 vi.mock('../../src/logger');

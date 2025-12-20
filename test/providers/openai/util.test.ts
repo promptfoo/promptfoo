@@ -1,6 +1,5 @@
-import { describe, expect, it, vi } from 'vitest';
-
 import OpenAI from 'openai';
+import { describe, expect, it, vi } from 'vitest';
 import {
   calculateOpenAICost,
   failApiCall,

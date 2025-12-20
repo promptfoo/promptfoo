@@ -1,7 +1,7 @@
-import { Mocked, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as path from 'path';
 
 import { Command } from 'commander';
+import { beforeEach, describe, expect, it, Mocked, vi } from 'vitest';
 import { disableCache } from '../../src/cache';
 import {
   doEval,
@@ -19,7 +19,7 @@ import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import { loadApiProvider } from '../../src/providers/index';
 import { createShareableUrl, isSharingEnabled } from '../../src/share';
-import { checkCloudPermissions, ConfigPermissionError } from '../../src/util/cloud';
+import { ConfigPermissionError, checkCloudPermissions } from '../../src/util/cloud';
 import { resolveConfigs } from '../../src/util/config/load';
 import { TokenUsageTracker } from '../../src/util/tokenUsage';
 

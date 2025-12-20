@@ -1,4 +1,3 @@
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import dedent from 'dedent';
 import { z } from 'zod';
 import { cloudConfig } from '../../../globalConfig/cloud';
@@ -12,6 +11,7 @@ import {
 } from '../../../share';
 import { loadDefaultConfig } from '../../../util/config/default';
 import { createToolResponse } from '../lib/utils';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
 /**
  * Share an evaluation to create a publicly accessible URL
