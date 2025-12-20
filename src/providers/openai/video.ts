@@ -1,14 +1,20 @@
 import crypto from 'crypto';
 import fs from 'fs';
+import path from 'path';
 
 import logger from '../../logger';
 import { getMediaStorage, storeMedia } from '../../storage';
+import { getConfigDirectoryPath } from '../../util/config/manage';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { ellipsize } from '../../util/text';
 import { sleep } from '../../util/time';
 import { OpenAiGenericProvider } from '.';
 
 import type { MediaStorageRef } from '../../storage/types';
+
+// Cache mapping constants
+const MEDIA_DIR = 'media';
+const CACHE_DIR = 'video/_cache';
 import type { EnvOverrides } from '../../types/env';
 import type {
   CallApiContextParams,
@@ -68,6 +74,21 @@ const VARIANT_MIME_TYPES: Record<OpenAiVideoVariant, string> = {
 // =============================================================================
 
 /**
+ * Get the file path for a cache mapping file.
+ * Cache mappings are stored directly on filesystem (not through media storage)
+ * to avoid content-based key generation.
+ */
+function getCacheMappingPath(cacheKey: string): string {
+  const basePath = path.join(getConfigDirectoryPath(true), MEDIA_DIR);
+  const cacheDir = path.join(basePath, CACHE_DIR);
+  // Ensure directory exists
+  if (!fs.existsSync(cacheDir)) {
+    fs.mkdirSync(cacheDir, { recursive: true });
+  }
+  return path.join(cacheDir, `${cacheKey}.json`);
+}
+
+/**
  * Generate a deterministic content hash from video generation parameters.
  * Used for cache key lookup and deduplication.
  *
@@ -98,38 +119,42 @@ export function generateVideoCacheKey(
 
 /**
  * Check if a cached video exists for the given cache key.
- * Uses the storage hash index to find content by request hash.
+ * Reads the cache mapping from filesystem and verifies the video still exists.
  */
 export async function checkVideoCache(cacheKey: string): Promise<string | null> {
-  const storage = getMediaStorage();
-  // The cacheKey is stored as contentHash in metadata, so we can use findByHash
-  // But since we're using request-based cache keys (not content hashes), we need
-  // a different approach: store a mapping file
-  const mappingKey = `video/_cache/${cacheKey}.json`;
-  if (await storage.exists(mappingKey)) {
-    try {
-      const mappingData = await storage.retrieve(mappingKey);
-      const mapping = JSON.parse(mappingData.toString());
-      // Verify the referenced files still exist
-      if (mapping.videoKey && (await storage.exists(mapping.videoKey))) {
+  const mappingPath = getCacheMappingPath(cacheKey);
+
+  if (!fs.existsSync(mappingPath)) {
+    return null;
+  }
+
+  try {
+    const mappingData = fs.readFileSync(mappingPath, 'utf8');
+    const mapping = JSON.parse(mappingData);
+    // Verify the referenced video file still exists in storage
+    if (mapping.videoKey) {
+      const storage = getMediaStorage();
+      if (await storage.exists(mapping.videoKey)) {
         return mapping.videoKey;
       }
-    } catch {
-      // Mapping file corrupted, treat as cache miss
     }
+  } catch {
+    // Mapping file corrupted, treat as cache miss
   }
+
   return null;
 }
 
 /**
  * Store cache mapping from request hash to storage keys.
+ * Written directly to filesystem to maintain predictable path.
  */
-async function storeCacheMapping(
+function storeCacheMapping(
   cacheKey: string,
   videoKey: string,
   thumbnailKey?: string,
   spritesheetKey?: string,
-): Promise<void> {
+): void {
   const mapping = {
     videoKey,
     thumbnailKey,
@@ -137,13 +162,9 @@ async function storeCacheMapping(
     createdAt: new Date().toISOString(),
   };
 
-  // Store the mapping using storeMedia
-  const mappingBuffer = Buffer.from(JSON.stringify(mapping, null, 2));
-  await storeMedia(mappingBuffer, {
-    contentType: 'application/json',
-    mediaType: 'video' as const,
-    contentHash: `cache-${cacheKey}`,
-  });
+  const mappingPath = getCacheMappingPath(cacheKey);
+  fs.writeFileSync(mappingPath, JSON.stringify(mapping, null, 2), 'utf8');
+  logger.debug(`[OpenAI Video] Stored cache mapping at ${mappingPath}`);
 }
 
 /**
@@ -457,14 +478,14 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
 
       const storage = getMediaStorage();
 
-      // Read the cache mapping to get all stored keys
-      const mappingKey = `video/_cache/${cacheKey}.json`;
+      // Read the cache mapping from filesystem to get thumbnail/spritesheet keys
+      const mappingPath = getCacheMappingPath(cacheKey);
       let thumbnailKey: string | undefined;
       let spritesheetKey: string | undefined;
 
       try {
-        const mappingData = await storage.retrieve(mappingKey);
-        const mapping = JSON.parse(mappingData.toString());
+        const mappingData = fs.readFileSync(mappingPath, 'utf8');
+        const mapping = JSON.parse(mappingData);
         thumbnailKey = mapping.thumbnailKey;
         spritesheetKey = mapping.spritesheetKey;
       } catch {
@@ -591,7 +612,7 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
     const cost = calculateVideoCost(model, seconds, false);
 
     // Store cache mapping for future lookups
-    await storeCacheMapping(cacheKey, videoRef.key, thumbnailRef?.key, spritesheetRef?.key);
+    storeCacheMapping(cacheKey, videoRef.key, thumbnailRef?.key, spritesheetRef?.key);
 
     // Build storage ref URLs
     const videoUrl = `storageRef:${videoRef.key}`;
