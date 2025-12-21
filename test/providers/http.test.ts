@@ -23,6 +23,7 @@ import {
   determineRequestBody,
   escapeJsonVariables,
   estimateTokenCount,
+  extractBodyFromRawRequest,
   HttpProvider,
   processJsonBody,
   processTextBody,
@@ -4570,6 +4571,121 @@ describe('urlEncodeRawRequestPath', () => {
       const result = urlEncodeRawRequestPath(rawRequest);
       expect(result).toBe(expected);
     }
+  });
+});
+
+describe('extractBodyFromRawRequest', () => {
+  it('should extract body from a simple POST request', () => {
+    const rawRequest = dedent`
+      POST /api/submit HTTP/1.1
+      Host: example.com
+      Content-Type: application/json
+
+      {"key": "value"}
+    `;
+    expect(extractBodyFromRawRequest(rawRequest)).toBe('{"key": "value"}');
+  });
+
+  it('should extract multipart/form-data body', () => {
+    const rawRequest = dedent`
+      POST /api/upload HTTP/1.1
+      Host: example.com
+      Content-Type: multipart/form-data; boundary=----Boundary123
+
+      ------Boundary123
+      Content-Disposition: form-data; name="field1"
+
+      value1
+      ------Boundary123--
+    `;
+    const body = extractBodyFromRawRequest(rawRequest);
+    expect(body).toContain('------Boundary123');
+    expect(body).toContain('Content-Disposition: form-data; name="field1"');
+    expect(body).toContain('value1');
+    expect(body).toContain('------Boundary123--');
+  });
+
+  it('should extract x-www-form-urlencoded body', () => {
+    const rawRequest = dedent`
+      POST /api/submit HTTP/1.1
+      Host: example.com
+      Content-Type: application/x-www-form-urlencoded
+
+      field1=value1&field2=value2
+    `;
+    expect(extractBodyFromRawRequest(rawRequest)).toBe('field1=value1&field2=value2');
+  });
+
+  it('should return undefined for GET request without body', () => {
+    const rawRequest = dedent`
+      GET /api/data HTTP/1.1
+      Host: example.com
+    `;
+    expect(extractBodyFromRawRequest(rawRequest)).toBeUndefined();
+  });
+
+  it('should return undefined for request with empty body', () => {
+    const rawRequest = dedent`
+      POST /api/submit HTTP/1.1
+      Host: example.com
+      Content-Type: application/json
+
+    `;
+    expect(extractBodyFromRawRequest(rawRequest)).toBeUndefined();
+  });
+
+  it('should handle body containing \\r\\n\\r\\n sequence', () => {
+    const rawRequest =
+      'POST /api/submit HTTP/1.1\r\n' +
+      'Host: example.com\r\n' +
+      'Content-Type: text/plain\r\n' +
+      '\r\n' +
+      'line1\r\n\r\nline2';
+    expect(extractBodyFromRawRequest(rawRequest)).toBe('line1\r\n\r\nline2');
+  });
+
+  it('should normalize mixed line endings', () => {
+    const rawRequest = 'POST /api/submit HTTP/1.1\nHost: example.com\r\n\r\nbody content';
+    expect(extractBodyFromRawRequest(rawRequest)).toBe('body content');
+  });
+
+  it('should trim leading and trailing whitespace from body', () => {
+    const rawRequest = dedent`
+      POST /api/submit HTTP/1.1
+      Host: example.com
+
+
+        body with whitespace
+
+    `;
+    expect(extractBodyFromRawRequest(rawRequest)).toBe('body with whitespace');
+  });
+
+  it('should handle special characters in body', () => {
+    const rawRequest = dedent`
+      POST /api/submit HTTP/1.1
+      Host: example.com
+      Content-Type: application/json
+
+      {"emoji": "🎉", "unicode": "日本語", "ampersand": "&"}
+    `;
+    expect(extractBodyFromRawRequest(rawRequest)).toBe(
+      '{"emoji": "🎉", "unicode": "日本語", "ampersand": "&"}',
+    );
+  });
+
+  it('should handle multiple headers before body', () => {
+    const rawRequest = dedent`
+      POST /api/submit HTTP/1.1
+      Host: example.com
+      Content-Type: application/json
+      Authorization: Bearer token123
+      X-Custom-Header: custom-value
+      Accept: application/json
+
+      {"data": "test"}
+    `;
+    expect(extractBodyFromRawRequest(rawRequest)).toBe('{"data": "test"}');
   });
 });
 

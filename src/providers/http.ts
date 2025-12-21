@@ -1057,9 +1057,17 @@ export function processTextBody(body: string, vars: Record<string, any>): string
   }
 }
 
-function parseRawRequest(input: string) {
+/**
+ * Normalize line endings in raw HTTP request strings.
+ * Converts all line endings to \r\n (HTTP standard) and trims whitespace.
+ */
+function normalizeHttpLineEndings(input: string): string {
   const normalized = input.replace(/\r\n/g, '\n').trim();
-  const adjusted = normalized.replace(/\n/g, '\r\n') + '\r\n\r\n';
+  return normalized.replace(/\n/g, '\r\n');
+}
+
+function parseRawRequest(input: string) {
+  const adjusted = normalizeHttpLineEndings(input) + '\r\n\r\n';
   // If the injectVar is in a query param, we need to encode the URL in the first line
   const encoded = urlEncodeRawRequestPath(adjusted);
   try {
@@ -1097,10 +1105,8 @@ function parseRawRequest(input: string) {
  * Used when http-z parses the body into params (e.g., multipart/form-data, application/x-www-form-urlencoded)
  * instead of preserving the raw text.
  */
-function extractBodyFromRawRequest(rawRequest: string): string | undefined {
-  // Use the same normalization as parseRawRequest for consistency
-  const normalized = rawRequest.replace(/\r\n/g, '\n').trim();
-  const adjusted = normalized.replace(/\n/g, '\r\n');
+export function extractBodyFromRawRequest(rawRequest: string): string | undefined {
+  const adjusted = normalizeHttpLineEndings(rawRequest);
 
   // Find header/body separator (blank line)
   const separatorIndex = adjusted.indexOf('\r\n\r\n');
@@ -1108,7 +1114,7 @@ function extractBodyFromRawRequest(rawRequest: string): string | undefined {
     return undefined;
   }
 
-  const body = adjusted.slice(separatorIndex + 4);
+  const body = adjusted.slice(separatorIndex + 4).trim();
   return body.length > 0 ? body : undefined;
 }
 
