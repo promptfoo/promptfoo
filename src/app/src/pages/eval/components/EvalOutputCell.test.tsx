@@ -715,6 +715,33 @@ describe('EvalOutputCell', () => {
     const latencyElement = screen.getByText('0 ms (cached)');
     expect(latencyElement).toBeInTheDocument();
   });
+
+  it('renders video metadata with extremely long text values', () => {
+    const longText = 'This is an extremely long text value '.repeat(20);
+    const propsWithLongVideoMetadata: MockEvalOutputCellProps = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        video: {
+          url: '/api/output/video/test-uuid/video.mp4',
+          format: 'mp4',
+          model: longText,
+          size: longText,
+          duration: 1000,
+          thumbnail: '/api/output/video/test-uuid/thumbnail.webp',
+        },
+      },
+    };
+
+    renderWithProviders(<EvalOutputCell {...propsWithLongVideoMetadata} />);
+
+    const modelElement = screen.getByText(`Model: ${longText}`);
+    expect(modelElement).toBeInTheDocument();
+    const sizeElement = screen.getByText(`Size: ${longText}`);
+    expect(sizeElement).toBeInTheDocument();
+    const durationElement = screen.getByText('Duration: 1000s');
+    expect(durationElement).toBeInTheDocument();
+  });
 });
 
 describe('EvalOutputCell search highlighting boundary conditions', () => {
@@ -1526,6 +1553,10 @@ describe('isVideoProvider helper function', () => {
 
   it('should return true for any provider with :video: in the name', () => {
     expect(isVideoProvider('some-provider:video:model')).toBe(true);
+  });
+
+  it('should return true for a provider string with leading and trailing whitespace', () => {
+    expect(isVideoProvider(' openai:video:sora-2 ')).toBe(true);
   });
 
   it('should return false for text completion providers', () => {

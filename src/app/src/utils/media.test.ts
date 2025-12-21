@@ -230,6 +230,46 @@ describe('resolveVideoSource', () => {
 
       expect(result?.poster).toBeUndefined();
     });
+
+    it('should return an object with the resolved poster URL when the video object includes a thumbnail field with a blob URI, HTTP(S) URL, or legacy API path', () => {
+      const videoObject1 = {
+        url: 'https://example.com/test.mp4',
+        thumbnail: 'promptfoo://blob/thumbnail-blob-hash',
+      };
+      const result1 = resolveVideoSource(videoObject1);
+      expect(result1?.poster).toBe('/api/blobs/thumbnail-blob-hash');
+
+      const videoObject2 = {
+        url: 'https://example.com/test.mp4',
+        thumbnail: 'https://example.com/thumbnail.jpg',
+      };
+      const result2 = resolveVideoSource(videoObject2);
+      expect(result2?.poster).toBe('https://example.com/thumbnail.jpg');
+
+      const videoObject3 = {
+        url: 'https://example.com/test.mp4',
+        thumbnail: '/api/thumbnails/thumbnail.jpg',
+      };
+      const result3 = resolveVideoSource(videoObject3);
+      expect(result3?.poster).toBe('/api/thumbnails/thumbnail.jpg');
+    });
+  });
+
+  describe('storageRef resolution', () => {
+    it('should return an object with the resolved storageRef URL as src and type video/mp4 when given a video object with a valid storageRef.key and no blobRef or format specified', () => {
+      const videoObject = {
+        storageRef: { key: 'mock-storage-key' },
+      };
+
+      const result = resolveVideoSource(videoObject);
+
+      expect(result).not.toBeNull();
+      expect(result).toEqual({
+        src: '/api/media/mock-storage-key',
+        type: 'video/mp4',
+        poster: undefined,
+      });
+    });
   });
 
   describe('priority order', () => {
@@ -250,6 +290,61 @@ describe('resolveVideoSource', () => {
       });
 
       expect(result?.src).toBe('/api/media/video/abc123.mp4');
+    });
+
+    it('should prioritize blobRef over storageRef and url when all are defined', () => {
+      const videoObject = {
+        blobRef: { hash: 'blob-hash' },
+        storageRef: { key: 'storage-key' },
+        url: 'http://example.com/video.mp4',
+      };
+      const result = resolveVideoSource(videoObject);
+      expect(result?.src).toBe('/api/blobs/blob-hash');
+    });
+  });
+
+  describe('direct HTTP(S) URL resolution', () => {
+    it('should return an object with the direct HTTP(S) URL as src and type video/mp4 when given a video object with a url starting with http:// or https:// and no blobRef or storageRef', () => {
+      const videoObject = {
+        url: 'https://example.com/video.mp4',
+      };
+
+      const result = resolveVideoSource(videoObject);
+
+      expect(result).not.toBeNull();
+      expect(result).toEqual({
+        src: 'https://example.com/video.mp4',
+        type: 'video/mp4',
+        poster: undefined,
+      });
+    });
+  });
+
+  describe('blob reference resolution', () => {
+    it('should return an object with resolved blob URL as src and type video/mp4 when given a video object with valid blobRef and no format', () => {
+      const videoObject = {
+        blobRef: { hash: 'mock-blob-hash' },
+      };
+
+      const result = resolveVideoSource(videoObject);
+
+      expect(result).not.toBeNull();
+      expect(result).toEqual({
+        src: '/api/blobs/mock-blob-hash',
+        type: 'video/mp4',
+        poster: undefined,
+      });
+    });
+  });
+
+  describe('format handling', () => {
+    it('should return an object with the correct type when the video object specifies a format', () => {
+      const videoObject = {
+        blobRef: { hash: 'mock-blob-hash' },
+        format: 'webm',
+      };
+      const result = resolveVideoSource(videoObject);
+      expect(result?.type).toBe('video/webm');
     });
   });
 
@@ -285,6 +380,23 @@ describe('resolveVideoSource', () => {
 
       // Legacy /api/ paths starting with / are returned as-is for browser resolution
       expect(result?.src).toBe('/api/output/video/test-uuid/video.mp4');
+    });
+
+    it('prepends apiBaseUrl to legacy /api/ paths when apiBaseUrl is set', () => {
+      vi.mocked(useApiConfig.getState).mockReturnValue(mockState('https://example.com'));
+
+      const videoObject = {
+        url: '/api/output/video/123/video.mp4',
+      };
+
+      const result = resolveVideoSource(videoObject);
+
+      expect(result).not.toBeNull();
+      expect(result).toEqual({
+        src: 'https://example.com/api/output/video/123/video.mp4',
+        type: 'video/mp4',
+        poster: undefined,
+      });
     });
 
     it('does not modify absolute https:// URLs', () => {
