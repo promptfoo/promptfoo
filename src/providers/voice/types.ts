@@ -149,7 +149,7 @@ export const DEFAULT_TURN_DETECTION: TurnDetectionConfig = {
 /**
  * Supported voice provider types.
  */
-export type VoiceProviderType = 'openai' | 'google';
+export type VoiceProviderType = 'openai' | 'google' | 'bedrock';
 
 /**
  * Configuration for a voice provider connection.

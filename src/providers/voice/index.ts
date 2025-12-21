@@ -15,6 +15,7 @@ export {
 // Connections
 export { BaseVoiceConnection, waitForEvent } from './connections/base';
 export { GoogleLiveConnection } from './connections/googleLive';
+export { NovaSonicConnection } from './connections/novaSonic';
 export { OpenAIRealtimeConnection } from './connections/openaiRealtime';
 // Orchestrator
 export { runVoiceConversation, VoiceConversationOrchestrator } from './orchestrator';

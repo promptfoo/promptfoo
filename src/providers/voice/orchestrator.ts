@@ -11,6 +11,7 @@ import { EventEmitter } from 'events';
 import logger from '../../logger';
 import { AudioBuffer, createStereoWav, type StereoTurn } from './audioBuffer';
 import { GoogleLiveConnection } from './connections/googleLive';
+import { NovaSonicConnection } from './connections/novaSonic';
 import { OpenAIRealtimeConnection } from './connections/openaiRealtime';
 import { TranscriptAccumulator } from './transcriptAccumulator';
 import { TurnDetector } from './turnDetection';
@@ -33,7 +34,7 @@ const DEFAULT_SAMPLE_RATE = 24000;
  * Creates a voice connection based on provider type.
  */
 function createConnection(
-  providerType: 'openai' | 'google',
+  providerType: 'openai' | 'google' | 'bedrock',
   config: VoiceProviderConfig,
 ): BaseVoiceConnection {
   switch (providerType) {
@@ -41,6 +42,9 @@ function createConnection(
       return new OpenAIRealtimeConnection(config);
     case 'google':
       return new GoogleLiveConnection(config);
+    case 'bedrock':
+      // NovaSonicConnection implements the same interface but extends EventEmitter directly
+      return new NovaSonicConnection(config) as unknown as BaseVoiceConnection;
     default:
       throw new Error(`Unknown voice provider type: ${providerType}`);
   }
@@ -143,11 +147,11 @@ export class VoiceConversationOrchestrator extends EventEmitter {
     try {
       // Create connections
       this.targetConnection = createConnection(
-        this.config.targetConfig.provider as 'openai' | 'google',
+        this.config.targetConfig.provider as 'openai' | 'google' | 'bedrock',
         this.config.targetConfig,
       );
       this.simulatedUserConnection = createConnection(
-        this.config.simulatedUserConfig.provider as 'openai' | 'google',
+        this.config.simulatedUserConfig.provider as 'openai' | 'google' | 'bedrock',
         this.config.simulatedUserConfig,
       );
 
