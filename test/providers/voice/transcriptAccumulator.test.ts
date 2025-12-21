@@ -1,9 +1,9 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import {
-  TranscriptAccumulator,
-  STOP_MARKER,
   extractStopMarker,
   formatTranscript,
+  STOP_MARKER,
+  TranscriptAccumulator,
 } from '../../../src/providers/voice/transcriptAccumulator';
 
 describe('TranscriptAccumulator', () => {

@@ -86,10 +86,12 @@ export interface ConversationResult {
   turnCount: number;
   /** Total duration in milliseconds */
   duration: number;
-  /** Full audio from target agent (WAV format) */
+  /** Full audio from target agent (WAV format, mono) */
   targetAudio?: Buffer;
-  /** Full audio from simulated user (WAV format) */
+  /** Full audio from simulated user (WAV format, mono) */
   simulatedUserAudio?: Buffer;
+  /** Combined stereo audio (WAV format, left=agent, right=user) */
+  combinedAudio?: Buffer;
   /** Aggregated token usage */
   tokenUsage?: TokenUsage;
   /** Additional metadata */

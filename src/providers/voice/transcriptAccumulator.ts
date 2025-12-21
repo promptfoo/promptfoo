@@ -250,10 +250,7 @@ export function extractStopMarker(transcript: string): {
  * @param turns Array of transcript turns
  * @param separator Separator between turns (default: '\n---\n')
  */
-export function formatTranscript(
-  turns: TranscriptTurn[],
-  separator: string = '\n---\n',
-): string {
+export function formatTranscript(turns: TranscriptTurn[], separator: string = '\n---\n'): string {
   return turns
     .map((turn) => `${turn.speaker === 'user' ? 'User' : 'Agent'}: ${turn.text}`)
     .join(separator);

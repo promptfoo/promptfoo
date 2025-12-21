@@ -6,10 +6,11 @@
  */
 
 import WebSocket from 'ws';
-import logger from '../../../logger';
 import { getEnvString } from '../../../envars';
+import logger from '../../../logger';
 import { BaseVoiceConnection, waitForEvent } from './base';
-import type { AudioChunk, VoiceProviderConfig, RealtimeMessage, AudioFormat } from '../types';
+
+import type { AudioChunk, AudioFormat, RealtimeMessage, VoiceProviderConfig } from '../types';
 
 const GOOGLE_LIVE_URL = 'wss://generativelanguage.googleapis.com/ws';
 const DEFAULT_MODEL = 'gemini-2.0-flash-exp';
@@ -290,7 +291,9 @@ export class GoogleLiveConnection extends BaseVoiceConnection {
 
     // Server content
     const serverContent = msg.serverContent as {
-      modelTurn?: { parts?: Array<{ text?: string; inlineData?: { mimeType?: string; data?: string } }> };
+      modelTurn?: {
+        parts?: Array<{ text?: string; inlineData?: { mimeType?: string; data?: string } }>;
+      };
       outputTranscription?: { text?: string };
       inputTranscription?: { text?: string };
       turnComplete?: boolean;

@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
 import type { VoiceProviderConfig } from '../../../src/providers/voice/types';
 
 // Use vi.hoisted to define the mock class before the vi.mock() hoisting

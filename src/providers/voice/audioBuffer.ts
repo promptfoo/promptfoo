@@ -5,8 +5,9 @@
  * and WAV encoding for voice conversations.
  */
 
-import type { AudioChunk, AudioFormat } from './types';
 import { BYTES_PER_SAMPLE, SAMPLE_RATES } from './types';
+
+import type { AudioChunk, AudioFormat } from './types';
 
 /**
  * Manages audio chunks for a conversation turn.
@@ -224,7 +225,11 @@ export function calculateDuration(bytes: number, sampleRate: number, format: Aud
  * @param format Audio format
  * @returns Number of bytes
  */
-export function calculateBytes(durationMs: number, sampleRate: number, format: AudioFormat): number {
+export function calculateBytes(
+  durationMs: number,
+  sampleRate: number,
+  format: AudioFormat,
+): number {
   const bytesPerSample = BYTES_PER_SAMPLE[format];
   const seconds = durationMs / 1000;
   const samples = seconds * sampleRate;
@@ -302,4 +307,132 @@ export function splitAudioBuffer(
   }
 
   return [before, after];
+}
+
+/**
+ * Turn information for stereo audio alignment (legacy, kept for API compatibility).
+ */
+export interface StereoTurn {
+  speaker: 'agent' | 'user';
+  timestamp: number;
+}
+
+/**
+ * Create a time-aligned stereo WAV from two AudioBuffers.
+ * Left channel = agent, Right channel = user.
+ *
+ * Uses the absolute timestamps on each audio chunk to place audio at the
+ * correct position in the stereo timeline. Each chunk's timestamp represents
+ * when that audio was generated (based on cumulative audio position from
+ * response start), ensuring accurate alignment regardless of network timing.
+ *
+ * @param agentBuffer Audio buffer for agent (left channel)
+ * @param userBuffer Audio buffer for user (right channel)
+ * @param _turns Deprecated, not used - chunk timestamps are used directly
+ * @returns Stereo WAV buffer with properly aligned audio
+ */
+export function createStereoWav(
+  agentBuffer: AudioBuffer,
+  userBuffer: AudioBuffer,
+  _turns?: StereoTurn[],
+): Buffer {
+  const sampleRate = agentBuffer.getSampleRate();
+  const bytesPerSample = 2; // PCM16
+  const bytesPerFrame = 4; // Stereo: 2 bytes × 2 channels
+
+  // Get all chunks with their timestamps
+  const agentChunks = agentBuffer.getChunks();
+  const userChunks = userBuffer.getChunks();
+
+  if (agentChunks.length === 0 && userChunks.length === 0) {
+    return pcm16ToWav(Buffer.alloc(0), sampleRate, 2);
+  }
+
+  // Collect all valid timestamps to find timeline boundaries
+  const allChunks = [
+    ...agentChunks.map((c) => ({ ...c, speaker: 'agent' as const })),
+    ...userChunks.map((c) => ({ ...c, speaker: 'user' as const })),
+  ].filter((c) => c.timestamp !== undefined);
+
+  if (allChunks.length === 0) {
+    // No valid timestamps - fall back to simple sequential placement
+    const agentPcm = agentBuffer.toBuffer();
+    const userPcm = userBuffer.toBuffer();
+    const maxSamples = Math.max(agentPcm.length, userPcm.length) / bytesPerSample;
+    const stereoBuffer = Buffer.alloc(Math.ceil(maxSamples) * bytesPerFrame);
+
+    for (let i = 0; i < maxSamples; i++) {
+      const agentSample =
+        i * bytesPerSample < agentPcm.length ? agentPcm.readInt16LE(i * bytesPerSample) : 0;
+      const userSample =
+        i * bytesPerSample < userPcm.length ? userPcm.readInt16LE(i * bytesPerSample) : 0;
+      stereoBuffer.writeInt16LE(agentSample, i * bytesPerFrame);
+      stereoBuffer.writeInt16LE(userSample, i * bytesPerFrame + 2);
+    }
+
+    return pcm16ToWav(stereoBuffer, sampleRate, 2);
+  }
+
+  // Find timeline boundaries from chunk timestamps
+  const startTime = Math.min(...allChunks.map((c) => c.timestamp!));
+  let endTime = startTime;
+  for (const chunk of allChunks) {
+    const chunkEnd = chunk.timestamp! + (chunk.duration || 0);
+    endTime = Math.max(endTime, chunkEnd);
+  }
+
+  // Add 500ms padding at the end
+  const durationMs = endTime - startTime + 500;
+  const totalSamples = Math.ceil((durationMs / 1000) * sampleRate);
+
+  // Allocate stereo buffer (initialized to silence)
+  const stereoBuffer = Buffer.alloc(totalSamples * bytesPerFrame);
+
+  // Place each agent chunk at its timestamp position (left channel)
+  for (const chunk of agentChunks) {
+    if (chunk.timestamp === undefined) {
+      continue;
+    }
+
+    const pcmData = base64ToBuffer(chunk.data);
+    const startPosition = Math.floor(((chunk.timestamp - startTime) / 1000) * sampleRate);
+    const numSamples = pcmData.length / bytesPerSample;
+
+    for (let i = 0; i < numSamples; i++) {
+      const sampleIndex = startPosition + i;
+      if (
+        sampleIndex >= 0 &&
+        sampleIndex < totalSamples &&
+        i * bytesPerSample + 1 < pcmData.length
+      ) {
+        const sample = pcmData.readInt16LE(i * bytesPerSample);
+        stereoBuffer.writeInt16LE(sample, sampleIndex * bytesPerFrame); // left channel
+      }
+    }
+  }
+
+  // Place each user chunk at its timestamp position (right channel)
+  for (const chunk of userChunks) {
+    if (chunk.timestamp === undefined) {
+      continue;
+    }
+
+    const pcmData = base64ToBuffer(chunk.data);
+    const startPosition = Math.floor(((chunk.timestamp - startTime) / 1000) * sampleRate);
+    const numSamples = pcmData.length / bytesPerSample;
+
+    for (let i = 0; i < numSamples; i++) {
+      const sampleIndex = startPosition + i;
+      if (
+        sampleIndex >= 0 &&
+        sampleIndex < totalSamples &&
+        i * bytesPerSample + 1 < pcmData.length
+      ) {
+        const sample = pcmData.readInt16LE(i * bytesPerSample);
+        stereoBuffer.writeInt16LE(sample, sampleIndex * bytesPerFrame + 2); // right channel
+      }
+    }
+  }
+
+  return pcm16ToWav(stereoBuffer, sampleRate, 2);
 }

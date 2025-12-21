@@ -1,6 +1,7 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { TurnDetector, SilenceDetector } from '../../../src/providers/voice/turnDetection';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { bufferToBase64 } from '../../../src/providers/voice/audioBuffer';
+import { SilenceDetector, TurnDetector } from '../../../src/providers/voice/turnDetection';
+
 import type { AudioChunk } from '../../../src/providers/voice/types';
 
 describe('TurnDetector', () => {

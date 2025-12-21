@@ -7,20 +7,22 @@
  */
 
 import { EventEmitter } from 'events';
+
 import logger from '../../logger';
-import type { BaseVoiceConnection } from './connections/base';
-import { OpenAIRealtimeConnection } from './connections/openaiRealtime';
+import { AudioBuffer, createStereoWav, type StereoTurn } from './audioBuffer';
 import { GoogleLiveConnection } from './connections/googleLive';
-import { TurnDetector } from './turnDetection';
+import { OpenAIRealtimeConnection } from './connections/openaiRealtime';
 import { TranscriptAccumulator } from './transcriptAccumulator';
-import { AudioBuffer } from './audioBuffer';
+import { TurnDetector } from './turnDetection';
+
+import type { BaseVoiceConnection } from './connections/base';
 import type {
   AudioChunk,
-  OrchestratorConfig,
   ConversationResult,
   ConversationState,
-  VoiceTurn,
+  OrchestratorConfig,
   VoiceProviderConfig,
+  VoiceTurn,
 } from './types';
 
 const DEFAULT_MAX_TURNS = 10;
@@ -69,6 +71,20 @@ export class VoiceConversationOrchestrator extends EventEmitter {
   private conversationTimeout: ReturnType<typeof setTimeout> | null = null;
   private isTargetSpeaking = false;
   private isSimulatedUserSpeaking = false;
+  // Track the global playback timeline position across both speakers.
+  // This ensures audio from both speakers is placed sequentially, not overlapping.
+  private globalAudioPositionMs = 0;
+  // Track offset to apply to each speaker's audio chunks.
+  // These offsets map each connection's internal timeline to the global timeline.
+  private targetAudioOffsetMs = 0;
+  private userAudioOffsetMs = 0;
+  // Baseline: where the PREVIOUS response ended in the connection's internal timeline.
+  // This is set in audio_done and used to calculate relative position within the current response.
+  private targetBaselineMs = 0;
+  private userBaselineMs = 0;
+  // Track where the CURRENT response ends (updated on each chunk, copied to baseline in audio_done).
+  private targetCurrentEndMs = 0;
+  private userCurrentEndMs = 0;
 
   constructor(config: OrchestratorConfig) {
     super();
@@ -189,7 +205,9 @@ export class VoiceConversationOrchestrator extends EventEmitter {
   /**
    * Stop the conversation gracefully.
    */
-  async stop(reason: 'goal_achieved' | 'max_turns' | 'timeout' | 'user_hangup' = 'user_hangup'): Promise<void> {
+  async stop(
+    reason: 'goal_achieved' | 'max_turns' | 'timeout' | 'user_hangup' = 'user_hangup',
+  ): Promise<void> {
     if (this.state === 'idle' || this.state === 'completed') {
       return;
     }
@@ -208,20 +226,51 @@ export class VoiceConversationOrchestrator extends EventEmitter {
 
     // Audio from target → forward to simulated user
     this.targetConnection.on('audio_delta', (chunk: AudioChunk) => {
-      this.targetAudioBuffer.append(chunk);
+      // Map connection's internal timestamp to global timeline.
+      // The connection's internal timestamps are cumulative across all responses,
+      // so we subtract the baseline (where previous response ended) to get position within this response.
+      const internalStart = chunk.timestamp;
+      const internalEnd = internalStart + (chunk.duration || 0);
+      const relativePosition = internalStart - this.targetBaselineMs;
+
+      const adjustedChunk: AudioChunk = {
+        ...chunk,
+        timestamp: this.targetAudioOffsetMs + relativePosition,
+      };
+      this.targetAudioBuffer.append(adjustedChunk);
+
+      // Track the furthest audio position in global timeline
+      const chunkEnd = adjustedChunk.timestamp + (adjustedChunk.duration || 0);
+      if (chunkEnd > this.globalAudioPositionMs) {
+        this.globalAudioPositionMs = chunkEnd;
+      }
+
+      // Track where this response ends (will become baseline after audio_done)
+      if (internalEnd > this.targetCurrentEndMs) {
+        this.targetCurrentEndMs = internalEnd;
+      }
 
       // Forward audio to simulated user
       if (this.simulatedUserConnection?.isReady()) {
         this.simulatedUserConnection.sendAudio(chunk);
       }
 
-      this.emit('target_audio', chunk);
+      this.emit('target_audio', adjustedChunk);
     });
 
     // Target finished speaking
     this.targetConnection.on('audio_done', () => {
-      logger.debug('[Orchestrator] Target audio done');
+      logger.debug('[Orchestrator] Target audio done:', {
+        globalPosition: this.globalAudioPositionMs,
+        targetCurrentEndMs: this.targetCurrentEndMs,
+      });
       this.isTargetSpeaking = false;
+
+      // Update baseline for next target response (where this response ended)
+      this.targetBaselineMs = this.targetCurrentEndMs;
+
+      // Set the user's offset to start after target's audio ends
+      this.userAudioOffsetMs = this.globalAudioPositionMs;
 
       // Commit audio to simulated user
       if (this.simulatedUserConnection?.isReady()) {
@@ -292,20 +341,51 @@ export class VoiceConversationOrchestrator extends EventEmitter {
 
     // Audio from simulated user → forward to target
     this.simulatedUserConnection.on('audio_delta', (chunk: AudioChunk) => {
-      this.simulatedUserAudioBuffer.append(chunk);
+      // Map connection's internal timestamp to global timeline.
+      // The connection's internal timestamps are cumulative across all responses,
+      // so we subtract the baseline (where previous response ended) to get position within this response.
+      const internalStart = chunk.timestamp;
+      const internalEnd = internalStart + (chunk.duration || 0);
+      const relativePosition = internalStart - this.userBaselineMs;
+
+      const adjustedChunk: AudioChunk = {
+        ...chunk,
+        timestamp: this.userAudioOffsetMs + relativePosition,
+      };
+      this.simulatedUserAudioBuffer.append(adjustedChunk);
+
+      // Track the furthest audio position in global timeline
+      const chunkEnd = adjustedChunk.timestamp + (adjustedChunk.duration || 0);
+      if (chunkEnd > this.globalAudioPositionMs) {
+        this.globalAudioPositionMs = chunkEnd;
+      }
+
+      // Track where this response ends (will become baseline after audio_done)
+      if (internalEnd > this.userCurrentEndMs) {
+        this.userCurrentEndMs = internalEnd;
+      }
 
       // Forward audio to target
       if (this.targetConnection?.isReady()) {
         this.targetConnection.sendAudio(chunk);
       }
 
-      this.emit('simulated_user_audio', chunk);
+      this.emit('simulated_user_audio', adjustedChunk);
     });
 
     // Simulated user finished speaking
     this.simulatedUserConnection.on('audio_done', () => {
-      logger.debug('[Orchestrator] Simulated user audio done');
+      logger.debug('[Orchestrator] Simulated user audio done:', {
+        globalPosition: this.globalAudioPositionMs,
+        userCurrentEndMs: this.userCurrentEndMs,
+      });
       this.isSimulatedUserSpeaking = false;
+
+      // Update baseline for next user response (where this response ended)
+      this.userBaselineMs = this.userCurrentEndMs;
+
+      // Set the target's offset to start after user's audio ends
+      this.targetAudioOffsetMs = this.globalAudioPositionMs;
 
       // Commit audio to target and request response
       if (this.targetConnection?.isReady()) {
@@ -424,6 +504,24 @@ export class VoiceConversationOrchestrator extends EventEmitter {
       timestamp: turn.timestamp,
     }));
 
+    // Create individual mono tracks
+    const targetAudio = this.targetAudioBuffer.toWav();
+    const simulatedUserAudio = this.simulatedUserAudioBuffer.toWav();
+
+    // Create combined stereo audio (left=agent, right=user for diarization)
+    // Use turn timestamps for accurate time alignment
+    const stereoTurns: StereoTurn[] = turns
+      .filter((t): t is typeof t & { timestamp: number } => t.timestamp !== undefined)
+      .map((t) => ({
+        speaker: t.speaker,
+        timestamp: t.timestamp,
+      }));
+    const combinedAudio = createStereoWav(
+      this.targetAudioBuffer,
+      this.simulatedUserAudioBuffer,
+      stereoTurns,
+    );
+
     const result: ConversationResult = {
       success: reason === 'goal_achieved',
       stopReason: reason,
@@ -431,8 +529,9 @@ export class VoiceConversationOrchestrator extends EventEmitter {
       turns,
       turnCount: this.turnCount,
       duration: endTime - this.startTime,
-      targetAudio: this.targetAudioBuffer.toWav(),
-      simulatedUserAudio: this.simulatedUserAudioBuffer.toWav(),
+      targetAudio,
+      simulatedUserAudio,
+      combinedAudio,
       metadata: {
         targetProvider: this.config.targetConfig.provider,
         simulatedUserProvider: this.config.simulatedUserConfig.provider,
@@ -482,7 +581,9 @@ export class VoiceConversationOrchestrator extends EventEmitter {
  * Create and run a voice conversation.
  * Convenience function for one-shot conversations.
  */
-export async function runVoiceConversation(config: OrchestratorConfig): Promise<ConversationResult> {
+export async function runVoiceConversation(
+  config: OrchestratorConfig,
+): Promise<ConversationResult> {
   const orchestrator = new VoiceConversationOrchestrator(config);
   return orchestrator.start();
 }

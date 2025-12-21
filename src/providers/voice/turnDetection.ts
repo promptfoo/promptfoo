@@ -6,9 +6,11 @@
  */
 
 import { EventEmitter } from 'events';
-import type { AudioChunk, TurnDetectionConfig } from './types';
-import { DEFAULT_TURN_DETECTION } from './types';
+
 import { base64ToBuffer } from './audioBuffer';
+import { DEFAULT_TURN_DETECTION } from './types';
+
+import type { AudioChunk, TurnDetectionConfig } from './types';
 
 /**
  * Events emitted by TurnDetector.

@@ -1,15 +1,16 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import {
   AudioBuffer,
-  pcm16ToWav,
   base64ToBuffer,
   bufferToBase64,
-  calculateDuration,
   calculateBytes,
+  calculateDuration,
   createAudioChunk,
   mergeAudioBuffers,
+  pcm16ToWav,
   splitAudioBuffer,
 } from '../../../src/providers/voice/audioBuffer';
+
 import type { AudioChunk } from '../../../src/providers/voice/types';
 
 describe('AudioBuffer', () => {

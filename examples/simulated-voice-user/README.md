@@ -35,43 +35,43 @@ npx promptfoo@latest eval
 
 ### Target Agent Settings
 
-| Option            | Description                             | Default                    |
-| ----------------- | --------------------------------------- | -------------------------- |
-| `targetProvider`  | Voice API provider (`openai`, `google`) | `openai`                   |
-| `targetModel`     | Model to use                            | `gpt-4o-realtime-preview`  |
-| `targetVoice`     | Voice for the agent                     | `alloy`                    |
+| Option           | Description                             | Default                   |
+| ---------------- | --------------------------------------- | ------------------------- |
+| `targetProvider` | Voice API provider (`openai`, `google`) | `openai`                  |
+| `targetModel`    | Model to use                            | `gpt-4o-realtime-preview` |
+| `targetVoice`    | Voice for the agent                     | `alloy`                   |
 
 ### Simulated User Settings
 
-| Option                    | Description                             | Default                    |
-| ------------------------- | --------------------------------------- | -------------------------- |
-| `simulatedUserProvider`   | Voice API provider                      | `openai`                   |
-| `simulatedUserModel`      | Model for simulated user                | `gpt-4o-realtime-preview`  |
-| `simulatedUserVoice`      | Voice for simulated user                | `echo`                     |
-| `instructions`            | Goal/persona for the simulated user     | Required                   |
+| Option                  | Description                         | Default                   |
+| ----------------------- | ----------------------------------- | ------------------------- |
+| `simulatedUserProvider` | Voice API provider                  | `openai`                  |
+| `simulatedUserModel`    | Model for simulated user            | `gpt-4o-realtime-preview` |
+| `simulatedUserVoice`    | Voice for simulated user            | `echo`                    |
+| `instructions`          | Goal/persona for the simulated user | Required                  |
 
 ### Conversation Settings
 
-| Option                | Description                                    | Default   |
-| --------------------- | ---------------------------------------------- | --------- |
-| `maxTurns`            | Maximum conversation turns                     | `10`      |
-| `timeoutMs`           | Maximum conversation duration (ms)             | `120000`  |
-| `targetSpeaksFirst`   | Whether target agent starts the conversation   | `true`    |
+| Option              | Description                                  | Default  |
+| ------------------- | -------------------------------------------- | -------- |
+| `maxTurns`          | Maximum conversation turns                   | `10`     |
+| `timeoutMs`         | Maximum conversation duration (ms)           | `120000` |
+| `targetSpeaksFirst` | Whether target agent starts the conversation | `true`   |
 
 ### Audio Settings
 
-| Option                | Description                                    | Default   |
-| --------------------- | ---------------------------------------------- | --------- |
-| `audioFormat`         | Audio format (`pcm16`, `g711_ulaw`, `g711_alaw`) | `pcm16` |
-| `sampleRate`          | Audio sample rate in Hz                        | `24000`   |
+| Option        | Description                                      | Default |
+| ------------- | ------------------------------------------------ | ------- |
+| `audioFormat` | Audio format (`pcm16`, `g711_ulaw`, `g711_alaw`) | `pcm16` |
+| `sampleRate`  | Audio sample rate in Hz                          | `24000` |
 
 ### Turn Detection (VAD)
 
-| Option                | Description                                    | Default       |
-| --------------------- | ---------------------------------------------- | ------------- |
-| `turnDetectionMode`   | Mode (`server_vad`, `client_vad`, `manual`)    | `server_vad`  |
-| `silenceThresholdMs`  | Silence duration to detect turn end            | `500`         |
-| `vadThreshold`        | Voice activity detection sensitivity           | `0.5`         |
+| Option               | Description                                 | Default      |
+| -------------------- | ------------------------------------------- | ------------ |
+| `turnDetectionMode`  | Mode (`server_vad`, `client_vad`, `manual`) | `server_vad` |
+| `silenceThresholdMs` | Silence duration to detect turn end         | `500`        |
+| `vadThreshold`       | Voice activity detection sensitivity        | `0.5`        |
 
 ## Writing Test Goals
 

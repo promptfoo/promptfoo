@@ -7,9 +7,11 @@
  */
 
 import { EventEmitter } from 'events';
-import type WebSocket from 'ws';
+
 import logger from '../../../logger';
-import type { AudioChunk, VoiceProviderConfig, VoiceConnectionEvents } from '../types';
+import type WebSocket from 'ws';
+
+import type { AudioChunk, VoiceConnectionEvents, VoiceProviderConfig } from '../types';
 
 /**
  * Connection state.
@@ -315,30 +317,21 @@ export abstract class BaseVoiceConnection extends EventEmitter {
   /**
    * Add a typed event listener.
    */
-  on<K extends keyof VoiceConnectionEvents>(
-    event: K,
-    listener: VoiceConnectionEvents[K],
-  ): this {
+  on<K extends keyof VoiceConnectionEvents>(event: K, listener: VoiceConnectionEvents[K]): this {
     return super.on(event, listener);
   }
 
   /**
    * Add a one-time typed event listener.
    */
-  once<K extends keyof VoiceConnectionEvents>(
-    event: K,
-    listener: VoiceConnectionEvents[K],
-  ): this {
+  once<K extends keyof VoiceConnectionEvents>(event: K, listener: VoiceConnectionEvents[K]): this {
     return super.once(event, listener);
   }
 
   /**
    * Remove a typed event listener.
    */
-  off<K extends keyof VoiceConnectionEvents>(
-    event: K,
-    listener: VoiceConnectionEvents[K],
-  ): this {
+  off<K extends keyof VoiceConnectionEvents>(event: K, listener: VoiceConnectionEvents[K]): this {
     return super.off(event, listener);
   }
 }

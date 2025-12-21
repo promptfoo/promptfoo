@@ -6,10 +6,11 @@
  */
 
 import WebSocket from 'ws';
-import logger from '../../../logger';
 import { getEnvString } from '../../../envars';
+import logger from '../../../logger';
 import { BaseVoiceConnection, waitForEvent } from './base';
-import type { AudioChunk, VoiceProviderConfig, RealtimeMessage, AudioFormat } from '../types';
+
+import type { AudioChunk, AudioFormat, RealtimeMessage, VoiceProviderConfig } from '../types';
 
 const OPENAI_REALTIME_URL = 'wss://api.openai.com/v1/realtime';
 const DEFAULT_MODEL = 'gpt-4o-realtime-preview';
@@ -25,6 +26,10 @@ const CONNECTION_TIMEOUT_MS = 15000;
  */
 export class OpenAIRealtimeConnection extends BaseVoiceConnection {
   private model: string;
+  // Track cumulative audio position across ALL responses (for playback timeline).
+  // This is the key to proper audio alignment: each chunk's timestamp is based
+  // on how much audio has been produced, NOT when it was received.
+  private cumulativeAudioPositionMs: number = 0;
 
   constructor(config: VoiceProviderConfig) {
     super(config);
@@ -223,16 +228,35 @@ export class OpenAIRealtimeConnection extends BaseVoiceConnection {
         break;
 
       // Audio output events
-      case 'response.audio.delta':
+      case 'response.audio.delta': {
+        const sampleRate = this.config.sampleRate || DEFAULT_SAMPLE_RATE;
+        const audioData = Buffer.from(msg.delta as string, 'base64');
+        const bytesPerSample = 2; // PCM16
+        const durationMs = (audioData.length / bytesPerSample / sampleRate) * 1000;
+
+        // Use cumulative audio position as timestamp (not real time).
+        // This ensures proper playback alignment: a 10s audio response gets
+        // timestamps spanning 0-10000ms regardless of network streaming speed.
+        const timestamp = this.cumulativeAudioPositionMs;
+
         this.emit('audio_delta', {
           data: msg.delta as string,
-          timestamp: Date.now(),
+          timestamp: timestamp,
+          duration: durationMs,
           format: this.config.audioFormat || DEFAULT_AUDIO_FORMAT,
-          sampleRate: this.config.sampleRate || DEFAULT_SAMPLE_RATE,
+          sampleRate: sampleRate,
         });
+
+        // Advance cumulative position for next chunk
+        this.cumulativeAudioPositionMs += durationMs;
         break;
+      }
 
       case 'response.audio.done':
+        logger.debug('[OpenAIRealtime] Audio done:', {
+          voice: this.config.voice,
+          cumulativePositionMs: this.cumulativeAudioPositionMs,
+        });
         this.emit('audio_done');
         break;
 
@@ -270,7 +294,10 @@ export class OpenAIRealtimeConnection extends BaseVoiceConnection {
 
       // Response lifecycle
       case 'response.created':
-        logger.debug('[OpenAIRealtime] Response created');
+        logger.debug('[OpenAIRealtime] Response created:', {
+          voice: this.config.voice,
+          cumulativePositionMs: this.cumulativeAudioPositionMs,
+        });
         break;
 
       case 'response.done':

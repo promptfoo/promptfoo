@@ -7,11 +7,12 @@
  * This is the voice equivalent of the text-based SimulatedUser provider.
  */
 
-import logger from '../../logger';
 import { getEnvString } from '../../envars';
+import logger from '../../logger';
 import { getNunjucksEngine } from '../../util/templates';
 import { VoiceConversationOrchestrator } from './orchestrator';
 import { STOP_MARKER } from './transcriptAccumulator';
+
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -20,10 +21,10 @@ import type {
   ProviderResponse,
 } from '../../types/index';
 import type {
-  SimulatedVoiceUserConfig,
-  VoiceProviderConfig,
-  TurnDetectionConfig,
   ConversationResult,
+  SimulatedVoiceUserConfig,
+  TurnDetectionConfig,
+  VoiceProviderConfig,
 } from './types';
 
 const DEFAULT_SAMPLE_RATE = 24000;
@@ -127,7 +128,10 @@ export class SimulatedVoiceUser implements ApiProvider {
       instructions: simulatedUserInstructions,
       audioFormat: this.voiceConfig.audioFormat || DEFAULT_AUDIO_FORMAT,
       sampleRate: this.voiceConfig.sampleRate || DEFAULT_SAMPLE_RATE,
-      turnDetection: this.buildTurnDetectionConfig(),
+      // IMPORTANT: Disable turn detection on simulated user to prevent auto-responses.
+      // We explicitly call requestResponse() after the target finishes speaking.
+      // Using VAD here causes the user to start speaking while the target is still talking.
+      turnDetection: undefined,
     };
   }
 
@@ -230,6 +234,10 @@ Remember: You are SIMULATING a user, not an AI assistant. Act as the caller/user
       .map((turn) => `${turn.speaker === 'agent' ? 'Assistant' : 'User'}: ${turn.text}`)
       .join('\n---\n');
 
+    // Use combined stereo audio (left=agent, right=user) for best playback experience
+    // Falls back to target-only audio if combined not available
+    const audioData = result.combinedAudio || result.targetAudio;
+
     return {
       output,
       metadata: {
@@ -240,10 +248,16 @@ Remember: You are SIMULATING a user, not an AI assistant. Act as the caller/user
         success: result.success,
         targetProvider: result.metadata?.targetProvider,
         simulatedUserProvider: result.metadata?.simulatedUserProvider,
+        // Include separate track references for advanced use cases
+        audioTracks: {
+          combined: result.combinedAudio ? 'stereo (left=agent, right=user)' : undefined,
+          targetOnly: result.targetAudio ? 'mono (agent only)' : undefined,
+          userOnly: result.simulatedUserAudio ? 'mono (user only)' : undefined,
+        },
       },
-      audio: result.targetAudio
+      audio: audioData
         ? {
-            data: result.targetAudio.toString('base64'),
+            data: audioData.toString('base64'),
             format: 'wav',
           }
         : undefined,
