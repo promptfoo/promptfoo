@@ -33,7 +33,6 @@ import invariant from '../util/invariant';
 import { promptfooCommand } from '../util/promptfooCommand';
 import { TokenUsageTracker } from '../util/tokenUsage';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
-import { expandScenarios } from './eval/expandScenarios';
 import { filterProviders } from './eval/filterProviders';
 import { filterTests } from './eval/filterTests';
 import { generateEvalSummary } from './eval/summary';
@@ -419,15 +418,6 @@ export async function doEval(
       if (scenario.tests) {
         scenario.tests = await maybeLoadFromExternalFile(scenario.tests);
       }
-    }
-
-    // Expand scenarios before filtering so that test descriptions can be templated
-    if (!resumeEval && testSuite.scenarios && testSuite.scenarios.length > 0) {
-      const expandedTests = expandScenarios(testSuite);
-      // Merge with existing tests (if any)
-      testSuite.tests = [...(testSuite.tests || []), ...expandedTests];
-      // Clear scenarios since they've been expanded
-      testSuite.scenarios = [];
     }
 
     // Apply filtering after scenario expansion
