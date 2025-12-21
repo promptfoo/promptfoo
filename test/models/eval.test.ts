@@ -456,6 +456,44 @@ describe('evaluator', () => {
       const stats = eval1.getStats();
       expect(stats.durationMs).toBe(54321);
     });
+
+    it('should include orchestratorStats when set', () => {
+      const eval1 = new Eval({});
+      eval1.setOrchestratorStats({
+        laneCount: 1,
+        totalStarted: 2,
+        totalCompleted: 2,
+        totalEstimatedTokens: 1200,
+        rateLimitEvents: 0,
+        maxQueueDepth: 1,
+        elapsedMs: 5000,
+        effectiveRpm: 24,
+        effectiveTpm: 14400,
+        lanes: [
+          {
+            providerKey: 'openai:gpt-4.1:example',
+            queueDepth: 0,
+            maxQueueDepth: 1,
+            inFlight: 0,
+            maxConcurrent: 2,
+            maxConcurrentDynamic: 2,
+            rpm: 60,
+            tpm: 60000,
+            totalStarted: 2,
+            totalCompleted: 2,
+            totalEstimatedTokens: 1200,
+            rateLimitEvents: 0,
+            elapsedMs: 5000,
+            effectiveRpm: 24,
+            effectiveTpm: 14400,
+          },
+        ],
+      });
+
+      const stats = eval1.getStats();
+      expect(stats.orchestratorStats?.laneCount).toBe(1);
+      expect(stats.orchestratorStats?.lanes[0].providerKey).toBe('openai:gpt-4.1:example');
+    });
   });
 
   describe('toResultsFile', () => {

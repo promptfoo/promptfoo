@@ -25,6 +25,7 @@ import type {
 } from './providers';
 import type { NunjucksFilterMap, TokenUsage } from './shared';
 import type { TraceData } from './tracing';
+import type { OrchestratorStats } from '../orchestrator/types';
 
 export * from '../redteam/types';
 export * from './prompts';
@@ -351,6 +352,7 @@ export interface EvaluateStats {
   errors: number;
   tokenUsage: Required<TokenUsage>;
   durationMs?: number;
+  orchestratorStats?: OrchestratorStats;
 }
 
 export interface EvaluateSummaryV3 {

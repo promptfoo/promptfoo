@@ -10,6 +10,7 @@ import type { Agent } from 'http';
 import { getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
+import { sha256 } from '../../util/createHash';
 import type { BedrockRuntime, Trace } from '@aws-sdk/client-bedrock-runtime';
 import type { AwsCredentialIdentity, AwsCredentialIdentityProvider } from '@aws-sdk/types';
 
@@ -59,6 +60,48 @@ export abstract class AwsBedrockGenericProvider {
 
   toString(): string {
     return `[Amazon Bedrock Provider ${this.modelName}]`;
+  }
+
+  getRateLimitKey(): string {
+    const region = this.getRegion();
+    const apiKey = this.getApiKey();
+    const apiKeyHash = apiKey ? sha256(apiKey).slice(0, 8) : '';
+    const accessKeyId = this.config.accessKeyId;
+    const accessKeyHash = accessKeyId ? sha256(accessKeyId).slice(0, 8) : '';
+    const profile = this.config.profile || '';
+    const profileHash = profile ? sha256(profile).slice(0, 8) : '';
+    const authFingerprint = apiKeyHash
+      ? `key-${apiKeyHash}`
+      : accessKeyHash
+        ? `access-${accessKeyHash}`
+        : profileHash
+          ? `profile-${profileHash}`
+          : 'default';
+    const endpoint = this.config.endpoint || '';
+    let endpointHost = endpoint || 'default-endpoint';
+    if (endpoint) {
+      try {
+        endpointHost = new URL(endpoint).host;
+      } catch {
+        // Keep raw endpoint when parsing fails.
+      }
+    }
+    return `bedrock:${region}:${this.modelName}:${endpointHost}:${authFingerprint}`;
+  }
+
+  getInitialLimits(): { rpm?: number; tpm?: number; maxConcurrent?: number } {
+    const config = this.config as {
+      rateLimit?: { rpm?: number; tpm?: number; maxConcurrent?: number };
+      maxConcurrency?: number;
+      maxConcurrent?: number;
+      rpm?: number;
+      tpm?: number;
+    };
+    return {
+      rpm: config.rateLimit?.rpm ?? config.rpm,
+      tpm: config.rateLimit?.tpm ?? config.tpm,
+      maxConcurrent: config.rateLimit?.maxConcurrent ?? config.maxConcurrent ?? config.maxConcurrency,
+    };
   }
 
   protected getApiKey(): string | undefined {

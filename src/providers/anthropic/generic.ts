@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { getEnvString } from '../../envars';
+import { sha256 } from '../../util/createHash';
 
 import type { EnvOverrides } from '../../types/env';
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/index';
@@ -61,6 +62,34 @@ export class AnthropicGenericProvider implements ApiProvider {
     return (
       this.config?.apiBaseUrl || this.env?.ANTHROPIC_BASE_URL || getEnvString('ANTHROPIC_BASE_URL')
     );
+  }
+
+  getRateLimitKey(): string {
+    const apiKey = this.getApiKey();
+    const apiKeyHash = apiKey ? sha256(apiKey).slice(0, 8) : 'no-key';
+    const baseUrl = this.getApiBaseUrl() || 'https://api.anthropic.com';
+    let host = baseUrl;
+    try {
+      host = new URL(baseUrl).host;
+    } catch {
+      // Keep raw baseUrl when parsing fails.
+    }
+    return `anthropic:${this.modelName}:${host}:${apiKeyHash}`;
+  }
+
+  getInitialLimits(): { rpm?: number; tpm?: number; maxConcurrent?: number } {
+    const config = this.config as {
+      rateLimit?: { rpm?: number; tpm?: number; maxConcurrent?: number };
+      maxConcurrency?: number;
+      maxConcurrent?: number;
+      rpm?: number;
+      tpm?: number;
+    };
+    return {
+      rpm: config.rateLimit?.rpm ?? config.rpm,
+      tpm: config.rateLimit?.tpm ?? config.tpm,
+      maxConcurrent: config.rateLimit?.maxConcurrent ?? config.maxConcurrent ?? config.maxConcurrency,
+    };
   }
 
   /**

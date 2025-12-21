@@ -17,7 +17,7 @@ import logger from './logger';
 import { selectMaxScore } from './matchers';
 import { generateIdFromPrompt } from './models/prompt';
 import { Orchestrator } from './orchestrator';
-import type { LaneLimits, TaskRunResult } from './orchestrator/types';
+import type { LaneLimits, OrchestratorStats, TaskRunResult } from './orchestrator/types';
 import { CIProgressReporter } from './progress/ciProgressReporter';
 import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
 import { providerRegistry } from './providers/providerRegistry';
@@ -1581,6 +1581,8 @@ class Evaluator {
       await progressBarManager.initialize(runEvalOptions, concurrency, 0);
     }
 
+    let orchestratorStats: OrchestratorStats | undefined;
+
     try {
       if (serialRunEvalOptions.length > 0) {
         // Run serial evaluations
@@ -1629,6 +1631,10 @@ class Evaluator {
         });
 
         await orchestrator.run(tasks);
+        orchestratorStats = orchestrator.getStats();
+        if (orchestratorStats.laneCount > 0) {
+          logger.debug('Orchestrator lane stats', { lanes: orchestratorStats.lanes });
+        }
       }
     } catch (err) {
       if (options.abortSignal?.aborted) {
@@ -1916,6 +1922,7 @@ class Evaluator {
 
     // Store the duration on the eval record for persistence
     this.evalRecord.setDurationMs(totalEvalTimeMs);
+    this.evalRecord.setOrchestratorStats(orchestratorStats);
 
     // Calculate aggregated metrics
     const totalCost = prompts.reduce((acc, p) => acc + (p.metrics?.cost || 0), 0);
@@ -1977,7 +1984,7 @@ class Evaluator {
         (r) => r.failureReason === ResultFailureReason.ERROR && r.error?.includes('timed out'),
       );
 
-    telemetry.record('eval_ran', {
+    const telemetryProps: Record<string, string | number | boolean | string[]> = {
       // Basic metrics
       numPrompts: prompts.length,
       numTests: this.stats.successes + this.stats.failures + this.stats.errors,
@@ -2024,7 +2031,17 @@ class Evaluator {
       usesExampleProvider,
       isPromptfooSampleTarget: testSuite.providers.some(isPromptfooSampleTarget),
       isRedteam: Boolean(options.isRedteam),
-    });
+    };
+
+    if (orchestratorStats) {
+      telemetryProps.orchestratorLaneCount = orchestratorStats.laneCount;
+      telemetryProps.orchestratorRateLimitEvents = orchestratorStats.rateLimitEvents;
+      telemetryProps.orchestratorMaxQueueDepth = orchestratorStats.maxQueueDepth;
+      telemetryProps.orchestratorEffectiveRpm = Math.round(orchestratorStats.effectiveRpm);
+      telemetryProps.orchestratorEffectiveTpm = Math.round(orchestratorStats.effectiveTpm);
+    }
+
+    telemetry.record('eval_ran', telemetryProps);
 
     // Save the eval record to persist durationMs
     if (this.evalRecord.persisted) {

@@ -1,6 +1,6 @@
 import { ProviderLane } from './lane';
 import { GlobalSemaphore } from './semaphore';
-import type { OrchestratorOptions, Task } from './types';
+import type { OrchestratorOptions, OrchestratorStats, Task } from './types';
 import { getProviderKey } from './utils';
 import type { ApiProvider } from '../types/providers';
 
@@ -55,6 +55,42 @@ export class Orchestrator {
     for (const lane of this.lanes.values()) {
       lane.stop(reason);
     }
+  }
+
+  getStats(): OrchestratorStats {
+    const lanes = Array.from(this.lanes.values()).map((lane) => lane.getStats());
+    let totalStarted = 0;
+    let totalCompleted = 0;
+    let totalEstimatedTokens = 0;
+    let rateLimitEvents = 0;
+    let maxQueueDepth = 0;
+    let elapsedMs = 0;
+
+    for (const lane of lanes) {
+      totalStarted += lane.totalStarted;
+      totalCompleted += lane.totalCompleted;
+      totalEstimatedTokens += lane.totalEstimatedTokens;
+      rateLimitEvents += lane.rateLimitEvents;
+      maxQueueDepth = Math.max(maxQueueDepth, lane.maxQueueDepth);
+      elapsedMs = Math.max(elapsedMs, lane.elapsedMs);
+    }
+
+    const minutes = elapsedMs > 0 ? elapsedMs / 60_000 : 0;
+    const effectiveRpm = minutes > 0 ? totalStarted / minutes : 0;
+    const effectiveTpm = minutes > 0 ? totalEstimatedTokens / minutes : 0;
+
+    return {
+      laneCount: lanes.length,
+      totalStarted,
+      totalCompleted,
+      totalEstimatedTokens,
+      rateLimitEvents,
+      maxQueueDepth,
+      elapsedMs,
+      effectiveRpm,
+      effectiveTpm,
+      lanes,
+    };
   }
 
   // Helper to generate key

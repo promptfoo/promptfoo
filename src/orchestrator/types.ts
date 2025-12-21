@@ -20,6 +20,37 @@ export interface TaskRunResult {
   };
 }
 
+export interface ProviderLaneStats {
+  providerKey: string;
+  queueDepth: number;
+  maxQueueDepth: number;
+  inFlight: number;
+  maxConcurrent: number;
+  maxConcurrentDynamic: number;
+  rpm?: number;
+  tpm?: number;
+  totalStarted: number;
+  totalCompleted: number;
+  totalEstimatedTokens: number;
+  rateLimitEvents: number;
+  elapsedMs: number;
+  effectiveRpm: number;
+  effectiveTpm: number;
+}
+
+export interface OrchestratorStats {
+  laneCount: number;
+  totalStarted: number;
+  totalCompleted: number;
+  totalEstimatedTokens: number;
+  rateLimitEvents: number;
+  maxQueueDepth: number;
+  elapsedMs: number;
+  effectiveRpm: number;
+  effectiveTpm: number;
+  lanes: ProviderLaneStats[];
+}
+
 export interface OrchestratorOptions {
   maxConcurrency: number;
   abortSignal?: AbortSignal;

@@ -1,5 +1,6 @@
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
+import { sha256 } from '../../util/createHash';
 import { throwConfigurationError } from './util';
 import type { TokenCredential } from '@azure/identity';
 
@@ -164,6 +165,45 @@ Please choose one of the following options:
       return undefined;
     }
     return `https://${host}`;
+  }
+
+  getRateLimitKey(): string {
+    const apiKey = this.getApiKey();
+    const apiKeyHash = apiKey ? sha256(apiKey).slice(0, 8) : '';
+    const clientId =
+      this.config?.azureClientId || this.env?.AZURE_CLIENT_ID || getEnvString('AZURE_CLIENT_ID');
+    const tenantId =
+      this.config?.azureTenantId || this.env?.AZURE_TENANT_ID || getEnvString('AZURE_TENANT_ID');
+    const authFingerprint = apiKeyHash
+      ? `key-${apiKeyHash}`
+      : clientId
+        ? `client-${sha256(clientId).slice(0, 8)}`
+        : tenantId
+          ? `tenant-${sha256(tenantId).slice(0, 8)}`
+          : 'default';
+    const baseUrl = this.getApiBaseUrl() || this.apiHost || 'unknown-host';
+    let host = baseUrl;
+    try {
+      host = new URL(baseUrl).host;
+    } catch {
+      // Keep raw baseUrl when parsing fails.
+    }
+    return `azure:${this.deploymentName}:${host}:${authFingerprint}`;
+  }
+
+  getInitialLimits(): { rpm?: number; tpm?: number; maxConcurrent?: number } {
+    const config = this.config as {
+      rateLimit?: { rpm?: number; tpm?: number; maxConcurrent?: number };
+      maxConcurrency?: number;
+      maxConcurrent?: number;
+      rpm?: number;
+      tpm?: number;
+    };
+    return {
+      rpm: config.rateLimit?.rpm ?? config.rpm,
+      tpm: config.rateLimit?.tpm ?? config.tpm,
+      maxConcurrent: config.rateLimit?.maxConcurrent ?? config.maxConcurrent ?? config.maxConcurrency,
+    };
   }
 
   id(): string {

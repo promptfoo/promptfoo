@@ -19,6 +19,7 @@ import { hashPrompt } from '../prompts/utils';
 import { PLUGIN_CATEGORIES } from '../redteam/constants';
 import { calculateAttackSuccessRate } from '../redteam/metrics';
 import { getRiskCategorySeverityMap } from '../redteam/sharedFrontend';
+import type { OrchestratorStats } from '../orchestrator/types';
 import { getTraceStore } from '../tracing/store';
 import {
   type CompletedPrompt,
@@ -247,6 +248,7 @@ export default class Eval {
   runtimeOptions?: Partial<import('../types').EvaluateOptions>;
   _shared: boolean = false;
   durationMs?: number;
+  orchestratorStats?: OrchestratorStats;
 
   static async latest() {
     const db = getDb();
@@ -295,6 +297,12 @@ export default class Eval {
       typeof rawDurationMs === 'number' && Number.isFinite(rawDurationMs) && rawDurationMs >= 0
         ? rawDurationMs
         : undefined;
+    const rawOrchestratorStats =
+      resultsObj && 'orchestratorStats' in resultsObj ? resultsObj.orchestratorStats : undefined;
+    const orchestratorStats =
+      rawOrchestratorStats && typeof rawOrchestratorStats === 'object'
+        ? (rawOrchestratorStats as OrchestratorStats)
+        : undefined;
 
     const evalInstance = new Eval(eval_.config, {
       id: eval_.id,
@@ -307,6 +315,7 @@ export default class Eval {
       vars: eval_.vars || [],
       runtimeOptions: (eval_ as any).runtimeOptions,
       durationMs,
+      orchestratorStats,
     });
     if (eval_.results && 'table' in eval_.results) {
       evalInstance.oldResults = eval_.results as EvaluateSummaryV2;
@@ -354,6 +363,7 @@ export default class Eval {
       results?: EvalResult[];
       vars?: string[];
       runtimeOptions?: Partial<import('../types').EvaluateOptions>;
+      orchestratorStats?: OrchestratorStats;
       completedPrompts?: CompletedPrompt[];
     },
   ): Promise<Eval> {
@@ -476,6 +486,7 @@ export default class Eval {
       vars?: string[];
       runtimeOptions?: Partial<import('../types').EvaluateOptions>;
       durationMs?: number;
+      orchestratorStats?: OrchestratorStats;
     },
   ) {
     const createdAt = opts?.createdAt || new Date();
@@ -491,6 +502,7 @@ export default class Eval {
     this.vars = opts?.vars || [];
     this.runtimeOptions = opts?.runtimeOptions;
     this.durationMs = opts?.durationMs;
+    this.orchestratorStats = opts?.orchestratorStats;
   }
 
   version() {
@@ -526,9 +538,16 @@ export default class Eval {
     if (this.useOldResults()) {
       invariant(this.oldResults, 'Old results not found');
       updateObj.results = this.oldResults;
-    } else if (this.durationMs !== undefined) {
-      // For V4 evals, store durationMs in the results column
-      updateObj.results = { durationMs: this.durationMs };
+    } else if (this.durationMs !== undefined || this.orchestratorStats !== undefined) {
+      // For V4 evals, store durationMs and optional orchestrator stats in the results column
+      const resultsPayload: Record<string, unknown> = {};
+      if (this.durationMs !== undefined) {
+        resultsPayload.durationMs = this.durationMs;
+      }
+      if (this.orchestratorStats !== undefined) {
+        resultsPayload.orchestratorStats = this.orchestratorStats;
+      }
+      updateObj.results = resultsPayload;
     }
     db.update(evalsTable).set(updateObj).where(eq(evalsTable.id, this.id)).run();
     this.persisted = true;
@@ -544,6 +563,10 @@ export default class Eval {
 
   setDurationMs(durationMs: number) {
     this.durationMs = durationMs;
+  }
+
+  setOrchestratorStats(orchestratorStats: OrchestratorStats | undefined) {
+    this.orchestratorStats = orchestratorStats;
   }
 
   getPrompts() {
@@ -1023,6 +1046,7 @@ export default class Eval {
       errors: 0,
       tokenUsage: createEmptyTokenUsage(),
       durationMs: this.durationMs,
+      orchestratorStats: this.orchestratorStats,
     };
 
     for (const prompt of this.prompts) {

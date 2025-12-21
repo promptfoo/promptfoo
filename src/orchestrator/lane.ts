@@ -1,6 +1,6 @@
 import logger from '../logger';
 import type { GlobalSemaphore } from './semaphore';
-import type { LaneLimits, Task, TaskRunResult } from './types';
+import type { LaneLimits, ProviderLaneStats, Task, TaskRunResult } from './types';
 
 interface QueueItem {
   task: Task;
@@ -30,6 +30,13 @@ export class ProviderLane {
   private pumping = false;
   private stopped = false;
   private successStreak = 0;
+  private totalStarted = 0;
+  private totalCompleted = 0;
+  private totalEstimatedTokens = 0;
+  private maxQueueDepth = 0;
+  private rateLimitEvents = 0;
+  private firstStartedAt = 0;
+  private lastStartedAt = 0;
 
   private readonly providerKey: string;
   private readonly semaphore: GlobalSemaphore;
@@ -48,6 +55,9 @@ export class ProviderLane {
     this.applyLimits(task.limits);
     return new Promise((resolve, reject) => {
       this.queue.push({ task, resolve, reject });
+      if (this.queue.length > this.maxQueueDepth) {
+        this.maxQueueDepth = this.queue.length;
+      }
       this.pump();
     });
   }
@@ -114,11 +124,18 @@ export class ProviderLane {
           return;
         }
 
+        const task = nextItem.task;
         this.queue.shift();
         this.activeCount++;
-        this.updateRateState(nextItem.task, now);
-
-        const task = nextItem.task;
+        this.totalStarted += 1;
+        if (task.estimatedTokens) {
+          this.totalEstimatedTokens += task.estimatedTokens;
+        }
+        if (!this.firstStartedAt) {
+          this.firstStartedAt = now;
+        }
+        this.lastStartedAt = now;
+        this.updateRateState(task, now);
         void this.semaphore.acquire().then(() => {
           if (this.stopped || this.shouldStop()) {
             this.activeCount--;
@@ -144,6 +161,7 @@ export class ProviderLane {
             .finally(() => {
               this.semaphore.release();
               this.activeCount--;
+              this.totalCompleted += 1;
               this.pump();
             });
         });
@@ -202,6 +220,7 @@ export class ProviderLane {
     }
     this.maxConcurrentDynamic = Math.max(1, Math.floor(this.maxConcurrentDynamic / 2));
     this.successStreak = 0;
+    this.rateLimitEvents += 1;
   }
 
   private recordSuccess(): void {
@@ -220,5 +239,33 @@ export class ProviderLane {
       return;
     }
     this.recordRateLimit(result.rateLimit.retryAfterMs);
+  }
+
+  getStats(): ProviderLaneStats {
+    const elapsedMs =
+      this.firstStartedAt && this.lastStartedAt
+        ? Math.max(this.lastStartedAt - this.firstStartedAt, 1)
+        : 0;
+    const minutes = elapsedMs > 0 ? elapsedMs / 60_000 : 0;
+    const effectiveRpm = minutes > 0 ? this.totalStarted / minutes : 0;
+    const effectiveTpm = minutes > 0 ? this.totalEstimatedTokens / minutes : 0;
+
+    return {
+      providerKey: this.providerKey,
+      queueDepth: this.queue.length,
+      maxQueueDepth: this.maxQueueDepth,
+      inFlight: this.activeCount,
+      maxConcurrent: this.maxConcurrent,
+      maxConcurrentDynamic: this.maxConcurrentDynamic,
+      rpm: this.rpm,
+      tpm: this.tpm,
+      totalStarted: this.totalStarted,
+      totalCompleted: this.totalCompleted,
+      totalEstimatedTokens: this.totalEstimatedTokens,
+      rateLimitEvents: this.rateLimitEvents,
+      elapsedMs,
+      effectiveRpm,
+      effectiveTpm,
+    };
   }
 }

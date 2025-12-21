@@ -1,4 +1,5 @@
 import { getEnvString } from '../../envars';
+import { sha256 } from '../../util/createHash';
 
 import type { EnvVarKey } from '../../envars';
 import type { EnvOverrides } from '../../types/env';
@@ -75,6 +76,36 @@ export class OpenAiGenericProvider implements ApiProvider {
       this.env?.OPENAI_API_KEY ||
       getEnvString('OPENAI_API_KEY')
     );
+  }
+
+  getRateLimitKey(): string {
+    const apiKey = this.getApiKey();
+    const apiKeyHash = apiKey ? sha256(apiKey).slice(0, 8) : 'no-key';
+    const org = this.getOrganization();
+    const orgHash = org ? sha256(org).slice(0, 8) : 'no-org';
+    const apiUrl = this.getApiUrl();
+    let host = apiUrl;
+    try {
+      host = new URL(apiUrl).host;
+    } catch {
+      // Keep raw apiUrl when parsing fails.
+    }
+    return `openai:${this.modelName}:${host}:${orgHash}:${apiKeyHash}`;
+  }
+
+  getInitialLimits(): { rpm?: number; tpm?: number; maxConcurrent?: number } {
+    const config = this.config as {
+      rateLimit?: { rpm?: number; tpm?: number; maxConcurrent?: number };
+      maxConcurrency?: number;
+      maxConcurrent?: number;
+      rpm?: number;
+      tpm?: number;
+    };
+    return {
+      rpm: config.rateLimit?.rpm ?? config.rpm,
+      tpm: config.rateLimit?.tpm ?? config.tpm,
+      maxConcurrent: config.rateLimit?.maxConcurrent ?? config.maxConcurrent ?? config.maxConcurrency,
+    };
   }
 
   requiresApiKey(): boolean {
