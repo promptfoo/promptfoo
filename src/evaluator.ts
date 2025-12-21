@@ -51,6 +51,7 @@ import { loadFunction, parseFileUrl } from './util/functions/loadFunction';
 import invariant from './util/invariant';
 import { safeJsonStringify, summarizeEvaluateResultForLogging } from './util/json';
 import { promptYesNo } from './util/readline';
+import { getNunjucksEngine } from './util/templates';
 import { sleep } from './util/time';
 import { TokenUsageTracker } from './util/tokenUsage';
 import {
@@ -59,7 +60,6 @@ import {
   createEmptyAssertions,
   createEmptyTokenUsage,
 } from './util/tokenUsageUtils';
-import { getNunjucksEngine } from './util/templates';
 import { type TransformContext, TransformInputType, transform } from './util/transform';
 import type { SingleBar } from 'cli-progress';
 import type winston from 'winston';
@@ -912,7 +912,10 @@ class Evaluator {
             let templatedDescription = test.description;
             if (test.description && typeof test.description === 'string') {
               try {
-                templatedDescription = getNunjucksEngine().renderString(test.description, mergedVars);
+                templatedDescription = getNunjucksEngine().renderString(
+                  test.description,
+                  mergedVars,
+                );
               } catch (error) {
                 logger.debug(`Failed to template test description: ${error}`);
                 // Keep original description if templating fails

@@ -119,10 +119,7 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
 
   if (options.pattern) {
     const pattern = new RegExp(options.pattern);
-    logger.debug(`Pattern filter: ${options.pattern}`);
-    logger.debug(`Test descriptions: ${tests.map((t) => t.description).join(', ')}`);
     tests = tests.filter((test) => test.description && pattern.test(test.description));
-    logger.debug(`After pattern filter: ${tests.length} tests`);
   }
 
   if (options.firstN !== undefined) {

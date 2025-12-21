@@ -411,27 +411,19 @@ export async function doEval(
     }
     // load scenarios or tests from an external file
     if (testSuite.scenarios) {
-      logger.debug(`Loading scenarios from external files, count: ${testSuite.scenarios.length}`);
-      logger.debug(`First scenario before loading:`, testSuite.scenarios[0]);
       testSuite.scenarios = (await maybeLoadFromExternalFile(testSuite.scenarios)) as Scenario[];
       // Flatten the scenarios array in case glob patterns were used
       testSuite.scenarios = testSuite.scenarios.flat();
-      logger.debug(`After loading, scenarios count: ${testSuite.scenarios.length}`);
-      logger.debug(`First scenario after loading:`, testSuite.scenarios[0]);
     }
     for (const scenario of testSuite.scenarios || []) {
-      logger.debug(`Checking scenario tests, tests type: ${typeof scenario.tests}, is array: ${Array.isArray(scenario.tests)}, length: ${Array.isArray(scenario.tests) ? scenario.tests.length : 'N/A'}`);
       if (scenario.tests) {
         scenario.tests = await maybeLoadFromExternalFile(scenario.tests);
-        logger.debug(`After loading, scenario tests length: ${Array.isArray(scenario.tests) ? scenario.tests.length : 'N/A'}`);
       }
     }
 
     // Expand scenarios before filtering so that test descriptions can be templated
     if (!resumeEval && testSuite.scenarios && testSuite.scenarios.length > 0) {
-      logger.debug(`Expanding ${testSuite.scenarios.length} scenarios`);
       const expandedTests = expandScenarios(testSuite);
-      logger.debug(`Expanded to ${expandedTests.length} tests`);
       // Merge with existing tests (if any)
       testSuite.tests = [...(testSuite.tests || []), ...expandedTests];
       // Clear scenarios since they've been expanded

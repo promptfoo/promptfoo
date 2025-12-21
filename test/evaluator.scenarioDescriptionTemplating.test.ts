@@ -4,6 +4,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { evaluate } from '../src/evaluator';
 import { runDbMigrations } from '../src/migrate';
 import Eval from '../src/models/eval';
+
 import type { ApiProvider, Prompt, TestSuite } from '../src/types';
 
 const mockApiProvider: ApiProvider = {
@@ -60,7 +61,7 @@ describe('Scenario description templating', () => {
     // Check that test descriptions were templated correctly
     const summary = await results.toEvaluateSummary();
     expect(summary.results).toHaveLength(2);
-    
+
     const spanishTest = summary.results.find((r) => r.testCase?.vars?.language === 'Spanish');
     expect(spanishTest?.testCase?.description).toBe('Translated Hello World from Spanish');
 
@@ -210,8 +211,6 @@ describe('Scenario description templating', () => {
 
     const summary = await results.toEvaluateSummary();
     expect(summary.results).toHaveLength(1);
-    expect(summary.results[0]?.testCase?.description).toBe(
-      'Test with global, scenario, and test',
-    );
+    expect(summary.results[0]?.testCase?.description).toBe('Test with global, scenario, and test');
   });
 });
