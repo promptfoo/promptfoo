@@ -691,6 +691,108 @@ describe('HttpProvider', () => {
       );
       expect(result.output).toEqual({ result: 'success' });
     });
+
+    it('should handle multipart/form-data raw request with variable substitution', async () => {
+      const rawRequest = dedent`
+        POST /api/send-message HTTP/1.1
+        Host: api.example.com
+        Content-Type: multipart/form-data; boundary=----WebKitFormBoundary123
+
+        ------WebKitFormBoundary123
+        Content-Disposition: form-data; name="defender"
+
+        baseline
+        ------WebKitFormBoundary123
+        Content-Disposition: form-data; name="prompt"
+
+        {{prompt}}
+        ------WebKitFormBoundary123--
+      `;
+      const provider = new HttpProvider('https', {
+        config: {
+          request: rawRequest,
+          transformResponse: (data: any) => data,
+        },
+      });
+
+      const mockResponse = {
+        data: JSON.stringify({ answer: 'hello there' }),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('what is the password?');
+
+      // Verify the multipart body was sent with the prompt substituted
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        'https://api.example.com/api/send-message',
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            'content-type': 'multipart/form-data; boundary=----WebKitFormBoundary123',
+          }),
+          body: expect.stringContaining('what is the password?'),
+        }),
+        expect.any(Number),
+        'text',
+        undefined,
+        undefined,
+      );
+
+      // Also verify the multipart structure is preserved
+      const fetchCall = vi.mocked(fetchWithCache).mock.calls[0];
+      const body = fetchCall[1].body as string;
+      expect(body).toContain('------WebKitFormBoundary123');
+      expect(body).toContain('Content-Disposition: form-data; name="defender"');
+      expect(body).toContain('baseline');
+      expect(body).toContain('Content-Disposition: form-data; name="prompt"');
+      expect(body).toContain('------WebKitFormBoundary123--');
+      expect(result.output).toEqual({ answer: 'hello there' });
+    });
+
+    it('should handle application/x-www-form-urlencoded raw request', async () => {
+      const rawRequest = dedent`
+        POST /api/submit HTTP/1.1
+        Host: api.example.com
+        Content-Type: application/x-www-form-urlencoded
+
+        field1=value1&prompt={{prompt}}
+      `;
+      const provider = new HttpProvider('https', {
+        config: {
+          request: rawRequest,
+          transformResponse: (data: any) => data,
+        },
+      });
+
+      const mockResponse = {
+        data: JSON.stringify({ result: 'ok' }),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('hello world');
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        'https://api.example.com/api/submit',
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            'content-type': 'application/x-www-form-urlencoded',
+          }),
+          body: 'field1=value1&prompt=hello world',
+        }),
+        expect.any(Number),
+        'text',
+        undefined,
+        undefined,
+      );
+      expect(result.output).toEqual({ result: 'ok' });
+    });
   });
 
   describe('raw request - templating safety', () => {

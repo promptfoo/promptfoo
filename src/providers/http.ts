@@ -1092,6 +1092,26 @@ function parseRawRequest(input: string) {
   }
 }
 
+/**
+ * Extract the raw body from an HTTP request string.
+ * Used when http-z parses the body into params (e.g., multipart/form-data, application/x-www-form-urlencoded)
+ * instead of preserving the raw text.
+ */
+function extractBodyFromRawRequest(rawRequest: string): string | undefined {
+  // Use the same normalization as parseRawRequest for consistency
+  const normalized = rawRequest.replace(/\r\n/g, '\n').trim();
+  const adjusted = normalized.replace(/\n/g, '\r\n');
+
+  // Find header/body separator (blank line)
+  const separatorIndex = adjusted.indexOf('\r\n\r\n');
+  if (separatorIndex === -1) {
+    return undefined;
+  }
+
+  const body = adjusted.slice(separatorIndex + 4);
+  return body.length > 0 ? body : undefined;
+}
+
 export function determineRequestBody(
   contentType: boolean,
   parsedPrompt: any,
@@ -2165,11 +2185,23 @@ export class HttpProvider implements ApiProvider {
 
     // Prepare fetch options with dispatcher if HTTPS agent is configured
     const httpsAgent = await this.getHttpsAgent();
+
+    // Determine body content:
+    // - For JSON/text bodies, http-z provides body.text
+    // - For multipart/form-data and x-www-form-urlencoded, http-z parses into body.params
+    //   but we need the raw body text, so extract it from the rendered request
+    let bodyContent: string | undefined;
+    if (parsedRequest.body?.text) {
+      bodyContent = parsedRequest.body.text.trim();
+    } else if (parsedRequest.body?.params) {
+      bodyContent = extractBodyFromRawRequest(renderedRequest);
+    }
+
     const fetchOptions: any = {
       method: parsedRequest.method,
       headers: parsedRequest.headers,
       ...(options?.abortSignal && { signal: options.abortSignal }),
-      ...(parsedRequest.body?.text && { body: parsedRequest.body.text.trim() }),
+      ...(bodyContent && { body: bodyContent }),
     };
 
     // Add HTTPS agent as dispatcher if configured
