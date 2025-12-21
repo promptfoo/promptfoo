@@ -7,6 +7,9 @@ import * as vertexUtil from '../../../src/providers/google/util';
 import { VertexChatProvider } from '../../../src/providers/google/vertex';
 import type { JSONClient } from 'google-auth-library/build/src/auth/googleauth';
 
+let originalVertexApiKey: string | undefined;
+let originalGeminiApiKey: string | undefined;
+
 // Hoisted mocks for cache
 const mockCacheGet = vi.hoisted(() => vi.fn());
 const mockCacheSet = vi.hoisted(() => vi.fn());
@@ -103,6 +106,27 @@ vi.mock('../../../src/esm', async (importOriginal) => {
     ...(await importOriginal()),
     importModule: mockImportModule,
   };
+});
+
+beforeEach(() => {
+  originalVertexApiKey = process.env.VERTEX_API_KEY;
+  originalGeminiApiKey = process.env.GEMINI_API_KEY;
+  delete process.env.VERTEX_API_KEY;
+  delete process.env.GEMINI_API_KEY;
+});
+
+afterEach(() => {
+  if (originalVertexApiKey !== undefined) {
+    process.env.VERTEX_API_KEY = originalVertexApiKey;
+  } else {
+    delete process.env.VERTEX_API_KEY;
+  }
+
+  if (originalGeminiApiKey !== undefined) {
+    process.env.GEMINI_API_KEY = originalGeminiApiKey;
+  } else {
+    delete process.env.GEMINI_API_KEY;
+  }
 });
 
 describe('VertexChatProvider.callGeminiApi', () => {

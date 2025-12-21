@@ -1,4 +1,3 @@
-import async from 'async';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import { globSync } from 'glob';
@@ -17,6 +16,8 @@ import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluator
 import logger from './logger';
 import { selectMaxScore } from './matchers';
 import { generateIdFromPrompt } from './models/prompt';
+import { Orchestrator } from './orchestrator';
+import type { LaneLimits, TaskRunResult } from './orchestrator/types';
 import { CIProgressReporter } from './progress/ciProgressReporter';
 import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
 import { providerRegistry } from './providers/providerRegistry';
@@ -46,6 +47,7 @@ import {
   type TestSuite,
 } from './types/index';
 import { isApiProvider } from './types/providers';
+import type { ApiProvider } from './types/providers';
 import { JsonlFileWriter } from './util/exportToFile/writeToFile';
 import { loadFunction, parseFileUrl } from './util/functions/loadFunction';
 import invariant from './util/invariant';
@@ -289,6 +291,7 @@ export async function runEval({
   registers,
   isRedteam,
   abortSignal,
+  skipDelay,
 }: RunEvalOptions): Promise<EvaluateResult[]> {
   // Use the original prompt to set the label, not renderedPrompt
   const promptLabel = prompt.label;
@@ -428,14 +431,16 @@ export async function runEval({
 
     logger.debug(`Evaluator response = ${JSON.stringify(response).substring(0, 100)}...`);
     logger.debug(
-      `Evaluator checking cached flag: response.cached = ${Boolean(response.cached)}, provider.delay = ${provider.delay}`,
+      `Evaluator checking cached flag: response.cached = ${Boolean(response.cached)}, provider.delay = ${provider.delay}, skipDelay = ${Boolean(skipDelay)}`,
     );
 
-    if (!response.cached && provider.delay > 0) {
+    if (!response.cached && provider.delay > 0 && !skipDelay) {
       logger.debug(`Sleeping for ${provider.delay}ms`);
       await sleep(provider.delay);
     } else if (response.cached) {
       logger.debug(`Skipping delay because response is cached`);
+    } else if (skipDelay) {
+      logger.debug(`Skipping delay because skipDelay is set`);
     }
 
     const ret: EvaluateResult = {
@@ -1178,7 +1183,10 @@ class Evaluator {
     // Actually run the eval
     let numComplete = 0;
 
-    const processEvalStep = async (evalStep: RunEvalOptions, index: number | string) => {
+    const processEvalStep = async (
+      evalStep: RunEvalOptions,
+      index: number | string,
+    ): Promise<EvaluateResult[]> => {
       if (typeof index !== 'number') {
         throw new Error('Expected index to be a number');
       }
@@ -1321,10 +1329,14 @@ class Evaluator {
           options.progressCallback(numComplete, runEvalOptions.length, index, evalStep, metrics);
         }
       }
+      return rows;
     };
 
     // Add a wrapper function that implements timeout
-    const processEvalStepWithTimeout = async (evalStep: RunEvalOptions, index: number | string) => {
+    const processEvalStepWithTimeout = async (
+      evalStep: RunEvalOptions,
+      index: number | string,
+    ): Promise<EvaluateResult[] | undefined> => {
       // Get timeout value from options or environment, defaults to 0 (no timeout)
       const timeoutMs = options.timeoutMs || getEvalTimeoutMs();
 
@@ -1346,7 +1358,7 @@ class Evaluator {
       try {
         return await Promise.race([
           processEvalStep(evalStepWithSignal, index),
-          new Promise<void>((_, reject) => {
+          new Promise<never>((_, reject) => {
             const timeoutId = setTimeout(() => {
               // Abort any ongoing requests
               abortController.abort();
@@ -1434,6 +1446,7 @@ class Evaluator {
             },
           );
         }
+        return;
       }
     };
 
@@ -1474,6 +1487,71 @@ class Evaluator {
       } else {
         logger.debug(`Eval #${index + 1} complete (${numComplete} of ${runEvalOptions.length})`);
       }
+    };
+
+    const extractRateLimitInfo = (rows: EvaluateResult[]): TaskRunResult | void => {
+      for (const row of rows) {
+        const status = row.response?.metadata?.http?.status;
+        if (status === 429) {
+          const headers = row.response?.metadata?.http?.headers;
+          const retryAfterMs = parseRetryAfterMs(headers);
+          return { rateLimit: { retryAfterMs } };
+        }
+      }
+      return;
+    };
+
+    const parseRetryAfterMs = (
+      headers: Record<string, string> | undefined,
+    ): number | undefined => {
+      if (!headers) {
+        return;
+      }
+      const normalized = Object.fromEntries(
+        Object.entries(headers).map(([key, value]) => [key.toLowerCase(), value]),
+      );
+      const retryAfter = normalized['retry-after'];
+      if (!retryAfter) {
+        return;
+      }
+      const parsedSeconds = Number.parseInt(retryAfter, 10);
+      if (!Number.isNaN(parsedSeconds)) {
+        return parsedSeconds * 1000;
+      }
+      const parsedDate = Date.parse(retryAfter);
+      if (!Number.isNaN(parsedDate)) {
+        return Math.max(parsedDate - Date.now(), 0);
+      }
+      return;
+    };
+
+    const buildLaneLimits = (provider: ApiProvider, delayMs: number): LaneLimits => {
+      const limits: LaneLimits = {};
+      if (delayMs > 0) {
+        limits.minGapMs = delayMs;
+      }
+      if (typeof provider.getInitialLimits === 'function') {
+        const initial = provider.getInitialLimits();
+        limits.maxConcurrent = initial.maxConcurrent;
+        limits.rpm = initial.rpm;
+        limits.tpm = initial.tpm;
+      }
+      const configLimits = provider.config?.rateLimit;
+      if (configLimits && typeof configLimits === 'object') {
+        limits.maxConcurrent =
+          limits.maxConcurrent ??
+          (typeof configLimits.maxConcurrent === 'number' ? configLimits.maxConcurrent : undefined);
+        limits.rpm =
+          limits.rpm ??
+          (typeof configLimits.rpm === 'number' ? configLimits.rpm : undefined);
+        limits.tpm =
+          limits.tpm ??
+          (typeof configLimits.tpm === 'number' ? configLimits.tpm : undefined);
+      }
+      if (typeof provider.config?.maxConcurrency === 'number') {
+        limits.maxConcurrent = limits.maxConcurrent ?? provider.config.maxConcurrency;
+      }
+      return limits;
     };
 
     // Separate serial and concurrent eval options
@@ -1523,13 +1601,35 @@ class Evaluator {
       }
 
       // Then run concurrent evaluations
-      await async.forEachOfLimit(concurrentRunEvalOptions, concurrency, async (evalStep) => {
-        checkAbort();
-        const idx = runEvalOptions.indexOf(evalStep);
-        await processEvalStepWithTimeout(evalStep, idx);
-        processedIndices.add(idx);
-        await this.evalRecord.addPrompts(prompts);
-      });
+      if (concurrentRunEvalOptions.length > 0) {
+        const orchestrator = new Orchestrator({
+          maxConcurrency: concurrency,
+          abortSignal: options.abortSignal,
+        });
+        const tasks = concurrentRunEvalOptions.map((evalStep) => {
+          const idx = runEvalOptions.indexOf(evalStep);
+          const delay =
+            evalStep.delay ?? evalStep.provider.delay ?? getEnvInt('PROMPTFOO_DELAY_MS', 0);
+          const laneLimits = buildLaneLimits(evalStep.provider, delay);
+          return {
+            id: `eval-${evalStep.testIdx}-${evalStep.promptIdx}-${evalStep.repeatIndex}`,
+            providerKey: orchestrator.getProviderKey(evalStep.provider),
+            limits: laneLimits,
+            run: async () => {
+              checkAbort();
+              const rows = await processEvalStepWithTimeout({ ...evalStep, skipDelay: true }, idx);
+              processedIndices.add(idx);
+              await this.evalRecord.addPrompts(prompts);
+              if (!rows) {
+                return;
+              }
+              return extractRateLimitInfo(rows);
+            },
+          };
+        });
+
+        await orchestrator.run(tasks);
+      }
     } catch (err) {
       if (options.abortSignal?.aborted) {
         // User interruption or max duration timeout

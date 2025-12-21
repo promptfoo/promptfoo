@@ -96,6 +96,8 @@ export interface ApiProvider {
   callEmbeddingApi?: (input: string) => Promise<ProviderEmbeddingResponse>;
   config?: any;
   delay?: number;
+  getRateLimitKey?: () => string;
+  getInitialLimits?: () => { rpm?: number; tpm?: number; maxConcurrent?: number };
   getSessionId?: () => string;
   label?: ProviderLabel;
   transform?: string;

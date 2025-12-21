@@ -7,14 +7,24 @@ import {
 
 describe('nextCommand', () => {
   let originalEnv: NodeJS.ProcessEnv;
+  let originalExecPath: string;
 
   beforeEach(() => {
     originalEnv = process.env;
     process.env = { ...originalEnv };
+    originalExecPath = process.execPath;
+    Object.defineProperty(process, 'execPath', {
+      value: '/usr/bin/node',
+      configurable: true,
+    });
   });
 
   afterEach(() => {
     process.env = originalEnv;
+    Object.defineProperty(process, 'execPath', {
+      value: originalExecPath,
+      configurable: true,
+    });
   });
 
   describe('detectInstaller', () => {

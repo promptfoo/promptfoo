@@ -2591,7 +2591,7 @@ describe('evaluator', () => {
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, evalRecord, {});
 
-    expect(sleep).toHaveBeenCalledWith(100);
+    // Orchestrator handles delay via rate limiting, so single task doesn't sleep
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(1);
   });
 

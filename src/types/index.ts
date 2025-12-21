@@ -163,6 +163,12 @@ export interface RunEvalOptions {
    * This is passed to the provider's callApi function
    */
   abortSignal?: AbortSignal;
+
+  /**
+   * If true, the evaluator will not sleep after the provider call.
+   * This is used when the orchestrator handles rate limiting/delay.
+   */
+  skipDelay?: boolean;
 }
 
 const EvaluateOptionsSchema = z.object({
