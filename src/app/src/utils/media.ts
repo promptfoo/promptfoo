@@ -36,15 +36,16 @@ function resolveMediaUrl(url?: string | null): string | undefined {
     return undefined;
   }
 
-  // Try resolving as blob/storage ref first
+  // Legacy API path - prepend base URL (check before resolveBlobUri since
+  // that function returns paths starting with '/' directly without apiBaseUrl)
+  if (url.startsWith('/api/')) {
+    return withApiBase(url);
+  }
+
+  // Try resolving as blob/storage ref
   const blobUrl = resolveBlobUri(url);
   if (blobUrl) {
     return blobUrl;
-  }
-
-  // Legacy API path - prepend base URL
-  if (url.startsWith('/api/')) {
-    return withApiBase(url);
   }
 
   // External URLs and data URIs pass through

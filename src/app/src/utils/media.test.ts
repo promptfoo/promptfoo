@@ -371,14 +371,14 @@ describe('resolveVideoSource', () => {
       expect(result?.src).toBe('https://api.example.com/api/media/video/abc123.mp4');
     });
 
-    it('returns legacy /api/ paths unchanged (browser resolves relative to domain)', () => {
-      vi.mocked(useApiConfig.getState).mockReturnValue(mockState('https://api.example.com'));
+    it('returns legacy /api/ paths unchanged when no apiBaseUrl is set (browser resolves relative to domain)', () => {
+      // When no apiBaseUrl is set, relative paths are returned as-is for browser resolution
+      vi.mocked(useApiConfig.getState).mockReturnValue(mockState(''));
 
       const result = resolveVideoSource({
         url: '/api/output/video/test-uuid/video.mp4',
       });
 
-      // Legacy /api/ paths starting with / are returned as-is for browser resolution
       expect(result?.src).toBe('/api/output/video/test-uuid/video.mp4');
     });
 
