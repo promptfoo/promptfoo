@@ -14,7 +14,7 @@ export async function addSimbaTestCases(
 ): Promise<TestCase[]> {
   logger.warn(
     'The "simba" strategy has been deprecated and removed. ' +
-      'This strategy will be skipped. Consider using "goat" or "crescendo" as alternatives.',
+      'This strategy will be skipped. Consider using "jailbreak:hydra" as an alternative.',
   );
   return [];
 }
