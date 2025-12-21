@@ -46,6 +46,7 @@ interface SessionState {
   isActive: boolean;
   audioContentId: string;
   promptName: string;
+  audioContentActive: boolean; // Track if audio content block is currently open
 }
 
 /**
@@ -160,6 +161,7 @@ export class NovaSonicConnection extends EventEmitter {
   private responsePromise: Promise<any> | null = null;
   private connectionTimeout: NodeJS.Timeout | null = null;
   private cumulativeAudioPositionMs: number = 0;
+  private hasReceivedAudio: boolean = false; // Track if we've received any audio
 
   constructor(config: VoiceProviderConfig) {
     super();
@@ -222,6 +224,7 @@ export class NovaSonicConnection extends EventEmitter {
       isActive: true,
       audioContentId: crypto.randomUUID(),
       promptName: crypto.randomUUID(),
+      audioContentActive: false, // Will be set true after contentStart
     };
 
     // Start the bidirectional stream
@@ -265,19 +268,10 @@ export class NovaSonicConnection extends EventEmitter {
       await this.sendSystemPrompt(this.config.instructions);
     }
 
-    // Start audio content
-    await this.sendEvent({
-      event: {
-        contentStart: {
-          promptName: this.session.promptName,
-          contentName: this.session.audioContentId,
-          type: 'AUDIO',
-          interactive: true,
-          role: 'USER',
-          audioInputConfiguration: DEFAULT_CONFIG.audio.input,
-        },
-      },
-    });
+    // Note: We don't start audio content here - it's started lazily
+    // when sendAudio() is called or when we need to trigger a response
+    // with sendInitialPrompt(). This avoids "Cannot end content as no
+    // content data was received" errors.
 
     // Start processing responses in background
     this.processResponses();
@@ -299,6 +293,26 @@ export class NovaSonicConnection extends EventEmitter {
     if (!this.isReady() || !this.session) {
       logger.warn('[NovaSonic] Cannot send audio: not ready');
       return;
+    }
+
+    // Mark that we've received audio input
+    this.hasReceivedAudio = true;
+
+    // Make sure audio content is started
+    if (!this.session.audioContentActive) {
+      this.sendEvent({
+        event: {
+          contentStart: {
+            promptName: this.session.promptName,
+            contentName: this.session.audioContentId,
+            type: 'AUDIO',
+            interactive: true,
+            role: 'USER',
+            audioInputConfiguration: DEFAULT_CONFIG.audio.input,
+          },
+        },
+      });
+      this.session.audioContentActive = true;
     }
 
     // Resample from 24kHz to 8kHz
@@ -329,6 +343,12 @@ export class NovaSonicConnection extends EventEmitter {
       return;
     }
 
+    // Only end content if it's currently active
+    if (!this.session.audioContentActive) {
+      logger.debug('[NovaSonic] Audio content not active, skipping commit');
+      return;
+    }
+
     // End the current audio content
     this.sendEvent({
       event: {
@@ -339,7 +359,8 @@ export class NovaSonicConnection extends EventEmitter {
       },
     });
 
-    // Generate new content ID for next turn
+    // Mark content as inactive and generate new ID for next turn
+    this.session.audioContentActive = false;
     this.session.audioContentId = crypto.randomUUID();
 
     logger.debug('[NovaSonic] Audio committed');
@@ -357,6 +378,20 @@ export class NovaSonicConnection extends EventEmitter {
       return;
     }
 
+    // If no audio has been received yet, we need to trigger an initial
+    // response by sending a brief text prompt (for "target speaks first")
+    if (!this.hasReceivedAudio) {
+      logger.debug('[NovaSonic] Triggering initial response with text prompt');
+      this.sendInitialPrompt();
+      return;
+    }
+
+    // Only start new content if previous content was ended
+    if (this.session.audioContentActive) {
+      logger.debug('[NovaSonic] Audio content already active, skipping contentStart');
+      return;
+    }
+
     // Start new audio content for next user turn
     this.sendEvent({
       event: {
@@ -370,8 +405,62 @@ export class NovaSonicConnection extends EventEmitter {
         },
       },
     });
+    this.session.audioContentActive = true;
 
     logger.debug('[NovaSonic] Response requested, new audio content started');
+  }
+
+  /**
+   * Send an initial prompt to trigger Nova Sonic to speak first.
+   * This is needed because Nova Sonic waits for input before responding.
+   * We send a brief silent audio chunk followed by contentEnd to trigger the response.
+   */
+  private async sendInitialPrompt(): Promise<void> {
+    if (!this.session) return;
+
+    // Start audio content
+    await this.sendEvent({
+      event: {
+        contentStart: {
+          promptName: this.session.promptName,
+          contentName: this.session.audioContentId,
+          type: 'AUDIO',
+          interactive: true,
+          role: 'USER',
+          audioInputConfiguration: DEFAULT_CONFIG.audio.input,
+        },
+      },
+    });
+    this.session.audioContentActive = true;
+
+    // Send a 1 second silent audio chunk at 8kHz to trigger VAD
+    // 8kHz * 1s * 2 bytes/sample = 16000 bytes
+    const silentBuffer = Buffer.alloc(16000, 0);
+    await this.sendEvent({
+      event: {
+        audioInput: {
+          promptName: this.session.promptName,
+          contentName: this.session.audioContentId,
+          content: silentBuffer.toString('base64'),
+        },
+      },
+    });
+
+    // End the audio content to trigger response
+    await this.sendEvent({
+      event: {
+        contentEnd: {
+          promptName: this.session.promptName,
+          contentName: this.session.audioContentId,
+        },
+      },
+    });
+
+    // Mark as inactive and generate new ID for next turn
+    this.session.audioContentActive = false;
+    this.session.audioContentId = crypto.randomUUID();
+
+    logger.debug('[NovaSonic] Initial silent audio sent to trigger response');
   }
 
   /**
@@ -579,9 +668,13 @@ export class NovaSonicConnection extends EventEmitter {
    * Handle Nova Sonic event and emit VoiceConnection events.
    */
   private handleNovaEvent(data: { event?: Record<string, unknown> }): void {
-    if (!data.event) return;
+    if (!data.event) {
+      logger.debug('[NovaSonic] Received non-event data:', { data });
+      return;
+    }
 
     const eventType = Object.keys(data.event)[0];
+    logger.debug('[NovaSonic] Processing event:', { type: eventType });
     const eventData = data.event[eventType] as Record<string, unknown>;
 
     switch (eventType) {
