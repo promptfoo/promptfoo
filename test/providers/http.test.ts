@@ -743,7 +743,8 @@ describe('HttpProvider', () => {
 
       // Also verify the multipart structure is preserved
       const fetchCall = vi.mocked(fetchWithCache).mock.calls[0];
-      const body = fetchCall[1].body as string;
+      expect(fetchCall).toBeDefined();
+      const body = fetchCall?.[1]?.body as string;
       expect(body).toContain('------WebKitFormBoundary123');
       expect(body).toContain('Content-Disposition: form-data; name="defender"');
       expect(body).toContain('baseline');
