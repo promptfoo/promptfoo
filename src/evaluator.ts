@@ -59,6 +59,7 @@ import {
   createEmptyAssertions,
   createEmptyTokenUsage,
 } from './util/tokenUsageUtils';
+import { getNunjucksEngine } from './util/templates';
 import { type TransformContext, TransformInputType, transform } from './util/transform';
 import type { SingleBar } from 'cli-progress';
 import type winston from 'winston';
@@ -900,15 +901,30 @@ class Evaluator {
               mergedMetadata.conversationId = `__scenario_${scenarioIndex}__`;
             }
 
+            // Merge vars from all sources
+            const mergedVars = {
+              ...(typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest?.vars : {}),
+              ...data.vars,
+              ...test.vars,
+            };
+
+            // Template the test description with merged vars if description exists
+            let templatedDescription = test.description;
+            if (test.description && typeof test.description === 'string') {
+              try {
+                templatedDescription = getNunjucksEngine().renderString(test.description, mergedVars);
+              } catch (error) {
+                logger.debug(`Failed to template test description: ${error}`);
+                // Keep original description if templating fails
+              }
+            }
+
             return {
               ...(typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : {}),
               ...data,
               ...test,
-              vars: {
-                ...(typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest?.vars : {}),
-                ...data.vars,
-                ...test.vars,
-              },
+              description: templatedDescription,
+              vars: mergedVars,
               options: {
                 ...(typeof testSuite.defaultTest === 'object'
                   ? testSuite.defaultTest?.options
