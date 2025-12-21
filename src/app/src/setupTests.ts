@@ -7,8 +7,22 @@ import 'prismjs/components/prism-json';
 import 'prismjs/components/prism-yaml';
 import 'prismjs/components/prism-http';
 
+import { webcrypto } from 'node:crypto';
 import * as matchers from '@testing-library/jest-dom/matchers';
 import { afterEach, expect, vi } from 'vitest';
+
+/**
+ * Polyfill crypto.subtle for jsdom environment.
+ * jsdom doesn't support SubtleCrypto, but Node.js provides it via webcrypto.
+ * This is needed for browser modules that use crypto.subtle.digest().
+ */
+if (!globalThis.crypto?.subtle) {
+  Object.defineProperty(globalThis, 'crypto', {
+    value: webcrypto,
+    writable: true,
+    configurable: true,
+  });
+}
 
 // Extend vitest's expect with jest-dom matchers
 expect.extend(matchers);
