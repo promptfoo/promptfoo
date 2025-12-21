@@ -261,7 +261,9 @@ describe('resolveVideoSource', () => {
         blobRef: 'promptfoo://blob/abc123def456789012345678901234567890',
       });
 
-      expect(result?.src).toBe('https://api.example.com/api/blobs/abc123def456789012345678901234567890');
+      expect(result?.src).toBe(
+        'https://api.example.com/api/blobs/abc123def456789012345678901234567890',
+      );
     });
 
     it('prepends apiBaseUrl to storageRef paths', () => {

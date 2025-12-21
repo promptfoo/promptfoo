@@ -27,6 +27,34 @@ function withApiBase(apiPath: string): string {
   return base ? `${base}${apiPath}` : apiPath;
 }
 
+/**
+ * Resolves a URL that could be a storage ref, blob URI, legacy API path, or external URL.
+ * Returns the resolved URL or undefined if unrecognized.
+ */
+function resolveMediaUrl(url?: string | null): string | undefined {
+  if (!url) {
+    return undefined;
+  }
+
+  // Try resolving as blob/storage ref first
+  const blobUrl = resolveBlobUri(url);
+  if (blobUrl) {
+    return blobUrl;
+  }
+
+  // Legacy API path - prepend base URL
+  if (url.startsWith('/api/')) {
+    return withApiBase(url);
+  }
+
+  // External URLs and data URIs pass through
+  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) {
+    return url;
+  }
+
+  return undefined;
+}
+
 export function resolveBlobUri(uri?: string | null): string | undefined {
   if (!uri) {
     return undefined;
@@ -138,61 +166,23 @@ export function resolveVideoSource(
     return null;
   }
 
-  let src: string | undefined;
-
-  // Try blob reference first
-  const blobUrl = resolveBlobRef(video.blobRef);
-  if (blobUrl) {
-    src = blobUrl;
-  }
-
-  // Try storage reference
-  if (!src && video.storageRef?.key) {
-    src = withApiBase(`/api/media/${normalizePath(video.storageRef.key)}`);
-  }
-
-  // Fall back to legacy url path (like /api/output/video/{uuid}/video.mp4)
-  // or storage ref format
-  if (!src && video.url) {
-    const resolvedUrl = resolveBlobUri(video.url);
-    if (resolvedUrl) {
-      src = resolvedUrl;
-    } else if (video.url.startsWith('/api/')) {
-      // Legacy API path - prepend base URL
-      src = withApiBase(video.url);
-    } else if (video.url.startsWith('http://') || video.url.startsWith('https://')) {
-      src = video.url;
-    } else if (video.url.startsWith('data:')) {
-      src = video.url;
-    }
-  }
+  // Try blob reference first, then storage reference, then URL
+  const src =
+    resolveBlobRef(video.blobRef) ||
+    (video.storageRef?.key
+      ? withApiBase(`/api/media/${normalizePath(video.storageRef.key)}`)
+      : undefined) ||
+    resolveMediaUrl(video.url);
 
   if (!src) {
     return null;
-  }
-
-  // Resolve poster/thumbnail URL
-  let poster: string | undefined;
-  if (video.thumbnail) {
-    const resolvedThumb = resolveBlobUri(video.thumbnail);
-    if (resolvedThumb) {
-      poster = resolvedThumb;
-    } else if (video.thumbnail.startsWith('/api/')) {
-      poster = withApiBase(video.thumbnail);
-    } else if (
-      video.thumbnail.startsWith('http://') ||
-      video.thumbnail.startsWith('https://') ||
-      video.thumbnail.startsWith('data:')
-    ) {
-      poster = video.thumbnail;
-    }
   }
 
   const format = video.format || 'mp4';
   return {
     src,
     type: `video/${format}`,
-    poster,
+    poster: resolveMediaUrl(video.thumbnail),
   };
 }
 

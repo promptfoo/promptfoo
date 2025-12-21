@@ -346,8 +346,10 @@ function EvalOutputCell({
         </div>
       );
     }
-  } else if (output.video) {
-    const videoSource = resolveVideoSource(output.video);
+  } else if (output.video || output.response?.video) {
+    // Support both top-level video (new format) and response.video (fallback)
+    const videoData = output.video || output.response?.video;
+    const videoSource = resolveVideoSource(videoData);
     if (videoSource) {
       node = (
         <div className="video-output">
@@ -364,13 +366,11 @@ function EvalOutputCell({
             className="video-metadata"
             style={{ marginTop: '8px', fontSize: '0.85em', opacity: 0.8 }}
           >
-            {output.video.model && (
-              <span style={{ marginRight: '12px' }}>Model: {output.video.model}</span>
+            {videoData?.model && (
+              <span style={{ marginRight: '12px' }}>Model: {videoData.model}</span>
             )}
-            {output.video.size && (
-              <span style={{ marginRight: '12px' }}>Size: {output.video.size}</span>
-            )}
-            {output.video.duration && <span>Duration: {output.video.duration}s</span>}
+            {videoData?.size && <span style={{ marginRight: '12px' }}>Size: {videoData.size}</span>}
+            {videoData?.duration && <span>Duration: {videoData.duration}s</span>}
           </div>
         </div>
       );

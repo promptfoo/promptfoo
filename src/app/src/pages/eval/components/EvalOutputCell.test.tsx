@@ -495,6 +495,34 @@ describe('EvalOutputCell', () => {
     expect(screen.queryByText(/Duration:/)).not.toBeInTheDocument();
   });
 
+  it('renders video player from response.video fallback', () => {
+    const propsWithResponseVideo: MockEvalOutputCellProps = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        response: {
+          output: 'test output',
+          video: {
+            url: 'storageRef:video/abc123.mp4',
+            format: 'mp4',
+            model: 'sora-2-pro',
+            size: '720x1280',
+            duration: 8,
+          },
+        },
+      },
+    };
+
+    renderWithProviders(<EvalOutputCell {...propsWithResponseVideo} />);
+
+    const videoElement = screen.getByTestId('video-player');
+    expect(videoElement).toBeInTheDocument();
+
+    expect(screen.getByText('Model: sora-2-pro')).toBeInTheDocument();
+    expect(screen.getByText('Size: 720x1280')).toBeInTheDocument();
+    expect(screen.getByText('Duration: 8s')).toBeInTheDocument();
+  });
+
   it('allows copying row link to clipboard', async () => {
     const originalClipboard = navigator.clipboard;
     const mockClipboard = {

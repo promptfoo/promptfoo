@@ -138,7 +138,7 @@ export async function checkVideoCache(cacheKey: string): Promise<string | null> 
         return mapping.videoKey;
       }
     }
-  } catch (err) {
+  } catch (err: unknown) {
     // Mapping file corrupted, treat as cache miss
     logger.debug(`[OpenAI Video] Cache mapping read failed: ${err}`);
   }
@@ -324,7 +324,7 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
 
       const job = (await response.json()) as OpenAiVideoJob;
       return { job };
-    } catch (err) {
+    } catch (err: unknown) {
       return {
         job: {} as OpenAiVideoJob,
         error: `Failed to create video job: ${String(err)}`,
@@ -377,7 +377,7 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
 
         // Wait before next poll
         await sleep(pollIntervalMs);
-      } catch (err) {
+      } catch (err: unknown) {
         return {
           job: {} as OpenAiVideoJob,
           error: `Polling error: ${String(err)}`,
@@ -427,7 +427,7 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
       logger.debug(`[OpenAI Video] Stored ${variant} at ${ref.key}`);
 
       return { storageRef: ref };
-    } catch (err) {
+    } catch (err: unknown) {
       return {
         error: `Download error for ${variant}: ${String(err)}`,
       };
@@ -491,7 +491,7 @@ export class OpenAiVideoProvider extends OpenAiGenericProvider {
         const mapping = JSON.parse(mappingData);
         thumbnailKey = mapping.thumbnailKey;
         spritesheetKey = mapping.spritesheetKey;
-      } catch (err) {
+      } catch (err: unknown) {
         // Mapping exists but couldn't be read - just use video
         logger.debug(`[OpenAI Video] Failed to read cache mapping for thumbnails: ${err}`);
       }
