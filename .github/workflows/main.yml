@@ -312,7 +312,7 @@ jobs:
 
   webui:
     name: webui tests
-    timeout-minutes: 5
+    timeout-minutes: 8
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo

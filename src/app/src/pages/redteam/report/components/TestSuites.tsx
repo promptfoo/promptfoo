@@ -78,30 +78,36 @@ const TestSuites = ({
 
   const pluginSeverityMap = React.useMemo(() => getRiskCategorySeverityMap(plugins), [plugins]);
 
-  const pluginsById = React.useMemo(() => {
-    return plugins.reduce(
-      (acc, plugin) => {
+  const [pluginsById, setPluginsById] = React.useState<Record<string, RedteamPluginObject>>({});
+
+  React.useEffect(() => {
+    async function buildPluginsById() {
+      const result: Record<string, RedteamPluginObject> = {};
+
+      for (const plugin of plugins) {
         let pluginId: string;
         if (plugin.id === 'policy' && plugin.config?.policy) {
           // Use the policy id as the plugin id in order to differentiate custom policies from each other.
           // Either get the policy id from the metadata or construct it by hashing the policy text.
           pluginId = isValidPolicyObject(plugin.config.policy)
             ? plugin.config.policy.id
-            : makeInlinePolicyId(plugin.config.policy as string);
+            : await makeInlinePolicyId(plugin.config.policy as string);
         } else {
           pluginId = plugin.id;
         }
 
-        acc[pluginId] = {
+        result[pluginId] = {
           ...plugin,
           // If the plugin does not have a severity defined, assign it here. Use original `plugin.id`
           // for `pluginSeverityMap` lookups.
           severity: plugin.severity ?? pluginSeverityMap[plugin.id as Plugin],
         };
-        return acc;
-      },
-      {} as Record<string, RedteamPluginObject>,
-    );
+      }
+
+      setPluginsById(result);
+    }
+
+    buildPluginsById();
   }, [plugins, pluginSeverityMap]);
 
   const customPoliciesById = useCustomPoliciesMap(plugins);
