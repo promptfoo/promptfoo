@@ -1,6 +1,7 @@
 import type winston from 'winston';
 
 import type { BlobRef } from '../blobs/types';
+import type { Inputs } from '../redteam/types';
 import type { EnvOverrides } from './env';
 import type { Prompt } from './prompts';
 import type { NunjucksFilterMap, TokenUsage } from './shared';
@@ -46,6 +47,7 @@ export interface ProviderOptions {
   transform?: string;
   delay?: number;
   env?: EnvOverrides;
+  inputs?: Inputs;
 }
 
 export interface CallApiContextParams {
@@ -97,6 +99,7 @@ export interface ApiProvider {
   config?: any;
   delay?: number;
   getSessionId?: () => string;
+  inputs?: Inputs;
   label?: ProviderLabel;
   transform?: string;
   toJSON?: () => any;

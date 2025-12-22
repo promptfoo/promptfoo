@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { InputsSchema } from '../redteam/types';
 import { ProviderEnvOverridesSchema } from '../types/env';
 import { BaseTokenUsageSchema } from '../types/shared';
 import { PromptSchema } from './prompts';
@@ -21,6 +22,7 @@ export const ProviderOptionsSchema = z.object({
   transform: z.string().optional(),
   delay: z.number().optional(),
   env: ProviderEnvOverridesSchema.optional(),
+  inputs: InputsSchema.optional(),
 });
 
 const CallApiContextParamsSchema = z.object({
@@ -64,6 +66,7 @@ export const ApiProviderSchema = z.object({
   transform: z.string().optional(),
   delay: z.number().optional(),
   config: z.any().optional(),
+  inputs: InputsSchema.optional(),
 });
 
 export const ProviderResponseSchema = z.object({

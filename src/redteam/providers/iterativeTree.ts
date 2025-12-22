@@ -996,7 +996,7 @@ async function runRedteamConversation({
 class RedteamIterativeTreeProvider implements ApiProvider {
   private readonly injectVar: string;
   private readonly excludeTargetOutputFromAgenticAttackGeneration: boolean;
-  private readonly inputs?: Record<string, string>;
+  readonly inputs?: Record<string, string>;
 
   /**
    * Creates a new instance of RedteamIterativeTreeProvider.

@@ -527,7 +527,7 @@ class RedteamIterativeMetaProvider implements ApiProvider {
   private readonly gradingProvider: RedteamFileConfig['provider'];
   private readonly excludeTargetOutputFromAgenticAttackGeneration: boolean;
   private readonly perTurnLayers: LayerConfig[];
-  private readonly inputs?: Record<string, string>;
+  readonly inputs?: Record<string, string>;
 
   constructor(readonly config: Record<string, string | object>) {
     logger.debug('[IterativeMeta] Constructor config', {

@@ -223,7 +223,7 @@ export interface RedteamFileConfig extends CommonOptions {
 export interface SynthesizeOptions extends CommonOptions {
   abortSignal?: AbortSignal;
   entities?: string[];
-  // Multi-variable inputs for test case generation (from target config)
+  // Multi-variable inputs for test case generation (from target)
   inputs?: Inputs;
   language?: string | string[];
   maxConcurrency?: number;
