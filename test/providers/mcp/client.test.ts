@@ -412,11 +412,12 @@ describe('MCPClient', () => {
       // Verify the description is provided and meaningful
       const clientCall = vi.mocked(Client).mock.calls[0][0];
       expect(clientCall).toHaveProperty('description');
-      expect(typeof clientCall.description).toBe('string');
-      expect(clientCall.description.length).toBeGreaterThan(0);
+      const description = clientCall.description as string;
+      expect(typeof description).toBe('string');
+      expect(description.length).toBeGreaterThan(0);
       // Case-insensitive check for key terms
-      expect(clientCall.description.toLowerCase()).toContain('promptfoo');
-      expect(clientCall.description).toContain('MCP');
+      expect(description.toLowerCase()).toContain('promptfoo');
+      expect(description).toContain('MCP');
     });
 
     it('should pass timeout to listTools when configured', async () => {
