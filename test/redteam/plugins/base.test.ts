@@ -2,6 +2,7 @@ import dedent from 'dedent';
 import { afterEach, beforeEach, describe, expect, it, Mock, MockInstance, vi } from 'vitest';
 import { matchesLlmRubric } from '../../../src/matchers';
 import {
+  parseGeneratedInputs,
   parseGeneratedPrompts,
   RedteamGraderBase,
   RedteamPluginBase,
@@ -274,6 +275,225 @@ describe('RedteamPluginBase', () => {
       expect(provider.callApi).toHaveBeenCalledWith(expect.stringContaining('<Modifiers>'));
       expect(provider.callApi).toHaveBeenCalledWith(expect.stringContaining('language: German'));
     });
+
+    it('should add __outputFormat modifier when inputs is defined', () => {
+      const config = {
+        inputs: {
+          username: 'The user name',
+          message: 'The message content',
+        },
+      };
+      const template = 'Generate {{ n }} test cases for {{ purpose }}';
+      const result = RedteamPluginBase.appendModifiers(template, config);
+
+      expect(result).toContain('<Modifiers>');
+      expect(result).toContain('__outputFormat:');
+      expect(result).toContain('<Prompt>');
+      expect(result).toContain('"username": "The user name"');
+      expect(result).toContain('"message": "The message content"');
+    });
+
+    it('should remove conflicting format instructions when inputs is defined', () => {
+      const config = {
+        inputs: {
+          username: 'The user name',
+        },
+      };
+      const template = `Generate test cases.
+Each line must begin with "Prompt:"
+Use the format: Prompt: <your prompt here>`;
+
+      const result = RedteamPluginBase.appendModifiers(template, config);
+
+      // Original format instructions should be removed
+      expect(result).not.toContain('Each line must begin with');
+      // But the main content should remain
+      expect(result).toContain('Generate test cases');
+      // And the new format should be added
+      expect(result).toContain('__outputFormat:');
+      expect(result).toContain('<Prompt>');
+    });
+
+    it('should combine inputs with other modifiers', () => {
+      const config = {
+        language: 'Spanish',
+        inputs: {
+          query: 'The search query',
+        },
+        modifiers: {
+          tone: 'formal',
+        },
+      };
+      const template = 'Generate test cases';
+      const result = RedteamPluginBase.appendModifiers(template, config);
+
+      expect(result).toContain('language: Spanish');
+      expect(result).toContain('tone: formal');
+      expect(result).toContain('__outputFormat:');
+      expect(result).toContain('"query": "The search query"');
+    });
+  });
+
+  describe('multi-input mode', () => {
+    let multiInputProvider: ApiProvider;
+    let multiInputPlugin: TestPlugin;
+
+    beforeEach(() => {
+      multiInputProvider = {
+        callApi: vi.fn().mockResolvedValue({
+          output: `
+            Here are the test cases:
+            <Prompt>{"username": "admin", "message": "Hello"}</Prompt>
+            <Prompt>{"username": "guest", "message": "Test message"}</Prompt>
+          `,
+        }),
+        id: vi.fn().mockReturnValue('test-provider'),
+      };
+    });
+
+    it('should generate test cases with multi-input mode when inputs is defined', async () => {
+      multiInputPlugin = new TestPlugin(multiInputProvider, 'test purpose', 'testVar', {
+        inputs: {
+          username: 'The user name',
+          message: 'The message content',
+        },
+      });
+
+      const tests = await multiInputPlugin.generateTests(2);
+
+      expect(tests).toHaveLength(2);
+      // Check that the full JSON is in the injectVar for all tests
+      tests.forEach((test) => {
+        expect(test.vars!.testVar).toContain('username');
+        expect(test.vars!.testVar).toContain('message');
+      });
+      // Check that individual variables are extracted (order may vary due to sampling)
+      const usernames = tests.map((t) => t.vars!.username);
+      const messages = tests.map((t) => t.vars!.message);
+      expect(usernames).toContain('admin');
+      expect(usernames).toContain('guest');
+      expect(messages).toContain('Hello');
+      expect(messages).toContain('Test message');
+    });
+
+    it('should include __outputFormat modifier in API call when inputs is defined', async () => {
+      multiInputPlugin = new TestPlugin(multiInputProvider, 'test purpose', 'testVar', {
+        inputs: {
+          username: 'The user name',
+        },
+      });
+
+      await multiInputPlugin.generateTests(1);
+
+      expect(multiInputProvider.callApi).toHaveBeenCalledWith(
+        expect.stringContaining('__outputFormat:'),
+      );
+      expect(multiInputProvider.callApi).toHaveBeenCalledWith(
+        expect.stringContaining('<Prompt>'),
+      );
+    });
+
+    it('should store inputs config in test metadata', async () => {
+      const inputsConfig = {
+        username: 'The user name',
+        message: 'The message content',
+      };
+      multiInputPlugin = new TestPlugin(multiInputProvider, 'test purpose', 'testVar', {
+        inputs: inputsConfig,
+      });
+
+      const tests = await multiInputPlugin.generateTests(2);
+
+      expect(tests[0].metadata?.pluginConfig?.inputs).toEqual(inputsConfig);
+    });
+
+    it('should handle parsing failures gracefully in multi-input mode', async () => {
+      const badProvider: ApiProvider = {
+        callApi: vi.fn().mockResolvedValue({
+          output: `
+            <Prompt>{"username": "admin", "message": "Valid"}</Prompt>
+            <Prompt>not valid json</Prompt>
+          `,
+        }),
+        id: vi.fn().mockReturnValue('test-provider'),
+      };
+
+      const plugin = new TestPlugin(badProvider, 'test purpose', 'testVar', {
+        inputs: {
+          username: 'The user name',
+          message: 'The message content',
+        },
+      });
+
+      const tests = await plugin.generateTests(1);
+
+      // Should only get the valid test case
+      expect(tests).toHaveLength(1);
+      expect(tests[0].vars!.username).toBe('admin');
+    });
+
+    it('should handle nested object values in multi-input mode', async () => {
+      const nestedProvider: ApiProvider = {
+        callApi: vi.fn().mockResolvedValue({
+          output:
+            '<Prompt>{"user": {"name": "admin", "id": 123}, "context": ["msg1", "msg2"]}</Prompt>',
+        }),
+        id: vi.fn().mockReturnValue('test-provider'),
+      };
+
+      const plugin = new TestPlugin(nestedProvider, 'test purpose', 'testVar', {
+        inputs: {
+          user: 'User data object',
+          context: 'Context information',
+        },
+      });
+
+      const tests = await plugin.generateTests(1);
+
+      expect(tests).toHaveLength(1);
+      // Nested objects should be stringified
+      expect(tests[0].vars!.user).toBe('{"name":"admin","id":123}');
+      expect(tests[0].vars!.context).toBe('["msg1","msg2"]');
+    });
+
+    it('should use parseGeneratedPrompts when inputs is not defined', async () => {
+      const standardProvider: ApiProvider = {
+        callApi: vi.fn().mockResolvedValue({
+          output: 'Prompt: Standard prompt 1\nPrompt: Standard prompt 2',
+        }),
+        id: vi.fn().mockReturnValue('test-provider'),
+      };
+
+      const plugin = new TestPlugin(standardProvider, 'test purpose', 'testVar', {});
+
+      const tests = await plugin.generateTests(2);
+
+      expect(tests).toHaveLength(2);
+      // Results may be sampled in any order, so check that both prompts exist
+      const prompts = tests.map((t) => t.vars!.testVar);
+      expect(prompts).toContain('Standard prompt 1');
+      expect(prompts).toContain('Standard prompt 2');
+      // Should NOT have individual variable extraction
+      expect(tests[0].vars!.username).toBeUndefined();
+    });
+
+    it('should handle empty inputs object (no multi-input mode)', async () => {
+      const standardProvider: ApiProvider = {
+        callApi: vi.fn().mockResolvedValue({
+          output: 'Prompt: Standard prompt',
+        }),
+        id: vi.fn().mockReturnValue('test-provider'),
+      };
+
+      const plugin = new TestPlugin(standardProvider, 'test purpose', 'testVar', {
+        inputs: {},
+      });
+
+      const tests = await plugin.generateTests(1);
+
+      expect(tests).toHaveLength(1);
+      expect(tests[0].vars!.testVar).toBe('Standard prompt');
+    });
   });
 
   describe('parseGeneratedPrompts', () => {
@@ -537,6 +757,173 @@ AGENT: Let me look that up for you. Can you tell me the amount and date?`;
 
     // Ensure prompts are properly separated
     expect(result[0].__prompt).not.toEqual(result[1].__prompt);
+  });
+});
+
+describe('parseGeneratedInputs', () => {
+  it('should parse JSON from <Prompt> tags with valid inputs', () => {
+    const inputs = { username: 'The user name', message: 'The message content' };
+    const generatedOutput = `
+      Here are the test cases:
+      <Prompt>{"username": "admin", "message": "Hello world"}</Prompt>
+      <Prompt>{"username": "guest", "message": "Test message"}</Prompt>
+    `;
+    const result = parseGeneratedInputs(generatedOutput, inputs);
+    expect(result).toHaveLength(2);
+    expect(result[0].__prompt).toBe('{"username": "admin", "message": "Hello world"}');
+    expect(result[1].__prompt).toBe('{"username": "guest", "message": "Test message"}');
+  });
+
+  it('should return empty array when no <Prompt> tags found', () => {
+    const inputs = { username: 'The user name' };
+    const generatedOutput = 'No prompt tags here';
+    const result = parseGeneratedInputs(generatedOutput, inputs);
+    expect(result).toEqual([]);
+  });
+
+  it('should skip entries with missing required keys', () => {
+    const inputs = { username: 'The user name', message: 'The message content' };
+    const generatedOutput = `
+      <Prompt>{"username": "admin", "message": "Complete"}</Prompt>
+      <Prompt>{"username": "admin"}</Prompt>
+      <Prompt>{"message": "Missing username"}</Prompt>
+    `;
+    const result = parseGeneratedInputs(generatedOutput, inputs);
+    expect(result).toHaveLength(1);
+    expect(result[0].__prompt).toBe('{"username": "admin", "message": "Complete"}');
+  });
+
+  it('should skip entries with invalid JSON', () => {
+    const inputs = { username: 'The user name' };
+    const generatedOutput = `
+      <Prompt>{"username": "valid"}</Prompt>
+      <Prompt>not valid json</Prompt>
+      <Prompt>{"broken": json}</Prompt>
+    `;
+    const result = parseGeneratedInputs(generatedOutput, inputs);
+    expect(result).toHaveLength(1);
+    expect(result[0].__prompt).toBe('{"username": "valid"}');
+  });
+
+  it('should handle entries with extra keys beyond inputs', () => {
+    const inputs = { username: 'The user name' };
+    const generatedOutput = '<Prompt>{"username": "admin", "extra": "ignored"}</Prompt>';
+    const result = parseGeneratedInputs(generatedOutput, inputs);
+    expect(result).toHaveLength(1);
+    // The full JSON is returned, extra keys are fine as long as required keys exist
+    expect(result[0].__prompt).toBe('{"username": "admin", "extra": "ignored"}');
+  });
+
+  it('should handle complex nested JSON values', () => {
+    const inputs = {
+      user: 'User data object',
+      context: 'Context information',
+    };
+    const generatedOutput = `
+      <Prompt>{"user": {"name": "admin", "id": 123}, "context": ["msg1", "msg2"]}</Prompt>
+    `;
+    const result = parseGeneratedInputs(generatedOutput, inputs);
+    expect(result).toHaveLength(1);
+    expect(result[0].__prompt).toBe(
+      '{"user": {"name": "admin", "id": 123}, "context": ["msg1", "msg2"]}',
+    );
+  });
+
+  it('should handle LLM-style output with explanatory text', () => {
+    const inputs = { username: 'The user name', query: 'The search query' };
+    const generatedOutput = `
+      I've generated the following test cases for you:
+
+      1. First test case (admin user):
+      <Prompt>{"username": "admin", "query": "SELECT * FROM users"}</Prompt>
+
+      2. Second test case (guest user):
+      <Prompt>{"username": "guest", "query": "DROP TABLE users"}</Prompt>
+
+      These test cases cover SQL injection scenarios.
+    `;
+    const result = parseGeneratedInputs(generatedOutput, inputs);
+    expect(result).toHaveLength(2);
+    expect(JSON.parse(result[0].__prompt)).toEqual({
+      username: 'admin',
+      query: 'SELECT * FROM users',
+    });
+    expect(JSON.parse(result[1].__prompt)).toEqual({
+      username: 'guest',
+      query: 'DROP TABLE users',
+    });
+  });
+
+  it('should handle multiline JSON in <Prompt> tags', () => {
+    const inputs = { username: 'The user name', message: 'The message' };
+    const generatedOutput = `
+      <Prompt>
+        {
+          "username": "admin",
+          "message": "Hello world"
+        }
+      </Prompt>
+    `;
+    const result = parseGeneratedInputs(generatedOutput, inputs);
+    expect(result).toHaveLength(1);
+    const parsed = JSON.parse(result[0].__prompt);
+    expect(parsed.username).toBe('admin');
+    expect(parsed.message).toBe('Hello world');
+  });
+
+  it('should handle case-insensitive <Prompt> tags', () => {
+    const inputs = { key: 'The key' };
+    const generatedOutput = `
+      <PROMPT>{"key": "value1"}</PROMPT>
+      <prompt>{"key": "value2"}</prompt>
+    `;
+    const result = parseGeneratedInputs(generatedOutput, inputs);
+    expect(result).toHaveLength(2);
+  });
+
+  it('should handle empty inputs config', () => {
+    const inputs = {};
+    const generatedOutput = '<Prompt>{"username": "admin"}</Prompt>';
+    const result = parseGeneratedInputs(generatedOutput, inputs);
+    // With no required keys, any valid JSON should pass
+    expect(result).toHaveLength(1);
+  });
+
+  it('should handle special characters in JSON values', () => {
+    const inputs = { message: 'The message content' };
+    const generatedOutput =
+      '<Prompt>{"message": "Hello \\"world\\" with special chars: \\n\\t"}</Prompt>';
+    const result = parseGeneratedInputs(generatedOutput, inputs);
+    expect(result).toHaveLength(1);
+    const parsed = JSON.parse(result[0].__prompt);
+    expect(parsed.message).toContain('world');
+  });
+
+  it('should handle multiple inputs for complex redteam scenarios', () => {
+    const inputs = {
+      userId: 'The user ID',
+      action: 'The action to perform',
+      targetResource: 'The target resource',
+      context: 'Additional context',
+    };
+    const generatedOutput = `
+      <Prompt>{"userId": "user123", "action": "delete", "targetResource": "/admin/users", "context": "unauthorized"}</Prompt>
+      <Prompt>{"userId": "admin", "action": "read", "targetResource": "/api/secrets", "context": "elevated"}</Prompt>
+    `;
+    const result = parseGeneratedInputs(generatedOutput, inputs);
+    expect(result).toHaveLength(2);
+    expect(JSON.parse(result[0].__prompt)).toEqual({
+      userId: 'user123',
+      action: 'delete',
+      targetResource: '/admin/users',
+      context: 'unauthorized',
+    });
+    expect(JSON.parse(result[1].__prompt)).toEqual({
+      userId: 'admin',
+      action: 'read',
+      targetResource: '/api/secrets',
+      context: 'elevated',
+    });
   });
 });
 
