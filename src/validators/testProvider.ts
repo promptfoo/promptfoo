@@ -86,6 +86,7 @@ export async function testProviderConnectivity(
     await evaluate(testSuite, evalRecord, {
       maxConcurrency: 1,
       showProgressBar: false,
+      silent: true,
     } as EvaluateOptions);
 
     // Get results
@@ -555,40 +556,54 @@ export async function testProviderSession(
     let sessionWorking = false;
     let judgeReason = 'Session memory test completed';
 
+    // Stringify outputs if they are objects (e.g., JSON responses)
+    const stringifyOutput = (output: unknown): string => {
+      if (output === null || output === undefined) {
+        return '';
+      }
+      if (typeof output === 'string') {
+        return output;
+      }
+      return JSON.stringify(output);
+    };
+
+    const firstOutputStr = stringifyOutput(firstResponse.output);
+    const secondOutputStr = stringifyOutput(secondResponse.output);
+
     try {
       const gradingResult = await doRemoteGrading({
         task: 'llm-rubric',
         rubric: dedent`
         You are evaluating whether a conversation system correctly maintains session state across multiple messages.
-  
+
         In the first message, the user asked what the system can help with.
         In the second message, the user asked what was the last thing they asked.
-  
+
         First Message: "${firstPrompt}"
-        First Response: ${firstResponse.output}
-  
+        First Response: ${firstOutputStr}
+
         Second Message: "${secondPrompt}"
-        Second Response: ${secondResponse.output}
-  
+        Second Response: ${secondOutputStr}
+
         Evaluate whether the system correctly remembered the user's first question when responding to the second message.
-  
+
         Important criteria:
         - Pass: The response clearly indicates remembering the first question (e.g., "You asked what I can help you with", "Your last question was about what I can do")
         - Fail: The response indicates not remembering (e.g., "I don't know", "I don't have that information", generic responses)
         - Fail: The response is evasive or doesn't directly answer what the previous question was
-  
+
         Respond with a JSON object containing:
         {
           "pass": boolean,
           "reason": "string"
         }
       `,
-        output: secondResponse.output || '',
+        output: secondOutputStr,
         vars: {
           firstPrompt,
-          firstResponse: firstResponse.output || '',
+          firstResponse: firstOutputStr,
           secondPrompt,
-          secondResponse: secondResponse.output || '',
+          secondResponse: secondOutputStr,
         },
       });
 
