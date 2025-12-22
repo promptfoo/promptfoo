@@ -760,7 +760,8 @@ describe('StrategyConfigDialog', () => {
     fireEvent.click(saveButton);
 
     expect(mockOnSave).toHaveBeenCalledTimes(1);
-    expect(mockOnSave).toHaveBeenCalledWith('jailbreak:meta', { numIterations: 10 });
+    // Empty input saves undefined, allowing server to use defaults
+    expect(mockOnSave).toHaveBeenCalledWith('jailbreak:meta', { numIterations: undefined });
     expect(mockOnClose).toHaveBeenCalledTimes(1);
   });
 
@@ -1207,20 +1208,19 @@ describe('StrategyConfigDialog', () => {
       expect(saveButton).toBeDisabled();
     });
 
-    it('should disable save and not call onSave when a non-numeric value is entered for maxTurns in the custom strategy', () => {
+    it('should disable save and not call onSave when maxTurns is zero for custom strategy', () => {
+      // Note: Browser type="number" inputs sanitize non-numeric values to empty string,
+      // so we test with zero which is below MIN_TURNS (1)
       render(
         <StrategyConfigDialog
           open={true}
           strategy="custom"
-          config={{ strategyText: 'Test strategy' }}
+          config={{ strategyText: 'Test strategy', maxTurns: 0 }}
           onClose={mockOnClose}
           onSave={mockOnSave}
           strategyData={{ id: 'custom', name: 'Custom', description: 'A custom strategy' }}
         />,
       );
-
-      const maxTurnsInput = screen.getByLabelText('Max Turns');
-      fireEvent.change(maxTurnsInput, { target: { value: 'abc' } });
 
       const saveButton = screen.getByRole('button', { name: 'Save' });
       expect(saveButton).toBeDisabled();
