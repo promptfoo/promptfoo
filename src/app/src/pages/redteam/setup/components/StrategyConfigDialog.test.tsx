@@ -1167,9 +1167,11 @@ describe('StrategyConfigDialog', () => {
         />,
       );
 
+      // Assert that the Save button is initially disabled due to the invalid maxTurns value
       let saveButton = screen.getByRole('button', { name: 'Save' });
       expect(saveButton).toBeDisabled();
 
+      // Rerender the component with a different strategy and a valid maxTurns value
       rerender(
         <StrategyConfigDialog
           open={true}
@@ -1181,8 +1183,50 @@ describe('StrategyConfigDialog', () => {
         />,
       );
 
+      // Assert that the Save button is now enabled, indicating that the validation logic has been correctly applied to the new strategy
       saveButton = screen.getByRole('button', { name: 'Save' });
       expect(saveButton).not.toBeDisabled();
+    });
+
+    it('should disable save when numIterations is negative for jailbreak strategy', () => {
+      render(
+        <StrategyConfigDialog
+          open={true}
+          strategy="jailbreak"
+          config={{ numIterations: -5 }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={{ id: 'jailbreak', name: 'Jailbreak', description: 'Jailbreak strategy' }}
+        />,
+      );
+
+      const numIterationsInput = screen.getByLabelText('Number of Iterations');
+      expect(numIterationsInput).toHaveValue(-5);
+
+      const saveButton = screen.getByRole('button', { name: 'Save' });
+      expect(saveButton).toBeDisabled();
+    });
+
+    it('should disable save and not call onSave when a non-numeric value is entered for maxTurns in the custom strategy', () => {
+      render(
+        <StrategyConfigDialog
+          open={true}
+          strategy="custom"
+          config={{ strategyText: 'Test strategy' }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={{ id: 'custom', name: 'Custom', description: 'A custom strategy' }}
+        />,
+      );
+
+      const maxTurnsInput = screen.getByLabelText('Max Turns');
+      fireEvent.change(maxTurnsInput, { target: { value: 'abc' } });
+
+      const saveButton = screen.getByRole('button', { name: 'Save' });
+      expect(saveButton).toBeDisabled();
+
+      fireEvent.click(saveButton);
+      expect(mockOnSave).not.toHaveBeenCalled();
     });
   });
 
