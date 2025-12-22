@@ -7,7 +7,7 @@ import { makeRequest } from '../../util/cloud';
 import invariant from '../../util/invariant';
 import { AGENTIC_STRATEGIES, MULTI_TURN_STRATEGIES } from '../constants/strategies';
 
-import type { TestCase, TestCaseWithPlugin } from '../../types/index';
+import type { ProviderResponse, TestCase, TestCaseWithPlugin } from '../../types/index';
 
 // Single-turn strategies = AGENTIC but NOT MULTI_TURN
 // These strategies iterate to find successful attacks but each attempt is a single turn
@@ -25,7 +25,7 @@ function isSingleTurnStrategy(strategyId: string | undefined): boolean {
  */
 function transformResult(
   testCase: TestCase,
-  response: Record<string, unknown> | null,
+  response: ProviderResponse | null,
   evalId: string,
 ): TestCase | null {
   try {
@@ -36,8 +36,7 @@ function transformResult(
     // This is the prompt that was actually used in the successful/failed attack
     let finalVars = testCase.vars;
     if (isSingleTurnStrategy(strategyId) && testCase.vars) {
-      const redteamFinalPrompt = (response?.metadata as Record<string, unknown>)
-        ?.redteamFinalPrompt;
+      const redteamFinalPrompt = response?.metadata?.redteamFinalPrompt;
       if (redteamFinalPrompt) {
         // Find the injectVar key (usually 'prompt') and replace with final prompt
         const injectVar = (testCase.provider as any)?.config?.injectVar || 'prompt';
@@ -107,12 +106,8 @@ async function getFailedTestCases(
           // Cloud API returns raw results with response field for transformation
           const cloudResults = data.results || [];
           const cloudTestCases = cloudResults
-            .map(
-              (r: {
-                testCase: TestCase;
-                response: Record<string, unknown> | null;
-                evalId: string;
-              }) => transformResult(r.testCase, r.response, r.evalId),
+            .map((r: { testCase: TestCase; response: ProviderResponse | null; evalId: string }) =>
+              transformResult(r.testCase, r.response, r.evalId),
             )
             .filter((tc: TestCase | null): tc is TestCase => tc !== null);
           allTestCases.push(...cloudTestCases);
