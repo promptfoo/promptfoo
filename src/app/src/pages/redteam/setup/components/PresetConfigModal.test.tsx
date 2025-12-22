@@ -1,8 +1,9 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Plugin } from '@promptfoo/redteam/constants';
-import type { LocalPluginConfig } from '../types';
 import PresetConfigModal from './PresetConfigModal';
+import type { Plugin } from '@promptfoo/redteam/constants';
+
+import type { LocalPluginConfig } from '../types';
 
 vi.mock('./PluginConfigDialog', () => ({
   default: ({
@@ -20,7 +21,10 @@ vi.mock('./PluginConfigDialog', () => ({
     open ? (
       <div data-testid="plugin-config-dialog">
         <span data-testid="config-dialog-plugin">{plugin}</span>
-        <button data-testid="config-dialog-save" onClick={() => onSave(plugin, { systemPrompt: 'test' })}>
+        <button
+          data-testid="config-dialog-save"
+          onClick={() => onSave(plugin, { systemPrompt: 'test' })}
+        >
           Save
         </button>
         <button data-testid="config-dialog-close" onClick={onClose}>

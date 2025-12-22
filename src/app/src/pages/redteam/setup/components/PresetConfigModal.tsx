@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CloseIcon from '@mui/icons-material/Close';
@@ -24,9 +24,9 @@ import {
   type Plugin,
   subCategoryDescriptions,
 } from '@promptfoo/redteam/constants';
+import PluginConfigDialog from './PluginConfigDialog';
 
 import type { LocalPluginConfig } from '../types';
-import PluginConfigDialog from './PluginConfigDialog';
 
 interface PluginConfigState {
   plugin: Plugin;
