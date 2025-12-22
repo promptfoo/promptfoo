@@ -76,7 +76,11 @@ const mcpServerMocks = vi.hoisted(() => {
 
   // Create a mock class that can be instantiated with `new`
   const MockMcpServer = vi.fn(function MockMcpServer(
-    this: { connect: ReturnType<typeof vi.fn>; tool: ReturnType<typeof vi.fn>; resource: ReturnType<typeof vi.fn> },
+    this: {
+      connect: ReturnType<typeof vi.fn>;
+      tool: ReturnType<typeof vi.fn>;
+      resource: ReturnType<typeof vi.fn>;
+    },
     config: { name: string; version: string; description?: string },
   ) {
     mcpServerCalls.push(config);
