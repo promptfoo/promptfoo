@@ -89,11 +89,7 @@ export function StrategyItem({
   const { tooltipTitle, settingsTooltipTitle } = useMemo(() => {
     if (requiresConfig) {
       const reason =
-        strategy.id === 'custom'
-          ? 'Strategy text is required'
-          : strategy.id === 'simba'
-            ? 'At least one goal is required'
-            : 'Configuration is required';
+        strategy.id === 'custom' ? 'Strategy text is required' : 'Configuration is required';
       const configRequiredTooltip = `Configuration required: ${reason}. Click the settings icon to configure.`;
 
       return {
@@ -123,15 +119,8 @@ export function StrategyItem({
   }, [strategyConfig, generateTestCase, strategy.id, testGenerationPlugin]);
 
   const handleToggle = useCallback(() => {
-    // If selecting simba for the first time, auto-open config dialog
-    if (strategy.id === 'simba' && !isSelected && !isDisabled) {
-      onToggle(strategy.id);
-      // Use setTimeout to ensure the toggle completes before opening config
-      setTimeout(() => onConfigClick(strategy.id), 0);
-    } else {
-      onToggle(strategy.id);
-    }
-  }, [strategy.id, isSelected, isDisabled, onToggle, onConfigClick]);
+    onToggle(strategy.id);
+  }, [strategy.id, onToggle]);
 
   return (
     <Paper

@@ -14,7 +14,6 @@
  * @module RedteamIterative
  */
 import dedent from 'dedent';
-import { v4 as uuidv4 } from 'uuid';
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
@@ -41,6 +40,7 @@ import {
 import {
   checkPenalizedPhrases,
   createIterationContext,
+  externalizeResponseForRedteamHistory,
   getTargetResponse,
   redteamProviderManager,
   type TargetResponse,
@@ -364,7 +364,7 @@ export function createTreeNode(
   id?: string,
 ): TreeNode {
   return {
-    id: id || uuidv4(),
+    id: id || crypto.randomUUID(),
     prompt,
     score,
     children: [],
@@ -605,12 +605,17 @@ async function runRedteamConversation({
           [injectVar], // Skip template rendering for injection variable to prevent double-evaluation
         );
 
-        const targetResponse = await getTargetResponse(
+        let targetResponse = await getTargetResponse(
           targetProvider,
           targetPrompt,
           iterationContext,
           options,
         );
+        targetResponse = await externalizeResponseForRedteamHistory(targetResponse, {
+          evalId: context?.evaluationId,
+          testIdx: context?.testIdx,
+          promptIdx: context?.promptIdx,
+        });
         lastResponse = targetResponse;
         // Do not throw on error. Record and continue so we can surface mapped output while marking error later.
         if (targetResponse.error) {
@@ -622,7 +627,7 @@ async function runRedteamConversation({
           treeOutputs.push({
             depth,
             graderPassed: undefined,
-            id: uuidv4(),
+            id: crypto.randomUUID(),
             improvement,
             output: typeof targetResponse.output === 'string' ? targetResponse.output : '',
             outputAudio:
@@ -731,7 +736,7 @@ async function runRedteamConversation({
           treeOutputs.push({
             depth,
             graderPassed,
-            id: uuidv4(),
+            id: crypto.randomUUID(),
             output: targetResponse.output,
             outputAudio:
               targetResponse.audio?.data && targetResponse.audio?.format
@@ -769,7 +774,7 @@ async function runRedteamConversation({
           );
           stoppingReason = 'NO_IMPROVEMENT';
           treeOutputs.push({
-            id: uuidv4(),
+            id: crypto.randomUUID(),
             prompt: targetPrompt,
             promptAudio: lastTransformResult?.audio,
             promptImage: lastTransformResult?.image,
@@ -810,7 +815,7 @@ async function runRedteamConversation({
           treeOutputs.push({
             depth,
             graderPassed,
-            id: uuidv4(),
+            id: crypto.randomUUID(),
             output: bestResponse,
             outputAudio:
               targetResponse.audio?.data && targetResponse.audio?.format
@@ -856,7 +861,7 @@ async function runRedteamConversation({
         treeOutputs.push({
           depth,
           graderPassed,
-          id: uuidv4(),
+          id: crypto.randomUUID(),
           improvement,
           output: targetResponse.output,
           outputAudio:
@@ -909,7 +914,7 @@ async function runRedteamConversation({
 
   stoppingReason = 'MAX_DEPTH';
   treeOutputs.push({
-    id: uuidv4(),
+    id: crypto.randomUUID(),
     prompt: finalTargetPrompt,
     // Note: promptAudio/promptImage not included here as this is a summary node after tree exploration
     output: bestResponse,

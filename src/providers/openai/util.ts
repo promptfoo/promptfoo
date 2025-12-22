@@ -580,7 +580,8 @@ export function failApiCall(err: any) {
 export function getTokenUsage(data: any, cached: boolean): Partial<TokenUsage> {
   if (data.usage) {
     if (cached) {
-      return { cached: data.usage.total_tokens, total: data.usage.total_tokens, numRequests: 1 };
+      // Cached responses don't count as a new request
+      return { cached: data.usage.total_tokens, total: data.usage.total_tokens };
     } else {
       return {
         total: data.usage.total_tokens,

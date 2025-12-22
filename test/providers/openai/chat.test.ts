@@ -119,7 +119,8 @@ describe('OpenAI Provider', () => {
 
       expect(mockFetchWithCache).toHaveBeenCalledTimes(2);
       expect(result2.output).toBe('Test output 2');
-      expect(result2.tokenUsage).toEqual({ total: 10, cached: 10, numRequests: 1 });
+      // Cached responses don't count as new requests, so numRequests is not included
+      expect(result2.tokenUsage).toEqual({ total: 10, cached: 10 });
     });
 
     it('should handle disabled cache correctly', async () => {
@@ -1428,7 +1429,8 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
 
       expect(mockFetchWithCache).toHaveBeenCalledTimes(2);
       expect(result2.output).toBe('Test output 2');
-      expect(result2.tokenUsage).toEqual({ total: 10, cached: 10, numRequests: 1 });
+      // Cached responses don't count as new requests, so numRequests is not included
+      expect(result2.tokenUsage).toEqual({ total: 10, cached: 10 });
     });
 
     it('should handle disabled cache correctly for chat completion', async () => {
@@ -1864,7 +1866,8 @@ Therefore, there are 2 occurrences of the letter "r" in "strawberry".\n\nThere a
         format: 'mp3',
       });
       expect(cachedResult.cached).toBe(true);
-      expect(cachedResult.tokenUsage).toEqual({ total: 20, cached: 20, numRequests: 1 });
+      // Cached responses don't count as new requests, so numRequests is not included
+      expect(cachedResult.tokenUsage).toEqual({ total: 20, cached: 20 });
     });
 
     it('should properly handle audio requested with response_format option', async () => {

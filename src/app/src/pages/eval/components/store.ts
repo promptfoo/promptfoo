@@ -9,7 +9,6 @@ import {
 } from '@promptfoo/redteam/plugins/policy/utils';
 import { getRiskCategorySeverityMap } from '@promptfoo/redteam/sharedFrontend';
 import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
-import { v4 as uuidv4 } from 'uuid';
 import { create } from 'zustand';
 import { persist, subscribeWithSelector } from 'zustand/middleware';
 import type { Policy, PolicyObject } from '@promptfoo/redteam/types';
@@ -686,7 +685,7 @@ export const useTableStore = create<TableState>()(
     },
 
     addFilter: (filter) => {
-      const filterId = uuidv4();
+      const filterId = crypto.randomUUID();
 
       set((prevState) => {
         const isApplied = isFilterApplied(filter);

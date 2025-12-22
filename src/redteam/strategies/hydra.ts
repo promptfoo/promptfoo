@@ -1,5 +1,3 @@
-import { v4 as uuidv4 } from 'uuid';
-
 import type { TestCase } from '../../types/index';
 
 export function addHydra(
@@ -10,7 +8,7 @@ export function addHydra(
   const providerName = 'promptfoo:redteam:hydra';
   const metricSuffix = 'Hydra';
   const strategyId = 'jailbreak:hydra';
-  const scanId = uuidv4(); // Generate once for all tests in this scan
+  const scanId = crypto.randomUUID(); // Generate once for all tests in this scan
 
   return testCases.map((testCase) => {
     const originalText = String(testCase.vars![injectVar]);

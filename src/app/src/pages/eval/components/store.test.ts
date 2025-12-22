@@ -2,14 +2,16 @@ import { HIDDEN_METADATA_KEYS } from '@app/constants';
 import { callApi } from '@app/utils/api';
 import { Severity } from '@promptfoo/redteam/constants';
 import { act } from '@testing-library/react';
-import { v4 as uuidv4 } from 'uuid';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { type ResultsFilter, useTableStore } from './store';
 import type { EvalTableDTO, EvaluateTable, PromptMetrics, ResultsFile } from '@promptfoo/types';
 
-vi.mock('uuid', () => ({
-  v4: vi.fn(),
-}));
+// Mock crypto.randomUUID
+const mockRandomUUID = vi.fn<() => `${string}-${string}-${string}-${string}-${string}`>();
+vi.stubGlobal('crypto', {
+  ...globalThis.crypto,
+  randomUUID: mockRandomUUID,
+});
 
 vi.mock('@app/utils/api', () => ({
   callApi: vi.fn(),
@@ -146,7 +148,9 @@ describe('useTableStore', () => {
   describe('filters', () => {
     it('should add a new filter to `filters.values` and increment `filters.appliedCount` when `addFilter` is called with a filter that has a value', () => {
       const mockFilterId = 'mock-uuid-1';
-      (uuidv4 as Mock<() => string>).mockImplementation(() => mockFilterId);
+      mockRandomUUID.mockReturnValue(
+        mockFilterId as `${string}-${string}-${string}-${string}-${string}`,
+      );
 
       const newFilter = {
         type: 'metric' as const,
@@ -178,7 +182,9 @@ describe('useTableStore', () => {
 
     it('should add a new severity filter to `filters.values` and increment `filters.appliedCount` when `addFilter` is called with a severity filter that has a value', () => {
       const mockFilterId = 'mock-uuid-2';
-      (uuidv4 as Mock<() => string>).mockImplementation(() => mockFilterId);
+      mockRandomUUID.mockReturnValue(
+        mockFilterId as `${string}-${string}-${string}-${string}-${string}`,
+      );
 
       const newFilter = {
         type: 'severity' as const,
@@ -208,7 +214,9 @@ describe('useTableStore', () => {
 
     it('should remove a filter from `filters.values` and decrement `filters.appliedCount` when `removeFilter` is called with a valid filter id', () => {
       const mockFilterId = 'mock-uuid-1';
-      (uuidv4 as Mock<() => string>).mockImplementation(() => mockFilterId);
+      mockRandomUUID.mockReturnValue(
+        mockFilterId as `${string}-${string}-${string}-${string}-${string}`,
+      );
 
       const newFilter = {
         type: 'metric' as const,
@@ -232,7 +240,9 @@ describe('useTableStore', () => {
 
     it('should clear all filters and set `filters.appliedCount` to 0 when `resetFilters` is called', () => {
       const mockFilterId = 'mock-uuid-1';
-      (uuidv4 as Mock<() => string>).mockImplementation(() => mockFilterId);
+      mockRandomUUID.mockReturnValue(
+        mockFilterId as `${string}-${string}-${string}-${string}-${string}`,
+      );
 
       const newFilter = {
         type: 'metric' as const,
@@ -255,7 +265,9 @@ describe('useTableStore', () => {
 
     it('should decrement `filters.appliedCount` when `updateFilter` is called with a filter that changes from having a value to having an empty value', () => {
       const mockFilterId = 'mock-uuid-1';
-      (uuidv4 as Mock<() => string>).mockImplementation(() => mockFilterId);
+      mockRandomUUID.mockReturnValue(
+        mockFilterId as `${string}-${string}-${string}-${string}-${string}`,
+      );
 
       const initialFilter = {
         id: mockFilterId,
@@ -295,7 +307,9 @@ describe('useTableStore', () => {
     });
     it('should decrement `filters.appliedCount` when `updateFilter` is called with a severity filter that changes from having a value to having an empty value', () => {
       const mockFilterId = 'mock-uuid-1';
-      (uuidv4 as Mock<() => string>).mockImplementation(() => mockFilterId);
+      mockRandomUUID.mockReturnValue(
+        mockFilterId as `${string}-${string}-${string}-${string}-${string}`,
+      );
 
       const initialFilter = {
         id: mockFilterId,
@@ -335,7 +349,9 @@ describe('useTableStore', () => {
 
     it('should consider exists operator filters as applied when field is present (even with empty value)', () => {
       const mockFilterId = 'exists-test-filter';
-      (uuidv4 as Mock<() => string>).mockImplementation(() => mockFilterId);
+      mockRandomUUID.mockReturnValue(
+        mockFilterId as `${string}-${string}-${string}-${string}-${string}`,
+      );
 
       // Add metadata filter with exists operator
       const existsFilter = {
@@ -363,7 +379,9 @@ describe('useTableStore', () => {
 
     it('should not consider exists operator filters as applied when field is missing', () => {
       const mockFilterId = 'exists-test-filter-2';
-      (uuidv4 as Mock<() => string>).mockImplementation(() => mockFilterId);
+      mockRandomUUID.mockReturnValue(
+        mockFilterId as `${string}-${string}-${string}-${string}-${string}`,
+      );
 
       // Add metadata filter with exists operator but no field
       const existsFilter = {
@@ -553,10 +571,10 @@ describe('useTableStore', () => {
       const mockFilterId1 = 'mock-uuid-1';
       const mockFilterId2 = 'mock-uuid-2';
       const mockFilterId3 = 'mock-uuid-3';
-      (uuidv4 as Mock<() => string>)
-        .mockImplementationOnce(() => mockFilterId1)
-        .mockImplementationOnce(() => mockFilterId2)
-        .mockImplementationOnce(() => mockFilterId3);
+      mockRandomUUID
+        .mockReturnValueOnce(mockFilterId1 as `${string}-${string}-${string}-${string}-${string}`)
+        .mockReturnValueOnce(mockFilterId2 as `${string}-${string}-${string}-${string}-${string}`)
+        .mockReturnValueOnce(mockFilterId3 as `${string}-${string}-${string}-${string}-${string}`);
 
       const newFilter1 = {
         type: 'metric' as const,
@@ -594,10 +612,10 @@ describe('useTableStore', () => {
       const mockFilterId1 = 'mock-uuid-1';
       const mockFilterId2 = 'mock-uuid-2';
       const mockFilterId3 = 'mock-uuid-3';
-      (uuidv4 as Mock<() => string>)
-        .mockImplementationOnce(() => mockFilterId1)
-        .mockImplementationOnce(() => mockFilterId2)
-        .mockImplementationOnce(() => mockFilterId3);
+      mockRandomUUID
+        .mockReturnValueOnce(mockFilterId1 as `${string}-${string}-${string}-${string}-${string}`)
+        .mockReturnValueOnce(mockFilterId2 as `${string}-${string}-${string}-${string}-${string}`)
+        .mockReturnValueOnce(mockFilterId3 as `${string}-${string}-${string}-${string}-${string}`);
 
       const newFilter1 = {
         type: 'metric' as const,
@@ -635,9 +653,9 @@ describe('useTableStore', () => {
     it('should default to "and" when there is no filter with sortIndex 0 and the filter with sortIndex 1 has a null logicOperator', () => {
       const mockFilterId2 = 'mock-uuid-2';
       const mockFilterId3 = 'mock-uuid-3';
-      (uuidv4 as Mock<() => string>)
-        .mockImplementationOnce(() => mockFilterId2)
-        .mockImplementationOnce(() => mockFilterId3);
+      mockRandomUUID
+        .mockReturnValueOnce(mockFilterId2 as `${string}-${string}-${string}-${string}-${string}`)
+        .mockReturnValueOnce(mockFilterId3 as `${string}-${string}-${string}-${string}-${string}`);
 
       const newFilter2 = {
         type: 'metric' as const,
@@ -665,9 +683,9 @@ describe('useTableStore', () => {
     it('should default to "and" when there is no filter with sortIndex 0 and the filter with sortIndex 1 has an undefined logicOperator', () => {
       const mockFilterId2 = 'mock-uuid-2';
       const mockFilterId3 = 'mock-uuid-3';
-      (uuidv4 as Mock<() => string>)
-        .mockImplementationOnce(() => mockFilterId2)
-        .mockImplementationOnce(() => mockFilterId3);
+      mockRandomUUID
+        .mockReturnValueOnce(mockFilterId2 as `${string}-${string}-${string}-${string}-${string}`)
+        .mockReturnValueOnce(mockFilterId3 as `${string}-${string}-${string}-${string}-${string}`);
 
       const newFilter2 = {
         type: 'metric' as const,
@@ -698,11 +716,13 @@ describe('useTableStore', () => {
       const mockFilterId2 = 'mock-uuid-2';
       const mockFilterIdNew = 'mock-uuid-new';
 
-      (uuidv4 as Mock<() => string>)
-        .mockImplementationOnce(() => mockFilterId0)
-        .mockImplementationOnce(() => mockFilterId1)
-        .mockImplementationOnce(() => mockFilterId2)
-        .mockImplementationOnce(() => mockFilterIdNew);
+      mockRandomUUID
+        .mockReturnValueOnce(mockFilterId0 as `${string}-${string}-${string}-${string}-${string}`)
+        .mockReturnValueOnce(mockFilterId1 as `${string}-${string}-${string}-${string}-${string}`)
+        .mockReturnValueOnce(mockFilterId2 as `${string}-${string}-${string}-${string}-${string}`)
+        .mockReturnValueOnce(
+          mockFilterIdNew as `${string}-${string}-${string}-${string}-${string}`,
+        );
 
       act(() => {
         useTableStore.getState().addFilter({
@@ -744,9 +764,9 @@ describe('useTableStore', () => {
     it('should inherit the updated logicOperator when a new filter is added after updating an existing filter', () => {
       const mockFilterId1 = 'mock-uuid-1';
       const mockFilterId2 = 'mock-uuid-2';
-      (uuidv4 as Mock<() => string>)
-        .mockImplementationOnce(() => mockFilterId1)
-        .mockImplementationOnce(() => mockFilterId2);
+      mockRandomUUID
+        .mockReturnValueOnce(mockFilterId1 as `${string}-${string}-${string}-${string}-${string}`)
+        .mockReturnValueOnce(mockFilterId2 as `${string}-${string}-${string}-${string}-${string}`);
 
       const initialFilter = {
         type: 'metric' as const,
@@ -795,7 +815,9 @@ describe('useTableStore', () => {
 
     it('should use the provided logicOperator for a new filter when logicOperator is explicitly set in the filter argument, regardless of existing filters', () => {
       const mockFilterId = 'mock-uuid-1';
-      (uuidv4 as Mock<() => string>).mockImplementation(() => mockFilterId);
+      mockRandomUUID.mockReturnValue(
+        mockFilterId as `${string}-${string}-${string}-${string}-${string}`,
+      );
 
       const existingFilter = {
         type: 'metric' as const,
