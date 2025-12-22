@@ -760,7 +760,8 @@ describe('StrategyConfigDialog', () => {
     fireEvent.click(saveButton);
 
     expect(mockOnSave).toHaveBeenCalledTimes(1);
-    expect(mockOnSave).toHaveBeenCalledWith('jailbreak:meta', { numIterations: 10 });
+    // When input is cleared, undefined is saved to allow server-side defaults
+    expect(mockOnSave).toHaveBeenCalledWith('jailbreak:meta', { numIterations: undefined });
     expect(mockOnClose).toHaveBeenCalledTimes(1);
   });
 
@@ -1110,6 +1111,94 @@ describe('StrategyConfigDialog', () => {
         ),
       ).toBeInTheDocument();
       expect(screen.queryByText(/Must be 30 or less/)).not.toBeInTheDocument();
+    });
+
+    it('should show error and disable save when numIterations is below minimum (3)', () => {
+      render(
+        <StrategyConfigDialog
+          open={true}
+          strategy="jailbreak"
+          config={{ numIterations: 1 }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={{ id: 'jailbreak', name: 'Jailbreak', description: 'Jailbreak strategy' }}
+        />,
+      );
+
+      // Should show minimum error message
+      expect(screen.getByText(/Must be at least 3/)).toBeInTheDocument();
+
+      // Save button should be disabled
+      const saveButton = screen.getByRole('button', { name: 'Save' });
+      expect(saveButton).toBeDisabled();
+    });
+
+    it('should show error and disable save when maxTurns is zero or negative', () => {
+      render(
+        <StrategyConfigDialog
+          open={true}
+          strategy="goat"
+          config={{ maxTurns: 0 }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={{ id: 'goat', name: 'GOAT', description: 'A multi-turn strategy' }}
+        />,
+      );
+
+      // Should show minimum error message
+      expect(screen.getByText(/Must be at least 1/)).toBeInTheDocument();
+
+      // Save button should be disabled
+      const saveButton = screen.getByRole('button', { name: 'Save' });
+      expect(saveButton).toBeDisabled();
+    });
+
+    it('should show error and disable save when numIterations is NaN', () => {
+      render(
+        <StrategyConfigDialog
+          open={true}
+          strategy="jailbreak"
+          config={{ numIterations: Number.NaN }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={{ id: 'jailbreak', name: 'Jailbreak', description: 'Jailbreak strategy' }}
+        />,
+      );
+
+      // Should show invalid number error message
+      expect(screen.getByText(/Please enter a valid positive number/)).toBeInTheDocument();
+
+      // Save button should be disabled
+      const saveButton = screen.getByRole('button', { name: 'Save' });
+      expect(saveButton).toBeDisabled();
+    });
+
+    it('should re-enable save when user fixes invalid numIterations value', () => {
+      render(
+        <StrategyConfigDialog
+          open={true}
+          strategy="jailbreak"
+          config={{ numIterations: 50 }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={{ id: 'jailbreak', name: 'Jailbreak', description: 'Jailbreak strategy' }}
+        />,
+      );
+
+      // Initially disabled due to value > 30
+      const saveButton = screen.getByRole('button', { name: 'Save' });
+      expect(saveButton).toBeDisabled();
+
+      // Fix the value
+      const numIterationsInput = screen.getByLabelText('Number of Iterations');
+      fireEvent.change(numIterationsInput, { target: { value: '15' } });
+
+      // Should now be enabled
+      expect(saveButton).not.toBeDisabled();
+
+      // Save should work
+      fireEvent.click(saveButton);
+      expect(mockOnSave).toHaveBeenCalledWith('jailbreak', { numIterations: 15 });
     });
   });
 

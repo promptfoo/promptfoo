@@ -34,11 +34,36 @@ import { STRATEGIES_REQUIRING_CONFIG } from './strategies/utils';
 import type { StrategyCardData } from './strategies/types';
 
 // Maximum allowed value for maxTurns/numIterations in agentic strategies
+// Based on empirical testing: beyond 30 iterations, success rates plateau while
+// cost and time increase linearly. See docs for attack strategy benchmarks.
 const MAX_ITERATIONS_LIMIT = 30;
+const MIN_ITERATIONS = 3;
+const MIN_TURNS = 1;
 const MAX_ITERATIONS_LIMIT_MESSAGE =
   'This is the maximum—higher values show diminishing returns while increasing scan time and cost.';
 const MAX_ITERATIONS_ERROR_MESSAGE =
   'Must be 30 or less. Higher values show diminishing returns while increasing scan time and cost.';
+const INVALID_NUMBER_ERROR_MESSAGE = 'Please enter a valid positive number.';
+
+/**
+ * Validates an iteration/turn value for agentic strategies.
+ * Returns an error message if invalid, or null if valid.
+ */
+function validateIterationValue(value: unknown, min: number): string | null {
+  if (value === undefined || value === null || value === '') {
+    return null; // Allow empty/undefined (will use default)
+  }
+  if (typeof value !== 'number' || Number.isNaN(value)) {
+    return INVALID_NUMBER_ERROR_MESSAGE;
+  }
+  if (value < min) {
+    return `Must be at least ${min}.`;
+  }
+  if (value > MAX_ITERATIONS_LIMIT) {
+    return MAX_ITERATIONS_ERROR_MESSAGE;
+  }
+  return null;
+}
 
 const DEFAULT_SIMBA_GOALS = [
   'Generate harmful content',
@@ -431,18 +456,21 @@ export default function StrategyConfigDialog({
     return true;
   };
 
-  // Validate that maxTurns/numIterations doesn't exceed the limit
-  const isIterationLimitValid = () => {
-    const maxTurns = localConfig.maxTurns;
-    const numIterations = localConfig.numIterations;
-    if (maxTurns !== undefined && maxTurns > MAX_ITERATIONS_LIMIT) {
+  // Validate that maxTurns/numIterations is within valid range
+  const isIterationLimitValid = React.useCallback(() => {
+    const { maxTurns, numIterations } = localConfig;
+    // Only validate if values are defined (undefined uses defaults)
+    if (maxTurns !== undefined && validateIterationValue(maxTurns, MIN_TURNS) !== null) {
       return false;
     }
-    if (numIterations !== undefined && numIterations > MAX_ITERATIONS_LIMIT) {
+    if (
+      numIterations !== undefined &&
+      validateIterationValue(numIterations, MIN_ITERATIONS) !== null
+    ) {
       return false;
     }
     return true;
-  };
+  }, [localConfig]);
 
   const handleSave = () => {
     if (!strategy) {
@@ -545,20 +573,19 @@ export default function StrategyConfigDialog({
             fullWidth
             label="Number of Iterations"
             type="number"
-            value={localConfig.numIterations || 10}
+            value={localConfig.numIterations ?? 10}
             onChange={(e) => {
-              const value = e.target.value ? Number.parseInt(e.target.value, 10) : 10;
+              const value = e.target.value === '' ? undefined : Number.parseInt(e.target.value, 10);
               setLocalConfig({ ...localConfig, numIterations: value });
             }}
             placeholder="Number of iterations (default: 10)"
-            InputProps={{ inputProps: { min: 3, max: MAX_ITERATIONS_LIMIT } }}
-            error={localConfig.numIterations > MAX_ITERATIONS_LIMIT}
+            InputProps={{ inputProps: { min: MIN_ITERATIONS, max: MAX_ITERATIONS_LIMIT } }}
+            error={validateIterationValue(localConfig.numIterations, MIN_ITERATIONS) !== null}
             helperText={
-              localConfig.numIterations > MAX_ITERATIONS_LIMIT
-                ? MAX_ITERATIONS_ERROR_MESSAGE
-                : localConfig.numIterations >= MAX_ITERATIONS_LIMIT
-                  ? MAX_ITERATIONS_LIMIT_MESSAGE
-                  : 'Number of iterations to try (more iterations increase chance of success)'
+              validateIterationValue(localConfig.numIterations, MIN_ITERATIONS) ??
+              (localConfig.numIterations === MAX_ITERATIONS_LIMIT
+                ? MAX_ITERATIONS_LIMIT_MESSAGE
+                : 'Number of iterations to try (more iterations increase chance of success)')
             }
           />
         </Box>
@@ -671,18 +698,17 @@ export default function StrategyConfigDialog({
             type="number"
             value={localConfig.maxTurns ?? 10}
             onChange={(e) => {
-              const value = e.target.value ? Number.parseInt(e.target.value, 10) : 10;
+              const value = e.target.value === '' ? undefined : Number.parseInt(e.target.value, 10);
               setLocalConfig({ ...localConfig, maxTurns: value });
             }}
             placeholder="Maximum number of conversation turns (default: 10)"
-            InputProps={{ inputProps: { min: 1, max: MAX_ITERATIONS_LIMIT } }}
-            error={localConfig.maxTurns > MAX_ITERATIONS_LIMIT}
+            InputProps={{ inputProps: { min: MIN_TURNS, max: MAX_ITERATIONS_LIMIT } }}
+            error={validateIterationValue(localConfig.maxTurns, MIN_TURNS) !== null}
             helperText={
-              localConfig.maxTurns > MAX_ITERATIONS_LIMIT
-                ? MAX_ITERATIONS_ERROR_MESSAGE
-                : localConfig.maxTurns >= MAX_ITERATIONS_LIMIT
-                  ? MAX_ITERATIONS_LIMIT_MESSAGE
-                  : 'Maximum number of back-and-forth exchanges with the model'
+              validateIterationValue(localConfig.maxTurns, MIN_TURNS) ??
+              (localConfig.maxTurns === MAX_ITERATIONS_LIMIT
+                ? MAX_ITERATIONS_LIMIT_MESSAGE
+                : 'Maximum number of back-and-forth exchanges with the model')
             }
           />
 
@@ -822,21 +848,17 @@ export default function StrategyConfigDialog({
             type="number"
             value={localConfig.maxTurns ?? 10}
             onChange={(e) => {
-              const parsedValue = Number.parseInt(e.target.value, 10);
-              setLocalConfig({
-                ...localConfig,
-                maxTurns: Number.isNaN(parsedValue) ? undefined : parsedValue,
-              });
+              const value = e.target.value === '' ? undefined : Number.parseInt(e.target.value, 10);
+              setLocalConfig({ ...localConfig, maxTurns: value });
             }}
             placeholder="Maximum conversation turns (default: 10)"
-            InputProps={{ inputProps: { min: 1, max: MAX_ITERATIONS_LIMIT } }}
-            error={localConfig.maxTurns > MAX_ITERATIONS_LIMIT}
+            InputProps={{ inputProps: { min: MIN_TURNS, max: MAX_ITERATIONS_LIMIT } }}
+            error={validateIterationValue(localConfig.maxTurns, MIN_TURNS) !== null}
             helperText={
-              localConfig.maxTurns > MAX_ITERATIONS_LIMIT
-                ? MAX_ITERATIONS_ERROR_MESSAGE
-                : localConfig.maxTurns >= MAX_ITERATIONS_LIMIT
-                  ? MAX_ITERATIONS_LIMIT_MESSAGE
-                  : 'Maximum number of back-and-forth exchanges with the target model.'
+              validateIterationValue(localConfig.maxTurns, MIN_TURNS) ??
+              (localConfig.maxTurns === MAX_ITERATIONS_LIMIT
+                ? MAX_ITERATIONS_LIMIT_MESSAGE
+                : 'Maximum number of back-and-forth exchanges with the target model.')
             }
           />
 
@@ -879,23 +901,23 @@ export default function StrategyConfigDialog({
             type="number"
             value={localConfig.maxTurns ?? 5}
             onChange={(e) => {
-              const value = e.target.value ? Number.parseInt(e.target.value, 10) : undefined;
+              const value = e.target.value === '' ? undefined : Number.parseInt(e.target.value, 10);
               setLocalConfig({ ...localConfig, maxTurns: value });
             }}
             onBlur={(e) => {
-              if (!e.target.value || Number.parseInt(e.target.value, 10) < 1) {
+              const parsed = Number.parseInt(e.target.value, 10);
+              if (!e.target.value || Number.isNaN(parsed) || parsed < MIN_TURNS) {
                 setLocalConfig({ ...localConfig, maxTurns: 5 });
               }
             }}
             placeholder="5"
-            InputProps={{ inputProps: { min: 1, max: MAX_ITERATIONS_LIMIT } }}
-            error={localConfig.maxTurns > MAX_ITERATIONS_LIMIT}
+            InputProps={{ inputProps: { min: MIN_TURNS, max: MAX_ITERATIONS_LIMIT } }}
+            error={validateIterationValue(localConfig.maxTurns, MIN_TURNS) !== null}
             helperText={
-              localConfig.maxTurns > MAX_ITERATIONS_LIMIT
-                ? MAX_ITERATIONS_ERROR_MESSAGE
-                : localConfig.maxTurns >= MAX_ITERATIONS_LIMIT
-                  ? MAX_ITERATIONS_LIMIT_MESSAGE
-                  : 'Maximum number of back-and-forth exchanges with the model (default: 5)'
+              validateIterationValue(localConfig.maxTurns, MIN_TURNS) ??
+              (localConfig.maxTurns === MAX_ITERATIONS_LIMIT
+                ? MAX_ITERATIONS_LIMIT_MESSAGE
+                : 'Maximum number of back-and-forth exchanges with the model (default: 5)')
             }
           />
 
@@ -931,20 +953,19 @@ export default function StrategyConfigDialog({
             fullWidth
             label="Number of Iterations"
             type="number"
-            value={localConfig.numIterations || 10}
+            value={localConfig.numIterations ?? 10}
             onChange={(e) => {
-              const value = e.target.value ? Number.parseInt(e.target.value, 10) : 10;
+              const value = e.target.value === '' ? undefined : Number.parseInt(e.target.value, 10);
               setLocalConfig({ ...localConfig, numIterations: value });
             }}
             placeholder="Number of iterations (default: 10)"
-            InputProps={{ inputProps: { min: 3, max: MAX_ITERATIONS_LIMIT } }}
-            error={localConfig.numIterations > MAX_ITERATIONS_LIMIT}
+            InputProps={{ inputProps: { min: MIN_ITERATIONS, max: MAX_ITERATIONS_LIMIT } }}
+            error={validateIterationValue(localConfig.numIterations, MIN_ITERATIONS) !== null}
             helperText={
-              localConfig.numIterations > MAX_ITERATIONS_LIMIT
-                ? MAX_ITERATIONS_ERROR_MESSAGE
-                : localConfig.numIterations >= MAX_ITERATIONS_LIMIT
-                  ? MAX_ITERATIONS_LIMIT_MESSAGE
-                  : 'Number of iterations for the meta-agent to attempt. Agent builds attack taxonomy and makes strategic decisions.'
+              validateIterationValue(localConfig.numIterations, MIN_ITERATIONS) ??
+              (localConfig.numIterations === MAX_ITERATIONS_LIMIT
+                ? MAX_ITERATIONS_LIMIT_MESSAGE
+                : 'Number of iterations for the meta-agent to attempt. Agent builds attack taxonomy and makes strategic decisions.')
             }
           />
         </Box>
