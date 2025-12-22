@@ -1,7 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { MockInstance } from 'vitest';
 import fs from 'fs';
 
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache, disableCache, enableCache, getCache } from '../../src/cache';
 import logger from '../../src/logger';
 import {
@@ -11,6 +10,7 @@ import {
 } from '../../src/providers/claude-agent-sdk';
 import { transformMCPConfigToClaudeCode } from '../../src/providers/mcp/transform';
 import type { NonNullableUsage, Query, SDKMessage } from '@anthropic-ai/claude-agent-sdk';
+import type { MockInstance } from 'vitest';
 
 import type { CallApiContextParams } from '../../src/types/index';
 

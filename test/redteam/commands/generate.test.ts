@@ -3,7 +3,6 @@ import fs from 'node:fs';
 import { Command } from 'commander';
 import * as yaml from 'js-yaml';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
 import { DEFAULT_MAX_CONCURRENCY } from '../../../src/constants';
 import { getAuthor, getUserEmail } from '../../../src/globalConfig/accounts';
 import { cloudConfig } from '../../../src/globalConfig/cloud';
@@ -13,16 +12,17 @@ import { doGenerateRedteam, redteamGenerateCommand } from '../../../src/redteam/
 import { Severity } from '../../../src/redteam/constants';
 import { extractMcpToolsInfo } from '../../../src/redteam/extraction/mcpTools';
 import { synthesize } from '../../../src/redteam/index';
-import type { RedteamCliGenerateOptions, RedteamPluginObject } from '../../../src/redteam/types';
-import type { ApiProvider } from '../../../src/types/index';
 import {
-  checkCloudPermissions,
   ConfigPermissionError,
+  checkCloudPermissions,
   getConfigFromCloud,
 } from '../../../src/util/cloud';
 import * as configModule from '../../../src/util/config/load';
 import { readConfig } from '../../../src/util/config/load';
 import { writePromptfooConfig } from '../../../src/util/config/writer';
+
+import type { RedteamCliGenerateOptions, RedteamPluginObject } from '../../../src/redteam/types';
+import type { ApiProvider } from '../../../src/types/index';
 
 vi.mock('node:fs');
 vi.mock('../../../src/redteam', () => ({
@@ -38,17 +38,13 @@ vi.mock('../../../src/logger', () => ({
   },
   getLogLevel: vi.fn().mockReturnValue('info'),
 }));
-vi.mock('uuid', async (importOriginal) => {
-  return {
-    ...(await importOriginal()),
-
-    validate: vi.fn((str: string) => {
-      // Simple UUID validation for testing
-      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-      return uuidRegex.test(str);
-    }),
-  };
-});
+vi.mock('../../../src/util/uuid', () => ({
+  isUuid: vi.fn((str: string) => {
+    // Simple UUID validation for testing
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    return uuidRegex.test(str);
+  }),
+}));
 vi.mock('../../../src/util', async (importOriginal) => {
   return {
     ...(await importOriginal()),

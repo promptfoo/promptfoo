@@ -5,10 +5,10 @@ import Stack from '@mui/material/Stack';
 import { GridFilterModel, GridLogicOperator } from '@mui/x-data-grid';
 import { type Plugin as PluginType, Severity } from '@promptfoo/redteam/constants';
 import { getRiskCategorySeverityMap } from '@promptfoo/redteam/sharedFrontend';
+import { type TestResultStats } from './FrameworkComplianceUtils';
 import SeverityCard from './SeverityCard';
 import { useReportStore } from './store';
 import type { RedteamPluginObject } from '@promptfoo/redteam/types';
-import { type TestResultStats } from './FrameworkComplianceUtils';
 
 interface OverviewProps {
   categoryStats: Record<PluginType, TestResultStats>;

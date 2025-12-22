@@ -343,6 +343,8 @@ When configured correctly, your self-hosted server handles requests like:
 
 By default, promptfoo stores its SQLite database (`promptfoo.db`) in `/home/promptfoo/.promptfoo` _inside the container_. Ensure this directory is mapped to persistent storage using volumes (as shown in the Docker and Docker Compose examples) to save your evals across container restarts.
 
+By default, promptfoo externalizes large binary outputs (for example, images/audio) to the local filesystem under `/home/promptfoo/.promptfoo/blobs` and replaces inline base64 with lightweight references. To keep media inline (legacy behavior), set `PROMPTFOO_INLINE_MEDIA=true`. Make sure your volume mapping includes `/home/promptfoo/.promptfoo/blobs` so media persists across restarts.
+
 ### Custom Config Directory
 
 You can override the default internal configuration directory (`/home/promptfoo/.promptfoo`) using the `PROMPTFOO_CONFIG_DIR` environment variable. If set, promptfoo uses this path _inside the container_ for both configuration files and the `promptfoo.db` database. You still need to map this custom path to a persistent volume.
@@ -521,6 +523,53 @@ docker exec promptfoo_container cat /home/promptfoo/.promptfoo/ui-providers.yaml
 ```
 
 File must be named `ui-providers.yaml` or `ui-providers.yml` (case-sensitive on Linux).
+
+## Deploying Behind a Reverse Proxy with Base Path
+
+To serve promptfoo at a URL prefix (e.g., `https://example.com/promptfoo/`), rebuild the Docker image with `VITE_PUBLIC_BASENAME` and configure your reverse proxy to strip the prefix.
+
+### Build the Image
+
+```bash
+docker build --build-arg VITE_PUBLIC_BASENAME=/promptfoo -t my-promptfoo .
+```
+
+### Nginx Configuration
+
+```nginx
+location /promptfoo/ {
+    proxy_pass http://localhost:3000/;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+}
+```
+
+### Traefik Configuration
+
+```yaml
+http:
+  routers:
+    promptfoo:
+      rule: 'PathPrefix(`/promptfoo`)'
+      middlewares:
+        - strip-promptfoo
+      service: promptfoo
+  middlewares:
+    strip-promptfoo:
+      stripPrefix:
+        prefixes:
+          - '/promptfoo'
+  services:
+    promptfoo:
+      loadBalancer:
+        servers:
+          - url: 'http://promptfoo:3000'
+```
+
+The `VITE_PUBLIC_BASENAME` build argument configures the frontend to use the correct paths for routing, API calls, and WebSocket connections.
 
 ## Specifications
 

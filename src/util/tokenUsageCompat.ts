@@ -1,8 +1,9 @@
-import type { SpanData } from '../tracing/store';
 import { getTraceStore } from '../tracing/store';
-import type { TokenUsage } from '../types/shared';
 import { TokenUsageTracker } from './tokenUsage';
 import { accumulateTokenUsage, createEmptyTokenUsage } from './tokenUsageUtils';
+
+import type { SpanData } from '../tracing/store';
+import type { TokenUsage } from '../types/shared';
 
 /**
  * Query options for retrieving token usage from traces.

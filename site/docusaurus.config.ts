@@ -87,6 +87,7 @@ const config: Config = {
         blog: {
           showReadingTime: false,
           blogSidebarCount: 0,
+          postsPerPage: 20,
           // Please change this to your repo.
           // Remove this to remove the "edit this page" links.
           //editUrl:
@@ -214,11 +215,6 @@ const config: Config = {
               description: 'Learn about our mission and team',
             },
             {
-              href: '/blog/',
-              label: 'Blog',
-              description: 'Latest insights on AI security and testing',
-            },
-            {
               href: '/press/',
               label: 'Press',
               description: 'Media coverage and press releases',
@@ -236,6 +232,7 @@ const config: Config = {
           ],
         },
         { to: '/docs/intro/', label: 'Docs', position: 'left' },
+        { to: '/blog/', label: 'Blog', position: 'left' },
         { to: '/pricing/', label: 'Pricing', position: 'left' },
         {
           to: '/contact/',

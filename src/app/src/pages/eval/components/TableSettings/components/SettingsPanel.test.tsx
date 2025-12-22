@@ -1,7 +1,7 @@
-import { render, screen, fireEvent } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import SettingsPanel from './SettingsPanel';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useResultsViewSettingsStore } from '../../store';
+import SettingsPanel from './SettingsPanel';
 
 vi.mock('../../store', () => ({
   useResultsViewSettingsStore: vi.fn(),

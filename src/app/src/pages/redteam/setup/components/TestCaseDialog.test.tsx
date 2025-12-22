@@ -1,10 +1,10 @@
+import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
-import { describe, expect, it, vi, beforeEach, type Mock } from 'vitest';
-import { TestCaseGenerateButton, TestCaseDialog } from './TestCaseDialog';
-import type { DefinedUseQueryResult } from '@tanstack/react-query';
+import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
+import { TestCaseDialog, TestCaseGenerateButton } from './TestCaseDialog';
 import type { ApiHealthResult } from '@app/hooks/useApiHealth';
+import type { DefinedUseQueryResult } from '@tanstack/react-query';
 
 vi.mock('@app/hooks/useApiHealth', () => ({
   useApiHealth: vi.fn(

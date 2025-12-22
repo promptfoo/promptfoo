@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ElevenLabsIsolationProvider } from '../../../../src/providers/elevenlabs/isolation';
+
 import type { CallApiContextParams } from '../../../../src/types/providers';
 
 // Mock dependencies
