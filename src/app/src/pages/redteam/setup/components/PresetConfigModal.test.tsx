@@ -590,7 +590,7 @@ describe('PresetConfigModal', () => {
 
     it('should not detect plugin as configured when config has empty array', () => {
       const pluginConfig: LocalPluginConfig = {
-        'indirect-prompt-injection': { items: [] },
+        'indirect-prompt-injection': { examples: [] },
       };
 
       render(<PresetConfigModal {...defaultProps} pluginConfig={pluginConfig} />);
