@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 300">
+  <defs>
+    <linearGradient id="trackGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#6366f1" />
+      <stop offset="50%" style="stop-color:#a855f7" />
+      <stop offset="100%" style="stop-color:#f97316" />
+    </linearGradient>
+  </defs>
+
+  <!-- Title -->
+  <text x="410" y="28" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="17" font-weight="700" fill="#1f2937">2026 AI Regulation Timeline</text>
+
+  <!-- Main timeline track -->
+  <rect x="50" y="138" width="720" height="5" rx="2.5" fill="#e5e7eb"/>
+  <rect x="50" y="138" width="720" height="5" rx="2.5" fill="url(#trackGrad)" opacity="0.6"/>
+
+  <!-- Quarter labels below track -->
+  <text x="140" y="270" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="12" font-weight="600" fill="#9ca3af">Q1</text>
+  <text x="320" y="270" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="12" font-weight="600" fill="#9ca3af">Q2</text>
+  <text x="500" y="270" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="12" font-weight="600" fill="#9ca3af">Q3</text>
+  <text x="680" y="270" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="12" font-weight="600" fill="#9ca3af">Q4</text>
+
+  <!-- Quarter divider ticks -->
+  <line x1="230" y1="133" x2="230" y2="148" stroke="#d1d5db" stroke-width="1"/>
+  <line x1="410" y1="133" x2="410" y2="148" stroke="#d1d5db" stroke-width="1"/>
+  <line x1="590" y1="133" x2="590" y2="148" stroke="#d1d5db" stroke-width="1"/>
+
+  <!-- EVENTS -->
+  <g font-family="system-ui, -apple-system, sans-serif">
+
+    <!-- Jan 1 (below) -->
+    <circle cx="70" cy="140" r="7" fill="#6366f1"/>
+    <circle cx="70" cy="140" r="3" fill="white"/>
+    <line x1="70" y1="147" x2="70" y2="175" stroke="#6366f1" stroke-width="1.5" opacity="0.5"/>
+    <text x="70" y="192" text-anchor="middle" font-size="12" font-weight="700" fill="#6366f1">Jan 1</text>
+    <text x="70" y="208" text-anchor="middle" font-size="10" fill="#4b5563">CA AB 2013</text>
+    <text x="70" y="222" text-anchor="middle" font-size="10" fill="#4b5563">TX HB 149</text>
+
+    <!-- ~Jan 10 (above) -->
+    <circle cx="115" cy="140" r="7" fill="#7c3aed"/>
+    <circle cx="115" cy="140" r="3" fill="white"/>
+    <line x1="115" y1="133" x2="115" y2="105" stroke="#7c3aed" stroke-width="1.5" opacity="0.5"/>
+    <text x="115" y="92" text-anchor="middle" font-size="12" font-weight="700" fill="#7c3aed">~Jan 10</text>
+    <text x="115" y="76" text-anchor="middle" font-size="10" fill="#4b5563">DOJ Task Force</text>
+
+    <!-- Mar 11 (below) - includes FTC -->
+    <circle cx="185" cy="140" r="7" fill="#8b5cf6"/>
+    <circle cx="185" cy="140" r="3" fill="white"/>
+    <line x1="185" y1="147" x2="185" y2="175" stroke="#8b5cf6" stroke-width="1.5" opacity="0.5"/>
+    <text x="185" y="192" text-anchor="middle" font-size="12" font-weight="700" fill="#8b5cf6">Mar 11</text>
+    <text x="185" y="208" text-anchor="middle" font-size="10" fill="#4b5563">M-26-04, FTC</text>
+    <text x="185" y="222" text-anchor="middle" font-size="10" fill="#4b5563">Commerce eval</text>
+
+    <!-- May 19 (above) - TAKE IT DOWN Act -->
+    <circle cx="285" cy="140" r="7" fill="#9333ea"/>
+    <circle cx="285" cy="140" r="3" fill="white"/>
+    <line x1="285" y1="133" x2="285" y2="105" stroke="#9333ea" stroke-width="1.5" opacity="0.5"/>
+    <text x="285" y="92" text-anchor="middle" font-size="12" font-weight="700" fill="#9333ea">May 19</text>
+    <text x="285" y="76" text-anchor="middle" font-size="10" fill="#4b5563">TAKE IT DOWN</text>
+
+    <!-- ~Jun (above) - FCC only -->
+    <circle cx="345" cy="140" r="7" fill="#a855f7"/>
+    <circle cx="345" cy="140" r="3" fill="white"/>
+    <line x1="345" y1="133" x2="345" y2="105" stroke="#a855f7" stroke-width="1.5" opacity="0.5"/>
+    <text x="345" y="92" text-anchor="middle" font-size="12" font-weight="700" fill="#a855f7">~Jun</text>
+    <text x="345" y="76" text-anchor="middle" font-size="10" fill="#4b5563">FCC proceeding</text>
+
+    <!-- Jun 30 (below) -->
+    <circle cx="395" cy="140" r="7" fill="#c026d3"/>
+    <circle cx="395" cy="140" r="3" fill="white"/>
+    <line x1="395" y1="147" x2="395" y2="175" stroke="#c026d3" stroke-width="1.5" opacity="0.5"/>
+    <text x="395" y="192" text-anchor="middle" font-size="12" font-weight="700" fill="#c026d3">Jun 30</text>
+    <text x="395" y="208" text-anchor="middle" font-size="10" fill="#4b5563">CO SB24-205</text>
+
+    <!-- Aug 2 (above) -->
+    <circle cx="480" cy="140" r="7" fill="#ec4899"/>
+    <circle cx="480" cy="140" r="3" fill="white"/>
+    <line x1="480" y1="133" x2="480" y2="105" stroke="#ec4899" stroke-width="1.5" opacity="0.5"/>
+    <text x="480" y="92" text-anchor="middle" font-size="12" font-weight="700" fill="#ec4899">Aug 2</text>
+    <text x="480" y="76" text-anchor="middle" font-size="10" fill="#4b5563">CA SB 942</text>
+
+    <!-- Aug (EU) (below) -->
+    <circle cx="540" cy="140" r="7" fill="#f97316"/>
+    <circle cx="540" cy="140" r="3" fill="white"/>
+    <line x1="540" y1="147" x2="540" y2="175" stroke="#f97316" stroke-width="1.5" opacity="0.5"/>
+    <text x="540" y="192" text-anchor="middle" font-size="12" font-weight="700" fill="#f97316">Aug</text>
+    <text x="540" y="208" text-anchor="middle" font-size="10" fill="#4b5563">EU AI Act</text>
+    <text x="540" y="222" text-anchor="middle" font-size="10" fill="#6b7280">(may slip)</text>
+
+    <!-- Ongoing: dashed extension with arrow -->
+    <line x1="560" y1="140" x2="760" y2="140" stroke="#f97316" stroke-width="2" stroke-dasharray="8,5" opacity="0.35"/>
+    <path d="M760 135 L780 140 L760 145" fill="none" stroke="#f97316" stroke-width="2" opacity="0.5"/>
+    <text x="680" y="170" text-anchor="middle" font-size="10" font-weight="600" fill="#d97706">Ongoing</text>
+    <text x="680" y="184" text-anchor="middle" font-size="9" fill="#6b7280">Preemption litigation</text>
+
+  </g>
+</svg>
