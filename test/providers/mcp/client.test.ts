@@ -385,7 +385,11 @@ describe('MCPClient', () => {
 
       await mcpClient.initialize();
 
-      expect(Client).toHaveBeenCalledWith({ name: 'promptfoo-MCP', version: '1.0.0' });
+      expect(Client).toHaveBeenCalledWith({
+        name: 'promptfoo-MCP',
+        version: '1.0.0',
+        description: 'Promptfoo MCP client for connecting to MCP servers during LLM evaluations',
+      });
     });
 
     it('should pass timeout to listTools when configured', async () => {
