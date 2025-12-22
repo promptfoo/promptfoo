@@ -839,8 +839,6 @@ export const HttpProviderConfigSchema = z.object({
     .transform(preprocessSignatureAuthConfig),
   // TLS Certificate configuration for HTTPS connections
   tls: TlsCertificateSchema.optional(),
-  // Keys are variable names, values are descriptions of what the variable should contain
-  inputs: z.record(z.string(), z.string()).optional(),
 });
 
 export type HttpProviderConfig = z.infer<typeof HttpProviderConfigSchema>;

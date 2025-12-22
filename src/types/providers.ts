@@ -1,7 +1,6 @@
 import type winston from 'winston';
 
 import type { BlobRef } from '../blobs/types';
-import type { Inputs } from '../redteam/types';
 import type { EnvOverrides } from './env';
 import type { Prompt } from './prompts';
 import type { Inputs, NunjucksFilterMap, TokenUsage, VarValue } from './shared';
