@@ -562,7 +562,8 @@ describe('useTableStore', () => {
       });
 
       const state = useTableStore.getState();
-      expect(state.filters.options.strategy).toEqual(['multilingual', 'retry', 'basic']);
+      // 'retry' is intentionally filtered out - it's not user-facing in the UI
+      expect(state.filters.options.strategy).toEqual(['multilingual', 'basic']);
       expect(state.filters.options.plugin).toEqual(['pii', 'bias']);
     });
 
