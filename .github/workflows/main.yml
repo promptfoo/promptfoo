@@ -179,18 +179,13 @@ jobs:
         run: |
           npm ci
 
-      - name: Lint Project
+      - name: Run Biome CI
         run: |
-          npm run lint
+          npm run lint:ci
 
-      - name: Lint UI
-        working-directory: src/app
+      - name: Run Prettier Check
         run: |
-          npm run lint
-
-      - name: Run Style Check
-        run: |
-          npm run format:check
+          npm run format:check:prettier
 
       - name: Check Dependency Versions
         run: |
