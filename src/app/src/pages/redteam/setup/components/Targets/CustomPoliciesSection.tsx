@@ -99,42 +99,59 @@ export const CustomPoliciesSection = () => {
   const [rows, setRows] = useState<PolicyRow[]>([]);
 
   React.useEffect(() => {
+    let cancelled = false;
+
     async function buildRows() {
-      if (policyPlugins.length === 0) {
-        setRows([]);
-        return;
-      }
-
-      const result: PolicyRow[] = [];
-      for (let index = 0; index < policyPlugins.length; index++) {
-        const p = policyPlugins[index];
-        // Handle both string and PolicyObject formats
-        let policyText: string;
-        let policyId: string;
-        let policyName: string;
-
-        if (typeof p.config.policy === 'string') {
-          policyText = p.config.policy;
-          policyId = await makeInlinePolicyId(policyText);
-          policyName = makeDefaultPolicyName(index);
-        } else {
-          policyText = p.config.policy.text;
-          policyId = p.config.policy.id;
-          policyName =
-            p.config.policy.name || policyNames[policyId] || makeDefaultPolicyName(index);
+      try {
+        if (policyPlugins.length === 0) {
+          if (!cancelled) {
+            setRows([]);
+          }
+          return;
         }
 
-        result.push({
-          id: policyId,
-          name: policyName,
-          policyText: policyText,
-        });
-      }
+        const result: PolicyRow[] = [];
+        for (let index = 0; index < policyPlugins.length; index++) {
+          const p = policyPlugins[index];
+          // Handle both string and PolicyObject formats
+          let policyText: string;
+          let policyId: string;
+          let policyName: string;
 
-      setRows(result);
+          if (typeof p.config.policy === 'string') {
+            policyText = p.config.policy;
+            policyId = await makeInlinePolicyId(policyText);
+            policyName = makeDefaultPolicyName(index);
+          } else {
+            policyText = p.config.policy.text;
+            policyId = p.config.policy.id;
+            policyName =
+              p.config.policy.name || policyNames[policyId] || makeDefaultPolicyName(index);
+          }
+
+          result.push({
+            id: policyId,
+            name: policyName,
+            policyText: policyText,
+          });
+        }
+
+        if (!cancelled) {
+          setRows(result);
+        }
+      } catch (error) {
+        console.error('Error building policy rows:', error);
+        if (!cancelled) {
+          setRows([]);
+        }
+      }
     }
 
     buildRows();
+
+    return () => {
+      cancelled = true;
+    };
   }, [policyPlugins, policyNames]);
 
   // Validate policy text uniqueness
