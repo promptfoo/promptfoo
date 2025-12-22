@@ -1963,6 +1963,9 @@
             },
             "isRedteam": {
               "type": "boolean"
+            },
+            "silent": {
+              "type": "boolean"
             }
           },
           "additionalProperties": false
