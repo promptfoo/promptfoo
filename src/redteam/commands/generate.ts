@@ -459,6 +459,7 @@ export async function doGenerateRedteam(
 
       const contextResult = await synthesize({
         ...parsedConfig.data,
+        inputs: targetInputs,
         purpose: contextPurpose,
         numTests: config.numTests,
         prompts: testSuite.prompts.map((prompt) => prompt.raw),
@@ -506,6 +507,7 @@ export async function doGenerateRedteam(
     // Single purpose mode (existing behavior)
     const result = await synthesize({
       ...parsedConfig.data,
+      inputs: targetInputs,
       purpose: enhancedPurpose,
       numTests: config.numTests,
       prompts: testSuite.prompts.map((prompt) => prompt.raw),
