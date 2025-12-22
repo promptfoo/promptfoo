@@ -118,7 +118,7 @@
 
   <!-- Row 5: Hallucination refusal -->
   <g transform="translate(0, 335)">
-    <text x="155" y="20" class="metric">Hallucination*</text>
+    <text x="155" y="20" class="metric">Fabricated Citations*</text>
     <text x="155" y="34" class="metric-note">(n=14-15)</text>
 
     <!-- GPT: 40% = 144px -->

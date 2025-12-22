@@ -55,7 +55,7 @@
     <!-- Average callout -->
     <g transform="translate(0, 165)">
       <rect x="0" y="0" width="290" height="30" rx="4" fill="#e8f8f5" stroke="#b2dfdb"/>
-      <text x="145" y="20" class="section-desc" text-anchor="middle" style="fill: #27ae60; font-weight: 600;">Average: 29% ASR (defended)</text>
+      <text x="145" y="20" class="section-desc" text-anchor="middle" style="fill: #27ae60; font-weight: 600;">Average: 29% ASR (lower)</text>
     </g>
   </g>
 
@@ -78,7 +78,7 @@
     </g>
 
     <g transform="translate(0, 95)">
-      <text x="0" y="14" class="attack-label">Hallucination</text>
+      <text x="0" y="14" class="attack-label">Fabricated citations</text>
       <rect x="105" y="0" width="186" height="20" rx="2" fill="#FF6B6B"/>
       <text x="276" y="14" class="pct-white">93%</text>
     </g>
