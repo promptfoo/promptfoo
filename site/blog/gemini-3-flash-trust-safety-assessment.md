@@ -18,7 +18,7 @@ authors: [michael]
 tags: [red-teaming, security-vulnerability, google]
 ---
 
-Google's Gemini 3 Flash launched yesterday with a new parameter: `thinkingLevel`. Set it to MINIMAL for speed. Set it to HIGH for reasoning. What Google doesn't advertise: that knob also controls how easily the model gets jailbroken.
+Gemini 3 Flash exposes a `thinkingLevel` parameter. Set it to MINIMAL for speed. Set it to HIGH for reasoning. What's less obvious: that knob also affects how easily the model gets jailbroken.
 
 We tested Flash with `thinkingLevel: MINIMAL`—the config teams will choose when optimizing for latency. Single-turn jailbreaks succeeded 89% of the time (160/179), compared to 60% for GPT-5.2 (108/179) under equivalent settings. The gap isn't just that Gemini starts weaker—it's that the weakness compounds.
 
