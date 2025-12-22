@@ -19,6 +19,54 @@ function isSingleTurnStrategy(strategyId: string | undefined): boolean {
   return strategyId ? SINGLE_TURN_STRATEGIES.includes(strategyId as any) : false;
 }
 
+/**
+ * Transform a raw result (testCase + response) into a TestCase ready for retry
+ * Handles redteamFinalPrompt extraction for single-turn strategies
+ */
+function transformResult(
+  testCase: TestCase,
+  response: Record<string, unknown> | null,
+  evalId: string,
+): TestCase | null {
+  try {
+    const { strategyConfig: _strategyConfig, ...restMetadata } = testCase.metadata || {};
+    const strategyId = testCase.metadata?.strategyId;
+
+    // For single-turn strategies, use the final attack prompt from the response
+    // This is the prompt that was actually used in the successful/failed attack
+    let finalVars = testCase.vars;
+    if (isSingleTurnStrategy(strategyId) && testCase.vars) {
+      const redteamFinalPrompt = (response?.metadata as Record<string, unknown>)
+        ?.redteamFinalPrompt;
+      if (redteamFinalPrompt) {
+        // Find the injectVar key (usually 'prompt') and replace with final prompt
+        const injectVar = (testCase.provider as any)?.config?.injectVar || 'prompt';
+        finalVars = {
+          ...testCase.vars,
+          [injectVar]: redteamFinalPrompt,
+        };
+      }
+    }
+
+    return {
+      ...testCase,
+      vars: finalVars,
+      metadata: {
+        ...restMetadata,
+        originalEvalId: evalId,
+        strategyConfig: undefined,
+      },
+      assert: testCase.assert?.map((assertion) => ({
+        ...assertion,
+        metric: assertion.metric?.split('/')[0],
+      })),
+    } as TestCase;
+  } catch (e) {
+    logger.debug(`Failed to transform test case: ${e}`);
+    return null;
+  }
+}
+
 export function deduplicateTests(tests: TestCase[]): TestCase[] {
   const seen = new Set<string>();
   return tests.filter((test) => {
@@ -56,7 +104,17 @@ async function getFailedTestCases(
 
         if (response.ok) {
           const data = await response.json();
-          const cloudTestCases = data.testCases || [];
+          // Cloud API returns raw results with response field for transformation
+          const cloudResults = data.results || [];
+          const cloudTestCases = cloudResults
+            .map(
+              (r: {
+                testCase: TestCase;
+                response: Record<string, unknown> | null;
+                evalId: string;
+              }) => transformResult(r.testCase, r.response, r.evalId),
+            )
+            .filter((tc: TestCase | null): tc is TestCase => tc !== null);
           allTestCases.push(...cloudTestCases);
         } else {
           logger.error(
@@ -110,40 +168,7 @@ async function getFailedTestCases(
             typeof r.testCase === 'string' ? JSON.parse(r.testCase) : r.testCase;
           const response = typeof r.response === 'string' ? JSON.parse(r.response) : r.response;
 
-          const { strategyConfig: _strategyConfig, ...restMetadata } = testCase.metadata || {};
-          const strategyId = testCase.metadata?.strategyId;
-
-          // For single-turn strategies, use the final attack prompt from the response
-          // This is the prompt that was actually used in the successful/failed attack
-          let finalVars = testCase.vars;
-          if (isSingleTurnStrategy(strategyId) && testCase.vars) {
-            const redteamFinalPrompt = response?.metadata?.redteamFinalPrompt;
-            if (redteamFinalPrompt) {
-              // Find the injectVar key (usually 'prompt') and replace with final prompt
-              const injectVar = (testCase.provider as any)?.config?.injectVar || 'prompt';
-              finalVars = {
-                ...testCase.vars,
-                [injectVar]: redteamFinalPrompt,
-              };
-            }
-          }
-
-          // Keep the provider - we'll use it directly if it has injectVar
-          const result = {
-            ...testCase,
-            vars: finalVars,
-            metadata: {
-              ...restMetadata,
-              originalEvalId: r.evalId,
-              strategyConfig: undefined,
-            },
-            assert: testCase.assert?.map((assertion) => ({
-              ...assertion,
-              metric: assertion.metric?.split('/')[0],
-            })),
-          } as TestCase;
-
-          return result;
+          return transformResult(testCase, response, r.evalId);
         } catch (e) {
           logger.debug(`Failed to parse test case: ${e}`);
           return null;
