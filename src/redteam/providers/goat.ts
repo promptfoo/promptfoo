@@ -23,7 +23,7 @@ import {
   type TransformResult,
 } from '../shared/runtimeTransform';
 import { Strategies } from '../strategies';
-import { extractPromptFromTags, extractVariablesFromJson, getSessionId } from '../util';
+import { extractInputVarsFromPrompt, extractPromptFromTags, getSessionId } from '../util';
 import { getGoalRubric } from './prompts';
 import { getLastMessageContent, tryUnblocking } from './shared';
 import { formatTraceForMetadata, formatTraceSummary } from './traceFormatting';
@@ -176,9 +176,6 @@ export default class GoatProvider implements ApiProvider {
 
     const messages: Message[] = [];
     const totalTokenUsage: TokenUsage = createEmptyTokenUsage();
-
-    // Get inputVars from test metadata for multi-input mode
-    const inputVars = context?.test?.metadata?.inputVars as Record<string, string> | undefined;
 
     // Track redteamHistory entries with audio/image data for UI rendering
     const redteamHistory: Array<{
@@ -368,21 +365,15 @@ export default class GoatProvider implements ApiProvider {
           processedMessage = extractedPrompt;
         }
 
+        // Extract input vars from the attack message for multi-input mode
+        const currentInputVars = extractInputVarsFromPrompt(processedMessage, this.config.inputs);
+
         // Build target vars - handle multi-input mode
         const targetVars: Record<string, string | object> = {
           ...context.vars,
           [this.config.injectVar]: processedMessage,
+          ...(currentInputVars || {}),
         };
-
-        // If inputs is defined, extract individual keys from the attack message JSON
-        if (this.config.inputs && Object.keys(this.config.inputs).length > 0) {
-          try {
-            const parsed = JSON.parse(processedMessage);
-            Object.assign(targetVars, extractVariablesFromJson(parsed, this.config.inputs));
-          } catch {
-            // If parsing fails, processedMessage is plain text - keep original vars
-          }
-        }
 
         const renderedAttackerPrompt = await renderPrompt(
           context.prompt,
@@ -562,8 +553,8 @@ export default class GoatProvider implements ApiProvider {
               ? { data: targetResponse.audio.data, format: targetResponse.audio.format }
               : undefined,
           // Note: outputImage not tracked as ProviderResponse doesn't include image yet
-          // Include input vars for multi-input mode
-          inputVars,
+          // Include input vars for multi-input mode (extracted from current prompt)
+          inputVars: currentInputVars,
         });
 
         // Store the attack response for potential unblocking in next turn

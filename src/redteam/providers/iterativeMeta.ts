@@ -18,7 +18,7 @@ import {
   type TransformResult,
 } from '../shared/runtimeTransform';
 import { Strategies } from '../strategies';
-import { extractPromptFromTags, extractVariablesFromJson } from '../util';
+import { extractInputVarsFromPrompt, extractPromptFromTags } from '../util';
 import {
   createIterationContext,
   externalizeResponseForRedteamHistory,
@@ -153,9 +153,6 @@ export async function runMetaAgentRedteam({
 
   // Track the previous iteration's trace summary for attack generation
   let previousTraceSummary: string | undefined;
-
-  // Get inputVars from test metadata for multi-input mode
-  const inputVars = test?.metadata?.inputVars as Record<string, string> | undefined;
 
   const redteamHistory: IterativeMetaMetadata['redteamHistory'] = [];
 
@@ -302,21 +299,15 @@ export async function runMetaAgentRedteam({
       .replace(/\{%/g, '{ %')
       .replace(/%\}/g, '% }');
 
+    // Extract input vars from the attack prompt for multi-input mode
+    const currentInputVars = extractInputVarsFromPrompt(attackPrompt, inputs);
+
     // Build updated vars - handle multi-input mode
     const updatedVars: Record<string, string | object> = {
       ...iterationVars,
       [injectVar]: escapedAttackPrompt,
+      ...(currentInputVars || {}),
     };
-
-    // If inputs is defined, extract individual keys from the attack prompt JSON
-    if (inputs && Object.keys(inputs).length > 0) {
-      try {
-        const parsed = JSON.parse(finalAttackPrompt);
-        Object.assign(updatedVars, extractVariablesFromJson(parsed, inputs));
-      } catch {
-        // If parsing fails, attackPrompt is plain text - keep original vars
-      }
-    }
 
     const targetPrompt = await renderPrompt(
       prompt,
@@ -486,8 +477,8 @@ export async function runMetaAgentRedteam({
       guardrails: undefined,
       trace: traceContext ? formatTraceForMetadata(traceContext) : undefined,
       traceSummary: computedTraceSummary,
-      // Include input vars for multi-input mode
-      inputVars,
+      // Include input vars for multi-input mode (extracted from current prompt)
+      inputVars: currentInputVars,
     });
 
     // Check if vulnerability was achieved

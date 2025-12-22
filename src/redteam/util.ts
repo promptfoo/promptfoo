@@ -69,6 +69,30 @@ export function extractVariablesFromJson(
 }
 
 /**
+ * Extracts input variables from a prompt string for multi-input mode.
+ * Handles JSON parsing and variable extraction in one step.
+ *
+ * @param prompt - The prompt string (may be JSON or plain text)
+ * @param inputs - The inputs config specifying which keys to extract (or undefined if not in multi-input mode)
+ * @returns The extracted variables, or undefined if not in multi-input mode or parsing fails
+ */
+export function extractInputVarsFromPrompt(
+  prompt: string,
+  inputs: Record<string, string> | undefined,
+): Record<string, string> | undefined {
+  if (!inputs || Object.keys(inputs).length === 0) {
+    return undefined;
+  }
+  try {
+    const parsed = JSON.parse(prompt);
+    return extractVariablesFromJson(parsed, inputs);
+  } catch {
+    // If parsing fails, prompt is plain text - no input vars to extract
+    return undefined;
+  }
+}
+
+/**
  * Normalizes different types of apostrophes to a standard single quote
  */
 export function normalizeApostrophes(str: string): string {

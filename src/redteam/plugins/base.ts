@@ -9,7 +9,7 @@ import { sleep } from '../../util/time';
 import { redteamProviderManager } from '../providers/shared';
 import {
   extractAllPromptsFromTags,
-  extractVariablesFromJson,
+  extractInputVarsFromPrompt,
   getShortPluginId,
   isBasicRefusal,
   isEmptyResponse,
@@ -356,22 +356,16 @@ export abstract class RedteamPluginBase {
     const hasMultipleInputs = this.config.inputs && Object.keys(this.config.inputs).length > 0;
 
     return prompts.sort().map((promptObj) => {
+      // Extract input vars from the prompt for multi-input mode
+      const inputVars = hasMultipleInputs
+        ? extractInputVarsFromPrompt(promptObj.__prompt, this.config.inputs)
+        : undefined;
+
       // Use the configured injectVar (will be MULTI_INPUT_VAR in multi-input mode)
       const vars: Record<string, string> = {
         [this.injectVar]: promptObj.__prompt,
+        ...(inputVars || {}),
       };
-
-      // If inputs is defined, extract individual keys from the JSON into vars
-      let inputVars: Record<string, string> | undefined;
-      if (hasMultipleInputs) {
-        try {
-          const parsed = JSON.parse(promptObj.__prompt);
-          inputVars = extractVariablesFromJson(parsed, this.config.inputs!);
-          Object.assign(vars, inputVars);
-        } catch {
-          // If parsing fails, just use the raw prompt
-        }
-      }
 
       return {
         vars,

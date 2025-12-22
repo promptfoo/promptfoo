@@ -3,6 +3,7 @@ import { fetchWithCache } from '../../src/cache';
 import {
   extractAllPromptsFromTags,
   extractGoalFromPrompt,
+  extractInputVarsFromPrompt,
   extractPromptFromTags,
   extractVariablesFromJson,
   getSessionId,
@@ -941,5 +942,73 @@ describe('extractVariablesFromJson', () => {
     expect(result.username).toBe('attacker');
     expect(result.query).toBe('SELECT * FROM users; DROP TABLE users; --');
     expect(result.context).toBe('{"previousMessages":["Hello","How are you?"]}');
+  });
+});
+
+describe('extractInputVarsFromPrompt', () => {
+  it('should extract variables from valid JSON prompt', () => {
+    const prompt = '{"username": "admin", "message": "Hello"}';
+    const inputs = { username: 'User name', message: 'Message content' };
+
+    const result = extractInputVarsFromPrompt(prompt, inputs);
+
+    expect(result).toEqual({ username: 'admin', message: 'Hello' });
+  });
+
+  it('should return undefined for plain text prompt', () => {
+    const prompt = 'This is a plain text prompt';
+    const inputs = { username: 'User name' };
+
+    const result = extractInputVarsFromPrompt(prompt, inputs);
+
+    expect(result).toBeUndefined();
+  });
+
+  it('should return undefined when inputs is undefined', () => {
+    const prompt = '{"username": "admin"}';
+
+    const result = extractInputVarsFromPrompt(prompt, undefined);
+
+    expect(result).toBeUndefined();
+  });
+
+  it('should return undefined when inputs is empty', () => {
+    const prompt = '{"username": "admin"}';
+    const inputs = {};
+
+    const result = extractInputVarsFromPrompt(prompt, inputs);
+
+    expect(result).toBeUndefined();
+  });
+
+  it('should handle nested objects by stringifying them', () => {
+    const prompt = '{"user": {"name": "admin", "id": 123}, "context": ["a", "b"]}';
+    const inputs = { user: 'User object', context: 'Context array' };
+
+    const result = extractInputVarsFromPrompt(prompt, inputs);
+
+    expect(result).toEqual({
+      user: '{"name":"admin","id":123}',
+      context: '["a","b"]',
+    });
+  });
+
+  it('should handle invalid JSON gracefully', () => {
+    const prompt = '{"username": admin}'; // Invalid JSON - unquoted value
+    const inputs = { username: 'User name' };
+
+    const result = extractInputVarsFromPrompt(prompt, inputs);
+
+    expect(result).toBeUndefined();
+  });
+
+  it('should only extract keys defined in inputs', () => {
+    const prompt = '{"username": "admin", "password": "secret", "message": "Hello"}';
+    const inputs = { username: 'User name', message: 'Message content' };
+
+    const result = extractInputVarsFromPrompt(prompt, inputs);
+
+    expect(result).toEqual({ username: 'admin', message: 'Hello' });
+    expect(result).not.toHaveProperty('password');
   });
 });

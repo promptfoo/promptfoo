@@ -22,8 +22,8 @@ import {
 } from '../../shared/runtimeTransform';
 import { Strategies } from '../../strategies';
 import {
+  extractInputVarsFromPrompt,
   extractPromptFromTags,
-  extractVariablesFromJson,
   getSessionId,
   isBasicRefusal,
 } from '../../util';
@@ -292,9 +292,6 @@ export class CrescendoProvider implements ApiProvider {
 
     const totalTokenUsage: TokenUsage = createEmptyTokenUsage();
 
-    // Get inputVars from test metadata for multi-input mode
-    const inputVars = context?.test?.metadata?.inputVars as Record<string, string> | undefined;
-
     // Track redteamHistory entries with audio/image data for UI rendering
     const redteamHistory: Array<{
       prompt: string;
@@ -395,7 +392,11 @@ export class CrescendoProvider implements ApiProvider {
 
         logger.debug(`[Crescendo] Generated attack prompt: ${attackPrompt}`);
 
-        const { response, transformResult } = await this.sendPrompt(
+        const {
+          response,
+          transformResult,
+          inputVars: currentInputVars,
+        } = await this.sendPrompt(
           attackPrompt,
           prompt,
           vars,
@@ -410,6 +411,8 @@ export class CrescendoProvider implements ApiProvider {
         );
         lastResponse = response;
         lastTransformResult = transformResult;
+        // Track current input vars for history entry
+        const lastInputVars = currentInputVars;
         accumulateResponseTokenUsage(totalTokenUsage, lastResponse);
 
         if (lastResponse.sessionId && this.stateful) {
@@ -556,8 +559,8 @@ export class CrescendoProvider implements ApiProvider {
             lastResponse.image?.data && lastResponse.image?.format
               ? { data: lastResponse.image.data, format: lastResponse.image.format }
               : undefined,
-          // Include input vars for multi-input mode
-          inputVars,
+          // Include input vars for multi-input mode (extracted from current prompt)
+          inputVars: lastInputVars,
         });
 
         if (graderPassed === false) {
@@ -791,7 +794,11 @@ export class CrescendoProvider implements ApiProvider {
     tracingOptions?: RedteamTracingOptions,
     shouldFetchTrace?: boolean,
     traceSnapshots?: TraceContextData[],
-  ): Promise<{ response: TargetResponse; transformResult?: TransformResult }> {
+  ): Promise<{
+    response: TargetResponse;
+    transformResult?: TransformResult;
+    inputVars?: Record<string, string>;
+  }> {
     // Extract JSON from <Prompt> tags if present (multi-input mode)
     let processedPrompt = attackPrompt;
     const extractedPrompt = extractPromptFromTags(attackPrompt);
@@ -799,21 +806,15 @@ export class CrescendoProvider implements ApiProvider {
       processedPrompt = extractedPrompt;
     }
 
+    // Extract input vars from the processed prompt for multi-input mode
+    const currentInputVars = extractInputVarsFromPrompt(processedPrompt, this.config.inputs);
+
     // Build updated vars - handle multi-input mode
     const updatedVars: Record<string, string | object> = {
       ...vars,
       [this.config.injectVar]: processedPrompt,
+      ...(currentInputVars || {}),
     };
-
-    // If inputs is defined, extract individual keys from the processedPrompt JSON
-    if (this.config.inputs && Object.keys(this.config.inputs).length > 0) {
-      try {
-        const parsed = JSON.parse(processedPrompt);
-        Object.assign(updatedVars, extractVariablesFromJson(parsed, this.config.inputs));
-      } catch {
-        // If parsing fails, processedPrompt is plain text - keep original vars
-      }
-    }
 
     const renderedPrompt = await renderPrompt(
       originalPrompt,
@@ -905,6 +906,7 @@ export class CrescendoProvider implements ApiProvider {
             tokenUsage: { numRequests: 0 },
           },
           transformResult: lastTransformResult,
+          inputVars: currentInputVars,
         };
       }
 
@@ -998,7 +1000,11 @@ export class CrescendoProvider implements ApiProvider {
       }
     }
 
-    return { response: targetResponse, transformResult: lastTransformResult };
+    return {
+      response: targetResponse,
+      transformResult: lastTransformResult,
+      inputVars: currentInputVars,
+    };
   }
 
   private async getRefusalScore(

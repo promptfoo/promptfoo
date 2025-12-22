@@ -22,7 +22,7 @@ import {
   type TransformResult,
 } from '../shared/runtimeTransform';
 import { Strategies } from '../strategies';
-import { extractPromptFromTags, extractVariablesFromJson, getSessionId } from '../util';
+import { extractInputVarsFromPrompt, extractPromptFromTags, getSessionId } from '../util';
 import {
   ATTACKER_SYSTEM_PROMPT,
   CLOUD_ATTACKER_SYSTEM_PROMPT,
@@ -189,9 +189,6 @@ export async function runRedteamConversation({
 
   const totalTokenUsage = createEmptyTokenUsage();
 
-  // Get inputVars from test metadata for multi-input mode
-  const inputVars = test?.metadata?.inputVars as Record<string, string> | undefined;
-
   const previousOutputs: {
     prompt: string;
     promptAudio?: MediaData;
@@ -342,22 +339,15 @@ export async function runRedteamConversation({
       });
     }
 
+    // Extract input vars from the attack prompt for multi-input mode
+    const currentInputVars = extractInputVarsFromPrompt(newInjectVar, inputs);
+
     // Build updated vars - handle multi-input mode
     const updatedVars: Record<string, string | object> = {
       ...iterationVars,
       [injectVar]: finalInjectVar,
+      ...(currentInputVars || {}),
     };
-
-    // If inputs is defined, extract individual keys from the attack prompt JSON
-    if (inputs && Object.keys(inputs).length > 0) {
-      try {
-        // Use the original newInjectVar (before escaping) for parsing
-        const parsed = JSON.parse(newInjectVar);
-        Object.assign(updatedVars, extractVariablesFromJson(parsed, inputs));
-      } catch {
-        // If parsing fails, it's plain text - keep original vars
-      }
-    }
 
     targetPrompt = await renderPrompt(
       prompt,
@@ -658,8 +648,8 @@ export async function runRedteamConversation({
       guardrails: targetResponse.guardrails,
       trace: traceContext ? formatTraceForMetadata(traceContext) : undefined,
       traceSummary,
-      // Include input vars for multi-input mode
-      inputVars,
+      // Include input vars for multi-input mode (extracted from current prompt)
+      inputVars: currentInputVars,
       metadata: {
         sessionId,
       },

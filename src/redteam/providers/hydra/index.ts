@@ -21,8 +21,8 @@ import {
 } from '../../shared/runtimeTransform';
 import { Strategies } from '../../strategies';
 import {
+  extractInputVarsFromPrompt,
   extractPromptFromTags,
-  extractVariablesFromJson,
   getSessionId,
   isBasicRefusal,
 } from '../../util';
@@ -270,9 +270,6 @@ export class HydraProvider implements ApiProvider {
     let lastTargetResponse: TargetResponse | undefined = undefined;
     let backtrackCount = 0;
 
-    // Get inputVars from test metadata for multi-input mode
-    const inputVars = context?.test?.metadata?.inputVars as Record<string, string> | undefined;
-
     const redteamHistory: Array<{
       prompt: string;
       promptAudio?: MediaData;
@@ -390,6 +387,9 @@ export class HydraProvider implements ApiProvider {
         processedMessage = extractedPrompt;
       }
 
+      // Extract input vars from the processed message for multi-input mode
+      const currentInputVars = extractInputVarsFromPrompt(processedMessage, this.config.inputs);
+
       // Add message to conversation history (without <Prompt> tags)
       this.conversationHistory.push({
         role: 'user',
@@ -412,17 +412,9 @@ export class HydraProvider implements ApiProvider {
           ...vars,
           [this.injectVar]: escapedMessage,
           ...(this.sessionId ? { sessionId: this.sessionId } : {}),
+          // Add extracted input vars if available
+          ...(currentInputVars || {}),
         };
-
-        // If inputs is defined, extract individual keys from the message JSON
-        if (this.config.inputs && Object.keys(this.config.inputs).length > 0) {
-          try {
-            const parsed = JSON.parse(processedMessage);
-            Object.assign(updatedVars, extractVariablesFromJson(parsed, this.config.inputs));
-          } catch {
-            // If parsing fails, processedMessage is plain text - keep original vars
-          }
-        }
 
         targetPrompt = await renderPrompt(
           prompt,
@@ -749,8 +741,8 @@ export class HydraProvider implements ApiProvider {
         graderPassed: graderResult?.pass,
         trace: traceContext ? formatTraceForMetadata(traceContext) : undefined,
         traceSummary: computedTraceSummary,
-        // Include input vars for multi-input mode
-        inputVars,
+        // Include input vars for multi-input mode (extracted from current prompt)
+        inputVars: currentInputVars,
       });
 
       // Check if vulnerability was achieved
