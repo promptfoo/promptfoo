@@ -156,7 +156,7 @@ When you manipulate tokens, the model catches it. When you manipulate framing, t
 
 Google's [launch post](https://blog.google/products/gemini/gemini-3-flash/) emphasizes speed, cost, and benchmarks. We focused on adversarial safety under speed-first configuration.
 
-Google reduced "unjustified refusals" by [10% vs the prior Flash model](https://ai.google.dev/gemini-api/docs/models/gemini-v3). That's a win for user experience on benign prompts. Our results may show the other side of that trade-off: a wider attack surface when prompts are adversarial.
+Google reduced "unjustified refusals" by [10% vs the prior Flash model](https://ai.google.dev/gemini-api/docs/gemini-3). That's a win for user experience on benign prompts. Our results may show the other side of that trade-off: a wider attack surface when prompts are adversarial.
 
 <div style={{backgroundColor: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: '8px', padding: '1rem', margin: '1.5rem 0'}}>
 <strong>For product teams deploying Gemini 3 Flash today:</strong>
@@ -278,7 +278,7 @@ GPT-5 (`gpt-5-2025-08-07`) for both models. Using a single judge improves compar
 | Unjustified-refusals | -10.4% | ✓ Fewer false refusals |
 | Multilingual Safety | +0.1% | Minor regression |
 
-Source: [Gemini 3 model documentation](https://ai.google.dev/gemini-api/docs/models/gemini-v3). Note: Google cautions that automated results are not directly comparable across model cards due to improved evals over time.
+Source: [Gemini 3 model documentation](https://ai.google.dev/gemini-api/docs/gemini-3). Note: Google cautions that automated results are not directly comparable across model cards due to improved evals over time.
 
 Google's metrics test typical inputs, not adversarial prompts. The 10.4% reduction in unjustified refusals is a UX win that may trade off against adversarial resistance.
 
