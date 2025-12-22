@@ -8,8 +8,8 @@ import fs from 'fs';
 import path from 'path';
 
 import yaml from 'js-yaml';
-import { type Config, ConfigSchema, DEFAULT_CONFIG } from './schema';
 import { ConfigLoadError, validateSeverity } from '../../types/codeScan';
+import { type Config, ConfigSchema, DEFAULT_CONFIG } from './schema';
 
 /**
  * Load configuration from a YAML file

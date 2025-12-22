@@ -1,11 +1,10 @@
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
-import { MemoryRouter, useNavigate } from 'react-router-dom';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { EvalSummary } from '@promptfoo/types';
-
 import { callApi } from '@app/utils/api';
 import { formatDataGridDate } from '@app/utils/date';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter, useNavigate } from 'react-router-dom';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ReportIndex from './ReportIndex';
+import type { EvalSummary } from '@promptfoo/types';
 
 vi.mock('@app/utils/api');
 

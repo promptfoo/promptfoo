@@ -1,8 +1,8 @@
 import { z } from 'zod';
-
-import type { ApiProvider, ProviderOptions } from '../types/providers';
 import { type FrameworkComplianceId, type Plugin, Severity, SeveritySchema } from './constants';
 import { isValidPolicyId } from './plugins/policy/validators';
+
+import type { ApiProvider, ProviderOptions } from '../types/providers';
 
 // Modifiers are used to modify the behavior of the plugin.
 // They let the user specify additional instructions for the plugin,
@@ -152,6 +152,13 @@ export interface PluginActionParams {
   config?: PluginConfig;
 }
 
+// Context for testing multiple security contexts/states
+export interface RedteamContext {
+  id: string;
+  purpose: string;
+  vars?: Record<string, string>;
+}
+
 // Shared redteam options
 type CommonOptions = {
   injectVar?: string;
@@ -160,6 +167,7 @@ type CommonOptions = {
   plugins?: RedteamPluginObject[];
   provider?: string | ProviderOptions | ApiProvider;
   purpose?: string;
+  contexts?: RedteamContext[];
   strategies?: RedteamStrategy[];
   frameworks?: FrameworkComplianceId[];
   delay?: number;
@@ -228,6 +236,7 @@ export interface RedteamRunOptions {
   filterTargets?: string;
   verbose?: boolean;
   progressBar?: boolean;
+  description?: string;
 
   // Used by webui
   liveRedteamConfig?: any;
@@ -287,7 +296,15 @@ export interface SavedRedteamConfig {
  * Media data (audio or image) for redteam history entries
  */
 export interface RedteamMediaData {
-  data: string;
+  /**
+   * Media payload for rendering/transport.
+   *
+   * - Base64 string (legacy/inline)
+   * - `storageRef:<key>` string (external media storage)
+   *
+   * Optional because some code paths only know the format and store the payload elsewhere.
+   */
+  data?: string;
   format: string;
 }
 
@@ -303,6 +320,8 @@ export interface RedteamHistoryEntry {
   promptImage?: RedteamMediaData;
   /** Audio data from the target response */
   outputAudio?: RedteamMediaData;
+  /** Image data from the target response */
+  outputImage?: RedteamMediaData;
 }
 
 /**

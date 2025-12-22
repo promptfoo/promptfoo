@@ -12,15 +12,15 @@ import {
   redteamProviderManager,
   tryUnblocking,
 } from '../../../src/redteam/providers/shared';
+import { sleep } from '../../../src/util/time';
+
 import type {
   ApiProvider,
   CallApiContextParams,
   CallApiFunction,
   CallApiOptionsParams,
-  ProviderResponse,
   Prompt,
 } from '../../../src/types/index';
-import { sleep } from '../../../src/util/time';
 
 // Hoisted mocks for class constructor and loadApiProviders
 const mockLoadApiProviders = vi.hoisted(() => vi.fn());

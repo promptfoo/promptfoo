@@ -1,5 +1,4 @@
 import dedent from 'dedent';
-import { v4 as uuidv4 } from 'uuid';
 import { evaluate } from '../evaluator';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
@@ -65,7 +64,7 @@ export async function testProviderConnectivity(
   // For server sessions, a value is provided by the server, and subsequent
   // requests will use the server-returned session ID
   if (!provider?.config?.sessionParser) {
-    vars['sessionId'] = uuidv4();
+    vars['sessionId'] = crypto.randomUUID();
   }
 
   // Build TestSuite for evaluation (no assertions - we'll use agent endpoint for analysis)
@@ -424,7 +423,7 @@ export async function testProviderSession(
       sessionConfig,
     });
 
-    const initialSessionId = effectiveSessionSource === 'server' ? undefined : uuidv4();
+    const initialSessionId = effectiveSessionSource === 'server' ? undefined : crypto.randomUUID();
 
     const firstPrompt = 'What can you help me with?';
     const secondPrompt = 'What was the last thing I asked you?';

@@ -166,6 +166,20 @@ describe('redteam types', () => {
     expect(options.maxConcurrency).toBe(5);
   });
 
+  it('should create RedteamRunOptions with description for custom scan names', () => {
+    const options: RedteamRunOptions = {
+      id: 'test-run',
+      config: 'config-uuid',
+      target: 'target-uuid',
+      description: 'My Custom Scan Name',
+      maxConcurrency: 5,
+    };
+
+    expect(options.description).toBe('My Custom Scan Name');
+    expect(options.config).toBe('config-uuid');
+    expect(options.target).toBe('target-uuid');
+  });
+
   it('should create valid SavedRedteamConfig', () => {
     const config: SavedRedteamConfig = {
       description: 'Test config',

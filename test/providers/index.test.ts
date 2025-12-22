@@ -1,4 +1,3 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import child_process from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -6,6 +5,7 @@ import Stream from 'stream';
 
 import chalk from 'chalk';
 import dedent from 'dedent';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache, disableCache, enableCache } from '../../src/cache';
 import { importModule } from '../../src/esm';
 import logger from '../../src/logger';

@@ -6,6 +6,7 @@
 
 import { io, type Socket } from 'socket.io-client';
 import logger from '../../logger';
+
 import type { SocketAuthCredentials } from '../../types/codeScan';
 
 /**

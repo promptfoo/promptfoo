@@ -1,9 +1,8 @@
-import { render, screen, fireEvent } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
-import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
-import userEvent from '@testing-library/user-event';
 import { Box, Typography } from '@mui/material';
-
+import { fireEvent, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
+import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import EvalsDataGrid from '../../evals/components/EvalsDataGrid';
 import EvalSelectorDialog from './EvalSelectorDialog';
 

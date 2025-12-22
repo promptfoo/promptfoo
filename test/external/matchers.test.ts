@@ -1,4 +1,4 @@
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { matchesConversationRelevance } from '../../src/external/matchers/deepeval';
 import { getDefaultProviders } from '../../src/providers/defaults';
 
