@@ -1,6 +1,7 @@
 import dedent from 'dedent';
 import { afterEach, beforeEach, describe, expect, it, Mock, MockInstance, vi } from 'vitest';
 import { matchesLlmRubric } from '../../../src/matchers';
+import { MULTI_INPUT_VAR } from '../../../src/redteam/constants';
 import {
   parseGeneratedInputs,
   parseGeneratedPrompts,
@@ -352,7 +353,8 @@ Use the format: Prompt: <your prompt here>`;
     });
 
     it('should generate test cases with multi-input mode when inputs is defined', async () => {
-      multiInputPlugin = new TestPlugin(multiInputProvider, 'test purpose', 'testVar', {
+      // In multi-input mode, injectVar is set to MULTI_INPUT_VAR at the redteam run level
+      multiInputPlugin = new TestPlugin(multiInputProvider, 'test purpose', MULTI_INPUT_VAR, {
         inputs: {
           username: 'The user name',
           message: 'The message content',
@@ -362,10 +364,11 @@ Use the format: Prompt: <your prompt here>`;
       const tests = await multiInputPlugin.generateTests(2);
 
       expect(tests).toHaveLength(2);
-      // Check that the full JSON is in the injectVar for all tests
+      // In multi-input mode, the full JSON is stored in MULTI_INPUT_VAR
+      // to prevent namespace collisions with user-defined input variables
       tests.forEach((test) => {
-        expect(test.vars!.testVar).toContain('username');
-        expect(test.vars!.testVar).toContain('message');
+        expect(test.vars![MULTI_INPUT_VAR]).toContain('username');
+        expect(test.vars![MULTI_INPUT_VAR]).toContain('message');
       });
       // Check that individual variables are extracted (order may vary due to sampling)
       const usernames = tests.map((t) => t.vars!.username);
@@ -388,9 +391,7 @@ Use the format: Prompt: <your prompt here>`;
       expect(multiInputProvider.callApi).toHaveBeenCalledWith(
         expect.stringContaining('__outputFormat:'),
       );
-      expect(multiInputProvider.callApi).toHaveBeenCalledWith(
-        expect.stringContaining('<Prompt>'),
-      );
+      expect(multiInputProvider.callApi).toHaveBeenCalledWith(expect.stringContaining('<Prompt>'));
     });
 
     it('should store inputs config in test metadata', async () => {
@@ -405,6 +406,35 @@ Use the format: Prompt: <your prompt here>`;
       const tests = await multiInputPlugin.generateTests(2);
 
       expect(tests[0].metadata?.pluginConfig?.inputs).toEqual(inputsConfig);
+    });
+
+    it('should include extracted inputVars in test case metadata', async () => {
+      // In multi-input mode, inputVars should be included in metadata for multi-turn strategies
+      multiInputPlugin = new TestPlugin(multiInputProvider, 'test purpose', MULTI_INPUT_VAR, {
+        inputs: {
+          username: 'The user name',
+          message: 'The message content',
+        },
+      });
+
+      const tests = await multiInputPlugin.generateTests(2);
+
+      // Both test cases should have inputVars in metadata
+      tests.forEach((test) => {
+        expect(test.metadata).toHaveProperty('inputVars');
+        expect(test.metadata?.inputVars).toBeDefined();
+        expect(typeof test.metadata?.inputVars).toBe('object');
+      });
+
+      // Verify the extracted values are correct (order may vary due to sampling)
+      const inputVarsArray = tests.map((t) => t.metadata?.inputVars as Record<string, string>);
+      const usernames = inputVarsArray.map((iv) => iv.username);
+      const messages = inputVarsArray.map((iv) => iv.message);
+
+      expect(usernames).toContain('admin');
+      expect(usernames).toContain('guest');
+      expect(messages).toContain('Hello');
+      expect(messages).toContain('Test message');
     });
 
     it('should handle parsing failures gracefully in multi-input mode', async () => {
@@ -441,7 +471,8 @@ Use the format: Prompt: <your prompt here>`;
         id: vi.fn().mockReturnValue('test-provider'),
       };
 
-      const plugin = new TestPlugin(nestedProvider, 'test purpose', 'testVar', {
+      // In multi-input mode, injectVar is set to MULTI_INPUT_VAR at the redteam run level
+      const plugin = new TestPlugin(nestedProvider, 'test purpose', MULTI_INPUT_VAR, {
         inputs: {
           user: 'User data object',
           context: 'Context information',
@@ -451,9 +482,16 @@ Use the format: Prompt: <your prompt here>`;
       const tests = await plugin.generateTests(1);
 
       expect(tests).toHaveLength(1);
-      // Nested objects should be stringified
+      // Full JSON stored in MULTI_INPUT_VAR
+      expect(tests[0].vars![MULTI_INPUT_VAR]).toContain('"user"');
+      // Nested objects should be stringified as individual vars
       expect(tests[0].vars!.user).toBe('{"name":"admin","id":123}');
       expect(tests[0].vars!.context).toBe('["msg1","msg2"]');
+    });
+
+    it('should use MULTI_INPUT_VAR constant value of __prompt', () => {
+      // This test ensures the constant value doesn't accidentally change
+      expect(MULTI_INPUT_VAR).toBe('__prompt');
     });
 
     it('should use parseGeneratedPrompts when inputs is not defined', async () => {

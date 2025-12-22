@@ -92,6 +92,7 @@ interface IterativeMetadata {
     guardrails: GuardrailResponse | undefined;
     trace?: Record<string, unknown>;
     traceSummary?: string;
+    inputVars?: Record<string, string>;
   }[];
   sessionIds: string[]; // All session IDs from iterations
   traceSnapshots?: Record<string, unknown>[];
@@ -188,6 +189,9 @@ export async function runRedteamConversation({
 
   const totalTokenUsage = createEmptyTokenUsage();
 
+  // Get inputVars from test metadata for multi-input mode
+  const inputVars = test?.metadata?.inputVars as Record<string, string> | undefined;
+
   const previousOutputs: {
     prompt: string;
     promptAudio?: MediaData;
@@ -200,6 +204,7 @@ export async function runRedteamConversation({
     guardrails: GuardrailResponse | undefined;
     trace?: Record<string, unknown>;
     traceSummary?: string;
+    inputVars?: Record<string, string>;
     metadata?: Record<string, any>;
   }[] = [];
 
@@ -653,6 +658,8 @@ export async function runRedteamConversation({
       guardrails: targetResponse.guardrails,
       trace: traceContext ? formatTraceForMetadata(traceContext) : undefined,
       traceSummary,
+      // Include input vars for multi-input mode
+      inputVars,
       metadata: {
         sessionId,
       },

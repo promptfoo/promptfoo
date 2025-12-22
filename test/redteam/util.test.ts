@@ -797,10 +797,7 @@ describe('extractAllPromptsFromTags', () => {
     const text =
       '<Prompt>{"user": {"name": "test"}, "items": [1, 2, 3]}</Prompt><Prompt>{"simple": true}</Prompt>';
     const result = extractAllPromptsFromTags(text);
-    expect(result).toEqual([
-      '{"user": {"name": "test"}, "items": [1, 2, 3]}',
-      '{"simple": true}',
-    ]);
+    expect(result).toEqual(['{"user": {"name": "test"}, "items": [1, 2, 3]}', '{"simple": true}']);
   });
 
   it('should handle LLM-generated output format with explanatory text', () => {
@@ -932,7 +929,7 @@ describe('extractVariablesFromJson', () => {
   it('should handle complex multi-input scenarios for redteam testing', () => {
     const parsed = {
       username: 'attacker',
-      query: "SELECT * FROM users; DROP TABLE users; --",
+      query: 'SELECT * FROM users; DROP TABLE users; --',
       context: { previousMessages: ['Hello', 'How are you?'] },
     };
     const inputs = {
@@ -942,7 +939,7 @@ describe('extractVariablesFromJson', () => {
     };
     const result = extractVariablesFromJson(parsed, inputs);
     expect(result.username).toBe('attacker');
-    expect(result.query).toBe("SELECT * FROM users; DROP TABLE users; --");
+    expect(result.query).toBe('SELECT * FROM users; DROP TABLE users; --');
     expect(result.context).toBe('{"previousMessages":["Hello","How are you?"]}');
   });
 });

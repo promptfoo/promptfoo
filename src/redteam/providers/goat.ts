@@ -177,6 +177,9 @@ export default class GoatProvider implements ApiProvider {
     const messages: Message[] = [];
     const totalTokenUsage: TokenUsage = createEmptyTokenUsage();
 
+    // Get inputVars from test metadata for multi-input mode
+    const inputVars = context?.test?.metadata?.inputVars as Record<string, string> | undefined;
+
     // Track redteamHistory entries with audio/image data for UI rendering
     const redteamHistory: Array<{
       prompt: string;
@@ -185,6 +188,7 @@ export default class GoatProvider implements ApiProvider {
       output: string;
       outputAudio?: MediaData;
       outputImage?: MediaData;
+      inputVars?: Record<string, string>;
     }> = [];
 
     let lastTargetResponse: ProviderResponse | undefined = undefined;
@@ -558,6 +562,8 @@ export default class GoatProvider implements ApiProvider {
               ? { data: targetResponse.audio.data, format: targetResponse.audio.format }
               : undefined,
           // Note: outputImage not tracked as ProviderResponse doesn't include image yet
+          // Include input vars for multi-input mode
+          inputVars,
         });
 
         // Store the attack response for potential unblocking in next turn

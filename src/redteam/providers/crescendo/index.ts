@@ -292,6 +292,9 @@ export class CrescendoProvider implements ApiProvider {
 
     const totalTokenUsage: TokenUsage = createEmptyTokenUsage();
 
+    // Get inputVars from test metadata for multi-input mode
+    const inputVars = context?.test?.metadata?.inputVars as Record<string, string> | undefined;
+
     // Track redteamHistory entries with audio/image data for UI rendering
     const redteamHistory: Array<{
       prompt: string;
@@ -300,6 +303,7 @@ export class CrescendoProvider implements ApiProvider {
       output: string;
       outputAudio?: MediaData;
       outputImage?: MediaData;
+      inputVars?: Record<string, string>;
     }> = [];
     let lastTransformResult: TransformResult | undefined;
 
@@ -552,6 +556,8 @@ export class CrescendoProvider implements ApiProvider {
             lastResponse.image?.data && lastResponse.image?.format
               ? { data: lastResponse.image.data, format: lastResponse.image.format }
               : undefined,
+          // Include input vars for multi-input mode
+          inputVars,
         });
 
         if (graderPassed === false) {

@@ -62,6 +62,7 @@ interface IterativeMetaMetadata {
     guardrails: GuardrailResponse | undefined;
     trace?: Record<string, unknown>;
     traceSummary?: string;
+    inputVars?: Record<string, string>;
   }[];
   sessionIds: string[];
   traceSnapshots?: Record<string, unknown>[];
@@ -152,6 +153,9 @@ export async function runMetaAgentRedteam({
 
   // Track the previous iteration's trace summary for attack generation
   let previousTraceSummary: string | undefined;
+
+  // Get inputVars from test metadata for multi-input mode
+  const inputVars = test?.metadata?.inputVars as Record<string, string> | undefined;
 
   const redteamHistory: IterativeMetaMetadata['redteamHistory'] = [];
 
@@ -482,6 +486,8 @@ export async function runMetaAgentRedteam({
       guardrails: undefined,
       trace: traceContext ? formatTraceForMetadata(traceContext) : undefined,
       traceSummary: computedTraceSummary,
+      // Include input vars for multi-input mode
+      inputVars,
     });
 
     // Check if vulnerability was achieved

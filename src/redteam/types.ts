@@ -1,24 +1,18 @@
 import { z } from 'zod';
+import { type Inputs, InputsSchema } from '../types/shared';
 import { type FrameworkComplianceId, type Plugin, Severity, SeveritySchema } from './constants';
 import { isValidPolicyId } from './plugins/policy/validators';
 
 import type { ApiProvider, ProviderOptions } from '../types/providers';
+
+// Re-export Inputs from shared to maintain backwards compatibility
+export { InputsSchema, type Inputs };
 
 // Modifiers are used to modify the behavior of the plugin.
 // They let the user specify additional instructions for the plugin,
 // and can be anything the user wants.
 export type Modifier = string | 'tone' | 'style' | 'context' | 'testGenerationInstructions';
 export type Intent = string | string[];
-
-// Inputs schema for multi-variable test case generation
-// Keys are variable names, values are descriptions of what the variable should contain
-export const InputsSchema = z.record(
-  z.string().regex(/^[a-zA-Z_][a-zA-Z0-9_]*$/, {
-    message: 'Input variable names must be valid identifiers (start with letter or underscore)',
-  }),
-  z.string().min(1, { message: 'Input descriptions must be non-empty strings' }),
-);
-export type Inputs = z.infer<typeof InputsSchema>;
 
 // Policy Types
 export const PolicyObjectSchema = z.object({
@@ -338,6 +332,8 @@ export interface RedteamHistoryEntry {
   outputAudio?: RedteamMediaData;
   /** Image data from the target response */
   outputImage?: RedteamMediaData;
+  /** Extracted input variables for multi-input mode */
+  inputVars?: Record<string, string>;
 }
 
 /**

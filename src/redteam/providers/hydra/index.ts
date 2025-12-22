@@ -270,6 +270,9 @@ export class HydraProvider implements ApiProvider {
     let lastTargetResponse: TargetResponse | undefined = undefined;
     let backtrackCount = 0;
 
+    // Get inputVars from test metadata for multi-input mode
+    const inputVars = context?.test?.metadata?.inputVars as Record<string, string> | undefined;
+
     const redteamHistory: Array<{
       prompt: string;
       promptAudio?: MediaData;
@@ -280,6 +283,7 @@ export class HydraProvider implements ApiProvider {
       graderPassed: boolean | undefined;
       trace?: Record<string, unknown>;
       traceSummary?: string;
+      inputVars?: Record<string, string>;
     }> = [];
     let lastTransformResult: TransformResult | undefined;
 
@@ -745,6 +749,8 @@ export class HydraProvider implements ApiProvider {
         graderPassed: graderResult?.pass,
         trace: traceContext ? formatTraceForMetadata(traceContext) : undefined,
         traceSummary: computedTraceSummary,
+        // Include input vars for multi-input mode
+        inputVars,
       });
 
       // Check if vulnerability was achieved

@@ -22,6 +22,7 @@ import {
   isFanoutStrategy,
   isLanguageDisallowedStrategy,
   MEDICAL_PLUGINS,
+  MULTI_INPUT_VAR,
   PHARMACY_PLUGINS,
   PII_PLUGINS,
   riskCategorySeverityMap,
@@ -741,16 +742,19 @@ export async function synthesize({
       (delay ? `• Delay: ${chalk.cyan(delay)}\n` : ''),
   );
 
-  // Handle multi-input mode: log info but don't override injectVar
+  // Handle multi-input mode: use MULTI_INPUT_VAR to prevent namespace collisions
   const hasMultipleInputs = inputs && Object.keys(inputs).length > 0;
   if (hasMultipleInputs) {
     const inputKeys = Object.keys(inputs);
     logger.info(
       `Using multi-input mode with ${inputKeys.length} variables: ${inputKeys.join(', ')}`,
     );
+    // In multi-input mode, use MULTI_INPUT_VAR to prevent namespace collisions
+    // with user-defined input variable names
+    injectVar = MULTI_INPUT_VAR;
   }
 
-  // Determine injectVar if not explicitly set
+  // Determine injectVar if not explicitly set (only applies to single-input mode)
   if (typeof injectVar !== 'string') {
     const parsedVars = extractVariablesFromTemplates(prompts);
     if (parsedVars.length > 1) {

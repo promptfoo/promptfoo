@@ -346,8 +346,9 @@ export abstract class RedteamPluginBase {
 
   /**
    * Converts an array of { __prompt: string } objects into an array of test cases.
-   * When inputs is defined, the __prompt contains JSON which is set as the injectVar value,
-   * and individual keys are extracted into vars for usability.
+   * When inputs is defined, the __prompt contains JSON which is stored in injectVar
+   * (which will be MULTI_INPUT_VAR in multi-input mode), and individual keys are
+   * extracted into vars for usability.
    * @param prompts - An array of { __prompt: string } objects.
    * @returns An array of test cases.
    */
@@ -355,16 +356,18 @@ export abstract class RedteamPluginBase {
     const hasMultipleInputs = this.config.inputs && Object.keys(this.config.inputs).length > 0;
 
     return prompts.sort().map((promptObj) => {
-      // Base vars with the primary injectVar
+      // Use the configured injectVar (will be MULTI_INPUT_VAR in multi-input mode)
       const vars: Record<string, string> = {
         [this.injectVar]: promptObj.__prompt,
       };
 
       // If inputs is defined, extract individual keys from the JSON into vars
+      let inputVars: Record<string, string> | undefined;
       if (hasMultipleInputs) {
         try {
           const parsed = JSON.parse(promptObj.__prompt);
-          Object.assign(vars, extractVariablesFromJson(parsed, this.config.inputs!));
+          inputVars = extractVariablesFromJson(parsed, this.config.inputs!);
+          Object.assign(vars, inputVars);
         } catch {
           // If parsing fails, just use the raw prompt
         }
@@ -376,6 +379,8 @@ export abstract class RedteamPluginBase {
         metadata: {
           pluginId: getShortPluginId(this.id),
           pluginConfig: this.config,
+          // Include extracted input vars in metadata for multi-turn strategies
+          ...(inputVars ? { inputVars } : {}),
         },
       };
     });

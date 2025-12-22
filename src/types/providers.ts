@@ -1,10 +1,9 @@
 import type winston from 'winston';
 
 import type { BlobRef } from '../blobs/types';
-import type { Inputs } from '../redteam/types';
 import type { EnvOverrides } from './env';
 import type { Prompt } from './prompts';
-import type { NunjucksFilterMap, TokenUsage } from './shared';
+import type { Inputs, NunjucksFilterMap, TokenUsage } from './shared';
 
 export type { TokenUsage } from './shared';
 export type ProviderId = string;

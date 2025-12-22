@@ -45,6 +45,9 @@ export interface ProviderOptions {
   id: string;
   label?: string;
   delay?: number;
+  // Multi-variable inputs for test case generation
+  // Keys are variable names, values are descriptions of what each variable should contain
+  inputs?: Record<string, string>;
   config: {
     // Custom provider config can have anything
     [key: string]: any;
@@ -73,9 +76,6 @@ export interface ProviderOptions {
     stateful?: boolean;
     sessionSource?: 'client' | 'server';
     streamResponse?: string;
-    // Multi-variable inputs for test case generation
-    // Keys are variable names, values are descriptions of what each variable should contain
-    inputs?: Record<string, string>;
   };
 }
 
