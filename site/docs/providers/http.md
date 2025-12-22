@@ -97,6 +97,8 @@ In this example:
 3. You can use template variables like `{{api_key}}` and `{{prompt}}` within the raw request. These will be replaced with actual values when the request is sent.
 4. The `transformResponse` property is used to extract the desired information from the JSON response.
 
+Raw requests support any content type including `multipart/form-data` and `application/x-www-form-urlencoded`.
+
 You can also load the raw request from an external file using the `file://` prefix:
 
 ```yaml
