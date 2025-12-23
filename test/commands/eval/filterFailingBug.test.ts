@@ -15,7 +15,7 @@
  * runEval to prevent mutation by reference.
  */
 
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { filterTests } from '../../../src/commands/eval/filterTests';
 import Eval from '../../../src/models/eval';
 import { ResultFailureReason } from '../../../src/types/index';
@@ -29,6 +29,10 @@ vi.mock('../../../src/models/eval', () => ({
 }));
 
 describe('filterTests - vars mutation bug', () => {
+  afterEach(() => {
+    vi.resetAllMocks();
+  });
+
   it('should match tests even when stored results have additional runtime vars', async () => {
     // Simulate a test suite as it would be loaded from config
     const mockTestSuite: TestSuite = {
