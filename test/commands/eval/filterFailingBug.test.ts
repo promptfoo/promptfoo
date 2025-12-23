@@ -80,10 +80,10 @@ describe('filterTests - vars mutation bug', () => {
             },
           },
           {
-            // This test also failed
+            // This test also failed (assertion failure, not error)
             vars: { input: 'thanks', language: 'en' },
             success: false,
-            failureReason: ResultFailureReason.ERROR,
+            failureReason: ResultFailureReason.ASSERT,
             testCase: {
               description: 'test3',
               // Bug: stored testCase.vars has _conversation added
@@ -115,9 +115,77 @@ describe('filterTests - vars mutation bug', () => {
     // not fail because of the extra _conversation property
     const result = await filterTests(mockTestSuite, { failing: 'eval-123' });
 
-    // Should find both failing tests
+    // Should find both failing tests (both have ASSERT failure reason)
     expect(result).toHaveLength(2);
     expect(result.map((t) => t.description)).toEqual(['test1', 'test3']);
+  });
+
+  it('should exclude error results when filtering for failures only', async () => {
+    const mockTestSuite: TestSuite = {
+      prompts: [],
+      providers: [],
+      tests: [
+        { description: 'test1', vars: { input: 'a' }, assert: [] },
+        { description: 'test2', vars: { input: 'b' }, assert: [] },
+        { description: 'test3', vars: { input: 'c' }, assert: [] },
+      ],
+    };
+
+    const mockEval = {
+      id: 'eval-errors',
+      createdAt: new Date().getTime(),
+      config: {},
+      results: [],
+      resultsCount: 0,
+      prompts: [],
+      persisted: true,
+      toEvaluateSummary: vi.fn().mockResolvedValue({
+        version: 2,
+        timestamp: new Date().toISOString(),
+        results: [
+          {
+            vars: { input: 'a' },
+            success: false,
+            failureReason: ResultFailureReason.ASSERT, // Actual failure
+            testCase: { description: 'test1', vars: { input: 'a' }, assert: [] },
+          },
+          {
+            vars: { input: 'b' },
+            success: false,
+            failureReason: ResultFailureReason.ERROR, // Error, not failure
+            testCase: { description: 'test2', vars: { input: 'b' }, assert: [] },
+          },
+          {
+            vars: { input: 'c' },
+            success: true, // Success
+            testCase: { description: 'test3', vars: { input: 'c' }, assert: [] },
+          },
+        ],
+        table: { head: { prompts: [], vars: [] }, body: [] },
+        stats: {
+          successes: 1,
+          failures: 1,
+          errors: 1,
+          tokenUsage: {
+            total: 0,
+            prompt: 0,
+            completion: 0,
+            cached: 0,
+            numRequests: 0,
+            completionDetails: { reasoning: 0, acceptedPrediction: 0, rejectedPrediction: 0 },
+          },
+        },
+      }),
+    };
+
+    vi.mocked(Eval.findById).mockResolvedValue(mockEval as any);
+
+    // --filter-failing should only return actual failures, not errors
+    const result = await filterTests(mockTestSuite, { failing: 'eval-errors' });
+
+    // Should only find test1 (the one with ASSERT failure), not test2 (error)
+    expect(result).toHaveLength(1);
+    expect(result[0].description).toBe('test1');
   });
 
   it('should match tests even when stored results have sessionId added by GOAT/Crescendo providers', async () => {
