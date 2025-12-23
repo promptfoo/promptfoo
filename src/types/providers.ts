@@ -179,6 +179,12 @@ export interface ProviderResponse {
     channels?: number;
     duration?: number;
   };
+  streamingMetrics?: {
+    timeToFirstToken?: number; // TTFT in milliseconds (measured from request start)
+    tokensPerSecond?: number; // Streaming throughput
+    totalStreamTime?: number; // End-to-end streaming time in milliseconds
+    isActuallyStreaming?: boolean; // True if response was actually streamed (>1 chunk)
+  };
 }
 
 export interface ProviderEmbeddingResponse {

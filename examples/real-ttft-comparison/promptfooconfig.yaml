@@ -1,0 +1,126 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: TTFT comparison between OpenAI models
+
+prompts:
+  - 'Write a brief explanation of {{topic}}'
+
+providers:
+  # GPT-4o-mini: Fast, cost-efficient model
+  - id: https://api.openai.com/v1/chat/completions
+    label: 'gpt-4o-mini'
+    config:
+      method: 'POST'
+      headers:
+        'Content-Type': 'application/json'
+        'Authorization': 'Bearer {{env.OPENAI_API_KEY}}'
+      body:
+        model: 'gpt-4o-mini'
+        messages:
+          - role: 'user'
+            content: '{{prompt}}'
+        stream: true
+        max_tokens: 100
+        temperature: 0.7
+      transformResponse: |
+        (json, text) => {
+          // Handle non-streaming response
+          if (json && json.choices?.[0]?.message?.content) {
+            return json.choices[0].message.content;
+          }
+
+          // Handle streaming SSE response
+          let content = '';
+          for (const line of String(text || '').split('\n')) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith('data: ')) continue;
+            if (trimmed === 'data: [DONE]') break;
+
+            try {
+              const data = JSON.parse(trimmed.slice(6));
+              if (data.choices?.[0]?.delta?.content) {
+                content += data.choices[0].delta.content;
+              }
+            } catch (e) {
+              // Skip malformed JSON
+            }
+          }
+          return content.trim();
+        }
+
+  # GPT-4o: Flagship model with advanced capabilities
+  - id: https://api.openai.com/v1/chat/completions
+    label: 'gpt-4o'
+    config:
+      method: 'POST'
+      headers:
+        'Content-Type': 'application/json'
+        'Authorization': 'Bearer {{env.OPENAI_API_KEY}}'
+      body:
+        model: 'gpt-4o'
+        messages:
+          - role: 'user'
+            content: '{{prompt}}'
+        stream: true
+        max_tokens: 100
+        temperature: 0.7
+      transformResponse: |
+        (json, text) => {
+          // Handle non-streaming response
+          if (json && json.choices?.[0]?.message?.content) {
+            return json.choices[0].message.content;
+          }
+
+          // Handle streaming SSE response
+          let content = '';
+          for (const line of String(text || '').split('\n')) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith('data: ')) continue;
+            if (trimmed === 'data: [DONE]') break;
+
+            try {
+              const data = JSON.parse(trimmed.slice(6));
+              if (data.choices?.[0]?.delta?.content) {
+                content += data.choices[0].delta.content;
+              }
+            } catch (e) {
+              // Skip malformed JSON
+            }
+          }
+          return content.trim();
+        }
+
+defaultTest:
+  assert:
+    # Test that we get meaningful content
+    - type: javascript
+      value: 'output && output.length > 10'
+
+    # TTFT should be reasonable (generous threshold for testing)
+    - type: ttft
+      threshold: 5000
+
+    # Total latency should be reasonable
+    - type: latency
+      threshold: 15000
+
+tests:
+  - vars:
+      topic: 'artificial intelligence'
+  - vars:
+      topic: 'climate change'
+  - vars:
+      topic: 'quantum computing'
+  - vars:
+      topic: 'machine learning'
+  - vars:
+      topic: 'renewable energy'
+  - vars:
+      topic: 'neuroscience'
+  - vars:
+      topic: 'biotechnology'
+  - vars:
+      topic: 'space exploration'
+  - vars:
+      topic: 'sustainable development'
+  - vars:
+      topic: 'digital transformation'

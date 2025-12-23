@@ -132,9 +132,9 @@ export async function fetchWithCache<T = any>(
   if (!enabled || bust) {
     const fetchStart = Date.now();
     const resp = await fetchWithRetries(url, options, timeout, maxRetries);
-    const fetchLatencyMs = Date.now() - fetchStart;
-
     const respText = await resp.text();
+    // Latency includes body reading time to measure total request duration
+    const fetchLatencyMs = Date.now() - fetchStart;
     try {
       return {
         cached: false,
@@ -167,8 +167,9 @@ export async function fetchWithCache<T = any>(
     cached = false;
     const fetchStart = Date.now();
     const response = await fetchWithRetries(url, options, timeout, maxRetries);
-    fetchLatencyMs = Date.now() - fetchStart;
     const responseText = await response.text();
+    // Latency includes body reading time to measure total request duration
+    fetchLatencyMs = Date.now() - fetchStart;
     const headers = Object.fromEntries(response.headers.entries());
 
     try {

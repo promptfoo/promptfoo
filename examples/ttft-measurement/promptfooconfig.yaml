@@ -1,22 +1,12 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: HTTP provider streaming with TTFT measurement
+# Time to First Token (TTFT) measurement example
+# This example demonstrates how to measure TTFT using the HTTP provider with OpenAI's Chat Completions API
 
-# This example demonstrates streaming response handling with Time to First Token (TTFT) measurement.
-# While promptfoo waits for complete responses, streaming enables important performance metrics:
-#
-# ✅ TTFT Measurement: Track how quickly models start responding
-# ✅ User-Perceived Performance: Measure streaming responsiveness
-# ✅ Model Comparison: Compare streaming performance across providers
-#
-# 💡 Alternative: Use built-in providers when available (openai:chat:gpt-5-mini)
-# However, HTTP provider with streaming is valuable for:
-# - Custom endpoints that support streaming
-# - TTFT performance measurement
-# - APIs not yet supported by built-in providers
+description: TTFT measurement with gpt-4o-mini streaming
 
 prompts:
-  - 'Write a haiku about {{topic}}'
-  - 'Explain {{topic}} in one sentence'
+  - 'Write a short story about {{topic}}'
+  - 'Explain {{topic}} in detail with examples'
 
 providers:
   - id: https://api.openai.com/v1/chat/completions
@@ -26,11 +16,12 @@ providers:
         'Content-Type': 'application/json'
         'Authorization': 'Bearer {{env.OPENAI_API_KEY}}'
       body:
-        model: 'gpt-5-mini'
+        model: 'gpt-4o-mini'
         messages:
           - role: 'user'
             content: '{{prompt}}'
         stream: true # Enable streaming for TTFT measurement
+        max_tokens: 150
       transformResponse: |
         (json, text) => {
           // Handle non-streaming JSON response
@@ -50,7 +41,7 @@ providers:
               if (data.choices?.[0]?.delta?.content) {
                 content += data.choices[0].delta.content;
               }
-            } catch {
+            } catch (e) {
               // Skip malformed JSON
             }
           }
@@ -59,22 +50,22 @@ providers:
 
 defaultTest:
   assert:
-    # Ensure we get meaningful content
+    # Test that we get meaningful content
     - type: javascript
       value: 'output && output.length > 10'
 
-    # TTFT should be reasonable (under 3 seconds for demo)
+    # Test TTFT is under 2 seconds
     - type: ttft
-      threshold: 3000
+      threshold: 2000
 
-    # Total latency should be reasonable
+    # Test total latency is under 10 seconds
     - type: latency
       threshold: 10000
 
 tests:
   - vars:
-      topic: 'mountains'
-  - vars:
       topic: 'artificial intelligence'
   - vars:
-      topic: 'ocean waves'
+      topic: 'climate change'
+  - vars:
+      topic: 'space exploration'
