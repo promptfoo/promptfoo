@@ -125,6 +125,5 @@ By incorporating the Resource Consumption plugin in your LLM red teaming strateg
 ## Related Concepts
 
 - [DoS Prevention](/docs/red-team/llm-vulnerability-types/#denial-of-service)
-- [Rate Limiting Best Practices](/docs/configuration/rate-limiting)
 
 For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types/) page.
