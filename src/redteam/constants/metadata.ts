@@ -20,6 +20,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'bias:gender': 'Gender-related bias detection',
   'bias:race': 'Race-related bias detection',
   bola: 'Tests for broken object-level authorization vulnerabilities (OWASP API 1)',
+  bopla: 'Tests for broken object property level authorization vulnerabilities (OWASP API 3)',
   cca: 'Tests for vulnerability to Context Compliance Attacks using fabricated conversation history',
   citation: 'Exploits academic authority bias to bypass content filters',
   competitors: 'Tests for unauthorized competitor mentions and endorsements',
@@ -162,6 +163,8 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   rbac: 'Tests role-based access control implementation',
   'reasoning-dos':
     'Tests for vulnerabilities to computational resource exhaustion through excessive reasoning patterns',
+  'resource-consumption':
+    'Tests for unrestricted resource consumption vulnerabilities (OWASP API 4)',
   religion: 'Tests handling of religious content and bias',
   retry:
     'Automatically incorporates previously failed test cases to build a regression testing suite',
@@ -174,6 +177,7 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   'system-prompt-override': 'Tests for system prompt override vulnerabilities',
   'tool-discovery': 'Tests for enumeration of available tools and function calls',
   unsafebench: 'Tests handling of unsafe image content from the UnsafeBench dataset',
+  'unrestricted-access': 'Tests for unrestricted access to sensitive business flows (OWASP API 6)',
   'unverifiable-claims': 'Tests for claims that cannot be verified or fact-checked',
   vlguard: 'Tests handling of potentially unsafe image content from the VLGuard dataset',
   wordplay: 'Tests whether AI systems can be tricked into generating profanity through wordplay',
@@ -204,6 +208,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'best-of-n': 'Best-of-N',
   bfla: 'Function-Level Authorization Bypass',
   bola: 'Object-Level Authorization Bypass',
+  bopla: 'Property-Level Authorization Bypass',
   camelcase: 'CamelCase Encoding',
   emoji: 'Emoji Smuggling',
   cca: 'Context Compliance Attack',
@@ -328,6 +333,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'rag-poisoning': 'RAG Poisoning',
   rbac: 'RBAC Implementation',
   'reasoning-dos': 'Reasoning DoS',
+  'resource-consumption': 'Resource Consumption',
   'mischievous-user': 'Mischievous User',
   religion: 'Religious Bias',
   retry: 'Regression Testing',
@@ -339,6 +345,7 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'system-prompt-override': 'System Prompt Override',
   'tool-discovery': 'Tool Discovery',
   unsafebench: 'UnsafeBench Dataset',
+  'unrestricted-access': 'Unrestricted Access',
   'unverifiable-claims': 'Unverifiable Claims',
   vlguard: 'VLGuard Dataset',
   wordplay: 'Wordplay',
@@ -382,6 +389,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   beavertails: Severity.Low,
   bfla: Severity.High,
   bola: Severity.High,
+  bopla: Severity.High,
   cca: Severity.High,
   ferpa: Severity.Medium,
   'financial:calculation-error': Severity.Low,
@@ -484,6 +492,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'rag-poisoning': Severity.Medium,
   rbac: Severity.High,
   'reasoning-dos': Severity.Low,
+  'resource-consumption': Severity.Medium,
   religion: Severity.Low,
   'shell-injection': Severity.High,
   'special-token-injection': Severity.Medium,
@@ -491,6 +500,7 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   ssrf: Severity.High,
   'system-prompt-override': Severity.High,
   unsafebench: Severity.Medium,
+  'unrestricted-access': Severity.Medium,
   'unverifiable-claims': Severity.Medium,
   vlguard: Severity.Medium,
   wordplay: Severity.Low,
@@ -503,18 +513,21 @@ export const riskCategories: Record<string, Plugin[]> = {
     'ascii-smuggling',
     'bfla',
     'bola',
+    'bopla',
     'cca',
     'debug-access',
     'hijacking',
     'indirect-prompt-injection',
     'rbac',
     'reasoning-dos',
+    'resource-consumption',
     'shell-injection',
     'special-token-injection',
     'sql-injection',
     'ssrf',
     'system-prompt-override',
     'tool-discovery',
+    'unrestricted-access',
     'mcp',
 
     // Data protection
@@ -662,6 +675,7 @@ export const categoryAliases: Record<Plugin, string> = {
   beavertails: 'BeaverTails',
   bfla: 'BFLAEnforcement',
   bola: 'BOLAEnforcement',
+  bopla: 'BOPLAEnforcement',
   cca: 'CCAEnforcement',
   competitors: 'CompetitorEndorsement',
   contracts: 'ContractualCommitment',
@@ -765,6 +779,7 @@ export const categoryAliases: Record<Plugin, string> = {
   'rag-poisoning': 'RAG Poisoning',
   rbac: 'RbacEnforcement',
   'reasoning-dos': 'Reasoning DoS',
+  'resource-consumption': 'ResourceConsumptionEnforcement',
   religion: 'Religion',
   'shell-injection': 'ShellInjection',
   'special-token-injection': 'SpecialTokenInjection',
@@ -772,6 +787,7 @@ export const categoryAliases: Record<Plugin, string> = {
   ssrf: 'SSRFEnforcement',
   'system-prompt-override': 'System Prompt Override',
   unsafebench: 'UnsafeBench',
+  'unrestricted-access': 'UnrestrictedAccessEnforcement',
   'unverifiable-claims': 'Unverifiable Claims',
   vlguard: 'VLGuard',
   wordplay: 'Wordplay',
@@ -793,6 +809,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
   beavertails: 'Tests handling of malicious prompts from the BeaverTails dataset',
   bfla: 'Evaluates function-level authorization controls to identify privilege escalation vulnerabilities (OWASP API Security Top 10 #5)',
   bola: 'Tests object-level authorization mechanisms to detect unauthorized data access vulnerabilities (OWASP API Security Top 10 #1)',
+  bopla:
+    'Tests property-level authorization mechanisms to detect unauthorized access to sensitive object properties (OWASP API Security Top 10 #3)',
   cca: 'Tests for vulnerability to Context Compliance Attacks using fabricated conversation history',
   competitors:
     'Assesses system protection against unauthorized competitor endorsements and brand security risks',
@@ -936,6 +954,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
   rbac: 'Tests implementation of role-based access control mechanisms',
   'reasoning-dos':
     'Tests for computational resource exhaustion through excessive reasoning patterns',
+  'resource-consumption':
+    'Tests for unrestricted resource consumption vulnerabilities and lack of proper consumption limits (OWASP API Security Top 10 #4)',
   religion: 'Assesses handling of religious content and bias mitigation',
   'shell-injection': 'Tests protection against command injection vulnerabilities',
   'special-token-injection':
@@ -945,6 +965,8 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'system-prompt-override': 'Tests for system prompt override vulnerabilities',
   unsafebench:
     'Tests handling of unsafe image content through multi-modal model evaluation and safety filters',
+  'unrestricted-access':
+    'Tests for unrestricted access to sensitive business flows that could harm the business (OWASP API Security Top 10 #6)',
   'unverifiable-claims':
     'Tests whether an AI system makes claims that cannot be verified, including future predictions, unsourced statistics, and unknowable information',
   vlguard: 'Tests handling of potentially unsafe image content using the VLGuard dataset',

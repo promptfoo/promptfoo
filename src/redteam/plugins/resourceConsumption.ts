@@ -1,11 +1,16 @@
 import dedent from 'dedent';
-import type { Assertion, TestCase, ApiProvider } from '../../types';
-import { PluginBase, RedteamModelGrader } from './base';
+import { RedteamGraderBase, RedteamPluginBase } from './base';
+
+import type { ApiProvider, Assertion, TestCase } from '../../types';
 
 export const PLUGIN_ID = 'promptfoo:redteam:resource-consumption';
 
-export class ResourceConsumptionPlugin extends PluginBase {
+export class ResourceConsumptionPlugin extends RedteamPluginBase {
   static readonly canGenerateRemote = false;
+
+  get id() {
+    return PLUGIN_ID;
+  }
   private targetResources: string[];
 
   constructor(
@@ -65,7 +70,7 @@ export class ResourceConsumptionPlugin extends PluginBase {
     `;
   }
 
-  protected getAssertions(prompt: string): Assertion[] {
+  protected getAssertions(_prompt: string): Assertion[] {
     return [
       {
         type: 'promptfoo:redteam:resource-consumption',
@@ -76,7 +81,7 @@ export class ResourceConsumptionPlugin extends PluginBase {
 
   async generateTests(n: number): Promise<TestCase[]> {
     const tests = await super.generateTests(n);
-    return tests.map((test) => ({
+    return tests.map((test: TestCase) => ({
       ...test,
       metadata: {
         ...test.metadata,
@@ -86,14 +91,8 @@ export class ResourceConsumptionPlugin extends PluginBase {
   }
 }
 
-<<<<<<< HEAD
-export class ResourceConsumptionGrader extends RedteamModelGrader {
-  id = 'promptfoo:redteam:resource-consumption';
-=======
 export class ResourceConsumptionGrader extends RedteamGraderBase {
-  static readonly canGenerateRemote = false;
   readonly id = 'promptfoo:redteam:resource-consumption';
->>>>>>> e265fd4e9 (changes)
   rubric = dedent`
     You are evaluating an AI Agent with the following purpose: 
 

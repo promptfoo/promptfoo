@@ -84,14 +84,14 @@ import { RagDocumentExfiltrationGrader } from './plugins/ragDocumentExfiltration
 import { RbacGrader } from './plugins/rbac';
 import { ReasoningDosGrader } from './plugins/reasoningDos';
 import { ReligionGrader } from './plugins/religion';
+import { ResourceConsumptionGrader } from './plugins/resourceConsumption';
 import { ShellInjectionGrader } from './plugins/shellInjection';
 import { SqlInjectionGrader } from './plugins/sqlInjection';
 import { SsrfGrader } from './plugins/ssrf';
-import { ResourceConsumptionGrader } from './plugins/resourceConsumption';
 import { ToolDiscoveryGrader } from './plugins/toolDiscovery';
 import { ToxicChatGrader } from './plugins/toxicChat';
-import { UnsafeBenchGrader } from './plugins/unsafebench';
 import { UnrestrictedAccessGrader } from './plugins/unrestrictedAccess';
+import { UnsafeBenchGrader } from './plugins/unsafebench';
 import { UnverifiableClaimsGrader } from './plugins/unverifiableClaims';
 import { VLGuardGrader } from './plugins/vlguard';
 import { WordplayGrader } from './plugins/wordplay';

@@ -1,11 +1,16 @@
 import dedent from 'dedent';
-import type { Assertion, TestCase, ApiProvider } from '../../types';
-import { PluginBase, RedteamModelGrader } from './base';
+import { RedteamGraderBase, RedteamPluginBase } from './base';
+
+import type { ApiProvider, Assertion, TestCase } from '../../types';
 
 export const PLUGIN_ID = 'promptfoo:redteam:unrestricted-access';
 
-export class UnrestrictedAccessPlugin extends PluginBase {
+export class UnrestrictedAccessPlugin extends RedteamPluginBase {
   static readonly canGenerateRemote = false;
+
+  get id() {
+    return PLUGIN_ID;
+  }
   private targetFlows: string[];
 
   constructor(
@@ -65,7 +70,7 @@ export class UnrestrictedAccessPlugin extends PluginBase {
     `;
   }
 
-  protected getAssertions(prompt: string): Assertion[] {
+  protected getAssertions(_prompt: string): Assertion[] {
     return [
       {
         type: 'promptfoo:redteam:unrestricted-access',
@@ -76,7 +81,7 @@ export class UnrestrictedAccessPlugin extends PluginBase {
 
   async generateTests(n: number): Promise<TestCase[]> {
     const tests = await super.generateTests(n);
-    return tests.map((test) => ({
+    return tests.map((test: TestCase) => ({
       ...test,
       metadata: {
         ...test.metadata,
@@ -86,14 +91,8 @@ export class UnrestrictedAccessPlugin extends PluginBase {
   }
 }
 
-<<<<<<< HEAD
-export class UnrestrictedAccessGrader extends RedteamModelGrader {
-  id = 'promptfoo:redteam:unrestricted-access';
-=======
 export class UnrestrictedAccessGrader extends RedteamGraderBase {
-  static readonly canGenerateRemote = false;
   readonly id = 'promptfoo:redteam:unrestricted-access';
->>>>>>> e265fd4e9 (changes)
   rubric = dedent`
     You are evaluating an AI Agent with the following purpose: 
 

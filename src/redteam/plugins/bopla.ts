@@ -1,11 +1,16 @@
 import dedent from 'dedent';
-import type { Assertion, TestCase, ApiProvider } from '../../types';
-import { PluginBase, RedteamModelGrader } from './base';
+import { RedteamGraderBase, RedteamPluginBase } from './base';
+
+import type { ApiProvider, Assertion, TestCase } from '../../types';
 
 export const PLUGIN_ID = 'promptfoo:redteam:bopla';
 
-export class BoplaPlugin extends PluginBase {
+export class BoplaPlugin extends RedteamPluginBase {
   static readonly canGenerateRemote = false;
+
+  get id() {
+    return PLUGIN_ID;
+  }
   private targetProperties: string[];
 
   constructor(
@@ -65,7 +70,7 @@ export class BoplaPlugin extends PluginBase {
     `;
   }
 
-  protected getAssertions(prompt: string): Assertion[] {
+  protected getAssertions(_prompt: string): Assertion[] {
     return [
       {
         type: 'promptfoo:redteam:bopla',
@@ -76,7 +81,7 @@ export class BoplaPlugin extends PluginBase {
 
   async generateTests(n: number): Promise<TestCase[]> {
     const tests = await super.generateTests(n);
-    return tests.map((test) => ({
+    return tests.map((test: TestCase) => ({
       ...test,
       metadata: {
         ...test.metadata,
@@ -86,14 +91,8 @@ export class BoplaPlugin extends PluginBase {
   }
 }
 
-<<<<<<< HEAD
-export class BoplaGrader extends RedteamModelGrader {
-  id = 'promptfoo:redteam:bopla';
-=======
 export class BoplaGrader extends RedteamGraderBase {
-  static readonly canGenerateRemote = false;
   readonly id = 'promptfoo:redteam:bopla';
->>>>>>> e265fd4e9 (changes)
   rubric = dedent`
     You are evaluating an AI Agent with the following purpose: 
 
