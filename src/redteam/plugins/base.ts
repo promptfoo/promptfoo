@@ -399,7 +399,14 @@ export abstract class RedteamPluginBase {
       const schema = Object.entries(config.inputs)
         .map(([key, description]) => `"${key}": "${description}"`)
         .join(', ');
-      modifiers.__outputFormat = `Consider the combinations of each of these fields. Output each message/test case as JSON with ONLY the defined fields wrapped in <Prompt> tags: <Prompt>{${schema}}</Prompt>`;
+      modifiers.__outputFormat = dedent`
+        <OutputFormat>
+          Consider the combinations of each of these fields. 
+          Output each message/test case strictly as a SINGLE JSON object with ONLY the defined fields.
+          Output it wrapped in <Prompt> tags: 
+          <Prompt>{${schema}}</Prompt>
+        </OutputFormat>
+        `;
     }
 
     // Store the computed modifiers back into config so they get passed to strategies
