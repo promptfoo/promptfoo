@@ -18,6 +18,9 @@ providers:
       targetProvider: bedrock
       targetModel: amazon.nova-sonic-v1:0
       targetVoice: tiffany
+      # Nova Sonic requires simulated user to speak first
+      # because it uses VAD and can't initiate without audio input
+      targetSpeaksFirst: false
       # Simulated User: OpenAI Realtime
       simulatedUserProvider: openai
       simulatedUserModel: gpt-4o-realtime-preview

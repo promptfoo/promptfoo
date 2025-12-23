@@ -8,7 +8,9 @@
  */
 
 import { getEnvString } from '../../envars';
+import { cloudConfig, CLOUD_API_HOST } from '../../globalConfig/cloud';
 import logger from '../../logger';
+import { fetchWithProxy } from '../../util/fetch/index';
 import { getNunjucksEngine } from '../../util/templates';
 import { VoiceConversationOrchestrator } from './orchestrator';
 import { STOP_MARKER } from './transcriptAccumulator';
@@ -177,6 +179,13 @@ Remember: You are SIMULATING a user, not an AI assistant. Act as the caller/user
       simulatedUserProvider: this.voiceConfig.simulatedUserProvider,
     });
 
+    // Use remote generation if cloud is enabled or if API_HOST is set to a non-default value
+    const apiHost = getEnvString('API_HOST', '');
+    const useRemote = cloudConfig.isEnabled() || (apiHost && apiHost !== CLOUD_API_HOST);
+    if (useRemote) {
+      return this.callRemoteVoiceTau(prompt, instructions);
+    }
+
     // Build configs for both connections
     const targetConfig = this.buildTargetConfig(prompt);
     const simulatedUserConfig = this.buildSimulatedUserConfig(instructions);
@@ -203,6 +212,118 @@ Remember: You are SIMULATING a user, not an AI assistant. Act as the caller/user
         error: error instanceof Error ? error.message : String(error),
       };
     }
+  }
+
+  /**
+   * Call the remote voice-tau task on the cloud server.
+   * This allows using server-side API keys for the simulated user.
+   */
+  private async callRemoteVoiceTau(
+    targetInstructions: string,
+    simulatedUserInstructions: string,
+  ): Promise<ProviderResponse> {
+    // Use API_HOST env var if set, otherwise fall back to cloud config
+    const envApiHost = getEnvString('API_HOST', '');
+    const apiHost = envApiHost || cloudConfig.getApiHost();
+    const apiKey = cloudConfig.getApiKey();
+    const url = `${apiHost}/api/v1/task`;
+
+    logger.debug('[SimulatedVoiceUser] Using remote voice-tau task:', { apiHost });
+
+    try {
+      const response = await fetchWithProxy(url, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          task: 'voice-tau',
+          targetProvider: this.voiceConfig.targetProvider || 'openai',
+          targetModel: this.voiceConfig.targetModel,
+          targetVoice: this.voiceConfig.targetVoice,
+          targetInstructions,
+          simulatedUserProvider: this.voiceConfig.simulatedUserProvider || 'openai',
+          simulatedUserModel: this.voiceConfig.simulatedUserModel,
+          simulatedUserVoice: this.voiceConfig.simulatedUserVoice,
+          simulatedUserInstructions,
+          maxTurns: this.voiceConfig.maxTurns || DEFAULT_MAX_TURNS,
+          timeoutMs: this.voiceConfig.timeoutMs || DEFAULT_TIMEOUT_MS,
+          targetSpeaksFirst: this.voiceConfig.targetSpeaksFirst ?? true,
+          audioFormat: this.voiceConfig.audioFormat || DEFAULT_AUDIO_FORMAT,
+          sampleRate: this.voiceConfig.sampleRate || DEFAULT_SAMPLE_RATE,
+          turnDetection: this.buildTurnDetectionConfig(),
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        logger.error('[SimulatedVoiceUser] Remote voice-tau failed:', {
+          status: response.status,
+          error: errorText,
+        });
+        return {
+          error: `Remote voice-tau failed: ${response.status} ${errorText}`,
+        };
+      }
+
+      const result = await response.json();
+      return this.formatRemoteResult(result);
+    } catch (error) {
+      logger.error('[SimulatedVoiceUser] Remote voice-tau error:', { error });
+      return {
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }
+
+  /**
+   * Format the remote voice-tau result as a ProviderResponse.
+   */
+  private formatRemoteResult(result: {
+    success: boolean;
+    transcript: string;
+    turns: Array<{ speaker: string; text: string; timestamp?: number }>;
+    turnCount: number;
+    duration: number;
+    stopReason: string;
+    combinedAudio?: string;
+    targetAudio?: string;
+    simulatedUserAudio?: string;
+    metadata?: Record<string, unknown>;
+  }): ProviderResponse {
+    // Build the output transcript
+    const output = result.turns
+      .map((turn) => `${turn.speaker === 'agent' ? 'Assistant' : 'User'}: ${turn.text}`)
+      .join('\n---\n');
+
+    // Use combined stereo audio (left=agent, right=user) for best playback experience
+    // Falls back to target-only audio if combined not available
+    const audioData = result.combinedAudio || result.targetAudio;
+
+    return {
+      output,
+      metadata: {
+        turns: result.turns,
+        turnCount: result.turnCount,
+        duration: result.duration,
+        stopReason: result.stopReason,
+        success: result.success,
+        targetProvider: result.metadata?.targetProvider,
+        simulatedUserProvider: result.metadata?.simulatedUserProvider,
+        audioTracks: {
+          combined: result.combinedAudio ? 'stereo (left=agent, right=user)' : undefined,
+          targetOnly: result.targetAudio ? 'mono (agent only)' : undefined,
+          userOnly: result.simulatedUserAudio ? 'mono (user only)' : undefined,
+        },
+      },
+      audio: audioData
+        ? {
+            data: audioData,
+            format: 'wav',
+          }
+        : undefined,
+    };
   }
 
   /**

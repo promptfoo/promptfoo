@@ -161,17 +161,11 @@ export class VoiceConversationOrchestrator extends EventEmitter {
       this.setupTurnDetectorHandlers();
 
       // Connect to both endpoints
-      logger.debug('[Orchestrator] Connecting to target...');
       await this.targetConnection.connect();
-
-      logger.debug('[Orchestrator] Connecting to simulated user...');
       await this.simulatedUserConnection.connect();
 
       // Configure sessions
-      logger.debug('[Orchestrator] Configuring target session...');
       await this.targetConnection.configureSession();
-
-      logger.debug('[Orchestrator] Configuring simulated user session...');
       await this.simulatedUserConnection.configureSession();
 
       // Start conversation timeout
@@ -192,10 +186,15 @@ export class VoiceConversationOrchestrator extends EventEmitter {
         };
         this.on('conversation_complete', onComplete);
 
-        // Initiate the conversation by requesting first response from target
-        // (assumes target speaks first, like a greeting)
+        // Initiate the conversation
         if (this.config.targetSpeaksFirst !== false) {
+          // Target speaks first (default) - request greeting from target
           this.targetConnection?.requestResponse();
+        } else {
+          // Simulated user speaks first - request opening from simulated user
+          // This is useful when target doesn't support "speak first" mode (e.g., Nova Sonic)
+          logger.debug('[Orchestrator] Simulated user speaks first mode');
+          this.simulatedUserConnection?.requestResponse();
         }
       });
     } catch (error) {

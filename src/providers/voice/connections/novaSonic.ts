@@ -7,7 +7,10 @@
  * Key differences from WebSocket-based providers:
  * - Uses AWS SDK InvokeModelWithBidirectionalStreamCommand
  * - Queue-based async iterable for sending events
- * - Different audio sample rates (8kHz input, 16kHz output vs 24kHz)
+ * - Uses 16kHz input sample rate, 24kHz output (resampled from Nova's 16kHz)
+ * - Requires silence after audio input to trigger VAD-based turn detection
+ *
+ * Based on analysis of haizelabs/spoken library patterns.
  */
 
 import { EventEmitter } from 'events';
@@ -22,10 +25,15 @@ import type { AudioChunk, AudioFormat, VoiceConnectionEvents, VoiceProviderConfi
 
 // Nova Sonic specific constants
 const DEFAULT_MODEL = 'amazon.nova-sonic-v1:0';
-const NOVA_INPUT_SAMPLE_RATE = 8000;
-const NOVA_OUTPUT_SAMPLE_RATE = 16000;
+const NOVA_INPUT_SAMPLE_RATE = 16000; // Nova Sonic expects 16kHz input (not 8kHz!)
+const NOVA_OUTPUT_SAMPLE_RATE = 24000; // Nova outputs at 24kHz (was incorrectly 16kHz)
 const TARGET_SAMPLE_RATE = 24000; // What other providers use
 const CONNECTION_TIMEOUT_MS = 30000;
+
+// VAD trigger configuration - send silence to trigger turn detection
+const VAD_SILENCE_CHUNKS = 50; // Number of silence chunks to send
+const VAD_SILENCE_CHUNK_SIZE = 1024; // Bytes per chunk (32ms at 16kHz)
+const VAD_CHUNK_DELAY_MS = 10; // Delay between chunks
 
 // Nova Sonic voice IDs
 const NOVA_VOICES = ['tiffany', 'matthew', 'amy'] as const;
@@ -47,6 +55,8 @@ interface SessionState {
   audioContentId: string;
   promptName: string;
   audioContentActive: boolean; // Track if audio content block is currently open
+  iteratorStarted: boolean; // Track if async iterator has started being consumed
+  promptEnded: boolean; // Track if promptEnd has been sent
 }
 
 /**
@@ -162,6 +172,7 @@ export class NovaSonicConnection extends EventEmitter {
   private connectionTimeout: NodeJS.Timeout | null = null;
   private cumulativeAudioPositionMs: number = 0;
   private hasReceivedAudio: boolean = false; // Track if we've received any audio
+  private accumulatedTranscript: string = ''; // Accumulate transcript from textOutput events
 
   constructor(config: VoiceProviderConfig) {
     super();
@@ -225,22 +236,16 @@ export class NovaSonicConnection extends EventEmitter {
       audioContentId: crypto.randomUUID(),
       promptName: crypto.randomUUID(),
       audioContentActive: false, // Will be set true after contentStart
+      iteratorStarted: false, // Will be set true when iterator starts
+      promptEnded: false, // Will be set true after promptEnd is sent
     };
 
-    // Start the bidirectional stream
-    const { InvokeModelWithBidirectionalStreamCommand } = await import(
-      '@aws-sdk/client-bedrock-runtime'
-    );
+    // Queue all initial events BEFORE starting the stream.
+    // Nova Sonic times out if events aren't available immediately.
+    const voice = this.mapVoice(this.config.voice);
 
-    this.responsePromise = this.bedrockClient.send(
-      new InvokeModelWithBidirectionalStreamCommand({
-        modelId: this.model,
-        body: this.createAsyncIterable(),
-      }),
-    );
-
-    // Send session start
-    await this.sendEvent({
+    // Queue session start
+    this.session.queue.push({
       event: {
         sessionStart: {
           inferenceConfiguration: DEFAULT_CONFIG.inference,
@@ -248,9 +253,8 @@ export class NovaSonicConnection extends EventEmitter {
       },
     });
 
-    // Send prompt start with audio config
-    const voice = this.mapVoice(this.config.voice);
-    await this.sendEvent({
+    // Queue prompt start
+    this.session.queue.push({
       event: {
         promptStart: {
           promptName: this.session.promptName,
@@ -263,18 +267,97 @@ export class NovaSonicConnection extends EventEmitter {
       },
     });
 
-    // Send system prompt if provided
-    if (this.config.instructions) {
-      await this.sendSystemPrompt(this.config.instructions);
+    // Queue system prompt - Nova Sonic REQUIRES a SYSTEM role content first
+    const textContentId = crypto.randomUUID();
+    const basePrompt = this.config.instructions || 'You are a helpful voice assistant.';
+    // Explicitly request English output to prevent language switching
+    const systemPrompt = `You must always respond in English. ${basePrompt}`;
+    this.session.queue.push({
+      event: {
+        contentStart: {
+          promptName: this.session.promptName,
+          contentName: textContentId,
+          type: 'TEXT',
+          interactive: true, // Use interactive: true like spoken library
+          role: 'SYSTEM',
+          textInputConfiguration: DEFAULT_CONFIG.text,
+        },
+      },
+    });
+    this.session.queue.push({
+      event: {
+        textInput: {
+          promptName: this.session.promptName,
+          contentName: textContentId,
+          content: systemPrompt,
+        },
+      },
+    });
+    this.session.queue.push({
+      event: {
+        contentEnd: {
+          promptName: this.session.promptName,
+          contentName: textContentId,
+        },
+      },
+    });
+
+    // Queue audio content start (interactive: true for ongoing conversation)
+    this.session.queue.push({
+      event: {
+        contentStart: {
+          promptName: this.session.promptName,
+          contentName: this.session.audioContentId,
+          type: 'AUDIO',
+          interactive: true,
+          role: 'USER',
+          audioInputConfiguration: DEFAULT_CONFIG.audio.input,
+        },
+      },
+    });
+    this.session.audioContentActive = true;
+
+    // Send some initial silence to establish the stream
+    // At 16kHz sample rate, 16-bit samples: 16000 * 2 = 32000 bytes/sec, so 3200 bytes = 100ms
+    const silentBuffer = Buffer.alloc(3200, 0); // 100ms at 16kHz
+    this.session.queue.push({
+      event: {
+        audioInput: {
+          promptName: this.session.promptName,
+          contentName: this.session.audioContentId,
+          content: silentBuffer.toString('base64'),
+        },
+      },
+    });
+
+    // Create a flag to track when iterator starts being consumed
+    this.session.iteratorStarted = false;
+
+    // Start the bidirectional stream with events already queued
+    const { InvokeModelWithBidirectionalStreamCommand } = await import(
+      '@aws-sdk/client-bedrock-runtime'
+    );
+
+    this.responsePromise = this.bedrockClient.send(
+      new InvokeModelWithBidirectionalStreamCommand({
+        modelId: this.model,
+        body: this.createAsyncIterable(),
+      }),
+    );
+
+    // Start processing responses in background - this also triggers input consumption
+    this.processResponses();
+
+    // Wait for the iterator to actually start being consumed by AWS SDK
+    // This ensures events are being sent before we return
+    const startTime = Date.now();
+    while (!this.session.iteratorStarted && Date.now() - startTime < 5000) {
+      await new Promise((resolve) => setImmediate(resolve));
     }
 
-    // Note: We don't start audio content here - it's started lazily
-    // when sendAudio() is called or when we need to trigger a response
-    // with sendInitialPrompt(). This avoids "Cannot end content as no
-    // content data was received" errors.
-
-    // Start processing responses in background
-    this.processResponses();
+    if (!this.session.iteratorStarted) {
+      logger.warn('[NovaSonic] Iterator did not start within timeout');
+    }
 
     this.state = 'ready';
     this.emit('session_configured');
@@ -336,131 +419,88 @@ export class NovaSonicConnection extends EventEmitter {
 
   /**
    * Commit the audio buffer (signal end of input).
+   * Sends silence chunks to trigger Nova Sonic's VAD-based turn detection.
    */
-  commitAudio(): void {
+  async commitAudio(): Promise<void> {
     if (!this.isReady() || !this.session) {
       logger.warn('[NovaSonic] Cannot commit audio: not ready');
       return;
     }
 
-    // Only end content if it's currently active
+    // Only proceed if content is currently active
     if (!this.session.audioContentActive) {
       logger.debug('[NovaSonic] Audio content not active, skipping commit');
       return;
     }
 
-    // End the current audio content
-    this.sendEvent({
-      event: {
-        contentEnd: {
-          promptName: this.session.promptName,
-          contentName: this.session.audioContentId,
+    // Send silence chunks to trigger VAD turn detection
+    // This is how Nova Sonic detects end of user speech
+    await this.sendSilenceForVAD();
+
+    logger.debug('[NovaSonic] Audio committed with VAD silence');
+  }
+
+  /**
+   * Send silence chunks to trigger VAD-based turn detection.
+   * Nova Sonic uses VAD to detect when user stops speaking.
+   * Based on haizelabs/spoken library approach.
+   */
+  private async sendSilenceForVAD(): Promise<void> {
+    if (!this.session?.isActive || !this.session.audioContentActive) {
+      return;
+    }
+
+    const silenceChunk = Buffer.alloc(VAD_SILENCE_CHUNK_SIZE, 0).toString('base64');
+
+    for (let i = 0; i < VAD_SILENCE_CHUNKS; i++) {
+      if (!this.session?.isActive) break;
+
+      this.sendEvent({
+        event: {
+          audioInput: {
+            promptName: this.session.promptName,
+            contentName: this.session.audioContentId,
+            content: silenceChunk,
+          },
         },
-      },
-    });
+      });
 
-    // Mark content as inactive and generate new ID for next turn
-    this.session.audioContentActive = false;
-    this.session.audioContentId = crypto.randomUUID();
+      // Small delay between chunks to simulate real-time silence
+      await new Promise((resolve) => setTimeout(resolve, VAD_CHUNK_DELAY_MS));
+    }
 
-    logger.debug('[NovaSonic] Audio committed');
+    logger.debug('[NovaSonic] Sent VAD silence chunks', { count: VAD_SILENCE_CHUNKS });
   }
 
   /**
    * Request a response from the provider.
-   * Nova Sonic automatically responds after content ends.
+   * Nova Sonic requires actual audio input with VAD detection to trigger responses.
+   * It does not support "agent speaks first" mode without user audio.
+   *
+   * Unlike other providers, we DON'T end the content here - Nova Sonic uses VAD
+   * to detect when the user stops speaking and triggers the response automatically.
+   * We just send silence to help trigger the VAD detection.
    */
-  requestResponse(): void {
-    // Nova Sonic automatically generates responses after contentEnd
-    // We need to start a new audio content for the next turn
+  async requestResponse(): Promise<void> {
     if (!this.isReady() || !this.session) {
       logger.warn('[NovaSonic] Cannot request response: not ready');
       return;
     }
 
-    // If no audio has been received yet, we need to trigger an initial
-    // response by sending a brief text prompt (for "target speaks first")
+    // Nova Sonic requires audio input to generate responses
+    // If no audio has been received, caller should send audio first
     if (!this.hasReceivedAudio) {
-      logger.debug('[NovaSonic] Triggering initial response with text prompt');
-      this.sendInitialPrompt();
+      logger.debug('[NovaSonic] requestResponse called but no audio received - Nova Sonic requires audio input');
       return;
     }
 
-    // Only start new content if previous content was ended
+    // Send silence to trigger VAD - Nova Sonic will detect end of speech
+    // and generate a response. We don't end the content here.
     if (this.session.audioContentActive) {
-      logger.debug('[NovaSonic] Audio content already active, skipping contentStart');
-      return;
+      await this.sendSilenceForVAD();
     }
 
-    // Start new audio content for next user turn
-    this.sendEvent({
-      event: {
-        contentStart: {
-          promptName: this.session.promptName,
-          contentName: this.session.audioContentId,
-          type: 'AUDIO',
-          interactive: true,
-          role: 'USER',
-          audioInputConfiguration: DEFAULT_CONFIG.audio.input,
-        },
-      },
-    });
-    this.session.audioContentActive = true;
-
-    logger.debug('[NovaSonic] Response requested, new audio content started');
-  }
-
-  /**
-   * Send an initial prompt to trigger Nova Sonic to speak first.
-   * This is needed because Nova Sonic waits for input before responding.
-   * We send a brief silent audio chunk followed by contentEnd to trigger the response.
-   */
-  private async sendInitialPrompt(): Promise<void> {
-    if (!this.session) return;
-
-    // Start audio content
-    await this.sendEvent({
-      event: {
-        contentStart: {
-          promptName: this.session.promptName,
-          contentName: this.session.audioContentId,
-          type: 'AUDIO',
-          interactive: true,
-          role: 'USER',
-          audioInputConfiguration: DEFAULT_CONFIG.audio.input,
-        },
-      },
-    });
-    this.session.audioContentActive = true;
-
-    // Send a 1 second silent audio chunk at 8kHz to trigger VAD
-    // 8kHz * 1s * 2 bytes/sample = 16000 bytes
-    const silentBuffer = Buffer.alloc(16000, 0);
-    await this.sendEvent({
-      event: {
-        audioInput: {
-          promptName: this.session.promptName,
-          contentName: this.session.audioContentId,
-          content: silentBuffer.toString('base64'),
-        },
-      },
-    });
-
-    // End the audio content to trigger response
-    await this.sendEvent({
-      event: {
-        contentEnd: {
-          promptName: this.session.promptName,
-          contentName: this.session.audioContentId,
-        },
-      },
-    });
-
-    // Mark as inactive and generate new ID for next turn
-    this.session.audioContentActive = false;
-    this.session.audioContentId = crypto.randomUUID();
-
-    logger.debug('[NovaSonic] Initial silent audio sent to trigger response');
+    logger.debug('[NovaSonic] Response requested via VAD silence');
   }
 
   /**
@@ -472,14 +512,16 @@ export class NovaSonicConnection extends EventEmitter {
     if (this.session?.isActive) {
       this.session.isActive = false;
 
-      // Send end events
-      this.sendEvent({
-        event: {
-          promptEnd: {
-            promptName: this.session.promptName,
+      // Only send promptEnd if it hasn't been sent yet
+      if (!this.session.promptEnded) {
+        this.sendEvent({
+          event: {
+            promptEnd: {
+              promptName: this.session.promptName,
+            },
           },
-        },
-      });
+        });
+      }
 
       this.sendEvent({
         event: {
@@ -539,47 +581,6 @@ export class NovaSonicConnection extends EventEmitter {
   // ─────────────────────────────────────────────────────────────
 
   /**
-   * Send a system prompt as text.
-   */
-  private async sendSystemPrompt(text: string): Promise<void> {
-    if (!this.session) return;
-
-    const textContentId = crypto.randomUUID();
-
-    await this.sendEvent({
-      event: {
-        contentStart: {
-          promptName: this.session.promptName,
-          contentName: textContentId,
-          type: 'TEXT',
-          interactive: false,
-          role: 'SYSTEM',
-          textInputConfiguration: DEFAULT_CONFIG.text,
-        },
-      },
-    });
-
-    await this.sendEvent({
-      event: {
-        textInput: {
-          promptName: this.session.promptName,
-          contentName: textContentId,
-          content: text,
-        },
-      },
-    });
-
-    await this.sendEvent({
-      event: {
-        contentEnd: {
-          promptName: this.session.promptName,
-          contentName: textContentId,
-        },
-      },
-    });
-  }
-
-  /**
    * Send an event to the queue.
    */
   private async sendEvent(event: NovaSonicEvent): Promise<void> {
@@ -598,44 +599,77 @@ export class NovaSonicConnection extends EventEmitter {
   }
 
   /**
-   * Create async iterable for bidirectional stream.
+   * Create async iterable for bidirectional stream using async generator.
+   * AWS SDK requires an async generator function pattern for proper streaming.
+   * Nova Sonic requires continuous input to avoid timeout.
    */
   private createAsyncIterable(): AsyncIterable<{ chunk: { bytes: Uint8Array } }> {
     const session = this.session!;
 
+    // Keep-alive audio chunk (32ms of silence at 16kHz = 1024 bytes)
+    const keepAliveChunk = Buffer.alloc(1024, 0).toString('base64');
+
     return {
-      [Symbol.asyncIterator]: () => ({
-        next: async () => {
-          if (!session.isActive) {
-            return { done: true, value: undefined };
-          }
+      [Symbol.asyncIterator]: async function* () {
+        session.iteratorStarted = true;
 
-          if (session.queue.length === 0) {
-            try {
-              await Promise.race([
-                firstValueFrom(session.queueSignal.pipe(take(1))),
-                firstValueFrom(session.closeSignal.pipe(take(1))),
-              ]);
-            } catch {
-              return { done: true, value: undefined };
-            }
-          }
+        let lastKeepAlive = Date.now();
+        const KEEP_ALIVE_INTERVAL_MS = 100; // Send keep-alive every 100ms if idle
 
-          const nextEvent = session.queue.shift();
-          if (nextEvent) {
-            return {
-              value: {
+        while (session.isActive) {
+          // Yield all queued events first
+          while (session.queue.length > 0 && session.isActive) {
+            const nextEvent = session.queue.shift();
+            if (nextEvent) {
+              yield {
                 chunk: {
                   bytes: new TextEncoder().encode(JSON.stringify(nextEvent)),
                 },
-              },
-              done: false,
-            };
+              };
+              lastKeepAlive = Date.now();
+            }
           }
 
-          return { done: true, value: undefined };
-        },
-      }),
+          // If queue is empty, wait briefly for new events or send keep-alive
+          if (session.queue.length === 0 && session.isActive) {
+            try {
+              // Wait for signal with short timeout
+              await Promise.race([
+                firstValueFrom(session.queueSignal.pipe(take(1))),
+                firstValueFrom(session.closeSignal.pipe(take(1))),
+                new Promise((resolve) => setTimeout(resolve, 50)),
+              ]);
+            } catch {
+              // Ignore errors from race
+            }
+
+            // If audio content is active and we haven't sent anything recently, send keep-alive
+            if (
+              session.isActive &&
+              session.audioContentActive &&
+              session.queue.length === 0 &&
+              Date.now() - lastKeepAlive > KEEP_ALIVE_INTERVAL_MS
+            ) {
+              yield {
+                chunk: {
+                  bytes: new TextEncoder().encode(
+                    JSON.stringify({
+                      event: {
+                        audioInput: {
+                          promptName: session.promptName,
+                          contentName: session.audioContentId,
+                          content: keepAliveChunk,
+                        },
+                      },
+                    }),
+                  ),
+                },
+              };
+              lastKeepAlive = Date.now();
+            }
+          }
+        }
+      },
     };
   }
 
@@ -643,14 +677,18 @@ export class NovaSonicConnection extends EventEmitter {
    * Process response stream in background.
    */
   private async processResponses(): Promise<void> {
-    if (!this.responsePromise) return;
+    if (!this.responsePromise) {
+      return;
+    }
 
     try {
       const response = await this.responsePromise;
 
       if (response.body) {
         for await (const event of response.body) {
-          if (!this.session?.isActive) break;
+          if (!this.session?.isActive) {
+            break;
+          }
 
           if (event.chunk?.bytes) {
             const data = JSON.parse(new TextDecoder().decode(event.chunk.bytes));
@@ -683,6 +721,8 @@ export class NovaSonicConnection extends EventEmitter {
         const content = eventData.content as string;
 
         if (role === 'ASSISTANT' && content) {
+          // Accumulate transcript for when turn ends
+          this.accumulatedTranscript += content;
           this.emit('transcript_delta', content);
         } else if (role === 'USER' && content) {
           this.emit('input_transcript', content);
@@ -693,7 +733,8 @@ export class NovaSonicConnection extends EventEmitter {
       case 'audioOutput': {
         const audioContent = eventData.content as string;
         if (audioContent) {
-          // Resample from 16kHz to 24kHz
+          // Nova Sonic outputs at 24kHz, same as our target - no resampling needed
+          // but we keep the resample call for flexibility if rates change
           const novaBuffer = base64ToBuffer(audioContent);
           const resampledBuffer = resampleAudio(
             novaBuffer,
@@ -721,7 +762,9 @@ export class NovaSonicConnection extends EventEmitter {
         const stopReason = eventData.stopReason as string;
         if (stopReason === 'END_TURN') {
           this.emit('audio_done');
-          this.emit('transcript_done', ''); // Transcript was sent via textOutput
+          // Emit accumulated transcript and clear for next turn
+          this.emit('transcript_done', this.accumulatedTranscript);
+          this.accumulatedTranscript = '';
           this.emit('speech_stopped');
         }
         break;
@@ -736,7 +779,9 @@ export class NovaSonicConnection extends EventEmitter {
    * Map voice name to Nova Sonic voice ID.
    */
   private mapVoice(voice?: string): NovaVoice {
-    if (!voice) return 'tiffany';
+    if (!voice) {
+      return 'tiffany';
+    }
 
     const lowerVoice = voice.toLowerCase();
     if (NOVA_VOICES.includes(lowerVoice as NovaVoice)) {

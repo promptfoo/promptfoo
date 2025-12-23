@@ -65,13 +65,15 @@ export abstract class BaseVoiceConnection extends EventEmitter {
 
   /**
    * Commit the audio buffer (signal end of input for this turn).
+   * May be async for providers that need to send multiple messages (e.g., VAD triggers).
    */
-  abstract commitAudio(): void;
+  abstract commitAudio(): void | Promise<void>;
 
   /**
    * Request a response from the provider.
+   * May be async for providers that need to send multiple messages (e.g., VAD triggers).
    */
-  abstract requestResponse(): void;
+  abstract requestResponse(): void | Promise<void>;
 
   /**
    * Cancel the current response.
