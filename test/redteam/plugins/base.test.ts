@@ -294,27 +294,6 @@ describe('RedteamPluginBase', () => {
       expect(result).toContain('"message": "The message content"');
     });
 
-    it('should remove conflicting format instructions when inputs is defined', () => {
-      const config = {
-        inputs: {
-          username: 'The user name',
-        },
-      };
-      const template = `Generate test cases.
-Each line must begin with "Prompt:"
-Use the format: Prompt: <your prompt here>`;
-
-      const result = RedteamPluginBase.appendModifiers(template, config);
-
-      // Original format instructions should be removed
-      expect(result).not.toContain('Each line must begin with');
-      // But the main content should remain
-      expect(result).toContain('Generate test cases');
-      // And the new format should be added
-      expect(result).toContain('__outputFormat:');
-      expect(result).toContain('<Prompt>');
-    });
-
     it('should combine inputs with other modifiers', () => {
       const config = {
         language: 'Spanish',

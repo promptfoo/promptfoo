@@ -399,7 +399,7 @@ export abstract class RedteamPluginBase {
       const schema = Object.entries(config.inputs)
         .map(([key, description]) => `"${key}": "${description}"`)
         .join(', ');
-      modifiers.__outputFormat = `Output each test case as JSON wrapped in <Prompt> tags: <Prompt>{${schema}}</Prompt>`;
+      modifiers.__outputFormat = `Consider the combinations of each of these fields. Output each message/test case as JSON wrapped in <Prompt> tags: <Prompt>{${schema}}</Prompt>`;
     }
 
     // Store the computed modifiers back into config so they get passed to strategies
@@ -415,27 +415,6 @@ export abstract class RedteamPluginBase {
       return template;
     }
 
-    let processedTemplate = template.trim();
-
-    // If __outputFormat modifier is set, remove conflicting format instructions from the template
-    // Templates often have lines like "Each line must begin with 'Prompt:'" that conflict with JSON output
-    if (modifiers.__outputFormat) {
-      // Remove common format instruction patterns that conflict with __outputFormat
-      processedTemplate = processedTemplate
-        .split('\n')
-        .filter((line) => {
-          const lower = line.toLowerCase();
-          // Remove lines that specify "Prompt:" format
-          return !(
-            lower.includes('each line must begin with') ||
-            lower.includes('begin with the string "prompt') ||
-            lower.includes("begin with the string 'prompt") ||
-            (lower.includes('format') && lower.includes('prompt:') && !lower.includes('<prompt>'))
-          );
-        })
-        .join('\n');
-    }
-
     // Append all modifiers
     const modifierSection = Object.entries(modifiers)
       .filter(([_, value]) => typeof value !== 'undefined' && value !== '')
@@ -443,7 +422,7 @@ export abstract class RedteamPluginBase {
       .join('\n');
 
     return dedent`
-      ${processedTemplate}
+      ${template}
 
       CRITICAL: Ignore any previous output format instructions. You MUST follow these requirements exactly:
       <Modifiers>
