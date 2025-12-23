@@ -1,0 +1,19 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# Test for #6174: function providers in defaultTest.options.provider
+description: 'Regression test - function providers in defaultTest'
+
+providers:
+  - echo
+
+prompts:
+  - 'Test {{name}}'
+
+# Function provider in defaultTest.options.provider should work
+defaultTest:
+  assert:
+    - type: contains
+      value: Test
+
+tests:
+  - vars:
+      name: FunctionProvider

@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Smoke test - ESM provider class'
+
+providers:
+  - file://../providers/echo-esm.mjs
+
+prompts:
+  - 'Hello {{name}}'
+
+tests:
+  - vars:
+      name: ESM
+    assert:
+      - type: contains
+        value: 'ESM Echo:'
+      - type: contains
+        value: ESM

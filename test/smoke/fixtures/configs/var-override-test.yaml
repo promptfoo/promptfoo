@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# Config for testing --var override behavior
+# Test vars take precedence over --var (defaultTest.vars)
+description: 'Smoke test - variable override behavior'
+
+providers:
+  - echo
+
+prompts:
+  - 'Name: {{name}}, Role: {{role}}'
+
+tests:
+  # This test has partial vars - name from test, role from --var
+  - vars:
+      name: TestDefinedName
+    assert:
+      - type: contains
+        value: 'Name:'

@@ -1,0 +1,14 @@
+# This config is intentionally invalid for testing validation errors
+description: 'Invalid config for smoke testing'
+
+# Missing required 'providers' field
+
+prompts:
+  - 'Hello {{name}}'
+
+tests:
+  - vars:
+      name: World
+    assert:
+      - type: invalid-assertion-type-that-does-not-exist
+        value: test

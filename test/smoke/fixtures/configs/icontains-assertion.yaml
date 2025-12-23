@@ -1,0 +1,21 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# Config for testing icontains (case-insensitive contains) assertion
+description: 'Smoke test - icontains assertion'
+
+providers:
+  - echo
+
+prompts:
+  - 'Response: HELLO World Test'
+
+tests:
+  - assert:
+      # Case-insensitive match - "hello" matches "HELLO"
+      - type: icontains
+        value: hello
+      # Case-insensitive match - "WORLD" matches "World"
+      - type: icontains
+        value: WORLD
+      # Case-insensitive match - mixed case
+      - type: icontains
+        value: wOrLd

@@ -1,0 +1,27 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Smoke test - contains-json assertion (5.1.7)'
+
+providers:
+  - echo
+
+prompts:
+  # The echo provider echoes the prompt, so include JSON in the prompt
+  - 'Here is the data: {"status": "success", "code": 200, "message": "Hello"}'
+
+tests:
+  - vars: {}
+    assert:
+      # contains-json without value just checks that valid JSON is present in output
+      - type: contains-json
+      # With a value, it validates against a JSON schema
+      - type: contains-json
+        value:
+          type: object
+          required:
+            - status
+            - code
+          properties:
+            status:
+              type: string
+            code:
+              type: number

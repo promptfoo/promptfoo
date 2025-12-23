@@ -1,0 +1,10 @@
+description: 'Test JSON path transform'
+providers:
+  - id: echo
+    transform: 'JSON.parse(output).value'
+prompts:
+  - '{"value": "extracted", "other": "ignored"}'
+tests:
+  - assert:
+      - type: equals
+        value: extracted

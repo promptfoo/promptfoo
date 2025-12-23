@@ -1,0 +1,15 @@
+description: 'Test multiple assertion types'
+providers:
+  - echo
+prompts:
+  - 'Hello World 123'
+tests:
+  - assert:
+      - type: contains
+        value: Hello
+      - type: contains
+        value: World
+      - type: regex
+        value: '\d+'
+      - type: javascript
+        value: output.length > 5

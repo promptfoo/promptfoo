@@ -1,0 +1,50 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Smoke test - various assertion types'
+
+providers:
+  - echo
+
+prompts:
+  - '{{input}}'
+
+tests:
+  # Test equals assertion
+  - vars:
+      input: 'exact match test'
+    assert:
+      - type: equals
+        value: 'exact match test'
+
+  # Test regex assertion
+  - vars:
+      input: 'The answer is 42'
+    assert:
+      - type: regex
+        value: 'answer.*\d+'
+
+  # Test starts-with assertion
+  - vars:
+      input: 'Hello World'
+    assert:
+      - type: starts-with
+        value: 'Hello'
+
+  # Test is-json assertion
+  - vars:
+      input: '{"key": "value", "number": 123}'
+    assert:
+      - type: is-json
+
+  # Test not-contains assertion
+  - vars:
+      input: 'This is safe content'
+    assert:
+      - type: not-contains
+        value: 'dangerous'
+
+  # Test inline JavaScript assertion
+  - vars:
+      input: 'count to five: 1 2 3 4 5'
+    assert:
+      - type: javascript
+        value: output.includes('5') && output.length > 10

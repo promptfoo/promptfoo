@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# Config for testing multiple prompts
+description: 'Smoke test - multiple prompts comparison'
+
+providers:
+  - echo
+
+prompts:
+  - 'Greeting: Hello {{name}}!'
+  - 'Greeting: Hi {{name}}!'
+  - 'Greeting: Hey {{name}}!'
+
+tests:
+  - vars:
+      name: Alice
+    assert:
+      - type: contains
+        value: Alice

@@ -1,0 +1,32 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# Test 10.3.2: maxConcurrency in config.yaml is respected
+# Bug #6526: maxConcurrency from config file was ignored in 0.120.0
+description: 'Regression test - maxConcurrency from config file'
+
+providers:
+  - echo
+
+prompts:
+  - 'Test {{n}}'
+
+# This setting was ignored in 0.120.0 - only CLI --max-concurrency worked
+defaultTest:
+  options:
+    maxConcurrency: 1
+
+tests:
+  - vars:
+      n: '1'
+    assert:
+      - type: contains
+        value: '1'
+  - vars:
+      n: '2'
+    assert:
+      - type: contains
+        value: '2'
+  - vars:
+      n: '3'
+    assert:
+      - type: contains
+        value: '3'

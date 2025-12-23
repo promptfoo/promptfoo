@@ -1,0 +1,11 @@
+description: 'Test Nunjucks filters'
+providers:
+  - echo
+prompts:
+  - 'Hello {{ name | upper }}'
+tests:
+  - vars:
+      name: world
+    assert:
+      - type: contains
+        value: WORLD

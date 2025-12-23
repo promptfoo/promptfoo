@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# Config for testing levenshtein (edit distance) assertion
+description: 'Smoke test - levenshtein assertion'
+
+providers:
+  - echo
+
+prompts:
+  - 'Hello World'
+
+tests:
+  - assert:
+      # Allow up to 3 character edits
+      - type: levenshtein
+        value: 'Hello Wurld'
+        threshold: 3

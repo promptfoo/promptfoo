@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# Config for testing --env-file flag
+description: 'Smoke test - environment variable loading'
+
+providers:
+  - echo
+
+prompts:
+  - 'API Key: {{api_key}}, Secret: {{secret}}'
+
+tests:
+  - vars:
+      api_key: '{{env.TEST_API_KEY}}'
+      secret: '{{env.TEST_SECRET}}'
+    assert:
+      - type: contains
+        value: 'API Key:'

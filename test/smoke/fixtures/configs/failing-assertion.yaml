@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'Smoke test - config with failing assertion'
+
+providers:
+  - echo
+
+prompts:
+  - 'Hello {{name}}'
+
+tests:
+  - vars:
+      name: World
+    assert:
+      # This assertion will fail because echo returns "Hello World"
+      # but we're asserting it contains "IMPOSSIBLE_STRING_NOT_IN_OUTPUT"
+      - type: contains
+        value: IMPOSSIBLE_STRING_NOT_IN_OUTPUT_12345

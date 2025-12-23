@@ -1,0 +1,19 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# Test 10.1.1: CJS provider with module.exports still works after ESM migration
+# Bug #6501: .js files with CJS syntax failed to load in 0.120.0
+description: 'Regression test - CJS module.exports provider'
+
+providers:
+  - file://../providers/cjs-module-exports.js
+
+prompts:
+  - 'Hello {{name}}'
+
+tests:
+  - vars:
+      name: CjsTest
+    assert:
+      - type: contains
+        value: 'CJS Echo:'
+      - type: contains
+        value: CjsTest
