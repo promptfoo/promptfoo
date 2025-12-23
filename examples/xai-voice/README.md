@@ -77,7 +77,7 @@ config:
 ```
 
 Supported formats: `audio/pcm`, `audio/pcmu`, `audio/pcma`
-Supported sample rates: 8000, 16000, 24000, 48000 Hz
+Supported sample rates: 8000, 16000, 22050, 24000, 32000, 44100, 48000 Hz
 
 ## Pricing
 

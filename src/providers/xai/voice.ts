@@ -94,7 +94,6 @@ export type XAIVoiceTool = XAIFileSearchTool | XAIWebSearchTool | XAIXSearchTool
 export interface XAIVoiceOptions {
   // Authentication
   apiKey?: string;
-  apiKeyEnvar?: string;
 
   // Voice configuration
   voice?: XAIVoice;
@@ -246,7 +245,7 @@ export class XAIVoiceProvider implements ApiProvider {
   }
 
   protected getApiKey(): string | undefined {
-    return this.config.apiKey || getEnvString(this.config.apiKeyEnvar ?? 'XAI_API_KEY');
+    return this.config.apiKey || getEnvString('XAI_API_KEY');
   }
 
   /**
