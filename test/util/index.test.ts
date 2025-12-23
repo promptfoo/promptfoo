@@ -867,6 +867,52 @@ describe('util', () => {
       // Should match because sessionId is filtered from both sides
       expect(resultIsForTestCase(result, testCase)).toBe(true);
     });
+
+    it('matches when vars contain emoji-encoded strings with invisible Unicode characters', async () => {
+      // Test that emoji-encoded strings (using variation selectors) compare correctly
+      // This mimics the emoji encoding strategy that uses invisible Unicode variation selectors
+      const emojiEncodedText = '😊' + String.fromCodePoint(0xfe00) + String.fromCodePoint(0xe0100);
+
+      const testCase: TestCase = {
+        provider: 'provider',
+        vars: {
+          prompt: emojiEncodedText,
+        },
+      };
+
+      const result = {
+        provider: 'provider',
+        vars: {
+          prompt: emojiEncodedText,
+          sessionId: 'goat-session-123',
+        },
+      } as any as EvaluateResult;
+
+      // Should match because sessionId is filtered and emoji strings are identical
+      expect(resultIsForTestCase(result, testCase)).toBe(true);
+    });
+
+    it('does not match when emoji-encoded strings are different', async () => {
+      const emojiEncodedText1 = '😊' + String.fromCodePoint(0xfe00);
+      const emojiEncodedText2 = '😊' + String.fromCodePoint(0xfe01);
+
+      const testCase: TestCase = {
+        provider: 'provider',
+        vars: {
+          prompt: emojiEncodedText1,
+        },
+      };
+
+      const result = {
+        provider: 'provider',
+        vars: {
+          prompt: emojiEncodedText2,
+        },
+      } as any as EvaluateResult;
+
+      // Should NOT match because the variation selectors are different
+      expect(resultIsForTestCase(result, testCase)).toBe(false);
+    });
   });
 
   describe('filterRuntimeVars', () => {

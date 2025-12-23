@@ -109,11 +109,31 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
     logger.debug(`After metadata filter: ${tests.length} tests remain`);
   }
 
-  if (options.failing) {
-    tests = await filterFailingTests(testSuite, options.failing);
-  }
+  // Handle failing and errorsOnly filters
+  // When both are provided, combine results (union) instead of overwriting
+  if (options.failing && options.errorsOnly) {
+    const failingTests = await filterFailingTests(testSuite, options.failing);
+    const errorTests = await filterErrorTests(testSuite, options.errorsOnly);
 
-  if (options.errorsOnly) {
+    // Create a union of both sets using a Map keyed by test identity
+    const testMap = new Map<string, (typeof tests)[0]>();
+    const getTestKey = (test: (typeof tests)[0]) =>
+      JSON.stringify({ vars: test.vars, description: test.description });
+
+    for (const test of failingTests) {
+      testMap.set(getTestKey(test), test);
+    }
+    for (const test of errorTests) {
+      testMap.set(getTestKey(test), test);
+    }
+
+    tests = Array.from(testMap.values());
+    logger.debug(
+      `Combined failing (${failingTests.length}) and errors (${errorTests.length}) filters: ${tests.length} unique tests`,
+    );
+  } else if (options.failing) {
+    tests = await filterFailingTests(testSuite, options.failing);
+  } else if (options.errorsOnly) {
     tests = await filterErrorTests(testSuite, options.errorsOnly);
   }
 
