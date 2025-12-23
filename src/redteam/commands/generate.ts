@@ -46,8 +46,8 @@ import { synthesize } from '../index';
 import { isValidPolicyObject } from '../plugins/policy/utils';
 import { shouldGenerateRemote } from '../remoteGeneration';
 import {
-  MCP_TOOL_CALL_INSTRUCTIONS,
   decodeXmlEntities,
+  MCP_TOOL_CALL_INSTRUCTIONS,
   parseTypedValue,
   parseXmlToolCall,
 } from './mcpParserUtils';
