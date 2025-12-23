@@ -194,16 +194,21 @@ describe('doRedteamRun', () => {
         loadedFromCloud: true,
       });
 
-      const expectedFilename = `redteam-${mockDate.getTime()}.yaml`;
-      const expectedPath = path.join('', expectedFilename);
+      // Config is written to a separate temp file, output goes to the stable file
+      const expectedConfigFilename = `redteam-config-${mockDate.getTime()}.yaml`;
+      const expectedConfigPath = path.join('', expectedConfigFilename);
+      const expectedOutputFilename = `redteam-${mockDate.getTime()}.yaml`;
+      const expectedOutputPath = path.join('', expectedOutputFilename);
 
-      expect(fs.mkdirSync).toHaveBeenCalledWith(path.dirname(expectedPath), { recursive: true });
-      expect(fs.writeFileSync).toHaveBeenCalledWith(expectedPath, 'mocked-yaml-content');
+      expect(fs.mkdirSync).toHaveBeenCalledWith(path.dirname(expectedConfigPath), {
+        recursive: true,
+      });
+      expect(fs.writeFileSync).toHaveBeenCalledWith(expectedConfigPath, 'mocked-yaml-content');
       expect(yaml.dump).toHaveBeenCalledWith(mockConfig);
       expect(doGenerateRedteam).toHaveBeenCalledWith(
         expect.objectContaining({
-          config: expectedPath,
-          output: expectedPath,
+          config: expectedConfigPath,
+          output: expectedOutputPath,
         }),
       );
     });
@@ -214,20 +219,20 @@ describe('doRedteamRun', () => {
         loadedFromCloud: false,
       });
 
-      const expectedPath = path.join('/tmp', 'redteam.yaml');
-      const expectedFilePrefix = path.join('/tmp', 'redteam-');
+      const expectedConfigPrefix = path.join('/tmp', 'redteam-config-');
+      const expectedOutputPrefix = path.join('/tmp', 'redteam-');
 
       expect(os.tmpdir).toHaveBeenCalledWith();
-      expect(fs.mkdirSync).toHaveBeenCalledWith(path.dirname(expectedPath), { recursive: true });
+      expect(fs.mkdirSync).toHaveBeenCalledWith('/tmp', { recursive: true });
       expect(fs.writeFileSync).toHaveBeenCalledWith(
-        expect.stringContaining(expectedFilePrefix),
+        expect.stringContaining(expectedConfigPrefix),
         'mocked-yaml-content',
       );
       expect(yaml.dump).toHaveBeenCalledWith(mockConfig);
       expect(doGenerateRedteam).toHaveBeenCalledWith(
         expect.objectContaining({
-          config: expect.stringContaining(expectedFilePrefix),
-          output: expect.stringContaining(expectedFilePrefix),
+          config: expect.stringContaining(expectedConfigPrefix),
+          output: expect.stringContaining(expectedOutputPrefix),
         }),
       );
     });
@@ -238,20 +243,20 @@ describe('doRedteamRun', () => {
         // loadedFromCloud is undefined
       });
 
-      const expectedPath = path.join('/tmp', 'redteam.yaml');
-      const expectedFilePrefix = path.join('/tmp', 'redteam-');
+      const expectedConfigPrefix = path.join('/tmp', 'redteam-config-');
+      const expectedOutputPrefix = path.join('/tmp', 'redteam-');
 
       expect(os.tmpdir).toHaveBeenCalledWith();
-      expect(fs.mkdirSync).toHaveBeenCalledWith(path.dirname(expectedPath), { recursive: true });
+      expect(fs.mkdirSync).toHaveBeenCalledWith('/tmp', { recursive: true });
       expect(fs.writeFileSync).toHaveBeenCalledWith(
-        expect.stringContaining(expectedFilePrefix),
+        expect.stringContaining(expectedConfigPrefix),
         'mocked-yaml-content',
       );
       expect(yaml.dump).toHaveBeenCalledWith(mockConfig);
       expect(doGenerateRedteam).toHaveBeenCalledWith(
         expect.objectContaining({
-          config: expect.stringContaining(expectedFilePrefix),
-          output: expect.stringContaining(expectedFilePrefix),
+          config: expect.stringContaining(expectedConfigPrefix),
+          output: expect.stringContaining(expectedOutputPrefix),
         }),
       );
     });
@@ -275,14 +280,19 @@ describe('doRedteamRun', () => {
         loadedFromCloud: true,
       });
 
-      const firstExpectedPath = path.join('', `redteam-${firstTimestamp}.yaml`);
-      const secondExpectedPath = path.join('', `redteam-${secondTimestamp}.yaml`);
+      // Config files have unique timestamps
+      const firstExpectedConfigPath = path.join('', `redteam-config-${firstTimestamp}.yaml`);
+      const secondExpectedConfigPath = path.join('', `redteam-config-${secondTimestamp}.yaml`);
 
-      // Verify different filenames were generated
-      expect(fs.writeFileSync).toHaveBeenNthCalledWith(1, firstExpectedPath, 'mocked-yaml-content');
+      // Verify different config filenames were generated
+      expect(fs.writeFileSync).toHaveBeenNthCalledWith(
+        1,
+        firstExpectedConfigPath,
+        'mocked-yaml-content',
+      );
       expect(fs.writeFileSync).toHaveBeenNthCalledWith(
         2,
-        secondExpectedPath,
+        secondExpectedConfigPath,
         'mocked-yaml-content',
       );
     });
@@ -323,10 +333,11 @@ describe('doRedteamRun', () => {
         loadedFromCloud: true,
       });
 
-      const expectedFilename = `redteam-${mockDate.getTime()}.yaml`;
-      const expectedPath = path.join('', expectedFilename);
+      // Config file uses redteam-config-{timestamp}.yaml pattern
+      const expectedConfigFilename = `redteam-config-${mockDate.getTime()}.yaml`;
+      const expectedConfigPath = path.join('', expectedConfigFilename);
 
-      expect(mockLogger.debug).toHaveBeenCalledWith(`Using live config from ${expectedPath}`);
+      expect(mockLogger.debug).toHaveBeenCalledWith(`Using live config from ${expectedConfigPath}`);
       expect(mockLogger.debug).toHaveBeenCalledWith(
         `Live config: ${JSON.stringify(mockConfig, null, 2)}`,
       );

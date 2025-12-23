@@ -60,16 +60,33 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
   }
 
   if (options.liveRedteamConfig) {
-    // Write liveRedteamConfig to a temporary file
-    const filename = `redteam-${Date.now()}.yaml`;
+    // Use stable filename based on cloud IDs so we can reuse cached test cases
+    let outputFilename: string;
+    logger.debug(
+      `[Cache] cloudConfigId: ${options.cloudConfigId}, cloudTargetId: ${options.cloudTargetId}`,
+    );
+    if (options.cloudConfigId) {
+      const configSuffix = options.cloudConfigId.slice(0, 8);
+      const targetSuffix = options.cloudTargetId ? `-${options.cloudTargetId.slice(0, 8)}` : '';
+      outputFilename = `redteam-${configSuffix}${targetSuffix}.yaml`;
+      logger.debug(`[Cache] Using stable filename: ${outputFilename}`);
+    } else {
+      outputFilename = `redteam-${Date.now()}.yaml`;
+      logger.debug(`[Cache] Using timestamp filename: ${outputFilename}`);
+    }
     const tmpDir = options.loadedFromCloud ? '' : os.tmpdir();
-    const tmpFile = path.join(tmpDir, filename);
-    fs.mkdirSync(path.dirname(tmpFile), { recursive: true });
-    fs.writeFileSync(tmpFile, yaml.dump(options.liveRedteamConfig));
-    redteamPath = tmpFile;
-    // Do not use default config.
-    configPath = tmpFile;
-    logger.debug(`Using live config from ${tmpFile}`);
+    redteamPath = path.join(tmpDir, outputFilename);
+
+    // Write liveRedteamConfig to a SEPARATE temp file for the config input
+    // This prevents overwriting the output file which may contain cached test cases with targetHash
+    const configFilename = `redteam-config-${Date.now()}.yaml`;
+    const configTmpFile = path.join(tmpDir, configFilename);
+    fs.mkdirSync(path.dirname(configTmpFile), { recursive: true });
+    fs.writeFileSync(configTmpFile, yaml.dump(options.liveRedteamConfig));
+    configPath = configTmpFile;
+
+    logger.debug(`Using live config from ${configTmpFile}`);
+    logger.debug(`Output will be written to ${redteamPath}`);
     logger.debug(`Live config: ${JSON.stringify(options.liveRedteamConfig, null, 2)}`);
   }
 
@@ -89,6 +106,8 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
     inRedteamRun: true,
     abortSignal: options.abortSignal,
     progressBar: options.progressBar,
+    // Pass liveRedteamConfig as configFromCloud to enable hash checking for reuse
+    ...(options.liveRedteamConfig ? { configFromCloud: options.liveRedteamConfig } : {}),
   });
 
   // Check if redteam.yaml exists before running evaluation
