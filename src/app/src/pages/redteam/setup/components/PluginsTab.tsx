@@ -474,6 +474,7 @@ export default function PluginsTab({
                     cursor: 'pointer',
                     '&:hover': {
                       bgcolor: selectedCategory === undefined ? 'primary.dark' : 'action.hover',
+                      color: selectedCategory === undefined ? 'primary.contrastText' : undefined,
                     },
                   }}
                 />
@@ -488,6 +489,7 @@ export default function PluginsTab({
                       cursor: 'pointer',
                       '&:hover': {
                         bgcolor: selectedCategory === filter.key ? 'primary.dark' : 'action.hover',
+                        color: selectedCategory === filter.key ? 'primary.contrastText' : undefined,
                       },
                     }}
                   />
