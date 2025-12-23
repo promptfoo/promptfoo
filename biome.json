@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.3.9/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.3.10/schema.json",
   "vcs": {
     "enabled": true,
     "clientKind": "git",
@@ -23,7 +23,8 @@
       "!!**/public",
       "!!examples/adaline-gateway/**/prompt.json",
       "!!examples/multiple-turn-conversation/prompt.json",
-      "!!examples/openai-chat-history/prompt.json"
+      "!!examples/openai-chat-history/prompt.json",
+      "!!test/fixtures/rubric-json-template/**/*.json"
     ]
   },
   "formatter": {
@@ -281,15 +282,6 @@
             "useBlockStatements": "off"
           }
         }
-      }
-    },
-    {
-      "includes": ["test/fixtures/rubric-json-template/**/*.json"],
-      "linter": {
-        "enabled": false
-      },
-      "formatter": {
-        "enabled": false
       }
     }
   ]

@@ -1,11 +1,11 @@
+import { callApi } from '@app/utils/api';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ResultsView from './ResultsView';
+import { useResultsViewSettingsStore, useTableStore } from './store';
 import type { ResultLightweightWithLabel } from '@promptfoo/types';
-import { useTableStore, useResultsViewSettingsStore } from './store';
-import { callApi } from '@app/utils/api';
 
 // Mock all the required modules
 const mockShowToast = vi.fn();

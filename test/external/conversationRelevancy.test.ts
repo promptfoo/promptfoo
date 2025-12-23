@@ -1,8 +1,9 @@
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleConversationRelevance } from '../../src/external/assertions/deepeval';
-import { matchesConversationRelevance } from '../../src/external/matchers/deepeval';
 import { ConversationRelevancyTemplate } from '../../src/external/matchers/conversationRelevancyTemplate';
+import { matchesConversationRelevance } from '../../src/external/matchers/deepeval';
 import { getDefaultProviders } from '../../src/providers/defaults';
+
 import type { AssertionParams, AtomicTestCase } from '../../src/types/index';
 
 vi.mock('../../src/providers/defaults', () => ({

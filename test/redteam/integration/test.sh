@@ -49,10 +49,10 @@ else
   echo "Confirmed: No promptfoo-errors.log file exists"
 fi
 
-if echo "$output" | grep -q "Errors: 0"; then
-  echo "Expected line found (Errors: 0) for promptfoo redteam eval"
+if echo "$output" | grep -q "0 errors"; then
+  echo "Expected line found (0 errors) for promptfoo redteam eval"
 else
-  echo "ERROR: Expected line (Errors: 0) not found in output."
+  echo "ERROR: Expected line (0 errors) not found in output."
   echo "$output"
   exit 1
 fi

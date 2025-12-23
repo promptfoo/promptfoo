@@ -1,4 +1,5 @@
 import { readFileSync } from 'fs';
+
 import { defineConfig } from 'tsdown';
 
 // Read package.json for version constants

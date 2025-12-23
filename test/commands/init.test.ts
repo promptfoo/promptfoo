@@ -1,8 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import fs from 'fs/promises';
 
-import { Command } from 'commander';
 import confirm from '@inquirer/confirm';
+import { Command } from 'commander';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as init from '../../src/commands/init';
 import logger from '../../src/logger';
 import { fetchWithProxy } from '../../src/util/fetch/index';

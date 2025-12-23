@@ -27,12 +27,12 @@ import {
   useGridApiRef,
 } from '@mui/x-data-grid';
 import { makeDefaultPolicyName, makeInlinePolicyId } from '@promptfoo/redteam/plugins/policy/utils';
-import type { PolicyObject } from '@promptfoo/redteam/types';
 import { parse } from 'csv-parse/browser/esm/sync';
 import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import { TestCaseGenerateButton } from '../TestCaseDialog';
 import { useTestCaseGeneration } from '../TestCaseGenerationProvider';
 import { PolicySuggestionsSidebar } from './PolicySuggestionsSidebar';
+import type { PolicyObject } from '@promptfoo/redteam/types';
 
 // Augment the toolbar props interface
 declare module '@mui/x-data-grid' {
@@ -398,6 +398,10 @@ export const CustomPoliciesSection = () => {
     setConfirmDeleteOpen(false);
   };
 
+  /**
+   * Generates custom policies for an application given its definition and a sample of existing
+   * policies. Generation occurs remotely in Promptfoo Cloud.
+   */
   const handleGeneratePolicies = useCallback(async () => {
     if (!config.applicationDefinition?.purpose) {
       return;
@@ -417,50 +421,55 @@ export const CustomPoliciesSection = () => {
         ...suggestedPolicies.map((p) => p.text || ''),
       ];
 
-      const response = await callApi('/redteam/generate-custom-policy', {
+      // Send the request to `/redteam/:taskId`:
+      const response = await callApi('/redteam/custom-policy-generation-task', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           applicationDefinition: config.applicationDefinition,
           existingPolicies,
         }),
       });
 
-      if (!response.ok) {
-        let errorMessage = 'Failed to generate policies';
-        try {
-          const error = await response.json();
-          errorMessage = error.details ?? error.error ?? errorMessage;
-        } catch {
-          // If response is not JSON, use status text
-          errorMessage = `Failed to generate policies: ${response.statusText || response.status}`;
-        }
+      // Parse the request body prior to handling success/error cases.
+      let data;
+      try {
+        data = (await response.json()) as {
+          result: PolicyObject[];
+          error: string | null;
+          task: string;
+          details?: string; // Optionally set in `logAndSendError`
+        };
+      } catch (error) {
+        // Handle JSON parsing errors
+        toast.showToast(
+          `Failed to generate policies: ${error instanceof Error ? error.message : String(error)}`,
+          'error',
+        );
+        return;
+      }
+
+      // Handle potential errors:
+      if (!response.ok || data.error) {
+        const errorMessage =
+          data?.details ??
+          data?.error ??
+          `Failed to generate policies: ${response.statusText || response.status}`;
         throw new Error(errorMessage);
       }
 
-      const data = await response.json();
-      const generatedPolicies: Array<{ name: string; text: string }> = data.policies || [];
+      // Otherwise, handle success:
+      const generatedPolicies: PolicyObject[] = data.result ?? [];
 
       if (generatedPolicies.length === 0) {
         toast.showToast(
           'No policies were generated. Try adjusting your application definition.',
           'warning',
         );
-        setSuggestedPolicies([]);
-        return;
       }
 
-      // Map to PolicyObject with generated IDs
-      const policyObjects: PolicyObject[] = generatedPolicies.map((p) => ({
-        id: makeInlinePolicyId(p.text),
-        text: p.text,
-        name: p.name,
-      }));
-
       // Store as suggested policies instead of directly adding them
-      setSuggestedPolicies(policyObjects);
+      setSuggestedPolicies(generatedPolicies);
     } catch (error) {
       console.error('Error generating policies:', error);
       let errorMessage = 'Failed to generate policies';

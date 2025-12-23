@@ -1,10 +1,10 @@
 import express from 'express';
 import { VERSION } from '../../constants';
 import { getEnvBool } from '../../envars';
+import logger from '../../logger';
 import { getLatestVersion } from '../../updates';
 import { getUpdateCommands } from '../../updates/updateCommands';
 import { isRunningUnderNpx } from '../../util/promptfooCommand';
-import logger from '../../logger';
 import type { Request, Response } from 'express';
 
 const router = express.Router();

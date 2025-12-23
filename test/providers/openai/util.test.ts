@@ -1,6 +1,5 @@
-import { describe, expect, it, vi } from 'vitest';
-
 import OpenAI from 'openai';
+import { describe, expect, it, vi } from 'vitest';
 import {
   calculateOpenAICost,
   failApiCall,
@@ -73,10 +72,10 @@ describe('getTokenUsage', () => {
     };
 
     const result = getTokenUsage(data, true);
+    // Cached responses don't count as a new request
     expect(result).toEqual({
       cached: 100,
       total: 100,
-      numRequests: 1,
     });
   });
 

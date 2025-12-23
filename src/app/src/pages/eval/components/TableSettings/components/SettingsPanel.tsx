@@ -1,8 +1,8 @@
 import React, { useCallback, useState } from 'react';
 
 import Box from '@mui/material/Box';
-import Typography from '@mui/material/Typography';
 import { alpha, useTheme } from '@mui/material/styles';
+import Typography from '@mui/material/Typography';
 import { useResultsViewSettingsStore } from '../../store';
 import CompactSlider from './CompactSlider';
 import CompactToggle from './CompactToggle';

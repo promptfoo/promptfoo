@@ -1,6 +1,5 @@
 {
-  "extends": ["config:base", ":disableDependencyDashboard"],
-  "pinVersions": false,
+  "extends": ["local>promptfoo/renovate-config"],
   "rebaseStalePrs": true,
   "separateMajorMinor": true,
   "lockFileMaintenance": {
@@ -66,11 +65,6 @@
         "peerDependencies"
       ],
       "groupName": "Azure packages"
-    },
-    {
-      "description": "Group Biome packages together",
-      "matchPackagePatterns": ["^@biomejs/"],
-      "groupName": "Biome"
     },
     {
       "description": "Group Docusaurus packages together",
