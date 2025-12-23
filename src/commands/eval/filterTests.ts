@@ -31,7 +31,12 @@ type Tests = NonNullable<TestSuite['tests']>;
  * @returns A filtered array of tests that failed in the specified eval
  */
 async function filterFailingTests(testSuite: TestSuite, pathOrId: string): Promise<Tests> {
-  return filterTestsByResults(testSuite, pathOrId, (result) => !result.success);
+  // Filter for failures only, excluding errors (which have their own filter)
+  return filterTestsByResults(
+    testSuite,
+    pathOrId,
+    (result) => !result.success && result.failureReason !== ResultFailureReason.ERROR,
+  );
 }
 
 /**
