@@ -2630,6 +2630,13 @@ describe('decodeXmlEntities', () => {
   it('should handle empty string', () => {
     expect(decodeXmlEntities('')).toBe('');
   });
+
+  it('should not double-decode entities (decode &amp; last)', () => {
+    // &amp;quot; should become &quot;, not "
+    expect(decodeXmlEntities('&amp;quot;')).toBe('&quot;');
+    expect(decodeXmlEntities('&amp;lt;')).toBe('&lt;');
+    expect(decodeXmlEntities('&amp;amp;')).toBe('&amp;');
+  });
 });
 
 describe('parseTypedValue', () => {

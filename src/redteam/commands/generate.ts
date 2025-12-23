@@ -59,14 +59,16 @@ import type {
 
 /**
  * Decode XML entities to their character equivalents.
+ * Note: &amp; must be decoded last to prevent double-decoding issues
+ * (e.g., &amp;quot; should become &quot;, not ")
  */
 export function decodeXmlEntities(text: string): string {
   return text
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
-    .replace(/&amp;/g, '&')
     .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'");
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, '&');
 }
 
 /**
