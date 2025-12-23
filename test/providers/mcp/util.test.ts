@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { getAuthHeaders, getAuthQueryParams, applyQueryParams } from '../../../src/providers/mcp/util';
+import {
+  applyQueryParams,
+  getAuthHeaders,
+  getAuthQueryParams,
+} from '../../../src/providers/mcp/util';
 
 import type { MCPServerConfig } from '../../../src/providers/mcp/types';
 

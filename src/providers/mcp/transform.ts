@@ -6,7 +6,6 @@ import {
   renderAuthVars,
   requiresAsyncAuth,
 } from './util';
-import type { MCPOAuthClientCredentialsAuth, MCPOAuthPasswordAuth } from './types';
 import type { McpServerConfig as ClaudeCodeMcpServerConfig } from '@anthropic-ai/claude-agent-sdk';
 import type Anthropic from '@anthropic-ai/sdk';
 
@@ -16,7 +15,14 @@ import type {
   Tool as GoogleTool,
 } from '../google/types';
 import type { OpenAiTool } from '../openai/util';
-import type { MCPConfig, MCPServerConfig, MCPTool, MCPToolInputSchema } from './types';
+import type {
+  MCPConfig,
+  MCPOAuthClientCredentialsAuth,
+  MCPOAuthPasswordAuth,
+  MCPServerConfig,
+  MCPTool,
+  MCPToolInputSchema,
+} from './types';
 
 export function transformMCPToolsToOpenAi(tools: MCPTool[]): OpenAiTool[] {
   return tools.map((tool) => {

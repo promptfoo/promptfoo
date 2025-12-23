@@ -43,7 +43,8 @@ interface MCPOAuthClientCredentialsAuth {
   grantType: 'client_credentials';
   clientId: string;
   clientSecret: string;
-  tokenUrl: string;
+  // Token URL for fetching tokens. If not provided, uses OAuth discovery.
+  tokenUrl?: string;
   scopes?: string[];
 }
 
@@ -53,7 +54,8 @@ interface MCPOAuthPasswordAuth {
   grantType: 'password';
   clientId?: string;
   clientSecret?: string;
-  tokenUrl: string;
+  // Token URL for fetching tokens. If not provided, uses OAuth discovery.
+  tokenUrl?: string;
   username: string;
   password: string;
   scopes?: string[];

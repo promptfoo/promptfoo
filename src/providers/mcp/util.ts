@@ -1,12 +1,15 @@
 import logger from '../../logger';
-import { fetchWithProxy } from '../../util/fetch/index';
 import { renderVarsInObject } from '../../util/index';
+import { fetchOAuthToken, type OAuthTokenResult, TOKEN_REFRESH_BUFFER_MS } from '../../util/oauth';
+
 import type {
   MCPApiKeyAuth,
   MCPOAuthClientCredentialsAuth,
   MCPOAuthPasswordAuth,
   MCPServerConfig,
 } from './types';
+
+export type { OAuthTokenResult };
 
 /**
  * Render environment variables in server config auth fields.
@@ -40,72 +43,63 @@ interface OAuthTokenCache {
 const oauthTokenCache = new Map<string, OAuthTokenCache>();
 
 /**
- * Get OAuth token, fetching a new one if needed
+ * Get the cache key for an OAuth config
+ */
+function getOAuthCacheKey(auth: MCPOAuthClientCredentialsAuth | MCPOAuthPasswordAuth): string {
+  return `${auth.tokenUrl}:${auth.grantType}:${'clientId' in auth ? auth.clientId : ''}:${'username' in auth ? auth.username : ''}`;
+}
+
+/**
+ * Get OAuth token with expiration info, fetching a new one if needed.
+ * Requires tokenUrl to be configured - throws if not provided.
+ * Caches tokens and returns cached version if still valid.
+ */
+export async function getOAuthTokenWithExpiry(
+  auth: MCPOAuthClientCredentialsAuth | MCPOAuthPasswordAuth,
+): Promise<OAuthTokenResult> {
+  if (!auth.tokenUrl) {
+    throw new Error('tokenUrl is required for direct OAuth token fetching');
+  }
+
+  const cacheKey = getOAuthCacheKey(auth);
+  const cached = oauthTokenCache.get(cacheKey);
+  const now = Date.now();
+
+  if (cached && now + TOKEN_REFRESH_BUFFER_MS < cached.expiresAt) {
+    logger.debug('[MCP Auth] Using cached OAuth token');
+    return { accessToken: cached.accessToken, expiresAt: cached.expiresAt };
+  }
+
+  // Use shared OAuth token fetch logic
+  const result = await fetchOAuthToken({
+    tokenUrl: auth.tokenUrl,
+    grantType: auth.grantType,
+    clientId: auth.clientId,
+    clientSecret: auth.clientSecret,
+    username: 'username' in auth ? auth.username : undefined,
+    password: 'password' in auth ? auth.password : undefined,
+    scopes: auth.scopes,
+  });
+
+  // Cache the token
+  oauthTokenCache.set(cacheKey, {
+    accessToken: result.accessToken,
+    expiresAt: result.expiresAt,
+  });
+
+  logger.debug('[MCP Auth] Cached OAuth token');
+  return result;
+}
+
+/**
+ * Get OAuth token, fetching a new one if needed.
+ * Requires tokenUrl to be configured - throws if not provided.
  */
 export async function getOAuthToken(
   auth: MCPOAuthClientCredentialsAuth | MCPOAuthPasswordAuth,
 ): Promise<string> {
-  const cacheKey = `${auth.tokenUrl}:${auth.grantType}:${'clientId' in auth ? auth.clientId : ''}:${'username' in auth ? auth.username : ''}`;
-  const cached = oauthTokenCache.get(cacheKey);
-  const now = Date.now();
-  const TOKEN_BUFFER_MS = 60000; // 60 second buffer before expiry
-
-  if (cached && now + TOKEN_BUFFER_MS < cached.expiresAt) {
-    logger.debug('[MCP Auth] Using cached OAuth token');
-    return cached.accessToken;
-  }
-
-  logger.debug('[MCP Auth] Fetching new OAuth token');
-
-  const tokenRequestBody = new URLSearchParams();
-  tokenRequestBody.append('grant_type', auth.grantType);
-
-  if (auth.clientId) {
-    tokenRequestBody.append('client_id', auth.clientId);
-  }
-  if (auth.clientSecret) {
-    tokenRequestBody.append('client_secret', auth.clientSecret);
-  }
-
-  if (auth.grantType === 'password' && 'username' in auth) {
-    tokenRequestBody.append('username', auth.username);
-    tokenRequestBody.append('password', auth.password);
-  }
-
-  if (auth.scopes && auth.scopes.length > 0) {
-    tokenRequestBody.append('scope', auth.scopes.join(' '));
-  }
-
-  const response = await fetchWithProxy(auth.tokenUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: tokenRequestBody.toString(),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(
-      `OAuth token request failed with status ${response.status} ${response.statusText}: ${errorText}`,
-    );
-  }
-
-  const tokenData = await response.json();
-
-  if (!tokenData.access_token) {
-    throw new Error('OAuth token response missing access_token');
-  }
-
-  // Cache the token
-  const expiresInSeconds = tokenData.expires_in || 3600;
-  oauthTokenCache.set(cacheKey, {
-    accessToken: tokenData.access_token,
-    expiresAt: now + expiresInSeconds * 1000,
-  });
-
-  logger.debug('[MCP Auth] Successfully fetched OAuth token');
-  return tokenData.access_token;
+  const result = await getOAuthTokenWithExpiry(auth);
+  return result.accessToken;
 }
 
 /**
@@ -130,9 +124,9 @@ export function getAuthHeaders(
       return { Authorization: `Bearer ${server.auth.token}` };
 
     case 'basic': {
-      const credentials = Buffer.from(
-        `${server.auth.username}:${server.auth.password}`,
-      ).toString('base64');
+      const credentials = Buffer.from(`${server.auth.username}:${server.auth.password}`).toString(
+        'base64',
+      );
       return { Authorization: `Basic ${credentials}` };
     }
 
