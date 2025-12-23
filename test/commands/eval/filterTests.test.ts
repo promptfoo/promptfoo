@@ -60,9 +60,15 @@ describe('filterTests', () => {
             testCase: mockTestSuite.tests![0],
           },
           {
-            vars: { var1: 'test3' },
+            vars: { var1: 'test2' },
             success: false,
             failureReason: ResultFailureReason.ERROR,
+            testCase: mockTestSuite.tests![1],
+          },
+          {
+            vars: { var1: 'test3' },
+            success: false,
+            failureReason: ResultFailureReason.ASSERT,
             testCase: mockTestSuite.tests![2],
           },
         ],
@@ -191,7 +197,7 @@ describe('filterTests', () => {
     it('should filter error tests when errorsOnly option is provided', async () => {
       const result = await filterTests(mockTestSuite, { errorsOnly: 'eval-123' });
       expect(result).toHaveLength(1);
-      expect(result[0]?.vars?.var1).toBe('test3');
+      expect(result[0]?.vars?.var1).toBe('test2');
     });
   });
 
