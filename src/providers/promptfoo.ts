@@ -214,7 +214,7 @@ export class PromptfooChatCompletionProvider implements ApiProvider {
       const data = await response.json();
 
       if (!data.result) {
-        logger.error(
+        logger.debug(
           `Error from promptfoo completion provider. Status: ${response.status} ${response.statusText} ${JSON.stringify(data)} `,
         );
         return {
