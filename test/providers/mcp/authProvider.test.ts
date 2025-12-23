@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  PromptfooOAuthClientProvider,
   clearOAuthTokenCache,
+  PromptfooOAuthClientProvider,
 } from '../../../src/providers/mcp/authProvider';
 
 // Mock the util module to avoid actual HTTP requests

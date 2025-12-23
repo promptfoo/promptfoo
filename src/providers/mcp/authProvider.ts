@@ -1,12 +1,13 @@
+import logger from '../../logger';
+import { getOAuthToken } from './util';
 import type { OAuthClientProvider } from '@modelcontextprotocol/sdk/client/auth.js';
 import type {
-  OAuthClientMetadata,
   OAuthClientInformationMixed,
+  OAuthClientMetadata,
   OAuthTokens,
 } from '@modelcontextprotocol/sdk/shared/auth.js';
-import logger from '../../logger';
+
 import type { MCPOAuthClientCredentialsAuth, MCPOAuthPasswordAuth } from './types';
-import { getOAuthToken } from './util';
 
 interface TokenCacheEntry {
   tokens: OAuthTokens;

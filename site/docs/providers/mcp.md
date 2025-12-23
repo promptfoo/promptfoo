@@ -210,21 +210,21 @@ When using OAuth authentication:
 
 #### Authentication Options Reference
 
-| Option       | Type     | Auth Type        | Required | Description                            |
-| ------------ | -------- | ---------------- | -------- | -------------------------------------- |
-| type         | string   | All              | Yes      | `'bearer'`, `'basic'`, `'api_key'`, or `'oauth'` |
-| token        | string   | bearer           | Yes      | The bearer token                       |
-| username     | string   | basic, oauth (password) | Yes | Username                              |
-| password     | string   | basic, oauth (password) | Yes | Password                              |
-| value        | string   | api_key          | Yes*     | The API key value                      |
-| api_key      | string   | api_key          | Yes*     | Legacy field, use `value` instead      |
-| keyName      | string   | api_key          | No       | Header or query parameter name (default: `X-API-Key`) |
-| placement    | string   | api_key          | No       | `'header'` (default) or `'query'`      |
-| grantType    | string   | oauth            | Yes      | `'client_credentials'` or `'password'` |
-| tokenUrl     | string   | oauth            | Yes      | OAuth token endpoint URL               |
-| clientId     | string   | oauth            | Varies   | Required for client_credentials        |
-| clientSecret | string   | oauth            | Varies   | Required for client_credentials        |
-| scopes       | string[] | oauth            | No       | OAuth scopes to request                |
+| Option       | Type     | Auth Type               | Required | Description                                           |
+| ------------ | -------- | ----------------------- | -------- | ----------------------------------------------------- |
+| type         | string   | All                     | Yes      | `'bearer'`, `'basic'`, `'api_key'`, or `'oauth'`      |
+| token        | string   | bearer                  | Yes      | The bearer token                                      |
+| username     | string   | basic, oauth (password) | Yes      | Username                                              |
+| password     | string   | basic, oauth (password) | Yes      | Password                                              |
+| value        | string   | api_key                 | Yes\*    | The API key value                                     |
+| api_key      | string   | api_key                 | Yes\*    | Legacy field, use `value` instead                     |
+| keyName      | string   | api_key                 | No       | Header or query parameter name (default: `X-API-Key`) |
+| placement    | string   | api_key                 | No       | `'header'` (default) or `'query'`                     |
+| grantType    | string   | oauth                   | Yes      | `'client_credentials'` or `'password'`                |
+| tokenUrl     | string   | oauth                   | Yes      | OAuth token endpoint URL                              |
+| clientId     | string   | oauth                   | Varies   | Required for client_credentials                       |
+| clientSecret | string   | oauth                   | Varies   | Required for client_credentials                       |
+| scopes       | string[] | oauth                   | No       | OAuth scopes to request                               |
 
 \* Either `value` or `api_key` is required for api_key auth type.
 
