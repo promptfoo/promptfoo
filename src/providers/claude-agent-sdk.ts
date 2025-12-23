@@ -690,7 +690,7 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
     }
 
     // Transform MCP config to Claude Agent SDK MCP servers
-    const mcpServers = config.mcp ? transformMCPConfigToClaudeCode(config.mcp) : {};
+    const mcpServers = config.mcp ? await transformMCPConfigToClaudeCode(config.mcp) : {};
 
     if (workingDir) {
       // verify the working dir exists and is a directory

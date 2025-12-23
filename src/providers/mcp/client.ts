@@ -1,12 +1,26 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { getEnvBool, getEnvInt } from '../../envars';
 import logger from '../../logger';
-import { getAuthHeaders } from './util';
+import {
+  applyQueryParams,
+  getAuthHeaders,
+  getAuthQueryParams,
+  getOAuthToken,
+  renderAuthVars,
+  requiresAsyncAuth,
+} from './util';
 import type { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import type { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import type { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 
-import type { MCPConfig, MCPServerConfig, MCPTool, MCPToolResult } from './types';
+import type {
+  MCPConfig,
+  MCPOAuthClientCredentialsAuth,
+  MCPOAuthPasswordAuth,
+  MCPServerConfig,
+  MCPTool,
+  MCPToolResult,
+} from './types';
 
 /**
  * MCP SDK RequestOptions type for timeout configuration.
@@ -137,12 +151,27 @@ export class MCPClient {
         });
         await client.connect(transport, requestOptions);
       } else if (server.url) {
+        // Render environment variables in auth config
+        const renderedServer = renderAuthVars(server);
+
+        // Handle OAuth token fetching if needed
+        let oauthToken: string | undefined;
+        if (requiresAsyncAuth(renderedServer) && renderedServer.auth?.type === 'oauth') {
+          oauthToken = await getOAuthToken(
+            renderedServer.auth as MCPOAuthClientCredentialsAuth | MCPOAuthPasswordAuth,
+          );
+        }
+
         // Get auth headers and combine with custom headers
-        const authHeaders = getAuthHeaders(server);
+        const authHeaders = getAuthHeaders(renderedServer, oauthToken);
         const headers = {
           ...(server.headers || {}),
           ...authHeaders,
         };
+
+        // Apply query params for api_key with query placement
+        const queryParams = getAuthQueryParams(renderedServer);
+        const serverUrl = applyQueryParams(server.url, queryParams);
 
         // Only set options if we have headers
         const options = Object.keys(headers).length > 0 ? { requestInit: { headers } } : undefined;
@@ -151,7 +180,7 @@ export class MCPClient {
           const { StreamableHTTPClientTransport } = await import(
             '@modelcontextprotocol/sdk/client/streamableHttp.js'
           );
-          transport = new StreamableHTTPClientTransport(new URL(server.url), options);
+          transport = new StreamableHTTPClientTransport(new URL(serverUrl), options);
           await client.connect(transport, requestOptions);
           logger.debug('Connected using Streamable HTTP transport');
         } catch (error) {
@@ -159,7 +188,7 @@ export class MCPClient {
             `Failed to connect to MCP server with Streamable HTTP transport ${serverKey}: ${error}`,
           );
           const { SSEClientTransport } = await import('@modelcontextprotocol/sdk/client/sse.js');
-          transport = new SSEClientTransport(new URL(server.url), options);
+          transport = new SSEClientTransport(new URL(serverUrl), options);
           await client.connect(transport, requestOptions);
           logger.debug('Connected using SSE transport');
         }
