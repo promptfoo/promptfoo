@@ -1,5 +1,3 @@
-import React from 'react';
-
 import Box from '@mui/material/Box';
 import FormControl from '@mui/material/FormControl';
 import InputLabel from '@mui/material/InputLabel';
@@ -12,23 +10,20 @@ export const MetricFilterSelector = () => {
   const { filters, addFilter, resetFilters } = useTableStore();
   const availableMetrics = filters.options.metric;
 
-  const handleChange = React.useCallback(
-    (event: SelectChangeEvent) => {
-      const value = event.target.value;
+  const handleChange = (event: SelectChangeEvent) => {
+    const value = event.target.value;
 
-      // Always reset any existing filters.
-      resetFilters();
+    // Always reset any existing filters.
+    resetFilters();
 
-      if (value) {
-        addFilter({
-          type: 'metric',
-          operator: 'equals',
-          value,
-        });
-      }
-    },
-    [addFilter, resetFilters],
-  );
+    if (value) {
+      addFilter({
+        type: 'metric',
+        operator: 'equals',
+        value,
+      });
+    }
+  };
 
   const selectedMetric =
     Object.keys(filters.values).length > 0 ? Object.values(filters.values)[0].value : null;

@@ -351,7 +351,8 @@ describe('ProviderConfigEditor', () => {
     const mockSetProvider = vi.fn();
     const mockSetError = vi.fn();
     const mockOnValidate = vi.fn();
-    let validateFn: (() => boolean) | null = null;
+    // Use vi.fn() to capture the validator - this works better with React Compiler
+    const captureValidator = vi.fn();
 
     const initialProvider: ProviderOptions = {
       id: 'file://path/to/agent.py',
@@ -369,9 +370,7 @@ describe('ProviderConfigEditor', () => {
             setProvider={setProvider}
             setError={mockSetError}
             onValidate={mockOnValidate}
-            onValidationRequest={(validator) => {
-              validateFn = validator;
-            }}
+            onValidationRequest={captureValidator}
             providerType={providerType}
           />
           <button data-testid="change-provider-type" onClick={() => setProviderType('http')}>
@@ -410,14 +409,14 @@ describe('ProviderConfigEditor', () => {
         setProvider={mockSetProvider}
         setError={mockSetError}
         onValidate={mockOnValidate}
-        onValidationRequest={(validator) => {
-          validateFn = validator;
-        }}
+        onValidationRequest={captureValidator}
         providerType="http"
       />,
     );
 
-    const isValid = validateFn!();
+    // Get the validator from the mock's most recent call
+    const validateFn = captureValidator.mock.calls[captureValidator.mock.calls.length - 1][0];
+    const isValid = validateFn();
 
     expect(isValid).toBe(true);
     expect(mockSetError).toHaveBeenCalledWith(null);

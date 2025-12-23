@@ -46,11 +46,9 @@ function TruncatedText({ text: rawText, maxLength }: TruncatedTextProps) {
       ? rawText
       : JSON.stringify(rawText);
 
-  const contentLen = React.useMemo(() => textLength(text), [text]);
-  const isOverLength = React.useMemo(
-    () => maxLength > 0 && contentLen > maxLength,
-    [contentLen, maxLength],
-  );
+  // Only compute text length when truncation is enabled (maxLength > 0)
+  // textLength() is O(n) recursive traversal, so skip it when not needed
+  const isOverLength = maxLength > 0 && textLength(text) > maxLength;
 
   // Initialize truncation state based on whether text actually exceeds maxLength
   const [isTruncated, setIsTruncated] = React.useState(() => isOverLength);
@@ -159,6 +157,8 @@ function TruncatedText({ text: rawText, maxLength }: TruncatedTextProps) {
     </div>
   );
 }
-const MemoizedTruncatedText = React.memo(TruncatedText);
 
-export default MemoizedTruncatedText;
+// React.memo prevents re-renders when props haven't changed.
+// This is valuable because TruncatedText renders inside EvalOutputCell in tables,
+// and textLength() is O(n) recursive traversal that we want to skip when possible.
+export default React.memo(TruncatedText);

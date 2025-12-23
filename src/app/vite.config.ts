@@ -37,8 +37,12 @@ export default defineConfig({
   },
   base: process.env.VITE_PUBLIC_BASENAME || '/',
   plugins: [
-    react(),
-    nodePolyfills(), // Removed vm exclusion - we need it for new Function() calls
+    react({
+      babel: {
+        plugins: [['babel-plugin-react-compiler', {}]],
+      },
+    }),
+    nodePolyfills(),
   ],
   resolve: {
     alias: {

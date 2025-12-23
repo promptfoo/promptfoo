@@ -122,7 +122,26 @@ const RiskCategoryDrawer = ({
   numPassed,
   numFailed,
 }: RiskCategoryDrawerProps) => {
+  // All hooks must be called unconditionally at the top
   const navigate = useNavigate();
+  const [suggestionsDialogOpen, setSuggestionsDialogOpen] = React.useState(false);
+  const [currentGradingResult, setCurrentGradingResult] = React.useState<GradingResult | undefined>(
+    undefined,
+  );
+  const [activeTab, setActiveTab] = React.useState(0);
+  const [detailsDialogOpen, setDetailsDialogOpen] = React.useState(false);
+  const [selectedTest, setSelectedTest] = React.useState<{
+    prompt: string;
+    output: string;
+    gradingResult?: GradingResult;
+    result?: EvaluateResult;
+  } | null>(null);
+
+  const sortedFailures = React.useMemo(() => {
+    return [...failures].sort(sortByPriorityStrategies);
+  }, [failures]);
+
+  // Derived values (not hooks)
   const categoryName = categoryAliases[category as keyof typeof categoryAliases];
   if (!categoryName) {
     console.error('[RiskCategoryDrawer] Could not load category', category);
@@ -149,24 +168,6 @@ const RiskCategoryDrawer = ({
       </Drawer>
     );
   }
-
-  const [suggestionsDialogOpen, setSuggestionsDialogOpen] = React.useState(false);
-  const [currentGradingResult, setCurrentGradingResult] = React.useState<GradingResult | undefined>(
-    undefined,
-  );
-
-  const [activeTab, setActiveTab] = React.useState(0);
-  const [detailsDialogOpen, setDetailsDialogOpen] = React.useState(false);
-  const [selectedTest, setSelectedTest] = React.useState<{
-    prompt: string;
-    output: string;
-    gradingResult?: GradingResult;
-    result?: EvaluateResult;
-  } | null>(null);
-
-  const sortedFailures = React.useMemo(() => {
-    return [...failures].sort(sortByPriorityStrategies);
-  }, [failures]);
 
   return (
     <Drawer anchor="right" open={open} onClose={onClose}>
