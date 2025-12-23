@@ -2,8 +2,9 @@
  * Config Generator Tests
  */
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as fs from 'fs';
+
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { generateConfigFile } from '../../code-scan-action/src/config';
 
 describe('generateConfigFile', () => {

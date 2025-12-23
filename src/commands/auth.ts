@@ -1,3 +1,4 @@
+import select from '@inquirer/select';
 import chalk from 'chalk';
 import dedent from 'dedent';
 import { isNonInteractive } from '../envars';
@@ -7,7 +8,6 @@ import logger from '../logger';
 import {
   canCreateTargets,
   getDefaultTeam,
-  getTeamById,
   getUserTeams,
   resolveTeamFromIdentifier,
   resolveTeamId,
@@ -28,7 +28,11 @@ export function authCommand(program: Command) {
       'The host of the promptfoo instance. This needs to be the url of the API if different from the app url.',
     )
     .option('-k, --api-key <apiKey>', 'Login using an API key.')
-    .action(async (cmdObj: { orgId: string; host: string; apiKey: string }) => {
+    .option(
+      '-t, --team <team>',
+      'The team to use (name, slug, or ID). Required in CI when multiple teams exist.',
+    )
+    .action(async (cmdObj: { orgId: string; host: string; apiKey: string; team?: string }) => {
       let token: string | undefined;
       const apiHost = cmdObj.host || cloudConfig.getApiHost();
 
@@ -56,32 +60,61 @@ export function authCommand(program: Command) {
           logger.info(`Organization: ${chalk.cyan(organization.name)}`);
           logger.info(`App: ${chalk.cyan(cloudConfig.getAppUrl())}`);
 
-          // Set up default team (only if no team is already selected for this org)
+          // Set up team
           try {
             const allTeams = await getUserTeams();
             cloudConfig.cacheTeams(allTeams, organization.id);
 
-            const existingTeamId = cloudConfig.getCurrentTeamId(organization.id);
-            if (existingTeamId) {
-              // Team already selected, keep it
-              try {
-                const currentTeam = await getTeamById(existingTeamId);
-                logger.info(`Team: ${chalk.cyan(currentTeam.name)}`);
-              } catch (_error) {
-                // Stored team no longer valid, fall back to default
+            let selectedTeam;
+
+            if (cmdObj.team) {
+              // --team flag provided: use specified team
+              selectedTeam = await resolveTeamFromIdentifier(cmdObj.team);
+              cloudConfig.setCurrentTeamId(selectedTeam.id, organization.id);
+              logger.info(`Team: ${chalk.cyan(selectedTeam.name)}`);
+            } else if (allTeams.length === 1) {
+              // Single team: just use it
+              selectedTeam = allTeams[0];
+              cloudConfig.setCurrentTeamId(selectedTeam.id, organization.id);
+              logger.info(`Team: ${chalk.cyan(selectedTeam.name)}`);
+            } else if (allTeams.length > 1) {
+              // Multiple teams
+              if (isNonInteractive()) {
+                // Non-interactive (CI): use default team but warn
                 const defaultTeam = await getDefaultTeam();
                 cloudConfig.setCurrentTeamId(defaultTeam.id, organization.id);
-                logger.info(`Team: ${chalk.cyan(defaultTeam.name)} ${chalk.dim('(default)')}`);
-              }
-            } else {
-              // No team selected yet, set the default
-              const defaultTeam = await getDefaultTeam();
-              cloudConfig.setCurrentTeamId(defaultTeam.id, organization.id);
-
-              logger.info(`Team: ${chalk.cyan(defaultTeam.name)} ${chalk.dim('(default)')}`);
-              if (allTeams.length > 1) {
-                logger.info(chalk.dim(`Use 'promptfoo auth teams list' to see all teams`));
-                logger.info(chalk.dim(`Use 'promptfoo auth teams set <name>' to switch teams`));
+                logger.info(`Team: ${chalk.cyan(defaultTeam.name)}`);
+                logger.warn(
+                  chalk.yellow(
+                    `\n⚠️  You have access to ${allTeams.length} teams. Using '${defaultTeam.name}'.`,
+                  ),
+                );
+                logger.info(
+                  chalk.dim(`   Use --team flag to specify: promptfoo auth login --team <name>`),
+                );
+              } else {
+                // Interactive: prompt user to select
+                logger.info('');
+                try {
+                  const answer = await select({
+                    message: 'Select a team to use:',
+                    choices: allTeams.map((team) => ({
+                      name: team.name,
+                      value: team.id,
+                      description: team.slug,
+                    })),
+                  });
+                  selectedTeam = allTeams.find((t) => t.id === answer);
+                  if (selectedTeam) {
+                    cloudConfig.setCurrentTeamId(selectedTeam.id, organization.id);
+                    logger.info(`\nTeam: ${chalk.cyan(selectedTeam.name)}`);
+                  }
+                } catch {
+                  // User cancelled (Ctrl+C) - use default
+                  const defaultTeam = await getDefaultTeam();
+                  cloudConfig.setCurrentTeamId(defaultTeam.id, organization.id);
+                  logger.info(`\nTeam: ${chalk.cyan(defaultTeam.name)} ${chalk.dim('(default)')}`);
+                }
               }
             }
           } catch (teamError) {

@@ -15,34 +15,33 @@ import path from 'path';
 
 import { getCache, isCacheEnabled } from '../../cache';
 import cliState from '../../cliState';
-import { importModule } from '../../esm';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
+import { importModule } from '../../esm';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import {
-  withGenAISpan,
   type GenAISpanContext,
   type GenAISpanResult,
+  withGenAISpan,
 } from '../../tracing/genaiTracer';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { maybeLoadToolsFromExternalFile } from '../../util/index';
 import { AwsBedrockGenericProvider, type BedrockOptions } from './base';
-
 import type {
   ContentBlock,
   ConverseCommandInput,
   ConverseCommandOutput,
   ConverseStreamCommandInput,
+  GuardrailConfiguration,
   GuardrailTrace,
   InferenceConfiguration,
   Message,
+  PerformanceConfiguration,
+  ServiceTier,
   SystemContentBlock,
   Tool,
   ToolChoice,
   ToolConfiguration,
-  GuardrailConfiguration,
-  PerformanceConfiguration,
-  ServiceTier,
 } from '@aws-sdk/client-bedrock-runtime';
 import type { DocumentType } from '@smithy/types';
 

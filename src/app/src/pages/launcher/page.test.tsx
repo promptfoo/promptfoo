@@ -1,11 +1,11 @@
+import { type ApiHealthResult, useApiHealth } from '@app/hooks/useApiHealth';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Mock } from 'vitest';
 import LauncherPage from './page';
-import { useApiHealth, type ApiHealthResult } from '@app/hooks/useApiHealth';
 import type { DefinedUseQueryResult } from '@tanstack/react-query';
+import type { Mock } from 'vitest';
 
 const mockFetch = vi.fn();
 global.fetch = mockFetch;

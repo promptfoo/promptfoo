@@ -1,6 +1,8 @@
 import React from 'react';
-import type { EventStatus } from '../../data/events';
+
 import styles from './EventFilters.module.css';
+
+import type { EventStatus } from '../../data/events';
 
 export type FilterStatus = EventStatus | 'all';
 export type FilterYear = number | 'all';

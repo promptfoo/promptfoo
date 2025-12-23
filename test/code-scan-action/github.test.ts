@@ -2,9 +2,9 @@
  * GitHub API Client Tests
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as github from '@actions/github';
 import { Octokit } from '@octokit/rest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getGitHubContext, postReviewComments } from '../../code-scan-action/src/github';
 
 // Mock @actions/core

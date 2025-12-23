@@ -2,6 +2,7 @@
 title: "Why Attack Success Rate (ASR) Isn't Comparable Across Jailbreak Papers Without a Shared Threat Model"
 description: "Attack Success Rate (ASR) is the most commonly reported metric for LLM red teaming, but it changes with attempt budget, prompt sets, and judge choice. Here's how to interpret ASR and report it so results are comparable."
 image: /img/blog/asr-not-portable-metric/asr-header.jpg
+featured: true
 keywords:
   [
     ASR,
@@ -19,7 +20,7 @@ keywords:
   ]
 date: 2025-12-12
 authors: [michael]
-tags: [red-teaming, llm-security, measurement, evaluation]
+tags: [red-teaming, ai-security, research-analysis, evaluation]
 ---
 
 If you've read papers about jailbreak attacks on language models, you've encountered Attack Success Rate, or ASR. It's the fraction of attack attempts that successfully get a model to produce prohibited content, and the headline metric for comparing different methods. Higher ASR means a more effective attack, or so the reasoning goes.

@@ -3,13 +3,14 @@
  */
 
 import logger from '../../../logger';
+
+import type { CallApiContextParams } from '../../../types/providers';
 import type {
+  EvaluationCriterion,
   ParsedConversation,
   SimulatedUser,
-  EvaluationCriterion,
   ToolMockConfig,
 } from './types';
-import type { CallApiContextParams } from '../../../types/providers';
 
 /**
  * Normalize speaker role to API-compatible format
