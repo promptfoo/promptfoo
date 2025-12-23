@@ -30,6 +30,7 @@ describe('PylonChat', () => {
     email: null,
     isLoading: false,
     setEmail: vi.fn(),
+    pylonEmailHash: null,
     ...overrides,
   });
 
@@ -63,6 +64,20 @@ describe('PylonChat', () => {
         scenario: 'user is logged in',
         userContext: { email: 'test@example.com', isLoading: false },
         expected: { app_id: APP_ID, email: 'test@example.com', name: 'test@example.com' },
+      },
+      {
+        scenario: 'user is logged in with pylonEmailHash',
+        userContext: {
+          email: 'test@example.com',
+          isLoading: false,
+          pylonEmailHash: 'abc123hash',
+        },
+        expected: {
+          app_id: APP_ID,
+          email: 'test@example.com',
+          name: 'test@example.com',
+          email_hash: 'abc123hash',
+        },
       },
       {
         scenario: 'user email is not defined',

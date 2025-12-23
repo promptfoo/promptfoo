@@ -12,6 +12,7 @@ import {
 import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
+import { fetchWithProxy } from '../../util/fetch';
 import { ApiSchemas } from '../apiSchemas';
 import type { Request, Response } from 'express';
 
@@ -186,6 +187,39 @@ userRouter.post('/logout', async (_req: Request, res: Response): Promise<void> =
       `Error during logout: ${error instanceof Error ? error.message : 'Unknown error'}`,
     );
     res.status(500).json({ error: 'Logout failed' });
+  }
+});
+
+/**
+ * Returns the Pylon email hash for the current user from the cloud API.
+ */
+userRouter.get('/pylon', async (_req: Request, res: Response): Promise<void> => {
+  try {
+    if (!cloudConfig.isEnabled()) {
+      res.json({ pylonEmailHash: null });
+      return;
+    }
+
+    const apiHost = cloudConfig.getApiHost();
+    const apiKey = cloudConfig.getApiKey();
+
+    const response = await fetchWithProxy(`${apiHost}/api/v1/users/me`, {
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+      },
+    });
+
+    if (!response.ok) {
+      logger.error(`Failed to fetch pylon email hash: ${response.statusText}`);
+      res.json({ pylonEmailHash: null });
+      return;
+    }
+
+    const data = await response.json();
+    res.json({ pylonEmailHash: data.pylonEmailHash || null });
+  } catch (error) {
+    logger.error(`Error fetching pylon email hash: ${error}`);
+    res.json({ pylonEmailHash: null });
   }
 });
 
