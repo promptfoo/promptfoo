@@ -43,6 +43,7 @@ const mockFetchTraces = vi.fn().mockResolvedValue([
 const mockCloudConfig = {
   appUrl: 'https://cloud.example.com',
   isEnabled: true,
+  isEnterprise: false,
 };
 
 const defaultProps = {
@@ -871,6 +872,7 @@ describe('EvalOutputPromptDialog cloud config', () => {
     const customCloudConfig = {
       appUrl: 'https://custom.cloud.com',
       isEnabled: true,
+      isEnterprise: false,
     };
     const propsWithCustomConfig = {
       ...defaultProps,
@@ -890,10 +892,11 @@ describe('EvalOutputPromptDialog cloud config', () => {
     expect(screen.queryByTestId('pf-cloud-policy-detail-link')).not.toBeInTheDocument();
   });
 
-  it('Should not render policy link if policy is not reusable', async () => {
+  it('Should render policy link for reusable policy', async () => {
     const customCloudConfig = {
       appUrl: 'https://custom.cloud.com',
       isEnabled: true,
+      isEnterprise: false,
     };
     const propsWithCustomConfig = {
       ...defaultProps,

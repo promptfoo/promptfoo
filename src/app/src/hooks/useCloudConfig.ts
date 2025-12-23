@@ -1,59 +1,72 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import { callApi } from '../utils/api';
 
 export type CloudConfigData = {
-  appUrl: string;
+  appUrl: string | null;
+  /** Whether the user is authenticated to Promptfoo Cloud */
   isEnabled: boolean;
+  /** Whether this is an enterprise/self-hosted deployment (non-promptfoo.app domain) */
+  isEnterprise: boolean;
 };
 
-/**
- * Loads the current user's cloud config from the API. Useful for getting the Cloud app's URL
- * in order to redirect the user to something in Cloud.
- */
-export default function useCloudConfig(): {
+export interface CloudConfigState {
   data: CloudConfigData | null;
   isLoading: boolean;
   error: string | null;
-  refetch: () => void;
-} {
-  const [data, setData] = useState<CloudConfigData | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
+}
 
-  /**
-   * Fetches the cloud config from the API.
-   */
-  const fetchCloudConfig = async () => {
+/**
+ * Loads the current user's cloud config from the API. Useful for:
+ * - Checking if user is connected to Promptfoo Cloud
+ * - Getting the Cloud app's URL for redirects and links
+ * - Detecting enterprise/self-hosted deployments
+ */
+export default function useCloudConfig(): CloudConfigState & { refetch: () => void } {
+  const [state, setState] = useState<CloudConfigState>({
+    data: null,
+    isLoading: true,
+    error: null,
+  });
+
+  const fetchCloudConfig = useCallback(async () => {
     try {
-      setIsLoading(true);
-      setError(null);
-      const response = await callApi('/user/cloud-config');
+      setState((prev) => ({ ...prev, isLoading: true, error: null }));
+
+      const response = await callApi('/user/cloud/status');
+
       if (!response.ok) {
         throw new Error('Failed to fetch cloud config');
       }
+
       const responseData = await response.json();
-      setData(responseData);
+
+      setState({
+        data: {
+          appUrl: responseData.appUrl,
+          // Map isAuthenticated to isEnabled for backwards compatibility
+          isEnabled: responseData.isAuthenticated,
+          isEnterprise: responseData.isEnterprise || false,
+        },
+        isLoading: false,
+        error: null,
+      });
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      setError(errorMessage);
-      console.error('Error fetching cloud config:', err);
-    } finally {
-      setIsLoading(false);
+      setState((prev) => ({
+        ...prev,
+        isLoading: false,
+        error: errorMessage,
+      }));
     }
-  };
-
-  /**
-   * Fetch on mount.
-   */
-  useEffect(() => {
-    fetchCloudConfig();
   }, []);
 
+  useEffect(() => {
+    fetchCloudConfig();
+  }, [fetchCloudConfig]);
+
   return {
-    data,
-    isLoading,
-    error,
+    ...state,
     refetch: fetchCloudConfig,
   };
 }

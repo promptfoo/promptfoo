@@ -1,0 +1,219 @@
+import { useState } from 'react';
+
+import useCloudConfig from '@app/hooks/useCloudConfig';
+import { useTelemetry } from '@app/hooks/useTelemetry';
+import CloudIcon from '@mui/icons-material/Cloud';
+import CloudOffIcon from '@mui/icons-material/CloudOff';
+import CloudQueueIcon from '@mui/icons-material/CloudQueue';
+import DashboardIcon from '@mui/icons-material/Dashboard';
+import ShareIcon from '@mui/icons-material/Share';
+import Alert from '@mui/material/Alert';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import CircularProgress from '@mui/material/CircularProgress';
+import Dialog from '@mui/material/Dialog';
+import DialogActions from '@mui/material/DialogActions';
+import DialogContent from '@mui/material/DialogContent';
+import DialogTitle from '@mui/material/DialogTitle';
+import IconButton from '@mui/material/IconButton';
+import Link from '@mui/material/Link';
+import Stack from '@mui/material/Stack';
+import Tooltip from '@mui/material/Tooltip';
+import Typography from '@mui/material/Typography';
+
+export default function CloudStatusIndicator() {
+  const { data, isLoading, error, refetch } = useCloudConfig();
+  const isAuthenticated = data?.isEnabled ?? false;
+  const appUrl = data?.appUrl ?? null;
+  const isEnterprise = data?.isEnterprise ?? false;
+
+  const [showDialog, setShowDialog] = useState(false);
+  const { recordEvent } = useTelemetry();
+
+  const handleIconClick = () => {
+    if (!isAuthenticated) {
+      recordEvent('feature_used', {
+        feature: 'cloud_status_icon_click',
+        authenticated: false,
+      });
+      setShowDialog(true);
+    } else if (appUrl) {
+      recordEvent('feature_used', {
+        feature: 'cloud_status_icon_click',
+        authenticated: true,
+      });
+      window.open(appUrl, '_blank');
+    }
+  };
+
+  const handleCloseDialog = () => {
+    setShowDialog(false);
+  };
+
+  const handlePromptfooAppClick = () => {
+    recordEvent('webui_action', {
+      action: 'cloud_cta_signup_click',
+      source: 'cloud_status_dialog',
+    });
+  };
+
+  const handleRefreshClick = () => {
+    recordEvent('webui_action', {
+      action: 'cloud_status_refresh',
+      source: 'cloud_status_dialog',
+    });
+    refetch();
+  };
+
+  const getTooltipTitle = () => {
+    if (isLoading) {
+      return 'Checking cloud status...';
+    }
+    if (error) {
+      return 'Unable to check cloud status';
+    }
+    if (isAuthenticated) {
+      const serviceName = isEnterprise ? 'Promptfoo Enterprise' : 'Promptfoo Cloud';
+      return `Connected to ${serviceName} (click to open dashboard)`;
+    }
+    const serviceName = isEnterprise ? 'Promptfoo Enterprise' : 'Promptfoo Cloud';
+    return `Not connected to ${serviceName} (click to learn more)`;
+  };
+
+  const getIcon = () => {
+    if (isLoading) {
+      return <CircularProgress size={20} color="inherit" />;
+    }
+    if (error) {
+      return <CloudOffIcon data-testid="CloudOffIcon" />;
+    }
+    if (isAuthenticated) {
+      return <CloudIcon data-testid="CloudIcon" />;
+    }
+    return <CloudOffIcon data-testid="CloudOffIcon" />;
+  };
+
+  const getIconColor = () => {
+    if (isLoading) {
+      return 'default';
+    }
+    if (error) {
+      return 'error';
+    }
+    if (isAuthenticated) {
+      return 'success';
+    }
+    return 'inherit';
+  };
+
+  const serviceName = isEnterprise ? 'Promptfoo Enterprise' : 'Promptfoo Cloud';
+  const teamName = isEnterprise ? 'organization' : 'team';
+
+  return (
+    <>
+      <Tooltip title={getTooltipTitle()}>
+        <IconButton
+          onClick={handleIconClick}
+          color={getIconColor()}
+          size="small"
+          aria-label={getTooltipTitle()}
+          sx={{
+            '& .MuiSvgIcon-root': {
+              fontSize: '1.5rem',
+            },
+          }}
+        >
+          {getIcon()}
+        </IconButton>
+      </Tooltip>
+
+      <Dialog open={showDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
+        <DialogTitle>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <CloudQueueIcon color="primary" />
+            Connect to {serviceName}
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body1" gutterBottom sx={{ mb: 2 }}>
+            Connect to unlock powerful {isEnterprise ? 'enterprise' : 'team'} features:
+          </Typography>
+          <Stack spacing={2} sx={{ mb: 3 }}>
+            <Stack direction="row" spacing={1} alignItems="center">
+              <ShareIcon fontSize="small" color="primary" />
+              <Typography variant="body2">Share evaluation results with your {teamName}</Typography>
+            </Stack>
+            <Stack direction="row" spacing={1} alignItems="center">
+              <DashboardIcon fontSize="small" color="primary" />
+              <Typography variant="body2">Centralized dashboard and reporting</Typography>
+            </Stack>
+          </Stack>
+
+          <Alert severity="info" sx={{ mb: 2 }}>
+            Run{' '}
+            <Box
+              component="code"
+              sx={{
+                backgroundColor: 'action.hover',
+                padding: '2px 6px',
+                borderRadius: '4px',
+                fontFamily: 'Monaco, Menlo, "Ubuntu Mono", monospace',
+                fontSize: '0.875em',
+                fontWeight: 'bold',
+                border: 1,
+                borderColor: 'divider',
+              }}
+            >
+              promptfoo auth login
+            </Box>{' '}
+            or visit{' '}
+            <Link
+              href="https://www.promptfoo.app/welcome"
+              target="_blank"
+              rel="noopener"
+              onClick={handlePromptfooAppClick}
+            >
+              promptfoo.app
+            </Link>{' '}
+            to get started
+          </Alert>
+
+          {error && (
+            <Alert
+              severity="error"
+              sx={{ mb: 2 }}
+              action={
+                <Button color="inherit" size="small" onClick={handleRefreshClick}>
+                  Retry
+                </Button>
+              }
+            >
+              Unable to connect to cloud service. Please check your connection and try again.
+            </Alert>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ justifyContent: 'space-between' }}>
+          <Button
+            onClick={() => {
+              recordEvent('webui_action', {
+                action: 'cloud_learn_more_click',
+                source: 'cloud_status_dialog',
+              });
+              window.open('https://www.promptfoo.dev/docs/usage/sharing/', '_blank');
+            }}
+          >
+            Learn More
+          </Button>
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <Button onClick={handleRefreshClick} disabled={isLoading}>
+              {isLoading ? 'Checking...' : 'Refresh Status'}
+            </Button>
+            <Button onClick={handleCloseDialog} variant="contained" color="primary">
+              Close
+            </Button>
+          </Box>
+        </DialogActions>
+      </Dialog>
+    </>
+  );
+}

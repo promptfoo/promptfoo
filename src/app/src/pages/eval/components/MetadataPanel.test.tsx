@@ -66,6 +66,7 @@ describe('MetadataPanel', () => {
     const mockCloudConfig = {
       isEnabled: true,
       appUrl: 'https://cloud.promptfoo.com',
+      isEnterprise: false,
     };
 
     render(
@@ -92,6 +93,7 @@ describe('MetadataPanel', () => {
     const mockCloudConfig = {
       isEnabled: true,
       appUrl: 'https://example.com',
+      isEnterprise: false,
     };
 
     render(
