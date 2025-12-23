@@ -114,6 +114,5 @@ By incorporating the SQL Injection plugin in your LLM red teaming strategy, you 
 
 - [Shell Injection](shell-injection.md)
 - [SSRF (Server-Side Request Forgery)](ssrf.md)
-- [Input Validation Best Practices](/docs/security/input-validation)
 
 For a comprehensive overview of LLM vulnerabilities and red teaming strategies, visit our [Types of LLM Vulnerabilities](/docs/red-team/llm-vulnerability-types) page.
