@@ -120,19 +120,20 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
     const failingTests = await filterFailingTests(testSuite, options.failing);
     const errorTests = await filterErrorTests(testSuite, options.errorsOnly);
 
-    // Create a union of both sets using a Map keyed by test identity
-    const testMap = new Map<string, (typeof tests)[0]>();
+    // Create a union of both sets, deduplicating by test identity
+    const seen = new Set<string>();
     const getTestKey = (test: (typeof tests)[0]) =>
       JSON.stringify({ vars: test.vars, description: test.description });
 
-    for (const test of failingTests) {
-      testMap.set(getTestKey(test), test);
-    }
-    for (const test of errorTests) {
-      testMap.set(getTestKey(test), test);
-    }
+    tests = [...failingTests, ...errorTests].filter((test) => {
+      const key = getTestKey(test);
+      if (seen.has(key)) {
+        return false;
+      }
+      seen.add(key);
+      return true;
+    });
 
-    tests = Array.from(testMap.values());
     logger.debug(
       `Combined failing (${failingTests.length}) and errors (${errorTests.length}) filters: ${tests.length} unique tests`,
     );
