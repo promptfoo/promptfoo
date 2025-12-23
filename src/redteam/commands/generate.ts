@@ -45,7 +45,7 @@ import { extractMcpToolsInfo } from '../extraction/mcpTools';
 import { synthesize } from '../index';
 import { isValidPolicyObject } from '../plugins/policy/utils';
 import { shouldGenerateRemote } from '../remoteGeneration';
-import { decodeXmlEntities, parseTypedValue, parseXmlToolCall } from './xmlToolCall';
+import { decodeXmlEntities, parseTypedValue, parseXmlToolCall } from './mcpParserUtils';
 import type { Command } from 'commander';
 
 import type { ApiProvider, TestSuite, UnifiedConfig } from '../../types/index';

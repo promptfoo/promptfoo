@@ -3,7 +3,7 @@ import {
   decodeXmlEntities,
   parseTypedValue,
   parseXmlToolCall,
-} from '../../../src/redteam/commands/xmlToolCall';
+} from '../../../src/redteam/commands/mcpParserUtils';
 
 describe('decodeXmlEntities', () => {
   it('should decode &lt; and &gt;', () => {
