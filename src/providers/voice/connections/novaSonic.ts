@@ -14,9 +14,9 @@
  */
 
 import { EventEmitter } from 'events';
-import { Subject, firstValueFrom } from 'rxjs';
-import { take } from 'rxjs/operators';
 
+import { firstValueFrom, Subject } from 'rxjs';
+import { take } from 'rxjs/operators';
 import { getEnvString } from '../../../envars';
 import logger from '../../../logger';
 import { base64ToBuffer, bufferToBase64 } from '../audioBuffer';
@@ -116,11 +116,7 @@ const DEFAULT_CONFIG = {
  * Resample audio between sample rates using linear interpolation.
  * For production use, consider using a proper resampling library.
  */
-function resampleAudio(
-  inputBuffer: Buffer,
-  inputRate: number,
-  outputRate: number,
-): Buffer {
+function resampleAudio(inputBuffer: Buffer, inputRate: number, outputRate: number): Buffer {
   if (inputRate === outputRate) {
     return inputBuffer;
   }
@@ -137,19 +133,16 @@ function resampleAudio(
     const fraction = srcIndex - srcIndexFloor;
 
     // Read samples (handle potential buffer overrun)
-    const sample1 = srcIndexFloor * 2 + 1 < inputBuffer.length
-      ? inputBuffer.readInt16LE(srcIndexFloor * 2)
-      : 0;
-    const sample2 = srcIndexCeil * 2 + 1 < inputBuffer.length
-      ? inputBuffer.readInt16LE(srcIndexCeil * 2)
-      : sample1;
+    const sample1 =
+      srcIndexFloor * 2 + 1 < inputBuffer.length ? inputBuffer.readInt16LE(srcIndexFloor * 2) : 0;
+    const sample2 =
+      srcIndexCeil * 2 + 1 < inputBuffer.length
+        ? inputBuffer.readInt16LE(srcIndexCeil * 2)
+        : sample1;
 
     // Linear interpolation
     const interpolated = Math.round(sample1 + (sample2 - sample1) * fraction);
-    outputBuffer.writeInt16LE(
-      Math.max(-32768, Math.min(32767, interpolated)),
-      i * 2,
-    );
+    outputBuffer.writeInt16LE(Math.max(-32768, Math.min(32767, interpolated)), i * 2);
   }
 
   return outputBuffer;
@@ -453,7 +446,9 @@ export class NovaSonicConnection extends EventEmitter {
     const silenceChunk = Buffer.alloc(VAD_SILENCE_CHUNK_SIZE, 0).toString('base64');
 
     for (let i = 0; i < VAD_SILENCE_CHUNKS; i++) {
-      if (!this.session?.isActive) break;
+      if (!this.session?.isActive) {
+        break;
+      }
 
       this.sendEvent({
         event: {
@@ -490,7 +485,9 @@ export class NovaSonicConnection extends EventEmitter {
     // Nova Sonic requires audio input to generate responses
     // If no audio has been received, caller should send audio first
     if (!this.hasReceivedAudio) {
-      logger.debug('[NovaSonic] requestResponse called but no audio received - Nova Sonic requires audio input');
+      logger.debug(
+        '[NovaSonic] requestResponse called but no audio received - Nova Sonic requires audio input',
+      );
       return;
     }
 

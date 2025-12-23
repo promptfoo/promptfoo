@@ -8,7 +8,7 @@
  */
 
 import { getEnvString } from '../../envars';
-import { cloudConfig, CLOUD_API_HOST } from '../../globalConfig/cloud';
+import { CLOUD_API_HOST, cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { getNunjucksEngine } from '../../util/templates';
