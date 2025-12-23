@@ -43,3 +43,13 @@ export type BaseTokenUsage = z.infer<typeof BaseTokenUsageSchema>;
 export type TokenUsage = z.infer<typeof BaseTokenUsageSchema>;
 
 export type NunjucksFilterMap = Record<string, (...args: any[]) => string>;
+
+// Inputs schema for multi-variable test case generation
+// Keys are variable names, values are descriptions of what the variable should contain
+export const InputsSchema = z.record(
+  z.string().regex(/^[a-zA-Z_][a-zA-Z0-9_]*$/, {
+    message: 'Input variable names must be valid identifiers (start with letter or underscore)',
+  }),
+  z.string().min(1, { message: 'Input descriptions must be non-empty strings' }),
+);
+export type Inputs = z.infer<typeof InputsSchema>;

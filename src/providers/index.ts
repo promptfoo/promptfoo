@@ -74,6 +74,7 @@ export async function loadApiProvider(
       transform: options.transform ?? cloudProvider.transform,
       delay: options.delay ?? cloudProvider.delay,
       prompts: options.prompts ?? cloudProvider.prompts,
+      inputs: options.inputs ?? cloudProvider.inputs,
       // Merge all three env sources: context (base) -> cloud -> local (highest priority)
       env: {
         ...env, // Context env (from testSuite.env - proxies, tracing IDs, etc.)
@@ -127,6 +128,7 @@ export async function loadApiProvider(
       const ret = await factory.create(renderedProviderPath, providerOptions, context);
       ret.transform = options.transform;
       ret.delay = options.delay;
+      ret.inputs = options.inputs;
       ret.label ||= getNunjucksEngine().renderString(String(options.label || ''), {});
       return ret;
     }

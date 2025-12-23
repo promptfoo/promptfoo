@@ -373,8 +373,13 @@ export async function doGenerateRedteam(
     logger.error(`Error details: ${error instanceof Error ? error.message : String(error)}`);
   }
 
+  // Read inputs from the first target/provider
+  const targetInputs = testSuite.providers[0]?.inputs;
+
   const config = {
     injectVar: redteamConfig?.injectVar || options.injectVar,
+    // Multi-variable inputs for test case generation (read from target)
+    inputs: targetInputs,
     language: redteamConfig?.language || options.language,
     maxConcurrency:
       options.maxConcurrency ?? commandLineOptions?.maxConcurrency ?? DEFAULT_MAX_CONCURRENCY,
@@ -454,6 +459,7 @@ export async function doGenerateRedteam(
 
       const contextResult = await synthesize({
         ...parsedConfig.data,
+        inputs: targetInputs,
         purpose: contextPurpose,
         numTests: config.numTests,
         prompts: testSuite.prompts.map((prompt) => prompt.raw),
@@ -501,6 +507,7 @@ export async function doGenerateRedteam(
     // Single purpose mode (existing behavior)
     const result = await synthesize({
       ...parsedConfig.data,
+      inputs: targetInputs,
       purpose: enhancedPurpose,
       numTests: config.numTests,
       prompts: testSuite.prompts.map((prompt) => prompt.raw),

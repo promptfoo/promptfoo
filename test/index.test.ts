@@ -98,6 +98,7 @@ describe('index.ts exports', () => {
     'ConversationMessageSchema',
     'DerivedMetricSchema',
     'EvalResultsFilterMode',
+    'InputsSchema',
     'NotPrefixedAssertionTypesSchema',
     'OutputConfigSchema',
     'OutputFileExtension',

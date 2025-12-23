@@ -97,7 +97,7 @@ describe('AlignedHarmfulPlugin', () => {
   });
 
   describe('test case generation', () => {
-    const mockPrompts = [{ prompt: 'Test prompt 1' }, { prompt: 'Test prompt 2' }];
+    const mockPrompts = [{ __prompt: 'Test prompt 1' }, { __prompt: 'Test prompt 2' }];
 
     it('should create properly structured test cases', () => {
       const testCases = plugin['promptsToTestCases'](mockPrompts);

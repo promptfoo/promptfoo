@@ -9,6 +9,90 @@ import { getRemoteGenerationUrl, neverGenerateRemote } from './remoteGeneration'
 import type { CallApiContextParams, ProviderResponse } from '../types/index';
 
 /**
+ * Regex pattern for matching <Prompt> tags in multi-input redteam generation output.
+ * Used to extract prompt content from LLM-generated outputs.
+ */
+const PROMPT_TAG_REGEX = /<Prompt>([\s\S]*?)<\/Prompt>/i;
+const PROMPT_TAG_REGEX_GLOBAL = /<Prompt>([\s\S]*?)<\/Prompt>/gi;
+
+/**
+ * Extracts the content from the first <Prompt> tag in a string.
+ * Used for multi-input mode where prompts are wrapped in <Prompt> tags.
+ *
+ * @param text - The text to extract the prompt from
+ * @returns The extracted prompt content (trimmed), or null if no <Prompt> tag found
+ */
+export function extractPromptFromTags(text: string): string | null {
+  const match = PROMPT_TAG_REGEX.exec(text);
+  return match ? match[1].trim() : null;
+}
+
+/**
+ * Extracts content from all <Prompt> tags in a string.
+ * Used when parsing multiple generated prompts from LLM output.
+ *
+ * @param text - The text to extract prompts from
+ * @returns Array of extracted prompt contents (trimmed)
+ */
+export function extractAllPromptsFromTags(text: string): string[] {
+  const results: string[] = [];
+  let match;
+
+  while ((match = PROMPT_TAG_REGEX_GLOBAL.exec(text)) !== null) {
+    results.push(match[1].trim());
+  }
+
+  return results;
+}
+
+/**
+ * Extracts variables from a parsed JSON object for multi-input mode.
+ * Properly stringifies objects/arrays instead of returning "[object Object]".
+ *
+ * @param parsed - The parsed JSON object containing input values
+ * @param inputs - The inputs config specifying which keys to extract
+ * @returns An object with the extracted variables as strings
+ */
+export function extractVariablesFromJson(
+  parsed: Record<string, unknown>,
+  inputs: Record<string, string>,
+): Record<string, string> {
+  const extractedVars: Record<string, string> = {};
+  for (const key of Object.keys(inputs)) {
+    if (key in parsed) {
+      const value = parsed[key];
+      extractedVars[key] =
+        typeof value === 'object' && value !== null ? JSON.stringify(value) : String(value);
+    }
+  }
+  return extractedVars;
+}
+
+/**
+ * Extracts input variables from a prompt string for multi-input mode.
+ * Handles JSON parsing and variable extraction in one step.
+ *
+ * @param prompt - The prompt string (may be JSON or plain text)
+ * @param inputs - The inputs config specifying which keys to extract (or undefined if not in multi-input mode)
+ * @returns The extracted variables, or undefined if not in multi-input mode or parsing fails
+ */
+export function extractInputVarsFromPrompt(
+  prompt: string,
+  inputs: Record<string, string> | undefined,
+): Record<string, string> | undefined {
+  if (!inputs || Object.keys(inputs).length === 0) {
+    return undefined;
+  }
+  try {
+    const parsed = JSON.parse(prompt);
+    return extractVariablesFromJson(parsed, inputs);
+  } catch {
+    // If parsing fails, prompt is plain text - no input vars to extract
+    return undefined;
+  }
+}
+
+/**
  * Normalizes different types of apostrophes to a standard single quote
  */
 export function normalizeApostrophes(str: string): string {

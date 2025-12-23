@@ -211,7 +211,9 @@ describe('Plugins', () => {
         }),
         expect.any(Number),
       );
-      expect(result).toEqual([{ test: 'case', metadata: { pluginId: 'ssrf' } }]);
+      expect(result).toEqual([
+        { test: 'case', metadata: { pluginId: 'ssrf', pluginConfig: { modifiers: {} } } },
+      ]);
     });
 
     it('should handle remote generation errors', async () => {
@@ -310,7 +312,10 @@ describe('Plugins', () => {
       });
 
       expect(result).toHaveLength(1);
-      expect(result?.[0]).toEqual(originalTestCase);
+      expect(result?.[0]).toEqual({
+        ...originalTestCase,
+        metadata: { ...originalTestCase.metadata, pluginConfig: { modifiers: {} } },
+      });
     });
   });
 
