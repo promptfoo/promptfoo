@@ -8,10 +8,7 @@ import { getAuthor, getUserEmail } from '../../../src/globalConfig/accounts';
 import { cloudConfig } from '../../../src/globalConfig/cloud';
 import logger from '../../../src/logger';
 import { doTargetPurposeDiscovery } from '../../../src/redteam/commands/discover';
-import {
-  doGenerateRedteam,
-  redteamGenerateCommand,
-} from '../../../src/redteam/commands/generate';
+import { doGenerateRedteam, redteamGenerateCommand } from '../../../src/redteam/commands/generate';
 import { Severity } from '../../../src/redteam/constants';
 import { extractMcpToolsInfo } from '../../../src/redteam/extraction/mcpTools';
 import { synthesize } from '../../../src/redteam/index';
@@ -2600,4 +2597,3 @@ describe('target ID extraction for retry strategy', () => {
     );
   });
 });
-
