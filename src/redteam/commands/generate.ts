@@ -45,12 +45,6 @@ import { extractMcpToolsInfo } from '../extraction/mcpTools';
 import { synthesize } from '../index';
 import { isValidPolicyObject } from '../plugins/policy/utils';
 import { shouldGenerateRemote } from '../remoteGeneration';
-import {
-  decodeXmlEntities,
-  MCP_TOOL_CALL_INSTRUCTIONS,
-  parseTypedValue,
-  parseXmlToolCall,
-} from './mcpParserUtils';
 import type { Command } from 'commander';
 
 import type { ApiProvider, TestSuite, UnifiedConfig } from '../../types/index';
@@ -62,9 +56,6 @@ import type {
   RedteamStrategyObject,
   SynthesizeOptions,
 } from '../types';
-
-// Re-export for backward compatibility
-export { decodeXmlEntities, parseTypedValue, parseXmlToolCall };
 
 function getConfigHash(configPath: string): string {
   const content = fs.readFileSync(configPath, 'utf8');
@@ -430,16 +421,14 @@ export async function doGenerateRedteam(
   // Extract MCP tools information and add to purpose
   let enhancedPurpose = parsedConfig.data.purpose || '';
   let augmentedTestGenerationInstructions = config.testGenerationInstructions ?? '';
-  let isMcpTarget = false;
   try {
     const mcpToolsInfo = await extractMcpToolsInfo(testSuite.providers);
     if (mcpToolsInfo) {
-      isMcpTarget = true;
       enhancedPurpose = enhancedPurpose
         ? `${enhancedPurpose}\n\n${mcpToolsInfo}\n\n`
         : mcpToolsInfo;
       logger.info('Added MCP tools information to red team purpose');
-      augmentedTestGenerationInstructions += MCP_TOOL_CALL_INSTRUCTIONS;
+      augmentedTestGenerationInstructions += `\nGenerate every test case prompt as a json string encoding the tool call and parameters, and choose a specific function to call. The specific format should be: {"tool": "function_name", "args": {...}}.`;
     }
   } catch (error) {
     logger.warn(
@@ -527,27 +516,6 @@ export async function doGenerateRedteam(
     purpose = result.purpose;
     entities = result.entities;
     finalInjectVar = result.injectVar;
-  }
-
-  // For MCP targets, parse XML tool calls and convert to JSON
-  if (isMcpTarget && finalInjectVar) {
-    redteamTests = redteamTests.map((test: any) => {
-      const injectValue = test.vars?.[finalInjectVar];
-      if (typeof injectValue === 'string') {
-        const parsed = parseXmlToolCall(injectValue);
-        if (parsed) {
-          return {
-            ...test,
-            vars: {
-              ...test.vars,
-              [finalInjectVar]: JSON.stringify(parsed),
-            },
-          };
-        }
-      }
-      return test;
-    });
-    logger.debug(`Converted ${redteamTests.length} MCP XML tool calls to JSON`);
   }
 
   if (redteamTests.length === 0) {
