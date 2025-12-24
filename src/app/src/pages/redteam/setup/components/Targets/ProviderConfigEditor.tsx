@@ -110,6 +110,13 @@ function ProviderConfigEditor({
       updatedTarget.delay = value;
     } else if (field === 'config') {
       updatedTarget.config = value;
+    } else if (field === 'inputs') {
+      // Handle top-level inputs field for multi-variable input configuration
+      if (value === undefined) {
+        delete (updatedTarget as any).inputs;
+      } else {
+        (updatedTarget as any).inputs = value;
+      }
     } else {
       updatedTarget.config[field] = value;
     }
