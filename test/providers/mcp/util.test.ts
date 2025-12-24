@@ -221,7 +221,9 @@ describe('discoverTokenEndpoint', () => {
   it('should succeed with path-appended discovery (Keycloak style)', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ token_endpoint: 'https://keycloak.example.com/realms/test/protocol/openid-connect/token' }),
+      json: async () => ({
+        token_endpoint: 'https://keycloak.example.com/realms/test/protocol/openid-connect/token',
+      }),
     });
 
     const result = await discoverTokenEndpoint('https://keycloak.example.com/realms/test');

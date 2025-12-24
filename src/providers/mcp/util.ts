@@ -1,4 +1,5 @@
 import logger from '../../logger';
+import { fetchWithProxy } from '../../util/fetch';
 import { renderVarsInObject } from '../../util/index';
 import { fetchOAuthToken, type OAuthTokenResult, TOKEN_REFRESH_BUFFER_MS } from '../../util/oauth';
 
@@ -86,7 +87,7 @@ export async function discoverTokenEndpoint(serverUrl: string): Promise<string> 
   for (const discoveryUrl of discoveryUrls) {
     try {
       logger.debug(`[MCP Auth] Trying OAuth discovery at ${discoveryUrl}`);
-      const response = await fetch(discoveryUrl);
+      const response = await fetchWithProxy(discoveryUrl);
 
       if (!response.ok) {
         logger.debug(`[MCP Auth] Discovery failed at ${discoveryUrl}: ${response.status}`);
