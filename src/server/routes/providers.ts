@@ -136,6 +136,7 @@ providersRouter.post('/test', async (req: Request, res: Response): Promise<void>
       changes_needed: result.analysis?.changes_needed,
       changes_needed_reason: result.analysis?.changes_needed_reason,
       changes_needed_suggestions: result.analysis?.changes_needed_suggestions,
+      configuration_change_suggestion: result.analysis?.configuration_change_suggestion,
     },
     providerResponse: result.providerResponse,
     transformedRequest: result.transformedRequest,
