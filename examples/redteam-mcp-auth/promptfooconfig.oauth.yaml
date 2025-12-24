@@ -7,13 +7,13 @@ targets:
     config:
       enabled: true
       server:
-        url: https://example-bot.promptfoo-staging.app/mcp/minnow?auth_type=bearer
+        url: https://example-bot.promptfoo.app/mcp/minnow?auth_type=bearer
         auth:
           type: oauth
           grantType: client_credentials
           clientId: '{{env.PROMPTFOO_TARGET_CLIENT_ID}}'
           clientSecret: '{{env.PROMPTFOO_TARGET_CLIENT_SECRET}}'
-          tokenUrl: https://example-bot.promptfoo-staging.app/oauth/token
+          tokenUrl: https://example-bot.promptfoo.app/oauth/token
           scopes: []
 
 redteam:
