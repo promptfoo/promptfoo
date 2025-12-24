@@ -71,10 +71,11 @@ promptfoo view
 
 When using OAuth authentication with MCP servers:
 
-1. The MCP provider automatically requests an access token from the `tokenUrl` using client credentials
-2. The token is cached and proactively refreshed before it expires (with a 60-second buffer)
-3. The token is added to MCP transport requests as an `Authorization: Bearer <token>` header
-4. If a token expires during an evaluation, the provider automatically reconnects with a fresh token
+1. If `tokenUrl` is not specified, the provider discovers it using RFC 8414 OAuth metadata
+2. The MCP provider requests an access token from the `tokenUrl` using client credentials
+3. The token is cached and proactively refreshed before it expires (with a 60-second buffer)
+4. The token is added to MCP transport requests as an `Authorization: Bearer <token>` header
+5. If a token expires during an evaluation, the provider automatically reconnects with a fresh token
 
 ### Token Refresh
 

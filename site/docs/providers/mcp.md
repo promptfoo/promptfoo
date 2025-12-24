@@ -199,11 +199,21 @@ providers:
             - read
 ```
 
+**Token Endpoint Discovery:**
+
+If `tokenUrl` is not specified, the provider automatically discovers the token endpoint using [RFC 8414](https://datatracker.ietf.org/doc/rfc8414/) OAuth 2.0 Authorization Server Metadata. It tries multiple well-known URLs:
+
+1. Path-appended: `{server-url}/.well-known/oauth-authorization-server` (Keycloak style)
+2. RFC 8414 path-aware: `{origin}/.well-known/oauth-authorization-server{path}`
+3. Root level: `{origin}/.well-known/oauth-authorization-server`
+
+For maximum compatibility, explicitly configure `tokenUrl` when possible.
+
 **Token Refresh Behavior:**
 
 When using OAuth authentication:
 
-1. The provider requests an access token from `tokenUrl` before connecting
+1. The provider requests an access token from `tokenUrl` (or discovered endpoint) before connecting
 2. Tokens are proactively refreshed 60 seconds before expiration
 3. Concurrent requests share the same refresh operation (no duplicate token fetches)
 4. If a token expires during an evaluation, the provider automatically reconnects with a fresh token
@@ -221,7 +231,7 @@ When using OAuth authentication:
 | keyName      | string   | api_key                 | No       | Header or query parameter name (default: `X-API-Key`) |
 | placement    | string   | api_key                 | No       | `'header'` (default) or `'query'`                     |
 | grantType    | string   | oauth                   | Yes      | `'client_credentials'` or `'password'`                |
-| tokenUrl     | string   | oauth                   | Yes      | OAuth token endpoint URL                              |
+| tokenUrl     | string   | oauth                   | No       | OAuth token endpoint URL (auto-discovered if omitted) |
 | clientId     | string   | oauth                   | Varies   | Required for client_credentials                       |
 | clientSecret | string   | oauth                   | Varies   | Required for client_credentials                       |
 | scopes       | string[] | oauth                   | No       | OAuth scopes to request                               |

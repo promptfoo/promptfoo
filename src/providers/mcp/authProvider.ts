@@ -22,9 +22,8 @@ const TOKEN_BUFFER_MS = 60000; // 60 seconds before expiry
  * OAuth client provider for MCP that supports client_credentials and password grant types.
  * Implements the SDK's OAuthClientProvider interface for automatic token refresh.
  *
- * Behavior:
- * - If `tokenUrl` is configured: fetches tokens directly from that URL (bypasses OAuth discovery)
- * - If `tokenUrl` is NOT configured: returns undefined from tokens() to let SDK use OAuth discovery
+ * Fetches tokens directly from the configured tokenUrl, bypassing the SDK's OAuth discovery
+ * which requires authorization_endpoint (only needed for interactive flows).
  */
 export class PromptfooOAuthClientProvider implements OAuthClientProvider {
   private _tokens?: OAuthTokens;
@@ -33,20 +32,12 @@ export class PromptfooOAuthClientProvider implements OAuthClientProvider {
   private _auth: MCPOAuthClientCredentialsAuth | MCPOAuthPasswordAuth;
   private _cacheKey: string;
   private _tokenFetchPromise?: Promise<OAuthTokens>;
-  private _useDirectTokenFetch: boolean;
 
   constructor(auth: MCPOAuthClientCredentialsAuth | MCPOAuthPasswordAuth) {
     this._auth = auth;
     this._cacheKey = this.buildCacheKey(auth);
 
-    // If tokenUrl is configured, fetch tokens directly; otherwise use SDK discovery
-    this._useDirectTokenFetch = Boolean(auth.tokenUrl);
-
-    if (this._useDirectTokenFetch) {
-      logger.debug('[MCP Auth] Using direct token fetch with configured tokenUrl');
-    } else {
-      logger.debug('[MCP Auth] Using SDK OAuth discovery (no tokenUrl configured)');
-    }
+    logger.debug('[MCP Auth] Using direct token fetch with configured tokenUrl');
 
     // Initialize client info
     this._clientInfo = {
@@ -63,13 +54,11 @@ export class PromptfooOAuthClientProvider implements OAuthClientProvider {
       token_endpoint_auth_method: auth.clientSecret ? 'client_secret_basic' : 'none',
     };
 
-    // Check cache for existing tokens (only relevant for direct fetch mode)
-    if (this._useDirectTokenFetch) {
-      const cached = tokenCache.get(this._cacheKey);
-      if (cached && Date.now() + TOKEN_BUFFER_MS < cached.expiresAt) {
-        this._tokens = cached.tokens;
-        logger.debug('[MCP Auth] Using cached OAuth tokens');
-      }
+    // Check cache for existing tokens
+    const cached = tokenCache.get(this._cacheKey);
+    if (cached && Date.now() + TOKEN_BUFFER_MS < cached.expiresAt) {
+      this._tokens = cached.tokens;
+      logger.debug('[MCP Auth] Using cached OAuth tokens');
     }
   }
 
@@ -128,33 +117,15 @@ export class PromptfooOAuthClientProvider implements OAuthClientProvider {
 
   /**
    * Returns cached tokens if valid, otherwise fetches fresh tokens.
-   *
-   * Behavior:
-   * - If tokenUrl is configured: fetches tokens directly and returns them
-   * - If tokenUrl is NOT configured: returns undefined to let SDK use OAuth discovery
    */
   async tokens(): Promise<OAuthTokens | undefined> {
-    // If not using direct token fetch, let SDK handle discovery
-    if (!this._useDirectTokenFetch) {
-      // Return any tokens the SDK has saved via saveTokens()
-      return this._tokens;
-    }
-
     // Check if cached tokens are still valid
     const cached = tokenCache.get(this._cacheKey);
     if (cached && Date.now() + TOKEN_BUFFER_MS < cached.expiresAt) {
       return cached.tokens;
     }
 
-    // If we have instance tokens, check if they're still valid
-    if (this._tokens) {
-      const instanceCached = tokenCache.get(this._cacheKey);
-      if (instanceCached && Date.now() + TOKEN_BUFFER_MS < instanceCached.expiresAt) {
-        return this._tokens;
-      }
-    }
-
-    // Fetch fresh tokens - this uses our configured tokenUrl directly
+    // Fetch fresh tokens from configured tokenUrl
     try {
       return await this.fetchToken();
     } catch (error) {

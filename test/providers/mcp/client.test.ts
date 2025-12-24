@@ -1002,37 +1002,6 @@ describe('MCPClient', () => {
       );
     });
 
-    it('should use authProvider for OAuth without tokenUrl (SDK discovery)', async () => {
-      mockClient.connect.mockResolvedValueOnce(undefined);
-      mockClient.listTools.mockResolvedValueOnce({
-        tools: [{ name: 'tool1', description: 'desc1', inputSchema: {} }],
-      });
-
-      mcpClient = new MCPClient({
-        enabled: true,
-        server: {
-          url: 'http://localhost:3000',
-          auth: {
-            type: 'oauth',
-            grantType: 'client_credentials',
-            clientId: 'test-client',
-            clientSecret: 'test-secret',
-            // No tokenUrl - should use SDK discovery via authProvider
-          },
-        },
-      });
-
-      await mcpClient.initialize();
-
-      // When tokenUrl is NOT configured, use authProvider for SDK discovery
-      expect(StreamableHTTPClientTransport).toHaveBeenCalledWith(
-        expect.any(URL),
-        expect.objectContaining({
-          authProvider: expect.any(Object),
-        }),
-      );
-    });
-
     it('should NOT use authProvider for bearer auth type', async () => {
       mockClient.connect.mockResolvedValueOnce(undefined);
       mockClient.listTools.mockResolvedValueOnce({

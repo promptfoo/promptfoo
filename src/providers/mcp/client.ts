@@ -2,7 +2,6 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { getEnvBool, getEnvInt } from '../../envars';
 import logger from '../../logger';
 import { TOKEN_REFRESH_BUFFER_MS } from '../../util/oauth';
-import { PromptfooOAuthClientProvider } from './authProvider';
 import {
   applyQueryParams,
   getAuthHeaders,
@@ -10,7 +9,6 @@ import {
   getOAuthTokenWithExpiry,
   renderAuthVars,
 } from './util';
-import type { OAuthClientProvider } from '@modelcontextprotocol/sdk/client/auth.js';
 import type { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import type { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import type { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
@@ -172,7 +170,6 @@ export class MCPClient {
         const renderedServer = renderAuthVars(server);
 
         // Determine authentication strategy
-        let authProvider: OAuthClientProvider | undefined;
         let authHeaders: Record<string, string> = {};
 
         if (renderedServer.auth?.type === 'oauth') {
@@ -180,25 +177,19 @@ export class MCPClient {
             | MCPOAuthClientCredentialsAuth
             | MCPOAuthPasswordAuth;
 
-          if (oauthAuth.tokenUrl) {
-            // When tokenUrl is configured, fetch token ourselves and use static headers
-            // This avoids SDK's OAuth discovery which may not work with all servers
-            logger.debug('[MCP] Using direct token fetch with configured tokenUrl');
-            const { accessToken, expiresAt } = await getOAuthTokenWithExpiry(oauthAuth);
-            authHeaders = { Authorization: `Bearer ${accessToken}` };
+          // Fetch token using configured tokenUrl or OAuth discovery
+          // This avoids SDK's OAuth discovery which requires authorization_endpoint
+          logger.debug('[MCP] Fetching OAuth token');
+          const { accessToken, expiresAt } = await getOAuthTokenWithExpiry(oauthAuth, server.url);
+          authHeaders = { Authorization: `Bearer ${accessToken}` };
 
-            // Store config and expiration for proactive token refresh
-            this.oauthConfigs.set(serverKey, {
-              serverKey,
-              serverConfig: server,
-              auth: oauthAuth,
-            });
-            this.tokenExpiresAt.set(serverKey, expiresAt);
-          } else {
-            // When tokenUrl is NOT configured, use authProvider for SDK discovery
-            authProvider = new PromptfooOAuthClientProvider(oauthAuth);
-            logger.debug('[MCP] Using authProvider for OAuth with SDK discovery');
-          }
+          // Store config and expiration for proactive token refresh
+          this.oauthConfigs.set(serverKey, {
+            serverKey,
+            serverConfig: server,
+            auth: oauthAuth,
+          });
+          this.tokenExpiresAt.set(serverKey, expiresAt);
         } else {
           // For non-OAuth auth types (bearer, basic, api_key), use static headers
           authHeaders = getAuthHeaders(renderedServer);
@@ -214,18 +205,13 @@ export class MCPClient {
         const queryParams = getAuthQueryParams(renderedServer);
         const serverUrl = applyQueryParams(server.url, queryParams);
 
-        // Build transport options
+        // Build transport options with headers
         const transportOptions: {
           requestInit?: { headers: Record<string, string> };
-          authProvider?: OAuthClientProvider;
         } = {};
 
         if (Object.keys(headers).length > 0) {
           transportOptions.requestInit = { headers };
-        }
-
-        if (authProvider) {
-          transportOptions.authProvider = authProvider;
         }
 
         const hasOptions = Object.keys(transportOptions).length > 0;

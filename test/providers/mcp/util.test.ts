@@ -1,11 +1,16 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   applyQueryParams,
+  discoverTokenEndpoint,
   getAuthHeaders,
   getAuthQueryParams,
 } from '../../../src/providers/mcp/util';
 
 import type { MCPServerConfig } from '../../../src/providers/mcp/types';
+
+// Mock global fetch for discovery tests
+const mockFetch = vi.fn();
+global.fetch = mockFetch;
 
 describe('getAuthHeaders', () => {
   it('should return bearer auth header', () => {
@@ -154,5 +159,102 @@ describe('applyQueryParams', () => {
   it('should return original URL if no params', () => {
     const url = 'https://api.example.com/v1';
     expect(applyQueryParams(url, {})).toBe(url);
+  });
+});
+
+describe('discoverTokenEndpoint', () => {
+  beforeEach(() => {
+    mockFetch.mockReset();
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should discover token endpoint from root well-known URL', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        token_endpoint: 'https://auth.example.com/oauth/token',
+        authorization_endpoint: 'https://auth.example.com/oauth/authorize',
+      }),
+    });
+
+    const result = await discoverTokenEndpoint('https://mcp.example.com');
+    expect(result).toBe('https://auth.example.com/oauth/token');
+    expect(mockFetch).toHaveBeenCalledWith(
+      'https://mcp.example.com/.well-known/oauth-authorization-server',
+    );
+  });
+
+  it('should try path-appended discovery first for URLs with paths', async () => {
+    // First attempt (path-appended) fails
+    mockFetch.mockResolvedValueOnce({ ok: false, status: 404 });
+    // Second attempt (RFC 8414 path-aware) fails
+    mockFetch.mockResolvedValueOnce({ ok: false, status: 404 });
+    // Third attempt (root) succeeds
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ token_endpoint: 'https://auth.example.com/token' }),
+    });
+
+    const result = await discoverTokenEndpoint('https://example.com/realms/test');
+    expect(result).toBe('https://auth.example.com/token');
+
+    // Should have tried path-appended first
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      1,
+      'https://example.com/realms/test/.well-known/oauth-authorization-server',
+    );
+    // Then RFC 8414 path-aware
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      2,
+      'https://example.com/.well-known/oauth-authorization-server/realms/test',
+    );
+    // Then root
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      3,
+      'https://example.com/.well-known/oauth-authorization-server',
+    );
+  });
+
+  it('should succeed with path-appended discovery (Keycloak style)', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ token_endpoint: 'https://keycloak.example.com/realms/test/protocol/openid-connect/token' }),
+    });
+
+    const result = await discoverTokenEndpoint('https://keycloak.example.com/realms/test');
+    expect(result).toBe('https://keycloak.example.com/realms/test/protocol/openid-connect/token');
+  });
+
+  it('should throw error if no discovery succeeds', async () => {
+    mockFetch.mockResolvedValue({ ok: false, status: 404 });
+
+    await expect(discoverTokenEndpoint('https://example.com')).rejects.toThrow(
+      /Failed to discover OAuth token endpoint/,
+    );
+  });
+
+  it('should throw error if metadata has no token_endpoint', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        // Missing token_endpoint - only has authorization_endpoint
+        authorization_endpoint: 'https://auth.example.com/authorize',
+      }),
+    });
+
+    await expect(discoverTokenEndpoint('https://example.com')).rejects.toThrow(
+      /Failed to discover OAuth token endpoint/,
+    );
+  });
+
+  it('should handle network errors gracefully', async () => {
+    mockFetch.mockRejectedValue(new Error('Network error'));
+
+    await expect(discoverTokenEndpoint('https://example.com')).rejects.toThrow(
+      /Failed to discover OAuth token endpoint/,
+    );
   });
 });
