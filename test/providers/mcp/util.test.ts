@@ -8,9 +8,11 @@ import {
 
 import type { MCPServerConfig } from '../../../src/providers/mcp/types';
 
-// Mock global fetch for discovery tests
+// Mock fetchWithProxy for discovery tests
 const mockFetch = vi.fn();
-global.fetch = mockFetch;
+vi.mock('../../../src/util/fetch', () => ({
+  fetchWithProxy: (...args: unknown[]) => mockFetch(...args),
+}));
 
 describe('getAuthHeaders', () => {
   it('should return bearer auth header', () => {
