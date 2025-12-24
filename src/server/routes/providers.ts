@@ -123,8 +123,13 @@ providersRouter.post('/test', async (req: Request, res: Response): Promise<void>
     },
   });
 
-  // Use refactored function with optional prompt
-  const result = await testProviderConnectivity(loadedProvider, payload.prompt);
+  // Use refactored function with optional prompt and inputs
+  // Pass inputs explicitly from providerOptions since loaded provider may not expose config.inputs
+  const result = await testProviderConnectivity(
+    loadedProvider,
+    payload.prompt,
+    providerOptions.config?.inputs,
+  );
 
   res.status(200).json({
     testResult: {
@@ -380,8 +385,14 @@ providersRouter.post('/test-session', async (req: Request, res: Response): Promi
       },
     });
 
-    // Use refactored function
-    const result = await testProviderSession(loadedProvider, sessionConfig);
+    // Use refactored function with inputs passed explicitly
+    // Pass inputs from validatedProvider since loaded provider may not expose config.inputs
+    const result = await testProviderSession(
+      loadedProvider,
+      sessionConfig,
+      undefined, // options
+      validatedProvider.config?.inputs,
+    );
 
     res.json(result);
   } catch (error) {

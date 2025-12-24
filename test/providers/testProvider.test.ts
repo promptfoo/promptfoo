@@ -165,7 +165,7 @@ describe('Provider Test Functions', () => {
             prompts: [{ raw: 'Hello World!', label: 'Connectivity Test' }],
             tests: [
               expect.objectContaining({
-                vars: { sessionId: 'test-uuid-1234' },
+                vars: { sessionId: 'test-uuid-1234', prompt: 'Hello World!' },
               }),
             ],
           }),
@@ -246,7 +246,7 @@ describe('Provider Test Functions', () => {
           expect.objectContaining({
             tests: [
               expect.objectContaining({
-                vars: { sessionId: 'test-uuid-1234' },
+                vars: { sessionId: 'test-uuid-1234', prompt: 'Hello World!' },
               }),
             ],
           }),
