@@ -862,7 +862,7 @@ describe('doGenerateRedteam', () => {
       expect.objectContaining({
         purpose: expect.stringContaining(mcpToolsInfo),
         testGenerationInstructions: expect.stringContaining(
-          'Generate every test case prompt as a json string',
+          'Generate every test case prompt using XML format',
         ),
       }),
     );
