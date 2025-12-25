@@ -1,5 +1,14 @@
 import type { RowSelectionState, Table } from '@tanstack/react-table';
 
+// Extend TanStack Table's ColumnMeta to include our custom filter metadata
+declare module '@tanstack/react-table' {
+  // biome-ignore lint: /correctness/noUnusedVariables
+  interface ColumnMeta<TData, TValue> {
+    filterVariant?: 'select';
+    filterOptions?: Array<{ label: string; value: string }>;
+  }
+}
+
 export interface DataTableProps<TData, TValue = unknown> {
   columns: import('@tanstack/react-table').ColumnDef<TData, TValue>[];
   data: TData[];

@@ -15,6 +15,7 @@ import { DeleteIcon } from '@app/components/ui/icons';
 import { cn } from '@app/lib/utils';
 import { callApi } from '@app/utils/api';
 import { formatDataGridDate } from '@app/utils/date';
+import { Tooltip } from '@mui/material';
 import invariant from '@promptfoo/util/invariant';
 import { Link, useLocation } from 'react-router-dom';
 import type { ColumnDef, RowSelectionState } from '@tanstack/react-table';
@@ -210,10 +211,11 @@ export default function EvalsTable({
       ...(hasRedteamEvals
         ? [
             {
-              accessorKey: 'isRedteam',
+              id: 'type',
+              accessorFn: (row) => (row.isRedteam === 1 ? 'Red Team' : 'Eval'),
               header: 'Type',
-              cell: ({ getValue }: { getValue: () => number }) => {
-                const isRedteam = getValue() === 1;
+              cell: ({ row }) => {
+                const isRedteam = row.original.isRedteam === 1;
                 return (
                   <Badge
                     variant={isRedteam ? 'destructive' : 'secondary'}
@@ -226,6 +228,13 @@ export default function EvalsTable({
                   </Badge>
                 );
               },
+              meta: {
+                filterVariant: 'select',
+                filterOptions: [
+                  { label: 'Red Team', value: 'Red Team' },
+                  { label: 'Eval', value: 'Eval' },
+                ],
+              },
               size: 100,
             } as ColumnDef<Eval>,
           ]
@@ -233,9 +242,25 @@ export default function EvalsTable({
       {
         accessorKey: 'description',
         header: 'Description',
-        cell: ({ row }) => (
-          <span className="text-sm">{row.original.description || row.original.label}</span>
-        ),
+        cell: ({ row }) => {
+          const text = row.original.description || row.original.label;
+          return (
+            <Tooltip title={text} placement="top" arrow>
+              <span
+                className="text-sm block"
+                style={{
+                  display: '-webkit-box',
+                  WebkitLineClamp: 3,
+                  WebkitBoxOrient: 'vertical',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
+              >
+                {text}
+              </span>
+            </Tooltip>
+          );
+        },
       },
       {
         accessorKey: 'passRate',

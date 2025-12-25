@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
+import { DataTable } from '@app/components/data-table/data-table';
 import { Badge } from '@app/components/ui/badge';
 import { Button } from '@app/components/ui/button';
 import { Card } from '@app/components/ui/card';
@@ -27,49 +28,11 @@ import {
 } from '@app/components/ui/tooltip';
 import { MODEL_AUDIT_ROUTES } from '@app/constants/routes';
 import { formatDataGridDate } from '@app/utils/date';
-import {
-  DataGrid,
-  type GridColDef,
-  GridCsvExportMenuItem,
-  type GridPaginationModel,
-  type GridRenderCellParams,
-  type GridSortModel,
-  GridToolbarColumnsButton,
-  GridToolbarContainer,
-  GridToolbarDensitySelector,
-  GridToolbarExportContainer,
-  GridToolbarFilterButton,
-  GridToolbarQuickFilter,
-} from '@mui/x-data-grid';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import { useModelAuditHistoryStore } from '../model-audit/stores';
+import type { ColumnDef } from '@tanstack/react-table';
 
 import type { HistoricalScan } from '../model-audit/stores';
-
-const GridToolbarExport = () => (
-  <GridToolbarExportContainer>
-    <GridCsvExportMenuItem />
-  </GridToolbarExportContainer>
-);
-
-function CustomToolbar({ onNewScan }: { onNewScan: () => void }) {
-  return (
-    <GridToolbarContainer className="p-2 border-b border-border gap-2 flex-wrap">
-      <div className="flex gap-2">
-        <Button size="sm" onClick={onNewScan}>
-          <AddIcon className="h-4 w-4 mr-2" />
-          New Scan
-        </Button>
-        <GridToolbarColumnsButton />
-        <GridToolbarFilterButton />
-        <GridToolbarDensitySelector />
-        <GridToolbarExport />
-      </div>
-      <div className="flex-grow" />
-      <GridToolbarQuickFilter className="[&_.MuiInputBase-root]:rounded-lg [&_.MuiInputBase-root]:bg-background" />
-    </GridToolbarContainer>
-  );
-}
 
 export default function ModelAuditHistory() {
   const navigate = useNavigate();
@@ -86,7 +49,6 @@ export default function ModelAuditHistory() {
     deleteHistoricalScan,
     setPageSize,
     setCurrentPage,
-    setSortModel,
   } = useModelAuditHistoryStore();
 
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -100,8 +62,8 @@ export default function ModelAuditHistory() {
   }, [fetchHistoricalScans, pageSize, currentPage, sortModel]);
 
   const handleRowClick = useCallback(
-    (params: { row: HistoricalScan }) => {
-      navigate(MODEL_AUDIT_ROUTES.DETAIL(params.row.id));
+    (row: HistoricalScan) => {
+      navigate(MODEL_AUDIT_ROUTES.DETAIL(row.id));
     },
     [navigate],
   );
@@ -127,125 +89,117 @@ export default function ModelAuditHistory() {
     }
   }, [scanToDelete, deleteHistoricalScan]);
 
-  const handlePaginationModelChange = useCallback(
-    (model: GridPaginationModel) => {
-      setPageSize(model.pageSize);
-      setCurrentPage(model.page);
-    },
-    [setPageSize, setCurrentPage],
-  );
-
-  const handleSortModelChange = useCallback(
-    (model: GridSortModel) => {
-      const newSortModel = model.map((item) => ({
-        field: item.field,
-        sort: item.sort || 'desc',
-      })) as { field: string; sort: 'asc' | 'desc' }[];
-      setSortModel(newSortModel.length > 0 ? newSortModel : [{ field: 'createdAt', sort: 'desc' }]);
-    },
-    [setSortModel],
-  );
-
-  const columns: GridColDef<HistoricalScan>[] = useMemo(
+  const columns = useMemo<ColumnDef<HistoricalScan>[]>(
     () => [
       {
-        field: 'id',
-        headerName: 'ID',
-        flex: 1,
-        minWidth: 120,
-        renderCell: (params: GridRenderCellParams<HistoricalScan>) => (
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span className="text-sm font-mono text-primary cursor-pointer hover:underline truncate">
-                  {params.value}
-                </span>
-              </TooltipTrigger>
-              <TooltipContent>{params.value}</TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+        accessorKey: 'id',
+        header: 'ID',
+        size: 120,
+        cell: ({ getValue }) => {
+          const value = getValue<string>();
+          return (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="text-sm font-mono text-primary cursor-pointer hover:underline truncate block">
+                    {value}
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>{value}</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          );
+        },
+      },
+      {
+        accessorKey: 'createdAt',
+        header: 'Created',
+        size: 180,
+        cell: ({ getValue }) => (
+          <span className="text-sm">{formatDataGridDate(getValue<number>())}</span>
         ),
       },
       {
-        field: 'createdAt',
-        headerName: 'Created',
-        flex: 1.5,
-        minWidth: 180,
-        valueFormatter: (value: number) => formatDataGridDate(value),
-      },
-      {
-        field: 'name',
-        headerName: 'Name',
-        flex: 2,
-        minWidth: 200,
-        renderCell: (params: GridRenderCellParams<HistoricalScan>) => (
-          <span className="text-sm truncate">{params.value || 'Unnamed scan'}</span>
+        accessorKey: 'name',
+        header: 'Name',
+        size: 200,
+        cell: ({ getValue }) => (
+          <span className="text-sm truncate block">{getValue<string>() || 'Unnamed scan'}</span>
         ),
       },
       {
-        field: 'modelPath',
-        headerName: 'Model Path',
-        flex: 2.5,
-        minWidth: 250,
-        renderCell: (params: GridRenderCellParams<HistoricalScan>) => (
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span className="text-sm font-mono truncate">{params.value}</span>
-              </TooltipTrigger>
-              <TooltipContent className="font-mono">{params.value}</TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        ),
+        accessorKey: 'modelPath',
+        header: 'Model Path',
+        size: 250,
+        cell: ({ getValue }) => {
+          const value = getValue<string>();
+          return (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="text-sm font-mono truncate block">{value}</span>
+                </TooltipTrigger>
+                <TooltipContent className="font-mono">{value}</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          );
+        },
       },
       {
-        field: 'hasErrors',
-        headerName: 'Status',
-        flex: 1,
-        minWidth: 130,
-        renderCell: (params: GridRenderCellParams<HistoricalScan>) => (
-          <Badge
-            variant={params.value ? 'critical' : 'success'}
-            className="gap-1.5 min-w-[100px] justify-center"
-          >
-            {params.value ? (
-              <ErrorIcon className="h-3.5 w-3.5" />
-            ) : (
-              <CheckCircleIcon className="h-3.5 w-3.5" />
-            )}
-            {params.value ? 'Issues Found' : 'Clean'}
-          </Badge>
-        ),
+        accessorKey: 'hasErrors',
+        header: 'Status',
+        size: 130,
+        accessorFn: (row) => (row.hasErrors ? 'Issues Found' : 'Clean'),
+        cell: ({ row }) => {
+          const hasErrors = row.original.hasErrors;
+          return (
+            <Badge
+              variant={hasErrors ? 'critical' : 'success'}
+              className="gap-1.5 min-w-[100px] justify-center"
+            >
+              {hasErrors ? (
+                <ErrorIcon className="h-3.5 w-3.5" />
+              ) : (
+                <CheckCircleIcon className="h-3.5 w-3.5" />
+              )}
+              {hasErrors ? 'Issues Found' : 'Clean'}
+            </Badge>
+          );
+        },
+        meta: {
+          filterVariant: 'select',
+          filterOptions: [
+            { label: 'Issues Found', value: 'Issues Found' },
+            { label: 'Clean', value: 'Clean' },
+          ],
+        },
       },
       {
-        field: 'totalChecks',
-        headerName: 'Checks',
-        flex: 0.8,
-        minWidth: 100,
-        type: 'number',
-        renderCell: (params: GridRenderCellParams<HistoricalScan>) => {
-          if (params.value === undefined || params.value === null) {
+        accessorKey: 'totalChecks',
+        header: 'Checks',
+        size: 100,
+        cell: ({ getValue, row }) => {
+          const value = getValue<number | undefined>();
+          if (value === undefined || value === null) {
             return <span className="text-sm text-muted-foreground">-</span>;
           }
           return (
             <div className="flex items-center gap-1">
               <span className="text-sm text-emerald-600 dark:text-emerald-400">
-                {params.row.passedChecks || 0}
+                {row.original.passedChecks || 0}
               </span>
               <span className="text-sm text-muted-foreground">/</span>
-              <span className="text-sm">{params.value}</span>
+              <span className="text-sm">{value}</span>
             </div>
           );
         },
       },
       {
-        field: 'actions',
-        headerName: 'Actions',
-        flex: 0.5,
-        minWidth: 80,
-        sortable: false,
-        filterable: false,
-        renderCell: (params: GridRenderCellParams<HistoricalScan>) => (
+        id: 'actions',
+        header: 'Actions',
+        size: 80,
+        enableSorting: false,
+        cell: ({ row }) => (
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -255,7 +209,7 @@ export default function ModelAuditHistory() {
                   className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
                   onClick={(e) => {
                     e.stopPropagation();
-                    setScanToDelete(params.row.id);
+                    setScanToDelete(row.original.id);
                     setDeleteDialogOpen(true);
                   }}
                 >
@@ -268,7 +222,7 @@ export default function ModelAuditHistory() {
         ),
       },
     ],
-    [],
+    [setScanToDelete],
   );
 
   return (
@@ -291,84 +245,109 @@ export default function ModelAuditHistory() {
       </div>
 
       {/* Main Content */}
-      <div className="container max-w-7xl mx-auto px-4 py-8">
+      <div className="container max-w-7xl mx-auto px-4 py-8 space-y-4">
+        {/* Toolbar */}
+        <div className="flex justify-between items-center">
+          <Button size="sm" onClick={handleNewScan}>
+            <AddIcon className="h-4 w-4 mr-2" />
+            New Scan
+          </Button>
+        </div>
+
         <Card className="overflow-hidden bg-white dark:bg-zinc-900">
-          <DataGrid
-            rows={historicalScans}
-            columns={columns}
-            loading={isLoadingHistory}
-            rowCount={totalCount}
-            paginationMode="server"
-            sortingMode="server"
-            paginationModel={{ page: currentPage, pageSize }}
-            onPaginationModelChange={handlePaginationModelChange}
-            sortModel={sortModel.map((s) => ({ field: s.field, sort: s.sort }))}
-            onSortModelChange={handleSortModelChange}
-            pageSizeOptions={[10, 25, 50, 100]}
-            onRowClick={handleRowClick}
-            getRowId={(row) => row.id}
-            autoHeight
-            slots={{
-              toolbar: () => <CustomToolbar onNewScan={handleNewScan} />,
-              loadingOverlay: () => (
-                <div className="flex flex-col items-center justify-center h-full gap-3 py-16">
-                  <Spinner size="lg" />
-                  <span className="text-sm text-muted-foreground">Loading scan history...</span>
-                </div>
-              ),
-              noRowsOverlay: () => (
-                <div className="flex flex-col items-center justify-center h-full py-16 text-center">
-                  {historyError ? (
-                    <>
-                      <div className="text-4xl mb-4">⚠️</div>
-                      <h3 className="text-lg font-semibold text-destructive mb-1">
-                        Error loading history
-                      </h3>
-                      <p className="text-sm text-muted-foreground">{historyError}</p>
-                    </>
-                  ) : (
-                    <>
-                      <div className="text-4xl mb-4">🔍</div>
-                      <h3 className="text-lg font-semibold mb-1">No scan history found</h3>
-                      <p className="text-sm text-muted-foreground mb-4">
-                        Run your first model security scan to see results here
-                      </p>
-                      <Button asChild>
-                        <RouterLink to={MODEL_AUDIT_ROUTES.SETUP}>
-                          <AddIcon className="h-4 w-4 mr-2" />
-                          New Scan
-                        </RouterLink>
+          {historyError ? (
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <div className="text-4xl mb-4">⚠️</div>
+              <h3 className="text-lg font-semibold text-destructive mb-1">Error loading history</h3>
+              <p className="text-sm text-muted-foreground">{historyError}</p>
+            </div>
+          ) : historicalScans.length === 0 && !isLoadingHistory ? (
+            <div className="flex flex-col items-center justify-center py-16 text-center gap-4">
+              <div className="text-4xl">🔍</div>
+              <h3 className="text-lg font-semibold">No scan history found</h3>
+              <p className="text-sm text-muted-foreground">
+                Run your first model security scan to see results here
+              </p>
+              <Button asChild>
+                <RouterLink to={MODEL_AUDIT_ROUTES.SETUP}>
+                  <AddIcon className="h-4 w-4 mr-2" />
+                  New Scan
+                </RouterLink>
+              </Button>
+            </div>
+          ) : (
+            <>
+              <DataTable
+                columns={columns}
+                data={historicalScans}
+                isLoading={isLoadingHistory}
+                onRowClick={handleRowClick}
+                getRowId={(row) => row.id}
+                initialSorting={sortModel.map((s) => ({ id: s.field, desc: s.sort === 'desc' }))}
+                showToolbar={false}
+                showPagination={false}
+              />
+
+              {/* Server-side Pagination */}
+              {historicalScans.length > 0 && (
+                <div className="flex items-center justify-between px-4 py-3 border-t border-border">
+                  <div className="text-sm text-muted-foreground">
+                    Showing {currentPage * pageSize + 1} to{' '}
+                    {Math.min((currentPage + 1) * pageSize, totalCount)} of {totalCount} scans
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={pageSize}
+                      onChange={(e) => {
+                        setPageSize(Number(e.target.value));
+                        setCurrentPage(0);
+                      }}
+                      className="px-3 py-1.5 rounded-md border border-border bg-background text-sm"
+                    >
+                      <option value={10}>10 / page</option>
+                      <option value={25}>25 / page</option>
+                      <option value={50}>50 / page</option>
+                      <option value={100}>100 / page</option>
+                    </select>
+                    <div className="flex gap-1">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCurrentPage(0)}
+                        disabled={currentPage === 0}
+                      >
+                        First
                       </Button>
-                    </>
-                  )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCurrentPage(currentPage - 1)}
+                        disabled={currentPage === 0}
+                      >
+                        Previous
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCurrentPage(currentPage + 1)}
+                        disabled={(currentPage + 1) * pageSize >= totalCount}
+                      >
+                        Next
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCurrentPage(Math.ceil(totalCount / pageSize) - 1)}
+                        disabled={(currentPage + 1) * pageSize >= totalCount}
+                      >
+                        Last
+                      </Button>
+                    </div>
+                  </div>
                 </div>
-              ),
-            }}
-            sx={{
-              border: 'none',
-              '& .MuiDataGrid-row': {
-                cursor: 'pointer',
-                transition: 'background-color 0.2s ease',
-                '&:hover': {
-                  backgroundColor: 'hsl(var(--muted) / 0.5)',
-                },
-              },
-              '& .MuiDataGrid-cell': {
-                borderColor: 'hsl(var(--border))',
-                display: 'flex',
-                alignItems: 'center',
-              },
-              '& .MuiDataGrid-columnHeaders': {
-                backgroundColor: 'hsl(var(--muted) / 0.3)',
-                borderColor: 'hsl(var(--border))',
-              },
-              '& .MuiDataGrid-footerContainer': {
-                borderColor: 'hsl(var(--border))',
-              },
-              '--DataGrid-overlayHeight': '300px',
-            }}
-            disableRowSelectionOnClick
-          />
+              )}
+            </>
+          )}
         </Card>
       </div>
 

@@ -35,24 +35,37 @@ const operatorFilterFn = (
     return true;
   }
 
-  const { operator, value } = filterValue as { operator: string; value: string };
-  if (!value) {
+  const { operator, value } = filterValue as { operator: string; value: string | string[] };
+
+  // Handle empty values (both string and array)
+  const hasValue = Array.isArray(value) ? value.length > 0 : Boolean(value);
+  if (!hasValue) {
     return true;
   }
 
   const cellValue = row.getValue(columnId);
   const cellString = String(cellValue ?? '').toLowerCase();
-  const filterString = value.toLowerCase();
 
   switch (operator) {
-    case 'contains':
+    // Text comparison operators
+    case 'contains': {
+      const filterString = String(value).toLowerCase();
       return cellString.includes(filterString);
-    case 'equals':
+    }
+    case 'equals': {
+      const filterString = String(value).toLowerCase();
       return cellString === filterString;
-    case 'startsWith':
+    }
+    case 'startsWith': {
+      const filterString = String(value).toLowerCase();
       return cellString.startsWith(filterString);
-    case 'endsWith':
+    }
+    case 'endsWith': {
+      const filterString = String(value).toLowerCase();
       return cellString.endsWith(filterString);
+    }
+
+    // Numeric comparison operators
     case 'gt': {
       const numCell = Number(cellValue);
       const numFilter = Number(value);
@@ -73,8 +86,23 @@ const operatorFilterFn = (
       const numFilter = Number(value);
       return !isNaN(numCell) && !isNaN(numFilter) && numCell <= numFilter;
     }
+
+    // Select filter operators
+    case 'notEquals': {
+      const filterString = String(value).toLowerCase();
+      return cellString !== filterString;
+    }
+    case 'isAny': {
+      // For multi-select, check if cell value matches any of the selected values
+      if (!Array.isArray(value)) {
+        return false;
+      }
+      const filterValues = value.map((v) => String(v).toLowerCase());
+      return filterValues.includes(cellString);
+    }
+
     default:
-      return cellString.includes(filterString);
+      return cellString.includes(String(value).toLowerCase());
   }
 };
 
@@ -219,10 +247,23 @@ export function DataTable<TData, TValue = unknown>({
 
   if (!hasData && !globalFilter && data.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center h-[400px] gap-3 rounded-xl bg-muted/50">
-        <Search className="h-12 w-12 text-muted-foreground" />
-        <h3 className="text-lg font-semibold">No data found</h3>
-        <p className="text-sm text-muted-foreground max-w-md text-center">{emptyMessage}</p>
+      <div className={cn('space-y-4 pb-4', className)}>
+        {showToolbar && toolbarActions && (
+          <DataTableToolbar
+            table={table}
+            globalFilter={globalFilter}
+            setGlobalFilter={setGlobalFilter}
+            showColumnToggle={false}
+            showFilter={false}
+            showExport={false}
+            toolbarActions={toolbarActions}
+          />
+        )}
+        <div className="flex flex-col items-center justify-center h-[400px] gap-3 rounded-xl bg-muted/50">
+          <Search className="h-12 w-12 text-muted-foreground" />
+          <h3 className="text-lg font-semibold">No data found</h3>
+          <p className="text-sm text-muted-foreground max-w-md text-center">{emptyMessage}</p>
+        </div>
       </div>
     );
   }

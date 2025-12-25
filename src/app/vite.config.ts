@@ -68,7 +68,7 @@ export default defineConfig({
           'vendor-react': ['react', 'react-dom', 'react-router-dom'],
           'vendor-mui-core': ['@mui/material', '@mui/system'],
           'vendor-mui-icons': ['@mui/icons-material'],
-          'vendor-mui-x': ['@mui/x-data-grid', '@mui/x-charts'],
+          'vendor-mui-x': ['@mui/x-charts'],
           'vendor-charts': ['recharts', 'chart.js'],
           'vendor-utils': ['js-yaml', 'diff', 'csv-parse', 'csv-stringify'],
           'vendor-syntax': ['prismjs'],
@@ -88,7 +88,7 @@ export default defineConfig({
     // Force vitest to transform MUI packages including CSS imports
     server: {
       deps: {
-        inline: ['@mui/x-data-grid', '@mui/x-charts', 'node-stdlib-browser'],
+        inline: ['@mui/x-charts', 'node-stdlib-browser'],
       },
     },
     // Fix ESM directory import issue with punycode in node-stdlib-browser

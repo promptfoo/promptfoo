@@ -202,13 +202,17 @@ Replace MUI Typography variants with Tailwind classes:
 
 ### DataGrid Strategy
 
-The `@mui/x-data-grid` is heavily used. Options:
+~~The `@mui/x-data-grid` is heavily used.~~ **✅ MIGRATION COMPLETE**
 
-1. **TanStack Table + custom UI** - Already using TanStack Table in some places
-2. **AG Grid** - Commercial alternative
-3. **Custom implementation** - Build on TanStack Table with shadcn styling
+A `DataTable` component was built using TanStack Table + Radix primitives. All DataGrid usages have been migrated to the new DataTable component:
 
-Recommendation: Build a `DataTable` component using TanStack Table + Radix primitives.
+- RedteamReportTable
+- CustomPoliciesSection
+- TestSuites
+- CustomMetricsDialog
+- Other data grid instances
+
+The `@mui/x-data-grid` dependency has been removed from package.json.
 
 ### Navigation Strategy
 
@@ -370,7 +374,7 @@ export {
 
 - [ ] Remove @mui/material
 - [ ] Remove @mui/icons-material
-- [ ] Remove @mui/x-data-grid (if replaced)
+- [x] Remove @mui/x-data-grid (replaced with DataTable)
 - [ ] Remove @mui/x-charts (if replaced)
 - [ ] Remove @emotion/react
 - [ ] Remove @emotion/styled
@@ -857,13 +861,13 @@ Use `/50` opacity in dark mode for subtle, non-overwhelming gradients.
 
 ## Risks & Mitigations
 
-| Risk                           | Mitigation                                                              |
-| ------------------------------ | ----------------------------------------------------------------------- |
-| DataGrid complexity            | Evaluate TanStack Table early; consider keeping @mui/x-data-grid longer |
-| Team velocity during migration | Clear phase boundaries; don't block features                            |
-| Visual regression              | Screenshot testing with Playwright                                      |
-| Icon coverage gaps             | Audit icons early; use multiple icon sets if needed                     |
-| Accessibility regression       | Radix has strong a11y; test with screen readers                         |
+| Risk                           | Mitigation                                                                   |
+| ------------------------------ | ---------------------------------------------------------------------------- |
+| ~~DataGrid complexity~~        | ✅ **RESOLVED** - DataTable component successfully built with TanStack Table |
+| Team velocity during migration | Clear phase boundaries; don't block features                                 |
+| Visual regression              | Screenshot testing with Playwright                                           |
+| Icon coverage gaps             | Audit icons early; use multiple icon sets if needed                          |
+| Accessibility regression       | Radix has strong a11y; test with screen readers                              |
 
 ---
 

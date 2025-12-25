@@ -6,25 +6,27 @@ import ChecksSection from './ChecksSection';
 
 import type { ScanCheck } from '../ModelAudit.types';
 
-vi.mock('@mui/x-data-grid', () => ({
-  ...vi.importActual('@mui/x-data-grid'),
-  DataGrid: (props: { rows: any[]; columns: any[] }) => {
-    const { rows, columns } = props;
+// Mock the DataTable component from the design system
+vi.mock('@app/components/data-table/data-table', () => ({
+  DataTable: (props: { data: any[]; columns: any[] }) => {
+    const { data, columns } = props;
     return (
       <div data-testid="mock-data-grid">
         <table>
           <thead>
             <tr>
-              {columns.map((col) => (
-                <th key={col.field}>{col.headerName}</th>
+              {columns.map((col: any) => (
+                <th key={col.accessorKey || col.id}>{col.header}</th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {rows.map((row, index) => (
+            {data.map((row: any, index: number) => (
               <tr key={index}>
-                {columns.map((col) => (
-                  <td key={col.field}>{row[col.field]}</td>
+                {columns.map((col: any) => (
+                  <td key={col.accessorKey || col.id}>
+                    {col.accessorKey ? row[col.accessorKey] : ''}
+                  </td>
                 ))}
               </tr>
             ))}

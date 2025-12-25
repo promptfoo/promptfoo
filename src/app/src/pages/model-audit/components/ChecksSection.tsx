@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 
+import { DataTable } from '@app/components/data-table/data-table';
 import { Badge } from '@app/components/ui/badge';
 import { Button } from '@app/components/ui/button';
 import {
@@ -14,7 +15,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@app/components/ui/tooltip';
-import { DataGrid, GridColDef, GridRenderCellParams } from '@mui/x-data-grid';
+import type { ColumnDef } from '@tanstack/react-table';
 
 import type { ScanAsset, ScanCheck } from '../ModelAudit.types';
 
@@ -27,14 +28,14 @@ interface ChecksSectionProps {
   filesScanned?: number;
 }
 
-// Status badge component for DataGrid cells
+// Status badge component for table cells
 function StatusBadge({ status }: { status: string }) {
   const label = status === 'passed' ? 'Passed' : status === 'failed' ? 'Failed' : 'Skipped';
   const variant = status === 'passed' ? 'success' : status === 'failed' ? 'critical' : 'secondary';
   return <Badge variant={variant}>{label}</Badge>;
 }
 
-// Severity badge component for DataGrid cells
+// Severity badge component for table cells
 function SeverityBadge({ severity }: { severity: string }) {
   const variant =
     severity === 'error' || severity === 'critical'
@@ -64,114 +65,141 @@ export default function ChecksSection({
     filteredChecks = filteredChecks.filter((check) => check.status !== 'passed');
   }
 
-  // Define columns for data grid
-  const getColumns = (): GridColDef[] => [
-    {
-      field: 'status',
-      headerName: 'Status',
-      width: 120,
-      sortComparator: (v1: string, v2: string) => {
-        const statusOrder = { failed: 2, skipped: 1, passed: 0 };
-        const order1 = statusOrder[v1 as keyof typeof statusOrder] ?? 0;
-        const order2 = statusOrder[v2 as keyof typeof statusOrder] ?? 0;
-        return order1 - order2;
+  // Define columns for table
+  const columns = useMemo<ColumnDef<ScanCheck>[]>(
+    () => [
+      {
+        accessorKey: 'status',
+        header: 'Status',
+        size: 120,
+        sortingFn: (rowA, rowB) => {
+          const statusOrder = { failed: 2, skipped: 1, passed: 0 };
+          const a = statusOrder[rowA.original.status as keyof typeof statusOrder] ?? 0;
+          const b = statusOrder[rowB.original.status as keyof typeof statusOrder] ?? 0;
+          return a - b;
+        },
+        cell: ({ getValue }) => <StatusBadge status={getValue<string>()} />,
+        meta: {
+          filterVariant: 'select',
+          filterOptions: [
+            { label: 'Failed', value: 'failed' },
+            { label: 'Passed', value: 'passed' },
+            { label: 'Skipped', value: 'skipped' },
+          ],
+        },
       },
-      renderCell: (params: GridRenderCellParams) => <StatusBadge status={params.value as string} />,
-    },
-    {
-      field: 'name',
-      headerName: 'Check Name',
-      flex: 1,
-      minWidth: 250,
-      renderCell: (params: GridRenderCellParams) => (
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span className="text-sm truncate">{params.value}</span>
-            </TooltipTrigger>
-            <TooltipContent>{params.value}</TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      ),
-    },
-    {
-      field: 'severity',
-      headerName: 'Severity',
-      width: 120,
-      sortComparator: (v1: string, v2: string) => {
-        const severityOrder = { critical: 4, error: 3, warning: 2, info: 1, debug: 0 };
-        const order1 = severityOrder[v1 as keyof typeof severityOrder] ?? 0;
-        const order2 = severityOrder[v2 as keyof typeof severityOrder] ?? 0;
-        return order1 - order2;
+      {
+        accessorKey: 'name',
+        header: 'Check Name',
+        size: 250,
+        cell: ({ getValue }) => {
+          const value = getValue<string>();
+          return (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="text-sm truncate block">{value}</span>
+                </TooltipTrigger>
+                <TooltipContent>{value}</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          );
+        },
       },
-      renderCell: (params: GridRenderCellParams) => {
-        if (!params.value) {
-          return null;
-        }
-        return <SeverityBadge severity={params.value as string} />;
+      {
+        accessorKey: 'severity',
+        header: 'Severity',
+        size: 120,
+        sortingFn: (rowA, rowB) => {
+          const severityOrder = { critical: 4, error: 3, warning: 2, info: 1, debug: 0 };
+          const a = severityOrder[rowA.original.severity as keyof typeof severityOrder] ?? 0;
+          const b = severityOrder[rowB.original.severity as keyof typeof severityOrder] ?? 0;
+          return a - b;
+        },
+        cell: ({ getValue }) => {
+          const value = getValue<string>();
+          if (!value) {
+            return null;
+          }
+          return <SeverityBadge severity={value} />;
+        },
+        meta: {
+          filterVariant: 'select',
+          filterOptions: [
+            { label: 'Critical', value: 'critical' },
+            { label: 'Error', value: 'error' },
+            { label: 'Warning', value: 'warning' },
+            { label: 'Info', value: 'info' },
+            { label: 'Debug', value: 'debug' },
+          ],
+        },
       },
-    },
-    {
-      field: 'message',
-      headerName: 'Message',
-      flex: 2,
-      minWidth: 400,
-      renderCell: (params: GridRenderCellParams) => (
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span className="text-sm truncate">{params.value}</span>
-            </TooltipTrigger>
-            <TooltipContent className="max-w-md">{params.value}</TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      ),
-    },
-    {
-      field: 'location',
-      headerName: 'Location',
-      width: 200,
-      renderCell: (params: GridRenderCellParams) => {
-        if (!params.value) {
-          return <span className="text-muted-foreground">-</span>;
-        }
-        const shortPath = params.value.split('/').slice(-2).join('/');
-        return (
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span className="text-xs font-mono truncate">{shortPath}</span>
-              </TooltipTrigger>
-              <TooltipContent className="font-mono text-xs">{params.value}</TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        );
+      {
+        accessorKey: 'message',
+        header: 'Message',
+        size: 400,
+        cell: ({ getValue }) => {
+          const value = getValue<string>();
+          return (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="text-sm truncate block">{value}</span>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-md">{value}</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          );
+        },
       },
-    },
-    {
-      field: 'why',
-      headerName: 'Reason',
-      flex: 1,
-      minWidth: 200,
-      renderCell: (params: GridRenderCellParams) => {
-        if (!params.value) {
-          return <span className="text-muted-foreground">-</span>;
-        }
-        return (
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span className="text-xs italic truncate text-muted-foreground">
-                  {params.value}
-                </span>
-              </TooltipTrigger>
-              <TooltipContent>{params.value}</TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        );
+      {
+        accessorKey: 'location',
+        header: 'Location',
+        size: 200,
+        cell: ({ getValue }) => {
+          const value = getValue<string>();
+          if (!value) {
+            return <span className="text-muted-foreground">-</span>;
+          }
+          const shortPath = value.split('/').slice(-2).join('/');
+          return (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="text-xs font-mono truncate block">{shortPath}</span>
+                </TooltipTrigger>
+                <TooltipContent className="font-mono text-xs">{value}</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          );
+        },
       },
-    },
-  ];
+      {
+        accessorKey: 'why',
+        header: 'Reason',
+        size: 200,
+        cell: ({ getValue }) => {
+          const value = getValue<string>();
+          if (!value) {
+            return <span className="text-muted-foreground">-</span>;
+          }
+          return (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="text-xs italic truncate block text-muted-foreground">
+                    {value}
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>{value}</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          );
+        },
+      },
+    ],
+    [],
+  );
 
   // Only show if we have check data
   if (totalChecks !== undefined && checks.length === 0 && totalChecks === 0) {
@@ -218,78 +246,19 @@ export default function ChecksSection({
             </Button>
           </div>
 
-          {/* Checks data grid */}
-          <div className="w-full">
-            <DataGrid
-              rows={filteredChecks}
-              getRowId={(row) =>
-                `${row.timestamp}-${row.name}-${row.location ?? ''}-${row.message}`
-              }
-              columns={getColumns()}
-              initialState={{
-                pagination: {
-                  paginationModel: { pageSize: 25 },
-                },
-                sorting: {
-                  sortModel: [
-                    { field: 'severity', sort: 'desc' },
-                    { field: 'status', sort: 'desc' },
-                  ],
-                },
-              }}
-              pageSizeOptions={[10, 25, 50, 100]}
-              disableRowSelectionOnClick
-              autoHeight
-              density="standard"
-              getRowClassName={(params) =>
-                params.row.status === 'failed'
-                  ? 'failed-check-row'
-                  : params.row.status === 'passed'
-                    ? 'passed-check-row'
-                    : 'skipped-check-row'
-              }
-              sx={{
-                borderRadius: '8px',
-                border: '1px solid',
-                borderColor: 'divider',
-                '& .failed-check-row': {
-                  bgcolor: (theme) =>
-                    theme.palette.mode === 'dark'
-                      ? 'rgba(244, 67, 54, 0.08)'
-                      : 'rgba(244, 67, 54, 0.04)',
-                },
-                '& .passed-check-row': {
-                  bgcolor: (theme) =>
-                    theme.palette.mode === 'dark'
-                      ? 'rgba(76, 175, 80, 0.08)'
-                      : 'rgba(76, 175, 80, 0.04)',
-                },
-                '& .skipped-check-row': {
-                  bgcolor: (theme) =>
-                    theme.palette.mode === 'dark'
-                      ? 'rgba(158, 158, 158, 0.08)'
-                      : 'rgba(158, 158, 158, 0.04)',
-                },
-                '& .MuiDataGrid-cell': {
-                  borderBottom: 'none',
-                  py: 2,
-                  px: 2,
-                  lineHeight: 'inherit',
-                },
-                '& .MuiDataGrid-columnHeaders': {
-                  bgcolor: 'background.paper',
-                  borderBottom: 2,
-                  borderColor: 'divider',
-                },
-                '& .MuiDataGrid-columnHeader': {
-                  px: 2,
-                },
-              }}
-              localeText={{
-                noRowsLabel: showPassed ? 'No checks to display' : 'All checks passed',
-              }}
-            />
-          </div>
+          <DataTable
+            columns={columns}
+            data={filteredChecks}
+            getRowId={(row) => `${row.timestamp}-${row.name}-${row.location ?? ''}-${row.message}`}
+            initialSorting={[
+              { id: 'severity', desc: true },
+              { id: 'status', desc: true },
+            ]}
+            initialPageSize={25}
+            emptyMessage={showPassed ? 'No checks to display' : 'All checks passed'}
+            showToolbar={false}
+            showPagination
+          />
         </>
       )}
 

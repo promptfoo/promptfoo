@@ -17,7 +17,7 @@ interface DataTableFilterProps<TData> {
   table: Table<TData>;
 }
 
-type FilterOperator =
+type ComparisonOperator =
   | 'contains'
   | 'equals'
   | 'startsWith'
@@ -27,7 +27,11 @@ type FilterOperator =
   | 'lt'
   | 'lte';
 
-const OPERATORS: { value: FilterOperator; label: string }[] = [
+type SelectOperator = 'equals' | 'notEquals' | 'isAny';
+
+type FilterOperator = ComparisonOperator | SelectOperator;
+
+const COMPARISON_OPERATORS: { value: ComparisonOperator; label: string }[] = [
   { value: 'contains', label: 'contains' },
   { value: 'equals', label: 'equals' },
   { value: 'startsWith', label: 'starts with' },
@@ -38,11 +42,168 @@ const OPERATORS: { value: FilterOperator; label: string }[] = [
   { value: 'lte', label: '<=' },
 ];
 
+const SELECT_OPERATORS: { value: SelectOperator; label: string }[] = [
+  { value: 'equals', label: 'equals' },
+  { value: 'notEquals', label: 'not equals' },
+  { value: 'isAny', label: 'is any of' },
+];
+
 interface ActiveFilter {
   id: string;
   columnId: string;
   operator: FilterOperator;
+  value: string | string[]; // Can be array for multi-select
+}
+
+interface FilterOption {
+  label: string;
   value: string;
+}
+
+// Select filter component for discrete values
+interface SelectFilterProps {
+  operator: SelectOperator;
+  value: string | string[];
+  options: FilterOption[];
+  onOperatorChange: (operator: SelectOperator) => void;
+  onChange: (value: string | string[]) => void;
+}
+
+function SelectFilterInput({
+  operator,
+  value,
+  options,
+  onOperatorChange,
+  onChange,
+}: SelectFilterProps) {
+  const isMultiSelect = operator === 'isAny';
+  const selectedValues = Array.isArray(value) ? value : value ? [value] : [];
+
+  const handleSingleSelect = (newValue: string) => {
+    onChange(newValue);
+  };
+
+  const handleMultiSelectToggle = (optionValue: string) => {
+    const currentValues = Array.isArray(value) ? value : [];
+    const newValues = currentValues.includes(optionValue)
+      ? currentValues.filter((v) => v !== optionValue)
+      : [...currentValues, optionValue];
+    onChange(newValues);
+  };
+
+  return (
+    <>
+      <Select value={operator} onValueChange={onOperatorChange}>
+        <SelectTrigger className="h-8 w-[110px] shrink-0">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {SELECT_OPERATORS.map((op) => (
+            <SelectItem key={op.value} value={op.value}>
+              {op.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
+      {isMultiSelect ? (
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="outline" className="h-8 flex-1 justify-start font-normal">
+              {selectedValues.length > 0 ? (
+                <span className="truncate">
+                  {selectedValues.length} selected
+                  {selectedValues.length <= 2 &&
+                    `: ${selectedValues.map((v) => options.find((o) => o.value === v)?.label || v).join(', ')}`}
+                </span>
+              ) : (
+                <span className="text-muted-foreground">Select values...</span>
+              )}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-[200px] p-2" align="start">
+            <div className="space-y-1">
+              {options.map((option) => {
+                const isSelected = selectedValues.includes(option.value);
+                return (
+                  <div
+                    key={option.value}
+                    className="flex items-center space-x-2 px-2 py-1.5 rounded-sm hover:bg-accent cursor-pointer"
+                    onClick={() => handleMultiSelectToggle(option.value)}
+                  >
+                    <div
+                      className={`h-4 w-4 border rounded flex items-center justify-center ${
+                        isSelected
+                          ? 'bg-primary border-primary text-primary-foreground'
+                          : 'border-input'
+                      }`}
+                    >
+                      {isSelected && <span className="text-xs">✓</span>}
+                    </div>
+                    <span className="text-sm">{option.label}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </PopoverContent>
+        </Popover>
+      ) : (
+        <Select
+          value={Array.isArray(value) ? value[0] || '' : value}
+          onValueChange={handleSingleSelect}
+        >
+          <SelectTrigger className="h-8 flex-1">
+            <SelectValue placeholder="Select value..." />
+          </SelectTrigger>
+          <SelectContent>
+            {options.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      )}
+    </>
+  );
+}
+
+// Comparison filter component for text/numeric values
+interface ComparisonFilterProps {
+  operator: FilterOperator;
+  value: string;
+  onOperatorChange: (operator: FilterOperator) => void;
+  onValueChange: (value: string) => void;
+}
+
+function ComparisonFilterInput({
+  operator,
+  value,
+  onOperatorChange,
+  onValueChange,
+}: ComparisonFilterProps) {
+  return (
+    <>
+      <Select value={operator} onValueChange={onOperatorChange}>
+        <SelectTrigger className="h-8 w-[110px] shrink-0">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {COMPARISON_OPERATORS.map((op) => (
+            <SelectItem key={op.value} value={op.value}>
+              {op.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Input
+        placeholder="Value..."
+        value={value}
+        onChange={(e) => onValueChange(e.target.value)}
+        className="h-8 flex-1"
+      />
+    </>
+  );
 }
 
 export function DataTableFilter<TData>({ table }: DataTableFilterProps<TData>) {
@@ -65,11 +226,14 @@ export function DataTableFilter<TData>({ table }: DataTableFilterProps<TData>) {
     if (filterableColumns.length === 0) {
       return;
     }
+    const firstColumn = filterableColumns[0];
+    const { isSelectFilter } = getColumnMetadata(firstColumn.id);
+
     const newFilter: ActiveFilter = {
       id: crypto.randomUUID(),
-      columnId: filterableColumns[0].id,
-      operator: 'contains',
-      value: '',
+      columnId: firstColumn.id,
+      operator: isSelectFilter ? 'equals' : 'contains',
+      value: isSelectFilter ? '' : '',
     };
     setActiveFilters([...activeFilters, newFilter]);
   };
@@ -78,7 +242,13 @@ export function DataTableFilter<TData>({ table }: DataTableFilterProps<TData>) {
   const applyFilter = React.useCallback(
     (filter: ActiveFilter) => {
       const column = table.getColumn(filter.columnId);
-      if (!column || !filter.value) {
+
+      // Check if filter has a value (handle both string and array)
+      const hasValue = Array.isArray(filter.value)
+        ? filter.value.length > 0
+        : Boolean(filter.value);
+
+      if (!column || !hasValue) {
         column?.setFilterValue(undefined);
         return;
       }
@@ -120,7 +290,25 @@ export function DataTableFilter<TData>({ table }: DataTableFilterProps<TData>) {
     setActiveFilters([]);
   };
 
-  const activeFilterCount = activeFilters.filter((f) => f.value).length;
+  const activeFilterCount = activeFilters.filter((f) => {
+    return Array.isArray(f.value) ? f.value.length > 0 : Boolean(f.value);
+  }).length;
+
+  // Helper to get column metadata
+  const getColumnMetadata = React.useCallback(
+    (columnId: string) => {
+      const column = table.getColumn(columnId);
+      const filterVariant = column?.columnDef.meta?.filterVariant as 'select' | undefined;
+      const filterOptions = column?.columnDef.meta?.filterOptions as FilterOption[] | undefined;
+
+      return {
+        column,
+        isSelectFilter: filterVariant === 'select' && filterOptions !== undefined,
+        filterOptions: filterOptions || [],
+      };
+    },
+    [table],
+  );
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -155,64 +343,83 @@ export function DataTableFilter<TData>({ table }: DataTableFilterProps<TData>) {
             <p className="text-sm text-muted-foreground">No filters applied</p>
           ) : (
             <div className="space-y-2">
-              {activeFilters.map((filter) => (
-                <div key={filter.id} className="flex items-center gap-1.5">
-                  <Select
-                    value={filter.columnId}
-                    onValueChange={(value) => {
-                      // Clear old column filter
-                      const oldColumn = table.getColumn(filter.columnId);
-                      oldColumn?.setFilterValue(undefined);
-                      // Update to new column
-                      updateFilter(filter.id, { columnId: value, value: '' });
-                    }}
-                  >
-                    <SelectTrigger className="h-8 w-[110px] shrink-0">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {filterableColumns.map((column) => (
-                        <SelectItem key={column.id} value={column.id}>
-                          {typeof column.columnDef.header === 'string'
-                            ? column.columnDef.header
-                            : column.id}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Select
-                    value={filter.operator}
-                    onValueChange={(value: FilterOperator) => {
-                      updateFilter(filter.id, { operator: value });
-                    }}
-                  >
-                    <SelectTrigger className="h-8 w-[110px] shrink-0">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {OPERATORS.map((op) => (
-                        <SelectItem key={op.value} value={op.value}>
-                          {op.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Input
-                    placeholder="Value..."
-                    value={filter.value}
-                    onChange={(e) => updateFilter(filter.id, { value: e.target.value })}
-                    className="h-8 flex-1"
-                  />
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => removeFilter(filter.id)}
-                    className="h-8 w-8 p-0 shrink-0"
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-              ))}
+              {activeFilters.map((filter) => {
+                const { isSelectFilter, filterOptions } = getColumnMetadata(filter.columnId);
+
+                return (
+                  <div key={filter.id} className="flex items-center gap-1.5">
+                    {/* Column selector */}
+                    <Select
+                      value={filter.columnId}
+                      onValueChange={(value) => {
+                        // Clear old column filter
+                        const oldColumn = table.getColumn(filter.columnId);
+                        oldColumn?.setFilterValue(undefined);
+                        // Update to new column
+                        updateFilter(filter.id, { columnId: value, value: '' });
+                      }}
+                    >
+                      <SelectTrigger className="h-8 w-[110px] shrink-0">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {filterableColumns.map((column) => (
+                          <SelectItem key={column.id} value={column.id}>
+                            {typeof column.columnDef.header === 'string'
+                              ? column.columnDef.header
+                              : column.id}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+
+                    {/* Filter input - either select or comparison */}
+                    {isSelectFilter ? (
+                      <SelectFilterInput
+                        operator={filter.operator as SelectOperator}
+                        value={filter.value}
+                        options={filterOptions}
+                        onOperatorChange={(operator) => {
+                          // When switching to/from isAny, reset value appropriately
+                          const newValue =
+                            operator === 'isAny'
+                              ? Array.isArray(filter.value)
+                                ? filter.value
+                                : []
+                              : Array.isArray(filter.value)
+                                ? filter.value[0] || ''
+                                : filter.value;
+                          updateFilter(filter.id, { operator, value: newValue });
+                        }}
+                        onChange={(value) => {
+                          updateFilter(filter.id, { value });
+                        }}
+                      />
+                    ) : (
+                      <ComparisonFilterInput
+                        operator={filter.operator as ComparisonOperator}
+                        value={typeof filter.value === 'string' ? filter.value : ''}
+                        onOperatorChange={(operator) => {
+                          updateFilter(filter.id, { operator });
+                        }}
+                        onValueChange={(value) => {
+                          updateFilter(filter.id, { value });
+                        }}
+                      />
+                    )}
+
+                    {/* Remove button */}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => removeFilter(filter.id)}
+                      className="h-8 w-8 p-0 shrink-0"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                );
+              })}
             </div>
           )}
 

@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 
+import { DataTable } from '@app/components/data-table/data-table';
 import { useApiHealth } from '@app/hooks/useApiHealth';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
@@ -18,14 +19,6 @@ import DialogTitle from '@mui/material/DialogTitle';
 import IconButton from '@mui/material/IconButton';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
-import {
-  DataGrid,
-  type GridColDef,
-  type GridRenderCellParams,
-  type GridRowSelectionModel,
-  GridToolbarContainer,
-  useGridApiRef,
-} from '@mui/x-data-grid';
 import { makeDefaultPolicyName, makeInlinePolicyId } from '@promptfoo/redteam/plugins/policy/utils';
 import { parse } from 'csv-parse/browser/esm/sync';
 import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
@@ -33,17 +26,7 @@ import { TestCaseGenerateButton } from '../TestCaseDialog';
 import { useTestCaseGeneration } from '../TestCaseGenerationProvider';
 import { PolicySuggestionsSidebar } from './PolicySuggestionsSidebar';
 import type { PolicyObject } from '@promptfoo/redteam/types';
-
-// Augment the toolbar props interface
-declare module '@mui/x-data-grid' {
-  interface ToolbarPropsOverrides {
-    selectedCount: number;
-    onDeleteSelected: () => void;
-    onAddPolicy: () => void;
-    onUploadCsv: (event: React.ChangeEvent<HTMLInputElement>) => void;
-    isUploadingCsv: boolean;
-  }
-}
+import type { ColumnDef, RowSelectionState } from '@tanstack/react-table';
 
 type PolicyRow = {
   id: string;
@@ -65,78 +48,15 @@ type PolicyDialogState = {
   };
 };
 
-function CustomToolbar({
-  selectedCount,
-  onDeleteSelected,
-  onAddPolicy,
-  onUploadCsv,
-  isUploadingCsv,
-}: {
-  selectedCount: number;
-  onDeleteSelected: () => void;
-  onAddPolicy: () => void;
-  onUploadCsv: (event: React.ChangeEvent<HTMLInputElement>) => void;
-  isUploadingCsv: boolean;
-}) {
-  return (
-    <GridToolbarContainer sx={{ p: 1, gap: 1 }}>
-      <Button
-        startIcon={<AddIcon />}
-        onClick={onAddPolicy}
-        variant="contained"
-        color="primary"
-        size="small"
-      >
-        Add Policy
-      </Button>
-      <Button
-        component="label"
-        variant="outlined"
-        startIcon={isUploadingCsv ? null : <FileUploadIcon />}
-        disabled={isUploadingCsv}
-        size="small"
-      >
-        {isUploadingCsv ? 'Uploading...' : 'Upload CSV'}
-        <input
-          type="file"
-          hidden
-          accept=".csv"
-          onChange={onUploadCsv}
-          onClick={(e) => {
-            (e.target as HTMLInputElement).value = '';
-          }}
-          disabled={isUploadingCsv}
-        />
-      </Button>
-      {selectedCount > 0 && (
-        <Button
-          color="error"
-          variant="outlined"
-          size="small"
-          onClick={onDeleteSelected}
-          startIcon={<DeleteIcon />}
-          sx={{ border: 0 }}
-        >
-          Delete ({selectedCount})
-        </Button>
-      )}
-    </GridToolbarContainer>
-  );
-}
-
 export const CustomPoliciesSection = () => {
   const { config, updateConfig } = useRedTeamConfig();
   const toast = useToast();
   const { recordEvent } = useTelemetry();
-  const apiRef = useGridApiRef();
   const [generatingPolicyId, setGeneratingPolicyId] = useState<string | null>(null);
   const [isUploadingCsv, setIsUploadingCsv] = useState(false);
   const [isGeneratingPolicies, setIsGeneratingPolicies] = useState(false);
   const [suggestedPolicies, setSuggestedPolicies] = useState<PolicyObject[]>([]);
-  const [rowSelectionModel, setRowSelectionModel] = useState<GridRowSelectionModel>({
-    type: 'include',
-    ids: new Set([]),
-  });
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const isGeneratingPoliciesRef = useRef(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
 
@@ -354,28 +274,30 @@ export const CustomPoliciesSection = () => {
   };
 
   const handleDeleteSelected = () => {
-    if (!rowSelectionModel?.ids || rowSelectionModel.ids.size === 0) {
+    const selectedCount = Object.keys(rowSelection).filter((key) => rowSelection[key]).length;
+    if (selectedCount === 0) {
       return;
     }
     setConfirmDeleteOpen(true);
   };
 
   const handleConfirmDelete = () => {
-    if (!rowSelectionModel?.ids) {
+    const selectedIds = Object.keys(rowSelection).filter((key) => rowSelection[key]);
+    if (selectedIds.length === 0) {
       return;
     }
     const otherPlugins = config.plugins.filter((p) =>
       typeof p === 'string' ? true : p.id !== 'policy',
     );
 
-    const selectedIds = rowSelectionModel.ids;
+    const selectedIdsSet = new Set(selectedIds);
     const remainingPolicies = policyPlugins
       .filter((p) => {
         const policyId =
           typeof p.config.policy === 'string'
             ? makeInlinePolicyId(p.config.policy)
             : p.config.policy.id;
-        return !selectedIds.has(policyId);
+        return !selectedIdsSet.has(policyId);
       })
       .map((p) => ({
         id: 'policy',
@@ -390,7 +312,7 @@ export const CustomPoliciesSection = () => {
 
     setPolicyNames(newPolicyNames);
     updateConfig('plugins', [...otherPlugins, ...remainingPolicies]);
-    setRowSelectionModel({ type: 'include', ids: new Set() });
+    setRowSelection({});
     setConfirmDeleteOpen(false);
   };
 
@@ -648,26 +570,24 @@ export const CustomPoliciesSection = () => {
     [toast, generateTestCase],
   );
 
-  const columns: GridColDef<PolicyRow>[] = useMemo(
+  const columns: ColumnDef<PolicyRow>[] = useMemo(
     () => [
       {
-        field: 'name',
-        headerName: 'Name',
-        flex: 0.75,
+        accessorKey: 'name',
+        header: 'Name',
+        size: 200,
       },
       {
-        field: 'policyText',
-        headerName: 'Policy Text',
-        flex: 3,
+        accessorKey: 'policyText',
+        header: 'Policy Text',
+        size: 600,
       },
       {
-        field: 'actions',
-        headerName: 'Actions',
-        flex: 0.5,
-        minWidth: 160,
-        sortable: false,
-        filterable: false,
-        renderCell: (params: GridRenderCellParams<PolicyRow>) => (
+        id: 'actions',
+        header: 'Actions',
+        size: 160,
+        enableSorting: false,
+        cell: ({ row }) => (
           <Box
             sx={{
               display: 'flex',
@@ -678,17 +598,17 @@ export const CustomPoliciesSection = () => {
             }}
           >
             <Tooltip title="Edit">
-              <IconButton size="small" onClick={() => handleEditPolicy(params.row)}>
+              <IconButton size="small" onClick={() => handleEditPolicy(row.original)}>
                 <EditIcon fontSize="small" />
               </IconButton>
             </Tooltip>
             <TestCaseGenerateButton
-              onClick={() => handleGenerateTestCase(params.row)}
+              onClick={() => handleGenerateTestCase(row.original)}
               disabled={
                 apiHealthStatus !== 'connected' ||
-                (generatingTestCase && generatingPolicyId === params.row.id)
+                (generatingTestCase && generatingPolicyId === row.original.id)
               }
-              isGenerating={generatingTestCase && generatingPolicyId === params.row.id}
+              isGenerating={generatingTestCase && generatingPolicyId === row.original.id}
               tooltipTitle={
                 apiHealthStatus === 'connected'
                   ? undefined
@@ -713,6 +633,55 @@ export const CustomPoliciesSection = () => {
   // Determine if we should show the suggestions sidebar - show whenever policy generation is possible
   const showSuggestionsSidebar = canGeneratePolicies;
 
+  // Get selected count
+  const selectedCount = Object.keys(rowSelection).filter((key) => rowSelection[key]).length;
+
+  // Custom toolbar actions
+  const toolbarActions = (
+    <>
+      <Button
+        startIcon={<AddIcon />}
+        onClick={handleAddPolicy}
+        variant="contained"
+        color="primary"
+        size="small"
+      >
+        Add Policy
+      </Button>
+      <Button
+        component="label"
+        variant="outlined"
+        startIcon={isUploadingCsv ? null : <FileUploadIcon />}
+        disabled={isUploadingCsv}
+        size="small"
+      >
+        {isUploadingCsv ? 'Uploading...' : 'Upload CSV'}
+        <input
+          type="file"
+          hidden
+          accept=".csv"
+          onChange={handleCsvUpload}
+          onClick={(e) => {
+            (e.target as HTMLInputElement).value = '';
+          }}
+          disabled={isUploadingCsv}
+        />
+      </Button>
+      {selectedCount > 0 && (
+        <Button
+          color="error"
+          variant="outlined"
+          size="small"
+          onClick={handleDeleteSelected}
+          startIcon={<DeleteIcon />}
+          sx={{ border: 0 }}
+        >
+          Delete ({selectedCount})
+        </Button>
+      )}
+    </>
+  );
+
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }} ref={containerRef}>
       <Box
@@ -726,25 +695,17 @@ export const CustomPoliciesSection = () => {
       >
         {/* Main table area */}
         <Box sx={{ height: '100%', minWidth: 0 }}>
-          <DataGrid
-            apiRef={apiRef}
-            rows={rows}
+          <DataTable
+            data={rows}
             columns={columns}
-            checkboxSelection
-            disableRowSelectionOnClick
-            slots={{ toolbar: CustomToolbar }}
-            slotProps={{
-              toolbar: {
-                selectedCount: rowSelectionModel?.ids?.size ?? 0,
-                onDeleteSelected: handleDeleteSelected,
-                onAddPolicy: handleAddPolicy,
-                onUploadCsv: handleCsvUpload,
-                isUploadingCsv,
-              },
-            }}
-            onRowSelectionModelChange={setRowSelectionModel}
-            rowSelectionModel={rowSelectionModel}
+            enableRowSelection
+            rowSelection={rowSelection}
+            onRowSelectionChange={setRowSelection}
+            getRowId={(row) => row.id}
+            toolbarActions={toolbarActions}
             showToolbar
+            showPagination={false}
+            emptyMessage="No custom policies configured. Add your first policy using the 'Add Policy' button above."
           />
         </Box>
 
@@ -763,13 +724,12 @@ export const CustomPoliciesSection = () => {
       {/* Delete confirmation dialog */}
       <Dialog open={confirmDeleteOpen} onClose={handleCancelDelete}>
         <DialogTitle>
-          Delete {rowSelectionModel?.ids?.size ?? 0} polic
-          {(rowSelectionModel?.ids?.size ?? 0) === 1 ? 'y' : 'ies'}?
+          Delete {selectedCount} polic{selectedCount === 1 ? 'y' : 'ies'}?
         </DialogTitle>
         <DialogContent>
           <DialogContentText>
             Are you sure you want to delete the selected polic
-            {(rowSelectionModel?.ids?.size ?? 0) === 1 ? 'y' : 'ies'}? This action cannot be undone.
+            {selectedCount === 1 ? 'y' : 'ies'}? This action cannot be undone.
           </DialogContentText>
         </DialogContent>
         <DialogActions>
