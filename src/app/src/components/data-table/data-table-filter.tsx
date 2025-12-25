@@ -17,7 +17,15 @@ interface DataTableFilterProps<TData> {
   table: Table<TData>;
 }
 
-type FilterOperator = 'contains' | 'equals' | 'startsWith' | 'endsWith' | 'gt' | 'gte' | 'lt' | 'lte';
+type FilterOperator =
+  | 'contains'
+  | 'equals'
+  | 'startsWith'
+  | 'endsWith'
+  | 'gt'
+  | 'gte'
+  | 'lt'
+  | 'lte';
 
 const OPERATORS: { value: FilterOperator; label: string }[] = [
   { value: 'contains', label: 'contains' },

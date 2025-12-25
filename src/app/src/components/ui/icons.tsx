@@ -14,9 +14,11 @@ export {
   Calendar as CalendarIcon,
   // Status/Severity icons
   CheckCircle as CheckCircleIcon,
+  ChevronDown as ChevronDownIcon,
   ChevronDown as ExpandMoreIcon,
   ChevronLeft as ChevronLeftIcon,
   ChevronRight as ChevronRightIcon,
+  ChevronUp as ChevronUpIcon,
   ChevronUp as ExpandLessIcon,
   Clock as ClockIcon,
   // Cloud/Storage icons
@@ -24,6 +26,7 @@ export {
   CloudUpload as CloudUploadIcon,
   Code as CodeIcon,
   Copy as ContentCopyIcon,
+  Copy as CopyIcon,
   Database as StorageIcon,
   Download as DownloadIcon,
   Edit as EditIcon,
@@ -46,12 +49,15 @@ export {
   Monitor as ComputerIcon,
   MoreHorizontal as MoreHorizIcon,
   MoreVertical as MoreVertIcon,
+  Pencil as PencilIcon,
   // Action icons
   Play as PlayArrowIcon,
   // Common UI icons
   Plus as AddIcon,
   RefreshCw as RefreshIcon,
+  RotateCcw as ResetIcon,
   // Navigation icons
+  Save as SaveIcon,
   Search as SearchIcon,
   Settings as SettingsIcon,
   // Security icons
@@ -59,7 +65,10 @@ export {
   ShieldAlert as ShieldAlertIcon,
   ShieldCheck as ShieldCheckIcon,
   Trash2 as DeleteIcon,
+  Trash2 as TrashIcon,
   Upload as UploadIcon,
+  Upload as PublishIcon,
+  X as CancelIcon,
   X as ClearIcon,
   X as CloseIcon,
   X as XIcon,
