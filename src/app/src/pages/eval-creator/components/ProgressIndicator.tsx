@@ -1,7 +1,7 @@
-import { Check, Circle } from 'lucide-react';
 import { Card, CardContent } from '@app/components/ui/card';
 import { cn } from '@app/lib/utils';
 import { useStore } from '@app/stores/evalConfig';
+import { Check, Circle } from 'lucide-react';
 
 interface Step {
   id: string;

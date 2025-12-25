@@ -1,6 +1,6 @@
+import { Card } from '@app/components/ui/card';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
-import { Card } from '@app/components/ui/card';
 import RunTestSuiteButton from './RunTestSuiteButton';
 
 interface RunOptionsSectionProps {
@@ -73,7 +73,8 @@ export function RunOptionsSection({
             />
             <p className="text-xs text-muted-foreground">
               {canSetDelay
-                ? 'Add a delay between API calls to avoid rate limits' : 'To set a delay, max concurrent requests must be 1'}
+                ? 'Add a delay between API calls to avoid rate limits'
+                : 'To set a delay, max concurrent requests must be 1'}
             </p>
           </div>
 
@@ -95,7 +96,8 @@ export function RunOptionsSection({
             />
             <p className="text-xs text-muted-foreground">
               {canSetMaxConcurrency
-                ? 'Maximum number of concurrent requests to make' : 'To set max concurrency, delay must be 0'}
+                ? 'Maximum number of concurrent requests to make'
+                : 'To set max concurrency, delay must be 0'}
             </p>
           </div>
         </div>

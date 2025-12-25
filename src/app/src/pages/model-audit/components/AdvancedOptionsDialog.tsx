@@ -75,7 +75,7 @@ export default function AdvancedOptionsDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onClose}>
+    <Dialog open={open} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Advanced Scan Options</DialogTitle>
@@ -93,6 +93,7 @@ export default function AdvancedOptionsDialog({
             </div>
             <div className="flex gap-2">
               <Input
+                aria-label="Add pattern"
                 placeholder="Add pattern"
                 value={blacklistInput}
                 onChange={(e) => setBlacklistInput(e.target.value)}
@@ -117,6 +118,7 @@ export default function AdvancedOptionsDialog({
                       type="button"
                       onClick={() => handleRemoveBlacklist(index)}
                       className="ml-1 hover:bg-secondary-foreground/20 rounded-full p-0.5"
+                      aria-label={`Remove ${pattern}`}
                     >
                       <XIcon className="h-3 w-3" />
                     </button>

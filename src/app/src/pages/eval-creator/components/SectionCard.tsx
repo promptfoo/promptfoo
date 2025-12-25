@@ -1,5 +1,5 @@
 import { Badge } from '@app/components/ui/badge';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@app/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@app/components/ui/card';
 
 interface SectionCardProps {
   title: string;

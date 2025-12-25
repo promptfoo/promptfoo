@@ -130,7 +130,9 @@ const AssertsForm = ({ onAdd, initialValues }: AssertsFormProps) => {
                 {/* Header: Type selector and delete button */}
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
-                    <Label className="text-sm font-medium">Type</Label>
+                    <Label htmlFor={`assert-type-${index}`} className="text-sm font-medium">
+                      Type
+                    </Label>
                     {LLM_ASSERTION_TYPES.has(assert.type) && (
                       <Badge variant="secondary" className="text-xs">
                         LLM
@@ -142,6 +144,7 @@ const AssertsForm = ({ onAdd, initialValues }: AssertsFormProps) => {
                     size="icon"
                     onClick={() => handleRemoveAssert(index)}
                     className="shrink-0"
+                    aria-label="Remove assertion"
                   >
                     <DeleteIcon className="h-4 w-4" />
                   </Button>
@@ -158,7 +161,7 @@ const AssertsForm = ({ onAdd, initialValues }: AssertsFormProps) => {
                     onAdd(newAsserts);
                   }}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger id={`assert-type-${index}`}>
                     <SelectValue placeholder="Select type" />
                   </SelectTrigger>
                   <SelectContent className="max-h-[300px]">
@@ -173,10 +176,19 @@ const AssertsForm = ({ onAdd, initialValues }: AssertsFormProps) => {
 
                 {/* Value textarea */}
                 <div className="space-y-2">
-                  <Label className="text-sm font-medium">Value</Label>
+                  <Label htmlFor={`assert-value-${index}`} className="text-sm font-medium">
+                    Value
+                  </Label>
                   <Textarea
+                    id={`assert-value-${index}`}
                     placeholder="Enter expected value or criteria..."
-                    value={typeof assert.value === 'string' ? assert.value : ''}
+                    value={
+                      typeof assert.value === 'string'
+                        ? assert.value
+                        : typeof assert.value === 'number'
+                          ? String(assert.value)
+                          : ''
+                    }
                     onChange={(e) => {
                       const newValue = e.target.value;
                       const newAsserts = asserts.map((a, i) =>

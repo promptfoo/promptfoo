@@ -493,8 +493,8 @@ describe('TestCasesSection', () => {
 
       render(<TestCasesSection varsList={[]} />);
 
-      // Find the duplicate button by the ContentCopyIcon
-      const duplicateButton = screen.getByTestId('ContentCopyIcon').parentElement as HTMLElement;
+      // Find the duplicate button by aria-label
+      const duplicateButton = screen.getByRole('button', { name: 'Duplicate test case' });
       fireEvent.click(duplicateButton);
 
       expect(mockUpdateConfig).toHaveBeenCalledWith({
@@ -519,8 +519,8 @@ describe('TestCasesSection', () => {
 
       render(<TestCasesSection varsList={[]} />);
 
-      // Find the delete button by the DeleteIcon
-      const deleteButton = screen.getByTestId('DeleteIcon').parentElement as HTMLElement;
+      // Find the delete button by aria-label
+      const deleteButton = screen.getByRole('button', { name: 'Delete test case' });
       await act(async () => {
         fireEvent.click(deleteButton);
       });

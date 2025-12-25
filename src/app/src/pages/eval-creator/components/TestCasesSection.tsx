@@ -226,7 +226,7 @@ const TestCasesSection = ({ varsList }: TestCasesSectionProps) => {
           <div className="flex items-center gap-2">
             <Tooltip>
               <TooltipTrigger asChild>
-                <label className="cursor-pointer">
+                <label className="cursor-pointer" aria-label="Upload test cases from CSV or YAML">
                   <Button variant="ghost" size="icon" asChild>
                     <span>
                       <UploadIcon className="h-4 w-4" />
@@ -342,6 +342,7 @@ const TestCasesSection = ({ varsList }: TestCasesSectionProps) => {
                               variant="ghost"
                               size="icon"
                               onClick={(event) => handleDuplicateTestCase(event, index)}
+                              aria-label="Duplicate test case"
                             >
                               <ContentCopyIcon className="h-4 w-4" />
                             </Button>
@@ -355,6 +356,7 @@ const TestCasesSection = ({ varsList }: TestCasesSectionProps) => {
                               variant="ghost"
                               size="icon"
                               onClick={(event) => handleRemoveTestCase(event, index)}
+                              aria-label="Delete test case"
                             >
                               <DeleteIcon className="h-4 w-4" />
                             </Button>

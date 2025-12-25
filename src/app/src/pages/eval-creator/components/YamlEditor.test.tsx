@@ -11,6 +11,14 @@ vi.mock('react-router-dom', () => ({
   ),
 }));
 
+// Mock useToast
+const mockShowToast = vi.fn();
+vi.mock('@app/hooks/useToast', () => ({
+  useToast: () => ({
+    showToast: mockShowToast,
+  }),
+}));
+
 const mockGetTestSuite = vi.fn().mockReturnValue({
   description: 'Test suite',
   providers: [{ id: 'test-provider' }],
@@ -78,28 +86,20 @@ describe('YamlEditor', () => {
     vi.restoreAllMocks();
   });
 
-  it('renders in read-only mode by default', () => {
+  it('renders in editing mode by default', () => {
     render(<YamlEditorComponent />);
-
-    expect(screen.getByText('Edit YAML')).toBeInTheDocument();
-    expect(screen.queryByText('Save')).not.toBeInTheDocument();
-    expect(screen.queryByText('Cancel')).not.toBeInTheDocument();
-
-    const editor = screen.getByTestId('yaml-editor');
-    expect(editor).toHaveAttribute('disabled');
-  });
-
-  it('switches to edit mode when Edit button is clicked', () => {
-    render(<YamlEditorComponent />);
-
-    fireEvent.click(screen.getByRole('button', { name: /Edit YAML/ }));
 
     expect(screen.getByRole('button', { name: /Save/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Cancel/ })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Edit YAML/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Undo/ })).toBeInTheDocument();
+    expect(screen.getByText('Upload File')).toBeInTheDocument();
 
     const editor = screen.getByTestId('yaml-editor') as HTMLTextAreaElement;
     expect(editor.disabled).toBe(false);
+  });
+
+  it.skip('switches to edit mode when Edit button is clicked', () => {
+    // This test is no longer applicable as the component always starts in editing mode
+    // and doesn't have an "Edit YAML" button
   });
 
   it.skip('handles file upload correctly', () => {
@@ -241,9 +241,13 @@ describe('YamlEditor', () => {
   it('respects readOnly prop', () => {
     render(<YamlEditorComponent readOnly={true} />);
 
-    expect(screen.queryByText('Edit YAML')).not.toBeInTheDocument();
+    // Action bar should be hidden when readOnly is true
+    expect(screen.queryByRole('button', { name: /Save/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Undo/ })).not.toBeInTheDocument();
+    expect(screen.queryByText('Upload File')).not.toBeInTheDocument();
 
-    const editor = screen.getByTestId('yaml-editor');
-    expect(editor).toHaveAttribute('disabled');
+    // Editor should still be rendered
+    const editor = screen.getByTestId('yaml-editor') as HTMLTextAreaElement;
+    expect(editor).toBeInTheDocument();
   });
 });

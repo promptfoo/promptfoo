@@ -1,5 +1,5 @@
-import { Info, Lightbulb, HelpCircle } from 'lucide-react';
 import { cn } from '@app/lib/utils';
+import { HelpCircle, Info, Lightbulb } from 'lucide-react';
 
 interface InfoBoxProps {
   children: React.ReactNode;

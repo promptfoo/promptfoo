@@ -1,11 +1,12 @@
 import { useState } from 'react';
+
+import { Badge } from '@app/components/ui/badge';
 import { Button } from '@app/components/ui/button';
 import { Card } from '@app/components/ui/card';
-import { Badge } from '@app/components/ui/badge';
-import { Plus, Settings, Trash2 } from 'lucide-react';
 import { cn } from '@app/lib/utils';
-import type { ProviderOptions } from '@promptfoo/types';
+import { Plus, Settings, Trash2 } from 'lucide-react';
 import AddProviderDialog from './AddProviderDialog';
+import type { ProviderOptions } from '@promptfoo/types';
 
 interface ProvidersListSectionProps {
   providers: ProviderOptions[];

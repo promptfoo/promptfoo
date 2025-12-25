@@ -1,6 +1,6 @@
 # MUI to shadcn/Radix UI Migration Plan
 
-This document outlines an incremental migration strategy from MUI to a design-system-driven approach using shadcn/ui, Radix UI primitives, and Tailwind CSS.
+This document outlines an incremental migration strategy from MUI to a design-system-driven approach using Promptfoo's Design system, Radix UI primitives, and Tailwind CSS.
 
 ## Goals
 
@@ -40,7 +40,6 @@ This document outlines an incremental migration strategy from MUI to a design-sy
 ### Tasks
 
 - [ ] Install Tailwind CSS and configure with Vite
-- [ ] Install shadcn/ui CLI and initialize
 - [ ] Install Radix UI primitives
 - [ ] Set up CSS variables for design tokens
 - [ ] Configure path aliases for new component library
@@ -90,7 +89,7 @@ Create `/src/app/src/styles/tokens.css`:
 
 ### Directory Structure
 
-```
+```plaintext
 src/app/src/
 ├── components/
 │   ├── ui/                    # New shadcn/Radix components
@@ -872,7 +871,7 @@ Use `/50` opacity in dark mode for subtle, non-overwhelming gradients.
 
 This is not a time estimate but a dependency map:
 
-```
+```plaintext
 Phase 0 (Foundation)
     ↓
 Phase 1 (Primitives) ←→ Phase 5 (Icons)
@@ -894,7 +893,6 @@ Phases 1, 2, 4, 5 can progress in parallel once foundation is set.
 
 ## References
 
-- [shadcn/ui](https://ui.shadcn.com/)
 - [Radix UI](https://www.radix-ui.com/)
 - [Tailwind CSS](https://tailwindcss.com/)
 - [Lucide Icons](https://lucide.dev/)

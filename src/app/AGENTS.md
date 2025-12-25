@@ -2,7 +2,7 @@
 
 React-based web UI using Vite + TypeScript. Separate workspace from main codebase.
 
-**IMPORTANT: Active Migration** - We are migrating from MUI to shadcn/Radix UI. See `MIGRATION.md` for the full plan.
+**IMPORTANT: Active Migration** - We are migrating from MUI to Promptfoo's Design system + Radix UI. See `MIGRATION.md` for the full plan.
 
 ## CRITICAL: Use callApi()
 
@@ -21,7 +21,7 @@ This handles API base URL differences between dev and production.
 
 - **React 19** + TypeScript + Vite
 - **MUI v7** (Material-UI) - legacy, being phased out
-- **shadcn/ui + Radix UI** - new component library
+- **Promptfoo's Design system + Radix UI** - new component library
 - **Tailwind CSS** - styling
 - **Vitest** for testing
 - Zustand for state management
@@ -30,7 +30,7 @@ This handles API base URL differences between dev and production.
 **Target Stack:**
 
 - React 19 + TypeScript + Vite
-- shadcn/ui + Radix UI primitives
+- Promptfoo's Design system + Radix UI primitives
 - Tailwind CSS for styling
 - Lucide React for icons
 
@@ -51,7 +51,7 @@ Avoid legacy patterns like class components, legacy context, or string refs.
 ### For NEW Code: Use shadcn/Radix
 
 ```typescript
-// New components - use shadcn/ui from components/ui/
+// New components - use Promptfoo's Design system from components/ui/
 import { Button } from '@app/components/ui/button';
 import { Dialog, DialogContent, DialogHeader } from '@app/components/ui/dialog';
 import { Input } from '@app/components/ui/input';

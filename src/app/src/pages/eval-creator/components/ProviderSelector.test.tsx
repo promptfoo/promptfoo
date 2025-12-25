@@ -37,10 +37,10 @@ describe('ProviderSelector', () => {
   });
 
   it('displays the correct number of providers', () => {
-    const chips = screen
-      .getAllByRole('button')
-      .filter((button) => button.classList.contains('MuiChip-root'));
-    expect(chips).toHaveLength(mockProviders.length);
+    // Find provider badges by looking for elements with provider IDs
+    mockProviders.forEach((provider) => {
+      expect(screen.getByText(provider.id)).toBeInTheDocument();
+    });
   });
 
   it('calls onChange when a provider is selected', () => {
@@ -62,7 +62,7 @@ describe('ProviderSelector', () => {
     fireEvent.click(providerChip);
     expect(
       screen.getByText(
-        'Click a provider to configure its settings. Hover over chips to see model IDs.',
+        'Click a provider to configure its settings. Hover over badges to see model IDs.',
       ),
     ).toBeInTheDocument();
   });

@@ -4,6 +4,13 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Navigation from './Navigation';
 
+// Mock ResizeObserver for Radix NavigationMenu
+global.ResizeObserver = class ResizeObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+};
+
 // Helper function to render Navigation with all required providers
 const renderNavigation = (
   props: { onToggleDarkMode?: () => void } = {},
@@ -37,8 +44,8 @@ describe('Navigation', () => {
 
   it('renders the navigation bar', () => {
     renderNavigation();
-    expect(screen.getByText('Create')).toBeInTheDocument();
-    expect(screen.getByText('Results')).toBeInTheDocument();
+    expect(screen.getByText('New')).toBeInTheDocument();
+    expect(screen.getByText('View Results')).toBeInTheDocument();
     expect(screen.getByText('Model Audit')).toBeInTheDocument();
     expect(screen.getByText('Prompts')).toBeInTheDocument();
     expect(screen.getByText('Datasets')).toBeInTheDocument();
@@ -47,7 +54,7 @@ describe('Navigation', () => {
 
   it('shows the Model Audit item in the Create dropdown', () => {
     renderNavigation();
-    fireEvent.click(screen.getByText('Create'));
+    fireEvent.click(screen.getByText('New'));
     const modelAuditItem = screen.getByText('Model Audit', { selector: 'div' });
     expect(modelAuditItem).toBeInTheDocument();
     expect(modelAuditItem.closest('a')).toHaveAttribute('href', '/model-audit/setup');
@@ -55,7 +62,7 @@ describe('Navigation', () => {
 
   it('activates the Create button when on model audit setup page', () => {
     renderNavigation({}, { initialEntries: ['/model-audit/setup'] });
-    const createButton = screen.getByText('Create').closest('button');
+    const createButton = screen.getByText('New').closest('button');
     // The Create button gets a visual highlight when active, but specific class depends on implementation
     expect(createButton).toBeInTheDocument();
   });
@@ -75,8 +82,8 @@ describe('Navigation', () => {
 
     renderNavigation();
 
-    expect(screen.getByText('Create')).toBeInTheDocument();
-    expect(screen.getByText('Results')).toBeInTheDocument();
+    expect(screen.getByText('New')).toBeInTheDocument();
+    expect(screen.getByText('View Results')).toBeInTheDocument();
     expect(screen.getByText('Model Audit')).toBeInTheDocument();
     expect(screen.getByText('Prompts')).toBeInTheDocument();
     expect(screen.getByText('Datasets')).toBeInTheDocument();
@@ -87,14 +94,16 @@ describe('Navigation', () => {
     renderNavigation({}, { initialEntries: ['/model-audit'] });
     const navBar = screen.getByRole('banner');
     const modelAuditLink = within(navBar).getByRole('link', { name: 'Model Audit' });
-    expect(modelAuditLink).toHaveClass('active');
+    expect(modelAuditLink).toHaveClass('bg-primary/10');
+    expect(modelAuditLink).toHaveClass('text-primary');
   });
 
   it('activates the Model Audit NavLink on /model-audit/:id path', () => {
     renderNavigation({}, { initialEntries: ['/model-audit/123'] });
     const navBar = screen.getByRole('banner');
     const modelAuditLink = within(navBar).getByRole('link', { name: 'Model Audit' });
-    expect(modelAuditLink).toHaveClass('active');
+    expect(modelAuditLink).toHaveClass('bg-primary/10');
+    expect(modelAuditLink).toHaveClass('text-primary');
   });
 
   it('does not activate Model Audit NavLink on /model-audit/setup path', () => {
@@ -103,7 +112,8 @@ describe('Navigation', () => {
     const topLevelNavLink = within(navBar).getByRole('link', { name: 'Model Audit' });
     expect(topLevelNavLink).toBeDefined();
     expect(topLevelNavLink).toHaveAttribute('href', '/model-audit');
-    expect(topLevelNavLink).not.toHaveClass('active');
+    expect(topLevelNavLink).not.toHaveClass('bg-primary/10');
+    expect(topLevelNavLink).toHaveClass('text-foreground');
   });
 
   it('does not activate Model Audit NavLink on /model-audit/history path', () => {
@@ -112,7 +122,8 @@ describe('Navigation', () => {
     const topLevelNavLink = within(navBar).getByRole('link', { name: 'Model Audit' });
     expect(topLevelNavLink).toBeDefined();
     expect(topLevelNavLink).toHaveAttribute('href', '/model-audit');
-    expect(topLevelNavLink).not.toHaveClass('active');
+    expect(topLevelNavLink).not.toHaveClass('bg-primary/10');
+    expect(topLevelNavLink).toHaveClass('text-foreground');
   });
 
   it('does not activate Model Audit NavLink on /model-audit/history/:id path', () => {
@@ -121,14 +132,15 @@ describe('Navigation', () => {
     const topLevelNavLink = within(navBar).getByRole('link', { name: 'Model Audit' });
     expect(topLevelNavLink).toBeDefined();
     expect(topLevelNavLink).toHaveAttribute('href', '/model-audit');
-    expect(topLevelNavLink).not.toHaveClass('active');
+    expect(topLevelNavLink).not.toHaveClass('bg-primary/10');
+    expect(topLevelNavLink).toHaveClass('text-foreground');
   });
 
   describe('Create Dropdown', () => {
     it('opens dropdown on click and shows Model Audit option', () => {
       renderNavigation();
 
-      const createButton = screen.getByText('Create');
+      const createButton = screen.getByText('New');
       fireEvent.click(createButton);
 
       const modelAuditItem = screen.getByText('Model Audit', { selector: 'div' });
@@ -142,7 +154,7 @@ describe('Navigation', () => {
     it('closes dropdown when clicking outside', async () => {
       renderNavigation();
 
-      const createButton = screen.getByText('Create');
+      const createButton = screen.getByText('New');
       fireEvent.click(createButton);
 
       // Wait for dropdown to appear
@@ -160,7 +172,7 @@ describe('Navigation', () => {
     it('closes dropdown when selecting an item', () => {
       renderNavigation();
 
-      const createButton = screen.getByText('Create');
+      const createButton = screen.getByText('New');
       fireEvent.click(createButton);
       expect(screen.getByText('Model Audit', { selector: 'div' })).toBeInTheDocument();
 
@@ -174,7 +186,7 @@ describe('Navigation', () => {
     it('supports keyboard navigation in dropdown', () => {
       renderNavigation();
 
-      const createButton = screen.getByText('Create');
+      const createButton = screen.getByText('New');
 
       // Click to open dropdown
       fireEvent.click(createButton);
@@ -194,7 +206,7 @@ describe('Navigation', () => {
     it('shows correct descriptions for all dropdown items', () => {
       renderNavigation();
 
-      fireEvent.click(screen.getByText('Create'));
+      fireEvent.click(screen.getByText('New'));
 
       // Verify Model Audit description
       expect(screen.getByText('Configure and run a model security scan')).toBeInTheDocument();
@@ -222,7 +234,8 @@ describe('Navigation', () => {
         (link) => link.getAttribute('href') === '/model-audit',
       );
       expect(topLevelModelAuditLink).toBeDefined();
-      expect(topLevelModelAuditLink).toHaveClass('active');
+      expect(topLevelModelAuditLink).toHaveClass('bg-primary/10');
+      expect(topLevelModelAuditLink).toHaveClass('text-primary');
     });
 
     it('activates Model Audit NavLink on /model-audit/:id path', () => {
@@ -233,7 +246,8 @@ describe('Navigation', () => {
         (link) => link.getAttribute('href') === '/model-audit',
       );
       expect(topLevelModelAuditLink).toBeDefined();
-      expect(topLevelModelAuditLink).toHaveClass('active');
+      expect(topLevelModelAuditLink).toHaveClass('bg-primary/10');
+      expect(topLevelModelAuditLink).toHaveClass('text-primary');
     });
 
     it('does not activate Model Audit NavLink on /model-audit/setup path', () => {
@@ -244,7 +258,8 @@ describe('Navigation', () => {
         (link) => link.getAttribute('href') === '/model-audit',
       );
       expect(topLevelModelAuditLink).toBeDefined();
-      expect(topLevelModelAuditLink).not.toHaveClass('active');
+      expect(topLevelModelAuditLink).not.toHaveClass('bg-primary/10');
+      expect(topLevelModelAuditLink).toHaveClass('text-foreground');
     });
 
     it('does not activate Model Audit NavLink on /model-audit/history path', () => {
@@ -255,7 +270,8 @@ describe('Navigation', () => {
         (link) => link.getAttribute('href') === '/model-audit',
       );
       expect(topLevelModelAuditLink).toBeDefined();
-      expect(topLevelModelAuditLink).not.toHaveClass('active');
+      expect(topLevelModelAuditLink).not.toHaveClass('bg-primary/10');
+      expect(topLevelModelAuditLink).toHaveClass('text-foreground');
     });
 
     it('does not activate Model Audit NavLink on deeply nested paths under excluded routes like /model-audit/history/details/123', () => {
@@ -266,7 +282,8 @@ describe('Navigation', () => {
         (link) => link.getAttribute('href') === '/model-audit',
       );
       expect(topLevelModelAuditLink).toBeDefined();
-      expect(topLevelModelAuditLink).not.toHaveClass('active');
+      expect(topLevelModelAuditLink).not.toHaveClass('bg-primary/10');
+      expect(topLevelModelAuditLink).toHaveClass('text-foreground');
     });
   });
 
@@ -274,7 +291,7 @@ describe('Navigation', () => {
     it('has proper ARIA attributes on dropdown trigger', () => {
       renderNavigation();
 
-      const createButton = screen.getByText('Create').closest('button');
+      const createButton = screen.getByText('New').closest('button');
       expect(createButton).toBeInTheDocument();
 
       // Check basic accessibility - button should be focusable
@@ -287,7 +304,7 @@ describe('Navigation', () => {
     it('has accessible link labels for Model Audit', () => {
       renderNavigation();
 
-      fireEvent.click(screen.getByText('Create'));
+      fireEvent.click(screen.getByText('New'));
 
       const modelAuditLink = screen.getByText('Model Audit', { selector: 'div' }).closest('a');
       expect(modelAuditLink).toHaveAttribute('href', '/model-audit/setup');
@@ -297,7 +314,7 @@ describe('Navigation', () => {
     it('supports keyboard navigation patterns', () => {
       renderNavigation();
 
-      const createButton = screen.getByText('Create').closest('button');
+      const createButton = screen.getByText('New').closest('button');
 
       // Should be focusable
       expect(createButton).not.toHaveAttribute('tabindex', '-1');
@@ -310,10 +327,10 @@ describe('Navigation', () => {
     });
   });
 
-  it("should display the 'Vulnerability Reports' menu item with the correct description when the Results dropdown is open", () => {
+  it("should display the 'Red Team Vulnerability Reports' menu item with the correct description when the Results dropdown is open", () => {
     renderNavigation();
 
-    const evalsButton = screen.getByRole('button', { name: /Results/i });
+    const evalsButton = screen.getByRole('button', { name: /View Results/i });
     fireEvent.click(evalsButton);
 
     expect(screen.getByText('Red Team Vulnerability Reports')).toBeInTheDocument();

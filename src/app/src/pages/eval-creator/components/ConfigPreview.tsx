@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { Tabs, TabsList, TabsTrigger } from '@app/components/ui/tabs';
+
 import { Card, CardContent, CardHeader, CardTitle } from '@app/components/ui/card';
-import { Code, Eye } from 'lucide-react';
+import { Tabs, TabsList, TabsTrigger } from '@app/components/ui/tabs';
 import { cn } from '@app/lib/utils';
 import { useStore } from '@app/stores/evalConfig';
-import YamlEditor from './YamlEditor';
+import { Code, Eye } from 'lucide-react';
 import RunTestSuiteButton from './RunTestSuiteButton';
+import YamlEditor from './YamlEditor';
 
 interface ConfigSummaryItemProps {
   label: string;
