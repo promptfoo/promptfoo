@@ -44,15 +44,16 @@ describe('TestSuites Component', () => {
     });
   });
 
-  it('should render an empty DataTable when categoryStats is empty', () => {
+  it('should render empty state message when categoryStats is empty', () => {
     renderWithProviders(<TestSuites {...defaultProps} categoryStats={{}} />);
-    // Check for the DataTable container
-    const dataTable = screen.getByRole('table');
-    expect(dataTable).toBeInTheDocument();
 
-    // Check for "No data found" message in DataTable
-    const noRowsOverlay = screen.queryByText(/No data found/i);
-    expect(noRowsOverlay).toBeInTheDocument();
+    // Check for "No data found" message in empty state
+    const emptyMessage = screen.getByText(/No data found/i);
+    expect(emptyMessage).toBeInTheDocument();
+
+    // Table should not be rendered when there's no data
+    const dataTable = screen.queryByRole('table');
+    expect(dataTable).not.toBeInTheDocument();
   });
 
   it('should render the DataTable with correct data', () => {

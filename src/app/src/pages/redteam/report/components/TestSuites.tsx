@@ -433,7 +433,7 @@ const TestSuites = ({
         size: 100,
         cell: ({ getValue }) => {
           const value = getValue<Severity>();
-          return severityDisplayNames[value];
+          return severityDisplayNames[value] || 'Unknown';
         },
         sortingFn: (rowA, rowB) => {
           const severityOrder: Record<string, number> = {

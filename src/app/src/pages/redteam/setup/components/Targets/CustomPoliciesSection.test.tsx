@@ -61,7 +61,7 @@ describe('CustomPoliciesSection', () => {
   });
 
   describe('Config Reset', () => {
-    it('should show empty grid when config.plugins is empty', async () => {
+    it('should show empty state message when config.plugins is empty', async () => {
       // Start with empty config
       const mockUseRedTeamConfig = useRedTeamConfig as unknown as Mock;
       mockUseRedTeamConfig.mockReturnValue({
@@ -73,12 +73,13 @@ describe('CustomPoliciesSection', () => {
 
       renderComponent();
 
-      // Verify the DataTable is rendered but empty
+      // Verify the empty state message is shown
       await waitFor(() => {
-        const table = screen.getByRole('table');
-        expect(table).toBeInTheDocument();
-        // No policy rows should be visible
-        expect(screen.queryByDisplayValue(/Custom Policy/)).not.toBeInTheDocument();
+        const emptyMessage = screen.getByText(/No custom policies configured/i);
+        expect(emptyMessage).toBeInTheDocument();
+        // Table should not be rendered when there's no data
+        const table = screen.queryByRole('table');
+        expect(table).not.toBeInTheDocument();
       });
     });
 
@@ -142,13 +143,16 @@ describe('CustomPoliciesSection', () => {
         </ThemeProvider>,
       );
 
-      // Verify policies are reset to empty table
+      // Verify policies are reset and empty state message is shown
       await waitFor(() => {
         expect(screen.queryByText('Custom Policy Text 1')).not.toBeInTheDocument();
         expect(screen.queryByText('Custom Policy Text 2')).not.toBeInTheDocument();
-        // Table should be empty
-        const table = screen.getByRole('table');
-        expect(table).toBeInTheDocument();
+        // Empty state message should be shown
+        const emptyMessage = screen.getByText(/No custom policies configured/i);
+        expect(emptyMessage).toBeInTheDocument();
+        // Table should not be rendered when empty
+        const table = screen.queryByRole('table');
+        expect(table).not.toBeInTheDocument();
       });
     });
   });
