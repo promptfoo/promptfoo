@@ -41,9 +41,7 @@ export interface ButtonProps
 
 function Button({ className, variant, size, asChild = false, ref, ...props }: ButtonProps) {
   const Comp = asChild ? Slot : 'button';
-  return (
-    <Comp className={cn(buttonVariants({ variant, size, className }))} ref={ref} {...props} />
-  );
+  return <Comp className={cn(buttonVariants({ variant, size, className }))} ref={ref} {...props} />;
 }
 
 export { Button, buttonVariants };

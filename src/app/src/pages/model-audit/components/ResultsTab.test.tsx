@@ -1,11 +1,11 @@
 import { createTheme, ThemeProvider } from '@mui/material/styles';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ChecksSection from './ChecksSection';
 import ResultsTab from './ResultsTab';
 
-import type { ScanIssue, ScanResult } from '../ModelAudit.types';
+import type { ScanResult } from '../ModelAudit.types';
 
 vi.mock('./ChecksSection', () => ({
   default: vi.fn(() => <div data-testid="checks-section"></div>),

@@ -18,7 +18,11 @@ function TabsList({ className, ref, ...props }: React.ComponentProps<typeof Tabs
   );
 }
 
-function TabsTrigger({ className, ref, ...props }: React.ComponentProps<typeof TabsPrimitive.Trigger>) {
+function TabsTrigger({
+  className,
+  ref,
+  ...props
+}: React.ComponentProps<typeof TabsPrimitive.Trigger>) {
   return (
     <TabsPrimitive.Trigger
       ref={ref}
@@ -31,7 +35,11 @@ function TabsTrigger({ className, ref, ...props }: React.ComponentProps<typeof T
   );
 }
 
-function TabsContent({ className, ref, ...props }: React.ComponentProps<typeof TabsPrimitive.Content>) {
+function TabsContent({
+  className,
+  ref,
+  ...props
+}: React.ComponentProps<typeof TabsPrimitive.Content>) {
   return (
     <TabsPrimitive.Content
       ref={ref}

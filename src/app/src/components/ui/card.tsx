@@ -24,9 +24,7 @@ function CardHeader({
   ref,
   ...props
 }: React.HTMLAttributes<HTMLDivElement> & { ref?: React.Ref<HTMLDivElement> }) {
-  return (
-    <div ref={ref} className={cn('flex flex-col space-y-1.5 p-6', className)} {...props} />
-  );
+  return <div ref={ref} className={cn('flex flex-col space-y-1.5 p-6', className)} {...props} />;
 }
 
 function CardTitle({
@@ -48,9 +46,7 @@ function CardDescription({
   ref,
   ...props
 }: React.HTMLAttributes<HTMLParagraphElement> & { ref?: React.Ref<HTMLParagraphElement> }) {
-  return (
-    <p ref={ref} className={cn('text-sm text-muted-foreground', className)} {...props} />
-  );
+  return <p ref={ref} className={cn('text-sm text-muted-foreground', className)} {...props} />;
 }
 
 function CardContent({

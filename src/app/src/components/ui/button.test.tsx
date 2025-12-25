@@ -59,7 +59,11 @@ describe('Button', () => {
   });
 
   it('renders with icon size', () => {
-    render(<Button size="icon" aria-label="Icon button">X</Button>);
+    render(
+      <Button size="icon" aria-label="Icon button">
+        X
+      </Button>,
+    );
     const button = screen.getByRole('button', { name: 'Icon button' });
     expect(button).toHaveClass('h-9', 'w-9');
   });

@@ -27,9 +27,7 @@ function BreadcrumbList({ className, ref, ...props }: React.ComponentProps<'ol'>
 }
 
 function BreadcrumbItem({ className, ref, ...props }: React.ComponentProps<'li'>) {
-  return (
-    <li ref={ref} className={cn('inline-flex items-center gap-1.5', className)} {...props} />
-  );
+  return <li ref={ref} className={cn('inline-flex items-center gap-1.5', className)} {...props} />;
 }
 
 function BreadcrumbLink({

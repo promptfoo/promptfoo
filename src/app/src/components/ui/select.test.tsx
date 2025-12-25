@@ -65,7 +65,7 @@ describe('Select', () => {
   });
 
   it('displays selected value', async () => {
-    const user = userEvent.setup();
+    userEvent.setup();
     render(
       <Select defaultValue="option1">
         <SelectTrigger>

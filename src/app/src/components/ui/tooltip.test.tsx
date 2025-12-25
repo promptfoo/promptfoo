@@ -31,7 +31,9 @@ describe('Tooltip', () => {
     const trigger = screen.getByText('Hover me');
     await user.hover(trigger);
 
-    expect(await screen.findByRole('tooltip', {}, { timeout: 3000 })).toHaveTextContent('Tooltip text');
+    expect(await screen.findByRole('tooltip', {}, { timeout: 3000 })).toHaveTextContent(
+      'Tooltip text',
+    );
   });
 
   it('applies custom className to content', async () => {
@@ -80,6 +82,8 @@ describe('Tooltip', () => {
       </TooltipProvider>,
     );
 
-    expect(await screen.findByRole('tooltip', {}, { timeout: 3000 })).toHaveTextContent('Always visible');
+    expect(await screen.findByRole('tooltip', {}, { timeout: 3000 })).toHaveTextContent(
+      'Always visible',
+    );
   });
 });

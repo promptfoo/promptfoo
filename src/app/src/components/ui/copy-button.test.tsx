@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CopyButton } from './copy-button';
 
 describe('CopyButton', () => {
@@ -108,10 +108,7 @@ describe('CopyButton', () => {
     // Wait for error to be logged
     await waitFor(
       () => {
-        expect(consoleSpy).toHaveBeenCalledWith(
-          'Failed to copy to clipboard:',
-          expect.any(Error),
-        );
+        expect(consoleSpy).toHaveBeenCalledWith('Failed to copy to clipboard:', expect.any(Error));
       },
       { timeout: 1000 },
     );
