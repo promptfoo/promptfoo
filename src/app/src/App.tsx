@@ -10,6 +10,7 @@ import {
   RouterProvider,
   useLocation,
 } from 'react-router-dom';
+import ErrorBoundary from './components/ErrorBoundary';
 import PageShell from './components/PageShell';
 import { ToastProvider } from './contexts/ToastContext';
 import { useTelemetry } from './hooks/useTelemetry';
@@ -71,10 +72,38 @@ const router = createBrowserRouter(
           <Route path="/prompts" element={<PromptsPage />} />
 
           {/* Model Audit routes - mirrors eval structure */}
-          <Route path="/model-audit" element={<ModelAuditLatestPage />} />
-          <Route path="/model-audits" element={<ModelAuditHistoryPage />} />
-          <Route path="/model-audit/setup" element={<ModelAuditSetupPage />} />
-          <Route path="/model-audit/:id" element={<ModelAuditResultPage />} />
+          <Route
+            path="/model-audit"
+            element={
+              <ErrorBoundary name="Model Audit">
+                <ModelAuditLatestPage />
+              </ErrorBoundary>
+            }
+          />
+          <Route
+            path="/model-audits"
+            element={
+              <ErrorBoundary name="Model Audit History">
+                <ModelAuditHistoryPage />
+              </ErrorBoundary>
+            }
+          />
+          <Route
+            path="/model-audit/setup"
+            element={
+              <ErrorBoundary name="Model Audit Setup">
+                <ModelAuditSetupPage />
+              </ErrorBoundary>
+            }
+          />
+          <Route
+            path="/model-audit/:id"
+            element={
+              <ErrorBoundary name="Model Audit Result">
+                <ModelAuditResultPage />
+              </ErrorBoundary>
+            }
+          />
           {/* Redirect legacy /model-audit/history route */}
           <Route path="/model-audit/history" element={<Navigate to="/model-audits" replace />} />
 

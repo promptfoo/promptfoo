@@ -14,14 +14,14 @@ This document outlines an incremental migration strategy from MUI to a design-sy
 
 ### MUI Usage Summary
 
-| Category | Count | Notes |
-|----------|-------|-------|
-| Files using MUI | 236 | Core components throughout |
-| Unique MUI components | 60+ | Box, Button, Typography, etc. |
-| Icons from @mui/icons-material | 110+ | Pervasive icon usage |
-| Styled components | 20+ files | styled() from @mui/material |
-| CSS files | 17 | Mixed styling approach |
-| Theme customizations | 200+ lines | Custom severity palette, dark mode |
+| Category                       | Count      | Notes                              |
+| ------------------------------ | ---------- | ---------------------------------- |
+| Files using MUI                | 236        | Core components throughout         |
+| Unique MUI components          | 60+        | Box, Button, Typography, etc.      |
+| Icons from @mui/icons-material | 110+       | Pervasive icon usage               |
+| Styled components              | 20+ files  | styled() from @mui/material        |
+| CSS files                      | 17         | Mixed styling approach             |
+| Theme customizations           | 200+ lines | Custom severity palette, dark mode |
 
 ### Complexity Hotspots
 
@@ -127,28 +127,28 @@ src/app/src/
 
 ### Component Mapping
 
-| MUI Component | Radix/shadcn Equivalent | Notes |
-|---------------|------------------------|-------|
-| `Button` | `@radix-ui/react-slot` + custom | Use variant system |
-| `IconButton` | Button with icon variant | |
-| `TextField` | Input + Label + FormMessage | Compose from primitives |
-| `Select` | `@radix-ui/react-select` | |
-| `Autocomplete` | `cmdk` or custom combobox | Complex - later phase |
-| `Dialog` | `@radix-ui/react-dialog` | |
-| `Drawer` | `vaul` or custom | |
-| `Menu` | `@radix-ui/react-dropdown-menu` | |
-| `Tooltip` | `@radix-ui/react-tooltip` | |
-| `Popover` | `@radix-ui/react-popover` | |
-| `Accordion` | `@radix-ui/react-accordion` | |
-| `Tabs` | `@radix-ui/react-tabs` | |
-| `Switch` | `@radix-ui/react-switch` | |
-| `Checkbox` | `@radix-ui/react-checkbox` | |
-| `Radio` | `@radix-ui/react-radio-group` | |
-| `Slider` | `@radix-ui/react-slider` | |
-| `Progress` | `@radix-ui/react-progress` | |
-| `Alert` | Custom with variants | |
-| `Badge/Chip` | Badge component | |
-| `Avatar` | `@radix-ui/react-avatar` | |
+| MUI Component  | Radix/shadcn Equivalent         | Notes                   |
+| -------------- | ------------------------------- | ----------------------- |
+| `Button`       | `@radix-ui/react-slot` + custom | Use variant system      |
+| `IconButton`   | Button with icon variant        |                         |
+| `TextField`    | Input + Label + FormMessage     | Compose from primitives |
+| `Select`       | `@radix-ui/react-select`        |                         |
+| `Autocomplete` | `cmdk` or custom combobox       | Complex - later phase   |
+| `Dialog`       | `@radix-ui/react-dialog`        |                         |
+| `Drawer`       | `vaul` or custom                |                         |
+| `Menu`         | `@radix-ui/react-dropdown-menu` |                         |
+| `Tooltip`      | `@radix-ui/react-tooltip`       |                         |
+| `Popover`      | `@radix-ui/react-popover`       |                         |
+| `Accordion`    | `@radix-ui/react-accordion`     |                         |
+| `Tabs`         | `@radix-ui/react-tabs`          |                         |
+| `Switch`       | `@radix-ui/react-switch`        |                         |
+| `Checkbox`     | `@radix-ui/react-checkbox`      |                         |
+| `Radio`        | `@radix-ui/react-radio-group`   |                         |
+| `Slider`       | `@radix-ui/react-slider`        |                         |
+| `Progress`     | `@radix-ui/react-progress`      |                         |
+| `Alert`        | Custom with variants            |                         |
+| `Badge/Chip`   | Badge component                 |                         |
+| `Avatar`       | `@radix-ui/react-avatar`        |                         |
 
 ### Tasks
 
@@ -414,15 +414,457 @@ import { Button } from '@/components/ui/button';
 
 ---
 
+## Design Patterns & Lessons Learned
+
+Patterns discovered during the Model Audit migration that should guide future work.
+
+### Page Background Hierarchy
+
+Use a three-tier background system to create clear visual hierarchy across the application:
+
+```tsx
+// Layer 1: Page background (base layer - most subtle)
+<div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
+  // Layer 2: Section headers (elevated layer)
+  <div className="border-b border-border bg-white/80 dark:bg-zinc-900/80 backdrop-blur-sm">
+    <div className="container max-w-7xl mx-auto px-4 py-10">{/* Header content */}</div>
+  </div>
+  // Layer 3: Content cards (most elevated)
+  <div className="container max-w-7xl mx-auto px-4 py-8">
+    <Card className="bg-white dark:bg-zinc-900 shadow-sm">{/* Card content */}</Card>
+  </div>
+</div>
+```
+
+**Rationale:**
+
+- **Avoid pure white/black**: `zinc-50/950` provides subtle warmth and reduces eye strain
+- **Semi-transparent headers**: `/80` opacity creates modern elevated feel
+- **Backdrop blur**: Adds depth and polish to headers
+- **Solid cards**: Full opacity on cards for clear content hierarchy
+
+**Reusable Components:**
+
+Use the pre-built layout components for consistency:
+
+```tsx
+import { PageContainer, PageHeader } from '@app/components/layout';
+
+// Basic usage
+<PageContainer>
+  <PageHeader>
+    <div className="container max-w-7xl mx-auto px-4 py-10">
+      <h1>Page Title</h1>
+    </div>
+  </PageHeader>
+  <div className="container mx-auto px-4 py-8">
+    <Card className="bg-white dark:bg-zinc-900">
+      {/* Content */}
+    </Card>
+  </div>
+</PageContainer>
+
+// Status-aware header (for results pages)
+<PageHeader variant={hasErrors ? 'error' : 'success'}>
+  {/* Header content */}
+</PageHeader>
+```
+
+**See also:** ModelAuditHistory.tsx, ModelAuditResult.tsx for reference implementations.
+
+### Severity Color System
+
+Use a consistent color scheme across background, border, text, and icons for each severity level:
+
+```tsx
+const severityStyles = {
+  critical: {
+    bg: 'bg-red-50 dark:bg-red-950/30',
+    border: 'border-red-200 dark:border-red-800',
+    text: 'text-red-700 dark:text-red-300',
+    icon: 'text-red-600 dark:text-red-400',
+  },
+  warning: {
+    bg: 'bg-amber-50 dark:bg-amber-950/30',
+    border: 'border-amber-200 dark:border-amber-800',
+    text: 'text-amber-700 dark:text-amber-300',
+    icon: 'text-amber-600 dark:text-amber-400',
+  },
+  info: {
+    bg: 'bg-blue-50 dark:bg-blue-950/30',
+    border: 'border-blue-200 dark:border-blue-800',
+    text: 'text-blue-700 dark:text-blue-300',
+    icon: 'text-blue-600 dark:text-blue-400',
+  },
+  success: {
+    bg: 'bg-emerald-50 dark:bg-emerald-950/30',
+    border: 'border-emerald-200 dark:border-emerald-800',
+    text: 'text-emerald-700 dark:text-emerald-300',
+    icon: 'text-emerald-600 dark:text-emerald-400',
+  },
+};
+```
+
+### Interactive States
+
+Add hover, focus, and selection states for clickable elements:
+
+```tsx
+// Clickable card with selection state
+<div
+  className={cn(
+    'rounded-xl border p-4 cursor-pointer transition-all',
+    'hover:border-primary/50 hover:shadow-sm',
+    isSelected && 'ring-2 ring-primary border-primary',
+  )}
+/>
+
+// Button-like interactive element
+<button
+  className={cn(
+    'flex items-center gap-2 px-3 py-2 rounded-lg',
+    'hover:bg-muted/50 transition-colors',
+    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+  )}
+/>
+```
+
+### Dark Mode Patterns
+
+Use opacity modifiers for dark mode backgrounds instead of solid colors:
+
+```tsx
+// Good - subtle dark backgrounds with opacity
+className = 'bg-red-50 dark:bg-red-950/30';
+className = 'bg-muted/50 dark:bg-muted/20';
+
+// Avoid - harsh solid dark backgrounds
+className = 'bg-red-50 dark:bg-red-900';
+```
+
+### Border Styling (IMPORTANT)
+
+**Never use harsh black borders.** Borders should be subtle and blend with the design.
+
+```tsx
+// Good - subtle borders that blend
+className = 'border border-border'; // Uses CSS variable (soft gray/blue tint)
+className = 'border border-muted'; // Even softer
+className = 'border-red-200 dark:border-red-900/50'; // Severity with opacity
+
+// Good - borderless with shadow for elevation
+className = 'shadow-sm'; // Subtle elevation instead of border
+className = 'ring-1 ring-black/5 dark:ring-white/10'; // Very subtle ring
+
+// Avoid - harsh borders
+className = 'border border-black'; // Never use pure black
+className = 'border border-gray-900'; // Too dark
+className = 'border-2'; // Too thick for content containers
+```
+
+**Border principles:**
+
+- Use `border-border` for standard borders (it's a soft blue-gray, not black)
+- In dark mode, borders should be barely visible (15-25% lightness)
+- For colored borders (severity), use lighter shades with opacity: `border-red-200 dark:border-red-800/50`
+- Consider using `ring-1 ring-black/5` instead of borders for subtle definition
+- Reserve `border-2` only for focus states or selected items, not for containers
+
+### Collapsible Content Groups
+
+Group related items with collapsible sections for better information density:
+
+```tsx
+<Collapsible open={isExpanded} onOpenChange={onToggle}>
+  {/* Header - always visible */}
+  <div className="p-4 border-b bg-muted/50">
+    <div className="flex items-center justify-between">
+      <h3 className="font-semibold">{title}</h3>
+      <Badge variant="warning">{count} items</Badge>
+    </div>
+  </div>
+
+  {/* Toggle button */}
+  <CollapsibleTrigger asChild>
+    <button className="w-full p-3 text-sm text-muted-foreground hover:bg-muted/50">
+      {isExpanded ? <ChevronUp /> : <ChevronDown />}
+      {isExpanded ? 'Hide' : 'Show'} details
+    </button>
+  </CollapsibleTrigger>
+
+  {/* Expandable content */}
+  <CollapsibleContent>
+    <div className="p-4 space-y-3">{children}</div>
+  </CollapsibleContent>
+</Collapsible>
+```
+
+### Card-Based Layouts
+
+Use cards to create visual hierarchy and group related content:
+
+```tsx
+<Card>
+  <CardHeader className="pb-3">
+    <CardTitle className="text-lg">Section Title</CardTitle>
+    <CardDescription>Optional description text</CardDescription>
+  </CardHeader>
+  <Separator />
+  <CardContent className="pt-4">{/* Content here */}</CardContent>
+</Card>
+```
+
+### Icon Mapping Strategy
+
+Create a centralized icon mapping file for easy migration and consistent naming:
+
+```tsx
+// components/ui/icons.tsx
+export {
+  CheckCircle as CheckCircleIcon,
+  XCircle as ErrorIcon,
+  AlertTriangle as WarningIcon,
+  Info as InfoIcon,
+  ChevronDown as ExpandMoreIcon,
+  ChevronUp as ExpandLessIcon,
+  // Map MUI names to Lucide equivalents
+} from 'lucide-react';
+```
+
+This allows gradual migration without changing imports in feature files.
+
+### Badge Variants
+
+Define semantic badge variants for consistent status display:
+
+```tsx
+// badge.tsx variants
+const badgeVariants = cva('...base styles...', {
+  variants: {
+    variant: {
+      default: 'bg-primary text-primary-foreground',
+      secondary: 'bg-secondary text-secondary-foreground',
+      destructive: 'bg-destructive text-destructive-foreground',
+      outline: 'border border-input bg-background',
+      // Semantic variants
+      critical: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
+      warning: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300',
+      info: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300',
+      success: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300',
+    },
+  },
+});
+```
+
+### Empty States
+
+Design informative empty states with icons and helpful messages:
+
+```tsx
+<div className="flex flex-col items-center justify-center py-16 px-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800">
+  <CheckCircleIcon className="h-16 w-16 text-emerald-600 dark:text-emerald-400 mb-4" />
+  <h3 className="text-xl font-semibold text-emerald-700 dark:text-emerald-300">No issues found</h3>
+  <p className="text-sm text-emerald-600 dark:text-emerald-400 mt-1">Everything looks good!</p>
+</div>
+```
+
+### Composition Over Props
+
+Build complex UI by composing simple primitives rather than adding props:
+
+```tsx
+// Good - compose primitives
+function FileIssueGroup({ file, issues }) {
+  return (
+    <Collapsible>
+      <FileHeader file={file} issueCount={issues.length} />
+      <CollapsibleContent>
+        {issues.map(issue => <IssueCard key={issue.id} issue={issue} />)}
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+// Avoid - monolithic component with many props
+function FileIssueGroup({
+  file,
+  issues,
+  showHeader,
+  headerVariant,
+  issueCardSize,
+  collapsible,
+  defaultExpanded,
+  // ... many more props
+}) { ... }
+```
+
+### Tailwind v4 Dark Mode Configuration
+
+Tailwind v4 requires explicit dark mode configuration when using a custom attribute like `data-theme`:
+
+```css
+/* index.css - Configure dark mode to use data-theme attribute */
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+```
+
+This tells Tailwind that `dark:` classes should activate when `data-theme='dark'` is present on any ancestor element.
+
+### Portal Components and CSS Variables
+
+Radix UI components like `Select`, `Popover`, and `Dialog` use React Portals to render content at the document root. This can break CSS variable inheritance because the portaled content is outside the themed container.
+
+```tsx
+// Problem: CSS variables defined on a parent container won't reach portaled content
+<div data-theme="dark">
+  <Select>
+    <SelectContent /> {/* Portaled to document.body - loses dark theme! */}
+  </Select>
+</div>
+
+// Solution 1: Apply theme to :root
+:root[data-theme='dark'],
+[data-theme='dark'] {
+  --background: 222.2 84% 4.9%;
+  /* ... */
+}
+
+// Solution 2: Use explicit colors instead of CSS variables in portaled components
+<SelectContent className="bg-white dark:bg-zinc-900" />
+```
+
+### Global CSS Specificity with :where()
+
+Use `:where()` selectors for global styles to keep specificity low and allow component classes to override:
+
+```css
+/* Global link styles that won't override component styling */
+a:where(:not([class*='text-']):not(.no-underline)) {
+  color: var(--link-color);
+  text-decoration: none;
+}
+
+a:where(:not([class*='text-']):not(.no-underline)):hover {
+  text-decoration: underline;
+}
+```
+
+The `:where()` selector has zero specificity, so any class-based styling will override it.
+
+### Button-as-Link Styling
+
+When buttons are rendered as anchor tags (via `asChild` with `RouterLink`), global anchor styles can leak through. Prevent this in the button component:
+
+```tsx
+// button.tsx - Add no-underline to base styles
+const buttonVariants = cva(
+  'inline-flex items-center justify-center ... no-underline hover:no-underline',
+  {
+    variants: {
+      variant: {
+        // Add explicit text colors to override anchor color inheritance
+        outline: 'border border-input bg-background text-foreground ...',
+        ghost: 'text-foreground hover:bg-accent ...',
+      },
+    },
+  },
+);
+```
+
+### Copy Button with Feedback
+
+Use the shared `CopyButton` component for clipboard actions. It swaps the icon to a checkmark for immediate visual feedback (tooltips require hover delay and are poor UX for confirmations):
+
+```tsx
+import { CopyButton } from '@app/components/ui/copy-button';
+
+// Simple usage
+<CopyButton value={textToCopy} />
+
+// With custom styling
+<CopyButton value={textToCopy} className="ml-2" iconSize="h-4 w-4" />
+```
+
+The component handles:
+
+- Clipboard API call
+- Icon swap (Copy → Check) for 2 seconds
+- Hover states and accessibility
+- Consistent styling across the app
+
+### Scorecard / Metric Cards
+
+For displaying metrics with severity-based styling:
+
+```tsx
+<div className="flex gap-3">
+  {/* Each metric card */}
+  <div
+    className={cn(
+      'flex flex-col items-center justify-center px-4 py-3 rounded-xl w-20',
+      count > 0
+        ? 'bg-red-100 border border-red-200/60 dark:bg-red-900/50 dark:border-red-700/50'
+        : 'bg-white/60 shadow-sm dark:bg-white/10',
+    )}
+  >
+    <span
+      className={cn(
+        'text-2xl font-bold tabular-nums',
+        count > 0 ? 'text-red-700 dark:text-red-300' : 'text-muted-foreground',
+      )}
+    >
+      {count}
+    </span>
+    <span
+      className={cn(
+        'text-xs font-medium uppercase tracking-wide',
+        count > 0 ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground',
+      )}
+    >
+      Critical
+    </span>
+  </div>
+</div>
+```
+
+Key points:
+
+- Use fixed width (`w-20`) for uniform sizing
+- Use `tabular-nums` for number alignment
+- Highlight cards with non-zero counts using colored backgrounds
+- Use muted styling for zero-count cards
+
+### Header Gradients for Status
+
+Use gradient backgrounds to convey overall status at a glance:
+
+```tsx
+<div
+  className={cn(
+    'border-b border-border/50',
+    isClean
+      ? 'bg-gradient-to-r from-emerald-50 to-green-50 dark:from-emerald-950/50 dark:to-green-950/50'
+      : hasCritical
+        ? 'bg-gradient-to-r from-red-50 to-orange-50 dark:from-red-950/50 dark:to-orange-950/50'
+        : 'bg-gradient-to-r from-amber-50 to-yellow-50 dark:from-amber-950/50 dark:to-yellow-950/50',
+  )}
+>
+  {/* Header content */}
+</div>
+```
+
+Use `/50` opacity in dark mode for subtle, non-overwhelming gradients.
+
+---
+
 ## Risks & Mitigations
 
-| Risk | Mitigation |
-|------|------------|
-| DataGrid complexity | Evaluate TanStack Table early; consider keeping @mui/x-data-grid longer |
-| Team velocity during migration | Clear phase boundaries; don't block features |
-| Visual regression | Screenshot testing with Playwright |
-| Icon coverage gaps | Audit icons early; use multiple icon sets if needed |
-| Accessibility regression | Radix has strong a11y; test with screen readers |
+| Risk                           | Mitigation                                                              |
+| ------------------------------ | ----------------------------------------------------------------------- |
+| DataGrid complexity            | Evaluate TanStack Table early; consider keeping @mui/x-data-grid longer |
+| Team velocity during migration | Clear phase boundaries; don't block features                            |
+| Visual regression              | Screenshot testing with Playwright                                      |
+| Icon coverage gaps             | Audit icons early; use multiple icon sets if needed                     |
+| Accessibility regression       | Radix has strong a11y; test with screen readers                         |
 
 ---
 

@@ -1,6 +1,9 @@
 /* Tailwind CSS v4 */
 @import 'tailwindcss';
 
+/* Configure dark mode to use data-theme attribute */
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
 /* Theme configuration */
 @theme {
   --color-background: hsl(var(--background));
@@ -123,27 +126,28 @@
   --cell-highlight-text-color: inherit;
 }
 
-/* Dark mode colors */
+/* Dark mode colors - also target html/root for portaled content */
+:root[data-theme='dark'],
 [data-theme='dark'] {
   /* Design tokens - Dark mode (aligned with MUI theme) */
-  --background: 0 0% 7.1%; /* #121212 */
-  --foreground: 0 0% 100%; /* #ffffff */
-  --card: 0 0% 11.8%; /* #1e1e1e */
-  --card-foreground: 0 0% 100%;
-  --popover: 0 0% 11.8%; /* #1e1e1e */
-  --popover-foreground: 0 0% 100%;
+  --background: 222.2 20% 7.1%; /* Slightly blue-tinted dark */
+  --foreground: 210 40% 98%; /* Off-white, easier on eyes */
+  --card: 222.2 20% 10%; /* Slightly elevated from background */
+  --card-foreground: 210 40% 98%;
+  --popover: 222.2 20% 10%;
+  --popover-foreground: 210 40% 98%;
   --primary: 217.2 91.2% 59.8%; /* #3b82f6 - blue-500 */
   --primary-foreground: 0 0% 100%;
   --secondary: 262.1 83.3% 57.8%; /* #8b5cf6 - violet-500 */
   --secondary-foreground: 0 0% 100%;
-  --muted: 0 0% 17.3%; /* #2c2c2c */
-  --muted-foreground: 0 0% 62.7%; /* #a0a0a0 */
-  --accent: 0 0% 17.3%;
-  --accent-foreground: 0 0% 100%;
+  --muted: 217.2 20% 14%; /* Subtle blue-gray tint */
+  --muted-foreground: 215 20% 55%; /* Lighter, more readable */
+  --accent: 217.2 20% 14%;
+  --accent-foreground: 210 40% 98%;
   --destructive: 0 62.8% 50%;
   --destructive-foreground: 0 0% 100%;
-  --border: 0 0% 17.3%; /* #2c2c2c */
-  --input: 0 0% 17.3%;
+  --border: 217.2 15% 22%; /* Softer, blue-tinted border - NOT pure black */
+  --input: 217.2 15% 22%;
   --ring: 217.2 91.2% 59.8%;
 
   /* Keep synced with prefers-color-scheme above */
@@ -181,27 +185,14 @@ body {
   overflow-x: hidden;
 }
 
-a {
+/* Only apply link color to plain anchors without Tailwind text classes */
+a:where(:not([class*='text-']):not(.no-underline)) {
   color: var(--link-color);
   text-decoration: none;
 }
 
-a:hover {
+a:where(:not([class*='text-']):not(.no-underline)):hover {
   text-decoration: underline;
-}
-
-/* Navigation links use Tailwind classes for color, not link-color */
-header a,
-nav a,
-[data-radix-collection-item] a {
-  color: inherit;
-  text-decoration: none;
-}
-
-header a:hover,
-nav a:hover,
-[data-radix-collection-item] a:hover {
-  text-decoration: none;
 }
 
 /* Allow Tailwind text color utilities to override inherit */

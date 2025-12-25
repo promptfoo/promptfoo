@@ -156,6 +156,33 @@ See `src/app/src/hooks/usePageMeta.test.ts` for patterns. Use `vi.fn()` for mock
 - **Prefer composition** - Build complex UI from simple primitives
 - **Accessibility first** - Radix primitives are accessible by default
 
+### Visual Design Rules
+
+**Borders (IMPORTANT):**
+
+- **Never use harsh black borders** - they look dated and jarring
+- Use `border-border` for standard borders (soft blue-gray)
+- For dark mode, borders should be subtle (use opacity: `dark:border-gray-800/50`)
+- Consider `shadow-sm` or `ring-1 ring-black/5` instead of borders for elevation
+- Reserve `border-2` for focus/selected states only
+
+```tsx
+// Good
+className = 'border border-border'; // Soft, uses CSS variable
+className = 'rounded-lg shadow-sm'; // Borderless with shadow
+className = 'border border-red-200 dark:border-red-900/50'; // Severity with opacity
+
+// Bad
+className = 'border border-black'; // Never pure black
+className = 'border-2 border-gray-900'; // Too harsh
+```
+
+**Colors:**
+
+- Use opacity modifiers in dark mode: `dark:bg-red-950/30` not `dark:bg-red-900`
+- Severity colors: red (critical), amber (warning), blue (info), emerald (success)
+- Text on colored backgrounds: use `*-700` in light mode, `*-300` in dark mode
+
 ### Component Composition Example
 
 ```tsx

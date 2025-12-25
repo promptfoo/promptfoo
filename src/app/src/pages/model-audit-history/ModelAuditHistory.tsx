@@ -1,30 +1,32 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
+import { Badge } from '@app/components/ui/badge';
+import { Button } from '@app/components/ui/button';
+import { Card } from '@app/components/ui/card';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@app/components/ui/dialog';
+import {
+  AddIcon,
+  CheckCircleIcon,
+  DeleteIcon,
+  ErrorIcon,
+  HistoryIcon,
+} from '@app/components/ui/icons';
+import { Spinner } from '@app/components/ui/spinner';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@app/components/ui/tooltip';
 import { MODEL_AUDIT_ROUTES } from '@app/constants/routes';
 import { formatDataGridDate } from '@app/utils/date';
-import {
-  Add as AddIcon,
-  CheckCircle as CheckCircleIcon,
-  Delete as DeleteIcon,
-  Error as ErrorIcon,
-} from '@mui/icons-material';
-import {
-  Box,
-  Button,
-  Chip,
-  CircularProgress,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogContentText,
-  DialogTitle,
-  IconButton,
-  Paper,
-  Stack,
-  Tooltip,
-  Typography,
-} from '@mui/material';
-import { alpha, useTheme } from '@mui/material/styles';
 import {
   DataGrid,
   type GridColDef,
@@ -39,7 +41,7 @@ import {
   GridToolbarFilterButton,
   GridToolbarQuickFilter,
 } from '@mui/x-data-grid';
-import { useNavigate } from 'react-router-dom';
+import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import { useModelAuditHistoryStore } from '../model-audit/stores';
 
 import type { HistoricalScan } from '../model-audit/stores';
@@ -51,29 +53,20 @@ const GridToolbarExport = () => (
 );
 
 function CustomToolbar({ onNewScan }: { onNewScan: () => void }) {
-  const theme = useTheme();
   return (
-    <GridToolbarContainer sx={{ p: 1, borderBottom: `1px solid ${theme.palette.divider}` }}>
-      <Box sx={{ display: 'flex', gap: 1 }}>
-        <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={onNewScan}>
+    <GridToolbarContainer className="p-2 border-b border-border gap-2 flex-wrap">
+      <div className="flex gap-2">
+        <Button size="sm" onClick={onNewScan}>
+          <AddIcon className="h-4 w-4 mr-2" />
           New Scan
         </Button>
         <GridToolbarColumnsButton />
         <GridToolbarFilterButton />
         <GridToolbarDensitySelector />
         <GridToolbarExport />
-      </Box>
-      <Box sx={{ flexGrow: 1 }} />
-      <Box
-        sx={{
-          '& .MuiInputBase-root': {
-            borderRadius: 2,
-            backgroundColor: theme.palette.background.paper,
-          },
-        }}
-      >
-        <GridToolbarQuickFilter />
-      </Box>
+      </div>
+      <div className="flex-grow" />
+      <GridToolbarQuickFilter className="[&_.MuiInputBase-root]:rounded-lg [&_.MuiInputBase-root]:bg-background" />
     </GridToolbarContainer>
   );
 }
@@ -161,21 +154,16 @@ export default function ModelAuditHistory() {
         flex: 1,
         minWidth: 120,
         renderCell: (params: GridRenderCellParams<HistoricalScan>) => (
-          <Tooltip title={params.value}>
-            <Typography
-              variant="body2"
-              color="primary"
-              fontFamily="monospace"
-              sx={{
-                cursor: 'pointer',
-                '&:hover': { textDecoration: 'underline' },
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-              }}
-            >
-              {params.value?.slice(0, 8)}...
-            </Typography>
-          </Tooltip>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="text-sm font-mono text-primary cursor-pointer hover:underline truncate">
+                  {params.value}
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>{params.value}</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         ),
       },
       {
@@ -191,9 +179,7 @@ export default function ModelAuditHistory() {
         flex: 2,
         minWidth: 200,
         renderCell: (params: GridRenderCellParams<HistoricalScan>) => (
-          <Typography variant="body2" noWrap>
-            {params.value || 'Unnamed scan'}
-          </Typography>
+          <span className="text-sm truncate">{params.value || 'Unnamed scan'}</span>
         ),
       },
       {
@@ -202,11 +188,14 @@ export default function ModelAuditHistory() {
         flex: 2.5,
         minWidth: 250,
         renderCell: (params: GridRenderCellParams<HistoricalScan>) => (
-          <Tooltip title={params.value}>
-            <Typography variant="body2" noWrap fontFamily="monospace" sx={{ fontSize: '0.85rem' }}>
-              {params.value}
-            </Typography>
-          </Tooltip>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="text-sm font-mono truncate">{params.value}</span>
+              </TooltipTrigger>
+              <TooltipContent className="font-mono">{params.value}</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         ),
       },
       {
@@ -215,23 +204,17 @@ export default function ModelAuditHistory() {
         flex: 1,
         minWidth: 130,
         renderCell: (params: GridRenderCellParams<HistoricalScan>) => (
-          <Chip
-            label={params.value ? 'Issues Found' : 'Clean'}
-            color={params.value ? 'error' : 'success'}
-            size="small"
-            variant="filled"
-            icon={
-              params.value ? (
-                <ErrorIcon sx={{ fontSize: 16 }} />
-              ) : (
-                <CheckCircleIcon sx={{ fontSize: 16 }} />
-              )
-            }
-            sx={{
-              fontWeight: 500,
-              minWidth: 100,
-            }}
-          />
+          <Badge
+            variant={params.value ? 'critical' : 'success'}
+            className="gap-1.5 min-w-[100px] justify-center"
+          >
+            {params.value ? (
+              <ErrorIcon className="h-3.5 w-3.5" />
+            ) : (
+              <CheckCircleIcon className="h-3.5 w-3.5" />
+            )}
+            {params.value ? 'Issues Found' : 'Clean'}
+          </Badge>
         ),
       },
       {
@@ -242,22 +225,16 @@ export default function ModelAuditHistory() {
         type: 'number',
         renderCell: (params: GridRenderCellParams<HistoricalScan>) => {
           if (params.value === undefined || params.value === null) {
-            return (
-              <Typography variant="body2" color="text.secondary">
-                -
-              </Typography>
-            );
+            return <span className="text-sm text-muted-foreground">-</span>;
           }
           return (
-            <Stack direction="row" spacing={0.5} alignItems="center">
-              <Typography variant="body2" color="success.main">
+            <div className="flex items-center gap-1">
+              <span className="text-sm text-emerald-600 dark:text-emerald-400">
                 {params.row.passedChecks || 0}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                /
-              </Typography>
-              <Typography variant="body2">{params.value}</Typography>
-            </Stack>
+              </span>
+              <span className="text-sm text-muted-foreground">/</span>
+              <span className="text-sm">{params.value}</span>
+            </div>
           );
         },
       },
@@ -269,19 +246,25 @@ export default function ModelAuditHistory() {
         sortable: false,
         filterable: false,
         renderCell: (params: GridRenderCellParams<HistoricalScan>) => (
-          <Tooltip title="Delete">
-            <IconButton
-              size="small"
-              onClick={(e) => {
-                e.stopPropagation();
-                setScanToDelete(params.row.id);
-                setDeleteDialogOpen(true);
-              }}
-              color="error"
-            >
-              <DeleteIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setScanToDelete(params.row.id);
+                    setDeleteDialogOpen(true);
+                  }}
+                >
+                  <DeleteIcon className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Delete</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         ),
       },
     ],
@@ -289,156 +272,142 @@ export default function ModelAuditHistory() {
   );
 
   return (
-    <Box
-      sx={{
-        position: 'absolute',
-        top: 64,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        bgcolor: (t) =>
-          t.palette.mode === 'dark'
-            ? alpha(t.palette.common.black, 0.2)
-            : alpha(t.palette.grey[50], 0.5),
-        p: 3,
-      }}
-    >
-      <Paper
-        elevation={0}
-        sx={{
-          height: '100%',
-          display: 'flex',
-          flexDirection: 'column',
-          borderTop: 1,
-          borderColor: (t) => alpha(t.palette.divider, 0.1),
-          boxShadow: (t) => `0 1px 2px ${alpha(t.palette.common.black, 0.05)}`,
-          bgcolor: 'background.paper',
-          borderRadius: 1,
-        }}
-      >
-        <DataGrid
-          rows={historicalScans}
-          columns={columns}
-          loading={isLoadingHistory}
-          rowCount={totalCount}
-          paginationMode="server"
-          sortingMode="server"
-          paginationModel={{ page: currentPage, pageSize }}
-          onPaginationModelChange={handlePaginationModelChange}
-          sortModel={sortModel.map((s) => ({ field: s.field, sort: s.sort }))}
-          onSortModelChange={handleSortModelChange}
-          pageSizeOptions={[10, 25, 50, 100]}
-          onRowClick={handleRowClick}
-          getRowId={(row) => row.id}
-          slots={{
-            toolbar: () => <CustomToolbar onNewScan={handleNewScan} />,
-            loadingOverlay: () => (
-              <Box
-                sx={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  height: '100%',
-                  gap: 2,
-                }}
-              >
-                <CircularProgress />
-                <Typography variant="body2" color="text.secondary">
-                  Loading scan history...
-                </Typography>
-              </Box>
-            ),
-            noRowsOverlay: () => (
-              <Box
-                sx={{
-                  textAlign: 'center',
-                  color: 'text.secondary',
-                  height: '100%',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                  p: 3,
-                }}
-              >
-                {historyError ? (
-                  <>
-                    <Box sx={{ fontSize: '2rem', mb: 2 }}>⚠️</Box>
-                    <Typography variant="h6" gutterBottom color="error">
-                      Error loading history
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      {historyError}
-                    </Typography>
-                  </>
-                ) : (
-                  <>
-                    <Box sx={{ fontSize: '2rem', mb: 2 }}>🔍</Box>
-                    <Typography variant="h6" gutterBottom>
-                      No scan history found
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                      Run your first model security scan to see results here
-                    </Typography>
-                    <Button variant="contained" startIcon={<AddIcon />} onClick={handleNewScan}>
-                      New Scan
-                    </Button>
-                  </>
-                )}
-              </Box>
-            ),
-          }}
-          sx={{
-            border: 'none',
-            '& .MuiDataGrid-row': {
-              cursor: 'pointer',
-              transition: 'background-color 0.2s ease',
-              '&:hover': {
-                backgroundColor: 'action.hover',
+    <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
+      {/* Page Header */}
+      <div className="border-b border-border bg-white/80 dark:bg-zinc-900/80 backdrop-blur-sm">
+        <div className="container max-w-7xl mx-auto px-4 py-10">
+          <div className="flex items-start gap-4">
+            <div className="shrink-0 w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center">
+              <HistoryIcon className="h-7 w-7 text-primary" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight">Scan History</h1>
+              <p className="text-sm text-muted-foreground mt-1.5">
+                View and manage your model security scan results
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <div className="container max-w-7xl mx-auto px-4 py-8">
+        <Card className="overflow-hidden bg-white dark:bg-zinc-900">
+          <DataGrid
+            rows={historicalScans}
+            columns={columns}
+            loading={isLoadingHistory}
+            rowCount={totalCount}
+            paginationMode="server"
+            sortingMode="server"
+            paginationModel={{ page: currentPage, pageSize }}
+            onPaginationModelChange={handlePaginationModelChange}
+            sortModel={sortModel.map((s) => ({ field: s.field, sort: s.sort }))}
+            onSortModelChange={handleSortModelChange}
+            pageSizeOptions={[10, 25, 50, 100]}
+            onRowClick={handleRowClick}
+            getRowId={(row) => row.id}
+            autoHeight
+            slots={{
+              toolbar: () => <CustomToolbar onNewScan={handleNewScan} />,
+              loadingOverlay: () => (
+                <div className="flex flex-col items-center justify-center h-full gap-3 py-16">
+                  <Spinner size="lg" />
+                  <span className="text-sm text-muted-foreground">Loading scan history...</span>
+                </div>
+              ),
+              noRowsOverlay: () => (
+                <div className="flex flex-col items-center justify-center h-full py-16 text-center">
+                  {historyError ? (
+                    <>
+                      <div className="text-4xl mb-4">⚠️</div>
+                      <h3 className="text-lg font-semibold text-destructive mb-1">
+                        Error loading history
+                      </h3>
+                      <p className="text-sm text-muted-foreground">{historyError}</p>
+                    </>
+                  ) : (
+                    <>
+                      <div className="text-4xl mb-4">🔍</div>
+                      <h3 className="text-lg font-semibold mb-1">No scan history found</h3>
+                      <p className="text-sm text-muted-foreground mb-4">
+                        Run your first model security scan to see results here
+                      </p>
+                      <Button asChild>
+                        <RouterLink to={MODEL_AUDIT_ROUTES.SETUP}>
+                          <AddIcon className="h-4 w-4 mr-2" />
+                          New Scan
+                        </RouterLink>
+                      </Button>
+                    </>
+                  )}
+                </div>
+              ),
+            }}
+            sx={{
+              border: 'none',
+              '& .MuiDataGrid-row': {
+                cursor: 'pointer',
+                transition: 'background-color 0.2s ease',
+                '&:hover': {
+                  backgroundColor: 'hsl(var(--muted) / 0.5)',
+                },
               },
-            },
-            '& .MuiDataGrid-cell': {
-              borderColor: 'divider',
-              display: 'flex',
-              alignItems: 'center',
-            },
-            '& .MuiDataGrid-columnHeaders': {
-              backgroundColor: 'background.default',
-              borderColor: 'divider',
-            },
-            '& .MuiDataGrid-selectedRow': {
-              backgroundColor: 'action.selected',
-            },
-            '--DataGrid-overlayHeight': '300px',
-          }}
-          disableRowSelectionOnClick
-        />
-      </Paper>
+              '& .MuiDataGrid-cell': {
+                borderColor: 'hsl(var(--border))',
+                display: 'flex',
+                alignItems: 'center',
+              },
+              '& .MuiDataGrid-columnHeaders': {
+                backgroundColor: 'hsl(var(--muted) / 0.3)',
+                borderColor: 'hsl(var(--border))',
+              },
+              '& .MuiDataGrid-footerContainer': {
+                borderColor: 'hsl(var(--border))',
+              },
+              '--DataGrid-overlayHeight': '300px',
+            }}
+            disableRowSelectionOnClick
+          />
+        </Card>
+      </div>
 
       {/* Delete Confirmation Dialog */}
-      <Dialog open={deleteDialogOpen} onClose={() => !isDeleting && setDeleteDialogOpen(false)}>
-        <DialogTitle>Delete Scan?</DialogTitle>
+      <Dialog
+        open={deleteDialogOpen}
+        onOpenChange={(open) => !isDeleting && setDeleteDialogOpen(open)}
+      >
         <DialogContent>
-          <DialogContentText>
-            Are you sure you want to delete this scan from history? This action cannot be undone.
-          </DialogContentText>
+          <DialogHeader>
+            <DialogTitle>Delete Scan?</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this scan from history? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setDeleteDialogOpen(false)}
+              disabled={isDeleting}
+            >
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDelete} disabled={isDeleting}>
+              {isDeleting ? (
+                <>
+                  <Spinner size="sm" className="mr-2" />
+                  Deleting...
+                </>
+              ) : (
+                <>
+                  <DeleteIcon className="h-4 w-4 mr-2" />
+                  Delete
+                </>
+              )}
+            </Button>
+          </DialogFooter>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDeleteDialogOpen(false)} disabled={isDeleting}>
-            Cancel
-          </Button>
-          <Button
-            onClick={handleDelete}
-            color="error"
-            variant="contained"
-            disabled={isDeleting}
-            startIcon={isDeleting ? <CircularProgress size={16} /> : <DeleteIcon />}
-          >
-            {isDeleting ? 'Deleting...' : 'Delete'}
-          </Button>
-        </DialogActions>
       </Dialog>
-    </Box>
+    </div>
   );
 }
