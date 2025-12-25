@@ -111,7 +111,7 @@ const PromptsSection = () => {
           <div className="flex items-center gap-2">
             <Tooltip>
               <TooltipTrigger asChild>
-                <label className="cursor-pointer">
+                <label className="cursor-pointer" aria-label="Upload prompt from file">
                   <Button variant="ghost" size="icon" asChild>
                     <span>
                       <UploadIcon className="h-4 w-4" />
@@ -122,6 +122,7 @@ const PromptsSection = () => {
                     accept=".txt,.md"
                     onChange={handleAddPromptFromFile}
                     className="hidden"
+                    aria-label="Upload prompt from file"
                   />
                 </label>
               </TooltipTrigger>
@@ -186,6 +187,7 @@ const PromptsSection = () => {
                           variant="ghost"
                           size="icon"
                           onClick={(event) => handleDuplicatePrompt(event, index)}
+                          aria-label={`Duplicate prompt ${index + 1}`}
                         >
                           <ContentCopyIcon className="h-4 w-4" />
                         </Button>
@@ -199,6 +201,7 @@ const PromptsSection = () => {
                           variant="ghost"
                           size="icon"
                           onClick={(event) => handleRemovePrompt(event, index)}
+                          aria-label={`Delete prompt ${index + 1}`}
                         >
                           <DeleteIcon className="h-4 w-4" />
                         </Button>

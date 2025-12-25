@@ -66,8 +66,8 @@ describe('ConfigurationTab', () => {
     const scanButton = screen.getByRole('button', { name: 'ModelAudit Not Installed' });
     // Button should NOT be disabled - users can click it to see installation instructions
     expect(scanButton).not.toBeDisabled();
-    // Button should have error color styling
-    expect(scanButton).toHaveClass('MuiButton-containedError');
+    // Button should have error color styling (destructive variant)
+    expect(scanButton).toHaveClass('bg-destructive');
   });
 
   it('should render PathSelector', () => {

@@ -296,7 +296,9 @@ export default function PathSelector({
 
           {/* Drag and Drop Zone */}
           <div>
-            <label className="text-sm text-muted-foreground mb-2 block">Add model path</label>
+            <label htmlFor="model-path-input" className="text-sm text-muted-foreground mb-2 block">
+              Add model path
+            </label>
             <div
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
@@ -333,6 +335,7 @@ export default function PathSelector({
             <div className="relative flex-1">
               <FolderOpenIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
+                id="model-path-input"
                 value={pathInput}
                 onChange={(e) => setPathInput(e.target.value)}
                 onKeyDown={(e) => {
@@ -497,6 +500,7 @@ export default function PathSelector({
                     onRemovePath(index);
                   }}
                   className="opacity-70 group-hover:opacity-100 text-destructive hover:text-destructive hover:bg-destructive/10"
+                  aria-label={`Remove ${path.name}`}
                 >
                   <DeleteIcon className="h-4 w-4" />
                 </Button>

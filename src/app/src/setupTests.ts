@@ -15,6 +15,51 @@ expect.extend(matchers);
 
 import { cleanup } from '@testing-library/react';
 
+// Polyfill for JSDOM missing APIs that Radix UI components need
+if (typeof Element !== 'undefined') {
+  // hasPointerCapture is used by Radix UI Select and other components
+  if (!Element.prototype.hasPointerCapture) {
+    Element.prototype.hasPointerCapture = function () {
+      return false;
+    };
+  }
+
+  // setPointerCapture and releasePointerCapture
+  if (!Element.prototype.setPointerCapture) {
+    Element.prototype.setPointerCapture = function () {
+      // noop
+    };
+  }
+
+  if (!Element.prototype.releasePointerCapture) {
+    Element.prototype.releasePointerCapture = function () {
+      // noop
+    };
+  }
+
+  // scrollIntoView is used by some Radix UI components
+  if (!Element.prototype.scrollIntoView) {
+    Element.prototype.scrollIntoView = function () {
+      // noop
+    };
+  }
+}
+
+// ResizeObserver mock
+if (typeof global.ResizeObserver === 'undefined') {
+  global.ResizeObserver = class ResizeObserver {
+    observe() {
+      // noop
+    }
+    unobserve() {
+      // noop
+    }
+    disconnect() {
+      // noop
+    }
+  };
+}
+
 // We can mock the environment variables. For example:
 // process.env.PROMPTFOO_VERSION = '1.0.0';
 

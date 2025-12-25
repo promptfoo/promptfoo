@@ -160,15 +160,8 @@ describe('PromptsSection', () => {
 
     expect(screen.getByText(/Translate the following sentence to French/)).toBeInTheDocument();
 
-    const duplicateButtons = screen
-      .getAllByTestId('ContentCopyIcon')
-      .map((icon) => icon.closest('button'));
-    if (duplicateButtons.length > 0) {
-      const button = duplicateButtons[0];
-      if (button) {
-        fireEvent.click(button);
-      }
-    }
+    const duplicateButton = screen.getByRole('button', { name: /duplicate prompt 1/i });
+    fireEvent.click(duplicateButton);
 
     expect(mockUpdateConfig).toHaveBeenCalledTimes(1);
     expect(mockUpdateConfig).toHaveBeenCalledWith({
@@ -190,11 +183,8 @@ describe('PromptsSection', () => {
     expect(screen.getByText(/Prompt 2/)).toBeInTheDocument();
     expect(screen.getByText(/Prompt 3/)).toBeInTheDocument();
 
-    const deleteButtons = screen.getAllByTestId('DeleteIcon');
-    const deleteButton = deleteButtons[1].closest('button');
-    if (deleteButton) {
-      fireEvent.click(deleteButton);
-    }
+    const deleteButton = screen.getByRole('button', { name: /delete prompt 2/i });
+    fireEvent.click(deleteButton);
 
     expect(screen.getByRole('dialog', { name: /delete prompt/i })).toBeInTheDocument();
 
@@ -239,7 +229,8 @@ describe('PromptsSection', () => {
     render(<PromptsSection />);
 
     const file = new File([longLineText], 'long_line.txt', { type: 'text/plain' });
-    const fileInput = screen.getByLabelText('Upload prompt from file').querySelector('input');
+    // Find the hidden file input
+    const fileInput = document.querySelector('input[type="file"]');
 
     if (!fileInput) {
       throw new Error('File input element not found');

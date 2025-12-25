@@ -61,16 +61,16 @@ describe('ScanStatistics', () => {
 
     renderScanStatistics(mockScanResults, null, mockOnSeverityClick, mockOnFilesClick);
 
-    const criticalCard = screen.getByText('Critical').closest('div');
+    const criticalCard = screen.getByText('Critical').closest('button');
     expect(criticalCard).toHaveTextContent('2');
 
-    const warningsCard = screen.getByText('Warnings').closest('div');
+    const warningsCard = screen.getByText('Warnings').closest('button');
     expect(warningsCard).toHaveTextContent('1');
 
-    const informationCard = screen.getByText('Information').closest('div');
+    const informationCard = screen.getByText('Information').closest('button');
     expect(informationCard).toHaveTextContent('3');
 
-    const filesScannedCard = screen.getByText('Files Scanned').closest('div');
+    const filesScannedCard = screen.getByText('Files Scanned').closest('button');
     expect(filesScannedCard).toHaveTextContent('125');
   });
 
@@ -81,7 +81,7 @@ describe('ScanStatistics', () => {
 
     renderScanStatistics(mockScanResults, null, mockOnSeverityClick, mockOnFilesClick);
 
-    const criticalCard = screen.getByText('Critical').closest('div');
+    const criticalCard = screen.getByText('Critical').closest('button');
     fireEvent.click(criticalCard as HTMLElement);
 
     expect(mockOnSeverityClick).toHaveBeenCalledWith('error');
@@ -96,7 +96,7 @@ describe('ScanStatistics', () => {
 
     renderScanStatistics(mockScanResults, selectedSeverity, mockOnSeverityClick, mockOnFilesClick);
 
-    const warningsCard = screen.getByText('Warnings').closest('div');
+    const warningsCard = screen.getByText('Warnings').closest('button');
     fireEvent.click(warningsCard as Element);
 
     expect(mockOnSeverityClick).toHaveBeenCalledWith(null);
@@ -109,7 +109,7 @@ describe('ScanStatistics', () => {
 
     renderScanStatistics(mockScanResults, null, mockOnSeverityClick, mockOnFilesClick);
 
-    const filesScannedCard = screen.getByText('Files Scanned').closest('div');
+    const filesScannedCard = screen.getByText('Files Scanned').closest('button');
     fireEvent.click(filesScannedCard as Element);
 
     expect(mockOnFilesClick).toHaveBeenCalled();
@@ -127,16 +127,16 @@ describe('ScanStatistics', () => {
 
     renderScanStatistics(mockScanResults, null, mockOnSeverityClick, mockOnFilesClick);
 
-    const criticalCard = screen.getByText('Critical').closest('div');
+    const criticalCard = screen.getByText('Critical').closest('button');
     expect(criticalCard).toHaveTextContent('1');
 
-    const warningsCard = screen.getByText('Warnings').closest('div');
+    const warningsCard = screen.getByText('Warnings').closest('button');
     expect(warningsCard).toHaveTextContent('1');
 
-    const informationCard = screen.getByText('Information').closest('div');
+    const informationCard = screen.getByText('Information').closest('button');
     expect(informationCard).toHaveTextContent('1');
 
-    const filesScannedCard = screen.getByText('Files Scanned').closest('div');
+    const filesScannedCard = screen.getByText('Files Scanned').closest('button');
     expect(filesScannedCard).toHaveTextContent('10');
   });
 });
