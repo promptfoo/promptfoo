@@ -1,3 +1,59 @@
+/* Tailwind CSS v4 */
+@import 'tailwindcss';
+
+/* Theme configuration */
+@theme {
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+
+  /* Severity colors */
+  --color-severity-critical: hsl(var(--severity-critical));
+  --color-severity-high: hsl(var(--severity-high));
+  --color-severity-medium: hsl(var(--severity-medium));
+  --color-severity-low: hsl(var(--severity-low));
+
+  /* Animation keyframes */
+  --animate-accordion-down: accordion-down 0.2s ease-out;
+  --animate-accordion-up: accordion-up 0.2s ease-out;
+
+  @keyframes accordion-down {
+    from {
+      height: 0;
+    }
+    to {
+      height: var(--radix-accordion-content-height);
+    }
+  }
+  @keyframes accordion-up {
+    from {
+      height: var(--radix-accordion-content-height);
+    }
+    to {
+      height: 0;
+    }
+  }
+}
+
 /* This CSS is common to all pages */
 
 * {
@@ -6,6 +62,34 @@
 
 :root {
   font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+
+  /* Design tokens - Light mode (aligned with MUI theme) */
+  --background: 210 40% 98%; /* #f8fafc - slate-50 */
+  --foreground: 222.2 47.4% 11.2%; /* #0f172a - slate-900 */
+  --card: 0 0% 100%; /* #ffffff */
+  --card-foreground: 222.2 47.4% 11.2%;
+  --popover: 0 0% 100%; /* #ffffff */
+  --popover-foreground: 222.2 47.4% 11.2%;
+  --primary: 217.2 91.2% 52.9%; /* #2563eb - blue-600 */
+  --primary-foreground: 0 0% 100%; /* #ffffff */
+  --secondary: 262.1 83.3% 57.8%; /* #8b5cf6 - violet-500 */
+  --secondary-foreground: 0 0% 100%;
+  --muted: 210 40% 96.1%; /* #f1f5f9 - slate-100 */
+  --muted-foreground: 215.4 16.3% 34.9%; /* #475569 - slate-600 */
+  --accent: 210 40% 96.1%;
+  --accent-foreground: 222.2 47.4% 11.2%;
+  --destructive: 0 84.2% 60.2%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 214.3 31.8% 91.4%; /* #e2e8f0 - slate-200 */
+  --input: 214.3 31.8% 91.4%;
+  --ring: 217.2 91.2% 52.9%;
+  --radius: 0.5rem;
+
+  /* Severity colors */
+  --severity-critical: 0 84% 60%;
+  --severity-high: 0 72% 51%;
+  --severity-medium: 25 95% 53%;
+  --severity-low: 142 76% 36%;
   font-style: normal;
   font-weight-normal: 400;
   font-weight-bold: 700;
@@ -41,6 +125,27 @@
 
 /* Dark mode colors */
 [data-theme='dark'] {
+  /* Design tokens - Dark mode (aligned with MUI theme) */
+  --background: 0 0% 7.1%; /* #121212 */
+  --foreground: 0 0% 100%; /* #ffffff */
+  --card: 0 0% 11.8%; /* #1e1e1e */
+  --card-foreground: 0 0% 100%;
+  --popover: 0 0% 11.8%; /* #1e1e1e */
+  --popover-foreground: 0 0% 100%;
+  --primary: 217.2 91.2% 59.8%; /* #3b82f6 - blue-500 */
+  --primary-foreground: 0 0% 100%;
+  --secondary: 262.1 83.3% 57.8%; /* #8b5cf6 - violet-500 */
+  --secondary-foreground: 0 0% 100%;
+  --muted: 0 0% 17.3%; /* #2c2c2c */
+  --muted-foreground: 0 0% 62.7%; /* #a0a0a0 */
+  --accent: 0 0% 17.3%;
+  --accent-foreground: 0 0% 100%;
+  --destructive: 0 62.8% 50%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 0 0% 17.3%; /* #2c2c2c */
+  --input: 0 0% 17.3%;
+  --ring: 217.2 91.2% 59.8%;
+
   /* Keep synced with prefers-color-scheme above */
   --background-color: #1a1a1a;
   --text-color: #f0f0f0;
@@ -83,6 +188,26 @@ a {
 
 a:hover {
   text-decoration: underline;
+}
+
+/* Navigation links use Tailwind classes for color, not link-color */
+header a,
+nav a,
+[data-radix-collection-item] a {
+  color: inherit;
+  text-decoration: none;
+}
+
+header a:hover,
+nav a:hover,
+[data-radix-collection-item] a:hover {
+  text-decoration: none;
+}
+
+/* Allow Tailwind text color utilities to override inherit */
+header a[class*='text-primary'],
+nav a[class*='text-primary'] {
+  color: hsl(var(--primary));
 }
 
 textarea {
