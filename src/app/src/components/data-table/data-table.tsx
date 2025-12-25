@@ -17,12 +17,66 @@ import { DataTableToolbar } from './data-table-toolbar';
 import type {
   ColumnDef,
   ColumnFiltersState,
+  ColumnSizingState,
   RowSelectionState,
   SortingState,
   VisibilityState,
 } from '@tanstack/react-table';
 
 import type { DataTableProps } from './types';
+
+// Custom filter function that handles operator-based filtering
+const operatorFilterFn = (
+  row: { getValue: (columnId: string) => unknown },
+  columnId: string,
+  filterValue: unknown,
+): boolean => {
+  if (!filterValue || typeof filterValue !== 'object') {
+    return true;
+  }
+
+  const { operator, value } = filterValue as { operator: string; value: string };
+  if (!value) {
+    return true;
+  }
+
+  const cellValue = row.getValue(columnId);
+  const cellString = String(cellValue ?? '').toLowerCase();
+  const filterString = value.toLowerCase();
+
+  switch (operator) {
+    case 'contains':
+      return cellString.includes(filterString);
+    case 'equals':
+      return cellString === filterString;
+    case 'startsWith':
+      return cellString.startsWith(filterString);
+    case 'endsWith':
+      return cellString.endsWith(filterString);
+    case 'gt': {
+      const numCell = Number(cellValue);
+      const numFilter = Number(value);
+      return !isNaN(numCell) && !isNaN(numFilter) && numCell > numFilter;
+    }
+    case 'gte': {
+      const numCell = Number(cellValue);
+      const numFilter = Number(value);
+      return !isNaN(numCell) && !isNaN(numFilter) && numCell >= numFilter;
+    }
+    case 'lt': {
+      const numCell = Number(cellValue);
+      const numFilter = Number(value);
+      return !isNaN(numCell) && !isNaN(numFilter) && numCell < numFilter;
+    }
+    case 'lte': {
+      const numCell = Number(cellValue);
+      const numFilter = Number(value);
+      return !isNaN(numCell) && !isNaN(numFilter) && numCell <= numFilter;
+    }
+    default:
+      return cellString.includes(filterString);
+  }
+};
 
 export function DataTable<TData, TValue = unknown>({
   columns,
@@ -37,6 +91,7 @@ export function DataTable<TData, TValue = unknown>({
   onExportJSON,
   showToolbar = true,
   showColumnToggle = true,
+  showFilter = true,
   showExport = true,
   showPagination = true,
   initialPageSize = 25,
@@ -49,6 +104,7 @@ export function DataTable<TData, TValue = unknown>({
   const [sorting, setSorting] = React.useState<SortingState>(initialSorting);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
+  const [columnSizing, setColumnSizing] = React.useState<ColumnSizingState>({});
   const [globalFilter, setGlobalFilter] = React.useState('');
   const [pagination, setPagination] = React.useState({ pageIndex: 0, pageSize: initialPageSize });
   const [internalRowSelection, setInternalRowSelection] = React.useState<RowSelectionState>({});
@@ -91,6 +147,7 @@ export function DataTable<TData, TValue = unknown>({
       size: 40,
       enableSorting: false,
       enableHiding: false,
+      enableResizing: false,
     }),
     [],
   );
@@ -106,19 +163,30 @@ export function DataTable<TData, TValue = unknown>({
   const table = useReactTable({
     data,
     columns: allColumns,
+    defaultColumn: {
+      filterFn: operatorFilterFn,
+    },
     state: {
       sorting,
       columnFilters,
       columnVisibility,
+      columnSizing,
       globalFilter,
       pagination,
       rowSelection,
     },
     enableRowSelection,
+    enableColumnResizing: true,
+    columnResizeMode: 'onChange',
+    filterFns: {
+      operator: operatorFilterFn,
+    },
+    globalFilterFn: 'includesString',
     onRowSelectionChange: handleRowSelectionChange,
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
     onColumnVisibilityChange: setColumnVisibility,
+    onColumnSizingChange: setColumnSizing,
     onGlobalFilterChange: setGlobalFilter,
     onPaginationChange: setPagination,
     getRowId: getRowId ? (row) => getRowId(row) : undefined,
@@ -167,6 +235,7 @@ export function DataTable<TData, TValue = unknown>({
           globalFilter={globalFilter}
           setGlobalFilter={setGlobalFilter}
           showColumnToggle={showColumnToggle}
+          showFilter={showFilter}
           showExport={showExport}
           onExportCSV={onExportCSV}
           onExportJSON={onExportJSON}
@@ -175,25 +244,24 @@ export function DataTable<TData, TValue = unknown>({
       )}
 
       <div className="rounded-lg border border-border overflow-hidden bg-white dark:bg-zinc-900">
-        <table className="w-full">
+        <table className="w-full" style={{ tableLayout: 'fixed' }}>
           <thead className="bg-muted/50">
             {table.getHeaderGroups().map((headerGroup) => (
               <tr key={headerGroup.id} className="border-b border-border">
                 {headerGroup.headers.map((header) => {
                   const canSort = header.column.getCanSort();
                   const sortDirection = header.column.getIsSorted();
+                  const canResize = header.column.getCanResize();
 
                   return (
                     <th
                       key={header.id}
                       className={cn(
-                        'px-4 py-3 text-left text-sm font-semibold',
+                        'px-4 py-3 text-left text-sm font-semibold relative',
                         canSort && 'cursor-pointer select-none hover:bg-muted/80',
                       )}
                       style={{
-                        width: header.column.columnDef.size
-                          ? `${header.column.columnDef.size}px`
-                          : undefined,
+                        width: header.getSize(),
                       }}
                       onClick={header.column.getToggleSortingHandler()}
                     >
@@ -212,6 +280,19 @@ export function DataTable<TData, TValue = unknown>({
                             </span>
                           )}
                         </div>
+                      )}
+                      {/* Column resize handle */}
+                      {canResize && (
+                        <div
+                          onMouseDown={header.getResizeHandler()}
+                          onTouchStart={header.getResizeHandler()}
+                          onClick={(e) => e.stopPropagation()}
+                          className={cn(
+                            'absolute right-0 top-0 h-full w-1 cursor-col-resize select-none touch-none',
+                            'hover:bg-primary/50',
+                            header.column.getIsResizing() && 'bg-primary',
+                          )}
+                        />
                       )}
                     </th>
                   );
@@ -234,9 +315,10 @@ export function DataTable<TData, TValue = unknown>({
                     <td
                       key={cell.id}
                       className={cn(
-                        'px-4 py-3 text-sm',
+                        'px-4 py-3 text-sm overflow-hidden text-ellipsis',
                         cell.column.id === 'select' && 'cursor-pointer',
                       )}
+                      style={{ width: cell.column.getSize() }}
                       onClick={cell.column.id === 'select' ? (e) => e.stopPropagation() : undefined}
                     >
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}

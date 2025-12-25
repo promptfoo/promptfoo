@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
 
 import { DataTable } from '@app/components/data-table/data-table';
 import { Badge } from '@app/components/ui/badge';
@@ -16,9 +15,9 @@ import { DeleteIcon } from '@app/components/ui/icons';
 import { cn } from '@app/lib/utils';
 import { callApi } from '@app/utils/api';
 import { formatDataGridDate } from '@app/utils/date';
-import type { ColumnDef, RowSelectionState } from '@tanstack/react-table';
 import invariant from '@promptfoo/util/invariant';
-import { useLocation } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
+import type { ColumnDef, RowSelectionState } from '@tanstack/react-table';
 
 type Eval = {
   createdAt: number;

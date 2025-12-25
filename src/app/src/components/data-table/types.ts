@@ -13,6 +13,7 @@ export interface DataTableProps<TData, TValue = unknown> {
   onExportJSON?: () => void;
   showToolbar?: boolean;
   showColumnToggle?: boolean;
+  showFilter?: boolean;
   showExport?: boolean;
   showPagination?: boolean;
   initialPageSize?: number;
@@ -30,6 +31,7 @@ export interface DataTableToolbarProps<TData> {
   globalFilter: string;
   setGlobalFilter: (value: string) => void;
   showColumnToggle?: boolean;
+  showFilter?: boolean;
   showExport?: boolean;
   onExportCSV?: () => void;
   onExportJSON?: () => void;

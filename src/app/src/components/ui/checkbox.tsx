@@ -1,4 +1,5 @@
 import * as React from 'react';
+
 import { cn } from '@app/lib/utils';
 import { Check, Minus } from 'lucide-react';
 
@@ -41,11 +42,7 @@ const Checkbox = React.forwardRef<HTMLInputElement, CheckboxProps>(
         >
           {(indeterminate || checked) && (
             <span className="absolute inset-0 flex items-center justify-center">
-              {indeterminate ? (
-                <Minus className="h-3 w-3" />
-              ) : (
-                <Check className="h-3 w-3" />
-              )}
+              {indeterminate ? <Minus className="h-3 w-3" /> : <Check className="h-3 w-3" />}
             </span>
           )}
         </div>

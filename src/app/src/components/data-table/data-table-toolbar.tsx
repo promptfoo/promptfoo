@@ -8,6 +8,7 @@ import {
 import { Input } from '@app/components/ui/input';
 import { Download } from 'lucide-react';
 import { DataTableColumnToggle } from './data-table-column-toggle';
+import { DataTableFilter } from './data-table-filter';
 
 import type { DataTableToolbarProps } from './types';
 
@@ -16,6 +17,7 @@ export function DataTableToolbar<TData>({
   globalFilter,
   setGlobalFilter,
   showColumnToggle = true,
+  showFilter = true,
   showExport = true,
   onExportCSV,
   onExportJSON,
@@ -25,6 +27,8 @@ export function DataTableToolbar<TData>({
     <div className="flex items-center justify-between gap-2 p-2 border-b border-border">
       <div className="flex items-center gap-2">
         {showColumnToggle && <DataTableColumnToggle table={table} />}
+
+        {showFilter && <DataTableFilter table={table} />}
 
         {showExport && (onExportCSV || onExportJSON) && (
           <DropdownMenu modal={false}>
