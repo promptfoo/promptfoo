@@ -40,12 +40,11 @@ const formatYamlWithSchema = (config: unknown): string => {
 const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: YamlEditorProps) => {
   const [code, setCode] = React.useState('');
   const [originalCode, setOriginalCode] = React.useState('');
-  const [isEditing, setIsEditing] = React.useState(true);
   const [parseError, setParseError] = React.useState<string | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = React.useState(false);
   const { showToast } = useToast();
 
-  const { config, getTestSuite, updateConfig } = useStore();
+  const { getTestSuite, updateConfig } = useStore();
 
   const parseAndUpdateStore = (yamlContent: string) => {
     try {
@@ -83,19 +82,9 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
       reader.onload = (e) => {
         const content = e.target?.result as string;
         if (content) {
-          // If in edit mode, just update the code
-          if (isEditing) {
-            setCode(ensureSchemaComment(content));
-            setHasUnsavedChanges(true);
-            showToast('File loaded into editor', 'info');
-          } else {
-            // If not in edit mode, parse and save immediately
-            const tempCode = ensureSchemaComment(content);
-            if (parseAndUpdateStore(tempCode)) {
-              setCode(tempCode);
-              setOriginalCode(tempCode);
-            }
-          }
+          setCode(ensureSchemaComment(content));
+          setHasUnsavedChanges(true);
+          showToast('File loaded into editor', 'info');
         }
       };
       reader.onerror = () => {
@@ -110,7 +99,6 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
   const handleSave = () => {
     const success = parseAndUpdateStore(code);
     if (success) {
-      setIsEditing(false);
       setOriginalCode(code);
       setHasUnsavedChanges(false);
     }
@@ -118,7 +106,6 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
 
   const handleCancel = () => {
     setCode(originalCode);
-    setIsEditing(false);
     setHasUnsavedChanges(false);
     setParseError(null);
     showToast('Changes discarded', 'info');
@@ -143,27 +130,10 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
     // Deliberately omitting getTestSuite from dependencies to avoid potential re-render loops
   }, [initialYaml, initialConfig]);
 
-  // Auto-update effect for store changes (only when not editing)
-  React.useEffect(() => {
-    if (!initialYaml && !initialConfig && !isEditing) {
-      const currentConfig = getTestSuite();
-      const formattedCode = formatYamlWithSchema(currentConfig);
-      // Only update if the content has actually changed to avoid cursor jumping
-      if (formattedCode !== code) {
-        setCode(formattedCode);
-        setOriginalCode(formattedCode);
-      }
-    }
-    // Deliberately omitting getTestSuite from dependencies to avoid infinite re-renders
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [config, isEditing, initialYaml, initialConfig, code]);
-
   // Track unsaved changes
   React.useEffect(() => {
-    if (isEditing && code !== originalCode) {
-      setHasUnsavedChanges(true);
-    }
-  }, [code, originalCode, isEditing]);
+    setHasUnsavedChanges(code !== originalCode);
+  }, [code, originalCode]);
 
   return (
     <div className="space-y-4">
@@ -177,7 +147,7 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
             </Button>
             <Button variant="outline" size="sm" onClick={handleCancel}>
               <CancelIcon className="h-4 w-4 mr-2" />
-              Undo
+              Reset to UI State
             </Button>
             <label>
               <Button variant="ghost" size="sm" asChild>
@@ -210,18 +180,16 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
           className={cn(
             'rounded-lg overflow-hidden',
             'border-2 transition-all',
-            isEditing ? 'border-primary' : 'border-border opacity-90',
+            hasUnsavedChanges ? 'border-primary' : 'border-border',
           )}
         >
           <Editor
             autoCapitalize="off"
             value={code}
             onValueChange={(newCode) => {
-              if (isEditing) {
-                setCode(newCode);
-                if (parseError) {
-                  setParseError(null);
-                }
+              setCode(newCode);
+              if (parseError) {
+                setParseError(null);
               }
             }}
             highlight={(code) => {
@@ -240,7 +208,6 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
               minHeight: '400px',
             }}
             className="bg-background"
-            disabled={!isEditing}
           />
         </div>
 

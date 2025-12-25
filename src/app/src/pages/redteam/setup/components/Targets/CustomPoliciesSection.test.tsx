@@ -73,10 +73,10 @@ describe('CustomPoliciesSection', () => {
 
       renderComponent();
 
-      // Verify the DataGrid is rendered but empty
+      // Verify the DataTable is rendered but empty
       await waitFor(() => {
-        const grid = screen.getByRole('grid');
-        expect(grid).toBeInTheDocument();
+        const table = screen.getByRole('table');
+        expect(table).toBeInTheDocument();
         // No policy rows should be visible
         expect(screen.queryByDisplayValue(/Custom Policy/)).not.toBeInTheDocument();
       });
@@ -142,13 +142,13 @@ describe('CustomPoliciesSection', () => {
         </ThemeProvider>,
       );
 
-      // Verify policies are reset to empty grid
+      // Verify policies are reset to empty table
       await waitFor(() => {
         expect(screen.queryByText('Custom Policy Text 1')).not.toBeInTheDocument();
         expect(screen.queryByText('Custom Policy Text 2')).not.toBeInTheDocument();
-        // Grid should be empty
-        const grid = screen.getByRole('grid');
-        expect(grid).toBeInTheDocument();
+        // Table should be empty
+        const table = screen.getByRole('table');
+        expect(table).toBeInTheDocument();
       });
     });
   });

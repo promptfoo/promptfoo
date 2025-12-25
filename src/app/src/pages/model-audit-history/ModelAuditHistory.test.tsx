@@ -81,8 +81,8 @@ describe('ModelAuditHistory', () => {
   it('should render the history page with New Scan button', () => {
     renderComponent();
 
-    // The DataGrid toolbar includes the New Scan button
-    expect(screen.getByText('New Scan')).toBeInTheDocument();
+    // Should have at least one "New Scan" button (toolbar + possibly empty state)
+    expect(screen.getAllByText('New Scan').length).toBeGreaterThanOrEqual(1);
   });
 
   it('should fetch historical scans on mount', async () => {
@@ -136,12 +136,12 @@ describe('ModelAuditHistory', () => {
   it('should have New Scan button in toolbar', async () => {
     renderComponent();
 
-    // Verify the New Scan button is rendered in the DataGrid toolbar
+    // Verify the New Scan button is rendered in the toolbar
     await waitFor(() => {
-      const newScanText = screen.getByText('New Scan');
-      expect(newScanText).toBeInTheDocument();
-      // Verify it's inside a clickable element
-      expect(newScanText.parentElement).not.toBeNull();
+      const newScanButtons = screen.getAllByText('New Scan');
+      expect(newScanButtons.length).toBeGreaterThanOrEqual(1);
+      // Verify at least one is inside a clickable element
+      expect(newScanButtons[0].closest('button, a')).not.toBeNull();
     });
   });
 

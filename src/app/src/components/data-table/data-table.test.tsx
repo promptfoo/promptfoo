@@ -21,9 +21,7 @@ describe('DataTable', () => {
   ];
 
   it('should render empty state with custom toolbar actions when data is empty and toolbarActions are provided', () => {
-    const toolbarActions = (
-      <button data-testid="custom-action">Add Item</button>
-    );
+    const toolbarActions = <button data-testid="custom-action">Add Item</button>;
 
     render(
       <DataTable
@@ -45,14 +43,7 @@ describe('DataTable', () => {
   });
 
   it('should not render toolbar in empty state when toolbarActions are not provided', () => {
-    render(
-      <DataTable
-        columns={columns}
-        data={[]}
-        showToolbar
-        emptyMessage="No items found"
-      />,
-    );
+    render(<DataTable columns={columns} data={[]} showToolbar emptyMessage="No items found" />);
 
     // Should show the empty state message
     expect(screen.getByText('No data found')).toBeInTheDocument();
@@ -63,23 +54,14 @@ describe('DataTable', () => {
   });
 
   it('should render toolbar with data and custom actions', () => {
-    const toolbarActions = (
-      <button data-testid="custom-action">Add Item</button>
-    );
+    const toolbarActions = <button data-testid="custom-action">Add Item</button>;
 
     const data: TestRow[] = [
       { id: '1', name: 'Test Item 1' },
       { id: '2', name: 'Test Item 2' },
     ];
 
-    render(
-      <DataTable
-        columns={columns}
-        data={data}
-        showToolbar
-        toolbarActions={toolbarActions}
-      />,
-    );
+    render(<DataTable columns={columns} data={data} showToolbar toolbarActions={toolbarActions} />);
 
     // Should show the custom toolbar action
     expect(screen.getByTestId('custom-action')).toBeInTheDocument();
@@ -109,42 +91,22 @@ describe('DataTable', () => {
   });
 
   it('should display loading state when isLoading is true', () => {
-    render(
-      <DataTable
-        columns={columns}
-        data={[]}
-        isLoading
-      />,
-    );
+    render(<DataTable columns={columns} data={[]} isLoading />);
 
     expect(screen.getByText('Loading data...')).toBeInTheDocument();
   });
 
   it('should display error state when error is provided', () => {
-    render(
-      <DataTable
-        columns={columns}
-        data={[]}
-        error="Failed to load data"
-      />,
-    );
+    render(<DataTable columns={columns} data={[]} error="Failed to load data" />);
 
     expect(screen.getByText('Error loading data')).toBeInTheDocument();
     expect(screen.getByText('Failed to load data')).toBeInTheDocument();
   });
 
   it('should hide toolbar when showToolbar is false', () => {
-    const data: TestRow[] = [
-      { id: '1', name: 'Test Item 1' },
-    ];
+    const data: TestRow[] = [{ id: '1', name: 'Test Item 1' }];
 
-    render(
-      <DataTable
-        columns={columns}
-        data={data}
-        showToolbar={false}
-      />,
-    );
+    render(<DataTable columns={columns} data={data} showToolbar={false} />);
 
     // Should show data but not toolbar
     expect(screen.getByText('Test Item 1')).toBeInTheDocument();

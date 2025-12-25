@@ -20,8 +20,6 @@ describe('TestSuites Component', () => {
   const mockRef = {
     current: null,
   } as unknown as React.RefObject<HTMLDivElement> as React.RefObject<HTMLDivElement>;
-  const mockFilterModel = { items: [] } as any;
-  const mockSetFilterModel = vi.fn();
   const defaultProps = {
     evalId: 'test-eval-123',
     categoryStats: {
@@ -34,8 +32,6 @@ describe('TestSuites Component', () => {
     },
     plugins: [],
     vulnerabilitiesDataGridRef: mockRef,
-    vulnerabilitiesDataGridFilterModel: mockFilterModel,
-    setVulnerabilitiesDataGridFilterModel: mockSetFilterModel,
   };
 
   beforeEach(() => {
@@ -48,23 +44,23 @@ describe('TestSuites Component', () => {
     });
   });
 
-  it('should render an empty DataGrid when categoryStats is empty', () => {
+  it('should render an empty DataTable when categoryStats is empty', () => {
     renderWithProviders(<TestSuites {...defaultProps} categoryStats={{}} />);
-    // Check for the DataGrid container
-    const dataGrid = screen.getByRole('grid');
-    expect(dataGrid).toBeInTheDocument();
+    // Check for the DataTable container
+    const dataTable = screen.getByRole('table');
+    expect(dataTable).toBeInTheDocument();
 
-    // Check for "No rows" message in DataGrid
-    const noRowsOverlay = screen.queryByText(/No rows/i);
+    // Check for "No data found" message in DataTable
+    const noRowsOverlay = screen.queryByText(/No data found/i);
     expect(noRowsOverlay).toBeInTheDocument();
   });
 
-  it('should render the DataGrid with correct data', () => {
+  it('should render the DataTable with correct data', () => {
     renderWithProviders(<TestSuites {...defaultProps} />);
 
-    // Check that the DataGrid is rendered
-    const dataGrid = screen.getByRole('grid');
-    expect(dataGrid).toBeInTheDocument();
+    // Check that the DataTable is rendered
+    const dataTable = screen.getByRole('table');
+    expect(dataTable).toBeInTheDocument();
 
     // Check for column headers
     expect(screen.getByText('Type')).toBeInTheDocument();
@@ -80,11 +76,11 @@ describe('TestSuites Component', () => {
     ).toBeInTheDocument();
   });
 
-  it('should render DataGrid with categoryStats data even when plugins prop is empty', () => {
+  it('should render DataTable with categoryStats data even when plugins prop is empty', () => {
     renderWithProviders(<TestSuites {...defaultProps} />);
 
-    const dataGrid = screen.getByRole('grid');
-    expect(dataGrid).toBeInTheDocument();
+    const dataTable = screen.getByRole('table');
+    expect(dataTable).toBeInTheDocument();
 
     expect(screen.getByText('Hate Speech')).toBeInTheDocument();
     expect(
@@ -113,8 +109,8 @@ describe('TestSuites Component', () => {
 
     renderWithProviders(<TestSuites {...propsWithUnknownSeverity} />);
 
-    const dataGrid = screen.getByRole('grid');
-    expect(dataGrid).toBeInTheDocument();
+    const dataTable = screen.getByRole('table');
+    expect(dataTable).toBeInTheDocument();
 
     const severityElements = screen.getAllByText(/Critical|Unknown/i);
     const severityValues = severityElements.map((el) => el.textContent);
@@ -135,8 +131,6 @@ describe('TestSuites Component Navigation', () => {
   const mockRef = {
     current: null,
   } as unknown as React.RefObject<HTMLDivElement> as React.RefObject<HTMLDivElement>;
-  const mockFilterModel = { items: [] } as any;
-  const mockSetFilterModel = vi.fn();
 
   const defaultProps = {
     evalId: 'test-eval-123',
@@ -156,8 +150,6 @@ describe('TestSuites Component Navigation', () => {
     },
     plugins: [],
     vulnerabilitiesDataGridRef: mockRef,
-    vulnerabilitiesDataGridFilterModel: mockFilterModel,
-    setVulnerabilitiesDataGridFilterModel: mockSetFilterModel,
   };
 
   beforeEach(() => {
@@ -276,8 +268,6 @@ describe('TestSuites Component Navigation with Missing EvalId', () => {
   const mockRef = {
     current: null,
   } as unknown as React.RefObject<HTMLDivElement> as React.RefObject<HTMLDivElement>;
-  const mockFilterModel = { items: [] } as any;
-  const mockSetFilterModel = vi.fn();
   const defaultProps = {
     evalId: 'test-eval-123',
     categoryStats: {
@@ -290,8 +280,6 @@ describe('TestSuites Component Navigation with Missing EvalId', () => {
     },
     plugins: [],
     vulnerabilitiesDataGridRef: mockRef,
-    vulnerabilitiesDataGridFilterModel: mockFilterModel,
-    setVulnerabilitiesDataGridFilterModel: mockSetFilterModel,
   };
 
   beforeEach(() => {
@@ -332,8 +320,6 @@ describe('TestSuites Component Filtering', () => {
   const mockRef = {
     current: null,
   } as unknown as React.RefObject<HTMLDivElement> as React.RefObject<HTMLDivElement>;
-  const mockFilterModel = { items: [] } as any;
-  const mockSetFilterModel = vi.fn();
 
   const defaultProps = {
     evalId: 'test-eval-123',
@@ -353,8 +339,6 @@ describe('TestSuites Component Filtering', () => {
     },
     plugins: [],
     vulnerabilitiesDataGridRef: mockRef,
-    vulnerabilitiesDataGridFilterModel: mockFilterModel,
-    setVulnerabilitiesDataGridFilterModel: mockSetFilterModel,
   };
 
   beforeEach(() => {
@@ -382,8 +366,6 @@ describe('TestSuites Component CSV Export', () => {
   const mockRef = {
     current: null,
   } as unknown as React.RefObject<HTMLDivElement> as React.RefObject<HTMLDivElement>;
-  const mockFilterModel = { items: [] } as any;
-  const mockSetFilterModel = vi.fn();
   const defaultProps = {
     evalId: 'test-eval-123',
     categoryStats: {
@@ -396,8 +378,6 @@ describe('TestSuites Component CSV Export', () => {
     },
     plugins: [],
     vulnerabilitiesDataGridRef: mockRef,
-    vulnerabilitiesDataGridFilterModel: mockFilterModel,
-    setVulnerabilitiesDataGridFilterModel: mockSetFilterModel,
   };
 
   beforeEach(() => {
@@ -426,8 +406,6 @@ describe('TestSuites Component - Zero Attack Success Rate', () => {
   const mockRef = {
     current: null,
   } as unknown as React.RefObject<HTMLDivElement> as React.RefObject<HTMLDivElement>;
-  const mockFilterModel = { items: [] } as any;
-  const mockSetFilterModel = vi.fn();
 
   const defaultProps = {
     evalId: 'test-eval-123',
@@ -447,8 +425,6 @@ describe('TestSuites Component - Zero Attack Success Rate', () => {
     },
     plugins: [],
     vulnerabilitiesDataGridRef: mockRef,
-    vulnerabilitiesDataGridFilterModel: mockFilterModel,
-    setVulnerabilitiesDataGridFilterModel: mockSetFilterModel,
   };
 
   beforeEach(() => {
@@ -506,8 +482,6 @@ describe('TestSuites Component CSV Export - Special Characters', () => {
     const mockRef = {
       current: null,
     } as unknown as React.RefObject<HTMLDivElement> as React.RefObject<HTMLDivElement>;
-    const mockFilterModel = { items: [] } as any;
-    const mockSetFilterModel = vi.fn();
 
     renderWithProviders(
       <TestSuites
@@ -515,8 +489,6 @@ describe('TestSuites Component CSV Export - Special Characters', () => {
         categoryStats={categoryStatsWithSpecialChars}
         plugins={plugins}
         vulnerabilitiesDataGridRef={mockRef}
-        vulnerabilitiesDataGridFilterModel={mockFilterModel}
-        setVulnerabilitiesDataGridFilterModel={mockSetFilterModel}
       />,
     );
 
@@ -544,8 +516,6 @@ describe('TestSuites Component - Large Filter Object', () => {
   const mockRef = {
     current: null,
   } as unknown as React.RefObject<HTMLDivElement> as React.RefObject<HTMLDivElement>;
-  const mockFilterModel = { items: [] } as any;
-  const mockSetFilterModel = vi.fn();
 
   const _evalId = 'test-eval-123';
 
@@ -580,8 +550,6 @@ describe('TestSuites Component - Large Filter Object', () => {
       },
       plugins: [],
       vulnerabilitiesDataGridRef: mockRef,
-      vulnerabilitiesDataGridFilterModel: mockFilterModel,
-      setVulnerabilitiesDataGridFilterModel: mockSetFilterModel,
     };
 
     renderWithProviders(<TestSuites {...defaultProps} />);
@@ -608,8 +576,6 @@ describe('TestSuites Component Navigation with Special Characters in Plugin ID',
   const mockRef = {
     current: null,
   } as unknown as React.RefObject<HTMLDivElement> as React.RefObject<HTMLDivElement>;
-  const mockFilterModel = { items: [] } as any;
-  const mockSetFilterModel = vi.fn();
 
   const evalId = 'test-eval-123';
   const specialPluginId = 'plugin:with"special\'chars\\and unicode:你好';
@@ -630,8 +596,6 @@ describe('TestSuites Component Navigation with Special Characters in Plugin ID',
       },
     ],
     vulnerabilitiesDataGridRef: mockRef,
-    vulnerabilitiesDataGridFilterModel: mockFilterModel,
-    setVulnerabilitiesDataGridFilterModel: mockSetFilterModel,
   };
 
   beforeEach(() => {
@@ -672,8 +636,6 @@ describe('TestSuites Component - Zero Attack Success Rate Navigation', () => {
   const mockRef = {
     current: null,
   } as unknown as React.RefObject<HTMLDivElement> as React.RefObject<HTMLDivElement>;
-  const mockFilterModel = { items: [] } as any;
-  const mockSetFilterModel = vi.fn();
 
   const evalId = 'test-eval-123';
 
@@ -689,8 +651,6 @@ describe('TestSuites Component - Zero Attack Success Rate Navigation', () => {
     },
     plugins: [],
     vulnerabilitiesDataGridRef: mockRef,
-    vulnerabilitiesDataGridFilterModel: mockFilterModel,
-    setVulnerabilitiesDataGridFilterModel: mockSetFilterModel,
   };
 
   beforeEach(() => {
