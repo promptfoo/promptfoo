@@ -109,7 +109,7 @@ describe('RiskCard', () => {
     render(<RiskCard {...createTestProps({ testTypes })} />);
 
     expect(screen.getByText('SQL Injection')).toBeInTheDocument();
-    expect(screen.getByText('SSRF Vulnerability')).toBeInTheDocument();
+    expect(screen.getByText('Server-Side Request Forgery')).toBeInTheDocument();
   });
 
   it('should open the RiskCategoryDrawer with the correct category and test data when a test type list item is clicked', () => {
