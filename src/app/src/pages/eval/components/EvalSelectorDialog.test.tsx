@@ -1,15 +1,14 @@
-import { Box, Typography } from '@mui/material';
 import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
-import EvalsDataGrid from '../../evals/components/EvalsDataGrid';
+import EvalsTable from '../../evals/components/EvalsTable';
 import EvalSelectorDialog from './EvalSelectorDialog';
 
-vi.mock('../../evals/components/EvalsDataGrid', () => ({
+vi.mock('../../evals/components/EvalsTable', () => ({
   default: vi.fn(({ onEvalSelected }: { onEvalSelected: (evalId: string) => void }) => {
     return (
-      <div data-testid="mock-evals-data-grid">
+      <div data-testid="mock-evals-table">
         <button data-testid="select-eval" onClick={() => onEvalSelected('test-eval-id')}>
           Select Eval
         </button>
@@ -18,14 +17,14 @@ vi.mock('../../evals/components/EvalsDataGrid', () => ({
   }),
 }));
 
-const MockedEvalsDataGrid = EvalsDataGrid as Mock;
+const MockedEvalsTable = EvalsTable as Mock;
 
 describe('EvalSelectorDialog', () => {
   beforeEach(() => {
-    MockedEvalsDataGrid.mockClear();
+    MockedEvalsTable.mockClear();
   });
 
-  it('should render the dialog with title, description, and EvalsDataGrid when open', () => {
+  it('should render the dialog with title, description, and EvalsTable when open', () => {
     const mockOnClose = vi.fn();
     const mockOnEvalSelected = vi.fn();
     const title = 'Select an Eval';
@@ -49,8 +48,8 @@ describe('EvalSelectorDialog', () => {
 
     expect(screen.getByText(description)).toBeInTheDocument();
 
-    expect(screen.getByTestId('mock-evals-data-grid')).toBeInTheDocument();
-    expect(MockedEvalsDataGrid).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('mock-evals-table')).toBeInTheDocument();
+    expect(MockedEvalsTable).toHaveBeenCalledTimes(1);
 
     expect(screen.getByRole('button', { name: /cancel/i })).toBeInTheDocument();
   });
@@ -71,7 +70,7 @@ describe('EvalSelectorDialog', () => {
     expect(mockOnClose).toHaveBeenCalledTimes(1);
   });
 
-  it('should call onEvalSelected with the selected evalId when an eval is selected in EvalsDataGrid', async () => {
+  it('should call onEvalSelected with the selected evalId when an eval is selected in EvalsTable', async () => {
     const mockOnClose = vi.fn();
     const mockOnEvalSelected = vi.fn();
 
@@ -93,7 +92,7 @@ describe('EvalSelectorDialog', () => {
     expect(mockOnEvalSelected).toHaveBeenCalledWith('test-eval-id');
   });
 
-  it('should pass focusedEvalId and filterByDatasetId to EvalsDataGrid', () => {
+  it('should pass focusedEvalId and filterByDatasetId to EvalsTable', () => {
     const mockOnClose = vi.fn();
     const mockOnEvalSelected = vi.fn();
     const focusedEvalId = 'test-eval-id';
@@ -111,7 +110,7 @@ describe('EvalSelectorDialog', () => {
       </MemoryRouter>,
     );
 
-    expect(MockedEvalsDataGrid).toHaveBeenCalledWith(
+    expect(MockedEvalsTable).toHaveBeenCalledWith(
       expect.objectContaining({
         focusedEvalId: focusedEvalId,
         filterByDatasetId: filterByDatasetId,
@@ -120,30 +119,7 @@ describe('EvalSelectorDialog', () => {
     );
   });
 
-  it('should pass onOpenFocusSearch to EvalsDataGrid as focusQuickFilterOnMount', () => {
-    const mockOnClose = vi.fn();
-    const mockOnEvalSelected = vi.fn();
-
-    render(
-      <MemoryRouter>
-        <EvalSelectorDialog
-          open={true}
-          onClose={mockOnClose}
-          onEvalSelected={mockOnEvalSelected}
-          onOpenFocusSearch={true}
-        />
-      </MemoryRouter>,
-    );
-
-    expect(MockedEvalsDataGrid).toHaveBeenCalledWith(
-      expect.objectContaining({
-        focusQuickFilterOnMount: true,
-      }),
-      undefined,
-    );
-  });
-
-  it('should not render DialogTitle and description Box when title and description props are undefined or null', () => {
+  it('should render default title when title prop is not provided', () => {
     const mockOnClose = vi.fn();
     const mockOnEvalSelected = vi.fn();
 
@@ -153,12 +129,11 @@ describe('EvalSelectorDialog', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.queryByText((_, element) => element?.textContent === undefined)).toBeNull();
+    // Default title should be shown
+    expect(screen.getByText('Select Evaluation')).toBeInTheDocument();
 
-    expect(screen.queryByText((_, element) => element?.textContent === null)).toBeNull();
-
-    expect(screen.getByTestId('mock-evals-data-grid')).toBeInTheDocument();
-    expect(MockedEvalsDataGrid).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('mock-evals-table')).toBeInTheDocument();
+    expect(MockedEvalsTable).toHaveBeenCalledTimes(1);
 
     expect(screen.getByRole('button', { name: /cancel/i })).toBeInTheDocument();
   });
@@ -178,40 +153,25 @@ describe('EvalSelectorDialog', () => {
       </MemoryRouter>,
     );
 
-    expect(MockedEvalsDataGrid).toHaveBeenCalledWith(
+    expect(MockedEvalsTable).toHaveBeenCalledWith(
       expect.objectContaining({
         filterByDatasetId: true,
         focusedEvalId: undefined,
         onEvalSelected: mockOnEvalSelected,
-        focusQuickFilterOnMount: false,
       }),
       undefined,
     );
   });
 
-  it('should display "No evals found" message when EvalsDataGrid has no evals', () => {
-    MockedEvalsDataGrid.mockImplementationOnce(() => (
-      <Box
-        data-testid="mock-evals-data-grid"
-        sx={{
-          textAlign: 'center',
-          color: 'text.secondary',
-          height: '100%',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'center',
-          alignItems: 'center',
-          p: 3,
-        }}
-      >
-        <Box sx={{ fontSize: '2rem', mb: 2 }}>🔍</Box>
-        <Typography variant="h6" gutterBottom>
-          No evals found
-        </Typography>
-        <Typography variant="body2" color="text.secondary">
+  it('should display "No evals found" message when EvalsTable has no evals', () => {
+    MockedEvalsTable.mockImplementationOnce(() => (
+      <div data-testid="mock-evals-table" className="flex flex-col items-center justify-center p-6">
+        <div className="text-4xl mb-4">🔍</div>
+        <h3 className="text-lg font-semibold">No evals found</h3>
+        <p className="text-sm text-muted-foreground">
           Try adjusting your search or create a new evaluation
-        </Typography>
-      </Box>
+        </p>
+      </div>
     ));
 
     const mockOnClose = vi.fn();

@@ -1,5 +1,6 @@
 import * as React from 'react';
 
+import { Checkbox } from '@app/components/ui/checkbox';
 import { Spinner } from '@app/components/ui/spinner';
 import { cn } from '@app/lib/utils';
 import {
@@ -10,10 +11,16 @@ import {
   getSortedRowModel,
   useReactTable,
 } from '@tanstack/react-table';
-import { AlertTriangle, Search } from 'lucide-react';
+import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, Search } from 'lucide-react';
 import { DataTablePagination } from './data-table-pagination';
 import { DataTableToolbar } from './data-table-toolbar';
-import type { ColumnFiltersState, SortingState, VisibilityState } from '@tanstack/react-table';
+import type {
+  ColumnDef,
+  ColumnFiltersState,
+  RowSelectionState,
+  SortingState,
+  VisibilityState,
+} from '@tanstack/react-table';
 
 import type { DataTableProps } from './types';
 
@@ -33,28 +40,88 @@ export function DataTable<TData, TValue = unknown>({
   showExport = true,
   showPagination = true,
   initialPageSize = 25,
+  enableRowSelection = false,
+  rowSelection: controlledRowSelection,
+  onRowSelectionChange,
+  getRowId,
+  toolbarActions,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>(initialSorting);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
   const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
   const [globalFilter, setGlobalFilter] = React.useState('');
   const [pagination, setPagination] = React.useState({ pageIndex: 0, pageSize: initialPageSize });
+  const [internalRowSelection, setInternalRowSelection] = React.useState<RowSelectionState>({});
+
+  // Use controlled or internal row selection state
+  const rowSelection = controlledRowSelection ?? internalRowSelection;
+  const handleRowSelectionChange = React.useCallback(
+    (updaterOrValue: RowSelectionState | ((old: RowSelectionState) => RowSelectionState)) => {
+      const newValue =
+        typeof updaterOrValue === 'function' ? updaterOrValue(rowSelection) : updaterOrValue;
+      if (onRowSelectionChange) {
+        onRowSelectionChange(newValue);
+      } else {
+        setInternalRowSelection(newValue);
+      }
+    },
+    [onRowSelectionChange, rowSelection],
+  );
+
+  // Create checkbox column for row selection (selects ALL rows, not just current page)
+  const selectionColumn: ColumnDef<TData, unknown> = React.useMemo(
+    () => ({
+      id: 'select',
+      header: ({ table }) => (
+        <Checkbox
+          checked={table.getIsAllRowsSelected()}
+          indeterminate={table.getIsSomeRowsSelected()}
+          onChange={table.getToggleAllRowsSelectedHandler()}
+          aria-label="Select all"
+        />
+      ),
+      cell: ({ row }) => (
+        <Checkbox
+          checked={row.getIsSelected()}
+          disabled={!row.getCanSelect()}
+          onChange={row.getToggleSelectedHandler()}
+          aria-label="Select row"
+        />
+      ),
+      size: 40,
+      enableSorting: false,
+      enableHiding: false,
+    }),
+    [],
+  );
+
+  // Prepend selection column when enabled
+  const allColumns = React.useMemo(() => {
+    if (enableRowSelection) {
+      return [selectionColumn, ...columns];
+    }
+    return columns;
+  }, [enableRowSelection, selectionColumn, columns]);
 
   const table = useReactTable({
     data,
-    columns,
+    columns: allColumns,
     state: {
       sorting,
       columnFilters,
       columnVisibility,
       globalFilter,
       pagination,
+      rowSelection,
     },
+    enableRowSelection,
+    onRowSelectionChange: handleRowSelectionChange,
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
     onColumnVisibilityChange: setColumnVisibility,
     onGlobalFilterChange: setGlobalFilter,
     onPaginationChange: setPagination,
+    getRowId: getRowId ? (row) => getRowId(row) : undefined,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
@@ -93,7 +160,7 @@ export function DataTable<TData, TValue = unknown>({
   }
 
   return (
-    <div className={cn('space-y-4', className)}>
+    <div className={cn('space-y-4 pb-4', className)}>
       {showToolbar && (
         <DataTableToolbar
           table={table}
@@ -103,6 +170,7 @@ export function DataTable<TData, TValue = unknown>({
           showExport={showExport}
           onExportCSV={onExportCSV}
           onExportJSON={onExportJSON}
+          toolbarActions={toolbarActions}
         />
       )}
 
@@ -111,21 +179,43 @@ export function DataTable<TData, TValue = unknown>({
           <thead className="bg-muted/50">
             {table.getHeaderGroups().map((headerGroup) => (
               <tr key={headerGroup.id} className="border-b border-border">
-                {headerGroup.headers.map((header) => (
-                  <th
-                    key={header.id}
-                    className="px-4 py-3 text-left text-sm font-semibold"
-                    style={{
-                      width: header.column.columnDef.size
-                        ? `${header.column.columnDef.size}px`
-                        : undefined,
-                    }}
-                  >
-                    {header.isPlaceholder
-                      ? null
-                      : flexRender(header.column.columnDef.header, header.getContext())}
-                  </th>
-                ))}
+                {headerGroup.headers.map((header) => {
+                  const canSort = header.column.getCanSort();
+                  const sortDirection = header.column.getIsSorted();
+
+                  return (
+                    <th
+                      key={header.id}
+                      className={cn(
+                        'px-4 py-3 text-left text-sm font-semibold',
+                        canSort && 'cursor-pointer select-none hover:bg-muted/80',
+                      )}
+                      style={{
+                        width: header.column.columnDef.size
+                          ? `${header.column.columnDef.size}px`
+                          : undefined,
+                      }}
+                      onClick={header.column.getToggleSortingHandler()}
+                    >
+                      {header.isPlaceholder ? null : (
+                        <div className="flex items-center gap-1">
+                          {flexRender(header.column.columnDef.header, header.getContext())}
+                          {canSort && (
+                            <span className="ml-1">
+                              {sortDirection === 'asc' ? (
+                                <ArrowUp className="h-4 w-4" />
+                              ) : sortDirection === 'desc' ? (
+                                <ArrowDown className="h-4 w-4" />
+                              ) : (
+                                <ArrowUpDown className="h-4 w-4 text-muted-foreground/50" />
+                              )}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </th>
+                  );
+                })}
               </tr>
             ))}
           </thead>
@@ -141,7 +231,14 @@ export function DataTable<TData, TValue = unknown>({
                   )}
                 >
                   {row.getVisibleCells().map((cell) => (
-                    <td key={cell.id} className="px-4 py-3 text-sm">
+                    <td
+                      key={cell.id}
+                      className={cn(
+                        'px-4 py-3 text-sm',
+                        cell.column.id === 'select' && 'cursor-pointer',
+                      )}
+                      onClick={cell.column.id === 'select' ? (e) => e.stopPropagation() : undefined}
+                    >
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </td>
                   ))}
@@ -149,7 +246,7 @@ export function DataTable<TData, TValue = unknown>({
               ))
             ) : (
               <tr>
-                <td colSpan={columns.length} className="h-[200px] text-center">
+                <td colSpan={allColumns.length} className="h-[200px] text-center">
                   <div className="flex flex-col items-center justify-center gap-2">
                     <Search className="h-8 w-8 text-muted-foreground" />
                     <p className="text-sm text-muted-foreground">No results match your search</p>

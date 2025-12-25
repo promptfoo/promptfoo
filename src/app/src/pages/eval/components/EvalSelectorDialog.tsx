@@ -1,10 +1,13 @@
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import Dialog from '@mui/material/Dialog';
-import DialogActions from '@mui/material/DialogActions';
-import DialogContent from '@mui/material/DialogContent';
-import DialogTitle from '@mui/material/DialogTitle';
-import EvalsDataGrid from '../../evals/components/EvalsDataGrid';
+import { Button } from '@app/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@app/components/ui/dialog';
+import EvalsTable from '../../evals/components/EvalsTable';
 
 type Props = {
   open: boolean;
@@ -25,25 +28,28 @@ const EvalSelectorDialog = ({
   description,
   focusedEvalId,
   filterByDatasetId,
-  onOpenFocusSearch = false,
 }: Props) => {
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="lg" fullWidth>
-      {title ? <DialogTitle>{title}</DialogTitle> : null}
-      <DialogContent>
-        {description ? <Box sx={{ mb: 4 }}>{description}</Box> : null}
-        <Box sx={{ width: '100%', mt: 2 }}>
-          <EvalsDataGrid
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
+      <DialogContent className="max-w-5xl max-h-[80vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle>{title || 'Select Evaluation'}</DialogTitle>
+          {description && <DialogDescription>{description}</DialogDescription>}
+        </DialogHeader>
+        <div className="flex-1 overflow-auto rounded-lg border border-border">
+          <EvalsTable
             onEvalSelected={onEvalSelected}
             focusedEvalId={focusedEvalId}
             filterByDatasetId={filterByDatasetId}
-            focusQuickFilterOnMount={onOpenFocusSearch}
+            showUtilityButtons
           />
-        </Box>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+        </DialogFooter>
       </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose}>Cancel</Button>
-      </DialogActions>
     </Dialog>
   );
 };

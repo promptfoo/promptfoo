@@ -1,4 +1,4 @@
-import type { Table } from '@tanstack/react-table';
+import type { RowSelectionState, Table } from '@tanstack/react-table';
 
 export interface DataTableProps<TData, TValue = unknown> {
   columns: import('@tanstack/react-table').ColumnDef<TData, TValue>[];
@@ -16,6 +16,13 @@ export interface DataTableProps<TData, TValue = unknown> {
   showExport?: boolean;
   showPagination?: boolean;
   initialPageSize?: number;
+  // Row selection
+  enableRowSelection?: boolean;
+  rowSelection?: RowSelectionState;
+  onRowSelectionChange?: (selection: RowSelectionState) => void;
+  getRowId?: (row: TData) => string;
+  // Custom toolbar actions
+  toolbarActions?: React.ReactNode;
 }
 
 export interface DataTableToolbarProps<TData> {
@@ -26,6 +33,7 @@ export interface DataTableToolbarProps<TData> {
   showExport?: boolean;
   onExportCSV?: () => void;
   onExportJSON?: () => void;
+  toolbarActions?: React.ReactNode;
 }
 
 export interface DataTablePaginationProps<TData> {

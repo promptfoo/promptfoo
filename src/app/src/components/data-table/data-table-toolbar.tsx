@@ -19,9 +19,10 @@ export function DataTableToolbar<TData>({
   showExport = true,
   onExportCSV,
   onExportJSON,
+  toolbarActions,
 }: DataTableToolbarProps<TData>) {
   return (
-    <div className="flex items-center justify-between gap-2 p-1 border-b border-border">
+    <div className="flex items-center justify-between gap-2 p-2 border-b border-border">
       <div className="flex items-center gap-2">
         {showColumnToggle && <DataTableColumnToggle table={table} />}
 
@@ -41,6 +42,8 @@ export function DataTableToolbar<TData>({
             </DropdownMenuContent>
           </DropdownMenu>
         )}
+
+        {toolbarActions}
       </div>
 
       <Input
