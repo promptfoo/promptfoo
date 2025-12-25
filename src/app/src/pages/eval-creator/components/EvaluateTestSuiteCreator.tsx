@@ -22,7 +22,6 @@ import { InfoBox } from './InfoBox';
 import PromptsSection from './PromptsSection';
 import { ProvidersListSection } from './ProvidersListSection';
 import { RunOptionsSection } from './RunOptionsSection';
-import RunTestSuiteButton from './RunTestSuiteButton';
 import { StepSection } from './StepSection';
 import TestCasesSection from './TestCasesSection';
 import YamlEditor from './YamlEditor';

@@ -141,7 +141,7 @@ export default function ModelAuditResultLatestPage() {
       <ScanResultHeader
         name={latestScan.name || 'Latest Scan Results'}
         modelPath={latestScan.modelPath}
-        createdAt={latestScan.createdAt}
+        createdAt={new Date(latestScan.createdAt).toISOString()}
         severityCounts={severityCounts}
         size="sm"
       />

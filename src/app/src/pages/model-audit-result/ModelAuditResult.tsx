@@ -190,8 +190,8 @@ export default function ModelAuditResult() {
       <ScanResultHeader
         name={scan.name || 'Model Security Scan'}
         modelPath={scan.modelPath}
-        createdAt={scan.createdAt}
-        author={scan.author}
+        createdAt={new Date(scan.createdAt).toISOString()}
+        author={scan.author ?? undefined}
         severityCounts={severityCounts}
         topBar={topBar}
       />

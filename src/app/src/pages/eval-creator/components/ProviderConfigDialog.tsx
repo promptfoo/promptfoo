@@ -92,36 +92,36 @@ const ProviderConfigDialog = ({
                 {isAgentIdValid && isAgentAliasIdValid ? (
                   <ul className="mt-2 ml-4 list-disc space-y-1 text-sm">
                     <li>
-                      <strong>Agent ID:</strong> {String(localConfig.agentId) || 'Not specified'}
+                      <strong>Agent ID:</strong> {(localConfig.agentId as string) || 'Not specified'}
                     </li>
-                    {localConfig.agentAliasId && (
+                    {localConfig.agentAliasId ? (
                       <li>
-                        <strong>Agent Alias:</strong> {String(localConfig.agentAliasId)}
+                        <strong>Agent Alias:</strong> {localConfig.agentAliasId as string}
                       </li>
-                    )}
-                    {localConfig.region && (
+                    ) : null}
+                    {localConfig.region ? (
                       <li>
-                        <strong>Region:</strong> {String(localConfig.region)}
+                        <strong>Region:</strong> {localConfig.region as string}
                       </li>
-                    )}
-                    {localConfig.knowledgeBaseConfigurations && (
+                    ) : null}
+                    {localConfig.knowledgeBaseConfigurations ? (
                       <li>
                         <strong>Knowledge Bases:</strong>{' '}
-                        {Array.isArray(localConfig.knowledgeBaseConfigurations)
+                        {(Array.isArray(localConfig.knowledgeBaseConfigurations)
                           ? localConfig.knowledgeBaseConfigurations
                               .map(
                                 (kb: { knowledgeBaseId?: string }) =>
                                   kb.knowledgeBaseId || 'Unknown',
                               )
                               .join(', ')
-                          : 'Configured'}
+                          : 'Configured') as string}
                       </li>
-                    )}
-                    {localConfig.enableTrace && (
+                    ) : null}
+                    {localConfig.enableTrace ? (
                       <li>
                         <strong>Tracing:</strong> Enabled
                       </li>
-                    )}
+                    ) : null}
                   </ul>
                 ) : (
                   <p className="mt-2 text-sm">

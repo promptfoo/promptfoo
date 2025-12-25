@@ -178,7 +178,7 @@ export default function EvalsTable({
       {
         accessorKey: 'evalId',
         header: 'ID',
-        cell: ({ getValue, row }) => {
+        cell: ({ getValue }) => {
           const evalId = getValue<string>();
           if (evalId === focusedEvalId) {
             return <span className="font-mono text-sm">{evalId}</span>;

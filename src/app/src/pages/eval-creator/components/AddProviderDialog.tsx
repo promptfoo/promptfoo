@@ -23,7 +23,8 @@ import {
 } from '@app/components/ui/tooltip';
 import ProviderConfigEditor from '@app/pages/redteam/setup/components/Targets/ProviderConfigEditor';
 import ProviderTypeSelector from '@app/pages/redteam/setup/components/Targets/ProviderTypeSelector';
-import type { ProviderOptions } from '@app/pages/redteam/setup/types';
+import type { ProviderOptions } from '@promptfoo/types';
+import type { ProviderOptions as RedteamProviderOptions } from '@app/pages/redteam/setup/types';
 
 interface AddProviderDialogProps {
   open: boolean;
@@ -130,16 +131,16 @@ export default function AddProviderDialog({
             {step === 'select' ? (
               <div className="w-full">
                 <ProviderTypeSelector
-                  provider={provider}
-                  setProvider={handleProviderTypeSelect}
+                  provider={provider as RedteamProviderOptions | undefined}
+                  setProvider={handleProviderTypeSelect as (provider: RedteamProviderOptions | undefined) => void}
                   providerType={providerType}
                 />
               </div>
             ) : (
               provider && (
                 <ProviderConfigEditor
-                  provider={provider}
-                  setProvider={setProvider}
+                  provider={provider as RedteamProviderOptions}
+                  setProvider={setProvider as (provider: RedteamProviderOptions) => void}
                   setError={setError}
                   validateAll={false}
                   providerType={providerType}

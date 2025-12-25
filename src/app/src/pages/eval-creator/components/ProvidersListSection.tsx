@@ -4,7 +4,7 @@ import { Card } from '@app/components/ui/card';
 import { Badge } from '@app/components/ui/badge';
 import { Plus, Settings, Trash2 } from 'lucide-react';
 import { cn } from '@app/lib/utils';
-import type { ProviderOptions } from '@app/pages/redteam/setup/types';
+import type { ProviderOptions } from '@promptfoo/types';
 import AddProviderDialog from './AddProviderDialog';
 
 interface ProvidersListSectionProps {
@@ -25,17 +25,39 @@ function getProviderLabel(provider: ProviderOptions): string {
 function getProviderType(provider: ProviderOptions): string {
   const id = typeof provider.id === 'string' ? provider.id : '';
 
-  if (id.startsWith('openai:')) return 'OpenAI';
-  if (id.startsWith('anthropic:')) return 'Anthropic';
-  if (id.startsWith('bedrock:')) return 'AWS Bedrock';
-  if (id.startsWith('azure:')) return 'Azure';
-  if (id.startsWith('vertex:')) return 'Google Vertex';
-  if (id.startsWith('openrouter:')) return 'OpenRouter';
-  if (id === 'http') return 'HTTP Endpoint';
-  if (id === 'websocket') return 'WebSocket';
-  if (id.startsWith('file://') && id.includes('.py')) return 'Python';
-  if (id.startsWith('file://') && id.includes('.js')) return 'JavaScript';
-  if (id === 'browser') return 'Browser Automation';
+  if (id.startsWith('openai:')) {
+    return 'OpenAI';
+  }
+  if (id.startsWith('anthropic:')) {
+    return 'Anthropic';
+  }
+  if (id.startsWith('bedrock:')) {
+    return 'AWS Bedrock';
+  }
+  if (id.startsWith('azure:')) {
+    return 'Azure';
+  }
+  if (id.startsWith('vertex:')) {
+    return 'Google Vertex';
+  }
+  if (id.startsWith('openrouter:')) {
+    return 'OpenRouter';
+  }
+  if (id === 'http') {
+    return 'HTTP Endpoint';
+  }
+  if (id === 'websocket') {
+    return 'WebSocket';
+  }
+  if (id.startsWith('file://') && id.includes('.py')) {
+    return 'Python';
+  }
+  if (id.startsWith('file://') && id.includes('.js')) {
+    return 'JavaScript';
+  }
+  if (id === 'browser') {
+    return 'Browser Automation';
+  }
 
   return 'Custom';
 }

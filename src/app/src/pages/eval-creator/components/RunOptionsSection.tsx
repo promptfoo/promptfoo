@@ -59,7 +59,7 @@ export function RunOptionsSection({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="delay" className={!canSetDelay ? 'text-muted-foreground' : ''}>
+            <Label htmlFor="delay" className={canSetDelay ? '' : 'text-muted-foreground'}>
               Delay between API calls (ms)
             </Label>
             <Input
@@ -72,16 +72,15 @@ export function RunOptionsSection({
               disabled={!canSetDelay}
             />
             <p className="text-xs text-muted-foreground">
-              {!canSetDelay
-                ? 'To set a delay, max concurrent requests must be 1'
-                : 'Add a delay between API calls to avoid rate limits'}
+              {canSetDelay
+                ? 'Add a delay between API calls to avoid rate limits' : 'To set a delay, max concurrent requests must be 1'}
             </p>
           </div>
 
           <div className="space-y-2">
             <Label
               htmlFor="maxConcurrency"
-              className={!canSetMaxConcurrency ? 'text-muted-foreground' : ''}
+              className={canSetMaxConcurrency ? '' : 'text-muted-foreground'}
             >
               Max concurrent requests
             </Label>
@@ -95,9 +94,8 @@ export function RunOptionsSection({
               disabled={!canSetMaxConcurrency}
             />
             <p className="text-xs text-muted-foreground">
-              {!canSetMaxConcurrency
-                ? 'To set max concurrency, delay must be 0'
-                : 'Maximum number of concurrent requests to make'}
+              {canSetMaxConcurrency
+                ? 'Maximum number of concurrent requests to make' : 'To set max concurrency, delay must be 0'}
             </p>
           </div>
         </div>

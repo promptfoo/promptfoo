@@ -164,14 +164,8 @@ const AssertsForm = ({ onAdd, initialValues }: AssertsFormProps) => {
                   <SelectContent className="max-h-[300px]">
                     {assertTypes.map((type) => (
                       <SelectItem key={type} value={type}>
-                        <div className="flex items-center gap-2">
-                          <span>{type}</span>
-                          {LLM_ASSERTION_TYPES.has(type) && (
-                            <Badge variant="secondary" className="text-xs">
-                              LLM
-                            </Badge>
-                          )}
-                        </div>
+                        {type}
+                        {LLM_ASSERTION_TYPES.has(type) && ' (LLM)'}
                       </SelectItem>
                     ))}
                   </SelectContent>

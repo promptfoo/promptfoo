@@ -3,13 +3,12 @@ import React from 'react';
 import { Alert, AlertDescription } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
 import { CopyButton } from '@app/components/ui/copy-button';
-import { CancelIcon, EditIcon, SaveIcon, UploadIcon } from '@app/components/ui/icons';
+import { CancelIcon, SaveIcon, UploadIcon } from '@app/components/ui/icons';
 import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
 import { useStore } from '@app/stores/evalConfig';
 import yaml from 'js-yaml';
 import Prism from 'prismjs';
-import { Link } from 'react-router-dom';
 import Editor from 'react-simple-code-editor';
 import type { UnifiedConfig } from '@promptfoo/types';
 import 'prismjs/components/prism-yaml';
@@ -108,12 +107,6 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
     event.target.value = '';
   };
 
-  const handleEdit = () => {
-    setIsEditing(true);
-    setOriginalCode(code);
-    setHasUnsavedChanges(false);
-  };
-
   const handleSave = () => {
     const success = parseAndUpdateStore(code);
     if (success) {
@@ -129,14 +122,6 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
     setHasUnsavedChanges(false);
     setParseError(null);
     showToast('Changes discarded', 'info');
-  };
-
-  const handleReset = () => {
-    const currentConfig = getTestSuite();
-    const newCode = formatYamlWithSchema(currentConfig);
-    setCode(newCode);
-    setHasUnsavedChanges(code !== newCode);
-    showToast('Reset to current configuration', 'info');
   };
 
   // Initial load effect
@@ -244,7 +229,7 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
                 return Prism.languages.yaml
                   ? Prism.highlight(code, Prism.languages.yaml, 'yaml')
                   : code;
-              } catch (e) {
+              } catch {
                 return code;
               }
             }}

@@ -1,4 +1,4 @@
-import { Card, CardContent, CardHeader } from '@app/components/ui/card';
+import { Card, CardContent } from '@app/components/ui/card';
 
 interface StepSectionProps {
   stepNumber: number;
@@ -13,15 +13,15 @@ interface StepSectionProps {
 }
 
 export function StepSection({
-  stepNumber,
+  stepNumber: _stepNumber,
   title,
   description,
-  isComplete,
-  isRequired = false,
-  count,
+  isComplete: _isComplete,
+  isRequired: _isRequired = false,
+  count: _count,
   guidance,
   children,
-  defaultOpen = false,
+  defaultOpen: _defaultOpen = false,
 }: StepSectionProps) {
   return (
     <div className="space-y-6">
