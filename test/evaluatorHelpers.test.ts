@@ -639,9 +639,9 @@ describe('runExtensionHook', () => {
         const extensions = ['ext1', 'ext2', 'ext3'];
         await runExtensionHook(extensions, hookName, context);
         expect(transform).toHaveBeenCalledTimes(3);
-        expect(transform).toHaveBeenNthCalledWith(1, 'ext1', hookName, context, false);
-        expect(transform).toHaveBeenNthCalledWith(2, 'ext2', hookName, context, false);
-        expect(transform).toHaveBeenNthCalledWith(3, 'ext3', hookName, context, false);
+        expect(transform).toHaveBeenNthCalledWith(1, 'ext1', context, { hookName }, false);
+        expect(transform).toHaveBeenNthCalledWith(2, 'ext2', context, { hookName }, false);
+        expect(transform).toHaveBeenNthCalledWith(3, 'ext3', context, { hookName }, false);
       });
 
       it('should return the original context when extension(s) do not return a value', async () => {
@@ -731,9 +731,9 @@ describe('runExtensionHook', () => {
         const extensions = ['ext1', 'ext2', 'ext3'];
         await runExtensionHook(extensions, hookName, context);
         expect(transform).toHaveBeenCalledTimes(3);
-        expect(transform).toHaveBeenNthCalledWith(1, 'ext1', hookName, context, false);
-        expect(transform).toHaveBeenNthCalledWith(2, 'ext2', hookName, context, false);
-        expect(transform).toHaveBeenNthCalledWith(3, 'ext3', hookName, context, false);
+        expect(transform).toHaveBeenNthCalledWith(1, 'ext1', context, { hookName }, false);
+        expect(transform).toHaveBeenNthCalledWith(2, 'ext2', context, { hookName }, false);
+        expect(transform).toHaveBeenNthCalledWith(3, 'ext3', context, { hookName }, false);
       });
 
       it('should return the original context when extension(s) do not return a value', async () => {
