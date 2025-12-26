@@ -1,4 +1,4 @@
-import type { RowSelectionState, Table } from '@tanstack/react-table';
+import type { ColumnDef, RowSelectionState, SortingState, Table } from '@tanstack/react-table';
 
 // Extend TanStack Table's ColumnMeta to include our custom filter metadata
 declare module '@tanstack/react-table' {
@@ -10,14 +10,14 @@ declare module '@tanstack/react-table' {
 }
 
 export interface DataTableProps<TData, TValue = unknown> {
-  columns: import('@tanstack/react-table').ColumnDef<TData, TValue>[];
+  columns: ColumnDef<TData, TValue>[];
   data: TData[];
   isLoading?: boolean;
   error?: string | null;
   onRowClick?: (row: TData) => void;
   emptyMessage?: string;
   className?: string;
-  initialSorting?: import('@tanstack/react-table').SortingState;
+  initialSorting?: SortingState;
   onExportCSV?: () => void;
   onExportJSON?: () => void;
   showToolbar?: boolean;

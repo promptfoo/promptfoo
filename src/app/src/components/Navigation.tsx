@@ -8,12 +8,7 @@ import {
   NavigationMenuList,
   NavigationMenuTrigger,
 } from '@app/components/ui/navigation-menu';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@app/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { IS_RUNNING_LOCALLY } from '@app/constants';
 import { cn } from '@app/lib/utils';
 import { Info, Settings } from 'lucide-react';
@@ -161,7 +156,7 @@ export default function Navigation({ onToggleDarkMode }: { onToggleDarkMode: () 
   const handleApiSettingsModalToggle = () => setShowApiSettingsModal((prevState) => !prevState);
 
   return (
-    <TooltipProvider delayDuration={300}>
+    <>
       <header className="sticky top-0 z-50 w-full border-b border-border bg-card shadow-sm">
         <div className="flex h-14 items-center justify-between px-4">
           {/* Left section: Logo and Navigation */}
@@ -233,6 +228,6 @@ export default function Navigation({ onToggleDarkMode }: { onToggleDarkMode: () 
       </header>
       <InfoModal open={showInfoModal} onClose={handleModalToggle} />
       <ApiSettingsModal open={showApiSettingsModal} onClose={handleApiSettingsModalToggle} />
-    </TooltipProvider>
+    </>
   );
 }

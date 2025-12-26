@@ -10,12 +10,7 @@ import {
   DialogTitle,
 } from '@app/components/ui/dialog';
 import { ContentCopyIcon, DeleteIcon, EditIcon, UploadIcon } from '@app/components/ui/icons';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@app/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { cn } from '@app/lib/utils';
 import { useStore } from '@app/stores/evalConfig';
 import PromptDialog from './PromptDialog';
@@ -103,8 +98,7 @@ const PromptsSection = () => {
   };
 
   return (
-    <TooltipProvider>
-      <div className="space-y-4">
+    <div className="space-y-4">
         {/* Header */}
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-semibold">Prompts</h2>
@@ -254,7 +248,6 @@ const PromptsSection = () => {
           </DialogContent>
         </Dialog>
       </div>
-    </TooltipProvider>
   );
 };
 

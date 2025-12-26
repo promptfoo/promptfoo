@@ -5,12 +5,7 @@ import { Button } from '@app/components/ui/button';
 import { ChevronDownIcon, FolderOpenIcon, XIcon } from '@app/components/ui/icons';
 import { Input } from '@app/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@app/components/ui/popover';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@app/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { cn } from '@app/lib/utils';
 import { useProvidersStore } from '../../../store/providersStore';
 import AddLocalProviderDialog from './AddLocalProviderDialog';
@@ -770,8 +765,7 @@ const ProviderSelector = ({ providers, onChange }: ProviderSelectorProps) => {
   ];
 
   return (
-    <TooltipProvider>
-      <div className="mt-4 space-y-4">
+    <div className="mt-4 space-y-4">
         <div className="flex gap-3 items-start">
           {/* Provider selector with popover */}
           <Popover open={isDropdownOpen} onOpenChange={setIsDropdownOpen}>
@@ -928,7 +922,6 @@ const ProviderSelector = ({ providers, onChange }: ProviderSelectorProps) => {
           />
         )}
       </div>
-    </TooltipProvider>
   );
 };
 

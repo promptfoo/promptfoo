@@ -6,7 +6,6 @@ import { Separator } from '@app/components/ui/separator';
 import {
   Tooltip,
   TooltipContent,
-  TooltipProvider,
   TooltipTrigger,
 } from '@app/components/ui/tooltip';
 import { cn } from '@app/lib/utils';
@@ -78,17 +77,15 @@ export default function ScanResultHeader({
             <div className="min-w-0">
               <h1 className="text-2xl font-bold tracking-tight truncate">{name}</h1>
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5 text-sm text-muted-foreground">
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span className="flex items-center gap-1.5 cursor-default">
-                        <FolderIcon className="h-3.5 w-3.5" />
-                        <span className="font-mono truncate max-w-[200px]">{modelPath}</span>
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent>{modelPath}</TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="flex items-center gap-1.5 cursor-default">
+                      <FolderIcon className="h-3.5 w-3.5" />
+                      <span className="font-mono truncate max-w-[200px]">{modelPath}</span>
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>{modelPath}</TooltipContent>
+                </Tooltip>
                 <CopyButton value={modelPath} />
                 <Separator orientation="vertical" className="h-4" />
                 <span>{formatDataGridDate(createdAt)}</span>

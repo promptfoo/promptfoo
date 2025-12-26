@@ -20,12 +20,7 @@ import {
   HistoryIcon,
 } from '@app/components/ui/icons';
 import { Spinner } from '@app/components/ui/spinner';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@app/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { MODEL_AUDIT_ROUTES } from '@app/constants/routes';
 import { formatDataGridDate } from '@app/utils/date';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
@@ -98,16 +93,14 @@ export default function ModelAuditHistory() {
         cell: ({ getValue }) => {
           const value = getValue<string>();
           return (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="text-sm font-mono text-primary cursor-pointer hover:underline truncate block">
-                    {value}
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent>{value}</TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="text-sm font-mono text-primary cursor-pointer hover:underline truncate block">
+                  {value}
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>{value}</TooltipContent>
+            </Tooltip>
           );
         },
       },
@@ -134,14 +127,12 @@ export default function ModelAuditHistory() {
         cell: ({ getValue }) => {
           const value = getValue<string>();
           return (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="text-sm font-mono truncate block">{value}</span>
-                </TooltipTrigger>
-                <TooltipContent className="font-mono">{value}</TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="text-sm font-mono truncate block">{value}</span>
+              </TooltipTrigger>
+              <TooltipContent className="font-mono">{value}</TooltipContent>
+            </Tooltip>
           );
         },
       },
@@ -200,25 +191,23 @@ export default function ModelAuditHistory() {
         size: 80,
         enableSorting: false,
         cell: ({ row }) => (
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setScanToDelete(row.original.id);
-                    setDeleteDialogOpen(true);
-                  }}
-                >
-                  <DeleteIcon className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Delete</TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setScanToDelete(row.original.id);
+                  setDeleteDialogOpen(true);
+                }}
+              >
+                <DeleteIcon className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Delete</TooltipContent>
+          </Tooltip>
         ),
       },
     ],

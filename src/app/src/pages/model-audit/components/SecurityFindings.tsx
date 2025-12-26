@@ -232,7 +232,7 @@ function FileGroup({
           <Separator />
           <div className="p-4 space-y-3 bg-muted/20">
             {issues.map((issue, index) => (
-              <IssueCard key={index} issue={issue} />
+              <IssueCard key={`issue-${issue.timestamp}-${index}`} issue={issue} />
             ))}
           </div>
         </CollapsibleContent>
@@ -419,7 +419,7 @@ export default function SecurityFindings({
       ) : (
         <div className="space-y-3">
           {filteredIssues.map((issue, index) => (
-            <div key={index}>
+            <div key={`issue-${issue.timestamp}-${index}`}>
               <IssueCard issue={issue} />
               {getIssueFilePath(issue) !== 'Unknown' && (
                 <p className="text-xs text-muted-foreground mt-1 ml-8 font-mono">

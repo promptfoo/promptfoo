@@ -4,12 +4,7 @@ import { Alert, AlertDescription } from '@app/components/ui/alert';
 import { Card, CardContent } from '@app/components/ui/card';
 import { CheckCircleIcon, ErrorIcon, RefreshIcon, SettingsIcon } from '@app/components/ui/icons';
 import { Spinner } from '@app/components/ui/spinner';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@app/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { MODEL_AUDIT_ROUTES } from '@app/constants/routes';
 import { callApi } from '@app/utils/api';
 import { useNavigate } from 'react-router-dom';
@@ -137,32 +132,27 @@ export default function ModelAuditSetupPage() {
             {/* Installation Status */}
             <div className="shrink-0">
               {installationStatus.checking ? (
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <div className="flex items-center gap-2 text-muted-foreground">
-                        <Spinner size="sm" />
-                        <span className="text-sm">Checking...</span>
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent>Checking ModelAudit installation...</TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <Spinner size="sm" />
+                      <span className="text-sm">Checking...</span>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent>Checking ModelAudit installation...</TooltipContent>
+                </Tooltip>
               ) : installationStatus.installed === true ? (
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
-                        <CheckCircleIcon className="h-4 w-4" />
-                        <span className="text-sm font-medium">Ready</span>
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent>ModelAudit is installed and ready</TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
+                      <CheckCircleIcon className="h-4 w-4" />
+                      <span className="text-sm font-medium">Ready</span>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent>ModelAudit is installed and ready</TooltipContent>
+                </Tooltip>
               ) : installationStatus.installed === false ? (
-                <TooltipProvider>
-                  <Tooltip>
+                <Tooltip>
                     <TooltipTrigger asChild>
                       <div className="flex items-center gap-1.5">
                         <ErrorIcon className="h-4 w-4 text-destructive" />
@@ -180,7 +170,6 @@ export default function ModelAuditSetupPage() {
                       {installationStatus.error || 'ModelAudit is not installed'}
                     </TooltipContent>
                   </Tooltip>
-                </TooltipProvider>
               ) : null}
             </div>
           </div>

@@ -2,12 +2,7 @@ import { Alert, AlertDescription } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
 import { PlayArrowIcon, SettingsIcon } from '@app/components/ui/icons';
 import { Spinner } from '@app/components/ui/spinner';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@app/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { cn } from '@app/lib/utils';
 import InstallationGuide from './InstallationGuide';
 import PathSelector from './PathSelector';
@@ -84,6 +79,8 @@ export default function ConfigurationTab({
     return '';
   };
 
+  const scanButtonTooltip = getScanButtonTooltip();
+
   return (
     <div className="space-y-6">
       {/* Installation Warning - Show prominently if not installed */}
@@ -111,47 +108,41 @@ export default function ConfigurationTab({
       />
 
       <div className="mt-8">
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div>
-                <Button
-                  size="lg"
-                  className={cn(
-                    'w-full py-6 text-lg font-semibold',
-                    isNotInstalled && 'bg-destructive hover:bg-destructive/90',
-                  )}
-                  onClick={onScan}
-                  disabled={scanButtonDisabled}
-                >
-                  {isScanning || isCheckingInstallation ? (
-                    <Spinner size="sm" className="mr-2" />
-                  ) : (
-                    <PlayArrowIcon className="h-5 w-5 mr-2" />
-                  )}
-                  {getScanButtonText()}
-                </Button>
-              </div>
-            </TooltipTrigger>
-            {getScanButtonTooltip() && (
-              <TooltipContent side="top">
-                <p>{getScanButtonTooltip()}</p>
-              </TooltipContent>
-            )}
-          </Tooltip>
-        </TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div>
+              <Button
+                size="lg"
+                className={cn(
+                  'w-full py-6 text-lg font-semibold',
+                  isNotInstalled && 'bg-destructive hover:bg-destructive/90',
+                )}
+                onClick={onScan}
+                disabled={scanButtonDisabled}
+              >
+                {isScanning || isCheckingInstallation ? (
+                  <Spinner size="sm" className="mr-2" />
+                ) : (
+                  <PlayArrowIcon className="h-5 w-5 mr-2" />
+                )}
+                {getScanButtonText()}
+              </Button>
+            </div>
+          </TooltipTrigger>
+          {scanButtonTooltip && (
+            <TooltipContent side="top">
+              <p>{scanButtonTooltip}</p>
+            </TooltipContent>
+          )}
+        </Tooltip>
 
         {error && (
           <Alert variant="destructive" className="mt-4">
             <AlertDescription className="flex items-center justify-between">
               <span>{error}</span>
-              <button
-                type="button"
-                onClick={onClearError}
-                className="text-sm underline hover:no-underline"
-              >
+              <Button type="button" variant="destructive" onClick={onClearError}>
                 Dismiss
-              </button>
+              </Button>
             </AlertDescription>
           </Alert>
         )}

@@ -1,10 +1,5 @@
 import { CheckCircleIcon, ErrorIcon, InfoIcon, WarningIcon } from '@app/components/ui/icons';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@app/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { cn } from '@app/lib/utils';
 import { isCriticalSeverity } from '../utils';
 
@@ -78,36 +73,34 @@ function StatCard({
   const styles = severityStyles[severity];
 
   return (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <button
-            type="button"
-            onClick={onClick}
-            className={cn(
-              'group relative flex flex-col items-center justify-center p-6 rounded-xl border-2 transition-all duration-200',
-              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2',
-              styles.bg,
-              styles.bgHover,
-              isSelected ? styles.borderSelected : styles.border,
-              isSelected && `ring-4 ${styles.ring}`,
-              'hover:-translate-y-1 hover:shadow-lg',
-              'active:translate-y-0 active:shadow-md',
-            )}
-          >
-            <Icon className={cn('h-10 w-10 mb-3', styles.icon)} />
-            <span className={cn('text-4xl font-bold tracking-tight', styles.count)}>{count}</span>
-            <span className="text-sm font-medium text-muted-foreground mt-1">{label}</span>
-            {isSelected && (
-              <span className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-primary animate-pulse" />
-            )}
-          </button>
-        </TooltipTrigger>
-        <TooltipContent side="top">
-          <p>{tooltip}</p>
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          onClick={onClick}
+          className={cn(
+            'group relative flex flex-col items-center justify-center p-6 rounded-xl border-2 transition-all duration-200',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2',
+            styles.bg,
+            styles.bgHover,
+            isSelected ? styles.borderSelected : styles.border,
+            isSelected && `ring-4 ${styles.ring}`,
+            'hover:-translate-y-1 hover:shadow-lg',
+            'active:translate-y-0 active:shadow-md',
+          )}
+        >
+          <Icon className={cn('h-10 w-10 mb-3', styles.icon)} />
+          <span className={cn('text-4xl font-bold tracking-tight', styles.count)}>{count}</span>
+          <span className="text-sm font-medium text-muted-foreground mt-1">{label}</span>
+          {isSelected && (
+            <span className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-primary animate-pulse" />
+          )}
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="top">
+        <p>{tooltip}</p>
+      </TooltipContent>
+    </Tooltip>
   );
 }
 

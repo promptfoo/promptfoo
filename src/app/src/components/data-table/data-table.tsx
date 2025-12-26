@@ -245,7 +245,7 @@ export function DataTable<TData, TValue = unknown>({
 
   const hasData = table.getRowModel().rows.length > 0;
 
-  if (!hasData && !globalFilter && data.length === 0) {
+  if (!hasData && !globalFilter) {
     return (
       <div className={cn('space-y-4 pb-4', className)}>
         {showToolbar && toolbarActions && (

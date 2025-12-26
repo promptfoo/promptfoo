@@ -12,7 +12,6 @@ import {
 import {
   Tooltip,
   TooltipContent,
-  TooltipProvider,
   TooltipTrigger,
 } from '@app/components/ui/tooltip';
 
@@ -73,25 +72,23 @@ export default function InstallationGuide({
           aria-label="Installation command"
         >
           <code>{installCommand}</code>
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleCopy}
-                  aria-label={copied ? 'Command copied to clipboard' : 'Copy installation command'}
-                >
-                  {copied ? (
-                    <CheckCircleIcon className="h-4 w-4 text-green-600" />
-                  ) : (
-                    <ContentCopyIcon className="h-4 w-4" />
-                  )}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>{copied ? 'Copied!' : 'Copy command'}</TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleCopy}
+                aria-label={copied ? 'Command copied to clipboard' : 'Copy installation command'}
+              >
+                {copied ? (
+                  <CheckCircleIcon className="h-4 w-4 text-green-600" />
+                ) : (
+                  <ContentCopyIcon className="h-4 w-4" />
+                )}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>{copied ? 'Copied!' : 'Copy command'}</TooltipContent>
+          </Tooltip>
         </div>
 
         <p className="text-sm text-muted-foreground mb-6">

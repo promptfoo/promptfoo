@@ -23,6 +23,13 @@ interface HistoryProps {
   showDatasetColumn?: boolean;
 }
 
+const calculatePassRate = (evalItem: StandaloneEval): string => {
+  const testPassCount = evalItem.metrics?.testPassCount ?? 0;
+  const testFailCount = evalItem.metrics?.testFailCount ?? 0;
+  const totalCount = testPassCount + testFailCount;
+  return totalCount > 0 ? ((testPassCount / totalCount) * 100).toFixed(2) : '0';
+};
+
 export default function History({
   data,
   isLoading,
@@ -40,12 +47,7 @@ export default function History({
       ...(showDatasetColumn && { datasetId: row.datasetId }),
       provider: row.provider,
       prompt: `[${row.promptId?.slice(0, 6)}]: ${row.raw}`,
-      passRate: (() => {
-        const testPassCount = row.metrics?.testPassCount ?? 0;
-        const testFailCount = row.metrics?.testFailCount ?? 0;
-        const totalCount = testPassCount + testFailCount;
-        return totalCount > 0 ? ((testPassCount / totalCount) * 100).toFixed(2) : '0';
-      })(),
+      passRate: calculatePassRate(row),
       passCount: row.metrics?.testPassCount ?? 0,
       failCount: (row.metrics?.testFailCount ?? 0) + (row.metrics?.testErrorCount ?? 0),
       score: row.metrics?.score?.toFixed(2) ?? '-',
@@ -79,15 +81,13 @@ export default function History({
     const rows = data.map((row) => {
       const testPassCount = row.metrics?.testPassCount ?? 0;
       const testFailCount = row.metrics?.testFailCount ?? 0;
-      const totalCount = testPassCount + testFailCount;
-      const passRate = totalCount > 0 ? ((testPassCount / totalCount) * 100).toFixed(2) : '0';
 
       return [
         row.evalId,
         ...(showDatasetColumn ? [row.datasetId || ''] : []),
         row.provider || '',
         `[${row.promptId?.slice(0, 6)}]: ${row.raw}`,
-        passRate,
+        calculatePassRate(row),
         testPassCount,
         (testFailCount ?? 0) + (row.metrics?.testErrorCount ?? 0),
         row.metrics?.score?.toFixed(2) ?? '-',
@@ -188,10 +188,7 @@ export default function History({
         id: 'passRate',
         header: 'Pass Rate %',
         accessorFn: (row) => {
-          const testPassCount = row.metrics?.testPassCount ?? 0;
-          const testFailCount = row.metrics?.testFailCount ?? 0;
-          const totalCount = testPassCount + testFailCount;
-          return totalCount > 0 ? (testPassCount / totalCount) * 100 : 0;
+          return calculatePassRate(row);
         },
         cell: ({ getValue }) => (
           <span className="text-sm font-mono">{getValue<number>().toFixed(2)}%</span>

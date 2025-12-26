@@ -10,12 +10,7 @@ import {
   DialogTitle,
 } from '@app/components/ui/dialog';
 import { ContentCopyIcon, DeleteIcon, EditIcon, UploadIcon } from '@app/components/ui/icons';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@app/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
 import { useStore } from '@app/stores/evalConfig';
@@ -218,8 +213,7 @@ const TestCasesSection = ({ varsList }: TestCasesSectionProps) => {
   };
 
   return (
-    <TooltipProvider>
-      <div className="space-y-4">
+    <div className="space-y-4">
         {/* Header */}
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-semibold">Test Cases</h2>
@@ -406,7 +400,6 @@ const TestCasesSection = ({ varsList }: TestCasesSectionProps) => {
           </DialogContent>
         </Dialog>
       </div>
-    </TooltipProvider>
   );
 };
 

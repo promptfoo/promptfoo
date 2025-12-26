@@ -12,6 +12,7 @@ import {
 } from 'react-router-dom';
 import ErrorBoundary from './components/ErrorBoundary';
 import PageShell from './components/PageShell';
+import { TooltipProvider } from './components/ui/tooltip';
 import { ToastProvider } from './contexts/ToastContext';
 import { useTelemetry } from './hooks/useTelemetry';
 import DatasetsPage from './pages/datasets/page';
@@ -127,11 +128,13 @@ const queryClient = new QueryClient();
 
 function App() {
   return (
-    <ToastProvider>
-      <QueryClientProvider client={queryClient}>
-        <RouterProvider router={router} />
-      </QueryClientProvider>
-    </ToastProvider>
+    <TooltipProvider delayDuration={300}>
+      <ToastProvider>
+        <QueryClientProvider client={queryClient}>
+          <RouterProvider router={router} />
+        </QueryClientProvider>
+      </ToastProvider>
+    </TooltipProvider>
   );
 }
 

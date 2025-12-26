@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 
 import { Alert, AlertDescription } from '@app/components/ui/alert';
 import { Badge } from '@app/components/ui/badge';
@@ -20,12 +20,7 @@ import {
 } from '@app/components/ui/icons';
 import { Input } from '@app/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@app/components/ui/tabs';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@app/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { cn } from '@app/lib/utils';
 import { callApi } from '@app/utils/api';
 import { useModelAuditConfigStore } from '../stores';
@@ -220,10 +215,12 @@ export default function PathSelector({
     [paths],
   );
 
-  const recentPaths = recentScans
-    .flatMap((scan) => scan.paths.map((path) => ({ ...path, scanId: scan.id })))
-    .filter((path, index, self) => index === self.findIndex((p) => p.path === path.path))
-    .slice(0, 8);
+  const recentPaths = useMemo(() => {
+    return recentScans
+      .flatMap((scan) => scan.paths.map((path) => ({ ...path, scanId: scan.id })))
+      .filter((path, index, self) => index === self.findIndex((p) => p.path === path.path))
+      .slice(0, 8);
+  }, [recentScans]);
 
   return (
     <div className="space-y-6">
@@ -233,52 +230,42 @@ export default function PathSelector({
             <ComputerIcon className="h-4 w-4" />
             <span className="hidden sm:inline">Local Files</span>
           </TabsTrigger>
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <TabsTrigger value="cloud" disabled className="flex items-center gap-2 opacity-60">
-                  <div className="relative">
-                    <CloudIcon className="h-4 w-4" />
-                    <LockIcon className="h-2.5 w-2.5 absolute -top-1 -right-1 text-muted-foreground" />
-                  </div>
-                  <span className="hidden sm:inline">Cloud</span>
-                </TabsTrigger>
-              </TooltipTrigger>
-              <TooltipContent>Cloud storage is available in Enterprise</TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <TabsTrigger value="github" disabled className="flex items-center gap-2 opacity-60">
-                  <div className="relative">
-                    <GitHubIcon className="h-4 w-4" />
-                    <LockIcon className="h-2.5 w-2.5 absolute -top-1 -right-1 text-muted-foreground" />
-                  </div>
-                  <span className="hidden sm:inline">GitHub</span>
-                </TabsTrigger>
-              </TooltipTrigger>
-              <TooltipContent>GitHub integration is available in Enterprise</TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <TabsTrigger
-                  value="registry"
-                  disabled
-                  className="flex items-center gap-2 opacity-60"
-                >
-                  <div className="relative">
-                    <StorageIcon className="h-4 w-4" />
-                    <LockIcon className="h-2.5 w-2.5 absolute -top-1 -right-1 text-muted-foreground" />
-                  </div>
-                  <span className="hidden sm:inline">Registry</span>
-                </TabsTrigger>
-              </TooltipTrigger>
-              <TooltipContent>Model registries are available in Enterprise</TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <TabsTrigger value="cloud" disabled className="flex items-center gap-2 opacity-60">
+                <div className="relative">
+                  <CloudIcon className="h-4 w-4" />
+                  <LockIcon className="h-2.5 w-2.5 absolute -top-1 -right-1 text-muted-foreground" />
+                </div>
+                <span className="hidden sm:inline">Cloud</span>
+              </TabsTrigger>
+            </TooltipTrigger>
+            <TooltipContent>Cloud storage is available in Enterprise</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <TabsTrigger value="github" disabled className="flex items-center gap-2 opacity-60">
+                <div className="relative">
+                  <GitHubIcon className="h-4 w-4" />
+                  <LockIcon className="h-2.5 w-2.5 absolute -top-1 -right-1 text-muted-foreground" />
+                </div>
+                <span className="hidden sm:inline">GitHub</span>
+              </TabsTrigger>
+            </TooltipTrigger>
+            <TooltipContent>GitHub integration is available in Enterprise</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <TabsTrigger value="registry" disabled className="flex items-center gap-2 opacity-60">
+                <div className="relative">
+                  <StorageIcon className="h-4 w-4" />
+                  <LockIcon className="h-2.5 w-2.5 absolute -top-1 -right-1 text-muted-foreground" />
+                </div>
+                <span className="hidden sm:inline">Registry</span>
+              </TabsTrigger>
+            </TooltipTrigger>
+            <TooltipContent>Model registries are available in Enterprise</TooltipContent>
+          </Tooltip>
         </TabsList>
 
         <TabsContent value="local" className="mt-6 space-y-6">

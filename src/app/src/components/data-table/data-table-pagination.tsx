@@ -1,4 +1,7 @@
+import { useMemo, useState } from 'react';
+
 import { Button } from '@app/components/ui/button';
+import { Input } from '@app/components/ui/input';
 import {
   Select,
   SelectContent,
@@ -10,29 +13,55 @@ import {
 import type { DataTablePaginationProps } from './types';
 
 export function DataTablePagination<TData>({ table }: DataTablePaginationProps<TData>) {
+  const pageCount = useMemo(() => table.getPageCount(), [table]);
+  const { pageIndex, pageSize } = table.getState().pagination;
+  const rowLength = table.getFilteredRowModel().rows.length;
+  const [pageInputValue, setPageInputValue] = useState<string>('');
+
+  const handlePageInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setPageInputValue(e.target.value);
+  };
+
+  const handlePageInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      const page = Number(pageInputValue);
+      if (page >= 1 && page <= pageCount) {
+        table.setPageIndex(page - 1);
+        setPageInputValue('');
+        (e.target as HTMLInputElement).blur();
+      }
+    } else if (e.key === 'Escape') {
+      setPageInputValue('');
+      (e.target as HTMLInputElement).blur();
+    }
+  };
+
+  const handlePageInputBlur = () => {
+    const page = Number(pageInputValue);
+    if (page >= 1 && page <= pageCount) {
+      table.setPageIndex(page - 1);
+    }
+    setPageInputValue('');
+  };
+
   return (
     <div className="flex items-center justify-between px-2">
       <div className="text-sm text-muted-foreground">
-        Showing {table.getState().pagination.pageIndex * table.getState().pagination.pageSize + 1}{' '}
-        to{' '}
-        {Math.min(
-          (table.getState().pagination.pageIndex + 1) * table.getState().pagination.pageSize,
-          table.getFilteredRowModel().rows.length,
-        )}{' '}
-        of {table.getFilteredRowModel().rows.length} rows
+        Showing {pageIndex * pageSize + 1} to {Math.min((pageIndex + 1) * pageSize, rowLength)} of{' '}
+        {rowLength} rows
       </div>
 
       <div className="flex items-center gap-2">
         <div className="flex items-center gap-2">
           <p className="text-sm font-medium">Rows per page</p>
           <Select
-            value={`${table.getState().pagination.pageSize}`}
+            value={`${pageSize}`}
             onValueChange={(value) => {
               table.setPageSize(Number(value));
             }}
           >
             <SelectTrigger className="h-8 w-[70px]">
-              <SelectValue placeholder={table.getState().pagination.pageSize} />
+              <SelectValue placeholder={pageSize} />
             </SelectTrigger>
             <SelectContent side="top" align="start">
               {[10, 25, 50, 100].map((pageSize) => (
@@ -62,9 +91,17 @@ export function DataTablePagination<TData>({ table }: DataTablePaginationProps<T
             Previous
           </Button>
           <div className="flex items-center gap-1 px-2">
-            <span className="text-sm font-medium">
-              Page {table.getState().pagination.pageIndex + 1} of {table.getPageCount()}
-            </span>
+            <span className="text-sm font-medium whitespace-nowrap">Page</span>
+            <Input
+              type="text"
+              inputMode="numeric"
+              value={pageInputValue || pageIndex + 1}
+              onChange={handlePageInputChange}
+              onKeyDown={handlePageInputKeyDown}
+              onBlur={handlePageInputBlur}
+              className="h-8 w-12 text-center text-sm p-0"
+            />
+            <span className="text-sm font-medium whitespace-nowrap">of {pageCount}</span>
           </div>
           <Button
             variant="outline"

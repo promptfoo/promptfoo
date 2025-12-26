@@ -20,12 +20,7 @@ import {
   SelectValue,
 } from '@app/components/ui/select';
 import { Separator } from '@app/components/ui/separator';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@app/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { cn } from '@app/lib/utils';
 import { getIssueFilePath, getSeverityLabel, isCriticalSeverity } from '../utils';
 import ChecksSection from './ChecksSection';
@@ -72,19 +67,17 @@ function IssueRow({ issue }: { issue: ScanIssue }) {
 
       {/* File path */}
       {fileName && (
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span className="flex items-center gap-1.5 text-xs text-muted-foreground shrink-0 max-w-[180px]">
-                <FileIcon className="h-3.5 w-3.5 shrink-0" />
-                <span className="truncate font-mono">{fileName}</span>
-              </span>
-            </TooltipTrigger>
-            <TooltipContent side="left" className="font-mono text-xs">
-              {filePath}
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="flex items-center gap-1.5 text-xs text-muted-foreground shrink-0 max-w-[180px]">
+              <FileIcon className="h-3.5 w-3.5 shrink-0" />
+              <span className="truncate font-mono">{fileName}</span>
+            </span>
+          </TooltipTrigger>
+          <TooltipContent side="left" className="font-mono text-xs">
+            {filePath}
+          </TooltipContent>
+        </Tooltip>
       )}
     </div>
   );
@@ -237,7 +230,7 @@ export default function ResultsTab({
               </div>
               <div className="rounded-lg border border-red-200/70 dark:border-red-700/50 bg-red-50/50 dark:bg-red-950/40 divide-y divide-red-100 dark:divide-red-800/40">
                 {issuesBySeverity.critical.map((issue, index) => (
-                  <IssueRow key={index} issue={issue} />
+                  <IssueRow key={`${issue.severity}-${issue.message}-${index}`} issue={issue} />
                 ))}
               </div>
             </div>
@@ -254,7 +247,7 @@ export default function ResultsTab({
               </div>
               <div className="rounded-lg border border-amber-200/70 dark:border-amber-700/50 bg-amber-50/50 dark:bg-amber-950/40 divide-y divide-amber-100 dark:divide-amber-800/40">
                 {issuesBySeverity.warnings.map((issue, index) => (
-                  <IssueRow key={index} issue={issue} />
+                  <IssueRow key={`${issue.severity}-${issue.message}-${index}`} issue={issue} />
                 ))}
               </div>
             </div>
@@ -271,7 +264,7 @@ export default function ResultsTab({
               </div>
               <div className="rounded-lg border border-blue-200/70 dark:border-blue-700/50 bg-blue-50/50 dark:bg-blue-950/40 divide-y divide-blue-100 dark:divide-blue-800/40">
                 {issuesBySeverity.info.map((issue, index) => (
-                  <IssueRow key={index} issue={issue} />
+                  <IssueRow key={`${issue.severity}-${issue.message}-${index}`} issue={issue} />
                 ))}
               </div>
             </div>

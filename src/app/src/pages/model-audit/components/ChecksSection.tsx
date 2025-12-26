@@ -12,7 +12,6 @@ import { ExpandLessIcon, ExpandMoreIcon } from '@app/components/ui/icons';
 import {
   Tooltip,
   TooltipContent,
-  TooltipProvider,
   TooltipTrigger,
 } from '@app/components/ui/tooltip';
 import type { ColumnDef } from '@tanstack/react-table';
@@ -95,14 +94,12 @@ export default function ChecksSection({
         cell: ({ getValue }) => {
           const value = getValue<string>();
           return (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="text-sm truncate block">{value}</span>
-                </TooltipTrigger>
-                <TooltipContent>{value}</TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="text-sm truncate block">{value}</span>
+              </TooltipTrigger>
+              <TooltipContent>{value}</TooltipContent>
+            </Tooltip>
           );
         },
       },
@@ -141,14 +138,12 @@ export default function ChecksSection({
         cell: ({ getValue }) => {
           const value = getValue<string>();
           return (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="text-sm truncate block">{value}</span>
-                </TooltipTrigger>
-                <TooltipContent className="max-w-md">{value}</TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="text-sm truncate block">{value}</span>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-md">{value}</TooltipContent>
+            </Tooltip>
           );
         },
       },
@@ -163,14 +158,12 @@ export default function ChecksSection({
           }
           const shortPath = value.split('/').slice(-2).join('/');
           return (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="text-xs font-mono truncate block">{shortPath}</span>
-                </TooltipTrigger>
-                <TooltipContent className="font-mono text-xs">{value}</TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="text-xs font-mono truncate block">{shortPath}</span>
+              </TooltipTrigger>
+              <TooltipContent className="font-mono text-xs">{value}</TooltipContent>
+            </Tooltip>
           );
         },
       },
@@ -184,16 +177,14 @@ export default function ChecksSection({
             return <span className="text-muted-foreground">-</span>;
           }
           return (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="text-xs italic truncate block text-muted-foreground">
-                    {value}
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent>{value}</TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="text-xs italic truncate block text-muted-foreground">
+                  {value}
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>{value}</TooltipContent>
+            </Tooltip>
           );
         },
       },

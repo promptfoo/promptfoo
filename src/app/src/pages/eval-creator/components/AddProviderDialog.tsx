@@ -15,12 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@app/components/ui/dialog';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@app/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import ProviderConfigEditor from '@app/pages/redteam/setup/components/Targets/ProviderConfigEditor';
 import ProviderTypeSelector from '@app/pages/redteam/setup/components/Targets/ProviderTypeSelector';
 import type { ProviderOptions as RedteamProviderOptions } from '@app/pages/redteam/setup/types';
@@ -158,22 +153,20 @@ export default function AddProviderDialog({
               {step === 'configure' ? 'Back' : 'Cancel'}
             </Button>
             {step === 'configure' && (
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <div>
-                      <Button onClick={handleSave} disabled={!!error}>
-                        {initialProvider ? 'Save Changes' : 'Add Provider'}
-                      </Button>
-                    </div>
-                  </TooltipTrigger>
-                  {getDisabledTooltip() && (
-                    <TooltipContent>
-                      <p>{getDisabledTooltip()}</p>
-                    </TooltipContent>
-                  )}
-                </Tooltip>
-              </TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div>
+                    <Button onClick={handleSave} disabled={!!error}>
+                      {initialProvider ? 'Save Changes' : 'Add Provider'}
+                    </Button>
+                  </div>
+                </TooltipTrigger>
+                {getDisabledTooltip() && (
+                  <TooltipContent>
+                    <p>{getDisabledTooltip()}</p>
+                  </TooltipContent>
+                )}
+              </Tooltip>
             )}
           </DialogFooter>
         </DialogContent>

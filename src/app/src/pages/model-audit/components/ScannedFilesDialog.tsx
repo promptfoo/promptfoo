@@ -25,7 +25,7 @@ export default function ScannedFilesDialog({
   paths,
 }: ScannedFilesDialogProps) {
   return (
-    <Dialog open={open} onOpenChange={onClose}>
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
       <DialogContent className="max-w-3xl max-h-[80vh]">
         <DialogHeader>
           <div className="flex items-center gap-2">
