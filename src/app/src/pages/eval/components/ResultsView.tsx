@@ -940,6 +940,7 @@ export default function ResultsView({
                     <CompareEvalMenuItem
                       initialEvals={recentEvals}
                       onComparisonEvalSelected={handleComparisonEvalSelected}
+                      onMenuClose={handleMenuClose}
                     />
                     <Tooltip title="View the configuration that defines this eval" placement="left">
                       <MenuItem onClick={() => setConfigModalOpen(true)}>
