@@ -10,6 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@app/components/ui/dialog';
+import { EVAL_ROUTES } from '@app/constants/routes';
 import { Link } from 'react-router-dom';
 import type { ServerPromptWithMetadata } from '@promptfoo/types';
 
@@ -109,7 +110,7 @@ const PromptDialog = ({
                       >
                         <td className="px-3 py-2">
                           <Link
-                            to={`/eval/?evalId=${evalData.id}`}
+                            to={EVAL_ROUTES.WITH_EVAL_ID(evalData.id)}
                             className="text-primary hover:underline font-mono text-sm block truncate"
                           >
                             {evalData.id}

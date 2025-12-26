@@ -12,6 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@app/components/ui/dialog';
+import { EVAL_ROUTES } from '@app/constants/routes';
 import { Link } from 'react-router-dom';
 import type { StandaloneEval } from '@promptfoo/util/database';
 import type { ColumnDef } from '@tanstack/react-table';
@@ -121,7 +122,7 @@ export default function History({
         header: 'Eval',
         cell: ({ getValue }) => (
           <Link
-            to={`/eval?evalId=${getValue<string>() || ''}`}
+            to={EVAL_ROUTES.WITH_EVAL_ID(getValue<string>() || '')}
             className="text-primary hover:underline font-mono text-sm"
           >
             {getValue<string>()}

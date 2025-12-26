@@ -1,6 +1,7 @@
 import React from 'react';
 
 import { IS_RUNNING_LOCALLY } from '@app/constants';
+import { EVAL_ROUTES } from '@app/constants/routes';
 import { useToast } from '@app/hooks/useToast';
 import { useStore as useMainStore } from '@app/stores/evalConfig';
 import { callApi, fetchUserEmail, updateEvalAuthor } from '@app/utils/api';
@@ -452,7 +453,7 @@ export default function ResultsView({
         const { id: newEvalId, distinctTestCount } = await response.json();
 
         // Open in new tab (Google Docs pattern)
-        window.open(`/eval/${newEvalId}`, '_blank');
+        window.open(EVAL_ROUTES.DETAIL(newEvalId), '_blank');
 
         // Show success toast
         showToast(`Copied ${distinctTestCount.toLocaleString()} results successfully`, 'success');

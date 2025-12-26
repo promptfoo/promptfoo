@@ -21,6 +21,8 @@ export const EVAL_ROUTES = {
   ROOT: '/eval',
   LIST: '/evals',
   DETAIL: (id: string) => `/eval/${id}`,
+  /** Navigate to eval page with evalId query param (legacy pattern) */
+  WITH_EVAL_ID: (id: string) => `/eval?evalId=${id}`,
 } as const;
 
 // Red Team routes

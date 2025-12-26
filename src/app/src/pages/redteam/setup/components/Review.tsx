@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import Code from '@app/components/Code';
+import { EVAL_ROUTES } from '@app/constants/routes';
 import { useApiHealth } from '@app/hooks/useApiHealth';
 import { useEmailVerification } from '@app/hooks/useEmailVerification';
 import { useTelemetry } from '@app/hooks/useTelemetry';
@@ -1301,7 +1302,7 @@ export default function Review({
                     <Button
                       variant="contained"
                       color="success"
-                      href={`/eval?evalId=${evalId}`}
+                      href={EVAL_ROUTES.WITH_EVAL_ID(evalId)}
                       startIcon={<SearchIcon />}
                     >
                       View Probes
