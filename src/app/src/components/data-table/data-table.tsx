@@ -245,8 +245,12 @@ export function DataTable<TData, TValue = unknown>({
   }
 
   const hasData = table.getRowModel().rows.length > 0;
+  const hasActiveFilters = globalFilter || columnFilters.length > 0;
 
-  if (!hasData && !globalFilter) {
+  // Show initial empty state only when there's no data AND no active filters
+  // If filters are active but return no results, we show the table with "no results" message
+  // so users can still access the toolbar to clear/modify their filters
+  if (!hasData && !hasActiveFilters) {
     return (
       <div className={cn('space-y-4 pb-4', className)}>
         {showToolbar && toolbarActions && (
