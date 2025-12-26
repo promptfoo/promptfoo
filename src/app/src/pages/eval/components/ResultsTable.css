@@ -498,7 +498,7 @@ table.results-table,
 .results-table-sticky {
   position: sticky;
   top: 0;
-  z-index: 100;
+  z-index: 10;
   transition: transform 0.2s ease-out;
 }
 
@@ -511,7 +511,7 @@ table.results-table,
   top: 8px;
   right: 8px;
   cursor: pointer;
-  z-index: 101;
+  z-index: 11;
   padding: 4px;
   border-radius: 100%;
   background: #eee;

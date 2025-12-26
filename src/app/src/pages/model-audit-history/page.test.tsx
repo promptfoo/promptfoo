@@ -26,11 +26,14 @@ const renderWithRouter = (component: React.ReactElement) => {
 };
 
 describe('ModelAuditHistoryPage', () => {
-  it('renders the scan history page with New Scan button', () => {
-    renderWithRouter(<ModelAuditHistoryPage />);
+  it('renders the scan history page', () => {
+    const { container } = renderWithRouter(<ModelAuditHistoryPage />);
 
-    // The page should render with the DataGrid toolbar containing a New Scan button
-    expect(screen.getByRole('button', { name: /new scan/i })).toBeInTheDocument();
+    // The page should render successfully
+    expect(container.firstChild).toBeInTheDocument();
+
+    // The page should have the main heading (level 1)
+    expect(screen.getByRole('heading', { name: 'Scan History', level: 1 })).toBeInTheDocument();
   });
 
   it('renders no rows message when history is empty', () => {
