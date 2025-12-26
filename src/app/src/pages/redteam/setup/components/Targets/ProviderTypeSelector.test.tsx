@@ -36,15 +36,17 @@ describe('ProviderTypeSelector', () => {
       />,
     );
 
-    // Component should start in collapsed state showing the selected provider
-    expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
-    expect(screen.getByText('Connect to REST APIs and HTTP endpoints')).toBeVisible();
+    // Component should always be expanded, showing the selected provider at the top
+    expect(screen.getByText('Currently Selected')).toBeVisible();
+    const httpEndpoints = screen.getAllByText('HTTP/HTTPS Endpoint');
+    expect(httpEndpoints.length).toBeGreaterThan(0);
+    const httpDescriptions = screen.getAllByText('Connect to REST APIs and HTTP endpoints');
+    expect(httpDescriptions.length).toBeGreaterThan(0);
 
-    // Click the "Change" button to expand the view
-    const changeButton = screen.getByRole('button', { name: 'Change' });
-    fireEvent.click(changeButton);
+    // Search and filters should be visible
+    expect(screen.getByPlaceholderText('Search providers...')).toBeVisible();
 
-    // Now we should see the expanded view with all providers
+    // Now click on Python provider in the list
     const pythonProviderCard = screen
       .getByText('Python Provider')
       .closest('div[class*="MuiPaper-root"]');
@@ -63,14 +65,18 @@ describe('ProviderTypeSelector', () => {
       'python',
     );
 
-    // After selection, component should collapse again and show the new selection
-    expect(screen.getByText('Python Provider')).toBeVisible();
-    expect(screen.getByText('Custom Python provider for specialized integrations')).toBeVisible();
+    // The selected provider at the top should still show (always expanded)
+    const pythonProviders = screen.getAllByText('Python Provider');
+    expect(pythonProviders.length).toBeGreaterThan(0);
+    const pythonDescriptions = screen.getAllByText(
+      'Custom Python provider for specialized integrations',
+    );
+    expect(pythonDescriptions.length).toBeGreaterThan(0);
   });
 
   it('should filter provider options by search term when the user enters text in the search box', () => {
     const mockSetProvider = vi.fn();
-    // Start with no provider to get expanded view initially
+    // Start with no provider to get the list view
     const initialProvider: ProviderOptions = {
       id: '',
       config: {},
@@ -80,18 +86,17 @@ describe('ProviderTypeSelector', () => {
       <ProviderTypeSelector provider={initialProvider} setProvider={mockSetProvider} />,
     );
 
-    // Should start in expanded view since no provider is initially selected
+    // Component is always expanded, should show search
     const searchInput = screen.getByPlaceholderText('Search providers...');
     fireEvent.change(searchInput, { target: { value: 'openai' } });
 
     expect(screen.getByText('OpenAI')).toBeVisible();
 
-    expect(screen.queryByText('HTTP/HTTPS Endpoint')).toBeNull();
+    expect(screen.queryByText(/HTTP\/HTTPS Endpoint/)).toBeNull();
   });
 
   it('should filter provider options by selected category when a category chip is toggled on', () => {
     const mockSetProvider = vi.fn();
-    // Start with no provider to get expanded view initially
     const initialProvider: ProviderOptions = {
       id: '',
       config: {},
@@ -101,11 +106,11 @@ describe('ProviderTypeSelector', () => {
       <ProviderTypeSelector provider={initialProvider} setProvider={mockSetProvider} />,
     );
 
-    // Should start in expanded view since no provider is initially selected
+    // Component is always expanded
     const apiEndpointsChip = screen.getByRole('button', { name: 'API Endpoints' });
     fireEvent.click(apiEndpointsChip);
 
-    expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
+    expect(screen.getByText(/HTTP\/HTTPS Endpoint/)).toBeVisible();
 
     const javascriptProvider = screen.queryByText('JavaScript Provider');
     expect(javascriptProvider).toBeNull();
@@ -113,7 +118,6 @@ describe('ProviderTypeSelector', () => {
 
   it('should only display provider options included in availableProviderIds when availableProviderIds prop is provided', () => {
     const mockSetProvider = vi.fn();
-    // Start with no provider to get expanded view initially
     const initialProvider: ProviderOptions = {
       id: '',
       config: {},
@@ -129,8 +133,8 @@ describe('ProviderTypeSelector', () => {
       />,
     );
 
-    // Should start in expanded view since no provider is initially selected
-    expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
+    // Component is always expanded
+    expect(screen.getByText(/HTTP\/HTTPS Endpoint/)).toBeVisible();
 
     expect(screen.getByText('Python Provider')).toBeVisible();
 
@@ -160,9 +164,13 @@ describe('ProviderTypeSelector', () => {
     expect(mockSetProvider).toHaveBeenCalledTimes(1);
     expect(mockSetProvider).toHaveBeenCalledWith(defaultHttpConfig, 'http');
 
-    // After auto-selection, should show collapsed view with HTTP provider
-    expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
-    expect(screen.getByText('Connect to REST APIs and HTTP endpoints')).toBeVisible();
+    // After auto-selection, should show the selected provider in the list (but no "Currently Selected" card since provider.id is empty initially)
+    // The component will auto-select HTTP but since we started with empty id, it won't show "Currently Selected" until re-render
+    // Just verify HTTP appears in the list
+    const httpEndpoints = screen.getAllByText(/HTTP\/HTTPS Endpoint/);
+    expect(httpEndpoints.length).toBeGreaterThan(0);
+    const httpDescriptions = screen.getAllByText(/Connect to REST APIs and HTTP endpoints/);
+    expect(httpDescriptions.length).toBeGreaterThan(0);
   });
 
   it('should handle a provider with a malformed ID (empty string) and default to HTTP provider', () => {
@@ -193,9 +201,11 @@ describe('ProviderTypeSelector', () => {
       'http',
     );
 
-    // After auto-selection, should show collapsed view with HTTP provider
-    expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
-    expect(screen.getByText('Connect to REST APIs and HTTP endpoints')).toBeVisible();
+    // After auto-selection, should show the selected provider at top (always expanded)
+    const httpEndpoints = screen.getAllByText(/HTTP\/HTTPS Endpoint/);
+    expect(httpEndpoints.length).toBeGreaterThan(0);
+    const httpDescriptions = screen.getAllByText(/Connect to REST APIs and HTTP endpoints/);
+    expect(httpDescriptions.length).toBeGreaterThan(0);
   });
 
   it('should maintain category filters when a search term is entered and then cleared', () => {
@@ -233,9 +243,9 @@ describe('ProviderTypeSelector', () => {
       expect(screen.getByText(providerLabel)).toBeVisible();
     });
 
-    expect(screen.queryByText('HTTP/HTTPS Endpoint')).toBeNull();
+    expect(screen.queryByText(/HTTP\/HTTPS Endpoint/)).toBeNull();
   });
-  it('should show collapsed view when provider is selected and expand when Change button is clicked', () => {
+  it('should show always-expanded view with selected provider at top and full list below', () => {
     const mockSetProvider = vi.fn();
     const initialProvider: ProviderOptions = {
       id: 'anthropic:messages:claude-sonnet-4-20250514',
@@ -251,23 +261,16 @@ describe('ProviderTypeSelector', () => {
       />,
     );
 
-    // Should show collapsed view with selected provider
-    expect(screen.getByText('Anthropic')).toBeVisible();
-    expect(screen.getByText('Claude models including Claude Sonnet 4')).toBeVisible();
-    expect(screen.getByRole('button', { name: 'Change' })).toBeVisible();
+    // Should show selected provider at the top with "Currently Selected" label
+    expect(screen.getByText('Currently Selected')).toBeVisible();
+    const anthropicLabels = screen.getAllByText('Anthropic');
+    expect(anthropicLabels.length).toBeGreaterThan(0);
+    const claudeDescriptions = screen.getAllByText(/Claude models including Claude Sonnet 4/);
+    expect(claudeDescriptions.length).toBeGreaterThan(0);
 
-    // Should not show other providers or search/filter UI
-    expect(screen.queryByText('OpenAI')).toBeNull();
-    expect(screen.queryByPlaceholderText('Search providers...')).toBeNull();
-
-    // Click Change button to expand
-    const changeButton = screen.getByRole('button', { name: 'Change' });
-    fireEvent.click(changeButton);
-
-    // Now should show expanded view with all providers and search/filter UI
+    // Should also show search/filter UI and other providers (always expanded)
     expect(screen.getByPlaceholderText('Search providers...')).toBeVisible();
     expect(screen.getByText('OpenAI')).toBeVisible();
-    expect(screen.getByText('Anthropic')).toBeVisible();
     expect(screen.getByRole('button', { name: 'All Tags' })).toBeVisible();
   });
 
@@ -287,12 +290,13 @@ describe('ProviderTypeSelector', () => {
       />,
     );
 
-    expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
-    expect(screen.getByText('Connect to REST APIs and HTTP endpoints')).toBeVisible();
+    expect(screen.getByText('Currently Selected')).toBeVisible();
+    const httpEndpoints = screen.getAllByText(/HTTP\/HTTPS Endpoint/);
+    expect(httpEndpoints.length).toBeGreaterThan(0);
+    const httpDescriptions = screen.getAllByText(/Connect to REST APIs and HTTP endpoints/);
+    expect(httpDescriptions.length).toBeGreaterThan(0);
 
-    const changeButton = screen.getByRole('button', { name: 'Change' });
-    fireEvent.click(changeButton);
-
+    // Component is always expanded, so we can click Go Provider directly
     const goProviderCard = screen.getByText('Go Provider').closest('div[class*="MuiPaper-root"]');
     expect(goProviderCard).toBeInTheDocument();
 
@@ -309,11 +313,13 @@ describe('ProviderTypeSelector', () => {
       'go',
     );
 
-    expect(screen.getByText('Go Provider')).toBeVisible();
-    expect(screen.getByText('Custom Go provider for specialized integrations')).toBeVisible();
+    const goProviders = screen.getAllByText('Go Provider');
+    expect(goProviders.length).toBeGreaterThan(0);
+    const goDescriptions = screen.getAllByText('Custom Go provider for specialized integrations');
+    expect(goDescriptions.length).toBeGreaterThan(0);
   });
 
-  it('should initialize selectedProviderType from the providerType prop when provided, and show the corresponding provider as selected in the collapsed view', () => {
+  it('should initialize selectedProviderType from the providerType prop when provided, and show the corresponding provider as selected at the top', () => {
     const mockSetProvider = vi.fn();
     const initialProvider: ProviderOptions = {
       id: 'file:///path/to/your/script.go',
@@ -331,8 +337,11 @@ describe('ProviderTypeSelector', () => {
       />,
     );
 
-    expect(screen.getByText('Go Provider')).toBeVisible();
-    expect(screen.getByText('Custom Go provider for specialized integrations')).toBeVisible();
+    expect(screen.getByText('Currently Selected')).toBeVisible();
+    const goProviders = screen.getAllByText('Go Provider');
+    expect(goProviders.length).toBeGreaterThan(0);
+    const goDescriptions = screen.getAllByText('Custom Go provider for specialized integrations');
+    expect(goDescriptions.length).toBeGreaterThan(0);
   });
 
   it('should initialize correctly when providerType is undefined but provider.id is set', () => {
@@ -371,14 +380,15 @@ describe('ProviderTypeSelector', () => {
       />,
     );
 
-    expect(screen.getByText('Go Provider')).toBeVisible();
-    expect(screen.getByText('Custom Go provider for specialized integrations')).toBeVisible();
+    expect(screen.getByText('Currently Selected')).toBeVisible();
+    const goProviders = screen.getAllByText('Go Provider');
+    expect(goProviders.length).toBeGreaterThan(0);
+    const goDescriptions = screen.getAllByText(/Custom Go provider for specialized integrations/);
+    expect(goDescriptions.length).toBeGreaterThan(0);
 
-    const changeButton = screen.getByRole('button', { name: 'Change' });
-    fireEvent.click(changeButton);
-
+    // Component is always expanded, so we can click HTTP provider directly
     const httpProviderCard = screen
-      .getByText('HTTP/HTTPS Endpoint')
+      .getByText(/HTTP\/HTTPS Endpoint/)
       .closest('div[class*="MuiPaper-root"]');
     expect(httpProviderCard).toBeInTheDocument();
 
@@ -402,8 +412,10 @@ describe('ProviderTypeSelector', () => {
       'http',
     );
 
-    expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
-    expect(screen.getByText('Connect to REST APIs and HTTP endpoints')).toBeVisible();
+    const httpEndpoints = screen.getAllByText(/HTTP\/HTTPS Endpoint/);
+    expect(httpEndpoints.length).toBeGreaterThan(0);
+    const httpDescriptions = screen.getAllByText(/Connect to REST APIs and HTTP endpoints/);
+    expect(httpDescriptions.length).toBeGreaterThan(0);
   });
 
   it('should update the UI when the providerType prop changes after initial render', () => {
@@ -422,8 +434,10 @@ describe('ProviderTypeSelector', () => {
       />,
     );
 
-    expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
-    expect(screen.getByText('Connect to REST APIs and HTTP endpoints')).toBeVisible();
+    const httpEndpoints = screen.getAllByText(/HTTP\/HTTPS Endpoint/);
+    expect(httpEndpoints.length).toBeGreaterThan(0);
+    const httpDescriptions = screen.getAllByText(/Connect to REST APIs and HTTP endpoints/);
+    expect(httpDescriptions.length).toBeGreaterThan(0);
 
     rerender(
       <ProviderTypeSelector
@@ -433,8 +447,12 @@ describe('ProviderTypeSelector', () => {
       />,
     );
 
-    expect(screen.getByText('Python Provider')).toBeVisible();
-    expect(screen.getByText('Custom Python provider for specialized integrations')).toBeVisible();
+    const pythonProviders = screen.getAllByText('Python Provider');
+    expect(pythonProviders.length).toBeGreaterThan(0);
+    const pythonDescriptions = screen.getAllByText(
+      'Custom Python provider for specialized integrations',
+    );
+    expect(pythonDescriptions.length).toBeGreaterThan(0);
   });
 
   it('should handle the case where providerType is set to a value that does not exist in allProviderOptions array without crashing, and default to http', () => {
@@ -452,7 +470,7 @@ describe('ProviderTypeSelector', () => {
       />,
     );
 
-    expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
+    expect(screen.getByText(/HTTP\/HTTPS Endpoint/)).toBeVisible();
   });
   it('should call setProvider with the correct configuration when an agentic framework is selected', () => {
     const mockSetProvider = vi.fn();
@@ -470,12 +488,13 @@ describe('ProviderTypeSelector', () => {
       />,
     );
 
-    expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
-    expect(screen.getByText('Connect to REST APIs and HTTP endpoints')).toBeVisible();
+    expect(screen.getByText('Currently Selected')).toBeVisible();
+    const httpEndpoints = screen.getAllByText(/HTTP\/HTTPS Endpoint/);
+    expect(httpEndpoints.length).toBeGreaterThan(0);
+    const httpDescriptions = screen.getAllByText(/Connect to REST APIs and HTTP endpoints/);
+    expect(httpDescriptions.length).toBeGreaterThan(0);
 
-    const changeButton = screen.getByRole('button', { name: 'Change' });
-    fireEvent.click(changeButton);
-
+    // Component is always expanded, so we can click LangChain directly
     const langchainProviderCard = screen
       .getByText('LangChain')
       .closest('div[class*="MuiPaper-root"]');
@@ -494,10 +513,12 @@ describe('ProviderTypeSelector', () => {
       'langchain',
     );
 
-    expect(screen.getByText('LangChain')).toBeVisible();
-    expect(
-      screen.getByText('Framework for developing applications powered by language models'),
-    ).toBeVisible();
+    const langchainLabels = screen.getAllByText('LangChain');
+    expect(langchainLabels.length).toBeGreaterThan(0);
+    const langchainDescriptions = screen.getAllByText(
+      'Framework for developing applications powered by language models',
+    );
+    expect(langchainDescriptions.length).toBeGreaterThan(0);
   });
 
   it('should filter provider options to show only agentic frameworks when the Agents category chip is selected', () => {
@@ -569,36 +590,6 @@ describe('ProviderTypeSelector', () => {
     });
   });
 
-  it('should call recordEvent with the correct parameters when the Change button is clicked', () => {
-    const mockSetProvider = vi.fn();
-    const mockRecordEvent = vi.fn();
-
-    (useTelemetry as any).mockReturnValue({ recordEvent: mockRecordEvent });
-
-    const initialProvider: ProviderOptions = {
-      id: 'http',
-      label: 'My Test Provider',
-      config: {},
-    };
-
-    renderWithTheme(
-      <ProviderTypeSelector
-        provider={initialProvider}
-        setProvider={mockSetProvider}
-        providerType="http"
-      />,
-    );
-
-    const changeButton = screen.getByRole('button', { name: 'Change' });
-    fireEvent.click(changeButton);
-
-    expect(mockRecordEvent).toHaveBeenCalledTimes(1);
-    expect(mockRecordEvent).toHaveBeenCalledWith('feature_used', {
-      feature: 'redteam_provider_selection_changed',
-      previous_provider_type: 'http',
-    });
-  });
-
   it('should update selectedProviderType and call setProvider with the correct file path format when an agent provider is selected', () => {
     const mockSetProvider = vi.fn();
     const initialProvider: ProviderOptions = {
@@ -615,11 +606,12 @@ describe('ProviderTypeSelector', () => {
       />,
     );
 
-    expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
-    expect(screen.getByText('Connect to REST APIs and HTTP endpoints')).toBeVisible();
+    const httpEndpoints = screen.getAllByText(/HTTP\/HTTPS Endpoint/);
+    expect(httpEndpoints.length).toBeGreaterThan(0);
+    const httpDescriptions = screen.getAllByText(/Connect to REST APIs and HTTP endpoints/);
+    expect(httpDescriptions.length).toBeGreaterThan(0);
 
-    const changeButton = screen.getByRole('button', { name: 'Change' });
-    fireEvent.click(changeButton);
+    // Component is always expanded, so we can click LangChain directly
 
     const langchainProviderCard = screen
       .getByText('LangChain')
@@ -639,10 +631,12 @@ describe('ProviderTypeSelector', () => {
       'langchain',
     );
 
-    expect(screen.getByText('LangChain')).toBeVisible();
-    expect(
-      screen.getByText('Framework for developing applications powered by language models'),
-    ).toBeVisible();
+    const langchainLabels = screen.getAllByText('LangChain');
+    expect(langchainLabels.length).toBeGreaterThan(0);
+    const langchainDescriptions = screen.getAllByText(
+      'Framework for developing applications powered by language models',
+    );
+    expect(langchainDescriptions.length).toBeGreaterThan(0);
   });
 
   it('should correctly transform provider configuration when switching from a non-agent provider to an agent provider, preserving the provider label', () => {
@@ -668,12 +662,13 @@ describe('ProviderTypeSelector', () => {
       />,
     );
 
-    expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
-    expect(screen.getByText('Connect to REST APIs and HTTP endpoints')).toBeVisible();
+    expect(screen.getByText('Currently Selected')).toBeVisible();
+    const httpEndpoints = screen.getAllByText(/HTTP\/HTTPS Endpoint/);
+    expect(httpEndpoints.length).toBeGreaterThan(0);
+    const httpDescriptions = screen.getAllByText(/Connect to REST APIs and HTTP endpoints/);
+    expect(httpDescriptions.length).toBeGreaterThan(0);
 
-    const changeButton = screen.getByRole('button', { name: 'Change' });
-    fireEvent.click(changeButton);
-
+    // Component is always expanded, so we can click LangChain directly
     const langchainProviderCard = screen
       .getByText('LangChain')
       .closest('div[class*="MuiPaper-root"]');
@@ -692,10 +687,12 @@ describe('ProviderTypeSelector', () => {
       'langchain',
     );
 
-    expect(screen.getByText('LangChain')).toBeVisible();
-    expect(
-      screen.getByText('Framework for developing applications powered by language models'),
-    ).toBeVisible();
+    const langchainLabels = screen.getAllByText('LangChain');
+    expect(langchainLabels.length).toBeGreaterThan(0);
+    const langchainDescriptions = screen.getAllByText(
+      'Framework for developing applications powered by language models',
+    );
+    expect(langchainDescriptions.length).toBeGreaterThan(0);
   });
 
   it('should filter provider options by selected tag and call recordEvent with the correct tag when a tag chip is toggled on', () => {
@@ -792,7 +789,7 @@ describe('ProviderTypeSelector', () => {
     expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
   });
 
-  it('should clear the selectedTag and show all provider options when the Change button is clicked', () => {
+  it('should show all provider options when the "All Tags" button is clicked after filtering', () => {
     const mockSetProvider = vi.fn();
     const initialProvider: ProviderOptions = {
       id: 'http',
@@ -808,21 +805,30 @@ describe('ProviderTypeSelector', () => {
       />,
     );
 
-    expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
-    expect(screen.getByText('Connect to REST APIs and HTTP endpoints')).toBeVisible();
+    expect(screen.getByText('Currently Selected')).toBeVisible();
+    const httpEndpoints = screen.getAllByText(/HTTP\/HTTPS Endpoint/);
+    expect(httpEndpoints.length).toBeGreaterThan(0);
+    const httpDescriptions = screen.getAllByText(/Connect to REST APIs and HTTP endpoints/);
+    expect(httpDescriptions.length).toBeGreaterThan(0);
 
-    const changeButton = screen.getByRole('button', { name: 'Change' });
-    fireEvent.click(changeButton);
-
+    // Component is always expanded, so filter by Agents
     const agentsChip = screen.getByRole('button', { name: 'Agents' });
     fireEvent.click(agentsChip);
 
-    expect(screen.queryByText('HTTP/HTTPS Endpoint')).toBeNull();
+    // HTTP should still be visible in "Currently Selected" card at top, but not in the filtered list below
+    // Since the component is always expanded with the selected card at top, we need to check more carefully
+    // The filter only affects the scrollable list, not the "Currently Selected" section
+    const httpElements = screen.queryAllByText(/HTTP\/HTTPS Endpoint/);
+    // Should have exactly 1 (in the Currently Selected card only, not in the filtered list)
+    expect(httpElements.length).toBe(1);
 
+    // Click "All Tags" to show all providers again
     const allTagsButton = screen.getByRole('button', { name: 'All Tags' });
     fireEvent.click(allTagsButton);
 
-    expect(screen.getByText('HTTP/HTTPS Endpoint')).toBeVisible();
+    // Now HTTP should appear in both places (Currently Selected + provider list)
+    const httpEndpointsAfter = screen.getAllByText(/HTTP\/HTTPS Endpoint/);
+    expect(httpEndpointsAfter.length).toBeGreaterThan(1);
   });
 
   it('should filter provider options correctly when availableProviderIds, search term, and tag are all provided', () => {
@@ -851,5 +857,54 @@ describe('ProviderTypeSelector', () => {
     expect(screen.getByText('LangChain')).toBeVisible();
     expect(screen.queryByText('AutoGen')).toBeNull();
     expect(screen.queryByText('HTTP/HTTPS Endpoint')).toBeNull();
+  });
+
+  it('should scroll selected provider card into view when provider type changes', () => {
+    const mockSetProvider = vi.fn();
+    const mockScrollIntoView = vi.fn();
+
+    // Mock scrollIntoView on HTMLElement prototype
+    HTMLElement.prototype.scrollIntoView = mockScrollIntoView;
+
+    const initialProvider: ProviderOptions = {
+      id: 'http',
+      label: 'My Test Provider',
+      config: {},
+    };
+
+    const { rerender } = renderWithTheme(
+      <ProviderTypeSelector
+        provider={initialProvider}
+        setProvider={mockSetProvider}
+        providerType="http"
+      />,
+    );
+
+    // Initial render should call scrollIntoView for HTTP provider
+    expect(mockScrollIntoView).toHaveBeenCalledWith({
+      behavior: 'smooth',
+      block: 'center',
+    });
+
+    // Clear the mock to check for subsequent calls
+    mockScrollIntoView.mockClear();
+
+    // Change to a different provider type
+    rerender(
+      <ProviderTypeSelector
+        provider={initialProvider}
+        setProvider={mockSetProvider}
+        providerType="python"
+      />,
+    );
+
+    // Should scroll again when provider type changes
+    expect(mockScrollIntoView).toHaveBeenCalledWith({
+      behavior: 'smooth',
+      block: 'center',
+    });
+
+    // Cleanup
+    delete (HTMLElement.prototype as any).scrollIntoView;
   });
 });

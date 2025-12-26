@@ -401,10 +401,6 @@ Content-Type: application/json
 
       renderWithTheme(<Targets onNext={mockOnNext} onBack={mockOnBack} />);
 
-      // Component starts in collapsed view showing HTTP provider, click Change to expand
-      const changeButton = screen.getByRole('button', { name: 'Change' });
-      fireEvent.click(changeButton);
-
       const websocketProviderCard = screen
         .getByText('WebSocket Endpoint')
         .closest('div[class*="MuiPaper-root"]');
@@ -522,10 +518,6 @@ Content-Type: application/json
 
       renderWithTheme(<Targets onNext={mockOnNext} onBack={mockOnBack} />);
 
-      // Component starts in collapsed view showing HTTP provider, click Change to expand
-      const changeButton = screen.getByRole('button', { name: 'Change' });
-      fireEvent.click(changeButton);
-
       const websocketProviderCard = screen
         .getByText('WebSocket Endpoint')
         .closest('div[class*="MuiPaper-root"]');
@@ -568,9 +560,6 @@ Content-Type: application/json
       });
 
       // Switch to HTTP provider
-      const changeButton = screen.getByRole('button', { name: 'Change' });
-      fireEvent.click(changeButton);
-
       const httpProviderCard = screen
         .getByText('HTTP/HTTPS Endpoint')
         .closest('div[class*="MuiPaper-root"]');
