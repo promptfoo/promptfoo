@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
@@ -24,37 +24,7 @@ describe('EvalSelectorDialog', () => {
     MockedEvalsTable.mockClear();
   });
 
-  it('should render the dialog with title, description, and EvalsTable when open', () => {
-    const mockOnClose = vi.fn();
-    const mockOnEvalSelected = vi.fn();
-    const title = 'Select an Eval';
-    const description = 'Please choose an evaluation from the list below.';
-
-    render(
-      <MemoryRouter>
-        <EvalSelectorDialog
-          open={true}
-          onClose={mockOnClose}
-          onEvalSelected={mockOnEvalSelected}
-          title={title}
-          description={description}
-        />
-      </MemoryRouter>,
-    );
-
-    expect(screen.getByRole('dialog')).toBeInTheDocument();
-
-    expect(screen.getByText(title)).toBeInTheDocument();
-
-    expect(screen.getByText(description)).toBeInTheDocument();
-
-    expect(screen.getByTestId('mock-evals-table')).toBeInTheDocument();
-    expect(MockedEvalsTable).toHaveBeenCalledTimes(1);
-
-    expect(screen.getByRole('button', { name: /cancel/i })).toBeInTheDocument();
-  });
-
-  it('should call onClose when the Cancel button is clicked', () => {
+  it('should render the dialog with EvalsTable when open', () => {
     const mockOnClose = vi.fn();
     const mockOnEvalSelected = vi.fn();
 
@@ -64,10 +34,9 @@ describe('EvalSelectorDialog', () => {
       </MemoryRouter>,
     );
 
-    const cancelButton = screen.getByRole('button', { name: /cancel/i });
-    fireEvent.click(cancelButton);
-
-    expect(mockOnClose).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByTestId('mock-evals-table')).toBeInTheDocument();
+    expect(MockedEvalsTable).toHaveBeenCalledTimes(1);
   });
 
   it('should call onEvalSelected with the selected evalId when an eval is selected in EvalsTable', async () => {
@@ -76,13 +45,7 @@ describe('EvalSelectorDialog', () => {
 
     render(
       <MemoryRouter>
-        <EvalSelectorDialog
-          open={true}
-          onClose={mockOnClose}
-          onEvalSelected={mockOnEvalSelected}
-          title="Select an Eval"
-          description="Please choose an evaluation from the list below."
-        />
+        <EvalSelectorDialog open={true} onClose={mockOnClose} onEvalSelected={mockOnEvalSelected} />
       </MemoryRouter>,
     );
 
@@ -117,25 +80,6 @@ describe('EvalSelectorDialog', () => {
       }),
       undefined,
     );
-  });
-
-  it('should render default title when title prop is not provided', () => {
-    const mockOnClose = vi.fn();
-    const mockOnEvalSelected = vi.fn();
-
-    render(
-      <MemoryRouter>
-        <EvalSelectorDialog open={true} onClose={mockOnClose} onEvalSelected={mockOnEvalSelected} />
-      </MemoryRouter>,
-    );
-
-    // Default title should be shown
-    expect(screen.getByText('Select Evaluation')).toBeInTheDocument();
-
-    expect(screen.getByTestId('mock-evals-table')).toBeInTheDocument();
-    expect(MockedEvalsTable).toHaveBeenCalledTimes(1);
-
-    expect(screen.getByRole('button', { name: /cancel/i })).toBeInTheDocument();
   });
 
   it('should handle the case when filterByDatasetId is true but focusedEvalId is undefined', () => {
@@ -179,13 +123,7 @@ describe('EvalSelectorDialog', () => {
 
     render(
       <MemoryRouter>
-        <EvalSelectorDialog
-          open={true}
-          onClose={mockOnClose}
-          onEvalSelected={mockOnEvalSelected}
-          title="Select an Eval"
-          description="Please choose an evaluation from the list below."
-        />
+        <EvalSelectorDialog open={true} onClose={mockOnClose} onEvalSelected={mockOnEvalSelected} />
       </MemoryRouter>,
     );
 

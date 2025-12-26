@@ -27,7 +27,8 @@ const calculatePassRate = (evalItem: StandaloneEval): string => {
   const testPassCount = evalItem.metrics?.testPassCount ?? 0;
   const testFailCount = evalItem.metrics?.testFailCount ?? 0;
   const totalCount = testPassCount + testFailCount;
-  return totalCount > 0 ? ((testPassCount / totalCount) * 100).toFixed(2) : '0';
+  const passRate = totalCount > 0 ? (testPassCount / totalCount) * 100 : 0;
+  return passRate?.toFixed(2) ?? '0.00';
 };
 
 export default function History({
@@ -190,9 +191,7 @@ export default function History({
         accessorFn: (row) => {
           return calculatePassRate(row);
         },
-        cell: ({ getValue }) => (
-          <span className="text-sm font-mono">{getValue<number>().toFixed(2)}%</span>
-        ),
+        cell: ({ getValue }) => <span className="text-sm font-mono">{getValue<number>()}%</span>,
         size: 120,
       },
       {

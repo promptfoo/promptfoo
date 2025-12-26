@@ -1,3 +1,4 @@
+import { TooltipProvider } from '@app/components/ui/tooltip';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -87,13 +88,15 @@ describe('ModelAuditResult', () => {
 
   const renderComponent = (scanId: string = 'test-scan-id') => {
     return render(
-      <MemoryRouter initialEntries={[`/model-audit/${scanId}`]}>
-        <ThemeProvider theme={theme}>
-          <Routes>
-            <Route path="/model-audit/:id" element={<ModelAuditResult />} />
-          </Routes>
-        </ThemeProvider>
-      </MemoryRouter>,
+      <TooltipProvider delayDuration={0}>
+        <MemoryRouter initialEntries={[`/model-audit/${scanId}`]}>
+          <ThemeProvider theme={theme}>
+            <Routes>
+              <Route path="/model-audit/:id" element={<ModelAuditResult />} />
+            </Routes>
+          </ThemeProvider>
+        </MemoryRouter>
+      </TooltipProvider>,
     );
   };
 

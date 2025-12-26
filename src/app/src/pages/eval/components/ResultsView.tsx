@@ -617,7 +617,7 @@ export default function ResultsView({
 
   return (
     <>
-      <Box px={2} pt={2}>
+      <Box px={2} pt={2} sx={{ isolation: 'isolate' }}>
         <Box sx={{ transition: 'all 0.3s ease' }}>
           <ResponsiveStack direction="row" spacing={1} alignItems="center" className="eval-header">
             <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', maxWidth: 250 }}>
@@ -652,7 +652,6 @@ export default function ResultsView({
                   setEvalSelectorDialogOpen(false);
                   onRecentEvalSelected(evalId);
                 }}
-                title="Select an Eval"
                 focusedEvalId={evalId ?? undefined}
               />
             </Box>

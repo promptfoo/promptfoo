@@ -153,23 +153,23 @@ export default function ModelAuditSetupPage() {
                 </Tooltip>
               ) : installationStatus.installed === false ? (
                 <Tooltip>
-                    <TooltipTrigger asChild>
-                      <div className="flex items-center gap-1.5">
-                        <ErrorIcon className="h-4 w-4 text-destructive" />
-                        <span className="text-sm font-medium text-destructive">Not Installed</span>
-                        <button
-                          type="button"
-                          onClick={() => checkInstallation()}
-                          className="p-1 hover:bg-muted rounded"
-                        >
-                          <RefreshIcon className="h-4 w-4 text-muted-foreground" />
-                        </button>
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      {installationStatus.error || 'ModelAudit is not installed'}
-                    </TooltipContent>
-                  </Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="flex items-center gap-1.5">
+                      <ErrorIcon className="h-4 w-4 text-destructive" />
+                      <span className="text-sm font-medium text-destructive">Not Installed</span>
+                      <button
+                        type="button"
+                        onClick={() => checkInstallation()}
+                        className="p-1 hover:bg-muted rounded"
+                      >
+                        <RefreshIcon className="h-4 w-4 text-muted-foreground" />
+                      </button>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {installationStatus.error || 'ModelAudit is not installed'}
+                  </TooltipContent>
+                </Tooltip>
               ) : null}
             </div>
           </div>

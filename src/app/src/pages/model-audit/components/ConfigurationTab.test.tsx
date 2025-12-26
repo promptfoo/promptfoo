@@ -1,3 +1,4 @@
+import { TooltipProvider } from '@app/components/ui/tooltip';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { act, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
@@ -33,18 +34,22 @@ describe('ConfigurationTab', () => {
   it('should clear the error message when the error prop changes from non-null to null', async () => {
     const initialError = 'An error occurred';
     const { rerender } = render(
-      <ThemeProvider theme={theme}>
-        <ConfigurationTab {...defaultProps} error={initialError} />
-      </ThemeProvider>,
+      <TooltipProvider delayDuration={0}>
+        <ThemeProvider theme={theme}>
+          <ConfigurationTab {...defaultProps} error={initialError} />
+        </ThemeProvider>
+      </TooltipProvider>,
     );
 
     expect(screen.getByText(initialError)).toBeInTheDocument();
 
     await act(() => {
       rerender(
-        <ThemeProvider theme={theme}>
-          <ConfigurationTab {...defaultProps} error={null} />
-        </ThemeProvider>,
+        <TooltipProvider delayDuration={0}>
+          <ThemeProvider theme={theme}>
+            <ConfigurationTab {...defaultProps} error={null} />
+          </ThemeProvider>
+        </TooltipProvider>,
       );
     });
 
@@ -53,13 +58,15 @@ describe('ConfigurationTab', () => {
 
   it('should show error state but remain clickable when installationStatus.installed is false', () => {
     render(
-      <ThemeProvider theme={theme}>
-        <ConfigurationTab
-          {...defaultProps}
-          installationStatus={{ checking: false, installed: false }}
-          paths={[{ path: '/test/path', type: 'file', name: 'test.pkl' }]}
-        />
-      </ThemeProvider>,
+      <TooltipProvider delayDuration={0}>
+        <ThemeProvider theme={theme}>
+          <ConfigurationTab
+            {...defaultProps}
+            installationStatus={{ checking: false, installed: false }}
+            paths={[{ path: '/test/path', type: 'file', name: 'test.pkl' }]}
+          />
+        </ThemeProvider>
+      </TooltipProvider>,
     );
 
     // Button should show "ModelAudit Not Installed" text
@@ -72,9 +79,11 @@ describe('ConfigurationTab', () => {
 
   it('should render PathSelector', () => {
     render(
-      <ThemeProvider theme={theme}>
-        <ConfigurationTab {...defaultProps} />
-      </ThemeProvider>,
+      <TooltipProvider delayDuration={0}>
+        <ThemeProvider theme={theme}>
+          <ConfigurationTab {...defaultProps} />
+        </ThemeProvider>
+      </TooltipProvider>,
     );
 
     expect(screen.getByTestId('path-selector')).toBeInTheDocument();

@@ -1,3 +1,4 @@
+import { TooltipProvider } from '@app/components/ui/tooltip';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -70,11 +71,13 @@ describe('ModelAuditHistory', () => {
 
   const renderComponent = () => {
     return render(
-      <MemoryRouter>
-        <ThemeProvider theme={theme}>
-          <ModelAuditHistory />
-        </ThemeProvider>
-      </MemoryRouter>,
+      <TooltipProvider delayDuration={0}>
+        <MemoryRouter>
+          <ThemeProvider theme={theme}>
+            <ModelAuditHistory />
+          </ThemeProvider>
+        </MemoryRouter>
+      </TooltipProvider>,
     );
   };
 

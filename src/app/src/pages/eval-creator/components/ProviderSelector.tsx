@@ -766,162 +766,160 @@ const ProviderSelector = ({ providers, onChange }: ProviderSelectorProps) => {
 
   return (
     <div className="mt-4 space-y-4">
-        <div className="flex gap-3 items-start">
-          {/* Provider selector with popover */}
-          <Popover open={isDropdownOpen} onOpenChange={setIsDropdownOpen}>
-            <PopoverTrigger asChild>
-              <div
-                className={cn(
-                  'flex-1 min-h-[56px] rounded-md border border-input bg-background px-3 py-2 cursor-text',
-                  'focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2',
-                )}
-                onClick={() => setIsDropdownOpen(true)}
+      <div className="flex gap-3 items-start">
+        {/* Provider selector with popover */}
+        <Popover open={isDropdownOpen} onOpenChange={setIsDropdownOpen}>
+          <PopoverTrigger asChild>
+            <div
+              className={cn(
+                'flex-1 min-h-[56px] rounded-md border border-input bg-background px-3 py-2 cursor-text',
+                'focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2',
+              )}
+              onClick={() => setIsDropdownOpen(true)}
+            >
+              {/* Selected providers as badges */}
+              <div className="flex flex-wrap gap-2 mb-2">
+                {providers.map((provider, index) => {
+                  const label = getOptionLabel(provider);
+                  const id = getProviderId(provider);
+                  return (
+                    <Tooltip key={id + index}>
+                      <TooltipTrigger asChild>
+                        <Badge
+                          variant="outline"
+                          className="cursor-pointer hover:bg-muted/50 transition-colors pr-1"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleProviderClick(provider);
+                          }}
+                        >
+                          <span className="truncate max-w-[200px]">{label}</span>
+                          <button
+                            type="button"
+                            className="ml-1 p-0.5 rounded-full hover:bg-muted"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRemoveProvider(index);
+                            }}
+                          >
+                            <XIcon className="h-3 w-3" />
+                          </button>
+                        </Badge>
+                      </TooltipTrigger>
+                      <TooltipContent>{id}</TooltipContent>
+                    </Tooltip>
+                  );
+                })}
+              </div>
+
+              {/* Search input */}
+              <div className="flex items-center gap-2">
+                <Input
+                  placeholder="Select LLM providers"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && searchQuery.trim()) {
+                      e.preventDefault();
+                      handleAddCustomProvider();
+                    }
+                  }}
+                  className="border-0 p-0 h-auto focus-visible:ring-0 focus-visible:ring-offset-0"
+                  onClick={(e) => e.stopPropagation()}
+                />
+                <ChevronDownIcon className="h-4 w-4 text-muted-foreground shrink-0" />
+              </div>
+            </div>
+          </PopoverTrigger>
+
+          <PopoverContent
+            className="w-[var(--radix-popover-trigger-width)] p-0 max-h-[400px] overflow-y-auto"
+            align="start"
+          >
+            {/* Custom provider option when typing */}
+            {searchQuery.trim() && (
+              <button
+                type="button"
+                className="w-full px-3 py-2 text-left text-sm hover:bg-muted/50 transition-colors border-b border-border"
+                onClick={handleAddCustomProvider}
               >
-                {/* Selected providers as badges */}
-                <div className="flex flex-wrap gap-2 mb-2">
-                  {providers.map((provider, index) => {
+                <span className="text-muted-foreground">Add custom: </span>
+                <span className="font-mono">{searchQuery}</span>
+              </button>
+            )}
+
+            {/* Grouped providers */}
+            {groupOrder.map((group) => {
+              const groupProviders = groupedProviders[group];
+              if (!groupProviders || groupProviders.length === 0) {
+                return null;
+              }
+
+              return (
+                <div key={group}>
+                  <div className="px-3 py-2 text-xs font-semibold text-muted-foreground bg-muted/50 sticky top-0">
+                    {group}
+                  </div>
+                  {groupProviders.map((provider) => {
                     const label = getOptionLabel(provider);
                     const id = getProviderId(provider);
                     return (
-                      <Tooltip key={id + index}>
-                        <TooltipTrigger asChild>
-                          <Badge
-                            variant="outline"
-                            className="cursor-pointer hover:bg-muted/50 transition-colors pr-1"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleProviderClick(provider);
-                            }}
-                          >
-                            <span className="truncate max-w-[200px]">{label}</span>
-                            <button
-                              type="button"
-                              className="ml-1 p-0.5 rounded-full hover:bg-muted"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleRemoveProvider(index);
-                              }}
-                            >
-                              <XIcon className="h-3 w-3" />
-                            </button>
-                          </Badge>
-                        </TooltipTrigger>
-                        <TooltipContent>{id}</TooltipContent>
-                      </Tooltip>
+                      <button
+                        key={id}
+                        type="button"
+                        className="w-full px-3 py-2 text-left hover:bg-muted/50 transition-colors"
+                        onClick={() => handleSelectProvider(provider)}
+                      >
+                        <div className="text-sm">{label}</div>
+                        <div className="text-xs text-muted-foreground font-mono truncate">{id}</div>
+                      </button>
                     );
                   })}
                 </div>
+              );
+            })}
 
-                {/* Search input */}
-                <div className="flex items-center gap-2">
-                  <Input
-                    placeholder="Select LLM providers"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && searchQuery.trim()) {
-                        e.preventDefault();
-                        handleAddCustomProvider();
-                      }
-                    }}
-                    className="border-0 p-0 h-auto focus-visible:ring-0 focus-visible:ring-offset-0"
-                    onClick={(e) => e.stopPropagation()}
-                  />
-                  <ChevronDownIcon className="h-4 w-4 text-muted-foreground shrink-0" />
-                </div>
+            {filteredProviders.length === 0 && !searchQuery.trim() && (
+              <div className="px-3 py-4 text-sm text-muted-foreground text-center">
+                No more providers available
               </div>
-            </PopoverTrigger>
+            )}
+          </PopoverContent>
+        </Popover>
 
-            <PopoverContent
-              className="w-[var(--radix-popover-trigger-width)] p-0 max-h-[400px] overflow-y-auto"
-              align="start"
-            >
-              {/* Custom provider option when typing */}
-              {searchQuery.trim() && (
-                <button
-                  type="button"
-                  className="w-full px-3 py-2 text-left text-sm hover:bg-muted/50 transition-colors border-b border-border"
-                  onClick={handleAddCustomProvider}
-                >
-                  <span className="text-muted-foreground">Add custom: </span>
-                  <span className="font-mono">{searchQuery}</span>
-                </button>
-              )}
-
-              {/* Grouped providers */}
-              {groupOrder.map((group) => {
-                const groupProviders = groupedProviders[group];
-                if (!groupProviders || groupProviders.length === 0) {
-                  return null;
-                }
-
-                return (
-                  <div key={group}>
-                    <div className="px-3 py-2 text-xs font-semibold text-muted-foreground bg-muted/50 sticky top-0">
-                      {group}
-                    </div>
-                    {groupProviders.map((provider) => {
-                      const label = getOptionLabel(provider);
-                      const id = getProviderId(provider);
-                      return (
-                        <button
-                          key={id}
-                          type="button"
-                          className="w-full px-3 py-2 text-left hover:bg-muted/50 transition-colors"
-                          onClick={() => handleSelectProvider(provider)}
-                        >
-                          <div className="text-sm">{label}</div>
-                          <div className="text-xs text-muted-foreground font-mono truncate">
-                            {id}
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                );
-              })}
-
-              {filteredProviders.length === 0 && !searchQuery.trim() && (
-                <div className="px-3 py-4 text-sm text-muted-foreground text-center">
-                  No more providers available
-                </div>
-              )}
-            </PopoverContent>
-          </Popover>
-
-          {/* Local provider button */}
-          <Button
-            variant="outline"
-            onClick={() => setIsAddLocalDialogOpen(true)}
-            className="h-14 whitespace-nowrap px-4"
-          >
-            <FolderOpenIcon className="h-4 w-4 mr-2" />
-            Reference Local Provider
-          </Button>
-        </div>
-
-        {/* Helper text */}
-        <p className="text-sm text-muted-foreground">
-          {providers.length > 0
-            ? 'Click a provider to configure its settings. Hover over badges to see model IDs.'
-            : 'Select LLM providers from the dropdown or type to search'}
-        </p>
-
-        <AddLocalProviderDialog
-          open={isAddLocalDialogOpen}
-          onClose={() => setIsAddLocalDialogOpen(false)}
-          onAdd={handleAddLocalProvider}
-        />
-        {selectedProvider && selectedProvider.id && (
-          <ProviderConfigDialog
-            open={!!selectedProvider}
-            providerId={selectedProvider.id}
-            config={selectedProvider.config as Record<string, unknown>}
-            onClose={() => setSelectedProvider(null)}
-            onSave={handleSave}
-          />
-        )}
+        {/* Local provider button */}
+        <Button
+          variant="outline"
+          onClick={() => setIsAddLocalDialogOpen(true)}
+          className="h-14 whitespace-nowrap px-4"
+        >
+          <FolderOpenIcon className="h-4 w-4 mr-2" />
+          Reference Local Provider
+        </Button>
       </div>
+
+      {/* Helper text */}
+      <p className="text-sm text-muted-foreground">
+        {providers.length > 0
+          ? 'Click a provider to configure its settings. Hover over badges to see model IDs.'
+          : 'Select LLM providers from the dropdown or type to search'}
+      </p>
+
+      <AddLocalProviderDialog
+        open={isAddLocalDialogOpen}
+        onClose={() => setIsAddLocalDialogOpen(false)}
+        onAdd={handleAddLocalProvider}
+      />
+      {selectedProvider && selectedProvider.id && (
+        <ProviderConfigDialog
+          open={!!selectedProvider}
+          providerId={selectedProvider.id}
+          config={selectedProvider.config as Record<string, unknown>}
+          onClose={() => setSelectedProvider(null)}
+          onSave={handleSave}
+        />
+      )}
+    </div>
   );
 };
 

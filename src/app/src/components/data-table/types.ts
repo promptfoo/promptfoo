@@ -33,6 +33,8 @@ export interface DataTableProps<TData, TValue = unknown> {
   getRowId?: (row: TData) => string;
   // Custom toolbar actions
   toolbarActions?: React.ReactNode;
+  // Fixed height with scroll
+  maxHeight?: string;
 }
 
 export interface DataTableToolbarProps<TData> {

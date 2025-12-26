@@ -9,11 +9,7 @@ import {
   OpenInNewIcon,
   WarningIcon,
 } from '@app/components/ui/icons';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@app/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 
 interface InstallationGuideProps {
   onRetryCheck: () => void;

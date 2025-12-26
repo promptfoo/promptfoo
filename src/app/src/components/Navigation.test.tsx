@@ -1,3 +1,4 @@
+import { TooltipProvider } from '@app/components/ui/tooltip';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
@@ -25,11 +26,13 @@ const renderNavigation = (
   });
 
   return render(
-    <QueryClientProvider client={queryClient}>
-      <MemoryRouter {...routerProps}>
-        <Navigation onToggleDarkMode={props.onToggleDarkMode || (() => {})} />
-      </MemoryRouter>
-    </QueryClientProvider>,
+    <TooltipProvider delayDuration={0}>
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter {...routerProps}>
+          <Navigation onToggleDarkMode={props.onToggleDarkMode || (() => {})} />
+        </MemoryRouter>
+      </QueryClientProvider>
+    </TooltipProvider>,
   );
 };
 

@@ -9,11 +9,7 @@ import {
   CollapsibleTrigger,
 } from '@app/components/ui/collapsible';
 import { ExpandLessIcon, ExpandMoreIcon } from '@app/components/ui/icons';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@app/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import type { ColumnDef } from '@tanstack/react-table';
 
 import type { ScanAsset, ScanCheck } from '../ModelAudit.types';
@@ -179,9 +175,7 @@ export default function ChecksSection({
           return (
             <Tooltip>
               <TooltipTrigger asChild>
-                <span className="text-xs italic truncate block text-muted-foreground">
-                  {value}
-                </span>
+                <span className="text-xs italic truncate block text-muted-foreground">{value}</span>
               </TooltipTrigger>
               <TooltipContent>{value}</TooltipContent>
             </Tooltip>

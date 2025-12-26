@@ -128,6 +128,7 @@ export function DataTable<TData, TValue = unknown>({
   onRowSelectionChange,
   getRowId,
   toolbarActions,
+  maxHeight,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>(initialSorting);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
@@ -269,24 +270,31 @@ export function DataTable<TData, TValue = unknown>({
   }
 
   return (
-    <div className={cn('space-y-4 pb-4', className)}>
+    <div className={cn('flex flex-col gap-4 flex-1 min-h-0', className)}>
       {showToolbar && (
-        <DataTableToolbar
-          table={table}
-          globalFilter={globalFilter}
-          setGlobalFilter={setGlobalFilter}
-          showColumnToggle={showColumnToggle}
-          showFilter={showFilter}
-          showExport={showExport}
-          onExportCSV={onExportCSV}
-          onExportJSON={onExportJSON}
-          toolbarActions={toolbarActions}
-        />
+        <div className="flex-shrink-0">
+          <DataTableToolbar
+            table={table}
+            globalFilter={globalFilter}
+            setGlobalFilter={setGlobalFilter}
+            showColumnToggle={showColumnToggle}
+            showFilter={showFilter}
+            showExport={showExport}
+            onExportCSV={onExportCSV}
+            onExportJSON={onExportJSON}
+            toolbarActions={toolbarActions}
+          />
+        </div>
       )}
 
-      <div className="rounded-lg border border-border overflow-hidden bg-white dark:bg-zinc-900">
+      <div
+        className={cn(
+          'rounded-lg border border-border bg-white dark:bg-zinc-900 overflow-auto flex-1 min-h-0',
+        )}
+        style={maxHeight ? { maxHeight } : undefined}
+      >
         <table className="w-full" style={{ tableLayout: 'fixed' }}>
-          <thead className="bg-muted/50">
+          <thead className="bg-muted/50 sticky top-0 z-10">
             {table.getHeaderGroups().map((headerGroup) => (
               <tr key={headerGroup.id} className="border-b border-border">
                 {headerGroup.headers.map((header) => {
@@ -381,7 +389,11 @@ export function DataTable<TData, TValue = unknown>({
         </table>
       </div>
 
-      {showPagination && hasData && <DataTablePagination table={table} />}
+      {showPagination && hasData && (
+        <div className="flex-shrink-0">
+          <DataTablePagination table={table} />
+        </div>
+      )}
     </div>
   );
 }

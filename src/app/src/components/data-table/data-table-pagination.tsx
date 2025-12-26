@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 
 import { Button } from '@app/components/ui/button';
 import { Input } from '@app/components/ui/input';
@@ -13,10 +13,11 @@ import {
 import type { DataTablePaginationProps } from './types';
 
 export function DataTablePagination<TData>({ table }: DataTablePaginationProps<TData>) {
-  const pageCount = useMemo(() => table.getPageCount(), [table]);
+  const [pageInputValue, setPageInputValue] = useState<string>('');
+
+  const pageCount = table.getPageCount();
   const { pageIndex, pageSize } = table.getState().pagination;
   const rowLength = table.getFilteredRowModel().rows.length;
-  const [pageInputValue, setPageInputValue] = useState<string>('');
 
   const handlePageInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setPageInputValue(e.target.value);

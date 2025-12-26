@@ -1,3 +1,4 @@
+import { TooltipProvider } from '@app/components/ui/tooltip';
 import { callApi } from '@app/utils/api';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { render, screen, waitFor } from '@testing-library/react';
@@ -55,11 +56,13 @@ describe('ModelAuditResultLatestPage', () => {
 
   const renderComponent = () => {
     return render(
-      <MemoryRouter>
-        <ThemeProvider theme={theme}>
-          <ModelAuditResultLatestPage />
-        </ThemeProvider>
-      </MemoryRouter>,
+      <TooltipProvider delayDuration={0}>
+        <MemoryRouter>
+          <ThemeProvider theme={theme}>
+            <ModelAuditResultLatestPage />
+          </ThemeProvider>
+        </MemoryRouter>
+      </TooltipProvider>,
     );
   };
 

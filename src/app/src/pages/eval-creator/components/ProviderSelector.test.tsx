@@ -1,3 +1,4 @@
+import { TooltipProvider } from '@app/components/ui/tooltip';
 import { ToastProvider } from '@app/contexts/ToastContext';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -22,9 +23,11 @@ describe('ProviderSelector', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     render(
-      <ToastProvider>
-        <ProviderSelector providers={mockProviders} onChange={mockOnChange} />
-      </ToastProvider>,
+      <TooltipProvider delayDuration={0}>
+        <ToastProvider>
+          <ProviderSelector providers={mockProviders} onChange={mockOnChange} />
+        </ToastProvider>
+      </TooltipProvider>,
     );
     // Wait for the component to finish loading
     await waitFor(() => {

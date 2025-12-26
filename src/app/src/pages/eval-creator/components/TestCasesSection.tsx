@@ -214,192 +214,190 @@ const TestCasesSection = ({ varsList }: TestCasesSectionProps) => {
 
   return (
     <div className="space-y-4">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold">Test Cases</h2>
-          <div className="flex items-center gap-2">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <label className="cursor-pointer" aria-label="Upload test cases from CSV or YAML">
-                  <Button variant="ghost" size="icon" asChild>
-                    <span>
-                      <UploadIcon className="h-4 w-4" />
-                    </span>
-                  </Button>
-                  <input
-                    type="file"
-                    accept=".csv,.yaml,.yml"
-                    onChange={handleAddTestCaseFromFile}
-                    className="hidden"
-                  />
-                </label>
-              </TooltipTrigger>
-              <TooltipContent>Upload test cases from CSV or YAML</TooltipContent>
-            </Tooltip>
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <h2 className="text-xl font-semibold">Test Cases</h2>
+        <div className="flex items-center gap-2">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <label className="cursor-pointer" aria-label="Upload test cases from CSV or YAML">
+                <Button variant="ghost" size="icon" asChild>
+                  <span>
+                    <UploadIcon className="h-4 w-4" />
+                  </span>
+                </Button>
+                <input
+                  type="file"
+                  accept=".csv,.yaml,.yml"
+                  onChange={handleAddTestCaseFromFile}
+                  className="hidden"
+                />
+              </label>
+            </TooltipTrigger>
+            <TooltipContent>Upload test cases from CSV or YAML</TooltipContent>
+          </Tooltip>
 
-            {testCases.length === 0 && (
-              <Button
-                variant="secondary"
-                onClick={() => {
-                  const exampleTestCase: TestCase = {
-                    description: 'Fun animal adventure story',
-                    vars: {
-                      animal: 'penguin',
-                      location: 'tropical island',
+          {testCases.length === 0 && (
+            <Button
+              variant="secondary"
+              onClick={() => {
+                const exampleTestCase: TestCase = {
+                  description: 'Fun animal adventure story',
+                  vars: {
+                    animal: 'penguin',
+                    location: 'tropical island',
+                  },
+                  assert: [
+                    {
+                      type: 'contains-any',
+                      value: ['penguin', 'adventure', 'tropical', 'island'],
                     },
-                    assert: [
-                      {
-                        type: 'contains-any',
-                        value: ['penguin', 'adventure', 'tropical', 'island'],
-                      },
-                      {
-                        type: 'llm-rubric',
-                        value:
-                          'Is this a fun, child-friendly story featuring a penguin on a tropical island adventure?\n\nCriteria:\n1. Does it mention a penguin as the main character?\n2. Does the story take place on a tropical island?\n3. Is it entertaining and appropriate for children?\n4. Does it have a sense of adventure?',
-                      },
-                    ],
-                  };
-                  setTestCases([...testCases, exampleTestCase]);
-                }}
-              >
-                Add Example
-              </Button>
-            )}
-            <Button onClick={() => setTestCaseDialogOpen(true)}>Add Test Case</Button>
-          </div>
+                    {
+                      type: 'llm-rubric',
+                      value:
+                        'Is this a fun, child-friendly story featuring a penguin on a tropical island adventure?\n\nCriteria:\n1. Does it mention a penguin as the main character?\n2. Does the story take place on a tropical island?\n3. Is it entertaining and appropriate for children?\n4. Does it have a sense of adventure?',
+                    },
+                  ],
+                };
+                setTestCases([...testCases, exampleTestCase]);
+              }}
+            >
+              Add Example
+            </Button>
+          )}
+          <Button onClick={() => setTestCaseDialogOpen(true)}>Add Test Case</Button>
         </div>
+      </div>
 
-        {/* Test Cases Table */}
-        <div className="rounded-lg border border-border overflow-hidden">
-          <table className="w-full">
-            <thead className="bg-muted/50">
-              <tr className="border-b border-border">
-                <th className="px-4 py-3 text-left text-sm font-semibold">Description</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold">Assertions</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold">Variables</th>
-                <th className="px-4 py-3 text-right text-sm font-semibold w-[120px]"></th>
+      {/* Test Cases Table */}
+      <div className="rounded-lg border border-border overflow-hidden">
+        <table className="w-full">
+          <thead className="bg-muted/50">
+            <tr className="border-b border-border">
+              <th className="px-4 py-3 text-left text-sm font-semibold">Description</th>
+              <th className="px-4 py-3 text-left text-sm font-semibold">Assertions</th>
+              <th className="px-4 py-3 text-left text-sm font-semibold">Variables</th>
+              <th className="px-4 py-3 text-right text-sm font-semibold w-[120px]"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {testCases.length === 0 ? (
+              <tr>
+                <td colSpan={4} className="p-8 text-center text-muted-foreground">
+                  No test cases added yet.
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {testCases.length === 0 ? (
-                <tr>
-                  <td colSpan={4} className="p-8 text-center text-muted-foreground">
-                    No test cases added yet.
+            ) : (
+              testCases.map((testCase, index) => (
+                <tr
+                  key={index}
+                  onClick={() => {
+                    setEditingTestCaseIndex(index);
+                    setTestCaseDialogOpen(true);
+                  }}
+                  className={cn(
+                    'border-b border-border cursor-pointer',
+                    'hover:bg-muted/50 transition-colors',
+                  )}
+                >
+                  <td className="px-4 py-3 text-sm">
+                    {testCase.description || `Test Case #${index + 1}`}
+                  </td>
+                  <td className="px-4 py-3 text-sm text-muted-foreground">
+                    {testCase.assert?.length || 0} assertions
+                  </td>
+                  <td className="px-4 py-3 text-sm text-muted-foreground font-mono text-xs">
+                    {Object.entries(testCase.vars || {})
+                      .map(([k, v]) => `${k}=${v}`)
+                      .join(', ')}
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingTestCaseIndex(index);
+                              setTestCaseDialogOpen(true);
+                            }}
+                          >
+                            <EditIcon className="h-4 w-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Edit</TooltipContent>
+                      </Tooltip>
+
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={(event) => handleDuplicateTestCase(event, index)}
+                            aria-label="Duplicate test case"
+                          >
+                            <ContentCopyIcon className="h-4 w-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Duplicate</TooltipContent>
+                      </Tooltip>
+
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={(event) => handleRemoveTestCase(event, index)}
+                            aria-label="Delete test case"
+                          >
+                            <DeleteIcon className="h-4 w-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Delete</TooltipContent>
+                      </Tooltip>
+                    </div>
                   </td>
                 </tr>
-              ) : (
-                testCases.map((testCase, index) => (
-                  <tr
-                    key={index}
-                    onClick={() => {
-                      setEditingTestCaseIndex(index);
-                      setTestCaseDialogOpen(true);
-                    }}
-                    className={cn(
-                      'border-b border-border cursor-pointer',
-                      'hover:bg-muted/50 transition-colors',
-                    )}
-                  >
-                    <td className="px-4 py-3 text-sm">
-                      {testCase.description || `Test Case #${index + 1}`}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-muted-foreground">
-                      {testCase.assert?.length || 0} assertions
-                    </td>
-                    <td className="px-4 py-3 text-sm text-muted-foreground font-mono text-xs">
-                      {Object.entries(testCase.vars || {})
-                        .map(([k, v]) => `${k}=${v}`)
-                        .join(', ')}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setEditingTestCaseIndex(index);
-                                setTestCaseDialogOpen(true);
-                              }}
-                            >
-                              <EditIcon className="h-4 w-4" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>Edit</TooltipContent>
-                        </Tooltip>
-
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={(event) => handleDuplicateTestCase(event, index)}
-                              aria-label="Duplicate test case"
-                            >
-                              <ContentCopyIcon className="h-4 w-4" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>Duplicate</TooltipContent>
-                        </Tooltip>
-
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={(event) => handleRemoveTestCase(event, index)}
-                              aria-label="Delete test case"
-                            >
-                              <DeleteIcon className="h-4 w-4" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>Delete</TooltipContent>
-                        </Tooltip>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Test Case Dialog */}
-        <TestCaseDialog
-          open={testCaseDialogOpen}
-          onAdd={handleAddTestCase}
-          varsList={varsList}
-          initialValues={
-            editingTestCaseIndex === null ? undefined : testCases[editingTestCaseIndex]
-          }
-          onCancel={() => {
-            setEditingTestCaseIndex(null);
-            setTestCaseDialogOpen(false);
-          }}
-        />
-
-        {/* Delete Confirmation Dialog */}
-        <Dialog open={deleteDialogOpen} onOpenChange={(open) => !open && cancelDeleteTestCase()}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Delete Test Case</DialogTitle>
-              <DialogDescription>
-                Are you sure you want to delete this test case? This action cannot be undone.
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <Button variant="outline" onClick={cancelDeleteTestCase}>
-                Cancel
-              </Button>
-              <Button variant="destructive" onClick={confirmDeleteTestCase}>
-                Delete
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+              ))
+            )}
+          </tbody>
+        </table>
       </div>
+
+      {/* Test Case Dialog */}
+      <TestCaseDialog
+        open={testCaseDialogOpen}
+        onAdd={handleAddTestCase}
+        varsList={varsList}
+        initialValues={editingTestCaseIndex === null ? undefined : testCases[editingTestCaseIndex]}
+        onCancel={() => {
+          setEditingTestCaseIndex(null);
+          setTestCaseDialogOpen(false);
+        }}
+      />
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={(open) => !open && cancelDeleteTestCase()}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Test Case</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this test case? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={cancelDeleteTestCase}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={confirmDeleteTestCase}>
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 };
 
