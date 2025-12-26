@@ -368,7 +368,14 @@ export function DataTable<TData, TValue = unknown>({
                         cell.column.id === 'select' && 'cursor-pointer',
                       )}
                       style={{ width: cell.column.getSize() }}
-                      onClick={cell.column.id === 'select' ? (e) => e.stopPropagation() : undefined}
+                      onClick={
+                        cell.column.id === 'select'
+                          ? (e) => {
+                              e.stopPropagation();
+                              row.toggleSelected();
+                            }
+                          : undefined
+                      }
                     >
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </td>
