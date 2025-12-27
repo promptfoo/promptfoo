@@ -604,7 +604,7 @@ function PerformanceOverTimeChart({ evalId }: ChartProps) {
       onClick: (_event: any, elements: any) => {
         if (elements.length > 0) {
           const index = elements[0].index;
-          window.open(EVAL_ROUTES.QUERY(chartData[index].evalData.evalId), '_blank');
+          window.open(EVAL_ROUTES.DETAIL(chartData[index].evalData.evalId), '_blank');
         }
       },
     };

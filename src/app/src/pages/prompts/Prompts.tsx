@@ -89,7 +89,7 @@ export default function Prompts({
           }
           return (
             <Link
-              to={EVAL_ROUTES.QUERY(row.original.recentEvalId)}
+              to={EVAL_ROUTES.DETAIL(row.original.recentEvalId)}
               className="text-primary hover:underline font-mono text-sm"
             >
               {formatDataGridDate(value)}

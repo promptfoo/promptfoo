@@ -1302,7 +1302,7 @@ export default function Review({
                     <Button
                       variant="contained"
                       color="success"
-                      href={EVAL_ROUTES.QUERY(evalId)}
+                      href={EVAL_ROUTES.DETAIL(evalId)}
                       startIcon={<SearchIcon />}
                     >
                       View Probes

@@ -166,7 +166,7 @@ export default function DatasetDialog({ openDialog, handleClose, testCase }: Dat
                         </td>
                         <td className="px-3 py-2">
                           <Link
-                            to={EVAL_ROUTES.QUERY(promptData.evalId)}
+                            to={EVAL_ROUTES.DETAIL(promptData.evalId)}
                             className="text-primary hover:underline font-mono text-sm block truncate"
                           >
                             {promptData.evalId}
