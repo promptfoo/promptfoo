@@ -102,9 +102,11 @@ function createHeaderComments({
   ].filter(Boolean) as string[];
 }
 
-export async function doGenerateRedteam(
-  options: Partial<RedteamCliGenerateOptions>,
-): Promise<Partial<UnifiedConfig> | null> {
+export async function doGenerateRedteam(options: Partial<RedteamCliGenerateOptions>): Promise<{
+  config: Partial<UnifiedConfig> | null;
+  pluginResults?: Record<string, { requested: number; generated: number }>;
+  strategyResults?: Record<string, { requested: number; generated: number }>;
+}> {
   setupEnv(options.envFile);
   if (!options.cache) {
     logger.info('Cache is disabled');
@@ -152,7 +154,7 @@ export async function doGenerateRedteam(
         logger.warn(
           'No changes detected in redteam configuration. Skipping generation (use --force to generate anyway)',
         );
-        return redteamContent;
+        return { config: redteamContent };
       }
     }
   } else {
@@ -230,7 +232,7 @@ export async function doGenerateRedteam(
         )} first`,
       ),
     );
-    return null;
+    return { config: null };
   }
 
   const startTime = Date.now();
@@ -442,6 +444,8 @@ export async function doGenerateRedteam(
   let purpose: string = enhancedPurpose;
   let entities: string[] = [];
   let finalInjectVar: string = '';
+  let pluginResults: Record<string, { requested: number; generated: number }> = {};
+  let strategyResults: Record<string, { requested: number; generated: number }> = {};
 
   if (contexts && contexts.length > 0) {
     // Multi-context mode: generate tests for each context
@@ -483,6 +487,23 @@ export async function doGenerateRedteam(
 
       redteamTests = redteamTests.concat(taggedTests);
 
+      // Merge plugin and strategy results from all contexts
+      Object.entries(contextResult.pluginResults).forEach(([key, value]) => {
+        if (!pluginResults[key]) {
+          pluginResults[key] = { requested: 0, generated: 0 };
+        }
+        pluginResults[key].requested += value.requested;
+        pluginResults[key].generated += value.generated;
+      });
+
+      Object.entries(contextResult.strategyResults).forEach(([key, value]) => {
+        if (!strategyResults[key]) {
+          strategyResults[key] = { requested: 0, generated: 0 };
+        }
+        strategyResults[key].requested += value.requested;
+        strategyResults[key].generated += value.generated;
+      });
+
       // Keep track of entities and injectVar from first context
       if (!entities.length) {
         entities = contextResult.entities;
@@ -516,11 +537,13 @@ export async function doGenerateRedteam(
     purpose = result.purpose;
     entities = result.entities;
     finalInjectVar = result.injectVar;
+    pluginResults = result.pluginResults;
+    strategyResults = result.strategyResults;
   }
 
   if (redteamTests.length === 0) {
     logger.warn('No test cases generated. Please check for errors and try again.');
-    return null;
+    return { config: null, pluginResults, strategyResults };
   }
 
   const updatedRedteamConfig = {
@@ -550,7 +573,7 @@ export async function doGenerateRedteam(
       chalk.green(`Wrote ${redteamTests.length} test cases to ${chalk.bold(options.output)}`),
     );
     // No need to return anything, Burp outputs are only invoked via command line.
-    return {};
+    return { config: {}, pluginResults, strategyResults };
   } else if (options.output) {
     const existingYaml = configPath
       ? (yaml.load(fs.readFileSync(configPath, 'utf8')) as Partial<UnifiedConfig>)
@@ -710,7 +733,7 @@ export async function doGenerateRedteam(
     isPromptfooSampleTarget: testSuite.providers.some(isPromptfooSampleTarget),
   });
 
-  return ret;
+  return { config: ret, pluginResults, strategyResults };
 }
 
 export function redteamGenerateCommand(
