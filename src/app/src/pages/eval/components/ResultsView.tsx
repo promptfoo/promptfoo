@@ -257,6 +257,9 @@ export default function ResultsView({
 
   const currentEvalId = evalId || defaultEvalId || 'default';
 
+  // Valid evalId for navigation (no fallback to 'default')
+  const validEvalId = evalId || defaultEvalId;
+
   // Handle menu close
   const handleMenuClose = () => {
     setAnchorEl(null);
@@ -988,15 +991,13 @@ export default function ResultsView({
                   </Menu>
                 )}
                 {/* TODO(Michael): Remove config.metadata.redteam check (2024-08-18) */}
-                {(config?.redteam || config?.metadata?.redteam) && (
+                {(config?.redteam || config?.metadata?.redteam) && validEvalId && (
                   <Tooltip title="View vulnerability scan report" placement="bottom">
                     <Button
                       color="primary"
                       variant="contained"
                       startIcon={<EyeIcon />}
-                      onClick={() =>
-                        navigate(REDTEAM_ROUTES.REPORT_DETAIL(evalId || defaultEvalId))
-                      }
+                      onClick={() => navigate(REDTEAM_ROUTES.REPORT_DETAIL(validEvalId))}
                     >
                       Vulnerability Report
                     </Button>
