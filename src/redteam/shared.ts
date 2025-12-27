@@ -161,11 +161,7 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
   logger.info('Generating test cases...');
   const { maxConcurrency, ...passThroughOptions } = options;
 
-  const {
-    config: redteamConfig,
-    pluginResults,
-    strategyResults,
-  } = await doGenerateRedteam({
+  const generateResult = await doGenerateRedteam({
     ...passThroughOptions,
     ...(options.liveRedteamConfig?.commandLineOptions || {}),
     ...(maxConcurrency !== undefined ? { maxConcurrency } : {}),
@@ -179,8 +175,19 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
     progressBar: options.progressBar,
   });
 
+  // Check if generation succeeded
+  if (!generateResult || !generateResult.config) {
+    logger.info('No test cases generated. Skipping scan.');
+    if (verboseToggleCleanup) {
+      verboseToggleCleanup();
+    }
+    return;
+  }
+
+  const { config: redteamConfig, pluginResults, strategyResults } = generateResult;
+
   // Check if redteam.yaml exists before running evaluation
-  if (!redteamConfig || !fs.existsSync(redteamPath)) {
+  if (!fs.existsSync(redteamPath)) {
     logger.info('No test cases generated. Skipping scan.');
     if (verboseToggleCleanup) {
       verboseToggleCleanup();
