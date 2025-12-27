@@ -110,7 +110,7 @@ const PromptDialog = ({
                       >
                         <td className="px-3 py-2">
                           <Link
-                            to={EVAL_ROUTES.WITH_EVAL_ID(evalData.id)}
+                            to={EVAL_ROUTES.QUERY(evalData.id)}
                             className="text-primary hover:underline font-mono text-sm block truncate"
                           >
                             {evalData.id}

@@ -122,7 +122,7 @@ export default function Datasets({ data, isLoading, error }: DatasetsProps) {
           }
           return (
             <Link
-              to={EVAL_ROUTES.WITH_EVAL_ID(value)}
+              to={EVAL_ROUTES.QUERY(value)}
               className="text-primary hover:underline font-mono text-sm"
             >
               {value}

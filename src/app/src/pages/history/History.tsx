@@ -122,7 +122,7 @@ export default function History({
         header: 'Eval',
         cell: ({ getValue }) => (
           <Link
-            to={EVAL_ROUTES.WITH_EVAL_ID(getValue<string>() || '')}
+            to={EVAL_ROUTES.QUERY(getValue<string>() || '')}
             className="text-primary hover:underline font-mono text-sm"
           >
             {getValue<string>()}
