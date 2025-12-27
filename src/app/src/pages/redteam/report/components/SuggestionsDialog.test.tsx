@@ -29,11 +29,9 @@ describe('SuggestionsDialog', () => {
 
     expect(screen.getByRole('heading', { name: 'Suggestions' })).toBeInTheDocument();
 
-    // Both close buttons (X icon and footer button) exist
-    expect(screen.getByLabelText('close')).toBeInTheDocument();
-    // Get all Close buttons and verify there are 2 (icon X button with sr-only text, and the footer Close button)
-    const closeButtons = screen.getAllByRole('button', { name: /close/i });
-    expect(closeButtons.length).toBeGreaterThanOrEqual(2);
+    // Dialog has built-in close button with sr-only "Close" text
+    const closeButton = screen.getByRole('button', { name: 'Close' });
+    expect(closeButton).toBeInTheDocument();
   });
 
   it('should render with no suggestion cards when gradingResult is undefined', () => {
@@ -61,19 +59,14 @@ describe('SuggestionsDialog', () => {
     expect(screen.getByText('This is a recommendation note.')).toBeInTheDocument();
   });
 
-  it('should call onClose when the close button or the "Close" dialog action button is clicked', () => {
+  it('should call onClose when the close button is clicked', () => {
     const onClose = vi.fn();
     renderSuggestionsDialog({ onClose });
 
-    const closeIconButton = screen.getByLabelText('close');
-    fireEvent.click(closeIconButton);
+    // Dialog has built-in close button with sr-only "Close" text
+    const closeButton = screen.getByRole('button', { name: 'Close' });
+    fireEvent.click(closeButton);
     expect(onClose).toHaveBeenCalledTimes(1);
-
-    // Click the footer Close button (find by text content)
-    const closeButtons = screen.getAllByRole('button', { name: /close/i });
-    const footerCloseButton = closeButtons.find((btn) => btn.textContent === 'Close');
-    fireEvent.click(footerCloseButton!);
-    expect(onClose).toHaveBeenCalledTimes(2);
   });
 
   it('should handle a gradingResult with componentResults that have undefined suggestions property', () => {
