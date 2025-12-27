@@ -760,7 +760,8 @@ describe('StrategyConfigDialog', () => {
     fireEvent.click(saveButton);
 
     expect(mockOnSave).toHaveBeenCalledTimes(1);
-    expect(mockOnSave).toHaveBeenCalledWith('jailbreak:meta', { numIterations: 10 });
+    // Empty input saves undefined, allowing server to use defaults
+    expect(mockOnSave).toHaveBeenCalledWith('jailbreak:meta', { numIterations: undefined });
     expect(mockOnClose).toHaveBeenCalledTimes(1);
   });
 
@@ -889,6 +890,344 @@ describe('StrategyConfigDialog', () => {
     const numIterationsInput = screen.getByLabelText('Number of Iterations');
     expect(numIterationsInput).toBeInTheDocument();
     expect(numIterationsInput).toHaveValue(10);
+  });
+
+  describe('Max iterations/turns limit validation', () => {
+    it('should show error and disable save when numIterations exceeds 30 for jailbreak strategy', () => {
+      render(
+        <StrategyConfigDialog
+          open={true}
+          strategy="jailbreak"
+          config={{ numIterations: 50 }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={{ id: 'jailbreak', name: 'Jailbreak', description: 'Jailbreak strategy' }}
+        />,
+      );
+
+      const numIterationsInput = screen.getByLabelText('Number of Iterations');
+      expect(numIterationsInput).toHaveValue(50);
+
+      // Should show error message
+      expect(screen.getByText(/Must be 30 or less/)).toBeInTheDocument();
+
+      // Save button should be disabled
+      const saveButton = screen.getByRole('button', { name: 'Save' });
+      expect(saveButton).toBeDisabled();
+    });
+
+    it('should show limit message when numIterations equals 30 for jailbreak strategy', () => {
+      render(
+        <StrategyConfigDialog
+          open={true}
+          strategy="jailbreak"
+          config={{ numIterations: 30 }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={{ id: 'jailbreak', name: 'Jailbreak', description: 'Jailbreak strategy' }}
+        />,
+      );
+
+      const numIterationsInput = screen.getByLabelText('Number of Iterations');
+      expect(numIterationsInput).toHaveValue(30);
+
+      // Should show limit message
+      expect(screen.getByText(/This is the maximum/)).toBeInTheDocument();
+
+      // Save button should be enabled
+      const saveButton = screen.getByRole('button', { name: 'Save' });
+      expect(saveButton).not.toBeDisabled();
+    });
+
+    it('should show error and disable save when numIterations exceeds 30 for jailbreak:meta strategy', () => {
+      render(
+        <StrategyConfigDialog
+          open={true}
+          strategy="jailbreak:meta"
+          config={{ numIterations: 40 }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={{
+            id: 'jailbreak:meta',
+            name: 'Meta-Agent Jailbreak',
+            description: 'Meta-Agent Jailbreak strategy',
+          }}
+        />,
+      );
+
+      const numIterationsInput = screen.getByLabelText('Number of Iterations');
+      expect(numIterationsInput).toHaveValue(40);
+
+      // Should show error message
+      expect(screen.getByText(/Must be 30 or less/)).toBeInTheDocument();
+
+      // Save button should be disabled
+      const saveButton = screen.getByRole('button', { name: 'Save' });
+      expect(saveButton).toBeDisabled();
+    });
+
+    it('should show error and disable save when maxTurns exceeds 30 for jailbreak:hydra strategy', () => {
+      render(
+        <StrategyConfigDialog
+          open={true}
+          strategy="jailbreak:hydra"
+          config={{ maxTurns: 35 }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={{
+            id: 'jailbreak:hydra',
+            name: 'Hydra',
+            description: 'Hydra multi-turn jailbreak',
+          }}
+        />,
+      );
+
+      const maxTurnsInput = screen.getByLabelText('Max Turns');
+      expect(maxTurnsInput).toHaveValue(35);
+
+      // Should show error message
+      expect(screen.getByText(/Must be 30 or less/)).toBeInTheDocument();
+
+      // Save button should be disabled
+      const saveButton = screen.getByRole('button', { name: 'Save' });
+      expect(saveButton).toBeDisabled();
+    });
+
+    it('should show error and disable save when maxTurns exceeds 30 for custom strategy', () => {
+      render(
+        <StrategyConfigDialog
+          open={true}
+          strategy="custom"
+          config={{ strategyText: 'Test strategy', maxTurns: 35 }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={{ id: 'custom', name: 'Custom', description: 'A custom strategy' }}
+        />,
+      );
+
+      const maxTurnsInput = screen.getByLabelText('Max Turns');
+      expect(maxTurnsInput).toHaveValue(35);
+
+      // Should show error message
+      expect(screen.getByText(/Must be 30 or less/)).toBeInTheDocument();
+
+      // Save button should be disabled
+      const saveButton = screen.getByRole('button', { name: 'Save' });
+      expect(saveButton).toBeDisabled();
+    });
+
+    it('should show error and disable save when maxTurns exceeds 30 for goat strategy (multi-turn)', () => {
+      render(
+        <StrategyConfigDialog
+          open={true}
+          strategy="goat"
+          config={{ maxTurns: 35 }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={{ id: 'goat', name: 'GOAT', description: 'A multi-turn strategy' }}
+        />,
+      );
+
+      const maxTurnsInput = screen.getByLabelText('Max Turns');
+      expect(maxTurnsInput).toHaveValue(35);
+
+      // Should show error message
+      expect(screen.getByText(/Must be 30 or less/)).toBeInTheDocument();
+
+      // Save button should be disabled
+      const saveButton = screen.getByRole('button', { name: 'Save' });
+      expect(saveButton).toBeDisabled();
+    });
+
+    it('should allow saving when maxTurns is exactly 30 for jailbreak:hydra strategy', () => {
+      render(
+        <StrategyConfigDialog
+          open={true}
+          strategy="jailbreak:hydra"
+          config={{ maxTurns: 30 }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={{
+            id: 'jailbreak:hydra',
+            name: 'Hydra',
+            description: 'Hydra multi-turn jailbreak',
+          }}
+        />,
+      );
+
+      // Should show limit message, not error
+      expect(screen.getByText(/This is the maximum/)).toBeInTheDocument();
+
+      const saveButton = screen.getByRole('button', { name: 'Save' });
+      expect(saveButton).not.toBeDisabled();
+      fireEvent.click(saveButton);
+
+      expect(mockOnSave).toHaveBeenCalledWith('jailbreak:hydra', { maxTurns: 30 });
+    });
+
+    it('should block save when user types value exceeding 30 for jailbreak strategy', () => {
+      render(
+        <StrategyConfigDialog
+          open={true}
+          strategy="jailbreak"
+          config={{}}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={{ id: 'jailbreak', name: 'Jailbreak', description: 'Jailbreak strategy' }}
+        />,
+      );
+
+      const numIterationsInput = screen.getByLabelText('Number of Iterations');
+      fireEvent.change(numIterationsInput, { target: { value: '50' } });
+
+      // Should show error message
+      expect(screen.getByText(/Must be 30 or less/)).toBeInTheDocument();
+
+      // Save button should be disabled
+      const saveButton = screen.getByRole('button', { name: 'Save' });
+      expect(saveButton).toBeDisabled();
+
+      // Clicking save should not call onSave
+      fireEvent.click(saveButton);
+      expect(mockOnSave).not.toHaveBeenCalled();
+    });
+
+    it('should show normal helper text when numIterations is below 30', () => {
+      render(
+        <StrategyConfigDialog
+          open={true}
+          strategy="jailbreak"
+          config={{ numIterations: 10 }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={{ id: 'jailbreak', name: 'Jailbreak', description: 'Jailbreak strategy' }}
+        />,
+      );
+
+      // Should show normal helper text
+      expect(
+        screen.getByText(
+          /Number of iterations to try \(more iterations increase chance of success\)/,
+        ),
+      ).toBeInTheDocument();
+      expect(screen.queryByText(/Must be 30 or less/)).not.toBeInTheDocument();
+    });
+
+    it('should disable save when both maxTurns and numIterations exceed the limit', () => {
+      render(
+        <StrategyConfigDialog
+          open={true}
+          strategy="jailbreak"
+          config={{ numIterations: 50, maxTurns: 40 }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={{ id: 'jailbreak', name: 'Jailbreak', description: 'Jailbreak strategy' }}
+        />,
+      );
+
+      const saveButton = screen.getByRole('button', { name: 'Save' });
+      expect(saveButton).toBeDisabled();
+    });
+
+    it('should enable Save button when user corrects numIterations from invalid to valid value', () => {
+      render(
+        <StrategyConfigDialog
+          open={true}
+          strategy="jailbreak"
+          config={{}}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={{ id: 'jailbreak', name: 'Jailbreak', description: 'Jailbreak strategy' }}
+        />,
+      );
+
+      const numIterationsInput = screen.getByLabelText('Number of Iterations');
+      fireEvent.change(numIterationsInput, { target: { value: '50' } });
+
+      const saveButton = screen.getByRole('button', { name: 'Save' });
+      expect(saveButton).toBeDisabled();
+
+      fireEvent.change(numIterationsInput, { target: { value: '20' } });
+      expect(saveButton).not.toBeDisabled();
+
+      fireEvent.click(saveButton);
+      expect(mockOnSave).toHaveBeenCalledTimes(1);
+      expect(mockOnSave).toHaveBeenCalledWith('jailbreak', { numIterations: 20 });
+      expect(mockOnClose).toHaveBeenCalledTimes(1);
+    });
+
+    it('should correctly apply validation when switching between strategies with maxTurns/numIterations', () => {
+      const { rerender } = render(
+        <StrategyConfigDialog
+          open={true}
+          strategy="custom"
+          config={{ strategyText: 'Initial strategy', maxTurns: 50 }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={{ id: 'custom', name: 'Custom', description: 'A custom strategy' }}
+        />,
+      );
+
+      // Assert that the Save button is initially disabled due to the invalid maxTurns value
+      let saveButton = screen.getByRole('button', { name: 'Save' });
+      expect(saveButton).toBeDisabled();
+
+      // Rerender the component with a different strategy and a valid maxTurns value
+      rerender(
+        <StrategyConfigDialog
+          open={true}
+          strategy="goat"
+          config={{ maxTurns: 20 }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={{ id: 'goat', name: 'GOAT', description: 'A multi-turn strategy' }}
+        />,
+      );
+
+      // Assert that the Save button is now enabled, indicating that the validation logic has been correctly applied to the new strategy
+      saveButton = screen.getByRole('button', { name: 'Save' });
+      expect(saveButton).not.toBeDisabled();
+    });
+
+    it('should disable save when numIterations is negative for jailbreak strategy', () => {
+      render(
+        <StrategyConfigDialog
+          open={true}
+          strategy="jailbreak"
+          config={{ numIterations: -5 }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={{ id: 'jailbreak', name: 'Jailbreak', description: 'Jailbreak strategy' }}
+        />,
+      );
+
+      const numIterationsInput = screen.getByLabelText('Number of Iterations');
+      expect(numIterationsInput).toHaveValue(-5);
+
+      const saveButton = screen.getByRole('button', { name: 'Save' });
+      expect(saveButton).toBeDisabled();
+    });
+
+    it('should disable save and not call onSave when maxTurns is zero for custom strategy', () => {
+      // Note: Browser type="number" inputs sanitize non-numeric values to empty string,
+      // so we test with zero which is below MIN_TURNS (1)
+      render(
+        <StrategyConfigDialog
+          open={true}
+          strategy="custom"
+          config={{ strategyText: 'Test strategy', maxTurns: 0 }}
+          onClose={mockOnClose}
+          onSave={mockOnSave}
+          strategyData={{ id: 'custom', name: 'Custom', description: 'A custom strategy' }}
+        />,
+      );
+
+      const saveButton = screen.getByRole('button', { name: 'Save' });
+      expect(saveButton).toBeDisabled();
+
+      fireEvent.click(saveButton);
+      expect(mockOnSave).not.toHaveBeenCalled();
+    });
   });
 
   describe('layer strategy', () => {
