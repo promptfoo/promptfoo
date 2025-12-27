@@ -1,9 +1,9 @@
 import { useState } from 'react';
 
+import { Button } from '@app/components/ui/button';
+import { Spinner } from '@app/components/ui/spinner';
 import { useStore } from '@app/stores/evalConfig';
 import { callApi } from '@app/utils/api';
-import Button from '@mui/material/Button';
-import CircularProgress from '@mui/material/CircularProgress';
 import { useNavigate } from 'react-router-dom';
 
 const RunTestSuiteButton = () => {
@@ -105,12 +105,12 @@ const RunTestSuiteButton = () => {
   };
 
   return (
-    <Button variant="contained" color="primary" onClick={runTestSuite} disabled={isDisabled}>
+    <Button onClick={runTestSuite} disabled={isDisabled}>
       {isRunning ? (
-        <>
-          <CircularProgress size={24} sx={{ marginRight: 2 }} />
+        <span className="flex items-center gap-2">
+          <Spinner className="h-4 w-4" />
           {progressPercent.toFixed(0)}% complete
-        </>
+        </span>
       ) : (
         'Run Eval'
       )}

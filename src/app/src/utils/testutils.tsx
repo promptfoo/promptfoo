@@ -1,4 +1,5 @@
 import { createAppTheme } from '@app/components/PageShell';
+import { TooltipProvider } from '@app/components/ui/tooltip';
 import { ThemeProvider } from '@mui/material/styles';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RenderOptions, render } from '@testing-library/react';
@@ -20,7 +21,9 @@ const Providers =
     });
     return (
       <QueryClientProvider client={queryClient}>
-        <ThemeProvider theme={theme}>{children}</ThemeProvider>
+        <TooltipProvider delayDuration={0}>
+          <ThemeProvider theme={theme}>{children}</ThemeProvider>
+        </TooltipProvider>
       </QueryClientProvider>
     );
   };

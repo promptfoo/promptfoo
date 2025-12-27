@@ -279,8 +279,9 @@ export default function ResultsView({
   const handleShare = async (id: string): Promise<string> => {
     try {
       if (!IS_RUNNING_LOCALLY) {
-        // For non-local instances, just return the URL directly
-        return `${window.location.host}/eval/?evalId=${id}`;
+        // For non-local instances, include base path in the URL
+        const basePath = import.meta.env.VITE_PUBLIC_BASENAME || '';
+        return `${window.location.host}${basePath}/eval/?evalId=${id}`;
       }
 
       const response = await callApi('/results/share', {
@@ -616,7 +617,7 @@ export default function ResultsView({
 
   return (
     <>
-      <Box px={2} pt={2}>
+      <Box px={2} pt={2} sx={{ isolation: 'isolate' }}>
         <Box sx={{ transition: 'all 0.3s ease' }}>
           <ResponsiveStack direction="row" spacing={1} alignItems="center" className="eval-header">
             <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', maxWidth: 250 }}>
@@ -651,7 +652,6 @@ export default function ResultsView({
                   setEvalSelectorDialogOpen(false);
                   onRecentEvalSelected(evalId);
                 }}
-                title="Select an Eval"
                 focusedEvalId={evalId ?? undefined}
               />
             </Box>
@@ -940,6 +940,7 @@ export default function ResultsView({
                     <CompareEvalMenuItem
                       initialEvals={recentEvals}
                       onComparisonEvalSelected={handleComparisonEvalSelected}
+                      onMenuClose={handleMenuClose}
                     />
                     <Tooltip title="View the configuration that defines this eval" placement="left">
                       <MenuItem onClick={() => setConfigModalOpen(true)}>

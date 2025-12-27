@@ -93,6 +93,10 @@ describe('ConfigureEnvButton', () => {
     const openaiApiKeyInput = screen.getByLabelText(/openai api key/i);
     expect(openaiApiKeyInput).toHaveValue(initialEnv.OPENAI_API_KEY);
 
+    // Expand the Azure section
+    const azureSection = screen.getByRole('button', { name: /azure/i });
+    await userEvent.click(azureSection);
+
     const azureApiKeyInput = screen.getByLabelText(/azure api key/i);
     expect(azureApiKeyInput).toHaveValue(initialEnv.AZURE_API_KEY);
   });

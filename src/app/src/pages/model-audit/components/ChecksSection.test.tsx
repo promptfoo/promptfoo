@@ -6,25 +6,27 @@ import ChecksSection from './ChecksSection';
 
 import type { ScanCheck } from '../ModelAudit.types';
 
-vi.mock('@mui/x-data-grid', () => ({
-  ...vi.importActual('@mui/x-data-grid'),
-  DataGrid: (props: { rows: any[]; columns: any[] }) => {
-    const { rows, columns } = props;
+// Mock the DataTable component from the design system
+vi.mock('@app/components/data-table/data-table', () => ({
+  DataTable: (props: { data: any[]; columns: any[] }) => {
+    const { data, columns } = props;
     return (
       <div data-testid="mock-data-grid">
         <table>
           <thead>
             <tr>
-              {columns.map((col) => (
-                <th key={col.field}>{col.headerName}</th>
+              {columns.map((col: any) => (
+                <th key={col.accessorKey || col.id}>{col.header}</th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {rows.map((row, index) => (
+            {data.map((row: any, index: number) => (
               <tr key={index}>
-                {columns.map((col) => (
-                  <td key={col.field}>{row[col.field]}</td>
+                {columns.map((col: any) => (
+                  <td key={col.accessorKey || col.id}>
+                    {col.accessorKey ? row[col.accessorKey] : ''}
+                  </td>
                 ))}
               </tr>
             ))}
@@ -68,22 +70,21 @@ describe('ChecksSection', () => {
     },
   ];
 
-  it('should render accordion, summary, filter, and DataGrid on happy path', async () => {
+  it('should render heading, summary, filter, and DataGrid on happy path', async () => {
     render(
       <ThemeProvider theme={theme}>
         <ChecksSection checks={mockChecks} totalChecks={10} passedChecks={8} failedChecks={2} />
       </ThemeProvider>,
     );
 
-    const accordionHeader = screen.getByRole('button', { name: /Security Checks/i });
-    expect(accordionHeader).toBeInTheDocument();
+    // Check heading is rendered (no longer an accordion)
+    expect(screen.getByRole('heading', { name: /Security Checks/i })).toBeInTheDocument();
 
     expect(screen.getByText('Total: 10')).toBeInTheDocument();
     expect(screen.getByText('Passed: 8')).toBeInTheDocument();
     expect(screen.getByText('Failed: 2')).toBeInTheDocument();
 
-    await userEvent.click(accordionHeader);
-
+    // Content is visible immediately (no accordion to expand)
     expect(screen.getByText('Show Failed/Skipped Only')).toBeInTheDocument();
 
     expect(screen.getByTestId('mock-data-grid')).toBeInTheDocument();
@@ -110,8 +111,7 @@ describe('ChecksSection', () => {
       </ThemeProvider>,
     );
 
-    await userEvent.click(screen.getByRole('button', { name: /Security Checks/i }));
-
+    // Content is visible immediately (no accordion to expand)
     expect(screen.getByText('Insecure Deserialization')).toBeInTheDocument();
     expect(screen.getByText('File Permissions')).toBeInTheDocument();
     expect(screen.getByText('Outdated Dependency')).toBeInTheDocument();
@@ -129,10 +129,10 @@ describe('ChecksSection', () => {
     expect(screen.getByText('Outdated Dependency')).toBeInTheDocument();
   });
 
-  it('should render nothing when totalChecks is defined and checks is an empty array', () => {
+  it('should render nothing when totalChecks is 0 and checks is an empty array', () => {
     const { container } = render(
       <ThemeProvider theme={theme}>
-        <ChecksSection checks={[]} totalChecks={10} />
+        <ChecksSection checks={[]} totalChecks={0} />
       </ThemeProvider>,
     );
 
@@ -146,8 +146,8 @@ describe('ChecksSection', () => {
       </ThemeProvider>,
     );
 
-    const accordionHeader = screen.getByRole('button', { name: /Security Checks/i });
-    expect(accordionHeader).toBeInTheDocument();
+    // Heading should be rendered (no longer an accordion button)
+    expect(screen.getByRole('heading', { name: /Security Checks/i })).toBeInTheDocument();
 
     expect(screen.queryByText(/Total:/i)).toBeNull();
     expect(screen.queryByText(/Passed:/i)).toBeNull();
@@ -221,8 +221,7 @@ describe('ChecksSection', () => {
       </ThemeProvider>,
     );
 
-    await userEvent.click(screen.getByRole('button', { name: /Security Checks/i }));
-
+    // Content is visible immediately (no accordion to expand)
     expect(screen.getByText('filename.js')).toBeInTheDocument();
     expect(screen.getByText('./relative/path.txt')).toBeInTheDocument();
     expect(

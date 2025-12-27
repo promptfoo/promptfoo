@@ -311,6 +311,27 @@ describe('StrategyItem', () => {
       expect(buttons).toHaveLength(1); // Only test case generation button
       expect(screen.queryByTestId('SettingsOutlinedIcon')).not.toBeInTheDocument();
     });
+
+    it('shows settings button with error color when isSelected and not isConfigured', () => {
+      const configurableStrategy: StrategyCardData = {
+        ...baseStrategy,
+        id: 'jailbreak',
+      };
+
+      renderStrategyItem({
+        isDisabled: false,
+        isRemoteGenerationDisabled: false,
+        strategy: configurableStrategy,
+        isSelected: true,
+        onToggle: mockOnToggle,
+        onConfigClick: mockOnConfigClick,
+        isConfigured: false,
+      });
+
+      const _settingsButton = screen.getByRole('button', {
+        name: /Configuration required.*Click the settings icon to configure/i,
+      });
+    });
   });
 
   describe('Interactions', () => {

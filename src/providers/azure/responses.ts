@@ -210,8 +210,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
           'Example: AZURE_API_HOST=your-resource.openai.azure.com',
       );
     }
-
-    if (!this.authHeaders || !this.authHeaders['api-key']) {
+    if (!this.authHeaders['api-key'] && !this.authHeaders.Authorization) {
       throw new Error(
         'Azure API authentication failed. Set AZURE_API_KEY environment variable or configure apiKey in provider config.\n' +
           'You can also use Microsoft Entra ID authentication.',

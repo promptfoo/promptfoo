@@ -2,14 +2,16 @@ import { HIDDEN_METADATA_KEYS } from '@app/constants';
 import { callApi } from '@app/utils/api';
 import { Severity } from '@promptfoo/redteam/constants';
 import { act } from '@testing-library/react';
-import { v4 as uuidv4 } from 'uuid';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { type ResultsFilter, useTableStore } from './store';
 import type { EvalTableDTO, EvaluateTable, PromptMetrics, ResultsFile } from '@promptfoo/types';
 
-vi.mock('uuid', () => ({
-  v4: vi.fn(),
-}));
+// Mock crypto.randomUUID
+const mockRandomUUID = vi.fn<() => `${string}-${string}-${string}-${string}-${string}`>();
+vi.stubGlobal('crypto', {
+  ...globalThis.crypto,
+  randomUUID: mockRandomUUID,
+});
 
 vi.mock('@app/utils/api', () => ({
   callApi: vi.fn(),
@@ -110,7 +112,7 @@ describe('useTableStore', () => {
   });
 
   describe('extractUniqueStrategyIds', () => {
-    it('should handle strategies with special characters and long IDs', () => {
+    it('should handle strategies with special characters and long IDs', async () => {
       const strategies = [
         'strategy-with-!@#$%^&*()_+=-`~[]\{}|;\':",./<>?characters',
         's'.repeat(200),
@@ -118,20 +120,22 @@ describe('useTableStore', () => {
         { id: 's'.repeat(200) },
       ];
 
-      useTableStore.getState().setTableFromResultsFile({
-        version: 4,
-        config: {
-          redteam: {
-            strategies: strategies,
+      await act(async () => {
+        await useTableStore.getState().setTableFromResultsFile({
+          version: 4,
+          config: {
+            redteam: {
+              strategies: strategies,
+            },
           },
-        },
-        results: {
-          results: [],
-        },
-        prompts: [],
-        createdAt: '2024-01-01T00:00:00.000Z',
-        author: 'test',
-      } as any);
+          results: {
+            results: [],
+          },
+          prompts: [],
+          createdAt: '2024-01-01T00:00:00.000Z',
+          author: 'test',
+        } as any);
+      });
 
       const state = useTableStore.getState();
       expect(state.filters.options.strategy).toEqual([
@@ -146,7 +150,9 @@ describe('useTableStore', () => {
   describe('filters', () => {
     it('should add a new filter to `filters.values` and increment `filters.appliedCount` when `addFilter` is called with a filter that has a value', () => {
       const mockFilterId = 'mock-uuid-1';
-      (uuidv4 as Mock<() => string>).mockImplementation(() => mockFilterId);
+      mockRandomUUID.mockReturnValue(
+        mockFilterId as `${string}-${string}-${string}-${string}-${string}`,
+      );
 
       const newFilter = {
         type: 'metric' as const,
@@ -178,7 +184,9 @@ describe('useTableStore', () => {
 
     it('should add a new severity filter to `filters.values` and increment `filters.appliedCount` when `addFilter` is called with a severity filter that has a value', () => {
       const mockFilterId = 'mock-uuid-2';
-      (uuidv4 as Mock<() => string>).mockImplementation(() => mockFilterId);
+      mockRandomUUID.mockReturnValue(
+        mockFilterId as `${string}-${string}-${string}-${string}-${string}`,
+      );
 
       const newFilter = {
         type: 'severity' as const,
@@ -208,7 +216,9 @@ describe('useTableStore', () => {
 
     it('should remove a filter from `filters.values` and decrement `filters.appliedCount` when `removeFilter` is called with a valid filter id', () => {
       const mockFilterId = 'mock-uuid-1';
-      (uuidv4 as Mock<() => string>).mockImplementation(() => mockFilterId);
+      mockRandomUUID.mockReturnValue(
+        mockFilterId as `${string}-${string}-${string}-${string}-${string}`,
+      );
 
       const newFilter = {
         type: 'metric' as const,
@@ -232,7 +242,9 @@ describe('useTableStore', () => {
 
     it('should clear all filters and set `filters.appliedCount` to 0 when `resetFilters` is called', () => {
       const mockFilterId = 'mock-uuid-1';
-      (uuidv4 as Mock<() => string>).mockImplementation(() => mockFilterId);
+      mockRandomUUID.mockReturnValue(
+        mockFilterId as `${string}-${string}-${string}-${string}-${string}`,
+      );
 
       const newFilter = {
         type: 'metric' as const,
@@ -255,7 +267,9 @@ describe('useTableStore', () => {
 
     it('should decrement `filters.appliedCount` when `updateFilter` is called with a filter that changes from having a value to having an empty value', () => {
       const mockFilterId = 'mock-uuid-1';
-      (uuidv4 as Mock<() => string>).mockImplementation(() => mockFilterId);
+      mockRandomUUID.mockReturnValue(
+        mockFilterId as `${string}-${string}-${string}-${string}-${string}`,
+      );
 
       const initialFilter = {
         id: mockFilterId,
@@ -295,7 +309,9 @@ describe('useTableStore', () => {
     });
     it('should decrement `filters.appliedCount` when `updateFilter` is called with a severity filter that changes from having a value to having an empty value', () => {
       const mockFilterId = 'mock-uuid-1';
-      (uuidv4 as Mock<() => string>).mockImplementation(() => mockFilterId);
+      mockRandomUUID.mockReturnValue(
+        mockFilterId as `${string}-${string}-${string}-${string}-${string}`,
+      );
 
       const initialFilter = {
         id: mockFilterId,
@@ -335,7 +351,9 @@ describe('useTableStore', () => {
 
     it('should consider exists operator filters as applied when field is present (even with empty value)', () => {
       const mockFilterId = 'exists-test-filter';
-      (uuidv4 as Mock<() => string>).mockImplementation(() => mockFilterId);
+      mockRandomUUID.mockReturnValue(
+        mockFilterId as `${string}-${string}-${string}-${string}-${string}`,
+      );
 
       // Add metadata filter with exists operator
       const existsFilter = {
@@ -363,7 +381,9 @@ describe('useTableStore', () => {
 
     it('should not consider exists operator filters as applied when field is missing', () => {
       const mockFilterId = 'exists-test-filter-2';
-      (uuidv4 as Mock<() => string>).mockImplementation(() => mockFilterId);
+      mockRandomUUID.mockReturnValue(
+        mockFilterId as `${string}-${string}-${string}-${string}-${string}`,
+      );
 
       // Add metadata filter with exists operator but no field
       const existsFilter = {
@@ -497,7 +517,7 @@ describe('useTableStore', () => {
       expect(state.filters.options.severity).toEqual([]);
     });
 
-    it('should not populate strategy options when setTableFromResultsFile receives non-redteam config', () => {
+    it('should not populate strategy options when setTableFromResultsFile receives non-redteam config', async () => {
       const mockResultsFile = {
         version: 4,
         config: {
@@ -512,8 +532,8 @@ describe('useTableStore', () => {
         author: 'test',
       };
 
-      act(() => {
-        useTableStore.getState().setTableFromResultsFile(mockResultsFile as any);
+      await act(async () => {
+        await useTableStore.getState().setTableFromResultsFile(mockResultsFile as any);
       });
 
       const state = useTableStore.getState();
@@ -522,7 +542,7 @@ describe('useTableStore', () => {
       expect(state.filters.options.severity).toBeUndefined();
     });
 
-    it('should populate strategy options when setTableFromResultsFile receives redteam config', () => {
+    it('should populate strategy options when setTableFromResultsFile receives redteam config', async () => {
       const mockResultsFile = {
         version: 4,
         config: {
@@ -539,12 +559,13 @@ describe('useTableStore', () => {
         author: 'test',
       };
 
-      act(() => {
-        useTableStore.getState().setTableFromResultsFile(mockResultsFile as any);
+      await act(async () => {
+        await useTableStore.getState().setTableFromResultsFile(mockResultsFile as any);
       });
 
       const state = useTableStore.getState();
-      expect(state.filters.options.strategy).toEqual(['multilingual', 'retry', 'basic']);
+      // 'retry' is intentionally filtered out - it's not user-facing in the UI
+      expect(state.filters.options.strategy).toEqual(['multilingual', 'basic']);
       expect(state.filters.options.plugin).toEqual(['pii', 'bias']);
     });
 
@@ -552,10 +573,10 @@ describe('useTableStore', () => {
       const mockFilterId1 = 'mock-uuid-1';
       const mockFilterId2 = 'mock-uuid-2';
       const mockFilterId3 = 'mock-uuid-3';
-      (uuidv4 as Mock<() => string>)
-        .mockImplementationOnce(() => mockFilterId1)
-        .mockImplementationOnce(() => mockFilterId2)
-        .mockImplementationOnce(() => mockFilterId3);
+      mockRandomUUID
+        .mockReturnValueOnce(mockFilterId1 as `${string}-${string}-${string}-${string}-${string}`)
+        .mockReturnValueOnce(mockFilterId2 as `${string}-${string}-${string}-${string}-${string}`)
+        .mockReturnValueOnce(mockFilterId3 as `${string}-${string}-${string}-${string}-${string}`);
 
       const newFilter1 = {
         type: 'metric' as const,
@@ -593,10 +614,10 @@ describe('useTableStore', () => {
       const mockFilterId1 = 'mock-uuid-1';
       const mockFilterId2 = 'mock-uuid-2';
       const mockFilterId3 = 'mock-uuid-3';
-      (uuidv4 as Mock<() => string>)
-        .mockImplementationOnce(() => mockFilterId1)
-        .mockImplementationOnce(() => mockFilterId2)
-        .mockImplementationOnce(() => mockFilterId3);
+      mockRandomUUID
+        .mockReturnValueOnce(mockFilterId1 as `${string}-${string}-${string}-${string}-${string}`)
+        .mockReturnValueOnce(mockFilterId2 as `${string}-${string}-${string}-${string}-${string}`)
+        .mockReturnValueOnce(mockFilterId3 as `${string}-${string}-${string}-${string}-${string}`);
 
       const newFilter1 = {
         type: 'metric' as const,
@@ -634,9 +655,9 @@ describe('useTableStore', () => {
     it('should default to "and" when there is no filter with sortIndex 0 and the filter with sortIndex 1 has a null logicOperator', () => {
       const mockFilterId2 = 'mock-uuid-2';
       const mockFilterId3 = 'mock-uuid-3';
-      (uuidv4 as Mock<() => string>)
-        .mockImplementationOnce(() => mockFilterId2)
-        .mockImplementationOnce(() => mockFilterId3);
+      mockRandomUUID
+        .mockReturnValueOnce(mockFilterId2 as `${string}-${string}-${string}-${string}-${string}`)
+        .mockReturnValueOnce(mockFilterId3 as `${string}-${string}-${string}-${string}-${string}`);
 
       const newFilter2 = {
         type: 'metric' as const,
@@ -664,9 +685,9 @@ describe('useTableStore', () => {
     it('should default to "and" when there is no filter with sortIndex 0 and the filter with sortIndex 1 has an undefined logicOperator', () => {
       const mockFilterId2 = 'mock-uuid-2';
       const mockFilterId3 = 'mock-uuid-3';
-      (uuidv4 as Mock<() => string>)
-        .mockImplementationOnce(() => mockFilterId2)
-        .mockImplementationOnce(() => mockFilterId3);
+      mockRandomUUID
+        .mockReturnValueOnce(mockFilterId2 as `${string}-${string}-${string}-${string}-${string}`)
+        .mockReturnValueOnce(mockFilterId3 as `${string}-${string}-${string}-${string}-${string}`);
 
       const newFilter2 = {
         type: 'metric' as const,
@@ -697,11 +718,13 @@ describe('useTableStore', () => {
       const mockFilterId2 = 'mock-uuid-2';
       const mockFilterIdNew = 'mock-uuid-new';
 
-      (uuidv4 as Mock<() => string>)
-        .mockImplementationOnce(() => mockFilterId0)
-        .mockImplementationOnce(() => mockFilterId1)
-        .mockImplementationOnce(() => mockFilterId2)
-        .mockImplementationOnce(() => mockFilterIdNew);
+      mockRandomUUID
+        .mockReturnValueOnce(mockFilterId0 as `${string}-${string}-${string}-${string}-${string}`)
+        .mockReturnValueOnce(mockFilterId1 as `${string}-${string}-${string}-${string}-${string}`)
+        .mockReturnValueOnce(mockFilterId2 as `${string}-${string}-${string}-${string}-${string}`)
+        .mockReturnValueOnce(
+          mockFilterIdNew as `${string}-${string}-${string}-${string}-${string}`,
+        );
 
       act(() => {
         useTableStore.getState().addFilter({
@@ -743,9 +766,9 @@ describe('useTableStore', () => {
     it('should inherit the updated logicOperator when a new filter is added after updating an existing filter', () => {
       const mockFilterId1 = 'mock-uuid-1';
       const mockFilterId2 = 'mock-uuid-2';
-      (uuidv4 as Mock<() => string>)
-        .mockImplementationOnce(() => mockFilterId1)
-        .mockImplementationOnce(() => mockFilterId2);
+      mockRandomUUID
+        .mockReturnValueOnce(mockFilterId1 as `${string}-${string}-${string}-${string}-${string}`)
+        .mockReturnValueOnce(mockFilterId2 as `${string}-${string}-${string}-${string}-${string}`);
 
       const initialFilter = {
         type: 'metric' as const,
@@ -794,7 +817,9 @@ describe('useTableStore', () => {
 
     it('should use the provided logicOperator for a new filter when logicOperator is explicitly set in the filter argument, regardless of existing filters', () => {
       const mockFilterId = 'mock-uuid-1';
-      (uuidv4 as Mock<() => string>).mockImplementation(() => mockFilterId);
+      mockRandomUUID.mockReturnValue(
+        mockFilterId as `${string}-${string}-${string}-${string}-${string}`,
+      );
 
       const existingFilter = {
         type: 'metric' as const,
@@ -1489,7 +1514,7 @@ describe('useTableStore', () => {
   });
 
   describe('setTableFromResultsFile', () => {
-    it("should set `filters.options.strategy` to only include 'basic' when `setTableFromResultsFile` is called with a resultsFile that has no strategies defined", () => {
+    it("should set `filters.options.strategy` to only include 'basic' when `setTableFromResultsFile` is called with a resultsFile that has no strategies defined", async () => {
       const mockResultsFile: ResultsFile = {
         version: 4,
         config: {
@@ -1505,15 +1530,15 @@ describe('useTableStore', () => {
         author: 'test',
       };
 
-      act(() => {
-        useTableStore.getState().setTableFromResultsFile(mockResultsFile);
+      await act(async () => {
+        await useTableStore.getState().setTableFromResultsFile(mockResultsFile);
       });
 
       const state = useTableStore.getState();
       expect(state.filters.options.strategy).toEqual(['basic']);
     });
 
-    it('should deduplicate strategy IDs in filters.options.strategy when resultsFile contains duplicate strategy IDs', () => {
+    it('should deduplicate strategy IDs in filters.options.strategy when resultsFile contains duplicate strategy IDs', async () => {
       const resultsFile: ResultsFile = {
         version: 3,
         config: {
@@ -1530,15 +1555,15 @@ describe('useTableStore', () => {
         prompts: [],
       } as any;
 
-      act(() => {
-        useTableStore.getState().setTableFromResultsFile(resultsFile);
+      await act(async () => {
+        await useTableStore.getState().setTableFromResultsFile(resultsFile);
       });
 
       const state = useTableStore.getState();
       expect(state.filters.options.strategy).toEqual(['strategy1', 'strategy2', 'basic']);
     });
 
-    it('should populate `filters.options.severity` with the correct severities in order when `setTableFromResultsFile` is called with a resultsFile containing redteam plugins with defined severities', () => {
+    it('should populate `filters.options.severity` with the correct severities in order when `setTableFromResultsFile` is called with a resultsFile containing redteam plugins with defined severities', async () => {
       const mockResultsFile: ResultsFile = {
         version: 4,
         config: {
@@ -1559,8 +1584,8 @@ describe('useTableStore', () => {
         author: 'test',
       };
 
-      act(() => {
-        useTableStore.getState().setTableFromResultsFile(mockResultsFile);
+      await act(async () => {
+        await useTableStore.getState().setTableFromResultsFile(mockResultsFile);
       });
 
       const state = useTableStore.getState();
@@ -1572,7 +1597,7 @@ describe('useTableStore', () => {
       ]);
     });
 
-    it('should correctly populate severity options when handling a results file with version < 4 that contains redteam plugins with severities', () => {
+    it('should correctly populate severity options when handling a results file with version < 4 that contains redteam plugins with severities', async () => {
       const mockResultsFile: ResultsFile = {
         version: 3,
         config: {
@@ -1594,8 +1619,8 @@ describe('useTableStore', () => {
         prompts: [],
       } as any;
 
-      act(() => {
-        useTableStore.getState().setTableFromResultsFile(mockResultsFile);
+      await act(async () => {
+        await useTableStore.getState().setTableFromResultsFile(mockResultsFile);
       });
 
       const state = useTableStore.getState();
@@ -1881,7 +1906,7 @@ describe('useTableStore', () => {
       });
     });
 
-    it('should return a sorted array of unique severity values when plugins have defined severities', () => {
+    it('should return a sorted array of unique severity values when plugins have defined severities', async () => {
       const mockResultsFile: ResultsFile = {
         version: 4,
         config: {
@@ -1903,8 +1928,8 @@ describe('useTableStore', () => {
         author: 'test',
       };
 
-      act(() => {
-        useTableStore.getState().setTableFromResultsFile(mockResultsFile);
+      await act(async () => {
+        await useTableStore.getState().setTableFromResultsFile(mockResultsFile);
       });
 
       const state = useTableStore.getState();
@@ -1913,7 +1938,7 @@ describe('useTableStore', () => {
       expect(state.filters.options.severity).toEqual(expectedSeverities);
     });
 
-    it('should return the correct severities based on the default riskCategorySeverityMap when given an array of plugin IDs (strings) without explicit severity overrides', () => {
+    it('should return the correct severities based on the default riskCategorySeverityMap when given an array of plugin IDs (strings) without explicit severity overrides', async () => {
       const pluginIds = ['pii', 'jailbreak', 'prompt-injection'];
       const mockResultsFile: ResultsFile = {
         version: 4,
@@ -1930,8 +1955,8 @@ describe('useTableStore', () => {
         author: 'test',
       };
 
-      act(() => {
-        useTableStore.getState().setTableFromResultsFile(mockResultsFile);
+      await act(async () => {
+        await useTableStore.getState().setTableFromResultsFile(mockResultsFile);
       });
 
       const state = useTableStore.getState();
@@ -1939,7 +1964,7 @@ describe('useTableStore', () => {
       expect(state.filters.options.severity).toEqual(expectedSeverities);
     });
 
-    it('should handle case-insensitive severity values correctly', () => {
+    it('should handle case-insensitive severity values correctly', async () => {
       const mockResultsFile: ResultsFile = {
         version: 4,
         config: {
@@ -1955,8 +1980,8 @@ describe('useTableStore', () => {
         author: 'test',
       };
 
-      act(() => {
-        useTableStore.getState().setTableFromResultsFile(mockResultsFile);
+      await act(async () => {
+        await useTableStore.getState().setTableFromResultsFile(mockResultsFile);
       });
 
       const state = useTableStore.getState();
@@ -1981,7 +2006,7 @@ describe('useTableStore', () => {
       expect(useTableStore.getState().filters.options.plugin).toEqual(['pii', 'jailbreak']);
     });
 
-    it('should populate plugin options when resultsFile redteam plugins are string IDs (setTableFromResultsFile)', () => {
+    it('should populate plugin options when resultsFile redteam plugins are string IDs (setTableFromResultsFile)', async () => {
       const mockResultsFile: ResultsFile = {
         version: 4,
         config: { redteam: { strategies: [], plugins: ['pii', 'bias'] } },
@@ -1991,14 +2016,14 @@ describe('useTableStore', () => {
         author: 'test',
       } as any;
 
-      act(() => {
-        useTableStore.getState().setTableFromResultsFile(mockResultsFile);
+      await act(async () => {
+        await useTableStore.getState().setTableFromResultsFile(mockResultsFile);
       });
 
       expect(useTableStore.getState().filters.options.plugin).toEqual(['pii', 'bias']);
     });
 
-    it('should allow metadata filtering on plugin/strategy/severity fields for non-redteam evaluations', () => {
+    it('should allow metadata filtering on plugin/strategy/severity fields for non-redteam evaluations', async () => {
       // This test documents that metadata filtering (field/value pairs) is separate
       // from redteam filtering (predefined types). Users can still filter on metadata
       // fields named "plugin", "strategy", or "severity" using metadata filters.
@@ -2011,8 +2036,8 @@ describe('useTableStore', () => {
         author: 'test',
       } as any;
 
-      act(() => {
-        useTableStore.getState().setTableFromResultsFile(mockResultsFile);
+      await act(async () => {
+        await useTableStore.getState().setTableFromResultsFile(mockResultsFile);
       });
 
       const state = useTableStore.getState();

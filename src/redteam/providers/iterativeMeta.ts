@@ -1,4 +1,3 @@
-import { v4 as uuidv4 } from 'uuid';
 import { getEnvInt } from '../../envars';
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
@@ -21,6 +20,7 @@ import {
 import { Strategies } from '../strategies';
 import {
   createIterationContext,
+  externalizeResponseForRedteamHistory,
   getTargetResponse,
   redteamProviderManager,
   type TargetResponse,
@@ -123,7 +123,7 @@ export async function runMetaAgentRedteam({
   const additionalRubric = getIterativeMetaGoalRubric(goal);
 
   // Generate unique test run ID
-  const testRunId = `${context?.evaluationId || 'local'}-tc${context?.testCaseId || uuidv4().slice(0, 8)}`;
+  const testRunId = `${context?.evaluationId || 'local'}-tc${context?.testCaseId || crypto.randomUUID().slice(0, 8)}`;
 
   // Resolve tracing options
   const tracingOptions = resolveTracingOptions({
@@ -220,7 +220,7 @@ export async function runMetaAgentRedteam({
     }
 
     if (agentResp.error) {
-      logger.info(`[IterativeMeta] ${i + 1}/${numIterations} - Agent provider error`, {
+      logger.debug(`[IterativeMeta] ${i + 1}/${numIterations} - Agent provider error`, {
         error: agentResp.error,
       });
       continue;
@@ -307,11 +307,19 @@ export async function runMetaAgentRedteam({
 
     // Execute attack against target
     const iterationStart = Date.now();
-    const targetResponse: TargetResponse = await getTargetResponse(
+    const initialTargetResponse: TargetResponse = await getTargetResponse(
       targetProvider,
       targetPrompt,
       iterationContext,
       options,
+    );
+    const targetResponse: TargetResponse = await externalizeResponseForRedteamHistory(
+      initialTargetResponse,
+      {
+        evalId: context?.evaluationId,
+        testIdx: context?.testIdx,
+        promptIdx: context?.promptIdx,
+      },
     );
     lastResponse = targetResponse;
     accumulateResponseTokenUsage(totalTokenUsage, targetResponse);

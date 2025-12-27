@@ -1,5 +1,4 @@
 import dedent from 'dedent';
-import { v4 as uuidv4 } from 'uuid';
 import { renderPrompt } from '../../../evaluatorHelpers';
 import logger from '../../../logger';
 import { PromptfooChatCompletionProvider } from '../../../providers/promptfoo';
@@ -25,6 +24,7 @@ import { Strategies } from '../../strategies';
 import { getSessionId, isBasicRefusal } from '../../util';
 import { getGoalRubric } from '../prompts';
 import {
+  externalizeResponseForRedteamHistory,
   getLastMessageContent,
   getTargetResponse,
   isValidChatMessageArray,
@@ -121,7 +121,7 @@ export class MemorySystem {
 
   duplicateConversationExcludingLastTurn(conversationId: string): string {
     const originalConversation = this.getConversation(conversationId);
-    const newConversationId = uuidv4();
+    const newConversationId = crypto.randomUUID();
     const newConversation = originalConversation.slice(0, -2); // Remove last turn (user + assistant)
     this.conversations.set(newConversationId, newConversation);
     return newConversationId;
@@ -156,8 +156,8 @@ export class CrescendoProvider implements ApiProvider {
     this.maxBacktracks = config.maxBacktracks || DEFAULT_MAX_BACKTRACKS;
     this.nunjucks = getNunjucksEngine();
     this.memory = new MemorySystem();
-    this.targetConversationId = uuidv4();
-    this.redTeamingChatConversationId = uuidv4();
+    this.targetConversationId = crypto.randomUUID();
+    this.redTeamingChatConversationId = crypto.randomUUID();
     this.excludeTargetOutputFromAgenticAttackGeneration =
       config.excludeTargetOutputFromAgenticAttackGeneration ?? false;
     this.perTurnLayers = config._perTurnLayers ?? [];
@@ -900,7 +900,12 @@ export class CrescendoProvider implements ApiProvider {
     }
 
     const iterationStart = Date.now();
-    const targetResponse = await getTargetResponse(provider, finalTargetPrompt, context, options);
+    let targetResponse = await getTargetResponse(provider, finalTargetPrompt, context, options);
+    targetResponse = await externalizeResponseForRedteamHistory(targetResponse, {
+      evalId: context?.evaluationId,
+      testIdx: context?.testIdx,
+      promptIdx: context?.promptIdx,
+    });
     logger.debug(`[Crescendo] Target response: ${JSON.stringify(targetResponse)}`);
 
     invariant(

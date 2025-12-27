@@ -67,7 +67,7 @@ const UI_STRATEGY_DESCRIPTIONS: Record<string, string> = {
 };
 
 const availableStrategies: StrategyCardData[] = ALL_STRATEGIES.filter(
-  (id) => id !== 'default' && id !== 'multilingual' && id !== 'simba',
+  (id) => id !== 'default' && id !== 'multilingual',
 ).map((id) => ({
   id,
   name: strategyDisplayNames[id] || id,
