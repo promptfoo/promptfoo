@@ -66,7 +66,7 @@ describe('TestSuites Component', () => {
     // Check for column headers
     expect(screen.getByText('Type')).toBeInTheDocument();
     expect(screen.getByText('Description')).toBeInTheDocument();
-    expect(screen.getByText('Attack Success Rate')).toBeInTheDocument();
+    expect(screen.getByText('ASR')).toBeInTheDocument();
     expect(screen.getByText('Severity')).toBeInTheDocument();
     expect(screen.getByText('Actions')).toBeInTheDocument();
 

@@ -43,20 +43,6 @@ vi.mock('recharts', () => ({
   Rectangle: (props: any) => <rect {...props} />,
 }));
 
-vi.mock('@mui/material/styles', async () => {
-  const actual = await vi.importActual('@mui/material/styles');
-  return {
-    ...actual,
-    useTheme: () => ({
-      palette: {
-        background: { paper: '#fff' },
-        divider: '#ccc',
-        text: { primary: '#000' },
-      },
-    }),
-  };
-});
-
 interface TestRecord {
   prompt: string;
   output: string;

@@ -133,7 +133,7 @@ describe('RiskCategoryDrawer Component Navigation', () => {
 
     renderWithProviders(<RiskCategoryDrawer {...props} />);
 
-    const closeButton = screen.getByLabelText('close drawer');
+    const closeButton = screen.getByRole('button', { name: 'Close' });
     fireEvent.click(closeButton);
 
     expect(onCloseMock).toHaveBeenCalled();
