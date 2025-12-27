@@ -32,7 +32,6 @@ import type {
   RedteamContext,
   RedteamFileConfig,
   RedteamPluginObject,
-  RedteamRunOptions,
   RedteamStrategy,
 } from '../redteam/types';
 
