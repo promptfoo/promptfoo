@@ -31,7 +31,12 @@ type Tests = NonNullable<TestSuite['tests']>;
  * @returns A filtered array of tests that failed in the specified eval
  */
 async function filterFailingTests(testSuite: TestSuite, pathOrId: string): Promise<Tests> {
-  return filterTestsByResults(testSuite, pathOrId, (result) => !result.success);
+  // Filter for failures only, excluding errors (which have their own filter)
+  return filterTestsByResults(
+    testSuite,
+    pathOrId,
+    (result) => !result.success && result.failureReason !== ResultFailureReason.ERROR,
+  );
 }
 
 /**
@@ -109,11 +114,32 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
     logger.debug(`After metadata filter: ${tests.length} tests remain`);
   }
 
-  if (options.failing) {
-    tests = await filterFailingTests(testSuite, options.failing);
-  }
+  // Handle failing and errorsOnly filters
+  // When both are provided, combine results (union) instead of overwriting
+  if (options.failing && options.errorsOnly) {
+    const failingTests = await filterFailingTests(testSuite, options.failing);
+    const errorTests = await filterErrorTests(testSuite, options.errorsOnly);
 
-  if (options.errorsOnly) {
+    // Create a union of both sets, deduplicating by test identity
+    const seen = new Set<string>();
+    const getTestKey = (test: (typeof tests)[0]) =>
+      JSON.stringify({ vars: test.vars, description: test.description });
+
+    tests = [...failingTests, ...errorTests].filter((test) => {
+      const key = getTestKey(test);
+      if (seen.has(key)) {
+        return false;
+      }
+      seen.add(key);
+      return true;
+    });
+
+    logger.debug(
+      `Combined failing (${failingTests.length}) and errors (${errorTests.length}) filters: ${tests.length} unique tests`,
+    );
+  } else if (options.failing) {
+    tests = await filterFailingTests(testSuite, options.failing);
+  } else if (options.errorsOnly) {
     tests = await filterErrorTests(testSuite, options.errorsOnly);
   }
 
