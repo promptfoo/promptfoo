@@ -12,6 +12,7 @@ import { VALID_SCHEMA_TYPES } from './types';
 import type { AnySchema } from 'ajv';
 import type { GoogleAuth } from 'google-auth-library';
 
+import type { EnvOverrides } from '../../types/env';
 import type { Content, FunctionCall, Part, Tool } from './types';
 
 const ajv = getAjv();
@@ -368,7 +369,7 @@ export async function getGoogleClient({ credentials }: { credentials?: string } 
  */
 export async function resolveProjectId(
   config: { projectId?: string; credentials?: string },
-  env?: Record<string, string>,
+  env?: EnvOverrides,
 ): Promise<string> {
   const processedCredentials = loadCredentials(config.credentials);
   const { projectId: googleProjectId } = await getGoogleClient({

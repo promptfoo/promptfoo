@@ -110,4 +110,7 @@ export const ProviderEnvOverridesSchema = z.object({
   PROMPTFOO_EVAL_TIMEOUT_MS: z.string().optional(),
 });
 
-export type EnvOverrides = z.infer<typeof ProviderEnvOverridesSchema>;
+// Allow arbitrary environment variables for template rendering (e.g., {{ env.MY_CUSTOM_VAR }})
+// while maintaining type safety for known env vars
+export type EnvOverrides = z.infer<typeof ProviderEnvOverridesSchema> &
+  Record<string, string | undefined>;
