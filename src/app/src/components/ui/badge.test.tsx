@@ -43,7 +43,7 @@ describe('Badge', () => {
   it('renders with medium severity variant', () => {
     render(<Badge variant="medium">Medium</Badge>);
     const badge = screen.getByText('Medium');
-    expect(badge).toHaveClass('bg-orange-100', 'text-orange-700');
+    expect(badge).toHaveClass('bg-amber-100', 'text-amber-700');
   });
 
   it('renders with low severity variant', () => {

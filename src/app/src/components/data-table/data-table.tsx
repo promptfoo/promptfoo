@@ -129,10 +129,12 @@ export function DataTable<TData, TValue = unknown>({
   getRowId,
   toolbarActions,
   maxHeight,
+  initialColumnVisibility = {},
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>(initialSorting);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
-  const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
+  const [columnVisibility, setColumnVisibility] =
+    React.useState<VisibilityState>(initialColumnVisibility);
   const [columnSizing, setColumnSizing] = React.useState<ColumnSizingState>({});
   const [globalFilter, setGlobalFilter] = React.useState('');
   const [pagination, setPagination] = React.useState({ pageIndex: 0, pageSize: initialPageSize });
