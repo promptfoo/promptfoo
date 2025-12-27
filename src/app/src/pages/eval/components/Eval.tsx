@@ -144,20 +144,26 @@ export default function Eval({ fetchId }: EvalOptions) {
         // Do search params need to be removed?
         if (_filters.appliedCount === 0) {
           // clear the search params
-          setSearchParams((prev) => {
-            prev.delete('filter');
-            return prev;
-          });
+          setSearchParams(
+            (prev) => {
+              prev.delete('filter');
+              return prev;
+            },
+            { replace: true },
+          );
         } else if (_filters.appliedCount > 0) {
           // Serialize the filters to a JSON string
           const serializedFilters = JSON.stringify(Object.values(_filters.values));
           // Check whether the serialized filters are already in the search params
           if (_searchParams.get('filter') !== serializedFilters) {
             // Add each filter to the search params
-            setSearchParams((prev) => {
-              prev.set('filter', serializedFilters);
-              return prev;
-            });
+            setSearchParams(
+              (prev) => {
+                prev.set('filter', serializedFilters);
+                return prev;
+              },
+              { replace: true },
+            );
           }
         }
       },
