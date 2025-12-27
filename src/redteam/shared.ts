@@ -184,7 +184,7 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
     return;
   }
 
-  const { config: redteamConfig, pluginResults, strategyResults } = generateResult;
+  const { pluginResults, strategyResults } = generateResult;
 
   // Check if redteam.yaml exists before running evaluation
   if (!fs.existsSync(redteamPath)) {
