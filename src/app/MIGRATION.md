@@ -735,6 +735,88 @@ Radix UI components like `Select`, `Popover`, and `Dialog` use React Portals to 
 <SelectContent className="bg-white dark:bg-zinc-900" />
 ```
 
+### Z-Index Scale for Portaled Components (CRITICAL)
+
+Radix UI components use portals to render at the document root. **All portaled components must use a consistent z-index scale** to ensure proper stacking, especially when components are nested (e.g., a Select inside a Dialog).
+
+#### The Problem
+
+When a Dialog renders at z-index 1400 and a Select inside it renders at z-index 50, the Select dropdown appears **behind** the Dialog overlay because both are portaled to `<body>` and only z-index determines stacking.
+
+#### The Solution: Semantic Z-Index Tokens
+
+We define z-index values as CSS custom properties in `index.css`:
+
+```css
+:root {
+  /* Z-index scale for layered components
+   * Modal < Dropdown ensures nested dropdowns appear above modals
+   * Values >= 1300 for MUI compatibility during migration */
+  --z-modal-backdrop: 1300;
+  --z-modal: 1310;
+  --z-dropdown: 1400;
+  --z-tooltip: 1500;
+}
+```
+
+#### Usage in Components
+
+Use the `z-[var(--z-*)]` syntax in Tailwind classes:
+
+```tsx
+// dialog.tsx
+<DialogPrimitive.Overlay className="fixed inset-0 z-[var(--z-modal-backdrop)] bg-black/50 ..." />
+<DialogPrimitive.Content className="fixed ... z-[var(--z-modal)] ..." />
+
+// popover.tsx, select.tsx, dropdown-menu.tsx
+<Content className="z-[var(--z-dropdown)] ..." />
+
+// tooltip.tsx
+<Content className="z-[var(--z-tooltip)] ..." />
+```
+
+#### Z-Index Stacking Order
+
+| Layer          | CSS Variable         | Value | Components                    |
+| -------------- | -------------------- | ----- | ----------------------------- |
+| Modal Backdrop | `--z-modal-backdrop` | 1300  | Dialog overlay                |
+| Modal Content  | `--z-modal`          | 1310  | Dialog content                |
+| Dropdowns      | `--z-dropdown`       | 1400  | Select, Popover, DropdownMenu |
+| Tooltips       | `--z-tooltip`        | 1500  | Tooltip                       |
+
+**Key insight**: Dropdowns (1400) are **above** modals (1310) so that dropdowns inside modals work correctly.
+
+#### Why These Values?
+
+- **>= 1300**: MUI modals use z-index 1300, so our components stack correctly during migration
+- **Modal < Dropdown**: Nested dropdowns must appear above parent modals
+- **Tooltip highest**: Tooltips should always be visible, even over dropdowns
+
+#### Anti-Patterns
+
+```tsx
+// BAD: Inline z-index styles
+<DialogContent style={{ zIndex: 1400 }} />  // Hard to maintain, breaks the system
+
+// BAD: Arbitrary magic numbers
+<PopoverContent className="z-[9999]" />  // Creates z-index arms race
+
+// BAD: Using default Tailwind z-scale for portaled components
+<SelectContent className="z-50" />  // Will be hidden behind modals at z-1300+
+
+// GOOD: Use semantic tokens
+<SelectContent className="z-[var(--z-dropdown)]" />
+```
+
+#### Adding New Layers
+
+If you need a new z-index layer:
+
+1. Add the CSS variable to `:root` in `index.css`
+2. Choose a value that fits the stacking hierarchy
+3. Document it in this table
+4. Use `z-[var(--z-your-layer)]` in components
+
 ### Global CSS Specificity with :where()
 
 Use `:where()` selectors for global styles to keep specificity low and allow component classes to override:
