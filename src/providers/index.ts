@@ -129,7 +129,19 @@ export async function loadApiProvider(
 
     invariant(fileContent.id, `Provider config ${filePath} must have an id`);
     logger.info(`Loaded provider ${fileContent.id} from ${filePath}`);
-    return loadApiProvider(fileContent.id, { ...context, options: fileContent });
+
+    // Merge file's env with context.env - context.env takes precedence
+    // This allows callers to override file-defined defaults
+    const mergedFileEnv: EnvOverrides | undefined =
+      fileContent.env || env ? { ...fileContent.env, ...env } : undefined;
+
+    return loadApiProvider(fileContent.id, {
+      basePath,
+      options: {
+        ...fileContent,
+        env: mergedFileEnv,
+      },
+    });
   }
 
   for (const factory of providerMap) {
