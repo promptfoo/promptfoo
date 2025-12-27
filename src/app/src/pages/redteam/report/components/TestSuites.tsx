@@ -4,11 +4,8 @@ import { DataTable } from '@app/components/data-table/data-table';
 import { EVAL_ROUTES } from '@app/constants/routes';
 import { Button } from '@app/components/ui/button';
 import { Card } from '@app/components/ui/card';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { useTelemetry } from '@app/hooks/useTelemetry';
-import Box from '@mui/material/Box';
-import { useTheme } from '@mui/material/styles';
-import Tooltip from '@mui/material/Tooltip';
-import Typography from '@mui/material/Typography';
 import {
   categoryAliases,
   displayNameOverrides,
@@ -51,15 +48,15 @@ interface TestSuitesProps {
   vulnerabilitiesDataGridRef: React.RefObject<HTMLDivElement | null>;
 }
 
-const getRiskScoreColor = (riskScore: number, theme: any): string => {
+const getRiskScoreColor = (riskScore: number): string => {
   if (riskScore >= severityRiskScores[Severity.Critical]) {
-    return getSeverityColor(Severity.Critical, theme);
+    return getSeverityColor(Severity.Critical);
   } else if (riskScore >= severityRiskScores[Severity.High]) {
-    return getSeverityColor(Severity.High, theme);
+    return getSeverityColor(Severity.High);
   } else if (riskScore >= severityRiskScores[Severity.Medium]) {
-    return getSeverityColor(Severity.Medium, theme);
+    return getSeverityColor(Severity.Medium);
   } else {
-    return getSeverityColor(Severity.Low, theme);
+    return getSeverityColor(Severity.Low);
   }
 };
 
@@ -72,7 +69,6 @@ const TestSuites = ({
   vulnerabilitiesDataGridRef,
 }: TestSuitesProps) => {
   const navigate = useNavigate();
-  const theme = useTheme();
   const { recordEvent } = useTelemetry();
   const { severityFilter } = useReportStore();
   const [sortModel] = React.useState<SortingState>([{ id: 'riskScore', desc: true }]);
@@ -316,17 +312,11 @@ const TestSuites = ({
         header: 'Description',
         size: 220,
         cell: ({ getValue }) => (
-          <Tooltip title={getValue<string>()} placement="top" arrow>
-            <Box
-              sx={{
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-                maxWidth: '100%',
-              }}
-            >
-              {getValue<string>()}
-            </Box>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="block max-w-full truncate">{getValue<string>()}</span>
+            </TooltipTrigger>
+            <TooltipContent>{getValue<string>()}</TooltipContent>
           </Tooltip>
         ),
       },
@@ -337,46 +327,33 @@ const TestSuites = ({
         cell: ({ row }) => {
           const value = row.original.riskScore;
           return (
-            <Tooltip
-              title={
-                <Box>
-                  <Typography variant="body2" sx={{ fontWeight: 'bold', mb: 1 }}>
-                    Risk Score
-                  </Typography>
-                  <Typography variant="caption" component="div">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="flex cursor-help items-center gap-2">
+                  <span
+                    className="h-3 w-3 rounded-full"
+                    style={{ backgroundColor: getRiskScoreColor(value) }}
+                  />
+                  {value.toFixed(2)}
+                </span>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-xs">
+                <div className="space-y-1">
+                  <p className="font-semibold">Risk Score</p>
+                  <p className="text-xs">
                     Risk = Impact + Exploitability + Human Factor + Complexity
-                  </Typography>
-                  <Box sx={{ mt: 1 }}>
-                    <Typography variant="caption" component="div">
-                      • Base Severity: {row.original.severity}
-                    </Typography>
-                    <Typography variant="caption" component="div">
+                  </p>
+                  <div className="mt-2 space-y-0.5 text-xs">
+                    <p>• Base Severity: {row.original.severity}</p>
+                    <p>
                       • Attack Success Rate: {formatASRForDisplay(row.original.attackSuccessRate)}%
-                    </Typography>
-                    <Typography
-                      variant="caption"
-                      component="div"
-                      sx={{ mt: 0.5, fontStyle: 'italic' }}
-                    >
+                    </p>
+                    <p className="mt-1 italic">
                       Higher exploitability increases risk exponentially
-                    </Typography>
-                  </Box>
-                </Box>
-              }
-              placement="top"
-              arrow
-            >
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, cursor: 'help' }}>
-                <Box
-                  sx={{
-                    width: 12,
-                    height: 12,
-                    borderRadius: '50%',
-                    backgroundColor: getRiskScoreColor(value, theme),
-                  }}
-                />
-                {value.toFixed(2)}
-              </Box>
+                    </p>
+                  </div>
+                </div>
+              </TooltipContent>
             </Tooltip>
           );
         },
@@ -388,36 +365,29 @@ const TestSuites = ({
         cell: ({ row }) => {
           const value = row.original.complexityScore;
           return (
-            <Tooltip
-              title={
-                <Box>
-                  <Typography variant="body2" sx={{ fontWeight: 'bold', mb: 1 }}>
-                    Attack Complexity
-                  </Typography>
-                  <Typography variant="caption" component="div">
-                    How difficult this attack is to execute
-                  </Typography>
-                  <Typography variant="caption" component="div" sx={{ mt: 1 }}>
-                    Strategy: {row.original.worstStrategy}
-                  </Typography>
-                  <Typography variant="caption" component="div">
-                    • Score: {value.toFixed(0)}/10
-                  </Typography>
-                  <Typography variant="caption" component="div" sx={{ mt: 0.5 }}>
-                    {value >= 7
-                      ? 'Very Hard - Requires automation/tools'
-                      : value >= 5
-                        ? 'Hard - Requires expertise'
-                        : value >= 3
-                          ? 'Medium - Requires some skill'
-                          : 'Easy - Average user could exploit'}
-                  </Typography>
-                </Box>
-              }
-              placement="top"
-              arrow
-            >
-              <Box sx={{ cursor: 'help' }}>{value.toFixed(0)}</Box>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="cursor-help">{value.toFixed(0)}</span>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-xs">
+                <div className="space-y-1">
+                  <p className="font-semibold">Attack Complexity</p>
+                  <p className="text-xs">How difficult this attack is to execute</p>
+                  <div className="mt-2 space-y-0.5 text-xs">
+                    <p>Strategy: {row.original.worstStrategy}</p>
+                    <p>• Score: {value.toFixed(0)}/10</p>
+                    <p className="mt-1">
+                      {value >= 7
+                        ? 'Very Hard - Requires automation/tools'
+                        : value >= 5
+                          ? 'Hard - Requires expertise'
+                          : value >= 3
+                            ? 'Medium - Requires some skill'
+                            : 'Easy - Average user could exploit'}
+                    </p>
+                  </div>
+                </div>
+              </TooltipContent>
             </Tooltip>
           );
         },
@@ -430,8 +400,11 @@ const TestSuites = ({
       {
         accessorKey: 'attackSuccessRate',
         header: () => (
-          <Tooltip title="Attack Success Rate" placement="top" arrow>
-            <span style={{ cursor: 'help' }}>ASR</span>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="cursor-help">ASR</span>
+            </TooltipTrigger>
+            <TooltipContent>Attack Success Rate</TooltipContent>
           </Tooltip>
         ),
         size: 80,
@@ -440,14 +413,14 @@ const TestSuites = ({
           const passRateWithFilter = row.original.passRateWithFilter;
           const passRate = row.original.passRate;
           return (
-            <Box>
+            <div>
               <strong>{formatASRForDisplay(value)}%</strong>
               {passRateWithFilter !== passRate && (
                 <>
                   <br />({formatASRForDisplay(100 - passRateWithFilter)}% with mitigation)
                 </>
               )}
-            </Box>
+            </div>
           );
         },
       },
@@ -510,8 +483,8 @@ const TestSuites = ({
             >
               View logs
             </Button>
-            <Tooltip title="Temporarily disabled while in beta, click to contact us to enable">
-              <span>
+            <Tooltip>
+              <TooltipTrigger asChild>
                 <Button
                   variant="secondary"
                   size="sm"
@@ -532,13 +505,16 @@ const TestSuites = ({
                 >
                   Apply mitigation
                 </Button>
-              </span>
+              </TooltipTrigger>
+              <TooltipContent>
+                Temporarily disabled while in beta, click to contact us to enable
+              </TooltipContent>
             </Tooltip>
           </div>
         ),
       },
     ],
-    [navigate, pluginsById, recordEvent, evalId, theme],
+    [navigate, pluginsById, recordEvent, evalId],
   );
 
   return (

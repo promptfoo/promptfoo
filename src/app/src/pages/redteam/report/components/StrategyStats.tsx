@@ -355,8 +355,8 @@ const StrategySheet = ({
       >
         <SheetTitle className="sr-only">
           {selectedStrategy
-            ? (displayNameOverrides[selectedStrategy as keyof typeof displayNameOverrides] ||
-                selectedStrategy)
+            ? displayNameOverrides[selectedStrategy as keyof typeof displayNameOverrides] ||
+              selectedStrategy
             : 'Strategy'}{' '}
           Details
         </SheetTitle>
