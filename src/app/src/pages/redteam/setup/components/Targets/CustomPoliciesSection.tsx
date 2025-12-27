@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 
+import { DataTable } from '@app/components/data-table/data-table';
 import { useApiHealth } from '@app/hooks/useApiHealth';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
@@ -18,14 +19,6 @@ import DialogTitle from '@mui/material/DialogTitle';
 import IconButton from '@mui/material/IconButton';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
-import {
-  DataGrid,
-  type GridColDef,
-  type GridRenderCellParams,
-  type GridRowSelectionModel,
-  GridToolbarContainer,
-  useGridApiRef,
-} from '@mui/x-data-grid';
 import { makeDefaultPolicyName, makeInlinePolicyId } from '@promptfoo/redteam/plugins/policy/utils';
 import { parse } from 'csv-parse/browser/esm/sync';
 import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
@@ -33,17 +26,7 @@ import { TestCaseGenerateButton } from '../TestCaseDialog';
 import { useTestCaseGeneration } from '../TestCaseGenerationProvider';
 import { PolicySuggestionsSidebar } from './PolicySuggestionsSidebar';
 import type { PolicyObject } from '@promptfoo/redteam/types';
-
-// Augment the toolbar props interface
-declare module '@mui/x-data-grid' {
-  interface ToolbarPropsOverrides {
-    selectedCount: number;
-    onDeleteSelected: () => void;
-    onAddPolicy: () => void;
-    onUploadCsv: (event: React.ChangeEvent<HTMLInputElement>) => void;
-    isUploadingCsv: boolean;
-  }
-}
+import type { ColumnDef, RowSelectionState } from '@tanstack/react-table';
 
 type PolicyRow = {
   id: string;
@@ -65,78 +48,15 @@ type PolicyDialogState = {
   };
 };
 
-function CustomToolbar({
-  selectedCount,
-  onDeleteSelected,
-  onAddPolicy,
-  onUploadCsv,
-  isUploadingCsv,
-}: {
-  selectedCount: number;
-  onDeleteSelected: () => void;
-  onAddPolicy: () => void;
-  onUploadCsv: (event: React.ChangeEvent<HTMLInputElement>) => void;
-  isUploadingCsv: boolean;
-}) {
-  return (
-    <GridToolbarContainer sx={{ p: 1, gap: 1 }}>
-      <Button
-        startIcon={<AddIcon />}
-        onClick={onAddPolicy}
-        variant="contained"
-        color="primary"
-        size="small"
-      >
-        Add Policy
-      </Button>
-      <Button
-        component="label"
-        variant="outlined"
-        startIcon={isUploadingCsv ? null : <FileUploadIcon />}
-        disabled={isUploadingCsv}
-        size="small"
-      >
-        {isUploadingCsv ? 'Uploading...' : 'Upload CSV'}
-        <input
-          type="file"
-          hidden
-          accept=".csv"
-          onChange={onUploadCsv}
-          onClick={(e) => {
-            (e.target as HTMLInputElement).value = '';
-          }}
-          disabled={isUploadingCsv}
-        />
-      </Button>
-      {selectedCount > 0 && (
-        <Button
-          color="error"
-          variant="outlined"
-          size="small"
-          onClick={onDeleteSelected}
-          startIcon={<DeleteIcon />}
-          sx={{ border: 0 }}
-        >
-          Delete ({selectedCount})
-        </Button>
-      )}
-    </GridToolbarContainer>
-  );
-}
-
 export const CustomPoliciesSection = () => {
   const { config, updateConfig } = useRedTeamConfig();
   const toast = useToast();
   const { recordEvent } = useTelemetry();
-  const apiRef = useGridApiRef();
   const [generatingPolicyId, setGeneratingPolicyId] = useState<string | null>(null);
   const [isUploadingCsv, setIsUploadingCsv] = useState(false);
   const [isGeneratingPolicies, setIsGeneratingPolicies] = useState(false);
   const [suggestedPolicies, setSuggestedPolicies] = useState<PolicyObject[]>([]);
-  const [rowSelectionModel, setRowSelectionModel] = useState<GridRowSelectionModel>({
-    type: 'include',
-    ids: new Set([]),
-  });
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const isGeneratingPoliciesRef = useRef(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
 
@@ -165,65 +85,95 @@ export const CustomPoliciesSection = () => {
   // Track custom names for policies (by policy ID)
   const [policyNames, setPolicyNames] = useState<Record<string, string>>({});
 
-  // Get policy plugins from config
-  const policyPlugins = config.plugins.filter(
-    (p) => typeof p === 'object' && p.id === 'policy',
-  ) as Array<{
-    id: string;
-    config: { policy: string | { id: string; text: string; name?: string } };
-  }>;
+  // Get policy plugins from config - memoized to prevent infinite re-renders
+  const policyPlugins = useMemo(
+    () =>
+      config.plugins.filter((p) => typeof p === 'object' && p.id === 'policy') as Array<{
+        id: string;
+        config: { policy: string | { id: string; text: string; name?: string } };
+      }>,
+    [config.plugins],
+  );
 
   // Convert policies to rows for the data grid
-  const rows: PolicyRow[] = useMemo(() => {
-    if (policyPlugins.length === 0) {
-      return [];
-    }
-    return policyPlugins.map((p, index) => {
-      // Handle both string and PolicyObject formats
-      let policyText: string;
-      let policyId: string;
-      let policyName: string;
+  const [rows, setRows] = useState<PolicyRow[]>([]);
 
-      if (typeof p.config.policy === 'string') {
-        policyText = p.config.policy;
-        policyId = makeInlinePolicyId(policyText);
-        policyName = makeDefaultPolicyName(index);
-      } else {
-        policyText = p.config.policy.text;
-        policyId = p.config.policy.id;
-        policyName = p.config.policy.name || policyNames[policyId] || makeDefaultPolicyName(index);
+  React.useEffect(() => {
+    let cancelled = false;
+
+    async function buildRows() {
+      try {
+        if (policyPlugins.length === 0) {
+          if (!cancelled) {
+            setRows([]);
+          }
+          return;
+        }
+
+        const result: PolicyRow[] = [];
+        for (let index = 0; index < policyPlugins.length; index++) {
+          const p = policyPlugins[index];
+          // Handle both string and PolicyObject formats
+          let policyText: string;
+          let policyId: string;
+          let policyName: string;
+
+          if (typeof p.config.policy === 'string') {
+            policyText = p.config.policy;
+            policyId = await makeInlinePolicyId(policyText);
+            policyName = makeDefaultPolicyName(index);
+          } else {
+            policyText = p.config.policy.text;
+            policyId = p.config.policy.id;
+            policyName =
+              p.config.policy.name || policyNames[policyId] || makeDefaultPolicyName(index);
+          }
+
+          result.push({
+            id: policyId,
+            name: policyName,
+            policyText: policyText,
+          });
+        }
+
+        if (!cancelled) {
+          setRows(result);
+        }
+      } catch (error) {
+        console.error('Error building policy rows:', error);
+        if (!cancelled) {
+          setRows([]);
+        }
       }
+    }
 
-      return {
-        id: policyId,
-        name: policyName,
-        policyText: policyText,
-      };
-    });
+    buildRows();
+
+    return () => {
+      cancelled = true;
+    };
   }, [policyPlugins, policyNames]);
 
   // Validate policy text uniqueness
   const validatePolicyText = useCallback(
-    (text: string, currentPolicyId?: string): string | undefined => {
+    async (text: string, currentPolicyId?: string): Promise<string | undefined> => {
       const trimmedText = text.trim();
       if (!trimmedText) {
         return 'Policy text is required';
       }
 
       // Check if this policy text already exists (excluding current policy being edited)
-      const duplicateExists = policyPlugins.some((p) => {
+      for (const p of policyPlugins) {
         const existingText =
           typeof p.config.policy === 'string' ? p.config.policy : p.config.policy.text;
         const existingId =
           typeof p.config.policy === 'string'
-            ? makeInlinePolicyId(p.config.policy)
+            ? await makeInlinePolicyId(p.config.policy)
             : p.config.policy.id;
 
-        return existingText === trimmedText && existingId !== currentPolicyId;
-      });
-
-      if (duplicateExists) {
-        return 'This policy text already exists. Policy texts must be unique.';
+        if (existingText === trimmedText && existingId !== currentPolicyId) {
+          return 'This policy text already exists. Policy texts must be unique.';
+        }
       }
 
       return undefined;
@@ -265,7 +215,7 @@ export const CustomPoliciesSection = () => {
     }));
   };
 
-  const handleSavePolicy = () => {
+  const handleSavePolicy = async () => {
     const { formData, mode, editingPolicy } = policyDialog;
     const trimmedText = formData.policyText.trim();
     const trimmedName = formData.name.trim();
@@ -277,7 +227,7 @@ export const CustomPoliciesSection = () => {
       errors.name = 'Name is required';
     }
 
-    const policyTextError = validatePolicyText(
+    const policyTextError = await validatePolicyText(
       trimmedText,
       mode === 'edit' ? editingPolicy?.id : undefined,
     );
@@ -294,7 +244,7 @@ export const CustomPoliciesSection = () => {
       typeof p === 'string' ? true : p.id !== 'policy',
     );
 
-    const newPolicyId = makeInlinePolicyId(trimmedText);
+    const newPolicyId = await makeInlinePolicyId(trimmedText);
 
     if (mode === 'create') {
       // Add new policy
@@ -323,14 +273,18 @@ export const CustomPoliciesSection = () => {
       toast.showToast('Policy added successfully', 'success');
     } else {
       // Update existing policy
-      const updatedPolicies = policyPlugins.map((p) => {
+      const updatedPolicies: Array<{
+        id: string;
+        config: { policy: string | { id: string; text: string; name?: string } };
+      }> = [];
+      for (const p of policyPlugins) {
         const currentPolicyId =
           typeof p.config.policy === 'string'
-            ? makeInlinePolicyId(p.config.policy)
+            ? await makeInlinePolicyId(p.config.policy)
             : p.config.policy.id;
 
         if (currentPolicyId === editingPolicy?.id) {
-          return {
+          updatedPolicies.push({
             id: 'policy',
             config: {
               policy: {
@@ -339,13 +293,14 @@ export const CustomPoliciesSection = () => {
                 name: trimmedName,
               },
             },
-          };
+          });
+        } else {
+          updatedPolicies.push({
+            id: 'policy',
+            config: { policy: p.config.policy },
+          });
         }
-        return {
-          id: 'policy',
-          config: { policy: p.config.policy },
-        };
-      });
+      }
       updateConfig('plugins', [...otherPlugins, ...updatedPolicies]);
       toast.showToast('Policy updated successfully', 'success');
     }
@@ -354,33 +309,40 @@ export const CustomPoliciesSection = () => {
   };
 
   const handleDeleteSelected = () => {
-    if (!rowSelectionModel?.ids || rowSelectionModel.ids.size === 0) {
+    const selectedCount = Object.keys(rowSelection).filter((key) => rowSelection[key]).length;
+    if (selectedCount === 0) {
       return;
     }
     setConfirmDeleteOpen(true);
   };
 
-  const handleConfirmDelete = () => {
-    if (!rowSelectionModel?.ids) {
+  const handleConfirmDelete = async () => {
+    const selectedIds = Object.keys(rowSelection).filter((key) => rowSelection[key]);
+    if (selectedIds.length === 0) {
       return;
     }
     const otherPlugins = config.plugins.filter((p) =>
       typeof p === 'string' ? true : p.id !== 'policy',
     );
 
-    const selectedIds = rowSelectionModel.ids;
-    const remainingPolicies = policyPlugins
-      .filter((p) => {
-        const policyId =
-          typeof p.config.policy === 'string'
-            ? makeInlinePolicyId(p.config.policy)
-            : p.config.policy.id;
-        return !selectedIds.has(policyId);
-      })
-      .map((p) => ({
-        id: 'policy',
-        config: { policy: p.config.policy },
-      }));
+    const selectedIdsSet = new Set(selectedIds);
+    const remainingPolicies: Array<{
+      id: string;
+      config: { policy: string | { id: string; text: string; name?: string } };
+    }> = [];
+
+    for (const p of policyPlugins) {
+      const policyId =
+        typeof p.config.policy === 'string'
+          ? await makeInlinePolicyId(p.config.policy)
+          : p.config.policy.id;
+      if (!selectedIdsSet.has(policyId)) {
+        remainingPolicies.push({
+          id: 'policy',
+          config: { policy: p.config.policy },
+        });
+      }
+    }
 
     // Clean up policy names for removed policies
     const newPolicyNames = { ...policyNames };
@@ -390,7 +352,7 @@ export const CustomPoliciesSection = () => {
 
     setPolicyNames(newPolicyNames);
     updateConfig('plugins', [...otherPlugins, ...remainingPolicies]);
-    setRowSelectionModel({ type: 'include', ids: new Set() });
+    setRowSelection({});
     setConfirmDeleteOpen(false);
   };
 
@@ -496,12 +458,12 @@ export const CustomPoliciesSection = () => {
   }, [config.applicationDefinition, rows, suggestedPolicies, toast]);
 
   const handleAddSuggestedPolicy = useCallback(
-    (policy: PolicyObject) => {
+    async (policy: PolicyObject) => {
       const otherPlugins = config.plugins.filter((p) =>
         typeof p === 'string' ? true : p.id !== 'policy',
       );
 
-      const policyId = policy.id || makeInlinePolicyId(policy.text || '');
+      const policyId = policy.id || (await makeInlinePolicyId(policy.text || ''));
       const newPolicy = {
         id: 'policy',
         config: {
@@ -581,14 +543,10 @@ export const CustomPoliciesSection = () => {
           );
 
           const currentPolicyCount = policyPlugins.length;
-          const allPolicies = [
-            ...policyPlugins.map((p) => ({
-              id: 'policy',
-              config: { policy: p.config.policy },
-            })),
-            ...newPolicies.map((policy, index) => {
+          const newPolicyPlugins = await Promise.all(
+            newPolicies.map(async (policy, index) => {
               const policyText = policy.trim();
-              const policyId = makeInlinePolicyId(policyText);
+              const policyId = await makeInlinePolicyId(policyText);
               return {
                 id: 'policy',
                 config: {
@@ -600,6 +558,14 @@ export const CustomPoliciesSection = () => {
                 },
               };
             }),
+          );
+
+          const allPolicies = [
+            ...policyPlugins.map((p) => ({
+              id: 'policy',
+              config: { policy: p.config.policy },
+            })),
+            ...newPolicyPlugins,
           ];
 
           updateConfig('plugins', [...otherPlugins, ...allPolicies]);
@@ -648,26 +614,24 @@ export const CustomPoliciesSection = () => {
     [toast, generateTestCase],
   );
 
-  const columns: GridColDef<PolicyRow>[] = useMemo(
+  const columns: ColumnDef<PolicyRow>[] = useMemo(
     () => [
       {
-        field: 'name',
-        headerName: 'Name',
-        flex: 0.75,
+        accessorKey: 'name',
+        header: 'Name',
+        size: 200,
       },
       {
-        field: 'policyText',
-        headerName: 'Policy Text',
-        flex: 3,
+        accessorKey: 'policyText',
+        header: 'Policy Text',
+        size: 600,
       },
       {
-        field: 'actions',
-        headerName: 'Actions',
-        flex: 0.5,
-        minWidth: 160,
-        sortable: false,
-        filterable: false,
-        renderCell: (params: GridRenderCellParams<PolicyRow>) => (
+        id: 'actions',
+        header: 'Actions',
+        size: 160,
+        enableSorting: false,
+        cell: ({ row }) => (
           <Box
             sx={{
               display: 'flex',
@@ -678,17 +642,17 @@ export const CustomPoliciesSection = () => {
             }}
           >
             <Tooltip title="Edit">
-              <IconButton size="small" onClick={() => handleEditPolicy(params.row)}>
+              <IconButton size="small" onClick={() => handleEditPolicy(row.original)}>
                 <EditIcon fontSize="small" />
               </IconButton>
             </Tooltip>
             <TestCaseGenerateButton
-              onClick={() => handleGenerateTestCase(params.row)}
+              onClick={() => handleGenerateTestCase(row.original)}
               disabled={
                 apiHealthStatus !== 'connected' ||
-                (generatingTestCase && generatingPolicyId === params.row.id)
+                (generatingTestCase && generatingPolicyId === row.original.id)
               }
-              isGenerating={generatingTestCase && generatingPolicyId === params.row.id}
+              isGenerating={generatingTestCase && generatingPolicyId === row.original.id}
               tooltipTitle={
                 apiHealthStatus === 'connected'
                   ? undefined
@@ -713,6 +677,55 @@ export const CustomPoliciesSection = () => {
   // Determine if we should show the suggestions sidebar - show whenever policy generation is possible
   const showSuggestionsSidebar = canGeneratePolicies;
 
+  // Get selected count
+  const selectedCount = Object.keys(rowSelection).filter((key) => rowSelection[key]).length;
+
+  // Custom toolbar actions
+  const toolbarActions = (
+    <>
+      <Button
+        startIcon={<AddIcon />}
+        onClick={handleAddPolicy}
+        variant="contained"
+        color="primary"
+        size="small"
+      >
+        Add Policy
+      </Button>
+      <Button
+        component="label"
+        variant="outlined"
+        startIcon={isUploadingCsv ? null : <FileUploadIcon />}
+        disabled={isUploadingCsv}
+        size="small"
+      >
+        {isUploadingCsv ? 'Uploading...' : 'Upload CSV'}
+        <input
+          type="file"
+          hidden
+          accept=".csv"
+          onChange={handleCsvUpload}
+          onClick={(e) => {
+            (e.target as HTMLInputElement).value = '';
+          }}
+          disabled={isUploadingCsv}
+        />
+      </Button>
+      {selectedCount > 0 && (
+        <Button
+          color="error"
+          variant="outlined"
+          size="small"
+          onClick={handleDeleteSelected}
+          startIcon={<DeleteIcon />}
+          sx={{ border: 0 }}
+        >
+          Delete ({selectedCount})
+        </Button>
+      )}
+    </>
+  );
+
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }} ref={containerRef}>
       <Box
@@ -726,25 +739,17 @@ export const CustomPoliciesSection = () => {
       >
         {/* Main table area */}
         <Box sx={{ height: '100%', minWidth: 0 }}>
-          <DataGrid
-            apiRef={apiRef}
-            rows={rows}
+          <DataTable
+            data={rows}
             columns={columns}
-            checkboxSelection
-            disableRowSelectionOnClick
-            slots={{ toolbar: CustomToolbar }}
-            slotProps={{
-              toolbar: {
-                selectedCount: rowSelectionModel?.ids?.size ?? 0,
-                onDeleteSelected: handleDeleteSelected,
-                onAddPolicy: handleAddPolicy,
-                onUploadCsv: handleCsvUpload,
-                isUploadingCsv,
-              },
-            }}
-            onRowSelectionModelChange={setRowSelectionModel}
-            rowSelectionModel={rowSelectionModel}
+            enableRowSelection
+            rowSelection={rowSelection}
+            onRowSelectionChange={setRowSelection}
+            getRowId={(row) => row.id}
+            toolbarActions={toolbarActions}
             showToolbar
+            showPagination={false}
+            emptyMessage="No custom policies configured. Add your first policy using the 'Add Policy' button above."
           />
         </Box>
 
@@ -763,13 +768,12 @@ export const CustomPoliciesSection = () => {
       {/* Delete confirmation dialog */}
       <Dialog open={confirmDeleteOpen} onClose={handleCancelDelete}>
         <DialogTitle>
-          Delete {rowSelectionModel?.ids?.size ?? 0} polic
-          {(rowSelectionModel?.ids?.size ?? 0) === 1 ? 'y' : 'ies'}?
+          Delete {selectedCount} polic{selectedCount === 1 ? 'y' : 'ies'}?
         </DialogTitle>
         <DialogContent>
           <DialogContentText>
             Are you sure you want to delete the selected polic
-            {(rowSelectionModel?.ids?.size ?? 0) === 1 ? 'y' : 'ies'}? This action cannot be undone.
+            {selectedCount === 1 ? 'y' : 'ies'}? This action cannot be undone.
           </DialogContentText>
         </DialogContent>
         <DialogActions>

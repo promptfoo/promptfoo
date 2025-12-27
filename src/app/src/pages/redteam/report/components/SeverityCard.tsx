@@ -1,4 +1,12 @@
-import { alpha, Card, CardActionArea, CardContent, Typography, useTheme } from '@mui/material';
+import {
+  alpha,
+  Card,
+  CardActionArea,
+  CardContent,
+  Tooltip,
+  Typography,
+  useTheme,
+} from '@mui/material';
 import { Severity, severityDisplayNames } from '@promptfoo/redteam/constants';
 
 interface SeverityCardProps {
@@ -6,6 +14,8 @@ interface SeverityCardProps {
   issueCount?: number;
   navigateOnClick: boolean;
   navigateToIssues: (props: { severity: Severity }) => void;
+  isActive?: boolean;
+  hasActiveFilter?: boolean;
 }
 
 export default function SeverityCard({
@@ -13,12 +23,17 @@ export default function SeverityCard({
   issueCount = 0,
   navigateOnClick,
   navigateToIssues,
+  isActive = false,
+  hasActiveFilter = false,
 }: SeverityCardProps) {
   const hasIssues = issueCount > 0;
   const theme = useTheme();
   const severityColor = hasIssues
     ? theme.palette.custom.severity[severity].main
     : theme.palette.text.disabled;
+
+  // De-emphasize inactive cards when a filter is active
+  const isInactive = hasActiveFilter && !isActive;
   const content = (
     <CardContent
       sx={{
@@ -56,7 +71,7 @@ export default function SeverityCard({
       </Typography>
     </CardContent>
   );
-  return (
+  const cardContent = (
     <Card
       sx={[
         {
@@ -65,12 +80,18 @@ export default function SeverityCard({
           backgroundColor: hasIssues ? alpha(severityColor, 0.05) : 'transparent',
           filter: hasIssues ? 'none' : 'grayscale(0.5)',
           height: '100%',
+          opacity: isInactive ? 0.4 : 1,
+          transition: 'all 0.2s ease-in-out',
         },
       ]}
     >
       {navigateOnClick && hasIssues ? (
         <CardActionArea
-          aria-label={`Filter by ${severityDisplayNames[severity]} vulnerabilities`}
+          aria-label={
+            isActive
+              ? `Clear ${severityDisplayNames[severity]} filter`
+              : `Filter by ${severityDisplayNames[severity]} vulnerabilities`
+          }
           onClick={navigateToIssues ? () => navigateToIssues({ severity }) : undefined}
           sx={{
             height: '100%',
@@ -91,4 +112,16 @@ export default function SeverityCard({
       )}
     </Card>
   );
+
+  // Wrap clickable cards with tooltip
+  if (navigateOnClick && hasIssues) {
+    const tooltipTitle = isActive ? 'Click to clear filter' : 'Click to filter';
+    return (
+      <Tooltip title={tooltipTitle} placement="top" arrow>
+        {cardContent}
+      </Tooltip>
+    );
+  }
+
+  return cardContent;
 }
