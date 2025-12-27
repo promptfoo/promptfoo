@@ -5,8 +5,8 @@ prompts:
   - 'Solve this riddle: {{riddle}}'
 
 providers:
-  - openai:gpt-4o
-  - openai:gpt-4.1-mini
+  - openai:gpt-5
+  - openai:gpt-5-mini
 
 defaultTest:
   assert:
@@ -31,7 +31,7 @@ tests:
       riddle: "You see a boat filled with people. It has not sunk, but when you look again you don't see a single person on the boat. Why?"
     assert:
       - type: llm-rubric
-        value: explains that the people are below deck
+        value: explains that there are no single people (they are all married)
   - vars:
       riddle: 'The more of this there is, the less you see. What is it?'
     assert:

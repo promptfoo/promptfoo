@@ -6,14 +6,20 @@ import dedent from 'dedent';
 import yaml from 'js-yaml';
 import cliState from '../cliState';
 import logger from '../logger';
-import { getCloudDatabaseId, getProviderFromCloud, isCloudProvider } from '../util/cloud';
+import {
+  getCloudDatabaseId,
+  getProviderFromCloud,
+  isCloudProvider,
+  validateLinkedTargetId,
+} from '../util/cloud';
 import { maybeLoadConfigFromExternalFile } from '../util/file';
+import { renderEnvOnlyInObject } from '../util/index';
 import invariant from '../util/invariant';
 import { getNunjucksEngine } from '../util/templates';
 import { providerMap } from './registry';
 
-import type { LoadApiProviderContext, TestSuiteConfig } from '../types';
 import type { EnvOverrides } from '../types/env';
+import type { LoadApiProviderContext, TestSuiteConfig } from '../types/index';
 import type { ApiProvider, ProviderOptions, ProviderOptionsMap } from '../types/providers';
 
 // FIXME(ian): Make loadApiProvider handle all the different provider types (string, ProviderOptions, ApiProvider, etc), rather than the callers.
@@ -22,27 +28,71 @@ export async function loadApiProvider(
   context: LoadApiProviderContext = {},
 ): Promise<ApiProvider> {
   const { options = {}, basePath, env } = context;
+
+  // Render ONLY environment variable templates at load time (e.g., {{ env.AZURE_ENDPOINT }})
+  // This allows constructors to access real env values while preserving runtime templates
+  // like {{ vars.* }} for per-test customization at callApi() time
+  const renderedConfig = options.config ? renderEnvOnlyInObject(options.config) : undefined;
+  const renderedId = options.id ? renderEnvOnlyInObject(options.id) : undefined;
+
   const providerOptions: ProviderOptions = {
-    id: options.id,
+    id: renderedId,
     config: {
-      ...options.config,
+      ...renderedConfig,
       basePath,
     },
     env,
   };
+
+  // Validate linkedTargetId if present (Promptfoo Cloud feature)
+  if (providerOptions.config?.linkedTargetId) {
+    await validateLinkedTargetId(providerOptions.config.linkedTargetId);
+  }
 
   const renderedProviderPath = getNunjucksEngine().renderString(providerPath, {});
 
   if (isCloudProvider(renderedProviderPath)) {
     const cloudDatabaseId = getCloudDatabaseId(renderedProviderPath);
 
-    const provider = await getProviderFromCloud(cloudDatabaseId);
-    if (isCloudProvider(provider.id)) {
+    const cloudProvider = await getProviderFromCloud(cloudDatabaseId);
+    if (isCloudProvider(cloudProvider.id)) {
       throw new Error(
-        `This cloud provider ${cloudDatabaseId} points to another cloud provider: ${provider.id}. This is not allowed. A cloud provider should point to a specific provider, not another cloud provider.`,
+        `This cloud provider ${cloudDatabaseId} points to another cloud provider: ${cloudProvider.id}. This is not allowed. A cloud provider should point to a specific provider, not another cloud provider.`,
       );
     }
-    return loadApiProvider(provider.id, { ...context, options: provider });
+
+    // Merge local config overrides with cloud provider config
+    // Local config takes precedence to allow per-eval customization
+    const mergedOptions: ProviderOptions = {
+      ...cloudProvider,
+      config: {
+        ...cloudProvider.config,
+        ...options.config,
+      },
+      // Allow local overrides for these fields
+      label: options.label ?? cloudProvider.label,
+      transform: options.transform ?? cloudProvider.transform,
+      delay: options.delay ?? cloudProvider.delay,
+      prompts: options.prompts ?? cloudProvider.prompts,
+      // Merge all three env sources: context (base) -> cloud -> local (highest priority)
+      env: {
+        ...env, // Context env (from testSuite.env - proxies, tracing IDs, etc.)
+        ...cloudProvider.env, // Cloud provider env overrides context
+        ...options.env, // Local env overrides everything
+      },
+    };
+
+    logger.debug(
+      `[Cloud Provider] Loaded ${cloudDatabaseId}, resolved to ${cloudProvider.id}${options.config ? ' with local config overrides' : ''}`,
+    );
+
+    const mergedContext = {
+      ...context,
+      options: mergedOptions,
+      env: mergedOptions.env,
+    };
+
+    return loadApiProvider(cloudProvider.id, mergedContext);
   }
 
   if (
@@ -100,6 +150,7 @@ export async function loadApiProvider(
 interface LoadApiProviderOptions {
   options?: ProviderOptions;
   env?: any;
+  basePath?: string;
 }
 
 /**
@@ -109,7 +160,7 @@ interface LoadApiProviderOptions {
 export async function resolveProvider(
   provider: any,
   providerMap: Record<string, ApiProvider>,
-  context: { env?: any } = {},
+  context: { env?: any; basePath?: string } = {},
 ): Promise<ApiProvider> {
   // Guard clause for null or undefined provider values
   if (provider == null) {
@@ -121,9 +172,14 @@ export async function resolveProvider(
     if (providerMap[provider]) {
       return providerMap[provider];
     }
-    return context.env
-      ? await loadApiProvider(provider, { env: context.env })
-      : await loadApiProvider(provider);
+    const loadOptions: LoadApiProviderOptions = {};
+    if (context.env) {
+      loadOptions.env = context.env;
+    }
+    if (context.basePath) {
+      loadOptions.basePath = context.basePath;
+    }
+    return await loadApiProvider(provider, loadOptions);
   } else if (typeof provider === 'object') {
     const casted = provider as ProviderOptions;
     invariant(casted.id, 'Provider object must have an id');
@@ -131,11 +187,16 @@ export async function resolveProvider(
     if (context.env) {
       loadOptions.env = context.env;
     }
+    if (context.basePath) {
+      loadOptions.basePath = context.basePath;
+    }
     return await loadApiProvider(casted.id, loadOptions);
   } else if (typeof provider === 'function') {
-    return context.env
-      ? await loadApiProvider(provider, { env: context.env })
-      : await loadApiProvider(provider);
+    // Handle function providers directly instead of passing to loadApiProvider
+    return {
+      id: () => provider.label ?? 'custom-function',
+      callApi: provider,
+    };
   } else {
     throw new Error('Invalid provider type');
   }
@@ -220,7 +281,7 @@ export async function loadApiProviders(
         if (typeof provider === 'function') {
           return [
             {
-              id: provider.label ? () => provider.label! : () => `custom-function-${idx}`,
+              id: () => provider.label ?? `custom-function-${idx}`,
               callApi: provider,
             },
           ];

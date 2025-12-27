@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest';
 import {
   handleContains,
   handleContainsAll,
@@ -7,7 +8,12 @@ import {
   handleIContainsAny,
 } from '../../src/assertions/contains';
 
-import type { ApiProvider, AssertionParams, AssertionValue, AtomicTestCase } from '../../src/types';
+import type {
+  ApiProvider,
+  AssertionParams,
+  AssertionValue,
+  AtomicTestCase,
+} from '../../src/types/index';
 
 const mockProvider: ApiProvider = {
   id: () => 'mock',
@@ -16,7 +22,7 @@ const mockProvider: ApiProvider = {
 
 const defaultParams = {
   baseType: 'contains' as const,
-  context: {
+  assertionValueContext: {
     vars: {},
     test: {} as AtomicTestCase,
     prompt: 'test prompt',

@@ -1,16 +1,23 @@
 import { exec } from 'child_process';
 import { promisify } from 'util';
+
 import chalk from 'chalk';
-import semverGt from 'semver/functions/gt';
+import semverGt from 'semver/functions/gt.js';
 import { TERMINAL_MAX_WIDTH, VERSION } from './constants';
 import { getEnvBool } from './envars';
-import { fetchWithTimeout } from './fetch';
 import logger from './logger';
+import { fetchWithTimeout } from './util/fetch/index';
 
 const execAsync = promisify(exec);
 
 export async function getLatestVersion() {
-  const response = await fetchWithTimeout(`https://api.promptfoo.dev/api/latestVersion`, {}, 1000);
+  const response = await fetchWithTimeout(
+    `https://api.promptfoo.dev/api/latestVersion`,
+    {
+      headers: { 'x-promptfoo-silent': 'true' },
+    },
+    10000,
+  );
   if (!response.ok) {
     throw new Error(`Failed to fetch package information for promptfoo`);
   }
@@ -49,7 +56,13 @@ ${border}\n`,
 
 export async function getModelAuditLatestVersion(): Promise<string | null> {
   try {
-    const response = await fetchWithTimeout('https://pypi.org/pypi/modelaudit/json', {}, 1000);
+    const response = await fetchWithTimeout(
+      'https://pypi.org/pypi/modelaudit/json',
+      {
+        headers: { 'x-promptfoo-silent': 'true' },
+      },
+      10000,
+    );
     if (!response.ok) {
       return null;
     }
@@ -62,8 +75,9 @@ export async function getModelAuditLatestVersion(): Promise<string | null> {
 
 export async function getModelAuditCurrentVersion(): Promise<string | null> {
   try {
-    const { stdout } = await execAsync('pip show modelaudit');
-    const versionMatch = stdout.match(/Version:\s*(\S+)/);
+    // Check the actual binary version (works with pip, pipx, or any installation method)
+    const { stdout } = await execAsync('modelaudit --version');
+    const versionMatch = stdout.match(/modelaudit,?\s+version\s+(\S+)/i);
     return versionMatch ? versionMatch[1] : null;
   } catch {
     return null;

@@ -1,6 +1,7 @@
+import { getEnvString } from '../envars';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 
-import type { ProviderOptions } from '../types';
+import type { ProviderOptions } from '../types/index';
 import type { OpenAiCompletionOptions } from './openai/types';
 
 export interface HeliconeGatewayOptions extends OpenAiCompletionOptions {
@@ -45,7 +46,7 @@ export class HeliconeGatewayProvider extends OpenAiChatCompletionProvider {
       ...config,
       apiBaseUrl,
       // Use placeholder API key since Helicone Gateway handles authentication
-      apiKey: config.apiKey || 'placeholder-api-key',
+      apiKey: config.apiKey || getEnvString('HELICONE_API_KEY') || 'placeholder-api-key',
     };
 
     // Call parent constructor with the model and modified config

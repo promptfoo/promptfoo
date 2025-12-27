@@ -6,7 +6,7 @@ export const REDTEAM_DEFAULTS = {
   NUM_TESTS: 10,
 } as const;
 
-export const REDTEAM_MODEL = 'openai:chat:gpt-4.1-2025-04-14';
+export const REDTEAM_MODEL = 'openai:chat:gpt-5-2025-08-07';
 
 // LlamaGuard 4 is the default on Replicate (supports S14: Code Interpreter Abuse)
 export const LLAMA_GUARD_REPLICATE_PROVIDER = 'replicate:moderation:meta/llama-guard-4-12b';
@@ -145,8 +145,14 @@ export const GUARDRAILS_EVALUATION_PLUGINS = [
   'harmful:privacy',
 ] as const;
 
+export const MCP_PLUGINS = ['mcp', 'pii', 'bfla', 'bola', 'sql-injection', 'rbac'] as const;
+
 export const AGENTIC_PLUGINS = ['agentic:memory-poisoning'] as const;
 export type AgenticPlugin = (typeof AGENTIC_PLUGINS)[number];
+
+// Plugins that require HuggingFace API keys for their datasets
+export const HUGGINGFACE_GATED_PLUGINS = ['beavertails', 'unsafebench', 'aegis'] as const;
+export type HuggingFaceGatedPlugin = (typeof HUGGINGFACE_GATED_PLUGINS)[number];
 
 export const COLLECTIONS = [
   'default',
@@ -155,6 +161,10 @@ export const COLLECTIONS = [
   'pii',
   'bias',
   'medical',
+  'pharmacy',
+  'insurance',
+  'financial',
+  'ecommerce',
   'guardrails-eval',
 ] as const;
 export type Collection = (typeof COLLECTIONS)[number];
@@ -226,14 +236,41 @@ export const MEDICAL_PLUGINS = [
 export const FINANCIAL_PLUGINS = [
   'financial:calculation-error',
   'financial:compliance-violation',
+  'financial:confidential-disclosure',
+  'financial:counterfactual',
   'financial:data-leakage',
+  'financial:defamation',
   'financial:hallucination',
+  'financial:impartiality',
+  'financial:misconduct',
   'financial:sycophancy',
+] as const;
+
+export const PHARMACY_PLUGINS = [
+  'pharmacy:controlled-substance-compliance',
+  'pharmacy:dosage-calculation',
+  'pharmacy:drug-interaction',
+] as const;
+
+export const INSURANCE_PLUGINS = [
+  'insurance:coverage-discrimination',
+  'insurance:network-misinformation',
+  'insurance:phi-disclosure',
+] as const;
+
+export const ECOMMERCE_PLUGINS = [
+  'ecommerce:compliance-bypass',
+  'ecommerce:order-fraud',
+  'ecommerce:pci-dss',
+  'ecommerce:price-manipulation',
 ] as const;
 
 export type PIIPlugin = (typeof PII_PLUGINS)[number];
 export type BiasPlugin = (typeof BIAS_PLUGINS)[number];
 export type MedicalPlugin = (typeof MEDICAL_PLUGINS)[number];
+export type PharmacyPlugin = (typeof PHARMACY_PLUGINS)[number];
+export type InsurancePlugin = (typeof INSURANCE_PLUGINS)[number];
+export type EcommercePlugin = (typeof ECOMMERCE_PLUGINS)[number];
 
 export const BASE_PLUGINS = [
   'contracts',
@@ -252,11 +289,13 @@ export const ADDITIONAL_PLUGINS = [
   'bola',
   'cca',
   'competitors',
+  'coppa',
   'cross-session-leak',
   'cyberseceval',
   'debug-access',
   'divergent-repetition',
   'donotanswer',
+  'ferpa',
   'harmbench',
   'toxic-chat',
   'imitation',
@@ -270,11 +309,27 @@ export const ADDITIONAL_PLUGINS = [
   'medical:sycophancy',
   'financial:calculation-error',
   'financial:compliance-violation',
+  'financial:confidential-disclosure',
+  'financial:counterfactual',
   'financial:data-leakage',
+  'financial:defamation',
   'financial:hallucination',
+  'financial:impartiality',
+  'financial:misconduct',
   'financial:sycophancy',
+  'ecommerce:compliance-bypass',
+  'ecommerce:order-fraud',
+  'ecommerce:pci-dss',
+  'ecommerce:price-manipulation',
+  'goal-misalignment',
+  'insurance:coverage-discrimination',
+  'insurance:network-misinformation',
+  'insurance:phi-disclosure',
   'off-topic',
   'overreliance',
+  'pharmacy:controlled-substance-compliance',
+  'pharmacy:dosage-calculation',
+  'pharmacy:drug-interaction',
   'pliny',
   'prompt-extraction',
   'rag-document-exfiltration',
@@ -283,12 +338,15 @@ export const ADDITIONAL_PLUGINS = [
   'reasoning-dos',
   'religion',
   'shell-injection',
+  'special-token-injection',
   'sql-injection',
   'ssrf',
   'system-prompt-override',
   'tool-discovery',
   'unsafebench',
   'unverifiable-claims',
+  'vlguard',
+  'wordplay',
   'xstest',
 ] as const;
 type AdditionalPlugin = (typeof ADDITIONAL_PLUGINS)[number];
@@ -304,7 +362,13 @@ export const AGENTIC_EXEMPT_PLUGINS = [
 ] as const;
 
 // Dataset plugins that don't use strategies (standalone dataset plugins)
-export const DATASET_EXEMPT_PLUGINS = ['pliny', 'unsafebench'] as const;
+export const DATASET_EXEMPT_PLUGINS = [
+  'beavertails',
+  'cyberseceval',
+  'pliny',
+  'unsafebench',
+  'vlguard',
+] as const;
 
 // Plugins that don't use strategies (standalone plugins) - combination of agentic and dataset
 export const STRATEGY_EXEMPT_PLUGINS = [
@@ -343,8 +407,53 @@ export const ALL_PLUGINS: readonly Plugin[] = [
 
 export const PLUGIN_CATEGORIES = {
   bias: BIAS_PLUGINS,
+  ecommerce: ECOMMERCE_PLUGINS,
   financial: FINANCIAL_PLUGINS,
   harmful: Object.keys(HARM_PLUGINS),
   pii: PII_PLUGINS,
   medical: MEDICAL_PLUGINS,
+  pharmacy: PHARMACY_PLUGINS,
+  insurance: INSURANCE_PLUGINS,
 } as const;
+
+// Plugins registered via createRemotePlugin() in plugins/index.ts
+// These have no local implementation and always call the remote API
+export const REMOTE_ONLY_PLUGIN_IDS = [
+  'agentic:memory-poisoning',
+  'ascii-smuggling',
+  'bfla',
+  'bola',
+  'cca',
+  'competitors',
+  'coppa',
+  'ferpa',
+  'goal-misalignment',
+  'harmful:misinformation-disinformation',
+  'harmful:specialized-advice',
+  'hijacking',
+  'indirect-prompt-injection',
+  'mcp',
+  'off-topic',
+  'rag-document-exfiltration',
+  'rag-poisoning',
+  'reasoning-dos',
+  'religion',
+  'special-token-injection',
+  'ssrf',
+  'system-prompt-override',
+  'wordplay',
+  ...MEDICAL_PLUGINS,
+  ...FINANCIAL_PLUGINS,
+  ...PHARMACY_PLUGINS,
+  ...INSURANCE_PLUGINS,
+  ...ECOMMERCE_PLUGINS,
+] as const;
+
+// Plugins that frontend should disable when remote generation is unavailable
+// Superset of REMOTE_ONLY_PLUGIN_IDS plus harm/bias plugins
+// Used by frontend UI to gray out plugins when PROMPTFOO_DISABLE_REMOTE_GENERATION is set
+export const UI_DISABLED_WHEN_REMOTE_UNAVAILABLE = [
+  ...Object.keys(UNALIGNED_PROVIDER_HARM_PLUGINS),
+  ...BIAS_PLUGINS,
+  ...REMOTE_ONLY_PLUGIN_IDS,
+] as const;

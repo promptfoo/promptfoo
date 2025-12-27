@@ -19,6 +19,7 @@ import { useTheme } from '@mui/material/styles';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
+import { DEFAULT_WEBSOCKET_TIMEOUT_MS } from './consts';
 import { getProviderDocumentationUrl, hasSpecificDocumentation } from './providerDocumentationMap';
 
 import type { ProviderOptions } from '../../types';
@@ -117,6 +118,13 @@ const allProviderOptions = [
     label: 'AWS Bedrock',
     description: 'AWS-hosted models from various providers',
     tag: 'cloud',
+  },
+  // AWS Bedrock Agents
+  {
+    value: 'bedrock-agent',
+    label: 'AWS Bedrock Agents',
+    description: 'Amazon Bedrock Agents for orchestrating AI workflows',
+    tag: 'agents',
   },
   // Azure OpenAI
   {
@@ -236,13 +244,6 @@ const allProviderOptions = [
     label: 'JFrog ML',
     description: "JFrog's LLM Model Library",
     tag: 'cloud',
-  },
-  // Lambda Labs
-  {
-    value: 'lambdalabs',
-    label: 'Lambda Labs',
-    description: 'Lambda Labs models via Inference API',
-    tag: 'specialized',
   },
   // llama.cpp
   {
@@ -501,9 +502,9 @@ export default function ProviderTypeSelector({
           config: {
             type: 'websocket',
             url: 'wss://example.com/ws',
-            messageTemplate: '{"message": "{{prompt}}"}',
+            messageTemplate: '{"message": {{prompt | dump}}}',
             transformResponse: 'response.message',
-            timeoutMs: 30000,
+            timeoutMs: DEFAULT_WEBSOCKET_TIMEOUT_MS,
           },
         },
         'websocket',
@@ -644,6 +645,20 @@ export default function ProviderTypeSelector({
         },
         'bedrock',
       );
+    } else if (value === 'bedrock-agent') {
+      setProvider(
+        {
+          id: 'bedrock-agent:YOUR_AGENT_ID',
+          config: {
+            agentId: 'YOUR_AGENT_ID',
+            agentAliasId: 'YOUR_ALIAS_ID',
+            region: 'us-east-1',
+            enableTrace: false,
+          },
+          label: currentLabel,
+        },
+        'bedrock-agent',
+      );
     } else if (value === 'ollama') {
       setProvider(
         {
@@ -707,15 +722,6 @@ export default function ProviderTypeSelector({
         },
         'helicone',
       );
-    } else if (value === 'ibm-bam') {
-      setProvider(
-        {
-          id: 'bam:chat:ibm/granite-13b-chat-v2',
-          config: {},
-          label: currentLabel,
-        },
-        'ibm-bam',
-      );
     } else if (value === 'jfrog') {
       setProvider(
         {
@@ -746,7 +752,7 @@ export default function ProviderTypeSelector({
     } else if (value === 'watsonx') {
       setProvider(
         {
-          id: 'watsonx:ibm/granite-13b-chat-v2',
+          id: 'watsonx:ibm/granite-3-3-8b-instruct',
           config: {},
           label: currentLabel,
         },

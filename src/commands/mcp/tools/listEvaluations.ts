@@ -1,8 +1,8 @@
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { getEvalSummaries } from '../../../models/eval';
 import { evaluationCache, paginate } from '../lib/performance';
 import { createToolResponse } from '../lib/utils';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
 /**
  * Tool to list and browse evaluation runs
@@ -16,7 +16,7 @@ export function registerListEvaluationsTool(server: McpServer) {
         .string()
         .optional()
         .describe(
-          'Filter evaluations by dataset ID. Example: "dataset_123" or leave empty to see all evaluations',
+          'Filter evaluations by dataset ID (SHA256 hash). Example: "0e65b35936119614815dfb3a2bd2c09863d8abbcd32d0cae1e98902b04b5df4e" or leave empty to see all evaluations',
         ),
       page: z
         .number()

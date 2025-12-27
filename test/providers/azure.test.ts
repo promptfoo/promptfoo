@@ -1,3 +1,4 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
 import { AzureChatCompletionProvider } from '../../src/providers/azure/chat';
 import { AzureCompletionProvider } from '../../src/providers/azure/completion';
@@ -6,19 +7,23 @@ import { maybeEmitAzureOpenAiWarning } from '../../src/providers/azure/warnings'
 import { HuggingfaceTextGenerationProvider } from '../../src/providers/huggingface';
 import { OpenAiCompletionProvider } from '../../src/providers/openai/completion';
 
-import type { TestCase, TestSuite } from '../../src/types';
+import type { TestCase, TestSuite } from '../../src/types/index';
 
-jest.mock('../../src/cache', () => ({
-  fetchWithCache: jest.fn(),
-}));
+vi.mock('../../src/cache', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    fetchWithCache: vi.fn(),
+  };
+});
 
 describe('Azure Provider Tests', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
+    vi.spyOn(AzureGenericProvider.prototype as any, 'getAuthHeaders').mockResolvedValue({});
   });
 
   afterEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('maybeEmitAzureOpenAiWarning', () => {
@@ -183,19 +188,20 @@ describe('Azure Provider Tests', () => {
         });
       });
 
-      it('should use provider config when no prompt config exists', () => {
+      it('should use provider config when no prompt config exists', async () => {
         const context = {
           prompt: { label: 'test prompt', raw: 'test prompt' },
           vars: {},
         };
-        expect((provider as any).getOpenAiBody('test prompt', context).body).toMatchObject({
+        const { body } = await (provider as any).getOpenAiBody('test prompt', context);
+        expect(body).toMatchObject({
           functions: [{ name: 'provider_func', parameters: {} }],
           max_tokens: 100,
           temperature: 0.5,
         });
       });
 
-      it('should merge prompt config with provider config', () => {
+      it('should merge prompt config with provider config', async () => {
         const context = {
           prompt: {
             config: {
@@ -207,38 +213,41 @@ describe('Azure Provider Tests', () => {
           },
           vars: {},
         };
-        expect((provider as any).getOpenAiBody('test prompt', context).body).toMatchObject({
+        const { body } = await (provider as any).getOpenAiBody('test prompt', context);
+        expect(body).toMatchObject({
           functions: [{ name: 'prompt_func', parameters: {} }],
           max_tokens: 100,
           temperature: 0.7,
         });
       });
 
-      it('should handle undefined prompt config', () => {
+      it('should handle undefined prompt config', async () => {
         const context = {
           prompt: { label: 'test prompt', raw: 'test prompt' },
           vars: {},
         };
-        expect((provider as any).getOpenAiBody('test prompt', context).body).toMatchObject({
+        const { body } = await (provider as any).getOpenAiBody('test prompt', context);
+        expect(body).toMatchObject({
           functions: [{ name: 'provider_func', parameters: {} }],
           max_tokens: 100,
           temperature: 0.5,
         });
       });
 
-      it('should handle empty prompt config', () => {
+      it('should handle empty prompt config', async () => {
         const context = {
           prompt: { config: {}, label: 'test prompt', raw: 'test prompt' },
           vars: {},
         };
-        expect((provider as any).getOpenAiBody('test prompt', context).body).toMatchObject({
+        const { body } = await (provider as any).getOpenAiBody('test prompt', context);
+        expect(body).toMatchObject({
           functions: [{ name: 'provider_func', parameters: {} }],
           max_tokens: 100,
           temperature: 0.5,
         });
       });
 
-      it('should handle complex nested config merging', () => {
+      it('should handle complex nested config merging', async () => {
         const context = {
           prompt: {
             config: {
@@ -250,7 +259,8 @@ describe('Azure Provider Tests', () => {
           },
           vars: {},
         };
-        expect((provider as any).getOpenAiBody('test prompt', context).body).toMatchObject({
+        const { body } = await (provider as any).getOpenAiBody('test prompt', context);
+        expect(body).toMatchObject({
           functions: [{ name: 'provider_func', parameters: {} }],
           max_tokens: 100,
           response_format: { type: 'json_object' },
@@ -259,7 +269,7 @@ describe('Azure Provider Tests', () => {
         });
       });
 
-      it('should handle json_schema response format', () => {
+      it('should handle json_schema response format', async () => {
         const context = {
           prompt: {
             config: {
@@ -284,7 +294,7 @@ describe('Azure Provider Tests', () => {
           },
           vars: {},
         };
-        const { body } = (provider as any).getOpenAiBody('test prompt', context);
+        const { body } = await (provider as any).getOpenAiBody('test prompt', context);
         expect(body.response_format).toMatchObject({
           type: 'json_schema',
           json_schema: {
@@ -302,7 +312,7 @@ describe('Azure Provider Tests', () => {
         });
       });
 
-      it('should render variables in response format', () => {
+      it('should render variables in response format', async () => {
         const context = {
           prompt: {
             config: {
@@ -327,7 +337,7 @@ describe('Azure Provider Tests', () => {
             schemaName: 'dynamic_schema',
           },
         };
-        const { body } = (provider as any).getOpenAiBody('test prompt', context);
+        const { body } = await (provider as any).getOpenAiBody('test prompt', context);
         expect(body.response_format.json_schema.name).toBe('dynamic_schema');
       });
     });
@@ -345,7 +355,7 @@ describe('Azure Provider Tests', () => {
       });
 
       afterEach(() => {
-        jest.resetAllMocks();
+        vi.resetAllMocks();
       });
 
       it('should parse JSON response with json_schema format when finish_reason is not content_filter', async () => {
@@ -387,7 +397,7 @@ describe('Azure Provider Tests', () => {
           },
         };
 
-        jest.mocked(fetchWithCache).mockResolvedValueOnce({
+        vi.mocked(fetchWithCache).mockResolvedValueOnce({
           data: mockResponse,
           cached: false,
           status: 200,
@@ -399,14 +409,14 @@ describe('Azure Provider Tests', () => {
       });
 
       it('should handle API errors', async () => {
-        jest.mocked(fetchWithCache).mockRejectedValueOnce(new Error('API Error'));
+        vi.mocked(fetchWithCache).mockRejectedValueOnce(new Error('API Error'));
 
         const result = await provider.callApi('test prompt');
         expect(result.error).toBe('API call error: API Error');
       });
 
       it('should handle invalid JSON response', async () => {
-        jest.mocked(fetchWithCache).mockResolvedValueOnce({
+        vi.mocked(fetchWithCache).mockResolvedValueOnce({
           data: 'invalid json',
           cached: false,
           status: 200,
@@ -448,7 +458,7 @@ describe('Azure Provider Tests', () => {
           },
         };
 
-        jest.mocked(fetchWithCache).mockResolvedValueOnce({
+        vi.mocked(fetchWithCache).mockResolvedValueOnce({
           data: mockResponse,
           cached: false,
           status: 200,
@@ -487,7 +497,7 @@ describe('Azure Provider Tests', () => {
           },
         };
 
-        jest.mocked(fetchWithCache).mockResolvedValueOnce({
+        vi.mocked(fetchWithCache).mockResolvedValueOnce({
           data: mockResponse,
           cached: false,
           status: 400,
@@ -508,7 +518,7 @@ describe('Azure Provider Tests', () => {
       let provider: AzureChatCompletionProvider;
 
       beforeEach(() => {
-        jest.clearAllMocks();
+        vi.clearAllMocks();
         provider = new AzureChatCompletionProvider('test-deployment', {
           config: {
             apiHost: 'test.azure.com',
@@ -518,8 +528,8 @@ describe('Azure Provider Tests', () => {
       });
 
       afterEach(() => {
-        jest.clearAllMocks();
-        jest.restoreAllMocks();
+        vi.clearAllMocks();
+        vi.restoreAllMocks();
       });
 
       it('should parse JSON response when prompt config specifies json_object format', async () => {
@@ -545,7 +555,7 @@ describe('Azure Provider Tests', () => {
           },
         };
 
-        jest.mocked(fetchWithCache).mockResolvedValueOnce({
+        vi.mocked(fetchWithCache).mockResolvedValueOnce({
           data: mockResponse,
           cached: false,
           status: 200,
@@ -592,7 +602,7 @@ describe('Azure Provider Tests', () => {
           },
         };
 
-        jest.mocked(fetchWithCache).mockResolvedValueOnce({
+        vi.mocked(fetchWithCache).mockResolvedValueOnce({
           data: mockResponse,
           cached: false,
           status: 200,
@@ -628,7 +638,7 @@ describe('Azure Provider Tests', () => {
           usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
         };
 
-        jest.mocked(fetchWithCache).mockResolvedValueOnce({
+        vi.mocked(fetchWithCache).mockResolvedValueOnce({
           data: mockResponse,
           cached: false,
           status: 200,
@@ -648,7 +658,7 @@ describe('Azure Provider Tests', () => {
         });
 
         // Verify the URL includes extensions and uses the custom API version
-        expect(jest.mocked(fetchWithCache).mock.calls[0][0]).toContain(
+        expect(vi.mocked(fetchWithCache).mock.calls[0][0]).toContain(
           '/extensions/chat/completions?api-version=2024-custom',
         );
       });
@@ -683,7 +693,138 @@ describe('Azure Provider Tests', () => {
         expect((provider as any).isReasoningModel()).toBe(true);
       });
 
-      it('should use max_completion_tokens for reasoning models', () => {
+      it('should auto-detect o1 models by deployment name', () => {
+        const provider = new AzureChatCompletionProvider('o1-preview', {
+          config: {},
+        });
+        expect((provider as any).isReasoningModel()).toBe(true);
+      });
+
+      it('should auto-detect o3 models by deployment name', () => {
+        const provider = new AzureChatCompletionProvider('o3-mini', {
+          config: {},
+        });
+        expect((provider as any).isReasoningModel()).toBe(true);
+      });
+
+      it('should auto-detect o4 models by deployment name', () => {
+        const provider = new AzureChatCompletionProvider('o4-preview', {
+          config: {},
+        });
+        expect((provider as any).isReasoningModel()).toBe(true);
+      });
+
+      it('should auto-detect gpt-5 models by deployment name', () => {
+        const provider = new AzureChatCompletionProvider('gpt-5-mini', {
+          config: {},
+        });
+        expect((provider as any).isReasoningModel()).toBe(true);
+      });
+
+      it('should not detect non-reasoning models', () => {
+        const provider = new AzureChatCompletionProvider('gpt-4o', {
+          config: {},
+        });
+        expect((provider as any).isReasoningModel()).toBe(false);
+      });
+
+      it('should auto-detect reasoning models with mixed case', () => {
+        const provider = new AzureChatCompletionProvider('GPT-5-Mini', {
+          config: {},
+        });
+        expect((provider as any).isReasoningModel()).toBe(true);
+      });
+
+      it('should auto-detect prefixed o1 deployment names', () => {
+        const provider = new AzureChatCompletionProvider('prod-o1-preview', {
+          config: {},
+        });
+        expect((provider as any).isReasoningModel()).toBe(true);
+      });
+
+      it('should auto-detect prefixed gpt-5 deployment names', () => {
+        const provider = new AzureChatCompletionProvider('staging-gpt-5-mini', {
+          config: {},
+        });
+        expect((provider as any).isReasoningModel()).toBe(true);
+      });
+
+      it('should not detect non-reasoning models with similar names', () => {
+        const provider = new AzureChatCompletionProvider('gpt-4-turbo', {
+          config: {},
+        });
+        expect((provider as any).isReasoningModel()).toBe(false);
+      });
+
+      // Third-party reasoning model detection tests
+      it('should auto-detect DeepSeek-R1 reasoning models', () => {
+        const provider = new AzureChatCompletionProvider('DeepSeek-R1', {
+          config: {},
+        });
+        expect((provider as any).isReasoningModel()).toBe(true);
+      });
+
+      it('should auto-detect deepseek-r1 with different separators', () => {
+        const providerHyphen = new AzureChatCompletionProvider('deepseek-r1-distill', {
+          config: {},
+        });
+        const providerUnderscore = new AzureChatCompletionProvider('deepseek_r1', {
+          config: {},
+        });
+        expect((providerHyphen as any).isReasoningModel()).toBe(true);
+        expect((providerUnderscore as any).isReasoningModel()).toBe(true);
+      });
+
+      it('should auto-detect Phi-4-reasoning models', () => {
+        const provider = new AzureChatCompletionProvider('phi-4-reasoning', {
+          config: {},
+        });
+        expect((provider as any).isReasoningModel()).toBe(true);
+      });
+
+      it('should auto-detect Phi-4-mini-reasoning models', () => {
+        const provider = new AzureChatCompletionProvider('Phi-4-mini-reasoning', {
+          config: {},
+        });
+        expect((provider as any).isReasoningModel()).toBe(true);
+      });
+
+      it('should auto-detect Grok reasoning models', () => {
+        const provider = new AzureChatCompletionProvider('grok-3-reasoning', {
+          config: {},
+        });
+        expect((provider as any).isReasoningModel()).toBe(true);
+      });
+
+      it('should auto-detect grok-mini-reasoning models', () => {
+        const provider = new AzureChatCompletionProvider('grok-3-mini-reasoning', {
+          config: {},
+        });
+        expect((provider as any).isReasoningModel()).toBe(true);
+      });
+
+      it('should not detect regular Grok models as reasoning', () => {
+        const provider = new AzureChatCompletionProvider('grok-3', {
+          config: {},
+        });
+        expect((provider as any).isReasoningModel()).toBe(false);
+      });
+
+      it('should not detect regular DeepSeek-V3 as reasoning', () => {
+        const provider = new AzureChatCompletionProvider('DeepSeek-V3', {
+          config: {},
+        });
+        expect((provider as any).isReasoningModel()).toBe(false);
+      });
+
+      it('should not detect regular Phi-4 as reasoning', () => {
+        const provider = new AzureChatCompletionProvider('Phi-4', {
+          config: {},
+        });
+        expect((provider as any).isReasoningModel()).toBe(false);
+      });
+
+      it('should use max_completion_tokens for reasoning models', async () => {
         const provider = new AzureChatCompletionProvider('test-deployment', {
           config: {
             isReasoningModel: true,
@@ -691,34 +832,34 @@ describe('Azure Provider Tests', () => {
             max_tokens: 1000,
           },
         });
-        const body = (provider as any).getOpenAiBody('test prompt').body;
+        const { body } = await (provider as any).getOpenAiBody('test prompt');
         expect(body).toHaveProperty('max_completion_tokens', 2000);
         expect(body).not.toHaveProperty('max_tokens');
       });
 
-      it('should use reasoning_effort for reasoning models', () => {
+      it('should use reasoning_effort for reasoning models', async () => {
         const provider = new AzureChatCompletionProvider('test-deployment', {
           config: {
             isReasoningModel: true,
             reasoning_effort: 'high',
           },
         });
-        const body = (provider as any).getOpenAiBody('test prompt').body;
+        const { body } = await (provider as any).getOpenAiBody('test prompt');
         expect(body).toHaveProperty('reasoning_effort', 'high');
       });
 
-      it('should not include temperature for reasoning models', () => {
+      it('should not include temperature for reasoning models', async () => {
         const provider = new AzureChatCompletionProvider('test-deployment', {
           config: {
             isReasoningModel: true,
             temperature: 0.7,
           },
         });
-        const body = (provider as any).getOpenAiBody('test prompt').body;
+        const { body } = await (provider as any).getOpenAiBody('test prompt');
         expect(body).not.toHaveProperty('temperature');
       });
 
-      it('should support variable rendering in reasoning_effort', () => {
+      it('should support variable rendering in reasoning_effort', async () => {
         const provider = new AzureChatCompletionProvider('test-deployment', {
           config: {
             isReasoningModel: true,
@@ -730,7 +871,7 @@ describe('Azure Provider Tests', () => {
           prompt: { label: 'test prompt', raw: 'test prompt' },
           vars: { effort: 'high' as const },
         };
-        const body = (provider as any).getOpenAiBody('test prompt', context).body;
+        const { body } = await (provider as any).getOpenAiBody('test prompt', context);
         expect(body).toHaveProperty('reasoning_effort', 'high');
       });
     });
@@ -738,7 +879,7 @@ describe('Azure Provider Tests', () => {
 
   describe('AzureCompletionProvider', () => {
     it('should handle basic completion with caching', async () => {
-      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: {
           choices: [{ text: 'hello' }],
           usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
@@ -746,7 +887,7 @@ describe('Azure Provider Tests', () => {
         cached: false,
       } as any);
 
-      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: {
           choices: [{ text: 'hello' }],
           usage: { total_tokens: 10 },

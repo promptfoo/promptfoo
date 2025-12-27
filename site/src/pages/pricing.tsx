@@ -1,4 +1,5 @@
 import React from 'react';
+
 import Link from '@docusaurus/Link';
 import CheckIcon from '@mui/icons-material/Check';
 import Layout from '@theme/Layout';
@@ -23,7 +24,7 @@ function PricingTable() {
       features: [
         'All LLM evaluation features',
         'All model providers and integrations',
-        'No usage limits',
+        'Red teaming (10k probes/month)',
         'Custom integration with your own app',
         //'Data visualizations',
         //'Dataset generation',
@@ -45,6 +46,7 @@ function PricingTable() {
       ),
       features: [
         'All Community features',
+        'Custom red teaming limits',
         'Team sharing & collaboration',
         'Continuous monitoring',
         'Centralized security/compliance dashboard',
@@ -261,7 +263,7 @@ function FeatureComparisonTable() {
   ];
 
   return (
-    <section className={styles.comparisonSection}>
+    <section id="feature-comparison" className={styles.comparisonSection}>
       <h2>Feature Comparison</h2>
       <div className={styles.tableWrapper}>
         <table className={styles.comparisonTable}>
@@ -359,6 +361,15 @@ function FAQSection() {
       answer: `The Community version includes all core features for local testing, evaluation, and vulnerability scanning.`,
     },
     {
+      question: 'What is a probe?',
+      answer: 'A probe is a single request made to your target system during red team testing.',
+    },
+    {
+      question: 'Why are there usage limits on red teaming?',
+      answer:
+        'Certain red teaming plugins require inference for dynamic test generation and grading. The open-source Community version includes up to 10k probes per month at no charge. Enterprise customers can purchase additional probes for larger scale testing.',
+    },
+    {
       question: 'Who needs the Enterprise version?',
       answer:
         'Larger teams and organizations that want to continuously monitor risk in development and production.',
@@ -404,7 +415,7 @@ function DemoCTA() {
   );
 }
 
-export default function Pricing(): JSX.Element {
+export default function Pricing(): React.ReactElement {
   return (
     <Layout
       title="Pricing"

@@ -1,20 +1,21 @@
+import { beforeEach, describe, expect, it, type MockedFunction, vi } from 'vitest';
 import { renderPrompt } from '../src/evaluatorHelpers';
 import * as langfuseIntegration from '../src/integrations/langfuse';
 
-import type { Prompt } from '../src/types';
+import type { Prompt } from '../src/types/index';
 
-jest.mock('../src/integrations/langfuse');
+vi.mock('../src/integrations/langfuse');
 
 function toPrompt(text: string): Prompt {
   return { raw: text, label: text };
 }
 
 describe('renderPrompt - Langfuse integration', () => {
-  let mockGetPrompt: jest.MockedFunction<typeof langfuseIntegration.getPrompt>;
+  let mockGetPrompt: MockedFunction<typeof langfuseIntegration.getPrompt>;
 
   beforeEach(() => {
-    jest.clearAllMocks();
-    mockGetPrompt = jest.mocked(langfuseIntegration.getPrompt);
+    vi.clearAllMocks();
+    mockGetPrompt = vi.mocked(langfuseIntegration.getPrompt);
   });
 
   describe('version-based prompts', () => {

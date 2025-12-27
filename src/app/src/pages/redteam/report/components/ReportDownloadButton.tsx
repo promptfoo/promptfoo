@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 
+import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import DownloadIcon from '@mui/icons-material/Download';
 import CircularProgress from '@mui/material/CircularProgress';
@@ -7,23 +8,24 @@ import IconButton from '@mui/material/IconButton';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import Tooltip from '@mui/material/Tooltip';
-import { convertEvalDataToCsv } from '../utils/csvExport';
-import type { ResultsFile } from '@promptfoo/types';
+import { displayNameOverrides } from '@promptfoo/redteam/constants';
+import { stringify } from 'csv-stringify/browser/esm/sync';
+import { getPluginIdFromResult, getStrategyIdFromTest } from '../components/shared';
+import type { EvaluateResult, ResultsFile } from '@promptfoo/types';
 
 interface ReportDownloadButtonProps {
   evalDescription: string;
   evalData: ResultsFile;
 }
 
-const ReportDownloadButton: React.FC<ReportDownloadButtonProps> = ({
-  evalDescription,
-  evalData,
-}) => {
+const ReportDownloadButton = ({ evalDescription, evalData }: ReportDownloadButtonProps) => {
   const [isDownloading, setIsDownloading] = useState(false);
   const [isHovering, setIsHovering] = useState(false);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
 
   const { recordEvent } = useTelemetry();
+
+  const customPoliciesById = useCustomPoliciesMap(evalData.config?.redteam?.plugins ?? []);
 
   const handleClick = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
@@ -32,6 +34,51 @@ const ReportDownloadButton: React.FC<ReportDownloadButtonProps> = ({
   const handleClose = () => {
     setAnchorEl(null);
   };
+
+  function convertEvalDataToCsv(evalData: ResultsFile): string {
+    const rows = evalData.results.results.map((result: EvaluateResult, index: number) => {
+      let pluginDisplayName = null;
+
+      const pluginId = getPluginIdFromResult(result);
+      if (pluginId) {
+        const customPolicy = customPoliciesById[pluginId];
+        if (customPolicy) {
+          pluginDisplayName = customPolicy.name;
+        } else {
+          pluginDisplayName =
+            displayNameOverrides[pluginId as keyof typeof displayNameOverrides] || pluginId;
+        }
+      }
+
+      return {
+        'Test ID': index + 1,
+        Plugin: pluginDisplayName,
+        'Plugin ID': pluginId ?? '',
+        Strategy: getStrategyIdFromTest(result.testCase),
+        Target: result.provider.label || result.provider.id || '',
+        Prompt:
+          result.vars.query?.toString() ||
+          result.vars.prompt?.toString() ||
+          result.prompt.raw ||
+          '',
+        Response: result.response?.output || '',
+        Pass:
+          result.gradingResult?.pass === true
+            ? `Pass${result.gradingResult?.score === undefined ? '' : ` (${result.gradingResult.score})`}`
+            : `Fail${result.gradingResult?.score === undefined ? '' : ` (${result.gradingResult.score})`}`,
+        Score: result.gradingResult?.score || '',
+        Reason: result.gradingResult?.reason || '',
+        Timestamp: new Date(evalData.createdAt).toISOString(),
+      };
+    });
+
+    return stringify(rows, {
+      header: true,
+      quoted: true,
+      quoted_string: true,
+      quoted_empty: true,
+    });
+  }
 
   const getFilename = (extension: string) => {
     return evalDescription

@@ -1,11 +1,11 @@
-import packageJson from '../package.json';
 import { getEnvInt, getEnvString } from './envars';
 
 export * from './providers/constants';
-
-export const VERSION = packageJson.version;
+export { VERSION } from './version';
 
 export const DEFAULT_QUERY_LIMIT = 100;
+
+export const DEFAULT_MAX_CONCURRENCY = 4;
 
 // Default API base URL used for sharing and other API operations
 export const DEFAULT_API_BASE_URL = 'https://api.promptfoo.app';
@@ -47,3 +47,8 @@ export const TERMINAL_MAX_WIDTH =
 export const CLOUD_PROVIDER_PREFIX = 'promptfoo://provider/';
 
 export const FILE_METADATA_KEY = '_promptfooFileMetadata';
+
+export const CONSENT_ENDPOINT = 'https://api.promptfoo.dev/consent';
+export const EVENTS_ENDPOINT = 'https://a.promptfoo.app';
+
+export const R_ENDPOINT = 'https://r.promptfoo.app/';

@@ -4,16 +4,31 @@ import { VERSION } from '../../constants';
 import { getUserEmail } from '../../globalConfig/accounts';
 import logger from '../../logger';
 import { REQUEST_TIMEOUT_MS } from '../../providers/shared';
+import { isMediaStorageEnabled, storeMedia } from '../../storage';
 import invariant from '../../util/invariant';
 import { getRemoteGenerationUrl, neverGenerateRemote } from '../remoteGeneration';
 
-import type { TestCase } from '../../types';
+import type { TestCase } from '../../types/index';
+
+/**
+ * Result of text-to-audio conversion
+ */
+export interface TextToAudioResult {
+  /** Base64 encoded audio data */
+  base64: string;
+  /** Storage key if stored to media storage */
+  storageKey?: string;
+}
 
 /**
  * Converts text to audio using the remote API
  * @throws Error if remote generation is disabled or if the API call fails
  */
-export async function textToAudio(text: string, language: string = 'en'): Promise<string> {
+export async function textToAudio(
+  text: string,
+  language: string = 'en',
+  options?: { evalId?: string; storeToStorage?: boolean },
+): Promise<TextToAudioResult> {
   // Check if remote generation is disabled
   if (neverGenerateRemote()) {
     throw new Error(
@@ -47,7 +62,30 @@ export async function textToAudio(text: string, language: string = 'en'): Promis
     }
 
     logger.debug(`Received audio base64 from remote API (${data.audioBase64.length} chars)`);
-    return data.audioBase64;
+    const base64Audio = data.audioBase64;
+
+    // Store to media storage if enabled
+    const useStorage = options?.storeToStorage ?? isMediaStorageEnabled();
+    if (useStorage) {
+      try {
+        const buffer = Buffer.from(base64Audio, 'base64');
+        const { ref } = await storeMedia(buffer, {
+          contentType: 'audio/mp3',
+          mediaType: 'audio',
+          originalText: text,
+          strategyId: 'audio',
+          evalId: options?.evalId,
+        });
+        logger.debug(`[Audio Strategy] Stored audio to: ${ref.key}`);
+        return { base64: base64Audio, storageKey: ref.key };
+      } catch (storageError) {
+        logger.warn(`[Audio Strategy] Failed to store audio, using inline base64`, {
+          error: storageError,
+        });
+      }
+    }
+
+    return { base64: base64Audio };
   } catch (error) {
     logger.error(`Error generating audio from text: ${error}`);
     throw new Error(
@@ -67,6 +105,7 @@ export async function addAudioToBase64(
 ): Promise<TestCase[]> {
   const audioTestCases: TestCase[] = [];
   const language = config.language || 'en';
+  const evalId = config.evalId;
 
   let progressBar: SingleBar | undefined;
   if (logger.level !== 'debug') {
@@ -90,7 +129,7 @@ export async function addAudioToBase64(
     const originalText = String(testCase.vars[injectVar]);
 
     // Convert text to audio using the remote API
-    const base64Audio = await textToAudio(originalText, language);
+    const audioResult = await textToAudio(originalText, language, { evalId });
 
     audioTestCases.push({
       ...testCase,
@@ -102,12 +141,18 @@ export async function addAudioToBase64(
       })),
       vars: {
         ...testCase.vars,
-        [injectVar]: base64Audio,
+        // Use base64 for the prompt (provider expects this)
+        [injectVar]: audioResult.base64,
       },
       metadata: {
         ...testCase.metadata,
         strategyId: 'audio',
         originalText,
+        // Store reference for later retrieval - include var name for sanitizer
+        ...(audioResult.storageKey && {
+          audioStorageKey: audioResult.storageKey,
+          audioInjectVar: injectVar,
+        }),
       },
     });
 

@@ -1,3 +1,4 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   DEFAULT_EXAMPLES,
   ShellInjectionGrader,
@@ -5,7 +6,7 @@ import {
 } from '../../../src/redteam/plugins/shellInjection';
 
 import type { RedteamObjectConfig } from '../../../src/redteam/types';
-import type { ApiProvider } from '../../../src/types';
+import type { ApiProvider } from '../../../src/types/index';
 
 describe('ShellInjectionPlugin', () => {
   let mockProvider: ApiProvider;
@@ -13,7 +14,7 @@ describe('ShellInjectionPlugin', () => {
   beforeEach(() => {
     mockProvider = {
       id: () => 'test-provider',
-      callApi: jest.fn().mockResolvedValue({
+      callApi: vi.fn().mockResolvedValue({
         output: 'Prompt: rm -rf /\nPrompt: cat /etc/passwd',
       }),
     } as ApiProvider;
@@ -143,16 +144,10 @@ describe('ShellInjectionGrader', () => {
     expect(grader.rubric).toContain('The output should not execute');
     expect(grader.rubric).toContain('Security warnings');
     expect(grader.rubric).toContain('Input validation errors');
-    expect(grader.rubric).toContain(
-      'Generic error messages that do not indicate command execution',
-    );
-    expect(grader.rubric).toContain(
-      'Example code snippets not from result of executing the command',
-    );
   });
 
   it('should contain guidance about acceptable responses', () => {
-    expect(grader.rubric).toContain('Acceptable responses include:');
+    expect(grader.rubric).toContain('NOT A VULNERABILITY (PASS)');
     expect(grader.rubric).toContain('Avoid false positives');
   });
 });

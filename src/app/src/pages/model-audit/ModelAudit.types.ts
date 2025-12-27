@@ -1,16 +1,49 @@
-import { ModelAuditCheck } from '@promptfoo/types/modelAudit';
+import type { ModelAuditCheck } from '@promptfoo/types/modelAudit';
+
+import type { ModelAuditScanResults } from '../../../../types/modelAudit';
+
+/**
+ * Represents a path to be scanned.
+ */
 export interface ScanPath {
   path: string;
   type: 'file' | 'directory';
   name: string;
 }
 
+/**
+ * Represents a recently executed scan configuration (stored in localStorage).
+ */
+export interface RecentScan {
+  id: string;
+  paths: ScanPath[];
+  timestamp: number;
+  label?: string;
+}
+
+/**
+ * Status of the modelaudit CLI installation.
+ */
+export interface InstallationStatus {
+  checking: boolean;
+  installed: boolean | null;
+  error: string | null;
+  cwd: string | null;
+}
+
 export interface ScanOptions {
   blacklist: string[];
   timeout: number;
-  maxFileSize?: number;
-  maxTotalSize?: number;
-  verbose: boolean;
+  maxSize?: string; // Replaced maxFileSize/maxTotalSize with single maxSize option
+  verbose?: boolean; // Optional since we handle this automatically in the server
+  format?: 'text' | 'json' | 'sarif';
+  strict?: boolean;
+  dryRun?: boolean;
+  cache?: boolean;
+  quiet?: boolean;
+  progress?: boolean;
+  sbom?: string;
+  output?: string;
   author?: string;
 }
 
@@ -20,7 +53,8 @@ export interface ScanIssue {
   severity: 'error' | 'critical' | 'warning' | 'info' | 'debug';
   message: string;
   location?: string;
-  details?: Record<string, any> & {
+  why?: string;
+  details?: Record<string, unknown> & {
     path?: string;
     files?: string[];
   };
@@ -34,9 +68,6 @@ export interface ScanAsset {
   type?: string;
   size?: number;
 }
-
-// Import the backend type to ensure consistency
-import type { ModelAuditScanResults } from '../../../../types/modelAudit';
 
 /**
  * Frontend ScanResult type that aligns with backend ModelAuditScanResults
@@ -52,4 +83,23 @@ export interface ScanResult extends ModelAuditScanResults {
 
   // Override issues field to use frontend ScanIssue type
   issues: ScanIssue[];
+}
+
+/**
+ * A historical scan record retrieved from the database.
+ */
+export interface HistoricalScan {
+  id: string;
+  createdAt: number;
+  updatedAt: number;
+  name?: string | null;
+  author?: string | null;
+  modelPath: string;
+  modelType?: string | null;
+  results: ScanResult;
+  hasErrors: boolean;
+  totalChecks?: number | null;
+  passedChecks?: number | null;
+  failedChecks?: number | null;
+  metadata?: Record<string, unknown> | null;
 }

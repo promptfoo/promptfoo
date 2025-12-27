@@ -1,12 +1,12 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 
+import { Button } from '@app/components/ui/button';
+import { Spinner } from '@app/components/ui/spinner';
 import { useStore } from '@app/stores/evalConfig';
 import { callApi } from '@app/utils/api';
-import Button from '@mui/material/Button';
-import CircularProgress from '@mui/material/CircularProgress';
 import { useNavigate } from 'react-router-dom';
 
-const RunTestSuiteButton: React.FC = () => {
+const RunTestSuiteButton = () => {
   const navigate = useNavigate();
   const { config } = useStore();
   const {
@@ -19,9 +19,17 @@ const RunTestSuiteButton: React.FC = () => {
     providers,
     scenarios,
     tests,
+    extensions,
   } = config;
   const [isRunning, setIsRunning] = useState(false);
   const [progressPercent, setProgressPercent] = useState(0);
+
+  const isDisabled =
+    isRunning ||
+    !prompts ||
+    prompts.length === 0 ||
+    !tests ||
+    (Array.isArray(tests) && tests.length === 0);
 
   const runTestSuite = async () => {
     setIsRunning(true);
@@ -36,6 +44,7 @@ const RunTestSuiteButton: React.FC = () => {
       providers,
       scenarios,
       tests, // Note: This is 'tests' in the API, not 'testCases'
+      extensions,
     };
 
     try {
@@ -96,12 +105,12 @@ const RunTestSuiteButton: React.FC = () => {
   };
 
   return (
-    <Button variant="contained" color="primary" onClick={runTestSuite} disabled={isRunning}>
+    <Button onClick={runTestSuite} disabled={isDisabled}>
       {isRunning ? (
-        <>
-          <CircularProgress size={24} sx={{ marginRight: 2 }} />
+        <span className="flex items-center gap-2">
+          <Spinner className="h-4 w-4" />
           {progressPercent.toFixed(0)}% complete
-        </>
+        </span>
       ) : (
         'Run Eval'
       )}

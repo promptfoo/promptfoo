@@ -4,6 +4,7 @@
 
 # Temporary and generated files
 scratch
+.worktrees/
 *.sw[op]
 *.log
 .DS_Store
@@ -11,8 +12,9 @@ node_modules
 dist
 .aider*
 .vite
-*.tsbuildinfo
-src/generated/
+**/*.tsbuildinfo
+task.md
+plan.md
 
 # pnpm-specific
 .pnpm-store/
@@ -42,3 +44,6 @@ examples/grok-4-political-bias/results-multi-judge.json
 # LLM Tool Settings
 **/.claude/settings.local.json
 .serena/
+
+# Code scan
+code-scan-action/dist/test.mp4

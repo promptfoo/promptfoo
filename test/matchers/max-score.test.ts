@@ -1,6 +1,8 @@
+import { describe, expect, it } from 'vitest';
 import { selectMaxScore } from '../../src/matchers';
-import { ResultFailureReason } from '../../src/types';
-import type { Assertion, EvaluateResult } from '../../src/types';
+import { ResultFailureReason } from '../../src/types/index';
+
+import type { Assertion, EvaluateResult } from '../../src/types/index';
 
 describe('selectMaxScore', () => {
   const createMockResult = (score: number, testIdx: number): EvaluateResult => ({
@@ -43,7 +45,6 @@ describe('selectMaxScore', () => {
           assertion: { type: 'contains', value: 'orange' } as Assertion,
         },
       ],
-      assertion: null,
     },
     namedScores: {},
     cost: 0,
@@ -266,5 +267,175 @@ describe('selectMaxScore', () => {
     // The first one should be selected due to tie-breaking
     expect(gradingResults[0].pass).toBe(true);
     expect(gradingResults[1].pass).toBe(false);
+  });
+
+  describe('Threshold Edge Cases - Truthy vs Undefined', () => {
+    it('should handle threshold=0 differently from threshold=undefined', async () => {
+      const outputs = ['Output 0', 'Output 1'];
+      const results = [
+        createMockResult(0, 0), // Max score will be 0 (average of 1 and 0)
+        createMockResult(0.5, 1), // Lower score
+      ];
+
+      // Test with threshold=undefined (no threshold)
+      const assertionWithoutThreshold: Assertion = {
+        type: 'max-score',
+        value: {},
+      };
+
+      const resultsWithoutThreshold = await selectMaxScore(
+        outputs,
+        results,
+        assertionWithoutThreshold,
+      );
+
+      // With no threshold, should select the winner (index 0 with score 0.5)
+      expect(resultsWithoutThreshold[0].pass).toBe(true);
+      expect(resultsWithoutThreshold[1].pass).toBe(false);
+
+      // Test with threshold=0
+      const assertionWithZeroThreshold: Assertion = {
+        type: 'max-score',
+        value: {
+          threshold: 0,
+        },
+      };
+
+      const resultsWithZeroThreshold = await selectMaxScore(
+        outputs,
+        results,
+        assertionWithZeroThreshold,
+      );
+
+      // With threshold=0, max score is 0.5 which is >= 0, so should still pass
+      expect(resultsWithZeroThreshold[0].pass).toBe(true);
+      expect(resultsWithZeroThreshold[1].pass).toBe(false);
+    });
+
+    it('should fail all outputs when max score is below threshold=0', async () => {
+      const outputs = ['Output 0', 'Output 1'];
+
+      // Create results where all scores are negative (so max will be negative)
+      const results = [
+        {
+          ...createMockResult(-0.5, 0),
+          gradingResult: {
+            ...createMockResult(-0.5, 0).gradingResult,
+            componentResults: [
+              {
+                pass: false,
+                score: -1, // Negative score
+                reason: 'Negative test result',
+                assertion: { type: 'contains', value: 'apple' } as Assertion,
+              },
+              {
+                pass: false,
+                score: 0,
+                reason: 'Zero test result',
+                assertion: { type: 'contains', value: 'orange' } as Assertion,
+              },
+            ],
+          },
+        },
+        {
+          ...createMockResult(-1, 1),
+          gradingResult: {
+            ...createMockResult(-1, 1).gradingResult,
+            componentResults: [
+              {
+                pass: false,
+                score: -2, // Even more negative
+                reason: 'Very negative test result',
+                assertion: { type: 'contains', value: 'apple' } as Assertion,
+              },
+              {
+                pass: false,
+                score: 0,
+                reason: 'Zero test result',
+                assertion: { type: 'contains', value: 'orange' } as Assertion,
+              },
+            ],
+          },
+        },
+      ];
+
+      const assertionWithZeroThreshold: Assertion = {
+        type: 'max-score',
+        value: {
+          threshold: 0,
+        },
+      };
+
+      const gradingResults = await selectMaxScore(outputs, results, assertionWithZeroThreshold);
+
+      // Max score will be -0.5, which is < 0, so all should fail
+      expect(gradingResults[0].pass).toBe(false);
+      expect(gradingResults[1].pass).toBe(false);
+      // The winner (index 0) should get the threshold message since it has max score but doesn't meet threshold
+      expect(gradingResults[0].reason).toContain('below threshold');
+      // The loser (index 1) gets the regular "not selected" message
+      expect(gradingResults[1].reason).toContain('Not selected');
+    });
+
+    it('should pass winner when max score equals threshold=0', async () => {
+      const outputs = ['Output 0', 'Output 1'];
+
+      // Create results where max score will be exactly 0
+      const results = [
+        {
+          ...createMockResult(0, 0),
+          gradingResult: {
+            ...createMockResult(0, 0).gradingResult,
+            componentResults: [
+              {
+                pass: false,
+                score: 0,
+                reason: 'Zero score',
+                assertion: { type: 'contains', value: 'apple' } as Assertion,
+              },
+              {
+                pass: false,
+                score: 0,
+                reason: 'Zero score',
+                assertion: { type: 'contains', value: 'orange' } as Assertion,
+              },
+            ],
+          },
+        },
+        {
+          ...createMockResult(-1, 1),
+          gradingResult: {
+            ...createMockResult(-1, 1).gradingResult,
+            componentResults: [
+              {
+                pass: false,
+                score: -2,
+                reason: 'Negative score',
+                assertion: { type: 'contains', value: 'apple' } as Assertion,
+              },
+              {
+                pass: false,
+                score: 2, // This balances to average of 0
+                reason: 'Positive score',
+                assertion: { type: 'contains', value: 'orange' } as Assertion,
+              },
+            ],
+          },
+        },
+      ];
+
+      const assertionWithZeroThreshold: Assertion = {
+        type: 'max-score',
+        value: {
+          threshold: 0,
+        },
+      };
+
+      const gradingResults = await selectMaxScore(outputs, results, assertionWithZeroThreshold);
+
+      // Max score will be 0, which equals threshold 0, so winner should pass
+      expect(gradingResults[0].pass).toBe(true); // Winner
+      expect(gradingResults[1].pass).toBe(false); // Loser
+    });
   });
 });

@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Clean up old test artifacts
+rm -f promptfoo-errors.log redteam.yaml
+
 # Run the CLI tool and capture the output
-output=$(npm run bin redteam generate -- -c test/redteam/integration/promptfooconfig.yaml)
+output=$(npm run bin redteam generate -- -c test/redteam/integration/promptfooconfig.yaml --force)
 
 echo "Done running promptfoo redteam generate"
 
@@ -16,10 +19,10 @@ else
 fi
 
 # Check for expected output patterns
-if echo "$output" | grep -q "Wrote 24 test cases to redteam.yaml"; then
-  echo "Expected line (Wrote 24 test cases to redteam.yaml) found for promptfoo redteam generate"
+if echo "$output" | grep -q "Wrote 12 test cases to redteam.yaml"; then
+  echo "Expected line (Wrote 12 test cases to redteam.yaml) found for promptfoo redteam generate"
 else
-  echo "ERROR: Expected line (Wrote 24 test cases to redteam.yaml) not found in output."
+  echo "ERROR: Expected line (Wrote 12 test cases to redteam.yaml) not found in output."
   echo "$output"
   exit 1
 fi
@@ -46,10 +49,10 @@ else
   echo "Confirmed: No promptfoo-errors.log file exists"
 fi
 
-if echo "$output" | grep -q "Errors: 0"; then
-  echo "Expected line found (Errors: 0) for promptfoo redteam eval"
+if echo "$output" | grep -q "0 errors"; then
+  echo "Expected line found (0 errors) for promptfoo redteam eval"
 else
-  echo "ERROR: Expected line (Errors: 0) not found in output."
+  echo "ERROR: Expected line (0 errors) not found in output."
   echo "$output"
   exit 1
 fi

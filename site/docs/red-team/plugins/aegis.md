@@ -34,15 +34,23 @@ The plugin:
 - Tests model responses against the comprehensive 13-category safety taxonomy
 - Evaluates both clear violations and edge cases marked as "Needs Caution"
 
-## Configuration
+## Quick Start
 
-To include the Aegis plugin in your LLM red teaming setup:
+1. Set your Hugging Face API token as an environment variable:
 
-```yaml
+```bash
+export HF_TOKEN=your_huggingface_token  # or HF_API_TOKEN
+```
+
+2. Enable the plugin in your configuration:
+
+```yaml title="promptfooconfig.yaml"
 redteam:
   plugins:
     - aegis
 ```
+
+## Configuration
 
 You can control the number of test cases using the `numTests` parameter:
 

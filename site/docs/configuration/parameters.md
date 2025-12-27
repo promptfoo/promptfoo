@@ -20,6 +20,14 @@ pagination_next: configuration/prompts
 
 Configure how promptfoo evaluates your LLM applications.
 
+:::tip Detailed Documentation
+For comprehensive guides, see the dedicated pages:
+
+- **[Prompts](/docs/configuration/prompts)** - Configure what you send to LLMs
+- **[Test Cases](/docs/configuration/test-cases)** - Set up evaluation scenarios
+- **[Output Formats](/docs/configuration/outputs)** - Save and analyze results
+  :::
+
 ## Quick Start
 
 ```yaml title="promptfooconfig.yaml"
@@ -156,7 +164,7 @@ prompts:
   - file://prompts/generate_prompt.js
 
 providers:
-  - openai:gpt-4.1-mini
+  - openai:gpt-5-mini
   - anthropic:claude-3-haiku
 
 tests:

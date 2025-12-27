@@ -14,12 +14,39 @@
  * @module RedteamIterative
  */
 import dedent from 'dedent';
-import type { Environment } from 'nunjucks';
-import { v4 as uuidv4 } from 'uuid';
-
 import { renderPrompt } from '../../evaluatorHelpers';
 import logger from '../../logger';
 import { PromptfooChatCompletionProvider } from '../../providers/promptfoo';
+import invariant from '../../util/invariant';
+import { extractFirstJsonObject } from '../../util/json';
+import { getNunjucksEngine } from '../../util/templates';
+import { sleep } from '../../util/time';
+import { TokenUsageTracker } from '../../util/tokenUsage';
+import { accumulateResponseTokenUsage, createEmptyTokenUsage } from '../../util/tokenUsageUtils';
+import { shouldGenerateRemote } from '../remoteGeneration';
+import {
+  applyRuntimeTransforms,
+  type LayerConfig,
+  type MediaData,
+  type TransformResult,
+} from '../shared/runtimeTransform';
+import { Strategies } from '../strategies';
+import { getSessionId } from '../util';
+import {
+  ATTACKER_SYSTEM_PROMPT,
+  CLOUD_ATTACKER_SYSTEM_PROMPT,
+  JUDGE_SYSTEM_PROMPT,
+} from './prompts';
+import {
+  checkPenalizedPhrases,
+  createIterationContext,
+  externalizeResponseForRedteamHistory,
+  getTargetResponse,
+  redteamProviderManager,
+  type TargetResponse,
+} from './shared';
+import type { Environment } from 'nunjucks';
+
 import type {
   ApiProvider,
   AtomicTestCase,
@@ -31,31 +58,8 @@ import type {
   Prompt,
   ProviderResponse,
   TokenUsage,
-} from '../../types';
-import invariant from '../../util/invariant';
-import { extractFirstJsonObject, safeJsonStringify } from '../../util/json';
-import { getNunjucksEngine } from '../../util/templates';
-import { sleep } from '../../util/time';
-import {
-  accumulateTokenUsage,
-  createEmptyTokenUsage,
-  accumulateResponseTokenUsage,
-  accumulateGraderTokenUsage,
-} from '../../util/tokenUsageUtils';
-import { shouldGenerateRemote } from '../remoteGeneration';
+} from '../../types/index';
 import type { BaseRedteamMetadata } from '../types';
-import {
-  ATTACKER_SYSTEM_PROMPT,
-  CLOUD_ATTACKER_SYSTEM_PROMPT,
-  JUDGE_SYSTEM_PROMPT,
-  ON_TOPIC_SYSTEM_PROMPT,
-} from './prompts';
-import {
-  checkPenalizedPhrases,
-  createIterationContext,
-  getTargetResponse,
-  redteamProviderManager,
-} from './shared';
 
 // Based on: https://arxiv.org/abs/2312.02119
 
@@ -79,9 +83,6 @@ const getIterativeTreeGoalRubric = (goal: string | undefined): string => {
 
 /** Maximum number of attempts for the red team conversation */
 const MAX_ATTEMPTS = 250;
-
-/** Target score to achieve, at which point the conversation stops */
-const TARGET_SCORE = 10;
 
 /** Maximum depth of the search tree */
 const MAX_DEPTH = 25;
@@ -116,6 +117,7 @@ function extractSessionIds(outputs: TreeSearchOutput[]): string[] {
  * @param goal - The goal or objective for the red team.
  * @param purpose - Optional purpose information for the system prompt.
  * @param excludeTargetOutputFromAgenticAttackGeneration - Whether to exclude target output from the attack generation process.
+ * @param modifiers - Optional modifiers to customize prompt generation (e.g., testGenerationInstructions).
  * @returns An object containing the rendered system prompts.
  */
 export function renderSystemPrompts(
@@ -123,16 +125,22 @@ export function renderSystemPrompts(
   goal: string,
   purpose?: string,
   excludeTargetOutputFromAgenticAttackGeneration?: boolean,
+  modifiers?: Record<string, string>,
 ): {
   redteamSystemPrompt: string;
-  onTopicSystemPrompt: string;
   judgeSystemPrompt: string;
 } {
+  const modifierSection =
+    modifiers && Object.keys(modifiers).length > 0
+      ? Object.entries(modifiers)
+          .map(([key, value]) => `${key}: ${value}`)
+          .join('\n')
+      : undefined;
+
   return {
     redteamSystemPrompt: excludeTargetOutputFromAgenticAttackGeneration
-      ? nunjucks.renderString(CLOUD_ATTACKER_SYSTEM_PROMPT, { goal, purpose })
-      : nunjucks.renderString(ATTACKER_SYSTEM_PROMPT, { goal, purpose }),
-    onTopicSystemPrompt: nunjucks.renderString(ON_TOPIC_SYSTEM_PROMPT, { goal }),
+      ? nunjucks.renderString(CLOUD_ATTACKER_SYSTEM_PROMPT, { goal, purpose, modifierSection })
+      : nunjucks.renderString(ATTACKER_SYSTEM_PROMPT, { goal, purpose, modifierSection }),
     judgeSystemPrompt: nunjucks.renderString(JUDGE_SYSTEM_PROMPT, { goal }),
   };
 }
@@ -176,11 +184,12 @@ export async function evaluateResponse(
     },
     vars: {},
   });
+  TokenUsageTracker.getInstance().trackUsage(provider.id(), judgeResp.tokenUsage);
   if (provider.delay) {
     logger.debug(`[IterativeTree] Sleeping for ${provider.delay}ms`);
     await sleep(provider.delay);
   }
-  logger.debug(`[IterativeTree] Judge response: ${JSON.stringify(judgeResp)}`);
+  logger.debug('[IterativeTree] Judge response', { response: judgeResp });
   if (judgeResp.error) {
     throw new Error(`Error from redteam (judge) provider: ${judgeResp.error}`);
   }
@@ -210,6 +219,10 @@ export async function evaluateResponse(
       explanation: parsed?.currentResponse?.explanation,
     };
   } catch (e) {
+    // Re-throw abort errors to properly cancel the operation
+    if (e instanceof Error && e.name === 'AbortError') {
+      throw e;
+    }
     logger.debug(`[IterativeTree] Error parsing judge response, using default score: ${e}`);
     return { score: 1, explanation: 'Failed to parse judge response' };
   }
@@ -237,67 +250,54 @@ export async function getNewPrompt(
     logger.debug(`[IterativeTree] Sleeping for ${redteamProvider.delay}ms`);
     await sleep(redteamProvider.delay);
   }
-  logger.debug(`[IterativeTree] Redteam response: ${JSON.stringify(redteamResp)}`);
+  logger.debug('[IterativeTree] Redteam response', { response: redteamResp });
   if (redteamResp.error) {
     throw new Error(`Error from redteam provider: ${redteamResp.error}`);
   }
-  const retObj =
-    typeof redteamResp.output === 'string'
-      ? extractFirstJsonObject<{ improvement: string; prompt: string }>(redteamResp.output)
-      : redteamResp.output;
+  TokenUsageTracker.getInstance().trackUsage(redteamProvider.id(), redteamResp.tokenUsage);
+
+  let retObj: { improvement: string; prompt: string };
+  if (typeof redteamResp.output === 'string') {
+    try {
+      // Primary path: extract first JSON object from possibly fenced/prose output
+      retObj = extractFirstJsonObject<{ improvement: string; prompt: string }>(redteamResp.output);
+    } catch (primaryErr) {
+      // Re-throw abort errors to properly cancel the operation
+      if (primaryErr instanceof Error && primaryErr.name === 'AbortError') {
+        throw primaryErr;
+      }
+      // Fallback: sometimes models return a JSON-encoded string; try one decode then extract
+      try {
+        const decoded = JSON.parse(redteamResp.output);
+        if (typeof decoded === 'string') {
+          retObj = extractFirstJsonObject<{ improvement: string; prompt: string }>(decoded);
+        } else {
+          retObj = decoded as { improvement: string; prompt: string };
+        }
+      } catch (fallbackErr) {
+        // Re-throw abort errors to properly cancel the operation
+        if (fallbackErr instanceof Error && fallbackErr.name === 'AbortError') {
+          throw fallbackErr;
+        }
+        logger.info(
+          `[IterativeTree] Failed to parse attacker response as JSON (primary and fallback). Skipping this turn. primary=${String(
+            primaryErr,
+          )} fallback=${String(fallbackErr)} outputPreview="${redteamResp.output.slice(0, 200)}"`,
+        );
+        // Gracefully skip this turn to keep the conversation going
+        return {
+          improvement: 'parse failure – skipping turn',
+          prompt: '',
+          tokenUsage: redteamResp.tokenUsage,
+        };
+      }
+    }
+  } else {
+    retObj = redteamResp.output as { improvement: string; prompt: string };
+  }
   return {
     ...retObj,
     tokenUsage: redteamResp.tokenUsage,
-  };
-}
-
-/**
- * Checks if the target prompt is on-topic.
- * @param provider - The provider used for evaluation.
- * @param onTopicSystemPrompt - The system prompt for the on-topic check.
- * @param targetPrompt - The prompt to be checked.
- * @returns A promise that resolves to a boolean indicating if the prompt is on-topic.
- */
-export async function checkIfOnTopic(
-  provider: ApiProvider,
-  onTopicSystemPrompt: string,
-  targetPrompt: string,
-): Promise<{ isOnTopic: boolean; tokenUsage?: TokenUsage }> {
-  const isOnTopicBody = JSON.stringify([
-    {
-      role: 'system',
-      content: onTopicSystemPrompt,
-    },
-    {
-      role: 'user',
-      content: targetPrompt,
-    },
-  ]);
-  const isOnTopicResp = await provider.callApi(isOnTopicBody, {
-    prompt: {
-      raw: isOnTopicBody,
-      label: 'on-topic',
-    },
-    vars: {},
-  });
-  if (provider.delay) {
-    logger.debug(`[IterativeTree] Sleeping for ${provider.delay}ms`);
-    await sleep(provider.delay);
-  }
-  logger.debug(`[IterativeTree] On-topic response: ${JSON.stringify(isOnTopicResp)}`);
-  if (isOnTopicResp.error) {
-    throw new Error(`Error from redteam (onTopic) provider: ${isOnTopicResp.error}`);
-  }
-
-  const { onTopic } =
-    typeof isOnTopicResp.output === 'string'
-      ? extractFirstJsonObject<{ onTopic: boolean }>(isOnTopicResp.output)
-      : isOnTopicResp.output;
-  logger.debug(`[IterativeTree] Parsed onTopic value: ${JSON.stringify(onTopic)}`);
-  invariant(typeof onTopic === 'boolean', 'Expected onTopic to be a boolean');
-  return {
-    isOnTopic: onTopic,
-    tokenUsage: isOnTopicResp.tokenUsage,
   };
 }
 
@@ -306,7 +306,6 @@ export async function checkIfOnTopic(
  * @param targetResponse - The response from the target provider.
  * @param goal - The current goal or objective.
  * @param score - The evaluation score for the response.
- * @param isOnTopic - Whether the prompt was on-topic.
  * @param containsPenalizedPhrase - Whether the response contains a penalized phrase.
  * @param excludeTargetOutputFromAgenticAttackGeneration - Whether to exclude target output from the attack generation process.
  * @param explanation - The explanation from the judge.
@@ -315,7 +314,6 @@ export function updateRedteamHistory(
   targetResponse: string,
   goal: string,
   score: number,
-  isOnTopic: boolean,
   containsPenalizedPhrase: boolean,
   excludeTargetOutputFromAgenticAttackGeneration: boolean,
   explanation?: string,
@@ -326,9 +324,7 @@ export function updateRedteamHistory(
       ? dedent`
           OBJECTIVE: ${goal}
 
-          SCORE: ${score} ${isOnTopic ? '' : '(your prompt was off-topic)'}${
-            containsPenalizedPhrase ? ' (contains penalized phrase)' : ''
-          }
+          SCORE: ${score}${containsPenalizedPhrase ? ' (contains penalized phrase)' : ''}
           ${explanation ? `EXPLANATION: ${explanation}` : ''}
         `
       : dedent`
@@ -336,9 +332,7 @@ export function updateRedteamHistory(
 
           OBJECTIVE: ${goal}
 
-          SCORE: ${score} ${isOnTopic ? '' : '(your prompt was off-topic)'}${
-            containsPenalizedPhrase ? ' (contains penalized phrase)' : ''
-          }
+          SCORE: ${score}${containsPenalizedPhrase ? ' (contains penalized phrase)' : ''}
           ${explanation ? `EXPLANATION: ${explanation}` : ''}
         `,
   };
@@ -370,7 +364,7 @@ export function createTreeNode(
   id?: string,
 ): TreeNode {
   return {
-    id: id || uuidv4(),
+    id: id || crypto.randomUUID(),
     prompt,
     score,
     children: [],
@@ -379,31 +373,7 @@ export function createTreeNode(
 }
 
 /**
- * Phase 1 pruning: Off-topic check
- * @param nodes - The list of nodes to prune.
- * @param redteamProvider - The OpenAI provider for the red team.
- * @param onTopicSystemPrompt - The system prompt for the on-topic check.
- * @param goal - The goal or objective for the red team.
- * @returns A promise that resolves to the pruned list of nodes.
- */
-async function pruneOffTopicNodes(
-  nodes: TreeNode[],
-  redteamProvider: ApiProvider,
-  onTopicSystemPrompt: string,
-  goal: string,
-): Promise<TreeNode[]> {
-  const remainingNodes: TreeNode[] = [];
-
-  for (const node of nodes) {
-    const { isOnTopic } = await checkIfOnTopic(redteamProvider, onTopicSystemPrompt, node.prompt);
-
-    if (isOnTopic) {
-      remainingNodes.push(node);
-    }
-  }
-
-  return remainingNodes;
-}
+ * Phase 1 pruning removed: assume on-topic due to goal alignment
 
 /**
  * Phase 2 pruning: Keep top w nodes by score
@@ -423,17 +393,9 @@ function pruneToWidth(nodes: TreeNode[], width: number): TreeNode[] {
  * @param goal - The goal or objective for the red team.
  * @returns The selected diverse nodes.
  */
-export async function selectNodes(
-  nodes: TreeNode[],
-  redteamProvider: ApiProvider,
-  onTopicSystemPrompt: string,
-  goal: string,
-): Promise<TreeNode[]> {
-  // First do Phase 1 pruning (off-topic check)
-  const onTopicNodes = await pruneOffTopicNodes(nodes, redteamProvider, onTopicSystemPrompt, goal);
-
-  // Then do Phase 2 pruning (keep top w scoring nodes)
-  return pruneToWidth(onTopicNodes, MAX_WIDTH);
+export async function selectNodes(nodes: TreeNode[]): Promise<TreeNode[]> {
+  // Keep top w scoring nodes
+  return pruneToWidth(nodes, MAX_WIDTH);
 }
 
 /**
@@ -442,9 +404,12 @@ export async function selectNodes(
 export interface TreeSearchOutput {
   id: string; // UUID
   prompt: string;
+  promptAudio?: MediaData;
+  promptImage?: MediaData;
   output: string;
+  outputAudio?: MediaData;
+  outputImage?: MediaData;
   score: number;
-  isOnTopic: boolean;
   depth: number;
   parentId?: string; // UUID
   improvement?: string;
@@ -454,13 +419,15 @@ export interface TreeSearchOutput {
   sessionId?: string; // Session ID for this specific attempt
 }
 
+type StopReason = 'MAX_ATTEMPTS' | 'MAX_DEPTH' | 'NO_IMPROVEMENT' | 'GRADER_FAILED';
+
 /**
  * Represents metadata for the iterative tree search process.
  */
 interface TreeIterativeMetadata extends BaseRedteamMetadata {
   highestScore: number;
   redteamFinalPrompt?: string;
-  stopReason: 'TARGET_SCORE' | 'MAX_ATTEMPTS' | 'MAX_DEPTH' | 'NO_IMPROVEMENT' | 'GRADER_FAILED';
+  stopReason: StopReason;
   attempts: number;
   redteamTreeHistory: TreeSearchOutput[];
   storedGraderResult?: GradingResult;
@@ -491,6 +458,7 @@ async function runRedteamConversation({
   test,
   vars,
   excludeTargetOutputFromAgenticAttackGeneration,
+  perTurnLayers = [],
 }: {
   context: CallApiContextParams;
   filters: NunjucksFilterMap | undefined;
@@ -503,6 +471,7 @@ async function runRedteamConversation({
   test?: AtomicTestCase;
   vars: Record<string, string | object>;
   excludeTargetOutputFromAgenticAttackGeneration: boolean;
+  perTurnLayers?: LayerConfig[];
 }): Promise<RedteamTreeResponse> {
   const nunjucks = getNunjucksEngine();
   const goal: string = context?.test?.metadata?.goal || (vars[injectVar] as string);
@@ -516,14 +485,15 @@ async function runRedteamConversation({
   let maxScore = 0;
 
   logger.debug(
-    `Starting red team conversation. Exploration parameters: MAX_DEPTH=${MAX_DEPTH}, BRANCHING_FACTOR=${BRANCHING_FACTOR}, MAX_ATTEMPTS=${MAX_ATTEMPTS}, TARGET_SCORE=${TARGET_SCORE} Goal: "${goal.substring(0, 50)}...".`,
+    `Starting red team conversation. Exploration parameters: MAX_DEPTH=${MAX_DEPTH}, BRANCHING_FACTOR=${BRANCHING_FACTOR}, MAX_ATTEMPTS=${MAX_ATTEMPTS} Goal: "${goal.substring(0, 50)}...".`,
   );
 
-  const { redteamSystemPrompt, onTopicSystemPrompt, judgeSystemPrompt } = renderSystemPrompts(
+  const { redteamSystemPrompt, judgeSystemPrompt } = renderSystemPrompts(
     nunjucks,
     goal,
     test?.metadata?.purpose,
     excludeTargetOutputFromAgenticAttackGeneration,
+    test?.metadata?.modifiers,
   );
 
   const redteamHistory: { role: 'user' | 'assistant' | 'system'; content: string }[] = [
@@ -546,14 +516,10 @@ async function runRedteamConversation({
 
   let bestResponse = '';
 
-  let stoppingReason:
-    | 'TARGET_SCORE'
-    | 'MAX_ATTEMPTS'
-    | 'MAX_DEPTH'
-    | 'NO_IMPROVEMENT'
-    | 'GRADER_FAILED' = 'MAX_DEPTH';
+  let stoppingReason: StopReason = 'MAX_DEPTH';
 
   const treeOutputs: TreeSearchOutput[] = [];
+  let lastResponse: TargetResponse | undefined = undefined;
 
   for (let depth = 0; depth < MAX_DEPTH; depth++) {
     logger.debug(
@@ -569,61 +535,120 @@ async function runRedteamConversation({
 
       for (let i = 0; i < BRANCHING_FACTOR; i++) {
         // Use the shared utility function to create iteration context
-        const { iterationVars, iterationContext } = await createIterationContext({
+        const iterationContext = await createIterationContext({
           originalVars,
           transformVarsConfig,
           context,
           iterationNumber: attempts + 1, // Using attempts + 1 as the iteration number
           loggerTag: '[IterativeTree]',
         });
+        const iterationVars = iterationContext?.vars || {};
 
-        const {
-          improvement,
-          prompt: newInjectVar,
-          tokenUsage: redteamTokenUsage,
-        } = await getNewPrompt(redteamProvider, [
+        const { improvement, prompt: newInjectVar } = await getNewPrompt(redteamProvider, [
           ...redteamHistory,
           { role: 'assistant', content: node.prompt },
         ]);
-
-        if (redteamTokenUsage) {
-          accumulateTokenUsage(totalTokenUsage, redteamTokenUsage);
-        }
 
         attempts++;
         logger.debug(
           `[Depth ${depth}, Attempt ${attempts}] Generated new prompt: "${newInjectVar.substring(0, 30)}...", improvement="${improvement.substring(0, 30)}...". Max score so far: ${maxScore}`,
         );
 
+        // ═══════════════════════════════════════════════════════════════════════
+        // Apply per-turn layer transforms if configured (e.g., audio, base64)
+        // This enables: layer: { steps: [jailbreak:tree, audio] }
+        // For tree iterative, we just transform the attack and send directly
+        // ═══════════════════════════════════════════════════════════════════════
+        let lastTransformResult: TransformResult | undefined;
+        let finalInjectVar = newInjectVar;
+        if (perTurnLayers.length > 0) {
+          logger.debug('[IterativeTree] Applying per-turn transforms', {
+            depth,
+            attempt: attempts,
+            layers: perTurnLayers.map((l) => (typeof l === 'string' ? l : l.id)),
+          });
+          lastTransformResult = await applyRuntimeTransforms(
+            newInjectVar,
+            injectVar,
+            perTurnLayers,
+            Strategies,
+          );
+
+          if (lastTransformResult.error) {
+            logger.warn('[IterativeTree] Transform failed, skipping attempt', {
+              depth,
+              attempt: attempts,
+              error: lastTransformResult.error,
+            });
+            continue;
+          }
+
+          finalInjectVar = lastTransformResult.prompt;
+          logger.debug('[IterativeTree] Per-turn transforms applied', {
+            depth,
+            attempt: attempts,
+            originalLength: newInjectVar.length,
+            transformedLength: finalInjectVar.length,
+            hasAudio: !!lastTransformResult.audio,
+            hasImage: !!lastTransformResult.image,
+          });
+        }
+
         const targetPrompt = await renderPrompt(
           prompt,
           {
             ...iterationVars,
-            [injectVar]: newInjectVar,
+            [injectVar]: finalInjectVar,
           },
           filters,
           targetProvider,
+          [injectVar], // Skip template rendering for injection variable to prevent double-evaluation
         );
 
-        const { isOnTopic, tokenUsage: isOnTopicTokenUsage } = await checkIfOnTopic(
-          gradingProvider,
-          onTopicSystemPrompt,
-          targetPrompt,
-        );
-        if (isOnTopicTokenUsage) {
-          accumulateTokenUsage(totalTokenUsage, isOnTopicTokenUsage);
-        }
-
-        const targetResponse = await getTargetResponse(
+        let targetResponse = await getTargetResponse(
           targetProvider,
           targetPrompt,
           iterationContext,
           options,
         );
+        targetResponse = await externalizeResponseForRedteamHistory(targetResponse, {
+          evalId: context?.evaluationId,
+          testIdx: context?.testIdx,
+          promptIdx: context?.promptIdx,
+        });
+        lastResponse = targetResponse;
+        // Do not throw on error. Record and continue so we can surface mapped output while marking error later.
         if (targetResponse.error) {
-          throw new Error(`[IterativeTree] Target returned an error: ${targetResponse.error}`);
+          logger.info(
+            `[IterativeTree] Target error at depth ${depth}, attempt ${attempts}: ${targetResponse.error}`,
+            { targetResponse },
+          );
+          // Push a node to history with the output we have, then skip scoring for this branch
+          treeOutputs.push({
+            depth,
+            graderPassed: undefined,
+            id: crypto.randomUUID(),
+            improvement,
+            output: typeof targetResponse.output === 'string' ? targetResponse.output : '',
+            outputAudio:
+              targetResponse.audio?.data && targetResponse.audio?.format
+                ? { data: targetResponse.audio.data, format: targetResponse.audio.format }
+                : undefined,
+            parentId: node.id,
+            prompt: targetPrompt,
+            promptAudio: lastTransformResult?.audio,
+            promptImage: lastTransformResult?.image,
+            score: 0,
+            wasSelected: false,
+            guardrails: targetResponse.guardrails,
+            sessionId: getSessionId(targetResponse, iterationContext),
+          });
+          continue;
         }
-        invariant(targetResponse.output, '[IterativeTree] Target did not return an output');
+        invariant(
+          Object.prototype.hasOwnProperty.call(targetResponse, 'output'),
+          '[IterativeTree] Target did not return an output property',
+        );
         accumulateResponseTokenUsage(totalTokenUsage, targetResponse);
 
         const containsPenalizedPhrase = checkPenalizedPhrases(targetResponse.output);
@@ -637,7 +662,7 @@ async function runRedteamConversation({
         );
 
         logger.debug(
-          `[Depth ${depth}, Attempt ${attempts}] Evaluation: score=${score}, on-topic=${isOnTopic}, penalized=${containsPenalizedPhrase}. Max score so far: ${maxScore}`,
+          `[Depth ${depth}, Attempt ${attempts}] Evaluation: score=${score}, penalized=${containsPenalizedPhrase}. Max score so far: ${maxScore}`,
         );
 
         // Create new node for the next level
@@ -685,7 +710,7 @@ async function runRedteamConversation({
                 }
               : { vars: iterationVars };
 
-            const { grade } = await grader.getResult(
+            const { grade, rubric } = await grader.getResult(
               newInjectVar,
               targetResponse.output,
               iterationTest,
@@ -693,52 +718,38 @@ async function runRedteamConversation({
               assertToUse && 'value' in assertToUse ? assertToUse.value : undefined,
               additionalRubric,
             );
-            storedGraderResult = grade;
+            storedGraderResult = {
+              ...grade,
+              assertion: grade.assertion
+                ? { ...grade.assertion, value: rubric }
+                : assertToUse && 'type' in assertToUse && assertToUse.type !== 'assert-set'
+                  ? { ...assertToUse, value: rubric }
+                  : undefined,
+            };
             graderPassed = grade.pass;
-
-            if (grade.tokensUsed) {
-              accumulateGraderTokenUsage(totalTokenUsage, grade);
-            }
           }
         }
 
-        if (score >= TARGET_SCORE || graderPassed === false) {
-          logger.debug(
-            `[Depth ${depth}, Attempt ${attempts}] Reached target score (${TARGET_SCORE}). Max score: ${maxScore}. Stopping.`,
-          );
-
-          // Set the appropriate stop reason
-          if (graderPassed === false) {
-            stoppingReason = 'GRADER_FAILED';
-          } else if (score >= TARGET_SCORE) {
-            stoppingReason = 'TARGET_SCORE';
-          }
-
-          // If we're exiting early due to high judge score and don't have a grader result, create one from the judge result
-          if (score >= TARGET_SCORE && !storedGraderResult) {
-            storedGraderResult = {
-              pass: false,
-              score: 0,
-              reason: explanation || 'Jailbreak goal achieved',
-            };
-          }
+        if (graderPassed === false) {
+          stoppingReason = 'GRADER_FAILED';
 
           treeOutputs.push({
             depth,
             graderPassed,
-            id: uuidv4(),
-            isOnTopic,
+            id: crypto.randomUUID(),
             output: targetResponse.output,
+            outputAudio:
+              targetResponse.audio?.data && targetResponse.audio?.format
+                ? { data: targetResponse.audio.data, format: targetResponse.audio.format }
+                : undefined,
             parentId: node.id,
             prompt: targetPrompt,
+            promptAudio: lastTransformResult?.audio,
+            promptImage: lastTransformResult?.image,
             score,
             wasSelected: false,
             guardrails: targetResponse.guardrails,
-            sessionId:
-              targetResponse.sessionId ||
-              (typeof iterationContext?.vars?.sessionId === 'string'
-                ? iterationContext.vars.sessionId
-                : undefined),
+            sessionId: getSessionId(targetResponse, iterationContext),
           });
           return {
             output: targetResponse.output,
@@ -763,20 +774,21 @@ async function runRedteamConversation({
           );
           stoppingReason = 'NO_IMPROVEMENT';
           treeOutputs.push({
-            id: uuidv4(),
+            id: crypto.randomUUID(),
             prompt: targetPrompt,
+            promptAudio: lastTransformResult?.audio,
+            promptImage: lastTransformResult?.image,
             output: bestResponse,
+            outputAudio:
+              targetResponse.audio?.data && targetResponse.audio?.format
+                ? { data: targetResponse.audio.data, format: targetResponse.audio.format }
+                : undefined,
             score,
-            isOnTopic,
             depth,
             parentId: node.id,
             wasSelected: false,
             guardrails: targetResponse.guardrails,
-            sessionId:
-              targetResponse.sessionId ||
-              (typeof iterationContext?.vars?.sessionId === 'string'
-                ? iterationContext.vars.sessionId
-                : undefined),
+            sessionId: getSessionId(targetResponse, iterationContext),
           });
           return {
             output: bestResponse,
@@ -803,19 +815,20 @@ async function runRedteamConversation({
           treeOutputs.push({
             depth,
             graderPassed,
-            id: uuidv4(),
-            isOnTopic,
+            id: crypto.randomUUID(),
             output: bestResponse,
+            outputAudio:
+              targetResponse.audio?.data && targetResponse.audio?.format
+                ? { data: targetResponse.audio.data, format: targetResponse.audio.format }
+                : undefined,
             parentId: node.id,
             prompt: targetPrompt,
+            promptAudio: lastTransformResult?.audio,
+            promptImage: lastTransformResult?.image,
             score,
             wasSelected: false,
             guardrails: targetResponse.guardrails,
-            sessionId:
-              targetResponse.sessionId ||
-              (typeof iterationContext?.vars?.sessionId === 'string'
-                ? iterationContext.vars.sessionId
-                : undefined),
+            sessionId: getSessionId(targetResponse, iterationContext),
           });
           return {
             output: bestResponse,
@@ -839,7 +852,6 @@ async function runRedteamConversation({
             targetResponse.output,
             goal,
             score,
-            isOnTopic,
             containsPenalizedPhrase,
             excludeTargetOutputFromAgenticAttackGeneration,
             explanation,
@@ -849,30 +861,26 @@ async function runRedteamConversation({
         treeOutputs.push({
           depth,
           graderPassed,
-          id: uuidv4(),
+          id: crypto.randomUUID(),
           improvement,
-          isOnTopic,
           output: targetResponse.output,
+          outputAudio:
+            targetResponse.audio?.data && targetResponse.audio?.format
+              ? { data: targetResponse.audio.data, format: targetResponse.audio.format }
+              : undefined,
           parentId: node.id,
           prompt: targetPrompt,
+          promptAudio: lastTransformResult?.audio,
+          promptImage: lastTransformResult?.image,
           score,
           wasSelected: true,
           guardrails: targetResponse.guardrails,
-          sessionId:
-            targetResponse.sessionId ||
-            (typeof iterationContext?.vars?.sessionId === 'string'
-              ? iterationContext.vars.sessionId
-              : undefined),
+          sessionId: getSessionId(targetResponse, iterationContext),
         });
       }
     }
 
-    currentBestNodes = await selectNodes(
-      nextLevelNodes,
-      redteamProvider,
-      onTopicSystemPrompt,
-      goal,
-    );
+    currentBestNodes = await selectNodes(nextLevelNodes);
     logger.debug(
       `[Depth ${depth}] Exploration complete. Selected ${currentBestNodes.length} diverse nodes for next depth. Current best score: ${bestScore}. Max score: ${maxScore}`,
     );
@@ -886,6 +894,7 @@ async function runRedteamConversation({
     },
     filters,
     targetProvider,
+    [injectVar], // Skip template rendering for injection variable to prevent double-evaluation
   );
 
   const finalTargetResponse = await getTargetResponse(
@@ -894,6 +903,7 @@ async function runRedteamConversation({
     context,
     options,
   );
+  lastResponse = finalTargetResponse;
   if (finalTargetResponse.tokenUsage) {
     accumulateResponseTokenUsage(totalTokenUsage, finalTargetResponse);
   }
@@ -904,19 +914,23 @@ async function runRedteamConversation({
 
   stoppingReason = 'MAX_DEPTH';
   treeOutputs.push({
-    id: uuidv4(),
+    id: crypto.randomUUID(),
     prompt: finalTargetPrompt,
+    // Note: promptAudio/promptImage not included here as this is a summary node after tree exploration
     output: bestResponse,
+    outputAudio:
+      finalTargetResponse.audio?.data && finalTargetResponse.audio?.format
+        ? { data: finalTargetResponse.audio.data, format: finalTargetResponse.audio.format }
+        : undefined,
     score: maxScore,
-    isOnTopic: true,
     depth: MAX_DEPTH - 1,
     parentId: bestNode.id,
     wasSelected: false,
     guardrails: finalTargetResponse.guardrails,
-    sessionId: finalTargetResponse.sessionId,
+    sessionId: getSessionId(finalTargetResponse, context),
   });
   return {
-    output: bestResponse,
+    output: bestResponse || (typeof lastResponse?.output === 'string' ? lastResponse.output : ''),
     metadata: {
       highestScore: maxScore,
       redteamFinalPrompt: bestNode.prompt,
@@ -929,6 +943,7 @@ async function runRedteamConversation({
     },
     tokenUsage: totalTokenUsage,
     guardrails: finalTargetResponse.guardrails,
+    ...(lastResponse?.error ? { error: lastResponse.error } : {}),
   };
 }
 
@@ -945,7 +960,7 @@ class RedteamIterativeTreeProvider implements ApiProvider {
    * @param initializeProviders - A export function to initialize the OpenAI providers.
    */
   constructor(readonly config: Record<string, string | object>) {
-    logger.debug(`[IterativeTree] Constructor config: ${JSON.stringify(config)}`);
+    logger.debug('[IterativeTree] Constructor config', { config });
     invariant(typeof config.injectVar === 'string', 'Expected injectVar to be set');
     this.injectVar = config.injectVar;
     this.excludeTargetOutputFromAgenticAttackGeneration = Boolean(
@@ -969,11 +984,11 @@ class RedteamIterativeTreeProvider implements ApiProvider {
    * @returns A promise that resolves to an object with the output and metadata.
    */
   async callApi(
-    prompt: string,
+    _prompt: string,
     context?: CallApiContextParams,
     options?: CallApiOptionsParams,
   ): Promise<RedteamTreeResponse> {
-    logger.debug(`[IterativeTree] callApi context: ${safeJsonStringify(context)}`);
+    logger.debug('[IterativeTree] callApi context', { context });
     invariant(context?.originalProvider, 'Expected originalProvider to be set');
     invariant(context?.vars, 'Expected vars to be set');
 

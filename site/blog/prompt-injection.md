@@ -191,7 +191,7 @@ This approach tends to be more effective than manual red teaming due to the wide
 - **Strict input constraints**: Limit the length and structure of user prompts.
 - **AI-powered detection**: Specialized APIs use machine learning to flag suspicious inputs.
 
-These are commonly referred to as [guardrails](/docs/red-team/guardrails/).
+These are commonly referred to as [guardrails](https://www.promptfoo.dev/guardrails/).
 
 Robust system design also plays a key role in mitigation:
 
@@ -227,7 +227,7 @@ Many LLM architectures weren't designed with robust security as a primary focus.
 
 - Formal verification of LLM behavior
 - Built-in adversarial training
-- Architectures separating instruction processing from content generation (OpenAI's most recent attempt at this was `gpt-4.1-mini`)
+- Architectures separating instruction processing from content generation (OpenAI's most recent attempt at this was `gpt-5-mini`)
 
 ## What's next?
 

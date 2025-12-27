@@ -1,8 +1,11 @@
-import { processPrompts } from '../../src/prompts';
+import * as fs from 'fs';
+
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { processPrompts } from '../../src/prompts/index';
 
 // Mock the python execution
-jest.mock('../../src/python/pythonUtils', () => ({
-  runPython: jest.fn((filePath: string, functionName: string, args: string[]) => {
+vi.mock('../../src/python/pythonUtils', () => ({
+  runPython: vi.fn((filePath: string, _functionName: string, _args: string[]) => {
     // Return different responses based on file path
     if (filePath.includes('marketing')) {
       return Promise.resolve(
@@ -26,9 +29,9 @@ jest.mock('../../src/python/pythonUtils', () => ({
 }));
 
 // Mock fs operations
-jest.mock('fs', () => ({
-  existsSync: jest.fn(() => true),
-  readFileSync: jest.fn((path: string) => {
+vi.mock('fs', () => ({
+  existsSync: vi.fn(() => true),
+  readFileSync: vi.fn((path: string) => {
     if (path.includes('.py')) {
       return 'def get_prompt(context):\n    return "Test prompt"';
     }
@@ -37,15 +40,16 @@ jest.mock('fs', () => ({
     }
     return '';
   }),
-  statSync: jest.fn(() => ({
+  statSync: vi.fn(() => ({
     size: 1000,
     isDirectory: () => false,
   })),
+  writeFileSync: vi.fn(),
 }));
 
 // Mock glob results
-jest.mock('glob', () => ({
-  globSync: jest.fn((pattern: string) => {
+vi.mock('glob', () => ({
+  globSync: vi.fn((pattern: string) => {
     if (pattern.includes('test/prompts/**/*.py')) {
       return [
         'test/prompts/marketing/email.py',
@@ -58,12 +62,16 @@ jest.mock('glob', () => ({
     }
     return [];
   }),
+  hasMagic: vi.fn((pattern: string | string[]) => {
+    const p = Array.isArray(pattern) ? pattern.join('') : pattern;
+    return p.includes('*') || p.includes('?') || p.includes('[') || p.includes('{');
+  }),
 }));
 
 // Mock importModule for JavaScript files
-jest.mock('../../src/esm', () => ({
-  importModule: jest.fn((filePath: string) => {
-    return Promise.resolve(function (context: any) {
+vi.mock('../../src/esm', () => ({
+  importModule: vi.fn((filePath: string) => {
+    return Promise.resolve(function (_context: any) {
       return `JS prompt from ${filePath}`;
     });
   }),
@@ -71,7 +79,7 @@ jest.mock('../../src/esm', () => ({
 
 describe('Wildcard prompt support', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('Python wildcards', () => {
@@ -124,9 +132,8 @@ describe('Wildcard prompt support', () => {
   describe('Mixed patterns', () => {
     it('should handle both wildcards and explicit paths', async () => {
       // Mock for the explicit path
-      const fs = require('fs');
-      fs.existsSync.mockImplementation((path: string) => {
-        if (path.includes('explicit.py')) {
+      vi.mocked(fs.existsSync).mockImplementation((path) => {
+        if (String(path).includes('explicit.py')) {
           return true;
         }
         return true;

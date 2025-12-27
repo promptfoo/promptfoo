@@ -3,11 +3,13 @@ import path from 'path';
 
 import { getCache, isCacheEnabled } from '../cache';
 import logger from '../logger';
-import { runPython } from '../python/pythonUtils';
-import { parsePathOrGlob } from '../util';
+import { getEnvInt } from '../python/pythonUtils';
+import { PythonWorkerPool } from '../python/workerPool';
 import { sha256 } from '../util/createHash';
 import { processConfigFileReferences } from '../util/fileReference';
+import { parsePathOrGlob } from '../util/index';
 import { safeJsonStringify } from '../util/json';
+import { providerRegistry } from './providerRegistry';
 
 import type {
   ApiProvider,
@@ -16,10 +18,13 @@ import type {
   ProviderEmbeddingResponse,
   ProviderOptions,
   ProviderResponse,
-} from '../types';
+} from '../types/index';
 
 interface PythonProviderConfig {
   pythonExecutable?: string;
+  workers?: number;
+  timeout?: number;
+  [key: string]: any; // Allow arbitrary config properties for user scripts
 }
 
 export class PythonProvider implements ApiProvider {
@@ -30,6 +35,7 @@ export class PythonProvider implements ApiProvider {
   private isInitialized: boolean = false;
   private initializationPromise: Promise<void> | null = null;
   public label: string | undefined;
+  private pool: PythonWorkerPool | null = null;
 
   constructor(
     runPath: string,
@@ -51,7 +57,7 @@ export class PythonProvider implements ApiProvider {
   }
 
   /**
-   * Process any file:// references in the configuration
+   * Process any file:// references in the configuration and initialize worker pool
    * This should be called after initialization
    * @returns A promise that resolves when all file references have been processed
    */
@@ -73,8 +79,28 @@ export class PythonProvider implements ApiProvider {
           this.config,
           this.options?.config.basePath || '',
         );
+
+        // Initialize worker pool
+        const workerCount = this.getWorkerCount();
+        const absPath = path.resolve(
+          path.join(this.options?.config.basePath || '', this.scriptPath),
+        );
+
+        this.pool = new PythonWorkerPool(
+          absPath,
+          this.functionName || 'call_api',
+          workerCount,
+          this.config.pythonExecutable,
+          this.config.timeout,
+        );
+
+        await this.pool.initialize();
+
+        // Register for cleanup
+        providerRegistry.register(this);
+
         this.isInitialized = true;
-        logger.debug(`Initialized Python provider ${this.id()}`);
+        logger.debug(`Initialized Python provider ${this.id()} with ${workerCount} workers`);
       } catch (error) {
         // Reset the initialization promise so future calls can retry
         this.initializationPromise = null;
@@ -83,6 +109,37 @@ export class PythonProvider implements ApiProvider {
     })();
 
     return this.initializationPromise;
+  }
+
+  /**
+   * Determine worker count based on config and environment
+   * Priority: config.workers > PROMPTFOO_PYTHON_WORKERS env > default 1
+   */
+  private getWorkerCount(): number {
+    let count: number;
+
+    // 1. Explicit config.workers
+    if (this.config.workers !== undefined) {
+      count = this.config.workers;
+    }
+    // 2. Environment variable
+    else {
+      const envWorkers = getEnvInt('PROMPTFOO_PYTHON_WORKERS');
+      if (envWorkers !== undefined) {
+        count = envWorkers;
+      } else {
+        // 3. Default: 1 worker (memory-efficient)
+        count = 1;
+      }
+    }
+
+    // Validate: must be at least 1
+    if (count < 1) {
+      logger.warn(`Invalid worker count ${count}, using minimum of 1`);
+      return 1;
+    }
+
+    return count;
   }
 
   /**
@@ -99,7 +156,7 @@ export class PythonProvider implements ApiProvider {
     context: CallApiContextParams | undefined,
     apiType: 'call_api' | 'call_embedding_api' | 'call_classification_api',
   ): Promise<any> {
-    if (!this.isInitialized) {
+    if (!this.isInitialized || !this.pool) {
       await this.initialize();
     }
 
@@ -142,6 +199,7 @@ export class PythonProvider implements ApiProvider {
           parsedResult.tokenUsage = {
             cached: total,
             total,
+            numRequests: parsedResult.tokenUsage.numRequests ?? 1,
           };
           logger.debug(
             `Updated token usage for cached result: ${JSON.stringify(parsedResult.tokenUsage)}`,
@@ -173,18 +231,18 @@ export class PythonProvider implements ApiProvider {
           : [prompt, optionsWithProcessedConfig];
 
       logger.debug(
-        `Running python script ${absPath} with scriptPath ${this.scriptPath} and args: ${safeJsonStringify(args)}`,
+        `Executing python script ${absPath} via worker pool with args: ${safeJsonStringify(args)}`,
       );
 
       const functionName = this.functionName || apiType;
       let result;
 
+      // Use worker pool instead of runPython
+      result = await this.pool!.execute(functionName, args);
+
+      // Validation logic based on API type
       switch (apiType) {
         case 'call_api':
-          result = await runPython(absPath, functionName, args, {
-            pythonExecutable: this.config.pythonExecutable,
-          });
-
           // Log result structure for debugging
           logger.debug(
             `Python provider result structure: ${result ? typeof result : 'undefined'}, keys: ${result ? Object.keys(result).join(',') : 'none'}`,
@@ -208,10 +266,6 @@ export class PythonProvider implements ApiProvider {
           }
           break;
         case 'call_embedding_api':
-          result = await runPython(absPath, functionName, args, {
-            pythonExecutable: this.config.pythonExecutable,
-          });
-
           if (
             !result ||
             typeof result !== 'object' ||
@@ -225,10 +279,6 @@ export class PythonProvider implements ApiProvider {
           }
           break;
         case 'call_classification_api':
-          result = await runPython(absPath, functionName, args, {
-            pythonExecutable: this.config.pythonExecutable,
-          });
-
           if (
             !result ||
             typeof result !== 'object' ||
@@ -261,10 +311,18 @@ export class PythonProvider implements ApiProvider {
         );
       }
 
-      // Set cached=false on fresh results
+      // Set cached=false on fresh results and ensure numRequests is set
       if (typeof result === 'object' && result !== null && apiType === 'call_api') {
         logger.debug(`PythonProvider explicitly setting cached=false for fresh result`);
         result.cached = false;
+
+        // Ensure tokenUsage includes numRequests for fresh results
+        if (result.tokenUsage && !result.tokenUsage.numRequests) {
+          result.tokenUsage.numRequests = 1;
+          logger.debug(
+            `Added numRequests to fresh result token usage: ${JSON.stringify(result.tokenUsage)}`,
+          );
+        }
       }
 
       return result;
@@ -290,5 +348,14 @@ export class PythonProvider implements ApiProvider {
       await this.initialize();
     }
     return this.executePythonScript(prompt, undefined, 'call_classification_api');
+  }
+
+  async shutdown(): Promise<void> {
+    if (this.pool) {
+      await this.pool.shutdown();
+      this.pool = null;
+    }
+    providerRegistry.unregister(this);
+    this.isInitialized = false;
   }
 }

@@ -1,21 +1,22 @@
-import { matchesLlmRubric, matchesAnswerRelevance, matchesGEval } from '../../src/matchers';
-import { loadApiProvider } from '../../src/providers';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { matchesAnswerRelevance, matchesGEval, matchesLlmRubric } from '../../src/matchers';
+import { loadApiProvider } from '../../src/providers/index';
 import { DefaultGradingProvider } from '../../src/providers/openai/defaults';
 
 describe('Matcher Token Tracking', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
-    jest.resetAllMocks();
+    vi.clearAllMocks();
+    vi.resetAllMocks();
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   describe('matchesLlmRubric', () => {
     it('should track numRequests in token usage', async () => {
       const mockProvider = await loadApiProvider('echo');
-      const mockCallApi = jest.fn().mockResolvedValue({
+      const mockCallApi = vi.fn().mockResolvedValue({
         output: JSON.stringify({
           pass: true,
           score: 1,
@@ -37,7 +38,7 @@ describe('Matcher Token Tracking', () => {
         'Test output',
         { provider: mockProvider },
         {},
-        null,
+        undefined,
       );
 
       expect(result.tokensUsed).toBeDefined();
@@ -50,7 +51,7 @@ describe('Matcher Token Tracking', () => {
 
     it('should default numRequests to 0 when not provided', async () => {
       const mockProvider = await loadApiProvider('echo');
-      const mockCallApi = jest.fn().mockResolvedValue({
+      const mockCallApi = vi.fn().mockResolvedValue({
         output: JSON.stringify({
           pass: true,
           score: 1,
@@ -72,7 +73,7 @@ describe('Matcher Token Tracking', () => {
         'Test output',
         { provider: mockProvider },
         {},
-        null,
+        undefined,
       );
 
       expect(result.tokensUsed).toBeDefined();
@@ -82,7 +83,7 @@ describe('Matcher Token Tracking', () => {
 
   describe('matchesGEval', () => {
     it('should accumulate numRequests across multiple API calls', async () => {
-      const mockCallApi = jest.spyOn(DefaultGradingProvider, 'callApi');
+      const mockCallApi = vi.spyOn(DefaultGradingProvider, 'callApi');
 
       // First call for steps
       mockCallApi.mockResolvedValueOnce({
@@ -130,8 +131,8 @@ describe('Matcher Token Tracking', () => {
         '../../src/providers/openai/defaults'
       );
 
-      const mockCallApi = jest.spyOn(DefaultGradingProvider, 'callApi');
-      const mockCallEmbeddingApi = jest.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi');
+      const mockCallApi = vi.spyOn(DefaultGradingProvider, 'callApi');
+      const mockCallEmbeddingApi = vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi');
 
       // Mock text generation calls (3 times for candidate questions)
       mockCallApi.mockResolvedValue({

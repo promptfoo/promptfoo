@@ -1,11 +1,13 @@
-import { act } from '@testing-library/react';
 import { callApi, fetchUserId } from '@app/utils/api';
-import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
+import { act } from '@testing-library/react';
+import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import { useUserStore } from './userStore';
 
 vi.mock('@app/utils/api', () => ({
   callApi: vi.fn(),
+  fetchUserEmail: vi.fn(() => Promise.resolve('test@example.com')),
   fetchUserId: vi.fn(),
+  updateEvalAuthor: vi.fn(() => Promise.resolve({})),
 }));
 
 const mockedCallApi = callApi as Mock;
@@ -26,7 +28,15 @@ describe('useUserStore', () => {
 
   const verifyEmailApiCall = () => {
     expect(mockedCallApi).toHaveBeenCalledTimes(1);
-    expect(mockedCallApi).toHaveBeenCalledWith('/user/email');
+    expect(mockedCallApi).toHaveBeenCalledWith('/user/email', { cache: 'no-store' });
+  };
+
+  const verifyEmailState = (expectedEmail: string | null) => {
+    expect(useUserStore.getState().email).toBe(expectedEmail);
+  };
+
+  const verifyUserIdState = (expectedUserId: string | null) => {
+    expect(useUserStore.getState().userId).toBe(expectedUserId);
   };
 
   describe('fetchEmail', () => {
@@ -43,17 +53,7 @@ describe('useUserStore', () => {
         },
       },
       {
-        name: '404 response',
-        mockSetup: () => {
-          mockedCallApi.mockResolvedValue({
-            ok: false,
-            status: 404,
-          });
-          return { expectedEmail: null };
-        },
-      },
-      {
-        name: 'status code other than 200 or 404',
+        name: 'non-200 status code (e.g. 500)',
         mockSetup: () => {
           mockedCallApi.mockResolvedValue({
             ok: false,
@@ -110,7 +110,7 @@ describe('useUserStore', () => {
 
   describe('fetchUserId', () => {
     it('should set userId when fetchUserId is called and fetchUserId resolves successfully', async () => {
-      expect(useUserStore.getState().userId).toBeNull();
+      verifyUserIdState(null);
       const testUserId = 'test-user-id';
       mockedFetchUserId.mockResolvedValue(testUserId);
 
@@ -118,7 +118,7 @@ describe('useUserStore', () => {
         await useUserStore.getState().fetchUserId();
       });
 
-      expect(useUserStore.getState().userId).toBe(testUserId);
+      verifyUserIdState(testUserId);
     });
 
     it('should not make an API call if userId is already present in the state', async () => {
@@ -130,6 +130,17 @@ describe('useUserStore', () => {
       });
 
       expect(mockedFetchUserId).not.toHaveBeenCalled();
+    });
+
+    it('should set userId to null when fetchUserId resolves with an empty string', async () => {
+      verifyUserIdState(null);
+      mockedFetchUserId.mockResolvedValue('');
+
+      await act(async () => {
+        await useUserStore.getState().fetchUserId();
+      });
+
+      verifyUserIdState(null);
     });
   });
 
@@ -149,13 +160,88 @@ describe('useUserStore', () => {
     it('should update the userId state when setUserId is called with a valid userId string', () => {
       const testUserId = 'test-user-id';
 
-      expect(useUserStore.getState().userId).toBeNull();
+      verifyUserIdState(null);
 
       act(() => {
         useUserStore.getState().setUserId(testUserId);
       });
 
-      expect(useUserStore.getState().userId).toBe(testUserId);
+      verifyUserIdState(testUserId);
+    });
+  });
+
+  describe('logout', () => {
+    it('should clear user state on successful logout', async () => {
+      // Set initial state
+      useUserStore.getState().setEmail('test@example.com');
+      useUserStore.getState().setUserId('test-user-id');
+
+      verifyEmailState('test@example.com');
+      verifyUserIdState('test-user-id');
+
+      mockedCallApi.mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockResolvedValue({ success: true }),
+      });
+
+      await act(async () => {
+        await useUserStore.getState().logout();
+      });
+
+      verifyEmailState(null);
+      verifyUserIdState(null);
+      expect(useUserStore.getState().isLoading).toBe(false);
+    });
+
+    it('should clear user state even on logout API failure', async () => {
+      // Set initial state
+      useUserStore.getState().setEmail('test@example.com');
+      useUserStore.getState().setUserId('test-user-id');
+
+      mockedCallApi.mockResolvedValue({
+        ok: false,
+        status: 500,
+      });
+
+      await act(async () => {
+        await useUserStore.getState().logout();
+      });
+
+      // Should still clear state even if API call fails
+      verifyEmailState(null);
+      verifyUserIdState(null);
+      expect(useUserStore.getState().isLoading).toBe(false);
+    });
+
+    it('should clear user state on logout network error', async () => {
+      // Set initial state
+      useUserStore.getState().setEmail('test@example.com');
+
+      mockedCallApi.mockRejectedValue(new Error('Network error'));
+
+      await act(async () => {
+        await useUserStore.getState().logout();
+      });
+
+      // Should clear state even on network error
+      verifyEmailState(null);
+      verifyUserIdState(null);
+    });
+  });
+
+  describe('clearUser', () => {
+    it('should immediately clear user state', () => {
+      // Set initial state
+      useUserStore.getState().setEmail('test@example.com');
+      useUserStore.getState().setUserId('test-user-id');
+
+      act(() => {
+        useUserStore.getState().clearUser();
+      });
+
+      verifyEmailState(null);
+      verifyUserIdState(null);
+      expect(useUserStore.getState().isLoading).toBe(false);
     });
   });
 });

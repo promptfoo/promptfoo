@@ -1,3 +1,4 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache } from '../../src/cache';
 import {
   AlibabaChatCompletionProvider,
@@ -6,14 +7,38 @@ import {
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
 
-import type { ProviderOptions } from '../../src/types';
+import type { ProviderOptions } from '../../src/types/index';
 
-jest.mock('../../src/logger');
-jest.mock('../../src/providers/openai');
+vi.mock('../../src/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+  },
+}));
+vi.mock('../../src/providers/openai/chat', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    OpenAiChatCompletionProvider: vi.fn(),
+  };
+});
+vi.mock('../../src/providers/openai/completion', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    OpenAiCompletionProvider: vi.fn(),
+  };
+});
+vi.mock('../../src/providers/openai/embedding', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    OpenAiEmbeddingProvider: vi.fn(),
+  };
+});
 
 describe('Alibaba Cloud Provider', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   afterEach(async () => {
@@ -52,15 +77,13 @@ describe('Alibaba Cloud Provider', () => {
     });
 
     it('should throw error when no model specified', () => {
-      expect(() => new AlibabaChatCompletionProvider('')).toThrow(
-        'Invalid Alibaba Cloud model: . Available models:',
-      );
+      expect(() => new AlibabaChatCompletionProvider('')).toThrow('Alibaba modelName is required');
     });
 
-    it('should throw error for unknown model', () => {
-      expect(() => new AlibabaChatCompletionProvider('unknown-model', {})).toThrow(
-        'Invalid Alibaba Cloud model: unknown-model. Available models:',
-      );
+    it('should warn but not throw for unknown model', () => {
+      // Unknown models now only warn, they don't throw errors
+      const provider = new AlibabaChatCompletionProvider('unknown-model', {});
+      expect(provider).toBeInstanceOf(OpenAiChatCompletionProvider);
     });
 
     it('should pass through environment variables', () => {
@@ -85,7 +108,7 @@ describe('Alibaba Cloud Provider', () => {
       const customBaseUrl = 'https://dashscope.aliyuncs.com/api/v1';
       const provider = new AlibabaChatCompletionProvider('qwen-max', {
         config: {
-          API_BASE_URL: customBaseUrl,
+          apiBaseUrl: customBaseUrl,
         },
       });
 
@@ -118,15 +141,13 @@ describe('Alibaba Cloud Provider', () => {
     });
 
     it('should throw error when no model specified', () => {
-      expect(() => new AlibabaEmbeddingProvider('')).toThrow(
-        'Invalid Alibaba Cloud model: . Available models:',
-      );
+      expect(() => new AlibabaEmbeddingProvider('')).toThrow('Alibaba modelName is required');
     });
 
-    it('should throw error for unknown model', () => {
-      expect(() => new AlibabaEmbeddingProvider('unknown-model', {})).toThrow(
-        'Invalid Alibaba Cloud model: unknown-model. Available models:',
-      );
+    it('should warn but not throw for unknown model', () => {
+      // Unknown models now only warn, they don't throw errors
+      const provider = new AlibabaEmbeddingProvider('unknown-model', {});
+      expect(provider).toBeInstanceOf(OpenAiEmbeddingProvider);
     });
 
     it('should pass through environment variables', () => {
@@ -151,7 +172,7 @@ describe('Alibaba Cloud Provider', () => {
       const customBaseUrl = 'https://dashscope.aliyuncs.com/api/v1';
       const provider = new AlibabaEmbeddingProvider('text-embedding-v3', {
         config: {
-          API_BASE_URL: customBaseUrl,
+          apiBaseUrl: customBaseUrl,
         },
       });
 

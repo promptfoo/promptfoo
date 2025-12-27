@@ -13,11 +13,13 @@ import { importModule } from '../esm';
 import { fetchCsvFromGoogleSheet } from '../googleSheets';
 import { fetchHuggingFaceDataset } from '../integrations/huggingfaceDatasets';
 import logger from '../logger';
-import { loadApiProvider } from '../providers';
+import { fetchCsvFromSharepoint } from '../microsoftSharepoint';
+import { loadApiProvider } from '../providers/index';
 import { runPython } from '../python/pythonUtils';
 import telemetry from '../telemetry';
 import { maybeLoadConfigFromExternalFile } from './file';
 import { isJavascriptFile } from './fileExtensions';
+import { parseXlsxFile } from './xlsx';
 
 import type {
   CsvRow,
@@ -25,7 +27,7 @@ import type {
   TestCase,
   TestCaseWithVarsFile,
   TestSuiteConfig,
-} from '../types';
+} from '../types/index';
 
 export async function readTestFiles(
   pathOrGlobs: string | string[],
@@ -38,6 +40,7 @@ export async function readTestFiles(
   const ret: Record<string, string | string[] | object> = {};
   for (const pathOrGlob of pathOrGlobs) {
     const resolvedPath = path.resolve(basePath, pathOrGlob);
+
     const paths = globSync(resolvedPath, {
       windowsPathsNoEscape: true,
     });
@@ -134,6 +137,11 @@ export async function readStandaloneTestsFile(
       feature: 'csv tests file - google sheet',
     });
     rows = await fetchCsvFromGoogleSheet(varsPath);
+  } else if (/https:\/\/[^/]+\.sharepoint\.com\//i.test(varsPath)) {
+    telemetry.record('feature_used', {
+      feature: 'csv tests file - sharepoint',
+    });
+    rows = await fetchCsvFromSharepoint(varsPath);
   } else if (fileExtension === 'csv') {
     telemetry.record('feature_used', {
       feature: 'csv tests file - local',
@@ -178,6 +186,11 @@ export async function readStandaloneTestsFile(
       }
       throw e;
     }
+  } else if (fileExtension === 'xlsx' || fileExtension === 'xls') {
+    telemetry.record('feature_used', {
+      feature: 'xlsx tests file - local',
+    });
+    rows = await parseXlsxFile(resolvedVarsPath);
   } else if (fileExtension === 'json') {
     telemetry.record('feature_used', {
       feature: 'json tests file',
@@ -242,25 +255,26 @@ export async function readTest(
   isDefaultTest: boolean = false,
 ): Promise<TestCase> {
   let testCase: TestCase;
+  let effectiveBasePath = basePath;
 
   if (typeof test === 'string') {
     const testFilePath = path.resolve(basePath, test);
-    const testBasePath = path.dirname(testFilePath);
+    effectiveBasePath = path.dirname(testFilePath);
     const rawContent = yaml.load(fs.readFileSync(testFilePath, 'utf-8'));
     const rawTestCase = maybeLoadConfigFromExternalFile(rawContent) as TestCaseWithVarsFile;
-    testCase = await loadTestWithVars(rawTestCase, testBasePath);
+    testCase = await loadTestWithVars(rawTestCase, effectiveBasePath);
   } else {
     testCase = await loadTestWithVars(test, basePath);
   }
 
   if (testCase.provider && typeof testCase.provider !== 'function') {
-    // Load provider
+    // Load provider - resolve paths relative to the test case's location
     if (typeof testCase.provider === 'string') {
-      testCase.provider = await loadApiProvider(testCase.provider);
+      testCase.provider = await loadApiProvider(testCase.provider, { basePath: effectiveBasePath });
     } else if (typeof testCase.provider.id === 'string') {
       testCase.provider = await loadApiProvider(testCase.provider.id, {
         options: testCase.provider as ProviderOptions,
-        basePath,
+        basePath: effectiveBasePath,
       });
     }
   }
@@ -310,12 +324,15 @@ export async function loadTestsFromGlob(
     loadTestsGlob = loadTestsGlob.slice('file://'.length);
   }
   const resolvedPath = path.resolve(basePath, loadTestsGlob);
+
   const testFiles: Array<string> = globSync(resolvedPath, {
     windowsPathsNoEscape: true,
   });
 
-  // Check for possible function names in the path
-  const pathWithoutFunction: string = resolvedPath.split(':')[0];
+  // Check for possible function names in the path (Windows-aware)
+  const lastColonIndex = resolvedPath.lastIndexOf(':');
+  const pathWithoutFunction: string =
+    lastColonIndex > 1 ? resolvedPath.slice(0, lastColonIndex) : resolvedPath;
   // Only add the file if it's not already included by glob and it's a special file type
   if (
     (isJavascriptFile(pathWithoutFunction) || pathWithoutFunction.endsWith('.py')) &&
@@ -340,7 +357,10 @@ export async function loadTestsFromGlob(
   }
   for (const testFile of testFiles) {
     let testCases: TestCase[] | undefined;
-    const pathWithoutFunction: string = testFile.split(':')[0];
+    // Extract path without function name (Windows-aware)
+    const lastColonIndex = testFile.lastIndexOf(':');
+    const pathWithoutFunction: string =
+      lastColonIndex > 1 ? testFile.slice(0, lastColonIndex) : testFile;
 
     if (
       testFile.endsWith('.csv') ||
@@ -362,7 +382,7 @@ export async function loadTestsFromGlob(
       testCases = maybeLoadConfigFromExternalFile(rawCases) as TestCase[];
       testCases = await _deref(testCases, testFile);
     } else if (testFile.endsWith('.json')) {
-      const rawContent = require(testFile);
+      const rawContent = JSON.parse(fs.readFileSync(testFile, 'utf8'));
       testCases = maybeLoadConfigFromExternalFile(rawContent) as TestCase[];
       testCases = await _deref(testCases, testFile);
     } else {
@@ -405,7 +425,10 @@ export async function readTests(
   if (Array.isArray(tests)) {
     for (const globOrTest of tests) {
       if (typeof globOrTest === 'string') {
-        const pathWithoutFunction: string = globOrTest.split(':')[0];
+        // Extract path without function name (Windows-aware)
+        const lastColonIndex = globOrTest.lastIndexOf(':');
+        const pathWithoutFunction: string =
+          lastColonIndex > 1 ? globOrTest.slice(0, lastColonIndex) : globOrTest;
         // For Python and JS files, or files with potential function names, use readStandaloneTestsFile
         if (
           isJavascriptFile(pathWithoutFunction) ||

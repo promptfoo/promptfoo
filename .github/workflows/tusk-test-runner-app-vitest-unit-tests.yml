@@ -24,6 +24,7 @@ jobs:
   test-action:
     name: Tusk Test Runner
     runs-on: ubuntu-latest
+    timeout-minutes: 8
 
     strategy:
       matrix:
@@ -32,15 +33,19 @@ jobs:
     steps:
       - name: Checkout
         id: checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ github.event.inputs.commitSha }} # Required for Tusk to access files for the commit being tested
 
       - name: Use Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version-file: '.nvmrc'
           cache: 'npm'
+
+      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
+      - name: Upgrade npm
+        run: npm install -g npm@latest
 
       - name: Install Dependencies
         run: |
@@ -94,7 +99,7 @@ jobs:
             npx tsc --build --noEmit --incremental
 
           # The script to run Vitest tests for individual files
-          testScript: 'npx vitest run {{file}} --reporter=basic'
+          testScript: 'npx vitest run {{file}} --reporter=default'
 
           coverageScript: |
             npx vitest run {{testFilePaths}} \

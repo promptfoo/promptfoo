@@ -1,15 +1,16 @@
 import React from 'react';
+
 import Layout from '@theme/Layout';
-import CallToAction from './components/CallToAction';
-import FAQ from './components/FAQ';
-import Features from './components/Features';
-import Hero from './components/Hero';
-import LogoSection from './components/LogoSection';
-import Stats from './components/Stats';
-import WhyPromptfoo from './components/WhyPromptfoo';
+import CallToAction from './components/_CallToAction';
+import FAQ from './components/_FAQ';
+import Features from './components/_Features';
+import Hero from './components/_Hero';
+import LogoSection from './components/_LogoSection';
+import Stats from './components/_Stats';
+import WhyPromptfoo from './components/_WhyPromptfoo';
 import styles from './styles.module.css';
 
-export default function SecurityLandingPage(): JSX.Element {
+export default function SecurityLandingPage(): React.ReactElement {
   return (
     <Layout
       title="Generative AI Security"

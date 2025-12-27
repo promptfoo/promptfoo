@@ -1,22 +1,26 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { writeOutput } from '../../src/util';
+
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { writeOutput } from '../../src/util/index';
 
 // Mock dependencies
-jest.mock('../../src/database', () => ({
-  getDb: jest.fn().mockReturnValue({
-    select: jest.fn(),
-    insert: jest.fn(),
-    transaction: jest.fn(),
+vi.mock('../../src/database', () => ({
+  getDb: vi.fn().mockReturnValue({
+    select: vi.fn(),
+    insert: vi.fn(),
+    transaction: vi.fn(),
   }),
 }));
 
-jest.mock('../../src/logger', () => ({
-  info: jest.fn(),
-  debug: jest.fn(),
-  error: jest.fn(),
-  warn: jest.fn(),
+vi.mock('../../src/logger', () => ({
+  default: {
+    info: vi.fn(),
+    debug: vi.fn(),
+    error: vi.fn(),
+    warn: vi.fn(),
+  },
 }));
 
 describe('JSONL output with proper line endings', () => {
@@ -37,7 +41,7 @@ describe('JSONL output with proper line endings', () => {
         { raw: 'Test prompt 1', label: 'prompt1' },
         { raw: 'Test prompt 2', label: 'prompt2' },
       ],
-      fetchResultsBatched: jest.fn(),
+      fetchResultsBatched: vi.fn(),
     };
   });
 
@@ -46,7 +50,7 @@ describe('JSONL output with proper line endings', () => {
       fs.unlinkSync(tempFilePath);
     }
     fs.rmSync(tempDir, { recursive: true, force: true });
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('should produce valid JSONL with proper line endings between batches', async () => {
@@ -63,7 +67,7 @@ describe('JSONL output with proper line endings', () => {
     // Create async iterator for batches
     const batchIterator = [batch1, batch2];
 
-    mockEval.fetchResultsBatched = jest.fn().mockImplementation(async function* () {
+    mockEval.fetchResultsBatched = vi.fn().mockImplementation(async function* () {
       for (const batch of batchIterator) {
         yield batch;
       }
@@ -95,7 +99,7 @@ describe('JSONL output with proper line endings', () => {
   it('should handle single batch correctly', async () => {
     const singleBatch = [{ testIdx: 0, success: true, score: 1.0, output: 'single result' }];
 
-    mockEval.fetchResultsBatched = jest.fn().mockImplementation(async function* () {
+    mockEval.fetchResultsBatched = vi.fn().mockImplementation(async function* () {
       yield singleBatch;
     });
 
@@ -110,7 +114,7 @@ describe('JSONL output with proper line endings', () => {
   });
 
   it('should handle empty batches gracefully', async () => {
-    mockEval.fetchResultsBatched = jest.fn().mockImplementation(async function* () {
+    mockEval.fetchResultsBatched = vi.fn().mockImplementation(async function* () {
       yield [];
       yield [{ testIdx: 0, success: true, score: 1.0, output: 'after empty' }];
       yield [];
@@ -130,7 +134,7 @@ describe('JSONL output with proper line endings', () => {
   it('should use OS-specific line endings', async () => {
     const batch = [{ testIdx: 0, success: true, score: 1.0, output: 'test result' }];
 
-    mockEval.fetchResultsBatched = jest.fn().mockImplementation(async function* () {
+    mockEval.fetchResultsBatched = vi.fn().mockImplementation(async function* () {
       yield batch;
     });
 
@@ -147,7 +151,7 @@ describe('JSONL output with proper line endings', () => {
       { testIdx: 1, success: true, score: 0.9, output: 'result 2' },
     ];
 
-    mockEval.fetchResultsBatched = jest.fn().mockImplementation(async function* () {
+    mockEval.fetchResultsBatched = vi.fn().mockImplementation(async function* () {
       yield multiResultBatch;
     });
 

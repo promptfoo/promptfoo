@@ -77,7 +77,7 @@ To adapt this example:
 
 Learn more about:
 
-- [Prompt Formats](https://www.promptfoo.dev/docs/configuration/parameters/#prompts)
-- [Prompt Functions](https://www.promptfoo.dev/docs/configuration/parameters/#prompt-functions)
+- [Prompt Formats](https://www.promptfoo.dev/docs/configuration/prompts/#prompts)
+- [Prompt Functions](https://www.promptfoo.dev/docs/configuration/prompts/#prompt-functions)
 - [Provider Configuration](https://www.promptfoo.dev/docs/providers/)
 - [JSON Schema Response Formats](https://www.promptfoo.dev/docs/providers/openai/#json-mode-structured-outputs)

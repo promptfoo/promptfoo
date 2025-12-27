@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 
 import logoPanda from '@app/assets/logo.svg';
+import { useApiHealth } from '@app/hooks/useApiHealth';
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import useApiConfig from '@app/stores/apiConfig';
 import LanguageIcon from '@mui/icons-material/Language';
@@ -16,7 +17,6 @@ import Typography from '@mui/material/Typography';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import { useNavigate } from 'react-router-dom';
 import DarkModeToggle from '../../components/DarkMode';
-import { useApiHealth } from '../../hooks/useApiHealth';
 
 const DEFAULT_LOCAL_API_URL = 'http://localhost:15500';
 
@@ -46,7 +46,7 @@ const createAppTheme = (darkMode: boolean) =>
 
 const StyledPaper = styled(Paper)(({ theme }) => ({
   padding: theme.spacing(3),
-  borderRadius: theme.shape.borderRadius * 2,
+  borderRadius: (theme.shape.borderRadius as number) * 2,
   border: `1px solid ${theme.palette.divider}`,
   backgroundColor: 'transparent',
 }));
@@ -95,7 +95,10 @@ export default function LauncherPage() {
   const prefersDarkMode = useMediaQuery('(prefers-color-scheme: dark)');
   const [darkMode, setDarkMode] = useState<boolean | null>(null);
   const isLargeScreen = useMediaQuery('(min-width:1200px)');
-  const { status: healthStatus, checkHealth } = useApiHealth();
+  const {
+    data: { status: healthStatus },
+    refetch: checkHealth,
+  } = useApiHealth();
   const { apiBaseUrl, setApiBaseUrl, enablePersistApiBaseUrl } = useApiConfig();
   usePageMeta({ title: 'Launcher', description: 'Connect to your API server' });
 
@@ -135,10 +138,21 @@ export default function LauncherPage() {
   }, [darkMode]);
 
   useEffect(() => {
-    const interval = setInterval(() => {
+    // Simple delay to allow server startup, then start health checks
+    let interval: NodeJS.Timeout;
+    const timeout = setTimeout(() => {
       checkHealth();
-    }, 2000);
-    return () => clearInterval(interval);
+      interval = setInterval(() => {
+        checkHealth();
+      }, 2000);
+    }, 3000);
+
+    return () => {
+      clearTimeout(timeout);
+      if (interval) {
+        clearInterval(interval);
+      }
+    };
   }, [checkHealth]);
 
   useEffect(() => {

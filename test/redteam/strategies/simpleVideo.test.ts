@@ -3,8 +3,10 @@
  *
  * Tests core functionality with proper mocks to avoid depending on fs, ffmpeg, etc.
  */
+
 import fs from 'fs';
 
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../../src/logger';
 import {
   addVideoToBase64,
@@ -13,48 +15,66 @@ import {
   writeVideoFile,
 } from '../../../src/redteam/strategies/simpleVideo';
 
-import type { TestCase } from '../../../src/types';
+import type { TestCase } from '../../../src/types/index';
 
 // Mock for dummy video data
 const DUMMY_VIDEO_BASE64 = 'AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAAIZnJlZQAAAu1tZGF0';
 
 // Mock video generator function
-const mockVideoGenerator = jest.fn().mockImplementation(() => {
+const mockVideoGenerator = vi.fn().mockImplementation(function () {
   return Promise.resolve(DUMMY_VIDEO_BASE64);
 });
 
 // Mock required dependencies
-jest.mock('../../../src/logger', () => ({
-  level: 'info',
-  debug: jest.fn(),
-  info: jest.fn(),
-  warn: jest.fn(),
-  error: jest.fn(),
+vi.mock('../../../src/logger', () => ({
+  default: {
+    level: 'info',
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
 }));
 
-jest.mock('../../../src/cliState', () => ({
-  webUI: false,
+vi.mock('../../../src/cliState', () => ({
+  default: {
+    webUI: false,
+  },
 }));
 
-jest.mock('fs', () => ({
-  writeFileSync: jest.fn(),
-  existsSync: jest.fn(),
-  unlinkSync: jest.fn(),
-}));
+const mockWriteFileSync = vi.hoisted(() => vi.fn());
+vi.mock('fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('fs')>();
+  return {
+    ...actual,
+    default: {
+      ...actual,
+      writeFileSync: mockWriteFileSync,
+    },
+    writeFileSync: mockWriteFileSync,
+  };
+});
 
 // Mock for progress bar
-jest.mock('cli-progress', () => ({
-  SingleBar: jest.fn().mockImplementation(() => ({
-    start: jest.fn(),
-    increment: jest.fn(),
-    stop: jest.fn(),
-  })),
-  Presets: { shades_classic: {} },
-}));
+vi.mock('cli-progress', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+
+    SingleBar: vi.fn().mockImplementation(function () {
+      return {
+        start: vi.fn(),
+        increment: vi.fn(),
+        stop: vi.fn(),
+      };
+    }),
+
+    Presets: { shades_classic: {} },
+  };
+});
 
 describe('simpleVideo strategy', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     mockVideoGenerator.mockClear();
   });
 
@@ -112,7 +132,7 @@ describe('simpleVideo strategy', () => {
 
     it('throws an error if writing fails', async () => {
       const mockError = new Error('Write failed');
-      jest.mocked(fs.writeFileSync).mockImplementationOnce(() => {
+      vi.mocked(fs.writeFileSync).mockImplementationOnce(function () {
         throw mockError;
       });
 
@@ -213,7 +233,7 @@ describe('simpleVideo strategy', () => {
       };
 
       // Mock generator that throws an error
-      const errorGenerator = jest.fn().mockImplementation(() => {
+      const errorGenerator = vi.fn().mockImplementation(function () {
         throw new Error('Test error');
       });
 

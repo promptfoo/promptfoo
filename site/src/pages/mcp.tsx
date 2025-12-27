@@ -1,4 +1,5 @@
 import React from 'react';
+
 import Head from '@docusaurus/Head';
 import Link from '@docusaurus/Link';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
@@ -155,7 +156,7 @@ function CallToActionSection() {
   );
 }
 
-export default function Mcp(): JSX.Element {
+export default function Mcp(): React.ReactElement {
   return (
     <Layout
       title="MCP Proxy"

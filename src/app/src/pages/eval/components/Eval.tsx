@@ -8,13 +8,16 @@ import useApiConfig from '@app/stores/apiConfig';
 import { callApi } from '@app/utils/api';
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
+import { type ResultLightweightWithLabel, type ResultsFile } from '@promptfoo/types';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { io as SocketIOClient } from 'socket.io-client';
 import EmptyState from './EmptyState';
 import ResultsView from './ResultsView';
-import { useResultsViewSettingsStore, useTableStore } from './store';
-import type { ResultLightweightWithLabel, ResultsFile } from '@promptfoo/types';
+import { ResultsFilter, useResultsViewSettingsStore, useTableStore } from './store';
 import './Eval.css';
+
+import { useToast } from '@app/hooks/useToast';
+import { useFilterMode } from './FilterModeProvider';
 
 interface EvalOptions {
   /**
@@ -26,10 +29,12 @@ interface EvalOptions {
 export default function Eval({ fetchId }: EvalOptions) {
   const navigate = useNavigate();
   const { apiBaseUrl } = useApiConfig();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { showToast } = useToast();
 
   const {
     table,
+    setTable,
     setTableFromResultsFile,
     config,
     setConfig,
@@ -41,6 +46,8 @@ export default function Eval({ fetchId }: EvalOptions) {
     addFilter,
     setIsStreaming,
   } = useTableStore();
+
+  const { filterMode } = useFilterMode();
 
   const { setInComparisonMode, setComparisonEvalIds } = useResultsViewSettingsStore();
 
@@ -85,6 +92,7 @@ export default function Eval({ fetchId }: EvalOptions) {
         const data = await fetchEvalData(id, {
           skipSettingEvalId: true,
           skipLoadingState: isBackgroundUpdate,
+          filterMode,
           filters: Object.values(filters.values).filter((filter) =>
             filter.type === 'metadata'
               ? Boolean(filter.value && filter.field)
@@ -103,7 +111,7 @@ export default function Eval({ fetchId }: EvalOptions) {
         return false;
       }
     },
-    [fetchEvalData, setFailed, setEvalId],
+    [fetchEvalData, setFailed, setEvalId, filterMode],
   );
 
   /**
@@ -123,37 +131,58 @@ export default function Eval({ fetchId }: EvalOptions) {
   // Effects
   // ================================
 
+  /**
+   * Listens for changes to the filters state. Updates the URL query string with the new filters.
+   */
   useEffect(() => {
-    // Reset filters when navigating to a different eval; necessary because Zustand
-    // is a global store.
+    const unsubscribe = useTableStore.subscribe(
+      (state) => state.filters,
+      (_filters) => {
+        // Read the search params from the URL. Does not use the hook to avoid re-running when the search params change.
+        const _searchParams = new URLSearchParams(window.location.search);
+
+        // Do search params need to be removed?
+        if (_filters.appliedCount === 0) {
+          // clear the search params
+          setSearchParams((prev) => {
+            prev.delete('filter');
+            return prev;
+          });
+        } else if (_filters.appliedCount > 0) {
+          // Serialize the filters to a JSON string
+          const serializedFilters = JSON.stringify(Object.values(_filters.values));
+          // Check whether the serialized filters are already in the search params
+          if (_searchParams.get('filter') !== serializedFilters) {
+            // Add each filter to the search params
+            setSearchParams((prev) => {
+              prev.set('filter', serializedFilters);
+              return prev;
+            });
+          }
+        }
+      },
+    );
+    return () => unsubscribe();
+  }, [setSearchParams]);
+
+  useEffect(() => {
+    const _searchParams = new URLSearchParams(window.location.search);
+
     resetFilters();
 
-    // Check for a `plugin` param in the URL; we support filtering on plugins via the URL which
-    // enables the "View Logs" functionality in Vulnerability reports.
-    const pluginParams = searchParams.getAll('plugin');
+    // Read search params
+    const filtersParam = _searchParams.get('filter');
 
-    // Check for >=1 metric params in the URL.
-    const metricParams = searchParams.getAll('metric');
-
-    if (pluginParams.length > 0) {
-      pluginParams.forEach((pluginParam) => {
-        addFilter({
-          type: 'plugin',
-          operator: 'equals',
-          value: pluginParam,
-          logicOperator: 'or',
-        });
-      });
-    }
-
-    if (metricParams.length > 0) {
-      metricParams.forEach((metricParam) => {
-        addFilter({
-          type: 'metric',
-          operator: 'equals',
-          value: metricParam,
-          logicOperator: 'or',
-        });
+    if (filtersParam) {
+      let filters: ResultsFilter[] = [];
+      try {
+        filters = JSON.parse(filtersParam) as ResultsFilter[];
+      } catch {
+        showToast('URL contains invalid JSON-encoded filters', 'error');
+        return;
+      }
+      filters.forEach((filter: ResultsFilter) => {
+        addFilter(filter);
       });
     }
 
@@ -162,31 +191,64 @@ export default function Eval({ fetchId }: EvalOptions) {
       const run = async () => {
         const success = await loadEvalById(fetchId);
         if (success) {
-          setLoaded(true);
           setDefaultEvalId(fetchId);
           // Load other recent eval runs
           fetchRecentFileEvals();
+          // Note: setLoaded(true) is handled by the useEffect that watches for table updates
         }
       };
       run();
     } else if (IS_RUNNING_LOCALLY) {
       console.log('Eval init: Using local server websocket');
 
-      const socket = SocketIOClient(apiBaseUrl || '');
+      // Determine socket path based on deployment configuration:
+      // - If apiBaseUrl points to a different origin, use default /socket.io (remote server manages its own)
+      // - If apiBaseUrl has a path component on same origin, derive socket path from it
+      // - If no apiBaseUrl, use VITE_PUBLIC_BASENAME for same-origin reverse proxy deployments
+      let socketPath = '/socket.io';
+      let socketUrl = '';
+
+      if (apiBaseUrl) {
+        try {
+          const url = new URL(apiBaseUrl, window.location.origin);
+          const isSameOrigin = url.origin === window.location.origin;
+          if (isSameOrigin && url.pathname !== '/') {
+            // Same origin with path prefix - derive socket path from API base
+            socketPath = `${url.pathname.replace(/\/$/, '')}/socket.io`;
+          }
+          // For different origins, use default /socket.io and connect to that host
+          socketUrl = isSameOrigin ? '' : apiBaseUrl;
+        } catch {
+          // Invalid URL, fall back to defaults
+        }
+      } else {
+        // No apiBaseUrl - use build-time base path for same-origin deployment
+        const basePath = import.meta.env.VITE_PUBLIC_BASENAME || '';
+        if (basePath) {
+          socketPath = `${basePath}/socket.io`;
+        }
+      }
+
+      const socket = SocketIOClient(socketUrl, { path: socketPath });
 
       /**
        * Populates the table store with the most recent eval result.
        */
-      const handleResultsFile = async (data: ResultsFile, isInit: boolean = false) => {
+      const handleResultsFile = async (data: ResultsFile | null) => {
+        // If no data provided (e.g., no evals exist yet), clear stale state and mark as loaded
+        if (!data) {
+          console.log('No eval data available');
+          setTable(null);
+          setConfig(null);
+          setEvalId('');
+          setAuthor(null);
+          setLoaded(true);
+          return;
+        }
+
         // Set streaming state when we start receiving data
         setIsStreaming(true);
 
-        // Populate values which do not change while the eval results are being streamed.
-        if (isInit) {
-          setTableFromResultsFile(data);
-          setConfig(data.config);
-          setAuthor(data.author ?? null);
-        }
         const newRecentEvals = await fetchRecentFileEvals();
         if (newRecentEvals && newRecentEvals.length > 0) {
           const newId = newRecentEvals[0].evalId;
@@ -202,7 +264,7 @@ export default function Eval({ fetchId }: EvalOptions) {
       socket
         .on('init', async (data) => {
           console.log('Initialized socket connection', data);
-          await handleResultsFile(data, true);
+          await handleResultsFile(data);
         })
         /**
          * The user has run `promptfoo eval` and a new latest eval
@@ -210,7 +272,7 @@ export default function Eval({ fetchId }: EvalOptions) {
          */
         .on('update', async (data) => {
           console.log('Received data update', data);
-          await handleResultsFile(data, false);
+          await handleResultsFile(data);
         });
 
       return () => {
@@ -226,15 +288,16 @@ export default function Eval({ fetchId }: EvalOptions) {
           const defaultEvalId = evals[0].evalId;
           const success = await loadEvalById(defaultEvalId);
           if (success) {
-            setLoaded(true);
             setDefaultEvalId(defaultEvalId);
+            // Note: setLoaded(true) is handled by the useEffect that watches for table updates
           }
         } else {
-          return (
-            <div className="notice">
-              No evals yet. Share some evals to this server and they will appear here.
-            </div>
-          );
+          // No evals exist - clear stale state and show empty state
+          setTable(null);
+          setConfig(null);
+          setEvalId('');
+          setAuthor(null);
+          setLoaded(true);
         }
       };
       run();
@@ -283,7 +346,7 @@ export default function Eval({ fetchId }: EvalOptions) {
     return <div className="notice">404 Eval not found</div>;
   }
 
-  if (!loaded || !table) {
+  if (!loaded) {
     return (
       <div className="notice">
         <div>
@@ -294,7 +357,7 @@ export default function Eval({ fetchId }: EvalOptions) {
     );
   }
 
-  if (loaded && !table) {
+  if (!table) {
     return <EmptyState />;
   }
 

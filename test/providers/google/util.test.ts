@@ -1,7 +1,17 @@
 import * as fs from 'fs';
 
-import { GoogleAuth } from 'google-auth-library';
 import * as nunjucks from 'nunjucks';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('../../../src/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+}));
+
 import logger from '../../../src/logger';
 import {
   geminiFormatAndSystemInstructions,
@@ -14,35 +24,66 @@ import {
 
 import type { Tool } from '../../../src/providers/google/types';
 
-jest.mock('google-auth-library');
-
-jest.mock('glob', () => ({
-  globSync: jest.fn().mockReturnValue([]),
+const googleAuthMock = vi.hoisted(() => ({
+  GoogleAuth: vi.fn(function () {
+    return {
+      getClient: vi.fn(),
+      fromJSON: vi.fn(),
+      getProjectId: vi.fn(),
+    };
+  }),
 }));
 
-jest.mock('fs', () => ({
-  existsSync: jest.fn().mockImplementation((path) => {
-    if (path === 'file://system_instruction.json') {
-      return true;
-    }
-    return false;
-  }),
-  readFileSync: jest.fn().mockImplementation((path) => {
-    if (path === 'file://system_instruction.json') {
-      return 'system instruction';
-    }
-    throw new Error(`Mock file not found: ${path}`);
-  }),
-  writeFileSync: jest.fn(),
-  statSync: jest.fn(),
-}));
+vi.mock('google-auth-library', () => googleAuthMock);
+
+vi.mock('glob', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    globSync: vi.fn().mockReturnValue([]),
+
+    hasMagic: (path: string) => {
+      // Match the real hasMagic behavior: only detect patterns in forward-slash paths
+      // This mimics glob's actual behavior where backslash paths return false
+      return /[*?[\]{}]/.test(path) && !path.includes('\\');
+    },
+  };
+});
+
+vi.mock('fs', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+
+    existsSync: vi.fn().mockImplementation(function (path) {
+      if (path === 'file://system_instruction.json') {
+        return true;
+      }
+      return false;
+    }),
+
+    readFileSync: vi.fn().mockImplementation(function (path) {
+      if (path === 'file://system_instruction.json') {
+        return 'system instruction';
+      }
+      throw new Error(`Mock file not found: ${path}`);
+    }),
+
+    writeFileSync: vi.fn(),
+    statSync: vi.fn(),
+    mkdirSync: vi.fn(),
+  };
+});
 
 describe('util', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
-    jest.resetAllMocks();
-    // Reset the GoogleAuth mock to default behavior
-    jest.mocked(GoogleAuth).mockClear();
+    vi.clearAllMocks();
+    vi.resetAllMocks();
+    googleAuthMock.GoogleAuth.mockImplementation(function () {
+      return {
+        getClient: vi.fn(),
+        fromJSON: vi.fn(),
+        getProjectId: vi.fn(),
+      };
+    });
   });
 
   describe('parseStringObject', () => {
@@ -386,17 +427,74 @@ describe('util', () => {
       });
     });
 
-    it('should handle unknown format', () => {
+    it('should handle unknown format and return empty array for non-array input', () => {
       const input = { unknown: 'format' };
       const result = maybeCoerceToGeminiFormat(input);
       expect(result).toEqual({
-        contents: input,
+        contents: [],
         coerced: false,
         systemInstruction: undefined,
       });
       expect(logger.warn).toHaveBeenCalledWith(
         `Unknown format for Gemini: ${JSON.stringify(input)}`,
       );
+    });
+
+    it('should handle null input and return empty array', () => {
+      const input = null;
+      const result = maybeCoerceToGeminiFormat(input);
+      expect(result).toEqual({
+        contents: [],
+        coerced: false,
+        systemInstruction: undefined,
+      });
+      expect(logger.warn).toHaveBeenCalledWith(`Unknown format for Gemini: null`);
+    });
+
+    it('should handle undefined input and return empty array', () => {
+      const input = undefined;
+      const result = maybeCoerceToGeminiFormat(input);
+      expect(result).toEqual({
+        contents: [],
+        coerced: false,
+        systemInstruction: undefined,
+      });
+      expect(logger.warn).toHaveBeenCalledWith(`Unknown format for Gemini: undefined`);
+    });
+
+    it('should handle number input and return empty array', () => {
+      const input = 42;
+      const result = maybeCoerceToGeminiFormat(input);
+      expect(result).toEqual({
+        contents: [],
+        coerced: false,
+        systemInstruction: undefined,
+      });
+      expect(logger.warn).toHaveBeenCalledWith(`Unknown format for Gemini: 42`);
+    });
+
+    it('should handle boolean input and return empty array', () => {
+      const input = true;
+      const result = maybeCoerceToGeminiFormat(input);
+      expect(result).toEqual({
+        contents: [],
+        coerced: false,
+        systemInstruction: undefined,
+      });
+      expect(logger.warn).toHaveBeenCalledWith(`Unknown format for Gemini: true`);
+    });
+
+    it('should handle array input in unknown format path and return array as-is', () => {
+      // Arrays that don't match known formats are still arrays, so they're returned as-is
+      // This is safe because arrays won't cause .map() errors downstream
+      const input = [1, 2, 3];
+      const result = maybeCoerceToGeminiFormat(input);
+      expect(result).toEqual({
+        contents: [1, 2, 3],
+        coerced: false,
+        systemInstruction: undefined,
+      });
+      expect(logger.warn).toHaveBeenCalledWith(`Unknown format for Gemini: [1,2,3]`);
     });
 
     it('should handle OpenAI chat format with mixed content types', () => {
@@ -580,12 +678,40 @@ describe('util', () => {
       });
     });
 
-    it('should log a warning and return the input for unknown formats', () => {
-      const loggerSpy = jest.spyOn(logger, 'warn');
+    it('should convert system-only prompts to user messages', () => {
+      const input = [{ role: 'system', content: 'You are a helpful assistant.' }];
+      const result = maybeCoerceToGeminiFormat(input);
+      expect(result).toEqual({
+        contents: [{ role: 'user', parts: [{ text: 'You are a helpful assistant.' }] }],
+        coerced: true,
+        systemInstruction: undefined,
+      });
+    });
+
+    it('should convert multiple system-only messages to single user message', () => {
+      const input = [
+        { role: 'system', content: 'First instruction.' },
+        { role: 'system', content: 'Second instruction.' },
+      ];
+      const result = maybeCoerceToGeminiFormat(input);
+      expect(result).toEqual({
+        contents: [
+          {
+            role: 'user',
+            parts: [{ text: 'First instruction.' }, { text: 'Second instruction.' }],
+          },
+        ],
+        coerced: true,
+        systemInstruction: undefined,
+      });
+    });
+
+    it('should log a warning and return empty array for unknown non-array formats', () => {
+      const loggerSpy = vi.spyOn(logger, 'warn');
       const input = { unknownFormat: 'test' };
       const result = maybeCoerceToGeminiFormat(input);
       expect(result).toEqual({
-        contents: input,
+        contents: [],
         coerced: false,
         systemInstruction: undefined,
       });
@@ -795,27 +921,23 @@ describe('util', () => {
   describe('getGoogleClient', () => {
     beforeEach(() => {
       // Reset modules before each test to clear cachedAuth
-      jest.resetModules();
-      // Re-mock google-auth-library after module reset
-      jest.doMock('google-auth-library', () => ({
-        GoogleAuth: jest.fn(),
-      }));
-    });
-
-    afterEach(() => {
-      jest.dontMock('google-auth-library');
+      vi.resetModules();
+      vi.clearAllMocks();
+      vi.doMock('google-auth-library', () => googleAuthMock);
     });
 
     it('should create and return Google client', async () => {
       const mockClient = { name: 'mockClient' };
       const mockProjectId = 'test-project';
       const mockAuth = {
-        getClient: jest.fn().mockResolvedValue(mockClient),
-        getProjectId: jest.fn().mockResolvedValue(mockProjectId),
+        getClient: vi.fn().mockResolvedValue(mockClient),
+        getProjectId: vi.fn().mockResolvedValue(mockProjectId),
       };
 
       const googleAuthLib = await import('google-auth-library');
-      jest.mocked(googleAuthLib.GoogleAuth).mockImplementation(() => mockAuth as any);
+      vi.mocked(googleAuthLib.GoogleAuth).mockImplementation(function () {
+        return mockAuth as any;
+      });
 
       // Import getGoogleClient after mocking
       const { getGoogleClient } = await import('../../../src/providers/google/util');
@@ -831,46 +953,43 @@ describe('util', () => {
       const mockClient = { name: 'mockClient' };
       const mockProjectId = 'test-project';
       const mockAuth = {
-        getClient: jest.fn().mockResolvedValue(mockClient),
-        getProjectId: jest.fn().mockResolvedValue(mockProjectId),
+        getClient: vi.fn().mockResolvedValue(mockClient),
+        getProjectId: vi.fn().mockResolvedValue(mockProjectId),
       };
 
       const googleAuthLib = await import('google-auth-library');
-      jest.mocked(googleAuthLib.GoogleAuth).mockImplementation(() => mockAuth as any);
+      vi.mocked(googleAuthLib.GoogleAuth).mockImplementation(function () {
+        return mockAuth as any;
+      });
 
       // Import getGoogleClient after mocking
       const { getGoogleClient } = await import('../../../src/providers/google/util');
 
       await getGoogleClient();
-      const googleAuthCalls = jest.mocked(googleAuthLib.GoogleAuth).mock.calls.length;
+      const googleAuthCalls = vi.mocked(googleAuthLib.GoogleAuth).mock.calls.length;
 
       await getGoogleClient();
-      expect(jest.mocked(googleAuthLib.GoogleAuth).mock.calls).toHaveLength(googleAuthCalls);
+      expect(vi.mocked(googleAuthLib.GoogleAuth).mock.calls).toHaveLength(googleAuthCalls);
     });
   });
 
   describe('hasGoogleDefaultCredentials', () => {
     beforeEach(() => {
       // Reset modules before each test to clear cachedAuth
-      jest.resetModules();
-      // Re-mock google-auth-library after module reset
-      jest.doMock('google-auth-library', () => ({
-        GoogleAuth: jest.fn(),
-      }));
-    });
-
-    afterEach(() => {
-      jest.dontMock('google-auth-library');
+      vi.resetModules();
+      vi.doMock('google-auth-library', () => googleAuthMock);
     });
 
     it('should return true when credentials are available', async () => {
       const mockAuth = {
-        getClient: jest.fn().mockResolvedValue({}),
-        getProjectId: jest.fn().mockResolvedValue('test-project'),
+        getClient: vi.fn().mockResolvedValue({}),
+        getProjectId: vi.fn().mockResolvedValue('test-project'),
       };
 
       const googleAuthLib = await import('google-auth-library');
-      jest.mocked(googleAuthLib.GoogleAuth).mockImplementation(() => mockAuth as any);
+      vi.mocked(googleAuthLib.GoogleAuth).mockImplementation(function () {
+        return mockAuth as any;
+      });
 
       // Import hasGoogleDefaultCredentials after mocking
       const { hasGoogleDefaultCredentials } = await import('../../../src/providers/google/util');
@@ -917,8 +1036,8 @@ describe('util', () => {
         ']';
       const context_vars = {};
 
-      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
-      jest.spyOn(fs, 'readFileSync').mockReturnValue(tools);
+      vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(tools);
       const result = loadFile(config_var, context_vars);
       expect(result).toEqual(JSON.parse(tools));
       expect(fs.existsSync).toHaveBeenCalledWith(expect.stringContaining('fp.json'));
@@ -985,8 +1104,8 @@ describe('util', () => {
     it('should handle filepath system messages in variables', async () => {
       const prompt = [{ role: 'user', parts: [{ text: 'user message' }] }];
       const system_instruction = JSON.stringify({ parts: [{ text: 'system instruction' }] });
-      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
-      jest.spyOn(fs, 'readFileSync').mockReturnValue(system_instruction);
+      vi.spyOn(fs, 'existsSync').mockReturnValue(true);
+      vi.spyOn(fs, 'readFileSync').mockReturnValue(system_instruction);
 
       const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
         JSON.stringify(prompt),
@@ -996,6 +1115,111 @@ describe('util', () => {
 
       expect(contents).toEqual([{ parts: [{ text: 'user message' }], role: 'user' }]);
       expect(systemInstruction).toEqual({ parts: [{ text: 'system instruction' }] });
+    });
+
+    it('should merge system messages from both prompt and config with string config', () => {
+      const prompt = [
+        { role: 'system', content: 'prompt system instruction' },
+        { role: 'user', content: 'user message' },
+      ];
+      const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
+        JSON.stringify(prompt),
+        {},
+        'config system instruction',
+      );
+      expect(contents).toEqual([{ parts: [{ text: 'user message' }], role: 'user' }]);
+      expect(systemInstruction).toEqual({
+        parts: [{ text: 'config system instruction' }, { text: 'prompt system instruction' }],
+      });
+    });
+
+    it('should merge system messages from both prompt and config with object config', () => {
+      const prompt = [
+        { role: 'system', content: 'prompt system instruction' },
+        { role: 'user', content: 'user message' },
+      ];
+      const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
+        JSON.stringify(prompt),
+        {},
+        { parts: [{ text: 'config system instruction' }] },
+      );
+      expect(contents).toEqual([{ parts: [{ text: 'user message' }], role: 'user' }]);
+      expect(systemInstruction).toEqual({
+        parts: [{ text: 'config system instruction' }, { text: 'prompt system instruction' }],
+      });
+    });
+
+    it('should merge multiple parts from config systemInstruction', () => {
+      const prompt = [
+        { role: 'system', content: 'prompt system instruction' },
+        { role: 'user', content: 'user message' },
+      ];
+      const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
+        JSON.stringify(prompt),
+        {},
+        {
+          parts: [{ text: 'config system instruction 1' }, { text: 'config system instruction 2' }],
+        },
+      );
+      expect(contents).toEqual([{ parts: [{ text: 'user message' }], role: 'user' }]);
+      expect(systemInstruction).toEqual({
+        parts: [
+          { text: 'config system instruction 1' },
+          { text: 'config system instruction 2' },
+          { text: 'prompt system instruction' },
+        ],
+      });
+    });
+
+    it('should merge multiple system messages from prompt', () => {
+      const prompt = [
+        { role: 'system', content: 'prompt system instruction 1' },
+        { role: 'system', content: 'prompt system instruction 2' },
+        { role: 'user', content: 'user message' },
+      ];
+      const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
+        JSON.stringify(prompt),
+        {},
+        'config system instruction',
+      );
+      expect(contents).toEqual([{ parts: [{ text: 'user message' }], role: 'user' }]);
+      expect(systemInstruction).toEqual({
+        parts: [
+          { text: 'config system instruction' },
+          { text: 'prompt system instruction 1' },
+          { text: 'prompt system instruction 2' },
+        ],
+      });
+    });
+
+    it('should render Nunjucks templates in config systemInstruction', () => {
+      const prompt = [{ role: 'user', content: 'user message' }];
+      const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
+        JSON.stringify(prompt),
+        { role: 'a helpful assistant', language: 'Japanese' },
+        'You are {{role}}. Respond in {{language}}.',
+      );
+      expect(contents).toEqual([{ parts: [{ text: 'user message' }], role: 'user' }]);
+      expect(systemInstruction).toEqual({
+        parts: [{ text: 'You are a helpful assistant. Respond in Japanese.' }],
+      });
+    });
+
+    it('should skip empty string config systemInstruction', () => {
+      const prompt = [
+        { role: 'system', content: 'prompt system instruction' },
+        { role: 'user', content: 'user message' },
+      ];
+      const { contents, systemInstruction } = geminiFormatAndSystemInstructions(
+        JSON.stringify(prompt),
+        {},
+        '',
+      );
+      expect(contents).toEqual([{ parts: [{ text: 'user message' }], role: 'user' }]);
+      // Empty string is falsy, so config systemInstruction is not processed
+      expect(systemInstruction).toEqual({
+        parts: [{ text: 'prompt system instruction' }],
+      });
     });
 
     describe('support for images in contents', () => {
@@ -1406,6 +1630,262 @@ describe('util', () => {
           ]);
         });
       });
+
+      describe('data URL support', () => {
+        it('should handle JPEG data URLs and extract base64', () => {
+          const base64Data = validBase64Image;
+          const dataUrl = `data:image/jpeg;base64,${base64Data}`;
+
+          const prompt = JSON.stringify([
+            {
+              role: 'user',
+              parts: [
+                {
+                  text: `Here is an image:\n${dataUrl}\nEnd of image.`,
+                },
+              ],
+            },
+          ]);
+
+          const contextVars = {
+            image1: dataUrl,
+          };
+
+          const { contents } = geminiFormatAndSystemInstructions(prompt, contextVars);
+
+          expect(contents).toEqual([
+            {
+              role: 'user',
+              parts: [
+                {
+                  text: 'Here is an image:',
+                },
+                {
+                  inlineData: {
+                    mimeType: 'image/jpeg',
+                    data: base64Data, // Should extract raw base64
+                  },
+                },
+                {
+                  text: 'End of image.',
+                },
+              ],
+            },
+          ]);
+        });
+
+        it('should handle PNG data URLs', () => {
+          const base64Data =
+            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChAGA5w5EQwA7BHigu/QKBgAAAABJRU5ErkJggg==';
+          const dataUrl = `data:image/png;base64,${base64Data}`;
+
+          const prompt = JSON.stringify([
+            {
+              role: 'user',
+              parts: [
+                {
+                  text: dataUrl,
+                },
+              ],
+            },
+          ]);
+
+          const contextVars = {
+            image1: dataUrl,
+          };
+
+          const { contents } = geminiFormatAndSystemInstructions(prompt, contextVars);
+
+          expect(contents[0].parts).toEqual([
+            {
+              inlineData: {
+                mimeType: 'image/png',
+                data: base64Data,
+              },
+            },
+          ]);
+        });
+
+        it('should handle GIF data URLs', () => {
+          const base64Data =
+            'R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==';
+          const dataUrl = `data:image/gif;base64,${base64Data}`;
+
+          const prompt = JSON.stringify([
+            {
+              role: 'user',
+              parts: [
+                {
+                  text: dataUrl,
+                },
+              ],
+            },
+          ]);
+
+          const contextVars = {
+            image1: dataUrl,
+          };
+
+          const { contents } = geminiFormatAndSystemInstructions(prompt, contextVars);
+
+          expect(contents[0].parts).toEqual([
+            {
+              inlineData: {
+                mimeType: 'image/gif',
+                data: base64Data,
+              },
+            },
+          ]);
+        });
+
+        it('should handle WebP data URLs', () => {
+          const base64Data =
+            'UklGRiQAAABXRUJQVlA4IBgAAAAwAQCdASoBAAEAAgA0JaQAA3AA/vuUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=';
+          const dataUrl = `data:image/webp;base64,${base64Data}`;
+
+          const prompt = JSON.stringify([
+            {
+              role: 'user',
+              parts: [
+                {
+                  text: dataUrl,
+                },
+              ],
+            },
+          ]);
+
+          const contextVars = {
+            image1: dataUrl,
+          };
+
+          const { contents } = geminiFormatAndSystemInstructions(prompt, contextVars);
+
+          expect(contents[0].parts).toEqual([
+            {
+              inlineData: {
+                mimeType: 'image/webp',
+                data: base64Data,
+              },
+            },
+          ]);
+        });
+
+        it('should handle mixed data URLs and raw base64', () => {
+          const rawBase64 = validBase64Image;
+          const dataUrlBase64 =
+            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChAGA5w5EQwA7BHigu/QKBgAAAABJRU5ErkJggg==';
+          const dataUrl = `data:image/png;base64,${dataUrlBase64}`;
+
+          const prompt = JSON.stringify([
+            {
+              role: 'user',
+              parts: [
+                {
+                  text: `Raw image:\n${rawBase64}\nData URL image:\n${dataUrl}\nEnd.`,
+                },
+              ],
+            },
+          ]);
+
+          const contextVars = {
+            rawImage: rawBase64,
+            dataUrlImage: dataUrl,
+          };
+
+          const { contents } = geminiFormatAndSystemInstructions(prompt, contextVars);
+
+          expect(contents).toEqual([
+            {
+              role: 'user',
+              parts: [
+                {
+                  text: 'Raw image:',
+                },
+                {
+                  inlineData: {
+                    mimeType: 'image/jpeg',
+                    data: rawBase64,
+                  },
+                },
+                {
+                  text: 'Data URL image:',
+                },
+                {
+                  inlineData: {
+                    mimeType: 'image/png',
+                    data: dataUrlBase64, // Should extract raw base64 from data URL
+                  },
+                },
+                {
+                  text: 'End.',
+                },
+              ],
+            },
+          ]);
+        });
+
+        it('should preserve MIME type from data URL when available', () => {
+          // Test that MIME type from data URL takes precedence over magic number detection
+          const base64Data = validBase64Image;
+          // Use a different MIME type in data URL (though this would be unusual in practice)
+          const dataUrl = `data:image/jpeg;base64,${base64Data}`;
+
+          const prompt = JSON.stringify([
+            {
+              role: 'user',
+              parts: [
+                {
+                  text: dataUrl,
+                },
+              ],
+            },
+          ]);
+
+          const contextVars = {
+            image1: dataUrl,
+          };
+
+          const { contents } = geminiFormatAndSystemInstructions(prompt, contextVars);
+
+          expect(contents[0].parts[0]).toMatchObject({
+            inlineData: {
+              mimeType: 'image/jpeg',
+              data: base64Data,
+            },
+          });
+        });
+      });
+    });
+
+    describe('edge cases for contents array handling', () => {
+      it('should handle empty contents array', () => {
+        const prompt = JSON.stringify([]);
+        const { contents } = geminiFormatAndSystemInstructions(prompt);
+        expect(Array.isArray(contents)).toBe(true);
+        expect(contents).toEqual([]);
+      });
+
+      it('should handle malformed prompt that results in empty array gracefully', () => {
+        // This tests the defensive guard in processImagesInContents
+        // by ensuring the function doesn't crash even with edge cases
+        const prompt = 'invalid json that cannot be parsed';
+        // parseChatPrompt will handle this and return a default format
+        const { contents } = geminiFormatAndSystemInstructions(prompt);
+        expect(Array.isArray(contents)).toBe(true);
+        // Should have at least one element with the prompt text
+        expect(contents.length).toBeGreaterThan(0);
+      });
+
+      it('should handle empty array with contextVars without error', () => {
+        const prompt = JSON.stringify([]);
+        const contextVars = {
+          image1:
+            '/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/2wBDAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQH/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwA/8A/9k=',
+        };
+        const { contents } = geminiFormatAndSystemInstructions(prompt, contextVars);
+        expect(Array.isArray(contents)).toBe(true);
+        expect(contents).toEqual([]);
+      });
     });
   });
 
@@ -1507,6 +1987,152 @@ describe('util', () => {
       const tools: any[] = [];
       const normalized = normalizeTools(tools);
       expect(normalized).toEqual([]);
+    });
+  });
+
+  describe('resolveProjectId', () => {
+    const mockProjectId = 'google-auth-project';
+
+    beforeEach(async () => {
+      // Reset modules to clear cached auth
+      vi.resetModules();
+      vi.doMock('google-auth-library', () => googleAuthMock);
+
+      // Re-mock google-auth-library after module reset
+      const mockAuth = {
+        getClient: vi.fn().mockResolvedValue({ name: 'mockClient' }),
+        getProjectId: vi.fn().mockResolvedValue(mockProjectId),
+      };
+      const googleAuthLib = await import('google-auth-library');
+      vi.mocked(googleAuthLib.GoogleAuth).mockImplementation(function () {
+        return mockAuth as any;
+      });
+    });
+
+    it('should prioritize explicit config over environment variables', async () => {
+      // Import resolveProject after mocking in beforeEach
+      const { resolveProjectId } = await import('../../../src/providers/google/util');
+
+      const config = { projectId: 'explicit-project' };
+      const env = { VERTEX_PROJECT_ID: 'env-project' };
+
+      const result = await resolveProjectId(config, env);
+      expect(result).toBe('explicit-project');
+    });
+
+    it('should use environment variables when no explicit config', async () => {
+      const { resolveProjectId } = await import('../../../src/providers/google/util');
+
+      const config = {};
+      const env = { VERTEX_PROJECT_ID: 'env-project' };
+
+      const result = await resolveProjectId(config, env);
+      expect(result).toBe('env-project');
+    });
+
+    it('should fall back to Google Auth Library when no config or env vars', async () => {
+      // Clear any environment variables that could interfere
+      const originalVertexProjectId = process.env.VERTEX_PROJECT_ID;
+      const originalGoogleProjectId = process.env.GOOGLE_PROJECT_ID;
+      delete process.env.VERTEX_PROJECT_ID;
+      delete process.env.GOOGLE_PROJECT_ID;
+
+      try {
+        const { resolveProjectId } = await import('../../../src/providers/google/util');
+
+        const config = {};
+        const env = {};
+
+        const result = await resolveProjectId(config, env);
+        expect(result).toBe(mockProjectId);
+      } finally {
+        // Restore environment variables
+        if (originalVertexProjectId !== undefined) {
+          process.env.VERTEX_PROJECT_ID = originalVertexProjectId;
+        }
+        if (originalGoogleProjectId !== undefined) {
+          process.env.GOOGLE_PROJECT_ID = originalGoogleProjectId;
+        }
+      }
+    });
+
+    it('should handle Google Auth Library getProjectId failure gracefully', async () => {
+      // Reset modules to clear cached auth
+      vi.resetModules();
+
+      // Mock Google Auth Library where getProjectId throws an error
+      const mockAuth = {
+        getClient: vi.fn().mockResolvedValue({ name: 'mockClient' }),
+        fromJSON: vi.fn().mockResolvedValue({ name: 'mockCredentialClient' }),
+        getProjectId: vi
+          .fn()
+          .mockRejectedValue(new Error('Unable to detect a Project Id in the current environment')),
+      };
+      const googleAuthLib = await import('google-auth-library');
+      vi.mocked(googleAuthLib.GoogleAuth).mockImplementation(function () {
+        return mockAuth;
+      });
+
+      const { resolveProjectId } = await import('../../../src/providers/google/util');
+
+      // Test that explicit config projectId is still used even when getProjectId fails
+      const config = {
+        projectId: 'explicit-project',
+        credentials: '{"type": "service_account", "project_id": "creds-project"}',
+      };
+      const env = {};
+
+      const result = await resolveProjectId(config, env);
+      expect(result).toBe('explicit-project');
+
+      // Verify that getProjectId was called but failed gracefully
+      expect(mockAuth.getProjectId).toHaveBeenCalled();
+      expect(mockAuth.fromJSON).toHaveBeenCalled();
+    });
+
+    it('should return empty string when all sources fail', async () => {
+      // Clear any environment variables that could interfere
+      const originalVertexProjectId = process.env.VERTEX_PROJECT_ID;
+      const originalGoogleProjectId = process.env.GOOGLE_PROJECT_ID;
+      delete process.env.VERTEX_PROJECT_ID;
+      delete process.env.GOOGLE_PROJECT_ID;
+
+      try {
+        let result: string = '';
+        const mockAuth = {
+          getClient: vi.fn().mockResolvedValue({ name: 'mockClient' }),
+          getProjectId: vi
+            .fn()
+            .mockRejectedValue(
+              new Error('Unable to detect a Project Id in the current environment'),
+            ),
+        };
+
+        const googleAuthLib = await import('google-auth-library');
+        vi.mocked(googleAuthLib.GoogleAuth).mockImplementation(function () {
+          return mockAuth;
+        });
+
+        const { resolveProjectId } = await import('../../../src/providers/google/util');
+
+        // Test that when no projectId is available anywhere, we get empty string
+        const config = {};
+        const env = {};
+
+        result = await resolveProjectId(config, env);
+
+        expect(result).toBe('');
+        // Verify that getProjectId was called but failed gracefully
+        expect(mockAuth.getProjectId).toHaveBeenCalled();
+      } finally {
+        // Restore environment variables
+        if (originalVertexProjectId !== undefined) {
+          process.env.VERTEX_PROJECT_ID = originalVertexProjectId;
+        }
+        if (originalGoogleProjectId !== undefined) {
+          process.env.GOOGLE_PROJECT_ID = originalGoogleProjectId;
+        }
+      }
     });
   });
 });

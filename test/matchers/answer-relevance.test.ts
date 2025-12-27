@@ -1,5 +1,6 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { matchesAnswerRelevance } from '../../src/matchers';
-import { ANSWER_RELEVANCY_GENERATE } from '../../src/prompts';
+import { ANSWER_RELEVANCY_GENERATE } from '../../src/prompts/index';
 import {
   DefaultEmbeddingProvider,
   DefaultGradingProvider,
@@ -9,24 +10,24 @@ import type { OpenAiEmbeddingProvider } from '../../src/providers/openai/embeddi
 
 describe('matchesAnswerRelevance', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
-    jest.resetAllMocks();
+    vi.clearAllMocks();
+    vi.resetAllMocks();
 
-    jest.spyOn(DefaultGradingProvider, 'callApi').mockReset();
-    jest.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi').mockReset();
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockReset();
+    vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi').mockReset();
 
-    jest.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockResolvedValue({
       output: 'foobar',
       tokenUsage: { total: 10, prompt: 5, completion: 5 },
     });
-    jest.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi').mockResolvedValue({
+    vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi').mockResolvedValue({
       embedding: [1, 0, 0],
       tokenUsage: { total: 5, prompt: 2, completion: 3 },
     });
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('should pass when the relevance score is above the threshold', async () => {
@@ -34,7 +35,7 @@ describe('matchesAnswerRelevance', () => {
     const output = 'Sample output';
     const threshold = 0.5;
 
-    const mockCallApi = jest.spyOn(DefaultGradingProvider, 'callApi');
+    const mockCallApi = vi.spyOn(DefaultGradingProvider, 'callApi');
     mockCallApi.mockImplementation(() => {
       return Promise.resolve({
         output: 'foobar',
@@ -42,7 +43,7 @@ describe('matchesAnswerRelevance', () => {
       });
     });
 
-    const mockCallEmbeddingApi = jest.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi');
+    const mockCallEmbeddingApi = vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi');
     mockCallEmbeddingApi.mockImplementation(function (this: OpenAiEmbeddingProvider) {
       return Promise.resolve({
         embedding: [1, 0, 0],
@@ -75,6 +76,7 @@ describe('matchesAnswerRelevance', () => {
     });
     expect(mockCallApi).toHaveBeenCalledWith(
       expect.stringContaining(ANSWER_RELEVANCY_GENERATE.slice(0, 50)),
+      expect.any(Object),
     );
     expect(mockCallEmbeddingApi).toHaveBeenCalledWith('Input text');
   });
@@ -84,7 +86,7 @@ describe('matchesAnswerRelevance', () => {
     const output = 'Different output';
     const threshold = 0.5;
 
-    const mockCallApi = jest.spyOn(DefaultGradingProvider, 'callApi');
+    const mockCallApi = vi.spyOn(DefaultGradingProvider, 'callApi');
     mockCallApi.mockImplementation((text) => {
       return Promise.resolve({
         output: text,
@@ -92,7 +94,7 @@ describe('matchesAnswerRelevance', () => {
       });
     });
 
-    const mockCallEmbeddingApi = jest.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi');
+    const mockCallEmbeddingApi = vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi');
     mockCallEmbeddingApi.mockImplementation((text) => {
       if (text.includes('Input text')) {
         return Promise.resolve({
@@ -133,6 +135,7 @@ describe('matchesAnswerRelevance', () => {
     });
     expect(mockCallApi).toHaveBeenCalledWith(
       expect.stringContaining(ANSWER_RELEVANCY_GENERATE.slice(0, 50)),
+      expect.any(Object),
     );
     expect(mockCallEmbeddingApi).toHaveBeenCalledWith(
       expect.stringContaining(ANSWER_RELEVANCY_GENERATE.slice(0, 50)),
@@ -165,7 +168,7 @@ describe('matchesAnswerRelevance', () => {
 
     // Mock 3 different generated questions
     let callCount = 0;
-    jest.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(() => {
+    vi.spyOn(DefaultGradingProvider, 'callApi').mockImplementation(() => {
       const questions = [
         'What is the capital city of France?',
         'Which city is the capital of France?',
@@ -178,7 +181,7 @@ describe('matchesAnswerRelevance', () => {
     });
 
     // Mock embeddings with varying similarities
-    jest.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi').mockImplementation((text) => {
+    vi.spyOn(DefaultEmbeddingProvider, 'callEmbeddingApi').mockImplementation((text) => {
       if (text === input) {
         return Promise.resolve({
           embedding: [1, 0, 0],

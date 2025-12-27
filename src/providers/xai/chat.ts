@@ -1,15 +1,87 @@
 import logger from '../../logger';
-import { renderVarsInObject } from '../../util';
+import { renderVarsInObject } from '../../util/index';
 import invariant from '../../util/invariant';
 import { OpenAiChatCompletionProvider } from '../openai/chat';
 
-import type { ApiProvider, ProviderOptions } from '../../types';
+import type { ApiProvider, ProviderOptions } from '../../types/index';
 import type { OpenAiCompletionOptions } from '../openai/types';
+
+/**
+ * xAI Agent Tools API - Server-side tool types
+ *
+ * TODO: These interfaces are defined for future use when the xAI Responses API
+ * is supported. Currently, Agent Tools (web_search, x_search, code_execution,
+ * collections_search, mcp) require the Responses API endpoint which is different
+ * from the Chat Completions API we currently use.
+ *
+ * For now, use `search_parameters` (Live Search) for real-time web/X search,
+ * which works with the Chat Completions API.
+ *
+ * See: https://docs.x.ai/docs/tools/overview
+ */
+export interface XAIWebSearchTool {
+  type: 'web_search';
+  filters?: {
+    /** Only search within these domains (max 5). Cannot be used with excluded_domains. */
+    allowed_domains?: string[];
+    /** Exclude these domains from search (max 5). Cannot be used with allowed_domains. */
+    excluded_domains?: string[];
+  };
+  /** Enable the model to view and analyze images encountered during search */
+  enable_image_understanding?: boolean;
+}
+
+export interface XAIXSearchTool {
+  type: 'x_search';
+  /** Only consider posts from these X handles (max 10). Cannot be used with excluded_x_handles. */
+  allowed_x_handles?: string[];
+  /** Exclude posts from these X handles (max 10). Cannot be used with allowed_x_handles. */
+  excluded_x_handles?: string[];
+  /** Start date for search results (ISO8601 format: YYYY-MM-DD) */
+  from_date?: string;
+  /** End date for search results (ISO8601 format: YYYY-MM-DD) */
+  to_date?: string;
+  /** Enable the model to view and analyze images in X posts */
+  enable_image_understanding?: boolean;
+  /** Enable the model to view and analyze videos in X posts */
+  enable_video_understanding?: boolean;
+}
+
+export interface XAICodeExecutionTool {
+  type: 'code_execution' | 'code_interpreter';
+}
+
+export interface XAICollectionsSearchTool {
+  type: 'collections_search' | 'file_search';
+  /** Collection IDs to search within */
+  collection_ids?: string[];
+}
+
+export interface XAIMCPTool {
+  type: 'mcp';
+  /** URL of the MCP server */
+  server_url: string;
+  /** Optional label for the MCP server */
+  server_label?: string;
+  /** Headers to send with MCP requests */
+  headers?: Record<string, string>;
+  /** Allowed tools from this MCP server */
+  allowed_tools?: string[];
+}
+
+export type XAIAgentTool =
+  | XAIWebSearchTool
+  | XAIXSearchTool
+  | XAICodeExecutionTool
+  | XAICollectionsSearchTool
+  | XAIMCPTool;
 
 type XAIConfig = {
   region?: string;
   reasoning_effort?: 'low' | 'high';
   search_parameters?: Record<string, any>;
+  /** xAI Agent Tools - server-side tools for agentic workflows */
+  agent_tools?: XAIAgentTool[];
 } & OpenAiCompletionOptions;
 
 type XAIProviderOptions = Omit<ProviderOptions, 'config'> & {
@@ -19,6 +91,60 @@ type XAIProviderOptions = Omit<ProviderOptions, 'config'> & {
 };
 
 export const XAI_CHAT_MODELS = [
+  // Grok 4.1 Fast Models (2M context window)
+  {
+    id: 'grok-4-1-fast-reasoning',
+    cost: {
+      input: 0.2 / 1e6,
+      output: 0.5 / 1e6,
+      cache_read: 0.05 / 1e6,
+    },
+    aliases: ['grok-4-1-fast', 'grok-4-1-fast-latest'],
+  },
+  {
+    id: 'grok-4-1-fast-non-reasoning',
+    cost: {
+      input: 0.2 / 1e6,
+      output: 0.5 / 1e6,
+      cache_read: 0.05 / 1e6,
+    },
+  },
+  // Grok Code Fast Models
+  {
+    id: 'grok-code-fast-1',
+    cost: {
+      input: 0.2 / 1e6,
+      output: 1.5 / 1e6,
+      cache_read: 0.02 / 1e6,
+    },
+    aliases: ['grok-code-fast'],
+  },
+  {
+    id: 'grok-code-fast-1-0825',
+    cost: {
+      input: 0.2 / 1e6,
+      output: 1.5 / 1e6,
+      cache_read: 0.02 / 1e6,
+    },
+  },
+  // Grok-4 Fast Models (2M context window)
+  {
+    id: 'grok-4-fast-reasoning',
+    cost: {
+      input: 0.2 / 1e6,
+      output: 0.5 / 1e6,
+      cache_read: 0.05 / 1e6,
+    },
+    aliases: ['grok-4-fast', 'grok-4-fast-latest'],
+  },
+  {
+    id: 'grok-4-fast-non-reasoning',
+    cost: {
+      input: 0.2 / 1e6,
+      output: 0.5 / 1e6,
+      cache_read: 0.05 / 1e6,
+    },
+  },
   // Grok-4 Models
   {
     id: 'grok-4-0709',
@@ -116,9 +242,23 @@ export const GROK_REASONING_EFFORT_MODELS = [
 
 // All reasoning models (including Grok-4 which doesn't support reasoning_effort)
 export const GROK_REASONING_MODELS = [
+  // Grok 4.1 Fast reasoning
+  'grok-4-1-fast-reasoning',
+  'grok-4-1-fast',
+  'grok-4-1-fast-latest',
+  // Grok Code Fast
+  'grok-code-fast-1',
+  'grok-code-fast',
+  'grok-code-fast-1-0825',
+  // Grok 4 Fast reasoning
+  'grok-4-fast-reasoning',
+  'grok-4-fast',
+  'grok-4-fast-latest',
+  // Grok 4
   'grok-4-0709',
   'grok-4',
   'grok-4-latest',
+  // Grok 3 mini
   'grok-3-mini-beta',
   'grok-3-mini',
   'grok-3-mini-latest',
@@ -127,8 +267,23 @@ export const GROK_REASONING_MODELS = [
   'grok-3-mini-fast-latest',
 ];
 
-// Grok-4 models that have specific parameter restrictions
-export const GROK_4_MODELS = ['grok-4-0709', 'grok-4', 'grok-4-latest'];
+// Grok-4+ models that have specific parameter restrictions (no presence_penalty, frequency_penalty, stop, reasoning_effort)
+export const GROK_4_MODELS = [
+  // Grok 4.1 Fast
+  'grok-4-1-fast-reasoning',
+  'grok-4-1-fast',
+  'grok-4-1-fast-latest',
+  'grok-4-1-fast-non-reasoning',
+  // Grok 4 Fast
+  'grok-4-fast-reasoning',
+  'grok-4-fast',
+  'grok-4-fast-latest',
+  'grok-4-fast-non-reasoning',
+  // Grok 4
+  'grok-4-0709',
+  'grok-4',
+  'grok-4-latest',
+];
 
 /**
  * Calculate xAI Grok cost based on model name and token usage
@@ -186,8 +341,8 @@ class XAIProvider extends OpenAiChatCompletionProvider {
     return true;
   }
 
-  getOpenAiBody(prompt: string, context?: any, callApiOptions?: any) {
-    const result = super.getOpenAiBody(prompt, context, callApiOptions);
+  async getOpenAiBody(prompt: string, context?: any, callApiOptions?: any) {
+    const result = await super.getOpenAiBody(prompt, context, callApiOptions);
 
     // Ensure we have a valid result
     if (!result || !result.body) {
@@ -208,11 +363,15 @@ class XAIProvider extends OpenAiChatCompletionProvider {
       delete result.body.reasoning_effort;
     }
 
-    // Handle search parameters
+    // Handle search parameters (Live Search)
     const searchParams = this.originalConfig?.search_parameters;
     if (searchParams) {
       result.body.search_parameters = renderVarsInObject(searchParams, context?.vars);
     }
+
+    // Note: xAI Agent Tools (web_search, x_search, code_execution, etc.) require
+    // the Responses API endpoint which is not yet implemented. For now, use
+    // search_parameters for live search functionality.
 
     return result;
   }

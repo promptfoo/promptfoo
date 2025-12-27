@@ -13,7 +13,7 @@ interface PostHogProviderProps {
   children: React.ReactNode;
 }
 
-export const PostHogProvider: React.FC<PostHogProviderProps> = ({ children }) => {
+export const PostHogProvider = ({ children }: PostHogProviderProps) => {
   const [isInitialized, setIsInitialized] = useState(false);
   const { email, userId, fetchEmail, fetchUserId } = useUserStore();
 
@@ -46,7 +46,7 @@ export const PostHogProvider: React.FC<PostHogProviderProps> = ({ children }) =>
       try {
         posthog.init(POSTHOG_KEY, {
           api_host: POSTHOG_HOST,
-          loaded: (posthogInstance: any) => {
+          loaded: (_posthogInstance: any) => {
             setIsInitialized(true);
           },
           capture_pageview: false,
@@ -84,5 +84,5 @@ export const PostHogProvider: React.FC<PostHogProviderProps> = ({ children }) =>
     return children;
   }
 
-  return <PostHogContext.Provider value={value}>{children}</PostHogContext.Provider>;
+  return <PostHogContext value={value}>{children}</PostHogContext>;
 };

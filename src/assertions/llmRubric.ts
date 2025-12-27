@@ -1,13 +1,14 @@
 import { matchesLlmRubric } from '../matchers';
 import invariant from '../util/invariant';
 
-import type { AssertionParams, GradingResult } from '../types';
+import type { AssertionParams, GradingResult } from '../types/index';
 
 export const handleLlmRubric = ({
   assertion,
   renderedValue,
   outputString,
   test,
+  providerCallContext,
 }: AssertionParams): Promise<GradingResult> => {
   invariant(
     typeof renderedValue === 'string' ||
@@ -21,5 +22,14 @@ export const handleLlmRubric = ({
 
   // Update the assertion value. This allows the web view to display the prompt.
   assertion.value = assertion.value || test.options?.rubricPrompt;
-  return matchesLlmRubric(renderedValue || '', outputString, test.options, test.vars, assertion);
+
+  return matchesLlmRubric(
+    renderedValue || '',
+    outputString,
+    test.options,
+    test.vars,
+    assertion,
+    undefined,
+    providerCallContext,
+  );
 };

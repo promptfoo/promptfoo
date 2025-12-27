@@ -1,5 +1,7 @@
+import { TooltipProvider } from '@app/components/ui/tooltip';
+import { ToastProvider } from '@app/contexts/ToastContext';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ProviderSelector from './ProviderSelector';
 
 vi.mock('../../../store/providersStore', () => ({
@@ -18,9 +20,19 @@ const mockProviders = [
 const mockOnChange = vi.fn();
 
 describe('ProviderSelector', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
-    render(<ProviderSelector providers={mockProviders} onChange={mockOnChange} />);
+    render(
+      <TooltipProvider delayDuration={0}>
+        <ToastProvider>
+          <ProviderSelector providers={mockProviders} onChange={mockOnChange} />
+        </ToastProvider>
+      </TooltipProvider>,
+    );
+    // Wait for the component to finish loading
+    await waitFor(() => {
+      expect(screen.queryByText('Loading...')).not.toBeInTheDocument();
+    });
   });
 
   it('renders the component correctly', () => {
@@ -28,10 +40,10 @@ describe('ProviderSelector', () => {
   });
 
   it('displays the correct number of providers', () => {
-    const chips = screen
-      .getAllByRole('button')
-      .filter((button) => button.classList.contains('MuiChip-root'));
-    expect(chips).toHaveLength(mockProviders.length);
+    // Find provider badges by looking for elements with provider IDs
+    mockProviders.forEach((provider) => {
+      expect(screen.getByText(provider.id)).toBeInTheDocument();
+    });
   });
 
   it('calls onChange when a provider is selected', () => {
@@ -53,7 +65,7 @@ describe('ProviderSelector', () => {
     fireEvent.click(providerChip);
     expect(
       screen.getByText(
-        'Click a provider to configure its settings. Hover over chips to see model IDs.',
+        'Click a provider to configure its settings. Hover over badges to see model IDs.',
       ),
     ).toBeInTheDocument();
   });
@@ -114,7 +126,7 @@ describe('ProviderSelector', () => {
 
     // Verify error message
     expect(
-      screen.getByText('Only javascript, python, and go files are supported'),
+      screen.getByText('Only javascript, python, go and ruby files are supported'),
     ).toBeInTheDocument();
   });
 

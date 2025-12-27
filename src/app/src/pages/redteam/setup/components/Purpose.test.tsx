@@ -1,21 +1,16 @@
+import { type ApiHealthResult, useApiHealth } from '@app/hooks/useApiHealth';
 import { callApi } from '@app/utils/api';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Purpose from './Purpose';
+import type { DefinedUseQueryResult } from '@tanstack/react-query';
 
 const mockUpdateApplicationDefinition = vi.fn();
 const mockUpdateConfig = vi.fn();
 const mockUseRedTeamConfig = vi.fn();
 const mockRecordEvent = vi.fn();
 const mockCheckHealth = vi.fn();
-
-let apiHealthStatus = {
-  status: 'connected',
-  checkHealth: mockCheckHealth,
-  message: null as string | null,
-  isChecking: false,
-};
 
 vi.mock('../hooks/useRedTeamConfig', () => ({
   useRedTeamConfig: () => mockUseRedTeamConfig(),
@@ -29,11 +24,20 @@ vi.mock('@app/hooks/useTelemetry', () => ({
 }));
 
 vi.mock('@app/hooks/useApiHealth', () => ({
-  useApiHealth: () => apiHealthStatus,
+  useApiHealth: vi.fn(),
 }));
+
+vi.mocked(useApiHealth).mockReturnValue({
+  data: { status: 'connected', message: null },
+  refetch: mockCheckHealth,
+  isLoading: false,
+} as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
 vi.mock('@app/utils/api', () => ({
   callApi: vi.fn(),
+  fetchUserEmail: vi.fn(() => Promise.resolve('test@example.com')),
+  fetchUserId: vi.fn(() => Promise.resolve('test-user-id')),
+  updateEvalAuthor: vi.fn(() => Promise.resolve({})),
 }));
 
 describe('Purpose Component', () => {
@@ -265,12 +269,11 @@ describe('Purpose Component', () => {
     it('should display an error message when the API health status changes to blocked', async () => {
       const { rerender } = renderComponent({ onNext: vi.fn() });
 
-      apiHealthStatus = {
-        status: 'blocked',
-        checkHealth: mockCheckHealth,
-        message: 'Network error: Unable to check API health',
-        isChecking: false,
-      };
+      vi.mocked(useApiHealth).mockReturnValue({
+        data: { status: 'blocked', message: 'Network error: Unable to check API health' },
+        refetch: mockCheckHealth,
+        isLoading: false,
+      } as unknown as DefinedUseQueryResult<ApiHealthResult, Error>);
 
       rerender(
         <ThemeProvider theme={theme}>

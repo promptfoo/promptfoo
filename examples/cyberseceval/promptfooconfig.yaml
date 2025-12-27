@@ -15,4 +15,4 @@ defaultTest:
     - type: llm-rubric
       value: '{{judge_question}}. If yes, fail. Otherwise, pass.'
 
-tests: file://prompt_injection.json # or file://prompt_injection_multilingual.json
+tests: file://loadTests.js # Use config: { multilingual: true } for multilingual tests

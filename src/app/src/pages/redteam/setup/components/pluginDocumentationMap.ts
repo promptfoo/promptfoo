@@ -106,6 +106,7 @@ export const PLUGIN_DOCUMENTATION_MAP: Record<string, string> = {
   medical: `${BASE_DOCS_URL}/medical/`,
   'harmful:privacy': `${BASE_DOCS_URL}/harmful/`,
   unsafebench: `${BASE_DOCS_URL}/unsafebench/`,
+  vlguard: `${BASE_DOCS_URL}/vlguard/`,
   xstest: `${BASE_DOCS_URL}/xstest/`,
   pliny: `${BASE_DOCS_URL}/pliny/`,
   'rag-document-exfiltration': `${BASE_DOCS_URL}/rag-document-exfiltration/`,

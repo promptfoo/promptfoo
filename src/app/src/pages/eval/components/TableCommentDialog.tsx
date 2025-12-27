@@ -1,5 +1,3 @@
-import React from 'react';
-
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
@@ -18,14 +16,14 @@ interface CommentDialogProps {
   onChange: (text: string) => void;
 }
 
-const CommentDialog: React.FC<CommentDialogProps> = ({
+const CommentDialog = ({
   open,
   contextText,
   commentText,
   onClose,
   onSave,
   onChange,
-}) => {
+}: CommentDialogProps) => {
   const darkMode = useTheme().palette.mode === 'dark';
 
   return (

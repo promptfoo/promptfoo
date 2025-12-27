@@ -1,23 +1,27 @@
-import { randomUUID } from 'crypto';
-import * as path from 'path';
-
 import async from 'async';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import { globSync } from 'glob';
-import { MODEL_GRADED_ASSERTION_TYPES, runAssertions, runCompareAssertion } from './assertions';
+import {
+  MODEL_GRADED_ASSERTION_TYPES,
+  runAssertions,
+  runCompareAssertion,
+} from './assertions/index';
+import { extractAndStoreBinaryData } from './blobs/extractor';
 import { getCache } from './cache';
 import cliState from './cliState';
-import { FILE_METADATA_KEY } from './constants';
+import { DEFAULT_MAX_CONCURRENCY, FILE_METADATA_KEY } from './constants';
 import { updateSignalFile } from './database/signal';
 import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from './envars';
 import { collectFileMetadata, renderPrompt, runExtensionHook } from './evaluatorHelpers';
 import logger from './logger';
 import { selectMaxScore } from './matchers';
 import { generateIdFromPrompt } from './models/prompt';
+import { CIProgressReporter } from './progress/ciProgressReporter';
 import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
+import { providerRegistry } from './providers/providerRegistry';
 import { isPromptfooSampleTarget } from './providers/shared';
-import { isPandamoniumProvider } from './redteam/providers/pandamonium';
+import { getSessionId } from './redteam/util';
 import { generatePrompts } from './suggestions';
 import telemetry from './telemetry';
 import {
@@ -26,6 +30,8 @@ import {
   startOtlpReceiverIfNeeded,
   stopOtlpReceiverIfNeeded,
 } from './tracing/evaluatorTracing';
+import { getDefaultOtelConfig } from './tracing/otelConfig';
+import { flushOtel, initializeOtel, shutdownOtel } from './tracing/otelSdk';
 import {
   type Assertion,
   type AssertionType,
@@ -38,7 +44,7 @@ import {
   ResultFailureReason,
   type RunEvalOptions,
   type TestSuite,
-} from './types';
+} from './types/index';
 import { isApiProvider } from './types/providers';
 import { JsonlFileWriter } from './util/exportToFile/writeToFile';
 import { loadFunction, parseFileUrl } from './util/functions/loadFunction';
@@ -61,11 +67,12 @@ import type Eval from './models/eval';
 import type {
   EvalConversations,
   EvalRegisters,
+  PromptMetrics,
   ProviderOptions,
   ScoringFunction,
   TokenUsage,
   Vars,
-} from './types';
+} from './types/index';
 
 /**
  * Manages a single progress bar for the evaluation
@@ -101,7 +108,20 @@ class ProgressBarManager {
     // Create single progress bar
     this.progressBar = new cliProgress.SingleBar(
       {
-        format: 'Evaluating [{bar}] {percentage}% | {value}/{total} | {provider} {prompt} {vars}',
+        format: (options, params, payload) => {
+          const barsize = options.barsize ?? 40;
+          const barCompleteString = options.barCompleteString ?? '=';
+          const barIncompleteString = options.barIncompleteString ?? '-';
+
+          const bar = barCompleteString.substring(0, Math.round(params.progress * barsize));
+          const spaces = barIncompleteString.substring(0, barsize - bar.length);
+          const percentage = Math.round(params.progress * 100);
+
+          // Only show errors if count > 0
+          const errorsText = payload.errors > 0 ? ` (errors: ${payload.errors})` : '';
+
+          return `Evaluating [${bar}${spaces}] ${percentage}% | ${params.value}/${params.total}${errorsText} | ${payload.provider} ${payload.prompt} ${payload.vars}`;
+        },
         hideCursor: true,
         gracefulExit: true,
       },
@@ -113,6 +133,7 @@ class ProgressBarManager {
       provider: '',
       prompt: '',
       vars: '',
+      errors: 0,
     });
   }
 
@@ -120,9 +141,10 @@ class ProgressBarManager {
    * Update progress for a specific evaluation
    */
   updateProgress(
-    index: number,
+    _index: number,
     evalStep: RunEvalOptions | undefined,
-    phase: 'serial' | 'concurrent' = 'concurrent',
+    _phase: 'serial' | 'concurrent' = 'concurrent',
+    metrics?: PromptMetrics,
   ): void {
     if (this.isWebUI || !evalStep || !this.progressBar) {
       return;
@@ -131,12 +153,13 @@ class ProgressBarManager {
     this.completedCount++;
     const provider = evalStep.provider.label || evalStep.provider.id();
     const prompt = `"${evalStep.prompt.raw.slice(0, 10).replace(/\n/g, ' ')}"`;
-    const vars = formatVarsForDisplay(evalStep.test.vars, 10);
+    const vars = formatVarsForDisplay(evalStep.test.vars, 40);
 
     this.progressBar.increment({
       provider,
       prompt: prompt || '""',
       vars: vars || '',
+      errors: metrics?.testErrorCount ?? 0,
     });
   }
 
@@ -153,6 +176,7 @@ class ProgressBarManager {
       provider: 'Grading',
       prompt: `"${prompt.slice(0, 10).replace(/\n/g, ' ')}"`,
       vars: '',
+      errors: 0,
     });
   }
 
@@ -189,8 +213,6 @@ class ProgressBarManager {
     }
   }
 }
-
-export const DEFAULT_MAX_CONCURRENCY = 4;
 
 /**
  * Update token usage metrics with assertion token usage
@@ -256,16 +278,16 @@ export async function runEval({
   provider,
   prompt, // raw prompt
   test,
+  testSuite,
   delay,
   nunjucksFilters: filters,
   evaluateOptions,
   testIdx,
   promptIdx,
+  repeatIndex,
   conversations,
   registers,
   isRedteam,
-  allTests,
-  concurrency,
   abortSignal,
 }: RunEvalOptions): Promise<EvaluateResult[]> {
   // Use the original prompt to set the label, not renderedPrompt
@@ -277,8 +299,12 @@ export async function runEval({
     `Provider delay should be set for ${provider.label}`,
   );
 
-  // Set up the special _conversation variable
-  const vars = test.vars || {};
+  // Set up vars with a shallow copy to prevent mutation of the original test.vars.
+  // This is important because providers (especially multi-turn strategies like GOAT,
+  // Crescendo) may add runtime variables like sessionId to vars during execution.
+  // Without this copy, those mutations would persist to the stored testCase, causing
+  // test matching to fail when using --filter-errors-only or --filter-failing.
+  const vars = { ...(test.vars || {}) };
 
   // Collect file metadata for the test case before rendering the prompt.
   const fileMetadata = collectFileMetadata(test.vars || vars);
@@ -332,22 +358,18 @@ export async function runEval({
 
     if (test.providerOutput) {
       response.output = test.providerOutput;
-    } else if (
-      typeof test.provider === 'object' &&
-      typeof test.provider.id === 'function' &&
-      test.provider.id() === 'promptfoo:redteam:pandamonium'
-    ) {
-      if (!isPandamoniumProvider(test.provider)) {
-        throw new Error('Provider identified as pandamonium but does not have required methods');
-      }
-
-      return await test.provider.runPandamonium(provider, test, allTests || [], concurrency);
     } else {
       const activeProvider = isApiProvider(test.provider) ? test.provider : provider;
       logger.debug(`Provider type: ${activeProvider.id()}`);
 
       // Generate trace context if tracing is enabled
-      traceContext = await generateTraceContextIfNeeded(test, evaluateOptions, testIdx, promptIdx);
+      traceContext = await generateTraceContextIfNeeded(
+        test,
+        evaluateOptions,
+        testIdx,
+        promptIdx,
+        testSuite,
+      );
 
       const callApiContext: any = {
         // Always included
@@ -362,7 +384,12 @@ export async function runEval({
         // All of these are removed in python and script providers, but every Javascript provider gets them
         logger: logger as unknown as winston.Logger,
         getCache,
+        repeatIndex,
       };
+
+      if (repeatIndex > 0) {
+        callApiContext.bustCache = true;
+      }
 
       // Only add trace context properties if tracing is enabled
       if (traceContext) {
@@ -424,26 +451,6 @@ export async function runEval({
         ...test.metadata,
         ...response.metadata,
         [FILE_METADATA_KEY]: fileMetadata,
-        // Add session information to metadata
-        ...(() => {
-          // If sessionIds array exists from iterative providers, use it
-          if (test.metadata?.sessionIds) {
-            return { sessionIds: test.metadata.sessionIds };
-          }
-
-          // Otherwise, use single sessionId (prioritize response over vars)
-          if (response.sessionId) {
-            return { sessionId: response.sessionId };
-          }
-
-          // Check if vars.sessionId is a valid string
-          const varsSessionId = vars.sessionId;
-          if (typeof varsSessionId === 'string' && varsSessionId.trim() !== '') {
-            return { sessionId: varsSessionId };
-          }
-
-          return {};
-        })(),
       },
       promptIdx,
       testIdx,
@@ -451,6 +458,11 @@ export async function runEval({
       promptId: prompt.id || '',
       tokenUsage: createEmptyTokenUsage(),
     };
+
+    if (!ret.metadata?.sessionIds && !ret.metadata?.sessionId) {
+      ret.metadata ??= {};
+      ret.metadata.sessionId = getSessionId(response, { vars });
+    }
 
     invariant(ret.tokenUsage, 'This is always defined, just doing this to shut TS up');
 
@@ -478,7 +490,7 @@ export async function runEval({
       }
     } else {
       // Create a copy of response so we can potentially mutate it.
-      const processedResponse = { ...response };
+      let processedResponse = { ...response };
 
       // Apply provider transform first (if exists)
       if (provider.transform) {
@@ -497,10 +509,20 @@ export async function runEval({
         processedResponse.output = await transform(testTransform, processedResponse.output, {
           vars,
           prompt,
+          ...(response && response.metadata && { metadata: response.metadata }),
         });
       }
 
       invariant(processedResponse.output != null, 'Response output should not be null');
+
+      // Externalize large blobs before grading to avoid token bloat in model-graded assertions.
+      const blobbedResponse = await extractAndStoreBinaryData(processedResponse, {
+        testIdx,
+        promptIdx,
+      });
+      if (blobbedResponse) {
+        processedResponse = blobbedResponse;
+      }
 
       // Extract traceId from traceparent if available
       let traceId: string | undefined;
@@ -522,7 +544,7 @@ export async function runEval({
           providerTransformedOutput,
         },
         test,
-        latencyMs: response.cached ? undefined : latencyMs,
+        latencyMs: response.latencyMs ?? latencyMs,
         assertScoringFunction: test.assertScoringFunction as ScoringFunction,
         traceId,
       });
@@ -624,14 +646,20 @@ export function generateVarCombinations(
 
     if (typeof vars[key] === 'string' && vars[key].startsWith('file://')) {
       const filePath = vars[key].slice('file://'.length);
-      const resolvedPath = path.resolve(cliState.basePath || '', filePath);
+
+      // For glob patterns, we need to resolve the base directory and use relative patterns
+      const basePath = cliState.basePath || '';
       const filePaths =
-        globSync(resolvedPath.replace(/\\/g, '/'), {
+        globSync(filePath, {
+          cwd: basePath || process.cwd(),
           windowsPathsNoEscape: true,
         }) || [];
+
       values = filePaths.map((path: string) => `file://${path}`);
       if (values.length === 0) {
-        throw new Error(`No files found for variable ${key} at path ${resolvedPath}`);
+        throw new Error(
+          `No files found for variable ${key} at path ${filePath} in directory ${basePath || process.cwd()}`,
+        );
       }
     } else {
       values = Array.isArray(vars[key]) ? vars[key] : [vars[key]];
@@ -699,6 +727,10 @@ class Evaluator {
     let globalAbortController: AbortController | undefined;
     const processedIndices = new Set<number>();
 
+    // Progress reporters declared here for cleanup in finally block
+    let ciProgressReporter: CIProgressReporter | null = null;
+    let progressBarManager: ProgressBarManager | null = null;
+
     if (maxEvalTimeMs > 0) {
       globalAbortController = new AbortController();
       options.abortSignal = options.abortSignal
@@ -717,7 +749,9 @@ class Evaluator {
       }
     };
 
-    logger.info(`Starting evaluation ${this.evalRecord.id}`);
+    if (!options.silent) {
+      logger.info(`Starting evaluation ${this.evalRecord.id}`);
+    }
 
     // Add abort checks at key points
     checkAbort();
@@ -726,6 +760,18 @@ class Evaluator {
     const assertionTypes = new Set<string>();
     const rowsWithSelectBestAssertion = new Set<number>();
     const rowsWithMaxScoreAssertion = new Set<number>();
+
+    // Ensure defaultTest has a usable structure before extensions run.
+    // This allows extensions to safely do `context.suite.defaultTest.assert.push(...)`
+    // without needing defensive checks for undefined values.
+    if (testSuite.extensions?.length) {
+      if (!testSuite.defaultTest) {
+        testSuite.defaultTest = {};
+      }
+      if (typeof testSuite.defaultTest !== 'string' && !testSuite.defaultTest.assert) {
+        testSuite.defaultTest.assert = [];
+      }
+    }
 
     const beforeAllOut = await runExtensionHook(testSuite.extensions, 'beforeAll', {
       suite: testSuite,
@@ -766,6 +812,17 @@ class Evaluator {
 
     // Split prompts by provider
     // Order matters - keep provider in outer loop to reduce need to swap models during local inference.
+
+    // Create a map of existing prompts for resume support
+    const existingPromptsMap = new Map<string, CompletedPrompt>();
+    if (cliState.resume && this.evalRecord.persisted && this.evalRecord.prompts.length > 0) {
+      logger.debug('Resuming evaluation: preserving metrics from previous run');
+      for (const existingPrompt of this.evalRecord.prompts) {
+        const key = `${existingPrompt.provider}:${existingPrompt.id}`;
+        existingPromptsMap.set(key, existingPrompt);
+      }
+    }
+
     for (const provider of testSuite.providers) {
       for (const prompt of testSuite.prompts) {
         // Check if providerPromptMap exists and if it contains the current prompt's label
@@ -773,12 +830,17 @@ class Evaluator {
         if (!isAllowedPrompt(prompt, testSuite.providerPromptMap?.[providerKey])) {
           continue;
         }
+
+        const promptId = generateIdFromPrompt(prompt);
+        const existingPromptKey = `${providerKey}:${promptId}`;
+        const existingPrompt = existingPromptsMap.get(existingPromptKey);
+
         const completedPrompt = {
           ...prompt,
-          id: generateIdFromPrompt(prompt),
+          id: promptId,
           provider: providerKey,
           label: prompt.label,
-          metrics: {
+          metrics: existingPrompt?.metrics || {
             score: 0,
             testPassCount: 0,
             testFailCount: 0,
@@ -815,6 +877,7 @@ class Evaluator {
       telemetry.record('feature_used', {
         feature: 'scenarios',
       });
+      let scenarioIndex = 0;
       for (const scenario of testSuite.scenarios) {
         for (const data of scenario.config) {
           // Merge defaultTest with scenario config
@@ -825,6 +888,20 @@ class Evaluator {
               },
             ]
           ).map((test) => {
+            // Merge metadata from all sources
+            const mergedMetadata = {
+              ...(typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest?.metadata : {}),
+              ...data.metadata,
+              ...test.metadata,
+            };
+
+            // Auto-generate scenarioConversationId if no conversationId is set
+            // This ensures each scenario has isolated conversation history by default
+            // Users can still override by setting their own conversationId
+            if (!mergedMetadata.conversationId) {
+              mergedMetadata.conversationId = `__scenario_${scenarioIndex}__`;
+            }
+
             return {
               ...(typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : {}),
               ...data,
@@ -845,17 +922,12 @@ class Evaluator {
                 ...(data.assert || []),
                 ...(test.assert || []),
               ],
-              metadata: {
-                ...(typeof testSuite.defaultTest === 'object'
-                  ? testSuite.defaultTest?.metadata
-                  : {}),
-                ...data.metadata,
-                ...test.metadata,
-              },
+              metadata: mergedMetadata,
             };
           });
           // Add scenario tests to tests
           tests = tests.concat(scenarioTests);
+          scenarioIndex++;
         }
       }
     }
@@ -882,7 +954,7 @@ class Evaluator {
         if (inputTransform) {
           const transformContext: TransformContext = {
             prompt: {},
-            uuid: randomUUID(),
+            uuid: crypto.randomUUID(),
           };
           const transformedVars: Vars = await transform(
             inputTransform,
@@ -1007,6 +1079,7 @@ class Evaluator {
                   ...prompt,
                   raw: prependToPrompt + prompt.raw + appendToPrompt,
                 },
+                testSuite,
                 test: (() => {
                   const baseTest = {
                     ...testCase,
@@ -1014,9 +1087,15 @@ class Evaluator {
                     options: testCase.options,
                   };
                   // Only add tracing metadata fields if tracing is actually enabled
+                  // Check env flag, test case metadata, and test suite config
                   const tracingEnabled =
+                    getEnvBool('PROMPTFOO_TRACING_ENABLED', false) ||
                     testCase.metadata?.tracingEnabled === true ||
                     testSuite.tracing?.enabled === true;
+
+                  logger.debug(
+                    `[Evaluator] Tracing check: env=${getEnvBool('PROMPTFOO_TRACING_ENABLED', false)}, testCase.metadata?.tracingEnabled=${testCase.metadata?.tracingEnabled}, testSuite.tracing?.enabled=${testSuite.tracing?.enabled}, tracingEnabled=${tracingEnabled}`,
+                  );
 
                   if (tracingEnabled) {
                     return {
@@ -1038,7 +1117,6 @@ class Evaluator {
                 conversations: this.conversations,
                 registers: this.registers,
                 isRedteam: testSuite.redteam != null,
-                allTests: runEvalOptions,
                 concurrency,
                 abortSignal: options.abortSignal,
               });
@@ -1049,6 +1127,40 @@ class Evaluator {
         }
       }
     }
+    // Pre-mark comparison rows before any filtering (used by resume logic)
+    for (const evalOption of runEvalOptions) {
+      if (evalOption.test.assert?.some((a) => a.type === 'select-best')) {
+        rowsWithSelectBestAssertion.add(evalOption.testIdx);
+      }
+      if (evalOption.test.assert?.some((a) => a.type === 'max-score')) {
+        rowsWithMaxScoreAssertion.add(evalOption.testIdx);
+      }
+    }
+
+    // Resume support: if CLI is in resume mode, skip already-completed (testIdx,promptIdx) pairs
+    if (cliState.resume && this.evalRecord.persisted) {
+      try {
+        const { default: EvalResult } = await import('./models/evalResult');
+        const completedPairs = await EvalResult.getCompletedIndexPairs(this.evalRecord.id);
+        const originalCount = runEvalOptions.length;
+        // Filter out steps that already exist in DB
+        for (let i = runEvalOptions.length - 1; i >= 0; i--) {
+          const step = runEvalOptions[i];
+          if (completedPairs.has(`${step.testIdx}:${step.promptIdx}`)) {
+            runEvalOptions.splice(i, 1);
+          }
+        }
+        const skipped = originalCount - runEvalOptions.length;
+        if (skipped > 0) {
+          logger.info(`Resuming: skipping ${skipped} previously completed cases`);
+        }
+      } catch (err) {
+        logger.warn(
+          `Resume: failed to load completed results. Running full evaluation. ${String(err)}`,
+        );
+      }
+    }
+
     // Determine run parameters
 
     if (concurrency > 1) {
@@ -1330,12 +1442,20 @@ class Evaluator {
     // Set up progress tracking
     const originalProgressCallback = this.options.progressCallback;
     const isWebUI = Boolean(cliState.webUI);
-    const progressBarManager = new ProgressBarManager(isWebUI);
 
-    // Initialize progress bar manager if needed
+    // Choose appropriate progress reporter
     logger.debug(
       `Progress bar settings: showProgressBar=${this.options.showProgressBar}, isWebUI=${isWebUI}`,
     );
+
+    if (isCI() && !isWebUI) {
+      // Use CI-friendly progress reporter
+      ciProgressReporter = new CIProgressReporter(runEvalOptions.length);
+      ciProgressReporter.start();
+    } else if (this.options.showProgressBar && process.stdout.isTTY) {
+      // Use visual progress bars
+      progressBarManager = new ProgressBarManager(isWebUI);
+    }
 
     this.options.progressCallback = (completed, total, index, evalStep, metrics) => {
       if (originalProgressCallback) {
@@ -1346,10 +1466,13 @@ class Evaluator {
         const provider = evalStep.provider.label || evalStep.provider.id();
         const vars = formatVarsForDisplay(evalStep.test.vars, 50);
         logger.info(`[${numComplete}/${total}] Running ${provider} with vars: ${vars}`);
-      } else if (this.options.showProgressBar) {
+      } else if (progressBarManager) {
         // Progress bar update is handled by the manager
         const phase = evalStep.test.options?.runSerially ? 'serial' : 'concurrent';
-        progressBarManager.updateProgress(index, evalStep, phase);
+        progressBarManager.updateProgress(index, evalStep, phase, metrics);
+      } else if (ciProgressReporter) {
+        // CI progress reporter update
+        ciProgressReporter.update(numComplete);
       } else {
         logger.debug(`Eval #${index + 1} complete (${numComplete} of ${runEvalOptions.length})`);
       }
@@ -1368,17 +1491,19 @@ class Evaluator {
     }
 
     // Print info messages before starting progress bar
-    if (serialRunEvalOptions.length > 0) {
-      logger.info(`Running ${serialRunEvalOptions.length} test cases serially...`);
-    }
-    if (concurrentRunEvalOptions.length > 0) {
-      logger.info(
-        `Running ${concurrentRunEvalOptions.length} test cases (up to ${concurrency} at a time)...`,
-      );
+    if (!this.options.silent) {
+      if (serialRunEvalOptions.length > 0) {
+        logger.info(`Running ${serialRunEvalOptions.length} test cases serially...`);
+      }
+      if (concurrentRunEvalOptions.length > 0) {
+        logger.info(
+          `Running ${concurrentRunEvalOptions.length} test cases (up to ${concurrency} at a time)...`,
+        );
+      }
     }
 
     // Now start the progress bar after info messages
-    if (this.options.showProgressBar) {
+    if (this.options.showProgressBar && progressBarManager) {
       await progressBarManager.initialize(runEvalOptions, concurrency, 0);
     }
 
@@ -1390,7 +1515,7 @@ class Evaluator {
             const provider = evalStep.provider.label || evalStep.provider.id();
             const vars = formatVarsForDisplay(evalStep.test.vars || {}, 50);
             logger.info(
-              `[${numComplete}/${serialRunEvalOptions.length}] Running ${provider} with vars: ${vars}`,
+              `[${numComplete}/${runEvalOptions.length}] Running ${provider} with vars: ${vars}`,
             );
           }
           const idx = runEvalOptions.indexOf(evalStep);
@@ -1398,7 +1523,7 @@ class Evaluator {
           processedIndices.add(idx);
         }
 
-        // Serial phase complete - no specific action needed with single bar
+        // Serial phase complete - progress is tracked automatically by updateProgress
       }
 
       // Then run concurrent evaluations
@@ -1411,9 +1536,17 @@ class Evaluator {
       });
     } catch (err) {
       if (options.abortSignal?.aborted) {
+        // User interruption or max duration timeout
         evalTimedOut = evalTimedOut || maxEvalTimeMs > 0;
-        logger.warn(`Evaluation aborted: ${String(err)}`);
+        if (evalTimedOut) {
+          logger.warn(`Evaluation stopped after reaching max duration (${maxEvalTimeMs}ms)`);
+        } else {
+          logger.info('Evaluation interrupted, saving progress...');
+        }
       } else {
+        if (ciProgressReporter) {
+          ciProgressReporter.error(`Evaluation failed: ${String(err)}`);
+        }
         throw err;
       }
     }
@@ -1421,9 +1554,14 @@ class Evaluator {
     // Do we have to run comparisons between row outputs?
     const compareRowsCount = rowsWithSelectBestAssertion.size + rowsWithMaxScoreAssertion.size;
 
-    // Update total count now that we know comparison count
-    if (this.options.showProgressBar && compareRowsCount > 0) {
-      progressBarManager.updateTotalCount(compareRowsCount);
+    // Update progress reporters based on comparison count
+    if (progressBarManager) {
+      if (compareRowsCount > 0) {
+        progressBarManager.updateTotalCount(compareRowsCount);
+      }
+    } else if (ciProgressReporter && compareRowsCount > 0) {
+      // Update total tests to include comparison tests for CI reporter
+      ciProgressReporter.updateTotalTests(runEvalOptions.length + compareRowsCount);
     }
 
     let compareCount = 0;
@@ -1447,10 +1585,25 @@ class Evaluator {
       ) as Assertion;
       if (compareAssertion) {
         const outputs = resultsToCompare.map((r) => r.response?.output || '');
+
+        // Provide context for grading providers that need originalProvider.
+        // For example, simulated-user requires originalProvider to access the target provider's configuration.
+        const firstResult = resultsToCompare[0];
+        const providerId = firstResult.provider.id;
+        const originalProvider = this.testSuite.providers.find((p) => p.id() === providerId);
+        const callApiContext = originalProvider
+          ? {
+              originalProvider,
+              prompt: firstResult.prompt,
+              vars: firstResult.testCase.vars || {},
+            }
+          : undefined;
+
         const gradingResults = await runCompareAssertion(
           resultsToCompare[0].testCase,
           compareAssertion,
           outputs,
+          callApiContext,
         );
         for (let index = 0; index < resultsToCompare.length; index++) {
           const result = resultsToCompare[index];
@@ -1510,8 +1663,10 @@ class Evaluator {
             await result.save();
           }
         }
-        if (this.options.showProgressBar) {
+        if (progressBarManager) {
           progressBarManager.updateComparisonProgress(resultsToCompare[0].prompt.raw);
+        } else if (ciProgressReporter) {
+          ciProgressReporter.update(runEvalOptions.length + compareCount);
         } else if (!isWebUI) {
           logger.debug(`Model-graded comparison #${compareCount} of ${compareRowsCount} complete`);
         }
@@ -1548,8 +1703,12 @@ class Evaluator {
           );
 
           // Update progress bar
-          if (this.options.showProgressBar) {
+          if (progressBarManager) {
             progressBarManager.updateComparisonProgress(resultsToCompare[0].prompt.raw);
+          } else if (ciProgressReporter) {
+            // For max-score assertions, we're still in the comparison phase
+            // so we add to the total completed count
+            ciProgressReporter.update(runEvalOptions.length + compareCount);
           } else if (!isWebUI) {
             logger.debug(`Max-score assertion for test #${testIdx} complete`);
           }
@@ -1592,10 +1751,16 @@ class Evaluator {
 
     await this.evalRecord.addPrompts(prompts);
 
-    // Finish up
-    if (this.options.showProgressBar) {
-      progressBarManager.complete();
-      progressBarManager.stop();
+    // Clean up progress reporters and timers
+    try {
+      if (progressBarManager) {
+        progressBarManager.complete();
+        progressBarManager.stop();
+      } else if (ciProgressReporter) {
+        ciProgressReporter.finish();
+      }
+    } catch (cleanupErr) {
+      logger.warn(`Error during progress reporter cleanup: ${cleanupErr}`);
     }
 
     if (globalTimeout) {
@@ -1652,6 +1817,9 @@ class Evaluator {
     // Calculate additional metrics for telemetry
     const endTime = Date.now();
     const totalEvalTimeMs = endTime - startTime;
+
+    // Store the duration on the eval record for persistence
+    this.evalRecord.setDurationMs(totalEvalTimeMs);
 
     // Calculate aggregated metrics
     const totalCost = prompts.reduce((acc, p) => acc + (p.metrics?.cost || 0), 0);
@@ -1717,6 +1885,8 @@ class Evaluator {
       // Basic metrics
       numPrompts: prompts.length,
       numTests: this.stats.successes + this.stats.failures + this.stats.errors,
+      numRequests: this.stats.tokenUsage.numRequests || 0,
+      numResults: this.evalRecord.results.length,
       numVars: varNames.size,
       numProviders: testSuite.providers.length,
       numRepeat: options.repeat || 1,
@@ -1739,6 +1909,8 @@ class Evaluator {
 
       // Token and cost metrics
       totalTokens,
+      promptTokens: this.stats.tokenUsage.prompt,
+      completionTokens: this.stats.tokenUsage.completion,
       cachedTokens,
       totalCost,
       totalRequests,
@@ -1758,8 +1930,13 @@ class Evaluator {
       isRedteam: Boolean(options.isRedteam),
     });
 
-    // Update database signal file after all results are written
-    updateSignalFile();
+    // Save the eval record to persist durationMs
+    if (this.evalRecord.persisted) {
+      await this.evalRecord.save();
+    }
+
+    // Update database signal file after all results are written, passing the eval ID
+    updateSignalFile(this.evalRecord.id);
 
     return this.evalRecord;
   }
@@ -1767,15 +1944,40 @@ class Evaluator {
   async evaluate(): Promise<Eval> {
     await startOtlpReceiverIfNeeded(this.testSuite);
 
+    // Initialize OTEL SDK if tracing is enabled
+    // Check env flag, test suite level, and default test metadata
+    const tracingEnabled =
+      getEnvBool('PROMPTFOO_TRACING_ENABLED', false) ||
+      this.testSuite.tracing?.enabled === true ||
+      (typeof this.testSuite.defaultTest === 'object' &&
+        this.testSuite.defaultTest?.metadata?.tracingEnabled === true) ||
+      this.testSuite.tests?.some((t) => t.metadata?.tracingEnabled === true);
+
+    if (tracingEnabled) {
+      logger.debug('[Evaluator] Initializing OTEL SDK for tracing');
+      const otelConfig = getDefaultOtelConfig();
+      initializeOtel(otelConfig);
+    }
+
     try {
       return await this._runEvaluation();
     } finally {
+      // Flush and shutdown OTEL SDK
+      if (tracingEnabled) {
+        logger.debug('[Evaluator] Flushing OTEL spans...');
+        await flushOtel();
+        await shutdownOtel();
+      }
+
       if (isOtlpReceiverStarted()) {
         // Add a delay to allow providers to finish exporting spans
         logger.debug('[Evaluator] Waiting for span exports to complete...');
-        await sleep(1000);
+        await sleep(3000);
       }
       await stopOtlpReceiverIfNeeded();
+
+      // Clean up Python worker pools to prevent resource leaks
+      await providerRegistry.shutdownAll();
     }
   }
 }

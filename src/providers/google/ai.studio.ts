@@ -1,8 +1,8 @@
 import { fetchWithCache } from '../../cache';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
-import { renderVarsInObject } from '../../util';
 import { maybeLoadFromExternalFile } from '../../util/file';
+import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util/index';
 import { getNunjucksEngine } from '../../util/templates';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToGoogle } from '../mcp/transform';
@@ -12,16 +12,16 @@ import {
   formatCandidateContents,
   geminiFormatAndSystemInstructions,
   getCandidate,
-  loadFile,
+  normalizeTools,
 } from './util';
 
+import type { EnvOverrides } from '../../types/env';
 import type {
   ApiProvider,
   CallApiContextParams,
   GuardrailResponse,
   ProviderResponse,
-} from '../../types';
-import type { EnvOverrides } from '../../types/env';
+} from '../../types/index';
 import type { CompletionOptions } from './types';
 import type { GeminiResponseData } from './util';
 
@@ -106,7 +106,7 @@ class AIStudioGenericProvider implements ApiProvider {
   }
 
   // @ts-ignore: Prompt is not used in this implementation
-  async callApi(prompt: string): Promise<ProviderResponse> {
+  async callApi(_prompt: string): Promise<ProviderResponse> {
     throw new Error('Not implemented');
   }
 }
@@ -161,8 +161,6 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
       maxOutputTokens: this.config.maxOutputTokens,
     };
 
-    logger.debug(`Calling Google API: ${JSON.stringify(body)}`);
-
     let data,
       cached = false;
     try {
@@ -187,8 +185,6 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
         error: `API call error: ${String(err)}`,
       };
     }
-
-    logger.debug(`\tGoogle API response: ${JSON.stringify(data)}`);
 
     if (!data?.candidates || data.candidates.length === 0) {
       return {
@@ -262,11 +258,20 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
     );
 
     // Determine API version based on model
-    const apiVersion = this.modelName === 'gemini-2.0-flash-thinking-exp' ? 'v1alpha' : 'v1beta';
+    const apiVersion =
+      this.modelName === 'gemini-2.0-flash-thinking-exp' || this.modelName.startsWith('gemini-3-')
+        ? 'v1alpha'
+        : 'v1beta';
 
     // --- MCP tool injection logic ---
     const mcpTools = this.mcpClient ? transformMCPToolsToGoogle(this.mcpClient.getAllTools()) : [];
-    const allTools = [...mcpTools, ...(config.tools ? loadFile(config.tools, context?.vars) : [])];
+    const fileTools = config.tools
+      ? await maybeLoadToolsFromExternalFile(config.tools, context?.vars)
+      : [];
+    const allTools = [
+      ...mcpTools,
+      ...(Array.isArray(fileTools) ? normalizeTools(fileTools) : fileTools ? [fileTools] : []),
+    ];
     // --- End MCP tool injection logic ---
 
     const body: Record<string, any> = {
@@ -304,8 +309,6 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
       body.generationConfig.response_mime_type = 'application/json';
     }
 
-    logger.debug(`Calling Google API: ${JSON.stringify(body)}`);
-
     let data;
     let cached = false;
     try {
@@ -334,7 +337,6 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
       };
     }
 
-    logger.debug(`\tGoogle API response: ${JSON.stringify(data)}`);
     let output, candidate;
     try {
       candidate = getCandidate(data);

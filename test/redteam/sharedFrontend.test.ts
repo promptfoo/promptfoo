@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest';
 import { Severity } from '../../src/redteam/constants';
 import { getRiskCategorySeverityMap, getUnifiedConfig } from '../../src/redteam/sharedFrontend';
 
@@ -198,5 +199,16 @@ describe('getUnifiedConfig', () => {
     const result = getUnifiedConfig(configWithNonStateful);
 
     expect(result.redteam.strategies).toEqual([{ id: 'goat' }]);
+  });
+
+  it('should include frameworks when provided', () => {
+    const configWithFrameworks: SavedRedteamConfig = {
+      ...baseConfig,
+      frameworks: ['owasp:llm', 'nist:ai:measure'],
+    };
+
+    const result = getUnifiedConfig(configWithFrameworks);
+
+    expect(result.redteam.frameworks).toEqual(['owasp:llm', 'nist:ai:measure']);
   });
 });

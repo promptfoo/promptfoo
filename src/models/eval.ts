@@ -1,8 +1,6 @@
-import { randomUUID } from 'crypto';
-
-import { desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
 import { DEFAULT_QUERY_LIMIT } from '../constants';
-import { getDb } from '../database';
+import { getDb } from '../database/index';
 import { updateSignalFile } from '../database/signal';
 import {
   datasetsTable,
@@ -19,6 +17,9 @@ import { getUserEmail } from '../globalConfig/accounts';
 import logger from '../logger';
 import { hashPrompt } from '../prompts/utils';
 import { PLUGIN_CATEGORIES } from '../redteam/constants';
+import { calculateAttackSuccessRate } from '../redteam/metrics';
+import { getRiskCategorySeverityMap } from '../redteam/sharedFrontend';
+import { getTraceStore } from '../tracing/store';
 import {
   type CompletedPrompt,
   type EvalSummary,
@@ -32,27 +33,87 @@ import {
   ResultFailureReason,
   type ResultsFile,
   type UnifiedConfig,
-} from '../types';
+} from '../types/index';
+import { calculateFilteredMetrics } from '../util/calculateFilteredMetrics';
 import { convertResultsToTable } from '../util/convertEvalResultsToTable';
 import { randomSequence, sha256 } from '../util/createHash';
-import { convertTestResultsToTableRow } from '../util/exportToFile';
+import { convertTestResultsToTableRow } from '../util/exportToFile/index';
 import invariant from '../util/invariant';
 import { getCurrentTimestamp } from '../util/time';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
+import {
+  getCachedResultsCount,
+  getTotalResultRowCount,
+  queryTestIndicesOptimized,
+} from './evalPerformance';
 import EvalResult from './evalResult';
-import { getCachedResultsCount, queryTestIndicesOptimized } from './evalPerformance';
 
+import type { EvalResultsFilterMode, TraceData } from '../types/index';
+
+/**
+ * Database query result type interfaces
+ * These types ensure type safety for raw SQL queries that don't use Drizzle's query builder
+ */
+
+/** Result from COUNT queries using db.get() - count may be null if query fails */
 interface FilteredCountRow {
   count: number | null;
 }
 
+/** Result from queries selecting test_idx column */
 interface TestIndexRow {
   test_idx: number;
+}
+
+/** Result from queries selecting distinct metadata or variable keys */
+interface MetadataKeyResult {
+  key: string;
+}
+
+/**
+ * Sanitizes runtime options to ensure only JSON-serializable data is persisted.
+ * Removes non-serializable fields like AbortSignal, functions, and symbols.
+ */
+function sanitizeRuntimeOptions(
+  options?: Partial<import('../types').EvaluateOptions>,
+): Partial<import('../types').EvaluateOptions> | undefined {
+  if (!options) {
+    return undefined;
+  }
+
+  // Create a deep copy to avoid mutating the original
+  const sanitized = { ...options };
+
+  // Remove known non-serializable fields
+  delete (sanitized as any).abortSignal;
+
+  // Remove any function or symbol values
+  for (const key in sanitized) {
+    const value = (sanitized as any)[key];
+    if (typeof value === 'function' || typeof value === 'symbol') {
+      delete (sanitized as any)[key];
+    }
+  }
+
+  return sanitized;
 }
 
 export function createEvalId(createdAt: Date = new Date()) {
   return `eval-${randomSequence(3)}-${createdAt.toISOString().slice(0, 19)}`;
 }
+
+/** Result from queries extracting variable keys with eval IDs */
+export interface VarKeyWithEvalIdResult {
+  key: string;
+  eval_id: string;
+}
+
+/** Result from queries extracting variable keys */
+export interface VarKeyResult {
+  key: string;
+}
+
+const escapeJsonPathKey = (key: string) => key.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 
 export class EvalQueries {
   static async getVarsFromEvals(evals: Eval[]) {
@@ -61,8 +122,7 @@ export class EvalQueries {
       `SELECT DISTINCT j.key, eval_id from (SELECT eval_id, json_extract(eval_results.test_case, '$.vars') as vars
 FROM eval_results where eval_id IN (${evals.map((e) => `'${e.id}'`).join(',')})) t, json_each(t.vars) j;`,
     );
-    // @ts-ignore
-    const results: { key: string; eval_id: string }[] = await db.all(query);
+    const results = await db.all<VarKeyWithEvalIdResult>(query);
     const vars = results.reduce((acc: Record<string, string[]>, r) => {
       acc[r.eval_id] = acc[r.eval_id] || [];
       acc[r.eval_id].push(r.key);
@@ -77,8 +137,7 @@ FROM eval_results where eval_id IN (${evals.map((e) => `'${e.id}'`).join(',')}))
       `SELECT DISTINCT j.key from (SELECT json_extract(eval_results.test_case, '$.vars') as vars
     FROM eval_results where eval_results.eval_id = '${evalId}') t, json_each(t.vars) j;`,
     );
-    // @ts-ignore
-    const results: { key: string }[] = await db.all(query);
+    const results = await db.all<VarKeyResult>(query);
     const vars = results.map((r) => r.key);
 
     return vars;
@@ -87,9 +146,86 @@ FROM eval_results where eval_id IN (${evals.map((e) => `'${e.id}'`).join(',')}))
   static async setVars(evalId: string, vars: string[]) {
     const db = getDb();
     try {
-      await db.update(evalsTable).set({ vars }).where(eq(evalsTable.id, evalId)).run();
+      db.update(evalsTable).set({ vars }).where(eq(evalsTable.id, evalId)).run();
     } catch (e) {
       logger.error(`Error setting vars: ${vars} for eval ${evalId}: ${e}`);
+    }
+  }
+
+  static async getMetadataKeysFromEval(
+    evalId: string,
+    comparisonEvalIds: string[] = [],
+  ): Promise<string[]> {
+    const db = getDb();
+    try {
+      // Combine primary eval ID with comparison eval IDs
+      const allEvalIds = [evalId, ...comparisonEvalIds];
+
+      // Use json_valid() to filter out malformed JSON and add LIMIT for DoS protection
+      const query = sql`
+        SELECT DISTINCT j.key FROM (
+          SELECT metadata FROM eval_results
+          WHERE eval_id IN (${sql.join(allEvalIds, sql`, `)})
+            AND metadata IS NOT NULL
+            AND metadata != '{}'
+            AND json_valid(metadata)
+          LIMIT 10000
+        ) t, json_each(t.metadata) j
+        ORDER BY j.key
+        LIMIT 1000
+      `;
+      const results = await db.all<MetadataKeyResult>(query);
+      return results.map((r) => r.key);
+    } catch (error) {
+      // Log error but return empty array to prevent breaking the UI
+      logger.error(
+        `Error fetching metadata keys for eval ${evalId} and comparisons [${comparisonEvalIds.join(', ')}]: ${error}`,
+      );
+      return [];
+    }
+  }
+
+  /**
+   * Queries all unique metadata values for a given metadata key.
+   * @param evalId - The ID of the eval to get the metadata values from.
+   * @param key - The key of the metadata to get the values from.
+   * @returns An array of unique metadata values.
+   */
+  static getMetadataValuesFromEval(evalId: string, key: string): string[] {
+    const db = getDb();
+    const trimmedKey = key.trim();
+    if (!trimmedKey) {
+      return [];
+    }
+
+    try {
+      const escapedKey = escapeJsonPathKey(trimmedKey);
+      const jsonPath = `$."${escapedKey}"`;
+
+      const query = sql`
+        SELECT DISTINCT
+          json_extract(${evalResultsTable.metadata}, ${jsonPath}) AS value
+        FROM ${evalResultsTable}
+        WHERE ${evalResultsTable.evalId} = ${evalId}
+          AND ${evalResultsTable.metadata} IS NOT NULL
+          AND ${evalResultsTable.metadata} != '{}'
+          AND json_valid(${evalResultsTable.metadata})
+          AND json_extract(${evalResultsTable.metadata}, ${jsonPath}) IS NOT NULL
+        ORDER BY value
+        LIMIT 1000
+      `;
+
+      const rows = db.all<{ value: string }>(query);
+      const values = rows
+        .map(({ value }) => String(value).trim())
+        .filter((value) => Boolean(value && value.length > 0));
+
+      return Array.from(new Set(values));
+    } catch (error) {
+      logger.error(
+        `Error fetching metadata values for eval ${evalId} and key ${trimmedKey}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return [];
     }
   }
 }
@@ -108,6 +244,9 @@ export default class Eval {
   persisted: boolean;
   vars: string[];
   _resultsLoaded: boolean = false;
+  runtimeOptions?: Partial<import('../types').EvaluateOptions>;
+  _shared: boolean = false;
+  durationMs?: number;
 
   static async latest() {
     const db = getDb();
@@ -147,6 +286,16 @@ export default class Eval {
     const eval_ = evalData[0];
     const datasetId = datasetResults[0]?.datasetId;
 
+    // Extract durationMs from results column (for V4 evals)
+    // Validate that it's a finite positive number to guard against corrupted data
+    const resultsObj = eval_.results as Record<string, unknown> | undefined;
+    const rawDurationMs =
+      resultsObj && 'durationMs' in resultsObj ? resultsObj.durationMs : undefined;
+    const durationMs =
+      typeof rawDurationMs === 'number' && Number.isFinite(rawDurationMs) && rawDurationMs >= 0
+        ? rawDurationMs
+        : undefined;
+
     const evalInstance = new Eval(eval_.config, {
       id: eval_.id,
       createdAt: new Date(eval_.createdAt),
@@ -156,6 +305,8 @@ export default class Eval {
       datasetId,
       persisted: true,
       vars: eval_.vars || [],
+      runtimeOptions: (eval_ as any).runtimeOptions,
+      durationMs,
     });
     if (eval_.results && 'table' in eval_.results) {
       evalInstance.oldResults = eval_.results as EvaluateSummaryV2;
@@ -202,6 +353,8 @@ export default class Eval {
       // Be wary, this is EvalResult[] and not EvaluateResult[]
       results?: EvalResult[];
       vars?: string[];
+      runtimeOptions?: Partial<import('../types').EvaluateOptions>;
+      completedPrompts?: CompletedPrompt[];
     },
   ): Promise<Eval> {
     const createdAt = opts?.createdAt || new Date();
@@ -221,6 +374,8 @@ export default class Eval {
           config,
           results: {},
           vars: opts?.vars || [],
+          runtimeOptions: sanitizeRuntimeOptions(opts?.runtimeOptions),
+          prompts: opts?.completedPrompts || [],
         })
         .run();
 
@@ -250,7 +405,7 @@ export default class Eval {
       if (opts?.results && opts.results.length > 0) {
         const res = db
           .insert(evalResultsTable)
-          .values(opts.results?.map((r) => ({ ...r, evalId, id: randomUUID() })))
+          .values(opts.results?.map((r) => ({ ...r, evalId, id: crypto.randomUUID() })))
           .run();
         logger.debug(`Inserted ${res.changes} eval results`);
       }
@@ -299,7 +454,13 @@ export default class Eval {
       }
     });
 
-    return new Eval(config, { id: evalId, author: opts?.author, createdAt, persisted: true });
+    return new Eval(config, {
+      id: evalId,
+      author: opts?.author,
+      createdAt,
+      persisted: true,
+      runtimeOptions: sanitizeRuntimeOptions(opts?.runtimeOptions),
+    });
   }
 
   constructor(
@@ -313,6 +474,8 @@ export default class Eval {
       datasetId?: string;
       persisted?: boolean;
       vars?: string[];
+      runtimeOptions?: Partial<import('../types').EvaluateOptions>;
+      durationMs?: number;
     },
   ) {
     const createdAt = opts?.createdAt || new Date();
@@ -326,6 +489,8 @@ export default class Eval {
     this.persisted = opts?.persisted || false;
     this._resultsLoaded = false;
     this.vars = opts?.vars || [];
+    this.runtimeOptions = opts?.runtimeOptions;
+    this.durationMs = opts?.durationMs;
   }
 
   version() {
@@ -355,13 +520,17 @@ export default class Eval {
       author: this.author,
       updatedAt: getCurrentTimestamp(),
       vars: Array.from(this.vars),
+      runtimeOptions: sanitizeRuntimeOptions(this.runtimeOptions),
     };
 
     if (this.useOldResults()) {
       invariant(this.oldResults, 'Old results not found');
       updateObj.results = this.oldResults;
+    } else if (this.durationMs !== undefined) {
+      // For V4 evals, store durationMs in the results column
+      updateObj.results = { durationMs: this.durationMs };
     }
-    await db.update(evalsTable).set(updateObj).where(eq(evalsTable.id, this.id)).run();
+    db.update(evalsTable).set(updateObj).where(eq(evalsTable.id, this.id)).run();
     this.persisted = true;
   }
 
@@ -371,6 +540,10 @@ export default class Eval {
 
   addVar(varName: string) {
     this.vars.push(varName);
+  }
+
+  setDurationMs(durationMs: number) {
+    this.durationMs = durationMs;
   }
 
   getPrompts() {
@@ -398,8 +571,8 @@ export default class Eval {
       this.results.push(newResult);
     }
     if (this.persisted) {
-      // Notify watchers that new results are available
-      updateSignalFile();
+      // Notify watchers that new results are available, passing the eval ID
+      updateSignalFile(this.id);
     }
   }
 
@@ -410,8 +583,17 @@ export default class Eval {
   }
 
   async getResultsCount(): Promise<number> {
-    // Use cached count for better performance
+    // Returns distinct test count (unique test cases) - used for UI display
     return getCachedResultsCount(this.id);
+  }
+
+  /**
+   * Get the total count of all result rows for this eval.
+   * Use this when iterating over all results (e.g., for sharing progress).
+   * This may be higher than getResultsCount() when there are multiple prompts/providers.
+   */
+  async getTotalResultRowCount(): Promise<number> {
+    return getTotalResultRowCount(this.id);
   }
 
   async fetchResultsByTestIdx(testIdx: number) {
@@ -419,19 +601,21 @@ export default class Eval {
   }
 
   /**
-   * Private helper method to build filter conditions and query for test indices
+   * CRITICAL: Builds the WHERE SQL clause for filtering results.
+   * This is the single source of truth for all filtering logic.
+   * Used by both queryTestIndices() (pagination) and getFilteredMetrics().
+   *
+   * Any changes to filter logic MUST be made here to ensure consistency
+   * between displayed rows and calculated metrics.
+   *
+   * @returns SQL WHERE clause string (without "WHERE" keyword)
    */
-  private async queryTestIndices(opts: {
-    offset?: number;
-    limit?: number;
-    filterMode?: string;
+  private buildFilterWhereSql(opts: {
+    filterMode?: EvalResultsFilterMode;
     searchQuery?: string;
     filters?: string[];
-  }): Promise<{ testIndices: number[]; filteredCount: number }> {
-    const db = getDb();
-    const offset = opts.offset ?? 0;
-    const limit = opts.limit ?? 50;
-    const mode = opts.filterMode ?? 'all';
+  }): string {
+    const mode: EvalResultsFilterMode = opts.filterMode ?? 'all';
 
     // Build filter conditions
     const conditions = [`eval_id = '${this.id}'`];
@@ -441,44 +625,100 @@ export default class Eval {
       conditions.push(`success = 0 AND failure_reason != ${ResultFailureReason.ERROR}`);
     } else if (mode === 'passes') {
       conditions.push(`success = 1`);
+    } else if (mode === 'highlights') {
+      conditions.push(`json_extract(grading_result, '$.comment') LIKE '!highlight%'`);
     }
 
     // Add filters
     if (opts.filters && opts.filters.length > 0) {
       const filterConditions: string[] = [];
+      // Helper function to sanitize SQL string values
+      const sanitizeValue = (val: string) => val.replace(/'/g, "''");
+
+      // Helper function to escape JSON path keys (quotes & backslashes) for safe SQLite json_extract() usage
+      const escapeJsonPathKey = (key: string) => key.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+
       opts.filters.forEach((filter) => {
         const { logicOperator, type, operator, value, field } = JSON.parse(filter);
         let condition: string | null = null;
 
-        if (type === 'metric' && operator === 'equals') {
-          const sanitizedValue = value.replace(/'/g, "''");
-          // Because sanitized values can contain dots (e.g. `gpt-4.1-judge`) we need to wrap the sanitized value
-          // in double quotes.
-          condition = `json_extract(named_scores, '$."${sanitizedValue}"') IS NOT NULL`;
+        if (type === 'metric') {
+          // For backward compatibility: old filters use 'value' for metric name with 'equals' operator
+          // New filters use 'field' for metric name with comparison operators
+          const metricKey = field || value;
+          if (!metricKey) {
+            // Skip invalid metric filters
+            return;
+          }
+
+          const escapedField = escapeJsonPathKey(metricKey);
+
+          // Value must be a number
+          const numericValue = typeof value === 'number' ? value : Number.parseFloat(value);
+
+          if (operator === 'is_defined' || (operator === 'equals' && !field)) {
+            // 'is_defined': new operator that checks if metric exists
+            // 'equals' without field: old format for backward compatibility
+            condition = `json_extract(named_scores, '$."${escapedField}"') IS NOT NULL`;
+          }
+          // For the numeric operators, validate that the value is a number
+          else if (Number.isFinite(numericValue)) {
+            if (operator === 'eq') {
+              // Numeric equality
+              condition = `CAST(json_extract(named_scores, '$."${escapedField}"') AS REAL) = ${numericValue}`;
+            } else if (operator === 'neq') {
+              // Numeric inequality
+              condition = `(json_extract(named_scores, '$."${escapedField}"') IS NOT NULL AND CAST(json_extract(named_scores, '$."${escapedField}"') AS REAL) != ${numericValue})`;
+            } else if (operator === 'gt') {
+              // Greater than
+              condition = `CAST(json_extract(named_scores, '$."${escapedField}"') AS REAL) > ${numericValue}`;
+            } else if (operator === 'gte') {
+              // Greater than or equal
+              condition = `CAST(json_extract(named_scores, '$."${escapedField}"') AS REAL) >= ${numericValue}`;
+            } else if (operator === 'lt') {
+              // Less than
+              condition = `CAST(json_extract(named_scores, '$."${escapedField}"') AS REAL) < ${numericValue}`;
+            } else if (operator === 'lte') {
+              // Less than or equal
+              condition = `CAST(json_extract(named_scores, '$."${escapedField}"') AS REAL) <= ${numericValue}`;
+            }
+          }
         } else if (type === 'metadata' && field) {
-          const sanitizedValue = value.replace(/'/g, "''");
-          const sanitizedField = field.replace(/'/g, "''");
+          const sanitizedValue = sanitizeValue(value);
+          const escapedField = escapeJsonPathKey(field);
 
           if (operator === 'equals') {
-            condition = `json_extract(metadata, '$."${sanitizedField}"') = '${sanitizedValue}'`;
+            condition = `json_extract(metadata, '$."${escapedField}"') = '${sanitizedValue}'`;
           } else if (operator === 'contains') {
-            condition = `json_extract(metadata, '$."${sanitizedField}"') LIKE '%${sanitizedValue}%'`;
+            condition = `json_extract(metadata, '$."${escapedField}"') LIKE '%${sanitizedValue}%'`;
           } else if (operator === 'not_contains') {
-            condition = `(json_extract(metadata, '$."${sanitizedField}"') IS NULL OR json_extract(metadata, '$."${sanitizedField}"') NOT LIKE '%${sanitizedValue}%')`;
+            condition = `(json_extract(metadata, '$."${escapedField}"') IS NULL OR json_extract(metadata, '$."${escapedField}"') NOT LIKE '%${sanitizedValue}%')`;
+          } else if (operator === 'exists') {
+            // For exists, check if the field is present AND not empty (not null, not empty string, not just whitespace)
+            // Use a single json_extract call with LENGTH(TRIM()) for better performance
+            condition = `LENGTH(TRIM(COALESCE(json_extract(metadata, '$."${escapedField}"'), ''))) > 0`;
           }
-        } else if (type === 'plugin' && operator === 'equals') {
-          const sanitizedValue = value.replace(/'/g, "''");
-          // Is the value a category? e.g. `harmful` or `bias`
+        } else if (type === 'plugin') {
+          const sanitizedValue = sanitizeValue(value);
+          const pluginIdPath = "json_extract(metadata, '$.pluginId')";
           const isCategory = Object.keys(PLUGIN_CATEGORIES).includes(sanitizedValue);
 
-          // Plugin ID is stored in metadata.pluginId
-          if (isCategory) {
-            condition = `json_extract(metadata, '$.pluginId') LIKE '${sanitizedValue}:%'`;
-          } else {
-            condition = `json_extract(metadata, '$.pluginId') = '${sanitizedValue}'`;
+          if (operator === 'equals') {
+            // Plugin ID is stored in metadata.pluginId
+            if (isCategory) {
+              condition = `${pluginIdPath} LIKE '${sanitizedValue}:%'`;
+            } else {
+              condition = `${pluginIdPath} = '${sanitizedValue}'`;
+            }
+          } else if (operator === 'not_equals') {
+            if (isCategory) {
+              condition = `(${pluginIdPath} IS NULL OR (${pluginIdPath} != '${sanitizedValue}' AND ${pluginIdPath} NOT LIKE '${sanitizedValue}:%'))`;
+            } else {
+              condition = `(${pluginIdPath} IS NULL OR ${pluginIdPath} != '${sanitizedValue}')`;
+            }
           }
         } else if (type === 'strategy' && operator === 'equals') {
-          const sanitizedValue = value.replace(/'/g, "''");
+          const sanitizedValue = sanitizeValue(value);
           if (sanitizedValue === 'basic') {
             // Basic is represented by NULL in the metadata.strategyId field
             condition = `(json_extract(metadata, '$.strategyId') IS NULL OR json_extract(metadata, '$.strategyId') = '')`;
@@ -486,12 +726,49 @@ export default class Eval {
             // Strategy ID is stored in metadata.strategyId
             condition = `json_extract(metadata, '$.strategyId') = '${sanitizedValue}'`;
           }
+        } else if (type === 'severity' && operator === 'equals') {
+          const sanitizedValue = sanitizeValue(value);
+
+          // Severity can be explicit (metadata.severity) or implied by pluginId.
+          // When implied by pluginId, ignore cases where an explicit override disagrees.
+          const explicit = `json_extract(metadata, '$.severity') = '${sanitizedValue}'`;
+
+          // Get the severity map for all plugins
+          const severityMap = getRiskCategorySeverityMap(this.config?.redteam?.plugins);
+
+          // Find all plugin IDs that match the requested severity
+          const matchingPluginIds = Object.entries(severityMap)
+            .filter(([, severity]) => severity === sanitizedValue)
+            .map(([pluginId]) => pluginId);
+
+          // Build pluginId match conditions for this severity
+          const pluginIdPath = "json_extract(metadata, '$.pluginId')";
+          const pluginConditions: string[] = matchingPluginIds.map((pluginId) => {
+            const sanitizedPluginId = sanitizeValue(pluginId);
+            return pluginId.includes(':')
+              ? // It's a specific subcategory
+                `${pluginIdPath} = '${sanitizedPluginId}'`
+              : // It's a category, match any plugin starting with this prefix
+                `${pluginIdPath} LIKE '${sanitizedPluginId}:%'`;
+          });
+
+          // Final condition: explicit OR (plugin match AND no conflicting override)
+          if (pluginConditions.length > 0) {
+            // Plugin-derived severity is only applied when there's no conflicting explicitly-defined override
+            // in the row's metadata.
+            const overrideOk = `(json_extract(metadata, '$.severity') IS NULL OR json_extract(metadata, '$.severity') = '${sanitizedValue}')`;
+            condition = `(${explicit} OR ((${pluginConditions.join(' OR ')}) AND ${overrideOk}))`;
+          } else {
+            condition = `(${explicit})`;
+          }
+        } else if (type === 'policy' && operator === 'equals') {
+          const sanitizedValue = sanitizeValue(value);
+          condition = `(named_scores LIKE '%PolicyViolation:%' AND named_scores LIKE '%${sanitizedValue}%')`;
         }
 
         if (condition) {
-          // Logic operator can only be applied if there are already conditions
+          // Apply logic operator if there are already existing filter conditions
           filterConditions.push(
-            // Logic operator can only be applied if there are already conditions
             filterConditions.length > 0 ? `${logicOperator} ${condition}` : condition,
           );
         }
@@ -523,7 +800,29 @@ export default class Eval {
       conditions.push(`(${searchConditions.join(' OR ')})`);
     }
 
-    const whereSql = conditions.join(' AND ');
+    return conditions.join(' AND ');
+  }
+
+  /**
+   * Private helper method to build filter conditions and query for test indices
+   */
+  private async queryTestIndices(opts: {
+    offset?: number;
+    limit?: number;
+    filterMode?: EvalResultsFilterMode;
+    searchQuery?: string;
+    filters?: string[];
+  }): Promise<{ testIndices: number[]; filteredCount: number }> {
+    const db = getDb();
+    const offset = opts.offset ?? 0;
+    const limit = opts.limit ?? 50;
+
+    // CRITICAL: Use single source of truth for WHERE clause
+    const whereSql = this.buildFilterWhereSql({
+      filterMode: opts.filterMode,
+      searchQuery: opts.searchQuery,
+      filters: opts.filters,
+    });
 
     // Get filtered count
     const filteredCountQuery = sql.raw(
@@ -550,10 +849,35 @@ export default class Eval {
     return { testIndices, filteredCount };
   }
 
+  /**
+   * CRITICAL: Calculates metrics for filtered results.
+   * Uses the SAME WHERE clause as queryTestIndices() to ensure consistency.
+   *
+   * This method is called from the API route when filters are active to provide
+   * metrics that accurately reflect the filtered dataset.
+   *
+   * @returns Array of PromptMetrics, one per prompt
+   */
+  async getFilteredMetrics(opts: {
+    filterMode?: EvalResultsFilterMode;
+    searchQuery?: string;
+    filters?: string[];
+  }): Promise<import('../types').PromptMetrics[]> {
+    // CRITICAL: Use the SAME WHERE clause as queryTestIndices
+    const whereSql = this.buildFilterWhereSql(opts);
+
+    return calculateFilteredMetrics({
+      evalId: this.id,
+      numPrompts: this.prompts.length,
+      whereSql,
+      whereParams: [], // SQLite uses string interpolation in this codebase
+    });
+  }
+
   async getTablePage(opts: {
     offset?: number;
     limit?: number;
-    filterMode?: string;
+    filterMode?: EvalResultsFilterMode;
     testIndices?: number[];
     searchQuery?: string;
     filters?: string[];
@@ -659,7 +983,7 @@ export default class Eval {
     this.prompts = prompts;
     if (this.persisted) {
       const db = getDb();
-      await db.update(evalsTable).set({ prompts }).where(eq(evalsTable.id, this.id)).run();
+      db.update(evalsTable).set({ prompts }).where(eq(evalsTable.id, this.id)).run();
     }
   }
 
@@ -698,6 +1022,7 @@ export default class Eval {
       failures: 0,
       errors: 0,
       tokenUsage: createEmptyTokenUsage(),
+      durationMs: this.durationMs,
     };
 
     for (const prompt of this.prompts) {
@@ -745,7 +1070,53 @@ export default class Eval {
     };
   }
 
+  async getTraces(): Promise<TraceData[]> {
+    try {
+      const traceStore = getTraceStore();
+      const tracesData = await traceStore.getTracesByEvaluation(this.id);
+
+      // Transform trace data to match the expected schema
+      return tracesData.map((trace: TraceData) => ({
+        traceId: trace.traceId,
+        evaluationId: trace.evaluationId,
+        testCaseId: trace.testCaseId,
+        metadata: trace.metadata,
+        spans: (trace.spans || []).map((span: any) => {
+          // Calculate duration
+          const durationMs =
+            span.endTime && span.startTime ? (span.endTime - span.startTime) / 1000000 : undefined;
+
+          // Map status code
+          const statusCode =
+            span.statusCode === 1 ? 'ok' : span.statusCode === 2 ? 'error' : 'unset';
+
+          return {
+            spanId: span.spanId,
+            parentSpanId: span.parentSpanId,
+            name: span.name,
+            kind: span.kind || 'unspecified',
+            startTime: span.startTime,
+            endTime: span.endTime,
+            durationMs,
+            attributes: span.attributes || {},
+            status: {
+              code: statusCode,
+              message: span.statusMessage,
+            },
+            depth: 0, // Will be calculated on the server side when storing
+            events: span.events || [],
+          };
+        }),
+      }));
+    } catch (error) {
+      logger.debug(`Failed to fetch traces for eval ${this.id}: ${error}`);
+      return [];
+    }
+  }
+
   async toResultsFile(): Promise<ResultsFile> {
+    const traces = await this.getTraces();
+
     const results: ResultsFile = {
       version: this.version(),
       createdAt: new Date(this.createdAt).toISOString(),
@@ -754,6 +1125,7 @@ export default class Eval {
       author: this.author || null,
       prompts: this.getPrompts(),
       datasetId: this.datasetId || null,
+      ...(traces.length > 0 && { traces }),
     };
 
     return results;
@@ -769,16 +1141,210 @@ export default class Eval {
       db.delete(evalsTable).where(eq(evalsTable.id, this.id)).run();
     });
   }
+
+  /**
+   * Creates a deep copy of this eval including all results.
+   * Uses batching to avoid memory exhaustion on large evals.
+   * @param description - Optional description for the new eval
+   * @param distinctTestCount - Optional pre-computed test count to avoid duplicate query
+   */
+  async copy(description?: string, distinctTestCount?: number): Promise<Eval> {
+    const newEvalId = createEvalId(new Date());
+    const copyDescription = description || `${this.description || 'Evaluation'} (Copy)`;
+
+    // Get distinct test count for logging and progress tracking
+    const testCount = distinctTestCount ?? (await this.getResultsCount());
+
+    logger.info('Starting eval copy', {
+      sourceEvalId: this.id,
+      targetEvalId: newEvalId,
+      distinctTestCount: testCount,
+    });
+
+    // Deep clone to prevent mutation issues
+    const newConfig = structuredClone(this.config);
+    newConfig.description = copyDescription;
+
+    const newPrompts = structuredClone(this.prompts);
+    const newVars = this.vars ? structuredClone(this.vars) : [];
+    const author = getUserEmail();
+
+    const db = getDb();
+
+    // Copy eval, results, and relationships within transaction for atomicity
+    let copiedCount = 0;
+    db.transaction(() => {
+      // Create the new eval record first
+      db.insert(evalsTable)
+        .values({
+          id: newEvalId,
+          createdAt: Date.now(),
+          author,
+          description: copyDescription,
+          config: newConfig,
+          results: {},
+          prompts: newPrompts,
+          vars: newVars,
+          runtimeOptions: sanitizeRuntimeOptions(this.runtimeOptions),
+          isRedteam: Boolean(newConfig.redteam),
+        })
+        .run();
+
+      // Copy prompts relationships
+      // Note: prompts already exist in promptsTable from when the source eval was created
+      // We just need to create new relationships pointing to those same prompts
+      const promptRels = db
+        .select()
+        .from(evalsToPromptsTable)
+        .where(eq(evalsToPromptsTable.evalId, this.id))
+        .all();
+
+      if (promptRels.length > 0) {
+        db.insert(evalsToPromptsTable)
+          .values(
+            promptRels.map((rel) => ({
+              evalId: newEvalId,
+              promptId: rel.promptId,
+            })),
+          )
+          .onConflictDoNothing()
+          .run();
+      }
+
+      // Copy tags relationships (from config.tags)
+      if (this.config.tags) {
+        for (const [tagKey, tagValue] of Object.entries(this.config.tags)) {
+          const tagId = sha256(`${tagKey}:${tagValue}`);
+
+          db.insert(tagsTable)
+            .values({
+              id: tagId,
+              name: tagKey,
+              value: tagValue,
+            })
+            .onConflictDoNothing()
+            .run();
+
+          db.insert(evalsToTagsTable)
+            .values({
+              evalId: newEvalId,
+              tagId,
+            })
+            .onConflictDoNothing()
+            .run();
+        }
+      }
+
+      // Copy dataset relationship
+      const datasetRel = db
+        .select()
+        .from(evalsToDatasetsTable)
+        .where(eq(evalsToDatasetsTable.evalId, this.id))
+        .limit(1)
+        .all();
+
+      if (datasetRel.length > 0) {
+        db.insert(evalsToDatasetsTable)
+          .values({
+            evalId: newEvalId,
+            datasetId: datasetRel[0].datasetId,
+          })
+          .onConflictDoNothing()
+          .run();
+      }
+
+      // Copy results in batches to avoid memory exhaustion
+      const BATCH_SIZE = 1000;
+      let offset = 0;
+
+      while (true) {
+        // Fetch batch from source eval
+        const batch = db
+          .select()
+          .from(evalResultsTable)
+          .where(eq(evalResultsTable.evalId, this.id))
+          .orderBy(evalResultsTable.id)
+          .limit(BATCH_SIZE)
+          .offset(offset)
+          .all();
+
+        if (batch.length === 0) {
+          break;
+        }
+
+        // Map to new eval with new IDs and timestamps
+        const now = Date.now();
+        const copiedResults = batch.map((result) => ({
+          ...result,
+          id: crypto.randomUUID(),
+          evalId: newEvalId,
+          createdAt: now,
+          updatedAt: now,
+        }));
+
+        // Insert batch
+        db.insert(evalResultsTable).values(copiedResults).run();
+
+        copiedCount += batch.length;
+        offset += BATCH_SIZE;
+
+        logger.debug('Copied batch of eval results', {
+          sourceEvalId: this.id,
+          targetEvalId: newEvalId,
+          batchSize: batch.length,
+          rowsCopied: copiedCount,
+          distinctTestCount: testCount,
+        });
+      }
+    });
+
+    logger.info('Eval copy completed successfully', {
+      sourceEvalId: this.id,
+      targetEvalId: newEvalId,
+      rowsCopied: copiedCount,
+      distinctTestCount: testCount,
+    });
+
+    return (await Eval.findById(newEvalId)) as Eval;
+  }
+
+  get shared() {
+    return this._shared;
+  }
+
+  set shared(shared: boolean) {
+    this._shared = shared;
+  }
 }
 
 /**
  * Queries summaries of all evals, optionally for a given dataset.
  *
  * @param datasetId - An optional dataset ID to filter by.
+ * @param type - An optional eval type to filter by.
+ * @param includeProviders - An optional flag to include providers in the summary.
  * @returns A list of eval summaries.
  */
-export async function getEvalSummaries(datasetId?: string): Promise<EvalSummary[]> {
+export async function getEvalSummaries(
+  datasetId?: string,
+  type?: 'redteam' | 'eval',
+  includeProviders: boolean = false,
+): Promise<EvalSummary[]> {
   const db = getDb();
+
+  const whereClauses = [];
+
+  if (datasetId) {
+    whereClauses.push(eq(evalsToDatasetsTable.datasetId, datasetId));
+  }
+
+  if (type) {
+    if (type === 'redteam') {
+      whereClauses.push(sql<boolean>`json_type(${evalsTable.config}, '$.redteam') IS NOT NULL`);
+    } else {
+      whereClauses.push(sql<boolean>`json_type(${evalsTable.config}, '$.redteam') IS NULL`);
+    }
+  }
 
   const results = db
     .select({
@@ -788,10 +1354,11 @@ export async function getEvalSummaries(datasetId?: string): Promise<EvalSummary[
       datasetId: evalsToDatasetsTable.datasetId,
       isRedteam: sql<boolean>`json_type(${evalsTable.config}, '$.redteam') IS NOT NULL`,
       prompts: evalsTable.prompts,
+      config: evalsTable.config,
     })
     .from(evalsTable)
     .leftJoin(evalsToDatasetsTable, eq(evalsTable.id, evalsToDatasetsTable.evalId))
-    .where(datasetId ? eq(evalsToDatasetsTable.datasetId, datasetId) : undefined)
+    .where(and(...whereClauses))
     .orderBy(desc(evalsTable.createdAt))
     .all();
 
@@ -805,6 +1372,11 @@ export async function getEvalSummaries(datasetId?: string): Promise<EvalSummary[
     const passCount =
       result.prompts?.reduce((memo, prompt) => {
         return memo + (prompt.metrics?.testPassCount ?? 0);
+      }, 0) ?? 0;
+
+    const failCount =
+      result.prompts?.reduce((memo, prompt) => {
+        return memo + (prompt.metrics?.testFailCount ?? 0);
       }, 0) ?? 0;
 
     // All prompts should have the same number of test cases:
@@ -822,6 +1394,49 @@ export async function getEvalSummaries(datasetId?: string): Promise<EvalSummary[
     // Test count * prompt count
     const testRunCount = testCount * (result.prompts?.length ?? 0);
 
+    // Construct an array of providers
+    const deserializedProviders = [];
+    const providers = result.config.providers;
+
+    if (includeProviders) {
+      if (typeof providers === 'string') {
+        // `providers: string`
+        deserializedProviders.push({
+          id: providers,
+          label: null,
+        });
+      } else if (Array.isArray(providers)) {
+        providers.forEach((p) => {
+          if (typeof p === 'string') {
+            // `providers: string[]`
+            deserializedProviders.push({
+              id: p,
+              label: null,
+            });
+          } else if (typeof p === 'object' && p) {
+            // Check if it's a declarative provider (record format)
+            // e.g., { 'openai:gpt-4': { config: {...} } }
+            const keys = Object.keys(p);
+            if (keys.length === 1 && !('id' in p)) {
+              // This is a declarative provider
+              const providerId = keys[0];
+              const providerConfig = (p as any)[providerId];
+              deserializedProviders.push({
+                id: providerId,
+                label: providerConfig.label ?? null,
+              });
+            } else {
+              // `providers: ProviderOptions[]` with explicit id
+              deserializedProviders.push({
+                id: (p as any).id ?? 'unknown',
+                label: (p as any).label ?? null,
+              });
+            }
+          }
+        });
+      }
+    }
+
     return {
       evalId: result.evalId,
       createdAt: result.createdAt,
@@ -831,6 +1446,9 @@ export async function getEvalSummaries(datasetId?: string): Promise<EvalSummary[
       isRedteam: result.isRedteam,
       passRate: testRunCount > 0 ? (passCount / testRunCount) * 100 : 0,
       label: result.description ? `${result.description} (${result.evalId})` : result.evalId,
+      providers: deserializedProviders,
+      attackSuccessRate:
+        type === 'redteam' ? calculateAttackSuccessRate(testRunCount, failCount) : undefined,
     };
   });
 }

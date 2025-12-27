@@ -16,7 +16,6 @@ import {
   isModelAuditSharingEnabled,
   isSharingEnabled,
 } from '../share';
-import telemetry from '../telemetry';
 import { loadDefaultConfig } from '../util/config/default';
 import type { Command } from 'commander';
 
@@ -38,7 +37,7 @@ export async function createAndDisplayShareableUrl(
   evalRecord: Eval,
   showAuth: boolean,
 ): Promise<string | null> {
-  const url = await createShareableUrl(evalRecord, showAuth);
+  const url = await createShareableUrl(evalRecord, { showAuth });
 
   if (url) {
     logger.info(`View results: ${chalk.greenBright.bold(url)}`);
@@ -90,10 +89,6 @@ export function shareCommand(program: Command) {
           showAuth: boolean;
         } & Command,
       ) => {
-        telemetry.record('command_used', {
-          name: 'share',
-        });
-
         let isEval = false;
         let eval_: Eval | undefined | null = null;
         let audit: ModelAudit | undefined | null = null;
@@ -136,11 +131,16 @@ export function shareCommand(program: Command) {
           if (evalTime > auditTime) {
             isEval = true;
             eval_ = latestEval;
-            logger.info(`Sharing latest eval (${eval_!.id})`);
           } else {
             audit = latestAudit;
-            logger.info(`Sharing latest model audit (${audit!.id})`);
           }
+        }
+
+        // Now show what we're sharing
+        if (isEval && eval_) {
+          logger.info(`Sharing eval ${eval_!.id}`);
+        } else if (audit) {
+          logger.info(`Sharing model audit ${audit!.id}`);
         }
 
         // Handle evaluation sharing (prioritized since evals are more important)
@@ -188,9 +188,23 @@ export function shareCommand(program: Command) {
               eval_.id,
               cmdObj.showAuth,
             );
-            const shouldContinue = await confirm({
-              message: `This eval is already shared at ${url}. Sharing it again will overwrite the existing data. Continue?`,
-            });
+
+            let shouldContinue = false;
+            try {
+              shouldContinue = await confirm({
+                message: dedent`
+                  Already shared at:
+                    ${chalk.cyan(url)}
+
+                  Re-share (will overwrite existing data)?
+                `,
+              });
+            } catch {
+              // User pressed Ctrl+C or cancelled
+              process.exitCode = 0;
+              return;
+            }
+
             if (!shouldContinue) {
               process.exitCode = 0;
               return;

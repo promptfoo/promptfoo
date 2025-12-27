@@ -1,5 +1,3 @@
-import React from 'react';
-
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import Box from '@mui/material/Box';
@@ -20,10 +18,10 @@ interface BrowserAutomationConfigurationProps {
   updateCustomTarget: (field: string, value: any) => void;
 }
 
-const BrowserAutomationConfiguration: React.FC<BrowserAutomationConfigurationProps> = ({
+const BrowserAutomationConfiguration = ({
   selectedTarget,
   updateCustomTarget,
-}) => {
+}: BrowserAutomationConfigurationProps) => {
   return (
     <Box mt={2}>
       <Typography variant="h6" gutterBottom>

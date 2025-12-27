@@ -1,15 +1,15 @@
 import * as fs from 'fs';
 import path from 'path';
 
-import { globSync } from 'glob';
+import { globSync, hasMagic } from 'glob';
 import yaml from 'js-yaml';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
 import {
   getResolvedRelativePath,
   maybeLoadConfigFromExternalFile,
   maybeLoadFromExternalFile,
 } from '../../src/util/file';
-import { safeJoin, safeResolve } from '../../src/util/file.node';
 import {
   isAudioFile,
   isImageFile,
@@ -17,22 +17,18 @@ import {
   isVideoFile,
 } from '../../src/util/fileExtensions';
 
-jest.mock('fs', () => ({
-  ...jest.requireActual('fs'),
-  readFileSync: jest.fn(),
-  existsSync: jest.fn(),
-}));
+vi.mock('fs', async () => {
+  const actual = await vi.importActual<typeof import('fs')>('fs');
+  return {
+    ...actual,
+    readFileSync: vi.fn(),
+    existsSync: vi.fn(),
+  };
+});
 
-jest.mock('glob');
+vi.mock('glob');
 
 describe('file utilities', () => {
-  // Helper to create platform-appropriate file URLs
-  const getFileUrl = (path: string) => {
-    return process.platform === 'win32'
-      ? `file:///C:/${path.replace(/\\/g, '/')}`
-      : `file:///${path}`;
-  };
-
   describe('isJavascriptFile', () => {
     it('identifies JavaScript and TypeScript files', () => {
       expect(isJavascriptFile('test.js')).toBe(true);
@@ -96,9 +92,13 @@ describe('file utilities', () => {
     const originalBasePath = cliState.basePath;
 
     beforeEach(() => {
-      jest.resetAllMocks();
-      jest.mocked(fs.existsSync).mockReturnValue(true);
-      jest.mocked(fs.readFileSync).mockReturnValue(mockFileContent);
+      vi.resetAllMocks();
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.readFileSync).mockReturnValue(mockFileContent);
+      vi.mocked(hasMagic).mockImplementation((pattern: string | string[]) => {
+        const p = Array.isArray(pattern) ? pattern.join('') : pattern;
+        return p.includes('*') || p.includes('?') || p.includes('[') || p.includes('{');
+      });
       cliState.basePath = '/mock/base/path';
     });
 
@@ -119,8 +119,8 @@ describe('file utilities', () => {
 
     it('should load JSON files', () => {
       const mockData = { key: 'value' };
-      jest.mocked(fs.existsSync).mockReturnValue(true);
-      jest.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(mockData));
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify(mockData));
 
       const result = maybeLoadFromExternalFile('file://test.json');
       expect(result).toEqual(mockData);
@@ -128,8 +128,8 @@ describe('file utilities', () => {
 
     it('should load YAML files', () => {
       const mockData = { key: 'value' };
-      jest.mocked(fs.existsSync).mockReturnValue(true);
-      jest.mocked(fs.readFileSync).mockReturnValue(yaml.dump(mockData));
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.readFileSync).mockReturnValue(yaml.dump(mockData));
 
       const result = maybeLoadFromExternalFile('file://test.yaml');
       expect(result).toEqual(mockData);
@@ -137,8 +137,8 @@ describe('file utilities', () => {
 
     it('should load CSV files', () => {
       const csvContent = 'name,age\nJohn,30\nJane,25';
-      jest.mocked(fs.existsSync).mockReturnValue(true);
-      jest.mocked(fs.readFileSync).mockReturnValue(csvContent);
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.readFileSync).mockReturnValue(csvContent);
 
       const result = maybeLoadFromExternalFile('file://test.csv');
       expect(result).toEqual([
@@ -152,9 +152,8 @@ describe('file utilities', () => {
       const mockData1 = { test: 'scenario1' };
       const mockData2 = { test: 'scenario2' };
 
-      jest.mocked(globSync).mockReturnValue(mockFiles);
-      jest
-        .mocked(fs.readFileSync)
+      vi.mocked(globSync).mockReturnValue(mockFiles);
+      vi.mocked(fs.readFileSync)
         .mockReturnValueOnce(yaml.dump(mockData1))
         .mockReturnValueOnce(yaml.dump(mockData2));
 
@@ -170,9 +169,8 @@ describe('file utilities', () => {
       const mockData1 = { id: 1 };
       const mockData2 = { id: 2 };
 
-      jest.mocked(globSync).mockReturnValue(mockFiles);
-      jest
-        .mocked(fs.readFileSync)
+      vi.mocked(globSync).mockReturnValue(mockFiles);
+      vi.mocked(fs.readFileSync)
         .mockReturnValueOnce(JSON.stringify(mockData1))
         .mockReturnValueOnce(JSON.stringify(mockData2));
 
@@ -185,9 +183,8 @@ describe('file utilities', () => {
       const mockData1 = [{ test: 'a' }, { test: 'b' }];
       const mockData2 = [{ test: 'c' }, { test: 'd' }];
 
-      jest.mocked(globSync).mockReturnValue(mockFiles);
-      jest
-        .mocked(fs.readFileSync)
+      vi.mocked(globSync).mockReturnValue(mockFiles);
+      vi.mocked(fs.readFileSync)
         .mockReturnValueOnce(yaml.dump(mockData1))
         .mockReturnValueOnce(yaml.dump(mockData2));
 
@@ -200,11 +197,8 @@ describe('file utilities', () => {
       const csvContent1 = 'name\nAlice\nBob';
       const csvContent2 = 'name\nCharlie\nDavid';
 
-      jest.mocked(globSync).mockReturnValue(mockFiles);
-      jest
-        .mocked(fs.readFileSync)
-        .mockReturnValueOnce(csvContent1)
-        .mockReturnValueOnce(csvContent2);
+      vi.mocked(globSync).mockReturnValue(mockFiles);
+      vi.mocked(fs.readFileSync).mockReturnValueOnce(csvContent1).mockReturnValueOnce(csvContent2);
 
       const result = maybeLoadFromExternalFile('file://data*.csv');
       // Should return array of values, not objects
@@ -215,8 +209,8 @@ describe('file utilities', () => {
       const mockFiles = ['/mock/base/path/users.csv'];
       const csvContent = 'name,age\nAlice,30\nBob,25';
 
-      jest.mocked(globSync).mockReturnValue(mockFiles);
-      jest.mocked(fs.readFileSync).mockReturnValue(csvContent);
+      vi.mocked(globSync).mockReturnValue(mockFiles);
+      vi.mocked(fs.readFileSync).mockReturnValue(csvContent);
 
       const result = maybeLoadFromExternalFile('file://users*.csv');
       // Should return array of objects for multi-column CSV
@@ -230,9 +224,8 @@ describe('file utilities', () => {
       const mockFiles = ['/mock/base/path/empty.yaml', '/mock/base/path/data.yaml'];
       const mockData = { test: 'data' };
 
-      jest.mocked(globSync).mockReturnValue(mockFiles);
-      jest
-        .mocked(fs.readFileSync)
+      vi.mocked(globSync).mockReturnValue(mockFiles);
+      vi.mocked(fs.readFileSync)
         .mockReturnValueOnce('') // Empty file
         .mockReturnValueOnce(yaml.dump(mockData));
 
@@ -242,7 +235,7 @@ describe('file utilities', () => {
     });
 
     it('should throw error when glob pattern matches no files', () => {
-      jest.mocked(globSync).mockReturnValue([]);
+      vi.mocked(globSync).mockReturnValue([]);
 
       expect(() => maybeLoadFromExternalFile('file://nonexistent/*.yaml')).toThrow(
         `No files found matching pattern: ${path.resolve('/mock/base/path', 'nonexistent/*.yaml')}`,
@@ -250,7 +243,7 @@ describe('file utilities', () => {
     });
 
     it('should throw error when file does not exist', () => {
-      jest.mocked(fs.existsSync).mockReturnValue(false);
+      vi.mocked(fs.existsSync).mockReturnValue(false);
 
       expect(() => maybeLoadFromExternalFile('file://nonexistent.yaml')).toThrow(
         `File does not exist: ${path.resolve('/mock/base/path', 'nonexistent.yaml')}`,
@@ -260,9 +253,8 @@ describe('file utilities', () => {
     it('should handle arrays of file paths', () => {
       const mockData1 = { key: 'value1' };
       const mockData2 = { key: 'value2' };
-      jest.mocked(fs.existsSync).mockReturnValue(true);
-      jest
-        .mocked(fs.readFileSync)
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.readFileSync)
         .mockReturnValueOnce(JSON.stringify(mockData1))
         .mockReturnValueOnce(JSON.stringify(mockData2));
 
@@ -273,7 +265,7 @@ describe('file utilities', () => {
     it('should use basePath when resolving file paths', () => {
       const basePath = '/base/path';
       cliState.basePath = basePath;
-      jest.mocked(fs.readFileSync).mockReturnValue(mockFileContent);
+      vi.mocked(fs.readFileSync).mockReturnValue(mockFileContent);
 
       maybeLoadFromExternalFile('file://test.txt');
 
@@ -287,7 +279,7 @@ describe('file utilities', () => {
     it('should handle relative paths correctly', () => {
       const basePath = './relative/path';
       cliState.basePath = basePath;
-      jest.mocked(fs.readFileSync).mockReturnValue(mockFileContent);
+      vi.mocked(fs.readFileSync).mockReturnValue(mockFileContent);
 
       maybeLoadFromExternalFile('file://test.txt');
 
@@ -302,7 +294,7 @@ describe('file utilities', () => {
       process.env.TEST_ROOT_PATH = '/root/dir';
       const input = 'file://{{ env.TEST_ROOT_PATH }}/test.txt';
 
-      jest.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.existsSync).mockReturnValue(true);
 
       const expectedPath = path.resolve(`${process.env.TEST_ROOT_PATH}/test.txt`);
       maybeLoadFromExternalFile(input);
@@ -316,7 +308,7 @@ describe('file utilities', () => {
     it('should ignore basePath when file path is absolute', () => {
       const basePath = '/base/path';
       cliState.basePath = basePath;
-      jest.mocked(fs.readFileSync).mockReturnValue(mockFileContent);
+      vi.mocked(fs.readFileSync).mockReturnValue(mockFileContent);
 
       maybeLoadFromExternalFile('file:///absolute/path/test.txt');
 
@@ -334,7 +326,7 @@ describe('file utilities', () => {
 
       // Mock readFileSync to return consistent data
       const mockFileData = 'test content';
-      jest.mocked(fs.readFileSync).mockReturnValue(mockFileData);
+      vi.mocked(fs.readFileSync).mockReturnValue(mockFileData);
 
       maybeLoadFromExternalFile(input);
 
@@ -352,7 +344,7 @@ describe('file utilities', () => {
     });
 
     it('should recursively load file references in objects', () => {
-      jest.mocked(fs.readFileSync).mockReturnValueOnce('{"foo": 1}').mockReturnValueOnce('bar');
+      vi.mocked(fs.readFileSync).mockReturnValueOnce('{"foo": 1}').mockReturnValueOnce('bar');
 
       const config = {
         data: 'file://data.json',
@@ -368,7 +360,7 @@ describe('file utilities', () => {
     });
 
     it('should handle arrays and nested structures', () => {
-      jest.mocked(fs.readFileSync).mockReturnValueOnce('test content');
+      vi.mocked(fs.readFileSync).mockReturnValueOnce('test content');
 
       const config = {
         items: ['file://test.txt', 'normal string'],
@@ -405,8 +397,7 @@ describe('file utilities', () => {
     });
 
     it('should handle deeply nested objects with multiple file references', () => {
-      jest
-        .mocked(fs.readFileSync)
+      vi.mocked(fs.readFileSync)
         .mockReturnValueOnce('{"nested": {"value": 123}}')
         .mockReturnValueOnce('["item1", "item2"]')
         .mockReturnValueOnce('deeply nested content');
@@ -448,8 +439,7 @@ describe('file utilities', () => {
     });
 
     it('should handle arrays with mixed content types including file references', () => {
-      jest
-        .mocked(fs.readFileSync)
+      vi.mocked(fs.readFileSync)
         .mockReturnValueOnce('{"config": "loaded"}')
         .mockReturnValueOnce('text content')
         .mockReturnValueOnce('{"config": "loaded"}');
@@ -503,7 +493,7 @@ describe('file utilities', () => {
     });
 
     it('should preserve object keys that contain special characters', () => {
-      jest.mocked(fs.readFileSync).mockReturnValueOnce('special content');
+      vi.mocked(fs.readFileSync).mockReturnValueOnce('special content');
 
       const config = {
         'key-with-dashes': 'file://special.txt',
@@ -527,7 +517,7 @@ describe('file utilities', () => {
     });
 
     it('should handle objects with prototype pollution attempts safely', () => {
-      jest.mocked(fs.readFileSync).mockReturnValueOnce('malicious content');
+      vi.mocked(fs.readFileSync).mockReturnValueOnce('malicious content');
 
       const config = {
         __proto__: 'file://malicious.txt',
@@ -547,7 +537,7 @@ describe('file utilities', () => {
     });
 
     it('should handle very large nested structures efficiently', () => {
-      jest.mocked(fs.readFileSync).mockReturnValue('file content');
+      vi.mocked(fs.readFileSync).mockReturnValue('file content');
 
       // Create a large nested structure
       const createNestedConfig = (depth: number): any => {
@@ -595,17 +585,120 @@ describe('file utilities', () => {
       expect(result.func).toBe(testFunction);
       expect(result.nested.func2).toBe(testFunction);
     });
+
+    it('should return original string for Python files with function names', () => {
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+
+      const result = maybeLoadFromExternalFile('file://assert.py:my_function');
+
+      // Should return the original string, not attempt to load file
+      expect(result).toBe('file://assert.py:my_function');
+      expect(fs.existsSync).not.toHaveBeenCalled();
+      expect(fs.readFileSync).not.toHaveBeenCalled();
+    });
+
+    it('should return original string for JavaScript files with function names', () => {
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+
+      const jsFiles = ['file://test.js:myFunc', 'file://test.ts:myFunc', 'file://test.mjs:myFunc'];
+
+      for (const fileRef of jsFiles) {
+        const result = maybeLoadFromExternalFile(fileRef);
+        expect(result).toBe(fileRef);
+      }
+
+      expect(fs.existsSync).not.toHaveBeenCalled();
+      expect(fs.readFileSync).not.toHaveBeenCalled();
+    });
+
+    it('should load Python/JS files normally when no function name specified', () => {
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.readFileSync).mockReturnValue('file contents');
+
+      const result = maybeLoadFromExternalFile('file://test.py');
+
+      expect(result).toBe('file contents');
+      expect(fs.existsSync).toHaveBeenCalled();
+      expect(fs.readFileSync).toHaveBeenCalled();
+    });
+
+    it('should handle Windows drive letters correctly', () => {
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+
+      // Drive letter colon should not be treated as function separator
+      const result = maybeLoadFromExternalFile('file://C:/path/test.py:myFunc');
+
+      expect(result).toBe('file://C:/path/test.py:myFunc');
+    });
+
+    it('should handle non-Python/JS files with colons normally', () => {
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.readFileSync).mockReturnValue('{"data": "test"}');
+
+      // JSON file with colon should still load normally (not treated as function)
+      const result = maybeLoadFromExternalFile('file://data:test.json');
+
+      expect(result).toEqual({ data: 'test' });
+      expect(fs.existsSync).toHaveBeenCalled();
+    });
+
+    it('should preserve function references in config objects (integration test)', () => {
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+
+      // Mock config object similar to what would be loaded from YAML tests
+      const config = {
+        assert: [
+          {
+            type: 'python',
+            value: 'file://assert.py:my_function',
+          },
+          {
+            type: 'javascript',
+            value: 'file://assert.js:my_function',
+          },
+        ],
+      };
+
+      const result = maybeLoadConfigFromExternalFile(config);
+
+      // Function references should be preserved unchanged
+      expect(result.assert[0].value).toBe('file://assert.py:my_function');
+      expect(result.assert[1].value).toBe('file://assert.js:my_function');
+
+      // No file system calls should have been made for function references
+      expect(fs.existsSync).not.toHaveBeenCalled();
+      expect(fs.readFileSync).not.toHaveBeenCalled();
+    });
+
+    it('should still support glob patterns after refactor (regression test)', () => {
+      const mockFiles = ['/mock/base/path/test1.yaml', '/mock/base/path/test2.yaml'];
+      const mockData1 = { test: 'data1' };
+      const mockData2 = { test: 'data2' };
+
+      vi.mocked(globSync).mockReturnValue(mockFiles);
+      vi.mocked(fs.readFileSync)
+        .mockReturnValueOnce(yaml.dump(mockData1))
+        .mockReturnValueOnce(yaml.dump(mockData2));
+
+      const result = maybeLoadFromExternalFile('file://test*.yaml');
+
+      // Glob expansion should still work correctly
+      expect(result).toEqual([mockData1, mockData2]);
+      expect(globSync).toHaveBeenCalledWith(path.resolve('/mock/base/path', 'test*.yaml'), {
+        windowsPathsNoEscape: true,
+      });
+    });
   });
 
   describe('getResolvedRelativePath', () => {
     const originalCwd = process.cwd();
 
     beforeEach(() => {
-      jest.spyOn(process, 'cwd').mockReturnValue('/mock/cwd');
+      vi.spyOn(process, 'cwd').mockReturnValue('/mock/cwd');
     });
 
     afterEach(() => {
-      jest.spyOn(process, 'cwd').mockReturnValue(originalCwd);
+      vi.spyOn(process, 'cwd').mockReturnValue(originalCwd);
     });
 
     it('returns absolute path unchanged', () => {
@@ -620,63 +713,294 @@ describe('file utilities', () => {
     });
   });
 
-  describe('safeResolve', () => {
-    it('returns absolute path unchanged', () => {
-      const absolutePath = path.resolve('/absolute/path/file.txt');
-      expect(safeResolve('some/base/path', absolutePath)).toBe(absolutePath);
+  describe('context-aware file loading', () => {
+    beforeEach(() => {
+      vi.resetAllMocks();
+      (fs.existsSync as ReturnType<typeof vi.fn>).mockReturnValue(true);
+      (fs.readFileSync as ReturnType<typeof vi.fn>).mockReturnValue('file content');
+      vi.mocked(hasMagic).mockImplementation((pattern: string | string[]) => {
+        const p = Array.isArray(pattern) ? pattern.join('') : pattern;
+        return p.includes('*') || p.includes('?') || p.includes('[') || p.includes('{');
+      });
+      cliState.basePath = '/test';
     });
 
-    it('returns file URL unchanged', () => {
-      const fileUrl = getFileUrl('absolute/path/file.txt');
-      expect(safeResolve('some/base/path', fileUrl)).toBe(fileUrl);
+    describe('maybeLoadFromExternalFile with context', () => {
+      it('should preserve Python files in assertion context', () => {
+        const result = maybeLoadFromExternalFile('file://assert.py', 'assertion');
+        expect(result).toBe('file://assert.py');
+        expect(fs.readFileSync).not.toHaveBeenCalled();
+      });
+
+      it('should preserve Python files with function names in assertion context', () => {
+        const result = maybeLoadFromExternalFile('file://assert.py:get_assert', 'assertion');
+        expect(result).toBe('file://assert.py:get_assert');
+        expect(fs.readFileSync).not.toHaveBeenCalled();
+      });
+
+      it('should preserve JavaScript files in assertion context', () => {
+        const result = maybeLoadFromExternalFile('file://assert.js', 'assertion');
+        expect(result).toBe('file://assert.js');
+        expect(fs.readFileSync).not.toHaveBeenCalled();
+      });
+
+      it('should preserve TypeScript files in assertion context', () => {
+        const result = maybeLoadFromExternalFile('file://assert.ts', 'assertion');
+        expect(result).toBe('file://assert.ts');
+        expect(fs.readFileSync).not.toHaveBeenCalled();
+      });
+
+      it('should load Python files normally in general context', () => {
+        (fs.readFileSync as ReturnType<typeof vi.fn>).mockReturnValue('def test(): pass');
+        const result = maybeLoadFromExternalFile('file://script.py', 'general');
+        expect(result).toBe('def test(): pass');
+        expect(fs.readFileSync).toHaveBeenCalled();
+      });
+
+      it('should load JavaScript files normally in general context', () => {
+        (fs.readFileSync as ReturnType<typeof vi.fn>).mockReturnValue('module.exports = {};');
+        const result = maybeLoadFromExternalFile('file://script.js', 'general');
+        expect(result).toBe('module.exports = {};');
+        expect(fs.readFileSync).toHaveBeenCalled();
+      });
+
+      it('should load Python files normally when no context provided', () => {
+        (fs.readFileSync as ReturnType<typeof vi.fn>).mockReturnValue('def test(): pass');
+        const result = maybeLoadFromExternalFile('file://script.py');
+        expect(result).toBe('def test(): pass');
+        expect(fs.readFileSync).toHaveBeenCalled();
+      });
+
+      it('should load non-code files normally in assertion context', () => {
+        (fs.readFileSync as ReturnType<typeof vi.fn>).mockReturnValue('test data');
+        const result = maybeLoadFromExternalFile('file://data.txt', 'assertion');
+        expect(result).toBe('test data');
+        expect(fs.readFileSync).toHaveBeenCalled();
+      });
+
+      it('should handle Windows paths correctly in assertion context', () => {
+        const result = maybeLoadFromExternalFile('file://C:/test/assert.py', 'assertion');
+        expect(result).toBe('file://C:/test/assert.py');
+        expect(fs.readFileSync).not.toHaveBeenCalled();
+      });
+
+      it('should handle arrays in assertion context', () => {
+        const files = ['file://assert1.py', 'file://assert2.js', 'file://data.txt'];
+        (fs.readFileSync as ReturnType<typeof vi.fn>).mockReturnValue('file content');
+        const result = maybeLoadFromExternalFile(files, 'assertion');
+
+        expect(result).toEqual(['file://assert1.py', 'file://assert2.js', 'file content']);
+        expect(fs.readFileSync).toHaveBeenCalledTimes(1); // Only data.txt should be loaded
+      });
     });
 
-    it('resolves relative paths', () => {
-      const expected = path.resolve('base/path', 'relative/file.txt');
-      expect(safeResolve('base/path', 'relative/file.txt')).toBe(expected);
+    describe('maybeLoadConfigFromExternalFile with assertion detection', () => {
+      it('should preserve Python assertion file references', () => {
+        const config = {
+          assert: [
+            {
+              type: 'python',
+              value: 'file://good_assertion.py',
+            },
+          ],
+        };
+        const result = maybeLoadConfigFromExternalFile(config);
+        expect(result.assert[0].value).toBe('file://good_assertion.py');
+        expect(fs.readFileSync).not.toHaveBeenCalled();
+      });
+
+      it('should preserve JavaScript assertion file references', () => {
+        const config = {
+          assert: [
+            {
+              type: 'javascript',
+              value: 'file://assertion.js:checkResult',
+            },
+          ],
+        };
+        const result = maybeLoadConfigFromExternalFile(config);
+        expect(result.assert[0].value).toBe('file://assertion.js:checkResult');
+        expect(fs.readFileSync).not.toHaveBeenCalled();
+      });
+
+      it('should load non-assertion Python files normally', () => {
+        (fs.readFileSync as ReturnType<typeof vi.fn>).mockReturnValue('def utility(): pass');
+        const config = {
+          util: 'file://helper.py',
+        };
+        const result = maybeLoadConfigFromExternalFile(config);
+        expect(result.util).toBe('def utility(): pass');
+        expect(fs.readFileSync).toHaveBeenCalled();
+      });
+
+      it('should handle nested assertion objects', () => {
+        const config = {
+          tests: [
+            {
+              assert: [
+                {
+                  type: 'python',
+                  value: 'file://nested_assertion.py',
+                },
+              ],
+            },
+          ],
+        };
+        const result = maybeLoadConfigFromExternalFile(config);
+        expect(result.tests[0].assert[0].value).toBe('file://nested_assertion.py');
+        expect(fs.readFileSync).not.toHaveBeenCalled();
+      });
+
+      it('should handle mixed assertion types', () => {
+        (fs.readFileSync as ReturnType<typeof vi.fn>).mockReturnValue('some data');
+        const config = {
+          assert: [
+            {
+              type: 'python',
+              value: 'file://python_assert.py',
+            },
+            {
+              type: 'contains',
+              value: 'file://expected.txt',
+            },
+            {
+              type: 'javascript',
+              value: 'file://js_assert.js',
+            },
+          ],
+        };
+        const result = maybeLoadConfigFromExternalFile(config);
+        expect(result.assert[0].value).toBe('file://python_assert.py');
+        expect(result.assert[1].value).toBe('some data'); // contains assertion loads file
+        expect(result.assert[2].value).toBe('file://js_assert.js');
+        expect(fs.readFileSync).toHaveBeenCalledTimes(1); // Only expected.txt
+      });
     });
 
-    it('handles multiple path segments', () => {
-      const absolutePath = path.resolve('/absolute/path/file.txt');
-      expect(safeResolve('base', 'path', absolutePath)).toBe(absolutePath);
+    describe('maybeLoadConfigFromExternalFile with vars context', () => {
+      it('should preserve glob patterns in vars field for test case expansion', () => {
+        const config = {
+          vars: {
+            text: 'file://./resources/tests/*.json',
+          },
+          assert: [
+            {
+              type: 'contains',
+              value: 'hello',
+            },
+          ],
+        };
+        const result = maybeLoadConfigFromExternalFile(config);
+        expect(result.vars.text).toBe('file://./resources/tests/*.json');
+        expect(fs.readFileSync).not.toHaveBeenCalled();
+      });
 
-      const expected = path.resolve('base', 'path', 'relative/file.txt');
-      expect(safeResolve('base', 'path', 'relative/file.txt')).toBe(expected);
-    });
+      it('should preserve glob patterns in nested vars objects', () => {
+        const config = {
+          tests: [
+            {
+              vars: {
+                input: 'file://inputs/*.txt',
+                data: 'file://data/test-*.json',
+                patterns: 'file://data/test-{a,b}.yaml',
+                optional: 'file://data/file?.json',
+              },
+            },
+          ],
+        };
+        const result = maybeLoadConfigFromExternalFile(config);
+        expect(result.tests[0].vars.input).toBe('file://inputs/*.txt');
+        expect(result.tests[0].vars.data).toBe('file://data/test-*.json');
+        expect(result.tests[0].vars.patterns).toBe('file://data/test-{a,b}.yaml');
+        expect(result.tests[0].vars.optional).toBe('file://data/file?.json');
+        expect(fs.readFileSync).not.toHaveBeenCalled();
+      });
 
-    it('handles empty input', () => {
-      expect(safeResolve()).toBe(path.resolve());
-      expect(safeResolve('')).toBe(path.resolve(''));
-    });
-  });
+      it('should preserve non-glob file references in vars for runtime loading by renderPrompt', () => {
+        const config = {
+          vars: {
+            content: 'file://content.txt', // No glob pattern - still preserved
+          },
+        };
+        const result = maybeLoadConfigFromExternalFile(config);
+        // File references in vars should be preserved for runtime loading
+        // JS/Python files will be executed by renderPrompt in evaluatorHelpers.ts
+        expect(result.vars.content).toBe('file://content.txt');
+        expect(fs.readFileSync).not.toHaveBeenCalled();
+      });
 
-  describe('safeJoin', () => {
-    it('returns absolute path unchanged', () => {
-      const absolutePath = path.resolve('/absolute/path/file.txt');
-      expect(safeJoin('some/base/path', absolutePath)).toBe(absolutePath);
-    });
+      it('should preserve JS file references in vars for runtime execution', () => {
+        const config = {
+          vars: {
+            dynamicContent: 'file://generateContent.js',
+          },
+        };
+        const result = maybeLoadConfigFromExternalFile(config);
+        expect(result.vars.dynamicContent).toBe('file://generateContent.js');
+        expect(fs.readFileSync).not.toHaveBeenCalled();
+      });
 
-    it('returns file URL unchanged', () => {
-      const fileUrl = getFileUrl('absolute/path/file.txt');
-      expect(safeJoin('some/base/path', fileUrl)).toBe(fileUrl);
-    });
+      it('should preserve Python file references in vars for runtime execution', () => {
+        const config = {
+          vars: {
+            dynamicContent: 'file://generateContent.py',
+          },
+        };
+        const result = maybeLoadConfigFromExternalFile(config);
+        expect(result.vars.dynamicContent).toBe('file://generateContent.py');
+        expect(fs.readFileSync).not.toHaveBeenCalled();
+      });
 
-    it('joins relative paths', () => {
-      const expected = path.join('base/path', 'relative/file.txt');
-      expect(safeJoin('base/path', 'relative/file.txt')).toBe(expected);
-    });
+      it('should preserve all file references in nested test cases loaded from external files', () => {
+        // This tests the scenario from PR #6393 where test cases are loaded
+        // from an external YAML file and contain JS/Python file references in vars
+        const testCasesFromExternalFile = [
+          {
+            vars: {
+              question: 'What is the policy?',
+              context: 'file://load_context.py',
+            },
+          },
+          {
+            vars: {
+              question: 'How does this work?',
+              context: 'file://load_context.js',
+            },
+          },
+        ];
 
-    it('handles multiple path segments', () => {
-      const absolutePath = path.resolve('/absolute/path/file.txt');
-      expect(safeJoin('base', 'path', absolutePath)).toBe(absolutePath);
+        const result = maybeLoadConfigFromExternalFile(testCasesFromExternalFile);
 
-      const expected = path.join('base', 'path', 'relative/file.txt');
-      expect(safeJoin('base', 'path', 'relative/file.txt')).toBe(expected);
-    });
+        // Both Python and JS file references should be preserved for runtime execution
+        expect(result[0].vars.context).toBe('file://load_context.py');
+        expect(result[1].vars.context).toBe('file://load_context.js');
+        // Static values should remain unchanged
+        expect(result[0].vars.question).toBe('What is the policy?');
+        expect(result[1].vars.question).toBe('How does this work?');
+        // No files should have been read
+        expect(fs.readFileSync).not.toHaveBeenCalled();
+      });
 
-    it('handles empty input', () => {
-      expect(safeJoin()).toBe(path.join());
-      expect(safeJoin('')).toBe(path.join(''));
+      it('should preserve plain text file references in vars for consistent runtime loading', () => {
+        // Plain text files are also preserved for runtime loading by renderPrompt
+        // This ensures consistent behavior across all file types
+        const config = {
+          tests: [
+            {
+              vars: {
+                content: 'file://content.txt',
+                data: 'file://data.json',
+              },
+            },
+          ],
+        };
+
+        const result = maybeLoadConfigFromExternalFile(config);
+
+        expect(result.tests[0].vars.content).toBe('file://content.txt');
+        expect(result.tests[0].vars.data).toBe('file://data.json');
+        expect(fs.readFileSync).not.toHaveBeenCalled();
+      });
     });
   });
 });

@@ -134,6 +134,34 @@
       "when": 1755723226650,
       "tag": "0018_fat_vanisher",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "6",
+      "when": 1757026874299,
+      "tag": "0019_new_clint_barton",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "6",
+      "when": 1757650210456,
+      "tag": "0020_skinny_maverick",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "6",
+      "when": 1761694564206,
+      "tag": "0021_mysterious_madelyne_pryor",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "6",
+      "when": 1765906817572,
+      "tag": "0022_sleepy_ultimo",
+      "breakpoints": true
     }
   ]
 }

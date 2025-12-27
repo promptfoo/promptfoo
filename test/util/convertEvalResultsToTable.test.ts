@@ -1,6 +1,7 @@
+import { describe, expect, it } from 'vitest';
 import { convertResultsToTable } from '../../src/util/convertEvalResultsToTable';
 
-import type { CompletedPrompt, EvaluateTable, ResultsFile } from '../../src/types';
+import type { CompletedPrompt, EvaluateTable, ResultsFile } from '../../src/types/index';
 
 describe('convertResultsToTable', () => {
   it('should convert results to table format', () => {
@@ -197,7 +198,7 @@ describe('convertResultsToTable', () => {
     };
 
     const result = convertResultsToTable(resultsFile);
-    expect(result.body[0].outputs[0].text).toBe('Test failed\n---\ntest output');
+    expect(result.body[0].outputs[0].text).toBe('test output');
   });
 
   it('should handle redteam final prompts', () => {
@@ -350,5 +351,76 @@ describe('convertResultsToTable', () => {
       transcript: 'test transcript',
       format: 'mp3',
     });
+  });
+
+  it('should format object and array variables with pretty-printed JSON', () => {
+    const resultsFile: ResultsFile = {
+      version: 4,
+      prompts: [
+        {
+          raw: 'test prompt',
+          display: 'test prompt',
+          id: 'prompt1',
+        } as CompletedPrompt,
+      ],
+      results: {
+        results: [
+          {
+            id: 'test1',
+            testIdx: 0,
+            promptIdx: 0,
+            vars: {
+              conversation: [
+                { user: 'How do I work with you?' },
+                { assistant: 'I can help you understand how to work with me.' },
+                { user: 'Tell me more about NDAs' },
+              ],
+              simpleVar: 'This is a simple string',
+              objectVar: { key1: 'value1', key2: 'value2' },
+            },
+            prompt: {
+              raw: 'test prompt',
+              label: 'Test Prompt',
+            },
+            response: {
+              output: 'test output',
+            },
+            provider: {
+              id: 'test-provider',
+              label: 'Test Provider',
+            },
+            success: true,
+            promptId: 'prompt1',
+            testCase: {},
+            // @ts-ignore
+            failureReason: 'none',
+            score: 1,
+            latencyMs: 100,
+            namedScores: {},
+          },
+        ],
+      },
+    };
+
+    const result = convertResultsToTable(resultsFile);
+    const expectedConversation = JSON.stringify(
+      [
+        { user: 'How do I work with you?' },
+        { assistant: 'I can help you understand how to work with me.' },
+        { user: 'Tell me more about NDAs' },
+      ],
+      null,
+      2,
+    );
+    const expectedObject = JSON.stringify({ key1: 'value1', key2: 'value2' }, null, 2);
+
+    // Verify that object/array variables are formatted with pretty-printed JSON
+    expect(result.body[0].vars[0]).toBe(expectedConversation);
+    expect(result.body[0].vars[1]).toBe(expectedObject);
+    expect(result.body[0].vars[2]).toBe('This is a simple string');
+
+    // Verify that pretty-printed JSON has multiple lines
+    expect(result.body[0].vars[0]).toContain('\n');
+    expect(result.body[0].vars[1]).toContain('\n');
   });
 });

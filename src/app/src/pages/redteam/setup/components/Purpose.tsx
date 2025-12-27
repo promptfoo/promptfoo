@@ -130,7 +130,10 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
   const theme = useTheme();
   const { config, updateApplicationDefinition, updateConfig } = useRedTeamConfig();
   const { recordEvent } = useTelemetry();
-  const { status: apiHealthStatus, checkHealth } = useApiHealth();
+  const {
+    data: { status: apiHealthStatus },
+    refetch: checkHealth,
+  } = useApiHealth();
   const [testMode, setTestMode] = useState<'application' | 'model'>('application');
   const [expandedSections, setExpandedSections] = useState<Set<string>>(
     new Set(['Core Application Details']), // Expand the first section by default since it has required fields
@@ -141,7 +144,7 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
   }, []);
 
   const handleTestModeChange = (
-    event: React.MouseEvent<HTMLElement>,
+    _event: React.MouseEvent<HTMLElement>,
     newMode: 'application' | 'model',
   ) => {
     if (newMode !== null) {
@@ -1062,14 +1065,14 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                 </Typography>
                 <Box>
                   <Typography variant="subtitle1" sx={{ fontWeight: 'medium', mb: 1 }}>
-                    Who is the red team user?{' '}
+                    Who typically uses this system?{' '}
                     <span style={{ fontSize: '0.8em', color: 'text.secondary' }}>(optional)</span>
                   </Typography>
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                    Define the persona attempting to attack your system. This helps create realistic
-                    attack scenarios for social engineering attacks targeting PII, hijacking
-                    attempts, prompt extraction, system prompt override, and role-based security
-                    vulnerabilities.
+                    Describe the legitimate users who normally interact with this system and their
+                    typical roles or characteristics. The red team will simulate these user personas
+                    when testing for vulnerabilities like social engineering, PII extraction,
+                    unauthorized access, and privilege escalation.
                   </Typography>
 
                   {discoveryResult && discoveryResult.user && (
@@ -1080,7 +1083,7 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
                     fullWidth
                     value={config.applicationDefinition?.redteamUser}
                     onChange={(e) => updateApplicationDefinition('redteamUser', e.target.value)}
-                    placeholder="e.g. A patient seeking medical assistance, a customer service representative, an external researcher..."
+                    placeholder="e.g. An engineer at Acme Inc, a healthcare provider accessing patient records, a financial analyst reviewing reports..."
                     multiline
                     minRows={2}
                     variant="outlined"

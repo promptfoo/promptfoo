@@ -131,12 +131,6 @@ table.results-table,
   cursor: zoom-in;
 }
 
-.results-table tr .variable > *,
-.compact.results-table tr .cell > * {
-  /* Header and vars always inline, cells are inline in compact mode. */
-  /*display: inline;*/
-}
-
 .results-table tr .cell .prompt {
   background-color: var(--variable-background-color);
   border: 1px solid var(--border-color);
@@ -159,24 +153,23 @@ table.results-table,
 
 .results-table tr .cell-actions {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 0.5rem;
-  visibility: hidden;
   position: absolute;
-  top: 1.25rem;
+  top: 1rem;
+  left: 0;
   right: 0.75rem;
   line-height: 0;
   font-size: 1.25rem;
 }
 
-/* Show all actions on hover */
-.results-table .first-prompt-col:hover .cell-actions,
-.results-table .second-prompt-column:hover .cell-actions {
-  visibility: visible;
+.results-table tr .cell-actions [role='tooltip'] {
+  line-height: normal;
 }
 
-/* Always show active thumbs */
-.results-table tr .cell-actions .action.active {
-  visibility: visible !important;
+.results-table tr .cell-actions .action {
+  line-height: normal;
 }
 
 .results-table tr .cell-detail {
@@ -195,12 +188,15 @@ table.results-table,
   color: #888;
 }
 
-.results-table tr .cell-actions .action {
+/* Remove default button styling - but not for MUI IconButton */
+.results-table tr button.action:not(.MuiIconButton-root) {
+  background: none;
+  color: inherit;
+  border: none;
+  padding: 0;
+  font: inherit;
+  appearance: none;
   cursor: pointer;
-}
-
-.results-table tr .cell-actions .action.active span {
-  filter: saturate(1.5);
 }
 
 /* Table-within-a-cell, used for markdown tables */
@@ -387,6 +383,37 @@ table.results-table,
   display: inline;
 }
 
+/* Pass reasons container */
+.pass-reasons {
+  margin-top: 0.25rem;
+}
+
+.pass-reason {
+  color: var(--pass-color);
+  font-weight: normal;
+  font-size: 0.9em;
+  opacity: 0.85;
+  padding: 0.15rem 0;
+  border-left: 2px solid var(--pass-color);
+  padding-left: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+.pass-reason:first-child {
+  margin-top: 0;
+}
+
+.compact .pass-reasons {
+  display: inline;
+  margin-left: 0.5rem;
+}
+
+.compact .pass-reason {
+  display: inline;
+  border-left: none;
+  padding-left: 0;
+}
+
 .results-table .fail .pill {
   white-space: nowrap;
   background-color: var(--fail-background-color);
@@ -471,7 +498,7 @@ table.results-table,
 .results-table-sticky {
   position: sticky;
   top: 0;
-  z-index: 100;
+  z-index: 10;
   transition: transform 0.2s ease-out;
 }
 
@@ -484,7 +511,7 @@ table.results-table,
   top: 8px;
   right: 8px;
   cursor: pointer;
-  z-index: 101;
+  z-index: 11;
   padding: 4px;
   border-radius: 100%;
   background: #eee;

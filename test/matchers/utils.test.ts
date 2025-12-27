@@ -1,10 +1,11 @@
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { getAndCheckProvider, getGradingProvider, renderLlmRubricPrompt } from '../../src/matchers';
 import {
   DefaultEmbeddingProvider,
   DefaultGradingProvider,
 } from '../../src/providers/openai/defaults';
 
-import type { ApiProvider, ProviderTypeMap } from '../../src/types';
+import type { ApiProvider, ProviderTypeMap } from '../../src/types/index';
 
 describe('getGradingProvider', () => {
   it('should return the correct provider when provider is a string', async () => {

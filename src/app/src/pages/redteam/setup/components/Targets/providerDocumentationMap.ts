@@ -50,7 +50,6 @@ export const PROVIDER_DOCUMENTATION_MAP: Record<string, string> = {
   ai21: `${BASE_DOCS_URL}/ai21`,
   aimlapi: `${BASE_DOCS_URL}/aimlapi`,
   hyperbolic: `${BASE_DOCS_URL}/hyperbolic`,
-  lambdalabs: `${BASE_DOCS_URL}/lambdalabs`,
   fal: `${BASE_DOCS_URL}/fal`,
   voyage: `${BASE_DOCS_URL}/voyage`,
 
@@ -72,7 +71,6 @@ export const PROVIDER_DOCUMENTATION_MAP: Record<string, string> = {
   echo: `${BASE_DOCS_URL}/echo`,
   f5: `${BASE_DOCS_URL}/f5`,
   fireworks: `${BASE_DOCS_URL}/fireworks`,
-  'ibm-bam': `${BASE_DOCS_URL}/ibm-bam`,
   litellm: `${BASE_DOCS_URL}/litellm`,
   openllm: `${BASE_DOCS_URL}/openllm`,
   replicate: `${BASE_DOCS_URL}/replicate`,

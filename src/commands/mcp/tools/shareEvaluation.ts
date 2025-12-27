@@ -1,4 +1,3 @@
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import dedent from 'dedent';
 import { z } from 'zod';
 import { cloudConfig } from '../../../globalConfig/cloud';
@@ -11,7 +10,8 @@ import {
   isSharingEnabled,
 } from '../../../share';
 import { loadDefaultConfig } from '../../../util/config/default';
-import { createToolResponse } from '../utils';
+import { createToolResponse } from '../lib/utils';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
 /**
  * Share an evaluation to create a publicly accessible URL
@@ -46,7 +46,7 @@ export function registerShareEvaluationTool(server: McpServer) {
           dedent`
             Specific evaluation ID to share.
             If not provided, shares the most recent evaluation.
-            Example: "eval_abc123def456"
+            Example: "eval-8h1-2025-11-15T14:17:18"
           `,
         ),
       showAuth: z
@@ -182,7 +182,7 @@ export function registerShareEvaluationTool(server: McpServer) {
 
         // Create new shareable URL
         logger.debug(`Creating shareable URL for evaluation ${evalRecord.id}`);
-        const shareUrl = await createShareableUrl(evalRecord, showAuth);
+        const shareUrl = await createShareableUrl(evalRecord, { showAuth });
 
         if (!shareUrl) {
           return createToolResponse(

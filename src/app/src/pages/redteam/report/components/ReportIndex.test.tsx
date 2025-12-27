@@ -1,10 +1,12 @@
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ResultLightweightWithLabel } from '@promptfoo/types';
-
 import { callApi } from '@app/utils/api';
+import { formatDataGridDate } from '@app/utils/date';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter, useNavigate } from 'react-router-dom';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ReportIndex from './ReportIndex';
+import type { EvalSummary } from '@promptfoo/types';
+
+vi.mock('@app/utils/api');
 
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual('react-router-dom');
@@ -14,55 +16,89 @@ vi.mock('react-router-dom', async () => {
   };
 });
 
-vi.mock('@app/utils/api', () => ({
-  callApi: vi.fn(),
+// Mock the DataTable component to simplify testing
+vi.mock('@app/components/data-table/data-table', () => ({
+  DataTable: ({
+    data,
+    isLoading,
+    error,
+    onRowClick,
+    columns,
+  }: {
+    data: EvalSummary[];
+    isLoading: boolean;
+    error: string | null;
+    onRowClick: (row: EvalSummary) => void;
+    columns: {
+      accessorKey: string;
+      header: string;
+      cell: (props: { row: { original: EvalSummary }; getValue: () => unknown }) => React.ReactNode;
+    }[];
+  }) => {
+    if (isLoading) {
+      return <div data-testid="loading">Loading...</div>;
+    }
+
+    if (error) {
+      return <div data-testid="error">{error}</div>;
+    }
+
+    if (data.length === 0) {
+      return <div data-testid="empty">No data</div>;
+    }
+
+    return (
+      <div data-testid="data-table" role="grid">
+        {/* Render toolbar button for test */}
+        <button>Select columns</button>
+        {data.map((row) => (
+          <div key={row.evalId} data-testid={`row-${row.evalId}`} role="row">
+            {columns.map((col) => {
+              const value = row[col.accessorKey as keyof EvalSummary];
+              const cellContent = col.cell({
+                row: { original: row },
+                getValue: () => value,
+              });
+              return (
+                <div key={col.accessorKey} role="gridcell" aria-label={String(value)}>
+                  {cellContent}
+                </div>
+              );
+            })}
+            <button data-testid={`click-${row.evalId}`} onClick={() => onRowClick?.(row)}>
+              Click row
+            </button>
+          </div>
+        ))}
+      </div>
+    );
+  },
 }));
 
-const mockEvals: ResultLightweightWithLabel[] = [
+const mockData: EvalSummary[] = [
   {
-    evalId: 'eval-123-redteam',
-    description: 'My First Red Team Eval',
-    createdAt: new Date('2023-10-26T10:00:00Z').getTime(),
-    isRedteam: true,
-    label: 'My First Red Team Eval',
+    evalId: 'eval-1',
     datasetId: 'dataset-1',
-    numTests: 10,
+    description: 'My First Redteam Report',
+    providers: [{ id: 'openai:gpt-4', label: 'GPT-4' }],
+    createdAt: new Date('2023-10-26T10:00:00.000Z').getTime(),
+    passRate: 75.123,
+    numTests: 100,
+    attackSuccessRate: 25,
+    label: 'My First Redteam Report',
+    isRedteam: true,
   },
   {
-    evalId: 'eval-456-redteam',
-    description: 'Another Security Test',
-    createdAt: new Date('2023-10-25T12:30:00Z').getTime(),
-    isRedteam: true,
-    label: 'Another Security Test',
+    evalId: 'eval-2',
     datasetId: 'dataset-2',
-    numTests: 20,
-  },
-  {
-    evalId: 'eval-789-not-redteam',
-    description: 'This one is not a redteam eval',
-    createdAt: new Date('2023-10-24T15:00:00Z').getTime(),
-    isRedteam: false,
-    label: 'This one is not a redteam eval',
-    datasetId: 'dataset-3',
-    numTests: 15,
-  },
-  {
-    evalId: 'eval-search-test',
-    description: 'Search Test Description',
-    createdAt: new Date('2023-10-23T15:00:00Z').getTime(),
+    description: 'Another Security Scan',
+    providers: [{ id: 'anthropic:claude-2', label: null }],
+    createdAt: new Date('2023-10-27T12:30:00.000Z').getTime(),
+    passRate: 100,
+    numTests: 50,
+    attackSuccessRate: 50,
+    label: 'Another Security Scan',
     isRedteam: true,
-    label: 'Search Test Description',
-    datasetId: 'dataset-4',
-    numTests: 5,
-  },
-  {
-    evalId: 'eval-invalid-date',
-    description: 'Eval with Invalid Date',
-    createdAt: new Date().getTime(),
-    isRedteam: true,
-    label: 'Eval with Invalid Date',
-    datasetId: 'dataset-invalid',
-    numTests: 5,
   },
 ];
 
@@ -71,165 +107,142 @@ describe('ReportIndex', () => {
     vi.clearAllMocks();
   });
 
-  it("should render a CircularProgress spinner and the text 'Waiting for reports' when isLoading is true", () => {
-    render(
-      <MemoryRouter>
-        <ReportIndex />
-      </MemoryRouter>,
-    );
+  describe('ReportsTable rendering', () => {
+    it('should render all rows and columns with correct values for a given EvalSummary[] data', async () => {
+      vi.mocked(callApi).mockResolvedValue({
+        ok: true,
+        json: async () => ({ data: mockData }),
+      } as Response);
 
-    expect(screen.getByRole('progressbar')).toBeInTheDocument();
-    expect(screen.getByText('Waiting for reports')).toBeInTheDocument();
-  });
+      render(
+        <MemoryRouter>
+          <ReportIndex />
+        </MemoryRouter>,
+      );
 
-  it('should render a table of red team evaluations when data is available', async () => {
-    vi.mocked(callApi).mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ data: mockEvals }),
-    } as Response);
+      await waitFor(() => {
+        expect(screen.getByRole('link', { name: 'My First Redteam Report' })).toBeInTheDocument();
+      });
 
-    render(
-      <MemoryRouter>
-        <ReportIndex />
-      </MemoryRouter>,
-    );
+      expect(screen.getByText('GPT-4')).toBeInTheDocument();
+      expect(screen.getByText(formatDataGridDate(mockData[0].createdAt))).toBeInTheDocument();
+      expect(screen.getByText('25.00%')).toBeInTheDocument();
+      expect(screen.getByText('100')).toBeInTheDocument();
+      expect(screen.getByText('eval-1')).toBeInTheDocument();
 
-    await screen.findByRole('table');
-
-    expect(screen.getByRole('columnheader', { name: /Name/i })).toBeInTheDocument();
-    expect(screen.getByRole('columnheader', { name: /Date/i })).toBeInTheDocument();
-    expect(screen.getByRole('columnheader', { name: /Eval ID/i })).toBeInTheDocument();
-
-    expect(screen.getByText('My First Red Team Eval')).toBeInTheDocument();
-    expect(screen.getByText('eval-123-redteam')).toBeInTheDocument();
-    expect(screen.getByText(/October 26, 2023/)).toBeInTheDocument();
-
-    expect(screen.getByText('Another Security Test')).toBeInTheDocument();
-    expect(screen.getByText('eval-456-redteam')).toBeInTheDocument();
-    expect(screen.getByText(/October 25, 2023/)).toBeInTheDocument();
-
-    expect(screen.queryByText('Waiting for reports')).not.toBeInTheDocument();
-    expect(screen.queryByText('No Red Team evaluations found')).not.toBeInTheDocument();
-  });
-
-  it('should handle evaluations with invalid date formats in createdAt gracefully', async () => {
-    vi.mocked(callApi).mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ data: mockEvals }),
-    } as Response);
-
-    render(
-      <MemoryRouter>
-        <ReportIndex />
-      </MemoryRouter>,
-    );
-
-    await screen.findByRole('table');
-
-    expect(screen.getByText('My First Red Team Eval')).toBeInTheDocument();
-    expect(screen.getByText('Another Security Test')).toBeInTheDocument();
-  });
-
-  it('should handle API errors and display an error message', async () => {
-    vi.mocked(callApi).mockRejectedValue(new Error('Network error'));
-
-    render(
-      <MemoryRouter>
-        <ReportIndex />
-      </MemoryRouter>,
-    );
-
-    await screen.findByText('Waiting for reports');
-    await screen.findByText('No Red Team evaluations found');
-
-    expect(screen.queryByText('No Red Team evaluations found')).toBeInTheDocument();
-  });
-
-  it('should handle malformed API responses gracefully', async () => {
-    vi.mocked(callApi).mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ data: { message: 'Malformed data' } }),
-    } as Response);
-
-    render(
-      <MemoryRouter>
-        <ReportIndex />
-      </MemoryRouter>,
-    );
-
-    await waitFor(() => {
-      expect(screen.queryByText('Waiting for reports')).not.toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'Another Security Scan' })).toBeInTheDocument();
+      expect(screen.getByText('anthropic:claude-2')).toBeInTheDocument();
+      expect(screen.getByText(formatDataGridDate(mockData[1].createdAt))).toBeInTheDocument();
+      expect(screen.getByText('50.00%')).toBeInTheDocument();
+      expect(screen.getByText('50')).toBeInTheDocument();
+      expect(screen.getByText('eval-2')).toBeInTheDocument();
     });
 
-    expect(screen.getByText('No Red Team evaluations found')).toBeInTheDocument();
+    it('should render the toolbar', async () => {
+      vi.mocked(callApi).mockResolvedValue({
+        ok: true,
+        json: async () => ({ data: mockData }),
+      } as Response);
+
+      render(
+        <MemoryRouter>
+          <ReportIndex />
+        </MemoryRouter>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'Select columns' })).toBeInTheDocument();
+      });
+    });
+
+    it('should render "No target" when providers array is empty', async () => {
+      const mockDataNoProviders: EvalSummary[] = [
+        {
+          evalId: 'eval-1',
+          datasetId: 'dataset-1',
+          description: 'Report with no providers',
+          providers: [],
+          createdAt: new Date('2023-10-26T10:00:00.000Z').getTime(),
+          passRate: 75,
+          numTests: 100,
+          attackSuccessRate: 25,
+          label: 'Report with no providers',
+          isRedteam: true,
+        },
+      ];
+
+      vi.mocked(callApi).mockResolvedValue({
+        ok: true,
+        json: async () => ({ data: mockDataNoProviders }),
+      } as Response);
+
+      render(
+        <MemoryRouter>
+          <ReportIndex />
+        </MemoryRouter>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('No target')).toBeInTheDocument();
+      });
+    });
+
+    it('should display "Untitled Evaluation" in the description column when description is missing', async () => {
+      const mockDataNoDescription: EvalSummary[] = [
+        {
+          evalId: 'eval-3',
+          datasetId: 'dataset-3',
+          providers: [{ id: 'openai:gpt-3.5-turbo', label: 'GPT-3.5-Turbo' }],
+          createdAt: new Date('2023-11-15T15:00:00.000Z').getTime(),
+          passRate: 60,
+          numTests: 80,
+          attackSuccessRate: 25,
+          label: 'Missing Description Report',
+          isRedteam: true,
+          description: '',
+        },
+      ];
+      vi.mocked(callApi).mockResolvedValue({
+        ok: true,
+        json: async () => ({ data: mockDataNoDescription }),
+      } as Response);
+
+      render(
+        <MemoryRouter>
+          <ReportIndex />
+        </MemoryRouter>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByRole('link', { name: 'Untitled Evaluation' })).toBeInTheDocument();
+      });
+    });
   });
 
-  it('should navigate to the report page for the selected evalId when a table row is clicked', async () => {
-    const mockNavigate = vi.fn();
+  describe('ReportsTable navigation', () => {
+    it('should navigate to /reports?evalId={evalId} when a row is clicked', async () => {
+      vi.mocked(callApi).mockResolvedValue({
+        ok: true,
+        json: async () => ({ data: mockData }),
+      } as Response);
 
-    const reactRouterDom = await import('react-router-dom');
-    vi.spyOn(reactRouterDom, 'useNavigate').mockImplementation(() => mockNavigate);
+      const navigate = vi.fn();
+      vi.mocked(useNavigate).mockReturnValue(navigate);
 
-    vi.mocked(callApi).mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ data: mockEvals }),
-    } as Response);
+      render(
+        <MemoryRouter>
+          <ReportIndex />
+        </MemoryRouter>,
+      );
 
-    render(
-      <MemoryRouter>
-        <ReportIndex />
-      </MemoryRouter>,
-    );
+      await waitFor(() => {
+        expect(screen.getByRole('link', { name: 'My First Redteam Report' })).toBeInTheDocument();
+      });
 
-    await screen.findByRole('table');
+      const linkElement = screen.getByRole('link', { name: 'My First Redteam Report' });
+      fireEvent.click(linkElement);
 
-    const evalId = 'eval-123-redteam';
-    const tableRow = screen.getByText(evalId).closest('tr');
-    expect(tableRow).toBeInTheDocument();
-
-    fireEvent.click(tableRow as Element);
-
-    expect(mockNavigate).toHaveBeenCalledWith(`/report?evalId=${evalId}`);
-  });
-
-  it('should filter the displayed evaluations by description or evalId when a search query is entered', async () => {
-    vi.mocked(callApi).mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ data: mockEvals }),
-    } as Response);
-
-    render(
-      <MemoryRouter>
-        <ReportIndex />
-      </MemoryRouter>,
-    );
-
-    await screen.findByRole('table');
-
-    const searchInput = screen.getByPlaceholderText(/Search by name or eval ID/i);
-    fireEvent.change(searchInput, { target: { value: 'search' } });
-
-    await screen.findByText('Search Test Description');
-    expect(screen.getByText('eval-search-test')).toBeInTheDocument();
-
-    expect(screen.queryByText('My First Red Team Eval')).not.toBeInTheDocument();
-    expect(screen.queryByText('Another Security Test')).not.toBeInTheDocument();
-  });
-
-  it('should render a card with the message "No Red Team evaluations found" when recentEvals is an empty array and isLoading is false', async () => {
-    vi.mocked(callApi).mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ data: [] }),
-    } as Response);
-
-    render(
-      <MemoryRouter>
-        <ReportIndex />
-      </MemoryRouter>,
-    );
-
-    await screen.findByText('No Red Team evaluations found');
-
-    expect(screen.getByText('No Red Team evaluations found')).toBeInTheDocument();
+      expect(navigate).toHaveBeenCalledWith('/reports?evalId=eval-1');
+    });
   });
 });

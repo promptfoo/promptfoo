@@ -5,8 +5,8 @@ import { sleep } from '../../util/time';
 import { REQUEST_TIMEOUT_MS } from '../shared';
 import { getGoogleClient, loadCredentials, resolveProjectId } from './util';
 
-import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types';
 import type { EnvOverrides } from '../../types/env';
+import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../../types/index';
 import type { CompletionOptions } from './types';
 
 interface GoogleImageOptions {
@@ -73,7 +73,7 @@ export class GoogleImageProvider implements ApiProvider {
     return await resolveProjectId(this.config, this.env);
   }
 
-  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+  async callApi(prompt: string, _context?: CallApiContextParams): Promise<ProviderResponse> {
     if (!prompt) {
       return {
         error: 'Prompt is required for image generation',
@@ -145,6 +145,7 @@ export class GoogleImageProvider implements ApiProvider {
         },
       };
 
+      const startTime = Date.now();
       const response = await this.withRetry(
         () =>
           client.request({
@@ -159,8 +160,9 @@ export class GoogleImageProvider implements ApiProvider {
           }),
         'Vertex AI API call',
       );
+      const latencyMs = Date.now() - startTime;
 
-      return this.processResponse(response.data, false);
+      return this.processResponse(response.data, false, latencyMs);
     } catch (err: any) {
       if (err.response?.data?.error) {
         return {
@@ -227,7 +229,7 @@ export class GoogleImageProvider implements ApiProvider {
         'Google AI Studio API call',
       );
 
-      return this.processResponse(response.data, response.cached);
+      return this.processResponse(response.data, response.cached, response.latencyMs);
     } catch (err) {
       return {
         error: `API call error: ${String(err)}`,
@@ -235,7 +237,7 @@ export class GoogleImageProvider implements ApiProvider {
     }
   }
 
-  private processResponse(data: any, cached?: boolean): ProviderResponse {
+  private processResponse(data: any, cached?: boolean, latencyMs?: number): ProviderResponse {
     logger.debug(`Response data: ${JSON.stringify(data).substring(0, 200)}...`);
 
     if (!data || typeof data !== 'object') {
@@ -284,6 +286,7 @@ export class GoogleImageProvider implements ApiProvider {
     return {
       output: imageOutputs.join('\n\n'),
       cached,
+      latencyMs,
       cost: totalCost,
     };
   }

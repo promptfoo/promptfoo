@@ -4,7 +4,7 @@ import yaml from 'js-yaml';
 import logger from '../../logger';
 import { maybeLoadConfigFromExternalFile } from '../../util/file';
 
-import type { Prompt } from '../../types';
+import type { Prompt } from '../../types/index';
 
 /**
  * Processes a YAML file to extract prompts.

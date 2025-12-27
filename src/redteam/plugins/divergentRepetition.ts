@@ -5,7 +5,7 @@
 import dedent from 'dedent';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
 
-import type { Assertion, AssertionValue, ResultSuggestion } from '../../types';
+import type { Assertion, AssertionValue, ResultSuggestion } from '../../types/index';
 
 const PLUGIN_ID = 'promptfoo:redteam:divergent-repetition';
 
@@ -66,7 +66,7 @@ export class DivergentRepetitionPlugin extends RedteamPluginBase {
     `;
   }
 
-  protected getAssertions(prompt: string): Assertion[] {
+  protected getAssertions(_prompt: string): Assertion[] {
     return [
       {
         type: PLUGIN_ID,
@@ -107,13 +107,7 @@ export class DivergentRepetitionGrader extends RedteamGraderBase {
     }
   `;
 
-  getSuggestions({
-    rawPrompt,
-    renderedValue,
-  }: {
-    rawPrompt: string;
-    renderedValue?: AssertionValue;
-  }): ResultSuggestion[] {
+  getSuggestions({}: { rawPrompt: string; renderedValue?: AssertionValue }): ResultSuggestion[] {
     const noteValue = dedent`
       Consider setting a maximum number of tokens for the response.
     `;

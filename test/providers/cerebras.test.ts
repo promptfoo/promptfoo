@@ -1,10 +1,11 @@
-import { loadApiProvider } from '../../src/providers';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createCerebrasProvider } from '../../src/providers/cerebras';
+import { loadApiProvider } from '../../src/providers/index';
 import type { z } from 'zod';
 
 import type { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
-import type { ApiProvider } from '../../src/types';
 import type { ProviderEnvOverridesSchema } from '../../src/types/env';
+import type { ApiProvider } from '../../src/types/index';
 
 type ProviderEnvOverrides = z.infer<typeof ProviderEnvOverridesSchema>;
 
@@ -20,7 +21,7 @@ describe('Cerebras provider', () => {
   });
 
   describe('createCerebrasProvider', () => {
-    it('should create a chat provider', () => {
+    it('should create a chat provider', async () => {
       provider = createCerebrasProvider('cerebras:llama3.1-8b');
       expect(provider.id()).toBe('llama3.1-8b');
       expect(provider.toString()).toContain('OpenAI');
@@ -31,7 +32,7 @@ describe('Cerebras provider', () => {
       });
     });
 
-    it('should handle custom config options', () => {
+    it('should handle custom config options', async () => {
       provider = createCerebrasProvider('cerebras:llama3.1-8b', {
         config: {
           config: {
@@ -49,9 +50,9 @@ describe('Cerebras provider', () => {
       });
     });
 
-    it('should handle max_tokens correctly', () => {
+    it('should handle max_tokens correctly', async () => {
       const provider = createCerebrasProvider('cerebras:llama3.1-8b');
-      const { body } = (provider as OpenAiChatCompletionProvider).getOpenAiBody(
+      const { body } = await (provider as OpenAiChatCompletionProvider).getOpenAiBody(
         'test prompt',
         undefined,
         {
@@ -71,12 +72,12 @@ describe('Cerebras provider', () => {
       });
     });
 
-    it('should handle model name parsing', () => {
+    it('should handle model name parsing', async () => {
       const provider = createCerebrasProvider('cerebras:model:with:colons');
       expect(provider.id()).toBe('model:with:colons');
     });
 
-    it('should merge env overrides', () => {
+    it('should merge env overrides', async () => {
       const provider = createCerebrasProvider('cerebras:test-model', {
         env: {
           OPENAI_API_KEY: 'override-key',
@@ -87,7 +88,7 @@ describe('Cerebras provider', () => {
       );
     });
 
-    it('should handle empty config', () => {
+    it('should handle empty config', async () => {
       const provider = createCerebrasProvider('cerebras:test-model');
       expect((provider as OpenAiChatCompletionProvider).config).toMatchObject({
         apiKeyEnvar: 'CEREBRAS_API_KEY',
@@ -96,9 +97,9 @@ describe('Cerebras provider', () => {
       });
     });
 
-    it('should not remove max_tokens if max_completion_tokens is not present', () => {
+    it('should not remove max_tokens if max_completion_tokens is not present', async () => {
       const provider = createCerebrasProvider('cerebras:llama3.1-8b');
-      const { body } = (provider as OpenAiChatCompletionProvider).getOpenAiBody(
+      const { body } = await (provider as OpenAiChatCompletionProvider).getOpenAiBody(
         'prompt',
         undefined,
         {
@@ -109,7 +110,7 @@ describe('Cerebras provider', () => {
       expect(body.max_completion_tokens).toBeUndefined();
     });
 
-    it('should support both empty and undefined options', () => {
+    it('should support both empty and undefined options', async () => {
       const provider1 = createCerebrasProvider('cerebras:foo');
       const provider2 = createCerebrasProvider('cerebras:foo', undefined);
       expect((provider1 as OpenAiChatCompletionProvider).config).toMatchObject({
@@ -124,7 +125,7 @@ describe('Cerebras provider', () => {
       });
     });
 
-    it('should not include basePath in passthrough config', () => {
+    it('should not include basePath in passthrough config', async () => {
       const provider = createCerebrasProvider('cerebras:llama3.1-8b', {
         config: {
           config: {
@@ -142,7 +143,7 @@ describe('Cerebras provider', () => {
       ).toBeUndefined();
     });
 
-    it('should pass through arbitrary passthrough config', () => {
+    it('should pass through arbitrary passthrough config', async () => {
       const provider = createCerebrasProvider('cerebras:llama3.1-8b', {
         config: {
           config: {
@@ -155,7 +156,7 @@ describe('Cerebras provider', () => {
       });
     });
 
-    it('should allow id and env options', () => {
+    it('should allow id and env options', async () => {
       const provider = createCerebrasProvider('cerebras:llama3.1-8b', {
         id: 'custom-id',
         env: {
@@ -168,9 +169,9 @@ describe('Cerebras provider', () => {
       );
     });
 
-    it('should not include max_tokens or max_completion_tokens if neither provided', () => {
+    it('should not include max_tokens or max_completion_tokens if neither provided', async () => {
       const provider = createCerebrasProvider('cerebras:llama3.1-8b');
-      const { body } = (provider as OpenAiChatCompletionProvider).getOpenAiBody(
+      const { body } = await (provider as OpenAiChatCompletionProvider).getOpenAiBody(
         'prompt',
         undefined,
         {} as any,

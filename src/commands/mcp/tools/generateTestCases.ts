@@ -1,9 +1,10 @@
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import dedent from 'dedent';
 import { z } from 'zod';
 import { synthesizeFromTestSuite } from '../../../testCase/synthesis';
-import type { TestSuite } from '../../../types';
-import { createToolResponse } from '../lib/utils';
+import { createToolResponse, DEFAULT_TOOL_TIMEOUT_MS, withTimeout } from '../lib/utils';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+
+import type { TestSuite } from '../../../types/index';
 
 /**
  * Tool to generate test cases with assertions for existing prompts
@@ -90,13 +91,17 @@ export function registerGenerateTestCasesTool(server: McpServer) {
           tests: [], // Will be generated
         };
 
-        // Generate test cases with variables
-        const results = await synthesizeFromTestSuite(testSuite, {
-          instructions,
-          numPersonas: 1,
-          numTestCasesPerPersona: numTestCases,
-          provider,
-        });
+        // Generate test cases with variables (with timeout protection)
+        const results = await withTimeout(
+          synthesizeFromTestSuite(testSuite, {
+            instructions,
+            numPersonas: 1,
+            numTestCasesPerPersona: numTestCases,
+            provider,
+          }),
+          DEFAULT_TOOL_TIMEOUT_MS,
+          'Test case generation timed out. This may indicate provider connectivity issues or missing API credentials.',
+        );
 
         if (!results || results.length === 0) {
           return createToolResponse(
@@ -170,6 +175,19 @@ export function registerGenerateTestCasesTool(server: McpServer) {
               suggestion: 'Try reducing numTestCases or wait before retrying',
             },
             'Rate limit exceeded while generating test cases',
+          );
+        }
+
+        if (errorMessage.includes('timed out')) {
+          return createToolResponse(
+            'generate_test_cases',
+            false,
+            {
+              originalError: errorMessage,
+              suggestion:
+                'Ensure your provider API keys are correctly configured and the provider is reachable',
+            },
+            'Test case generation timed out',
           );
         }
 

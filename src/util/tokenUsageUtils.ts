@@ -1,4 +1,4 @@
-import type { TokenUsage, CompletionTokenDetails } from '../types/shared';
+import type { CompletionTokenDetails, TokenUsage } from '../types/shared';
 
 /**
  * Helper to create empty completion details
@@ -188,23 +188,21 @@ export function accumulateResponseTokenUsage(
 }
 
 /**
- * Accumulate token usage from a grader result, handling the common pattern of
- * incrementing numRequests when no token usage is provided.
- * @param target Object to update
- * @param graderResult Result that may contain tokensUsed
+ * Normalize token usage from a provider response into a standard TokenUsage object.
+ * Provides default values for all fields if not present in the response.
+ * @param tokenUsage Token usage from provider response (may be partial or undefined)
+ * @returns Fully populated TokenUsage object with defaults
  */
-export function accumulateGraderTokenUsage(
-  target: TokenUsage,
-  graderResult: { tokensUsed?: Partial<TokenUsage> } | undefined,
-): void {
-  if (graderResult?.tokensUsed) {
-    accumulateTokenUsage(target, graderResult.tokensUsed);
-    // Increment numRequests if not already present in tokensUsed
-    if (graderResult.tokensUsed.numRequests === undefined) {
-      target.numRequests = (target.numRequests ?? 0) + 1;
-    }
-  } else if (graderResult) {
-    // Only increment numRequests if we got a grader result but no token usage
-    target.numRequests = (target.numRequests ?? 0) + 1;
-  }
+export function normalizeTokenUsage(
+  tokenUsage: Partial<TokenUsage> | undefined,
+): Required<TokenUsage> {
+  return {
+    total: tokenUsage?.total || 0,
+    prompt: tokenUsage?.prompt || 0,
+    completion: tokenUsage?.completion || 0,
+    cached: tokenUsage?.cached || 0,
+    numRequests: tokenUsage?.numRequests || 0,
+    completionDetails: tokenUsage?.completionDetails || createEmptyCompletionDetails(),
+    assertions: tokenUsage?.assertions || createEmptyAssertions(),
+  };
 }

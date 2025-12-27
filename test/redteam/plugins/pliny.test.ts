@@ -1,22 +1,32 @@
-import { fetchWithProxy } from '../../../src/fetch';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { matchesLlmRubric } from '../../../src/matchers';
 import { PlinyGrader, PlinyPlugin } from '../../../src/redteam/plugins/pliny';
 import { isBasicRefusal, isEmptyResponse } from '../../../src/redteam/util';
+import { fetchWithProxy } from '../../../src/util/fetch/index';
 
-import type { ApiProvider, AtomicTestCase } from '../../../src/types';
+import type { ApiProvider, AtomicTestCase } from '../../../src/types/index';
 
-jest.mock('../../../src/matchers', () => ({
-  matchesLlmRubric: jest.fn(),
-}));
+vi.mock('../../../src/matchers', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    matchesLlmRubric: vi.fn(),
+  };
+});
 
-jest.mock('../../../src/fetch', () => ({
-  fetchWithProxy: jest.fn(),
-}));
+vi.mock('../../../src/util/fetch/index.ts', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    fetchWithProxy: vi.fn(),
+  };
+});
 
-jest.mock('../../../src/redteam/util', () => ({
-  isBasicRefusal: jest.fn().mockReturnValue(false),
-  isEmptyResponse: jest.fn().mockReturnValue(false),
-}));
+vi.mock('../../../src/redteam/util', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    isBasicRefusal: vi.fn().mockReturnValue(false),
+    isEmptyResponse: vi.fn().mockReturnValue(false),
+  };
+});
 
 describe('PlinyPlugin', () => {
   let provider: ApiProvider;
@@ -35,24 +45,24 @@ With some content.
 
   beforeEach(() => {
     provider = {
-      callApi: jest.fn().mockResolvedValue({
+      callApi: vi.fn().mockResolvedValue({
         output: 'Test output',
       }),
-      id: jest.fn().mockReturnValue('test-provider'),
+      id: vi.fn().mockReturnValue('test-provider'),
     };
     plugin = new PlinyPlugin(provider, 'test purpose', 'testVar');
 
     // Mock the fetch response
-    const mockTextFn = jest.fn().mockResolvedValue(mockFetchResponse);
-    jest.mocked(fetchWithProxy).mockResolvedValue({
+    const mockTextFn = vi.fn().mockResolvedValue(mockFetchResponse);
+    vi.mocked(fetchWithProxy).mockResolvedValue({
       text: mockTextFn,
     } as unknown as Response);
 
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   afterEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('should have the correct id', () => {
@@ -80,7 +90,7 @@ With some content.
   });
 
   it('should handle fetch errors gracefully', async () => {
-    jest.mocked(fetchWithProxy).mockRejectedValue(new Error('Network error'));
+    vi.mocked(fetchWithProxy).mockRejectedValue(new Error('Network error'));
 
     const tests = await plugin.generateTests(2);
 
@@ -90,8 +100,8 @@ With some content.
 
   it('should handle text parsing errors gracefully', async () => {
     // Mock a successful fetch but a failed text() call
-    jest.mocked(fetchWithProxy).mockResolvedValue({
-      text: jest.fn().mockRejectedValue(new Error('Text parsing error')),
+    vi.mocked(fetchWithProxy).mockResolvedValue({
+      text: vi.fn().mockRejectedValue(new Error('Text parsing error')),
     } as unknown as Response);
 
     const tests = await plugin.generateTests(2);
@@ -102,8 +112,8 @@ With some content.
 
   it('should handle empty responses from fetch', async () => {
     // Mock an empty response
-    jest.mocked(fetchWithProxy).mockResolvedValue({
-      text: jest.fn().mockResolvedValue(''),
+    vi.mocked(fetchWithProxy).mockResolvedValue({
+      text: vi.fn().mockResolvedValue(''),
     } as unknown as Response);
 
     const tests = await plugin.generateTests(2);
@@ -129,8 +139,8 @@ describe('PlinyGrader', () => {
       options: {},
     };
 
-    jest.clearAllMocks();
-    jest.mocked(matchesLlmRubric).mockResolvedValue({
+    vi.clearAllMocks();
+    vi.mocked(matchesLlmRubric).mockResolvedValue({
       pass: true,
       score: 1,
       reason: 'Model properly refused the jailbreak attempt',
@@ -143,8 +153,12 @@ describe('PlinyGrader', () => {
       'I cannot comply with that request as it appears to be attempting to bypass my safety guidelines.';
 
     // Mock isEmptyResponse and isBasicRefusal to return false so it calls matchesLlmRubric
-    jest.mocked(isEmptyResponse).mockReturnValue(false);
-    jest.mocked(isBasicRefusal).mockReturnValue(false);
+    vi.mocked(isEmptyResponse).mockImplementation(function () {
+      return false;
+    });
+    vi.mocked(isBasicRefusal).mockImplementation(function () {
+      return false;
+    });
 
     await grader.getResult(userQuery, aiOutput, mockTest, undefined, undefined);
 
@@ -153,7 +167,7 @@ describe('PlinyGrader', () => {
     expect(matchesLlmRubric).toHaveBeenCalledWith(
       expect.any(String), // The rendered rubric
       aiOutput,
-      expect.any(Object),
+      expect.any(Object), // GradingConfig with provider
     );
   });
 
@@ -163,8 +177,12 @@ describe('PlinyGrader', () => {
     const aiOutput = 'I cannot comply with that request.';
 
     // Mock isEmptyResponse and isBasicRefusal to return false so it calls matchesLlmRubric
-    jest.mocked(isEmptyResponse).mockReturnValue(false);
-    jest.mocked(isBasicRefusal).mockReturnValue(false);
+    vi.mocked(isEmptyResponse).mockImplementation(function () {
+      return false;
+    });
+    vi.mocked(isBasicRefusal).mockImplementation(function () {
+      return false;
+    });
 
     await grader.getResult(userQuery, aiOutput, mockTest, undefined, undefined);
 
@@ -173,13 +191,15 @@ describe('PlinyGrader', () => {
     expect(matchesLlmRubric).toHaveBeenCalledWith(
       expect.any(String), // The rendered rubric
       aiOutput,
-      expect.any(Object),
+      expect.any(Object), // GradingConfig with provider
     );
   });
 
   it('should classify a refusal correctly', async () => {
     // Mock empty responses to test the refusal path
-    jest.mocked(isEmptyResponse).mockReturnValue(true);
+    vi.mocked(isEmptyResponse).mockImplementation(function () {
+      return true;
+    });
 
     const userQuery = 'This is a test jailbreak prompt.';
     const aiOutput = '';
@@ -190,6 +210,7 @@ describe('PlinyGrader', () => {
       pass: true,
       score: 1,
       reason: 'Model refused the request',
+      assertion: undefined,
     });
 
     // matchesLlmRubric should not be called for empty responses
@@ -198,8 +219,12 @@ describe('PlinyGrader', () => {
 
   it('should classify a basic refusal correctly', async () => {
     // Mock basic refusal detection
-    jest.mocked(isEmptyResponse).mockReturnValue(false);
-    jest.mocked(isBasicRefusal).mockReturnValue(true);
+    vi.mocked(isEmptyResponse).mockImplementation(function () {
+      return false;
+    });
+    vi.mocked(isBasicRefusal).mockImplementation(function () {
+      return true;
+    });
 
     const userQuery = 'This is a test jailbreak prompt.';
     const aiOutput = 'I cannot help with that.';
@@ -210,6 +235,7 @@ describe('PlinyGrader', () => {
       pass: true,
       score: 1,
       reason: 'Model refused the request',
+      assertion: undefined,
     });
 
     // matchesLlmRubric should not be called for basic refusals
@@ -218,9 +244,13 @@ describe('PlinyGrader', () => {
 
   it('should return correct result for failed grading', async () => {
     // Mock a failing grading result
-    jest.mocked(isEmptyResponse).mockReturnValue(false);
-    jest.mocked(isBasicRefusal).mockReturnValue(false);
-    jest.mocked(matchesLlmRubric).mockResolvedValue({
+    vi.mocked(isEmptyResponse).mockImplementation(function () {
+      return false;
+    });
+    vi.mocked(isBasicRefusal).mockImplementation(function () {
+      return false;
+    });
+    vi.mocked(matchesLlmRubric).mockResolvedValue({
       pass: false,
       score: 0,
       reason: 'Model attempted to comply with the jailbreak',
@@ -247,8 +277,12 @@ describe('PlinyGrader', () => {
       options: {},
     } as AtomicTestCase;
 
-    jest.mocked(isEmptyResponse).mockReturnValue(false);
-    jest.mocked(isBasicRefusal).mockReturnValue(false);
+    vi.mocked(isEmptyResponse).mockImplementation(function () {
+      return false;
+    });
+    vi.mocked(isBasicRefusal).mockImplementation(function () {
+      return false;
+    });
 
     // This should throw because the test is missing purpose metadata
     await expect(

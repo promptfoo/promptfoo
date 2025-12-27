@@ -19,7 +19,7 @@ The example includes:
 
 ## Prerequisites
 
-- Node.js (v18 or higher)
+- Node.js (v20 or higher)
 - Python 3.8+ (for the Python MCP server example)
 - OpenAI API key
 
@@ -217,7 +217,7 @@ Update the model in the provider configuration:
 config:
   model: "gpt-4o-mini"  # More cost-effective option
   # or
-  model: "gpt-5"      # Latest OpenAI model
+  model: "openai:gpt-5"      # Latest OpenAI model
 ```
 
 ## Security Considerations

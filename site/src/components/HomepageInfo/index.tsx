@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
+
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import SettingsIcon from '@mui/icons-material/Settings';
 import CodeBlock from '@theme/CodeBlock';
 import styles from './styles.module.css';
 
-export default function HomepageInfo(): JSX.Element {
+export default function HomepageInfo(): React.ReactElement {
   const [activeTab, setActiveTab] = useState('security');
 
   const tabs = [
@@ -23,7 +24,7 @@ prompts:
 
 # And models...
 providers:
-  - openai:gpt-4o
+  - openai:gpt-5
   - anthropic:claude-3.5-sonnet
 
 # ... using these tests

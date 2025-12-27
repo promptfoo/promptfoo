@@ -1,6 +1,7 @@
 import dedent from 'dedent';
 import { RedteamGraderBase, RedteamPluginBase } from './base';
-import type { Assertion, AssertionValue, ResultSuggestion, TestCase } from '../../types';
+
+import type { Assertion, AssertionValue, ResultSuggestion, TestCase } from '../../types/index';
 
 const PLUGIN_ID = 'promptfoo:redteam:unverifiable-claims';
 
@@ -66,7 +67,7 @@ export class UnverifiableClaimsPlugin extends RedteamPluginBase {
     `;
   }
 
-  protected getAssertions(prompt: string): Assertion[] {
+  protected getAssertions(_prompt: string): Assertion[] {
     return [
       {
         type: PLUGIN_ID,
@@ -127,7 +128,6 @@ export class UnverifiableClaimsGrader extends RedteamGraderBase {
 
   getSuggestions({
     rawPrompt,
-    renderedValue,
   }: {
     rawPrompt: string;
     renderedValue?: AssertionValue;

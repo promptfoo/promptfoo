@@ -1,5 +1,7 @@
+import { describe, expect, it, vi } from 'vitest';
 import { handleConversationRelevance } from '../../src/external/assertions/deepeval';
-import type { AssertionParams, AtomicTestCase, ApiProvider } from '../../src/types';
+
+import type { ApiProvider, AssertionParams, AtomicTestCase } from '../../src/types/index';
 
 const createMockProvider = (output: string, reason?: string): ApiProvider => ({
   id: () => 'mock',
@@ -15,16 +17,19 @@ const createMockProvider = (output: string, reason?: string): ApiProvider => ({
 });
 
 // Mock getAndCheckProvider
-jest.mock('../../src/matchers', () => ({
-  ...jest.requireActual('../../src/matchers'),
-  getAndCheckProvider: jest.fn().mockImplementation((type, provider) => {
-    return provider;
-  }),
-}));
+vi.mock('../../src/matchers', async () => {
+  const actual = await vi.importActual('../../src/matchers');
+  return {
+    ...actual,
+    getAndCheckProvider: vi.fn().mockImplementation((_type, provider) => {
+      return provider;
+    }),
+  };
+});
 
 const defaultParams = {
   baseType: 'conversation-relevance' as const,
-  context: {
+  assertionValueContext: {
     vars: {},
     test: {} as AtomicTestCase,
     prompt: 'test prompt',
@@ -157,8 +162,8 @@ describe('handleConversationRelevance', () => {
 
     const params: AssertionParams = {
       ...defaultParams,
-      context: {
-        ...defaultParams.context,
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
         provider: createMockProvider('yes'),
       },
       assertion: {
@@ -197,8 +202,8 @@ describe('handleConversationRelevance', () => {
 
     const params: AssertionParams = {
       ...defaultParams,
-      context: {
-        ...defaultParams.context,
+      assertionValueContext: {
+        ...defaultParams.assertionValueContext,
         provider: createMockProvider('yes'),
       },
       assertion: {

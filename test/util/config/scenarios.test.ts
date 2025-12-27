@@ -2,49 +2,65 @@ import * as fs from 'fs';
 
 import { globSync } from 'glob';
 import yaml from 'js-yaml';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { validateAssertions } from '../../../src/assertions/validateAssertions';
 import cliState from '../../../src/cliState';
-import { readPrompts, readProviderPromptMap } from '../../../src/prompts';
-import { loadApiProviders } from '../../../src/providers';
-import { readFilters } from '../../../src/util';
+import { readPrompts, readProviderPromptMap } from '../../../src/prompts/index';
+import { loadApiProviders } from '../../../src/providers/index';
 // Import after mocking
 import { resolveConfigs } from '../../../src/util/config/load';
 import { maybeLoadFromExternalFile } from '../../../src/util/file';
+import { readFilters } from '../../../src/util/index';
 import { readTests } from '../../../src/util/testCaseReader';
 
-jest.mock('fs');
-jest.mock('glob');
+import type { ApiProvider } from '../../../src/types/providers';
+
+vi.mock('fs');
+vi.mock('glob', () => ({
+  globSync: vi.fn(),
+  hasMagic: vi.fn((pattern: string | string[]) => {
+    const p = Array.isArray(pattern) ? pattern.join('') : pattern;
+    return p.includes('*') || p.includes('?') || p.includes('[') || p.includes('{');
+  }),
+}));
 
 // Mock all the dependencies first
-jest.mock('../../../src/util/file', () => ({
-  ...jest.requireActual('../../../src/util/file'),
-  maybeLoadFromExternalFile: jest.fn(),
-}));
-jest.mock('../../../src/prompts');
-jest.mock('../../../src/providers');
-jest.mock('../../../src/util/testCaseReader');
-jest.mock('../../../src/util', () => ({
-  ...jest.requireActual('../../../src/util'),
-  readFilters: jest.fn(),
-}));
-jest.mock('../../../src/assertions/validateAssertions');
+vi.mock('../../../src/util/file', async () => {
+  const actual =
+    await vi.importActual<typeof import('../../../src/util/file')>('../../../src/util/file');
+  return {
+    ...actual,
+    maybeLoadFromExternalFile: vi.fn(),
+  };
+});
+vi.mock('../../../src/prompts');
+vi.mock('../../../src/providers');
+vi.mock('../../../src/util/testCaseReader');
+vi.mock('../../../src/util', async () => {
+  const actual = await vi.importActual<typeof import('../../../src/util')>('../../../src/util');
+  return {
+    ...actual,
+    readFilters: vi.fn(),
+  };
+});
+vi.mock('../../../src/assertions/validateAssertions');
 
 describe('Scenario loading with glob patterns', () => {
   const originalBasePath = cliState.basePath;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     cliState.basePath = '/test/path';
 
     // Setup default mocks
-    jest.mocked(readPrompts).mockResolvedValue([{ raw: 'Test prompt', label: 'Test prompt' }]);
-    jest.mocked(readProviderPromptMap).mockReturnValue({});
-    jest
-      .mocked(loadApiProviders)
-      .mockResolvedValue([{ id: () => 'openai:gpt-3.5-turbo', callApi: jest.fn() } as any]);
-    jest.mocked(readTests).mockResolvedValue([]);
-    jest.mocked(readFilters).mockResolvedValue({});
-    jest.mocked(validateAssertions).mockImplementation(() => {});
+    vi.mocked(readPrompts).mockResolvedValue([{ raw: 'Test prompt', label: 'Test prompt' }]);
+    vi.mocked(readProviderPromptMap).mockReturnValue({});
+    vi.mocked(loadApiProviders).mockResolvedValue([
+      { id: () => 'openai:gpt-3.5-turbo', callApi: vi.fn() } as unknown as ApiProvider,
+    ]);
+    vi.mocked(readTests).mockResolvedValue([]);
+    vi.mocked(readFilters).mockResolvedValue({});
+    vi.mocked(validateAssertions).mockImplementation(() => {});
   });
 
   afterEach(() => {
@@ -65,8 +81,8 @@ describe('Scenario loading with glob patterns', () => {
     };
 
     // Mock file system
-    jest.mocked(fs.existsSync).mockReturnValue(true);
-    jest.mocked(fs.readFileSync).mockImplementation((filePath) => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockImplementation((filePath) => {
       if (filePath === 'config.yaml') {
         return yaml.dump({
           prompts: ['Test prompt'],
@@ -78,10 +94,10 @@ describe('Scenario loading with glob patterns', () => {
     });
 
     // Mock glob to return config file
-    jest.mocked(globSync).mockReturnValue(['config.yaml']);
+    vi.mocked(globSync).mockReturnValue(['config.yaml']);
 
     // Mock maybeLoadFromExternalFile to return nested array (simulating glob expansion)
-    jest.mocked(maybeLoadFromExternalFile).mockImplementation((input) => {
+    vi.mocked(maybeLoadFromExternalFile).mockImplementation((input) => {
       if (Array.isArray(input) && input[0] === 'file://scenarios/*.yaml') {
         // Return nested array as would happen with glob pattern
         return [[scenario1, scenario2]];
@@ -122,8 +138,8 @@ describe('Scenario loading with glob patterns', () => {
       },
     ];
 
-    jest.mocked(fs.existsSync).mockReturnValue(true);
-    jest.mocked(fs.readFileSync).mockImplementation((filePath) => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockImplementation((filePath) => {
       if (filePath === 'config.yaml') {
         return yaml.dump({
           prompts: ['Test prompt'],
@@ -134,9 +150,9 @@ describe('Scenario loading with glob patterns', () => {
       return '';
     });
 
-    jest.mocked(globSync).mockReturnValue(['config.yaml']);
+    vi.mocked(globSync).mockReturnValue(['config.yaml']);
 
-    jest.mocked(maybeLoadFromExternalFile).mockImplementation((input) => {
+    vi.mocked(maybeLoadFromExternalFile).mockImplementation((input) => {
       if (Array.isArray(input)) {
         // Simulate two glob patterns each returning different scenarios
         return [
@@ -177,8 +193,8 @@ describe('Scenario loading with glob patterns', () => {
       },
     ];
 
-    jest.mocked(fs.existsSync).mockReturnValue(true);
-    jest.mocked(fs.readFileSync).mockImplementation((filePath) => {
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.readFileSync).mockImplementation((filePath) => {
       if (filePath === 'config.yaml') {
         return yaml.dump({
           prompts: ['Test prompt'],
@@ -189,9 +205,9 @@ describe('Scenario loading with glob patterns', () => {
       return '';
     });
 
-    jest.mocked(globSync).mockReturnValue(['config.yaml']);
+    vi.mocked(globSync).mockReturnValue(['config.yaml']);
 
-    jest.mocked(maybeLoadFromExternalFile).mockImplementation((input) => {
+    vi.mocked(maybeLoadFromExternalFile).mockImplementation((input) => {
       if (Array.isArray(input)) {
         // First element is direct scenario, second is glob pattern
         return [directScenario, globScenarios];

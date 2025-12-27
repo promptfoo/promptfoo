@@ -1,21 +1,25 @@
-import { useState } from 'react';
-import Alert from '@mui/material/Alert';
-import Button from '@mui/material/Button';
-import IconButton from '@mui/material/IconButton';
-import Box from '@mui/material/Box';
-import Typography from '@mui/material/Typography';
-import Snackbar from '@mui/material/Snackbar';
+import { useEffect, useRef, useState } from 'react';
+
+import { useVersionCheck } from '@app/hooks/useVersionCheck';
+import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
-import UpdateIcon from '@mui/icons-material/Update';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import UpdateIcon from '@mui/icons-material/Update';
+import Alert from '@mui/material/Alert';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import IconButton from '@mui/material/IconButton';
+import Snackbar from '@mui/material/Snackbar';
 import { styled } from '@mui/material/styles';
-import { useVersionCheck } from '@app/hooks/useVersionCheck';
+import Typography from '@mui/material/Typography';
 
 const StyledAlert = styled(Alert)(({ theme }) => ({
   borderRadius: 0,
   padding: theme.spacing(0.75, 2),
   alignItems: 'center',
+  position: 'relative',
+  zIndex: theme.zIndex.appBar + 1,
   '& .MuiAlert-message': {
     width: '100%',
     padding: theme.spacing(0.5, 0),
@@ -49,14 +53,64 @@ const UpdateActions = styled(Box)({
 export default function UpdateBanner() {
   const { versionInfo, loading, error, dismissed, dismiss } = useVersionCheck();
   const [copySnackbarOpen, setCopySnackbarOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const bannerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const element = bannerRef.current;
+
+    if (!element) {
+      return () => {
+        document.documentElement.style.removeProperty('--update-banner-height');
+      };
+    }
+
+    const updateHeight = () => {
+      const height = element.offsetHeight;
+      document.documentElement.style.setProperty('--update-banner-height', `${height}px`);
+    };
+
+    updateHeight();
+
+    if (typeof ResizeObserver !== 'undefined') {
+      const observer = new ResizeObserver(() => {
+        updateHeight();
+      });
+      observer.observe(element);
+
+      return () => {
+        observer.disconnect();
+        document.documentElement.style.removeProperty('--update-banner-height');
+      };
+    }
+
+    window.addEventListener('resize', updateHeight);
+
+    return () => {
+      window.removeEventListener('resize', updateHeight);
+      document.documentElement.style.removeProperty('--update-banner-height');
+    };
+  }, []);
+
+  useEffect(() => {
+    if (copied) {
+      const timer = setTimeout(() => setCopied(false), 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [copied]);
 
   const handleCopyCommand = async () => {
     const command = versionInfo?.updateCommands?.primary;
 
     if (command) {
+      const onSuccess = () => {
+        setCopySnackbarOpen(true);
+        setCopied(true);
+      };
+
       try {
         await navigator.clipboard.writeText(command);
-        setCopySnackbarOpen(true);
+        onSuccess();
       } catch (error) {
         // Fallback for browsers that don't support clipboard API or when it fails
         console.error('Failed to copy to clipboard:', error);
@@ -69,7 +123,7 @@ export default function UpdateBanner() {
         textarea.select();
         try {
           document.execCommand('copy');
-          setCopySnackbarOpen(true);
+          onSuccess();
         } catch (fallbackError) {
           console.error('Fallback copy also failed:', fallbackError);
           // Show the command in an alert as last resort
@@ -93,6 +147,7 @@ export default function UpdateBanner() {
   return (
     <>
       <StyledAlert
+        ref={bannerRef}
         severity="info"
         icon={<UpdateIcon />}
         action={
@@ -132,7 +187,13 @@ export default function UpdateBanner() {
               <Button
                 size="small"
                 variant="outlined"
-                startIcon={<ContentCopyIcon sx={{ fontSize: '0.875rem' }} />}
+                startIcon={
+                  copied ? (
+                    <CheckIcon sx={{ fontSize: '0.875rem' }} />
+                  ) : (
+                    <ContentCopyIcon sx={{ fontSize: '0.875rem' }} />
+                  )
+                }
                 onClick={handleCopyCommand}
                 sx={{ textTransform: 'none' }}
                 title={versionInfo.updateCommands.primary}

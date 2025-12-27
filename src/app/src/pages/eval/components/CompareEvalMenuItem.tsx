@@ -7,19 +7,20 @@ import MenuItem from '@mui/material/MenuItem';
 import Tooltip from '@mui/material/Tooltip';
 import EvalSelectorDialog from './EvalSelectorDialog';
 import { useTableStore } from './store';
-
-import type { ResultLightweightWithLabel } from './types';
+import type { ResultLightweightWithLabel } from '@promptfoo/types';
 
 interface CompareEvalMenuItemProps {
   initialEvals: ResultLightweightWithLabel[];
   onComparisonEvalSelected: (evalId: string) => void;
+  onMenuClose?: () => void;
 }
 
-function CompareEvalMenuItem({ onComparisonEvalSelected }: CompareEvalMenuItemProps) {
+function CompareEvalMenuItem({ onComparisonEvalSelected, onMenuClose }: CompareEvalMenuItemProps) {
   const { evalId: currentEvalId } = useTableStore();
   const [dialogOpen, setDialogOpen] = useState(false);
 
   const handleOpenDialog = () => {
+    onMenuClose?.();
     setDialogOpen(true);
   };
 
@@ -28,8 +29,18 @@ function CompareEvalMenuItem({ onComparisonEvalSelected }: CompareEvalMenuItemPr
   };
 
   const handleEvalSelected = (evalId: string) => {
-    onComparisonEvalSelected(evalId);
-    handleCloseDialog();
+    // Prevent self-comparison
+    if (evalId === currentEvalId) {
+      handleCloseDialog();
+      return;
+    }
+
+    try {
+      onComparisonEvalSelected(evalId);
+    } finally {
+      // Always close the dialog, even if the callback throws an error
+      handleCloseDialog();
+    }
   };
 
   return (
@@ -48,7 +59,6 @@ function CompareEvalMenuItem({ onComparisonEvalSelected }: CompareEvalMenuItemPr
         onEvalSelected={(evalId) => {
           handleEvalSelected(evalId);
         }}
-        title="Select an eval to compare"
         description="Only evals with the same dataset can be compared."
         focusedEvalId={currentEvalId ?? undefined}
         filterByDatasetId

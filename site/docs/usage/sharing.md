@@ -1,12 +1,12 @@
 ---
 sidebar_position: 40
-description: Collaborate on LLM evaluations by sharing results via cloud platform, enterprise deployment, or self-hosted infrastructure
-keywords: [eval sharing, LLM testing, promptfoo sharing, collaboration, team sharing]
+description: Share your promptfoo eval results with teams via cloud platform, enterprise deployment, or self-hosted infrastructure
+keywords: [eval sharing, model testing, promptfoo sharing, collaboration, team sharing]
 ---
 
 # Sharing
 
-Share your eval results with others using the `share` command.
+Share your eval results with others using the `share` command or the web interface.
 
 ## Quick Start (Cloud)
 
@@ -23,14 +23,42 @@ promptfoo share
 ```
 
 :::note
+
 Cloud sharing creates private links only visible to you and your organization. If you don't have an account, visit https://promptfoo.app/welcome to create one and get your API key.
+
 :::
+
+## Web Interface Sharing
+
+Share evals directly from the web interface with a single click. The **Share** button appears in the "Eval actions" dropdown menu for all evals.
+
+![Share button location in web interface](/img/docs/usage/sharing-webui.png)
+
+### Share an Eval via Web Interface
+
+1. Open your eval results in the web interface
+2. Click **"Eval actions"** in the top toolbar
+3. Select **"Share"** from the dropdown menu
+4. Follow the prompts to generate your shareable URL
+
+:::tip
+
+The share button is visible by default for all evals. If sharing isn't configured, you'll see helpful setup instructions instead of errors.
+
+:::
+
+### Sharing Behavior by Setup Type
+
+- **Cloud users**: Generates private sharing URLs automatically
+- **Enterprise users**: Creates team-accessible links with role-based permissions
+- **Self-hosted users**: Uses your configured sharing endpoints
+- **Unconfigured setups**: Displays clear setup instructions with next steps
 
 ## Sharing Specific Evals
 
 ```sh
 # List available evals
-promptfoo list
+promptfoo list evals
 
 # Share by ID
 promptfoo share my-eval-id
@@ -52,7 +80,7 @@ promptfoo share
 Enterprise sharing includes additional features:
 
 - Team-based access controls
-- Role-based permissions for shared evaluations
+- Role-based permissions for shared evals
 - SSO integration (SAML 2.0 and OIDC)
 
 For more details on authentication and team management, see the [Enterprise documentation](/docs/enterprise/authentication.md).
@@ -101,14 +129,16 @@ sharing:
 ```
 
 :::tip
+
 Self-hosted sharing doesn't require `promptfoo auth login` when these environment variables or config settings are present.
+
 :::
 
 ### Troubleshooting Upload Issues
 
 #### Handling "413 Request Entity Too Large" Errors
 
-When sharing large evaluation results, you may encounter "413 Request Entity Too Large" errors from NGINX or other proxies. This happens when the request payload exceeds the server's configured limit.
+When sharing large eval results, you may encounter "413 Request Entity Too Large" errors from NGINX or other proxies. This happens when the request payload exceeds the server's configured limit.
 
 You can solve this in two ways:
 
@@ -132,8 +162,16 @@ For multi-tenant environments, reducing the chunk size on the client is usually 
 
 To disable sharing completely:
 
+### Disable via Configuration
+
 ```yaml title="promptfooconfig.yaml"
 sharing: false
+```
+
+### Disable via Environment Variable
+
+```sh
+export PROMPTFOO_DISABLE_SHARING=true
 ```
 
 ## See Also

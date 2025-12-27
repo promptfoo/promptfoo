@@ -1,60 +1,76 @@
-import fs from 'fs';
-import path from 'path';
+import fs from 'node:fs';
+import path from 'node:path';
 
 import { ProxyAgent, setGlobalDispatcher } from 'undici';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../src/cliState';
 import { VERSION } from '../src/constants';
 import { getEnvBool, getEnvString } from '../src/envars';
+import logger from '../src/logger';
+import { REQUEST_TIMEOUT_MS } from '../src/providers/shared';
 import {
   fetchWithProxy,
   fetchWithRetries,
   fetchWithTimeout,
   handleRateLimit,
   isRateLimited,
-  sanitizeUrl,
-} from '../src/fetch';
-import logger from '../src/logger';
-import { REQUEST_TIMEOUT_MS } from '../src/providers/shared';
+} from '../src/util/fetch/index';
 import { sleep } from '../src/util/time';
 import { createMockResponse } from './util/utils';
 
-jest.mock('../src/util/time', () => ({
-  sleep: jest.fn().mockResolvedValue(undefined),
+vi.mock('../src/util/time', () => ({
+  sleep: vi.fn().mockResolvedValue(undefined),
 }));
 
-jest.mock('undici', () => {
-  const mockProxyAgentConstructor = jest.fn();
+vi.mock('../src/logger', () => ({
+  __esModule: true,
+  default: {
+    debug: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+  logRequestResponse: vi.fn(),
+}));
+
+vi.mock('../src/globalConfig/cloud', () => ({
+  CLOUD_API_HOST: 'https://api.promptfoo.dev',
+  cloudConfig: {
+    getApiKey: vi.fn(),
+  },
+}));
+
+vi.mock('undici', () => {
   const mockProxyAgentInstance = {
     options: null,
-    addRequest: jest.fn(),
-    destroy: jest.fn(),
+    addRequest: vi.fn(),
+    destroy: vi.fn(),
   };
 
-  mockProxyAgentConstructor.mockImplementation((options) => {
+  const mockAgentInstance = {
+    addRequest: vi.fn(),
+    destroy: vi.fn(),
+  };
+
+  // Use regular functions instead of arrow functions for constructors
+  const ProxyAgent = vi.fn(function (this: any, options: any) {
     mockProxyAgentInstance.options = options;
     return mockProxyAgentInstance;
   });
 
-  const mockAgentConstructor = jest.fn();
-  const mockAgentInstance = {
-    addRequest: jest.fn(),
-    destroy: jest.fn(),
-  };
-
-  mockAgentConstructor.mockImplementation(() => {
+  const Agent = vi.fn(function (this: any) {
     return mockAgentInstance;
   });
 
   return {
-    ProxyAgent: mockProxyAgentConstructor,
-    Agent: mockAgentConstructor,
-    setGlobalDispatcher: jest.fn(),
+    ProxyAgent,
+    Agent,
+    setGlobalDispatcher: vi.fn(),
   };
 });
 
-jest.mock('../src/envars', () => {
+vi.mock('../src/envars', () => {
   return {
-    getEnvString: jest.fn().mockImplementation((key: string, defaultValue: string = '') => {
+    getEnvString: vi.fn().mockImplementation((key: string, defaultValue: string = '') => {
       if (key === 'HTTPS_PROXY' && process.env.HTTPS_PROXY) {
         return process.env.HTTPS_PROXY;
       }
@@ -81,7 +97,7 @@ jest.mock('../src/envars', () => {
       }
       return defaultValue;
     }),
-    getEnvBool: jest.fn().mockImplementation((key: string, defaultValue: boolean = false) => {
+    getEnvBool: vi.fn().mockImplementation((key: string, defaultValue: boolean = false) => {
       if (key === 'PROMPTFOO_RETRY_5XX_ENABLED') {
         return process.env.PROMPTFOO_RETRY_5XX_ENABLED === 'true' || false;
       }
@@ -93,7 +109,7 @@ jest.mock('../src/envars', () => {
       }
       return defaultValue;
     }),
-    getEnvInt: jest.fn().mockImplementation((key: string, defaultValue: number = 0) => {
+    getEnvInt: vi.fn().mockImplementation((key: string, defaultValue: number = 0) => {
       if (key === 'REQUEST_TIMEOUT_MS') {
         return Number.parseInt(process.env.REQUEST_TIMEOUT_MS || '300000', 10);
       }
@@ -102,11 +118,14 @@ jest.mock('../src/envars', () => {
   };
 });
 
-jest.mock('fs', () => ({
-  readFileSync: jest.fn(),
+vi.mock('node:fs', () => ({
+  default: {
+    readFileSync: vi.fn(),
+  },
+  readFileSync: vi.fn(),
 }));
 
-jest.mock('../src/cliState', () => ({
+vi.mock('../src/cliState', () => ({
   default: {
     basePath: undefined,
   },
@@ -114,10 +133,10 @@ jest.mock('../src/cliState', () => ({
 
 describe('fetchWithProxy', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
-    jest.spyOn(global, 'fetch').mockImplementation();
-    jest.mocked(ProxyAgent).mockClear();
-    jest.mocked(setGlobalDispatcher).mockClear();
+    vi.clearAllMocks();
+    vi.spyOn(global, 'fetch').mockResolvedValue(new Response());
+    vi.mocked(ProxyAgent).mockClear();
+    vi.mocked(setGlobalDispatcher).mockClear();
     delete process.env.HTTPS_PROXY;
     delete process.env.https_proxy;
     delete process.env.HTTP_PROXY;
@@ -129,7 +148,7 @@ describe('fetchWithProxy', () => {
   });
 
   afterEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   it('should add version header to all requests', async () => {
@@ -300,7 +319,7 @@ describe('fetchWithProxy', () => {
     process.env.HTTPS_PROXY = mockProxyUrl;
     process.env.PROMPTFOO_CA_CERT_PATH = mockCertPath;
 
-    jest.mocked(getEnvString).mockImplementation((key: string, defaultValue: string = '') => {
+    vi.mocked(getEnvString).mockImplementation((key: string, defaultValue: string = '') => {
       if (key === 'PROMPTFOO_CA_CERT_PATH') {
         return mockCertPath;
       }
@@ -309,21 +328,21 @@ describe('fetchWithProxy', () => {
       }
       return defaultValue;
     });
-    jest.mocked(getEnvBool).mockImplementation((key: string, defaultValue: boolean = false) => {
+    vi.mocked(getEnvBool).mockImplementation((key: string, defaultValue: boolean = false) => {
       if (key === 'PROMPTFOO_INSECURE_SSL') {
         return false;
       }
       return defaultValue;
     });
-    jest.mocked(fs.readFileSync).mockReturnValue(mockCertContent);
+    vi.mocked(fs.readFileSync).mockReturnValue(mockCertContent);
 
-    const mockFetch = jest.fn().mockResolvedValue(new Response());
+    const mockFetch = vi.fn().mockResolvedValue(new Response());
     global.fetch = mockFetch;
 
     await fetchWithProxy('https://example.com');
 
-    const actualPath = jest.mocked(fs.readFileSync).mock.calls[0][0] as string;
-    const actualEncoding = jest.mocked(fs.readFileSync).mock.calls[0][1];
+    const actualPath = vi.mocked(fs.readFileSync).mock.calls[0][0] as string;
+    const actualEncoding = vi.mocked(fs.readFileSync).mock.calls[0][1];
     const normalizedActual = path.normalize(actualPath).replace(/^\w:/, '');
     const normalizedExpected = path.normalize(mockCertPath).replace(/^\w:/, '');
     expect(normalizedActual).toBe(normalizedExpected);
@@ -350,7 +369,7 @@ describe('fetchWithProxy', () => {
     process.env.HTTPS_PROXY = mockProxyUrl;
     process.env.PROMPTFOO_CA_CERT_PATH = mockCertPath;
 
-    jest.mocked(getEnvString).mockImplementation((key: string, defaultValue: string = '') => {
+    vi.mocked(getEnvString).mockImplementation((key: string, defaultValue: string = '') => {
       if (key === 'PROMPTFOO_CA_CERT_PATH') {
         return mockCertPath;
       }
@@ -359,16 +378,16 @@ describe('fetchWithProxy', () => {
       }
       return defaultValue;
     });
-    jest.mocked(fs.readFileSync).mockImplementation(() => {
+    vi.mocked(fs.readFileSync).mockImplementation(() => {
       throw new Error('File not found');
     });
 
-    const mockFetch = jest.fn().mockResolvedValue(new Response());
+    const mockFetch = vi.fn().mockResolvedValue(new Response());
     global.fetch = mockFetch;
 
     await fetchWithProxy('https://example.com');
 
-    const actualPath = jest.mocked(fs.readFileSync).mock.calls[0][0] as string;
+    const actualPath = vi.mocked(fs.readFileSync).mock.calls[0][0] as string;
     const normalizedActual = path.normalize(actualPath).replace(/^\w:/, '');
     const normalizedExpected = path.normalize(mockCertPath).replace(/^\w:/, '');
     expect(normalizedActual).toBe(normalizedExpected);
@@ -391,20 +410,20 @@ describe('fetchWithProxy', () => {
     process.env.HTTPS_PROXY = mockProxyUrl;
     process.env.PROMPTFOO_INSECURE_SSL = 'true';
 
-    jest.mocked(getEnvString).mockImplementation((key: string, defaultValue: string = '') => {
+    vi.mocked(getEnvString).mockImplementation((key: string, defaultValue: string = '') => {
       if (key === 'HTTPS_PROXY') {
         return mockProxyUrl;
       }
       return defaultValue;
     });
-    jest.mocked(getEnvBool).mockImplementation((key: string, defaultValue: boolean = false) => {
+    vi.mocked(getEnvBool).mockImplementation((key: string, defaultValue: boolean = false) => {
       if (key === 'PROMPTFOO_INSECURE_SSL') {
         return true;
       }
       return defaultValue;
     });
 
-    const mockFetch = jest.fn().mockResolvedValue(new Response());
+    const mockFetch = vi.fn().mockResolvedValue(new Response());
     global.fetch = mockFetch;
 
     await fetchWithProxy('https://example.com');
@@ -433,7 +452,7 @@ describe('fetchWithProxy', () => {
 
     cliState.basePath = mockBasePath;
 
-    jest.mocked(getEnvString).mockImplementation((key: string, defaultValue: string = '') => {
+    vi.mocked(getEnvString).mockImplementation((key: string, defaultValue: string = '') => {
       if (key === 'PROMPTFOO_CA_CERT_PATH') {
         return mockCertPath;
       }
@@ -442,22 +461,22 @@ describe('fetchWithProxy', () => {
       }
       return defaultValue;
     });
-    jest.mocked(getEnvBool).mockImplementation((key: string, defaultValue: boolean = false) => {
+    vi.mocked(getEnvBool).mockImplementation((key: string, defaultValue: boolean = false) => {
       if (key === 'PROMPTFOO_INSECURE_SSL') {
         return false;
       }
       return defaultValue;
     });
-    jest.mocked(fs.readFileSync).mockReturnValue(mockCertContent);
+    vi.mocked(fs.readFileSync).mockReturnValue(mockCertContent);
 
-    const mockFetch = jest.fn().mockResolvedValue(new Response());
+    const mockFetch = vi.fn().mockResolvedValue(new Response());
     global.fetch = mockFetch;
 
     await fetchWithProxy('https://example.com');
 
     const expectedPath = path.normalize(path.join(mockBasePath, mockCertPath));
-    const actualPath = jest.mocked(fs.readFileSync).mock.calls[0][0] as string;
-    const actualEncoding = jest.mocked(fs.readFileSync).mock.calls[0][1];
+    const actualPath = vi.mocked(fs.readFileSync).mock.calls[0][0] as string;
+    const actualEncoding = vi.mocked(fs.readFileSync).mock.calls[0][1];
 
     const normalizedActual = path.normalize(actualPath).replace(/^\w:/, '');
     const normalizedExpected = path.normalize(expectedPath).replace(/^\w:/, '');
@@ -524,7 +543,7 @@ describe('fetchWithProxy', () => {
     ];
 
     for (const testCase of httpTestCases) {
-      jest.clearAllMocks();
+      vi.clearAllMocks();
 
       allProxyVars.forEach((key) => {
         delete process.env[key];
@@ -548,7 +567,7 @@ describe('fetchWithProxy', () => {
       });
       expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(Object));
 
-      const debugCalls = jest.mocked(logger.debug).mock.calls;
+      const debugCalls = vi.mocked(logger.debug).mock.calls;
       const normalizedCalls = debugCalls.map((call) => call[0].replace(/\/$/, ''));
 
       const proxyConfigCalls = normalizedCalls.filter((msg) => msg.includes(`Using proxy:`));
@@ -561,7 +580,7 @@ describe('fetchWithProxy', () => {
     }
 
     for (const testCase of httpsTestCases) {
-      jest.clearAllMocks();
+      vi.clearAllMocks();
 
       allProxyVars.forEach((key) => {
         delete process.env[key];
@@ -585,7 +604,7 @@ describe('fetchWithProxy', () => {
       });
       expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(Object));
 
-      const debugCalls = jest.mocked(logger.debug).mock.calls;
+      const debugCalls = vi.mocked(logger.debug).mock.calls;
       const normalizedCalls = debugCalls.map((call) => call[0].replace(/\/$/, ''));
 
       const proxyConfigCalls = normalizedCalls.filter((msg) => msg.includes(`Using proxy:`));
@@ -613,35 +632,102 @@ describe('fetchWithProxy', () => {
     );
     expect(setGlobalDispatcher).toHaveBeenCalledWith(expect.any(Object));
   });
+
+  describe('Abort Signal Handling', () => {
+    it('should pass abortSignal parameter to fetch', async () => {
+      const abortController = new AbortController();
+      const url = 'https://example.com/api';
+
+      await fetchWithProxy(url, {}, abortController.signal);
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        url,
+        expect.objectContaining({
+          signal: abortController.signal,
+        }),
+      );
+    });
+
+    it('should combine abortSignal parameter with options.signal', async () => {
+      const abortController1 = new AbortController();
+      const abortController2 = new AbortController();
+      const url = 'https://example.com/api';
+
+      await fetchWithProxy(url, { signal: abortController1.signal }, abortController2.signal);
+
+      // The combined signal should be passed
+      expect(global.fetch).toHaveBeenCalledWith(
+        url,
+        expect.objectContaining({
+          signal: expect.any(Object),
+        }),
+      );
+    });
+
+    it('should use only options.signal when abortSignal parameter is not provided', async () => {
+      const abortController = new AbortController();
+      const url = 'https://example.com/api';
+
+      await fetchWithProxy(url, { signal: abortController.signal });
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        url,
+        expect.objectContaining({
+          signal: abortController.signal,
+        }),
+      );
+    });
+  });
 });
 
 describe('fetchWithTimeout', () => {
   beforeEach(() => {
-    jest.useFakeTimers();
-    jest.spyOn(global, 'fetch').mockImplementation();
+    vi.useFakeTimers();
+    vi.spyOn(global, 'fetch').mockImplementation(() => Promise.resolve(new Response()));
   });
 
   afterEach(() => {
-    jest.useRealTimers();
+    vi.useRealTimers();
   });
 
   it('should resolve when fetch completes before timeout', async () => {
     const mockResponse = createMockResponse({ ok: true });
-    jest.mocked(global.fetch).mockImplementationOnce(() => Promise.resolve(mockResponse));
+    vi.mocked(global.fetch).mockImplementationOnce(() => Promise.resolve(mockResponse));
 
     const fetchPromise = fetchWithTimeout('https://example.com', {}, 5000);
     await expect(fetchPromise).resolves.toBe(mockResponse);
   });
 
   it('should reject when request times out', async () => {
-    jest
-      .mocked(global.fetch)
-      .mockImplementationOnce(() => new Promise((resolve) => setTimeout(resolve, 6000)));
+    vi.mocked(global.fetch).mockImplementationOnce(
+      () => new Promise((resolve) => setTimeout(resolve, 6000)),
+    );
 
     const fetchPromise = fetchWithTimeout('https://example.com', {}, 5000);
-    jest.advanceTimersByTime(5000);
+    vi.advanceTimersByTime(5000);
 
     await expect(fetchPromise).rejects.toThrow('Request timed out after 5000 ms');
+  });
+
+  it('should combine options.signal with timeout signal using AbortSignal.any', async () => {
+    const userAbortController = new AbortController();
+    const mockResponse = createMockResponse({ ok: true });
+    vi.mocked(global.fetch).mockImplementationOnce(() => Promise.resolve(mockResponse));
+
+    const fetchPromise = fetchWithTimeout(
+      'https://example.com',
+      { signal: userAbortController.signal },
+      5000,
+    );
+    await expect(fetchPromise).resolves.toBe(mockResponse);
+
+    // The signal passed to fetch should be a combined signal
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        signal: expect.any(Object),
+      }),
+    );
   });
 });
 
@@ -692,12 +778,12 @@ describe('isRateLimited', () => {
 
 describe('handleRateLimit', () => {
   beforeEach(() => {
-    jest.useFakeTimers();
-    jest.mocked(sleep).mockClear();
+    vi.useFakeTimers();
+    vi.mocked(sleep).mockClear();
   });
 
   afterEach(() => {
-    jest.useRealTimers();
+    vi.useRealTimers();
   });
 
   it('should handle OpenAI reset headers', async () => {
@@ -708,7 +794,7 @@ describe('handleRateLimit', () => {
     });
 
     const promise = handleRateLimit(response);
-    jest.advanceTimersByTime(5000);
+    vi.advanceTimersByTime(5000);
     await promise;
 
     expect(logger.debug).toHaveBeenCalledWith('Rate limited, waiting 5000ms before retry');
@@ -738,7 +824,7 @@ describe('handleRateLimit', () => {
     });
 
     const promise = handleRateLimit(response);
-    jest.advanceTimersByTime(5000);
+    vi.advanceTimersByTime(5000);
     await promise;
 
     expect(logger.debug).toHaveBeenCalledWith('Rate limited, waiting 5000ms before retry');
@@ -748,7 +834,7 @@ describe('handleRateLimit', () => {
     const response = createMockResponse();
 
     const promise = handleRateLimit(response);
-    jest.advanceTimersByTime(60000);
+    vi.advanceTimersByTime(60000);
     await promise;
 
     expect(logger.debug).toHaveBeenCalledWith('Rate limited, waiting 60000ms before retry');
@@ -757,14 +843,14 @@ describe('handleRateLimit', () => {
 
 describe('fetchWithRetries', () => {
   beforeEach(() => {
-    jest.mocked(sleep).mockClear();
-    jest.spyOn(global, 'fetch').mockImplementation();
-    jest.clearAllMocks();
+    vi.mocked(sleep).mockClear();
+    vi.spyOn(global, 'fetch').mockImplementation(() => Promise.resolve(new Response()));
+    vi.clearAllMocks();
   });
 
   it('should make exactly one attempt when retries is 0', async () => {
     const successResponse = createMockResponse();
-    jest.mocked(global.fetch).mockResolvedValueOnce(successResponse);
+    vi.mocked(global.fetch).mockResolvedValueOnce(successResponse);
 
     await fetchWithRetries('https://example.com', {}, 1000, 0);
 
@@ -774,7 +860,7 @@ describe('fetchWithRetries', () => {
 
   it('should handle negative retry values by treating them as 0', async () => {
     const successResponse = createMockResponse();
-    jest.mocked(global.fetch).mockResolvedValueOnce(successResponse);
+    vi.mocked(global.fetch).mockResolvedValueOnce(successResponse);
 
     await fetchWithRetries('https://example.com', {}, 1000, -1);
 
@@ -783,7 +869,7 @@ describe('fetchWithRetries', () => {
   });
 
   it('should make retries+1 total attempts', async () => {
-    jest.mocked(global.fetch).mockRejectedValue(new Error('Network error'));
+    vi.mocked(global.fetch).mockRejectedValue(new Error('Network error'));
 
     await expect(fetchWithRetries('https://example.com', {}, 1000, 2)).rejects.toThrow(
       'Request failed after 2 retries: Error: Network error',
@@ -794,7 +880,7 @@ describe('fetchWithRetries', () => {
   });
 
   it('should not sleep after the final attempt', async () => {
-    jest.mocked(global.fetch).mockRejectedValue(new Error('Network error'));
+    vi.mocked(global.fetch).mockRejectedValue(new Error('Network error'));
 
     await expect(fetchWithRetries('https://example.com', {}, 1000, 1)).rejects.toThrow(
       'Request failed after 1 retries: Error: Network error',
@@ -805,7 +891,7 @@ describe('fetchWithRetries', () => {
   });
 
   it('should handle 5XX errors when PROMPTFOO_RETRY_5XX is true', async () => {
-    jest.mocked(getEnvBool).mockImplementation((key: string) => {
+    vi.mocked(getEnvBool).mockImplementation((key: string) => {
       if (key === 'PROMPTFOO_RETRY_5XX') {
         return true;
       }
@@ -818,7 +904,7 @@ describe('fetchWithRetries', () => {
     });
     const successResponse = createMockResponse();
 
-    const mockFetch = jest
+    const mockFetch = vi
       .fn()
       .mockResolvedValueOnce(errorResponse)
       .mockResolvedValueOnce(successResponse);
@@ -839,7 +925,7 @@ describe('fetchWithRetries', () => {
     });
     const successResponse = createMockResponse();
 
-    const mockFetch = jest
+    const mockFetch = vi
       .fn()
       .mockResolvedValueOnce(rateLimitedResponse)
       .mockResolvedValueOnce(successResponse);
@@ -853,7 +939,7 @@ describe('fetchWithRetries', () => {
   });
 
   it('should respect maximum retry count', async () => {
-    const mockFetch = jest.fn().mockRejectedValue(new Error('Network error'));
+    const mockFetch = vi.fn().mockRejectedValue(new Error('Network error'));
     global.fetch = mockFetch;
 
     await expect(fetchWithRetries('https://example.com', {}, 1000, 2)).rejects.toThrow(
@@ -868,7 +954,7 @@ describe('fetchWithRetries', () => {
     const error = new Error('Network error');
     (error as any).code = 'ECONNREFUSED';
     (error as any).cause = 'Connection refused';
-    jest.mocked(global.fetch).mockRejectedValue(error);
+    vi.mocked(global.fetch).mockRejectedValue(error);
 
     await expect(fetchWithRetries('https://example.com', {}, 1000, 1)).rejects.toThrow(
       'Request failed after 1 retries: Error: Network error (Cause: Connection refused) (Code: ECONNREFUSED)',
@@ -879,7 +965,7 @@ describe('fetchWithRetries', () => {
   });
 
   it('should handle non-Error objects in rejection', async () => {
-    jest.mocked(global.fetch).mockRejectedValue('String error');
+    vi.mocked(global.fetch).mockRejectedValue('String error');
 
     await expect(fetchWithRetries('https://example.com', {}, 1000, 1)).rejects.toThrow(
       'Request failed after 1 retries: String error',
@@ -898,7 +984,7 @@ describe('fetchWithRetries', () => {
     });
     const successResponse = createMockResponse();
 
-    const mockFetch = jest
+    const mockFetch = vi
       .fn()
       .mockResolvedValueOnce(rateLimitedResponse)
       .mockResolvedValueOnce(successResponse);
@@ -910,197 +996,86 @@ describe('fetchWithRetries', () => {
     expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Rate limited on URL'));
     expect(sleep).toHaveBeenCalledTimes(1);
   });
-});
 
-describe('sanitizeUrl', () => {
-  it('should mask credentials in URLs', () => {
-    const url = 'https://username:password@example.com/api';
-    expect(sanitizeUrl(url)).toBe('https://***:***@example.com/api');
+  it('should log attempt count with total attempts on rate limit', async () => {
+    const rateLimitedResponse = createMockResponse({
+      status: 429,
+      headers: new Headers({ 'Retry-After': '0' }),
+    });
+    vi.mocked(global.fetch).mockResolvedValue(rateLimitedResponse);
+
+    await expect(fetchWithRetries('https://example.com', {}, 1000, 2)).rejects.toThrow();
+
+    expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('attempt 1/3'));
   });
 
-  it('should handle URLs without credentials', () => {
-    const url = 'https://example.com/api';
-    expect(sanitizeUrl(url)).toBe(url);
+  it('should include error details in final error message for rate limits', async () => {
+    const rateLimitResponse = createMockResponse({
+      status: 429,
+      statusText: 'Too Many Requests',
+    });
+
+    vi.mocked(global.fetch).mockResolvedValue(rateLimitResponse);
+
+    await expect(fetchWithRetries('https://example.com', {}, 1000, 2)).rejects.toThrow(
+      'Rate limited: 429 Too Many Requests',
+    );
   });
 
-  it('should return original string for invalid URLs', () => {
-    const invalidUrl = 'not-a-url';
-    expect(sanitizeUrl(invalidUrl)).toBe(invalidUrl);
-  });
+  describe('Abort Signal Handling', () => {
+    it('should immediately re-throw AbortError without retrying', async () => {
+      const abortError = new Error('The operation was aborted');
+      abortError.name = 'AbortError';
 
-  describe('query parameter sanitization', () => {
-    it('should sanitize api_key parameter', () => {
-      const url = 'https://example.com/api?api_key=sk_live_abc123&other=value';
-      const result = sanitizeUrl(url);
-      expect(result).toBe('https://example.com/api?api_key=%5BREDACTED%5D&other=value');
+      vi.mocked(global.fetch).mockRejectedValue(abortError);
+
+      await expect(fetchWithRetries('https://example.com', {}, 1000, 3)).rejects.toThrow(
+        'The operation was aborted',
+      );
+
+      // Should only be called once - no retries
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+      expect(sleep).not.toHaveBeenCalled();
     });
 
-    it('should sanitize api-key parameter (hyphenated)', () => {
-      const url = 'https://example.com/api?api-key=secret123';
-      const result = sanitizeUrl(url);
-      expect(result).toBe('https://example.com/api?api-key=%5BREDACTED%5D');
-    });
+    it('should pass signal through options to underlying fetch', async () => {
+      const abortController = new AbortController();
+      const successResponse = createMockResponse();
+      vi.mocked(global.fetch).mockResolvedValueOnce(successResponse);
 
-    it('should sanitize token parameter', () => {
-      const url = 'https://example.com/api?token=bearer_token_123&normal=param';
-      const result = sanitizeUrl(url);
-      expect(result).toBe('https://example.com/api?token=%5BREDACTED%5D&normal=param');
-    });
+      await fetchWithRetries('https://example.com', { signal: abortController.signal }, 1000, 0);
 
-    it('should sanitize password parameter', () => {
-      const url = 'https://example.com/api?username=user&password=secret123';
-      const result = sanitizeUrl(url);
-      expect(result).toBe('https://example.com/api?username=user&password=%5BREDACTED%5D');
-    });
-
-    it('should sanitize secret parameter', () => {
-      const url = 'https://example.com/api?secret=mysecret&client_secret=clientsecret';
-      const result = sanitizeUrl(url);
-      expect(result).toBe(
-        'https://example.com/api?secret=%5BREDACTED%5D&client_secret=%5BREDACTED%5D',
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          signal: expect.any(Object),
+        }),
       );
     });
 
-    it('should sanitize signature and sig parameters', () => {
-      const url = 'https://example.com/api?signature=sig123&sig=sig456';
-      const result = sanitizeUrl(url);
-      expect(result).toBe('https://example.com/api?signature=%5BREDACTED%5D&sig=%5BREDACTED%5D');
-    });
+    it('should not retry when abort signal is triggered during request', async () => {
+      const abortError = new Error('The operation was aborted');
+      abortError.name = 'AbortError';
 
-    it('should sanitize access_token and refresh_token parameters', () => {
-      const url = 'https://example.com/api?access_token=access123&refresh_token=refresh456';
-      const result = sanitizeUrl(url);
-      expect(result).toBe(
-        'https://example.com/api?access_token=%5BREDACTED%5D&refresh_token=%5BREDACTED%5D',
+      // First call throws AbortError
+      vi.mocked(global.fetch).mockRejectedValueOnce(abortError);
+
+      await expect(fetchWithRetries('https://example.com', {}, 1000, 5)).rejects.toThrow(
+        'The operation was aborted',
       );
-    });
 
-    it('should sanitize id_token parameter', () => {
-      const url = 'https://example.com/api?id_token=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9';
-      const result = sanitizeUrl(url);
-      expect(result).toBe('https://example.com/api?id_token=%5BREDACTED%5D');
-    });
-
-    it('should sanitize authorization parameter', () => {
-      const url = 'https://example.com/api?authorization=Bearer%20token123';
-      const result = sanitizeUrl(url);
-      expect(result).toBe('https://example.com/api?authorization=%5BREDACTED%5D');
-    });
-
-    it('should handle case-insensitive parameter matching', () => {
-      const url = 'https://example.com/api?API_KEY=secret&Token=bearer&PASSWORD=pass';
-      const result = sanitizeUrl(url);
-      expect(result).toBe(
-        'https://example.com/api?API_KEY=%5BREDACTED%5D&Token=%5BREDACTED%5D&PASSWORD=%5BREDACTED%5D',
-      );
-    });
-
-    it('should handle multiple sensitive parameters', () => {
-      const url =
-        'https://example.com/api?api_key=key123&token=tok456&password=pass789&normal=value';
-      const result = sanitizeUrl(url);
-      expect(result).toBe(
-        'https://example.com/api?api_key=%5BREDACTED%5D&token=%5BREDACTED%5D&password=%5BREDACTED%5D&normal=value',
-      );
-    });
-
-    it('should handle URLs with both credentials and sensitive parameters', () => {
-      const url = 'https://user:pass@example.com/api?api_key=secret123&normal=value';
-      const result = sanitizeUrl(url);
-      expect(result).toBe('https://***:***@example.com/api?api_key=%5BREDACTED%5D&normal=value');
-    });
-
-    it('should preserve non-sensitive parameters', () => {
-      const url = 'https://example.com/api?limit=10&offset=20&format=json&api_key=secret';
-      const result = sanitizeUrl(url);
-      expect(result).toBe(
-        'https://example.com/api?limit=10&offset=20&format=json&api_key=%5BREDACTED%5D',
-      );
-    });
-
-    it('should handle URLs with no query parameters', () => {
-      const url = 'https://example.com/api';
-      const result = sanitizeUrl(url);
-      expect(result).toBe(url);
-    });
-
-    it('should handle empty query parameter values', () => {
-      const url = 'https://example.com/api?api_key=&normal=value';
-      const result = sanitizeUrl(url);
-      expect(result).toBe('https://example.com/api?api_key=%5BREDACTED%5D&normal=value');
-    });
-
-    it('should continue sanitizing if search params handling fails', () => {
-      // Mock a scenario where searchParams throws an error
-      const originalURL = global.URL;
-      const mockURL = jest.fn().mockImplementation((url) => {
-        const urlObj = new originalURL(url);
-        Object.defineProperty(urlObj, 'searchParams', {
-          get: () => {
-            throw new Error('SearchParams error');
-          },
-        });
-        return urlObj;
-      });
-      global.URL = mockURL as any;
-
-      const url = 'https://user:pass@example.com/api?api_key=secret';
-      const result = sanitizeUrl(url);
-      expect(result).toBe('https://***:***@example.com/api?api_key=secret'); // Credentials masked, params not
-
-      global.URL = originalURL;
-    });
-  });
-
-  describe('edge cases', () => {
-    it('should handle empty string input', () => {
-      expect(sanitizeUrl('')).toBe('');
-    });
-
-    it('should handle whitespace-only input', () => {
-      expect(sanitizeUrl('   ')).toBe('   ');
-    });
-
-    it('should handle non-string input gracefully', () => {
-      expect(sanitizeUrl(null as any)).toBe(null);
-      expect(sanitizeUrl(undefined as any)).toBe(undefined);
-      expect(sanitizeUrl(123 as any)).toBe(123);
-    });
-
-    it('should handle URLs with port numbers', () => {
-      const url = 'https://user:pass@example.com:8080/api?api_key=secret';
-      const result = sanitizeUrl(url);
-      expect(result).toBe('https://***:***@example.com:8080/api?api_key=%5BREDACTED%5D');
-    });
-
-    it('should handle URLs with hash fragments', () => {
-      const url = 'https://example.com/api?api_key=secret#section';
-      const result = sanitizeUrl(url);
-      expect(result).toBe('https://example.com/api?api_key=%5BREDACTED%5D#section');
-    });
-
-    it('should handle URLs with encoded characters', () => {
-      const url = 'https://example.com/api?api_key=secret%20key&normal=value%20with%20spaces';
-      const result = sanitizeUrl(url);
-      expect(result).toBe(
-        'https://example.com/api?api_key=%5BREDACTED%5D&normal=value+with+spaces',
-      );
-    });
-
-    it('should handle malformed URLs gracefully', () => {
-      const malformedUrl = 'https://[invalid-host]/api?api_key=secret';
-      const result = sanitizeUrl(malformedUrl);
-      expect(result).toBe(malformedUrl); // Should return original if URL parsing fails
+      // Should not retry on abort
+      expect(global.fetch).toHaveBeenCalledTimes(1);
     });
   });
 });
 
 describe('fetchWithProxy with NO_PROXY', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
-    jest.spyOn(global, 'fetch').mockImplementation();
-    jest.mocked(ProxyAgent).mockClear();
-    jest.mocked(setGlobalDispatcher).mockClear();
+    vi.clearAllMocks();
+    vi.spyOn(global, 'fetch').mockImplementation(() => Promise.resolve(new Response()));
+    vi.mocked(ProxyAgent).mockClear();
+    vi.mocked(setGlobalDispatcher).mockClear();
     delete process.env.HTTPS_PROXY;
     delete process.env.https_proxy;
     delete process.env.HTTP_PROXY;
@@ -1124,7 +1099,7 @@ describe('fetchWithProxy with NO_PROXY', () => {
     delete process.env.all_proxy;
     delete process.env.NO_PROXY;
     delete process.env.no_proxy;
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   it('should respect NO_PROXY for localhost URLs', async () => {
@@ -1159,19 +1134,19 @@ describe('fetchWithProxy with NO_PROXY', () => {
     await fetchWithProxy('http://localhost:3000/api');
     expect(ProxyAgent).not.toHaveBeenCalled();
 
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     process.env.HTTPS_PROXY = mockProxyUrl;
     process.env.NO_PROXY = noProxyList;
     await fetchWithProxy('https://example.org/api');
     expect(ProxyAgent).not.toHaveBeenCalled();
 
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     process.env.HTTPS_PROXY = mockProxyUrl;
     process.env.NO_PROXY = noProxyList;
     await fetchWithProxy('https://internal.example.com/api');
     expect(ProxyAgent).not.toHaveBeenCalled();
 
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     process.env.HTTPS_PROXY = mockProxyUrl;
     process.env.NO_PROXY = noProxyList;
     await fetchWithProxy('https://example.com/api');
@@ -1208,12 +1183,12 @@ describe('fetchWithProxy with NO_PROXY', () => {
     await fetchWithProxy('https://api.example.org/v1');
     expect(ProxyAgent).not.toHaveBeenCalled();
 
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     process.env.HTTPS_PROXY = mockProxyUrl;
     await fetchWithProxy('https://subdomain.api.example.org/v1');
     expect(ProxyAgent).not.toHaveBeenCalled();
 
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     process.env.HTTPS_PROXY = mockProxyUrl;
     await fetchWithProxy('https://example.com/v1');
     expect(ProxyAgent).toHaveBeenCalledWith(
@@ -1232,17 +1207,17 @@ describe('fetchWithProxy with NO_PROXY', () => {
     await fetchWithProxy('https://api.example.org/v1');
     expect(ProxyAgent).not.toHaveBeenCalled();
 
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     process.env.HTTPS_PROXY = mockProxyUrl;
     await fetchWithProxy('https://subdomain.api.example.org/v1');
     expect(ProxyAgent).not.toHaveBeenCalled();
 
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     process.env.HTTPS_PROXY = mockProxyUrl;
     await fetchWithProxy('https://abc.example.org/v1');
     expect(ProxyAgent).not.toHaveBeenCalled();
 
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     process.env.HTTPS_PROXY = mockProxyUrl;
     await fetchWithProxy('https://abc.example.com/v1');
     expect(ProxyAgent).toHaveBeenCalledWith(
@@ -1261,7 +1236,7 @@ describe('fetchWithProxy with NO_PROXY', () => {
     await fetchWithProxy('localhost:3000');
     expect(ProxyAgent).not.toHaveBeenCalled();
 
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     await fetchWithProxy('example.org');
     expect(ProxyAgent).not.toHaveBeenCalled();
   });
@@ -1306,7 +1281,7 @@ describe('fetchWithProxy with NO_PROXY', () => {
     await fetchWithProxy('http://localhost:3000');
     expect(ProxyAgent).not.toHaveBeenCalled();
 
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     await fetchWithProxy('https://api.example.org/v1');
     expect(ProxyAgent).not.toHaveBeenCalled();
   });
@@ -1321,7 +1296,7 @@ describe('fetchWithProxy with NO_PROXY', () => {
     await fetchWithProxy(urlObj.toString());
     expect(ProxyAgent).not.toHaveBeenCalled();
 
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     process.env.HTTPS_PROXY = mockProxyUrl;
     process.env.NO_PROXY = 'localhost,example.org';
@@ -1329,7 +1304,7 @@ describe('fetchWithProxy with NO_PROXY', () => {
     await fetchWithProxy(request);
     expect(ProxyAgent).not.toHaveBeenCalled();
 
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     process.env.HTTP_PROXY = mockProxyUrl;
     process.env.NO_PROXY = 'localhost,example.org';

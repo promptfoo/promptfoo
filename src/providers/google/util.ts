@@ -1,8 +1,10 @@
 import Clone from 'rfdc';
 import { z } from 'zod';
+import { getEnvString } from '../../envars';
 import logger from '../../logger';
-import { renderVarsInObject } from '../../util';
+import { extractBase64FromDataUrl, isDataUrl, parseDataUrl } from '../../util/dataUrl';
 import { maybeLoadFromExternalFile } from '../../util/file';
+import { renderVarsInObject } from '../../util/index';
 import { getAjv } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { parseChatPrompt } from '../shared';
@@ -71,6 +73,8 @@ export interface GeminiResponseData {
   promptFeedback?: {
     safetyRatings: Array<{ category: string; probability: string }>;
     blockReason: any;
+    /** Message explaining why content was blocked (e.g., by Model Armor) */
+    blockReasonMessage?: string;
   };
 }
 
@@ -166,6 +170,7 @@ export function maybeCoerceToGeminiFormat(
   // Handle native Gemini format with system_instruction
   if (
     typeof contents === 'object' &&
+    contents !== null &&
     !Array.isArray(contents) &&
     'system_instruction' in contents
   ) {
@@ -242,16 +247,21 @@ export function maybeCoerceToGeminiFormat(
       }
     });
     coerced = true;
-  } else if (typeof contents === 'object' && 'parts' in contents) {
+  } else if (typeof contents === 'object' && contents !== null && 'parts' in contents) {
     // This might be a single content object
     coercedContents = [contents as z.infer<typeof ContentSchema>];
     coerced = true;
   } else {
     logger.warn(`Unknown format for Gemini: ${JSON.stringify(contents)}`);
-    return { contents: contents as GeminiFormat, coerced: false, systemInstruction: undefined };
+    // Ensure we always return an array, even for unknown formats
+    // This prevents "contents.map is not a function" errors downstream
+    // For arrays that don't match known formats, we still return them as-is
+    // since they're already arrays and won't cause .map() errors
+    const fallbackContents: GeminiFormat = Array.isArray(contents) ? contents : [];
+    return { contents: fallbackContents, coerced: false, systemInstruction: undefined };
   }
 
-  const systemPromptParts: { text: string }[] = [];
+  let systemPromptParts: { text: string }[] = [];
   coercedContents = coercedContents.filter((message) => {
     if (message.role === ('system' as any) && message.parts.length > 0) {
       systemPromptParts.push(
@@ -263,6 +273,19 @@ export function maybeCoerceToGeminiFormat(
     }
     return true;
   });
+
+  // Convert system-only prompts to user messages
+  // Gemini does not support execution with systemInstruction only
+  if (coercedContents.length === 0 && systemPromptParts.length > 0) {
+    coercedContents = [
+      {
+        role: 'user',
+        parts: systemPromptParts,
+      },
+    ];
+    coerced = true;
+    systemPromptParts = [];
+  }
 
   return {
     contents: coercedContents,
@@ -326,7 +349,17 @@ export async function getGoogleClient({ credentials }: { credentials?: string } 
     client = await cachedAuth.getClient();
   }
 
-  const projectId = await cachedAuth.getProjectId();
+  // Try to get project ID from Google Auth Library, but don't fail if it can't detect it
+  // This allows the fallback logic in resolveProjectId to work properly
+  let projectId;
+  try {
+    projectId = await cachedAuth.getProjectId();
+  } catch {
+    // If Google Auth Library can't detect project ID from environment,
+    // let resolveProjectId handle the fallback logic
+    projectId = undefined;
+  }
+
   return { client, projectId };
 }
 
@@ -343,12 +376,12 @@ export async function resolveProjectId(
   });
 
   return (
-    googleProjectId ||
     config.projectId ||
     env?.VERTEX_PROJECT_ID ||
     env?.GOOGLE_PROJECT_ID ||
-    process.env.VERTEX_PROJECT_ID ||
-    process.env.GOOGLE_PROJECT_ID ||
+    getEnvString('VERTEX_PROJECT_ID') ||
+    getEnvString('GOOGLE_PROJECT_ID') ||
+    googleProjectId ||
     ''
   );
 }
@@ -529,35 +562,60 @@ export function loadFile(
 }
 
 function isValidBase64Image(data: string): boolean {
-  if (!data || data.length < 100) {
+  // Handle both data URLs and raw base64
+  const base64Data = isDataUrl(data) ? extractBase64FromDataUrl(data) : data;
+
+  // Minimum length check: smallest valid GIF is ~35 chars
+  // Set threshold to 20 to allow small images (1x1 pixels, icons, test fixtures)
+  if (!base64Data || base64Data.length < 20) {
     return false;
   }
 
   try {
     // Verify it's valid base64
-    Buffer.from(data, 'base64');
+    Buffer.from(base64Data, 'base64');
 
-    // Check for known image format headers
+    // Check for known image format headers (magic numbers)
     return (
-      data.startsWith('/9j/') || // JPEG
-      data.startsWith('iVBORw0KGgo') || // PNG
-      data.startsWith('R0lGODlh') || // GIF
-      data.startsWith('UklGR') // WebP
+      base64Data.startsWith('/9j/') || // JPEG
+      base64Data.startsWith('iVBORw0KGgo') || // PNG
+      base64Data.startsWith('R0lGODlh') || // GIF89a
+      base64Data.startsWith('R0lGODdh') || // GIF87a
+      base64Data.startsWith('UklGR') || // WebP (RIFF)
+      base64Data.startsWith('Qk0') || // BMP
+      base64Data.startsWith('Qk1') || // BMP (alternate)
+      base64Data.startsWith('SUkq') || // TIFF (little-endian)
+      base64Data.startsWith('TU0A') || // TIFF (big-endian)
+      base64Data.startsWith('AAABAA') // ICO
     );
   } catch {
     return false;
   }
 }
 
-function getMimeTypeFromBase64(base64Data: string): string {
+function getMimeTypeFromBase64(base64DataOrUrl: string): string {
+  // Try to extract MIME type from data URL first
+  const parsed = parseDataUrl(base64DataOrUrl);
+  if (parsed) {
+    return parsed.mimeType;
+  }
+
+  // Fallback to magic number detection for raw base64
+  const base64Data = extractBase64FromDataUrl(base64DataOrUrl);
   if (base64Data.startsWith('/9j/')) {
     return 'image/jpeg';
   } else if (base64Data.startsWith('iVBORw0KGgo')) {
     return 'image/png';
-  } else if (base64Data.startsWith('R0lGODlh')) {
+  } else if (base64Data.startsWith('R0lGODlh') || base64Data.startsWith('R0lGODdh')) {
     return 'image/gif';
   } else if (base64Data.startsWith('UklGR')) {
     return 'image/webp';
+  } else if (base64Data.startsWith('Qk0') || base64Data.startsWith('Qk1')) {
+    return 'image/bmp';
+  } else if (base64Data.startsWith('SUkq') || base64Data.startsWith('TU0A')) {
+    return 'image/tiff';
+  } else if (base64Data.startsWith('AAABAA')) {
+    return 'image/x-icon';
   }
   // Default to jpeg for unknown formats
   return 'image/jpeg';
@@ -569,6 +627,16 @@ function processImagesInContents(
 ): GeminiFormat {
   if (!contextVars) {
     return contents;
+  }
+
+  // Guard: ensure contents is an array
+  if (!Array.isArray(contents)) {
+    logger.warn('[Google] contents is not an array in processImagesInContents', {
+      contentsType: typeof contents,
+      contentsValue: contents,
+    });
+    // Return empty array as fallback to prevent .map() error
+    return [];
   }
 
   const base64ToVarName = new Map<string, string>();
@@ -608,10 +676,14 @@ function processImagesInContents(
 
               // Add the image part
               const mimeType = getMimeTypeFromBase64(trimmedLine);
+              // Extract raw base64 data (Google expects raw base64, not data URLs)
+              const base64Data = isDataUrl(trimmedLine)
+                ? extractBase64FromDataUrl(trimmedLine)
+                : trimmedLine;
               processedParts.push({
                 inlineData: {
                   mimeType,
-                  data: trimmedLine,
+                  data: base64Data,
                 },
               });
             } else {
@@ -651,6 +723,52 @@ function processImagesInContents(
   });
 }
 
+/**
+ * Parses and processes config-level systemInstruction.
+ * Handles file loading, string-to-Content conversion, and Nunjucks template rendering.
+ *
+ * @param configSystemInstruction - The systemInstruction from config (can be string, Content, or undefined)
+ * @param contextVars - Variables for Nunjucks template rendering
+ * @returns Processed Content object or undefined
+ */
+function parseConfigSystemInstruction(
+  configSystemInstruction: Content | string | undefined,
+  contextVars?: Record<string, string | object>,
+): Content | undefined {
+  if (!configSystemInstruction) {
+    return undefined;
+  }
+
+  // Make a copy to avoid mutating the original
+  let configInstruction = clone(configSystemInstruction);
+
+  // Load systemInstruction from file if it's a file path
+  if (typeof configSystemInstruction === 'string') {
+    configInstruction = loadFile(configSystemInstruction, contextVars);
+  }
+
+  // Convert string to Content structure
+  if (typeof configInstruction === 'string') {
+    configInstruction = { parts: [{ text: configInstruction }] };
+  }
+
+  // Render Nunjucks templates in all text parts
+  if (contextVars && configInstruction) {
+    const nunjucks = getNunjucksEngine();
+    for (const part of configInstruction.parts) {
+      if (part.text) {
+        try {
+          part.text = nunjucks.renderString(part.text, contextVars);
+        } catch (err) {
+          throw new Error(`Unable to render nunjucks in systemInstruction: ${err}`);
+        }
+      }
+    }
+  }
+
+  return configInstruction;
+}
+
 export function geminiFormatAndSystemInstructions(
   prompt: string,
   contextVars?: Record<string, string | object>,
@@ -680,35 +798,16 @@ export function geminiFormatAndSystemInstructions(
     contents = updatedContents;
   }
 
-  let systemInstruction: Content | string | undefined = parsedSystemInstruction;
-  if (configSystemInstruction && !systemInstruction) {
-    // Make a copy
-    systemInstruction = clone(configSystemInstruction);
+  let systemInstruction: Content | undefined = parsedSystemInstruction;
 
-    // Load SI from file
-    if (typeof configSystemInstruction === 'string') {
-      systemInstruction = loadFile(configSystemInstruction, contextVars);
-    }
-
-    // Format SI if string was not a filepath above
-    if (typeof systemInstruction === 'string') {
-      systemInstruction = { parts: [{ text: systemInstruction }] };
-    }
-
-    if (contextVars && systemInstruction) {
-      const nunjucks = getNunjucksEngine();
-      for (const part of systemInstruction.parts) {
-        if (part.text) {
-          try {
-            part.text = nunjucks.renderString(part.text, contextVars);
-          } catch (err) {
-            throw new Error(`Unable to render nunjunks in systemInstruction: ${err}`);
-          }
-        }
-      }
-    }
-  } else if (configSystemInstruction && systemInstruction) {
-    throw new Error(`Template error: system instruction defined in prompt and config.`);
+  const parsedConfigInstruction = parseConfigSystemInstruction(
+    configSystemInstruction,
+    contextVars,
+  );
+  if (parsedConfigInstruction) {
+    systemInstruction = systemInstruction
+      ? { parts: [...parsedConfigInstruction.parts, ...systemInstruction.parts] }
+      : parsedConfigInstruction;
   }
 
   // Process images in contents

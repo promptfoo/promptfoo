@@ -1,5 +1,26 @@
 import type { MCPConfig } from '../mcp/types';
 
+/**
+ * Model Armor configuration for Vertex AI integration.
+ * Model Armor screens prompts and responses for safety, security, and compliance.
+ * @see https://cloud.google.com/security-command-center/docs/model-armor-vertex-integration
+ */
+export interface ModelArmorConfig {
+  /**
+   * Full resource path to the Model Armor template for screening prompts.
+   * Format: projects/{project}/locations/{location}/templates/{template_id}
+   * @example "projects/my-project/locations/us-central1/templates/strict-safety"
+   */
+  promptTemplate?: string;
+
+  /**
+   * Full resource path to the Model Armor template for screening responses.
+   * Format: projects/{project}/locations/{location}/templates/{template_id}
+   * @example "projects/my-project/locations/us-central1/templates/strict-safety"
+   */
+  responseTemplate?: string;
+}
+
 interface Blob {
   mimeType: string;
   data: string; // base64-encoded string
@@ -119,9 +140,9 @@ export interface CompletionOptions {
   topK?: number;
   top_k?: number; // Alternative format for Claude models
 
-  // Image generation options
+  // Imagen image generation options
   n?: number; // Number of images to generate
-  aspectRatio?: '1:1' | '16:9' | '9:16' | '3:4' | '4:3'; // Valid aspect ratios
+  aspectRatio?: '1:1' | '16:9' | '9:16' | '3:4' | '4:3'; // Valid aspect ratios for Imagen
   personGeneration?: 'allow_all' | 'allow_adult' | 'dont_allow';
   safetyFilterLevel?:
     | 'block_most'
@@ -131,6 +152,20 @@ export interface CompletionOptions {
     | 'block_low_and_above';
   addWatermark?: boolean;
   seed?: number;
+
+  // Gemini native image generation options
+  imageAspectRatio?:
+    | '1:1'
+    | '2:3'
+    | '3:2'
+    | '3:4'
+    | '4:3'
+    | '4:5'
+    | '5:4'
+    | '9:16'
+    | '16:9'
+    | '21:9';
+  imageSize?: '1K' | '2K' | '4K';
 
   // Live API websocket timeout
   timeoutMs?: number;
@@ -173,9 +208,12 @@ export interface CompletionOptions {
       proactiveAudio?: boolean;
     };
 
-    // Thinking configuration
+    // Thinking configuration for Gemini 2.5+ models
+    // Gemini 3 Flash supports: MINIMAL, LOW, MEDIUM, HIGH
+    // Gemini 3 Pro supports: LOW, HIGH
     thinkingConfig?: {
       thinkingBudget?: number;
+      thinkingLevel?: 'MINIMAL' | 'LOW' | 'MEDIUM' | 'HIGH';
     };
   };
 
@@ -226,6 +264,31 @@ export interface CompletionOptions {
    * If false (default), maps 'assistant' to 'model' (for newer Gemini versions).
    */
   useAssistantRole?: boolean;
+
+  /**
+   * Model Armor configuration for screening prompts and responses.
+   * Only applicable for Vertex AI provider.
+   * @see https://cloud.google.com/security-command-center/docs/model-armor-vertex-integration
+   */
+  modelArmor?: ModelArmorConfig;
+
+  /**
+   * Whether to use streaming API. Defaults to false.
+   * Note: Model Armor floor settings only work with the non-streaming API.
+   */
+  streaming?: boolean;
+
+  /**
+   * Control Vertex AI express mode (API key authentication).
+   *
+   * Express mode is AUTOMATIC when an API key is available and no explicit
+   * projectId or credentials are configured. Set to `false` to force OAuth
+   * authentication even when an API key is present.
+   *
+   * @default undefined (automatic detection)
+   * @see https://cloud.google.com/vertex-ai/generative-ai/docs/start/express-mode
+   */
+  expressMode?: boolean;
 }
 
 // Claude API interfaces

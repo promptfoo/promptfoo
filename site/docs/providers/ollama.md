@@ -74,6 +74,40 @@ providers:
         # Any other Ollama API fields
 ```
 
+## Function Calling
+
+Ollama chat models that support function calling (like Llama 3.1, Llama 3.3, Qwen, and others) can use tools with the `tools` config:
+
+```yaml title="promptfooconfig.yaml"
+prompts:
+  - 'What is the weather like in {{city}}?'
+
+providers:
+  - id: ollama:chat:llama3.3
+    config:
+      tools:
+        - type: function
+          function:
+            name: get_current_weather
+            description: Get the current weather in a given location
+            parameters:
+              type: object
+              properties:
+                location:
+                  type: string
+                  description: City and state, e.g. San Francisco, CA
+                unit:
+                  type: string
+                  enum: [celsius, fahrenheit]
+              required: [location]
+
+tests:
+  - vars:
+      city: Boston
+    assert:
+      - type: is-valid-openai-tools-call
+```
+
 ## Using Ollama as a Local Grading Provider
 
 ### Using Ollama for Model-Graded Assertions

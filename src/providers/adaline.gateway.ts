@@ -10,7 +10,7 @@ import { Vertex as GatewayVertex } from '@adaline/vertex';
 import { getCache, isCacheEnabled } from '../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../envars';
 import logger from '../logger';
-import { maybeLoadToolsFromExternalFile } from '../util';
+import { maybeLoadToolsFromExternalFile } from '../util/index';
 import { safeJsonStringify } from '../util/json';
 import { AnthropicMessagesProvider } from './anthropic/messages';
 import { calculateAnthropicCost } from './anthropic/util';
@@ -19,7 +19,7 @@ import { AzureEmbeddingProvider } from './azure/embedding';
 import { calculateAzureCost } from './azure/util';
 import { AIStudioChatProvider } from './google/ai.studio';
 import { VertexChatProvider, VertexEmbeddingProvider } from './google/vertex';
-import { GroqProvider } from './groq';
+import { GroqProvider } from './groq/index';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
 import { calculateOpenAICost } from './openai/util';
@@ -41,6 +41,7 @@ import type {
   ToolType as GatewayToolType,
 } from '@adaline/types';
 
+import type { EnvOverrides } from '../types/env';
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -49,8 +50,7 @@ import type {
   ProviderOptions,
   ProviderResponse,
   TokenUsage,
-} from '../types';
-import type { EnvOverrides } from '../types/env';
+} from '../types/index';
 import type { OpenAiCompletionOptions } from './openai/types';
 
 // Allows Adaline Gateway to R/W Promptfoo's cache
@@ -66,7 +66,7 @@ export class AdalineGatewayCachePlugin<T> implements GatewayCache<T> {
   }
 
   // Gateway will never invoke this method
-  async delete(key: string): Promise<void> {
+  async delete(_key: string): Promise<void> {
     throw new Error('Not implemented');
   }
 
@@ -177,9 +177,9 @@ class AdalineGatewayGenericProvider implements ApiProvider {
 
   // @ts-ignore: Params are not used in this implementation
   async callApi(
-    prompt: string,
-    context?: CallApiContextParams,
-    callApiOptions?: CallApiOptionsParams,
+    _prompt: string,
+    _context?: CallApiContextParams,
+    _callApiOptions?: CallApiOptionsParams,
   ): Promise<ProviderResponse> {
     throw new Error('Not implemented');
   }
@@ -257,7 +257,7 @@ export class AdalineGatewayEmbeddingProvider extends AdalineGatewayGenericProvid
           customHeaders: this.config.headers,
         },
       };
-      logger.debug(`Adaline Gateway Embedding API Request: ${safeJsonStringify(gatewayRequest)}`);
+      logger.debug('Adaline Gateway Embedding API Request', { request: gatewayRequest });
       const response = (await this.gateway.getEmbeddings(
         gatewayRequest,
       )) as GetEmbeddingsHandlerResponseType;
@@ -269,6 +269,7 @@ export class AdalineGatewayEmbeddingProvider extends AdalineGatewayGenericProvid
         tokenUsage: {
           total: response.response.usage?.totalTokens,
           cached: response.cached ? response.response.usage?.totalTokens : 0,
+          numRequests: 1,
         },
       };
     } catch (error) {
@@ -383,7 +384,7 @@ export class AdalineGatewayChatProvider extends AdalineGatewayGenericProvider {
           this.modelName,
           this.providerOptions,
         );
-        const { body } = openAiProvider.getOpenAiBody(prompt, context, callApiOptions);
+        const { body } = await openAiProvider.getOpenAiBody(prompt, context, callApiOptions);
         // create a temp gateway openai model to transform the body to gateway types
         const gatewayOpenAiDummyModel = new GatewayOpenAI().chatModel({
           modelName: 'gpt-4o',
@@ -420,7 +421,7 @@ export class AdalineGatewayChatProvider extends AdalineGatewayGenericProvider {
           { role: 'user', content: [{ modality: 'text', value: prompt }] },
         ]);
         gatewayTools = _config.tools
-          ? (maybeLoadToolsFromExternalFile(_config.tools) as GatewayToolType[])
+          ? ((await maybeLoadToolsFromExternalFile(_config.tools)) as GatewayToolType[])
           : undefined;
       }
 
@@ -462,6 +463,7 @@ export class AdalineGatewayChatProvider extends AdalineGatewayGenericProvider {
           throw new Error('Vertex API token is not set. Please configure the Google Cloud SDK');
         }
         gatewayChatModel = provider.chatModel({
+          authType: 'accessToken',
           modelName: this.modelName,
           accessToken: token.token as string,
           location: parentClass.getRegion(),
@@ -593,7 +595,7 @@ export class AdalineGatewayChatProvider extends AdalineGatewayGenericProvider {
         customHeaders: this.config.headers,
       },
     };
-    logger.debug(`Adaline Gateway Chat API request: ${safeJsonStringify(gatewayRequest)}`);
+    logger.debug('Adaline Gateway Chat API request', { request: gatewayRequest });
 
     try {
       response = (await this.gateway.completeChat(
@@ -601,9 +603,12 @@ export class AdalineGatewayChatProvider extends AdalineGatewayGenericProvider {
       )) as CompleteChatHandlerResponseType;
       logger.debug(`Adaline Gateway Chat API response: ${safeJsonStringify(response)}`);
     } catch (error) {
-      logger.error(`Adaline Gateway Chat API response error: ${String(error)}`);
+      logger.error('Adaline Gateway Chat API response error', {
+        error: String(error),
+        request: gatewayRequest,
+      });
       return {
-        error: `API response error: ${String(error)} : ${safeJsonStringify(gatewayRequest)}`,
+        error: `API response error: ${String(error)}`,
       };
     }
 
@@ -694,7 +699,7 @@ export class AdalineGatewayChatProvider extends AdalineGatewayGenericProvider {
       }
 
       const logProbs = response.response.logProbs?.map((logProb: any) => logProb.logProb);
-      const tokenUsage: TokenUsage = {};
+      const tokenUsage: TokenUsage = { numRequests: 1 };
       if (response.cached) {
         tokenUsage.cached = response.response.usage?.totalTokens;
         tokenUsage.total = response.response.usage?.totalTokens;

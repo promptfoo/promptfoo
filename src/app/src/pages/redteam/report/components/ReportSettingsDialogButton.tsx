@@ -12,7 +12,7 @@ import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { useReportStore } from './store';
 
-const ReportSettingsDialogButton: React.FC = () => {
+const ReportSettingsDialogButton = () => {
   const {
     showPercentagesOnRiskCards,
     setShowPercentagesOnRiskCards,

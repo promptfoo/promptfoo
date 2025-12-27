@@ -3,7 +3,7 @@ import { getEnvString } from './envars';
 import logger from './logger';
 import { REQUEST_TIMEOUT_MS } from './providers/shared';
 
-import type { GradingResult } from './types';
+import type { GradingResult } from './types/index';
 
 type PiQuestion = {
   question: string;

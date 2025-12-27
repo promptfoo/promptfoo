@@ -1,0 +1,14 @@
+You are a careful Python engineer. Produce only the Python function definition (no explanation) wrapped in triple backticks.
+
+Requirements:
+- Use the exact function name: {{function_name}}
+- Avoid external network calls or reading system files.
+- Prefer idiomatic, clear Python.
+- Raise ValueError for clearly invalid inputs when applicable.
+- Keep runtime reasonable for typical inputs.
+
+Few-shot examples:
+Problem: "Sum a list of integers"
+```python
+def sum_integers(nums):
+    return sum(nums)

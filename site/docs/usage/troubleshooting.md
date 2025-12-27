@@ -5,6 +5,34 @@ description: Debug and resolve common promptfoo issues with solutions for memory
 
 # Troubleshooting
 
+## Log Files and Debugging
+
+Before troubleshooting specific issues, you can access detailed logs to help diagnose problems:
+
+- **View logs directly**: Log files are stored in your config directory at `~/.promptfoo/logs` by default
+- **Custom log directory**: Set the `PROMPTFOO_LOG_DIR` environment variable to write logs to a different directory (e.g., `PROMPTFOO_LOG_DIR=./logs promptfoo eval`)
+- **Export logs for sharing**: Use `promptfoo export logs` to create a compressed archive of your log files for debugging or support
+
+### Live Debug Toggle
+
+During `promptfoo redteam run`, you can toggle debug logging on and off in real-time without restarting:
+
+- **Press `v`** at any time to toggle verbose/debug output
+- Works only in interactive terminal mode (not in CI or when output is piped)
+- Useful for investigating issues mid-run without overwhelming log output
+
+When you start a scan, you'll see:
+
+```
+  Tip: Press v to toggle debug output
+```
+
+Press `v` to enable debug logs and see detailed API requests, provider responses, and grading results. Press `v` again to return to clean output.
+
+:::tip
+This is especially helpful when a scan seems stuck or you want to understand what's happening with a specific test case.
+:::
+
 ## Out of memory error
 
 If you have a large number of tests or your tests have large outputs, you may encounter an out of memory error. There are several ways to handle this:
@@ -173,6 +201,75 @@ defaultTest:
           apiHost: xxx.openai.azure.com
 ```
 
+## Python/JavaScript tool files require function name
+
+If you see errors like `Python files require a function name` when loading tools from Python or JavaScript files, you need to specify the function name that returns the tool definitions.
+
+### Solution
+
+Python and JavaScript tool files must specify a function name using the `file://path:function_name` format:
+
+```yaml title="promptfooconfig.yaml"
+providers:
+  - id: openai:chat:gpt-4.1-mini
+    config:
+      # Correct - specifies function name
+      tools: file://./tools.py:get_tools
+      # or for JavaScript/TypeScript
+      tools: file://./tools.js:getTools
+```
+
+The function must return a tool definitions array (can be synchronous or asynchronous):
+
+```python title="tools.py"
+def get_tools():
+    return [
+        {
+            "type": "function",
+            "function": {
+                "name": "get_current_weather",
+                "description": "Get the current weather in a given location",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "location": {
+                            "type": "string",
+                            "description": "The city and state, e.g. San Francisco, CA"
+                        }
+                    },
+                    "required": ["location"]
+                }
+            }
+        }
+    ]
+```
+
+```javascript title="tools.js"
+function getTools() {
+  return [
+    {
+      type: 'function',
+      function: {
+        name: 'get_current_weather',
+        description: 'Get the current weather in a given location',
+        parameters: {
+          type: 'object',
+          properties: {
+            location: {
+              type: 'string',
+              description: 'The city and state, e.g. San Francisco, CA',
+            },
+          },
+          required: ['location'],
+        },
+      },
+    },
+  ];
+}
+
+module.exports = { getTools };
+```
+
 ## How to triage stuck evals
 
 When running evals, you may encounter timeout errors, especially when using local providers or when running many concurrent requests. Here's how to fix them:
@@ -240,6 +337,69 @@ def call_api(prompt, options, context):
     # Your code...
 ```
 
+### Python Installation and Path Issues
+
+If you encounter errors like `spawn py -3 ENOENT` or `Python 3 not found`, promptfoo cannot locate your Python installation. Here's how to resolve this:
+
+#### Setting a Custom Python Path
+
+Use the `PROMPTFOO_PYTHON` environment variable to specify your Python executable:
+
+```bash
+# Windows (if Python is installed at a custom location)
+export PROMPTFOO_PYTHON=C:\Python\3_11\python.exe
+
+# macOS/Linux
+export PROMPTFOO_PYTHON=/usr/local/bin/python3
+
+# Then run your evaluation
+npx promptfoo eval
+```
+
+#### Per-Provider Python Configuration
+
+You can also set the Python path for specific providers in your config:
+
+```yaml
+providers:
+  - id: 'file://my_provider.py'
+    config:
+      pythonExecutable: /path/to/specific/python
+```
+
+#### Windows-Specific Issues
+
+On Windows, promptfoo tries to detect Python in this order:
+
+1. `PROMPTFOO_PYTHON` environment variable (if set)
+2. Provider-specific `pythonExecutable` config (if set)
+3. **Windows smart detection**: Uses `where python` command and filters out Microsoft Store stubs
+4. `python -c "import sys; print(sys.executable)"` (to get the actual Python path)
+5. Common fallback commands: `python`, `python3`, `py -3`, `py`
+
+If you don't have the Python launcher (`py.exe`) installed but have Python directly, make sure the `python` command works from your command line. If not, either:
+
+- Add your Python installation directory to your PATH
+- Set `PROMPTFOO_PYTHON` to the full path of your `python.exe`
+
+**Common Windows Python locations:**
+
+- Microsoft Store: `%USERPROFILE%\AppData\Local\Microsoft\WindowsApps\python.exe`
+- Direct installer: `C:\Python3X\python.exe` (where X is the version)
+- Anaconda: `C:\Users\YourName\anaconda3\python.exe`
+
+#### Testing Your Python Configuration
+
+To verify your Python is correctly configured:
+
+```bash
+# Test that promptfoo can find your Python
+python -c "import sys; print(sys.executable)"
+
+# If this works but promptfoo still has issues, set PROMPTFOO_PYTHON:
+export PROMPTFOO_PYTHON=$(python -c "import sys; print(sys.executable)")
+```
+
 ### Handling errors
 
 If you encounter errors in your Python script, the error message and stack trace will be displayed in the promptfoo output. Make sure to check this information for clues about what might be going wrong in your code.
@@ -269,11 +429,8 @@ Remember that promptfoo runs your Python script in a separate process, so some s
 
 ## Finding log files
 
-promptfoo logs errors to `${PROMPTFOO_LOG_DIR}/promptfoo-errors.log` by default.
-`PROMPTFOO_LOG_DIR` defaults to the current working directory, so the log file
-is created next to where you run your command.
+Promptfoo logs errors and verbose logs to `~/.promptfoo/logs` by default.
 
-Set `PROMPTFOO_DISABLE_ERROR_LOG=true` to turn off file logging, or change the
-location by setting `PROMPTFOO_LOG_DIR` to a different directory.
+Change the location by setting `PROMPTFOO_LOG_DIR` to a different directory.
 
-Increase verbosity by running commands with `LOG_LEVEL=debug`.
+For each run an error log and a debug log will be created.

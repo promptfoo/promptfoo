@@ -1,11 +1,13 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 
-import CrispChat from '@app/components/CrispChat';
 import ErrorBoundary from '@app/components/ErrorBoundary';
+import PylonChat from '@app/components/PylonChat';
+import { UserProvider } from '@app/contexts/UserContext';
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import { callApi } from '@app/utils/api';
+import { formatDataGridDate } from '@app/utils/date';
 import AppIcon from '@mui/icons-material/Apps';
 import DownloadIcon from '@mui/icons-material/Download';
 import PluginIcon from '@mui/icons-material/Extension';
@@ -42,15 +44,20 @@ import Setup from './components/Setup';
 import Strategies from './components/Strategies';
 import TargetConfiguration from './components/Targets/TargetConfiguration';
 import TargetTypeSelection from './components/Targets/TargetTypeSelection';
+import { TestCaseGenerationProvider } from './components/TestCaseGenerationProvider';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from './hooks/useRedTeamConfig';
 import { useSetupState } from './hooks/useSetupState';
 import { generateOrderedYaml } from './utils/yamlHelpers';
 import type { RedteamStrategy } from '@promptfoo/types';
 
-import type { Config, RedteamUITarget } from './types';
 import './page.css';
 
-export const SIDEBAR_WIDTH = 240;
+import { NAVBAR_HEIGHT, SIDEBAR_WIDTH } from './constants';
+
+import type { Config, RedteamUITarget } from './types';
+
+// Re-export for backward compatibility
+export { SIDEBAR_WIDTH };
 
 const StyledTabs = styled(Tabs)(({ theme }) => ({
   '& .MuiTabs-indicator': {
@@ -166,8 +173,8 @@ const OuterSidebarContainer = styled(Box)(({ theme }) => ({
 
 const InnerSidebarContainer = styled(Box)({
   position: 'sticky',
-  top: 64, // Account for navbar
-  height: 'calc(100vh - 64px)',
+  top: `calc(${NAVBAR_HEIGHT}px + var(--update-banner-height, 0px))`,
+  height: `calc(100vh - ${NAVBAR_HEIGHT}px - var(--update-banner-height, 0px))`,
   display: 'flex',
   flexDirection: 'column',
 });
@@ -351,7 +358,7 @@ export default function RedTeamSetupPage() {
     });
   };
 
-  const handleChange = (event: React.SyntheticEvent, newValue: number) => {
+  const handleChange = (_event: React.SyntheticEvent, newValue: number) => {
     updateHash(newValue);
     setValue(newValue);
     window.scrollTo({ top: 0 });
@@ -470,6 +477,8 @@ export default function RedTeamSetupPage() {
 
       toast.showToast('Configuration loaded successfully', 'success');
       setLoadDialogOpen(false);
+      // Faizan: This is a hack to reload the page and apply the new config, this needs to be fixed so a reload isn't required.
+      window.location.reload();
     } catch (error) {
       console.error('Failed to load configuration', error);
       toast.showToast(
@@ -591,293 +600,305 @@ export default function RedTeamSetupPage() {
     });
   };
 
+  // Calculate active strategy count (excluding 'basic' with enabled: false)
+  const activeStrategyCount = useMemo(() => {
+    return config.strategies.filter((strategy) => {
+      const id = typeof strategy === 'string' ? strategy : strategy.id;
+      // Skip 'basic' strategy if it has enabled: false
+      if (id === 'basic' && typeof strategy === 'object' && strategy.config?.enabled === false) {
+        return false;
+      }
+      return true;
+    }).length;
+  }, [config.strategies]);
+
   return (
-    <Root>
-      <Content>
-        <OuterSidebarContainer>
-          <InnerSidebarContainer>
-            <StatusSection>
-              <Typography className="configName">
-                {configName ? `Config: ${configName}` : 'New Configuration'}
-              </Typography>
-              {hasUnsavedChanges ? (
-                <div className="statusRow">
-                  <Typography className="unsavedChanges">
-                    <span>●</span> Unsaved changes
-                  </Typography>
-                  <Button
-                    className="saveButton"
-                    size="small"
-                    variant="outlined"
-                    color="warning"
-                    onClick={handleSaveConfig}
-                    disabled={!configName}
-                  >
-                    Save now
-                  </Button>
-                </div>
-              ) : (
-                configDate && (
-                  <Typography className="dateText" color="text.secondary" variant="body2">
-                    {new Date(configDate).toLocaleString()}
-                  </Typography>
-                )
-              )}
-            </StatusSection>
-            <TabsContainer>
-              <StyledTabs
-                orientation="vertical"
-                variant="scrollable"
-                value={value}
-                onChange={handleChange}
-              >
-                <StyledTab
-                  icon={<TargetIcon />}
-                  iconPosition="start"
-                  label="Target Type"
-                  {...a11yProps(0)}
+    <UserProvider>
+      <Root>
+        <Content>
+          <OuterSidebarContainer>
+            <InnerSidebarContainer>
+              <StatusSection>
+                <Typography className="configName">
+                  {configName ? `Config: ${configName}` : 'New Configuration'}
+                </Typography>
+                {hasUnsavedChanges ? (
+                  <div className="statusRow">
+                    <Typography className="unsavedChanges">
+                      <span>●</span> Unsaved changes
+                    </Typography>
+                    <Button
+                      className="saveButton"
+                      size="small"
+                      variant="outlined"
+                      color="warning"
+                      onClick={handleSaveConfig}
+                      disabled={!configName}
+                    >
+                      Save now
+                    </Button>
+                  </div>
+                ) : (
+                  configDate && (
+                    <Typography className="dateText" color="text.secondary" variant="body2">
+                      {formatDataGridDate(configDate)}
+                    </Typography>
+                  )
+                )}
+              </StatusSection>
+              <TabsContainer>
+                <StyledTabs
+                  orientation="vertical"
+                  variant="scrollable"
+                  value={value}
+                  onChange={handleChange}
+                >
+                  <StyledTab
+                    icon={<TargetIcon />}
+                    iconPosition="start"
+                    label="Target Type"
+                    {...a11yProps(0)}
+                  />
+                  <StyledTab
+                    icon={<SettingsIcon />}
+                    iconPosition="start"
+                    label="Target Config"
+                    {...a11yProps(1)}
+                  />
+                  <StyledTab
+                    icon={<AppIcon />}
+                    iconPosition="start"
+                    label="Application Details"
+                    {...a11yProps(1)}
+                  />
+                  <StyledTab
+                    icon={<PluginIcon />}
+                    iconPosition="start"
+                    label={`Plugins${config.plugins?.length ? ` (${config.plugins.length})` : ''}`}
+                    {...a11yProps(3)}
+                  />
+                  <StyledTab
+                    icon={<StrategyIcon />}
+                    iconPosition="start"
+                    label={`Strategies${activeStrategyCount ? ` (${activeStrategyCount})` : ''}`}
+                    {...a11yProps(4)}
+                  />
+                  <StyledTab
+                    icon={<ReviewIcon />}
+                    iconPosition="start"
+                    label="Review"
+                    {...a11yProps(5)}
+                  />
+                </StyledTabs>
+              </TabsContainer>
+              <SidebarButtons>
+                <SidebarButton
+                  variant="text"
+                  fullWidth
+                  startIcon={<SaveIcon />}
+                  onClick={() => setSaveDialogOpen(true)}
+                >
+                  Save Config
+                </SidebarButton>
+                <SidebarButton
+                  variant="text"
+                  fullWidth
+                  startIcon={<FolderOpenIcon />}
+                  onClick={() => {
+                    loadConfigs();
+                    setLoadDialogOpen(true);
+                  }}
+                >
+                  Load Config
+                </SidebarButton>
+                <SidebarButton
+                  variant="text"
+                  fullWidth
+                  startIcon={<RestartAltIcon />}
+                  onClick={() => setResetDialogOpen(true)}
+                >
+                  Reset Config
+                </SidebarButton>
+              </SidebarButtons>
+            </InnerSidebarContainer>
+          </OuterSidebarContainer>
+          <TabContent>
+            <CustomTabPanel value={value} index={0}>
+              <ErrorBoundary name="Target Type Selection Page">
+                <TargetTypeSelection onNext={handleNext} />
+              </ErrorBoundary>
+            </CustomTabPanel>
+            <CustomTabPanel value={value} index={1}>
+              <ErrorBoundary name="Target Configuration Page">
+                <TargetConfiguration onNext={handleNext} onBack={handleBack} />
+              </ErrorBoundary>
+            </CustomTabPanel>
+            <CustomTabPanel value={value} index={2}>
+              <ErrorBoundary name="Application Purpose Page">
+                <Purpose onNext={handleNext} onBack={handleBack} />
+              </ErrorBoundary>
+            </CustomTabPanel>
+            <CustomTabPanel value={value} index={3}>
+              <ErrorBoundary name="Plugins Page">
+                <TestCaseGenerationProvider redTeamConfig={config}>
+                  <Plugins onNext={handleNext} onBack={handleBack} />
+                </TestCaseGenerationProvider>
+              </ErrorBoundary>
+            </CustomTabPanel>
+            <CustomTabPanel value={value} index={4}>
+              <ErrorBoundary name="Strategies Page">
+                <Strategies onNext={handleNext} onBack={handleBack} />
+              </ErrorBoundary>
+            </CustomTabPanel>
+            <CustomTabPanel value={value} index={5}>
+              <ErrorBoundary name="Review Page">
+                <Review
+                  navigateToPlugins={navigateToPlugins}
+                  navigateToStrategies={navigateToStrategies}
+                  navigateToPurpose={navigateToPurpose}
                 />
-                <StyledTab
-                  icon={<SettingsIcon />}
-                  iconPosition="start"
-                  label="Target Config"
-                  {...a11yProps(1)}
-                />
-                <StyledTab
-                  icon={<AppIcon />}
-                  iconPosition="start"
-                  label="Application Details"
-                  {...a11yProps(1)}
-                />
-                <StyledTab
-                  icon={<PluginIcon />}
-                  iconPosition="start"
-                  label={`Plugins${config.plugins?.length ? ` (${config.plugins.length})` : ''}`}
-                  {...a11yProps(3)}
-                />
-                <StyledTab
-                  icon={<StrategyIcon />}
-                  iconPosition="start"
-                  label={`Strategies${config.strategies?.length ? ` (${config.strategies.length})` : ''}`}
-                  {...a11yProps(4)}
-                />
-                <StyledTab
-                  icon={<ReviewIcon />}
-                  iconPosition="start"
-                  label="Review"
-                  {...a11yProps(5)}
-                />
-              </StyledTabs>
-            </TabsContainer>
-            <SidebarButtons>
-              <SidebarButton
-                variant="text"
-                fullWidth
-                startIcon={<SaveIcon />}
-                onClick={() => setSaveDialogOpen(true)}
-              >
-                Save Config
-              </SidebarButton>
-              <SidebarButton
-                variant="text"
-                fullWidth
-                startIcon={<FolderOpenIcon />}
-                onClick={() => {
-                  loadConfigs();
-                  setLoadDialogOpen(true);
-                }}
-              >
-                Load Config
-              </SidebarButton>
-              <SidebarButton
-                variant="text"
-                fullWidth
-                startIcon={<RestartAltIcon />}
-                onClick={() => setResetDialogOpen(true)}
-              >
-                Reset Config
-              </SidebarButton>
-            </SidebarButtons>
-          </InnerSidebarContainer>
-        </OuterSidebarContainer>
-        <TabContent>
-          <CustomTabPanel value={value} index={0}>
-            <ErrorBoundary name="Target Type Selection Page">
-              <TargetTypeSelection onNext={handleNext} setupModalOpen={setupModalOpen} />
-            </ErrorBoundary>
-          </CustomTabPanel>
-          <CustomTabPanel value={value} index={1}>
-            <ErrorBoundary name="Target Configuration Page">
-              <TargetConfiguration
-                onNext={handleNext}
-                onBack={handleBack}
-                setupModalOpen={setupModalOpen}
-              />
-            </ErrorBoundary>
-          </CustomTabPanel>
-          <CustomTabPanel value={value} index={2}>
-            <ErrorBoundary name="Application Purpose Page">
-              <Purpose onNext={handleNext} onBack={handleBack} />
-            </ErrorBoundary>
-          </CustomTabPanel>
-          <CustomTabPanel value={value} index={3}>
-            <ErrorBoundary name="Plugins Page">
-              <Plugins onNext={handleNext} onBack={handleBack} />
-            </ErrorBoundary>
-          </CustomTabPanel>
-          <CustomTabPanel value={value} index={4}>
-            <ErrorBoundary name="Strategies Page">
-              <Strategies onNext={handleNext} onBack={handleBack} />
-            </ErrorBoundary>
-          </CustomTabPanel>
-          <CustomTabPanel value={value} index={5}>
-            <ErrorBoundary name="Review Page">
-              <Review
-                navigateToPlugins={navigateToPlugins}
-                navigateToStrategies={navigateToStrategies}
-                navigateToPurpose={navigateToPurpose}
-              />
-            </ErrorBoundary>
-          </CustomTabPanel>
-        </TabContent>
-      </Content>
+              </ErrorBoundary>
+            </CustomTabPanel>
+          </TabContent>
+        </Content>
 
-      {setupModalOpen ? <Setup open={setupModalOpen} onClose={closeSetupModal} /> : null}
-      <CrispChat />
-      {saveDialogOpen ? (
-        <Dialog
-          open={saveDialogOpen}
-          onClose={() => setSaveDialogOpen(false)}
-          maxWidth="sm"
-          fullWidth
-        >
-          <DialogTitle>Save Configuration</DialogTitle>
-          <DialogContent>
-            <TextField
-              autoFocus
-              margin="dense"
-              label="Configuration Name"
-              fullWidth
-              value={configName}
-              onChange={(e) => setConfigName(e.target.value)}
-              sx={{ mb: 2 }}
-            />
-            <Box sx={{ display: 'flex', gap: 1, mt: 2 }}>
-              <Button
-                variant="outlined"
-                startIcon={<DownloadIcon />}
-                onClick={handleDownloadYaml}
+        {setupModalOpen ? <Setup open={setupModalOpen} onClose={closeSetupModal} /> : null}
+        <PylonChat />
+        {saveDialogOpen ? (
+          <Dialog
+            open={saveDialogOpen}
+            onClose={() => setSaveDialogOpen(false)}
+            maxWidth="sm"
+            fullWidth
+          >
+            <DialogTitle>Save Configuration</DialogTitle>
+            <DialogContent>
+              <TextField
+                autoFocus
+                margin="dense"
+                label="Configuration Name"
                 fullWidth
-              >
-                Export YAML
-              </Button>
-              <Button
-                variant="contained"
-                startIcon={<SaveIcon />}
-                onClick={handleSaveConfig}
-                disabled={!configName}
-                fullWidth
-              >
-                Save
-              </Button>
-            </Box>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setSaveDialogOpen(false)}>Cancel</Button>
-          </DialogActions>
-        </Dialog>
-      ) : null}
-
-      {loadDialogOpen ? (
-        <Dialog
-          open={loadDialogOpen}
-          onClose={() => setLoadDialogOpen(false)}
-          maxWidth="sm"
-          fullWidth
-        >
-          <DialogTitle>Load Configuration</DialogTitle>
-          <DialogContent>
-            <Box sx={{ mb: 2 }}>
-              <input
-                accept=".yml,.yaml"
-                style={{ display: 'none' }}
-                id="yaml-file-upload"
-                type="file"
-                onChange={handleFileUpload}
+                value={configName}
+                onChange={(e) => setConfigName(e.target.value)}
+                sx={{ mb: 2 }}
               />
-              <label htmlFor="yaml-file-upload">
-                <Button variant="outlined" component="span" fullWidth sx={{ mb: 2 }}>
-                  Upload YAML File
+              <Box sx={{ display: 'flex', gap: 1, mt: 2 }}>
+                <Button
+                  variant="outlined"
+                  startIcon={<DownloadIcon />}
+                  onClick={handleDownloadYaml}
+                  fullWidth
+                >
+                  Export YAML
                 </Button>
-              </label>
-            </Box>
-            <Typography variant="subtitle2" sx={{ mb: 2 }}>
-              Or choose a saved configuration:
-            </Typography>
-            {savedConfigs.length === 0 ? (
-              <Box sx={{ py: 4, textAlign: 'center' }}>
-                <Typography color="text.secondary">No saved configurations found</Typography>
+                <Button
+                  variant="contained"
+                  startIcon={<SaveIcon />}
+                  onClick={handleSaveConfig}
+                  disabled={!configName}
+                  fullWidth
+                >
+                  Save
+                </Button>
               </Box>
-            ) : (
-              <List>
-                {savedConfigs.map((config) => (
-                  <ListItemButton
-                    key={config.id}
-                    onClick={() => handleLoadConfig(config.id)}
-                    sx={{
-                      border: '1px solid',
-                      borderColor: 'divider',
-                      borderRadius: 1,
-                      mb: 0.5,
-                      backgroundColor: 'background.paper',
-                      '&:hover': {
-                        backgroundColor: 'action.hover',
-                        cursor: 'pointer',
-                      },
-                    }}
-                  >
-                    <ListItemText
-                      primary={config.name}
-                      secondary={new Date(config.updatedAt).toLocaleString()}
-                    />
-                  </ListItemButton>
-                ))}
-              </List>
-            )}
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setLoadDialogOpen(false)}>Cancel</Button>
-          </DialogActions>
-        </Dialog>
-      ) : null}
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={() => setSaveDialogOpen(false)}>Cancel</Button>
+            </DialogActions>
+          </Dialog>
+        ) : null}
 
-      {resetDialogOpen ? (
-        <Dialog
-          open={resetDialogOpen}
-          onClose={() => setResetDialogOpen(false)}
-          maxWidth="sm"
-          fullWidth
-        >
-          <DialogTitle>Reset Configuration</DialogTitle>
-          <DialogContent>
-            <Typography>
-              Are you sure you want to reset the configuration to default values? This action cannot
-              be undone.
-            </Typography>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setResetDialogOpen(false)}>Cancel</Button>
-            <Button
-              onClick={() => {
-                handleResetConfig();
-              }}
-              color="error"
-            >
-              Reset
-            </Button>
-          </DialogActions>
-        </Dialog>
-      ) : null}
-    </Root>
+        {loadDialogOpen ? (
+          <Dialog
+            open={loadDialogOpen}
+            onClose={() => setLoadDialogOpen(false)}
+            maxWidth="sm"
+            fullWidth
+          >
+            <DialogTitle>Load Configuration</DialogTitle>
+            <DialogContent>
+              <Box sx={{ mb: 2 }}>
+                <input
+                  accept=".yml,.yaml"
+                  style={{ display: 'none' }}
+                  id="yaml-file-upload"
+                  type="file"
+                  onChange={handleFileUpload}
+                />
+                <label htmlFor="yaml-file-upload">
+                  <Button variant="outlined" component="span" fullWidth sx={{ mb: 2 }}>
+                    Upload YAML File
+                  </Button>
+                </label>
+              </Box>
+              <Typography variant="subtitle2" sx={{ mb: 2 }}>
+                Or choose a saved configuration:
+              </Typography>
+              {savedConfigs.length === 0 ? (
+                <Box sx={{ py: 4, textAlign: 'center' }}>
+                  <Typography color="text.secondary">No saved configurations found</Typography>
+                </Box>
+              ) : (
+                <List>
+                  {savedConfigs.map((config) => (
+                    <ListItemButton
+                      key={config.id}
+                      onClick={() => handleLoadConfig(config.id)}
+                      sx={{
+                        border: '1px solid',
+                        borderColor: 'divider',
+                        borderRadius: 1,
+                        mb: 0.5,
+                        backgroundColor: 'background.paper',
+                        '&:hover': {
+                          backgroundColor: 'action.hover',
+                          cursor: 'pointer',
+                        },
+                      }}
+                    >
+                      <ListItemText
+                        primary={config.name}
+                        secondary={formatDataGridDate(config.updatedAt)}
+                      />
+                    </ListItemButton>
+                  ))}
+                </List>
+              )}
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={() => setLoadDialogOpen(false)}>Cancel</Button>
+            </DialogActions>
+          </Dialog>
+        ) : null}
+
+        {resetDialogOpen ? (
+          <Dialog
+            open={resetDialogOpen}
+            onClose={() => setResetDialogOpen(false)}
+            maxWidth="sm"
+            fullWidth
+          >
+            <DialogTitle>Reset Configuration</DialogTitle>
+            <DialogContent>
+              <Typography>
+                Are you sure you want to reset the configuration to default values? This action
+                cannot be undone.
+              </Typography>
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={() => setResetDialogOpen(false)}>Cancel</Button>
+              <Button
+                onClick={() => {
+                  handleResetConfig();
+                }}
+                color="error"
+              >
+                Reset
+              </Button>
+            </DialogActions>
+          </Dialog>
+        ) : null}
+      </Root>
+    </UserProvider>
   );
 }
