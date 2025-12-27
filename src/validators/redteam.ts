@@ -32,6 +32,7 @@ import type {
   RedteamContext,
   RedteamFileConfig,
   RedteamPluginObject,
+  RedteamRunOptions,
   RedteamStrategy,
 } from '../redteam/types';
 
@@ -239,6 +240,47 @@ export const RedteamGenerateOptionsSchema = z.object({
   burpEscapeJson: z.boolean().describe('Whether to escape quotes in Burp payloads').optional(),
   progressBar: z.boolean().describe('Whether to show a progress bar').optional(),
   configFromCloud: z.any().optional().describe('A configuration object loaded from cloud'),
+});
+
+/**
+ * Schema for `promptfoo redteam run` command options
+ */
+// NOTE: Remember to edit types/redteam.ts:RedteamRunOptions if you edit this schema
+export const RedteamRunOptionsSchema = z.object({
+  id: z.string().optional().describe('Evaluation ID'),
+  config: z.string().optional().describe('Path to the configuration file'),
+  target: z.string().optional().describe('Cloud provider target ID to run the scan on'),
+  output: z.string().optional().describe('Output file path'),
+  cache: z.boolean().optional().describe('Whether to use caching'),
+  envPath: z.string().optional().describe('Path to the environment file'),
+  maxConcurrency: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe('Maximum number of concurrent API calls'),
+  delay: z
+    .number()
+    .int()
+    .nonnegative()
+    .optional()
+    .describe('Delay in milliseconds between API calls'),
+  remote: z.boolean().optional().describe('Whether to force remote inference'),
+  force: z.boolean().optional().describe('Whether to force generation'),
+  filterProviders: z.string().optional().describe('Filter providers'),
+  filterTargets: z.string().optional().describe('Filter targets'),
+  verbose: z.boolean().optional().describe('Whether to enable verbose logging'),
+  progressBar: z.boolean().optional().describe('Whether to show a progress bar'),
+  yes: z
+    .boolean()
+    .optional()
+    .describe('Automatically answer yes to all prompts (for CI/CD automation)'),
+  description: z.string().optional().describe('Description of the red team run'),
+  liveRedteamConfig: z.any().optional().describe('Live configuration object from web UI'),
+  logCallback: z.function().optional().describe('Callback function for logging'),
+  progressCallback: z.function().optional().describe('Callback function for progress updates'),
+  abortSignal: z.any().optional().describe('AbortSignal for cancellation'),
+  loadedFromCloud: z.boolean().optional().describe('Whether config was loaded from cloud'),
 });
 
 /**
@@ -558,6 +600,10 @@ function assert<_T extends never>() {}
 type TypeEqualityGuard<A, B> = Exclude<A, B> | Exclude<B, A>;
 
 assert<TypeEqualityGuard<RedteamFileConfig, z.infer<typeof RedteamConfigSchema>>>();
+
+// Note: RedteamRunOptions includes function types (logCallback, progressCallback) and
+// AbortSignal which cannot be directly validated with Zod, so type equality check is omitted.
+// The schema still provides runtime validation for the serializable fields.
 
 // TODO: Why is this never?
 // assert<TypeEqualityGuard<RedteamPluginObject, z.infer<typeof RedteamPluginObjectSchema>>>();

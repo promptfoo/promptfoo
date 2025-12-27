@@ -366,7 +366,7 @@ describe('doRedteamRun', () => {
     it('should call cleanup function when no test cases are generated', async () => {
       const mockCleanup = vi.fn();
       vi.mocked(initVerboseToggle).mockReturnValue(mockCleanup);
-      vi.mocked(doGenerateRedteam).mockResolvedValue(null);
+      vi.mocked(doGenerateRedteam).mockResolvedValue({ config: null });
 
       await doRedteamRun({});
 

@@ -240,8 +240,6 @@ describe('doGenerateRedteam', () => {
       injectVar: 'input',
       pluginResults: {},
       strategyResults: {},
-      pluginResults: {},
-      strategyResults: {},
     });
 
     await doGenerateRedteam(options);
@@ -301,8 +299,6 @@ describe('doGenerateRedteam', () => {
       purpose: 'Test purpose',
       entities: [],
       injectVar: 'input',
-      pluginResults: {},
-      strategyResults: {},
       pluginResults: {},
       strategyResults: {},
     });
@@ -374,8 +370,6 @@ describe('doGenerateRedteam', () => {
       injectVar: 'input',
       pluginResults: {},
       strategyResults: {},
-      pluginResults: {},
-      strategyResults: {},
     });
 
     await doGenerateRedteam(options);
@@ -433,8 +427,6 @@ describe('doGenerateRedteam', () => {
       purpose: 'Test purpose',
       entities: ['Test entity'],
       injectVar: 'input',
-      pluginResults: {},
-      strategyResults: {},
       pluginResults: {},
       strategyResults: {},
     });
@@ -505,8 +497,6 @@ describe('doGenerateRedteam', () => {
       purpose: 'Test purpose',
       entities: ['Test entity'],
       injectVar: 'input',
-      pluginResults: {},
-      strategyResults: {},
       pluginResults: {},
       strategyResults: {},
     });
@@ -580,8 +570,6 @@ describe('doGenerateRedteam', () => {
       injectVar: 'input',
       pluginResults: {},
       strategyResults: {},
-      pluginResults: {},
-      strategyResults: {},
     });
 
     const options: RedteamCliGenerateOptions = {
@@ -639,8 +627,6 @@ describe('doGenerateRedteam', () => {
       purpose: 'Test purpose',
       entities: [],
       injectVar: 'input',
-      pluginResults: {},
-      strategyResults: {},
       pluginResults: {},
       strategyResults: {},
     });
@@ -706,8 +692,6 @@ describe('doGenerateRedteam', () => {
       injectVar: 'input',
       pluginResults: {},
       strategyResults: {},
-      pluginResults: {},
-      strategyResults: {},
     });
 
     const options: RedteamCliGenerateOptions = {
@@ -751,8 +735,6 @@ describe('doGenerateRedteam', () => {
       injectVar: 'input',
       pluginResults: {},
       strategyResults: {},
-      pluginResults: {},
-      strategyResults: {},
     });
 
     const options: RedteamCliGenerateOptions = {
@@ -781,8 +763,6 @@ describe('doGenerateRedteam', () => {
       purpose: 'Test purpose',
       entities: ['Test entity'],
       injectVar: 'input',
-      pluginResults: {},
-      strategyResults: {},
       pluginResults: {},
       strategyResults: {},
     });
@@ -846,8 +826,6 @@ describe('doGenerateRedteam', () => {
       injectVar: 'input',
       pluginResults: {},
       strategyResults: {},
-      pluginResults: {},
-      strategyResults: {},
     });
 
     const options: RedteamCliGenerateOptions = {
@@ -890,8 +868,6 @@ describe('doGenerateRedteam', () => {
       purpose: 'Test purpose',
       entities: [],
       injectVar: 'input',
-      pluginResults: {},
-      strategyResults: {},
       pluginResults: {},
       strategyResults: {},
     });
@@ -938,8 +914,6 @@ describe('doGenerateRedteam', () => {
       purpose: 'Test purpose',
       entities: [],
       injectVar: 'input',
-      pluginResults: {},
-      strategyResults: {},
       pluginResults: {},
       strategyResults: {},
     });
@@ -991,6 +965,8 @@ describe('doGenerateRedteam', () => {
         purpose: 'Test purpose',
         entities: [],
         injectVar: 'input',
+        pluginResults: {},
+        strategyResults: {},
       });
 
       const options: RedteamCliGenerateOptions = {
@@ -1035,6 +1011,8 @@ describe('doGenerateRedteam', () => {
         purpose: 'Test purpose',
         entities: [],
         injectVar: 'input',
+        pluginResults: {},
+        strategyResults: {},
       });
 
       const options: RedteamCliGenerateOptions = {
@@ -1076,8 +1054,6 @@ describe('doGenerateRedteam', () => {
         purpose: 'Test purpose',
         entities: [],
         injectVar: 'input',
-        pluginResults: {},
-        strategyResults: {},
         pluginResults: {},
         strategyResults: {},
       });
@@ -1137,6 +1113,8 @@ describe('doGenerateRedteam', () => {
         purpose: 'Test purpose',
         entities: [],
         injectVar: 'input',
+        pluginResults: {},
+        strategyResults: {},
       });
 
       const options: RedteamCliGenerateOptions = {
@@ -1181,6 +1159,8 @@ describe('doGenerateRedteam', () => {
         purpose: 'Test purpose',
         entities: [],
         injectVar: 'input',
+        pluginResults: {},
+        strategyResults: {},
       });
 
       const options: RedteamCliGenerateOptions = {
@@ -2021,8 +2001,6 @@ describe('doGenerateRedteam with external defaultTest', () => {
       purpose: 'Test purpose',
       entities: ['entity1', 'entity2'],
       injectVar: 'input',
-      pluginResults: {},
-      strategyResults: {},
       pluginResults: { redteam: { requested: 1, generated: 1 } },
       strategyResults: {},
     });
@@ -2083,8 +2061,6 @@ describe('doGenerateRedteam with external defaultTest', () => {
       purpose: 'Test purpose',
       entities: ['entity1', 'entity2'],
       injectVar: 'input',
-      pluginResults: {},
-      strategyResults: {},
       pluginResults: { redteam: { requested: 1, generated: 1 } },
       strategyResults: {},
     });
@@ -2143,8 +2119,6 @@ describe('doGenerateRedteam with external defaultTest', () => {
       purpose: 'Test purpose',
       entities: ['entity1', 'entity2'],
       injectVar: 'input',
-      pluginResults: {},
-      strategyResults: {},
       pluginResults: { redteam: { requested: 1, generated: 1 } },
       strategyResults: {},
     });
@@ -2235,8 +2209,6 @@ describe('redteam generate command with target option', () => {
       injectVar: 'input',
       pluginResults: {},
       strategyResults: {},
-      pluginResults: {},
-      strategyResults: {},
     });
 
     const configUUID = '12345678-1234-1234-1234-123456789012';
@@ -2289,8 +2261,6 @@ describe('redteam generate command with target option', () => {
       purpose: 'Test purpose',
       entities: [],
       injectVar: 'input',
-      pluginResults: {},
-      strategyResults: {},
       pluginResults: {},
       strategyResults: {},
     });
@@ -2456,8 +2426,6 @@ describe('redteam generate command with target option', () => {
       purpose: 'Test purpose',
       entities: [],
       injectVar: 'input',
-      pluginResults: {},
-      strategyResults: {},
       pluginResults: {},
       strategyResults: {},
     });
