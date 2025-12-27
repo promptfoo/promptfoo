@@ -7,7 +7,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ShiftKeyProvider } from '../../../contexts/ShiftKeyContext';
-import EvalOutputCell, { isImageProvider } from './EvalOutputCell';
+import EvalOutputCell, { isImageProvider, isVideoProvider } from './EvalOutputCell';
 
 import type { EvalOutputCellProps } from './EvalOutputCell';
 
@@ -444,6 +444,85 @@ describe('EvalOutputCell', () => {
     expect(sourceElement).toHaveAttribute('type', 'audio/mp3');
   });
 
+  it('renders video player when video data is present', () => {
+    const propsWithVideo: MockEvalOutputCellProps = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        video: {
+          url: '/api/output/video/test-uuid/video.mp4',
+          format: 'mp4',
+          model: 'sora-2',
+          size: '1280x720',
+          duration: 10,
+          thumbnail: '/api/output/video/test-uuid/thumbnail.webp',
+        },
+      },
+    };
+
+    renderWithProviders(<EvalOutputCell {...propsWithVideo} />);
+
+    const videoElement = screen.getByTestId('video-player');
+    expect(videoElement).toBeInTheDocument();
+
+    const sourceElement = videoElement.querySelector('source');
+    expect(sourceElement).toHaveAttribute('src', '/api/output/video/test-uuid/video.mp4');
+    expect(sourceElement).toHaveAttribute('type', 'video/mp4');
+
+    expect(screen.getByText('Model: sora-2')).toBeInTheDocument();
+    expect(screen.getByText('Size: 1280x720')).toBeInTheDocument();
+    expect(screen.getByText('Duration: 10s')).toBeInTheDocument();
+  });
+
+  it('handles video without optional metadata', () => {
+    const propsWithVideoNoMetadata: MockEvalOutputCellProps = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        video: {
+          url: '/api/output/video/test-uuid/video.mp4',
+        },
+      },
+    };
+
+    renderWithProviders(<EvalOutputCell {...propsWithVideoNoMetadata} />);
+
+    const videoElement = screen.getByTestId('video-player');
+    expect(videoElement).toBeInTheDocument();
+
+    expect(screen.queryByText(/Model:/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Size:/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Duration:/)).not.toBeInTheDocument();
+  });
+
+  it('renders video player from response.video fallback', () => {
+    const propsWithResponseVideo: MockEvalOutputCellProps = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        response: {
+          output: 'test output',
+          video: {
+            url: 'storageRef:video/abc123.mp4',
+            format: 'mp4',
+            model: 'sora-2-pro',
+            size: '720x1280',
+            duration: 8,
+          },
+        },
+      },
+    };
+
+    renderWithProviders(<EvalOutputCell {...propsWithResponseVideo} />);
+
+    const videoElement = screen.getByTestId('video-player');
+    expect(videoElement).toBeInTheDocument();
+
+    expect(screen.getByText('Model: sora-2-pro')).toBeInTheDocument();
+    expect(screen.getByText('Size: 720x1280')).toBeInTheDocument();
+    expect(screen.getByText('Duration: 8s')).toBeInTheDocument();
+  });
+
   it('allows copying row link to clipboard', async () => {
     const originalClipboard = navigator.clipboard;
     const mockClipboard = {
@@ -635,6 +714,35 @@ describe('EvalOutputCell', () => {
 
     const latencyElement = screen.getByText('0 ms (cached)');
     expect(latencyElement).toBeInTheDocument();
+  });
+
+  it('renders video metadata with long text values', () => {
+    // Test that video metadata fields are rendered correctly
+    const propsWithVideoMetadata: MockEvalOutputCellProps = {
+      ...defaultProps,
+      output: {
+        ...defaultProps.output,
+        video: {
+          url: '/api/output/video/test-uuid/video.mp4',
+          format: 'mp4',
+          model: 'sora-2-pro',
+          size: '1920x1080',
+          duration: 30,
+          thumbnail: '/api/output/video/test-uuid/thumbnail.webp',
+        },
+      },
+    };
+
+    renderWithProviders(<EvalOutputCell {...propsWithVideoMetadata} />);
+
+    // Verify video player is rendered
+    const videoElement = screen.getByTestId('video-player');
+    expect(videoElement).toBeInTheDocument();
+
+    // Verify metadata is displayed
+    expect(screen.getByText('Model: sora-2-pro')).toBeInTheDocument();
+    expect(screen.getByText('Size: 1920x1080')).toBeInTheDocument();
+    expect(screen.getByText('Duration: 30s')).toBeInTheDocument();
   });
 });
 
@@ -1433,6 +1541,48 @@ describe('isImageProvider helper function', () => {
 
   it('should return false for empty string', () => {
     expect(isImageProvider('')).toBe(false);
+  });
+});
+
+describe('isVideoProvider helper function', () => {
+  it('should return true for Sora 2 provider', () => {
+    expect(isVideoProvider('openai:video:sora-2')).toBe(true);
+  });
+
+  it('should return true for Sora 2 Pro provider', () => {
+    expect(isVideoProvider('openai:video:sora-2-pro')).toBe(true);
+  });
+
+  it('should return true for any provider with :video: in the name', () => {
+    expect(isVideoProvider('some-provider:video:model')).toBe(true);
+  });
+
+  it('should return true for a provider string with leading and trailing whitespace', () => {
+    expect(isVideoProvider(' openai:video:sora-2 ')).toBe(true);
+  });
+
+  it('should return false for text completion providers', () => {
+    expect(isVideoProvider('openai:gpt-4')).toBe(false);
+  });
+
+  it('should return false for chat providers', () => {
+    expect(isVideoProvider('openai:chat:gpt-4')).toBe(false);
+  });
+
+  it('should return false for image providers', () => {
+    expect(isVideoProvider('openai:image:dall-e-3')).toBe(false);
+  });
+
+  it('should return false for anthropic providers', () => {
+    expect(isVideoProvider('anthropic:claude-3-opus')).toBe(false);
+  });
+
+  it('should return false for undefined provider', () => {
+    expect(isVideoProvider(undefined)).toBe(false);
+  });
+
+  it('should return false for empty string', () => {
+    expect(isVideoProvider('')).toBe(false);
   });
 });
 

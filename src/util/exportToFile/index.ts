@@ -38,6 +38,18 @@ export function convertEvalResultToTableCell(result: EvalResult): EvaluateTableO
           format: result.response.audio.format,
         }
       : undefined,
+    video: result.response?.video
+      ? {
+          id: result.response.video.id,
+          url: result.response.video.url,
+          format: result.response.video.format,
+          size: result.response.video.size,
+          duration: result.response.video.duration,
+          thumbnail: result.response.video.thumbnail,
+          spritesheet: result.response.video.spritesheet,
+          model: result.response.video.model,
+        }
+      : undefined,
   };
 }
 

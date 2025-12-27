@@ -3,7 +3,12 @@ import React, { useMemo } from 'react';
 import useCloudConfig from '@app/hooks/useCloudConfig';
 import { useEvalOperations } from '@app/hooks/useEvalOperations';
 import { useShiftKey } from '@app/hooks/useShiftKey';
-import { normalizeMediaText, resolveAudioSource, resolveImageSource } from '@app/utils/media';
+import {
+  normalizeMediaText,
+  resolveAudioSource,
+  resolveImageSource,
+  resolveVideoSource,
+} from '@app/utils/media';
 import {
   Check,
   ContentCopy,
@@ -61,6 +66,21 @@ export function isImageProvider(provider: string | undefined): boolean {
     return true;
   }
   return false;
+}
+
+/**
+ * Detects if the provider is a video generation provider.
+ * Video providers follow patterns like:
+ * - 'openai:video:sora-2' (OpenAI Sora)
+ * - 'openai:video:sora-2-pro' (OpenAI Sora Pro)
+ * Used to skip truncation for video content.
+ */
+export function isVideoProvider(provider: string | undefined): boolean {
+  if (!provider) {
+    return false;
+  }
+  // Check for :video: namespace (OpenAI Sora)
+  return provider.includes(':video:');
 }
 
 const tooltipSlotProps: TooltipProps['slotProps'] = {
@@ -323,6 +343,35 @@ function EvalOutputCell({
       node = (
         <div className="transcript">
           <strong>Transcript:</strong> {output.audio.transcript}
+        </div>
+      );
+    }
+  } else if (output.video || output.response?.video) {
+    // Support both top-level video (new format) and response.video (fallback)
+    const videoData = output.video || output.response?.video;
+    const videoSource = resolveVideoSource(videoData);
+    if (videoSource) {
+      node = (
+        <div className="video-output">
+          <video
+            controls
+            style={{ width: '100%', maxWidth: '640px', borderRadius: '4px' }}
+            poster={videoSource.poster}
+            data-testid="video-player"
+          >
+            <source src={videoSource.src} type={videoSource.type || 'video/mp4'} />
+            Your browser does not support the video element.
+          </video>
+          <div
+            className="video-metadata"
+            style={{ marginTop: '8px', fontSize: '0.85em', opacity: 0.8 }}
+          >
+            {videoData?.model && (
+              <span style={{ marginRight: '12px' }}>Model: {videoData.model}</span>
+            )}
+            {videoData?.size && <span style={{ marginRight: '12px' }}>Size: {videoData.size}</span>}
+            {videoData?.duration && <span>Duration: {videoData.duration}s</span>}
+          </div>
         </div>
       );
     }
@@ -810,7 +859,11 @@ function EvalOutputCell({
       <div style={contentStyle}>
         <TruncatedText
           text={node || normalizedText}
-          maxLength={renderMarkdown && isImageProvider(output.provider) ? 0 : maxTextLength}
+          maxLength={
+            renderMarkdown && (isImageProvider(output.provider) || isVideoProvider(output.provider))
+              ? 0
+              : maxTextLength
+          }
         />
       </div>
       {comment}

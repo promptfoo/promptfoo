@@ -179,6 +179,16 @@ export interface ProviderResponse {
     channels?: number;
     duration?: number;
   };
+  video?: {
+    id?: string; // Provider video ID (e.g., Sora job ID)
+    url?: string; // Storage ref URL (e.g., storageRef:video/abc123.mp4) or blob URI
+    format?: string; // 'mp4'
+    size?: string; // '1280x720' or '720x1280'
+    duration?: number; // Seconds
+    thumbnail?: string; // Storage ref URL for thumbnail
+    spritesheet?: string; // Storage ref URL for spritesheet
+    model?: string; // Model used (e.g., 'sora-2', 'sora-2-pro')
+  };
 }
 
 export interface ProviderEmbeddingResponse {
