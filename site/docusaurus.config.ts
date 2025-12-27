@@ -229,6 +229,11 @@ const config: Config = {
               label: 'Careers',
               description: 'Join our growing team',
             },
+            {
+              to: '/store/',
+              label: 'Swag',
+              description: 'Official Promptfoo merch and swag',
+            },
           ],
         },
         { to: '/docs/intro/', label: 'Docs', position: 'left' },
@@ -366,6 +371,10 @@ const config: Config = {
             {
               label: 'Careers',
               to: '/careers/',
+            },
+            {
+              label: 'Swag',
+              to: '/store/',
             },
             {
               label: 'Log in',
