@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { DataTable } from '@app/components/data-table/data-table';
 import { Badge } from '@app/components/ui/badge';
-import { EVAL_ROUTES } from '@app/constants/routes';
+import { EVAL_ROUTES, REDTEAM_ROUTES } from '@app/constants/routes';
 import { cn } from '@app/lib/utils';
 import { callApi } from '@app/utils/api';
 import { formatDataGridDate } from '@app/utils/date';
@@ -110,7 +110,7 @@ export default function ReportsTable({ onReportSelected }: ReportsTableProps) {
           const description = getValue<string>() || 'Untitled Evaluation';
           return (
             <Link
-              to={`/reports?evalId=${row.original.evalId}`}
+              to={REDTEAM_ROUTES.REPORT_DETAIL(row.original.evalId)}
               onClick={(e) => {
                 e.preventDefault();
                 onReportSelected(row.original.evalId);

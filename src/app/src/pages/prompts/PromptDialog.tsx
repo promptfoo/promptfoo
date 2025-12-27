@@ -10,7 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@app/components/ui/dialog';
-import { EVAL_ROUTES } from '@app/constants/routes';
+import { EVAL_ROUTES, ROUTES } from '@app/constants/routes';
 import { Link } from 'react-router-dom';
 import type { ServerPromptWithMetadata } from '@promptfoo/types';
 
@@ -119,7 +119,7 @@ const PromptDialog = ({
                         {showDatasetColumn && (
                           <td className="px-3 py-2">
                             <Link
-                              to={`/datasets/?id=${evalData.datasetId}`}
+                              to={ROUTES.DATASET_DETAIL(evalData.datasetId)}
                               className="text-primary hover:underline font-mono text-sm"
                             >
                               {evalData.datasetId.slice(0, 6)}

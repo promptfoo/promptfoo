@@ -12,7 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@app/components/ui/dialog';
-import { EVAL_ROUTES } from '@app/constants/routes';
+import { EVAL_ROUTES, ROUTES } from '@app/constants/routes';
 import { Link } from 'react-router-dom';
 import type { StandaloneEval } from '@promptfoo/util/database';
 import type { ColumnDef } from '@tanstack/react-table';
@@ -142,7 +142,7 @@ export default function History({
                 }
                 return (
                   <Link
-                    to={`/datasets?id=${value}`}
+                    to={ROUTES.DATASET_DETAIL(value)}
                     className="text-primary hover:underline font-mono text-sm"
                   >
                     {value.slice(0, 6)}
@@ -166,7 +166,7 @@ export default function History({
         cell: ({ row }) => (
           <div className="flex items-center gap-1">
             <Link
-              to={`/prompts?id=${row.original.promptId || ''}`}
+              to={ROUTES.PROMPT_DETAIL(row.original.promptId || '')}
               className="text-primary hover:underline font-mono text-xs shrink-0"
             >
               [{row.original.promptId?.slice(0, 6)}]

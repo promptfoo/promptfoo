@@ -9,7 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@app/components/ui/dialog';
-import { EVAL_ROUTES } from '@app/constants/routes';
+import { EVAL_ROUTES, ROUTES } from '@app/constants/routes';
 import yaml from 'js-yaml';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -135,7 +135,7 @@ export default function DatasetDialog({ openDialog, handleClose, testCase }: Dat
                       >
                         <td className="px-3 py-2">
                           <Link
-                            to={`/prompts?id=${promptData.id}`}
+                            to={ROUTES.PROMPT_DETAIL(promptData.id)}
                             className="text-primary hover:underline font-mono text-sm block truncate"
                           >
                             {promptData.id.slice(0, 6)}
