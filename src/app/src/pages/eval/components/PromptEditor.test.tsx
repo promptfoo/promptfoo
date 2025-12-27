@@ -46,7 +46,7 @@ describe('PromptEditor', () => {
       onMouseEnter: vi.fn(),
       onMouseLeave: vi.fn(),
       CodeDisplay: MockCodeDisplay,
-      subtitleTypographySx: {},
+      subtitleTypographyClassName: 'mb-2 font-medium text-base',
     };
   });
 

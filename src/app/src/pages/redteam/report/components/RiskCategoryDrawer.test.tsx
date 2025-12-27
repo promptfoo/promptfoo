@@ -1,8 +1,14 @@
+import { TooltipProvider } from '@app/components/ui/tooltip';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { useNavigate } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import RiskCategoryDrawer from './RiskCategoryDrawer';
 import type { AtomicTestCase, EvaluateResult, ResultFailureReason } from '@promptfoo/types';
+
+// Helper to render with TooltipProvider
+const renderWithProviders = (ui: React.ReactElement) => {
+  return render(<TooltipProvider>{ui}</TooltipProvider>);
+};
 
 // Mock dependencies
 vi.mock('react-router-dom', () => ({
@@ -85,7 +91,7 @@ describe('RiskCategoryDrawer Component Navigation', () => {
   });
 
   it('should navigate to eval page when clicking View All Logs button', () => {
-    render(<RiskCategoryDrawer {...defaultProps} />);
+    renderWithProviders(<RiskCategoryDrawer {...defaultProps} />);
 
     const viewAllLogsButton = screen.getByText('View All Logs');
 
@@ -99,7 +105,7 @@ describe('RiskCategoryDrawer Component Navigation', () => {
   });
 
   it('should open in new tab when ctrl/cmd clicking View All Logs button', () => {
-    render(<RiskCategoryDrawer {...defaultProps} />);
+    renderWithProviders(<RiskCategoryDrawer {...defaultProps} />);
 
     const viewAllLogsButton = screen.getByText('View All Logs');
 
@@ -125,7 +131,7 @@ describe('RiskCategoryDrawer Component Navigation', () => {
     const onCloseMock = vi.fn();
     const props = { ...defaultProps, onClose: onCloseMock };
 
-    render(<RiskCategoryDrawer {...props} />);
+    renderWithProviders(<RiskCategoryDrawer {...props} />);
 
     const closeButton = screen.getByLabelText('close drawer');
     fireEvent.click(closeButton);
@@ -134,7 +140,7 @@ describe('RiskCategoryDrawer Component Navigation', () => {
   });
 
   it('should display correct pass/fail statistics', () => {
-    render(<RiskCategoryDrawer {...defaultProps} />);
+    renderWithProviders(<RiskCategoryDrawer {...defaultProps} />);
 
     expect(screen.getByText('8')).toBeInTheDocument(); // numPassed
     expect(screen.getByText('10')).toBeInTheDocument(); // total (8 + 2)
@@ -159,7 +165,7 @@ describe('RiskCategoryDrawer Component Navigation', () => {
       ],
     };
 
-    render(<RiskCategoryDrawer {...propsWithMalformedJson} />);
+    renderWithProviders(<RiskCategoryDrawer {...propsWithMalformedJson} />);
 
     expect(screen.getByText(malformedJsonPrompt)).toBeInTheDocument();
   });
@@ -192,7 +198,7 @@ describe('RiskCategoryDrawer Component Navigation', () => {
       ],
     };
 
-    render(<RiskCategoryDrawer {...props} />);
+    renderWithProviders(<RiskCategoryDrawer {...props} />);
 
     expect(stringifySpy).toHaveBeenCalledWith(complexOutput);
     expect(screen.getByText(JSON.stringify(complexOutput))).toBeInTheDocument();
@@ -214,7 +220,7 @@ describe('RiskCategoryDrawer Component Invalid Category', () => {
       strategyStats: {},
     };
 
-    const { container } = render(<RiskCategoryDrawer {...props} />);
+    const { container } = renderWithProviders(<RiskCategoryDrawer {...props} />);
 
     expect(container.firstChild).toBeNull();
     expect(consoleErrorSpy).toHaveBeenCalledWith(

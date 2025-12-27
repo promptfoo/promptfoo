@@ -1,5 +1,5 @@
-import DownloadIcon from '@mui/icons-material/Download';
-import Button from '@mui/material/Button';
+import { Button } from '@app/components/ui/button';
+import { DownloadIcon } from '@app/components/ui/icons';
 import { formatASRForDisplay } from '@promptfoo/app/src/utils/redteam';
 import {
   ALIASED_PLUGIN_MAPPINGS,
@@ -202,13 +202,8 @@ const CSVExporter = ({
   };
 
   return (
-    <Button
-      variant="contained"
-      color="primary"
-      startIcon={<DownloadIcon />}
-      onClick={exportToCSV}
-      className="print-hide"
-    >
+    <Button onClick={exportToCSV} className="print-hide">
+      <DownloadIcon className="mr-2 h-4 w-4" />
       Export framework results to CSV
     </Button>
   );
