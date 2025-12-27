@@ -43,7 +43,7 @@ import RiskCategories from './RiskCategories';
 import StrategyStats from './StrategyStats';
 import { getPluginIdFromResult, getStrategyIdFromTest } from './shared';
 import TestSuites from './TestSuites';
-import ToolsDialog from './ToolsDialog';
+import ToolsDialog, { Tool } from './ToolsDialog';
 
 const App = () => {
   const navigate = useNavigate();
@@ -556,7 +556,7 @@ const App = () => {
       ? convertResultsToTable(evalData).body
       : (evalData.results as EvaluateSummaryV2).table.body) || [];
 
-  let tools: unknown[] = [];
+  let tools: Tool[] = [];
   if (Array.isArray(evalData.config.providers) && isProviderOptions(evalData.config.providers[0])) {
     const providerTools = evalData.config.providers[0].config?.tools;
     // If providerTools exists, convert it to an array (if it's not already)

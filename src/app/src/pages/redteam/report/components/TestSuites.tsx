@@ -2,11 +2,10 @@ import React from 'react';
 
 import { DataTable } from '@app/components/data-table/data-table';
 import { EVAL_ROUTES } from '@app/constants/routes';
+import { Button } from '@app/components/ui/button';
+import { Card } from '@app/components/ui/card';
 import { useTelemetry } from '@app/hooks/useTelemetry';
-import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import Paper from '@mui/material/Paper';
 import { useTheme } from '@mui/material/styles';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
@@ -20,6 +19,7 @@ import {
   subCategoryDescriptions,
 } from '@promptfoo/redteam/constants';
 import { getRiskCategorySeverityMap } from '@promptfoo/redteam/sharedFrontend';
+import { Download } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { getSeverityColor } from '../utils/color';
 import { getStrategyIdFromTest } from './shared';
@@ -306,7 +306,7 @@ const TestSuites = ({
       {
         accessorKey: 'type',
         header: 'Type',
-        size: 200,
+        size: 180,
         accessorFn: (row) =>
           displayNameOverrides[row.pluginName as keyof typeof displayNameOverrides] || row.type,
         cell: ({ getValue }) => <span style={{ fontWeight: 500 }}>{getValue<string>()}</span>,
@@ -314,8 +314,21 @@ const TestSuites = ({
       {
         accessorKey: 'description',
         header: 'Description',
-        size: 350,
-        cell: ({ getValue }) => <Box sx={{ wordBreak: 'break-word' }}>{getValue<string>()}</Box>,
+        size: 220,
+        cell: ({ getValue }) => (
+          <Tooltip title={getValue<string>()} placement="top" arrow>
+            <Box
+              sx={{
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                maxWidth: '100%',
+              }}
+            >
+              {getValue<string>()}
+            </Box>
+          </Tooltip>
+        ),
       },
       {
         accessorKey: 'riskScore',
@@ -412,12 +425,16 @@ const TestSuites = ({
       {
         accessorKey: 'successfulAttacks',
         header: 'Successful Attacks',
-        size: 150,
+        size: 110,
       },
       {
         accessorKey: 'attackSuccessRate',
-        header: 'Attack Success Rate',
-        size: 150,
+        header: () => (
+          <Tooltip title="Attack Success Rate" placement="top" arrow>
+            <span style={{ cursor: 'help' }}>ASR</span>
+          </Tooltip>
+        ),
+        size: 80,
         cell: ({ row }) => {
           const value = row.original.attackSuccessRate;
           const passRateWithFilter = row.original.passRateWithFilter;
@@ -437,7 +454,7 @@ const TestSuites = ({
       {
         accessorKey: 'severity',
         header: 'Severity',
-        size: 100,
+        size: 90,
         cell: ({ getValue }) => {
           const value = getValue<Severity>();
           return severityDisplayNames[value] || 'Unknown';
@@ -466,13 +483,12 @@ const TestSuites = ({
       {
         id: 'actions',
         header: 'Actions',
-        size: 300,
+        size: 220,
         enableSorting: false,
         cell: ({ row }) => (
-          <>
+          <div className="flex items-center gap-2">
             <Button
-              variant="contained"
-              size="small"
+              size="sm"
               onClick={() => {
                 const pluginId = row.original.pluginName;
                 const plugin = pluginsById[pluginId];
@@ -495,30 +511,30 @@ const TestSuites = ({
               View logs
             </Button>
             <Tooltip title="Temporarily disabled while in beta, click to contact us to enable">
-              <Button
-                variant="contained"
-                size="small"
-                color="inherit"
-                style={{ marginLeft: 8 }}
-                onClick={() => {
-                  // Track the mitigation button click
-                  recordEvent('feature_used', {
-                    feature: 'redteam_apply_mitigation_clicked',
-                    plugin: row.original.pluginName,
-                    evalId,
-                  });
+              <span>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    // Track the mitigation button click
+                    recordEvent('feature_used', {
+                      feature: 'redteam_apply_mitigation_clicked',
+                      plugin: row.original.pluginName,
+                      evalId,
+                    });
 
-                  // Open email in new tab
-                  window.open(
-                    'mailto:inquiries@promptfoo.dev?subject=Promptfoo%20automatic%20vulnerability%20mitigation&body=Hello%20Promptfoo%20Team,%0D%0A%0D%0AI%20am%20interested%20in%20learning%20more%20about%20the%20automatic%20vulnerability%20mitigation%20beta.%20Please%20provide%20me%20with%20more%20details.%0D%0A%0D%0A',
-                    '_blank',
-                  );
-                }}
-              >
-                Apply mitigation
-              </Button>
+                    // Open email in new tab
+                    window.open(
+                      'mailto:inquiries@promptfoo.dev?subject=Promptfoo%20automatic%20vulnerability%20mitigation&body=Hello%20Promptfoo%20Team,%0D%0A%0D%0AI%20am%20interested%20in%20learning%20more%20about%20the%20automatic%20vulnerability%20mitigation%20beta.%20Please%20provide%20me%20with%20more%20details.%0D%0A%0D%0A',
+                      '_blank',
+                    );
+                  }}
+                >
+                  Apply mitigation
+                </Button>
+              </span>
             </Tooltip>
-          </>
+          </div>
         ),
       },
     ],
@@ -526,20 +542,15 @@ const TestSuites = ({
   );
 
   return (
-    <Box sx={{ pageBreakBefore: 'always', breakBefore: 'always' }} ref={vulnerabilitiesDataGridRef}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-        <Typography variant="h5">Vulnerabilities and Mitigations</Typography>
-        <Button
-          variant="contained"
-          color="primary"
-          startIcon={<FileDownloadIcon />}
-          onClick={exportToCSV}
-          className="print-hide"
-        >
+    <div className="break-before-page print:break-before-always" ref={vulnerabilitiesDataGridRef}>
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="text-xl font-semibold">Vulnerabilities and Mitigations</h2>
+        <Button onClick={exportToCSV} className="print:hidden">
+          <Download className="mr-2 h-4 w-4" />
           Export vulnerabilities to CSV
         </Button>
-      </Box>
-      <Paper>
+      </div>
+      <Card className="pb-4">
         <DataTable
           columns={columns}
           data={rows}
@@ -553,8 +564,8 @@ const TestSuites = ({
           initialPageSize={25}
           getRowId={(row) => row.id}
         />
-      </Paper>
-    </Box>
+      </Card>
+    </div>
   );
 };
 

@@ -1,8 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { Badge } from '@app/components/ui/badge';
 import { Card, CardContent } from '@app/components/ui/card';
-import { Sheet, SheetContent } from '@app/components/ui/sheet';
+import { Sheet, SheetContent, SheetTitle } from '@app/components/ui/sheet';
 import { Spinner } from '@app/components/ui/spinner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@app/components/ui/tabs';
 import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
@@ -308,6 +308,76 @@ const DrawerContent = ({
   );
 };
 
+/**
+ * Separate component for the strategy sheet to handle scroll reset
+ */
+const StrategySheet = ({
+  selectedStrategy,
+  isOpen,
+  onClose,
+  tabValue,
+  onTabChange,
+  failuresByPlugin,
+  passesByPlugin,
+  strategyStats,
+  plugins,
+}: {
+  selectedStrategy: string | null;
+  isOpen: boolean;
+  onClose: () => void;
+  tabValue: string;
+  onTabChange: (value: string) => void;
+  failuresByPlugin: Record<string, TestWithMetadata[]>;
+  passesByPlugin: Record<string, TestWithMetadata[]>;
+  strategyStats: TestResultStats | null;
+  plugins: RedteamPluginObject[];
+}) => {
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  // Reset scroll position when sheet opens
+  useEffect(() => {
+    if (isOpen) {
+      const timer = setTimeout(() => {
+        if (scrollContainerRef.current) {
+          scrollContainerRef.current.scrollTop = 0;
+        }
+      }, 0);
+      return () => clearTimeout(timer);
+    }
+  }, [isOpen]);
+
+  return (
+    <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <SheetContent
+        side="right"
+        className="flex w-[750px] flex-col p-0 sm:max-w-[750px]"
+        aria-describedby={undefined}
+      >
+        <SheetTitle className="sr-only">
+          {selectedStrategy
+            ? (displayNameOverrides[selectedStrategy as keyof typeof displayNameOverrides] ||
+                selectedStrategy)
+            : 'Strategy'}{' '}
+          Details
+        </SheetTitle>
+        <div ref={scrollContainerRef} className="flex-1 overflow-y-auto">
+          {selectedStrategy && strategyStats && (
+            <DrawerContent
+              selectedStrategy={selectedStrategy}
+              tabValue={tabValue}
+              onTabChange={onTabChange}
+              succeededAttacksByPlugin={failuresByPlugin}
+              failedAttacksByPlugin={passesByPlugin}
+              selectedStrategyStats={strategyStats}
+              plugins={plugins}
+            />
+          )}
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+};
+
 const StrategyStats = ({
   strategyStats,
   failuresByPlugin,
@@ -428,21 +498,17 @@ const StrategyStats = ({
         </CardContent>
       </Card>
 
-      <Sheet open={Boolean(selectedStrategy)} onOpenChange={(open) => !open && handleDrawerClose()}>
-        <SheetContent side="right" className="w-[750px] overflow-y-auto sm:max-w-[750px]">
-          {selectedStrategy && (
-            <DrawerContent
-              selectedStrategy={selectedStrategy}
-              tabValue={tabValue}
-              onTabChange={(newValue) => setTabValue(newValue)}
-              succeededAttacksByPlugin={failuresByPlugin}
-              failedAttacksByPlugin={passesByPlugin}
-              selectedStrategyStats={strategyStats[selectedStrategy]}
-              plugins={plugins}
-            />
-          )}
-        </SheetContent>
-      </Sheet>
+      <StrategySheet
+        selectedStrategy={selectedStrategy}
+        isOpen={!!selectedStrategy}
+        onClose={handleDrawerClose}
+        tabValue={tabValue}
+        onTabChange={(newValue) => setTabValue(newValue)}
+        failuresByPlugin={failuresByPlugin}
+        passesByPlugin={passesByPlugin}
+        strategyStats={selectedStrategy ? strategyStats[selectedStrategy] : null}
+        plugins={plugins}
+      />
     </>
   );
 };

@@ -7,7 +7,7 @@ import {
   DialogTitle,
 } from '@app/components/ui/dialog';
 
-interface Tool {
+export interface Tool {
   type: string;
   function?: {
     name: string;
