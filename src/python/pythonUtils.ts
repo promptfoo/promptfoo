@@ -28,6 +28,26 @@ export function getEnvInt(key: string): number | undefined {
   return isNaN(parsed) ? undefined : parsed;
 }
 
+/**
+ * Resolves the Python executable path from explicit config and environment.
+ * This centralizes the fallback logic: configPath > PROMPTFOO_PYTHON env var.
+ *
+ * Note: Does NOT apply the final 'python' default - that's handled by
+ * validatePythonPath. This preserves the distinction between "explicitly
+ * configured" (should fail if invalid) and "using system default" (should
+ * try fallback detection).
+ *
+ * @param configPath - Explicitly configured Python path from provider config
+ * @returns The configured path, or undefined if neither config nor env var is set
+ */
+export function getConfiguredPythonPath(configPath?: string): string | undefined {
+  if (configPath) {
+    return configPath;
+  }
+  const envPath = getEnvString('PROMPTFOO_PYTHON');
+  return envPath || undefined;
+}
+
 export const state: {
   cachedPythonPath: string | null;
   validationPromise: Promise<string> | null;
@@ -289,7 +309,7 @@ export async function runPython(
     os.tmpdir(),
     `promptfoo-python-output-json-${Date.now()}-${Math.random().toString(16).slice(2)}.json`,
   );
-  const customPath = options.pythonExecutable || getEnvString('PROMPTFOO_PYTHON');
+  const customPath = getConfiguredPythonPath(options.pythonExecutable);
   let pythonPath = customPath || 'python';
 
   pythonPath = await validatePythonPath(pythonPath, typeof customPath === 'string');
