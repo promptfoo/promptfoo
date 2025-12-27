@@ -27,10 +27,10 @@ function getASRColorClass(percentage: number): string {
     return 'text-red-600 dark:text-red-400';
   }
   if (percentage >= 25) {
-    return 'text-orange-600 dark:text-orange-400';
+    return 'text-amber-600 dark:text-amber-400';
   }
   if (percentage >= 10) {
-    return 'text-amber-600 dark:text-amber-400';
+    return 'text-amber-500 dark:text-amber-300';
   }
   return 'text-emerald-600 dark:text-emerald-400';
 }

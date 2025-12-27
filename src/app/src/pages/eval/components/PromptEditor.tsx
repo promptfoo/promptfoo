@@ -1,15 +1,16 @@
 import React from 'react';
 
-import EditIcon from '@mui/icons-material/Edit';
-import PlayArrowIcon from '@mui/icons-material/PlayArrow';
-import Alert from '@mui/material/Alert';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import CircularProgress from '@mui/material/CircularProgress';
-import IconButton from '@mui/material/IconButton';
-import TextField from '@mui/material/TextField';
-import Tooltip from '@mui/material/Tooltip';
-import Typography from '@mui/material/Typography';
+import { Alert, AlertDescription } from '@app/components/ui/alert';
+import { Button } from '@app/components/ui/button';
+import { Spinner } from '@app/components/ui/spinner';
+import { Textarea } from '@app/components/ui/textarea';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@app/components/ui/tooltip';
+import { Pencil, Play } from 'lucide-react';
 
 interface CodeDisplayProps {
   content: string;
@@ -40,7 +41,7 @@ interface PromptEditorProps {
   onMouseEnter: (element: string) => void;
   onMouseLeave: () => void;
   CodeDisplay: CodeDisplayComponent;
-  subtitleTypographySx: object;
+  subtitleTypographyClassName: string;
   readOnly?: boolean;
 }
 
@@ -60,45 +61,45 @@ export function PromptEditor({
   onMouseEnter,
   onMouseLeave,
   CodeDisplay,
-  subtitleTypographySx,
+  subtitleTypographyClassName,
   readOnly = false,
 }: PromptEditorProps) {
   return (
-    <Box mb={2}>
-      <Box display="flex" alignItems="center" justifyContent="space-between" mb={1}>
-        <Typography variant="subtitle1" sx={subtitleTypographySx}>
-          Prompt
-        </Typography>
-        <Box display="flex" gap={1}>
+    <div className="mb-4">
+      <div className="flex items-center justify-between mb-2">
+        <h4 className={subtitleTypographyClassName}>Prompt</h4>
+        <div className="flex gap-2">
           {!readOnly && !editMode && (
-            <Tooltip title="Edit & Replay">
-              <IconButton
-                size="small"
-                onClick={() => onEditModeChange(true)}
-                sx={{
-                  color: 'text.secondary',
-                  '&:hover': {
-                    color: 'primary.main',
-                  },
-                }}
-              >
-                <EditIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => onEditModeChange(true)}
+                    className="h-8 w-8 text-muted-foreground hover:text-primary"
+                    aria-label="Edit & Replay"
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Edit & Replay</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           )}
           {!readOnly && editMode && (
             <>
-              <Button
-                size="small"
-                variant="contained"
-                startIcon={replayLoading ? <CircularProgress size={16} /> : <PlayArrowIcon />}
-                onClick={onReplay}
-                disabled={replayLoading || !editedPrompt.trim()}
-              >
+              <Button size="sm" onClick={onReplay} disabled={replayLoading || !editedPrompt.trim()}>
+                {replayLoading ? (
+                  <Spinner className="h-4 w-4 mr-2" />
+                ) : (
+                  <Play className="h-4 w-4 mr-2" />
+                )}
                 Replay
               </Button>
               <Button
-                size="small"
+                variant="outline"
+                size="sm"
                 onClick={() => {
                   onCancel();
                   onEditModeChange(false);
@@ -109,23 +110,14 @@ export function PromptEditor({
               </Button>
             </>
           )}
-        </Box>
-      </Box>
+        </div>
+      </div>
       {editMode ? (
-        <TextField
-          fullWidth
-          multiline
-          variant="outlined"
+        <Textarea
           value={editedPrompt}
           onChange={(e) => onPromptChange(e.target.value)}
-          sx={{
-            '& .MuiInputBase-root': {
-              fontFamily: 'monospace',
-              fontSize: '0.875rem',
-            },
-          }}
-          minRows={4}
-          maxRows={20}
+          className="font-mono text-sm min-h-[100px] max-h-[400px]"
+          rows={4}
         />
       ) : (
         <CodeDisplay
@@ -139,10 +131,10 @@ export function PromptEditor({
         />
       )}
       {replayError && (
-        <Alert severity="error" sx={{ mt: 1 }}>
-          {replayError}
+        <Alert variant="destructive" className="mt-2">
+          <AlertDescription>{replayError}</AlertDescription>
         </Alert>
       )}
-    </Box>
+    </div>
   );
 }

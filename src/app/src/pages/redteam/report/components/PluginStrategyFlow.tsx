@@ -2,7 +2,6 @@
 
 import React, { useMemo } from 'react';
 
-import { useTheme } from '@mui/material/styles';
 import { displayNameOverrides } from '@promptfoo/redteam/constants';
 import { type EvaluateResult, type GradingResult } from '@promptfoo/types';
 import { Layer, Rectangle, ResponsiveContainer, Sankey, Tooltip } from 'recharts';
@@ -20,9 +19,17 @@ interface PluginStrategyFlowProps {
   passesByPlugin: TestRecord[];
 }
 
+// Helper to get CSS variable value and return as hsl() string
+const getCssVarAsHsl = (varName: string, fallbackHsl: string): string => {
+  if (typeof window === 'undefined') {
+    return `hsl(${fallbackHsl})`;
+  }
+  const value = getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
+  return value ? `hsl(${value})` : `hsl(${fallbackHsl})`;
+};
+
 // Add custom node component
 const CustomNode = ({ x, y, width, height, index, payload, containerWidth }: any) => {
-  const theme = useTheme();
   const textRef = React.useRef<SVGTextElement>(null);
   const [labelWidth, setLabelWidth] = React.useState(0);
   const isOut = x + width + 6 > containerWidth;
@@ -36,6 +43,11 @@ const CustomNode = ({ x, y, width, height, index, payload, containerWidth }: any
   const label = `${displayName} (${payload.value || 0})`;
   const color =
     payload.name === 'Pass' ? '#2e7d32' : payload.name === 'Fail' ? '#d32f2f' : '#8884d8';
+
+  // Get theme colors from CSS variables
+  const bgColor = getCssVarAsHsl('--card', '0 0% 100%');
+  const borderColor = getCssVarAsHsl('--border', '214.3 31.8% 91.4%');
+  const textColor = getCssVarAsHsl('--foreground', '222.2 84% 4.9%');
 
   React.useEffect(() => {
     if (textRef.current) {
@@ -54,8 +66,8 @@ const CustomNode = ({ x, y, width, height, index, payload, containerWidth }: any
           height={20}
           rx={10}
           ry={10}
-          fill={theme.palette.background.paper}
-          stroke={theme.palette.divider}
+          fill={bgColor}
+          stroke={borderColor}
         />
       )}
       <text
@@ -64,7 +76,7 @@ const CustomNode = ({ x, y, width, height, index, payload, containerWidth }: any
         x={isOut ? x - 14 : x + width + 14}
         y={y + height / 2 + 5}
         fontSize="12"
-        fill={theme.palette.text.primary}
+        fill={textColor}
       >
         {label}
       </text>
@@ -297,14 +309,14 @@ const PluginStrategyFlow = ({ failuresByPlugin, passesByPlugin }: PluginStrategy
 
   if (data.nodes.length === 0 || data.links.length === 0) {
     return (
-      <div style={{ textAlign: 'center', marginTop: '1em' }}>
-        <p>No data available to display the strategy flow.</p>
+      <div className="mt-4 text-center">
+        <p className="text-muted-foreground">No data available to display the strategy flow.</p>
       </div>
     );
   }
 
   return (
-    <div style={{ width: '100%', height: 400 }}>
+    <div className="h-[400px] w-full">
       <ResponsiveContainer>
         <Sankey
           data={data}
@@ -322,14 +334,7 @@ const PluginStrategyFlow = ({ failuresByPlugin, passesByPlugin }: PluginStrategy
               const data = payload[0] as any;
               const { source, target, value } = data;
               return (
-                <div
-                  className="custom-tooltip"
-                  style={{
-                    backgroundColor: 'white',
-                    padding: '5px 10px',
-                    border: '1px solid #ccc',
-                  }}
-                >
+                <div className="rounded border border-border bg-card px-3 py-2 text-sm shadow-sm">
                   <strong>
                     {source?.name} → {target?.name}
                   </strong>
