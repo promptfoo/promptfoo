@@ -951,6 +951,16 @@ class Evaluator {
       }
     }
 
+    // Apply pattern filter after scenario expansion so templated descriptions can be matched
+    if (options.filterPattern) {
+      const pattern = new RegExp(options.filterPattern);
+      const beforeCount = tests.length;
+      tests = tests.filter((test) => test.description && pattern.test(test.description));
+      logger.debug(
+        `Pattern filter "${options.filterPattern}" reduced tests from ${beforeCount} to ${tests.length}`,
+      );
+    }
+
     maybeEmitAzureOpenAiWarning(testSuite, tests);
 
     // Prepare vars

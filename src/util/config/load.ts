@@ -35,7 +35,6 @@ import { maybeLoadFromExternalFile } from '../../util/file';
 import { isJavascriptFile } from '../../util/fileExtensions';
 import { readFilters } from '../../util/index';
 import invariant from '../../util/invariant';
-import { getNunjucksEngine } from '../../util/templates';
 import { PromptSchema } from '../../validators/prompts';
 import { promptfooCommand } from '../promptfooCommand';
 import { readTest, readTests } from '../testCaseReader';
@@ -662,49 +661,8 @@ export async function resolveConfigs(
       }
       invariant(typeof scenario === 'object', 'scenario must be an object');
 
-      // For pattern filtering in scenarios, we need to check if the templated description matches
-      let patternFilterToUse = cmdObj.filterPattern;
-      if (cmdObj.filterPattern && scenario.config && scenario.config.length > 0 && scenario.tests) {
-        const pattern = new RegExp(cmdObj.filterPattern);
-        const matchingTests: TestCase[] = [];
-
-        for (const test of scenario.tests) {
-          // Check if the test description matches the pattern when templated with ANY config
-          let matches = false;
-          for (const configItem of scenario.config) {
-            const mergedVars = {
-              ...configItem.vars,
-              ...test.vars,
-            };
-
-            let templatedDescription = test.description;
-            if (test.description && typeof test.description === 'string') {
-              try {
-                templatedDescription = getNunjucksEngine().renderString(
-                  test.description,
-                  mergedVars,
-                );
-                if (pattern.test(templatedDescription)) {
-                  matches = true;
-                  break;
-                }
-              } catch (error) {
-                logger.debug(`Failed to template test description: ${error}`);
-              }
-            }
-          }
-
-          if (matches) {
-            matchingTests.push(test);
-          }
-        }
-
-        // Update scenario tests with only matching ones
-        scenario.tests = matchingTests;
-        // Don't apply pattern filter again in filterTests
-        patternFilterToUse = undefined;
-      }
-
+      // Note: Pattern filtering for scenarios is handled in the evaluator after scenario expansion,
+      // so that templated descriptions can be properly matched. Other filters are applied here.
       const filteredTests = await filterTests(
         {
           ...(scenario ?? {}),
@@ -713,7 +671,8 @@ export async function resolveConfigs(
         },
         {
           firstN: cmdObj.filterFirstN,
-          pattern: patternFilterToUse,
+          // Pattern filtering is intentionally omitted here - it's handled in the evaluator
+          // after scenario expansion so templated descriptions can be matched
           failing: cmdObj.filterFailing,
           sample: cmdObj.filterSample,
         },

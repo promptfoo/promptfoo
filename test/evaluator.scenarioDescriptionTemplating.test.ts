@@ -213,4 +213,170 @@ describe('Scenario description templating', () => {
     expect(summary.results).toHaveLength(1);
     expect(summary.results[0]?.testCase?.description).toBe('Test with global, scenario, and test');
   });
+
+  describe('filterPattern option', () => {
+    it('should filter scenario tests by templated description pattern', async () => {
+      const testSuite: TestSuite = {
+        prompts: [toPrompt('Translate "{{input}}" to {{language}}')],
+        providers: [mockApiProvider],
+        scenarios: [
+          {
+            config: [
+              {
+                vars: {
+                  language: 'Spanish',
+                },
+              },
+              {
+                vars: {
+                  language: 'French',
+                },
+              },
+            ],
+            tests: [
+              {
+                description: 'Translation to {{ language }}',
+                vars: {
+                  input: 'Hello world',
+                },
+              },
+            ],
+          },
+        ],
+      };
+
+      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+      const results = await evaluate(testSuite, evalRecord, {
+        showProgressBar: false,
+        filterPattern: 'Spanish',
+      });
+
+      // Only Spanish test should run
+      const summary = await results.toEvaluateSummary();
+      expect(summary.results).toHaveLength(1);
+      expect(summary.results[0]?.testCase?.vars?.language).toBe('Spanish');
+      expect(summary.results[0]?.testCase?.description).toBe('Translation to Spanish');
+    });
+
+    it('should filter multiple scenario tests by pattern', async () => {
+      const testSuite: TestSuite = {
+        prompts: [toPrompt('Test prompt')],
+        providers: [mockApiProvider],
+        scenarios: [
+          {
+            config: [
+              { vars: { language: 'Spanish' } },
+              { vars: { language: 'French' } },
+              { vars: { language: 'German' } },
+            ],
+            tests: [
+              {
+                description: 'Test {{ language }} translation',
+                vars: { input: 'Hello' },
+              },
+              {
+                description: 'Verify {{ language }} output',
+                vars: { input: 'World' },
+              },
+            ],
+          },
+        ],
+      };
+
+      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+      const results = await evaluate(testSuite, evalRecord, {
+        showProgressBar: false,
+        filterPattern: 'French',
+      });
+
+      // Only French tests should run (2 tests x 1 matching config = 2 results)
+      const summary = await results.toEvaluateSummary();
+      expect(summary.results).toHaveLength(2);
+      expect(summary.results.every((r) => r.testCase?.vars?.language === 'French')).toBe(true);
+    });
+
+    it('should return no results when pattern matches nothing', async () => {
+      const testSuite: TestSuite = {
+        prompts: [toPrompt('Test prompt')],
+        providers: [mockApiProvider],
+        scenarios: [
+          {
+            config: [{ vars: { language: 'Spanish' } }],
+            tests: [
+              {
+                description: 'Test {{ language }}',
+                vars: { input: 'Hello' },
+              },
+            ],
+          },
+        ],
+      };
+
+      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+      const results = await evaluate(testSuite, evalRecord, {
+        showProgressBar: false,
+        filterPattern: 'Japanese',
+      });
+
+      const summary = await results.toEvaluateSummary();
+      expect(summary.results).toHaveLength(0);
+    });
+
+    it('should filter non-scenario tests by pattern', async () => {
+      const testSuite: TestSuite = {
+        prompts: [toPrompt('Test prompt')],
+        providers: [mockApiProvider],
+        tests: [
+          { description: 'Test Spanish translation', vars: { input: 'hola' } },
+          { description: 'Test French translation', vars: { input: 'bonjour' } },
+          { description: 'Test German translation', vars: { input: 'hallo' } },
+        ],
+      };
+
+      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+      const results = await evaluate(testSuite, evalRecord, {
+        showProgressBar: false,
+        filterPattern: 'Spanish',
+      });
+
+      const summary = await results.toEvaluateSummary();
+      expect(summary.results).toHaveLength(1);
+      expect(summary.results[0]?.testCase?.description).toBe('Test Spanish translation');
+    });
+
+    it('should support regex patterns', async () => {
+      const testSuite: TestSuite = {
+        prompts: [toPrompt('Test prompt')],
+        providers: [mockApiProvider],
+        scenarios: [
+          {
+            config: [
+              { vars: { language: 'Spanish' } },
+              { vars: { language: 'French' } },
+              { vars: { language: 'German' } },
+            ],
+            tests: [
+              {
+                description: 'Test {{ language }}',
+                vars: { input: 'Hello' },
+              },
+            ],
+          },
+        ],
+      };
+
+      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+      const results = await evaluate(testSuite, evalRecord, {
+        showProgressBar: false,
+        filterPattern: 'Spanish|German',
+      });
+
+      const summary = await results.toEvaluateSummary();
+      expect(summary.results).toHaveLength(2);
+      const languages = summary.results.map((r) => r.testCase?.vars?.language);
+      expect(languages).toContain('Spanish');
+      expect(languages).toContain('German');
+      expect(languages).not.toContain('French');
+    });
+  });
 });

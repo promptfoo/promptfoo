@@ -420,14 +420,16 @@ export async function doEval(
       }
     }
 
-    // Apply filtering after scenario expansion
+    // Apply non-pattern filters to testSuite.tests (non-scenario tests).
+    // Pattern filtering is handled in the evaluator after scenario expansion,
+    // so templated descriptions can be properly matched.
     if (!resumeEval) {
       const filterOptions: FilterOptions = {
         failing: cmdObj.filterFailing,
         errorsOnly: cmdObj.filterErrorsOnly,
         firstN: cmdObj.filterFirstN,
         metadata: cmdObj.filterMetadata,
-        pattern: cmdObj.filterPattern,
+        // Pattern filtering is intentionally handled in the evaluator after scenario expansion
         sample: cmdObj.filterSample,
       };
       testSuite.tests = await filterTests(testSuite, filterOptions);
@@ -488,6 +490,7 @@ export async function doEval(
       eventSource: 'cli',
       abortSignal: evaluateOptions.abortSignal,
       isRedteam: Boolean(config.redteam),
+      filterPattern: resumeEval ? undefined : cmdObj.filterPattern,
     });
 
     // Cleanup signal handler
