@@ -2,7 +2,6 @@
   transition: box-shadow 0.3s ease-in-out;
   border-radius: 12px;
   overflow: hidden;
-  background-color: #f5f5f5;
 }
 
 .compliance-summary {
@@ -92,9 +91,6 @@
   text-align: center;
 }
 
-[data-theme='dark'] .framework-compliance-card {
-  background-color: #1e1e1e;
-}
 
 [data-theme='dark'] .compliance-summary {
   background-color: #2a2a2a;

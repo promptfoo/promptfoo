@@ -55,6 +55,153 @@
       height: 0;
     }
   }
+
+  /* Sheet/Dialog animation keyframes */
+  @keyframes enter {
+    from {
+      opacity: var(--tw-enter-opacity, 1);
+      transform: translate3d(
+          var(--tw-enter-translate-x, 0),
+          var(--tw-enter-translate-y, 0),
+          0
+        )
+        scale3d(
+          var(--tw-enter-scale, 1),
+          var(--tw-enter-scale, 1),
+          var(--tw-enter-scale, 1)
+        )
+        rotate(var(--tw-enter-rotate, 0));
+    }
+  }
+
+  @keyframes exit {
+    to {
+      opacity: var(--tw-exit-opacity, 1);
+      transform: translate3d(
+          var(--tw-exit-translate-x, 0),
+          var(--tw-exit-translate-y, 0),
+          0
+        )
+        scale3d(
+          var(--tw-exit-scale, 1),
+          var(--tw-exit-scale, 1),
+          var(--tw-exit-scale, 1)
+        )
+        rotate(var(--tw-exit-rotate, 0));
+    }
+  }
+}
+
+/* Sheet/Drawer animations */
+.sheet-overlay[data-state='open'] {
+  animation: fade-in 300ms ease-out forwards;
+}
+.sheet-overlay[data-state='closed'] {
+  animation: fade-out 200ms ease-in forwards;
+}
+
+.sheet-content[data-state='open'] {
+  animation: sheet-slide-in 300ms ease-out forwards;
+}
+.sheet-content[data-state='closed'] {
+  animation: sheet-slide-out 200ms ease-in forwards;
+}
+
+/* Sheet slide directions - define hidden position for each direction */
+.sheet-right {
+  --sheet-translate-x: 100%;
+  --sheet-translate-y: 0;
+}
+.sheet-left {
+  --sheet-translate-x: -100%;
+  --sheet-translate-y: 0;
+}
+.sheet-top {
+  --sheet-translate-x: 0;
+  --sheet-translate-y: -100%;
+}
+.sheet-bottom {
+  --sheet-translate-x: 0;
+  --sheet-translate-y: 100%;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes sheet-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(var(--sheet-translate-x, 0))
+      translateY(var(--sheet-translate-y, 0));
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) translateY(0);
+  }
+}
+
+@keyframes sheet-slide-out {
+  from {
+    opacity: 1;
+    transform: translateX(0) translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(var(--sheet-translate-x, 0))
+      translateY(var(--sheet-translate-y, 0));
+  }
+}
+
+/* Dialog animations */
+.dialog-overlay[data-state='open'] {
+  animation: fade-in 200ms ease-out forwards;
+}
+.dialog-overlay[data-state='closed'] {
+  animation: fade-out 150ms ease-in forwards;
+}
+
+.dialog-content[data-state='open'] {
+  animation: dialog-enter 200ms ease-out forwards;
+}
+.dialog-content[data-state='closed'] {
+  animation: dialog-exit 150ms ease-in forwards;
+}
+
+@keyframes dialog-enter {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -48%) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+@keyframes dialog-exit {
+  from {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translate(-50%, -48%) scale(0.96);
+  }
 }
 
 /* This CSS is common to all pages */
@@ -83,8 +230,8 @@
   --popover-foreground: 222.2 47.4% 11.2%;
   --primary: 217.2 91.2% 52.9%; /* #2563eb - blue-600 */
   --primary-foreground: 0 0% 100%; /* #ffffff */
-  --secondary: 262.1 83.3% 57.8%; /* #8b5cf6 - violet-500 */
-  --secondary-foreground: 0 0% 100%;
+  --secondary: 210 40% 96.1%; /* #f1f5f9 - slate-100 */
+  --secondary-foreground: 222.2 47.4% 11.2%; /* slate-900 */
   --muted: 210 40% 96.1%; /* #f1f5f9 - slate-100 */
   --muted-foreground: 215.4 16.3% 34.9%; /* #475569 - slate-600 */
   --accent: 210 40% 96.1%;
@@ -146,8 +293,8 @@
   --popover-foreground: 210 40% 98%;
   --primary: 217.2 91.2% 59.8%; /* #3b82f6 - blue-500 */
   --primary-foreground: 0 0% 100%;
-  --secondary: 262.1 83.3% 57.8%; /* #8b5cf6 - violet-500 */
-  --secondary-foreground: 0 0% 100%;
+  --secondary: 217.2 20% 20%; /* slate-800 equivalent */
+  --secondary-foreground: 210 40% 98%; /* off-white */
   --muted: 217.2 20% 14%; /* Subtle blue-gray tint */
   --muted-foreground: 215 20% 55%; /* Lighter, more readable */
   --accent: 217.2 20% 14%;

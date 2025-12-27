@@ -2,7 +2,7 @@ import React from 'react';
 
 import { Badge } from '@app/components/ui/badge';
 import { Button } from '@app/components/ui/button';
-import { Sheet, SheetContent } from '@app/components/ui/sheet';
+import { Sheet, SheetContent, SheetTitle } from '@app/components/ui/sheet';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@app/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { cn } from '@app/lib/utils';
@@ -12,7 +12,7 @@ import {
   type Strategy,
   strategyDescriptions,
 } from '@promptfoo/redteam/constants';
-import { Lightbulb, X } from 'lucide-react';
+import { Lightbulb } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import EvalOutputPromptDialog from '../../../eval/components/EvalOutputPromptDialog';
 import PluginStrategyFlow from './PluginStrategyFlow';
@@ -132,7 +132,12 @@ const RiskCategoryDrawer = ({
   if (totalTests === 0) {
     return (
       <Sheet open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-        <SheetContent side="right" className="w-[500px] overflow-y-auto sm:max-w-[500px]">
+        <SheetContent
+          side="right"
+          className="w-[500px] overflow-y-auto sm:max-w-[500px]"
+          aria-describedby={undefined}
+        >
+          <SheetTitle className="sr-only">{displayName}</SheetTitle>
           <div className="risk-category-drawer">
             <h2 className="mb-4 text-lg font-semibold">{displayName}</h2>
             <p className="mt-4 text-center">No tests have been run for this category.</p>
@@ -225,18 +230,14 @@ const RiskCategoryDrawer = ({
 
   return (
     <Sheet open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <SheetContent side="right" className="w-[750px] overflow-y-auto sm:max-w-[750px]">
+      <SheetContent
+        side="right"
+        className="w-[750px] overflow-y-auto sm:max-w-[750px]"
+        aria-describedby={undefined}
+      >
+        <SheetTitle className="sr-only">{displayName}</SheetTitle>
         <div className="risk-category-drawer p-2">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-lg font-semibold">{displayName}</h2>
-            <button
-              onClick={onClose}
-              className="rounded-sm p-1 opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-              aria-label="close drawer"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
+          <h2 className="mb-4 text-lg font-semibold">{displayName}</h2>
 
           {/* Stats row */}
           <div className="mb-4 flex items-center justify-between">

@@ -30,7 +30,7 @@ const RiskCategories = ({
 
   return (
     <div className="space-y-8">
-      <h2 className="text-xl font-medium">Risk Categories</h2>
+      <h2 className="text-xl font-semibold">Risk Categories</h2>
       {categories.map((category, index) => {
         const categoryName = category.name as TopLevelCategory;
         const subCategories = riskCategories[categoryName];
