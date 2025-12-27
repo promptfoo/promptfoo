@@ -802,7 +802,7 @@ describe('util', () => {
     });
 
     it('matches when result.vars has sessionId runtime variable from GOAT/Crescendo providers', async () => {
-      // This tests the fix for multi-turn strategy providers (GOAT, Crescendo, SIMBA)
+      // This tests the fix for multi-turn strategy providers (GOAT, Crescendo)
       // that add sessionId to vars during execution
       const testCase: TestCase = {
         provider: 'provider',

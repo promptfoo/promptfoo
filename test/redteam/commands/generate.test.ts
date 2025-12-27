@@ -38,17 +38,13 @@ vi.mock('../../../src/logger', () => ({
   },
   getLogLevel: vi.fn().mockReturnValue('info'),
 }));
-vi.mock('uuid', async (importOriginal) => {
-  return {
-    ...(await importOriginal()),
-
-    validate: vi.fn((str: string) => {
-      // Simple UUID validation for testing
-      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-      return uuidRegex.test(str);
-    }),
-  };
-});
+vi.mock('../../../src/util/uuid', () => ({
+  isUuid: vi.fn((str: string) => {
+    // Simple UUID validation for testing
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    return uuidRegex.test(str);
+  }),
+}));
 vi.mock('../../../src/util', async (importOriginal) => {
   return {
     ...(await importOriginal()),
@@ -379,7 +375,7 @@ describe('doGenerateRedteam', () => {
         plugins: expect.any(Array),
         prompts: expect.any(Array),
         strategies: expect.any(Array),
-        targetLabels: [],
+        targetIds: [],
         showProgressBar: true,
         testGenerationInstructions: '',
       }),
@@ -2397,5 +2393,207 @@ describe('redteam generate command with target option', () => {
 
     // Verify getConfigFromCloud was called with both config and target
     expect(getConfigFromCloud).toHaveBeenCalledWith(configUUID, targetUUID);
+  });
+});
+
+describe('target ID extraction for retry strategy', () => {
+  let mockProvider: ApiProvider;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+
+    mockProvider = {
+      id: () => 'test-provider',
+      callApi: vi.fn().mockResolvedValue({ output: 'test output' }),
+      cleanup: vi.fn().mockResolvedValue(undefined),
+    };
+
+    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({}));
+    vi.mocked(synthesize).mockResolvedValue({
+      testCases: [],
+      purpose: 'Test purpose',
+      entities: [],
+      injectVar: 'input',
+    });
+  });
+
+  it('should extract target IDs from string providers', async () => {
+    vi.mocked(configModule.resolveConfigs).mockResolvedValue({
+      basePath: '/mock/path',
+      testSuite: {
+        providers: [mockProvider],
+        prompts: [{ raw: 'Test prompt', label: 'Test label' }],
+        tests: [],
+      },
+      config: {
+        providers: ['openai:gpt-4o-mini', 'anthropic:claude-3-sonnet'],
+        redteam: {
+          plugins: ['harmful:hate' as unknown as RedteamPluginObject],
+          strategies: [{ id: 'retry' }],
+        },
+      },
+    });
+
+    const options: RedteamCliGenerateOptions = {
+      output: 'output.yaml',
+      config: 'config.yaml',
+      cache: true,
+      defaultConfig: {},
+      write: false,
+    };
+
+    await doGenerateRedteam(options);
+
+    expect(synthesize).toHaveBeenCalledWith(
+      expect.objectContaining({
+        targetIds: ['openai:gpt-4o-mini', 'anthropic:claude-3-sonnet'],
+      }),
+    );
+  });
+
+  it('should extract target IDs from object providers with id property', async () => {
+    vi.mocked(configModule.resolveConfigs).mockResolvedValue({
+      basePath: '/mock/path',
+      testSuite: {
+        providers: [mockProvider],
+        prompts: [{ raw: 'Test prompt', label: 'Test label' }],
+        tests: [],
+      },
+      config: {
+        providers: [
+          { id: 'openai:gpt-4o-mini', config: { temperature: 0 } },
+          { id: 'openai:gpt-4o', config: { temperature: 0.5 } },
+        ],
+        redteam: {
+          plugins: ['harmful:hate' as unknown as RedteamPluginObject],
+          strategies: [{ id: 'retry' }],
+        },
+      },
+    });
+
+    const options: RedteamCliGenerateOptions = {
+      output: 'output.yaml',
+      config: 'config.yaml',
+      cache: true,
+      defaultConfig: {},
+      write: false,
+    };
+
+    await doGenerateRedteam(options);
+
+    expect(synthesize).toHaveBeenCalledWith(
+      expect.objectContaining({
+        targetIds: ['openai:gpt-4o-mini', 'openai:gpt-4o'],
+      }),
+    );
+  });
+
+  it('should handle mixed string and object providers', async () => {
+    vi.mocked(configModule.resolveConfigs).mockResolvedValue({
+      basePath: '/mock/path',
+      testSuite: {
+        providers: [mockProvider],
+        prompts: [{ raw: 'Test prompt', label: 'Test label' }],
+        tests: [],
+      },
+      config: {
+        providers: [
+          'openai:gpt-4o-mini',
+          { id: 'anthropic:claude-3-sonnet', config: {} },
+          'openai:gpt-4o',
+        ],
+        redteam: {
+          plugins: ['harmful:hate' as unknown as RedteamPluginObject],
+          strategies: [],
+        },
+      },
+    });
+
+    const options: RedteamCliGenerateOptions = {
+      output: 'output.yaml',
+      config: 'config.yaml',
+      cache: true,
+      defaultConfig: {},
+      write: false,
+    };
+
+    await doGenerateRedteam(options);
+
+    expect(synthesize).toHaveBeenCalledWith(
+      expect.objectContaining({
+        targetIds: ['openai:gpt-4o-mini', 'anthropic:claude-3-sonnet', 'openai:gpt-4o'],
+      }),
+    );
+  });
+
+  it('should return empty array when no providers configured', async () => {
+    vi.mocked(configModule.resolveConfigs).mockResolvedValue({
+      basePath: '/mock/path',
+      testSuite: {
+        providers: [mockProvider],
+        prompts: [{ raw: 'Test prompt', label: 'Test label' }],
+        tests: [],
+      },
+      config: {
+        redteam: {
+          plugins: ['harmful:hate' as unknown as RedteamPluginObject],
+          strategies: [],
+        },
+      },
+    });
+
+    const options: RedteamCliGenerateOptions = {
+      output: 'output.yaml',
+      config: 'config.yaml',
+      cache: true,
+      defaultConfig: {},
+      write: false,
+    };
+
+    await doGenerateRedteam(options);
+
+    expect(synthesize).toHaveBeenCalledWith(
+      expect.objectContaining({
+        targetIds: [],
+      }),
+    );
+  });
+
+  it('should filter out providers without id', async () => {
+    vi.mocked(configModule.resolveConfigs).mockResolvedValue({
+      basePath: '/mock/path',
+      testSuite: {
+        providers: [mockProvider],
+        prompts: [{ raw: 'Test prompt', label: 'Test label' }],
+        tests: [],
+      },
+      config: {
+        providers: [
+          'openai:gpt-4o-mini',
+          { config: { temperature: 0 } }, // No id
+          { id: 'openai:gpt-4o' },
+        ],
+        redteam: {
+          plugins: ['harmful:hate' as unknown as RedteamPluginObject],
+          strategies: [],
+        },
+      },
+    });
+
+    const options: RedteamCliGenerateOptions = {
+      output: 'output.yaml',
+      config: 'config.yaml',
+      cache: true,
+      defaultConfig: {},
+      write: false,
+    };
+
+    await doGenerateRedteam(options);
+
+    expect(synthesize).toHaveBeenCalledWith(
+      expect.objectContaining({
+        targetIds: ['openai:gpt-4o-mini', 'openai:gpt-4o'],
+      }),
+    );
   });
 });
