@@ -10,6 +10,7 @@ import {
 import { extractAndStoreBinaryData } from './blobs/extractor';
 import { getCache } from './cache';
 import cliState from './cliState';
+import { filterTestsByPattern } from './commands/eval/filterTests';
 import { DEFAULT_MAX_CONCURRENCY, FILE_METADATA_KEY } from './constants';
 import { updateSignalFile } from './database/signal';
 import { getEnvBool, getEnvInt, getEvalTimeoutMs, getMaxEvalTimeMs, isCI } from './envars';
@@ -953,9 +954,8 @@ class Evaluator {
 
     // Apply pattern filter after scenario expansion so templated descriptions can be matched
     if (options.filterPattern) {
-      const pattern = new RegExp(options.filterPattern);
       const beforeCount = tests.length;
-      tests = tests.filter((test) => test.description && pattern.test(test.description));
+      tests = filterTestsByPattern(tests, options.filterPattern);
       logger.debug(
         `Pattern filter "${options.filterPattern}" reduced tests from ${beforeCount} to ${tests.length}`,
       );

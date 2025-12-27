@@ -2,7 +2,7 @@ import logger from '../../logger';
 import { ResultFailureReason } from '../../types/index';
 import { filterTestsByResults } from './filterTestsUtil';
 
-import type { TestSuite } from '../../types/index';
+import type { TestCase, TestSuite } from '../../types/index';
 
 /**
  * Options for filtering test cases in a test suite.
@@ -151,4 +151,23 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
   }
 
   return tests;
+}
+
+/**
+ * Filters tests by matching their description against a regex pattern.
+ * This is a helper function used by both filterTests and the evaluator
+ * for filtering after scenario expansion.
+ *
+ * @param tests - Array of test cases to filter
+ * @param pattern - Regular expression pattern string to match against descriptions
+ * @returns Filtered array of tests whose descriptions match the pattern
+ */
+export function filterTestsByPattern(tests: TestCase[], pattern: string): TestCase[] {
+  try {
+    const regex = new RegExp(pattern);
+    return tests.filter((test) => test.description && regex.test(test.description));
+  } catch (error) {
+    logger.warn(`Invalid filter pattern "${pattern}": ${error}`);
+    return tests;
+  }
 }
