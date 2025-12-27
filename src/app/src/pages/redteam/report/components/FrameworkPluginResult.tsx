@@ -1,3 +1,4 @@
+import { EVAL_ROUTES } from '@app/constants/routes';
 import { formatASRForDisplay } from '@app/utils/redteam';
 import CancelIcon from '@mui/icons-material/Cancel';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
@@ -44,7 +45,7 @@ export default function FrameworkPluginResult({
     );
 
     const mode = asr === 0 ? 'passes' : 'failures';
-    navigate(`/eval/${evalId}?filter=${filterParam}&mode=${mode}`);
+    navigate(`${EVAL_ROUTES.DETAIL(evalId)}?filter=${filterParam}&mode=${mode}`);
   };
 
   const { asr, total, failCount } = getPluginASR(plugin);

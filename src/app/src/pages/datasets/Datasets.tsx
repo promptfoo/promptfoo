@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { DataTable } from '@app/components/data-table';
 import { PageHeader } from '@app/components/layout/PageHeader';
+import { EVAL_ROUTES } from '@app/constants/routes';
 import { formatDataGridDate } from '@app/utils/date';
 import { Link, useSearchParams } from 'react-router-dom';
 import DatasetDialog from './DatasetDialog';
@@ -121,7 +122,7 @@ export default function Datasets({ data, isLoading, error }: DatasetsProps) {
           }
           return (
             <Link
-              to={`/eval?evalId=${value}`}
+              to={EVAL_ROUTES.DETAIL(value)}
               className="text-primary hover:underline font-mono text-sm"
             >
               {value}

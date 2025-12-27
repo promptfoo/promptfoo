@@ -2,6 +2,7 @@ import { useState } from 'react';
 
 import { Button } from '@app/components/ui/button';
 import { Spinner } from '@app/components/ui/spinner';
+import { EVAL_ROUTES } from '@app/constants/routes';
 import { useStore } from '@app/stores/evalConfig';
 import { callApi } from '@app/utils/api';
 import { useNavigate } from 'react-router-dom';
@@ -77,7 +78,7 @@ const RunTestSuiteButton = () => {
             clearInterval(intervalId);
             setIsRunning(false);
             if (progressData.evalId) {
-              navigate(`/eval/${progressData.evalId}`);
+              navigate(EVAL_ROUTES.DETAIL(progressData.evalId));
             }
           } else if (['failed', 'error'].includes(progressData.status)) {
             clearInterval(intervalId);

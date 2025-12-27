@@ -83,7 +83,7 @@ describe('History', () => {
     const row1 = screen.getByRole('row', { name: /eval-2024-01-01/i });
     const row1Cells = within(row1);
     const evalLink1 = row1Cells.getByRole('link', { name: 'eval-2024-01-01' });
-    expect(evalLink1).toHaveAttribute('href', '/eval?evalId=eval-2024-01-01');
+    expect(evalLink1).toHaveAttribute('href', '/eval/eval-2024-01-01');
     const datasetLink1 = row1Cells.getByRole('link', { name: 'alpha-' });
     expect(datasetLink1).toHaveAttribute('href', '/datasets?id=alpha-dataset');
     expect(row1Cells.getByText('TestProviderA')).toBeInTheDocument();
@@ -99,7 +99,7 @@ describe('History', () => {
     const row2 = screen.getByRole('row', { name: /eval-2024-01-02/i });
     const row2Cells = within(row2);
     const evalLink2 = row2Cells.getByRole('link', { name: 'eval-2024-01-02' });
-    expect(evalLink2).toHaveAttribute('href', '/eval?evalId=eval-2024-01-02');
+    expect(evalLink2).toHaveAttribute('href', '/eval/eval-2024-01-02');
     const datasetLink2 = row2Cells.getByRole('link', { name: 'beta-d' });
     expect(datasetLink2).toHaveAttribute('href', '/datasets?id=beta-dataset');
     expect(row2Cells.getByText('TestProviderB')).toBeInTheDocument();

@@ -1,5 +1,6 @@
 import React from 'react';
 
+import { EVAL_ROUTES } from '@app/constants/routes';
 import CloseIcon from '@mui/icons-material/Close';
 import LightbulbOutlinedIcon from '@mui/icons-material/LightbulbOutlined';
 import Box from '@mui/material/Box';
@@ -216,7 +217,9 @@ const RiskCategoryDrawer = ({
               ]),
             );
 
-            const url = pluginId ? `/eval/${evalId}?filter=${filterParam}` : `/eval/${evalId}`;
+            const url = pluginId
+              ? `${EVAL_ROUTES.DETAIL(evalId)}?filter=${filterParam}`
+              : EVAL_ROUTES.DETAIL(evalId);
             if (event.ctrlKey || event.metaKey) {
               window.open(url, '_blank');
             } else {

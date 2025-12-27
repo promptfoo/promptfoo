@@ -1,6 +1,7 @@
 import { PageContainer } from '@app/components/layout/PageContainer';
 import { PageHeader } from '@app/components/layout/PageHeader';
 import { Card } from '@app/components/ui/card';
+import { REDTEAM_ROUTES } from '@app/constants/routes';
 import { useNavigate } from 'react-router-dom';
 import ReportsTable from './ReportsTable';
 
@@ -19,7 +20,9 @@ export default function ReportIndex() {
       </PageHeader>
       <div className="container max-w-7xl mx-auto px-6 pt-6 pb-12">
         <Card className="bg-white dark:bg-zinc-900 p-4">
-          <ReportsTable onReportSelected={(evalId) => navigate(`/reports?evalId=${evalId}`)} />
+          <ReportsTable
+            onReportSelected={(evalId) => navigate(REDTEAM_ROUTES.REPORT_DETAIL(evalId))}
+          />
         </Card>
       </div>
     </PageContainer>
