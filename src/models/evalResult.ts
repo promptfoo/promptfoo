@@ -31,6 +31,7 @@ export function sanitizeProvider(
         ...(provider.config && {
           config: JSON.parse(safeJsonStringify(provider.config) as string),
         }),
+        ...(provider.metadata && { metadata: provider.metadata }),
       };
     }
     if (isProviderOptions(provider)) {
@@ -40,16 +41,23 @@ export function sanitizeProvider(
         ...(provider.config && {
           config: JSON.parse(safeJsonStringify(provider.config) as string),
         }),
+        ...(provider.metadata && { metadata: provider.metadata }),
       };
     }
     if (typeof provider === 'object' && provider) {
-      const providerObj = provider as { id: string | (() => string); label?: string; config?: any };
+      const providerObj = provider as {
+        id: string | (() => string);
+        label?: string;
+        config?: any;
+        metadata?: Record<string, any>;
+      };
       return {
         id: typeof providerObj.id === 'function' ? providerObj.id() : providerObj.id,
         label: providerObj.label,
         ...(providerObj.config && {
           config: JSON.parse(safeJsonStringify(providerObj.config) as string),
         }),
+        ...(providerObj.metadata && { metadata: providerObj.metadata }),
       };
     }
   } catch {}
@@ -364,7 +372,11 @@ export default class EvalResult {
       prompt,
       promptId: this.promptId,
       promptIdx: this.promptIdx,
-      provider: { id: this.provider.id, label: this.provider.label },
+      provider: {
+        id: this.provider.id,
+        label: this.provider.label,
+        metadata: this.provider.metadata,
+      },
       response,
       score: this.score,
       success: this.success,

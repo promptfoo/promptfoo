@@ -74,6 +74,7 @@ export async function loadApiProvider(
       transform: options.transform ?? cloudProvider.transform,
       delay: options.delay ?? cloudProvider.delay,
       prompts: options.prompts ?? cloudProvider.prompts,
+      metadata: options.metadata ?? cloudProvider.metadata,
       // Merge all three env sources: context (base) -> cloud -> local (highest priority)
       env: {
         ...env, // Context env (from testSuite.env - proxies, tracing IDs, etc.)
@@ -128,6 +129,7 @@ export async function loadApiProvider(
       ret.transform = options.transform;
       ret.delay = options.delay;
       ret.label ||= getNunjucksEngine().renderString(String(options.label || ''), {});
+      ret.metadata = options.metadata;
       return ret;
     }
   }

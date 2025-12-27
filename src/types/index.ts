@@ -285,7 +285,7 @@ export interface EvaluateResult {
   testIdx: number; // on the new version 2, this is stored per-result
   testCase: AtomicTestCase; // on the new version 2, this is stored per-result
   promptId: string; // on the new version 2, this is stored per-result
-  provider: Pick<ProviderOptions, 'id' | 'label'>;
+  provider: Pick<ProviderOptions, 'id' | 'label' | 'metadata'>;
   prompt: Prompt;
   vars: Vars;
   response?: ProviderResponse;
