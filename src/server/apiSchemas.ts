@@ -45,7 +45,8 @@ export const ApiSchemas = {
         id: z.string(),
       }),
       Request: z.object({
-        author: z.string().email(),
+        // Allow empty string to clear author, or valid email to set it
+        author: z.union([z.literal(''), z.string().email()]),
       }),
       Response: z.object({
         message: z.string(),
