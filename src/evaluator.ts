@@ -952,16 +952,14 @@ class Evaluator {
       }
     }
 
-    // Apply pattern filter after scenario expansion so templated descriptions can be matched
+    // Apply pattern filter after scenario expansion so templated descriptions can be matched.
+    // We reuse filterTests (with a minimal TestSuite) rather than inline regex construction
+    // to avoid CodeQL security alerts for regex injection. The filterTests function has
+    // proper error handling for invalid patterns.
     if (options.filterPattern) {
-      const beforeCount = tests.length;
-      // Use existing filterTests function which already handles regex pattern matching
       tests = await filterTests(
         { tests, providers: [], prompts: [] },
         { pattern: options.filterPattern },
-      );
-      logger.debug(
-        `Pattern filter "${options.filterPattern}" reduced tests from ${beforeCount} to ${tests.length}`,
       );
     }
 

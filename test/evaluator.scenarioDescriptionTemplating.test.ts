@@ -378,5 +378,22 @@ describe('Scenario description templating', () => {
       expect(languages).toContain('German');
       expect(languages).not.toContain('French');
     });
+
+    it('should throw error for invalid regex pattern', async () => {
+      const testSuite: TestSuite = {
+        prompts: [toPrompt('Test prompt')],
+        providers: [mockApiProvider],
+        tests: [{ description: 'Test', vars: { input: 'Hello' } }],
+      };
+
+      const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+
+      await expect(
+        evaluate(testSuite, evalRecord, {
+          showProgressBar: false,
+          filterPattern: '[invalid',
+        }),
+      ).rejects.toThrow('Invalid filter pattern');
+    });
   });
 });
