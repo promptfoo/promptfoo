@@ -1,6 +1,5 @@
 import React from 'react';
 
-import { Button } from '@app/components/ui/button';
 import { Card, CardContent } from '@app/components/ui/card';
 import {
   Collapsible,
@@ -8,15 +7,9 @@ import {
   CollapsibleTrigger,
 } from '@app/components/ui/collapsible';
 import { CopyButton } from '@app/components/ui/copy-button';
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@app/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@app/components/ui/dialog';
 import { cn } from '@app/lib/utils';
-import { ChevronDown, X } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 import type { GradingResult, ResultSuggestion } from '@promptfoo/types';
 
 interface SuggestionsDialogProps {
@@ -231,15 +224,6 @@ export default function SuggestionsDialog({
       <DialogContent className="max-w-3xl">
         <DialogHeader>
           <DialogTitle className="text-xl">Suggestions</DialogTitle>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="absolute right-4 top-4"
-            onClick={onClose}
-            aria-label="close"
-          >
-            <X className="h-4 w-4" />
-          </Button>
         </DialogHeader>
 
         <div className="max-h-[60vh] space-y-4 overflow-y-auto p-1">
@@ -271,7 +255,7 @@ export default function SuggestionsDialog({
                       </CollapsibleTrigger>
                       <CollapsibleContent>
                         <div className="group relative mt-2">
-                          <pre className="overflow-x-auto whitespace-pre-wrap break-words rounded bg-muted/50 p-4 pr-12 font-mono text-sm">
+                          <pre className="overflow-x-auto whitespace-pre-wrap wrap-break-word rounded bg-muted/50 p-4 pr-12 font-mono text-sm">
                             {suggestion.value}
                           </pre>
                           <div className="absolute right-2 top-2 opacity-0 transition-opacity group-hover:opacity-100">
@@ -286,10 +270,6 @@ export default function SuggestionsDialog({
             </Card>
           ))}
         </div>
-
-        <DialogFooter>
-          <Button onClick={onClose}>Close</Button>
-        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

@@ -19,8 +19,10 @@ function SheetOverlay({
 }: React.ComponentProps<typeof DialogPrimitive.Overlay>) {
   return (
     <DialogPrimitive.Overlay
-      className={cn('sheet-overlay fixed inset-0 bg-black/50', className)}
-      style={{ zIndex: 1400 }}
+      className={cn(
+        'sheet-overlay fixed inset-0 z-[var(--z-modal-backdrop)] bg-black/50 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
+        className,
+      )}
       {...props}
     />
   );
@@ -59,8 +61,7 @@ function SheetContent({
       <SheetOverlay />
       <DialogPrimitive.Content
         ref={ref}
-        className={cn(sheetVariants({ side }), className)}
-        style={{ zIndex: 1400 }}
+        className={cn(sheetVariants({ side }), 'z-[var(--z-modal)]', className)}
         {...props}
       >
         {children}
