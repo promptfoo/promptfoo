@@ -1591,6 +1591,8 @@ describe('doGenerateRedteam', () => {
         purpose: 'Test purpose',
         entities: ['Test entity'],
         injectVar: 'input',
+        pluginResults: {},
+        strategyResults: {},
       });
 
       const options: RedteamCliGenerateOptions = {
@@ -1659,6 +1661,8 @@ describe('doGenerateRedteam', () => {
         purpose: 'Test purpose',
         entities: ['Test entity'],
         injectVar: 'input',
+        pluginResults: {},
+        strategyResults: {},
       });
 
       const options: RedteamCliGenerateOptions = {
@@ -1857,6 +1861,8 @@ describe('doGenerateRedteam', () => {
         purpose: 'Test purpose',
         entities: ['Test entity'],
         injectVar: 'input',
+        pluginResults: {},
+        strategyResults: {},
       });
 
       const options: RedteamCliGenerateOptions = {
