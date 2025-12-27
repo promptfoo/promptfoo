@@ -112,4 +112,5 @@ export const ProviderEnvOverridesSchema = z.object({
 
 // Allow arbitrary environment variables for template rendering (e.g., {{ env.MY_CUSTOM_VAR }})
 // while maintaining type safety for known env vars
-export type EnvOverrides = z.infer<typeof ProviderEnvOverridesSchema> & Record<string, string | undefined>;
+export type EnvOverrides = z.infer<typeof ProviderEnvOverridesSchema> &
+  Record<string, string | undefined>;

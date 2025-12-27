@@ -28,7 +28,11 @@ export async function loadApiProvider(
   context: LoadApiProviderContext = {},
 ): Promise<ApiProvider> {
   const { options = {}, basePath, env } = context;
-  const mergedEnv = env || options.env ? { ...(env ?? {}), ...(options.env ?? {}) } : undefined;
+
+  // Merge environment overrides: context.env (test suite level) is base,
+  // options.env (provider-specific) takes precedence for per-provider customization
+  const mergedEnv: EnvOverrides | undefined =
+    env || options.env ? { ...env, ...options.env } : undefined;
 
   // Render ONLY environment variable templates at load time (e.g., {{ env.AZURE_ENDPOINT }})
   // This allows constructors to access real env values while preserving runtime templates

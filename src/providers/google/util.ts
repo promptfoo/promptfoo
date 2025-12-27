@@ -2,7 +2,6 @@ import Clone from 'rfdc';
 import { z } from 'zod';
 import { getEnvString } from '../../envars';
 import logger from '../../logger';
-import type { EnvOverrides } from '../../types/env';
 import { extractBase64FromDataUrl, isDataUrl, parseDataUrl } from '../../util/dataUrl';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { renderVarsInObject } from '../../util/index';
@@ -13,6 +12,7 @@ import { VALID_SCHEMA_TYPES } from './types';
 import type { AnySchema } from 'ajv';
 import type { GoogleAuth } from 'google-auth-library';
 
+import type { EnvOverrides } from '../../types/env';
 import type { Content, FunctionCall, Part, Tool } from './types';
 
 const ajv = getAjv();
