@@ -1,0 +1,43 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: 'n8n AI agent evaluation'
+
+prompts:
+  - '{{query}}'
+
+providers:
+  - id: n8n:https://your-n8n-instance.com/webhook/your-agent-id
+    config:
+      headers:
+        Authorization: 'Bearer {{env.N8N_API_KEY}}'
+      body:
+        message: '{{prompt}}'
+        userId: '{{userId}}'
+
+tests:
+  - vars:
+      query: What are your business hours?
+      userId: test-user-1
+    assert:
+      - type: contains-any
+        value:
+          - hours
+          - open
+          - available
+
+  - vars:
+      query: What's the status of my order #12345?
+      userId: test-user-2
+    assert:
+      - type: javascript
+        value: |
+          const toolCalls = context.metadata?.toolCalls || [];
+          return toolCalls.some(tc => tc.name === 'order_lookup');
+      - type: contains
+        value: '12345'
+
+  - vars:
+      query: I need help resetting my password
+      userId: test-user-3
+    assert:
+      - type: llm-rubric
+        value: The response should acknowledge the request and provide clear next steps
