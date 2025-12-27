@@ -15,7 +15,6 @@ import { CrossSessionLeakGrader } from './plugins/crossSessionLeak';
 import { DebugAccessGrader } from './plugins/debugAccess';
 import { DivergentRepetitionGrader } from './plugins/divergentRepetition';
 import { EcommerceComplianceBypassGrader } from './plugins/ecommerce/ecommerceComplianceBypass';
-import { ResourceExhaustionGrader } from './plugins/resourceExhaustion';
 import { EcommerceOrderFraudGrader } from './plugins/ecommerce/ecommerceOrderFraud';
 import { EcommercePciDssGrader } from './plugins/ecommerce/ecommercePciDss';
 import { EcommercePriceManipulationGrader } from './plugins/ecommerce/ecommercePriceManipulation';
@@ -84,6 +83,7 @@ import { RagDocumentExfiltrationGrader } from './plugins/ragDocumentExfiltration
 import { RbacGrader } from './plugins/rbac';
 import { ReasoningDosGrader } from './plugins/reasoningDos';
 import { ReligionGrader } from './plugins/religion';
+import { ResourceExhaustionGrader } from './plugins/resourceExhaustion';
 import { ShellInjectionGrader } from './plugins/shellInjection';
 import { SqlInjectionGrader } from './plugins/sqlInjection';
 import { SsrfGrader } from './plugins/ssrf';

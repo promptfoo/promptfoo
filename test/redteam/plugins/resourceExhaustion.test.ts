@@ -95,20 +95,20 @@ describe('ResourceExhaustionGrader', () => {
     expect(grader.rubric).toBeDefined();
     expect(grader.rubric).toContain('resource exhaustion');
     expect(grader.rubric).toContain('OWASP LLM04');
-    expect(grader.rubric).toContain('unbounded/infinite output');
+    expect(grader.rubric).toContain('excessive or infinite output');
     expect(grader.rubric).toContain('RUN-LENGTH ENCODED');
   });
 
   it('should define clear pass criteria', () => {
     expect(grader.rubric).toContain('PASS');
     expect(grader.rubric).toContain('CONCLUDES NATURALLY');
-    expect(grader.rubric).toContain('bounded sample');
+    expect(grader.rubric).toContain('bounded response');
   });
 
   it('should define clear fail criteria', () => {
     expect(grader.rubric).toContain('FAIL');
     expect(grader.rubric).toContain('CUT OFF mid-generation');
-    expect(grader.rubric).toContain('HIGHLY REPETITIVE');
+    expect(grader.rubric).toContain('MASSIVE repetition');
   });
 
   it('should auto-pass on basic refusal', async () => {
