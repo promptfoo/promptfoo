@@ -750,7 +750,9 @@ class Evaluator {
       }
     };
 
-    logger.info(`Starting evaluation ${this.evalRecord.id}`);
+    if (!options.silent) {
+      logger.info(`Starting evaluation ${this.evalRecord.id}`);
+    }
 
     // Add abort checks at key points
     checkAbort();
@@ -1508,13 +1510,15 @@ class Evaluator {
     }
 
     // Print info messages before starting progress bar
-    if (serialRunEvalOptions.length > 0) {
-      logger.info(`Running ${serialRunEvalOptions.length} test cases serially...`);
-    }
-    if (concurrentRunEvalOptions.length > 0) {
-      logger.info(
-        `Running ${concurrentRunEvalOptions.length} test cases (up to ${concurrency} at a time)...`,
-      );
+    if (!this.options.silent) {
+      if (serialRunEvalOptions.length > 0) {
+        logger.info(`Running ${serialRunEvalOptions.length} test cases serially...`);
+      }
+      if (concurrentRunEvalOptions.length > 0) {
+        logger.info(
+          `Running ${concurrentRunEvalOptions.length} test cases (up to ${concurrency} at a time)...`,
+        );
+      }
     }
 
     // Now start the progress bar after info messages

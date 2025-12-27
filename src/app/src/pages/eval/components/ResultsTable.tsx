@@ -1439,7 +1439,7 @@ function ResultsTable({
             alignItems: 'center',
             justifyContent: 'center',
             backgroundColor: (theme) => alpha(theme.palette.background.default, 0.7),
-            zIndex: 1000,
+            zIndex: 20,
             opacity: isFetching ? 1 : 0,
             pointerEvents: isFetching ? 'auto' : 'none',
             transition: 'opacity 0.3s ease-in-out',
@@ -1567,7 +1567,7 @@ function ResultsTable({
         sx={{
           position: 'sticky',
           bottom: 0,
-          zIndex: 1000,
+          zIndex: 10,
           display: 'flex',
           alignItems: 'center',
           gap: 2,

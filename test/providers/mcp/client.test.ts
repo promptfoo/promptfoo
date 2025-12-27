@@ -368,7 +368,7 @@ describe('MCPClient', () => {
       ]);
     });
 
-    it('should initialize with correct client name', async () => {
+    it('should initialize with correct client metadata including name, version, and description', async () => {
       // Reset mocks for this test
       mockClient.connect.mockResolvedValueOnce(undefined);
       mockClient.listTools.mockResolvedValueOnce({
@@ -385,7 +385,39 @@ describe('MCPClient', () => {
 
       await mcpClient.initialize();
 
-      expect(Client).toHaveBeenCalledWith({ name: 'promptfoo-MCP', version: '1.0.0' });
+      expect(Client).toHaveBeenCalledWith({
+        name: 'promptfoo-MCP',
+        version: '1.0.0',
+        description: 'Promptfoo MCP client for connecting to MCP servers during LLM evaluations',
+      });
+    });
+
+    it('should provide a descriptive client description for MCP server identification', async () => {
+      // Reset mocks for this test
+      mockClient.connect.mockResolvedValueOnce(undefined);
+      mockClient.listTools.mockResolvedValueOnce({
+        tools: [],
+      });
+
+      mcpClient = new MCPClient({
+        enabled: true,
+        server: {
+          command: 'npm',
+          args: ['start'],
+        },
+      });
+
+      await mcpClient.initialize();
+
+      // Verify the description is provided and meaningful
+      const clientCall = vi.mocked(Client).mock.calls[0][0];
+      expect(clientCall).toHaveProperty('description');
+      const description = clientCall.description as string;
+      expect(typeof description).toBe('string');
+      expect(description.length).toBeGreaterThan(0);
+      // Case-insensitive check for key terms
+      expect(description.toLowerCase()).toContain('promptfoo');
+      expect(description).toContain('MCP');
     });
 
     it('should pass timeout to listTools when configured', async () => {

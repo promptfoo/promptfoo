@@ -2,6 +2,35 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import CustomMetrics from './CustomMetrics';
 
+// Mock the hooks that make API calls or use crypto
+vi.mock('./store', () => ({
+  useTableStore: vi.fn(() => ({
+    config: null,
+    filters: { values: {}, appliedCount: 0 },
+    addFilter: vi.fn(),
+  })),
+}));
+
+vi.mock('../../../hooks/useCloudConfig', () => ({
+  default: vi.fn(() => ({
+    data: null,
+    isLoading: false,
+    error: null,
+  })),
+}));
+
+vi.mock('@app/hooks/useCustomPoliciesMap', () => ({
+  useCustomPoliciesMap: vi.fn(() => ({})),
+}));
+
+vi.mock('@promptfoo/redteam/plugins/policy/utils', () => ({
+  isPolicyMetric: vi.fn(() => false),
+  deserializePolicyIdFromMetric: vi.fn(),
+  formatPolicyIdentifierAsMetric: vi.fn((name) => name),
+  determinePolicyTypeFromId: vi.fn(() => 'inline'),
+  makeCustomPolicyCloudUrl: vi.fn(),
+}));
+
 describe('CustomMetrics', () => {
   afterEach(() => {
     cleanup();

@@ -96,7 +96,11 @@ export class MCPClient {
 
   private async connectToServer(server: MCPServerConfig): Promise<void> {
     const serverKey = server.name || server.url || server.path || 'default';
-    const client = new Client({ name: 'promptfoo-MCP', version: '1.0.0' });
+    const client = new Client({
+      name: 'promptfoo-MCP',
+      version: '1.0.0',
+      description: 'Promptfoo MCP client for connecting to MCP servers during LLM evaluations',
+    });
 
     let transport: StdioClientTransport | SSEClientTransport | StreamableHTTPClientTransport;
     try {
