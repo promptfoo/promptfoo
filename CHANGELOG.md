@@ -4,6 +4,35 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.120.9](https://github.com/promptfoo/promptfoo/compare/0.120.8...0.120.9) (2025-12-27)
+
+### Features
+
+- Introduce promptfoo design system, new nav, model audit, eval creator, and more ([#6823](https://github.com/promptfoo/promptfoo/issues/6823)) ([c5c698b](https://github.com/promptfoo/promptfoo/commit/c5c698bc97b3927b023eff623b9b73d6fa9d5940))
+- **mcp:** add OAuth authentication with proactive token refresh ([#6817](https://github.com/promptfoo/promptfoo/issues/6817)) ([bcd4db3](https://github.com/promptfoo/promptfoo/commit/bcd4db3fec98c0c2f40337eb0f7f317298d3a1e2))
+- **providers:** add xAI Voice Agent API provider ([#6792](https://github.com/promptfoo/promptfoo/issues/6792)) ([1f366a5](https://github.com/promptfoo/promptfoo/commit/1f366a588a9a275f3c4195fb565a71669fabd2a2))
+- **redteam:** Improve output of validate target ([#6742](https://github.com/promptfoo/promptfoo/issues/6742)) ([664c5b9](https://github.com/promptfoo/promptfoo/commit/664c5b929618b161868e73a4317b5c679ae85719))
+
+### Bug Fixes
+
+- **app:** resolve z-index stacking for filters in evals modal ([#6826](https://github.com/promptfoo/promptfoo/issues/6826)) ([7b5f0f8](https://github.com/promptfoo/promptfoo/commit/7b5f0f8912c210cdd66f756e8f84215e24920ea8))
+- **app:** show toolbar when filters return no results ([#6827](https://github.com/promptfoo/promptfoo/issues/6827)) ([b53f832](https://github.com/promptfoo/promptfoo/commit/b53f8322de6787366bb898fd6e3bcab8779d7cc2))
+- **deps:** update dependency @modelcontextprotocol/sdk to ^1.25.1 ([#6805](https://github.com/promptfoo/promptfoo/issues/6805)) ([ab85bf4](https://github.com/promptfoo/promptfoo/commit/ab85bf4e65dfa52c34833fa1c3e84177527753ce))
+- **deps:** update dependency protobufjs to v8 ([#6806](https://github.com/promptfoo/promptfoo/issues/6806)) ([0c1e4c5](https://github.com/promptfoo/promptfoo/commit/0c1e4c50a972215690d943fbbbb94604a93b508d))
+- **eval:** prevent icon overflow in results table cells ([#6807](https://github.com/promptfoo/promptfoo/issues/6807)) ([3af0a5e](https://github.com/promptfoo/promptfoo/commit/3af0a5e91211f5f9c2b708d7d39150b79abdf68d))
+- **http:** handle multipart/form-data and x-www-form-urlencoded in raw requests ([#6797](https://github.com/promptfoo/promptfoo/issues/6797)) ([8850ab2](https://github.com/promptfoo/promptfoo/commit/8850ab24dc4e1daf86168225b432ee17aae2799c))
+- **redteam:** add retry strategy for failed test cases ([#6243](https://github.com/promptfoo/promptfoo/issues/6243)) ([e7228c8](https://github.com/promptfoo/promptfoo/commit/e7228c8345bdcea352728d064da864ad0cbb4762))
+- **redteam:** reduce false positives in grader rubrics ([#6784](https://github.com/promptfoo/promptfoo/issues/6784)) ([54a552a](https://github.com/promptfoo/promptfoo/commit/54a552a68a98e203a0f492cef33969a32a33219a))
+- **redteam:** use XML format for MCP tool call generation to reduce error rate ([#6812](https://github.com/promptfoo/promptfoo/issues/6812)) ([3ef3eb6](https://github.com/promptfoo/promptfoo/commit/3ef3eb6b47caa3f6400e6e5ecc0838306305e647))
+
+### Performance Improvements
+
+- **app:** eliminate crypto polyfill with native SubtleCrypto ([#6798](https://github.com/promptfoo/promptfoo/issues/6798)) ([c3e24ad](https://github.com/promptfoo/promptfoo/commit/c3e24ad8857f296713f935b826eb45cb8cb32ba8))
+
+### Reverts
+
+- **redteam:** use XML format for MCP tool call generation ([#6818](https://github.com/promptfoo/promptfoo/issues/6818)) ([b7154ba](https://github.com/promptfoo/promptfoo/commit/b7154ba0a0ce5c9421982c647766df29a2eae972))
+
 ## [0.120.8](https://github.com/promptfoo/promptfoo/compare/0.120.7...0.120.8) (2025-12-21)
 
 ### Features
