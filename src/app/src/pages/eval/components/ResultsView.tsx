@@ -216,7 +216,7 @@ export default function ResultsView({
 
   const handleSearchTextChange = React.useCallback(
     (text: string) => {
-      setSearchParams((prev) => ({ ...prev, search: text }));
+      setSearchParams((prev) => ({ ...prev, search: text }), { replace: true });
       setSearchText(text);
     },
     [setSearchParams],
