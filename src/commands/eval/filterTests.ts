@@ -118,18 +118,8 @@ export async function filterTests(testSuite: TestSuite, options: FilterOptions):
   }
 
   if (options.pattern) {
-    let regex: RegExp;
-    try {
-      regex = new RegExp(options.pattern);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      throw new Error(`Invalid filter pattern "${options.pattern}": ${message}`);
-    }
-    const beforeCount = tests.length;
-    tests = tests.filter((test) => test.description && regex.test(test.description));
-    logger.debug(
-      `Pattern filter "${options.pattern}" matched ${tests.length}/${beforeCount} tests`,
-    );
+    const pattern = new RegExp(options.pattern);
+    tests = tests.filter((test) => test.description && pattern.test(test.description));
   }
 
   if (options.firstN !== undefined) {
