@@ -15,6 +15,32 @@ function isReactElementWithChildren(node: React.ReactNode): node is ReactElement
   return 'children' in node.props;
 }
 
+// Helper function to check if a string contains a markdown image with base64 data
+function containsMarkdownBase64Image(text: string): boolean {
+  // Updated regex to handle nested brackets in alt text properly
+  // Uses a more flexible approach that looks for the markdown pattern with base64 data
+  return /!\[.*?\]\(data:image\/[a-zA-Z0-9.+-]+;base64,[^)]+\)/.test(text);
+}
+
+// Helper function to extract text content from React nodes for base64 detection.
+// Note: This utility is needed because TruncatedText receives arbitrary React nodes
+// and needs to check if they contain base64 images before truncation decisions.
+// An alternative would be to parse/detect images upstream before passing to this component.
+function extractTextContent(node: React.ReactNode): string {
+  if (typeof node === 'string' || typeof node === 'number') {
+    return node.toString();
+  }
+  if (Array.isArray(node)) {
+    return node.map((child) => extractTextContent(child)).join('');
+  }
+  if (isReactElementWithChildren(node)) {
+    return React.Children.toArray(node.props.children)
+      .map((child) => extractTextContent(child))
+      .join('');
+  }
+  return '';
+}
+
 function textLength(node: React.ReactNode): number {
   if (typeof node === 'string' || typeof node === 'number') {
     return node.toString().length;
@@ -47,18 +73,27 @@ function TruncatedText({ text: rawText, maxLength }: TruncatedTextProps) {
       : JSON.stringify(rawText);
 
   const contentLen = React.useMemo(() => textLength(text), [text]);
+
+  // Check if the content contains a markdown base64 image
+  // If so, we should never truncate regardless of length
+  const containsBase64Image = React.useMemo(
+    () => containsMarkdownBase64Image(extractTextContent(text)),
+    [text],
+  );
+
   const isOverLength = React.useMemo(
     () => maxLength > 0 && contentLen > maxLength,
     [contentLen, maxLength],
   );
 
   // Initialize truncation state based on whether text actually exceeds maxLength
-  const [isTruncated, setIsTruncated] = React.useState(() => isOverLength);
+  // But don't truncate if it contains a base64 image
+  const [isTruncated, setIsTruncated] = React.useState(() => isOverLength && !containsBase64Image);
 
   // Reset truncation state when content or length threshold changes
   React.useEffect(() => {
-    setIsTruncated(isOverLength);
-  }, [isOverLength]);
+    setIsTruncated(isOverLength && !containsBase64Image);
+  }, [isOverLength, containsBase64Image]);
 
   const toggleTruncate = (e: React.MouseEvent<HTMLSpanElement>) => {
     e.preventDefault();
@@ -69,7 +104,18 @@ function TruncatedText({ text: rawText, maxLength }: TruncatedTextProps) {
   const truncateText = (node: React.ReactNode, length: number = 0): React.ReactNode => {
     if (typeof node === 'string' || typeof node === 'number') {
       const nodeAsString = node.toString();
-      return nodeAsString.slice(0, maxLength - length);
+
+      // Don't truncate if this string contains base64 image data
+      if (containsMarkdownBase64Image(nodeAsString)) {
+        return nodeAsString;
+      }
+
+      // Guard against negative remaining length
+      const remaining = maxLength - length;
+      if (remaining <= 0) {
+        return '';
+      }
+      return nodeAsString.slice(0, remaining);
     }
     if (Array.isArray(node)) {
       const nodes: React.ReactNode[] = [];
@@ -114,7 +160,7 @@ function TruncatedText({ text: rawText, maxLength }: TruncatedTextProps) {
       >
         {truncatedText}
 
-        {isOverLength && (
+        {isOverLength && !containsBase64Image && (
           <span
             style={{
               display: 'inline-flex',

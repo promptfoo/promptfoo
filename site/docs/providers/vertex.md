@@ -21,6 +21,7 @@ The `vertex` provider enables integration with Google's [Vertex AI](https://clou
 
 - `vertex:gemini-2.5-pro` - Enhanced reasoning, coding, and multimodal understanding with 2M context
 - `vertex:gemini-2.5-flash` - Fast model with enhanced reasoning and thinking capabilities
+- `vertex:gemini-2.5-flash-image-preview` - Gemini 2.5 Flash with native image generation capabilities (generates base64 images)
 - `vertex:gemini-2.5-flash-lite` - Cost-efficient model optimized for high-volume, latency-sensitive tasks
 - `vertex:gemini-2.5-flash-preview-09-2025` - Preview: Enhanced quality improvements
 - `vertex:gemini-2.5-flash-lite-preview-09-2025` - Preview: Cost and latency optimizations
@@ -37,7 +38,9 @@ The `vertex` provider enables integration with Google's [Vertex AI](https://clou
 **Gemini 1.5 (Legacy):**
 
 - `vertex:gemini-1.5-pro` - Text/chat with long-context understanding
+- `vertex:gemini-1.5-pro-latest` - Latest Gemini 1.5 Pro model with same capabilities as gemini-1.5-pro
 - `vertex:gemini-1.5-flash` - Fast and efficient for high-volume applications
+- `vertex:gemini-1.5-flash-8b` - Small model optimized for high-volume, lower complexity tasks
 
 ### Claude Models
 
@@ -138,9 +141,66 @@ By default, Llama models use Llama Guard for content safety. You can disable it 
 
 ### Image Generation Models
 
+#### Imagen Models
+
 :::note
 Imagen models are available through [Google AI Studio](/docs/providers/google#image-generation-models) using the `google:image:` prefix.
 :::
+
+#### Gemini Image Generation Models
+
+Gemini models with native image generation capabilities:
+
+- `vertex:gemini-2.5-flash-image-preview` - Gemini 2.5 Flash with built-in image generation (~$0.039 per image)
+
+Unlike Imagen models which are specialized for image generation, Gemini image models can generate images as part of their text responses and support both text and image outputs in a single interaction.
+
+##### Configuration for Image Generation
+
+```yaml
+providers:
+  - id: vertex:gemini-2.5-flash-image-preview
+    config:
+      projectId: your-project-id
+      region: us-central1
+      generationConfig:
+        temperature: 0.7
+        maxOutputTokens: 1024
+        responseModalities:
+          - IMAGE # Enable image generation
+          - TEXT # Include text responses
+```
+
+##### Output Format
+
+Generated images are returned as base64-encoded markdown images:
+
+```
+Generated a vibrant image for you!
+
+![Generated Image](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA...)
+```
+
+##### Example Usage
+
+```yaml
+providers:
+  - vertex:gemini-2.5-flash-image-preview
+
+prompts:
+  - 'Generate an image of {{subject}}'
+
+tests:
+  - vars:
+      subject: 'a rainbow unicorn in a cyberpunk city'
+    assert:
+      - type: contains
+        value: '![Generated Image]'
+      - type: cost
+        threshold: 0.05
+```
+
+For complete examples, see [google-gemini-image examples](https://github.com/promptfoo/promptfoo/tree/main/examples/google-gemini-image).
 
 ## Model Capabilities
 
