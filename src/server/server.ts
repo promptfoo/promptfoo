@@ -333,13 +333,18 @@ export async function startServer(
       logger.debug(
         `Emitting update for eval: ${updatedEval?.config?.description || updatedEval?.id || 'unknown'}`,
       );
-      io.emit('update', updatedEval);
+      // Send minimal payload to avoid RangeError with large evals (issue #2507)
+      // The frontend only uses this as a notification to fetch data via REST API
+      io.emit('update', { evalId: updatedEval?.id });
       allPrompts = null;
     }
   });
 
   io.on('connection', async (socket) => {
-    socket.emit('init', await Eval.latest());
+    // Send minimal payload to avoid RangeError with large evals (issue #2507)
+    // The frontend only uses this as a notification to fetch data via REST API
+    const latestEval = await Eval.latest();
+    socket.emit('init', latestEval ? { evalId: latestEval.id } : null);
   });
 
   // Return a Promise that only resolves when the server shuts down

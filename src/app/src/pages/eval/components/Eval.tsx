@@ -9,7 +9,17 @@ import useApiConfig from '@app/stores/apiConfig';
 import { callApi } from '@app/utils/api';
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
-import { type ResultLightweightWithLabel, type ResultsFile } from '@promptfoo/types';
+import type { ResultLightweightWithLabel } from '@promptfoo/types';
+
+/**
+ * Minimal payload sent by the server via socket.io to notify the client
+ * that eval data has changed. The client uses this as a trigger to fetch
+ * actual data via REST API. This replaces the previous full ResultsFile
+ * payload to avoid memory issues with large datasets (issue #2507).
+ */
+interface SocketEvalNotification {
+  evalId: string;
+}
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { io as SocketIOClient } from 'socket.io-client';
 import EmptyState from './EmptyState';
@@ -36,7 +46,6 @@ export default function Eval({ fetchId }: EvalOptions) {
   const {
     table,
     setTable,
-    setTableFromResultsFile,
     config,
     setConfig,
     evalId,
@@ -239,9 +248,11 @@ export default function Eval({ fetchId }: EvalOptions) {
       const socket = SocketIOClient(socketUrl, { path: socketPath });
 
       /**
-       * Populates the table store with the most recent eval result.
+       * Handles socket.io notifications about eval updates.
+       * The server sends a minimal payload (just evalId) to avoid memory issues.
+       * Actual data is fetched via REST API.
        */
-      const handleResultsFile = async (data: ResultsFile | null) => {
+      const handleEvalNotification = async (data: SocketEvalNotification | null) => {
         // If no data provided (e.g., no evals exist yet), clear stale state and mark as loaded
         if (!data) {
           console.log('No eval data available');
@@ -269,17 +280,17 @@ export default function Eval({ fetchId }: EvalOptions) {
       };
 
       socket
-        .on('init', async (data) => {
+        .on('init', async (data: SocketEvalNotification | null) => {
           console.log('Initialized socket connection', data);
-          await handleResultsFile(data);
+          await handleEvalNotification(data);
         })
         /**
          * The user has run `promptfoo eval` and a new latest eval
          * result has been received.
          */
-        .on('update', async (data) => {
+        .on('update', async (data: SocketEvalNotification | null) => {
           console.log('Received data update', data);
-          await handleResultsFile(data);
+          await handleEvalNotification(data);
         });
 
       return () => {
@@ -316,7 +327,6 @@ export default function Eval({ fetchId }: EvalOptions) {
     apiBaseUrl,
     fetchId,
     loadEvalById,
-    setTableFromResultsFile,
     setConfig,
     setAuthor,
     setEvalId,
@@ -336,8 +346,8 @@ export default function Eval({ fetchId }: EvalOptions) {
    * If and when a table is available, set loaded to true.
    *
    * Constructing the table is a time-expensive operation; therefore `setLoaded(true)` is not called
-   * immediately after `setTableFromResultsFile` is called. Otherwise, `loaded` will be true before
-   * the table is defined resulting in a race condition.
+   * immediately after fetching data. Otherwise, `loaded` will be true before the table is defined
+   * resulting in a race condition.
    */
   useEffect(() => {
     if (table && !loaded) {
