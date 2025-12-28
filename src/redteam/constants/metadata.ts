@@ -75,8 +75,6 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
   image: 'Tests handling of image content',
   imitation: 'Tests handling of unauthorized impersonation of entities',
   'indirect-prompt-injection': 'Tests for injection vulnerabilities via untrusted variables',
-<<<<<<< HEAD
-=======
   'insurance:coverage-discrimination':
     'Tests for discriminatory coverage decisions based on protected characteristics (age, disability, race, etc.)',
   'insurance:network-misinformation': 'Tests for inaccurate provider network information',
@@ -90,7 +88,6 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
     'Tests for detection of fraudulent order patterns, unauthorized transactions, or payment manipulation attempts',
   'ecommerce:price-manipulation':
     'Tests for price manipulation through discount abuse, inventory exploits, or unauthorized price modifications',
->>>>>>> origin/main
   intent: 'Tests for manipulation of system behavior via specific prompts',
   jailbreak: 'Single-shot optimization of safety bypass techniques',
   'jailbreak:composite': 'Combines multiple jailbreak techniques for enhanced effectiveness',
@@ -171,14 +168,11 @@ export const subCategoryDescriptions: Record<Plugin | Strategy, string> = {
     'Collection of alternative text transformation strategies (Morse code, Pig Latin, camelCase, and emoji variation selector smuggling) for testing evasion techniques',
   bias: 'Bias detection across protected characteristics',
   medical: 'Medical AI safety testing across healthcare vulnerabilities',
-<<<<<<< HEAD
-=======
   pharmacy: 'Pharmacy AI safety testing across pharmaceutical vulnerabilities',
   insurance: 'Insurance AI safety testing across healthcare coverage vulnerabilities',
   financial: 'Financial AI safety testing across financial services vulnerabilities',
   ecommerce:
     'E-commerce AI safety testing across payment security and transaction integrity vulnerabilities',
->>>>>>> origin/main
 };
 
 // These names are displayed in risk cards and in the table
@@ -242,13 +236,10 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'bias:race': 'Race Bias',
   bias: 'Bias Detection',
   medical: 'Medical Safety Suite',
-<<<<<<< HEAD
-=======
   pharmacy: 'Pharmacy Safety Suite',
   insurance: 'Insurance Safety Suite',
   financial: 'Financial Safety Suite',
   ecommerce: 'E-commerce Safety Suite',
->>>>>>> origin/main
   'harmful:chemical-biological-weapons': 'WMD Content',
   'harmful:child-exploitation': 'Child Exploitation',
   'harmful:copyright-violations': 'IP Violations',
@@ -281,8 +272,6 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   image: 'Image Content',
   imitation: 'Entity Impersonation',
   'indirect-prompt-injection': 'Indirect Prompt Injection',
-<<<<<<< HEAD
-=======
   'insurance:coverage-discrimination': 'Coverage Discrimination',
   'insurance:network-misinformation': 'Network Misinformation',
   'insurance:phi-disclosure': 'PHI Disclosure',
@@ -290,7 +279,6 @@ export const displayNameOverrides: Record<Plugin | Strategy, string> = {
   'ecommerce:compliance-bypass': 'Compliance Bypass',
   'ecommerce:order-fraud': 'Order Fraud',
   'ecommerce:price-manipulation': 'Price Manipulation',
->>>>>>> origin/main
   intent: 'Intent',
   jailbreak: 'Single-shot Optimization',
   'jailbreak:composite': 'Multi-Vector Safety Bypass',
@@ -412,13 +400,10 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'bias:race': Severity.Low,
   bias: Severity.Low,
   medical: Severity.High,
-<<<<<<< HEAD
-=======
   pharmacy: Severity.High,
   insurance: Severity.High,
   financial: Severity.High,
   ecommerce: Severity.High,
->>>>>>> origin/main
   'harmful:chemical-biological-weapons': Severity.High,
   'harmful:child-exploitation': Severity.Critical,
   'harmful:copyright-violations': Severity.Low,
@@ -448,8 +433,6 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   hijacking: Severity.High,
   imitation: Severity.Low,
   'indirect-prompt-injection': Severity.High,
-<<<<<<< HEAD
-=======
   'insurance:coverage-discrimination': Severity.Critical,
   'insurance:network-misinformation': Severity.High,
   'insurance:phi-disclosure': Severity.Critical,
@@ -457,7 +440,6 @@ export const riskCategorySeverityMap: Record<Plugin, Severity> = {
   'ecommerce:compliance-bypass': Severity.High,
   'ecommerce:order-fraud': Severity.High,
   'ecommerce:price-manipulation': Severity.High,
->>>>>>> origin/main
   intent: Severity.High,
   overreliance: Severity.Low,
   pii: Severity.High,
@@ -687,13 +669,10 @@ export const categoryAliases: Record<Plugin, string> = {
   'bias:race': 'Race Bias',
   bias: 'Bias Detection',
   medical: 'Medical Safety',
-<<<<<<< HEAD
-=======
   pharmacy: 'Pharmacy Safety',
   insurance: 'Insurance Safety',
   financial: 'Financial Safety',
   ecommerce: 'E-commerce Safety',
->>>>>>> origin/main
   'harmful:chemical-biological-weapons': 'Chemical & Biological Weapons',
   'harmful:child-exploitation': 'Child Exploitation',
   'harmful:copyright-violations': 'Copyright Violations - Copyrighted text',
@@ -795,8 +774,6 @@ export const pluginDescriptions: Record<Plugin, string> = {
   bias: 'Unified bias detection across protected characteristics including age, disability, gender, and race',
   medical:
     'Comprehensive medical AI safety testing for healthcare-specific vulnerabilities including hallucination, anchoring bias, incorrect knowledge, off-label use, prioritization errors, and sycophancy',
-<<<<<<< HEAD
-=======
   pharmacy:
     'Comprehensive pharmacy AI safety testing for pharmaceutical vulnerabilities including drug interactions, dosage calculations, and controlled substance compliance',
   insurance:
@@ -805,7 +782,6 @@ export const pluginDescriptions: Record<Plugin, string> = {
     'Comprehensive financial AI safety testing for financial services vulnerabilities including calculation errors, compliance violations, hallucination, and data leakage',
   ecommerce:
     'Comprehensive e-commerce AI safety testing for payment security and transaction integrity vulnerabilities including PCI DSS compliance, fraud detection, and price manipulation',
->>>>>>> origin/main
   'harmful:chemical-biological-weapons': 'Tests detection and response to WMD-related content',
   'harmful:child-exploitation': 'Tests handling of child exploitation content',
   'harmful:copyright-violations': 'Tests handling of intellectual property violations',
@@ -834,8 +810,6 @@ export const pluginDescriptions: Record<Plugin, string> = {
   'harmful:weapons:ied': 'Tests handling of Improvised Explosive Devices',
   hijacking: 'Assesses protection against unauthorized resource usage and purpose deviation',
   imitation: 'Tests safeguards against unauthorized entity impersonation attempts',
-<<<<<<< HEAD
-=======
   'insurance:coverage-discrimination':
     'Tests for discriminatory coverage or benefit determinations based on protected characteristics (age, disability, race, genetic information, sex) in violation of federal civil rights laws including ADA, Section 1557, GINA, and age discrimination statutes',
   'insurance:network-misinformation':
@@ -850,7 +824,6 @@ export const pluginDescriptions: Record<Plugin, string> = {
     'Tests for detection of fraudulent order patterns, unauthorized transactions, account takeover attempts, or payment manipulation in e-commerce checkout and order processing',
   'ecommerce:price-manipulation':
     'Tests for price manipulation through discount code abuse, inventory exploits, cart manipulation, unauthorized price modifications, or coupon stacking vulnerabilities',
->>>>>>> origin/main
   mcp: 'Tests for vulnerabilities to Model Context Protocol (MCP) attacks',
   'medical:anchoring-bias':
     'Tests for medical anchoring bias where AI fixates on irrelevant information in medical contexts',
