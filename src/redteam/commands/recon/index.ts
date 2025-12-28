@@ -3,9 +3,11 @@ import * as path from 'path';
 
 import chalk from 'chalk';
 import confirm from '@inquirer/confirm';
+import open from 'open';
 import ora from 'ora';
 
 import logger from '../../../logger';
+import { getConfigDirectoryPath } from '../../../util/config/manage';
 import { writePromptfooConfig } from '../../../util/config/writer';
 import { buildRedteamConfig } from './config';
 import { buildReconPrompt } from './prompt';
@@ -17,6 +19,56 @@ import {
 } from './providers';
 import { createScratchpad } from './scratchpad';
 import type { ReconOptions, ReconResult } from './types';
+
+/** Default port for the promptfoo web server */
+const DEFAULT_SERVER_PORT = 15500;
+
+/** Filename for pending recon config */
+const PENDING_RECON_FILENAME = 'pending-recon.json';
+
+/**
+ * Writes the recon result to a pending file for the web UI to pick up.
+ * This enables the CLI → Browser handoff flow.
+ */
+function writePendingReconConfig(
+  config: object,
+  result: ReconResult,
+  codebaseDirectory: string,
+): string {
+  const configDir = getConfigDirectoryPath(true);
+  const pendingPath = path.join(configDir, PENDING_RECON_FILENAME);
+
+  const pendingData = {
+    config,
+    metadata: {
+      source: 'recon-cli' as const,
+      timestamp: Date.now(),
+      codebaseDirectory,
+      filesAnalyzed: result.keyFiles?.length || 0,
+    },
+    reconResult: result,
+  };
+
+  fs.writeFileSync(pendingPath, JSON.stringify(pendingData, null, 2));
+  logger.debug(`Wrote pending recon config to ${pendingPath}`);
+
+  return pendingPath;
+}
+
+/**
+ * Opens the web UI with the recon source parameter
+ */
+async function openBrowserWithRecon(): Promise<void> {
+  const url = `http://localhost:${DEFAULT_SERVER_PORT}/redteam/setup?source=recon`;
+
+  try {
+    await open(url);
+    logger.info(`\n${chalk.green('✨')} Opening browser: ${chalk.cyan(url)}`);
+  } catch (error) {
+    logger.debug('Failed to open browser automatically', { error });
+    logger.info(`\nOpen this URL in your browser: ${chalk.cyan(url)}`);
+  }
+}
 
 /**
  * Main entry point for the recon command
@@ -93,10 +145,20 @@ export async function doRecon(options: ReconOptions): Promise<ReconResult> {
     ]);
 
     logger.info(`\nConfig written to ${chalk.green(outputPath)}`);
-    logger.info(`\n${chalk.yellow('Next steps:')}`);
-    logger.info('  1. Configure your target endpoint in the config');
-    logger.info('  2. Review the discovered application context');
-    logger.info(`  3. Run: ${chalk.cyan('promptfoo redteam run')}`);
+
+    // Write pending recon config for web UI handoff
+    writePendingReconConfig(config, result, directory);
+
+    // Open browser if not disabled
+    if (options.open !== false) {
+      await openBrowserWithRecon();
+      logger.info(chalk.dim('Configure your target in the browser, then click Run.'));
+    } else {
+      logger.info(`\n${chalk.yellow('Next steps:')}`);
+      logger.info('  1. Configure your target endpoint in the config');
+      logger.info('  2. Review the discovered application context');
+      logger.info(`  3. Run: ${chalk.cyan('promptfoo redteam run')}`);
+    }
 
     return result;
   } finally {

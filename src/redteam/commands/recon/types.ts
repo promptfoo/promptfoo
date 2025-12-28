@@ -14,6 +14,8 @@ export interface ReconOptions {
   yes?: boolean;
   exclude?: string[];
   envPath?: string;
+  /** Open browser with web UI after analysis (default: true) */
+  open?: boolean;
 }
 
 /**

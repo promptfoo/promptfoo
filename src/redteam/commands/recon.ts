@@ -14,6 +14,7 @@ const ArgsSchema = z.object({
   model: z.string().optional(),
   yes: z.boolean().optional(),
   exclude: z.array(z.string()).optional(),
+  open: z.boolean().optional(),
 });
 
 /**
@@ -43,6 +44,7 @@ export function reconCommand(program: Command): void {
     .option('-m, --model <model>', 'Override default model')
     .option('-y, --yes', 'Skip confirmation prompts', false)
     .option('--exclude <patterns...>', 'Additional glob patterns to exclude')
+    .option('--no-open', 'Do not open browser after analysis')
     // Note: --verbose and --env-file are added automatically by addCommonOptionsRecursively
     .action(async (rawArgs) => {
       telemetry.record('command_used', { name: `redteam ${COMMAND}` });
