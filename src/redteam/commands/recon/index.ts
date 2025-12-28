@@ -43,6 +43,7 @@ function writePendingReconConfig(
   const pendingPath = path.join(configDir, PENDING_RECON_FILENAME);
 
   // Type-safe pending config structure
+  // Include applicationDefinition and reconDetails in metadata for UI consumption
   const pendingData: PendingReconConfig = {
     config,
     metadata: {
@@ -50,6 +51,34 @@ function writePendingReconConfig(
       timestamp: Date.now(),
       codebaseDirectory,
       keyFilesAnalyzed: result.keyFiles?.length || 0,
+      // Application definition fields for UI form population
+      applicationDefinition: {
+        purpose: result.purpose,
+        features: result.features,
+        industry: result.industry,
+        systemPrompt: result.systemPrompt,
+        hasAccessTo: result.hasAccessTo,
+        doesNotHaveAccessTo: result.doesNotHaveAccessTo,
+        userTypes: result.userTypes,
+        securityRequirements: result.securityRequirements,
+        sensitiveDataTypes: result.sensitiveDataTypes,
+        exampleIdentifiers: result.exampleIdentifiers,
+        criticalActions: result.criticalActions,
+        forbiddenTopics: result.forbiddenTopics,
+        attackConstraints: result.attackConstraints,
+        competitors: result.competitors,
+        connectedSystems: result.connectedSystems,
+        redteamUser: result.redteamUser,
+      },
+      // Recon-specific details (stateful, tools, security notes)
+      reconDetails: {
+        stateful: result.stateful,
+        entities: result.entities,
+        discoveredTools: result.discoveredTools,
+        securityNotes: result.securityNotes,
+        keyFiles: result.keyFiles,
+        suggestedPlugins: result.suggestedPlugins,
+      },
     },
     reconResult: result,
   };
