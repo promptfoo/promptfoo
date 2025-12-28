@@ -1300,7 +1300,7 @@ describe('getProviderIds', () => {
     vi.clearAllMocks();
   });
 
-  it('returns provider IDs from a file-based config', () => {
+  it('returns provider IDs from a file-based config with multiple providers', () => {
     const mockYamlContent = dedent`
     - id: 'openai:gpt-4o-mini'
       config:
@@ -1322,6 +1322,39 @@ describe('getProviderIds', () => {
     );
   });
 
+  it('returns provider ID from a file with a single provider (non-array)', () => {
+    const mockYamlContent = dedent`
+    id: 'openai:gpt-4o-mini'
+    config:
+      key: 'value1'`;
+    vi.mocked(fs.readFileSync).mockReturnValue(mockYamlContent);
+
+    const providerIds = getProviderIds('file://path/to/single-provider.yaml');
+    expect(providerIds).toEqual(['openai:gpt-4o-mini']);
+  });
+
+  it('handles .yml extension', () => {
+    const mockYamlContent = dedent`
+    id: 'openai:gpt-4o-mini'
+    config:
+      key: 'value1'`;
+    vi.mocked(fs.readFileSync).mockReturnValue(mockYamlContent);
+
+    const providerIds = getProviderIds('file://path/to/provider.yml');
+    expect(providerIds).toEqual(['openai:gpt-4o-mini']);
+  });
+
+  it('handles .json extension', () => {
+    const mockJsonContent = JSON.stringify({
+      id: 'openai:gpt-4o-mini',
+      config: { key: 'value1' },
+    });
+    vi.mocked(fs.readFileSync).mockReturnValue(mockJsonContent);
+
+    const providerIds = getProviderIds('file://path/to/provider.json');
+    expect(providerIds).toEqual(['openai:gpt-4o-mini']);
+  });
+
   it('flattens file-based providers when mixed with inline providers', () => {
     const mockYamlContent = dedent`
     - id: 'openai:gpt-4o-mini'
@@ -1338,6 +1371,66 @@ describe('getProviderIds', () => {
       'openai:gpt-4o-mini',
       'anthropic:messages:claude-3-5-sonnet-20241022',
     ]);
+  });
+
+  it('throws error when provider config is missing id', () => {
+    const mockYamlContent = dedent`
+    config:
+      key: 'value1'`;
+    vi.mocked(fs.readFileSync).mockReturnValue(mockYamlContent);
+
+    expect(() => getProviderIds('file://path/to/provider.yaml')).toThrow(
+      'Provider config in path/to/provider.yaml must have an id',
+    );
+  });
+
+  it('returns string provider as-is when not a file reference', () => {
+    const providerIds = getProviderIds('openai:gpt-4o-mini');
+    expect(providerIds).toEqual(['openai:gpt-4o-mini']);
+  });
+
+  it('returns custom-function for function provider', () => {
+    const customFunction = async () => ({ output: 'test' });
+    const providerIds = getProviderIds(customFunction);
+    expect(providerIds).toEqual(['custom-function']);
+  });
+
+  it('handles array with function providers', () => {
+    const labeledFunction = async () => ({ output: 'test' });
+    labeledFunction.label = 'my-custom-provider';
+
+    const unlabeledFunction = async () => ({ output: 'test2' });
+
+    const providerIds = getProviderIds(['echo', labeledFunction, unlabeledFunction]);
+    expect(providerIds).toEqual(['echo', 'my-custom-provider', 'custom-function-2']);
+  });
+
+  it('extracts id from ProviderOptions objects', () => {
+    const providerIds = getProviderIds([
+      { id: 'openai:gpt-4o-mini', config: { temperature: 0.5 } },
+      { id: 'anthropic:messages:claude-3-5-sonnet-20241022' },
+    ]);
+    expect(providerIds).toEqual([
+      'openai:gpt-4o-mini',
+      'anthropic:messages:claude-3-5-sonnet-20241022',
+    ]);
+  });
+
+  it('extracts id from ProviderOptionsMap objects', () => {
+    const providerIds = getProviderIds([
+      { 'openai:gpt-4o-mini': { config: { temperature: 0.5 } } },
+      { 'anthropic:messages:claude-3-5-sonnet-20241022': { id: 'custom-id' } },
+    ]);
+    expect(providerIds).toEqual(['openai:gpt-4o-mini', 'custom-id']);
+  });
+
+  it('does not treat file:// paths without yaml/yml/json extension as file references', () => {
+    const providerIds = getProviderIds('file://path/to/provider.js');
+    expect(providerIds).toEqual(['file://path/to/provider.js']);
+  });
+
+  it('throws error for invalid provider type', () => {
+    expect(() => getProviderIds(null as any)).toThrow('Invalid providers list');
   });
 });
 

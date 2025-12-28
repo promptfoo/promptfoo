@@ -424,18 +424,8 @@ export async function loadApiProviders(
  */
 function getProviderIdsFromFile(providerPath: string): string[] {
   const basePath = cliState.basePath || process.cwd();
+  const configs = loadProviderConfigsFromFile(providerPath, basePath);
   const relativePath = providerPath.slice('file://'.length);
-  const modulePath = path.isAbsolute(relativePath)
-    ? relativePath
-    : path.join(basePath, relativePath);
-
-  const rawContent = yaml.load(fs.readFileSync(modulePath, 'utf8'));
-  const fileContent = maybeLoadConfigFromExternalFile(rawContent) as
-    | ProviderOptions
-    | ProviderOptions[];
-  invariant(fileContent, `Provider config ${relativePath} is undefined`);
-
-  const configs = [fileContent].flat() as ProviderOptions[];
   return configs.map((config) => {
     invariant(config.id, `Provider config in ${relativePath} must have an id`);
     return config.id;
@@ -444,12 +434,7 @@ function getProviderIdsFromFile(providerPath: string): string[] {
 
 export function getProviderIds(providerPaths: TestSuiteConfig['providers']): string[] {
   if (typeof providerPaths === 'string') {
-    if (
-      providerPaths.startsWith('file://') &&
-      (providerPaths.endsWith('.yaml') ||
-        providerPaths.endsWith('.yml') ||
-        providerPaths.endsWith('.json'))
-    ) {
+    if (isFileReference(providerPaths)) {
       return getProviderIdsFromFile(providerPaths);
     }
     return [providerPaths];
@@ -458,10 +443,7 @@ export function getProviderIds(providerPaths: TestSuiteConfig['providers']): str
   } else if (Array.isArray(providerPaths)) {
     return providerPaths.flatMap((provider, idx) => {
       if (typeof provider === 'string') {
-        if (
-          provider.startsWith('file://') &&
-          (provider.endsWith('.yaml') || provider.endsWith('.yml') || provider.endsWith('.json'))
-        ) {
+        if (isFileReference(provider)) {
           return getProviderIdsFromFile(provider);
         }
         return provider;
