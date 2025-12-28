@@ -1,21 +1,28 @@
-import { hasWebSearchCapability, loadWebSearchProvider } from '../../src/providers/webSearchUtils';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { loadApiProvider } from '../../src/providers/index';
+import { hasWebSearchCapability, loadWebSearchProvider } from '../../src/providers/webSearchUtils';
+
 import type { ApiProvider } from '../../src/types/index';
 
-jest.mock('../../src/providers', () => ({
-  loadApiProvider: jest.fn(),
-}));
+vi.mock('../../src/providers', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    loadApiProvider: vi.fn(),
+  };
+});
 
-jest.mock('../../src/logger', () => ({
-  debug: jest.fn(),
-  info: jest.fn(),
-  warn: jest.fn(),
-  error: jest.fn(),
+vi.mock('../../src/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
 }));
 
 describe('webSearchUtils', () => {
   beforeEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   describe('hasWebSearchCapability', () => {
@@ -174,7 +181,7 @@ describe('webSearchUtils', () => {
   });
 
   describe('loadWebSearchProvider', () => {
-    const mockLoadApiProvider = jest.mocked(loadApiProvider);
+    const mockLoadApiProvider = vi.mocked(loadApiProvider);
 
     it('should return null when no providers can be loaded', async () => {
       mockLoadApiProvider.mockRejectedValue(new Error('API key not found'));

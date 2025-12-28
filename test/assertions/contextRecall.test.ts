@@ -1,17 +1,18 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleContextRecall } from '../../src/assertions/contextRecall';
 import * as contextUtils from '../../src/assertions/contextUtils';
 import * as matchers from '../../src/matchers';
 
 import type { ApiProvider, AssertionParams, ProviderResponse } from '../../src/types/index';
 
-jest.mock('../../src/matchers');
-jest.mock('../../src/assertions/contextUtils');
+vi.mock('../../src/matchers');
+vi.mock('../../src/assertions/contextUtils');
 
 describe('handleContextRecall', () => {
-  const mockMatchesContextRecall = jest.spyOn(matchers, 'matchesContextRecall');
+  const mockMatchesContextRecall = vi.spyOn(matchers, 'matchesContextRecall');
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   it('should pass when context recall is above threshold', async () => {
@@ -30,11 +31,11 @@ describe('handleContextRecall', () => {
       },
     };
     mockMatchesContextRecall.mockResolvedValue(mockResult);
-    jest.mocked(contextUtils.resolveContext).mockResolvedValue('test context');
+    vi.mocked(contextUtils.resolveContext).mockResolvedValue('test context');
 
     const mockProvider: ApiProvider = {
       id: () => 'test-provider',
-      callApi: jest.fn(),
+      callApi: vi.fn().mockResolvedValue({} as ProviderResponse),
     };
 
     const params: AssertionParams = {
@@ -86,11 +87,11 @@ describe('handleContextRecall', () => {
   it('should fail when context recall is below threshold', async () => {
     const mockResult = { pass: false, score: 0.3, reason: 'Context missing expected information' };
     mockMatchesContextRecall.mockResolvedValue(mockResult);
-    jest.mocked(contextUtils.resolveContext).mockResolvedValue('test context');
+    vi.mocked(contextUtils.resolveContext).mockResolvedValue('test context');
 
     const mockProvider: ApiProvider = {
       id: () => 'test-provider',
-      callApi: jest.fn(),
+      callApi: vi.fn().mockResolvedValue({} as ProviderResponse),
     };
 
     const params: AssertionParams = {
@@ -134,11 +135,11 @@ describe('handleContextRecall', () => {
   it('should use default threshold of 0 when not provided', async () => {
     const mockResult = { pass: true, score: 1, reason: 'Perfect match' };
     mockMatchesContextRecall.mockResolvedValue(mockResult);
-    jest.mocked(contextUtils.resolveContext).mockResolvedValue('test context');
+    vi.mocked(contextUtils.resolveContext).mockResolvedValue('test context');
 
     const mockProvider: ApiProvider = {
       id: () => 'test-provider',
-      callApi: jest.fn(),
+      callApi: vi.fn().mockResolvedValue({} as ProviderResponse),
     };
 
     const params: AssertionParams = {
@@ -179,11 +180,11 @@ describe('handleContextRecall', () => {
   it('should fall back to prompt when no context variable', async () => {
     const mockResult = { pass: true, score: 1, reason: 'ok' };
     mockMatchesContextRecall.mockResolvedValue(mockResult);
-    jest.mocked(contextUtils.resolveContext).mockResolvedValue('test prompt');
+    vi.mocked(contextUtils.resolveContext).mockResolvedValue('test prompt');
 
     const mockProvider: ApiProvider = {
       id: () => 'test-provider',
-      callApi: jest.fn(),
+      callApi: vi.fn().mockResolvedValue({} as ProviderResponse),
     };
 
     const params: AssertionParams = {
@@ -232,9 +233,12 @@ describe('handleContextRecall', () => {
   it('should use contextTransform when provided', async () => {
     const mockResult = { pass: true, score: 1, reason: 'ok' };
     mockMatchesContextRecall.mockResolvedValue(mockResult);
-    jest.mocked(contextUtils.resolveContext).mockResolvedValue('ctx');
+    vi.mocked(contextUtils.resolveContext).mockResolvedValue('ctx');
 
-    const mockProvider: ApiProvider = { id: () => 'p', callApi: jest.fn() };
+    const mockProvider: ApiProvider = {
+      id: () => 'p',
+      callApi: vi.fn().mockResolvedValue({} as ProviderResponse),
+    };
 
     const params: AssertionParams = {
       assertion: { type: 'context-recall', contextTransform: 'expr' },
@@ -275,7 +279,7 @@ describe('handleContextRecall', () => {
   it('should throw error when renderedValue is not a string', async () => {
     const mockProvider: ApiProvider = {
       id: () => 'test-provider',
-      callApi: jest.fn(),
+      callApi: vi.fn().mockResolvedValue({} as ProviderResponse),
     };
 
     const params: AssertionParams = {
@@ -307,7 +311,7 @@ describe('handleContextRecall', () => {
   it('should throw error when prompt is missing', async () => {
     const mockProvider: ApiProvider = {
       id: () => 'test-provider',
-      callApi: jest.fn(),
+      callApi: vi.fn().mockResolvedValue({} as ProviderResponse),
     };
 
     const params: AssertionParams = {

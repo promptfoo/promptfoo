@@ -6,17 +6,17 @@
 
 import chalk from 'chalk';
 import ora from 'ora';
-import logger from '../../logger';
-import { formatDuration } from '../../util/formatDuration';
 import { TERMINAL_MAX_WIDTH } from '../../constants';
-import { printBorder } from '../../util/index';
+import logger from '../../logger';
 import {
   CodeScanSeverity,
-  formatSeverity,
   countBySeverity,
+  formatSeverity,
   getSeverityRank,
   type ScanResponse,
 } from '../../types/codeScan';
+import { formatDuration } from '../../util/formatDuration';
+import { printBorder } from '../../util/index';
 
 /**
  * Options for output display
@@ -102,7 +102,7 @@ export function displayScanResults(
 
     // 4. Detailed findings (only show issues with valid severity)
     if (severityCounts.total > 0) {
-      const validSeverities = [
+      const validSeverities: CodeScanSeverity[] = [
         CodeScanSeverity.CRITICAL,
         CodeScanSeverity.HIGH,
         CodeScanSeverity.MEDIUM,

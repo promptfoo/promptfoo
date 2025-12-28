@@ -1,9 +1,4 @@
-import { v4 as uuidv4 } from 'uuid';
-
-import { jest } from '@jest/globals';
-
-import type { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
-import type { TreeSearchOutput } from '../../../src/redteam/providers/iterativeTree';
+import { beforeEach, describe, expect, it, Mocked, vi } from 'vitest';
 import {
   createTreeNode,
   evaluateResponse,
@@ -19,6 +14,10 @@ import {
   JUDGE_SYSTEM_PROMPT,
 } from '../../../src/redteam/providers/prompts';
 import { getTargetResponse } from '../../../src/redteam/providers/shared';
+import { getNunjucksEngine } from '../../../src/util/templates';
+
+import type { OpenAiChatCompletionProvider } from '../../../src/providers/openai/chat';
+import type { TreeSearchOutput } from '../../../src/redteam/providers/iterativeTree';
 import type {
   ApiProvider,
   AtomicTestCase,
@@ -26,13 +25,15 @@ import type {
   CallApiOptionsParams,
   GradingResult,
 } from '../../../src/types/index';
-import { getNunjucksEngine } from '../../../src/util/templates';
 
-jest.mock('../../../src/providers/openai');
-jest.mock('../../../src/util/templates');
-jest.mock('../../../src/redteam/graders', () => ({
-  getGraderById: jest.fn(),
-}));
+vi.mock('../../../src/providers/openai');
+// Note: We don't mock '../../../src/util/templates' because tests need the real nunjucks engine
+vi.mock('../../../src/redteam/graders', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    getGraderById: vi.fn(),
+  };
+});
 
 describe('RedteamIterativeProvider', () => {
   describe('renderSystemPrompts', () => {
@@ -112,13 +113,13 @@ describe('RedteamIterativeProvider', () => {
   });
 
   describe('evaluateResponse', () => {
-    let mockRedteamProvider: jest.Mocked<OpenAiChatCompletionProvider>;
+    let mockRedteamProvider: Mocked<OpenAiChatCompletionProvider>;
 
     beforeEach(() => {
       mockRedteamProvider = {
-        id: jest.fn().mockReturnValue('mock-provider'),
-        callApi: jest.fn(),
-      } as unknown as jest.Mocked<OpenAiChatCompletionProvider>;
+        id: vi.fn().mockReturnValue('mock-provider'),
+        callApi: vi.fn(),
+      } as unknown as Mocked<OpenAiChatCompletionProvider>;
     });
 
     it('should evaluate response correctly without penalized phrase', async () => {
@@ -222,13 +223,13 @@ describe('RedteamIterativeProvider', () => {
   });
 
   describe('getNewPrompt', () => {
-    let mockRedteamProvider: jest.Mocked<OpenAiChatCompletionProvider>;
+    let mockRedteamProvider: Mocked<OpenAiChatCompletionProvider>;
 
     beforeEach(() => {
       mockRedteamProvider = {
-        id: jest.fn().mockReturnValue('mock-provider'),
-        callApi: jest.fn(),
-      } as unknown as jest.Mocked<OpenAiChatCompletionProvider>;
+        id: vi.fn().mockReturnValue('mock-provider'),
+        callApi: vi.fn(),
+      } as unknown as Mocked<OpenAiChatCompletionProvider>;
     });
 
     it('should generate a new prompt correctly', async () => {
@@ -311,6 +312,73 @@ describe('RedteamIterativeProvider', () => {
           }),
         }),
       );
+    });
+  });
+
+  describe('Abort Signal Handling', () => {
+    let mockRedteamProvider: Mocked<ApiProvider>;
+
+    beforeEach(() => {
+      mockRedteamProvider = {
+        id: vi.fn().mockReturnValue('mock-provider'),
+        callApi: vi.fn(),
+      } as unknown as Mocked<ApiProvider>;
+    });
+
+    it('should re-throw AbortError from evaluateResponse and not swallow it', async () => {
+      const abortError = new Error('The operation was aborted');
+      abortError.name = 'AbortError';
+
+      // Mock callApi to throw AbortError
+      mockRedteamProvider.callApi.mockRejectedValue(abortError);
+
+      await expect(
+        evaluateResponse(mockRedteamProvider, 'Judge prompt', 'Response', 'Best', false),
+      ).rejects.toThrow('The operation was aborted');
+    });
+
+    it('should re-throw AbortError from getNewPrompt primary parse failure', async () => {
+      const abortError = new Error('The operation was aborted');
+      abortError.name = 'AbortError';
+
+      // Mock callApi to throw AbortError
+      mockRedteamProvider.callApi.mockRejectedValue(abortError);
+
+      await expect(getNewPrompt(mockRedteamProvider, [])).rejects.toThrow(
+        'The operation was aborted',
+      );
+    });
+
+    it('should handle non-AbortError parse failures gracefully in evaluateResponse', async () => {
+      // Return unparseable output - should return default score
+      mockRedteamProvider.callApi.mockResolvedValue({
+        output: 'not valid json at all',
+      });
+
+      const result = await evaluateResponse(
+        mockRedteamProvider,
+        'Judge prompt',
+        'Response',
+        'Best',
+        false,
+      );
+
+      // Should return default score instead of throwing
+      expect(result.score).toBe(1);
+      expect(result.explanation).toBe('Failed to parse judge response');
+    });
+
+    it('should handle non-AbortError parse failures gracefully in getNewPrompt', async () => {
+      // Return unparseable output - should skip turn gracefully
+      mockRedteamProvider.callApi.mockResolvedValue({
+        output: 'definitely not JSON',
+      });
+
+      const result = await getNewPrompt(mockRedteamProvider, []);
+
+      // Should return skip marker instead of throwing
+      expect(result.improvement).toBe('parse failure – skipping turn');
+      expect(result.prompt).toBe('');
     });
   });
 
@@ -433,13 +501,13 @@ describe('RedteamIterativeProvider', () => {
   });
 
   describe('getTargetResponse', () => {
-    let mockTargetProvider: jest.Mocked<ApiProvider>;
+    let mockTargetProvider: Mocked<ApiProvider>;
 
     beforeEach(() => {
       mockTargetProvider = {
-        id: jest.fn().mockReturnValue('mock-provider'),
-        callApi: jest.fn<ApiProvider['callApi']>(),
-      } as jest.Mocked<ApiProvider>;
+        id: vi.fn().mockReturnValue('mock-provider'),
+        callApi: vi.fn<ApiProvider['callApi']>(),
+      } as Mocked<ApiProvider>;
     });
 
     it('should get target response correctly', async () => {
@@ -499,7 +567,7 @@ describe('TreeNode', () => {
     });
 
     it('should use provided UUID if given', () => {
-      const customId = uuidv4();
+      const customId = crypto.randomUUID();
       const node = createTreeNode('prompt', 5, 0, customId);
       expect(node.id).toBe(customId);
     });
@@ -508,8 +576,8 @@ describe('TreeNode', () => {
 
 describe('Tree Structure', () => {
   it('should track parent-child relationships in treeOutputs', async () => {
-    const parentId = uuidv4();
-    const childId = uuidv4();
+    const parentId = crypto.randomUUID();
+    const childId = crypto.randomUUID();
     const parentNode = createTreeNode('parent', 5, 0, parentId);
     const childNode = createTreeNode('child', 7, 1, childId);
 
@@ -639,23 +707,23 @@ describe('Tree Structure', () => {
 });
 
 describe('Tree Structure and Metadata', () => {
-  let mockRedteamProvider: jest.Mocked<ApiProvider>;
-  let mockTargetProvider: jest.Mocked<ApiProvider>;
+  let mockRedteamProvider: Mocked<ApiProvider>;
+  let mockTargetProvider: Mocked<ApiProvider>;
 
   beforeEach(() => {
     mockRedteamProvider = {
-      id: jest.fn().mockReturnValue('mock-provider'),
-      callApi: jest.fn<ApiProvider['callApi']>().mockResolvedValue({
+      id: vi.fn().mockReturnValue('mock-provider'),
+      callApi: vi.fn<ApiProvider['callApi']>().mockResolvedValue({
         output: JSON.stringify({ onTopic: true }),
       }),
-    } as jest.Mocked<ApiProvider>;
+    } as Mocked<ApiProvider>;
 
     mockTargetProvider = {
-      id: jest.fn().mockReturnValue('mock-provider'),
-      callApi: jest.fn<ApiProvider['callApi']>().mockResolvedValue({
+      id: vi.fn().mockReturnValue('mock-provider'),
+      callApi: vi.fn<ApiProvider['callApi']>().mockResolvedValue({
         output: 'test response',
       }),
-    } as jest.Mocked<ApiProvider>;
+    } as Mocked<ApiProvider>;
   });
   it('should track parent-child relationships in metadata', async () => {
     const parentPrompt = 'parent prompt';
@@ -700,13 +768,13 @@ describe('Tree Structure and Metadata', () => {
 
   it('should not throw on target error and allow error-bearing output to be recorded', async () => {
     // This test validates the non-throwing behavior at a unit level by calling shared.getTargetResponse directly
-    const mockTargetProvider: jest.Mocked<ApiProvider> = {
-      id: jest.fn().mockReturnValue('mock-target'),
-      callApi: jest.fn<ApiProvider['callApi']>().mockResolvedValue({
+    const mockTargetProvider: Mocked<ApiProvider> = {
+      id: vi.fn().mockReturnValue('mock-target'),
+      callApi: vi.fn<ApiProvider['callApi']>().mockResolvedValue({
         output: 'This is 504',
         error: 'HTTP 504',
       }),
-    } as jest.Mocked<ApiProvider>;
+    } as Mocked<ApiProvider>;
 
     const result = await getTargetResponse(
       mockTargetProvider,
@@ -720,10 +788,10 @@ describe('Tree Structure and Metadata', () => {
   });
 
   it('should track tree structure across multiple depths', () => {
-    const rootId = uuidv4();
-    const child1Id = uuidv4();
-    const child2Id = uuidv4();
-    const grandchild1Id = uuidv4();
+    const rootId = crypto.randomUUID();
+    const child1Id = crypto.randomUUID();
+    const child2Id = crypto.randomUUID();
+    const grandchild1Id = crypto.randomUUID();
 
     const treeOutputs: TreeSearchOutput[] = [
       {
@@ -1089,21 +1157,21 @@ describe('Metadata Validation with New Fields', () => {
 });
 
 describe('Token Counting', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     // Reset TokenUsageTracker between tests to ensure clean state
-    const { TokenUsageTracker } = require('../../../src/util/tokenUsage');
+    const { TokenUsageTracker } = await import('../../../src/util/tokenUsage');
     TokenUsageTracker.getInstance().resetAllUsage();
   });
 
   it('should correctly track token usage from target provider responses', async () => {
-    const mockTargetProvider: jest.Mocked<ApiProvider> = {
-      id: jest.fn().mockReturnValue('mock-target'),
-      callApi: jest.fn<ApiProvider['callApi']>().mockResolvedValue({
+    const mockTargetProvider: Mocked<ApiProvider> = {
+      id: vi.fn().mockReturnValue('mock-target'),
+      callApi: vi.fn<ApiProvider['callApi']>().mockResolvedValue({
         output: 'target response',
         tokenUsage: { total: 100, prompt: 60, completion: 40, numRequests: 1 },
         cached: false,
       }),
-    } as jest.Mocked<ApiProvider>;
+    } as Mocked<ApiProvider>;
 
     const targetPrompt = 'Test prompt';
     const context: CallApiContextParams = {
@@ -1125,14 +1193,14 @@ describe('Token Counting', () => {
   });
 
   it('should handle missing token usage from target responses', async () => {
-    const mockTargetProvider: jest.Mocked<ApiProvider> = {
-      id: jest.fn().mockReturnValue('mock-target'),
-      callApi: jest.fn<ApiProvider['callApi']>().mockResolvedValue({
+    const mockTargetProvider: Mocked<ApiProvider> = {
+      id: vi.fn().mockReturnValue('mock-target'),
+      callApi: vi.fn<ApiProvider['callApi']>().mockResolvedValue({
         output: 'response without tokens',
         // No tokenUsage provided
         cached: false,
       }),
-    } as jest.Mocked<ApiProvider>;
+    } as Mocked<ApiProvider>;
 
     const result = await getTargetResponse(
       mockTargetProvider,
@@ -1146,14 +1214,14 @@ describe('Token Counting', () => {
   });
 
   it('should handle zero token counts correctly', async () => {
-    const mockTargetProvider: jest.Mocked<ApiProvider> = {
-      id: jest.fn().mockReturnValue('mock-target'),
-      callApi: jest.fn<ApiProvider['callApi']>().mockResolvedValue({
+    const mockTargetProvider: Mocked<ApiProvider> = {
+      id: vi.fn().mockReturnValue('mock-target'),
+      callApi: vi.fn<ApiProvider['callApi']>().mockResolvedValue({
         output: 'response with zero tokens',
         tokenUsage: { total: 0, prompt: 0, completion: 0, numRequests: 1 },
         cached: false,
       }),
-    } as jest.Mocked<ApiProvider>;
+    } as Mocked<ApiProvider>;
 
     const result = await getTargetResponse(
       mockTargetProvider,
@@ -1171,16 +1239,16 @@ describe('Token Counting', () => {
   });
 
   it('should track token usage from redteam provider calls', async () => {
-    const mockRedteamProvider: jest.Mocked<ApiProvider> = {
-      id: jest.fn().mockReturnValue('mock-redteam'),
-      callApi: jest.fn<ApiProvider['callApi']>().mockResolvedValue({
+    const mockRedteamProvider: Mocked<ApiProvider> = {
+      id: vi.fn().mockReturnValue('mock-redteam'),
+      callApi: vi.fn<ApiProvider['callApi']>().mockResolvedValue({
         output: JSON.stringify({
           improvement: 'test improvement',
           prompt: 'test prompt',
         }),
         tokenUsage: { total: 50, prompt: 30, completion: 20, numRequests: 1 },
       }),
-    } as jest.Mocked<ApiProvider>;
+    } as Mocked<ApiProvider>;
 
     const redteamHistory: { role: 'system' | 'user' | 'assistant'; content: string }[] = [
       { role: 'system', content: 'System prompt' },
@@ -1196,16 +1264,16 @@ describe('Token Counting', () => {
   });
 
   it('should track token usage from judge evaluation calls', async () => {
-    const mockJudgeProvider: jest.Mocked<ApiProvider> = {
-      id: jest.fn().mockReturnValue('mock-judge'),
-      callApi: jest.fn<ApiProvider['callApi']>().mockResolvedValue({
+    const mockJudgeProvider: Mocked<ApiProvider> = {
+      id: vi.fn().mockReturnValue('mock-judge'),
+      callApi: vi.fn<ApiProvider['callApi']>().mockResolvedValue({
         output: JSON.stringify({
           currentResponse: { rating: 8, explanation: 'Good response' },
           previousBestResponse: { rating: 5, explanation: 'Previous response' },
         }),
         tokenUsage: { total: 75, prompt: 40, completion: 35, numRequests: 1 },
       }),
-    } as jest.Mocked<ApiProvider>;
+    } as Mocked<ApiProvider>;
 
     const { score, explanation } = await evaluateResponse(
       mockJudgeProvider,
@@ -1223,13 +1291,13 @@ describe('Token Counting', () => {
   // removed on-topic token usage test
 
   it('should handle incomplete token usage data gracefully', async () => {
-    const mockProvider: jest.Mocked<ApiProvider> = {
-      id: jest.fn().mockReturnValue('mock-provider'),
-      callApi: jest.fn<ApiProvider['callApi']>().mockResolvedValue({
+    const mockProvider: Mocked<ApiProvider> = {
+      id: vi.fn().mockReturnValue('mock-provider'),
+      callApi: vi.fn<ApiProvider['callApi']>().mockResolvedValue({
         output: 'response with partial tokens',
         tokenUsage: { total: 100, prompt: 60 }, // completion missing
       }),
-    } as jest.Mocked<ApiProvider>;
+    } as Mocked<ApiProvider>;
 
     const result = await getTargetResponse(
       mockProvider,
@@ -1345,9 +1413,9 @@ describe('Token Counting', () => {
     // This test simulates how token usage would be accumulated in the actual iterativeTree provider
     // by testing individual components that contribute to token usage
 
-    const mockRedteamProvider: jest.Mocked<ApiProvider> = {
-      id: jest.fn().mockReturnValue('mock-redteam'),
-      callApi: jest
+    const mockRedteamProvider: Mocked<ApiProvider> = {
+      id: vi.fn().mockReturnValue('mock-redteam'),
+      callApi: vi
         .fn<ApiProvider['callApi']>()
         .mockResolvedValueOnce({
           output: JSON.stringify({ improvement: 'test1', prompt: 'prompt1' }),
@@ -1360,15 +1428,15 @@ describe('Token Counting', () => {
           }),
           tokenUsage: { total: 75, prompt: 40, completion: 35, numRequests: 1 },
         }),
-    } as jest.Mocked<ApiProvider>;
+    } as Mocked<ApiProvider>;
 
-    const mockTargetProvider: jest.Mocked<ApiProvider> = {
-      id: jest.fn().mockReturnValue('mock-target'),
-      callApi: jest.fn<ApiProvider['callApi']>().mockResolvedValue({
+    const mockTargetProvider: Mocked<ApiProvider> = {
+      id: vi.fn().mockReturnValue('mock-target'),
+      callApi: vi.fn<ApiProvider['callApi']>().mockResolvedValue({
         output: 'target response',
         tokenUsage: { total: 100, prompt: 60, completion: 40, numRequests: 1 },
       }),
-    } as jest.Mocked<ApiProvider>;
+    } as Mocked<ApiProvider>;
 
     // Simulate the sequence of calls that would happen in one iteration
     const promptResult = await getNewPrompt(mockRedteamProvider, [
@@ -1400,14 +1468,14 @@ describe('Token Counting', () => {
   });
 
   it('should handle provider delay settings during token tracking', async () => {
-    const mockProviderWithDelay: jest.Mocked<ApiProvider> = {
-      id: jest.fn().mockReturnValue('mock-provider-with-delay'),
-      callApi: jest.fn<ApiProvider['callApi']>().mockResolvedValue({
+    const mockProviderWithDelay: Mocked<ApiProvider> = {
+      id: vi.fn().mockReturnValue('mock-provider-with-delay'),
+      callApi: vi.fn<ApiProvider['callApi']>().mockResolvedValue({
         output: JSON.stringify({ improvement: 'test', prompt: 'test' }),
         tokenUsage: { total: 50, prompt: 30, completion: 20, numRequests: 1 },
       }),
       delay: 100, // 100ms delay
-    } as jest.Mocked<ApiProvider>;
+    } as Mocked<ApiProvider>;
 
     const startTime = Date.now();
 
@@ -1421,3 +1489,8 @@ describe('Token Counting', () => {
     expect(elapsed).toBeGreaterThanOrEqual(90); // Allow for 10ms variance
   });
 });
+
+// Note: Tests for perTurnLayers in iterativeTree are covered by testing through
+// the RedteamIterativeTreeProvider class, not exposed internal functions.
+// The TreeSearchOutput interface already supports promptAudio, promptImage,
+// outputAudio, and outputImage fields which are populated when perTurnLayers is configured.

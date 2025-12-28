@@ -43,6 +43,10 @@ jobs:
           node-version-file: '.nvmrc'
           cache: 'npm'
 
+      # Node 24 ships with npm 11.6.2 which has a lockfile compatibility bug (npm/cli#8669)
+      - name: Upgrade npm
+        run: npm install -g npm@latest
+
       - name: Install Dependencies
         run: |
           npm ci
@@ -95,7 +99,7 @@ jobs:
             npx tsc --build --noEmit --incremental
 
           # The script to run Vitest tests for individual files
-          testScript: 'npx vitest run {{file}} --reporter=basic'
+          testScript: 'npx vitest run {{file}} --reporter=default'
 
           coverageScript: |
             npx vitest run {{testFilePaths}} \

@@ -1,3 +1,4 @@
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../src/cliState';
 import {
   getEnvBool,
@@ -15,7 +16,7 @@ describe('envars', () => {
   const originalCliState = { ...cliState };
 
   beforeEach(() => {
-    jest.resetModules();
+    vi.resetModules();
     process.env = { ...originalEnv };
     // Reset cliState to empty for each test
     Object.keys(cliState).forEach((key) => {

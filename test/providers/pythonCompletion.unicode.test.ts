@@ -1,10 +1,12 @@
 import * as fs from 'fs';
-import * as path from 'path';
 import * as os from 'os';
-import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll } from '@jest/globals';
+import * as path from 'path';
+
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { PythonProvider } from '../../src/providers/pythonCompletion';
-import type { CallApiContextParams } from '../../src/types/index';
 import * as pythonUtils from '../../src/python/pythonUtils';
+
+import type { CallApiContextParams } from '../../src/types/index';
 
 // Windows CI has severe filesystem delays (antivirus, etc.) - allow up to 90s
 // (60s for file retry + 30s for Python startup and test overhead)

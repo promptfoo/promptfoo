@@ -1,16 +1,17 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleSearchRubric } from '../../src/assertions/searchRubric';
 import { matchesSearchRubric } from '../../src/matchers';
 
 import type { Assertion, AssertionParams, GradingResult } from '../../src/types/index';
 
-jest.mock('../../src/matchers');
+vi.mock('../../src/matchers');
 
 describe('handleSearchRubric', () => {
   beforeEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
-  const mockMatchesSearchRubric = jest.mocked(matchesSearchRubric);
+  const mockMatchesSearchRubric = vi.mocked(matchesSearchRubric);
 
   const defaultParams: AssertionParams = {
     assertion: {
@@ -74,6 +75,7 @@ describe('handleSearchRubric', () => {
       { city: 'Tokyo' },
       params.assertion,
       undefined,
+      undefined, // providerCallContext
     );
   });
 
@@ -164,7 +166,7 @@ describe('handleSearchRubric', () => {
   it('should pass provider to matchesSearchRubric', async () => {
     const mockProvider = {
       id: () => 'test-provider',
-      callApi: jest.fn(),
+      callApi: vi.fn(),
     };
 
     const params: AssertionParams = {

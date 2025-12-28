@@ -37,6 +37,7 @@ interface SystemError extends Error {
 export async function fetchWithProxy(
   url: RequestInfo,
   options: FetchOptions = {},
+  abortSignal?: AbortSignal,
 ): Promise<Response> {
   let finalUrl = url;
   let finalUrlString: string | undefined;
@@ -53,6 +54,13 @@ export async function fetchWithProxy(
     throw new Error('Invalid URL');
   }
 
+  // Combine abort signals: incoming abortSignal parameter + any signal in options
+  const combinedSignal = abortSignal
+    ? options.signal
+      ? AbortSignal.any([options.signal, abortSignal])
+      : abortSignal
+    : options.signal;
+
   // This is overridden globally but Node v20 is still complaining so we need to add it here too
   const finalOptions: FetchOptions & { dispatcher?: any } = {
     ...options,
@@ -60,6 +68,7 @@ export async function fetchWithProxy(
       ...(options.headers as Record<string, string>),
       'x-promptfoo-version': VERSION,
     },
+    signal: combinedSignal,
   };
 
   if (typeof url === 'string') {
@@ -136,10 +145,16 @@ export function fetchWithTimeout(
   timeout: number,
 ): Promise<Response> {
   return new Promise((resolve, reject) => {
-    const controller = new AbortController();
-    const { signal } = controller;
+    const timeoutController = new AbortController();
+
+    // Combine timeout signal with any incoming abort signal
+    // The composite signal will abort if EITHER signal aborts
+    const signal = options.signal
+      ? AbortSignal.any([options.signal, timeoutController.signal])
+      : timeoutController.signal;
+
     const timeoutId = setTimeout(() => {
-      controller.abort();
+      timeoutController.abort();
       reject(new Error(`Request timed out after ${timeout} ms`));
     }, timeout);
 
@@ -238,6 +253,11 @@ export async function fetchWithRetries(
 
       return response;
     } catch (error) {
+      // Don't retry on abort - propagate immediately
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw error;
+      }
+
       let errorMessage;
       if (error instanceof Error) {
         // Extract as much detail as possible from the error

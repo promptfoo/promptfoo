@@ -3,6 +3,7 @@ import { URL } from 'url';
 import input from '@inquirer/input';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
+import { isBlobStorageEnabled } from './blobs/extractor';
 import { getDefaultShareViewBaseUrl, getShareApiBaseUrl, getShareViewBaseUrl } from './constants';
 import { getEnvBool, getEnvInt, getEnvString, isCI } from './envars';
 import { getUserEmail, setUserEmail } from './globalConfig/accounts';
@@ -14,6 +15,7 @@ import {
   makeRequest as makeCloudRequest,
 } from './util/cloud';
 import { fetchWithProxy } from './util/fetch/index';
+import { createBlobInlineCache, inlineBlobRefsForShare } from './util/inlineBlobsForShare';
 
 import type Eval from './models/eval';
 import type EvalResult from './models/evalResult';
@@ -22,6 +24,13 @@ import type ModelAudit from './models/modelAudit';
 interface ShareDomainResult {
   domain: string;
   isPublicShare: boolean;
+}
+
+export interface ShareOptions {
+  /** Suppress progress bar and "Sharing to:" messages for async background sharing */
+  silent?: boolean;
+  /** Show authentication info in the URL */
+  showAuth?: boolean;
 }
 
 export function isSharingEnabled(evalRecord: Eval): boolean {
@@ -107,8 +116,28 @@ async function sendEvalRecord(
 ): Promise<string> {
   // Fetch traces for the eval
   const traces = await evalRecord.getTraces();
-  const evalDataWithoutResults = { ...evalRecord, results: [], traces };
-  const jsonData = JSON.stringify(evalDataWithoutResults);
+
+  // Inject current team ID into config metadata if cloud is enabled
+  // This ensures the eval is created in the correct team (not the default team)
+  let evalData: Record<string, unknown> = { ...evalRecord, results: [], traces };
+  if (cloudConfig.isEnabled()) {
+    const currentOrgId = cloudConfig.getCurrentOrganizationId();
+    const currentTeamId = cloudConfig.getCurrentTeamId(currentOrgId);
+    if (currentTeamId) {
+      evalData = {
+        ...evalData,
+        config: {
+          ...(evalRecord.config || {}),
+          metadata: {
+            ...(evalRecord.config?.metadata || {}),
+            teamId: currentTeamId,
+          },
+        },
+      };
+    }
+  }
+
+  const jsonData = JSON.stringify(evalData);
 
   logger.debug(
     `Sending initial eval data to ${url} - eval ${evalRecord.id} with ${evalRecord.prompts.length} prompts ${traces.length > 0 ? `and trace data` : ''}`,
@@ -217,16 +246,28 @@ async function rollbackEval(url: string, evalId: string, headers: Record<string,
   }
 }
 
-async function sendChunkedResults(evalRecord: Eval, url: string): Promise<string | null> {
+async function sendChunkedResults(
+  evalRecord: Eval,
+  url: string,
+  options: ShareOptions = {},
+): Promise<string | null> {
   const isVerbose = isDebugEnabled();
+  const { silent = false } = options;
   logger.debug(`Starting chunked results upload to ${url}`);
 
   await checkCloudPermissions(evalRecord.config);
 
-  const sampleResults = (await evalRecord.fetchResultsBatched(100).next()).value ?? [];
+  const inlineBlobs =
+    isBlobStorageEnabled() && getEnvBool('PROMPTFOO_SHARE_INLINE_BLOBS', !cloudConfig.isEnabled());
+  const inlineCache = inlineBlobs ? createBlobInlineCache() : null;
+
+  let sampleResults = (await evalRecord.fetchResultsBatched(100).next()).value ?? [];
   if (sampleResults.length === 0) {
     logger.debug(`No results found`);
     return null;
+  }
+  if (inlineBlobs && inlineCache) {
+    sampleResults = await inlineBlobRefsForShare(sampleResults, inlineCache);
   }
   logger.debug(`Loaded ${sampleResults.length} sample results to determine chunk size`);
 
@@ -250,12 +291,13 @@ async function sendChunkedResults(evalRecord: Eval, url: string): Promise<string
     headers['Authorization'] = `Bearer ${cloudConfig.getApiKey()}`;
   }
 
-  const totalResults = await evalRecord.getResultsCount();
+  // Use total row count (not distinct test count) since we iterate over all result rows
+  const totalResults = await evalRecord.getTotalResultRowCount();
   logger.debug(`Total results to share: ${totalResults}`);
 
-  // Setup progress bar only if not in verbose mode or CI
+  // Setup progress bar only if not in verbose mode, CI, or silent mode
   let progressBar: cliProgress.SingleBar | null = null;
-  if (!isVerbose && !isCI()) {
+  if (!isVerbose && !isCI() && !silent) {
     progressBar = new cliProgress.SingleBar(
       {
         format: 'Sharing | {bar} | {percentage}% | {value}/{total} results',
@@ -284,7 +326,11 @@ async function sendChunkedResults(evalRecord: Eval, url: string): Promise<string
           chunkNumber++;
           logger.debug(`Sending chunk ${chunkNumber} with ${currentChunk.length} results`);
 
-          await sendChunkOfResults(currentChunk, url, evalId, headers);
+          const chunkToSend =
+            inlineBlobs && inlineCache
+              ? await inlineBlobRefsForShare(currentChunk, inlineCache)
+              : currentChunk;
+          await sendChunkOfResults(chunkToSend, url, evalId, headers);
           totalSent += currentChunk.length;
 
           if (progressBar) {
@@ -305,7 +351,11 @@ async function sendChunkedResults(evalRecord: Eval, url: string): Promise<string
       chunkNumber++;
       logger.debug(`Sending final chunk ${chunkNumber} with ${currentChunk.length} results`);
 
-      await sendChunkOfResults(currentChunk, url, evalId, headers);
+      const chunkToSend =
+        inlineBlobs && inlineCache
+          ? await inlineBlobRefsForShare(currentChunk, inlineCache)
+          : currentChunk;
+      await sendChunkOfResults(chunkToSend, url, evalId, headers);
       totalSent += currentChunk.length;
 
       if (progressBar) {
@@ -429,26 +479,30 @@ export async function getShareableUrl(
 /**
  * Shares an eval and returns the shareable URL.
  * @param evalRecord The eval to share.
- * @param showAuth Whether to show the authentication information in the URL.
+ * @param options Share options (silent mode, showAuth).
  * @returns The shareable URL for the eval.
  */
 export async function createShareableUrl(
   evalRecord: Eval,
-  showAuth: boolean = false,
+  options: ShareOptions = {},
 ): Promise<string | null> {
+  const { silent = false, showAuth = false } = options;
+
   // If sharing is explicitly disabled, return null
   if (getEnvBool('PROMPTFOO_DISABLE_SHARING')) {
     logger.debug('Sharing is explicitly disabled, returning null');
     return null;
   }
 
-  // Show org/team context before uploading (only when cloud is enabled)
-  const orgContext = await getOrgContext();
-  if (orgContext) {
-    const teamSuffix = orgContext.teamName ? ` > ${orgContext.teamName}` : '';
-    logger.info(
-      `${chalk.dim('Sharing to:')} ${chalk.cyan(orgContext.organizationName)}${teamSuffix}`,
-    );
+  // Show org/team context before uploading (only when cloud is enabled and not silent)
+  if (!silent) {
+    const orgContext = await getOrgContext();
+    if (orgContext) {
+      const teamSuffix = orgContext.teamName ? ` > ${orgContext.teamName}` : '';
+      logger.info(
+        `${chalk.dim('Sharing to:')} ${chalk.cyan(orgContext.organizationName)}${teamSuffix}`,
+      );
+    }
   }
 
   // 1. Handle email collection
@@ -463,7 +517,7 @@ export async function createShareableUrl(
     `Sharing with ${url} canUseNewResults: ${canUseNewResults} Use old results: ${evalRecord.useOldResults()}`,
   );
 
-  const evalId = await sendChunkedResults(evalRecord, url);
+  const evalId = await sendChunkedResults(evalRecord, url, { silent });
 
   if (!evalId) {
     return null;
@@ -474,19 +528,27 @@ export async function createShareableUrl(
 }
 
 /**
- * Checks whether an eval has been shared.
+ * Checks whether an eval has been shared to the current team.
  * @param eval_ The eval to check.
- * @returns True if the eval has been shared, false otherwise.
+ * @returns True if the eval has been shared to the current team, false otherwise.
  */
 export async function hasEvalBeenShared(eval_: Eval): Promise<boolean> {
   try {
-    // GET /api/results/:id
-    const res = await makeCloudRequest(`results/${eval_.id}`, 'GET');
+    // Get current team ID to scope the check to current team only
+    // This prevents false positives when eval exists in a different team
+    const currentOrgId = cloudConfig.getCurrentOrganizationId();
+    const currentTeamId = cloudConfig.getCurrentTeamId(currentOrgId);
+
+    // GET /api/results/:id with optional teamId scope
+    const url = currentTeamId
+      ? `results/${eval_.id}?teamId=${currentTeamId}`
+      : `results/${eval_.id}`;
+    const res = await makeCloudRequest(url, 'GET');
     switch (res.status) {
-      // 200: Eval already exists i.e. it has been shared before.
+      // 200: Eval already exists in the current team.
       case 200:
         return true;
-      // 404: Eval not found i.e. it has not been shared before.
+      // 404: Eval not found in the current team.
       case 404:
         return false;
       default:
@@ -624,7 +686,7 @@ export function getShareableModelAuditUrl(
     ? cloudConfig.getAppUrl()
     : getShareViewBaseUrl() || getDefaultShareViewBaseUrl();
 
-  const fullUrl = `${appBaseUrl}/model-audit/scan/${remoteAuditId}`;
+  const fullUrl = `${appBaseUrl}/model-audit/${remoteAuditId}`;
 
   return showAuth ? fullUrl : stripAuthFromUrl(fullUrl);
 }

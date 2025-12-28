@@ -1,14 +1,13 @@
+import * as fs from 'fs';
+
 import async from 'async';
 import chalk from 'chalk';
 import cliProgress from 'cli-progress';
 import Table from 'cli-table3';
-import * as fs from 'fs';
 import yaml from 'js-yaml';
-
 import cliState from '../cliState';
 import { getEnvString } from '../envars';
 import logger, { getLogLevel } from '../logger';
-import type { TestCase, TestCaseWithPlugin } from '../types/index';
 import { checkRemoteHealth } from '../util/apiHealth';
 import invariant from '../util/invariant';
 import { extractVariablesFromTemplates } from '../util/templates';
@@ -38,8 +37,10 @@ import { redteamProviderManager } from './providers/shared';
 import { getRemoteHealthUrl, shouldGenerateRemote } from './remoteGeneration';
 import { loadStrategy, Strategies, validateStrategies } from './strategies/index';
 import { pluginMatchesStrategyTargets } from './strategies/util';
-import type { RedteamPluginObject, RedteamStrategyObject, SynthesizeOptions } from './types';
 import { extractGoalFromPrompt, getShortPluginId } from './util';
+
+import type { TestCase, TestCaseWithPlugin } from '../types/index';
+import type { RedteamPluginObject, RedteamStrategyObject, SynthesizeOptions } from './types';
 
 function getPolicyText(metadata: TestCase['metadata'] | undefined): string | undefined {
   if (!metadata || metadata.policy === undefined || metadata.policy === null) {
@@ -200,7 +201,10 @@ const formatTestCount = (numTests: number, strategy: boolean): string =>
  * @param test - The test case to get language from.
  * @returns The language string or undefined if not found.
  */
-function getLanguageForTestCase(test: TestCase): string | undefined {
+function getLanguageForTestCase(test: TestCase | undefined): string | undefined {
+  if (!test) {
+    return undefined;
+  }
   return test.metadata?.language || test.metadata?.modifiers?.language;
 }
 
@@ -302,11 +306,24 @@ async function applyStrategies(
     }
 
     const targetPlugins = strategy.config?.plugins;
-    const applicableTestCases = testCases.filter((t) =>
-      pluginMatchesStrategyTargets(t, strategy.id, targetPlugins),
-    );
+    const applicableTestCases = testCases.filter((t) => {
+      // Check plugin matching first
+      if (!pluginMatchesStrategyTargets(t, strategy.id, targetPlugins)) {
+        return false;
+      }
 
-    const strategyTestCases: TestCase[] = await strategyAction(
+      // Skip retry tests - they shouldn't be transformed by strategies
+      if (t.metadata?.retry === true) {
+        logger.debug(
+          `Skipping ${strategy.id} for retry test (plugin: ${t.metadata?.pluginId}) - retry tests are not transformed`,
+        );
+        return false;
+      }
+
+      return true;
+    });
+
+    const strategyTestCases: (TestCase | undefined)[] = await strategyAction(
       applicableTestCases,
       injectVar,
       {
@@ -323,7 +340,10 @@ async function applyStrategies(
           ...t,
           metadata: {
             ...(t?.metadata || {}),
-            strategyId: t?.metadata?.strategyId || strategy.id,
+            // Don't set strategyId for retry strategy (it's not user-facing)
+            ...(strategy.id !== 'retry' && {
+              strategyId: t?.metadata?.strategyId || strategy.id,
+            }),
             ...(t?.metadata?.pluginId && { pluginId: t.metadata.pluginId }),
             ...(t?.metadata?.pluginConfig && {
               pluginConfig: t.metadata.pluginConfig,
@@ -545,7 +565,7 @@ export async function synthesize({
   provider,
   purpose: purposeOverride,
   strategies,
-  targetLabels,
+  targetIds,
   showProgressBar: showProgressBarOverride,
   excludeTargetOutputFromAgenticAttackGeneration,
   testGenerationInstructions,
@@ -598,20 +618,29 @@ export async function synthesize({
   });
 
   // Deduplicate strategies by a key. For most strategies, the key is the id.
-  // For 'layer', include the ordered step ids in the key so different layers are preserved.
+  // For 'layer', use label if provided, otherwise include the ordered step ids.
   const seen = new Set<string>();
   const keyForStrategy = (s: (typeof strategies)[number]): string => {
-    if (s.id === 'layer' && s.config && Array.isArray((s as any).config.steps)) {
-      const steps = ((s as any).config.steps as any[]).map((st) =>
-        typeof st === 'string' ? st : st?.id,
-      );
-      return `layer:${steps.join('->')}`;
+    if (s.id === 'layer' && s.config) {
+      const config = s.config as Record<string, unknown>;
+      // If label is provided, use it for uniqueness (allows multiple layer strategies)
+      if (typeof config.label === 'string' && config.label.trim()) {
+        return `layer/${config.label}`;
+      }
+      // Otherwise use steps for uniqueness
+      if (Array.isArray(config.steps)) {
+        const steps = (config.steps as Array<string | { id?: string }>).map((st) =>
+          typeof st === 'string' ? st : (st?.id ?? 'unknown'),
+        );
+        return `layer:${steps.join('->')}`;
+      }
     }
     return s.id;
   };
   strategies = expandedStrategies.filter((strategy) => {
     const key = keyForStrategy(strategy);
     if (seen.has(key)) {
+      logger.debug(`[Synthesize] Skipping duplicate strategy: ${key}`);
       return false;
     }
     seen.add(key);
@@ -1054,7 +1083,7 @@ export async function synthesize({
   if (retryStrategy) {
     logger.debug('Applying retry strategy first');
     retryStrategy.config = {
-      targetLabels,
+      targetIds,
       ...retryStrategy.config,
     };
     const { testCases: retryTestCases, strategyResults: retryResults } = await applyStrategies(

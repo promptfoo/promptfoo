@@ -1,10 +1,11 @@
 import { useCallback } from 'react';
+
 import { callApi } from '@app/utils/api';
+import type { Trace } from '@app/components/traces/TraceView';
 import type {
   ReplayEvaluationParams,
   ReplayEvaluationResult,
 } from '@app/pages/eval/components/EvalOutputPromptDialog';
-import type { Trace } from '@app/components/traces/TraceView';
 
 /**
  * Custom hook that provides eval-related API operations.

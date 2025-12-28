@@ -1,16 +1,18 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   AssertionsResult,
   DEFAULT_TOKENS_USED,
   GUARDRAIL_BLOCKED_REASON,
 } from '../../src/assertions/assertionsResult';
 import { getEnvBool } from '../../src/envars';
+
 import type { AssertionSet, GradingResult } from '../../src/types/index';
 
-jest.mock('../../src/envars');
+vi.mock('../../src/envars');
 
 describe('AssertionsResult', () => {
   beforeEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   describe('noAssertsResult', () => {
@@ -79,7 +81,7 @@ describe('AssertionsResult', () => {
     });
 
     it('should throw error if short circuit enabled', () => {
-      jest.mocked(getEnvBool).mockReturnValue(true);
+      vi.mocked(getEnvBool).mockReturnValue(true);
 
       const assertionsResult = new AssertionsResult({});
       const result: GradingResult = {
@@ -133,7 +135,7 @@ describe('AssertionsResult', () => {
 
     it('should handle scoring function', async () => {
       const assertionsResult = new AssertionsResult({});
-      const scoringFunction = jest.fn().mockResolvedValue({
+      const scoringFunction = vi.fn().mockResolvedValue({
         pass: true,
         score: 0.9,
         reason: 'Custom scoring',
@@ -157,7 +159,7 @@ describe('AssertionsResult', () => {
 
     it('should handle scoring function errors', async () => {
       const assertionsResult = new AssertionsResult({});
-      const scoringFunction = jest.fn().mockRejectedValue(new Error('Scoring failed'));
+      const scoringFunction = vi.fn().mockRejectedValue(new Error('Scoring failed'));
 
       const result = await assertionsResult.testResult(scoringFunction);
 

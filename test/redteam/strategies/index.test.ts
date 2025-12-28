@@ -1,5 +1,6 @@
 import path from 'path';
 
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../../src/cliState';
 import { importModule } from '../../../src/esm';
 import logger from '../../../src/logger';
@@ -7,14 +8,26 @@ import { loadStrategy, validateStrategies } from '../../../src/redteam/strategie
 
 import type { RedteamStrategyObject, TestCaseWithPlugin } from '../../../src/types/index';
 
-jest.mock('../../../src/cliState');
-jest.mock('../../../src/esm', () => ({
-  importModule: jest.fn(),
+vi.mock('../../../src/cliState');
+vi.mock('../../../src/esm', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    importModule: vi.fn(),
+  };
+});
+vi.mock('../../../src/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+  getLogLevel: vi.fn().mockReturnValue('info'),
 }));
 
 describe('validateStrategies', () => {
   beforeEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   it('should validate valid strategies', async () => {
@@ -51,7 +64,9 @@ describe('validateStrategies', () => {
   });
 
   it('should exit for invalid strategies', async () => {
-    const mockExit = jest.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    const mockExit = vi.spyOn(process, 'exit').mockImplementation(function () {
+      return undefined as never;
+    });
     const invalidStrategies: RedteamStrategyObject[] = [{ id: 'invalid-strategy' }];
 
     await validateStrategies(invalidStrategies);
@@ -63,7 +78,7 @@ describe('validateStrategies', () => {
 
 describe('loadStrategy', () => {
   beforeEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   it('should load predefined strategy', async () => {
@@ -161,9 +176,9 @@ describe('loadStrategy', () => {
   it('should load custom file strategy', async () => {
     const customStrategy = {
       id: 'custom',
-      action: jest.fn(),
+      action: vi.fn(),
     };
-    jest.mocked(importModule).mockResolvedValue(customStrategy);
+    vi.mocked(importModule).mockResolvedValue(customStrategy);
     (cliState as any).basePath = '/test/path';
 
     const strategy = await loadStrategy('file://custom.js');
@@ -177,7 +192,7 @@ describe('loadStrategy', () => {
   });
 
   it('should throw error for invalid custom strategy', async () => {
-    jest.mocked(importModule).mockResolvedValue({});
+    vi.mocked(importModule).mockResolvedValue({});
 
     await expect(loadStrategy('file://invalid.js')).rejects.toThrow(
       "Custom strategy in invalid.js must export an object with 'key' and 'action' properties",
@@ -187,9 +202,9 @@ describe('loadStrategy', () => {
   it('should use absolute path for custom strategy', async () => {
     const customStrategy = {
       id: 'custom',
-      action: jest.fn(),
+      action: vi.fn(),
     };
-    jest.mocked(importModule).mockResolvedValue(customStrategy);
+    vi.mocked(importModule).mockResolvedValue(customStrategy);
 
     await loadStrategy('file:///absolute/path/custom.js');
     expect(importModule).toHaveBeenCalledWith('/absolute/path/custom.js');
@@ -198,9 +213,9 @@ describe('loadStrategy', () => {
   it('should use relative path from basePath for custom strategy', async () => {
     const customStrategy = {
       id: 'custom',
-      action: jest.fn(),
+      action: vi.fn(),
     };
-    jest.mocked(importModule).mockResolvedValue(customStrategy);
+    vi.mocked(importModule).mockResolvedValue(customStrategy);
     (cliState as any).basePath = '/base/path';
 
     await loadStrategy('file://relative/custom.js');
@@ -282,7 +297,9 @@ describe('custom strategy validation', () => {
   });
 
   it('should reject invalid custom-like strategy patterns', async () => {
-    const mockExit = jest.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    const mockExit = vi.spyOn(process, 'exit').mockImplementation(function () {
+      return undefined as never;
+    });
     const strategies: RedteamStrategyObject[] = [
       { id: 'invalid-strategy' },
       { id: 'custom-invalid' },

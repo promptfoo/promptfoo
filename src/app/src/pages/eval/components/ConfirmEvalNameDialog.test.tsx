@@ -1,7 +1,7 @@
-import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { createTheme, ThemeProvider } from '@mui/material/styles';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { ConfirmEvalNameDialog } from './ConfirmEvalNameDialog';
 
 const renderWithTheme = (component: React.ReactNode) => {

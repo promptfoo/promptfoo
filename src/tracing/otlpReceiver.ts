@@ -1,5 +1,11 @@
 import express from 'express';
 import logger from '../logger';
+import {
+  bytesToHex,
+  type DecodedAttribute,
+  type DecodedExportTraceServiceRequest,
+  decodeExportTraceServiceRequest,
+} from './protobuf';
 import { getTraceStore, type ParsedTrace, type SpanData, type TraceStore } from './store';
 
 interface OTLPAttribute {
@@ -89,13 +95,10 @@ export class OTLPReceiver {
       logger.debug('[OtlpReceiver] Starting to process traces');
 
       // Check content type first before processing
-      if (contentType === 'application/json') {
-        // Continue with JSON processing
-      } else if (contentType === 'application/x-protobuf') {
-        logger.warn('Protobuf format not yet supported, please use JSON');
-        res.status(415).json({ error: 'Protobuf format not yet supported' });
-        return;
-      } else {
+      const isJson = contentType === 'application/json';
+      const isProtobuf = contentType === 'application/x-protobuf';
+
+      if (!isJson && !isProtobuf) {
         res.status(415).json({ error: 'Unsupported content type' });
         return;
       }
@@ -103,12 +106,19 @@ export class OTLPReceiver {
       try {
         let traces: ParsedTrace[] = [];
 
-        // We already validated content type above, so this must be JSON
-        logger.debug('[OtlpReceiver] Parsing OTLP JSON request');
-        logger.debug(
-          `[OtlpReceiver] Request body: ${JSON.stringify(req.body).substring(0, 500)}...`,
-        );
-        traces = this.parseOTLPJSONRequest(req.body);
+        if (isJson) {
+          // Parse JSON request
+          logger.debug('[OtlpReceiver] Parsing OTLP JSON request');
+          logger.debug(
+            `[OtlpReceiver] Request body: ${JSON.stringify(req.body).substring(0, 500)}...`,
+          );
+          traces = this.parseOTLPJSONRequest(req.body);
+        } else if (isProtobuf) {
+          // Parse protobuf request
+          logger.debug('[OtlpReceiver] Parsing OTLP protobuf request');
+          logger.debug(`[OtlpReceiver] Request body size: ${req.body?.length || 0} bytes`);
+          traces = await this.parseOTLPProtobufRequest(req.body);
+        }
         logger.debug(`[OtlpReceiver] Parsed ${traces.length} traces from request`);
 
         // Group spans by trace ID and extract metadata
@@ -167,6 +177,14 @@ export class OTLPReceiver {
         logger.error(
           `[OtlpReceiver] Error stack: ${error instanceof Error ? error.stack : 'No stack'}`,
         );
+
+        // Return 400 for invalid protobuf/parsing errors
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        if (errorMessage.toLowerCase().includes('invalid protobuf')) {
+          res.status(400).json({ error: errorMessage });
+          return;
+        }
+
         res.status(500).json({ error: 'Internal server error' });
       }
     });
@@ -182,7 +200,7 @@ export class OTLPReceiver {
       res.status(200).json({
         service: 'promptfoo-otlp-receiver',
         version: '1.0.0',
-        supported_formats: ['json'], // 'protobuf' will be added in phase 2
+        supported_formats: ['json', 'protobuf'],
       });
     });
 
@@ -265,6 +283,127 @@ export class OTLPReceiver {
     }
 
     return traces;
+  }
+
+  private async parseOTLPProtobufRequest(body: Buffer): Promise<ParsedTrace[]> {
+    const traces: ParsedTrace[] = [];
+
+    // Decode protobuf message
+    const decoded: DecodedExportTraceServiceRequest = await decodeExportTraceServiceRequest(body);
+
+    logger.debug(
+      `[OtlpReceiver] Parsing protobuf request with ${decoded.resourceSpans?.length || 0} resource spans`,
+    );
+
+    for (const resourceSpan of decoded.resourceSpans || []) {
+      // Extract resource attributes
+      const resourceAttributes = this.parseDecodedAttributes(resourceSpan.resource?.attributes);
+      logger.debug(
+        `[OtlpReceiver] Parsed ${Object.keys(resourceAttributes).length} resource attributes from protobuf`,
+      );
+
+      for (const scopeSpan of resourceSpan.scopeSpans || []) {
+        for (const span of scopeSpan.spans || []) {
+          // Convert binary IDs to hex strings
+          const traceId = bytesToHex(span.traceId, 32);
+          const spanId = bytesToHex(span.spanId, 16);
+          const parentSpanId = span.parentSpanId?.length
+            ? bytesToHex(span.parentSpanId, 16)
+            : undefined;
+
+          logger.debug(
+            `[OtlpReceiver] Processing protobuf span: ${span.name} (${spanId}) in trace ${traceId}`,
+          );
+
+          // Parse attributes
+          const spanKindName = SPAN_KIND_MAP[span.kind ?? 0] ?? 'unspecified';
+          const attributes: Record<string, any> = {
+            ...resourceAttributes,
+            ...this.parseDecodedAttributes(span.attributes),
+            'otel.scope.name': scopeSpan.scope?.name,
+            'otel.scope.version': scopeSpan.scope?.version,
+            'otel.span.kind': spanKindName,
+            'otel.span.kind_code': span.kind ?? 0,
+          };
+
+          // Convert nanoseconds to milliseconds
+          const startTimeNano =
+            typeof span.startTimeUnixNano === 'number'
+              ? span.startTimeUnixNano
+              : Number(span.startTimeUnixNano);
+          const endTimeNano = span.endTimeUnixNano
+            ? typeof span.endTimeUnixNano === 'number'
+              ? span.endTimeUnixNano
+              : Number(span.endTimeUnixNano)
+            : undefined;
+
+          traces.push({
+            traceId,
+            span: {
+              spanId,
+              parentSpanId,
+              name: span.name,
+              startTime: startTimeNano / 1_000_000, // Convert nanoseconds to milliseconds
+              endTime: endTimeNano ? endTimeNano / 1_000_000 : undefined,
+              attributes,
+              statusCode: span.status?.code,
+              statusMessage: span.status?.message,
+            },
+          });
+        }
+      }
+    }
+
+    return traces;
+  }
+
+  private parseDecodedAttributes(attributes?: DecodedAttribute[]): Record<string, any> {
+    if (!attributes) {
+      return {};
+    }
+
+    const result: Record<string, any> = {};
+
+    for (const attr of attributes) {
+      const value = this.parseDecodedAttributeValue(attr.value);
+      if (value !== undefined) {
+        result[attr.key] = value;
+      }
+    }
+
+    return result;
+  }
+
+  private parseDecodedAttributeValue(value: DecodedAttribute['value']): any {
+    if (!value) {
+      return undefined;
+    }
+    if (value.stringValue !== undefined) {
+      return value.stringValue;
+    }
+    if (value.intValue !== undefined) {
+      return typeof value.intValue === 'number' ? value.intValue : Number(value.intValue);
+    }
+    if (value.doubleValue !== undefined) {
+      return value.doubleValue;
+    }
+    if (value.boolValue !== undefined) {
+      return value.boolValue;
+    }
+    if (value.bytesValue !== undefined) {
+      return Buffer.from(value.bytesValue).toString('base64');
+    }
+    if (value.arrayValue?.values) {
+      return value.arrayValue.values.map((v) => this.parseDecodedAttributeValue(v));
+    }
+    if (value.kvlistValue?.values) {
+      const kvMap: Record<string, any> = {};
+      for (const kv of value.kvlistValue.values) {
+        kvMap[kv.key] = this.parseDecodedAttributeValue(kv.value);
+      }
+      return kvMap;
+    }
+    return undefined;
   }
 
   private parseAttributes(attributes?: OTLPAttribute[]): Record<string, any> {
@@ -350,7 +489,7 @@ export class OTLPReceiver {
     }
   }
 
-  listen(port: number = 4318, host: string = '0.0.0.0'): Promise<void> {
+  listen(port: number = 4318, host: string = '127.0.0.1'): Promise<void> {
     this.port = port;
     logger.debug(`[OtlpReceiver] Starting receiver on ${host}:${port}`);
 

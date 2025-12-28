@@ -1,8 +1,8 @@
-import { fireEvent, render, screen } from '@testing-library/react';
-import { vi } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { StrategyItem } from './StrategyItem';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { TestCaseGenerationProvider } from '../TestCaseGenerationProvider';
+import { StrategyItem } from './StrategyItem';
 
 import type { StrategyCardData } from './types';
 
@@ -310,6 +310,27 @@ describe('StrategyItem', () => {
       const buttons = screen.queryAllByRole('button');
       expect(buttons).toHaveLength(1); // Only test case generation button
       expect(screen.queryByTestId('SettingsOutlinedIcon')).not.toBeInTheDocument();
+    });
+
+    it('shows settings button with error color when isSelected and not isConfigured', () => {
+      const configurableStrategy: StrategyCardData = {
+        ...baseStrategy,
+        id: 'jailbreak',
+      };
+
+      renderStrategyItem({
+        isDisabled: false,
+        isRemoteGenerationDisabled: false,
+        strategy: configurableStrategy,
+        isSelected: true,
+        onToggle: mockOnToggle,
+        onConfigClick: mockOnConfigClick,
+        isConfigured: false,
+      });
+
+      const _settingsButton = screen.getByRole('button', {
+        name: /Configuration required.*Click the settings icon to configure/i,
+      });
     });
   });
 

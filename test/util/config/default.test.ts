@@ -1,21 +1,22 @@
 import path from 'path';
 
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { configCache, loadDefaultConfig } from '../../../src/util/config/default';
 import { maybeReadConfig } from '../../../src/util/config/load';
 
-jest.mock('../../../src/util/config/load', () => ({
-  maybeReadConfig: jest.fn(),
+vi.mock('../../../src/util/config/load', () => ({
+  maybeReadConfig: vi.fn(),
 }));
 
 describe('loadDefaultConfig', () => {
   beforeEach(() => {
-    jest.resetAllMocks();
-    jest.spyOn(process, 'cwd').mockImplementation(() => '/test/path');
+    vi.resetAllMocks();
+    vi.spyOn(process, 'cwd').mockImplementation(() => '/test/path');
     configCache.clear();
   });
 
   it('should return empty config when no config file is found', async () => {
-    jest.mocked(maybeReadConfig).mockResolvedValue(undefined);
+    vi.mocked(maybeReadConfig).mockResolvedValue(undefined);
 
     const result = await loadDefaultConfig();
     expect(result).toEqual({
@@ -31,8 +32,7 @@ describe('loadDefaultConfig', () => {
 
   it('should return the first valid config file found', async () => {
     const mockConfig = { prompts: ['Some prompt'], providers: [], tests: [] };
-    jest
-      .mocked(maybeReadConfig)
+    vi.mocked(maybeReadConfig)
       .mockResolvedValueOnce(undefined)
       .mockResolvedValueOnce(undefined)
       .mockResolvedValueOnce(mockConfig);
@@ -47,7 +47,7 @@ describe('loadDefaultConfig', () => {
 
   it('should stop checking extensions after finding a valid config', async () => {
     const mockConfig = { prompts: ['Some prompt'], providers: [], tests: [] };
-    jest.mocked(maybeReadConfig).mockResolvedValueOnce(undefined).mockResolvedValueOnce(mockConfig);
+    vi.mocked(maybeReadConfig).mockResolvedValueOnce(undefined).mockResolvedValueOnce(mockConfig);
 
     await loadDefaultConfig();
 
@@ -64,7 +64,7 @@ describe('loadDefaultConfig', () => {
 
   it('should use provided directory when specified', async () => {
     const mockConfig = { prompts: ['Some prompt'], providers: [], tests: [] };
-    jest.mocked(maybeReadConfig).mockResolvedValueOnce(mockConfig);
+    vi.mocked(maybeReadConfig).mockResolvedValueOnce(mockConfig);
 
     const customDir = '/custom/directory';
     const result = await loadDefaultConfig(customDir);
@@ -77,7 +77,7 @@ describe('loadDefaultConfig', () => {
 
   it('should use custom config name when provided', async () => {
     const mockConfig = { prompts: ['Custom config'], providers: [], tests: [] };
-    jest.mocked(maybeReadConfig).mockResolvedValueOnce(mockConfig);
+    vi.mocked(maybeReadConfig).mockResolvedValueOnce(mockConfig);
 
     const result = await loadDefaultConfig(undefined, 'redteam');
     expect(result).toEqual({
@@ -91,8 +91,7 @@ describe('loadDefaultConfig', () => {
     const mockConfig1 = { prompts: ['Config 1'], providers: [], tests: [] };
     const mockConfig2 = { prompts: ['Config 2'], providers: [], tests: [] };
 
-    jest
-      .mocked(maybeReadConfig)
+    vi.mocked(maybeReadConfig)
       .mockResolvedValueOnce(mockConfig1)
       .mockResolvedValueOnce(mockConfig2);
 
@@ -115,8 +114,7 @@ describe('loadDefaultConfig', () => {
     const mockConfig1 = { prompts: ['Config 1'], providers: [], tests: [] };
     const mockConfig2 = { prompts: ['Config 2'], providers: [], tests: [] };
 
-    jest
-      .mocked(maybeReadConfig)
+    vi.mocked(maybeReadConfig)
       .mockResolvedValueOnce(mockConfig1)
       .mockResolvedValueOnce(mockConfig2);
 
@@ -140,7 +138,7 @@ describe('loadDefaultConfig', () => {
 
   it('should use cache for subsequent calls with same parameters', async () => {
     const mockConfig = { prompts: ['Cached config'], providers: [], tests: [] };
-    jest.mocked(maybeReadConfig).mockResolvedValueOnce(mockConfig);
+    vi.mocked(maybeReadConfig).mockResolvedValueOnce(mockConfig);
 
     const result1 = await loadDefaultConfig();
     const result2 = await loadDefaultConfig();
@@ -150,14 +148,14 @@ describe('loadDefaultConfig', () => {
   });
 
   it('should handle errors when reading config files', async () => {
-    jest.mocked(maybeReadConfig).mockRejectedValue(new Error('Permission denied'));
+    vi.mocked(maybeReadConfig).mockRejectedValue(new Error('Permission denied'));
 
     await expect(loadDefaultConfig()).rejects.toThrow('Permission denied');
   });
 
   it('should handle various config names', async () => {
     const mockConfig = { prompts: ['Test config'], providers: [], tests: [] };
-    jest.mocked(maybeReadConfig).mockResolvedValue(mockConfig);
+    vi.mocked(maybeReadConfig).mockResolvedValue(mockConfig);
 
     const configNames = ['test1', 'test2', 'test3'];
     for (const name of configNames) {
@@ -168,7 +166,7 @@ describe('loadDefaultConfig', () => {
 
   it('should handle interaction between configName and directory', async () => {
     const mockConfig = { prompts: ['Combined config'], providers: [], tests: [] };
-    jest.mocked(maybeReadConfig).mockResolvedValue(mockConfig);
+    vi.mocked(maybeReadConfig).mockResolvedValue(mockConfig);
 
     const customDir = '/custom/dir';
     const customName = 'customconfig';

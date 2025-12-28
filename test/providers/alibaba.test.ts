@@ -1,3 +1,4 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache } from '../../src/cache';
 import {
   AlibabaChatCompletionProvider,
@@ -8,12 +9,36 @@ import { OpenAiEmbeddingProvider } from '../../src/providers/openai/embedding';
 
 import type { ProviderOptions } from '../../src/types/index';
 
-jest.mock('../../src/logger');
-jest.mock('../../src/providers/openai');
+vi.mock('../../src/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+  },
+}));
+vi.mock('../../src/providers/openai/chat', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    OpenAiChatCompletionProvider: vi.fn(),
+  };
+});
+vi.mock('../../src/providers/openai/completion', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    OpenAiCompletionProvider: vi.fn(),
+  };
+});
+vi.mock('../../src/providers/openai/embedding', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    OpenAiEmbeddingProvider: vi.fn(),
+  };
+});
 
 describe('Alibaba Cloud Provider', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   afterEach(async () => {

@@ -1,4 +1,6 @@
+import { describe, expect, it, vi } from 'vitest';
 import { runCompareAssertion } from '../../src/assertions/index';
+
 import type {
   ApiProvider,
   Assertion,
@@ -13,7 +15,7 @@ describe('select-best context propagation', () => {
     // Create a grading provider that captures the context
     const gradingProvider: ApiProvider = {
       id: () => 'test-grading-provider',
-      callApi: jest.fn(async (_prompt: string, context) => {
+      callApi: vi.fn(async (_prompt: string, context) => {
         capturedContext = context;
         return {
           output: '0', // Select first option
@@ -24,7 +26,7 @@ describe('select-best context propagation', () => {
 
     const originalProvider: ApiProvider = {
       id: () => 'original-provider',
-      callApi: jest.fn(),
+      callApi: vi.fn().mockResolvedValue({ output: '', tokenUsage: {} }),
     };
 
     const test: AtomicTestCase = {

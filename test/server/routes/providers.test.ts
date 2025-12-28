@@ -1,29 +1,30 @@
 import request from 'supertest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../../src/server/server';
 
 import type { ApiProvider, ProviderOptions } from '../../../src/types/providers';
 import type { ProviderTestResult } from '../../../src/validators/testProvider';
 
 // Mock dependencies
-jest.mock('../../../src/providers/index');
-jest.mock('../../../src/validators/testProvider');
-jest.mock('../../../src/server/config/serverConfig');
+vi.mock('../../../src/providers/index');
+vi.mock('../../../src/validators/testProvider');
+vi.mock('../../../src/server/config/serverConfig');
 
 // Import after mocking
 import { loadApiProvider } from '../../../src/providers/index';
-import { testProviderConnectivity } from '../../../src/validators/testProvider';
 import { getAvailableProviders } from '../../../src/server/config/serverConfig';
+import { testProviderConnectivity } from '../../../src/validators/testProvider';
 
-const mockedLoadApiProvider = jest.mocked(loadApiProvider);
-const mockedTestProviderConnectivity = jest.mocked(testProviderConnectivity);
-const mockedGetAvailableProviders = jest.mocked(getAvailableProviders);
+const mockedLoadApiProvider = vi.mocked(loadApiProvider);
+const mockedTestProviderConnectivity = vi.mocked(testProviderConnectivity);
+const mockedGetAvailableProviders = vi.mocked(getAvailableProviders);
 
 describe('Providers Routes', () => {
   describe('GET /providers', () => {
     let app: ReturnType<typeof createApp>;
 
     beforeEach(() => {
-      jest.clearAllMocks();
+      vi.clearAllMocks();
       app = createApp();
     });
 
@@ -98,7 +99,7 @@ describe('Providers Routes', () => {
     let app: ReturnType<typeof createApp>;
 
     beforeEach(() => {
-      jest.clearAllMocks();
+      vi.clearAllMocks();
       app = createApp();
     });
 
@@ -137,13 +138,13 @@ describe('Providers Routes', () => {
     let mockProvider: ApiProvider;
 
     beforeEach(() => {
-      jest.clearAllMocks();
+      vi.clearAllMocks();
       app = createApp();
 
       // Setup mock provider
       mockProvider = {
-        id: jest.fn(() => 'test-provider'),
-        callApi: jest.fn(),
+        id: vi.fn(() => 'test-provider'),
+        callApi: vi.fn(),
         config: {},
       } as any;
 

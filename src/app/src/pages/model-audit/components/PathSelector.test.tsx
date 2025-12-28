@@ -1,15 +1,16 @@
+import { TooltipProvider } from '@app/components/ui/tooltip';
 import { callApi } from '@app/utils/api';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { useModelAuditStore } from '../store';
+import { useModelAuditConfigStore } from '../stores';
 import PathSelector from './PathSelector';
 
 vi.mock('@app/utils/api');
-vi.mock('../store');
+vi.mock('../stores');
 
 const mockCallApi = vi.mocked(callApi);
-const mockUseModelAuditStore = vi.mocked(useModelAuditStore);
+const mockUseModelAuditConfigStore = vi.mocked(useModelAuditConfigStore);
 
 const theme = createTheme();
 
@@ -19,13 +20,11 @@ describe('PathSelector', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockUseModelAuditStore.mockReturnValue({
+    mockUseModelAuditConfigStore.mockReturnValue({
       recentScans: [],
       clearRecentScans: vi.fn(),
-      addRecentScan: vi.fn(),
-      removeRecentScan: vi.fn(),
-      getRecentScans: () => [],
-    });
+      removeRecentPath: vi.fn(),
+    } as any);
   });
 
   describe('handleAddPath', () => {
@@ -42,9 +41,11 @@ describe('PathSelector', () => {
       } as Response);
 
       render(
-        <ThemeProvider theme={theme}>
-          <PathSelector paths={[]} onAddPath={onAddPath} onRemovePath={onRemovePath} />
-        </ThemeProvider>,
+        <TooltipProvider delayDuration={0}>
+          <ThemeProvider theme={theme}>
+            <PathSelector paths={[]} onAddPath={onAddPath} onRemovePath={onRemovePath} />
+          </ThemeProvider>
+        </TooltipProvider>,
       );
 
       const input = screen.getByLabelText('Add model path');
@@ -78,9 +79,11 @@ describe('PathSelector', () => {
       mockCallApi.mockRejectedValue(new Error('API Error'));
 
       render(
-        <ThemeProvider theme={theme}>
-          <PathSelector paths={[]} onAddPath={onAddPath} onRemovePath={onRemovePath} />
-        </ThemeProvider>,
+        <TooltipProvider delayDuration={0}>
+          <ThemeProvider theme={theme}>
+            <PathSelector paths={[]} onAddPath={onAddPath} onRemovePath={onRemovePath} />
+          </ThemeProvider>
+        </TooltipProvider>,
       );
 
       const input = screen.getByLabelText('Add model path');
@@ -117,9 +120,11 @@ describe('PathSelector', () => {
       } as Response);
 
       render(
-        <ThemeProvider theme={theme}>
-          <PathSelector paths={[]} onAddPath={onAddPath} onRemovePath={onRemovePath} />
-        </ThemeProvider>,
+        <TooltipProvider delayDuration={0}>
+          <ThemeProvider theme={theme}>
+            <PathSelector paths={[]} onAddPath={onAddPath} onRemovePath={onRemovePath} />
+          </ThemeProvider>
+        </TooltipProvider>,
       );
 
       const input = screen.getByLabelText('Add model path');
@@ -157,9 +162,11 @@ describe('PathSelector', () => {
       } as Response);
 
       render(
-        <ThemeProvider theme={theme}>
-          <PathSelector paths={[]} onAddPath={onAddPath} onRemovePath={onRemovePath} />
-        </ThemeProvider>,
+        <TooltipProvider delayDuration={0}>
+          <ThemeProvider theme={theme}>
+            <PathSelector paths={[]} onAddPath={onAddPath} onRemovePath={onRemovePath} />
+          </ThemeProvider>
+        </TooltipProvider>,
       );
 
       const input = screen.getByLabelText('Add model path');
@@ -196,9 +203,11 @@ describe('PathSelector', () => {
     ];
 
     render(
-      <ThemeProvider theme={theme}>
-        <PathSelector paths={paths} onAddPath={onAddPath} onRemovePath={onRemovePath} />
-      </ThemeProvider>,
+      <TooltipProvider delayDuration={0}>
+        <ThemeProvider theme={theme}>
+          <PathSelector paths={paths} onAddPath={onAddPath} onRemovePath={onRemovePath} />
+        </ThemeProvider>
+      </TooltipProvider>,
     );
 
     // Find the delete button for the first path
@@ -211,7 +220,7 @@ describe('PathSelector', () => {
 
   it('should call clearRecentScans when the clear recent scans button is clicked and there are more than three recent scans', () => {
     const clearRecentScansMock = vi.fn();
-    mockUseModelAuditStore.mockReturnValue({
+    mockUseModelAuditConfigStore.mockReturnValue({
       recentScans: [
         { id: '1', paths: [{ path: 'path1', type: 'file', name: 'file1' }], timestamp: 1 },
         { id: '2', paths: [{ path: 'path2', type: 'file', name: 'file2' }], timestamp: 2 },
@@ -219,15 +228,15 @@ describe('PathSelector', () => {
         { id: '4', paths: [{ path: 'path4', type: 'file', name: 'file4' }], timestamp: 4 },
       ],
       clearRecentScans: clearRecentScansMock,
-      addRecentScan: vi.fn(),
-      removeRecentScan: vi.fn(),
-      getRecentScans: () => [],
-    });
+      removeRecentPath: vi.fn(),
+    } as any);
 
     render(
-      <ThemeProvider theme={theme}>
-        <PathSelector paths={[]} onAddPath={onAddPath} onRemovePath={onRemovePath} />
-      </ThemeProvider>,
+      <TooltipProvider delayDuration={0}>
+        <ThemeProvider theme={theme}>
+          <PathSelector paths={[]} onAddPath={onAddPath} onRemovePath={onRemovePath} />
+        </ThemeProvider>
+      </TooltipProvider>,
     );
 
     const clearButton = screen.getByText('Clear All');
@@ -237,20 +246,20 @@ describe('PathSelector', () => {
   });
 
   it('should display the "Clear All" button even when there are fewer than 4 recent scans', () => {
-    mockUseModelAuditStore.mockReturnValue({
+    mockUseModelAuditConfigStore.mockReturnValue({
       recentScans: [
         { id: '1', paths: [{ path: 'path1', type: 'file', name: 'file1' }], timestamp: 1 },
       ],
       clearRecentScans: vi.fn(),
-      addRecentScan: vi.fn(),
-      removeRecentScan: vi.fn(),
-      getRecentScans: () => [],
-    });
+      removeRecentPath: vi.fn(),
+    } as any);
 
     render(
-      <ThemeProvider theme={theme}>
-        <PathSelector paths={[]} onAddPath={onAddPath} onRemovePath={onRemovePath} />
-      </ThemeProvider>,
+      <TooltipProvider delayDuration={0}>
+        <ThemeProvider theme={theme}>
+          <PathSelector paths={[]} onAddPath={onAddPath} onRemovePath={onRemovePath} />
+        </ThemeProvider>
+      </TooltipProvider>,
     );
 
     const clearButton = screen.getByText('Clear All');

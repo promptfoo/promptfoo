@@ -1,14 +1,14 @@
-import type { Response } from 'express';
-import { describe, expect, it, jest, beforeEach } from '@jest/globals';
+import { beforeEach, describe, expect, it, Mock, vi } from 'vitest';
 import { setDownloadHeaders } from '../../../src/server/utils/downloadHelpers';
+import type { Response } from 'express';
 
 describe('downloadHelpers', () => {
   describe('setDownloadHeaders', () => {
     let mockRes: Partial<Response>;
-    let setHeaderMock: jest.Mock;
+    let setHeaderMock: Mock;
 
     beforeEach(() => {
-      setHeaderMock = jest.fn().mockReturnThis();
+      setHeaderMock = vi.fn().mockReturnThis();
       mockRes = {
         setHeader: setHeaderMock,
       } as Partial<Response>;

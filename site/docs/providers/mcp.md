@@ -89,7 +89,11 @@ providers:
 
 ### Authentication
 
-For servers requiring authentication, use the `auth` configuration:
+For servers requiring authentication, use the `auth` configuration. The MCP provider supports multiple authentication methods.
+
+#### Bearer Token
+
+For APIs that accept a static bearer token:
 
 ```yaml
 providers:
@@ -100,10 +104,31 @@ providers:
         url: https://secure-mcp-server.com
         auth:
           type: bearer
-          token: 'your-bearer-token'
+          token: '{{env.MCP_BEARER_TOKEN}}'
 ```
 
-Or using API key authentication:
+The provider adds an `Authorization: Bearer <token>` header to each request.
+
+#### Basic Authentication
+
+For servers that use HTTP Basic authentication:
+
+```yaml
+providers:
+  - id: mcp
+    config:
+      enabled: true
+      server:
+        url: https://secure-mcp-server.com
+        auth:
+          type: basic
+          username: '{{env.MCP_USERNAME}}'
+          password: '{{env.MCP_PASSWORD}}'
+```
+
+#### API Key
+
+For servers that use API key authentication:
 
 ```yaml
 providers:
@@ -114,8 +139,104 @@ providers:
         url: https://secure-mcp-server.com
         auth:
           type: api_key
-          api_key: 'your-api-key'
+          value: '{{env.MCP_API_KEY}}'
+          keyName: X-API-Key # Header or query parameter name (default: X-API-Key)
+          placement: header # 'header' (default) or 'query'
 ```
+
+When `placement` is `header`, the key is added as a request header. When `placement` is `query`, it's appended as a URL query parameter.
+
+:::note Backward Compatibility
+The legacy `api_key` field is still supported for backward compatibility. New configurations should use `value` instead.
+:::
+
+#### OAuth 2.0
+
+OAuth 2.0 authentication supports **Client Credentials** and **Password** grant types. Tokens are automatically refreshed with a 60-second buffer before expiry.
+
+**Client Credentials Grant:**
+
+Use this grant type for server-to-server authentication:
+
+```yaml
+providers:
+  - id: mcp
+    config:
+      enabled: true
+      server:
+        url: https://secure-mcp-server.com
+        auth:
+          type: oauth
+          grantType: client_credentials
+          tokenUrl: https://auth.example.com/oauth/token
+          clientId: '{{env.MCP_CLIENT_ID}}'
+          clientSecret: '{{env.MCP_CLIENT_SECRET}}'
+          scopes:
+            - read
+            - write
+```
+
+**Password Grant:**
+
+Use this grant type when authenticating with user credentials:
+
+```yaml
+providers:
+  - id: mcp
+    config:
+      enabled: true
+      server:
+        url: https://secure-mcp-server.com
+        auth:
+          type: oauth
+          grantType: password
+          tokenUrl: https://auth.example.com/oauth/token
+          username: '{{env.MCP_USERNAME}}'
+          password: '{{env.MCP_PASSWORD}}'
+          clientId: '{{env.MCP_CLIENT_ID}}' # Optional
+          clientSecret: '{{env.MCP_CLIENT_SECRET}}' # Optional
+          scopes:
+            - read
+```
+
+**Token Endpoint Discovery:**
+
+If `tokenUrl` is not specified, the provider automatically discovers the token endpoint using [RFC 8414](https://datatracker.ietf.org/doc/rfc8414/) OAuth 2.0 Authorization Server Metadata. It tries multiple well-known URLs:
+
+1. Path-appended: `{server-url}/.well-known/oauth-authorization-server` (Keycloak style)
+2. RFC 8414 path-aware: `{origin}/.well-known/oauth-authorization-server{path}`
+3. Root level: `{origin}/.well-known/oauth-authorization-server`
+
+For maximum compatibility, explicitly configure `tokenUrl` when possible.
+
+**Token Refresh Behavior:**
+
+When using OAuth authentication:
+
+1. The provider requests an access token from `tokenUrl` (or discovered endpoint) before connecting
+2. Tokens are proactively refreshed 60 seconds before expiration
+3. Concurrent requests share the same refresh operation (no duplicate token fetches)
+4. If a token expires during an evaluation, the provider automatically reconnects with a fresh token
+
+#### Authentication Options Reference
+
+| Option       | Type     | Auth Type               | Required | Description                                           |
+| ------------ | -------- | ----------------------- | -------- | ----------------------------------------------------- |
+| type         | string   | All                     | Yes      | `'bearer'`, `'basic'`, `'api_key'`, or `'oauth'`      |
+| token        | string   | bearer                  | Yes      | The bearer token                                      |
+| username     | string   | basic, oauth (password) | Yes      | Username                                              |
+| password     | string   | basic, oauth (password) | Yes      | Password                                              |
+| value        | string   | api_key                 | Yes\*    | The API key value                                     |
+| api_key      | string   | api_key                 | Yes\*    | Legacy field, use `value` instead                     |
+| keyName      | string   | api_key                 | No       | Header or query parameter name (default: `X-API-Key`) |
+| placement    | string   | api_key                 | No       | `'header'` (default) or `'query'`                     |
+| grantType    | string   | oauth                   | Yes      | `'client_credentials'` or `'password'`                |
+| tokenUrl     | string   | oauth                   | No       | OAuth token endpoint URL (auto-discovered if omitted) |
+| clientId     | string   | oauth                   | Varies   | Required for client_credentials                       |
+| clientSecret | string   | oauth                   | Varies   | Required for client_credentials                       |
+| scopes       | string[] | oauth                   | No       | OAuth scopes to request                               |
+
+\* Either `value` or `api_key` is required for api_key auth type.
 
 ### Tool Filtering
 
@@ -355,12 +476,14 @@ This will log:
 For complete working examples, see:
 
 - [Basic MCP Red Team Testing](https://github.com/promptfoo/promptfoo/tree/main/examples/redteam-mcp)
+- [MCP Authentication](https://github.com/promptfoo/promptfoo/tree/main/examples/redteam-mcp-auth) - OAuth and other authentication methods
 - [Simple MCP Integration](https://github.com/promptfoo/promptfoo/tree/main/examples/simple-mcp)
 
 You can initialize these examples with:
 
 ```bash
 npx promptfoo@latest init --example redteam-mcp
+npx promptfoo@latest init --example redteam-mcp-auth
 ```
 
 ## See Also

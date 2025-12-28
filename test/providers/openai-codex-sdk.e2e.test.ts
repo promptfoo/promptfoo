@@ -1,12 +1,13 @@
 /**
  * End-to-End tests for OpenAI Codex SDK Provider
  * These tests use the real @openai/codex-sdk package (must be installed)
- * Run with: OPENAI_API_KEY=... npx jest openai-codex-sdk.e2e --runInBand
+ * Run with: OPENAI_API_KEY=... npx vitest run openai-codex-sdk.e2e
  */
 
-import { beforeAll, describe, expect, it } from '@jest/globals';
 import fs from 'fs';
 import path from 'path';
+
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 
 // Check if SDK is available before unmocking
 let hasSdk = false;
@@ -14,9 +15,9 @@ try {
   require.resolve('@openai/codex-sdk');
   hasSdk = true;
   // Only unmock if SDK is actually installed
-  jest.unmock('@openai/codex-sdk');
+  vi.unmock('@openai/codex-sdk');
   // Also unmock the esm module so importModule can load the real SDK
-  jest.unmock('../../src/esm');
+  vi.unmock('../../src/esm');
 } catch {
   // SDK not installed - tests will be skipped
   hasSdk = false;

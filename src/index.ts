@@ -1,5 +1,6 @@
 import assertions from './assertions/index';
 import * as cache from './cache';
+import cliState from './cliState';
 import { evaluate as doEvaluate } from './evaluator';
 import guardrails from './guardrails';
 import { runDbMigrations } from './migrate';
@@ -11,17 +12,17 @@ import { extractEntities } from './redteam/extraction/entities';
 import { extractMcpToolsInfo } from './redteam/extraction/mcpTools';
 import { extractSystemPurpose } from './redteam/extraction/purpose';
 import { GRADERS } from './redteam/graders';
-import { Plugins } from './redteam/plugins/index';
 import { RedteamGraderBase, RedteamPluginBase } from './redteam/plugins/base';
+import { Plugins } from './redteam/plugins/index';
 import { doRedteamRun } from './redteam/shared';
 import { Strategies } from './redteam/strategies/index';
-import { readFilters, writeMultipleOutputs, writeOutput } from './util/index';
+import { isApiProvider } from './types/providers';
 import { maybeLoadFromExternalFile } from './util/file';
+import { readFilters, writeMultipleOutputs, writeOutput } from './util/index';
 import { readTests } from './util/testCaseReader';
 
 import type { EvaluateOptions, EvaluateTestSuite, Scenario, TestSuite } from './types/index';
 import type { ApiProvider } from './types/providers';
-import { isApiProvider } from './types/providers';
 
 export { generateTable } from './table';
 export * from './types/index';
@@ -71,7 +72,7 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
       constructedTestSuite.defaultTest.provider = await resolveProvider(
         constructedTestSuite.defaultTest.provider,
         providerMap,
-        { env: testSuite.env },
+        { env: testSuite.env, basePath: cliState.basePath },
       );
     }
     // Resolve defaultTest.options.provider (only if it's not already an ApiProvider instance)
@@ -82,7 +83,7 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
       constructedTestSuite.defaultTest.options.provider = await resolveProvider(
         constructedTestSuite.defaultTest.options.provider,
         providerMap,
-        { env: testSuite.env },
+        { env: testSuite.env, basePath: cliState.basePath },
       );
     }
   }
@@ -91,6 +92,7 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
     if (test.options?.provider && !isApiProvider(test.options.provider)) {
       test.options.provider = await resolveProvider(test.options.provider, providerMap, {
         env: testSuite.env,
+        basePath: cliState.basePath,
       });
     }
     if (test.assert) {
@@ -102,6 +104,7 @@ async function evaluate(testSuite: EvaluateTestSuite, options: EvaluateOptions =
         if (assertion.provider && !isApiProvider(assertion.provider)) {
           assertion.provider = await resolveProvider(assertion.provider, providerMap, {
             env: testSuite.env,
+            basePath: cliState.basePath,
           });
         }
       }

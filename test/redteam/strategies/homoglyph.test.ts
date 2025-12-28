@@ -1,3 +1,4 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   addHomoglyphs,
   homoglyphMap,
@@ -24,7 +25,7 @@ describe('homoglyph strategy', () => {
   ];
 
   afterEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   describe('toHomoglyphs', () => {

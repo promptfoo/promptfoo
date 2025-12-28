@@ -42,12 +42,14 @@ We particularly welcome contributions in the following areas:
    3.1. Setup locally
 
    ```bash
-   # We recommend using the Node.js version specified in the .nvmrc file (ensure node >= 20)
+   # Use the Node.js version specified in .nvmrc (node >= 20 required)
    nvm use
+
+   # Install dependencies (npm, pnpm, or yarn all work)
    npm install
    ```
 
-   3.2 Setup using `devcontainer` (requires Docker and VSCode)
+   3.2 Set up using `devcontainer` (requires Docker and VSCode)
 
    Open the repository in VSCode and click on the "Reopen in Container" button. This will build a Docker container with all the necessary dependencies.
 
@@ -130,7 +132,7 @@ Don't hesitate to ask for help. We're here to support you. If you're worried abo
 
 ### Running Tests
 
-We use Jest for testing. To run the test suite:
+We use both Vitest and Jest. To run the test suite:
 
 ```bash
 npm test
@@ -142,33 +144,28 @@ To run tests in watch mode:
 npm run test:watch
 ```
 
-You can also run specific tests with (see [jest documentation](https://jestjs.io/docs/cli#jest-regexfortestfiles)):
+You can also run specific tests with:
 
 ```bash
+# Vitest
+npx vitest [pattern]
+
+# Jest
 npx jest [pattern]
 
 # Example:
 # Runs all provider tests
-npx jest providers
+npx vitest providers
 ```
 
 ### Writing Tests
 
 When writing tests, please:
 
-- Run the test suite you modified with the `--randomize` flag to ensure your mocks setup and teardown are not affecting other tests.
-
-  ```bash
-  # Run specific test file with randomization
-  npx jest path/to/your/test.test.ts --randomize
-
-  # Run all tests in a directory with randomization
-  npm run test -- --testPathPattern="test/providers" --randomize
-  ```
-
+- **Use Vitest for new test files.** When modifying existing files, use whichever framework that file uses.
 - Ensure proper test isolation by:
   - Using `beforeEach` and `afterEach` to set up and clean up mocks
-  - Calling `jest.clearAllMocks()` or `jest.restoreAllMocks()` as appropriate
+  - Calling `vi.clearAllMocks()` or `vi.restoreAllMocks()` for Vitest (or `jest.clearAllMocks()` for Jest)
   - Avoiding shared state between tests
 - Check the coverage report to ensure your changes are covered.
 - Avoid adding additional logs to the console.
@@ -344,7 +341,7 @@ npm run dev
 This will host the web UI at http://localhost:3000. This allows you to hack on the React app quickly (with fast refresh). If you want to run the web UI without the express server, you can run:
 
 ```bash
-npm run dev:web
+npm run dev:app
 ```
 
 To test the entire thing end-to-end, we recommend building the entire project and linking it to promptfoo:

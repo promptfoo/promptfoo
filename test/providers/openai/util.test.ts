@@ -1,4 +1,5 @@
 import OpenAI from 'openai';
+import { describe, expect, it, vi } from 'vitest';
 import {
   calculateOpenAICost,
   failApiCall,
@@ -8,7 +9,7 @@ import {
   validateFunctionCall,
 } from '../../../src/providers/openai/util';
 
-jest.mock('../../../src/cache');
+vi.mock('../../../src/cache');
 
 describe('failApiCall', () => {
   it('should format OpenAI API errors', () => {
@@ -59,6 +60,7 @@ describe('getTokenUsage', () => {
       total: 100,
       prompt: 40,
       completion: 60,
+      numRequests: 1,
     });
   });
 
@@ -70,6 +72,7 @@ describe('getTokenUsage', () => {
     };
 
     const result = getTokenUsage(data, true);
+    // Cached responses don't count as a new request
     expect(result).toEqual({
       cached: 100,
       total: 100,
@@ -101,6 +104,7 @@ describe('getTokenUsage', () => {
       total: 100,
       prompt: 40,
       completion: 60,
+      numRequests: 1,
       completionDetails: {
         reasoning: 20,
         acceptedPrediction: 30,

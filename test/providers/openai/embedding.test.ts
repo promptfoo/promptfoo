@@ -1,11 +1,12 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { disableCache, enableCache, fetchWithCache } from '../../../src/cache';
 import { OpenAiEmbeddingProvider } from '../../../src/providers/openai/embedding';
 
-jest.mock('../../../src/cache');
+vi.mock('../../../src/cache');
 
 describe('OpenAI Provider', () => {
   beforeEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
     disableCache();
   });
 
@@ -34,7 +35,7 @@ describe('OpenAI Provider', () => {
         },
       };
 
-      jest.mocked(fetchWithCache).mockResolvedValue({
+      vi.mocked(fetchWithCache).mockResolvedValue({
         data: mockResponse,
         cached: false,
         status: 200,
@@ -47,11 +48,12 @@ describe('OpenAI Provider', () => {
         total: 10,
         prompt: 0,
         completion: 0,
+        numRequests: 1,
       });
     });
 
     it('should handle API errors', async () => {
-      jest.mocked(fetchWithCache).mockRejectedValue(new Error('API error'));
+      vi.mocked(fetchWithCache).mockRejectedValue(new Error('API error'));
 
       const result = await provider.callEmbeddingApi('test text');
       expect(result.error).toBe('API call error: Error: API error');
@@ -67,7 +69,7 @@ describe('OpenAI Provider', () => {
     });
 
     it('should handle HTTP error status', async () => {
-      jest.mocked(fetchWithCache).mockResolvedValue({
+      vi.mocked(fetchWithCache).mockResolvedValue({
         data: { error: { message: 'Unauthorized' } },
         cached: false,
         status: 401,

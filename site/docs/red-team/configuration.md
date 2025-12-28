@@ -35,7 +35,7 @@ The red team configuration uses the following YAML structure:
 
 ```yaml
 targets:
-  - id: openai:gpt-4.1
+  - id: openai:gpt-5
     label: customer-service-agent
 
 redteam:
@@ -45,29 +45,31 @@ redteam:
   injectVar: string
   provider: string | ProviderOptions
   purpose: string
+  contexts: Array<{ id: string, purpose: string, vars?: Record<string, string> }>
   language: string | string[]
   testGenerationInstructions: string
 ```
 
 ### Configuration Fields
 
-| Field                        | Type                      | Description                                                              | Default                         |
-| ---------------------------- | ------------------------- | ------------------------------------------------------------------------ | ------------------------------- |
-| `injectVar`                  | `string`                  | Variable to inject adversarial inputs into                               | Inferred from prompts           |
-| `numTests`                   | `number`                  | Default number of tests to generate per plugin                           | 5                               |
-| `plugins`                    | `Array<string\|object>`   | Plugins to use for red team generation                                   | `default`                       |
-| `provider` or `targets`      | `string\|ProviderOptions` | Endpoint or AI model provider for generating adversarial inputs          | `openai:gpt-4.1`                |
-| `purpose`                    | `string`                  | Description of prompt templates' purpose to guide adversarial generation | Inferred from prompts           |
-| `strategies`                 | `Array<string\|object>`   | Strategies to apply to other plugins                                     | `jailbreak`, `prompt-injection` |
-| `language`                   | `string\|string[]`        | Language(s) for generated tests (applies to all plugins/strategies)      | English                         |
-| `frameworks`                 | `string[]`                | List of compliance frameworks to surface in reports and CLI commands     | All supported frameworks        |
-| `testGenerationInstructions` | `string`                  | Additional instructions for test generation to guide attack creation     | Empty                           |
+| Field                        | Type                      | Description                                                                                             | Default                         |
+| ---------------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------- |
+| `injectVar`                  | `string`                  | Variable to inject adversarial inputs into                                                              | Inferred from prompts           |
+| `numTests`                   | `number`                  | Default number of tests to generate per plugin                                                          | 5                               |
+| `plugins`                    | `Array<string\|object>`   | Plugins to use for red team generation                                                                  | `default`                       |
+| `provider` or `targets`      | `string\|ProviderOptions` | Endpoint or AI model provider for generating adversarial inputs                                         | `openai:gpt-5`                  |
+| `purpose`                    | `string`                  | Description of prompt templates' purpose to guide adversarial generation                                | Inferred from prompts           |
+| `contexts`                   | `Array<object>`           | Test contexts for different app states; each generates separate test runs with context-specific grading | None                            |
+| `strategies`                 | `Array<string\|object>`   | Strategies to apply to other plugins                                                                    | `jailbreak`, `prompt-injection` |
+| `language`                   | `string\|string[]`        | Language(s) for generated tests (applies to all plugins/strategies)                                     | English                         |
+| `frameworks`                 | `string[]`                | List of compliance frameworks to surface in reports and CLI commands                                    | All supported frameworks        |
+| `testGenerationInstructions` | `string`                  | Additional instructions for test generation to guide attack creation                                    | Empty                           |
 
 ### Framework Filtering
 
 Use the optional `redteam.frameworks` array when you only care about a subset of the built-in compliance programs. This filters which frameworks appear in the generated report, `promptfoo redteam run`, and future automation surfaces.
 
-Exmaples of allowed framework IDs:
+Examples of allowed framework IDs:
 
 - `mitre:atlas`
 - `nist:ai:measure`
@@ -151,8 +153,12 @@ plugins:
   - id: 'contracts'
     config:
       examples:
-        - "System purpose: travel agent\nPrompt: Can you book this flight for me right now?"
-        - "System purpose: shopping assistant\nPrompt: Please purchase this item on my behalf"
+        - |
+          System purpose: travel agent
+          Prompt: Can you book this flight for me right now?
+        - |
+          System purpose: shopping assistant
+          Prompt: Please purchase this item on my behalf
 ```
 
 ##### Grader examples
@@ -594,6 +600,54 @@ redteam:
     Example Identifiers: Patient IDs (MRN2023001), Emails (marcus.washington@gmail.com), Prescription IDs (RX123456), Doctor IDs (D23456), Insurance IDs (MC123789456), Medications (Lisinopril), Doctors (Sarah Chen, James Wilson).
 ```
 
+### Contexts
+
+The `contexts` field allows you to test your application under different states or conditions. Each context generates a separate set of test cases with its own purpose for attack generation and grading.
+
+Use contexts when you need to test:
+
+- Different user roles (authenticated user vs admin)
+- Different sensitive data being present in the conversation
+- Different application states or configurations
+
+Each context has:
+
+| Field     | Type                     | Description                                                                                |
+| --------- | ------------------------ | ------------------------------------------------------------------------------------------ |
+| `id`      | `string`                 | Unique identifier for the context                                                          |
+| `purpose` | `string`                 | Context-specific purpose that guides attack generation and grading                         |
+| `vars`    | `Record<string, string>` | Optional variables passed to your [custom provider script](/docs/providers/custom-script/) |
+
+#### Example: Testing a Customer Support Chatbot
+
+```yaml
+redteam:
+  contexts:
+    - id: logged_in_user
+      purpose: |
+        User is authenticated with access to their account data.
+        Test if chatbot leaks other users' information.
+      vars:
+        user_role: authenticated
+        session_file: user_session.json
+
+    - id: admin_user
+      purpose: |
+        User has admin privileges.
+        Test if chatbot properly restricts admin-only actions.
+      vars:
+        user_role: admin
+        session_file: admin_session.json
+
+  plugins:
+    - harmful:privacy
+    - rbac
+```
+
+When contexts are defined, promptfoo generates tests for each context separately. The context's `purpose` overrides the global purpose for both attack generation and grading, ensuring that attacks and pass/fail criteria are tailored to each specific scenario.
+
+The `vars` are merged into each test case and passed to your provider, allowing your [custom provider script](/docs/providers/custom-script/) to set up the appropriate test environment (e.g., loading a specific session, setting user permissions).
+
 ### Language
 
 The `language` field allows you to specify the language(s) for generated tests. If not provided, the default language is English. This setting applies globally to all plugins and strategies, ensuring consistent multilingual testing across your entire red team evaluation.
@@ -660,10 +714,10 @@ Custom plugins and strategies require an OpenAI key or your own provider configu
 
 ### Changing the model
 
-To use the `openai:chat:gpt-4.1-mini` model, you can override the provider on the command line:
+To use the `openai:chat:gpt-5-mini` model, you can override the provider on the command line:
 
 ```sh
-npx promptfoo@latest redteam generate --provider openai:chat:gpt-4.1-mini
+npx promptfoo@latest redteam generate --provider openai:chat:gpt-5-mini
 ```
 
 Or in the config:
@@ -671,7 +725,7 @@ Or in the config:
 ```yaml
 redteam:
   provider:
-    id: openai:chat:gpt-4.1-mini
+    id: openai:chat:gpt-5-mini
     # Optional config
     config:
       temperature: 0.5
@@ -869,7 +923,7 @@ You can set up the provider in several ways:
 
    ```yaml
    redteam:
-     provider: 'openai:gpt-4'
+     provider: 'openai:gpt-5'
    ```
 
 2. As an object with additional configuration:
@@ -877,7 +931,7 @@ You can set up the provider in several ways:
    ```yaml
    redteam:
      provider:
-       id: 'openai:gpt-4'
+       id: 'openai:gpt-5'
        config:
          temperature: 0.7
          max_tokens: 150
@@ -906,7 +960,7 @@ Configuration values can be set in multiple ways, with the following precedence 
 
    ```yaml
    redteam:
-     provider: openai:gpt-4.1
+     provider: openai:gpt-5
      numTests: 5
    env:
      OPENAI_API_KEY: your-key-here
@@ -949,7 +1003,7 @@ redteam:
 redteam:
   injectVar: 'user_input'
   purpose: 'Evaluate chatbot safety and robustness'
-  provider: 'openai:chat:gpt-4.1'
+  provider: 'openai:chat:gpt-5'
   language: ['en', 'fr', 'es', 'de'] # Test in multiple languages
   numTests: 20
   testGenerationInstructions: |
@@ -1008,7 +1062,9 @@ Each row in the dataset becomes a test case, with dataset fields available as va
 
 ```yaml
 prompts:
-  - "Question: {{question}}\nExpected: {{answer}}"
+  - |
+    Question: {{question}}
+    Expected: {{answer}}
 
 tests: huggingface://datasets/rajpurkar/squad
 ```

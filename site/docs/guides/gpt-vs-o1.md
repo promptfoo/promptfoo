@@ -1,19 +1,19 @@
 ---
-sidebar_label: 'gpt-4.1 vs o1'
+sidebar_label: 'gpt-5 vs o1'
 description: 'Benchmark OpenAI o1 reasoning models against GPT-4 for cost, latency, and accuracy to optimize model selection decisions'
 ---
 
-# gpt-4.1 vs o1: Benchmark on Your Own Data
+# gpt-5 vs o1: Benchmark on Your Own Data
 
 OpenAI has released a new model series called o1 designed to spend more time thinking before responding and excel at complex reasoning tasks.
 
-While it scores higher on generic benchmarks, there are many real-world cases where gpt-4.1 is still the better choice.
+While it scores higher on generic benchmarks, there are many real-world cases where gpt-5 is still the better choice.
 
-This guide describes through how to compare `o1-preview` and `o1-mini` against `gpt-4.1` using promptfoo, with a focus on performance, cost, and latency.
+This guide describes through how to compare `o1-preview` and `o1-mini` against `gpt-5` using promptfoo, with a focus on performance, cost, and latency.
 
 The end result will be a side-by-side comparison that looks similar to this:
 
-![o1 vs gpt-4.1 comparison](/img/docs/o1-vs-gpt.png)
+![o1 vs gpt-5 comparison](/img/docs/o1-vs-gpt.png)
 
 ## Prerequisites
 
@@ -45,11 +45,11 @@ Edit the `promptfooconfig.yaml` file to define your comparison.
    The `{{riddle}}` placeholder will be replaced with specific riddles in each test case.
 
 1. **Providers**:
-   Specify the models you want to compare. In this case, we're comparing gpt-4.1 and o1-preview:
+   Specify the models you want to compare. In this case, we're comparing gpt-5 and o1-preview:
 
    ```yaml
    providers:
-     - openai:gpt-4.1
+     - openai:gpt-5
      - openai:o1-preview
    ```
 
@@ -98,7 +98,7 @@ description: 'GPT 4o vs o1 comparison'
 prompts:
   - 'Solve this riddle: {{riddle}}'
 providers:
-  - openai:gpt-4.1
+  - openai:gpt-5
   - openai:o1-preview
 defaultTest:
   assert:
@@ -125,13 +125,13 @@ tests:
       riddle: >-
         Suppose I have a cabbage, a goat and a lion, and I need to get them across a river. I have a boat that can only carry myself and a single other item. I am not allowed to leave the cabbage and lion alone together, and I am not allowed to leave the lion and goat alone together. How can I safely get all three across?
   - vars:
-      riddle: 'The surgeon, who is the boys father says, "I cant operate on this boy, hes my son!" Who is the surgeon to the boy?'
+      riddle: 'The surgeon, who is the boy''s father says, "I can''t operate on this boy, he''s my son!" Who is the surgeon to the boy?'
     assert:
       - type: llm-rubric
         value: "output must state that the surgeon is the boy's father"
 ```
 
-This configuration sets up a comprehensive comparison between gpt-4.1 and o1-preview using a variety of riddles, with cost and latency requirements. We strongly encourage you to revise this with your own test cases and assertions!
+This configuration sets up a comprehensive comparison between gpt-5 and o1-preview using a variety of riddles, with cost and latency requirements. We strongly encourage you to revise this with your own test cases and assertions!
 
 ## Step 3: Run the Comparison
 
@@ -149,12 +149,12 @@ To view the results in a web interface, run:
 npx promptfoo@latest view
 ```
 
-![o1 vs gpt-4.1 comparison](/img/docs/o1-vs-gpt.png)
+![o1 vs gpt-5 comparison](/img/docs/o1-vs-gpt.png)
 
 ## What's next?
 
-By running this comparison, you'll gain insights into how the o1-class models perform against gpt-4.1 on tasks requiring logical reasoning and problem-solving. You'll also see the trade-offs in terms of cost and latency.
+By running this comparison, you'll gain insights into how the o1-class models perform against gpt-5 on tasks requiring logical reasoning and problem-solving. You'll also see the trade-offs in terms of cost and latency.
 
-In this case, gpt-4.1 outperforms o1 because answering a simple riddle in some cases costs over 4 cents! This limits its viability for production use cases, but we're sure that OpenAI will continue to slash inference costs in the future.
+In this case, gpt-5 outperforms o1 because answering a simple riddle in some cases costs over 4 cents! This limits its viability for production use cases, but we're sure that OpenAI will continue to slash inference costs in the future.
 
 Ultimately, the best model is going to depend a lot on your application. There's no substitute for testing these models on your own data, rather than relying on general-purpose benchmarks.

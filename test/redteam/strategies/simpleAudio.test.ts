@@ -1,5 +1,5 @@
-import { describe, expect, it } from '@jest/globals';
 import { SingleBar } from 'cli-progress';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import logger from '../../../src/logger';
 import { neverGenerateRemote } from '../../../src/redteam/remoteGeneration';
@@ -8,39 +8,52 @@ import { addAudioToBase64, textToAudio } from '../../../src/redteam/strategies/s
 import type { TestCase } from '../../../src/types/index';
 
 // Mock the remoteGeneration module
-jest.mock('../../../src/redteam/remoteGeneration', () => ({
-  getRemoteGenerationUrl: jest.fn().mockReturnValue('http://test.url'),
-  neverGenerateRemote: jest.fn().mockReturnValue(false),
-}));
+vi.mock('../../../src/redteam/remoteGeneration', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    getRemoteGenerationUrl: vi.fn().mockReturnValue('http://test.url'),
+    neverGenerateRemote: vi.fn().mockReturnValue(false),
+  };
+});
 
 // Mock the cache module
-jest.mock('../../../src/cache', () => ({
-  fetchWithCache: jest.fn(),
-}));
+vi.mock('../../../src/cache', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    fetchWithCache: vi.fn(),
+  };
+});
 
 // Mock cli-progress
-jest.mock('cli-progress', () => ({
-  Presets: {
-    shades_classic: {},
-  },
-  SingleBar: jest.fn().mockImplementation(() => ({
-    increment: jest.fn(),
-    start: jest.fn(),
-    stop: jest.fn(),
-  })),
-}));
+vi.mock('cli-progress', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+
+    Presets: {
+      shades_classic: {},
+    },
+
+    SingleBar: vi.fn().mockImplementation(function () {
+      return {
+        increment: vi.fn(),
+        start: vi.fn(),
+        stop: vi.fn(),
+      };
+    }),
+  };
+});
 
 const originalConsoleLog = console.log;
-const mockFetchWithCache = jest.mocked(fetchWithCache);
-const mockNeverGenerateRemote = jest.mocked(neverGenerateRemote);
+const mockFetchWithCache = vi.mocked(fetchWithCache);
+const mockNeverGenerateRemote = vi.mocked(neverGenerateRemote);
 
 describe('audio strategy', () => {
   beforeAll(() => {
-    jest.spyOn(console, 'log').mockImplementation();
+    vi.spyOn(console, 'log').mockImplementation(() => {});
   });
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     mockFetchWithCache.mockResolvedValue({
       data: { audioBase64: 'bW9ja2VkLWF1ZGlvLWJhc2U2NC1kYXRh' },
       cached: false,
@@ -57,7 +70,7 @@ describe('audio strategy', () => {
   describe('textToAudio', () => {
     it('should convert text to base64 string using remote API', async () => {
       const text = 'Hello, world!';
-      const base64 = await textToAudio(text, 'en');
+      const result = await textToAudio(text, 'en');
 
       expect(mockFetchWithCache).toHaveBeenCalledWith(
         expect.any(String),
@@ -68,7 +81,11 @@ describe('audio strategy', () => {
         }),
         expect.any(Number),
       );
-      expect(base64).toBe('bW9ja2VkLWF1ZGlvLWJhc2U2NC1kYXRh');
+      expect(result).toEqual(
+        expect.objectContaining({
+          base64: 'bW9ja2VkLWF1ZGlvLWJhc2U2NC1kYXRh',
+        }),
+      );
     });
 
     it('should throw an error if remote generation is disabled', async () => {
@@ -158,12 +175,14 @@ describe('audio strategy', () => {
 
       const result = await addAudioToBase64([testCase], 'prompt');
 
-      expect(result[0].metadata).toEqual({
-        harmCategory: 'Illegal Activities',
-        otherField: 'value',
-        strategyId: 'audio',
-        originalText: 'Harmful content',
-      });
+      expect(result[0].metadata).toEqual(
+        expect.objectContaining({
+          harmCategory: 'Illegal Activities',
+          otherField: 'value',
+          strategyId: 'audio',
+          originalText: 'Harmful content',
+        }),
+      );
       expect(result[0].assert).toEqual([
         {
           metric: 'harmful/Audio-Encoded',
@@ -181,10 +200,12 @@ describe('audio strategy', () => {
 
       const result = await addAudioToBase64([testCase], 'prompt');
 
-      expect(result[0].metadata).toEqual({
-        strategyId: 'audio',
-        originalText: 'Simple content',
-      });
+      expect(result[0].metadata).toEqual(
+        expect.objectContaining({
+          strategyId: 'audio',
+          originalText: 'Simple content',
+        }),
+      );
       expect(result[0].assert).toBeUndefined();
     });
 
@@ -222,15 +243,17 @@ describe('audio strategy', () => {
 
       // Create mock for SingleBar
       const mockBarInstance = {
-        increment: jest.fn(),
-        start: jest.fn(),
-        stop: jest.fn(),
+        increment: vi.fn(),
+        start: vi.fn(),
+        stop: vi.fn(),
       };
 
       // Cast SingleBar to any to avoid TypeScript errors with mocking
       const mockSingleBar = SingleBar as any;
       const originalImplementation = mockSingleBar.mockImplementation;
-      mockSingleBar.mockImplementation(() => mockBarInstance);
+      mockSingleBar.mockImplementation(function () {
+        return mockBarInstance;
+      });
 
       await addAudioToBase64([testCase], 'prompt');
 

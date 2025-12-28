@@ -1,4 +1,4 @@
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   calculateXAICost,
   createXAIProvider,
@@ -14,13 +14,15 @@ import type { ProviderOptions } from '../../../src/types/providers';
 // Mock only external dependencies - NOT the OpenAiChatCompletionProvider class
 vi.mock('../../../src/logger');
 
-// Mock fetchWithCache for HTTP tests
-const mockFetchWithCache = vi.fn();
-vi.mock('../../../src/cache', () => ({
-  fetchWithCache: (...args: any[]) => mockFetchWithCache(...args),
-  getCache: vi.fn(),
-  isCacheEnabled: vi.fn().mockReturnValue(false),
-}));
+const mockFetchWithCache = vi.hoisted(() => vi.fn());
+vi.mock('../../../src/cache', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    fetchWithCache: (...args: any[]) => mockFetchWithCache(...args),
+    getCache: vi.fn(),
+    isCacheEnabled: vi.fn().mockReturnValue(false),
+  };
+});
 
 describe('xAI Chat Provider', () => {
   beforeEach(() => {
@@ -534,7 +536,7 @@ describe('xAI Chat Provider', () => {
       expect(grok4?.aliases).toContain('grok-4-latest');
 
       // grok-3-beta should have aliases
-      const grok3 = XAI_CHAT_MODELS.find((m) => m.id === 'grok-3-beta');
+      const _grok3 = XAI_CHAT_MODELS.find((m) => m.id === 'grok-3-beta');
       const modelWithAliases = XAI_CHAT_MODELS.find((m) => m.aliases?.includes('grok-3'));
       expect(modelWithAliases).toBeDefined();
       expect(modelWithAliases?.aliases).toEqual(['grok-3', 'grok-3-latest']);

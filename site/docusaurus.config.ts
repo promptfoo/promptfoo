@@ -81,11 +81,13 @@ const config: Config = {
           showLastUpdateTime: true,
           exclude: [
             '**/CLAUDE.md', // Exclude Claude Code context files
+            '**/AGENTS.md', // Exclude AI agent instruction files
           ],
         },
         blog: {
           showReadingTime: false,
           blogSidebarCount: 0,
+          postsPerPage: 20,
           // Please change this to your repo.
           // Remove this to remove the "edit this page" links.
           //editUrl:
@@ -94,13 +96,7 @@ const config: Config = {
         theme: {
           customCss: require.resolve('./src/css/custom.css'),
         },
-        gtag:
-          process.env.NODE_ENV === 'development'
-            ? undefined
-            : {
-                trackingID: ['G-3TS8QLZQ93', 'G-3YM29CN26E', 'AW-17347444171'],
-                anonymizeIP: true,
-              },
+        // gtag disabled in preset - added as standalone plugin below for production only
       } satisfies Preset.Options,
     ],
   ],
@@ -143,6 +139,11 @@ const config: Config = {
               to: '/mcp/',
               label: 'MCP Proxy',
               description: 'Secure proxy for Model Context Protocol communications',
+            },
+            {
+              to: '/code-scanning/',
+              label: 'Code Scanning',
+              description: 'Find LLM vulnerabilities in your IDE and CI/CD',
             },
             {
               to: '/docs/getting-started/',
@@ -214,14 +215,14 @@ const config: Config = {
               description: 'Learn about our mission and team',
             },
             {
-              href: '/blog/',
-              label: 'Blog',
-              description: 'Latest insights on AI security and testing',
-            },
-            {
               href: '/press/',
               label: 'Press',
               description: 'Media coverage and press releases',
+            },
+            {
+              href: '/events/',
+              label: 'Events',
+              description: 'Meet the team at conferences and events',
             },
             {
               href: '/careers/',
@@ -231,6 +232,7 @@ const config: Config = {
           ],
         },
         { to: '/docs/intro/', label: 'Docs', position: 'left' },
+        { to: '/blog/', label: 'Blog', position: 'left' },
         { to: '/pricing/', label: 'Pricing', position: 'left' },
         {
           to: '/contact/',
@@ -354,6 +356,10 @@ const config: Config = {
               to: '/press/',
             },
             {
+              label: 'Events',
+              to: '/events/',
+            },
+            {
               label: 'Contact',
               to: '/contact/',
             },
@@ -439,6 +445,18 @@ const config: Config = {
   plugins: [
     require.resolve('docusaurus-plugin-image-zoom'),
     require.resolve('./src/plugins/docusaurus-plugin-og-image'),
+    // Only load gtag in production to avoid "window.gtag is not a function" errors in dev
+    ...(process.env.NODE_ENV === 'development'
+      ? []
+      : [
+          [
+            '@docusaurus/plugin-google-gtag',
+            {
+              trackingID: ['G-3TS8QLZQ93', 'G-3YM29CN26E', 'AW-17347444171'],
+              anonymizeIP: true,
+            },
+          ],
+        ]),
     [
       '@docusaurus/plugin-client-redirects',
       {
