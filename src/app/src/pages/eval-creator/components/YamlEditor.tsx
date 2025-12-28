@@ -178,7 +178,7 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
       <div className="relative">
         <div
           className={cn(
-            'rounded-lg overflow-hidden',
+            'rounded-lg overflow-auto max-h-[60vh]',
             'border-2 transition-all',
             hasUnsavedChanges ? 'border-primary' : 'border-border',
           )}
@@ -187,6 +187,9 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
             autoCapitalize="off"
             value={code}
             onValueChange={(newCode) => {
+              if (readOnly) {
+                return;
+              }
               setCode(newCode);
               if (parseError) {
                 setParseError(null);
@@ -205,14 +208,15 @@ const YamlEditorComponent = ({ initialConfig, readOnly = false, initialYaml }: Y
             style={{
               fontFamily: '"Fira code", "Fira Mono", monospace',
               fontSize: 14,
-              minHeight: '400px',
+              minHeight: '300px',
             }}
-            className="bg-background"
+            className={cn('bg-background', readOnly && 'cursor-default select-text')}
+            disabled={readOnly}
           />
         </div>
 
-        {/* Copy button */}
-        <div className="absolute top-2 right-2">
+        {/* Copy button - offset to avoid scrollbar */}
+        <div className="absolute top-2 right-5">
           <CopyButton value={code} />
         </div>
       </div>

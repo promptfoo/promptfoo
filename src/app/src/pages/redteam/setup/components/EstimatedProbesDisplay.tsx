@@ -26,7 +26,7 @@ export default function EstimatedProbesDisplay({
 
   return (
     <div
-      className={cn('mb-6 flex items-center gap-2 rounded-lg border bg-background p-4', className)}
+      className={cn('mb-6 flex items-center gap-2 rounded-lg border border-border p-4', className)}
     >
       <span className="text-muted-foreground">Estimated Probes:</span>
       <span className="font-bold text-primary">{estimatedProbes.toLocaleString()}</span>

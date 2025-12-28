@@ -29,13 +29,14 @@ export function RecommendedOptions({
       </CardHeader>
       <CardContent>
         <div className="flex flex-col gap-4">
-          <div className="flex items-center space-x-2">
+          <div className="flex items-start gap-2">
             <Checkbox
-              id="multi-turn"
+              id="multi-turn-checkbox"
               checked={isMultiTurnEnabled}
               onCheckedChange={(checked) => onMultiTurnChange(checked === true)}
+              className="mt-0.5"
             />
-            <Label htmlFor="multi-turn" className="cursor-pointer font-normal">
+            <Label htmlFor="multi-turn-checkbox" className="cursor-pointer text-sm font-normal">
               {mediumPreset.options.multiTurn.label}
             </Label>
           </div>
@@ -48,7 +49,7 @@ export function RecommendedOptions({
               <RadioGroup
                 value={String(isStatefulValue)}
                 onValueChange={(value) => onStatefulChange(value === 'true')}
-                className="flex flex-row gap-6"
+                className="flex flex-col gap-2"
               >
                 <div className="flex items-center space-x-2">
                   <RadioGroupItem value="true" id="stateful-yes-rec" />

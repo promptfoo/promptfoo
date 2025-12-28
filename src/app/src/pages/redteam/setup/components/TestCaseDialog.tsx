@@ -164,8 +164,11 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent className="z-[10000] sm:max-w-2xl" data-testid="test-case-dialog">
-        <DialogHeader className="flex flex-row items-start justify-between gap-4">
+      <DialogContent
+        className="z-[10000] flex max-h-[85vh] flex-col sm:max-w-3xl"
+        data-testid="test-case-dialog"
+      >
+        <DialogHeader className="flex flex-row items-start justify-between gap-4 pr-8">
           <div>
             <DialogTitle>
               {allowPluginChange
@@ -202,12 +205,14 @@ export const TestCaseDialog: React.FC<TestCaseDialogProps> = ({
           )}
         </DialogHeader>
 
-        <div className="min-h-[200px] space-y-4">
-          <ChatMessages
-            messages={turnMessages}
-            displayTurnCount={maxTurns > 1}
-            maxTurns={maxTurns}
-          />
+        <div className="min-h-[200px] flex-1 space-y-4 overflow-y-auto">
+          <div className="max-h-[50vh] overflow-y-auto">
+            <ChatMessages
+              messages={turnMessages}
+              displayTurnCount={maxTurns > 1}
+              maxTurns={maxTurns}
+            />
+          </div>
           {generatedTestCases.length > 0 && (
             <Alert variant="info">
               <Info className="h-4 w-4" />

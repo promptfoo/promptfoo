@@ -10,7 +10,7 @@ interface EstimatedDurationDisplayProps {
 
 export default function EstimatedDurationDisplay({ config }: EstimatedDurationDisplayProps) {
   return (
-    <div className="mb-6 flex items-center gap-2 rounded-lg border bg-background p-4">
+    <div className="mb-6 flex items-center gap-2 rounded-lg border border-border p-4">
       <span className="text-muted-foreground">Estimated Duration:</span>
       <span className="font-bold text-primary">{getEstimatedDuration(config)}</span>
       <Tooltip>

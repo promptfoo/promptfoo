@@ -80,17 +80,9 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
   } = useApiHealth();
 
   const [isStatefulValue, setIsStatefulValue] = useState(config.target?.config?.stateful === true);
-
-  // Check if config has multi-turn strategies
-  const hasMultiTurnStrategies = useMemo(
-    () =>
-      (config.strategies ?? []).some(
-        (s) => s && MULTI_TURN_STRATEGIES.includes(getStrategyId(s) as any),
-      ),
-    [config.strategies],
+  const [isMultiTurnEnabled, setIsMultiTurnEnabled] = useState(() =>
+    config.strategies.some((s) => s && MULTI_TURN_STRATEGIES.includes(getStrategyId(s) as any)),
   );
-
-  const [isMultiTurnEnabled, setIsMultiTurnEnabled] = useState(hasMultiTurnStrategies);
 
   const [configDialog, setConfigDialog] = useState<ConfigDialogState>({
     isOpen: false,
@@ -163,12 +155,6 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
       other,
     };
   }, []);
-
-  // Sync isMultiTurnEnabled when config.strategies changes
-  // This keeps the toggle in sync with the actual state of strategies
-  useEffect(() => {
-    setIsMultiTurnEnabled(hasMultiTurnStrategies);
-  }, [hasMultiTurnStrategies]);
 
   // Determine the initially selected preset
   const initialPreset = useMemo(() => {
@@ -413,17 +399,20 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
     (checked: boolean) => {
       setIsMultiTurnEnabled(checked);
 
+      // Get multi-turn strategies from the preset, or use the global MULTI_TURN_STRATEGIES
       const preset = STRATEGY_PRESETS[selectedPreset as PresetId];
+      const presetMultiTurnStrategies = preset?.options?.multiTurn?.strategies;
 
-      const multiTurnStrategies = preset?.options?.multiTurn?.strategies;
-      if (!multiTurnStrategies) {
-        return;
-      }
+      // Use preset strategies if available, otherwise use all multi-turn strategies
+      const multiTurnStrategiesToUse =
+        presetMultiTurnStrategies || (MULTI_TURN_STRATEGIES as unknown as string[]);
 
       if (checked) {
         // Filter out disabled strategies
-        const enabledMultiTurnIds = multiTurnStrategies.filter((id) => !isStrategyDisabled(id));
-        const skippedMultiTurnIds = multiTurnStrategies.filter((id) => isStrategyDisabled(id));
+        const enabledMultiTurnIds = multiTurnStrategiesToUse.filter(
+          (id) => !isStrategyDisabled(id),
+        );
+        const skippedMultiTurnIds = multiTurnStrategiesToUse.filter((id) => isStrategyDisabled(id));
 
         // Show toast if any strategies were skipped
         if (skippedMultiTurnIds.length > 0) {
@@ -450,9 +439,9 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
         ];
         updateConfig('strategies', newStrats);
       } else {
-        // Remove multi-turn strategies
+        // Remove all multi-turn strategies
         const filtered = config.strategies.filter(
-          (s) => !multiTurnStrategies.includes(getStrategyId(s) as string),
+          (s) => !MULTI_TURN_STRATEGIES.includes(getStrategyId(s) as any),
         );
         updateConfig('strategies', filtered);
       }

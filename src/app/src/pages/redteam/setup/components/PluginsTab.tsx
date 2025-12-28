@@ -341,6 +341,22 @@ export default function PluginsTab({
     [presets, selectedPlugins],
   );
 
+  // Split selected plugins into configured vs needing configuration
+  const { pluginsNeedingConfig, configuredPlugins } = useMemo(() => {
+    const needsConfig: Plugin[] = [];
+    const configured: Plugin[] = [];
+
+    for (const plugin of selectedPlugins) {
+      if (PLUGINS_REQUIRING_CONFIG.includes(plugin) && !isPluginConfigured(plugin)) {
+        needsConfig.push(plugin);
+      } else {
+        configured.push(plugin);
+      }
+    }
+
+    return { pluginsNeedingConfig: needsConfig, configuredPlugins: configured };
+  }, [selectedPlugins, isPluginConfigured]);
+
   // Event handlers
   const handleCategoryToggle = useCallback((category: string) => {
     setSelectedCategory((prev) => (prev === category ? undefined : category));
@@ -405,7 +421,7 @@ export default function PluginsTab({
           <div className="mb-6">
             <h3 className="mb-4 text-lg font-semibold">Presets</h3>
 
-            <div className="mb-6 flex flex-wrap gap-2">
+            <div className="mb-6 grid auto-rows-fr grid-cols-[repeat(auto-fill,230px)] gap-3">
               {presets.map((preset) => {
                 const isSelected =
                   preset.name === 'Custom'
@@ -694,42 +710,88 @@ export default function PluginsTab({
               </p>
             ) : (
               <div className="max-h-[400px] space-y-2 overflow-y-auto">
-                {Array.from(selectedPlugins).map((plugin) => {
-                  const requiresConfig = PLUGINS_REQUIRING_CONFIG.includes(plugin);
-                  const hasError = requiresConfig && !isPluginConfigured(plugin);
-
-                  return (
-                    <div
-                      key={plugin}
-                      className={cn(
-                        'flex items-center rounded-lg border p-3',
-                        hasError
-                          ? 'border-2 border-destructive bg-destructive/10'
-                          : 'border-primary/20 bg-primary/5',
-                      )}
-                    >
-                      <div className="flex min-w-0 flex-1 items-center gap-2">
-                        {hasError && <AlertCircle className="h-4 w-4 shrink-0 text-destructive" />}
-                        <span
+                {/* Plugins requiring configuration - shown first */}
+                {pluginsNeedingConfig.length > 0 && (
+                  <div className="mb-3">
+                    <p className="mb-2 text-xs font-medium uppercase tracking-wide text-destructive">
+                      Needs Configuration
+                    </p>
+                    <div className="space-y-2">
+                      {pluginsNeedingConfig.map((plugin) => (
+                        <div
+                          key={plugin}
+                          onClick={() => handleConfigClick(plugin)}
                           className={cn(
-                            'text-sm font-medium',
-                            hasError ? 'text-destructive' : 'text-foreground',
+                            'flex cursor-pointer items-center rounded-lg border-2 border-destructive bg-destructive/10 p-3 transition-colors',
+                            'hover:bg-destructive/20',
                           )}
                         >
-                          {displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}
-                        </span>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="ml-2 h-6 w-6"
-                        onClick={() => handlePluginToggle(plugin)}
-                      >
-                        <Minus className="h-4 w-4" />
-                      </Button>
+                          <div className="flex min-w-0 flex-1 items-center gap-2">
+                            <AlertCircle className="h-4 w-4 shrink-0 text-destructive" />
+                            <span className="text-sm font-medium text-destructive">
+                              {displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6 text-destructive hover:text-destructive"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleConfigClick(plugin);
+                              }}
+                            >
+                              <Settings className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handlePluginToggle(plugin);
+                              }}
+                            >
+                              <Minus className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  );
-                })}
+                  </div>
+                )}
+
+                {/* Configured plugins */}
+                {configuredPlugins.length > 0 && (
+                  <div>
+                    {pluginsNeedingConfig.length > 0 && (
+                      <div className="my-3 border-t border-border" />
+                    )}
+                    <div className="space-y-2">
+                      {configuredPlugins.map((plugin) => (
+                        <div
+                          key={plugin}
+                          className="flex items-center rounded-lg border border-primary/20 bg-primary/5 p-3"
+                        >
+                          <div className="flex min-w-0 flex-1 items-center gap-2">
+                            <span className="text-sm font-medium text-foreground">
+                              {displayNameOverrides[plugin] || categoryAliases[plugin] || plugin}
+                            </span>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="ml-2 h-6 w-6"
+                            onClick={() => handlePluginToggle(plugin)}
+                          >
+                            <Minus className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 

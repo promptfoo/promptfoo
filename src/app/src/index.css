@@ -190,6 +190,8 @@
 
 * {
   box-sizing: border-box;
+  /* Default border color - prevents harsh black borders */
+  border-color: hsl(var(--border));
 }
 
 :root {

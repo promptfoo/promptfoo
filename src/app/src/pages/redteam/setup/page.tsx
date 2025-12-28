@@ -640,7 +640,7 @@ export default function RedTeamSetupPage() {
 
         {/* Load Dialog */}
         <Dialog open={loadDialogOpen} onOpenChange={(open) => !open && setLoadDialogOpen(false)}>
-          <DialogContent className="sm:max-w-md">
+          <DialogContent className="sm:max-w-2xl">
             <DialogHeader>
               <DialogTitle>Load Configuration</DialogTitle>
             </DialogHeader>
@@ -667,7 +667,7 @@ export default function RedTeamSetupPage() {
                   <p className="text-muted-foreground">No saved configurations found</p>
                 </div>
               ) : (
-                <div className="space-y-1">
+                <div className="max-h-[50vh] space-y-1 overflow-y-auto">
                   {savedConfigs.map((savedConfig) => (
                     <button
                       key={savedConfig.id}

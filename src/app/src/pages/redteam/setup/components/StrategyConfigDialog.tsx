@@ -1260,11 +1260,11 @@ export default function StrategyConfigDialog({
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="flex max-h-[85vh] max-w-lg flex-col">
         <DialogHeader>
           <DialogTitle>Configure {strategyData?.name ?? strategy}</DialogTitle>
         </DialogHeader>
-        <div className="max-h-[60vh] overflow-y-auto py-4">{renderStrategyConfig()}</div>
+        <div className="flex-1 overflow-y-auto py-4">{renderStrategyConfig()}</div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>
             Cancel

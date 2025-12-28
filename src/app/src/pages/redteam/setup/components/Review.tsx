@@ -844,7 +844,7 @@ export default function Review({
         </div>
 
         {/* Collapsible Sections */}
-        <div className="mt-6 overflow-hidden rounded-lg border shadow-sm">
+        <div className="mt-6 rounded-lg border border-border shadow-sm">
           {/* Application Details */}
           <Collapsible open={isPurposeExpanded} onOpenChange={setIsPurposeExpanded}>
             <CollapsibleTrigger className="flex w-full items-center justify-between border-b p-4 hover:bg-muted/50">
@@ -1053,6 +1053,7 @@ export default function Review({
                   runOptions={{
                     maxConcurrency: config.maxConcurrency,
                     delay: config.target.config.delay,
+                    verbose: config.target.config.verbose,
                   }}
                   updateConfig={updateConfig}
                   updateRunOption={(key: keyof RedteamRunOptions, value: any) => {
@@ -1169,7 +1170,7 @@ export default function Review({
 
         {/* YAML Dialog */}
         <Dialog open={isYamlDialogOpen} onOpenChange={setIsYamlDialogOpen}>
-          <DialogContent className="max-w-4xl">
+          <DialogContent className="max-w-6xl w-[90vw] max-h-none overflow-visible">
             <DialogHeader>
               <DialogTitle>YAML Configuration</DialogTitle>
             </DialogHeader>

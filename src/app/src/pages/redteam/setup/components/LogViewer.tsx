@@ -200,7 +200,7 @@ export function LogViewer({ logs }: LogViewerProps) {
         <DialogContent className="h-screen max-w-none p-0 sm:max-w-none">
           <DialogHeader className="flex flex-row items-center justify-between border-b border-border px-4 py-3">
             <DialogTitle>Logs</DialogTitle>
-            <div className="flex gap-2">
+            <div className="mr-8 flex gap-2">
               <Button variant="ghost" size="sm" onClick={handleCopyLogs}>
                 <Copy className="mr-1 h-4 w-4" />
                 Copy
