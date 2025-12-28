@@ -263,14 +263,21 @@ export function DataTableFilter<TData>({ table }: DataTableFilterProps<TData>) {
     (id: string) => {
       setActiveFilters((prevFilters) => {
         const filter = prevFilters.find((f) => f.id === id);
+        const remainingFilters = prevFilters.filter((f) => f.id !== id);
+
         if (filter) {
-          // Clear the column filter after state update
+          // Only clear column filter if no other filters reference this column
           queueMicrotask(() => {
-            const column = table.getColumn(filter.columnId);
-            column?.setFilterValue(undefined);
+            const otherFiltersOnSameColumn = remainingFilters.filter(
+              (f) => f.columnId === filter.columnId,
+            );
+            if (otherFiltersOnSameColumn.length === 0) {
+              const column = table.getColumn(filter.columnId);
+              column?.setFilterValue(undefined);
+            }
           });
         }
-        return prevFilters.filter((f) => f.id !== id);
+        return remainingFilters;
       });
     },
     [table],
