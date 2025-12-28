@@ -79,6 +79,7 @@ describe('GoogleImageProvider', async () => {
       }),
       expect.any(Number),
       'json',
+      { bust: undefined, repeatIndex: undefined },
     );
     expect(result.output).toContain('![Generated Image](data:image/png;base64,base64data)');
   });
@@ -300,6 +301,7 @@ describe('GoogleImageProvider', async () => {
         }),
         expect.any(Number),
         'json',
+        { bust: undefined, repeatIndex: undefined },
       );
 
       expect(result.output).toContain('![Generated Image](data:image/png;base64,base64data1)');
@@ -366,6 +368,7 @@ describe('GoogleImageProvider', async () => {
         }),
         expect.any(Number),
         'json',
+        { bust: undefined, repeatIndex: undefined },
       );
       expect(result.output).toContain('![Generated Image]');
     });

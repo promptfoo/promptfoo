@@ -2,7 +2,7 @@ import { fetchWithCache, getCache, isCacheEnabled } from '../cache';
 import { getEnvString } from '../envars';
 import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
-import { calculateCost, parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
+import { calculateCost, getCacheOptions, parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
 
 import type { EnvVarKey } from '../envars';
 import type { EnvOverrides } from '../types/env';
@@ -288,7 +288,7 @@ export class MistralChatCompletionProvider implements ApiProvider {
 
   private async callApiInternal(
     prompt: string,
-    _context?: CallApiContextParams,
+    context?: CallApiContextParams,
     config: MistralChatCompletionOptions = {},
   ): Promise<ProviderResponse> {
     if (!this.getApiKey()) {
@@ -346,6 +346,8 @@ export class MistralChatCompletionProvider implements ApiProvider {
           body: JSON.stringify(params),
         },
         REQUEST_TIMEOUT_MS,
+        'json',
+        getCacheOptions(context),
       )) as unknown as { data: any; cached: boolean });
     } catch (err) {
       return {

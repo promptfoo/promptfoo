@@ -184,10 +184,13 @@ export class OllamaCompletionProvider implements ApiProvider {
       return result;
     };
 
-    return withGenAISpan(spanContext, () => this.callApiInternal(prompt), resultExtractor);
+    return withGenAISpan(spanContext, () => this.callApiInternal(prompt, context), resultExtractor);
   }
 
-  private async callApiInternal(prompt: string): Promise<ProviderResponse> {
+  private async callApiInternal(
+    prompt: string,
+    context?: CallApiContextParams,
+  ): Promise<ProviderResponse> {
     const params = {
       model: this.modelName,
       prompt,
@@ -232,6 +235,7 @@ export class OllamaCompletionProvider implements ApiProvider {
         },
         REQUEST_TIMEOUT_MS,
         'text',
+        getCacheOptions(context),
       );
     } catch (err) {
       return {

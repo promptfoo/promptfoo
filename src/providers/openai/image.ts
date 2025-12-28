@@ -1,7 +1,7 @@
-import { fetchWithCache } from '../../cache';
+import { fetchWithCache, type CacheOptions } from '../../cache';
 import logger from '../../logger';
 import { ellipsize } from '../../util/text';
-import { REQUEST_TIMEOUT_MS } from '../shared';
+import { getCacheOptions, REQUEST_TIMEOUT_MS } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import { formatOpenAiError } from './util';
 
@@ -304,6 +304,7 @@ export async function callOpenAiImageApi(
   body: Record<string, any>,
   headers: Record<string, string>,
   timeout: number,
+  cacheOptions?: CacheOptions,
 ): Promise<{ data: any; cached: boolean; status: number; statusText: string; latencyMs?: number }> {
   return await fetchWithCache(
     url,
@@ -313,6 +314,8 @@ export async function callOpenAiImageApi(
       body: JSON.stringify(body),
     },
     timeout,
+    'json',
+    cacheOptions,
   );
 }
 
@@ -421,6 +424,7 @@ export class OpenAiImageProvider extends OpenAiGenericProvider {
         body,
         headers,
         REQUEST_TIMEOUT_MS,
+        getCacheOptions(context),
       ));
 
       if (status < 200 || status >= 300) {

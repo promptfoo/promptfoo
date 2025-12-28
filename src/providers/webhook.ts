@@ -1,7 +1,7 @@
 import { fetchWithCache } from '../cache';
-import { REQUEST_TIMEOUT_MS } from './shared';
+import { getCacheOptions, REQUEST_TIMEOUT_MS } from './shared';
 
-import type { ApiProvider, ProviderResponse } from '../types/index';
+import type { ApiProvider, CallApiContextParams, ProviderResponse } from '../types/index';
 
 export class WebhookProvider implements ApiProvider {
   webhookUrl: string;
@@ -22,7 +22,7 @@ export class WebhookProvider implements ApiProvider {
     return `[Webhook Provider ${this.webhookUrl}]`;
   }
 
-  async callApi(prompt: string): Promise<ProviderResponse> {
+  async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
     const params: { prompt: string; config?: object } = {
       prompt,
     };
@@ -45,6 +45,7 @@ export class WebhookProvider implements ApiProvider {
         },
         REQUEST_TIMEOUT_MS,
         'json',
+        getCacheOptions(context),
       ));
     } catch (err) {
       return {
