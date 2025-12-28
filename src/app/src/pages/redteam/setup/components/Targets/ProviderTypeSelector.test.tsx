@@ -178,6 +178,7 @@ describe('ProviderTypeSelector', () => {
     expect(mockSetProvider).toHaveBeenCalledWith(
       {
         id: 'http',
+        label: 'Invalid Provider', // Label should be preserved when defaulting to HTTP
         config: {
           url: '',
           method: 'POST',

@@ -446,9 +446,11 @@ export default function ProviderTypeSelector({
 
   useEffect(() => {
     if (!provider?.id) {
+      // Preserve the label when defaulting to HTTP
       setProvider(
         {
           id: 'http',
+          label: provider?.label,
           config: {
             url: '',
             method: 'POST',

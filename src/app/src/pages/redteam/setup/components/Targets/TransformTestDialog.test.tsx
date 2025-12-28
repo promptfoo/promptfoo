@@ -137,7 +137,7 @@ describe('TransformTestDialog', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('Run the test to see results here')).toBeInTheDocument();
+      expect(screen.getByText('Run the test to see results')).toBeInTheDocument();
     });
 
     rerender(
@@ -152,7 +152,7 @@ describe('TransformTestDialog', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('Run the test to see results here')).toBeInTheDocument();
+      expect(screen.getByText('Run the test to see results')).toBeInTheDocument();
     });
   });
 

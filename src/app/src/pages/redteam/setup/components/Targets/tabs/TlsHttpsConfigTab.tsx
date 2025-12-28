@@ -947,11 +947,11 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
               <div className="space-y-2">
                 <Label>Minimum TLS Version</Label>
                 <Select
-                  value={selectedTarget.config.tls?.minVersion || ''}
+                  value={selectedTarget.config.tls?.minVersion || 'default'}
                   onValueChange={(value) =>
                     updateCustomTarget('tls', {
                       ...selectedTarget.config.tls,
-                      minVersion: value || undefined,
+                      minVersion: value === 'default' ? undefined : value,
                     })
                   }
                 >
@@ -959,7 +959,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                     <SelectValue placeholder="Default" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Default</SelectItem>
+                    <SelectItem value="default">Default</SelectItem>
                     <SelectItem value="TLSv1">TLS 1.0</SelectItem>
                     <SelectItem value="TLSv1.1">TLS 1.1</SelectItem>
                     <SelectItem value="TLSv1.2">TLS 1.2</SelectItem>
@@ -971,11 +971,11 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
               <div className="space-y-2">
                 <Label>Maximum TLS Version</Label>
                 <Select
-                  value={selectedTarget.config.tls?.maxVersion || ''}
+                  value={selectedTarget.config.tls?.maxVersion || 'default'}
                   onValueChange={(value) =>
                     updateCustomTarget('tls', {
                       ...selectedTarget.config.tls,
-                      maxVersion: value || undefined,
+                      maxVersion: value === 'default' ? undefined : value,
                     })
                   }
                 >
@@ -983,7 +983,7 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
                     <SelectValue placeholder="Default" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Default</SelectItem>
+                    <SelectItem value="default">Default</SelectItem>
                     <SelectItem value="TLSv1">TLS 1.0</SelectItem>
                     <SelectItem value="TLSv1.1">TLS 1.1</SelectItem>
                     <SelectItem value="TLSv1.2">TLS 1.2</SelectItem>

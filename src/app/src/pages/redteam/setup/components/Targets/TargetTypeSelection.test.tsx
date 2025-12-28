@@ -1,5 +1,6 @@
 import { TooltipProvider } from '@app/components/ui/tooltip';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import TargetTypeSelection from './TargetTypeSelection';
 
@@ -415,42 +416,49 @@ describe('TargetTypeSelection', () => {
     });
 
     it('should allow proceeding to next step with custom provider after entering name', async () => {
-      // Start with a custom provider selected but the user needs to confirm/enter a name
+      // This test verifies the flow when user selects custom provider and enters a name
+      const user = userEvent.setup();
       const mockSetProviderType = vi.fn();
       mockUseRedTeamConfig.mockReturnValue({
         config: {
           target: {
             id: '', // Empty id for custom provider
-            label: 'my-custom-target',
+            label: '',
             config: {},
           },
         },
         updateConfig: mockUpdateConfig,
-        providerType: 'custom',
+        providerType: 'custom', // Custom provider already selected
         setProviderType: mockSetProviderType,
       });
 
       renderComponent();
+
+      // Enter a target name using userEvent for proper input simulation
+      const nameInput = screen.getByRole('textbox', { name: /Target Name/i });
+      await user.type(nameInput, 'my-custom-target');
+
+      // Click the inline "Next: Select Target Type" button to reveal the section
+      const inlineNextButton = await screen.findByRole('button', {
+        name: 'Next: Select Target Type',
+      });
+      await user.click(inlineNextButton);
 
       // Wait for target type section to be visible
       await waitFor(() => {
         expect(screen.getByText('Select Target Type')).toBeInTheDocument();
       });
 
-      // The footer Next button should be present
+      // The footer Next button should be present and enabled since we have providerType set and label entered
       const footerNextButton = await screen.findByRole('button', { name: /Next.*Configure/i });
       expect(footerNextButton).toBeInTheDocument();
 
-      // Enter a name in the input to enable the button
-      const nameInput = screen.getByRole('textbox', { name: 'Target Name' });
-      fireEvent.change(nameInput, { target: { value: 'my-custom-target' } });
-
-      // Now the button should be enabled
+      // Wait for button to become enabled (state updates may be asynchronous)
       await waitFor(() => {
         expect(footerNextButton).toBeEnabled();
       });
 
-      fireEvent.click(footerNextButton);
+      await user.click(footerNextButton);
 
       expect(onNext).toHaveBeenCalledTimes(1);
     });
