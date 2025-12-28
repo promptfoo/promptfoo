@@ -253,6 +253,7 @@ function ProviderConfigEditor({
           rawConfigJson={rawConfigJson}
           setRawConfigJson={setRawConfigJson}
           bodyError={bodyError}
+          providerType={providerType}
         />
       )}
 
@@ -323,6 +324,7 @@ function ProviderConfigEditor({
           rawConfigJson={rawConfigJson}
           setRawConfigJson={setRawConfigJson}
           bodyError={bodyError}
+          providerType={providerType}
         />
       )}
 
@@ -336,6 +338,7 @@ function ProviderConfigEditor({
           rawConfigJson={rawConfigJson}
           setRawConfigJson={setRawConfigJson}
           bodyError={bodyError}
+          providerType={providerType}
         />
       )}
 
@@ -349,6 +352,7 @@ function ProviderConfigEditor({
           rawConfigJson={rawConfigJson}
           setRawConfigJson={setRawConfigJson}
           bodyError={bodyError}
+          providerType={providerType}
         />
       )}
 
@@ -369,6 +373,7 @@ function ProviderConfigEditor({
           rawConfigJson={rawConfigJson}
           setRawConfigJson={setRawConfigJson}
           bodyError={bodyError}
+          providerType={providerType}
         />
       )}
 

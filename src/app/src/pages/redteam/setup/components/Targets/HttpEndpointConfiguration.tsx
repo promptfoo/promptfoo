@@ -146,6 +146,7 @@ Content-Type: application/json
   // Test Target state
   const [isTestRunning, setIsTestRunning] = useState(false);
   const [testResult, setTestResult] = useState<TestResult | null>(null);
+  const [testDetailsExpanded, setTestDetailsExpanded] = useState(false);
 
   // Response transform test state
   const [responseTestOpen, setResponseTestOpen] = useState(false);
@@ -164,10 +165,9 @@ Content-Type: application/json
           message:
             'Please configure a valid HTTP URL for your target. Enter a complete URL (e.g., https://api.example.com/endpoint).',
         });
+        setTestDetailsExpanded(true);
         setIsTestRunning(false);
-        if (onTargetTested) {
-          onTargetTested(false);
-        }
+        onTargetTested?.(false);
         return;
       }
     }
@@ -197,14 +197,11 @@ Content-Type: application/json
           message: message,
           providerResponse: data.providerResponse || {},
           transformedRequest: data.transformedRequest,
-          // Include the suggestions if available
           changes_needed: hasConfigIssues,
           changes_needed_suggestions: data.testResult?.changes_needed_suggestions,
         });
-
-        if (onTargetTested) {
-          onTargetTested(isSuccess);
-        }
+        setTestDetailsExpanded(!isSuccess || hasConfigIssues);
+        onTargetTested?.(isSuccess);
       } else {
         const errorData = await response.json();
         setTestResult({
@@ -213,16 +210,13 @@ Content-Type: application/json
           providerResponse: errorData.providerResponse || {},
           transformedRequest: errorData.transformedRequest,
         });
-
-        if (onTargetTested) {
-          onTargetTested(false);
-        }
+        setTestDetailsExpanded(true);
+        onTargetTested?.(false);
       }
     } catch (error) {
       console.error('Error testing target:', error);
       let errorMessage = 'Failed to test target configuration';
       if (error instanceof Error) {
-        // Improve URL-related error messages
         if (
           error.message.includes('Failed to parse URL') ||
           error.message.includes('Invalid URL')
@@ -237,10 +231,8 @@ Content-Type: application/json
         success: false,
         message: errorMessage,
       });
-
-      if (onTargetTested) {
-        onTargetTested(false);
-      }
+      setTestDetailsExpanded(true);
+      onTargetTested?.(false);
     } finally {
       setIsTestRunning(false);
     }
@@ -589,33 +581,31 @@ ${exampleRequest}`;
               <Label htmlFor="url">
                 URL <span className="text-destructive">*</span>
               </Label>
-              <Input
-                id="url"
-                value={selectedTarget.config.url}
-                onChange={(e) => updateCustomTarget('url', e.target.value)}
-                className={cn(urlError && 'border-destructive')}
-                placeholder="https://example.com/api/chat"
-              />
+              <div className="flex gap-2">
+                <Select
+                  value={selectedTarget.config.method}
+                  onValueChange={(value) => updateCustomTarget('method', value)}
+                >
+                  <SelectTrigger id="method" className="w-24 shrink-0">
+                    <SelectValue placeholder="Method" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {['GET', 'POST'].map((method) => (
+                      <SelectItem key={method} value={method}>
+                        {method}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Input
+                  id="url"
+                  value={selectedTarget.config.url}
+                  onChange={(e) => updateCustomTarget('url', e.target.value)}
+                  className={cn('flex-1', urlError && 'border-destructive')}
+                  placeholder="https://example.com/api/chat"
+                />
+              </div>
               {urlError && <p className="text-sm text-destructive">{urlError}</p>}
-            </div>
-
-            <div className="mt-4 space-y-2">
-              <Label htmlFor="method">Method</Label>
-              <Select
-                value={selectedTarget.config.method}
-                onValueChange={(value) => updateCustomTarget('method', value)}
-              >
-                <SelectTrigger id="method">
-                  <SelectValue placeholder="Select method" />
-                </SelectTrigger>
-                <SelectContent>
-                  {['GET', 'POST'].map((method) => (
-                    <SelectItem key={method} value={method}>
-                      {method}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
             </div>
 
             <p className="mb-2 mt-6 font-medium">Headers</p>
@@ -751,19 +741,21 @@ ${exampleRequest}`;
               ? !selectedTarget.config.request
               : !selectedTarget.config.url
           }
+          detailsExpanded={testDetailsExpanded}
+          onDetailsExpandedChange={setTestDetailsExpanded}
         />
       </div>
 
       <Dialog open={configDialogOpen} onOpenChange={setConfigDialogOpen}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-4xl">
           <DialogHeader>
-            <DialogTitle>AI Auto-fill HTTP Configuration</DialogTitle>
+            <DialogTitle>Generate HTTP Configuration</DialogTitle>
           </DialogHeader>
-          <p className="mb-4 text-sm text-muted-foreground">
-            Paste an example HTTP request and optionally a response. AI will automatically generate
-            the configuration for you.
+          <p className="mb-2 text-sm text-muted-foreground">
+            Paste an example HTTP request and optionally a response. Promptfoo will automatically
+            generate the configuration for you.
           </p>
-          <div className="mt-2 grid grid-cols-1 gap-6 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
             <div>
               <p className="mb-2 text-lg font-semibold">
                 Example Request (paste your HTTP request here)
@@ -843,7 +835,11 @@ ${exampleRequest}`;
             <Button variant="outline" onClick={() => setConfigDialogOpen(false)}>
               Cancel
             </Button>
-            <Button variant="outline" onClick={handleGenerateConfig} disabled={generating}>
+            <Button
+              variant={generatedConfig ? 'outline' : 'default'}
+              onClick={handleGenerateConfig}
+              disabled={generating}
+            >
               {generating ? 'Generating...' : 'Generate'}
             </Button>
             {generatedConfig && <Button onClick={handleApply}>Apply Configuration</Button>}

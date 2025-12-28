@@ -204,6 +204,7 @@ const allProviderOptions = [
     label: 'HTTP/HTTPS Endpoint',
     description: 'Connect to REST APIs and HTTP endpoints',
     tag: 'endpoint',
+    recommended: true,
   },
   // Hugging Face
   {
@@ -225,6 +226,7 @@ const allProviderOptions = [
     label: 'JavaScript Provider',
     description: 'Custom JS provider for specialized integrations',
     tag: 'custom',
+    recommended: true,
   },
   // JFrog ML
   {
@@ -302,6 +304,7 @@ const allProviderOptions = [
     label: 'Python Provider',
     description: 'Custom Python provider for specialized integrations',
     tag: 'custom',
+    recommended: true,
   },
   // Shell Command
   {
@@ -353,7 +356,47 @@ const allProviderOptions = [
     tag: 'model',
   },
 ].sort((a, b) => {
-  return a.last ? 1 : b.last ? -1 : a.label.localeCompare(b.label);
+  // Define priority tiers
+  const tier1Providers = ['http', 'python', 'javascript']; // Custom/endpoint options
+  const tier2Providers = ['openai', 'google', 'anthropic', 'openrouter']; // Popular foundation models
+
+  const aIsTier1 = tier1Providers.includes(a.value);
+  const bIsTier1 = tier1Providers.includes(b.value);
+  const aIsTier2 = tier2Providers.includes(a.value);
+  const bIsTier2 = tier2Providers.includes(b.value);
+
+  // Items marked as 'last' always go to the end
+  if (a.last) {
+    return 1;
+  }
+  if (b.last) {
+    return -1;
+  }
+
+  // Tier 1 providers come first
+  if (aIsTier1 && !bIsTier1) {
+    return -1;
+  }
+  if (!aIsTier1 && bIsTier1) {
+    return 1;
+  }
+  if (aIsTier1 && bIsTier1) {
+    return tier1Providers.indexOf(a.value) - tier1Providers.indexOf(b.value);
+  }
+
+  // Tier 2 providers come after tier 1
+  if (aIsTier2 && !bIsTier2) {
+    return -1;
+  }
+  if (!aIsTier2 && bIsTier2) {
+    return 1;
+  }
+  if (aIsTier2 && bIsTier2) {
+    return tier2Providers.indexOf(a.value) - tier2Providers.indexOf(b.value);
+  }
+
+  // Otherwise sort alphabetically
+  return a.label.localeCompare(b.label);
 });
 
 interface ProviderTypeSelectorProps {
@@ -957,7 +1000,21 @@ export default function ProviderTypeSelector({
           <CheckCircle className="mr-4 h-5 w-5 flex-shrink-0 text-primary" />
 
           <div className="min-w-0 flex-1">
-            <p className="mb-1 font-semibold text-primary">{selectedOption.label}</p>
+            <div className="mb-1 flex items-center gap-2">
+              <p className="font-semibold text-primary">{selectedOption.label}</p>
+              {selectedOption.recommended && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Badge variant="secondary" className="text-xs">
+                      Recommended
+                    </Badge>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    Popular choice that's flexible, well-documented, and easy to integrate
+                  </TooltipContent>
+                </Tooltip>
+              )}
+            </div>
             <p className="overflow-hidden text-ellipsis text-sm text-muted-foreground">
               {selectedOption.description}
             </p>
@@ -1027,64 +1084,93 @@ export default function ProviderTypeSelector({
       </div>
 
       <div className="space-y-2">
-        {filteredProviderOptions.map((option) => (
-          <div
-            key={option.value}
-            onClick={() => handleProviderTypeSelect(option.value)}
-            className={cn(
-              'flex w-full cursor-pointer items-center rounded-lg border p-4 transition-colors',
-              selectedProviderType === option.value
-                ? 'border-2 border-primary bg-primary/5'
-                : 'border-border hover:bg-muted/50',
-            )}
-          >
-            <input
-              type="radio"
-              checked={selectedProviderType === option.value}
-              onChange={() => handleProviderTypeSelect(option.value)}
-              name="provider-type-radio"
-              className="mr-4 h-4 w-4 flex-shrink-0"
-            />
+        {filteredProviderOptions.map((option, index) => {
+          // Check if we need to show a divider before this option
+          const tier2Providers = ['openai', 'google', 'anthropic', 'openrouter'];
+          const showDivider =
+            index > 0 &&
+            tier2Providers.includes(filteredProviderOptions[index - 1].value) &&
+            !tier2Providers.includes(option.value);
 
-            <div className="min-w-0 flex-1">
-              <p
+          return (
+            <>
+              {showDivider && (
+                <div className="py-3">
+                  <div className="h-px w-full bg-border" />
+                </div>
+              )}
+              <div
+                key={option.value}
+                onClick={() => handleProviderTypeSelect(option.value)}
                 className={cn(
-                  'mb-1',
+                  'flex w-full cursor-pointer items-center rounded-lg border p-4 transition-colors',
                   selectedProviderType === option.value
-                    ? 'font-semibold text-primary'
-                    : 'font-medium text-foreground',
+                    ? 'border-2 border-primary bg-primary/5'
+                    : 'border-border hover:bg-muted/50',
                 )}
               >
-                {option.label}
-              </p>
-              <p className="line-clamp-2 text-sm text-muted-foreground">{option.description}</p>
-            </div>
+                <input
+                  type="radio"
+                  checked={selectedProviderType === option.value}
+                  onChange={() => handleProviderTypeSelect(option.value)}
+                  name="provider-type-radio"
+                  className="mr-4 h-4 w-4 flex-shrink-0"
+                />
 
-            <div className="ml-4 flex flex-shrink-0 items-center">
-              {/* Documentation link */}
-              {hasSpecificDocumentation(option.value) && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <a
-                      href={getProviderDocumentationUrl(option.value)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={(e) => e.stopPropagation()}
-                      className="mr-2 text-muted-foreground hover:text-foreground"
+                <div className="min-w-0 flex-1">
+                  <div className="mb-1 flex items-center gap-2">
+                    <p
+                      className={cn(
+                        selectedProviderType === option.value
+                          ? 'font-semibold text-primary'
+                          : 'font-medium text-foreground',
+                      )}
                     >
-                      <HelpCircle className="h-4 w-4" />
-                    </a>
-                  </TooltipTrigger>
-                  <TooltipContent>View {option.label} documentation</TooltipContent>
-                </Tooltip>
-              )}
+                      {option.label}
+                    </p>
+                    {option.recommended && (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Badge variant="secondary" className="text-xs">
+                            Recommended
+                          </Badge>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          Popular choice that's flexible, well-documented, and easy to integrate
+                        </TooltipContent>
+                      </Tooltip>
+                    )}
+                  </div>
+                  <p className="line-clamp-2 text-sm text-muted-foreground">{option.description}</p>
+                </div>
 
-              {selectedProviderType === option.value && (
-                <CheckCircle className="h-4 w-4 text-primary" />
-              )}
-            </div>
-          </div>
-        ))}
+                <div className="ml-4 flex flex-shrink-0 items-center">
+                  {/* Documentation link */}
+                  {hasSpecificDocumentation(option.value) && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <a
+                          href={getProviderDocumentationUrl(option.value)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="mr-2 text-muted-foreground hover:text-foreground"
+                        >
+                          <HelpCircle className="h-4 w-4" />
+                        </a>
+                      </TooltipTrigger>
+                      <TooltipContent>View {option.label} documentation</TooltipContent>
+                    </Tooltip>
+                  )}
+
+                  {selectedProviderType === option.value && (
+                    <CheckCircle className="h-4 w-4 text-primary" />
+                  )}
+                </div>
+              </div>
+            </>
+          );
+        })}
       </div>
     </div>
   );

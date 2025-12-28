@@ -1,14 +1,8 @@
 import React, { useEffect, useState } from 'react';
 
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@app/components/ui/collapsible';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
-import { cn } from '@app/lib/utils';
-import { ChevronDown } from 'lucide-react';
+import { SetupSection } from '../SetupSection';
 
 import type { ProviderOptions } from '../../types';
 
@@ -153,86 +147,76 @@ const FoundationModelConfiguration = ({
           </p>
         </div>
 
-        <Collapsible open={isAdvancedOpen} onOpenChange={setIsAdvancedOpen} className="mt-4">
-          <CollapsibleTrigger className="flex w-full items-center justify-between rounded-lg border border-border bg-muted/50 px-4 py-3 text-left hover:bg-muted">
-            <div>
-              <p className="font-medium">Advanced Configuration</p>
-              <p className="text-sm text-muted-foreground">Model parameters and API settings</p>
+        <SetupSection
+          title="Advanced Configuration"
+          description="Model parameters and API settings"
+          isExpanded={isAdvancedOpen}
+          onExpandedChange={setIsAdvancedOpen}
+          className="mt-4"
+        >
+          <div className="grid gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="temperature">Temperature</Label>
+              <Input
+                id="temperature"
+                type="number"
+                min={0}
+                max={2}
+                step={0.1}
+                value={selectedTarget.config?.temperature ?? ''}
+                onChange={(e) =>
+                  updateCustomTarget('temperature', parseFloat(e.target.value) || undefined)
+                }
+              />
+              <p className="text-sm text-muted-foreground">Controls randomness (0.0 to 2.0)</p>
             </div>
-            <ChevronDown
-              className={cn(
-                'h-5 w-5 transition-transform duration-200',
-                isAdvancedOpen && 'rotate-180',
-              )}
-            />
-          </CollapsibleTrigger>
-          <CollapsibleContent className="pt-4">
-            <div className="grid gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="temperature">Temperature</Label>
-                <Input
-                  id="temperature"
-                  type="number"
-                  min={0}
-                  max={2}
-                  step={0.1}
-                  value={selectedTarget.config?.temperature ?? ''}
-                  onChange={(e) =>
-                    updateCustomTarget('temperature', parseFloat(e.target.value) || undefined)
-                  }
-                />
-                <p className="text-sm text-muted-foreground">Controls randomness (0.0 to 2.0)</p>
-              </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="max-tokens">Max Tokens</Label>
-                <Input
-                  id="max-tokens"
-                  type="number"
-                  min={1}
-                  value={selectedTarget.config?.max_tokens ?? ''}
-                  onChange={(e) =>
-                    updateCustomTarget('max_tokens', parseInt(e.target.value) || undefined)
-                  }
-                />
-                <p className="text-sm text-muted-foreground">
-                  Maximum number of tokens to generate
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="top-p">Top P</Label>
-                <Input
-                  id="top-p"
-                  type="number"
-                  min={0}
-                  max={1}
-                  step={0.01}
-                  value={selectedTarget.config?.top_p ?? ''}
-                  onChange={(e) =>
-                    updateCustomTarget('top_p', parseFloat(e.target.value) || undefined)
-                  }
-                />
-                <p className="text-sm text-muted-foreground">
-                  Nucleus sampling parameter (0.0 to 1.0)
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="api-key">API Key</Label>
-                <Input
-                  id="api-key"
-                  type="password"
-                  value={selectedTarget.config?.apiKey ?? ''}
-                  onChange={(e) => updateCustomTarget('apiKey', e.target.value || undefined)}
-                />
-                <p className="text-sm text-muted-foreground">
-                  Optional - defaults to {providerInfo.envVar} environment variable
-                </p>
-              </div>
+            <div className="space-y-2">
+              <Label htmlFor="max-tokens">Max Tokens</Label>
+              <Input
+                id="max-tokens"
+                type="number"
+                min={1}
+                value={selectedTarget.config?.max_tokens ?? ''}
+                onChange={(e) =>
+                  updateCustomTarget('max_tokens', parseInt(e.target.value) || undefined)
+                }
+              />
+              <p className="text-sm text-muted-foreground">Maximum number of tokens to generate</p>
             </div>
-          </CollapsibleContent>
-        </Collapsible>
+
+            <div className="space-y-2">
+              <Label htmlFor="top-p">Top P</Label>
+              <Input
+                id="top-p"
+                type="number"
+                min={0}
+                max={1}
+                step={0.01}
+                value={selectedTarget.config?.top_p ?? ''}
+                onChange={(e) =>
+                  updateCustomTarget('top_p', parseFloat(e.target.value) || undefined)
+                }
+              />
+              <p className="text-sm text-muted-foreground">
+                Nucleus sampling parameter (0.0 to 1.0)
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="api-key">API Key</Label>
+              <Input
+                id="api-key"
+                type="password"
+                value={selectedTarget.config?.apiKey ?? ''}
+                onChange={(e) => updateCustomTarget('apiKey', e.target.value || undefined)}
+              />
+              <p className="text-sm text-muted-foreground">
+                Optional - defaults to {providerInfo.envVar} environment variable
+              </p>
+            </div>
+          </div>
+        </SetupSection>
       </div>
     </div>
   );

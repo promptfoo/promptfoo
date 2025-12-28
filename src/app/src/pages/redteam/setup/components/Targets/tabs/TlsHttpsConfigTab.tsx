@@ -2,11 +2,6 @@ import React, { useState } from 'react';
 
 import { Alert, AlertDescription } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@app/components/ui/collapsible';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import {
@@ -19,11 +14,9 @@ import {
 import { Switch } from '@app/components/ui/switch';
 import { Textarea } from '@app/components/ui/textarea';
 import { useToast } from '@app/hooks/useToast';
-import { cn } from '@app/lib/utils';
 import {
   AlertTriangle,
   Check,
-  ChevronDown,
   File,
   Info,
   Key,
@@ -33,6 +26,7 @@ import {
   Upload,
 } from 'lucide-react';
 import { validatePrivateKey } from '../../../utils/crypto';
+import { SetupSection } from '../../SetupSection';
 import SensitiveTextField from './SensitiveTextField';
 import type { ProviderOptions } from '@promptfoo/types';
 
@@ -926,101 +920,97 @@ const TlsHttpsConfigTab: React.FC<TlsHttpsConfigTabProps> = ({
           </div>
 
           {/* Advanced Options */}
-          <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
-            <CollapsibleTrigger className="flex w-full items-center justify-between rounded-lg border border-border p-4 hover:bg-muted/50">
-              <h3 className="font-medium">Advanced TLS Options</h3>
-              <ChevronDown
-                className={cn('h-4 w-4 transition-transform', advancedOpen && 'rotate-180')}
-              />
-            </CollapsibleTrigger>
-            <CollapsibleContent>
-              <div className="mt-2 rounded-lg border border-border p-4 space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="tls-ciphers">Cipher Suites</Label>
-                  <Input
-                    id="tls-ciphers"
-                    placeholder="TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256"
-                    value={selectedTarget.config.tls?.ciphers || ''}
-                    onChange={(e) =>
-                      updateCustomTarget('tls', {
-                        ...selectedTarget.config.tls,
-                        ciphers: e.target.value,
-                      })
-                    }
-                  />
-                  <p className="text-sm text-muted-foreground">
-                    Specify allowed cipher suites (OpenSSL format)
-                  </p>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Minimum TLS Version</Label>
-                  <Select
-                    value={selectedTarget.config.tls?.minVersion || ''}
-                    onValueChange={(value) =>
-                      updateCustomTarget('tls', {
-                        ...selectedTarget.config.tls,
-                        minVersion: value || undefined,
-                      })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Default" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="">Default</SelectItem>
-                      <SelectItem value="TLSv1">TLS 1.0</SelectItem>
-                      <SelectItem value="TLSv1.1">TLS 1.1</SelectItem>
-                      <SelectItem value="TLSv1.2">TLS 1.2</SelectItem>
-                      <SelectItem value="TLSv1.3">TLS 1.3</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Maximum TLS Version</Label>
-                  <Select
-                    value={selectedTarget.config.tls?.maxVersion || ''}
-                    onValueChange={(value) =>
-                      updateCustomTarget('tls', {
-                        ...selectedTarget.config.tls,
-                        maxVersion: value || undefined,
-                      })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Default" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="">Default</SelectItem>
-                      <SelectItem value="TLSv1">TLS 1.0</SelectItem>
-                      <SelectItem value="TLSv1.1">TLS 1.1</SelectItem>
-                      <SelectItem value="TLSv1.2">TLS 1.2</SelectItem>
-                      <SelectItem value="TLSv1.3">TLS 1.3</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="tls-secure-protocol">Secure Protocol</Label>
-                  <Input
-                    id="tls-secure-protocol"
-                    placeholder="TLSv1_3_method"
-                    value={selectedTarget.config.tls?.secureProtocol || ''}
-                    onChange={(e) =>
-                      updateCustomTarget('tls', {
-                        ...selectedTarget.config.tls,
-                        secureProtocol: e.target.value,
-                      })
-                    }
-                  />
-                  <p className="text-sm text-muted-foreground">
-                    SSL method to use (e.g., 'TLSv1_2_method', 'TLSv1_3_method')
-                  </p>
-                </div>
+          <SetupSection
+            title="Advanced TLS Options"
+            isExpanded={advancedOpen}
+            onExpandedChange={setAdvancedOpen}
+          >
+            <div className="mt-2 rounded-lg border border-border p-4 space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="tls-ciphers">Cipher Suites</Label>
+                <Input
+                  id="tls-ciphers"
+                  placeholder="TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256"
+                  value={selectedTarget.config.tls?.ciphers || ''}
+                  onChange={(e) =>
+                    updateCustomTarget('tls', {
+                      ...selectedTarget.config.tls,
+                      ciphers: e.target.value,
+                    })
+                  }
+                />
+                <p className="text-sm text-muted-foreground">
+                  Specify allowed cipher suites (OpenSSL format)
+                </p>
               </div>
-            </CollapsibleContent>
-          </Collapsible>
+
+              <div className="space-y-2">
+                <Label>Minimum TLS Version</Label>
+                <Select
+                  value={selectedTarget.config.tls?.minVersion || ''}
+                  onValueChange={(value) =>
+                    updateCustomTarget('tls', {
+                      ...selectedTarget.config.tls,
+                      minVersion: value || undefined,
+                    })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Default" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Default</SelectItem>
+                    <SelectItem value="TLSv1">TLS 1.0</SelectItem>
+                    <SelectItem value="TLSv1.1">TLS 1.1</SelectItem>
+                    <SelectItem value="TLSv1.2">TLS 1.2</SelectItem>
+                    <SelectItem value="TLSv1.3">TLS 1.3</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Maximum TLS Version</Label>
+                <Select
+                  value={selectedTarget.config.tls?.maxVersion || ''}
+                  onValueChange={(value) =>
+                    updateCustomTarget('tls', {
+                      ...selectedTarget.config.tls,
+                      maxVersion: value || undefined,
+                    })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Default" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Default</SelectItem>
+                    <SelectItem value="TLSv1">TLS 1.0</SelectItem>
+                    <SelectItem value="TLSv1.1">TLS 1.1</SelectItem>
+                    <SelectItem value="TLSv1.2">TLS 1.2</SelectItem>
+                    <SelectItem value="TLSv1.3">TLS 1.3</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="tls-secure-protocol">Secure Protocol</Label>
+                <Input
+                  id="tls-secure-protocol"
+                  placeholder="TLSv1_3_method"
+                  value={selectedTarget.config.tls?.secureProtocol || ''}
+                  onChange={(e) =>
+                    updateCustomTarget('tls', {
+                      ...selectedTarget.config.tls,
+                      secureProtocol: e.target.value,
+                    })
+                  }
+                />
+                <p className="text-sm text-muted-foreground">
+                  SSL method to use (e.g., 'TLSv1_2_method', 'TLSv1_3_method')
+                </p>
+              </div>
+            </div>
+          </SetupSection>
         </div>
       )}
     </>

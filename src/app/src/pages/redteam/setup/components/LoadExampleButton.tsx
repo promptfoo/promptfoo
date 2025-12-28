@@ -50,7 +50,7 @@ export default function LoadExampleButton() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      <Button variant="outline" onClick={handleClick}>
+      <Button variant="default" size="sm" onClick={handleClick} className="whitespace-nowrap">
         Load Example
       </Button>
     </>

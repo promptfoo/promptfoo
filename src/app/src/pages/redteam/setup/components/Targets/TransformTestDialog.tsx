@@ -1,6 +1,6 @@
 import React from 'react';
 
-import { Alert } from '@app/components/ui/alert';
+import { Alert, AlertDescription } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
 import {
   Collapsible,
@@ -8,9 +8,10 @@ import {
   CollapsibleTrigger,
 } from '@app/components/ui/collapsible';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@app/components/ui/dialog';
+import { Label } from '@app/components/ui/label';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { cn } from '@app/lib/utils';
-import { AlertCircle, AlignLeft, CheckCircle, ChevronDown, Info, Play } from 'lucide-react';
+import { AlertCircle, AlignLeft, CheckCircle, ChevronDown, Code2, Info, Play } from 'lucide-react';
 import Prism from 'prismjs';
 import Editor from 'react-simple-code-editor';
 
@@ -89,6 +90,7 @@ const TransformTestDialog: React.FC<TransformTestDialogProps> = ({
     noTransform?: boolean;
   } | null>(null);
   const [testInputExpanded, setTestInputExpanded] = React.useState(true);
+  const [docsExpanded, setDocsExpanded] = React.useState(false);
   const [formatError, setFormatError] = React.useState<string | null>(null);
 
   const formatJson = () => {
@@ -151,31 +153,35 @@ const TransformTestDialog: React.FC<TransformTestDialogProps> = ({
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent className="flex h-[85vh] max-w-6xl flex-col p-4">
-        <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
+      <DialogContent className="flex h-[85vh] max-w-6xl flex-col gap-0 p-0">
+        <DialogHeader className="border-b border-border px-6 py-4">
+          <DialogTitle className="flex items-center gap-2">
+            <Code2 className="h-5 w-5 text-primary" />
+            {title}
+          </DialogTitle>
         </DialogHeader>
-        <div className="flex flex-1 flex-col gap-4 overflow-hidden md:flex-row">
+
+        <div className="flex flex-1 flex-col gap-0 overflow-hidden md:flex-row">
           {/* Left side - Input */}
-          <div className="flex flex-[0_0_58%] flex-col">
-            <div className="flex flex-1 flex-col gap-4">
-              {/* Test Input */}
-              <div>
-                <h4 className="mb-2 text-sm font-semibold">{testInputLabel}</h4>
+          <div className="flex flex-[0_0_58%] flex-col border-r border-border">
+            <div className="flex flex-1 flex-col gap-4 overflow-y-auto p-4">
+              {/* Test Input Section */}
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold">{testInputLabel}</Label>
                 <Collapsible
                   open={testInputExpanded}
                   onOpenChange={setTestInputExpanded}
-                  className="mb-4 rounded-md bg-black/5 dark:bg-white/5"
+                  className="rounded-lg border border-border"
                 >
-                  <CollapsibleTrigger className="flex w-full items-center justify-between p-3">
-                    <span className="text-sm">Test input</span>
-                    <div className="flex items-center gap-2">
+                  <CollapsibleTrigger className="flex w-full items-center justify-between rounded-t-lg bg-muted/50 px-3 py-2 text-left transition-colors hover:bg-muted">
+                    <span className="text-sm text-muted-foreground">Test input</span>
+                    <div className="flex items-center gap-1">
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <button
                             type="button"
                             aria-label="Format JSON"
-                            className="rounded p-1 hover:bg-black/10 dark:hover:bg-white/10"
+                            className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
                             onClick={(e) => {
                               e.stopPropagation();
                               formatJson();
@@ -188,30 +194,31 @@ const TransformTestDialog: React.FC<TransformTestDialogProps> = ({
                       </Tooltip>
                       <ChevronDown
                         className={cn(
-                          'h-4 w-4 transition-transform',
+                          'h-4 w-4 text-muted-foreground transition-transform',
                           testInputExpanded && 'rotate-180',
                         )}
                       />
                     </div>
                   </CollapsibleTrigger>
-                  <CollapsibleContent className="px-3 pb-3">
+                  <CollapsibleContent>
                     {formatError && (
-                      <Alert variant="destructive" className="mb-2">
+                      <Alert variant="destructive" className="m-3 mb-0">
                         <AlertCircle className="h-4 w-4" />
-                        <span>{formatError}</span>
+                        <AlertDescription>{formatError}</AlertDescription>
                       </Alert>
                     )}
-                    <div className="overflow-hidden rounded border border-border bg-white dark:bg-zinc-900">
+                    <div className="border-t border-border bg-white dark:bg-zinc-950">
                       <Editor
                         value={testInput}
                         onValueChange={onTestInputChange}
                         highlight={highlightJSON}
-                        padding={10}
+                        padding={12}
                         placeholder={testInputPlaceholder}
+                        className="text-sm"
                         style={{
-                          fontFamily: '"Fira code", "Fira Mono", monospace',
-                          fontSize: 14,
-                          minHeight: `${testInputRows * 20}px`,
+                          fontFamily: 'ui-monospace, "Fira Code", monospace',
+                          fontSize: 13,
+                          minHeight: `${testInputRows * 24}px`,
                         }}
                       />
                     </div>
@@ -219,76 +226,105 @@ const TransformTestDialog: React.FC<TransformTestDialogProps> = ({
                 </Collapsible>
               </div>
 
-              {/* Transform Code Editor */}
-              <div>
-                <h4 className="mb-2 text-sm font-semibold">Transform Function</h4>
-                <details className="mb-2 cursor-pointer rounded bg-black/5 p-3 dark:bg-white/5">
-                  <summary className="select-none text-sm font-medium">
-                    View expected response format
-                  </summary>
-                  <div className="mt-3 text-sm">{functionDocumentation.description}</div>
-                </details>
-                <details className="mb-4 cursor-pointer rounded bg-black/5 p-3 dark:bg-white/5">
-                  <summary className="select-none text-sm font-medium">
-                    View function signature
-                  </summary>
-                  <div className="mt-3">
-                    <p className="mb-2 text-sm">
-                      <strong>Function signature:</strong>
-                    </p>
-                    <pre className="m-0 whitespace-pre-wrap font-mono text-xs">
-                      {functionDocumentation.signature}
-                    </pre>
+              {/* Transform Code Editor Section */}
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold">Transform Function</Label>
+
+                {/* Documentation Collapsible */}
+                <Collapsible
+                  open={docsExpanded}
+                  onOpenChange={setDocsExpanded}
+                  className="rounded-lg border border-border"
+                >
+                  <CollapsibleTrigger className="flex w-full items-center justify-between rounded-lg bg-muted/50 px-3 py-2 text-left transition-colors hover:bg-muted data-[state=open]:rounded-b-none">
+                    <span className="text-sm text-muted-foreground">Documentation</span>
+                    <ChevronDown
+                      className={cn(
+                        'h-4 w-4 text-muted-foreground transition-transform',
+                        docsExpanded && 'rotate-180',
+                      )}
+                    />
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <div className="space-y-3 border-t border-border p-3">
+                      <div>
+                        <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                          Function Signature
+                        </p>
+                        <code className="block rounded bg-muted px-2 py-1.5 font-mono text-xs">
+                          {functionDocumentation.signature}
+                        </code>
+                      </div>
+                      <div>
+                        <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                          Parameters & Return
+                        </p>
+                        <div className="text-sm leading-relaxed text-muted-foreground">
+                          {functionDocumentation.description}
+                        </div>
+                      </div>
+                    </div>
+                  </CollapsibleContent>
+                </Collapsible>
+
+                {/* Code Editor */}
+                <div className="overflow-hidden rounded-lg border border-border">
+                  <div className="flex items-center justify-between border-b border-border bg-muted/50 px-3 py-1.5">
+                    <span className="text-xs text-muted-foreground">JavaScript</span>
                   </div>
-                </details>
-                <div className="overflow-hidden rounded border border-border bg-white dark:bg-zinc-900">
-                  <Editor
-                    value={transformCode}
-                    onValueChange={onTransformCodeChange}
-                    highlight={highlightJS}
-                    padding={10}
-                    placeholder="Enter transform function"
-                    style={{
-                      fontFamily: '"Fira code", "Fira Mono", monospace',
-                      fontSize: 14,
-                      minHeight: '150px',
-                    }}
-                  />
+                  <div className="bg-white dark:bg-zinc-950">
+                    <Editor
+                      value={transformCode}
+                      onValueChange={onTransformCodeChange}
+                      highlight={highlightJS}
+                      padding={12}
+                      placeholder="// Enter your transform function here"
+                      style={{
+                        fontFamily: 'ui-monospace, "Fira Code", monospace',
+                        fontSize: 13,
+                        minHeight: '150px',
+                      }}
+                    />
+                  </div>
                 </div>
               </div>
 
               {/* Test Button */}
-              <Button onClick={testTransform} disabled={testLoading} className="w-full">
+              <Button onClick={testTransform} disabled={testLoading} size="lg" className="w-full">
                 <Play className="mr-2 h-4 w-4" />
                 Run Test
               </Button>
 
               {/* Loading */}
               {testLoading && (
-                <div className="h-1 w-full overflow-hidden rounded bg-muted">
-                  <div className="h-full w-1/3 animate-pulse bg-primary" />
+                <div className="h-1 w-full overflow-hidden rounded-full bg-muted">
+                  <div className="h-full w-1/3 animate-[pulse_1s_ease-in-out_infinite] rounded-full bg-primary" />
                 </div>
               )}
             </div>
           </div>
 
           {/* Right side - Result */}
-          <div className="flex flex-1 flex-col">
-            <div className="flex flex-1 flex-col">
-              <h4 className="mb-2 text-sm font-semibold">Result</h4>
+          <div className="flex flex-1 flex-col bg-muted/30">
+            <div className="flex flex-1 flex-col p-4">
+              <Label className="mb-2 text-sm font-semibold">Result</Label>
               {testResult ? (
-                <div className="flex flex-1 flex-col overflow-auto rounded border p-4">
+                <div className="flex flex-1 flex-col overflow-auto rounded-lg border border-border bg-card p-4">
                   {testResult.success ? (
                     <div className="flex flex-1 flex-col">
                       {testResult.noTransform ? (
                         <Alert variant="info" className="mb-4">
                           <Info className="h-4 w-4" />
-                          <span>No transform applied - showing base behavior</span>
+                          <AlertDescription>
+                            No transform applied - showing base behavior
+                          </AlertDescription>
                         </Alert>
                       ) : (
                         <Alert variant="success" className="mb-4">
                           <CheckCircle className="h-4 w-4" />
-                          <span>{functionDocumentation.successMessage}</span>
+                          <AlertDescription>
+                            {functionDocumentation.successMessage}
+                          </AlertDescription>
                         </Alert>
                       )}
                       {onApply && !testResult.noTransform && (
@@ -296,10 +332,10 @@ const TransformTestDialog: React.FC<TransformTestDialogProps> = ({
                           Apply Transform
                         </Button>
                       )}
-                      <p className="mb-2 text-xs text-muted-foreground">
+                      <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                         {functionDocumentation.outputLabel}
                       </p>
-                      <div className="flex-1 overflow-auto rounded bg-muted p-4 font-mono text-sm">
+                      <div className="flex-1 overflow-auto rounded-lg border border-border bg-white p-3 dark:bg-zinc-950">
                         <Editor
                           value={
                             typeof testResult.result === 'string'
@@ -311,8 +347,8 @@ const TransformTestDialog: React.FC<TransformTestDialogProps> = ({
                           padding={0}
                           readOnly
                           style={{
-                            fontFamily: '"Fira code", "Fira Mono", monospace',
-                            fontSize: 14,
+                            fontFamily: 'ui-monospace, "Fira Code", monospace',
+                            fontSize: 13,
                           }}
                         />
                       </div>
@@ -320,15 +356,16 @@ const TransformTestDialog: React.FC<TransformTestDialogProps> = ({
                   ) : (
                     <Alert variant="destructive">
                       <AlertCircle className="h-4 w-4" />
-                      <span>{testResult.error}</span>
+                      <AlertDescription>{testResult.error}</AlertDescription>
                     </Alert>
                   )}
                 </div>
               ) : (
-                <div className="flex flex-1 items-center justify-center rounded border p-4">
-                  <p className="text-center text-muted-foreground">
-                    Run the test to see results here
-                  </p>
+                <div className="flex flex-1 items-center justify-center rounded-lg border border-dashed border-border bg-card p-4">
+                  <div className="text-center">
+                    <Play className="mx-auto mb-2 h-8 w-8 text-muted-foreground/50" />
+                    <p className="text-sm text-muted-foreground">Run the test to see results</p>
+                  </div>
                 </div>
               )}
             </div>

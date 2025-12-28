@@ -1,10 +1,17 @@
 import React from 'react';
 
-import { Alert } from '@app/components/ui/alert';
+import { Alert, AlertDescription } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@app/components/ui/collapsible';
+import { Label } from '@app/components/ui/label';
 import { Spinner } from '@app/components/ui/spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
-import { AlertCircle, CheckCircle, Info, Play } from 'lucide-react';
+import { cn } from '@app/lib/utils';
+import { AlertCircle, CheckCircle, ChevronDown, Info, Play, Send } from 'lucide-react';
 
 import type { ProviderOptions } from '../../types';
 
@@ -23,7 +30,29 @@ interface TestSectionProps {
   testResult: TestResult | null;
   handleTestTarget: () => void;
   disabled: boolean;
+  detailsExpanded: boolean;
+  onDetailsExpandedChange: (expanded: boolean) => void;
 }
+
+interface CodeBlockProps {
+  label: string;
+  children: React.ReactNode;
+  maxHeight?: string;
+}
+
+const CodeBlock: React.FC<CodeBlockProps> = ({ label, children, maxHeight = '200px' }) => (
+  <div className="min-w-0 space-y-1">
+    <p className="text-xs font-medium text-muted-foreground">{label}</p>
+    <div
+      className="overflow-auto rounded-md border border-border bg-white p-2 dark:bg-zinc-950"
+      style={{ maxHeight }}
+    >
+      <pre className="m-0 overflow-hidden text-wrap break-all font-mono text-xs leading-relaxed">
+        {children}
+      </pre>
+    </div>
+  </div>
+);
 
 const TestSection: React.FC<TestSectionProps> = ({
   selectedTarget,
@@ -31,245 +60,231 @@ const TestSection: React.FC<TestSectionProps> = ({
   testResult,
   handleTestTarget,
   disabled,
+  detailsExpanded,
+  onDetailsExpandedChange,
 }) => {
   const responseHeaders = testResult?.providerResponse?.metadata?.http?.headers;
 
   return (
-    <div className="mt-6 rounded-lg border bg-background p-6">
-      <h4 className="mb-4 text-sm font-bold">Test Target Configuration</h4>
+    <div className="mt-6 overflow-hidden rounded-lg border border-border bg-card">
+      {/* Header */}
+      <div className="border-b border-border px-4 py-2.5">
+        <div className="flex items-center gap-2">
+          <Send className="h-3.5 w-3.5 text-primary" />
+          <span className="text-sm font-medium">Test Target Configuration</span>
+        </div>
+      </div>
 
-      <p className="mb-4 text-sm text-muted-foreground">
-        Validate your target configuration by sending a test request to your endpoint. This will
-        verify that your authentication, headers, and request transformation settings are working
-        correctly.
-      </p>
+      {/* Content */}
+      <div className="p-4">
+        <p className="mb-3 text-sm text-muted-foreground">
+          Validate your target configuration by sending a test request to your endpoint. This will
+          verify that your authentication, headers, and request transformation settings are working
+          correctly.
+        </p>
 
-      <Button onClick={handleTestTarget} disabled={isTestRunning || disabled} className="mb-4">
-        {isTestRunning ? <Spinner className="mr-2 h-4 w-4" /> : <Play className="mr-2 h-4 w-4" />}
-        {isTestRunning ? 'Testing...' : 'Test Target'}
-      </Button>
-
-      {!selectedTarget.config.url && !selectedTarget.config.request && (
-        <Alert variant="warning" className="mb-4">
-          <AlertCircle className="h-4 w-4" />
-          <span>Please configure the target URL or request before testing.</span>
-        </Alert>
-      )}
-
-      {testResult && (
-        <>
-          {(testResult.success || testResult.changes_needed) && (
-            <Alert
-              variant={
-                testResult.changes_needed
-                  ? 'warning'
-                  : testResult.success
-                    ? 'success'
-                    : 'destructive'
-              }
-              className="mt-4"
-            >
-              {testResult.changes_needed ? (
-                <AlertCircle className="h-4 w-4" />
-              ) : testResult.success ? (
-                <CheckCircle className="h-4 w-4" />
-              ) : (
-                <AlertCircle className="h-4 w-4" />
-              )}
-              <div>
-                <p className="mb-1 font-bold">
-                  {testResult.changes_needed
-                    ? 'Configuration Changes Needed'
-                    : testResult.success
-                      ? 'Test Passed'
-                      : 'Test Failed'}
-                </p>
-                <p className="text-sm">{testResult.message}</p>
-
-                {/* Display configuration suggestions if available */}
-                {testResult.changes_needed_suggestions &&
-                  testResult.changes_needed_suggestions.length > 0 && (
-                    <div className="mt-4">
-                      <p className="mb-2 font-bold">Suggested Changes:</p>
-                      <ul className="m-0 list-disc pl-5">
-                        {testResult.changes_needed_suggestions.map(
-                          (suggestion: string, index: number) => (
-                            <li key={index} className="text-sm">
-                              {suggestion}
-                            </li>
-                          ),
-                        )}
-                      </ul>
-                    </div>
-                  )}
-              </div>
-            </Alert>
+        <Button
+          onClick={handleTestTarget}
+          disabled={isTestRunning || disabled}
+          size="sm"
+          className="mb-3"
+        >
+          {isTestRunning ? (
+            <Spinner className="mr-1.5 h-3.5 w-3.5" />
+          ) : (
+            <Play className="mr-1.5 h-3.5 w-3.5" />
           )}
+          {isTestRunning ? 'Testing...' : 'Test Target'}
+        </Button>
 
-          {/* Request and Response Details */}
-          <details
-            className="mt-4"
-            open={testResult.changes_needed || testResult.success === false}
-          >
-            <summary className="cursor-pointer select-none text-xs">
-              View request and response details
-            </summary>
+        {!selectedTarget.config.url && !selectedTarget.config.request && (
+          <Alert variant="warning" className="mb-3">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription className="text-sm">
+              Please configure the target URL or request before testing.
+            </AlertDescription>
+          </Alert>
+        )}
 
-            {/* Request and Response Details Side by Side */}
-            <div className="mt-4 flex flex-col gap-4 md:flex-row">
-              {/* Request Details */}
-              <div className="flex-1">
-                <div className="h-full overflow-auto rounded bg-black/5 p-4 dark:bg-white/5">
-                  <h5 className="mb-4 text-sm font-bold">Request Details</h5>
+        {testResult && (
+          <div className="space-y-3">
+            {/* Result Alert */}
+            {(testResult.success || testResult.changes_needed) && (
+              <Alert
+                variant={
+                  testResult.changes_needed
+                    ? 'warning'
+                    : testResult.success
+                      ? 'success'
+                      : 'destructive'
+                }
+              >
+                {testResult.changes_needed ? (
+                  <AlertCircle className="h-4 w-4" />
+                ) : testResult.success ? (
+                  <CheckCircle className="h-4 w-4" />
+                ) : (
+                  <AlertCircle className="h-4 w-4" />
+                )}
+                <AlertDescription className="text-sm">
+                  <p className="font-medium">
+                    {testResult.changes_needed
+                      ? 'Configuration Changes Needed'
+                      : testResult.success
+                        ? 'Test Passed'
+                        : 'Test Failed'}
+                  </p>
+                  <p className="mt-1">{testResult.message}</p>
 
-                  {/* URL and Method */}
-                  {selectedTarget.config.url && (
-                    <>
-                      <p className="text-xs font-bold">URL:</p>
-                      <div className="mb-4">
-                        <pre className="my-1 whitespace-pre-wrap break-words text-xs">
-                          {selectedTarget.config.url}
-                        </pre>
+                  {testResult.changes_needed_suggestions &&
+                    testResult.changes_needed_suggestions.length > 0 && (
+                      <div className="mt-2 rounded-md bg-background/50 p-2">
+                        <p className="mb-1.5 font-medium">Suggested Changes</p>
+                        <ul className="m-0 list-disc space-y-0.5 pl-4">
+                          {testResult.changes_needed_suggestions.map(
+                            (suggestion: string, index: number) => (
+                              <li key={index}>{suggestion}</li>
+                            ),
+                          )}
+                        </ul>
                       </div>
+                    )}
+                </AlertDescription>
+              </Alert>
+            )}
 
-                      <p className="text-xs font-bold">Method:</p>
-                      <div className="mb-4">
-                        <pre className="my-1 text-xs">{selectedTarget.config.method || 'POST'}</pre>
-                      </div>
-                    </>
+            {/* Request and Response Details */}
+            <Collapsible
+              open={detailsExpanded}
+              onOpenChange={onDetailsExpandedChange}
+              className="rounded-lg border border-border"
+            >
+              <CollapsibleTrigger className="flex w-full items-center justify-between rounded-lg bg-muted/50 px-3 py-2.5 text-left transition-colors hover:bg-muted data-[state=open]:rounded-b-none">
+                <span className="text-sm font-medium">Request & Response Details</span>
+                <ChevronDown
+                  className={cn(
+                    'h-4 w-4 text-muted-foreground transition-transform',
+                    detailsExpanded && 'rotate-180',
                   )}
+                />
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <div className="border-t border-border p-3">
+                  {/* Request and Response Side by Side */}
+                  <div className="flex flex-col gap-3 md:flex-row md:items-stretch">
+                    {/* Request Details */}
+                    <div className="flex min-w-0 flex-1 flex-col space-y-1.5">
+                      <Label className="text-sm font-medium">Request</Label>
+                      <div className="min-w-0 flex-1 space-y-2 rounded-md border border-border bg-muted/30 p-3">
+                        {selectedTarget.config.url && (
+                          <>
+                            <CodeBlock label="URL">{selectedTarget.config.url}</CodeBlock>
+                            <CodeBlock label="Method">
+                              {selectedTarget.config.method || 'POST'}
+                            </CodeBlock>
+                          </>
+                        )}
 
-                  {/* Headers */}
-                  {selectedTarget.config.headers &&
-                    Object.keys(selectedTarget.config.headers).length > 0 && (
-                      <>
-                        <p className="text-xs font-bold">Request Headers:</p>
-                        <div className="mb-4 max-h-[200px] overflow-auto">
-                          <pre className="my-1 text-xs">
-                            {JSON.stringify(selectedTarget.config.headers, null, 2)}
+                        {selectedTarget.config.headers &&
+                          Object.keys(selectedTarget.config.headers).length > 0 && (
+                            <CodeBlock label="Headers">
+                              {JSON.stringify(selectedTarget.config.headers, null, 2)}
+                            </CodeBlock>
+                          )}
+
+                        {selectedTarget.config.body && !testResult?.transformedRequest && (
+                          <CodeBlock label="Body" maxHeight="300px">
+                            {typeof selectedTarget.config.body === 'string'
+                              ? selectedTarget.config.body
+                              : JSON.stringify(selectedTarget.config.body, null, 2)}
+                          </CodeBlock>
+                        )}
+
+                        {selectedTarget.config.request && (
+                          <CodeBlock label="Raw Request" maxHeight="300px">
+                            {selectedTarget.config.request}
+                          </CodeBlock>
+                        )}
+
+                        {testResult?.transformedRequest && (
+                          <CodeBlock label="Transformed Body">
+                            {typeof testResult.transformedRequest === 'string'
+                              ? testResult.transformedRequest
+                              : JSON.stringify(testResult.transformedRequest, null, 2)}
+                          </CodeBlock>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Response Details */}
+                    <div className="flex min-w-0 flex-1 flex-col space-y-1.5">
+                      <Label className="text-sm font-medium">Response</Label>
+                      <div className="min-w-0 flex-1 space-y-2 rounded-md border border-border bg-muted/30 p-3">
+                        {testResult.providerResponse &&
+                        testResult.providerResponse.raw !== undefined ? (
+                          <>
+                            {responseHeaders && Object.keys(responseHeaders).length > 0 && (
+                              <CodeBlock label="Headers">
+                                {JSON.stringify(responseHeaders, null, 2)}
+                              </CodeBlock>
+                            )}
+
+                            <CodeBlock label="Raw Response">
+                              {typeof testResult.providerResponse?.raw === 'string'
+                                ? testResult.providerResponse?.raw
+                                : JSON.stringify(testResult.providerResponse?.raw, null, 2)}
+                            </CodeBlock>
+
+                            {testResult.providerResponse?.sessionId && (
+                              <CodeBlock label="Session ID">
+                                {testResult.providerResponse.sessionId}
+                              </CodeBlock>
+                            )}
+                          </>
+                        ) : (
+                          <div className="rounded-md border border-destructive/50 bg-destructive/10 p-2">
+                            <p className="text-sm text-destructive">
+                              {testResult.providerResponse?.error || 'No response from provider'}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Final Response */}
+                  {testResult.providerResponse && testResult.providerResponse.raw !== undefined && (
+                    <div className="mt-3 space-y-1.5">
+                      <div className="flex items-center gap-1.5">
+                        <Label className="text-sm font-medium">Final Response</Label>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Info className="h-3.5 w-3.5 cursor-help text-muted-foreground" />
+                          </TooltipTrigger>
+                          <TooltipContent className="text-sm">
+                            This is what promptfoo will use for evaluation. Configure the response
+                            parser if this isn't the plain text output from your API.
+                          </TooltipContent>
+                        </Tooltip>
+                      </div>
+                      <div className="overflow-hidden rounded-md border border-primary/30 bg-primary/5 p-3">
+                        <div className="max-h-50 overflow-auto">
+                          <pre className="m-0 overflow-hidden text-wrap break-all font-mono text-xs leading-relaxed">
+                            {typeof testResult.providerResponse?.output === 'string'
+                              ? testResult.providerResponse?.output
+                              : JSON.stringify(testResult.providerResponse?.output, null, 2) ||
+                                'No parsed response'}
                           </pre>
                         </div>
-                      </>
-                    )}
-
-                  {/* Request Body */}
-                  {selectedTarget.config.body && !testResult?.transformedRequest && (
-                    <>
-                      <p className="text-xs font-bold">Request Body:</p>
-                      <div className="mb-4 max-h-[300px] overflow-auto">
-                        <pre className="my-1 whitespace-pre-wrap break-words text-xs">
-                          {typeof selectedTarget.config.body === 'string'
-                            ? selectedTarget.config.body
-                            : JSON.stringify(selectedTarget.config.body, null, 2)}
-                        </pre>
                       </div>
-                    </>
-                  )}
-
-                  {/* Raw Request */}
-                  {selectedTarget.config.request && (
-                    <>
-                      <p className="text-xs font-bold">Raw Request:</p>
-                      <div className="mb-4 max-h-[300px] overflow-auto">
-                        <pre className="my-1 whitespace-pre-wrap break-words text-xs">
-                          {selectedTarget.config.request}
-                        </pre>
-                      </div>
-                    </>
-                  )}
-
-                  {/* Transformed Request */}
-                  {testResult?.transformedRequest && (
-                    <>
-                      <p className="text-xs font-bold">Request Body:</p>
-                      <div className="max-h-[200px] overflow-auto">
-                        <pre className="my-1 whitespace-pre-wrap break-words text-xs">
-                          {typeof testResult.transformedRequest === 'string'
-                            ? testResult.transformedRequest
-                            : JSON.stringify(testResult.transformedRequest, null, 2)}
-                        </pre>
-                      </div>
-                    </>
-                  )}
-                </div>
-              </div>
-
-              {/* Response Details */}
-              <div className="flex-1">
-                <div className="h-full overflow-auto rounded bg-black/5 p-4 dark:bg-white/5">
-                  <h5 className="mb-4 text-sm font-bold">Response Details</h5>
-
-                  {testResult.providerResponse && testResult.providerResponse.raw !== undefined ? (
-                    <>
-                      {/* Response Headers */}
-                      {responseHeaders && Object.keys(responseHeaders).length > 0 && (
-                        <>
-                          <p className="text-xs font-bold">Response Headers:</p>
-                          <div className="mb-4 max-h-[200px] overflow-auto">
-                            <pre className="my-1 break-all text-xs">
-                              {JSON.stringify(responseHeaders, null, 2)}
-                            </pre>
-                          </div>
-                        </>
-                      )}
-
-                      <p className="text-xs font-bold">Raw Response:</p>
-                      <div className="max-h-[200px] overflow-auto">
-                        <pre className="my-1 whitespace-pre-wrap break-all text-xs">
-                          {typeof testResult.providerResponse?.raw === 'string'
-                            ? testResult.providerResponse?.raw
-                            : JSON.stringify(testResult.providerResponse?.raw, null, 2)}
-                        </pre>
-                      </div>
-
-                      {testResult.providerResponse?.sessionId && (
-                        <>
-                          <p className="mt-4 block text-xs font-bold">Session ID:</p>
-                          <div className="max-h-[100px] overflow-auto">
-                            <pre className="my-1 text-xs">
-                              {testResult.providerResponse.sessionId}
-                            </pre>
-                          </div>
-                        </>
-                      )}
-                    </>
-                  ) : (
-                    <div className="max-h-[200px] overflow-auto">
-                      <p className="break-all text-xs text-destructive">
-                        {testResult.providerResponse?.error || 'No response from provider'}
-                      </p>
                     </div>
                   )}
                 </div>
-              </div>
-            </div>
-            {testResult.providerResponse && testResult.providerResponse.raw !== undefined && (
-              <div className="mt-4 overflow-auto rounded bg-black/5 p-4 dark:bg-white/5">
-                <div className="mb-2 flex items-center gap-1">
-                  <h5 className="text-sm font-bold">Final Response</h5>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Info className="h-4 w-4 cursor-help text-muted-foreground" />
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      This is what promptfoo will use for evaluation. Configure the response parser
-                      if this isn't the plain text output from your API.
-                    </TooltipContent>
-                  </Tooltip>
-                </div>
-                <div className="max-h-[200px] overflow-auto">
-                  <pre className="m-0 whitespace-pre-wrap break-all text-xs">
-                    {typeof testResult.providerResponse?.output === 'string'
-                      ? testResult.providerResponse?.output
-                      : JSON.stringify(testResult.providerResponse?.output, null, 2) ||
-                        'No parsed response'}
-                  </pre>
-                </div>
-              </div>
-            )}
-          </details>
-        </>
-      )}
+              </CollapsibleContent>
+            </Collapsible>
+          </div>
+        )}
+      </div>
     </div>
   );
 };

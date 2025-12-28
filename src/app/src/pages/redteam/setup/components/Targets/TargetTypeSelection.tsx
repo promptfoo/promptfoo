@@ -153,14 +153,16 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
     >
       <div className="flex flex-col gap-6">
         {/* Quick Start Section */}
-        <Alert variant="info">
-          <Info className="h-4 w-4" />
-          <AlertDescription className="flex w-full flex-wrap items-center justify-between gap-4">
-            <span className="min-w-[300px] flex-1 text-sm">
-              <strong>New to Promptfoo</strong> and want to see it in action? Load an example
-              configuration to get started immediately.
-            </span>
-            <LoadExampleButton />
+        <Alert variant="info" className="[&>svg]:hidden">
+          <AlertDescription className="flex w-full items-center gap-3">
+            <Info className="h-4 w-4 shrink-0" />
+            <div className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-4">
+              <span className="min-w-[300px] flex-1 text-sm">
+                <strong>New to Promptfoo</strong> and want to see it in action? Load an example
+                configuration to get started immediately.
+              </span>
+              <LoadExampleButton />
+            </div>
           </AlertDescription>
         </Alert>
 

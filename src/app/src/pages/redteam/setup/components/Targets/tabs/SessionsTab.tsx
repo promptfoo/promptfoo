@@ -2,13 +2,27 @@ import React from 'react';
 
 import { Alert, AlertDescription } from '@app/components/ui/alert';
 import { Button } from '@app/components/ui/button';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@app/components/ui/collapsible';
 import { Input } from '@app/components/ui/input';
 import { Label } from '@app/components/ui/label';
 import { Separator } from '@app/components/ui/separator';
 import { Spinner } from '@app/components/ui/spinner';
+import { cn } from '@app/lib/utils';
 import ChatMessages from '@app/pages/eval/components/ChatMessages';
 import { callApi } from '@app/utils/api';
-import { AlertTriangle, CheckCircle, Info, Play, XCircle } from 'lucide-react';
+import {
+  AlertCircle,
+  AlertTriangle,
+  CheckCircle,
+  ChevronDown,
+  Info,
+  Play,
+  Send,
+} from 'lucide-react';
 import type { Message } from '@app/pages/eval/components/ChatMessages';
 import type { ProviderOptions } from '@promptfoo/types';
 
@@ -43,6 +57,7 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
 }) => {
   const [isTestRunning, setIsTestRunning] = React.useState(false);
   const [testResult, setTestResult] = React.useState<TestResult | null>(null);
+  const [detailsExpanded, setDetailsExpanded] = React.useState(false);
 
   const runSessionTest = async () => {
     setIsTestRunning(true);
@@ -64,13 +79,9 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
 
       if (response.ok) {
         const data: TestResult = await response.json();
-
         setTestResult(data);
-
-        // Call the callback when test completes
-        if (onTestComplete) {
-          onTestComplete(data.success);
-        }
+        setDetailsExpanded(!data.success);
+        onTestComplete?.(data.success);
       } else {
         const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
         setTestResult({
@@ -80,40 +91,33 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
           reason: errorData.error || errorData.reason,
           details: errorData.details,
         });
-
-        // Call the callback with failure
-        if (onTestComplete) {
-          onTestComplete(false);
-        }
+        setDetailsExpanded(true);
+        onTestComplete?.(false);
       }
     } catch (error) {
       setTestResult({
         success: false,
         message: `Test failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
       });
-
-      // Call the callback with failure
-      if (onTestComplete) {
-        onTestComplete(false);
-      }
+      setDetailsExpanded(true);
+      onTestComplete?.(false);
     } finally {
       setIsTestRunning(false);
     }
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* Stateful Configuration Section */}
       <div>
-        <p className="mb-4 font-semibold">Does your system maintain conversation state?</p>
-
-        <p className="mb-4 text-sm text-muted-foreground">
+        <p className="mb-0.5 text-sm font-medium">Does your system maintain conversation state?</p>
+        <p className="mb-3 text-sm text-muted-foreground">
           This determines whether your application remembers context from previous messages in a
           conversation.
         </p>
 
-        <div className="space-y-3">
-          <label className="flex cursor-pointer items-start gap-3">
+        <div className="space-y-1">
+          <label className="flex cursor-pointer items-start gap-2.5 rounded-md px-2 py-1.5 transition-colors hover:bg-muted/50">
             <input
               type="radio"
               name="stateful"
@@ -123,16 +127,16 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
                 updateCustomTarget('stateful', e.target.value === 'true');
                 setTestResult(null);
               }}
-              className="mt-1"
+              className="mt-0.5"
             />
             <div>
-              <p className="font-medium">Yes - my system is stateful</p>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm">Yes - my system is stateful</p>
+              <p className="text-xs text-muted-foreground">
                 The system maintains conversation history and context across messages
               </p>
             </div>
           </label>
-          <label className="flex cursor-pointer items-start gap-3">
+          <label className="flex cursor-pointer items-start gap-2.5 rounded-md px-2 py-1.5 transition-colors hover:bg-muted/50">
             <input
               type="radio"
               name="stateful"
@@ -142,11 +146,11 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
                 updateCustomTarget('stateful', e.target.value === 'true');
                 setTestResult(null);
               }}
-              className="mt-1"
+              className="mt-0.5"
             />
             <div>
-              <p className="font-medium">No - my system is not stateful</p>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm">No - my system is not stateful</p>
+              <p className="text-xs text-muted-foreground">
                 The full conversation history must be sent with every request
               </p>
             </div>
@@ -155,18 +159,12 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
 
         {/* Info alert when system is not stateful */}
         {selectedTarget.config.stateful === false && (
-          <Alert variant="info" className="mt-4">
+          <Alert variant="info" className="mt-3">
             <Info className="h-4 w-4" />
-            <AlertDescription>
-              <p className="font-semibold">Non-stateful configuration:</p>
-              <p className="mt-1">
-                Since your system doesn't maintain conversation history, the full context will be
-                included in each request during multi-turn testing. This ensures each message
-                contains all necessary information from previous turns.
-              </p>
-              <p className="mt-2">
-                Session management configuration is not needed for non-stateful systems.
-              </p>
+            <AlertDescription className="text-sm">
+              Since your system doesn't maintain conversation history, the full context will be
+              included in each request during multi-turn testing. Session management configuration
+              is not needed for non-stateful systems.
             </AlertDescription>
           </Alert>
         )}
@@ -179,10 +177,13 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
 
           {/* Session Management Section */}
           <div>
-            <p className="mb-4 font-semibold">How does your target manage sessions?</p>
+            <p className="mb-0.5 text-sm font-medium">How does your target manage sessions?</p>
+            <p className="mb-3 text-sm text-muted-foreground">
+              Choose whether session IDs are created by your server or generated by the client.
+            </p>
 
-            <div className="space-y-3">
-              <label className="flex cursor-pointer items-start gap-3">
+            <div className="space-y-1">
+              <label className="flex cursor-pointer items-start gap-2.5 rounded-md px-2 py-1.5 transition-colors hover:bg-muted/50">
                 <input
                   type="radio"
                   name="sessionSource"
@@ -198,17 +199,17 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
                     }
                     setTestResult(null);
                   }}
-                  className="mt-1"
+                  className="mt-0.5"
                 />
                 <div>
-                  <p className="font-medium">Server-generated Session ID</p>
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-sm">Server-generated Session ID</p>
+                  <p className="text-xs text-muted-foreground">
                     Your server creates and returns session IDs (e.g., in cookies, headers, or
                     response body)
                   </p>
                 </div>
               </label>
-              <label className="flex cursor-pointer items-start gap-3">
+              <label className="flex cursor-pointer items-start gap-2.5 rounded-md px-2 py-1.5 transition-colors hover:bg-muted/50">
                 <input
                   type="radio"
                   name="sessionSource"
@@ -221,11 +222,11 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
                     }
                     setTestResult(null);
                   }}
-                  className="mt-1"
+                  className="mt-0.5"
                 />
                 <div>
-                  <p className="font-medium">Client-generated Session ID</p>
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-sm">Client-generated Session ID</p>
+                  <p className="text-xs text-muted-foreground">
                     The client generates session IDs and includes them in requests
                   </p>
                 </div>
@@ -237,294 +238,317 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
           selectedTarget.config.sessionSource == null ? (
             <>
               <div>
-                <p className="mb-2 font-semibold">Session ID Extraction</p>
-                <p className="mb-4 text-sm text-muted-foreground">
+                <Label htmlFor="session-parser" className="text-sm font-medium">
+                  Session ID Extraction
+                </Label>
+                <p className="mb-2 mt-0.5 text-sm text-muted-foreground">
                   Specify how to extract the session ID from the server response. Leave empty if the
                   session ID is automatically handled (e.g., via cookies).
                 </p>
-
-                <div className="space-y-2">
-                  <Label htmlFor="session-parser">Session Parser (Required)</Label>
-                  <Input
-                    id="session-parser"
-                    value={selectedTarget.config.sessionParser || ''}
-                    placeholder="e.g., data.headers['session-id'] or JSON.parse(data.body).sessionId"
-                    onChange={(e) => {
-                      updateCustomTarget('sessionParser', e.target.value);
-                      setTestResult(null);
-                    }}
-                  />
-                  <p className="text-sm text-muted-foreground">
-                    JavaScript expression to extract the session ID from the response
-                  </p>
-                </div>
+                <Input
+                  id="session-parser"
+                  value={selectedTarget.config.sessionParser || ''}
+                  placeholder="e.g., data.headers['session-id'] or JSON.parse(data.body).sessionId"
+                  onChange={(e) => {
+                    updateCustomTarget('sessionParser', e.target.value);
+                    setTestResult(null);
+                  }}
+                  className="font-mono text-xs"
+                />
               </div>
 
               <Alert variant="info">
                 <Info className="h-4 w-4" />
-                <AlertDescription>
-                  <p className="mb-2 font-semibold">Common patterns:</p>
-                  <ul className="list-inside list-disc space-y-1 text-sm">
+                <AlertDescription className="text-sm">
+                  <p className="mb-1.5 font-medium">Common patterns:</p>
+                  <ul className="list-inside list-disc space-y-0.5">
                     <li>
-                      <strong>Header:</strong> <code>data.headers['x-session-id']</code>
+                      <strong>Header:</strong>{' '}
+                      <code className="font-mono text-xs">data.headers['x-session-id']</code>
                     </li>
                     <li>
                       <strong>Cookie:</strong>{' '}
-                      <code>data.headers['set-cookie']?.match(/sessionId=([^;]+)/)?.[1]</code>
+                      <code className="font-mono text-xs">
+                        data.headers['set-cookie']?.match(/sessionId=([^;]+)/)?.[1]
+                      </code>
                     </li>
                     <li>
-                      <strong>JSON body:</strong> <code>JSON.parse(data.body).session.id</code>
-                    </li>
-                    <li>
-                      <strong>JWT token:</strong> <code>JSON.parse(data.body).auth_token</code>
+                      <strong>JSON body:</strong>{' '}
+                      <code className="font-mono text-xs">JSON.parse(data.body).session.id</code>
                     </li>
                   </ul>
                 </AlertDescription>
               </Alert>
             </>
           ) : (
-            <div>
-              <Alert variant="info" className="mb-4">
-                <Info className="h-4 w-4" />
-                <AlertDescription>
-                  <p className="mb-2 font-semibold">Client-generated sessions enabled</p>
-                  <p className="mb-4">
-                    A unique UUID will be generated for each conversation and stored in the{' '}
-                    <code className="rounded bg-muted px-1">sessionId</code> variable. Include{' '}
-                    <code className="rounded bg-muted px-1">{'{{sessionId}}'}</code> in your request
-                    headers or body where needed.
+            <Alert variant="info">
+              <Info className="h-4 w-4" />
+              <AlertDescription className="text-sm">
+                <p className="mb-2 font-medium">Client-generated sessions enabled</p>
+                <p className="mb-2">
+                  A unique UUID will be generated for each conversation and stored in the{' '}
+                  <code className="rounded bg-muted px-1 font-mono text-xs">sessionId</code>{' '}
+                  variable. Include{' '}
+                  <code className="rounded bg-muted px-1 font-mono text-xs">{'{{sessionId}}'}</code>{' '}
+                  in your request headers or body where needed.
+                </p>
+                <div className="space-y-1 text-muted-foreground">
+                  <p>
+                    <span className="font-medium text-foreground">Header:</span>{' '}
+                    <code className="font-mono text-xs">X-Session-ID: {'{{sessionId}}'}</code>
                   </p>
-
-                  <p className="mb-2 text-muted-foreground">
-                    <strong>Usage examples:</strong>
-                  </p>
-                  <div className="text-sm text-muted-foreground">
-                    In your request headers:
-                    <br />
-                    <code className="rounded bg-muted px-1">X-Session-ID: {'{{sessionId}}'}</code>
-                    <br />
-                    <br />
-                    Or in your request body:
-                    <br />
-                    <code className="rounded bg-muted px-1">
-                      {JSON.stringify(
-                        { session_id: '{{sessionId}}', message: '{{prompt}}' },
-                        null,
-                        2,
-                      )}
+                  <p>
+                    <span className="font-medium text-foreground">Body:</span>{' '}
+                    <code className="font-mono text-xs">
+                      {'{"session_id": "{{sessionId}}", "message": "{{prompt}}"}'}
                     </code>
-                  </div>
-                </AlertDescription>
-              </Alert>
-            </div>
+                  </p>
+                </div>
+              </AlertDescription>
+            </Alert>
           )}
 
           {/* Session Test Section */}
-          <div className="rounded-lg border border-border bg-muted/30 p-6">
-            <p className="mb-4 font-semibold">Test Session Configuration</p>
+          <div className="overflow-hidden rounded-lg border border-border bg-card">
+            {/* Header */}
+            <div className="border-b border-border px-4 py-2.5">
+              <div className="flex items-center gap-2">
+                <Send className="h-3.5 w-3.5 text-primary" />
+                <span className="text-sm font-medium">Test Session Configuration</span>
+              </div>
+            </div>
 
-            <p className="mb-4 text-sm text-muted-foreground">
-              Run a quick test to verify that your session configuration is working correctly. This
-              will send two requests: first to establish a session with test data, then a second
-              request to verify the session persists.
-            </p>
+            {/* Content */}
+            <div className="p-4">
+              <p className="mb-3 text-sm text-muted-foreground">
+                Validate your session configuration by sending two test requests. The first
+                establishes a session with test data, and the second verifies the session persists
+                across requests.
+              </p>
 
-            <Button
-              onClick={runSessionTest}
-              disabled={isTestRunning || !selectedTarget.config.url}
-              className="mb-4"
-            >
-              {isTestRunning ? (
-                <>
-                  <Spinner size="sm" className="mr-2" />
-                  Testing Session...
-                </>
-              ) : (
-                <>
-                  <Play className="mr-2 h-4 w-4" />
-                  Test Session
-                </>
-              )}
-            </Button>
-
-            {!selectedTarget.config.url && (
-              <Alert variant="warning" className="mb-4">
-                <AlertTriangle className="h-4 w-4" />
-                <AlertDescription>
-                  Please configure the target URL in the endpoint configuration before testing
-                  sessions.
-                </AlertDescription>
-              </Alert>
-            )}
-
-            {testResult && (
-              <Alert variant={testResult.success ? 'default' : 'destructive'} className="mt-4">
-                {testResult.success ? (
-                  <CheckCircle className="h-4 w-4" />
+              <Button
+                onClick={runSessionTest}
+                disabled={isTestRunning || !selectedTarget.config.url}
+                size="sm"
+                className="mb-3"
+              >
+                {isTestRunning ? (
+                  <Spinner className="mr-1.5 h-3.5 w-3.5" />
                 ) : (
-                  <XCircle className="h-4 w-4" />
+                  <Play className="mr-1.5 h-3.5 w-3.5" />
                 )}
-                <AlertDescription>
-                  <p className="mb-2 font-semibold">
-                    {testResult.success ? 'Session Test Passed' : 'Session Test Failed'}
-                  </p>
+                {isTestRunning ? 'Testing...' : 'Test Session'}
+              </Button>
 
-                  <p
-                    className={testResult.details ? 'mb-4' : ''}
-                    style={{ overflowWrap: 'anywhere' }}
-                  >
-                    {testResult.message}
-                  </p>
+              {!selectedTarget.config.url && (
+                <Alert variant="warning" className="mb-3">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription className="text-sm">
+                    Please configure the target URL in the endpoint configuration before testing
+                    sessions.
+                  </AlertDescription>
+                </Alert>
+              )}
 
+              {testResult && (
+                <div className="space-y-3">
+                  {/* Result Alert */}
+                  <Alert variant={testResult.success ? 'success' : 'destructive'}>
+                    {testResult.success ? (
+                      <CheckCircle className="h-4 w-4" />
+                    ) : (
+                      <AlertCircle className="h-4 w-4" />
+                    )}
+                    <AlertDescription className="text-sm">
+                      <p className="font-medium">
+                        {testResult.success ? 'Session Test Passed' : 'Session Test Failed'}
+                      </p>
+                      <p className="mt-1">{testResult.message}</p>
+                    </AlertDescription>
+                  </Alert>
+
+                  {/* Details Collapsible */}
                   {testResult.details && (
-                    <div className="mt-4">
-                      {!testResult.success && (
-                        <Alert variant="warning" className="mb-4">
-                          <AlertTriangle className="h-4 w-4" />
-                          <AlertDescription>
-                            <strong>What to check:</strong>
-                            <br />• Verify your session configuration matches your target's
-                            requirements
-                            <br />• For server sessions: Check the session parser extracts the
-                            correct ID
-                            <br />• For client sessions: Ensure the {'{{sessionId}}'} variable is in
-                            the right place
-                            <br />• Confirm your target actually supports stateful conversations
-                          </AlertDescription>
-                        </Alert>
-                      )}
+                    <Collapsible
+                      open={detailsExpanded}
+                      onOpenChange={setDetailsExpanded}
+                      className="rounded-lg border border-border"
+                    >
+                      <CollapsibleTrigger className="flex w-full items-center justify-between rounded-lg bg-muted/50 px-3 py-2.5 text-left transition-colors hover:bg-muted data-[state=open]:rounded-b-none">
+                        <span className="text-sm font-medium">Session Test Details</span>
+                        <ChevronDown
+                          className={cn(
+                            'h-4 w-4 text-muted-foreground transition-transform',
+                            detailsExpanded && 'rotate-180',
+                          )}
+                        />
+                      </CollapsibleTrigger>
+                      <CollapsibleContent>
+                        <div className="space-y-3 border-t border-border p-3">
+                          {/* Troubleshooting - only show on failure */}
+                          {!testResult.success && (
+                            <Alert variant="warning">
+                              <AlertTriangle className="h-4 w-4" />
+                              <AlertDescription className="text-sm">
+                                <p className="mb-1.5 font-medium">Troubleshooting</p>
+                                <ul className="m-0 list-disc space-y-0.5 pl-4">
+                                  <li>
+                                    Verify your session configuration matches your target's
+                                    requirements
+                                  </li>
+                                  <li>
+                                    For server sessions: Check the session parser extracts the
+                                    correct ID
+                                  </li>
+                                  <li>
+                                    For client sessions: Ensure {'{{sessionId}}'} is in the right
+                                    place
+                                  </li>
+                                  <li>Confirm your target supports stateful conversations</li>
+                                </ul>
+                              </AlertDescription>
+                            </Alert>
+                          )}
 
-                      <details className="mt-2">
-                        <summary className="cursor-pointer select-none text-sm">
-                          View detailed test results
-                        </summary>
+                          {/* Conversation Flow */}
+                          <div className="space-y-1.5">
+                            <Label className="text-sm font-medium">Conversation Flow</Label>
+                            <div className="rounded-md border border-border bg-muted/30 p-3">
+                              <ChatMessages
+                                messages={(() => {
+                                  const messages: Message[] = [];
 
-                        <div className="mt-4">
-                          {/* Chat Messages */}
-                          <ChatMessages
-                            messages={(() => {
-                              const messages: Message[] = [];
+                                  if (testResult.details?.request1?.prompt) {
+                                    messages.push({
+                                      role: 'user',
+                                      content: testResult.details.request1.prompt,
+                                    });
+                                  }
 
-                              // Add first request
-                              if (testResult.details.request1?.prompt) {
-                                messages.push({
-                                  role: 'user',
-                                  content: testResult.details.request1.prompt,
-                                });
-                              }
+                                  if (testResult.details?.response1) {
+                                    const content =
+                                      typeof testResult.details.response1 === 'string'
+                                        ? testResult.details.response1
+                                        : JSON.stringify(testResult.details.response1, null, 2);
+                                    messages.push({
+                                      role: 'assistant',
+                                      content,
+                                    });
+                                  }
 
-                              // Add first response
-                              if (testResult.details.response1) {
-                                const content =
-                                  typeof testResult.details.response1 === 'string'
-                                    ? testResult.details.response1
-                                    : JSON.stringify(testResult.details.response1, null, 2);
-                                messages.push({
-                                  role: 'assistant',
-                                  content,
-                                });
-                              }
+                                  if (testResult.details?.request2?.prompt) {
+                                    messages.push({
+                                      role: 'user',
+                                      content: testResult.details.request2.prompt,
+                                    });
+                                  }
 
-                              // Add second request
-                              if (testResult.details.request2?.prompt) {
-                                messages.push({
-                                  role: 'user',
-                                  content: testResult.details.request2.prompt,
-                                });
-                              }
+                                  if (testResult.details?.response2) {
+                                    const content =
+                                      typeof testResult.details.response2 === 'string'
+                                        ? testResult.details.response2
+                                        : JSON.stringify(testResult.details.response2, null, 2);
+                                    messages.push({
+                                      role: 'assistant',
+                                      content,
+                                    });
+                                  }
 
-                              // Add second response
-                              if (testResult.details.response2) {
-                                const content =
-                                  typeof testResult.details.response2 === 'string'
-                                    ? testResult.details.response2
-                                    : JSON.stringify(testResult.details.response2, null, 2);
-                                messages.push({
-                                  role: 'assistant',
-                                  content,
-                                });
-                              }
-
-                              return messages;
-                            })()}
-                          />
+                                  return messages;
+                                })()}
+                              />
+                            </div>
+                          </div>
 
                           {/* Test Result Explanation */}
                           {testResult.reason && (
-                            <Alert
-                              variant={testResult.success ? 'default' : 'warning'}
-                              className="mt-4"
-                            >
+                            <Alert variant={testResult.success ? 'success' : 'warning'}>
                               {testResult.success ? (
                                 <CheckCircle className="h-4 w-4" />
                               ) : (
                                 <AlertTriangle className="h-4 w-4" />
                               )}
-                              <AlertDescription>
+                              <AlertDescription className="text-sm">
                                 <strong>{testResult.success ? 'Success:' : 'Issue:'}</strong>{' '}
                                 {testResult.reason}
                               </AlertDescription>
                             </Alert>
                           )}
 
-                          {/* Session ID Info */}
-                          <div className="mt-4 rounded-md bg-muted/50 p-3">
-                            <p className="text-sm text-muted-foreground">
-                              <strong>Session ID used:</strong>{' '}
-                              {testResult.details.sessionId || 'None'}
-                            </p>
-                            {testResult.details.sessionSource && (
-                              <p className="text-sm text-muted-foreground">
-                                <strong>Session source:</strong> {testResult.details.sessionSource}
-                              </p>
-                            )}
-                            {testResult.details.hasSessionIdTemplate !== undefined && (
-                              <p className="text-sm text-muted-foreground">
-                                <strong>{'{{sessionId}}'} template found:</strong>{' '}
-                                {testResult.details.hasSessionIdTemplate ? 'Yes' : 'No'}
-                              </p>
-                            )}
-                            {testResult.details.hasSessionParser !== undefined && (
-                              <p className="text-sm text-muted-foreground">
-                                <strong>Session parser configured:</strong>{' '}
-                                {testResult.details.hasSessionParser ? 'Yes' : 'No'}
-                              </p>
-                            )}
-                            {testResult.details.sessionParser && (
-                              <p className="text-sm text-muted-foreground">
-                                <strong>Session parser:</strong>{' '}
-                                <code className="rounded bg-muted px-1">
-                                  {testResult.details.sessionParser}
+                          {/* Session Configuration Info - at bottom */}
+                          <div className="space-y-1.5 rounded-md border border-border bg-muted/30 p-3">
+                            <Label className="text-sm font-medium">Session Details</Label>
+                            <div className="grid gap-1.5 text-sm">
+                              <div className="flex items-center justify-between">
+                                <span className="text-muted-foreground">Session ID:</span>
+                                <code className="rounded bg-muted px-2 py-0.5 text-xs">
+                                  {testResult.details.sessionId || 'None'}
                                 </code>
-                              </p>
-                            )}
+                              </div>
+                              {testResult.details.sessionSource && (
+                                <div className="flex items-center justify-between">
+                                  <span className="text-muted-foreground">Session Source:</span>
+                                  <span className="font-medium">
+                                    {testResult.details.sessionSource}
+                                  </span>
+                                </div>
+                              )}
+                              {testResult.details.hasSessionIdTemplate !== undefined && (
+                                <div className="flex items-center justify-between">
+                                  <span className="text-muted-foreground">
+                                    {'{{sessionId}}'} template:
+                                  </span>
+                                  <span className="font-medium">
+                                    {testResult.details.hasSessionIdTemplate
+                                      ? 'Found'
+                                      : 'Not found'}
+                                  </span>
+                                </div>
+                              )}
+                              {testResult.details.hasSessionParser !== undefined && (
+                                <div className="flex items-center justify-between">
+                                  <span className="text-muted-foreground">Session Parser:</span>
+                                  <span className="font-medium">
+                                    {testResult.details.hasSessionParser
+                                      ? 'Configured'
+                                      : 'Not configured'}
+                                  </span>
+                                </div>
+                              )}
+                              {testResult.details.sessionParser && (
+                                <div className="flex flex-col gap-1">
+                                  <span className="text-muted-foreground">Parser Expression:</span>
+                                  <code className="rounded bg-muted px-2 py-1 text-xs">
+                                    {testResult.details.sessionParser}
+                                  </code>
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </div>
-                      </details>
-                    </div>
+                      </CollapsibleContent>
+                    </Collapsible>
                   )}
-                </AlertDescription>
-              </Alert>
-            )}
+                </div>
+              )}
+            </div>
           </div>
         </>
       )}
 
       {/* Documentation link - always visible */}
-      <div>
-        <p className="text-sm text-muted-foreground">
-          For more information, see the{' '}
-          <a
-            href="https://www.promptfoo.dev/docs/providers/http/#session-management"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-primary hover:underline"
-          >
-            session management documentation
-          </a>
-          .
-        </p>
-      </div>
+      <p className="text-sm text-muted-foreground">
+        For more information, see the{' '}
+        <a
+          href="https://www.promptfoo.dev/docs/providers/http/#session-management"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-primary hover:underline"
+        >
+          session management documentation
+        </a>
+        .
+      </p>
     </div>
   );
 };
