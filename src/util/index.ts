@@ -1,22 +1,13 @@
-import * as fs from 'fs';
 import * as path from 'path';
 
 import deepEqual from 'fast-deep-equal';
-import { globSync } from 'glob';
 import cliState from '../cliState';
 import { TERMINAL_MAX_WIDTH } from '../constants';
 import { getEnvString } from '../envars';
 import { importModule } from '../esm';
 import logger from '../logger';
 import { runPython } from '../python/pythonUtils';
-import {
-  type EvaluateResult,
-  isApiProvider,
-  isProviderOptions,
-  type NunjucksFilterMap,
-  type OutputFile,
-  type TestCase,
-} from '../types/index';
+import { type EvaluateResult, isApiProvider, isProviderOptions, type TestCase } from '../types';
 import invariant from '../util/invariant';
 import { maybeLoadFromExternalFile } from './file';
 import { isJavascriptFile } from './fileExtensions';
@@ -29,39 +20,10 @@ import type { Vars } from '../types/index';
 export { createOutputMetadata, writeOutput, writeMultipleOutputs } from './output';
 export { setupEnv } from './env';
 export { renderEnvOnlyInObject, renderVarsInObject } from './render';
-export { parsePathOrGlob } from './file';
+export { parsePathOrGlob, readOutput, readFilters } from './file';
 
 // Import renderVarsInObject for internal use (used by maybeLoadToolsFromExternalFile)
 import { renderVarsInObject } from './render';
-
-export async function readOutput(outputPath: string): Promise<OutputFile> {
-  const ext = path.parse(outputPath).ext.slice(1);
-
-  switch (ext) {
-    case 'json':
-      return JSON.parse(fs.readFileSync(outputPath, 'utf-8')) as OutputFile;
-    default:
-      throw new Error(`Unsupported output file format: ${ext} currently only supports json`);
-  }
-}
-
-export async function readFilters(
-  filters: Record<string, string>,
-  basePath: string = '',
-): Promise<NunjucksFilterMap> {
-  const ret: NunjucksFilterMap = {};
-  for (const [name, filterPath] of Object.entries(filters)) {
-    const globPath = path.join(basePath, filterPath);
-    const filePaths = globSync(globPath, {
-      windowsPathsNoEscape: true,
-    });
-    for (const filePath of filePaths) {
-      const finalPath = path.resolve(filePath);
-      ret[name] = await importModule(finalPath);
-    }
-  }
-  return ret;
-}
 
 export function printBorder() {
   const border = '='.repeat(TERMINAL_MAX_WIDTH);

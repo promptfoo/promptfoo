@@ -7,7 +7,9 @@ import yaml from 'js-yaml';
 import nunjucks from 'nunjucks';
 import cliState from '../cliState';
 import { getEnvBool } from '../envars';
+import { importModule } from '../esm';
 import logger from '../logger';
+import type { NunjucksFilterMap, OutputFile } from '../types';
 import { isJavascriptFile } from './fileExtensions';
 import { parseFileUrl } from './functions/loadFunction';
 import { safeResolve } from './pathUtils';
@@ -317,4 +319,33 @@ export function parsePathOrGlob(
     functionName,
     isPathPattern,
   };
+}
+
+export async function readOutput(outputPath: string): Promise<OutputFile> {
+  const ext = path.parse(outputPath).ext.slice(1);
+
+  switch (ext) {
+    case 'json':
+      return JSON.parse(fs.readFileSync(outputPath, 'utf-8')) as OutputFile;
+    default:
+      throw new Error(`Unsupported output file format: ${ext} currently only supports json`);
+  }
+}
+
+export async function readFilters(
+  filters: Record<string, string>,
+  basePath: string = '',
+): Promise<NunjucksFilterMap> {
+  const ret: NunjucksFilterMap = {};
+  for (const [name, filterPath] of Object.entries(filters)) {
+    const globPath = path.join(basePath, filterPath);
+    const filePaths = globSync(globPath, {
+      windowsPathsNoEscape: true,
+    });
+    for (const filePath of filePaths) {
+      const finalPath = path.resolve(filePath);
+      ret[name] = await importModule(finalPath);
+    }
+  }
+  return ret;
 }
