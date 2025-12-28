@@ -9,6 +9,7 @@ import { VERSION } from '../constants';
 import logger from '../logger';
 import { initializeProject } from '../onboarding';
 import telemetry from '../telemetry';
+import { runInkInit, shouldUseInkInit } from '../ui/init';
 import { fetchWithProxy } from '../util/fetch/index';
 import { promptfooCommand } from '../util/promptfooCommand';
 import type { Command } from 'commander';
@@ -218,6 +219,34 @@ export function initCommand(program: Command) {
     .option('--no-interactive', 'Do not run in interactive mode')
     .option('--example [name]', 'Download an example from the promptfoo repo')
     .action(async (directory: string | null, cmdObj: InitCommandOptions) => {
+      // Try to use Ink-based init if enabled
+      if (cmdObj.interactive && shouldUseInkInit()) {
+        logger.debug('Using Ink-based interactive init');
+        try {
+          const result = await runInkInit({
+            directory: directory || undefined,
+            example: cmdObj.example,
+            interactive: cmdObj.interactive,
+          });
+
+          if (result.success) {
+            telemetry.record('command_used', {
+              name: 'init',
+              action: 'ink_init',
+            });
+          } else if (result.error) {
+            logger.debug(`Ink init cancelled or failed: ${result.error}`);
+          }
+          return;
+        } catch (error) {
+          // Fall back to legacy init on error
+          logger.debug(
+            `Ink init failed, falling back to legacy: ${error instanceof Error ? error.message : error}`,
+          );
+        }
+      }
+
+      // Legacy init flow
       if (directory === 'redteam' && cmdObj.interactive) {
         const useRedteam = await confirm({
           message:

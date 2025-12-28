@@ -16,6 +16,7 @@ import {
   isModelAuditSharingEnabled,
   isSharingEnabled,
 } from '../share';
+import { initInkShare, shouldUseInkShare } from '../ui/share';
 import { loadDefaultConfig } from '../util/config/default';
 import type { Command } from 'commander';
 
@@ -80,6 +81,7 @@ export function shareCommand(program: Command) {
       'Flag does nothing (maintained for backwards compatibility only - shares are now private by default)',
       false,
     )
+    .option('--no-interactive', 'Disable interactive UI')
     .action(
       async (
         id: string | undefined,
@@ -87,6 +89,7 @@ export function shareCommand(program: Command) {
           yes: boolean;
           envPath?: string;
           showAuth: boolean;
+          interactive: boolean;
         } & Command,
       ) => {
         let isEval = false;
@@ -174,6 +177,47 @@ export function shareCommand(program: Command) {
           if (!isSharingEnabled(eval_)) {
             notCloudEnabledShareInstructions();
             process.exitCode = 1;
+            return;
+          }
+
+          // Use interactive UI by default (unless --no-interactive is specified)
+          if (cmdObj.interactive && shouldUseInkShare()) {
+            const resultCount = eval_.results?.length;
+
+            const shareUI = await initInkShare({
+              evalId: eval_.id,
+              description: eval_.config.description,
+              resultCount,
+              skipConfirmation: false,
+            });
+
+            // Wait for confirmation
+            const confirmed = await shareUI.confirmation;
+            if (!confirmed) {
+              shareUI.cleanup();
+              process.exitCode = 0;
+              return;
+            }
+
+            // Perform the share
+            shareUI.controller.setPhase('uploading');
+            try {
+              const url = await createShareableUrl(eval_, {
+                showAuth: cmdObj.showAuth,
+                silent: true,
+              });
+              if (url) {
+                shareUI.controller.complete(url);
+                // Wait for user to acknowledge
+                await shareUI.result;
+              } else {
+                shareUI.controller.error('Failed to create shareable URL');
+              }
+            } catch (err) {
+              shareUI.controller.error((err as Error).message);
+            }
+
+            shareUI.cleanup();
             return;
           }
 

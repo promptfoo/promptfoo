@@ -16,6 +16,7 @@ import { readGlobalConfig, writeGlobalConfigPartial } from '../../globalConfig/g
 import logger from '../../logger';
 import { startServer } from '../../server/server';
 import telemetry, { type EventProperties } from '../../telemetry';
+import { runInkRedteamInit, shouldUseInkRedteamInit } from '../../ui/init/redteamInitRunner';
 import { setupEnv } from '../../util/index';
 import { promptfooCommand } from '../../util/promptfooCommand';
 import { BrowserBehavior, checkServerRunning, openBrowser } from '../../util/server';
@@ -697,6 +698,35 @@ export function initCommand(program: Command) {
               await openBrowser(BrowserBehavior.OPEN_TO_REDTEAM_CREATE);
             } else {
               await startServer(getDefaultPort(), BrowserBehavior.OPEN_TO_REDTEAM_CREATE);
+            }
+          } else if (shouldUseInkRedteamInit()) {
+            // Use Ink-based interactive UI
+            logger.debug('Using Ink-based redteam init UI');
+            const result = await runInkRedteamInit({ directory });
+            if (result.success) {
+              telemetry.record('command_used', { name: 'redteam init' });
+              telemetry.record('redteam init', { phase: 'completed' });
+              await recordOnboardingStep('finish');
+              logger.info(
+                '\n' +
+                  chalk.green(dedent`
+                    To generate test cases and run your red team, use the command:
+
+                        ${chalk.bold(promptfooCommand('redteam run'))}
+                  `),
+              );
+            } else if (result.error === 'Cancelled by user') {
+              logger.info(
+                '\n' +
+                  chalk.blue(
+                    'Red team initialization paused. To continue setup later, use the command: ',
+                  ) +
+                  chalk.bold(promptfooCommand('redteam init')),
+              );
+              await recordOnboardingStep('early exit');
+            } else {
+              logger.error(`Red team initialization failed: ${result.error}`);
+              process.exitCode = 1;
             }
           } else {
             await redteamInit(directory);

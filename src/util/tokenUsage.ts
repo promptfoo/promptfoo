@@ -4,7 +4,14 @@ import { accumulateTokenUsage, createEmptyTokenUsage } from './tokenUsageUtils';
 import type { TokenUsage } from '../types/shared';
 
 /**
+ * Listener callback type for token usage updates.
+ */
+export type TokenUsageListener = (providerId: string, usage: TokenUsage) => void;
+
+/**
  * A utility class for tracking token usage across an evaluation.
+ *
+ * Supports real-time subscriptions for UI updates via the subscribe() method.
  *
  * @deprecated Use OpenTelemetry tracing instead for per-call token tracking.
  * This class provides only cumulative totals and will be removed in a future version.
@@ -20,6 +27,7 @@ import type { TokenUsage } from '../types/shared';
 export class TokenUsageTracker {
   private static instance: TokenUsageTracker;
   private providersMap: Map<string, TokenUsage> = new Map();
+  private listeners: Set<TokenUsageListener> = new Set();
 
   private constructor() {}
 
@@ -31,6 +39,35 @@ export class TokenUsageTracker {
       TokenUsageTracker.instance = new TokenUsageTracker();
     }
     return TokenUsageTracker.instance;
+  }
+
+  /**
+   * Subscribe to token usage updates.
+   *
+   * The listener will be called whenever trackUsage() is invoked with the
+   * provider ID and the updated cumulative usage for that provider.
+   *
+   * @param listener - Callback function to receive updates
+   * @returns Unsubscribe function
+   */
+  public subscribe(listener: TokenUsageListener): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  /**
+   * Notify all listeners of a token usage update.
+   */
+  private notifyListeners(providerId: string, usage: TokenUsage): void {
+    for (const listener of this.listeners) {
+      try {
+        listener(providerId, usage);
+      } catch (error) {
+        logger.debug(`Error in token usage listener: ${error}`);
+      }
+    }
   }
 
   /**
@@ -47,6 +84,9 @@ export class TokenUsageTracker {
     logger.debug(
       `Tracked token usage for ${providerId}: total=${usage.total ?? 0}, cached=${usage.cached ?? 0}`,
     );
+
+    // Notify subscribers of the update
+    this.notifyListeners(providerId, updated);
   }
 
   /**
@@ -101,5 +141,13 @@ export class TokenUsageTracker {
    */
   public cleanup(): void {
     this.providersMap.clear();
+    this.listeners.clear();
+  }
+
+  /**
+   * Get the number of active listeners (for debugging/testing).
+   */
+  public getListenerCount(): number {
+    return this.listeners.size;
   }
 }
