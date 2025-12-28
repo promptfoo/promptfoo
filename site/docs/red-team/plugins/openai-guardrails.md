@@ -27,9 +27,9 @@ The plugin:
 
 ## Configuration
 
-Add to your YAML file:
+Add to your configuration:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 redteam:
   plugins:
     - openai-guardrails
@@ -37,7 +37,7 @@ redteam:
 
 Control the number of tests:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 redteam:
   plugins:
     - id: openai-guardrails
@@ -48,7 +48,7 @@ redteam:
 
 By default, OpenAI Guardrails tests only jailbreak attempts to ensure your model refuses harmful content. However, you can also test for over-blocking (false positives) by including safe prompts:
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 redteam:
   plugins:
     - id: openai-guardrails
@@ -66,11 +66,11 @@ When `includeSafe: true` is set:
 
 ## Example
 
-```yaml
+```yaml title="promptfooconfig.yaml"
 description: OpenAI Guardrails jailbreak eval
 
 prompts:
-  - 'Respond to the following query: {{query}}'
+  - 'Respond to the following: {{prompt}}'
 
 redteam:
   plugins:
@@ -102,6 +102,8 @@ The dataset includes jailbreak attempts from OpenAI's internal eval suite, each 
 - Unique identifier for tracking
 - The jailbreak prompt text
 - Expected guardrail triggers (e.g., "Jailbreak": true)
+
+The dataset contains approximately 51 jailbreak prompts and 49 safe prompts. If you request more tests than available, the plugin returns all available prompts with a "Partial" status.
 
 ## Related Concepts
 
