@@ -1,92 +1,133 @@
-# provider-prompt-reporting (Provider Prompt Reporting)
+# provider-prompt-reporting (Dynamic Prompt Reporting)
 
-Demonstrates how custom providers can report the **actual prompt** they sent to the LLM using the `prompt` field in `ProviderResponse`.
+Demonstrates how providers can report the **actual prompt** they sent to the LLM, enabling proper assertions and debugging when prompts are constructed dynamically.
 
 ## The Problem
 
-Modern LLM frameworks like [Vercel AI SDK](https://ai-sdk.dev), [LangChain](https://js.langchain.com), and agent systems dynamically construct prompts with:
+Modern LLM applications don't use simple templates—they dynamically construct prompts with:
 
-- System instructions
-- Few-shot examples
-- Retrieved context (RAG)
-- Tool definitions
-- Conversation history
+- **System instructions** tailored to the task
+- **Few-shot examples** selected at runtime
+- **Retrieved context** from RAG pipelines
+- **User preferences** and safety guardrails
 
-Without prompt reporting, promptfoo shows the raw template instead of the actual prompt. This breaks:
+Without prompt reporting, promptfoo shows `{{topic}}` as the prompt, making it impossible to:
 
-- Prompt-based assertions
-- UI debugging experience
-- Moderation checks
+- Debug what was actually sent to the model
+- Run assertions on the real prompt content
+- Perform moderation checks on dynamic content
 
 ## The Solution
 
-Providers include a `prompt` field in their response:
+This example uses the [Vercel AI SDK](https://ai-sdk.dev) (20M+ monthly downloads) to demonstrate how providers report the actual prompt:
 
 ```javascript
 return {
-  output: "The LLM's response",
+  output: result.text,
+  // Report what was actually sent to the LLM
   prompt: [
-    { role: 'system', content: 'You are a helpful assistant...' },
-    { role: 'user', content: 'The actual user prompt with context...' },
+    { role: 'system', content: dynamicSystemPrompt },
+    { role: 'user', content: dynamicUserPrompt },
   ],
 };
 ```
 
-This prompt is used for:
+## Features Demonstrated
 
-1. **Assertions** - Prompt-based checks see the real prompt
-2. **UI Display** - Shows "Actual Prompt Sent" in the results
-3. **Moderation** - Checks the actual content for policy violations
+| Feature | Description |
+|---------|-------------|
+| **Multiple personas** | `expert`, `coder`, `analyst` with different system prompts |
+| **Task types** | `explain`, `compare`, `troubleshoot` with different structures |
+| **Context injection** | RAG-style context added to prompts |
+| **Template filling** | Variables like `{{domain}}`, `{{audience}}` filled dynamically |
 
 ## Running the Example
 
 ```bash
-# Initialize this example
+# Initialize
 npx promptfoo@latest init --example provider-prompt-reporting
 cd provider-prompt-reporting
 
-# Run with mock provider (no API key needed)
+# Install dependencies
+npm install
+
+# Set your API key
+export OPENAI_API_KEY=sk-...
+
+# Run the evaluation
 npx promptfoo@latest eval
 
-# Run with real AI SDK provider (requires OpenAI key)
-npm install ai @ai-sdk/openai
-OPENAI_API_KEY=your-key npx promptfoo@latest eval --providers file://./aiSdkProvider.mjs
+# View results in browser
+npx promptfoo@latest view
+```
+
+## What You'll See
+
+In the promptfoo UI, click on any result to see **"Actual Prompt Sent"** showing the full dynamically-constructed prompt instead of just `{{topic}}`.
+
+Example transformation:
+
+**Input (what you write):**
+```yaml
+vars:
+  topic: quantum entanglement
+  persona: expert
+  domain: quantum physics
+  audience: college students
+```
+
+**Actual Prompt Sent (what the LLM receives):**
+```
+System: You are a world-class expert in quantum physics.
+
+Your communication style:
+- Clear and precise explanations
+- Use analogies for complex concepts
+- Include concrete examples
+- Acknowledge limitations honestly
+
+Your audience: college students
+
+User: Explain quantum entanglement in a way that's accessible and engaging.
+
+Focus on:
+1. Core concepts and why they matter
+2. Real-world applications
+3. Common misconceptions to avoid
 ```
 
 ## Files
 
 | File | Description |
 |------|-------------|
-| `aiSdkProvider.mjs` | Real provider using [Vercel AI SDK](https://ai-sdk.dev) |
-| `mockProvider.mjs` | Mock provider for testing without API keys |
-| `promptfooconfig.yaml` | Example configuration with test cases |
+| `aiSdkProvider.mjs` | Provider using Vercel AI SDK with dynamic prompt construction |
+| `promptfooconfig.yaml` | Test cases showcasing different personas and task types |
+| `package.json` | Dependencies (`ai`, `@ai-sdk/openai`) |
 
-## How It Works
+## Adapting for Your Use Case
 
-The providers dynamically construct prompts based on variables:
+The pattern works with any framework:
 
 ```javascript
-// Variables from test case
-const vars = { topic: 'quantum computing', audience: 'students' };
-
-// Dynamic prompt construction
-const systemPrompt = 'You are an expert assistant...';
-const userPrompt = `Explain ${vars.topic} for ${vars.audience}`;
-
-// Report the actual prompt
+// LangChain
+const chain = prompt.pipe(model);
+const result = await chain.invoke(input);
 return {
-  output: result.text,
-  prompt: [
-    { role: 'system', content: systemPrompt },
-    { role: 'user', content: userPrompt },
-  ],
+  output: result,
+  prompt: prompt.format(input), // Report the formatted prompt
+};
+
+// Custom RAG
+const context = await retrieveContext(query);
+const fullPrompt = `Context: ${context}\n\nQuestion: ${query}`;
+const result = await llm.generate(fullPrompt);
+return {
+  output: result,
+  prompt: fullPrompt, // Report prompt with retrieved context
 };
 ```
 
-## Use Cases
+## Learn More
 
-- **Vercel AI SDK** - Report prompts with system instructions and tools
-- **LangChain** - Report chain outputs with retrieved context
-- **Agent frameworks** - Report the final prompt after tool planning
-- **RAG pipelines** - Report prompts with retrieved documents
-- **Prompt optimization** - Report the optimized variant used
+- [Vercel AI SDK Documentation](https://ai-sdk.dev)
+- [promptfoo Custom Providers](https://promptfoo.dev/docs/providers/custom-api)
