@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 
 dotenv.config({ quiet: true });
 
+import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 
@@ -11,7 +12,7 @@ import express from 'express';
 import { Server as SocketIOServer } from 'socket.io';
 import { fromError } from 'zod-validation-error';
 import { getDefaultPort, VERSION } from '../constants';
-import { setupSignalWatcher } from '../database/signal';
+import { readSignalEvalId, setupSignalWatcher } from '../database/signal';
 import { getDirectory } from '../esm';
 import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
@@ -31,8 +32,10 @@ import {
 } from '../util/database';
 import invariant from '../util/invariant';
 import { BrowserBehavior, BrowserBehaviorNames, openBrowser } from '../util/server';
+import { blobsRouter } from './routes/blobs';
 import { configsRouter } from './routes/configs';
 import { evalRouter } from './routes/eval';
+import { mediaRouter } from './routes/media';
 import { modelAuditRouter } from './routes/modelAudit';
 import { providersRouter } from './routes/providers';
 import { redteamRouter } from './routes/redteam';
@@ -82,10 +85,38 @@ export function handleServerError(error: NodeJS.ErrnoException, port: number): v
   process.exit(1);
 }
 
+/**
+ * Finds the static directory containing the web app.
+ *
+ * When running in development (tsx), getDirectory() returns src/ and the app is at src/app/.
+ * When bundled into dist/src/server/index.js, getDirectory() returns dist/src/server/
+ * but the app is at dist/src/app/, so we need to check the parent directory.
+ */
+export function findStaticDir(): string {
+  const baseDir = getDirectory();
+
+  // Try the standard location first (works in development)
+  const standardPath = path.join(baseDir, 'app');
+  if (fs.existsSync(path.join(standardPath, 'index.html'))) {
+    return standardPath;
+  }
+
+  // When bundled, the server is at dist/src/server/ but app is at dist/src/app/
+  const parentPath = path.resolve(baseDir, '..', 'app');
+  if (fs.existsSync(path.join(parentPath, 'index.html'))) {
+    logger.debug(`Static directory resolved to parent: ${parentPath}`);
+    return parentPath;
+  }
+
+  // Fall back to standard path even if it doesn't exist (will fail gracefully later)
+  logger.warn(`Static directory not found at ${standardPath} or ${parentPath}`);
+  return standardPath;
+}
+
 export function createApp() {
   const app = express();
 
-  const staticDir = path.join(getDirectory(), 'app');
+  const staticDir = findStaticDir();
 
   app.use(cors());
   app.use(compression());
@@ -208,7 +239,7 @@ export function createApp() {
     invariant(eval_, 'Eval not found');
 
     try {
-      const url = await createShareableUrl(eval_, true);
+      const url = await createShareableUrl(eval_, { showAuth: true });
       logger.debug(`Generated share URL for eval ${id}: ${stripAuthFromUrl(url || '')}`);
       res.json({ url });
     } catch (error) {
@@ -230,6 +261,8 @@ export function createApp() {
   });
 
   app.use('/api/eval', evalRouter);
+  app.use('/api/media', mediaRouter);
+  app.use('/api/blobs', blobsRouter);
   app.use('/api/providers', providersRouter);
   app.use('/api/redteam', redteamRouter);
   app.use('/api/user', userRouter);
@@ -290,14 +323,17 @@ export async function startServer(
   await runDbMigrations();
 
   const watcher = setupSignalWatcher(async () => {
-    const latestEval = await Eval.latest();
-    const results = await latestEval?.getResultsCount();
+    // Try to get the specific eval that was updated from the signal file
+    const signalEvalId = readSignalEvalId();
+    const updatedEval = signalEvalId ? await Eval.findById(signalEvalId) : await Eval.latest();
+
+    const results = await updatedEval?.getResultsCount();
 
     if (results && results > 0) {
-      logger.info(
-        `Emitting update for eval: ${latestEval?.config?.description || latestEval?.id || 'unknown'}`,
+      logger.debug(
+        `Emitting update for eval: ${updatedEval?.config?.description || updatedEval?.id || 'unknown'}`,
       );
-      io.emit('update', latestEval);
+      io.emit('update', updatedEval);
       allPrompts = null;
     }
   });
@@ -341,8 +377,17 @@ export async function startServer(
         resolve();
       }, SHUTDOWN_TIMEOUT_MS);
 
-      // Close Socket.io connections first, then the HTTP server
+      // Close Socket.io connections (this also closes the underlying HTTP server)
       io.close(() => {
+        // Socket.io's close() already closes the HTTP server, so check if it's still listening
+        // before attempting to close it again to avoid "Server is not running" errors
+        if (!httpServer.listening) {
+          clearTimeout(forceCloseTimeout);
+          logger.info('Server closed');
+          resolve();
+          return;
+        }
+
         httpServer.close((err) => {
           clearTimeout(forceCloseTimeout);
           if (err) {

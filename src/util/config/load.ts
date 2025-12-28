@@ -11,6 +11,7 @@ import { fromError } from 'zod-validation-error';
 import { readAssertions } from '../../assertions/index';
 import { validateAssertions } from '../../assertions/validateAssertions';
 import cliState from '../../cliState';
+import { filterProviderConfigs } from '../../commands/eval/filterProviders';
 import { filterTests } from '../../commands/eval/filterTests';
 import { getEnvBool, isCI } from '../../envars';
 import { importModule } from '../../esm';
@@ -30,12 +31,12 @@ import {
   type UnifiedConfig,
   UnifiedConfigSchema,
 } from '../../types/index';
-import { readFilters } from '../../util/index';
-import { promptfooCommand } from '../promptfooCommand';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { isJavascriptFile } from '../../util/fileExtensions';
+import { readFilters } from '../../util/index';
 import invariant from '../../util/invariant';
 import { PromptSchema } from '../../validators/prompts';
+import { promptfooCommand } from '../promptfooCommand';
 import { readTest, readTests } from '../testCaseReader';
 
 /**
@@ -608,9 +609,25 @@ export async function resolveConfigs(
   }
 
   invariant(Array.isArray(config.providers), 'providers must be an array');
+
+  // Filter providers BEFORE instantiation to avoid loading providers that won't be used.
+  // This is important when providers validate env vars or other resources on construction.
+  const filterOption = cmdObj.filterProviders || cmdObj.filterTargets;
+  const filteredProviderConfigs = filterProviderConfigs(config.providers, filterOption);
+
+  if (
+    filterOption &&
+    Array.isArray(filteredProviderConfigs) &&
+    filteredProviderConfigs.length === 0
+  ) {
+    logger.warn(
+      `No providers matched the filter "${filterOption}". Check your --filter-providers/--filter-targets value.`,
+    );
+  }
+
   // Parse prompts, providers, and tests
   const parsedPrompts = await readPrompts(config.prompts, cmdObj.prompts ? undefined : basePath);
-  const parsedProviders = await loadApiProviders(config.providers, {
+  const parsedProviders = await loadApiProviders(filteredProviderConfigs, {
     env: config.env,
     basePath,
   });
@@ -698,20 +715,30 @@ export async function resolveConfigs(
     tracing: config.tracing,
   };
 
-  if (testSuite.tests) {
-    validateAssertions(testSuite.tests);
-  }
+  // Validate assertions in tests and defaultTest using Zod schema
+  // Note: defaultTest can be a string (file://) reference, so only pass if it's an object
+  validateAssertions(
+    testSuite.tests || [],
+    typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined,
+  );
 
   cliState.config = config;
 
   // Extract commandLineOptions from either explicit config files or default config
   let commandLineOptions = fileConfig.commandLineOptions || defaultConfig.commandLineOptions;
 
-  // Resolve relative envPath against the config file directory
-  if (commandLineOptions?.envPath && !path.isAbsolute(commandLineOptions.envPath) && basePath) {
+  // Resolve relative envPath(s) against the config file directory
+  if (commandLineOptions?.envPath && basePath) {
+    const envPaths = Array.isArray(commandLineOptions.envPath)
+      ? commandLineOptions.envPath
+      : [commandLineOptions.envPath];
+
+    const resolvedPaths = envPaths.map((p) => (path.isAbsolute(p) ? p : path.resolve(basePath, p)));
+
     commandLineOptions = {
       ...commandLineOptions,
-      envPath: path.resolve(basePath, commandLineOptions.envPath),
+      // Keep as single string if only one path, array otherwise
+      envPath: resolvedPaths.length === 1 ? resolvedPaths[0] : resolvedPaths,
     };
   }
 

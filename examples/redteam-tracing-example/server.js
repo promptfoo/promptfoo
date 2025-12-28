@@ -85,7 +85,6 @@ async function emitTraceSpans(spans) {
       ],
     };
 
-    // biome-ignore lint/style/noRestrictedGlobals: This is an example server, using native fetch is appropriate
     const response = await fetch(OTLP_ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

@@ -141,30 +141,38 @@ export class BatchProcessor<T, R> {
 }
 
 /**
- * Stream processor for handling large datasets
+ * Stream processor for handling large datasets with controlled concurrency.
+ * Yields results as they complete while maintaining the concurrency limit.
  */
 export async function* streamProcess<T, R>(
   items: T[],
   processor: (item: T) => Promise<R>,
   concurrency: number = 5,
 ): AsyncGenerator<R, void, unknown> {
-  const executing: Promise<R>[] = [];
+  // Use a Map to track promises and identify which one completed
+  type WrappedResult = { result: R; id: number };
+  const executing = new Map<number, Promise<WrappedResult>>();
+  let nextId = 0;
 
   for (const item of items) {
-    const promise = processor(item);
-    executing.push(promise);
+    const id = nextId++;
+    // Wrap the promise to include an identifier
+    const wrappedPromise = processor(item).then((result) => ({ result, id }));
+    executing.set(id, wrappedPromise);
 
-    if (executing.length >= concurrency) {
-      yield await Promise.race(executing);
-      const index = executing.findIndex((p) => p === promise);
-      executing.splice(index, 1);
+    if (executing.size >= concurrency) {
+      // Wait for one to complete and yield its result
+      const { result, id: completedId } = await Promise.race(executing.values());
+      executing.delete(completedId);
+      yield result;
     }
   }
 
-  // Yield remaining results
-  while (executing.length > 0) {
-    yield await Promise.race(executing);
-    executing.shift();
+  // Yield remaining results as they complete
+  while (executing.size > 0) {
+    const { result, id: completedId } = await Promise.race(executing.values());
+    executing.delete(completedId);
+    yield result;
   }
 }
 

@@ -1,11 +1,11 @@
-import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as fs from 'fs';
 
 import cliProgress from 'cli-progress';
 import yaml from 'js-yaml';
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../src/logger';
 import { loadApiProvider } from '../../src/providers/index';
-import { HARM_PLUGINS, PII_PLUGINS, getDefaultNFanout } from '../../src/redteam/constants';
+import { getDefaultNFanout, HARM_PLUGINS, PII_PLUGINS } from '../../src/redteam/constants';
 import { extractEntities } from '../../src/redteam/extraction/entities';
 import { extractSystemPurpose } from '../../src/redteam/extraction/purpose';
 import {
@@ -19,7 +19,6 @@ import { getRemoteHealthUrl, shouldGenerateRemote } from '../../src/redteam/remo
 import { Strategies, validateStrategies } from '../../src/redteam/strategies/index';
 import { checkRemoteHealth } from '../../src/util/apiHealth';
 import { extractVariablesFromTemplates } from '../../src/util/templates';
-
 import { stripAnsi } from '../util/utils';
 
 vi.mock('cli-progress');
@@ -132,7 +131,7 @@ describe('synthesize', () => {
         prompts: ['Test prompt'],
         purpose: 'Custom purpose',
         strategies: [],
-        targetLabels: ['test-provider'],
+        targetIds: ['test-provider'],
       });
 
       expect(result).toEqual(
@@ -152,7 +151,7 @@ describe('synthesize', () => {
         plugins: [{ id: 'test-plugin', numTests: 1 }],
         prompts: ['Test prompt'],
         strategies: [],
-        targetLabels: ['test-provider'],
+        targetIds: ['test-provider'],
       });
 
       expect(extractEntities).toHaveBeenCalledWith(expect.any(Object), ['Test prompt']);
@@ -167,7 +166,7 @@ describe('synthesize', () => {
           plugins: [{ id: 'test-plugin', numTests: 1 }],
           prompts: [] as unknown as [string, ...string[]],
           strategies: [],
-          targetLabels: ['test-provider'],
+          targetIds: ['test-provider'],
         }),
       ).rejects.toThrow('Prompts array cannot be empty');
     });
@@ -179,7 +178,7 @@ describe('synthesize', () => {
         plugins: [{ id: 'test-plugin', numTests: 1 }],
         prompts: ['Prompt 1', 'Prompt 2', 'Prompt 3'],
         strategies: [],
-        targetLabels: ['test-provider'],
+        targetIds: ['test-provider'],
       });
 
       expect(extractSystemPurpose).toHaveBeenCalledWith(expect.any(Object), [
@@ -210,7 +209,7 @@ describe('synthesize', () => {
         prompts: ['Test prompt'],
         provider: customProvider,
         strategies: [],
-        targetLabels: ['custom-provider'],
+        targetIds: ['custom-provider'],
       });
 
       expect(loadApiProvider).not.toHaveBeenCalled();
@@ -232,7 +231,7 @@ describe('synthesize', () => {
         ],
         prompts: ['Test prompt'],
         strategies: [],
-        targetLabels: ['test-provider'],
+        targetIds: ['test-provider'],
       });
 
       expect(mockPluginAction).toHaveBeenCalledTimes(2);
@@ -251,7 +250,7 @@ describe('synthesize', () => {
         plugins: [{ id: 'unregistered-plugin', numTests: 1 }],
         prompts: ['Test prompt'],
         strategies: [],
-        targetLabels: ['test-provider'],
+        targetIds: ['test-provider'],
       });
 
       expect(logger.warn).toHaveBeenCalledWith(
@@ -272,7 +271,7 @@ describe('synthesize', () => {
         ],
         prompts: ['Test prompt'],
         strategies: [],
-        targetLabels: ['test-provider'],
+        targetIds: ['test-provider'],
       });
 
       // Verify the test cases by checking each one individually rather than hardcoding a number
@@ -317,7 +316,7 @@ describe('synthesize', () => {
         plugins: [{ id: 'test-plugin', numTests: 2 }],
         prompts: ['Test prompt'],
         strategies: [{ id: 'mockStrategy' }],
-        targetLabels: ['test-provider'],
+        targetIds: ['test-provider'],
       });
 
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Test Generation Report:'));
@@ -349,7 +348,7 @@ describe('synthesize', () => {
           plugins: [{ id: 'test-plugin', numTests: 1 }],
           prompts: ['Test prompt'],
           strategies: [{ id: 'jailbreak:composite' }],
-          targetLabels: ['test-provider'],
+          targetIds: ['test-provider'],
         });
 
         const reportMessage = vi
@@ -457,7 +456,7 @@ describe('synthesize', () => {
             config: { customOption: 'test-value' },
           },
         ],
-        targetLabels: ['test-provider'],
+        targetIds: ['test-provider'],
       });
 
       expect(validateStrategies).toHaveBeenCalledWith(expect.any(Array));
@@ -481,7 +480,7 @@ describe('synthesize', () => {
           { id: 'other-encodings' },
           { id: 'morse' }, // This is already included in other-encodings
         ],
-        targetLabels: ['test-provider'],
+        targetIds: ['test-provider'],
       });
 
       // Check that validateStrategies was called
@@ -516,7 +515,7 @@ describe('synthesize', () => {
         strategies: [
           { id: 'unknown-collection' }, // This doesn't exist in the mappings
         ],
-        targetLabels: ['test-provider'],
+        targetIds: ['test-provider'],
       });
 
       expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('unknown-collection'));
@@ -554,7 +553,7 @@ describe('synthesize', () => {
         plugins: [{ id: 'test-plugin', numTests: 1 }],
         prompts: ['Test prompt'],
         strategies: [{ id: 'jailbreak:composite' }],
-        targetLabels: ['test-provider'],
+        targetIds: ['test-provider'],
       });
 
       // Should have called the composite action, not the basic jailbreak action
@@ -597,7 +596,7 @@ describe('synthesize', () => {
         plugins: [{ id: 'test-plugin', numTests: 1 }],
         prompts: ['Test prompt'],
         strategies: [{ id: 'custom' }],
-        targetLabels: ['test-provider'],
+        targetIds: ['test-provider'],
       });
 
       // Should have found the exact 'custom' strategy and called its action
@@ -640,7 +639,7 @@ describe('synthesize', () => {
         plugins: [{ id: 'test-plugin', numTests: 1 }],
         prompts: ['Test prompt'],
         strategies: [{ id: 'custom:aggressive' }],
-        targetLabels: ['test-provider'],
+        targetIds: ['test-provider'],
       });
 
       // Should have found the base 'custom' strategy and called its action
@@ -670,7 +669,7 @@ describe('synthesize', () => {
         plugins: [{ id: 'test-plugin', numTests: 1 }],
         prompts: ['Test prompt'],
         strategies: [{ id: 'nonexistent-strategy' }],
-        targetLabels: ['test-provider'],
+        targetIds: ['test-provider'],
       });
 
       expect(logger.warn).toHaveBeenCalledWith(
@@ -714,7 +713,7 @@ describe('synthesize', () => {
         plugins: [{ id: 'test-plugin', numTests: 1 }],
         prompts: ['Test prompt'],
         strategies: [{ id: 'jailbreak:composite' }],
-        targetLabels: ['test-provider'],
+        targetIds: ['test-provider'],
       });
 
       // Should have called the composite action, not the basic jailbreak action
@@ -752,7 +751,7 @@ describe('synthesize', () => {
         plugins: [failingPlugin, passingPlugin],
         prompts: ['Test prompt'],
         strategies: [],
-        targetLabels: ['test-provider'],
+        targetIds: ['test-provider'],
       });
 
       expect(result.testCases).toHaveLength(1);
@@ -840,7 +839,7 @@ describe('synthesize', () => {
         injectVar: 'prompt',
         language: 'en',
         numTests: 5,
-        targetLabels: ['test'],
+        targetIds: ['test'],
       });
 
       const intentTestCases = result.testCases.filter((tc) => tc.metadata?.pluginId === 'intent');
@@ -887,7 +886,7 @@ describe('synthesize', () => {
         plugins: [{ id: 'test-plugin', numTests: 2 }],
         prompts: ['Test prompt'],
         strategies: [{ id: 'test-strategy' }],
-        targetLabels: ['test-provider'],
+        targetIds: ['test-provider'],
       });
 
       // Should have 2 base tests + 2 strategy tests (undefined values filtered out)
@@ -921,7 +920,7 @@ describe('synthesize', () => {
         plugins: [{ id: 'test-plugin', numTests: 1 }],
         prompts: ['Test prompt'],
         strategies: [{ id: 'failing-strategy' }],
-        targetLabels: ['test-provider'],
+        targetIds: ['test-provider'],
       });
 
       // Should only have the base test (no strategy tests since all were undefined)
@@ -962,7 +961,7 @@ describe('synthesize', () => {
         plugins: [{ id: 'test-plugin', numTests: 1 }],
         prompts: ['Test prompt'],
         strategies: [{ id: 'test-strategy' }],
-        targetLabels: ['test-provider'],
+        targetIds: ['test-provider'],
       });
 
       // Should have 1 base test + 2 strategy tests
@@ -993,7 +992,7 @@ describe('synthesize', () => {
         plugins: [{ id: 'test-plugin', numTests: 1 }],
         prompts: ['Test prompt'],
         strategies: [],
-        targetLabels: ['test-provider'],
+        targetIds: ['test-provider'],
       });
 
       expect(cliProgress.SingleBar).not.toHaveBeenCalled();
@@ -1045,7 +1044,7 @@ describe('synthesize', () => {
         plugins: [{ id: 'test-plugin', numTests: 1 }],
         prompts: ['Test prompt'],
         strategies: [],
-        targetLabels: ['test-provider'],
+        targetIds: ['test-provider'],
       });
 
       expect(shouldGenerateRemote).toHaveBeenCalledWith();
@@ -1064,7 +1063,7 @@ describe('synthesize', () => {
         plugins: [{ id: 'test-plugin', numTests: 1 }],
         prompts: ['Test prompt'],
         strategies: [],
-        targetLabels: ['test-provider'],
+        targetIds: ['test-provider'],
       });
 
       expect(shouldGenerateRemote).toHaveBeenCalledWith();
@@ -1085,7 +1084,7 @@ describe('synthesize', () => {
           plugins: [{ id: 'test-plugin', numTests: 1 }],
           prompts: ['Test prompt'],
           strategies: [],
-          targetLabels: ['test-provider'],
+          targetIds: ['test-provider'],
         }),
       ).rejects.toThrow('Unable to proceed with test generation: API is not accessible');
     });
@@ -1101,7 +1100,7 @@ describe('synthesize', () => {
         plugins: [{ id: 'test-plugin', numTests: 1 }],
         prompts: ['Test prompt'],
         strategies: [],
-        targetLabels: ['test-provider'],
+        targetIds: ['test-provider'],
       });
 
       expect(shouldGenerateRemote).toHaveBeenCalledWith();
@@ -1149,7 +1148,7 @@ describe('synthesize', () => {
       provider: mockProvider,
       language: 'en',
       numTests: 1,
-      targetLabels: ['test-provider'],
+      targetIds: ['test-provider'],
     });
 
     expect(resultEnabled.testCases.length).toBeGreaterThan(0);
@@ -1162,7 +1161,7 @@ describe('synthesize', () => {
       provider: mockProvider,
       language: 'en',
       numTests: 1,
-      targetLabels: ['test-provider'],
+      targetIds: ['test-provider'],
     });
 
     expect(resultDisabled.testCases).toHaveLength(0);
@@ -1181,7 +1180,7 @@ describe('synthesize', () => {
         plugins: [{ id: 'bias:gender', numTests: 2 }],
         prompts: ['Test prompt'],
         strategies: [],
-        targetLabels: ['test-provider'],
+        targetIds: ['test-provider'],
       });
 
       // Check that the plugin wasn't expanded and was used directly
@@ -1213,7 +1212,7 @@ describe('synthesize', () => {
         plugins: [{ id: 'bias', numTests: 2 }],
         prompts: ['Test prompt'],
         strategies: [],
-        targetLabels: ['test-provider'],
+        targetIds: ['test-provider'],
       });
 
       // Check that we have test cases for each bias plugin
@@ -1664,7 +1663,7 @@ describe('Language configuration', () => {
         plugins: [{ id: 'test-plugin', numTests: 2 }],
         prompts: ['Test prompt'],
         strategies: [],
-        targetLabels: ['test-provider'],
+        targetIds: ['test-provider'],
       });
 
       expect(result.testCases).toHaveLength(2);
@@ -1678,7 +1677,7 @@ describe('Language configuration', () => {
         plugins: [{ id: 'test-plugin', numTests: 2 }],
         prompts: ['Test prompt'],
         strategies: [],
-        targetLabels: ['test-provider'],
+        targetIds: ['test-provider'],
       });
 
       // Should generate 2 tests * 2 languages = 4 test cases
@@ -1721,7 +1720,7 @@ describe('Language configuration', () => {
         plugins: [{ id: 'test-plugin', numTests: 2 }],
         prompts: ['Test prompt'],
         strategies: [{ id: 'rot13' }],
-        targetLabels: ['test-provider'],
+        targetIds: ['test-provider'],
       });
 
       // Base tests: 2 * 2 languages = 4
@@ -1748,7 +1747,7 @@ describe('Language configuration', () => {
         plugins: [{ id: 'test-plugin', numTests: 1 }],
         prompts: ['Test prompt'],
         strategies: [],
-        targetLabels: ['test-provider'],
+        targetIds: ['test-provider'],
       });
 
       expect(result.testCases).toHaveLength(3);
@@ -1775,7 +1774,7 @@ describe('Language configuration', () => {
         ],
         prompts: ['Test prompt'],
         strategies: [],
-        targetLabels: ['test-provider'],
+        targetIds: ['test-provider'],
       });
 
       // Should generate 2 tests * 2 plugin languages = 4 test cases
@@ -1793,7 +1792,7 @@ describe('Language configuration', () => {
         plugins: [{ id: 'test-plugin', numTests: 2 }],
         prompts: ['Test prompt'],
         strategies: [],
-        targetLabels: ['test-provider'],
+        targetIds: ['test-provider'],
       });
 
       expect(result.testCases).toHaveLength(2);
@@ -1816,7 +1815,7 @@ describe('Language configuration', () => {
         plugins: [{ id: 'test-plugin', numTests: 1 }],
         prompts: ['Test prompt'],
         strategies: [],
-        targetLabels: ['test-provider'],
+        targetIds: ['test-provider'],
       });
 
       // Verify action was called with config that does NOT contain language property
@@ -1852,7 +1851,7 @@ describe('Language configuration', () => {
         ],
         prompts: ['Test prompt'],
         strategies: [],
-        targetLabels: ['test-provider'],
+        targetIds: ['test-provider'],
       });
 
       // Verify modifiers don't contain language
@@ -1899,7 +1898,7 @@ describe('Language configuration', () => {
         ],
         prompts: ['Test prompt'],
         strategies: [],
-        targetLabels: ['test-provider'],
+        targetIds: ['test-provider'],
         testGenerationInstructions: 'Focus on edge cases',
       });
 
@@ -1942,7 +1941,7 @@ describe('Language configuration', () => {
         plugins: [{ id: 'test-plugin', numTests: 2 }],
         prompts: ['Test prompt'],
         strategies: [{ id: 'audio' }],
-        targetLabels: ['test-provider'],
+        targetIds: ['test-provider'],
       });
 
       // With audio strategy present, language is forced to 'en' early in synthesize
@@ -1982,7 +1981,7 @@ describe('Language configuration', () => {
         plugins: [{ id: 'test-plugin', numTests: 1 }],
         prompts: ['Test prompt'],
         strategies: [{ id: 'video' }],
-        targetLabels: ['test-provider'],
+        targetIds: ['test-provider'],
       });
 
       // With video strategy present, language is forced to 'en' early in synthesize
@@ -2015,7 +2014,7 @@ describe('Language configuration', () => {
         plugins: [{ id: 'test-plugin', numTests: 3 }],
         prompts: ['Test prompt'],
         strategies: [{ id: 'image' }],
-        targetLabels: ['test-provider'],
+        targetIds: ['test-provider'],
       });
 
       // With image strategy present, language is forced to 'en' early in synthesize
@@ -2048,7 +2047,7 @@ describe('Language configuration', () => {
         plugins: [{ id: 'test-plugin', numTests: 2 }],
         prompts: ['Test prompt'],
         strategies: [{ id: 'jailbreak' }],
-        targetLabels: ['test-provider'],
+        targetIds: ['test-provider'],
       });
 
       // Layer strategy now supports multiple languages
@@ -2082,7 +2081,7 @@ describe('Language configuration', () => {
         plugins: [{ id: 'test-plugin', numTests: 1 }],
         prompts: ['Test prompt'],
         strategies: [{ id: 'math-prompt' }],
-        targetLabels: ['test-provider'],
+        targetIds: ['test-provider'],
       });
 
       // With math-prompt strategy present, language is forced to 'en' early in synthesize
@@ -2115,7 +2114,7 @@ describe('Language configuration', () => {
         plugins: [{ id: 'test-plugin', numTests: 2 }],
         prompts: ['Test prompt'],
         strategies: [{ id: 'rot13' }],
-        targetLabels: ['test-provider'],
+        targetIds: ['test-provider'],
       });
 
       // Rot13 is NOT in the disallow list, so it should process all languages
@@ -2154,7 +2153,7 @@ describe('Language configuration', () => {
         plugins: [{ id: 'policy', numTests: 1 }],
         prompts: ['Test prompt'],
         strategies: [],
-        targetLabels: ['test-provider'],
+        targetIds: ['test-provider'],
       });
 
       // Verify extractGoalFromPrompt was called with the policy
@@ -2192,7 +2191,7 @@ describe('Language configuration', () => {
         plugins: [{ id: 'other-plugin', numTests: 1 }],
         prompts: ['Test prompt'],
         strategies: [],
-        targetLabels: ['test-provider'],
+        targetIds: ['test-provider'],
       });
 
       // Verify extractGoalFromPrompt was called WITHOUT policy (undefined)
@@ -2253,7 +2252,7 @@ describe('Language configuration', () => {
           plugins: [{ id: 'test-plugin', numTests: 1 }],
           prompts: ['Test prompt'],
           strategies: [],
-          targetLabels: ['test-provider'],
+          targetIds: ['test-provider'],
         });
 
         // Verify the policy parameter matches expected

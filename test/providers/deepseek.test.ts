@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-
 import { calculateDeepSeekCost, DEEPSEEK_CHAT_MODELS } from '../../src/providers/deepseek';
 
 describe('calculateDeepSeekCost', () => {

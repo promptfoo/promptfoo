@@ -1,7 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { MockInstance } from 'vitest';
 import fs from 'fs';
 
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearCache, disableCache, enableCache, getCache } from '../../src/cache';
 import logger from '../../src/logger';
 import {
@@ -11,6 +10,7 @@ import {
 } from '../../src/providers/claude-agent-sdk';
 import { transformMCPConfigToClaudeCode } from '../../src/providers/mcp/transform';
 import type { NonNullableUsage, Query, SDKMessage } from '@anthropic-ai/claude-agent-sdk';
+import type { MockInstance } from 'vitest';
 
 import type { CallApiContextParams } from '../../src/types/index';
 
@@ -22,6 +22,7 @@ vi.mock('../../src/esm', async (importOriginal) => {
   return {
     ...(await importOriginal()),
     importModule: vi.fn(),
+    resolvePackageEntryPoint: vi.fn(() => '@anthropic-ai/claude-agent-sdk'),
   };
 });
 vi.mock('../../src/providers/mcp/transform');
@@ -149,7 +150,7 @@ describe('ClaudeCodeSDKProvider', () => {
     vi.mocked(importModule).mockResolvedValue({ query: mockQuery });
 
     // Default mocks
-    mockTransformMCPConfigToClaudeCode.mockReturnValue({});
+    mockTransformMCPConfigToClaudeCode.mockResolvedValue({});
 
     // File system mocks
     tempDirSpy = vi.spyOn(fs, 'mkdtempSync').mockReturnValue('/tmp/test-temp-dir');
@@ -659,7 +660,7 @@ describe('ClaudeCodeSDKProvider', () => {
     describe('MCP configuration', () => {
       it('should transform MCP config', async () => {
         mockQuery.mockReturnValue(createMockResponse('Response'));
-        mockTransformMCPConfigToClaudeCode.mockReturnValue({
+        mockTransformMCPConfigToClaudeCode.mockResolvedValue({
           'test-server': {
             command: 'test-command',
             args: ['arg1'],
@@ -987,6 +988,70 @@ describe('ClaudeCodeSDKProvider', () => {
           });
         });
 
+        it('with ask_user_question configuration creates canUseTool callback', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              ask_user_question: {
+                behavior: 'first_option',
+              },
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              canUseTool: expect.any(Function),
+            }),
+          });
+        });
+
+        it('with ask_user_question canUseTool callback handles AskUserQuestion tool', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              ask_user_question: { behavior: 'first_option' },
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          // Get the canUseTool callback that was passed to query
+          const callArgs = mockQuery.mock.calls[0][0];
+          const canUseTool = callArgs.options.canUseTool;
+
+          // Test it handles AskUserQuestion and selects first option
+          const result = await canUseTool(
+            'AskUserQuestion',
+            {
+              questions: [
+                {
+                  question: 'Which option?',
+                  header: 'Test',
+                  options: [
+                    { label: 'Option A', description: 'First' },
+                    { label: 'Option B', description: 'Second' },
+                  ],
+                  multiSelect: false,
+                },
+              ],
+            },
+            { signal: new AbortController().signal, toolUseID: 'test-id' },
+          );
+
+          expect(result).toEqual({
+            behavior: 'allow',
+            updatedInput: {
+              questions: expect.any(Array),
+              answers: { 'Which option?': 'Option A' },
+            },
+          });
+        });
+
         it('with includePartialMessages configuration', async () => {
           mockQuery.mockReturnValue(createMockResponse('Response'));
 
@@ -1227,6 +1292,121 @@ describe('ClaudeCodeSDKProvider', () => {
             prompt: 'Test prompt',
             options: expect.objectContaining({
               settingSources: ['user', 'project', 'local'],
+            }),
+          });
+        });
+
+        it('with tools configuration as array', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              tools: ['Bash', 'Read', 'Edit'],
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              tools: ['Bash', 'Read', 'Edit'],
+            }),
+          });
+        });
+
+        it('with tools configuration as preset', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              tools: { type: 'preset', preset: 'claude_code' },
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              tools: { type: 'preset', preset: 'claude_code' },
+            }),
+          });
+        });
+
+        it('with tools as empty array to disable all tools', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              tools: [],
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              tools: [],
+            }),
+          });
+        });
+
+        it('with enable_file_checkpointing configuration', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              enable_file_checkpointing: true,
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              enableFileCheckpointing: true,
+            }),
+          });
+        });
+
+        it('with persist_session configuration', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              persist_session: false,
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              persistSession: false,
+            }),
+          });
+        });
+
+        it('with spawn_claude_code_process callback', async () => {
+          mockQuery.mockReturnValue(createMockResponse('Response'));
+
+          const spawnCallback = vi.fn();
+          const provider = new ClaudeCodeSDKProvider({
+            config: {
+              spawn_claude_code_process: spawnCallback,
+            },
+            env: { ANTHROPIC_API_KEY: 'test-api-key' },
+          });
+          await provider.callApi('Test prompt');
+
+          expect(mockQuery).toHaveBeenCalledWith({
+            prompt: 'Test prompt',
+            options: expect.objectContaining({
+              spawnClaudeCodeProcess: spawnCallback,
             }),
           });
         });

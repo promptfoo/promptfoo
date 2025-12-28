@@ -1,10 +1,10 @@
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { randomUUID } from 'crypto';
 import fs from 'fs';
 
-import glob from 'glob';
+import { glob } from 'glob';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../src/cliState';
-import { DEFAULT_MAX_CONCURRENCY, FILE_METADATA_KEY } from '../src/constants';
+import { FILE_METADATA_KEY } from '../src/constants';
 import {
   evaluate,
   formatVarsForDisplay,
@@ -16,7 +16,6 @@ import { runExtensionHook } from '../src/evaluatorHelpers';
 import logger from '../src/logger';
 import { runDbMigrations } from '../src/migrate';
 import Eval from '../src/models/eval';
-import { strategyDisplayNames } from '../src/redteam/constants/metadata';
 import {
   type ApiProvider,
   type Prompt,
@@ -203,8 +202,10 @@ vi.mock('glob', () => {
     const p = Array.isArray(pattern) ? pattern.join('') : pattern;
     return p.includes('*') || p.includes('?') || p.includes('[') || p.includes('{');
   });
+  const glob = Object.assign(vi.fn(), { globSync, hasMagic, sync: globSync });
   return {
     default: { globSync, hasMagic },
+    glob,
     globSync,
     hasMagic,
   };
@@ -341,7 +342,9 @@ describe('evaluator', () => {
     vi.clearAllMocks();
     // Reset runExtensionHook to default implementation (other tests may have overridden it)
     vi.mocked(runExtensionHook).mockReset();
-    vi.mocked(runExtensionHook).mockImplementation((_extensions, _hookName, context) => context);
+    vi.mocked(runExtensionHook).mockImplementation(
+      async (_extensions, _hookName, context) => context,
+    );
     // Reset cliState for each test to ensure clean state
     cliState.resume = false;
     cliState.basePath = '';
@@ -416,87 +419,6 @@ describe('evaluator', () => {
     expect(summary.results[0].prompt.raw).toBe('Test prompt value1 value2');
     expect(summary.results[0].prompt.label).toBe('Test prompt {{ var1 }} {{ var2 }}');
     expect(summary.results[0].response?.output).toBe('Test output');
-  });
-
-  it('runs Simba test cases after other providers during evaluate', async () => {
-    const callOrder: string[] = [];
-
-    const normalProvider: ApiProvider = {
-      id: vi.fn().mockReturnValue('normal-provider'),
-      label: 'Normal provider',
-      delay: 0,
-      callApi: vi.fn().mockImplementation(async () => {
-        callOrder.push('normal');
-        return {
-          output: 'normal output',
-          tokenUsage: {
-            total: 1,
-            prompt: 1,
-            completion: 0,
-            cached: 0,
-            numRequests: 1,
-            completionDetails: {
-              reasoning: 0,
-              acceptedPrediction: 0,
-              rejectedPrediction: 0,
-            },
-          },
-        };
-      }),
-    };
-
-    const runResults = [
-      {
-        promptIdx: -1,
-        testIdx: -1,
-        testCase: { assert: [] },
-        promptId: 'simba-case',
-        provider: {
-          id: 'promptfoo:redteam:simba',
-          label: strategyDisplayNames.simba,
-        },
-        prompt: {
-          raw: 'Test prompt',
-          label: strategyDisplayNames.simba,
-        },
-        vars: {},
-        failureReason: ResultFailureReason.NONE,
-        success: true,
-        score: 1,
-        latencyMs: 5,
-        namedScores: {},
-      },
-    ];
-
-    const agentProvider = {
-      id: vi.fn().mockReturnValue('promptfoo:redteam:simba'),
-      label: strategyDisplayNames.simba,
-      delay: 0,
-      callApi: vi.fn(),
-      runSimba: vi.fn().mockImplementation(async () => {
-        callOrder.push('simba');
-        return runResults.map((result) => ({ ...result }));
-      }),
-    } as unknown as ApiProvider & { runSimba: ReturnType<typeof vi.fn> };
-
-    const testSuite: TestSuite = {
-      providers: [normalProvider, agentProvider],
-      prompts: [toPrompt('Test prompt')],
-      tests: [{}],
-    };
-
-    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    const addResultSpy = vi.spyOn(evalRecord, 'addResult');
-
-    await evaluate(testSuite, evalRecord, { maxConcurrency: 2 });
-
-    expect(callOrder).toEqual(['normal', 'simba']);
-    expect(normalProvider.callApi).toHaveBeenCalledTimes(1);
-    expect(agentProvider.runSimba as ReturnType<typeof vi.fn>).toHaveBeenCalledTimes(1);
-    expect(agentProvider.callApi as ReturnType<typeof vi.fn>).not.toHaveBeenCalled();
-    expect(addResultSpy).toHaveBeenCalledTimes(2);
-    expect(addResultSpy.mock.calls[0][0].provider.id).toBe('normal-provider');
-    expect(addResultSpy.mock.calls[1][0].provider.id).toBe('promptfoo:redteam:simba');
   });
 
   it('evaluate with vars - no escaping', async () => {
@@ -1808,6 +1730,7 @@ describe('evaluator', () => {
       defaultKey: 'defaultValue',
       configKey: 'configValue',
       testKey: 'testValue',
+      conversationId: '__scenario_0__', // Auto-generated for scenario isolation
     });
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(2);
@@ -2524,6 +2447,131 @@ describe('evaluator', () => {
     );
   });
 
+  it('should maintain separate conversation histories between scenarios without explicit conversationId', async () => {
+    // This test verifies the fix for GitHub issue #384:
+    // Scenarios should have isolated _conversation state by default
+    const mockApiProvider = {
+      id: () => 'test-provider',
+      callApi: vi.fn().mockImplementation((_prompt) => ({
+        output: 'Test output',
+      })),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [
+        {
+          raw: '{% for completion in _conversation %}Previous: {{ completion.input }} -> {{ completion.output }}\n{% endfor %}Current: {{ question }}',
+          label: 'Conversation test',
+        },
+      ],
+      scenarios: [
+        {
+          // First scenario - conversation about books
+          config: [{}],
+          tests: [
+            { vars: { question: 'Recommend a sci-fi book' } },
+            { vars: { question: 'Tell me more about it' } },
+          ],
+        },
+        {
+          // Second scenario - conversation about recipes
+          // Should NOT include history from first scenario
+          config: [{}],
+          tests: [
+            { vars: { question: 'Suggest a pasta recipe' } },
+            { vars: { question: 'How long does it take?' } },
+          ],
+        },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+
+    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(4);
+
+    // First scenario, first question - no history
+    const firstCall = mockApiProvider.callApi.mock.calls[0][0];
+    expect(firstCall).toContain('Current: Recommend a sci-fi book');
+    expect(firstCall).not.toContain('Previous:');
+
+    // First scenario, second question - should have first scenario's history
+    const secondCall = mockApiProvider.callApi.mock.calls[1][0];
+    expect(secondCall).toContain('Previous: ');
+    expect(secondCall).toContain('Recommend a sci-fi book');
+    expect(secondCall).toContain('Current: Tell me more about it');
+
+    // Second scenario, first question - should NOT have first scenario's history
+    // This is the key assertion that verifies the fix for issue #384
+    const thirdCall = mockApiProvider.callApi.mock.calls[2][0];
+    expect(thirdCall).toContain('Current: Suggest a pasta recipe');
+    expect(thirdCall).not.toContain('Previous:');
+    expect(thirdCall).not.toContain('sci-fi');
+    expect(thirdCall).not.toContain('Recommend');
+
+    // Second scenario, second question - should only have second scenario's history
+    const fourthCall = mockApiProvider.callApi.mock.calls[3][0];
+    expect(fourthCall).toContain('Previous: ');
+    expect(fourthCall).toContain('Suggest a pasta recipe');
+    expect(fourthCall).toContain('Current: How long does it take?');
+    expect(fourthCall).not.toContain('sci-fi');
+  });
+
+  it('should allow scenarios to share conversation history with explicit conversationId', async () => {
+    // This test verifies that users can still explicitly share conversations across scenarios
+    const mockApiProvider = {
+      id: () => 'test-provider',
+      callApi: vi.fn().mockImplementation((_prompt) => ({
+        output: 'Test output',
+      })),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [
+        {
+          raw: '{% for completion in _conversation %}Previous: {{ completion.input }}\n{% endfor %}Current: {{ question }}',
+          label: 'Conversation test',
+        },
+      ],
+      scenarios: [
+        {
+          config: [{}],
+          tests: [
+            {
+              vars: { question: 'Question from scenario 1' },
+              metadata: { conversationId: 'shared-conversation' },
+            },
+          ],
+        },
+        {
+          config: [{}],
+          tests: [
+            {
+              vars: { question: 'Question from scenario 2' },
+              metadata: { conversationId: 'shared-conversation' },
+            },
+          ],
+        },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+
+    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(2);
+
+    // First scenario - no history
+    const firstCall = mockApiProvider.callApi.mock.calls[0][0];
+    expect(firstCall).not.toContain('Previous:');
+
+    // Second scenario - SHOULD have first scenario's history because they share conversationId
+    const secondCall = mockApiProvider.callApi.mock.calls[1][0];
+    expect(secondCall).toContain('Previous: ');
+    expect(secondCall).toContain('Question from scenario 1');
+  });
+
   it('evaluates with provider delay', async () => {
     const mockApiProvider: ApiProvider = {
       id: vi.fn().mockReturnValue('test-provider'),
@@ -2747,6 +2795,7 @@ describe('evaluator', () => {
       }),
       save: vi.fn().mockResolvedValue(undefined),
       setVars: vi.fn().mockResolvedValue(undefined),
+      setDurationMs: vi.fn(),
     };
 
     const testSuite: TestSuite = {
@@ -2831,6 +2880,7 @@ describe('evaluator', () => {
       }),
       save: vi.fn().mockResolvedValue(undefined),
       setVars: vi.fn().mockResolvedValue(undefined),
+      setDurationMs: vi.fn(),
     };
 
     const testSuite: TestSuite = {
@@ -3681,189 +3731,6 @@ describe('runEval', () => {
     expect(results[0].response?.output).toBe('original-provider-test');
   });
 
-  it('delegates Simba providers to runSimba using evaluateOptions maxConcurrency', async () => {
-    const runSimbaResults = [
-      {
-        promptIdx: -1,
-        testIdx: -1,
-        testCase: { assert: [] },
-        promptId: 'simba-case',
-        provider: {
-          id: 'promptfoo:redteam:simba',
-          label: strategyDisplayNames.simba,
-        },
-        prompt: { raw: 'Simba prompt', label: 'simba-label' },
-        vars: {},
-        failureReason: ResultFailureReason.NONE,
-        success: true,
-        score: 1,
-        latencyMs: 50,
-        namedScores: {},
-      },
-    ];
-
-    const runSimbaMock = vi.fn().mockResolvedValue(runSimbaResults);
-    const agentProvider = {
-      id: vi.fn().mockReturnValue('promptfoo:redteam:simba'),
-      label: strategyDisplayNames.simba,
-      delay: 0,
-      callApi: vi.fn(),
-      runSimba: runSimbaMock,
-    } as unknown as ApiProvider & { runSimba: ReturnType<typeof vi.fn> };
-
-    const options = {
-      ...defaultOptions,
-      testIdx: 5,
-      promptIdx: 2,
-      evaluateOptions: { maxConcurrency: 7 },
-      concurrency: 99,
-    };
-
-    const results = await runEval({
-      ...options,
-      provider: agentProvider,
-      prompt: { raw: 'Simba prompt', label: 'simba-label' },
-      test: {},
-      conversations: {},
-      registers: {},
-      isRedteam: true,
-    });
-
-    expect(runSimbaMock).toHaveBeenCalledTimes(1);
-    expect(runSimbaMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        prompt: 'Simba prompt',
-        context: expect.objectContaining({ vars: {} }),
-        options: undefined,
-        concurrency: 7,
-      }),
-    );
-    expect(agentProvider.callApi as ReturnType<typeof vi.fn>).not.toHaveBeenCalled();
-    expect(results).toHaveLength(1);
-    expect(results[0].promptIdx).toBe(2);
-    expect(results[0].testIdx).toBe(5);
-    expect(results[0].success).toBe(true);
-  });
-
-  it('uses default Simba concurrency when evaluateOptions are not provided', async () => {
-    const runSimbaResults = [
-      {
-        promptIdx: -1,
-        testIdx: -1,
-        testCase: { assert: [] },
-        promptId: 'simba-case',
-        provider: {
-          id: 'promptfoo:redteam:simba',
-          label: strategyDisplayNames.simba,
-        },
-        prompt: { raw: 'Simba prompt', label: 'simba-label' },
-        vars: {},
-        failureReason: ResultFailureReason.NONE,
-        success: true,
-        score: 1,
-        latencyMs: 50,
-        namedScores: {},
-      },
-    ];
-
-    const runSimbaMock = vi.fn().mockResolvedValue(runSimbaResults);
-    const agentProvider = {
-      id: vi.fn().mockReturnValue('promptfoo:redteam:simba'),
-      label: strategyDisplayNames.simba,
-      delay: 0,
-      callApi: vi.fn(),
-      runSimba: runSimbaMock,
-    } as unknown as ApiProvider & { runSimba: ReturnType<typeof vi.fn> };
-
-    const results = await runEval({
-      ...defaultOptions,
-      provider: agentProvider,
-      prompt: { raw: 'Simba prompt', label: 'simba-label' },
-      test: {},
-      conversations: {},
-      registers: {},
-      isRedteam: true,
-    });
-
-    expect(runSimbaMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        prompt: 'Simba prompt',
-        context: expect.any(Object),
-        options: undefined,
-        concurrency: DEFAULT_MAX_CONCURRENCY,
-      }),
-    );
-    expect(results[0].promptIdx).toBe(defaultOptions.promptIdx);
-    expect(results[0].testIdx).toBe(defaultOptions.testIdx);
-  });
-
-  it('assigns sequential test indices when runSimba returns multiple results', async () => {
-    const runSimbaResults = [
-      {
-        promptIdx: -1,
-        testIdx: -1,
-        testCase: { assert: [] },
-        promptId: 'simba-case-1',
-        provider: {
-          id: 'promptfoo:redteam:simba',
-          label: strategyDisplayNames.simba,
-        },
-        prompt: { raw: 'Simba prompt', label: 'simba-label' },
-        vars: {},
-        failureReason: ResultFailureReason.NONE,
-        success: true,
-        score: 1,
-        latencyMs: 10,
-        namedScores: {},
-      },
-      {
-        promptIdx: -1,
-        testIdx: -1,
-        testCase: { assert: [] },
-        promptId: 'simba-case-2',
-        provider: {
-          id: 'promptfoo:redteam:simba',
-          label: strategyDisplayNames.simba,
-        },
-        prompt: { raw: 'Simba prompt', label: 'simba-label' },
-        vars: {},
-        failureReason: ResultFailureReason.NONE,
-        success: true,
-        score: 0.5,
-        latencyMs: 20,
-        namedScores: {},
-      },
-    ];
-
-    const runSimbaMock = vi.fn().mockResolvedValue(runSimbaResults);
-    const agentProvider = {
-      id: vi.fn().mockReturnValue('promptfoo:redteam:simba'),
-      label: strategyDisplayNames.simba,
-      delay: 0,
-      callApi: vi.fn(),
-      runSimba: runSimbaMock,
-    } as unknown as ApiProvider & { runSimba: ReturnType<typeof vi.fn> };
-
-    const results = await runEval({
-      ...defaultOptions,
-      testIdx: 10,
-      promptIdx: 3,
-      provider: agentProvider,
-      prompt: { raw: 'Simba prompt', label: 'simba-label' },
-      test: {},
-      conversations: {},
-      registers: {},
-      isRedteam: true,
-    });
-
-    expect(runSimbaMock).toHaveBeenCalledTimes(1);
-    expect(results).toHaveLength(2);
-    expect(results[0].testIdx).toBe(10);
-    expect(results[0].promptIdx).toBe(3);
-    expect(results[1].testIdx).toBe(11);
-    expect(results[1].promptIdx).toBe(3);
-  });
-
   it('should accumulate token usage correctly', async () => {
     const results = await runEval({
       ...defaultOptions,
@@ -4037,7 +3904,9 @@ describe('evaluator defaultTest merging', () => {
     vi.clearAllMocks();
     // Reset runExtensionHook to default implementation (other tests may have overridden it)
     vi.mocked(runExtensionHook).mockReset();
-    vi.mocked(runExtensionHook).mockImplementation((_extensions, _hookName, context) => context);
+    vi.mocked(runExtensionHook).mockImplementation(
+      async (_extensions, _hookName, context) => context,
+    );
   });
 
   it('should merge defaultTest.options.provider with test case options', async () => {
@@ -4152,7 +4021,9 @@ describe('Evaluator with external defaultTest', () => {
     vi.clearAllMocks();
     // Reset runExtensionHook to default implementation (other tests may have overridden it)
     vi.mocked(runExtensionHook).mockReset();
-    vi.mocked(runExtensionHook).mockImplementation((_extensions, _hookName, context) => context);
+    vi.mocked(runExtensionHook).mockImplementation(
+      async (_extensions, _hookName, context) => context,
+    );
   });
 
   it('should handle string defaultTest gracefully', async () => {
@@ -4375,7 +4246,9 @@ describe('defaultTest normalization for extensions', () => {
     vi.clearAllMocks();
     // Reset runExtensionHook to default implementation (other tests may have overridden it)
     vi.mocked(runExtensionHook).mockReset();
-    vi.mocked(runExtensionHook).mockImplementation((_extensions, _hookName, context) => context);
+    vi.mocked(runExtensionHook).mockImplementation(
+      async (_extensions, _hookName, context) => context,
+    );
   });
 
   it('should initialize defaultTest when undefined and extensions are present', async () => {
@@ -4385,7 +4258,7 @@ describe('defaultTest normalization for extensions', () => {
     const mockedRunExtensionHook = vi.mocked(runExtensionHook);
     mockedRunExtensionHook.mockImplementation(async (_extensions, hookName, context) => {
       if (hookName === 'beforeAll') {
-        capturedSuite = context.suite;
+        capturedSuite = (context as { suite: TestSuite }).suite;
       }
       return context;
     });
@@ -4413,7 +4286,7 @@ describe('defaultTest normalization for extensions', () => {
     const mockedRunExtensionHook = vi.mocked(runExtensionHook);
     mockedRunExtensionHook.mockImplementation(async (_extensions, hookName, context) => {
       if (hookName === 'beforeAll') {
-        capturedSuite = context.suite;
+        capturedSuite = (context as { suite: TestSuite }).suite;
       }
       return context;
     });
@@ -4434,8 +4307,9 @@ describe('defaultTest normalization for extensions', () => {
 
     expect(capturedSuite).toBeDefined();
     expect(capturedSuite!.defaultTest).toBeDefined();
-    expect(capturedSuite!.defaultTest!.vars).toEqual({ defaultVar: 'defaultValue' });
-    expect(capturedSuite!.defaultTest!.assert).toEqual([]);
+    const defaultTest = capturedSuite!.defaultTest as Record<string, unknown>;
+    expect(defaultTest.vars).toEqual({ defaultVar: 'defaultValue' });
+    expect(defaultTest.assert).toEqual([]);
   });
 
   it('should preserve existing defaultTest.assert when extensions are present', async () => {
@@ -4445,7 +4319,7 @@ describe('defaultTest normalization for extensions', () => {
     const mockedRunExtensionHook = vi.mocked(runExtensionHook);
     mockedRunExtensionHook.mockImplementation(async (_extensions, hookName, context) => {
       if (hookName === 'beforeAll') {
-        capturedSuite = context.suite;
+        capturedSuite = (context as { suite: TestSuite }).suite;
       }
       return context;
     });
@@ -4469,8 +4343,9 @@ describe('defaultTest normalization for extensions', () => {
     await evaluate(testSuite, evalRecord, {});
 
     expect(capturedSuite).toBeDefined();
-    expect(capturedSuite!.defaultTest!.assert).toBe(existingAssertions); // Same reference
-    expect(capturedSuite!.defaultTest!.assert).toHaveLength(2);
+    const defaultTest = capturedSuite!.defaultTest as Record<string, unknown>;
+    expect(defaultTest.assert).toBe(existingAssertions); // Same reference
+    expect(defaultTest.assert).toHaveLength(2);
   });
 
   it('should not modify defaultTest when no extensions are present', async () => {
@@ -4504,7 +4379,9 @@ describe('defaultTest normalization for extensions', () => {
       if (hookName === 'beforeAll') {
         // Simulate what an extension would do - push to assert array
         // This should work because defaultTest.assert is guaranteed to be an array
-        context.suite.defaultTest!.assert!.push({ type: 'is-json' as const });
+        const suite = (context as { suite: TestSuite }).suite;
+        const defaultTest = suite.defaultTest as Exclude<typeof suite.defaultTest, string>;
+        defaultTest!.assert!.push({ type: 'is-json' as const });
       }
       return context;
     });

@@ -1,15 +1,14 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Mock } from 'vitest';
-
 import fs from 'fs';
 import path from 'path';
 
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getCache, isCacheEnabled } from '../../src/cache';
-import { PythonProvider } from '../../src/providers/pythonCompletion';
 import { providerRegistry } from '../../src/providers/providerRegistry';
+import { PythonProvider } from '../../src/providers/pythonCompletion';
 import * as pythonUtils from '../../src/python/pythonUtils';
 import { getEnvInt } from '../../src/python/pythonUtils';
 import { PythonWorkerPool } from '../../src/python/workerPool';
+import type { Mock } from 'vitest';
 
 vi.mock('../../src/python/pythonUtils');
 vi.mock('../../src/cache');

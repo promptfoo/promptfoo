@@ -43,7 +43,7 @@ import FrameworkCompliance from './FrameworkCompliance';
 import Overview from './Overview';
 import './Report.css';
 
-import { type GridFilterModel, GridLogicOperator } from '@mui/x-data-grid';
+import { type CategoryStats, type TestResultStats } from './FrameworkComplianceUtils';
 import ReportDownloadButton from './ReportDownloadButton';
 import ReportSettingsDialogButton from './ReportSettingsDialogButton';
 import RiskCategories from './RiskCategories';
@@ -51,7 +51,6 @@ import StrategyStats from './StrategyStats';
 import { getPluginIdFromResult, getStrategyIdFromTest } from './shared';
 import TestSuites from './TestSuites';
 import ToolsDialog from './ToolsDialog';
-import { type TestResultStats, type CategoryStats } from './FrameworkComplianceUtils';
 
 const App = () => {
   const navigate = useNavigate();
@@ -69,13 +68,8 @@ const App = () => {
   // Scroll tracking for persistent header
   const [isScrolled, setIsScrolled] = React.useState(false);
 
-  // Vulnerabilities DataGrid
+  // Vulnerabilities table reference for scroll navigation
   const vulnerabilitiesDataGridRef = React.useRef<HTMLDivElement>(null);
-  const [vulnerabilitiesDataGridFilterModel, setVulnerabilitiesDataGridFilterModel] =
-    React.useState<GridFilterModel>({
-      items: [],
-      logicOperator: GridLogicOperator.Or,
-    });
 
   const searchParams = new URLSearchParams(window.location.search);
   React.useEffect(() => {
@@ -937,7 +931,6 @@ const App = () => {
             categoryStats={hasActiveFilters ? filteredCategoryStats : categoryStats}
             plugins={evalData.config.redteam.plugins || []}
             vulnerabilitiesDataGridRef={vulnerabilitiesDataGridRef}
-            setVulnerabilitiesDataGridFilterModel={setVulnerabilitiesDataGridFilterModel}
           />
           <StrategyStats
             strategyStats={hasActiveFilters ? filteredStrategyStats : strategyStats}
@@ -958,8 +951,6 @@ const App = () => {
             failuresByPlugin={hasActiveFilters ? filteredFailuresByPlugin : failuresByPlugin}
             passesByPlugin={hasActiveFilters ? filteredPassesByPlugin : passesByPlugin}
             vulnerabilitiesDataGridRef={vulnerabilitiesDataGridRef}
-            vulnerabilitiesDataGridFilterModel={vulnerabilitiesDataGridFilterModel}
-            setVulnerabilitiesDataGridFilterModel={setVulnerabilitiesDataGridFilterModel}
           />
           <FrameworkCompliance
             evalId={evalId}

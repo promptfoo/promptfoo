@@ -1,3 +1,4 @@
+import { HIDDEN_METADATA_KEYS } from '@app/constants';
 import CheckIcon from '@mui/icons-material/Check';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import FilterAltIcon from '@mui/icons-material/FilterAlt';
@@ -17,9 +18,9 @@ import {
   determinePolicyTypeFromId,
   makeCustomPolicyCloudUrl,
 } from '@promptfoo/redteam/plugins/policy/utils';
-import { HIDDEN_METADATA_KEYS } from '@app/constants';
-import type { CloudConfigData } from '../../../hooks/useCloudConfig';
 import { ellipsize } from '../../../../../util/text';
+
+import type { CloudConfigData } from '../../../hooks/useCloudConfig';
 
 const isValidUrl = (str: string): boolean => {
   try {

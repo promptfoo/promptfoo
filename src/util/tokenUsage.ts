@@ -12,6 +12,17 @@ export type TokenUsageListener = (providerId: string, usage: TokenUsage) => void
  * A utility class for tracking token usage across an evaluation.
  *
  * Supports real-time subscriptions for UI updates via the subscribe() method.
+ *
+ * @deprecated Use OpenTelemetry tracing instead for per-call token tracking.
+ * This class provides only cumulative totals and will be removed in a future version.
+ *
+ * For new implementations, use the OTEL-based tracing infrastructure:
+ * - Enable tracing with `PROMPTFOO_OTEL_ENABLED=true`
+ * - Use `getTokenUsageFromTrace()` from `src/util/tokenUsageCompat.ts` for per-trace usage
+ * - Token usage is automatically captured as GenAI semantic convention span attributes
+ *
+ * @see src/tracing/genaiTracer.ts for the new tracing implementation
+ * @see src/util/tokenUsageCompat.ts for the compatibility layer
  */
 export class TokenUsageTracker {
   private static instance: TokenUsageTracker;

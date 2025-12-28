@@ -2,9 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { matchesLlmRubric } from '../../../src/matchers';
 import { PlinyGrader, PlinyPlugin } from '../../../src/redteam/plugins/pliny';
 import { isBasicRefusal, isEmptyResponse } from '../../../src/redteam/util';
+import { fetchWithProxy } from '../../../src/util/fetch/index';
 
 import type { ApiProvider, AtomicTestCase } from '../../../src/types/index';
-import { fetchWithProxy } from '../../../src/util/fetch/index';
 
 vi.mock('../../../src/matchers', async (importOriginal) => {
   return {

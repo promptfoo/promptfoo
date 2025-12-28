@@ -1,20 +1,20 @@
 import { fetchWithCache } from '../../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
-import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util/index';
 import { maybeLoadFromExternalFile } from '../../util/file';
+import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util/index';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
+import { ResponsesProcessor } from '../responses/index';
 import { REQUEST_TIMEOUT_MS } from '../shared';
 import { OpenAiGenericProvider } from '.';
 import { calculateOpenAICost, formatOpenAiError, getTokenUsage } from './util';
-import { ResponsesProcessor } from '../responses/index';
 
+import type { EnvOverrides } from '../../types/env';
 import type {
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderResponse,
 } from '../../types/index';
-import type { EnvOverrides } from '../../types/env';
 import type { OpenAiCompletionOptions, ReasoningEffort } from './types';
 
 export class OpenAiResponsesProvider extends OpenAiGenericProvider {
@@ -48,10 +48,12 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     'gpt-5-pro-2025-10-06',
     // GPT-5.1 models
     'gpt-5.1',
+    'gpt-5.1-2025-11-13',
     'gpt-5.1-mini',
     'gpt-5.1-nano',
     'gpt-5.1-codex',
     'gpt-5.1-codex-max',
+    'gpt-5.1-chat-latest',
     // GPT-5.2 models
     'gpt-5.2',
     'gpt-5.2-2025-12-11',
@@ -62,9 +64,9 @@ export class OpenAiResponsesProvider extends OpenAiGenericProvider {
     'gpt-audio-mini-2025-10-06',
     // Computer use model
     'computer-use-preview',
-    // Image generation model
-    'gpt-image-1',
-    'gpt-image-1-2025-04-15',
+    'computer-use-preview-2025-03-11',
+    // NOTE: gpt-image-1, gpt-image-1-mini, and gpt-image-1.5 are NOT supported with the Responses API.
+    // Use openai:image:gpt-image-1, openai:image:gpt-image-1-mini, or openai:image:gpt-image-1.5 instead (which uses /images/generations endpoint)
     // Reasoning models
     'o1',
     'o1-2024-12-17',

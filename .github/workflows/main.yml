@@ -18,7 +18,7 @@ env:
   VITE_TELEMETRY_DISABLED: 1
 jobs:
   test:
-    name: Test on Node ${{ matrix.node }} and ${{ matrix.os }}
+    name: Test on Node ${{ matrix.node }} and ${{ matrix.os }}${{ matrix.shard && format(' (shard {0}/3)', matrix.shard) || '' }}
     timeout-minutes: 10
     runs-on: ${{ matrix.os }}
     strategy:
@@ -26,10 +26,43 @@ jobs:
       matrix:
         node: ['20.x', '22.x', '24.x']
         os: [ubuntu-latest, windows-latest, macOS-latest]
-        # Temporarily exclude macOS with Node 24.x due to flaky test failures
+        shard: ['']
         exclude:
+          # Temporarily exclude macOS with Node 24.x due to flaky test failures
           - node: '24.x'
             os: macOS-latest
+          # Exclude non-sharded Windows tests (we use sharded versions below)
+          - os: windows-latest
+            shard: ''
+        # Add sharding for Windows to speed up CI (Windows tests are ~2x slower)
+        include:
+          - os: windows-latest
+            node: '20.x'
+            shard: 1
+          - os: windows-latest
+            node: '20.x'
+            shard: 2
+          - os: windows-latest
+            node: '20.x'
+            shard: 3
+          - os: windows-latest
+            node: '22.x'
+            shard: 1
+          - os: windows-latest
+            node: '22.x'
+            shard: 2
+          - os: windows-latest
+            node: '22.x'
+            shard: 3
+          - os: windows-latest
+            node: '24.x'
+            shard: 1
+          - os: windows-latest
+            node: '24.x'
+            shard: 2
+          - os: windows-latest
+            node: '24.x'
+            shard: 3
 
     steps:
       - name: Checkout repo
@@ -57,12 +90,21 @@ jobs:
         with:
           ruby-version: 3.3
 
+      # Cache node_modules to speed up installs (especially on Windows where npm ci is slow)
+      # Key includes OS and Node version since native modules are platform/version specific
+      - name: Cache node_modules
+        id: cache-node-modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-node${{ matrix.node }}-${{ hashFiles('package-lock.json') }}
+
       - name: Install Dependencies
-        run: |
-          npm ci
+        if: steps.cache-node-modules.outputs.cache-hit != 'true'
+        run: npm ci
 
       - name: Test
-        run: npm run test
+        run: npm run test${{ matrix.shard && format(' -- --shard={0}/3', matrix.shard) || '' }}
 
   build:
     name: Build on Node ${{ matrix.node }}
@@ -137,18 +179,13 @@ jobs:
         run: |
           npm ci
 
-      - name: Lint Project
+      - name: Run Biome CI
         run: |
-          npm run lint
+          npm run lint:ci
 
-      - name: Lint UI
-        working-directory: src/app
+      - name: Run Prettier Check
         run: |
-          npm run lint
-
-      - name: Run Style Check
-        run: |
-          npm run format:check
+          npm run format:check:prettier
 
       - name: Check Dependency Versions
         run: |
@@ -162,6 +199,10 @@ jobs:
       - name: Check for missing dependencies
         run: |
           npm run depcheck
+
+      - name: Validate lockfile integrity
+        run: |
+          npx lockfile-lint --path package-lock.json --allowed-hosts npm --validate-https
 
   shell-format:
     name: Shell Format Check
@@ -332,6 +373,7 @@ jobs:
     name: Share Test
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
     steps:
@@ -389,6 +431,7 @@ jobs:
   redteam:
     name: Redteam (Production API)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout repo
         uses: actions/checkout@v5
@@ -414,6 +457,7 @@ jobs:
     name: Redteam (Staging API)
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
     steps:

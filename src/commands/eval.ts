@@ -4,12 +4,13 @@ import * as path from 'path';
 import chalk from 'chalk';
 import chokidar from 'chokidar';
 import dedent from 'dedent';
+import ora from 'ora';
 import { z } from 'zod';
 import { fromError } from 'zod-validation-error';
 import { disableCache } from '../cache';
 import cliState from '../cliState';
-import { getEnvBool, getEnvFloat, getEnvInt } from '../envars';
 import { DEFAULT_MAX_CONCURRENCY } from '../constants';
+import { getEnvBool, getEnvFloat, getEnvInt, isCI } from '../envars';
 import { evaluate } from '../evaluator';
 import { checkEmailStatusAndMaybeExit, promptForEmailUnverified } from '../globalConfig/accounts';
 import { cloudConfig } from '../globalConfig/cloud';
@@ -20,13 +21,13 @@ import { loadApiProvider } from '../providers/index';
 import { createShareableUrl, isSharingEnabled } from '../share';
 import { generateTable } from '../table';
 import telemetry from '../telemetry';
+import { EMAIL_OK_STATUS } from '../types/email';
 import { CommandLineOptionsSchema, OutputFileExtension, TestSuiteSchema } from '../types/index';
 import { isApiProvider } from '../types/providers';
 import { checkCloudPermissions, getOrgContext } from '../util/cloud';
 import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
 import { resolveConfigs } from '../util/config/load';
 import { maybeLoadFromExternalFile } from '../util/file';
-import { formatDuration } from '../util/formatDuration';
 import { printBorder, setupEnv, writeMultipleOutputs } from '../util/index';
 import invariant from '../util/invariant';
 import { promptfooCommand } from '../util/promptfooCommand';
@@ -34,6 +35,7 @@ import { TokenUsageTracker } from '../util/tokenUsage';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
 import { filterProviders } from './eval/filterProviders';
 import { filterTests } from './eval/filterTests';
+import { generateEvalSummary } from './eval/summary';
 import { deleteErrorResults, getErrorResultIds, recalculatePromptMetrics } from './retry';
 import { notCloudEnabledShareInstructions } from './share';
 import { initInkEval, shouldUseInkUI } from '../ui/evalRunner';
@@ -44,10 +46,8 @@ import type {
   EvaluateOptions,
   Scenario,
   TestSuite,
-  TokenUsage,
   UnifiedConfig,
 } from '../types/index';
-import { EMAIL_OK_STATUS } from '../types/email';
 import type { FilterOptions } from './eval/filterTests';
 
 const EvalCommandSchema = CommandLineOptionsSchema.extend({
@@ -76,35 +76,6 @@ export function showRedteamProviderLabelMissingWarning(testSuite: TestSuite) {
       `,
     );
   }
-}
-
-/**
- * Format token usage for display in CLI output
- */
-export function formatTokenUsage(usage: Partial<TokenUsage>): string {
-  const parts = [];
-
-  if (usage.total !== undefined) {
-    parts.push(`${usage.total.toLocaleString()} total`);
-  }
-
-  if (usage.prompt !== undefined) {
-    parts.push(`${usage.prompt.toLocaleString()} prompt`);
-  }
-
-  if (usage.completion !== undefined) {
-    parts.push(`${usage.completion.toLocaleString()} completion`);
-  }
-
-  if (usage.cached !== undefined) {
-    parts.push(`${usage.cached.toLocaleString()} cached`);
-  }
-
-  if (usage.completionDetails?.reasoning !== undefined) {
-    parts.push(`${usage.completionDetails.reasoning.toLocaleString()} reasoning`);
-  }
-
-  return parts.join(' / ');
 }
 
 export async function doEval(
@@ -706,7 +677,7 @@ export async function doEval(
       printBorder();
       logger.info(`${chalk.yellow('⏸')} Evaluation paused. ID: ${chalk.cyan(evalRecord.id)}`);
       logger.info(
-        `» Resume with: ${chalk.greenBright.bold('promptfoo eval --resume ' + evalRecord.id)}`,
+        `» Resume with: ${chalk.green.bold('promptfoo eval --resume ' + evalRecord.id)}`,
       );
       printBorder();
       return ret;
@@ -716,13 +687,13 @@ export async function doEval(
     // Clear results from memory to avoid memory issues
     evalRecord.clearResults();
 
+    // Check for explicit disable signals first
+    const hasExplicitDisable =
+      cmdObj.share === false || cmdObj.noShare === true || getEnvBool('PROMPTFOO_DISABLE_SHARING');
+
     // Determine sharing with explicit precedence handling
     let wantsToShare: boolean;
-    if (
-      cmdObj.share === false ||
-      cmdObj.noShare === true ||
-      getEnvBool('PROMPTFOO_DISABLE_SHARING')
-    ) {
+    if (hasExplicitDisable) {
       // Explicit disable via CLI or env var takes highest priority
       wantsToShare = false;
     } else if (cmdObj.share === true) {
@@ -744,17 +715,15 @@ export async function doEval(
     logger.debug(`Wants to share: ${wantsToShare}`);
     logger.debug(`Can share eval: ${canShareEval}`);
 
-    // Skip sharing if already shared or if sharing is already in progress (Ink UI background share)
-    const shareableUrl =
-      wantsToShare && canShareEval && !evalRecord.shared && !pendingInkShare
-        ? await createShareableUrl(evalRecord)
-        : null;
-
-    logger.debug(`Shareable URL: ${shareableUrl}`);
-
-    if (shareableUrl) {
-      evalRecord.shared = true;
+    // Start sharing in background (don't await yet) - this allows us to show results immediately
+    // Skip if already shared or if Ink UI already started background sharing
+    const willShare = wantsToShare && canShareEval && !evalRecord.shared && !pendingInkShare;
+    let sharePromise: Promise<string | null> | null = null;
+    if (willShare) {
+      // Start the share operation in background with silent mode (no progress bar)
+      sharePromise = createShareableUrl(evalRecord, { silent: true });
     }
+
     let successes = 0;
     let failures = 0;
     let errors = 0;
@@ -777,6 +746,7 @@ export async function doEval(
     const passRate = (successes / totalTests) * 100;
 
     // Display results table (non-Ink UI mode only - Ink UI handles table in unified session above)
+    // Output results immediately (before share completes)
     if (!useInkUI && cmdObj.table && getLogLevel() !== 'debug' && totalTests < 500) {
       const table = await evalRecord.getTable();
       const outputTable = generateTable(table);
@@ -803,10 +773,116 @@ export async function doEval(
     const paths = (Array.isArray(outputPath) ? outputPath : [outputPath]).filter(
       (p): p is string => typeof p === 'string' && p.length > 0 && !p.endsWith('.jsonl'),
     );
+
+    const isRedteam = Boolean(config.redteam);
+    const duration = Math.round((Date.now() - startTime) / 1000);
+    const tracker = TokenUsageTracker.getInstance();
+
+    // Generate and display summary immediately (before share completes)
+    const summaryLines = generateEvalSummary({
+      evalId: evalRecord.id,
+      isRedteam,
+      writeToDatabase: cmdObj.write !== false,
+      shareableUrl: null, // Not available yet if sharing in background
+      wantsToShare,
+      hasExplicitDisable,
+      cloudEnabled: cloudConfig.isEnabled(),
+      activelySharing: willShare,
+      tokenUsage,
+      successes,
+      failures,
+      errors,
+      duration,
+      maxConcurrency,
+      tracker,
+    });
+
+    // Special case: show cloud signup instructions when user wants to share but can't
+    if (cmdObj.write && wantsToShare && !canShareEval) {
+      logger.info(summaryLines[0]); // Show just the completion message
+      notCloudEnabledShareInstructions();
+      // Skip the guidance lines and show the rest
+      for (let i = 1; i < summaryLines.length; i++) {
+        if (summaryLines[i].includes('View results:')) {
+          // Skip guidance section
+          while (i < summaryLines.length && !summaryLines[i].includes('Total Tokens:')) {
+            i++;
+          }
+          i--; // Back up one so the for loop increment works
+        } else {
+          logger.info(summaryLines[i]);
+        }
+      }
+    } else {
+      // Normal case: show all summary lines
+      for (const line of summaryLines) {
+        logger.info(line);
+      }
+    }
+
+    // Now wait for share to complete and show spinner (as the last output)
+    let shareableUrl: string | null = null;
+    if (sharePromise) {
+      // Determine org context for spinner text
+      const orgContext = await getOrgContext();
+      const orgSuffix = orgContext
+        ? ` to ${orgContext.organizationName}${orgContext.teamName ? ` > ${orgContext.teamName}` : ''}`
+        : '';
+
+      // Only show spinner in TTY (not CI)
+      if (process.stdout.isTTY && !isCI()) {
+        const spinner = ora({
+          text: `Sharing${orgSuffix}...`,
+          prefixText: chalk.dim('»'),
+          spinner: 'dots',
+        }).start();
+
+        try {
+          shareableUrl = await sharePromise;
+          if (shareableUrl) {
+            evalRecord.shared = true;
+            spinner.succeed(shareableUrl);
+          } else {
+            spinner.fail(chalk.red('Share failed'));
+          }
+        } catch (error) {
+          spinner.fail(chalk.red('Share failed'));
+          logger.debug(`Share error: ${error}`);
+        }
+      } else {
+        // CI mode - just await and log result
+        try {
+          shareableUrl = await sharePromise;
+          if (shareableUrl) {
+            evalRecord.shared = true;
+            logger.info(`${chalk.dim('»')} ${chalk.green('✓')} ${shareableUrl}`);
+          }
+        } catch (error) {
+          logger.debug(`Share error: ${error}`);
+        }
+      }
+    }
+
+    logger.debug(`Shareable URL: ${shareableUrl}`);
+
+    // Write outputs after share completes (so we can include shareableUrl)
     if (paths.length) {
       await writeMultipleOutputs(paths, evalRecord, shareableUrl);
       if (!useInkUI) {
         logger.info(chalk.yellow(`Writing output to ${paths.join(', ')}`));
+      }
+    }
+
+    // Await background share before displaying results (if started)
+    let shareableUrl: string | null = null;
+    if (sharePromise) {
+      try {
+        shareableUrl = await sharePromise;
+        if (shareableUrl) {
+          evalRecord.shared = true;
+        }
+      } catch (err) {
+        logger.debug(`Share failed: ${err}`);
       }
     }
 

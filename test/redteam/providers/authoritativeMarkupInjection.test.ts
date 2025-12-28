@@ -1,10 +1,8 @@
-import type { Mock } from 'vitest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ApiProvider, CallApiContextParams } from '../../../src/types/index';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const mockFetchWithProxy = vi.fn<any>();
+const mockFetchWithProxy = vi.fn();
 
 vi.mock('../../../src/util/fetch/index', () => ({
   fetchWithProxy: (...args: unknown[]) => mockFetchWithProxy(...args),
@@ -26,11 +24,10 @@ vi.mock('../../../src/redteam/remoteGeneration', () => ({
   neverGenerateRemote: vi.fn().mockReturnValue(false),
 }));
 
-describe('AuthoritativeMarkupInjectionProvider - Abort Signal Handling', () => {
+describe('AuthoritativeMarkupInjectionProvider', () => {
   let AuthoritativeMarkupInjectionProvider: typeof import('../../../src/redteam/providers/authoritativeMarkupInjection').default;
   let mockTargetProvider: ApiProvider;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let mockCallApi: Mock<any>;
+  let mockCallApi: ReturnType<typeof vi.fn>;
 
   const createMockContext = (targetProvider: ApiProvider): CallApiContextParams => ({
     originalProvider: targetProvider,
@@ -98,5 +95,80 @@ describe('AuthoritativeMarkupInjectionProvider - Abort Signal Handling', () => {
 
     // The target provider should be called with the options
     expect(mockCallApi).toHaveBeenCalledWith(expect.any(String), expect.any(Object), options);
+  });
+
+  describe('Token Usage Tracking', () => {
+    it('should accumulate token usage from target provider', async () => {
+      mockCallApi.mockResolvedValue({
+        output: 'target response',
+        tokenUsage: { prompt: 50, completion: 25, total: 75, numRequests: 1 },
+      });
+
+      const provider = new AuthoritativeMarkupInjectionProvider({
+        injectVar: 'input',
+      });
+
+      const context = createMockContext(mockTargetProvider);
+      const result = await provider.callApi('test prompt', context);
+
+      expect(result.tokenUsage).toBeDefined();
+      expect(result.tokenUsage?.prompt).toBe(50);
+      expect(result.tokenUsage?.completion).toBe(25);
+      expect(result.tokenUsage?.total).toBe(75);
+      expect(result.tokenUsage?.numRequests).toBe(1);
+    });
+
+    it('should return token usage even when target provider returns error', async () => {
+      mockCallApi.mockResolvedValue({
+        output: '',
+        error: 'Target provider error',
+        tokenUsage: { prompt: 10, completion: 0, total: 10, numRequests: 1 },
+      });
+
+      const provider = new AuthoritativeMarkupInjectionProvider({
+        injectVar: 'input',
+      });
+
+      const context = createMockContext(mockTargetProvider);
+      const result = await provider.callApi('test prompt', context);
+
+      expect(result.error).toBe('Target provider error');
+      expect(result.tokenUsage).toBeDefined();
+      expect(result.tokenUsage?.numRequests).toBe(1);
+    });
+
+    it('should handle target provider with no token usage', async () => {
+      mockCallApi.mockResolvedValue({
+        output: 'response without token usage',
+      });
+
+      const provider = new AuthoritativeMarkupInjectionProvider({
+        injectVar: 'input',
+      });
+
+      const context = createMockContext(mockTargetProvider);
+      const result = await provider.callApi('test prompt', context);
+
+      // Should still have token usage object with numRequests counted
+      expect(result.tokenUsage).toBeDefined();
+      expect(result.tokenUsage?.numRequests).toBe(1);
+    });
+
+    it('should include metadata with redteamFinalPrompt', async () => {
+      mockCallApi.mockResolvedValue({
+        output: 'target response',
+        tokenUsage: { prompt: 50, completion: 25, total: 75, numRequests: 1 },
+      });
+
+      const provider = new AuthoritativeMarkupInjectionProvider({
+        injectVar: 'input',
+      });
+
+      const context = createMockContext(mockTargetProvider);
+      const result = await provider.callApi('test prompt', context);
+
+      expect(result.metadata).toBeDefined();
+      expect(result.metadata?.redteamFinalPrompt).toBeDefined();
+    });
   });
 });

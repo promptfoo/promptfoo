@@ -1,5 +1,6 @@
-import { defineConfig } from 'vitest/config';
 import os from 'os';
+
+import { defineConfig } from 'vitest/config';
 
 const cpuCount = os.cpus().length;
 // Use most cores but leave 2 for system/main process
