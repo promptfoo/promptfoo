@@ -5,8 +5,9 @@
  * and user interface preferences.
  */
 
-import { useStdout } from 'ink';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+
+import { useStdout } from 'ink';
 
 export interface UIState {
   // Terminal dimensions

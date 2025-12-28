@@ -1,5 +1,7 @@
 import React from 'react';
+
 import { Box, Text, useInput } from 'ink';
+import { LIMITS } from '../../constants';
 
 /**
  * Definition of a keyboard shortcut for display in the help overlay.
@@ -132,7 +134,7 @@ export function HelpOverlay({
   const categories = getShortcutCategories(historyAvailable);
 
   // Split categories into two columns for wider display
-  const useWideLayout = terminalWidth >= 70;
+  const useWideLayout = terminalWidth >= LIMITS.WIDE_LAYOUT_MIN_WIDTH;
   const leftCategories = useWideLayout ? categories.slice(0, 1) : categories;
   const rightCategories = useWideLayout ? categories.slice(1) : [];
 

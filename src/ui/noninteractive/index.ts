@@ -8,6 +8,7 @@
  * it can be loaded without pulling in the React runtime.
  */
 
-export { TextOutput, getTextOutput } from './textOutput';
 export { NonInteractiveProgress, NonInteractiveSpinner } from './progress';
+export { getTextOutput, TextOutput } from './textOutput';
+
 export type { ProgressUpdate } from './progress';

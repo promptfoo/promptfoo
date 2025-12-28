@@ -7,8 +7,9 @@
  * - Provides sensible defaults for non-TTY environments
  */
 
-import { useStdout } from 'ink';
 import { useEffect, useState } from 'react';
+
+import { useStdout } from 'ink';
 
 /**
  * Terminal size dimensions.
@@ -74,5 +75,3 @@ export function getStaticTerminalSize(): TerminalSize {
     height: process.stdout.rows || DEFAULT_SIZE.height,
   };
 }
-
-export default useTerminalSize;

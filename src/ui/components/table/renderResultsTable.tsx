@@ -6,9 +6,10 @@
  */
 
 import { render } from 'ink';
-import type { EvaluateTable } from '../../../types';
 import { isRawModeSupported } from '../../hooks/useKeypress';
 import { ResultsTable, StaticResultsTable } from './ResultsTable';
+
+import type { EvaluateTable } from '../../../types';
 
 /**
  * Options for rendering the results table.
@@ -28,13 +29,31 @@ export interface RenderResultsTableOptions {
 
 /**
  * Check if the Ink table should be used based on environment.
+ *
+ * Enabled by default when:
+ * - stdout is a TTY (interactive terminal)
+ * - NOT in a CI environment
+ *
+ * Can be disabled via PROMPTFOO_DISABLE_INK_TABLE=true
  */
 export function shouldUseInkTable(): boolean {
-  return (
-    process.stdout.isTTY === true &&
-    !process.env.CI &&
-    process.env.PROMPTFOO_DISABLE_INK_TABLE !== 'true'
-  );
+  // Allow explicit disable
+  if (process.env.PROMPTFOO_DISABLE_INK_TABLE === 'true') {
+    return false;
+  }
+
+  // Force enable overrides CI check
+  if (process.env.PROMPTFOO_FORCE_INTERACTIVE_UI === 'true') {
+    return true;
+  }
+
+  // CI environments get non-interactive by default
+  if (process.env.CI) {
+    return false;
+  }
+
+  // Default: use table in TTY environments
+  return process.stdout.isTTY === true;
 }
 
 /**
@@ -133,5 +152,3 @@ export function createResultsTableInstance(
     },
   );
 }
-
-export default renderResultsTable;

@@ -5,8 +5,10 @@
  * toggles verbose mode with the 'v' key.
  */
 
-import { Box, Text } from 'ink';
 import { useMemo } from 'react';
+
+import { Box, Text } from 'ink';
+
 import type { LogEntry } from '../../contexts/EvalContext';
 
 export interface LogPanelProps {
@@ -139,9 +141,9 @@ export function LogPanel({
           Logs {verbose ? '(verbose)' : '(warnings/errors only)'} - {displayLogs.length} entries
         </Text>
       </Box>
-      {displayLogs.map((entry, index) => (
+      {displayLogs.map((entry) => (
         <LogEntryRow
-          key={`${entry.timestamp}-${index}`}
+          key={entry.id}
           entry={entry}
           showTimestamp={showTimestamps}
           maxMessageLength={maxMessageLength}
@@ -150,5 +152,3 @@ export function LogPanel({
     </Box>
   );
 }
-
-export default LogPanel;

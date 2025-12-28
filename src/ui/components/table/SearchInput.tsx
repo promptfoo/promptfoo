@@ -8,9 +8,13 @@
  * - Vim-style activation (/)
  * - Real-time search display
  * - Shows match count
+ * - Inline regex validation with error display
  */
 
+import { useMemo } from 'react';
+
 import { Box, Text } from 'ink';
+import { parseSearchQuery } from './filterUtils';
 
 export interface SearchInputProps {
   /** Current search query */
@@ -28,24 +32,34 @@ export interface SearchInputProps {
  * Input handling is done in useTableNavigation.
  */
 export function SearchInput({ query, isActive, matchCount, totalCount }: SearchInputProps) {
+  // Parse query to check for regex errors
+  const parsed = useMemo(() => (query ? parseSearchQuery(query) : null), [query]);
+  const hasRegexError = parsed?.isRegex && parsed?.error;
+
   if (!isActive) {
     return null;
   }
 
   return (
-    <Box marginTop={1}>
-      <Text color="yellow">/</Text>
-      <Text>{query}</Text>
-      <Text color="gray">█</Text>
-      {matchCount !== undefined && totalCount !== undefined && (
-        <Text dimColor>
-          {' '}
-          ({matchCount}/{totalCount})
-        </Text>
+    <Box flexDirection="column" marginTop={1}>
+      <Box>
+        <Text color="yellow">/</Text>
+        <Text color={hasRegexError ? 'red' : undefined}>{query}</Text>
+        <Text color="gray">█</Text>
+        {matchCount !== undefined && totalCount !== undefined && !hasRegexError && (
+          <Text dimColor>
+            {' '}
+            ({matchCount}/{totalCount})
+          </Text>
+        )}
+        {hasRegexError && <Text color="red"> (invalid regex)</Text>}
+        <Text dimColor> [Enter] apply | [Esc] cancel</Text>
+      </Box>
+      {hasRegexError && (
+        <Box>
+          <Text color="red">⚠ {parsed?.error}</Text>
+        </Box>
       )}
-      <Text dimColor> [Enter] apply | [Esc] cancel</Text>
     </Box>
   );
 }
-
-export default SearchInput;

@@ -2,8 +2,9 @@
  * Badge and status indicator components.
  */
 
-import { Text } from 'ink';
 import React from 'react';
+
+import { Text } from 'ink';
 
 export type BadgeVariant = 'success' | 'error' | 'warning' | 'info' | 'neutral';
 

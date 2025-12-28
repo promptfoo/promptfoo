@@ -6,8 +6,9 @@
  * summary box above the interactive results table.
  */
 
-import { Box, useApp } from 'ink';
 import { useEffect, useRef } from 'react';
+
+import { Box, useApp } from 'ink';
 import { EvalScreen } from './components/eval/EvalScreen';
 import { ErrorBoundary } from './components/shared/ErrorBoundary';
 import { ResultsTable } from './components/table/ResultsTable';
@@ -167,5 +168,3 @@ export function EvalApp(props: EvalAppProps) {
     </UIProvider>
   );
 }
-
-export default EvalApp;

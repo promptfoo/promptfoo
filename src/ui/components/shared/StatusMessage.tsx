@@ -2,8 +2,9 @@
  * Status message component for displaying alerts and notifications.
  */
 
-import { Box, Text } from 'ink';
 import React from 'react';
+
+import { Box, Text } from 'ink';
 
 export type StatusType = 'info' | 'success' | 'warning' | 'error';
 

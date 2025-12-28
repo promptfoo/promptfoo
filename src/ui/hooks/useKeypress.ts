@@ -5,8 +5,9 @@
  * support for common key combinations.
  */
 
-import { useInput } from 'ink';
 import { useEffect, useState } from 'react';
+
+import { useInput } from 'ink';
 
 /**
  * Key information passed to keypress handlers.

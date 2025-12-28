@@ -5,10 +5,12 @@
  * in the terminal, with proper TTY detection and cleanup handling.
  */
 
-import type { Instance } from 'ink';
 import type { ComponentType, ReactElement } from 'react';
+
 import { getEnvBool } from '../envars';
 import logger from '../logger';
+import { EXIT_CODES, TIMING } from './constants';
+import type { Instance } from 'ink';
 
 // Lazy load Ink to avoid loading React in non-interactive mode
 let inkModule: typeof import('ink') | null = null;
@@ -139,8 +141,7 @@ export async function renderInteractive(
   // Track render performance in debug mode
   const _onRender = debug
     ? ({ renderTime }: { renderTime: number }) => {
-        const SLOW_RENDER_MS = 200;
-        if (renderTime > SLOW_RENDER_MS) {
+        if (renderTime > TIMING.SLOW_RENDER_MS) {
           logger.warn(`Slow render detected: ${renderTime}ms`);
         }
       }
@@ -167,7 +168,7 @@ export async function renderInteractive(
     onSignal?.('SIGINT');
     // Set exit code and schedule graceful shutdown
     // This allows pending async operations to complete
-    process.exitCode = 130;
+    process.exitCode = EXIT_CODES.SIGINT;
     setImmediate(() => {
       process.exit();
     });
@@ -181,7 +182,7 @@ export async function renderInteractive(
     // Invoke callback for abort/cancel logic
     onSignal?.('SIGTERM');
     // Set exit code and schedule graceful shutdown
-    process.exitCode = 143;
+    process.exitCode = EXIT_CODES.SIGTERM;
     setImmediate(() => {
       process.exit();
     });

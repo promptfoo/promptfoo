@@ -6,8 +6,9 @@
  * getDerivedStateFromError and componentDidCatch lifecycle methods.
  */
 
-import { Box, Text } from 'ink';
 import React, { Component, type ReactNode } from 'react';
+
+import { Box, Text } from 'ink';
 import logger from '../../../logger';
 
 export interface ErrorBoundaryProps {
@@ -151,5 +152,3 @@ export function withErrorBoundary<P extends object>(
 
   return WithErrorBoundary;
 }
-
-export default ErrorBoundary;

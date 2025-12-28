@@ -9,14 +9,16 @@
  * - Keyboard navigation (q to close, arrows to navigate)
  */
 
+import { type ReactNode, useEffect } from 'react';
+
 import { Box, Text } from 'ink';
-import { useEffect, type ReactNode } from 'react';
-import { ResultFailureReason } from '../../../types';
+import { type Assertion, type GradingResult, ResultFailureReason } from '../../../types';
 import { isRawModeSupported } from '../../hooks/useKeypress';
 import { useTerminalSize } from '../../hooks/useTerminalSize';
 import { formatCost, formatLatency } from '../../utils/format';
 import { StatusBadge } from './StatusBadge';
-import type { CellDetailOverlayProps } from './types';
+
+import type { CellDetailOverlayProps, TableCellData } from './types';
 
 /**
  * Error category type for classification.
@@ -404,7 +406,7 @@ export function CellDetailOverlay({
 /**
  * Format assertion type for display.
  */
-function formatAssertionType(assertion: any): string {
+function formatAssertionType(assertion: Assertion | undefined): string {
   if (!assertion) {
     return 'assertion';
   }
@@ -426,7 +428,7 @@ function formatAssertionType(assertion: any): string {
 /**
  * Single assertion result row.
  */
-function AssertionRow({ result, isLast }: { result: any; isLast: boolean }) {
+function AssertionRow({ result, isLast }: { result: GradingResult; isLast: boolean }) {
   return (
     <Box flexDirection="column" marginBottom={isLast ? 0 : 1}>
       <Box>
@@ -453,7 +455,7 @@ function AssertionRow({ result, isLast }: { result: any; isLast: boolean }) {
 /**
  * Display assertion/grading results.
  */
-function AssertionResults({ gradingResult }: { gradingResult: any }) {
+function AssertionResults({ gradingResult }: { gradingResult: GradingResult | undefined }) {
   // Handle different grading result formats
   if (!gradingResult) {
     return <Text dimColor>No assertion details available</Text>;
@@ -465,7 +467,7 @@ function AssertionResults({ gradingResult }: { gradingResult: any }) {
     const results = gradingResult.componentResults;
     return (
       <Box flexDirection="column">
-        {results.map((result: any, idx: number) => (
+        {results.map((result, idx) => (
           <AssertionRow key={idx} result={result} isLast={idx === results.length - 1} />
         ))}
       </Box>
@@ -591,7 +593,7 @@ export function MinimalCellDetail({
   cellData,
   onClose: _onClose,
 }: {
-  cellData: any;
+  cellData: TableCellData;
   onClose: () => void;
 }) {
   return (
@@ -604,5 +606,3 @@ export function MinimalCellDetail({
     </Box>
   );
 }
-
-export default CellDetailOverlay;

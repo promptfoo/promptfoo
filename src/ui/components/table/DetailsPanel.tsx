@@ -12,12 +12,15 @@
  * - Copy functionality
  */
 
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+
 import { Box, Text, useInput } from 'ink';
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { useTerminalSize } from '../../hooks/useTerminalSize';
 import { copyToClipboard } from '../../utils/clipboard';
 import { formatCost, formatLatency } from '../../utils/format';
 import { StatusBadge } from './StatusBadge';
+
+import type { Assertion, GradingResult } from '../../../types';
 import type { TableCellData, TableColumn, TableRowData } from './types';
 
 /**
@@ -206,7 +209,10 @@ function AssertionRow({
 /**
  * Format assertion type for display.
  */
-function formatAssertionDisplay(assertion: any): { type: string; value?: string } {
+function formatAssertionDisplay(assertion: Assertion | undefined): {
+  type: string;
+  value?: string;
+} {
   if (!assertion) {
     return { type: 'assertion' };
   }
@@ -224,7 +230,7 @@ function formatAssertionDisplay(assertion: any): { type: string; value?: string 
 /**
  * Assertions section content.
  */
-function AssertionsContent({ gradingResult }: { gradingResult: any }) {
+function AssertionsContent({ gradingResult }: { gradingResult: GradingResult | null | undefined }) {
   if (!gradingResult) {
     return (
       <Box marginLeft={2}>
@@ -236,7 +242,7 @@ function AssertionsContent({ gradingResult }: { gradingResult: any }) {
   // Handle componentResults (multiple assertions)
   if (gradingResult.componentResults && Array.isArray(gradingResult.componentResults)) {
     const results = gradingResult.componentResults;
-    const passCount = results.filter((r: any) => r.pass).length;
+    const passCount = results.filter((r) => r.pass).length;
 
     return (
       <Box flexDirection="column">
@@ -245,7 +251,7 @@ function AssertionsContent({ gradingResult }: { gradingResult: any }) {
             {passCount}/{results.length} passed
           </Text>
         </Box>
-        {results.map((result: any, idx: number) => {
+        {results.map((result, idx) => {
           const { type, value } = formatAssertionDisplay(result.assertion);
           return (
             <AssertionRow
@@ -289,7 +295,10 @@ function AssertionsContent({ gradingResult }: { gradingResult: any }) {
 /**
  * Get assertion pass/fail counts.
  */
-function getAssertionCounts(gradingResult: any): { pass: number; total: number } {
+function getAssertionCounts(gradingResult: GradingResult | null | undefined): {
+  pass: number;
+  total: number;
+} {
   if (!gradingResult) {
     return { pass: 0, total: 0 };
   }
@@ -297,7 +306,7 @@ function getAssertionCounts(gradingResult: any): { pass: number; total: number }
   if (gradingResult.componentResults && Array.isArray(gradingResult.componentResults)) {
     const results = gradingResult.componentResults;
     return {
-      pass: results.filter((r: any) => r.pass).length,
+      pass: results.filter((r) => r.pass).length,
       total: results.length,
     };
   }
@@ -739,5 +748,3 @@ export function DetailsPanel({
     </Box>
   );
 }
-
-export default DetailsPanel;

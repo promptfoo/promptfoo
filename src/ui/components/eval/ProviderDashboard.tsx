@@ -6,7 +6,7 @@
  */
 
 import { Box, Text } from 'ink';
-import { useEvalState, type ProviderMetrics } from '../../contexts/EvalContext';
+import { type ProviderMetrics, useEvalState } from '../../contexts/EvalContext';
 import {
   formatAvgLatency,
   formatCost,

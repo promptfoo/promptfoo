@@ -5,6 +5,7 @@
  */
 
 import Eval from '../../models/eval';
+
 import type { CompletedPrompt, EvaluateTable } from '../../types/index';
 
 /**

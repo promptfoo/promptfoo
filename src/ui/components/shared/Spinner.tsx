@@ -3,7 +3,7 @@
  */
 
 import { Text } from 'ink';
-import { useSpinnerFrame, type SpinnerType } from '../../hooks/useSpinnerFrame';
+import { type SpinnerType, useSpinnerFrame } from '../../hooks/useSpinnerFrame';
 
 export interface SpinnerProps {
   /** Text to display next to the spinner */

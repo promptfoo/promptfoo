@@ -6,24 +6,25 @@
  * predictable state transitions and explicit state modeling.
  */
 
-import { useMachine } from '@xstate/react';
 import React, { createContext, useCallback, useContext, useMemo } from 'react';
 
-import type { EvaluateTable } from '../../types';
+import { useMachine } from '@xstate/react';
 import {
+  type EvalError,
+  type EvalMachineContext,
+  type EvalMachineEvent,
   evalMachine,
+  type GradingTokens,
   getEvalPhase,
   getProgressPercent,
   getSessionPhase,
   isComplete as machineIsComplete,
   isRunning as machineIsRunning,
-  type EvalError,
-  type EvalMachineContext,
-  type EvalMachineEvent,
-  type GradingTokens,
   type ProviderMetrics,
   type TokenMetricsPayload,
 } from '../machines/evalMachine';
+
+import type { EvaluateTable } from '../../types';
 import type { LogEntry } from '../utils/InkUITransport';
 
 // Re-export types for consumers

@@ -9,9 +9,11 @@
  * - Newline normalization
  */
 
-import { Box, Text } from 'ink';
 import { memo } from 'react';
-import { StatusBadge, getStatusBadgeWidth } from './StatusBadge';
+
+import { Box, Text } from 'ink';
+import { getStatusBadgeWidth, StatusBadge } from './StatusBadge';
+
 import type { TableCellProps } from './types';
 
 /**
@@ -182,5 +184,3 @@ export const IndexCell = memo(function IndexCell({
   // Index cells don't expand, so show minimal selection indicator
   return <Text dimColor>{paddedText}</Text>;
 });
-
-export default TableCell;

@@ -23,101 +23,94 @@
  * ```
  */
 
+// Eval components
+export {
+  ErrorSummary,
+  EvalHeader,
+  type EvalHeaderProps,
+  EvalScreen,
+  type EvalScreenProps,
+  ProviderStatusList,
+} from './components/eval';
+// Shared components
+export {
+  Badge,
+  type BadgeVariant,
+  CountBadge,
+  ErrorDisplay,
+  InlineProgress,
+  PassFail,
+  ProgressBar,
+  type ProgressBarProps,
+  Score,
+  Spinner,
+  type SpinnerProps,
+  StatusMessage,
+  StatusSpinner,
+  type StatusSpinnerProps,
+  StatusText,
+  WarningList,
+} from './components/shared';
+// Contexts
+export {
+  type EvalAction,
+  type EvalError,
+  EvalProvider,
+  type EvalState,
+  type ProviderStatus,
+  UIProvider,
+  type UIState,
+  useCompactMode,
+  useEval,
+  useEvalProgress,
+  useEvalState,
+  useTerminalSize,
+  useUI,
+} from './contexts';
+// Main app component
+export { EvalApp, type EvalAppProps } from './EvalApp';
+// Bridge utilities
+export {
+  createEvalUIController,
+  createProgressCallback,
+  type EvalUIController,
+  extractProviderIds,
+  wrapEvaluateOptions,
+} from './evalBridge';
+// Eval runner
+export {
+  type EvalRunnerOptions,
+  type InkEvalResult,
+  initInkEval,
+  shouldUseInkUI,
+} from './evalRunner';
+// Hooks
+export {
+  type KeyInfo,
+  SPINNER_FRAMES,
+  type SpinnerType,
+  useConfirmKey,
+  useKeypress,
+  useNavigationKeys,
+  useSpinner,
+  useSpinnerFrame,
+} from './hooks';
 // Core rendering utilities
 export {
+  getTerminalSize,
+  isInteractiveUIForced,
+  type RenderOptions,
+  type RenderResult,
   renderInteractive,
   runInteractive,
   shouldUseInteractiveUI,
-  isInteractiveUIForced,
-  getTerminalSize,
   supportsColor,
-  type RenderOptions,
-  type RenderResult,
 } from './render';
-
-// Main app component
-export { EvalApp, type EvalAppProps } from './EvalApp';
-
-// Contexts
-export {
-  EvalProvider,
-  useEval,
-  useEvalState,
-  useEvalProgress,
-  UIProvider,
-  useUI,
-  useTerminalSize,
-  useCompactMode,
-  type EvalState,
-  type EvalAction,
-  type ProviderStatus,
-  type EvalError,
-  type UIState,
-} from './contexts';
-
-// Hooks
-export {
-  useSpinnerFrame,
-  useSpinner,
-  useKeypress,
-  useNavigationKeys,
-  useConfirmKey,
-  SPINNER_FRAMES,
-  type SpinnerType,
-  type KeyInfo,
-} from './hooks';
-
-// Shared components
-export {
-  Spinner,
-  StatusSpinner,
-  ProgressBar,
-  InlineProgress,
-  Badge,
-  PassFail,
-  Score,
-  CountBadge,
-  StatusMessage,
-  StatusText,
-  ErrorDisplay,
-  WarningList,
-  type SpinnerProps,
-  type StatusSpinnerProps,
-  type ProgressBarProps,
-  type BadgeVariant,
-} from './components/shared';
-
-// Eval components
-export {
-  EvalScreen,
-  EvalHeader,
-  ProviderStatusList,
-  ErrorSummary,
-  type EvalScreenProps,
-  type EvalHeaderProps,
-} from './components/eval';
-
-// Bridge utilities
-export {
-  createProgressCallback,
-  createEvalUIController,
-  wrapEvaluateOptions,
-  extractProviderIds,
-  type EvalUIController,
-} from './evalBridge';
-
-// Eval runner
-export {
-  initInkEval,
-  shouldUseInkUI,
-  type EvalRunnerOptions,
-  type InkEvalResult,
-} from './evalRunner';
 
 // Re-export non-interactive utilities (but keep them lazy-loadable)
 export type {
-  TextOutput,
   NonInteractiveProgress,
   NonInteractiveSpinner,
   ProgressUpdate,
+  TextOutput,
 } from './noninteractive';

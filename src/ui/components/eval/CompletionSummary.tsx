@@ -290,5 +290,3 @@ export function CompletionSummary({
     </Box>
   );
 }
-
-export default CompletionSummary;

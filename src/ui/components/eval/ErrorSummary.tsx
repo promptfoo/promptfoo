@@ -3,7 +3,8 @@
  */
 
 import { Box, Text } from 'ink';
-import { useEvalState, type EvalError } from '../../contexts/EvalContext';
+import { LIMITS } from '../../constants';
+import { type EvalError, useEvalState } from '../../contexts/EvalContext';
 
 export interface ErrorItemProps {
   error: EvalError;
@@ -13,14 +14,16 @@ export interface ErrorItemProps {
 function ErrorItem({ error, showDetails = false }: ErrorItemProps) {
   const { provider, prompt, message, vars } = error;
 
-  // Truncate long values
-  const maxMessageLength = 80;
+  // Truncate long values using centralized constants
   const displayMessage =
-    message.length > maxMessageLength ? message.slice(0, maxMessageLength - 3) + '...' : message;
+    message.length > LIMITS.MAX_ERROR_MESSAGE_LENGTH
+      ? message.slice(0, LIMITS.MAX_ERROR_MESSAGE_LENGTH - 3) + '...'
+      : message;
 
-  const maxPromptLength = 30;
   const displayPrompt =
-    prompt.length > maxPromptLength ? prompt.slice(0, maxPromptLength - 3) + '...' : prompt;
+    prompt.length > LIMITS.MAX_PROMPT_PREVIEW_LENGTH
+      ? prompt.slice(0, LIMITS.MAX_PROMPT_PREVIEW_LENGTH - 3) + '...'
+      : prompt;
 
   return (
     <Box flexDirection="column" marginLeft={2}>

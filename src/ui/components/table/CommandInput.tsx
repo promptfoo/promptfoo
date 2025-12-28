@@ -12,6 +12,7 @@
  */
 
 import { Box, Text } from 'ink';
+
 import type { ColumnFilter, FilterOperator } from './types';
 
 export interface CommandInputProps {
@@ -203,5 +204,3 @@ export function CommandInput({ input, isActive, error }: CommandInputProps) {
     </Box>
   );
 }
-
-export default CommandInput;

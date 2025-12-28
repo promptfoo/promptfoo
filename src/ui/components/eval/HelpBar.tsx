@@ -97,6 +97,8 @@ export function HelpBar({
           <ShortcutItem shortcutKey="e" label="errors" active={showErrorDetails} />
         </>
       )}
+      <Separator />
+      <ShortcutItem shortcutKey="?" label="help" />
       {isComplete && (
         <>
           <Separator />
@@ -106,5 +108,3 @@ export function HelpBar({
     </Box>
   );
 }
-
-export default HelpBar;

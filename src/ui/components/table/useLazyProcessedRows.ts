@@ -12,13 +12,9 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef } from 'react';
-import { getCellStatus, type EvaluateTable, type TableCellData, type TableRowData } from './types';
 
-/**
- * Configuration constants for lazy processing.
- */
-const BUFFER_SIZE = 10; // Pre-process 10 rows above/below visible area
-const MAX_CACHE_SIZE = 200; // Keep ~200 processed rows in memory
+import { LIMITS } from '../../constants';
+import { type EvaluateTable, getCellStatus, type TableCellData, type TableRowData } from './types';
 
 /**
  * Truncate text to a maximum length.
@@ -167,8 +163,8 @@ export function useLazyProcessedRows(
       return;
     }
 
-    const bufferStart = Math.max(0, visibleStart - BUFFER_SIZE);
-    const bufferEnd = Math.min(data.body.length, visibleEnd + BUFFER_SIZE);
+    const bufferStart = Math.max(0, visibleStart - LIMITS.ROW_BUFFER_SIZE);
+    const bufferEnd = Math.min(data.body.length, visibleEnd + LIMITS.ROW_BUFFER_SIZE);
 
     const handle = requestIdleCallback(() => {
       // Process buffer rows
@@ -180,7 +176,7 @@ export function useLazyProcessedRows(
 
       // Evict old entries to keep memory bounded
       const centerIndex = Math.floor((visibleStart + visibleEnd) / 2);
-      evictOldEntries(processedCache.current, centerIndex, MAX_CACHE_SIZE);
+      evictOldEntries(processedCache.current, centerIndex, LIMITS.MAX_CACHE_SIZE);
     });
 
     return () => cancelIdleCallback(handle);
@@ -208,5 +204,3 @@ export function useLazyProcessedRows(
     processAllRowsForFilter,
   };
 }
-
-export default useLazyProcessedRows;

@@ -3,22 +3,21 @@
  */
 
 export {
-  EvalProvider,
-  useEval,
-  useEvalState,
-  useEvalProgress,
-  type EvalState,
   type EvalAction,
-  type EvalProviderProps,
-  type ProviderStatus,
   type EvalError,
+  EvalProvider,
+  type EvalProviderProps,
+  type EvalState,
+  type ProviderStatus,
+  useEval,
+  useEvalProgress,
+  useEvalState,
 } from './EvalContext';
-
 export {
   UIProvider,
-  useUI,
-  useTerminalSize,
-  useCompactMode,
-  type UIState,
   type UIProviderProps,
+  type UIState,
+  useCompactMode,
+  useTerminalSize,
+  useUI,
 } from './UIContext';

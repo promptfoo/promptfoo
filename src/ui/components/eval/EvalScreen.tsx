@@ -5,26 +5,29 @@
  * It shows all information in a clean, consolidated view without duplication.
  */
 
-import { Box, Text, useApp } from 'ink';
 import React, { memo, useEffect, useRef, useState } from 'react';
+
+import { Box, Text, useApp } from 'ink';
+import { EVAL_COL_WIDTH, TIMING } from '../../constants';
 import { useEval, useEvalState } from '../../contexts/EvalContext';
 import { useKeypress } from '../../hooks/useKeypress';
 import { useTerminalTitle } from '../../hooks/useTerminalTitle';
 import { useTokenMetrics } from '../../hooks/useTokenMetrics';
 import {
+  calculateETA,
+  formatAvgLatency,
   formatCost,
   formatDuration,
-  formatTokens,
-  formatAvgLatency,
-  truncate,
-  calculateETA,
   formatETA,
+  formatTokens,
+  truncate,
 } from '../../utils/format';
 import { setInkUITransportLevel } from '../../utils/InkUITransport';
-import { HelpBar } from './HelpBar';
-import { LogPanel } from './LogPanel';
 import { ProgressBar } from '../shared/ProgressBar';
 import { Spinner } from '../shared/Spinner';
+import { EvalHelpOverlay } from './EvalHelpOverlay';
+import { HelpBar } from './HelpBar';
+import { LogPanel } from './LogPanel';
 
 export interface ShareContext {
   /** Organization name (from cloud config) */
@@ -65,30 +68,8 @@ export interface EvalScreenProps {
   shareContext?: ShareContext | null;
 }
 
-// Column widths for consistent alignment
-const COL_WIDTH = {
-  status: 2,
-  provider: 20,
-  progress: 18, // Needs space for bar[8] + brackets[2] + space[1] + count[9] = 20, but we use shorter notation
-  results: 14,
-  tokens: 8,
-  cost: 8,
-  latency: 6,
-};
-
-/**
- * Activity threshold in milliseconds.
- * Providers with activity within this window are considered "active" and highlighted.
- * This enables multi-provider activity highlighting with high concurrency.
- */
-const ACTIVITY_THRESHOLD_MS = 500;
-
-/**
- * TICK interval during evaluation (ms).
- * Faster = smoother activity indicators but more re-renders.
- * 250ms provides smooth visual feedback without excessive CPU usage.
- */
-const TICK_INTERVAL_MS = 250;
+// Use centralized column widths from constants
+const COL_WIDTH = EVAL_COL_WIDTH;
 
 /**
  * Table header row (memoized - never changes).
@@ -410,6 +391,9 @@ export function EvalScreen({
   // This prevents spurious re-renders from other state changes (like spinner updates)
   const [activityNow, setActivityNow] = useState(() => Date.now());
 
+  // Help overlay state
+  const [showHelpOverlay, setShowHelpOverlay] = useState(false);
+
   // Check if we're in results phase - if so, ResultsTable handles keyboard input
   const inResultsPhase = state.sessionPhase === 'results';
 
@@ -420,10 +404,22 @@ export function EvalScreen({
   // Disabled when in results phase - ResultsTable handles keyboard input
   useKeypress(
     (key) => {
+      // Handle help overlay separately - if it's open, close it on any key
+      if (showHelpOverlay) {
+        setShowHelpOverlay(false);
+        return;
+      }
+
       // Handle escape and 'q' for exit
       if (key.name === 'escape' || key.key.toLowerCase() === 'q') {
         onExit?.();
         exit();
+        return;
+      }
+
+      // Handle '?' for help overlay
+      if (key.key === '?') {
+        setShowHelpOverlay(true);
         return;
       }
 
@@ -456,7 +452,7 @@ export function EvalScreen({
       dispatch({ type: 'TICK' });
       // Update activity timestamp on each TICK for stable activity detection
       setActivityNow(Date.now());
-    }, TICK_INTERVAL_MS);
+    }, TIMING.TICK_INTERVAL_MS);
 
     return () => clearInterval(timer);
   }, [state.phase, dispatch]);
@@ -571,7 +567,7 @@ export function EvalScreen({
             const isActive =
               provider.status === 'running' &&
               provider.lastActivityMs > 0 &&
-              activityNow - provider.lastActivityMs < ACTIVITY_THRESHOLD_MS;
+              activityNow - provider.lastActivityMs < TIMING.ACTIVITY_THRESHOLD_MS;
             return (
               <ProviderRow
                 key={id}
@@ -601,7 +597,7 @@ export function EvalScreen({
 
       {/* Help bar - only during active evaluation, hidden on completion to avoid
           confusion during transition to results table which has different shortcuts */}
-      {showHelp && isRawModeSupported && !isComplete && (
+      {showHelp && isRawModeSupported && !isComplete && !showHelpOverlay && (
         <HelpBar
           isComplete={isComplete}
           showVerbose={state.showVerbose}
@@ -610,8 +606,14 @@ export function EvalScreen({
           logWarningCount={state.logs.filter((log) => log.level === 'warn').length}
         />
       )}
+
+      {/* Help overlay - shown when user presses '?' */}
+      {showHelpOverlay && (
+        <EvalHelpOverlay
+          onClose={() => setShowHelpOverlay(false)}
+          hasErrors={state.errorCount > 0}
+        />
+      )}
     </Box>
   );
 }
-
-export default EvalScreen;

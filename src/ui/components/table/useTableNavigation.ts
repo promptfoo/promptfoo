@@ -27,8 +27,10 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { parseFilterCommand } from './CommandInput';
+
 import { isRawModeSupported, useKeypress } from '../../hooks/useKeypress';
+import { parseFilterCommand } from './CommandInput';
+
 import type { FilterMode, TableFilterState, TableNavigationState } from './types';
 
 /**
@@ -503,6 +505,9 @@ export function useTableNavigation({
 
   const dispatch = useCallback(
     (action: NavigationAction) => {
+      // Capture the pre-action state to check if we're toggling expand
+      const wasExpanded = stateRef.current.expandedCell !== null;
+
       setState((prev) => {
         const newState = navigationReducer(prev, action, bounds);
         // Update ref synchronously to avoid race conditions with rapid key presses
@@ -510,12 +515,14 @@ export function useTableNavigation({
         return newState;
       });
 
-      // Handle expand callback
-      if (action.type === 'TOGGLE_EXPAND' && !state.expandedCell && onExpand) {
-        onExpand(state.selectedRow, state.selectedCol);
+      // Handle expand callback - use stateRef to get the correct position
+      // We're expanding if: action is TOGGLE_EXPAND, we weren't expanded, and now we are
+      if (action.type === 'TOGGLE_EXPAND' && !wasExpanded && onExpand) {
+        // Use stateRef.current which was just updated synchronously in setState
+        onExpand(stateRef.current.selectedRow, stateRef.current.selectedCol);
       }
     },
-    [bounds, state.selectedRow, state.selectedCol, state.expandedCell, onExpand],
+    [bounds, onExpand],
   );
 
   // Reset state when row/col count changes
@@ -786,5 +793,3 @@ export function getVisibleRowRange(
   const end = Math.min(scrollOffset + visibleRows, totalRows);
   return { start, end };
 }
-
-export default useTableNavigation;

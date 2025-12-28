@@ -10,8 +10,9 @@
  * - Pass/Fail/Error status coloring
  */
 
-import { Box, Text } from 'ink';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+
+import { Box, Text } from 'ink';
 import { isRawModeSupported } from '../../hooks/useKeypress';
 import { copyToClipboard } from '../../utils/clipboard';
 import { convertTableToFormat } from '../../utils/export';
@@ -27,15 +28,15 @@ import { SearchInput } from './SearchInput';
 import { TableHeader } from './TableHeader';
 import { TableRow } from './TableRow';
 import {
-  getCellStatus,
   type EvaluateTable,
+  getCellStatus,
   type ResultsTableProps,
   type TableCellData,
   type TableFilterState,
   type TableRowData,
 } from './types';
 import { useTableLayout } from './useTableLayout';
-import { useTableNavigation, getVisibleRowRange } from './useTableNavigation';
+import { getVisibleRowRange, useTableNavigation } from './useTableNavigation';
 
 /**
  * Default configuration values.
@@ -753,5 +754,3 @@ export function StaticResultsTable({
     <ResultsTable data={data} maxRows={maxRows} maxCellLength={maxCellLength} interactive={false} />
   );
 }
-
-export default ResultsTable;

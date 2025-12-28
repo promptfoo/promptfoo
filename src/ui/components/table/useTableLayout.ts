@@ -9,29 +9,33 @@
  */
 
 import { useMemo } from 'react';
+
+import { LIMITS, TABLE_LAYOUT } from '../../constants';
 import { useTerminalSize } from '../../hooks/useTerminalSize';
+
 import type { CompletedPrompt, EvaluateTable, TableColumn, TableLayout } from './types';
 
 /**
  * Layout configuration constants.
+ * Uses centralized constants from ../../constants.ts
  */
 const LAYOUT_CONFIG = {
   /** Minimum terminal width for table mode */
-  MIN_TABLE_WIDTH: 60,
+  MIN_TABLE_WIDTH: TABLE_LAYOUT.MIN_TABLE_WIDTH,
   /** Index column width */
-  INDEX_WIDTH: 5,
+  INDEX_WIDTH: TABLE_LAYOUT.INDEX_WIDTH,
   /** Minimum variable column width */
-  MIN_VAR_WIDTH: 8,
+  MIN_VAR_WIDTH: TABLE_LAYOUT.MIN_VAR_WIDTH,
   /** Maximum variable column width */
-  MAX_VAR_WIDTH: 30,
+  MAX_VAR_WIDTH: TABLE_LAYOUT.MAX_VAR_WIDTH,
   /** Minimum output column width */
-  MIN_OUTPUT_WIDTH: 15,
+  MIN_OUTPUT_WIDTH: TABLE_LAYOUT.MIN_OUTPUT_WIDTH,
   /** Border/separator overhead per column */
   BORDER_OVERHEAD: 3, // ' | ' between columns
   /** Status badge width + space */
-  BADGE_WIDTH: 8, // '[PASS] ' = 7 + 1
+  BADGE_WIDTH: TABLE_LAYOUT.BADGE_WIDTH,
   /** Number of visible rows before scrolling */
-  DEFAULT_VISIBLE_ROWS: 15,
+  DEFAULT_VISIBLE_ROWS: LIMITS.MAX_VISIBLE_ROWS,
 };
 
 /**
@@ -183,7 +187,7 @@ export function useTableLayout(
 
     // Calculate visible rows based on terminal height
     // Reserve space for: header (2 lines), borders (2), status line (1), padding (2)
-    const reservedLines = 7;
+    const reservedLines = LIMITS.RESERVED_UI_LINES;
     const availableLines = Math.max(5, terminalHeight - reservedLines);
     const visibleRowCount = Math.min(maxVisibleRows, availableLines, body.length);
 
@@ -220,7 +224,7 @@ export function calculateTableLayout(
   }
 
   const contentWidth = columns.reduce((sum, c) => sum + c.width, 0);
-  const reservedLines = 7;
+  const reservedLines = LIMITS.RESERVED_UI_LINES;
   const availableLines = Math.max(5, terminalHeight - reservedLines);
   const visibleRowCount = Math.min(maxVisibleRows, availableLines, body.length);
 
@@ -232,5 +236,3 @@ export function calculateTableLayout(
     visibleRowCount,
   };
 }
-
-export default useTableLayout;

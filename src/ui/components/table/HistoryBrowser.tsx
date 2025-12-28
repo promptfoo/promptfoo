@@ -8,8 +8,9 @@
  * - Load selected eval to replace current view
  */
 
-import { Box, Text, useInput, useStdout } from 'ink';
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
+
+import { Box, Text, useInput, useStdout } from 'ink';
 import {
   type EvalListItem,
   fetchEvalList,
@@ -18,6 +19,7 @@ import {
   formatShortId,
   getPassRateIndicator,
 } from '../../utils/history';
+
 import type { EvaluateTable } from './types';
 
 export interface HistoryBrowserProps {
@@ -417,5 +419,3 @@ export const HistoryBrowser = memo(function HistoryBrowser({
     </Box>
   );
 });
-
-export default HistoryBrowser;

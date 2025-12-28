@@ -5,16 +5,18 @@
  * It handles the lifecycle of rendering, progress updates, and cleanup.
  */
 
+import { isCI } from '../envars';
 import logger from '../logger';
-import type { EvaluateOptions, PromptMetrics, RunEvalOptions, TestSuite } from '../types/index';
 import { EvalApp } from './EvalApp';
-import { extractProviderIds, type EvalUIController } from './evalBridge';
-import { renderInteractive, shouldUseInteractiveUI, type RenderResult } from './render';
+import { type EvalUIController, extractProviderIds } from './evalBridge';
+import { type RenderResult, renderInteractive, shouldUseInteractiveUI } from './render';
 import {
+  type InkUITransport,
   registerInkUITransport,
   unregisterInkUITransport,
-  type InkUITransport,
 } from './utils/InkUITransport';
+
+import type { EvaluateOptions, PromptMetrics, RunEvalOptions, TestSuite } from '../types/index';
 
 export interface ShareContext {
   /** Organization name (from cloud config) */
@@ -208,27 +210,28 @@ export async function initInkEval(options: EvalRunnerOptions): Promise<InkEvalRe
 /**
  * Check if the Ink UI should be used for this evaluation.
  *
- * The Ink UI is used when:
- * - PROMPTFOO_INTERACTIVE_UI is set to true (opt-in for now)
- * - AND one of:
- *   - stdout is a TTY
- *   - PROMPTFOO_FORCE_INTERACTIVE_UI is set (allows non-TTY usage)
+ * The Ink UI is enabled by default when:
+ * - stdout is a TTY (interactive terminal)
+ * - NOT in a CI environment
+ *
+ * Can be controlled via:
+ * - PROMPTFOO_FORCE_INTERACTIVE_UI=true - Force enable (even in CI)
+ * - PROMPTFOO_DISABLE_INTERACTIVE_UI=true - Force disable
+ * - --no-interactive CLI flag (sets disabled)
  */
 export function shouldUseInkUI(): boolean {
-  // For now, make it opt-in via environment variable
-  const explicitEnable = process.env.PROMPTFOO_INTERACTIVE_UI === 'true';
-  const forceEnable = process.env.PROMPTFOO_FORCE_INTERACTIVE_UI === 'true';
-
-  if (!explicitEnable) {
-    logger.debug('Ink UI not enabled (set PROMPTFOO_INTERACTIVE_UI=true to enable)');
-    return false;
-  }
-
-  // If force is set, skip TTY checks
-  if (forceEnable) {
+  // Force enable overrides everything (useful for testing in CI)
+  if (process.env.PROMPTFOO_FORCE_INTERACTIVE_UI === 'true') {
     logger.debug('Ink UI force-enabled via PROMPTFOO_FORCE_INTERACTIVE_UI');
     return true;
   }
 
+  // CI environments get non-interactive by default
+  if (isCI()) {
+    logger.debug('Ink UI disabled in CI environment');
+    return false;
+  }
+
+  // Use the shared interactive UI check (handles TTY, explicit disable, etc.)
   return shouldUseInteractiveUI();
 }

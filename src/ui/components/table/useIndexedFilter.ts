@@ -9,8 +9,11 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { EvaluateTable, TableRowData } from './types';
+
+import { LIMITS } from '../../constants';
 import { getCellStatus } from './types';
+
+import type { EvaluateTable, TableRowData } from './types';
 
 export type FilterMode = 'all' | 'pass' | 'fail' | 'error' | 'diff';
 
@@ -182,7 +185,7 @@ export function useIndexedFilter(
     }
 
     setIsSearching(true);
-    const BATCH_SIZE = 100;
+    const BATCH_SIZE = LIMITS.FILTER_BATCH_SIZE;
     let currentBatch = 0;
     const results: number[] = [];
 
@@ -255,5 +258,3 @@ export function useIndexedFilter(
     totalRows: data.body.length,
   };
 }
-
-export default useIndexedFilter;

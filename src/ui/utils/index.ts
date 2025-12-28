@@ -2,7 +2,6 @@
  * UI utility exports.
  */
 
-export { RingBuffer } from './RingBuffer';
 export {
   formatCost,
   formatLatency,
@@ -11,3 +10,4 @@ export {
   truncate,
 } from './format';
 export { InkUITransport, registerInkUITransport } from './InkUITransport';
+export { RingBuffer } from './RingBuffer';

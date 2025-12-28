@@ -4,15 +4,17 @@
  * Shows available export formats and handles selection via keyboard.
  */
 
-import { Box, Text, useInput } from 'ink';
 import { memo, useState } from 'react';
-import type { EvaluateTable } from '../../../types/index';
+
+import { Box, Text, useInput } from 'ink';
 import {
   EXPORT_FORMATS,
   type ExportFormat,
   exportTableToFile,
   getFormatFromKey,
 } from '../../utils/export';
+
+import type { EvaluateTable } from '../../../types/index';
 
 export interface ExportMenuProps {
   /** Table data to export */
@@ -133,5 +135,3 @@ export const ExportMenu = memo(function ExportMenu({
     </Box>
   );
 });
-
-export default ExportMenu;

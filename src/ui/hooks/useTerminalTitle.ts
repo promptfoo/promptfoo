@@ -5,8 +5,9 @@
  * and ensure correct cleanup when the component unmounts.
  */
 
-import { useStdout } from 'ink';
 import { useEffect } from 'react';
+
+import { useStdout } from 'ink';
 
 /**
  * Set the terminal window/tab title.

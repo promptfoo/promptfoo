@@ -8,8 +8,10 @@
  * - Compact mode support
  */
 
-import { Box, Text } from 'ink';
 import React, { memo } from 'react';
+
+import { Box, Text } from 'ink';
+
 import type { TableColumn, TableHeaderProps } from './types';
 
 /**
@@ -107,5 +109,3 @@ export function MinimalHeader() {
     </Box>
   );
 }
-
-export default TableHeader;

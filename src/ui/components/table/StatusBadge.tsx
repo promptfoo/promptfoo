@@ -8,6 +8,7 @@
  */
 
 import { Text } from 'ink';
+
 import type { CellStatus, StatusBadgeProps } from './types';
 
 /**
@@ -71,5 +72,3 @@ export function StatusIndicator({ status }: StatusBadgeProps) {
     </Text>
   );
 }
-
-export default StatusBadge;

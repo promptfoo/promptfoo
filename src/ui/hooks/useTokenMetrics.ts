@@ -6,16 +6,12 @@
  */
 
 import { useCallback, useEffect, useRef } from 'react';
-import type { TokenUsage } from '../../types/shared';
-import { TokenUsageTracker } from '../../util/tokenUsage';
-import type { EvalAction, TokenMetricsPayload } from '../contexts/EvalContext';
 
-/**
- * Debounce interval for batching token updates (ms).
- * Lower = more responsive but more renders.
- * Higher = fewer renders but more latency.
- */
-const DEBOUNCE_MS = 100;
+import { TokenUsageTracker } from '../../util/tokenUsage';
+import { TIMING } from '../constants';
+
+import type { TokenUsage } from '../../types/shared';
+import type { EvalAction, TokenMetricsPayload } from '../contexts/EvalContext';
 
 /**
  * Convert TokenUsage to TokenMetricsPayload for dispatch.
@@ -53,7 +49,7 @@ function normalizeProviderId(trackerId: string): string {
  *
  * Uses event-based subscription with debouncing for efficient updates:
  * - Subscribes to TokenUsageTracker on mount
- * - Batches rapid updates within DEBOUNCE_MS window
+ * - Batches rapid updates within TOKEN_DEBOUNCE_MS window
  * - Flushes immediately on first update, then debounces subsequent updates
  * - Normalizes provider IDs to match EvalContext keys
  *
@@ -121,7 +117,7 @@ export function useTokenMetrics(
     debounceTimer.current = setTimeout(() => {
       flushUpdates();
       debounceTimer.current = null;
-    }, DEBOUNCE_MS);
+    }, TIMING.TOKEN_DEBOUNCE_MS);
   }, [flushUpdates]);
 
   /**

@@ -5,6 +5,8 @@
  * and the React state management in the Ink UI.
  */
 
+import { TIMING } from './constants';
+
 import type { EvaluateOptions, EvaluateTable, PromptMetrics, RunEvalOptions } from '../types/index';
 import type { EvalAction, LogEntry, SessionPhase, SharingStatus } from './contexts/EvalContext';
 
@@ -27,20 +29,13 @@ export interface BatchProgressItem {
 }
 
 /**
- * Batch interval in milliseconds.
- * At 50ms, we get max 20 batches/second which is visually smooth.
- * Lower = more responsive but more CPU; Higher = less CPU but choppier.
- */
-const BATCH_INTERVAL_MS = 50;
-
-/**
  * Creates a batching dispatcher that queues progress updates and flushes them
  * at a throttled rate. This dramatically reduces the number of state updates
  * and re-renders when running with high concurrency.
  *
  * Design:
  * - First item in a batch is dispatched immediately for responsiveness
- * - Subsequent items are queued and flushed after BATCH_INTERVAL_MS
+ * - Subsequent items are queued and flushed after BATCH_INTERVAL_MS interval
  * - On flush, all queued items are sent as a single BATCH_PROGRESS event
  * - Timer is cleared on cleanup to prevent memory leaks
  */
@@ -79,7 +74,7 @@ function createBatchingDispatcher(dispatch: (action: EvalAction) => void) {
       });
       // Schedule flush for any subsequent items
       if (!flushTimer) {
-        flushTimer = setTimeout(flushBatch, BATCH_INTERVAL_MS);
+        flushTimer = setTimeout(flushBatch, TIMING.BATCH_INTERVAL_MS);
       }
       return;
     }
@@ -89,7 +84,7 @@ function createBatchingDispatcher(dispatch: (action: EvalAction) => void) {
 
     // Ensure flush is scheduled
     if (!flushTimer) {
-      flushTimer = setTimeout(flushBatch, BATCH_INTERVAL_MS);
+      flushTimer = setTimeout(flushBatch, TIMING.BATCH_INTERVAL_MS);
     }
   }
 

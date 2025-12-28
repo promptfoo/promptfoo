@@ -2,8 +2,9 @@
  * Progress bar component for tracking task completion.
  */
 
-import { Box, Text, useStdout } from 'ink';
 import { useMemo } from 'react';
+
+import { Box, Text, useStdout } from 'ink';
 
 export interface ProgressBarProps {
   /** Current progress value */

@@ -256,5 +256,3 @@ export class RingBuffer<T> {
     return result;
   }
 }
-
-export default RingBuffer;

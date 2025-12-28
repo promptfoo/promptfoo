@@ -9,10 +9,13 @@
  * - Compact card mode for narrow terminals
  */
 
-import { Box, Text } from 'ink';
 import { memo, type ReactNode } from 'react';
+
+import { Box, Text } from 'ink';
+import { areCompactRowPropsEqual, areTableRowPropsEqual } from './rowComparison';
 import { StatusBadge, StatusIndicator } from './StatusBadge';
 import { IndexCell, TableCell, TextCell } from './TableCell';
+
 import type { TableRowData, TableRowProps } from './types';
 
 /**
@@ -29,180 +32,139 @@ function ColumnSeparator({ isSelected = false }: { isSelected?: boolean }) {
  * - Selection state hasn't changed
  * - Columns reference hasn't changed
  */
-export const TableRow = memo(
-  function TableRow({
-    rowData,
-    columns,
-    isSelected = false,
-    selectedCol,
-    isCompact = false,
-  }: TableRowProps) {
-    if (isCompact) {
-      return <CompactRow rowData={rowData} isSelected={isSelected} />;
-    }
+export const TableRow = memo(function TableRow({
+  rowData,
+  columns,
+  isSelected = false,
+  selectedCol,
+  isCompact = false,
+}: TableRowProps) {
+  if (isCompact) {
+    return <CompactRow rowData={rowData} isSelected={isSelected} />;
+  }
 
-    let varIdx = 0;
-    let outputIdx = 0;
+  let varIdx = 0;
+  let outputIdx = 0;
 
-    return (
-      <Box>
-        {columns.map((column, colIdx) => {
-          const isCellSelected = isSelected && selectedCol === colIdx;
+  return (
+    <Box>
+      {columns.map((column, colIdx) => {
+        const isCellSelected = isSelected && selectedCol === colIdx;
 
-          let cellContent: ReactNode;
+        let cellContent: ReactNode;
 
-          switch (column.type) {
-            case 'index':
-              cellContent = (
-                <IndexCell index={rowData.index} width={column.width} isSelected={isCellSelected} />
-              );
-              break;
+        switch (column.type) {
+          case 'index':
+            cellContent = (
+              <IndexCell index={rowData.index} width={column.width} isSelected={isCellSelected} />
+            );
+            break;
 
-            case 'var': {
-              const varValue = rowData.originalRow.vars[varIdx++] || '';
-              cellContent = (
-                <TextCell content={varValue} width={column.width} isSelected={isCellSelected} />
-              );
-              break;
-            }
-
-            case 'output': {
-              const cellData = rowData.cells[outputIdx++];
-              if (cellData) {
-                cellContent = (
-                  <TableCell
-                    data={cellData}
-                    width={column.width}
-                    isSelected={isCellSelected}
-                    showBadge={true}
-                  />
-                );
-              } else {
-                cellContent = (
-                  <TextCell content="-" width={column.width} isSelected={isCellSelected} dimColor />
-                );
-              }
-              break;
-            }
+          case 'var': {
+            const varValue = rowData.originalRow.vars[varIdx++] || '';
+            cellContent = (
+              <TextCell content={varValue} width={column.width} isSelected={isCellSelected} />
+            );
+            break;
           }
 
-          return (
-            <Box key={column.id} flexShrink={0}>
-              {colIdx > 0 && <ColumnSeparator isSelected={isSelected} />}
-              {cellContent}
-            </Box>
-          );
-        })}
-      </Box>
-    );
-  },
-  (prevProps, nextProps) => {
-    // Custom comparison: only re-render if row data or selection changed
-    // Return true if props are equal (no re-render needed)
-    if (prevProps.isSelected !== nextProps.isSelected) {
-      return false;
-    }
-    if (prevProps.selectedCol !== nextProps.selectedCol) {
-      return false;
-    }
-    if (prevProps.isCompact !== nextProps.isCompact) {
-      return false;
-    }
-    if (prevProps.rowData.testIdx !== nextProps.rowData.testIdx) {
-      return false;
-    }
-    if (prevProps.rowData.index !== nextProps.rowData.index) {
-      return false;
-    }
-    // Columns rarely change - use reference equality
-    if (prevProps.columns !== nextProps.columns) {
-      return false;
-    }
-    return true;
-  },
-);
+          case 'output': {
+            const cellData = rowData.cells[outputIdx++];
+            if (cellData) {
+              cellContent = (
+                <TableCell
+                  data={cellData}
+                  width={column.width}
+                  isSelected={isCellSelected}
+                  showBadge={true}
+                />
+              );
+            } else {
+              cellContent = (
+                <TextCell content="-" width={column.width} isSelected={isCellSelected} dimColor />
+              );
+            }
+            break;
+          }
+        }
+
+        return (
+          <Box key={column.id} flexShrink={0}>
+            {colIdx > 0 && <ColumnSeparator isSelected={isSelected} />}
+            {cellContent}
+          </Box>
+        );
+      })}
+    </Box>
+  );
+}, areTableRowPropsEqual);
 
 /**
  * Compact card-style row for narrow terminals.
  * Memoized to prevent re-renders when row data hasn't changed.
  */
-export const CompactRow = memo(
-  function CompactRow({
-    rowData,
-    isSelected = false,
-  }: {
-    rowData: TableRowData;
-    isSelected?: boolean;
-  }) {
-    const { index, originalRow, cells } = rowData;
+export const CompactRow = memo(function CompactRow({
+  rowData,
+  isSelected = false,
+}: {
+  rowData: TableRowData;
+  isSelected?: boolean;
+}) {
+  const { index, originalRow, cells } = rowData;
 
-    return (
-      <Box
-        flexDirection="column"
-        borderStyle={isSelected ? 'single' : 'round'}
-        borderColor={isSelected ? 'cyan' : 'gray'}
-        paddingX={1}
-        marginBottom={1}
-      >
-        {/* Row header */}
-        <Box>
-          <Text bold color={isSelected ? 'cyan' : undefined}>
-            Test #{index + 1}
-          </Text>
-          {/* Show summary status */}
-          <Text> </Text>
-          {cells.map((cell, i) => (
-            <Text key={i}>
-              {i > 0 && ' '}
-              <StatusIndicator status={cell.status} />
-            </Text>
-          ))}
-        </Box>
-
-        {/* Variables */}
-        {originalRow.vars.length > 0 && (
-          <Box marginTop={1}>
-            <Text dimColor>Vars: </Text>
-            <Text>
-              {originalRow.vars
-                .slice(0, 3)
-                .map((v, i) => (i > 0 ? ', ' : '') + truncateForCompact(v, 20))
-                .join('')}
-              {originalRow.vars.length > 3 && '...'}
-            </Text>
-          </Box>
-        )}
-
-        {/* Outputs */}
+  return (
+    <Box
+      flexDirection="column"
+      borderStyle={isSelected ? 'single' : 'round'}
+      borderColor={isSelected ? 'cyan' : 'gray'}
+      paddingX={1}
+      marginBottom={1}
+    >
+      {/* Row header */}
+      <Box>
+        <Text bold color={isSelected ? 'cyan' : undefined}>
+          Test #{index + 1}
+        </Text>
+        {/* Show summary status */}
+        <Text> </Text>
         {cells.map((cell, i) => (
-          <Box key={i} flexDirection="column" marginTop={1}>
-            <Box>
-              <StatusBadge status={cell.status} />
-              <Text> </Text>
-              <Text dimColor>{cell.output?.provider || `Output ${i + 1}`}</Text>
-            </Box>
-            <Box marginLeft={2}>
-              <Text wrap="truncate-end">{truncateForCompact(cell.content, 60)}</Text>
-            </Box>
-          </Box>
+          <Text key={i}>
+            {i > 0 && ' '}
+            <StatusIndicator status={cell.status} />
+          </Text>
         ))}
       </Box>
-    );
-  },
-  (prevProps, nextProps) => {
-    // Return true if props are equal (no re-render needed)
-    if (prevProps.isSelected !== nextProps.isSelected) {
-      return false;
-    }
-    if (prevProps.rowData.testIdx !== nextProps.rowData.testIdx) {
-      return false;
-    }
-    if (prevProps.rowData.index !== nextProps.rowData.index) {
-      return false;
-    }
-    return true;
-  },
-);
+
+      {/* Variables */}
+      {originalRow.vars.length > 0 && (
+        <Box marginTop={1}>
+          <Text dimColor>Vars: </Text>
+          <Text>
+            {originalRow.vars
+              .slice(0, 3)
+              .map((v, i) => (i > 0 ? ', ' : '') + truncateForCompact(v, 20))
+              .join('')}
+            {originalRow.vars.length > 3 && '...'}
+          </Text>
+        </Box>
+      )}
+
+      {/* Outputs */}
+      {cells.map((cell, i) => (
+        <Box key={i} flexDirection="column" marginTop={1}>
+          <Box>
+            <StatusBadge status={cell.status} />
+            <Text> </Text>
+            <Text dimColor>{cell.output?.provider || `Output ${i + 1}`}</Text>
+          </Box>
+          <Box marginLeft={2}>
+            <Text wrap="truncate-end">{truncateForCompact(cell.content, 60)}</Text>
+          </Box>
+        </Box>
+      ))}
+    </Box>
+  );
+}, areCompactRowPropsEqual);
 
 /**
  * Truncate text for compact display.
@@ -228,5 +190,3 @@ export function RowDivider({ width }: { width: number }) {
     </Box>
   );
 }
-
-export default TableRow;

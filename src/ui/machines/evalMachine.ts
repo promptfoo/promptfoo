@@ -8,8 +8,10 @@
  */
 
 import { assign, setup } from 'xstate';
-import type { EvaluateTable } from '../../types';
+import { LIMITS } from '../constants';
 import { RingBuffer } from '../utils/RingBuffer';
+
+import type { EvaluateTable } from '../../types';
 import type { LogEntry } from '../utils/InkUITransport';
 
 // ============================================================================
@@ -269,10 +271,10 @@ const initialContext: EvalMachineContext = {
   providers: {},
   providerOrder: [],
   elapsedMs: 0,
-  errors: new RingBuffer<EvalError>(5),
-  maxErrorsToShow: 5,
-  logs: new RingBuffer<LogEntry>(100),
-  maxLogsToShow: 100,
+  errors: new RingBuffer<EvalError>(LIMITS.MAX_ERRORS_SHOWN),
+  maxErrorsToShow: LIMITS.MAX_ERRORS_SHOWN,
+  logs: new RingBuffer<LogEntry>(LIMITS.MAX_LOG_ENTRIES),
+  maxLogsToShow: LIMITS.MAX_LOG_ENTRIES,
   showVerbose: false,
   showErrorDetails: false,
   tableData: null,

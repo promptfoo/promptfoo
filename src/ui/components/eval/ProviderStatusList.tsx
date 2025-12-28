@@ -2,9 +2,11 @@
  * Component for displaying provider-level status during evaluation.
  */
 
-import { Box, Text } from 'ink';
 import React from 'react';
-import { useEvalState, type ProviderStatus } from '../../contexts/EvalContext';
+
+import { Box, Text } from 'ink';
+import { LIMITS } from '../../constants';
+import { type ProviderStatus, useEvalState } from '../../contexts/EvalContext';
 import { Spinner } from '../shared/Spinner';
 
 export interface ProviderStatusItemProps {
@@ -44,9 +46,10 @@ function ProviderStatusItem({ provider, showDetails = true }: ProviderStatusItem
   const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
 
   // Truncate label if too long
-  const maxLabelLength = 30;
   const displayLabel =
-    label.length > maxLabelLength ? label.slice(0, maxLabelLength - 3) + '...' : label;
+    label.length > LIMITS.MAX_LABEL_LENGTH
+      ? label.slice(0, LIMITS.MAX_LABEL_LENGTH - 3) + '...'
+      : label;
 
   return (
     <Box>
@@ -54,7 +57,7 @@ function ProviderStatusItem({ provider, showDetails = true }: ProviderStatusItem
       <Box width={3}>{statusIcon}</Box>
 
       {/* Provider name */}
-      <Box width={maxLabelLength + 2}>
+      <Box width={LIMITS.MAX_LABEL_LENGTH + 2}>
         <Text color={statusColor}>{displayLabel}</Text>
       </Box>
 
