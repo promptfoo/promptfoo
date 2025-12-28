@@ -254,8 +254,8 @@ export default function Eval({ fetchId }: EvalOptions) {
        * Actual data is fetched via REST API.
        */
       const handleEvalNotification = async (data: SocketEvalNotification | null) => {
-        // If no data provided (e.g., no evals exist yet), clear stale state and mark as loaded
-        if (!data) {
+        // If no data or invalid evalId provided, clear stale state and mark as loaded
+        if (!data?.evalId) {
           console.log('No eval data available');
           setTable(null);
           setConfig(null);
@@ -268,13 +268,24 @@ export default function Eval({ fetchId }: EvalOptions) {
         // Set streaming state when we start receiving data
         setIsStreaming(true);
 
-        // Use the evalId from the notification directly - no need to fetch the list first
+        // Use the evalId from the notification directly
         setDefaultEvalId(data.evalId);
         setEvalId(data.evalId);
-        await loadEvalById(data.evalId, true);
+        const success = await loadEvalById(data.evalId, true);
 
-        // Refresh the recent evals list in background for the UI picker
-        fetchRecentFileEvals();
+        // If load failed (e.g., stale signal, transient error), fall back to recent evals
+        if (success) {
+          // Refresh the recent evals list in background for the UI picker
+          fetchRecentFileEvals();
+        } else {
+          const recentEvals = await fetchRecentFileEvals();
+          if (recentEvals && recentEvals.length > 0) {
+            const fallbackId = recentEvals[0].evalId;
+            setDefaultEvalId(fallbackId);
+            setEvalId(fallbackId);
+            await loadEvalById(fallbackId, true);
+          }
+        }
 
         // Clear streaming state after update is complete
         setIsStreaming(false);
