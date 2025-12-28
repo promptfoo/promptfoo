@@ -8,12 +8,24 @@
 import Transport from 'winston-transport';
 
 export interface LogEntry {
+  id: string;
   level: 'debug' | 'info' | 'warn' | 'error';
   message: string;
   timestamp: number;
 }
 
 export type LogCallback = (entry: LogEntry) => void;
+
+/** Counter for generating unique log entry IDs */
+let logIdCounter = 0;
+
+/**
+ * Generate a unique ID for a log entry.
+ * Uses a counter combined with timestamp for uniqueness across sessions.
+ */
+function generateLogId(): string {
+  return `log-${Date.now()}-${++logIdCounter}`;
+}
 
 /**
  * Winston transport that captures logs for the Ink UI.
@@ -65,6 +77,7 @@ export class InkUITransport extends Transport {
         const cleanMessage = String(message).replace(/\x1b\[[0-9;]*m/g, '');
 
         this.callback({
+          id: generateLogId(),
           level: info.level as LogEntry['level'],
           message: cleanMessage,
           timestamp: Date.now(),
