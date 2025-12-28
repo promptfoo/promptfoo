@@ -1,5 +1,6 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { runDbMigrations } from '../../src/migrate';
 import type { EvaluateTestSuite } from '../../src/types/index';
 
 // Mock the trace store to avoid database dependency in tests
@@ -67,6 +68,8 @@ let evaluate: typeof import('../../src/index').evaluate;
 
 describe('OpenTelemetry Tracing Integration', () => {
   beforeAll(async () => {
+    // Run database migrations to create required tables (eval_results, etc.)
+    await runDbMigrations();
     const mod = await import('../../src/index');
     evaluate = mod.evaluate;
   });
