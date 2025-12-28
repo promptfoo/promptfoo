@@ -75,11 +75,17 @@ describe('CustomTargetConfiguration - Config Field Handling', () => {
       />,
     );
 
-    const configTextarea = screen.getByPlaceholderText('Configuration (JSON)');
+    // The Editor component renders a textarea for input
+    // Find the JSON editor container and get the textarea inside it
+    const configLabel = screen.getByText('Configuration (JSON)');
+    const editorContainer = configLabel.closest('.space-y-2');
+    const configTextarea = editorContainer?.querySelector('textarea');
+    expect(configTextarea).toBeTruthy();
+
     const newConfig = { temperature: 0.7, max_tokens: 100 };
     const newConfigJson = JSON.stringify(newConfig, null, 2);
 
-    fireEvent.change(configTextarea, {
+    fireEvent.change(configTextarea!, {
       target: { value: newConfigJson },
     });
 
@@ -99,10 +105,15 @@ describe('CustomTargetConfiguration - Config Field Handling', () => {
       />,
     );
 
-    const configTextarea = screen.getByPlaceholderText('Configuration (JSON)');
+    // Find the JSON editor textarea
+    const configLabel = screen.getByText('Configuration (JSON)');
+    const editorContainer = configLabel.closest('.space-y-2');
+    const configTextarea = editorContainer?.querySelector('textarea');
+    expect(configTextarea).toBeTruthy();
+
     const invalidJson = '{ invalid json }';
 
-    fireEvent.change(configTextarea, {
+    fireEvent.change(configTextarea!, {
       target: { value: invalidJson },
     });
 
@@ -123,10 +134,14 @@ describe('CustomTargetConfiguration - Config Field Handling', () => {
       />,
     );
 
-    const configTextarea = screen.getByPlaceholderText('Configuration (JSON)');
-    // Error state is shown via CSS class instead of aria-invalid
-    expect(configTextarea).toHaveClass('border-destructive');
+    // Error message should be displayed in an Alert
     expect(screen.getByText('Invalid JSON format')).toBeInTheDocument();
+
+    // The editor container should have destructive border styling
+    const configLabel = screen.getByText('Configuration (JSON)');
+    const editorSection = configLabel.closest('.space-y-2');
+    const editorContainer = editorSection?.querySelector('.border-destructive');
+    expect(editorContainer).toBeTruthy();
   });
 
   it('should update target ID when changed', () => {

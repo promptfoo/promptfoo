@@ -16,7 +16,6 @@
     "test:ci": "vitest run"
   },
   "devDependencies": {
-    "babel-plugin-react-compiler": "^1.0.0",
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
     "@kurkle/color": "^0.4.0",
@@ -41,6 +40,7 @@
     "@vitest/coverage-v8": "^4.0.14",
     "ansi-to-html": "^0.7.2",
     "autoprefixer": "^10.4.23",
+    "babel-plugin-react-compiler": "^1.0.0",
     "chart.js": "^4.5.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -50,6 +50,7 @@
     "idb-keyval": "^6.2.2",
     "js-yaml": "^4.1.1",
     "jsdom": "^26.1.0",
+    "lightningcss-darwin-arm64": "^1.30.2",
     "lucide-react": "^0.562.0",
     "postcss": "^8.5.6",
     "posthog-js": "^1.298.0",
