@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getEnvBool } from '../../src/envars';
 import {
   calculateCost,
+  getCacheOptions,
   isPromptfooSampleTarget,
   parseChatPrompt,
   toTitleCase,
@@ -206,6 +207,50 @@ describe('Shared Provider Functions', () => {
         config: {},
       };
       expect(isPromptfooSampleTarget(provider) ?? false).toBe(false);
+    });
+  });
+
+  describe('getCacheOptions', () => {
+    // Helper to create minimal context with required fields
+    const createContext = (overrides: Record<string, unknown> = {}) => ({
+      prompt: { raw: 'test', label: 'test' },
+      vars: {},
+      ...overrides,
+    });
+
+    it('should return undefined bust and repeatIndex when context is undefined', () => {
+      const result = getCacheOptions(undefined);
+      expect(result).toEqual({ bust: undefined, repeatIndex: undefined });
+    });
+
+    it('should extract bustCache from context', () => {
+      const result = getCacheOptions(createContext({ bustCache: true }));
+      expect(result.bust).toBe(true);
+    });
+
+    it('should fall back to debug for bust when bustCache is undefined', () => {
+      const result = getCacheOptions(createContext({ debug: true }));
+      expect(result.bust).toBe(true);
+    });
+
+    it('should prefer bustCache over debug', () => {
+      const result = getCacheOptions(createContext({ bustCache: false, debug: true }));
+      expect(result.bust).toBe(false);
+    });
+
+    it('should extract repeatIndex from context', () => {
+      const result = getCacheOptions(createContext({ repeatIndex: 2 }));
+      expect(result.repeatIndex).toBe(2);
+    });
+
+    it('should return all cache options from context', () => {
+      const result = getCacheOptions(createContext({ bustCache: true, repeatIndex: 3 }));
+      expect(result).toEqual({ bust: true, repeatIndex: 3 });
+    });
+
+    it('should handle context with only required fields', () => {
+      const result = getCacheOptions(createContext());
+      expect(result).toEqual({ bust: undefined, repeatIndex: undefined });
     });
   });
 });
