@@ -870,6 +870,13 @@ thead .header-dismiss {
 
 [data-theme='dark'] .results-table tr .cell pre code {
   color: #e6edf3;
+  text-shadow: none; /* Override Prism.js white text-shadow */
+}
+
+/* Also override for any language-specific code */
+[data-theme='dark'] .results-table tr .cell pre code[class*="language-"],
+[data-theme='dark'] .results-table tr .cell code[class*="language-"] {
+  text-shadow: none;
 }
 
 /* Dark mode inline code - subtle but readable */
