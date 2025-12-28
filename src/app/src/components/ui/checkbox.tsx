@@ -3,12 +3,23 @@ import * as React from 'react';
 import { cn } from '@app/lib/utils';
 import { Check, Minus } from 'lucide-react';
 
-export interface CheckboxProps extends React.InputHTMLAttributes<HTMLInputElement> {
+export interface CheckboxProps
+  extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'onChange'> {
   indeterminate?: boolean;
   ref?: React.Ref<HTMLInputElement>;
+  onCheckedChange?: (checked: boolean) => void;
+  onChange?: React.ChangeEventHandler<HTMLInputElement>;
 }
 
-function Checkbox({ className, indeterminate, checked, ref, ...props }: CheckboxProps) {
+function Checkbox({
+  className,
+  indeterminate,
+  checked,
+  ref,
+  onCheckedChange,
+  onChange,
+  ...props
+}: CheckboxProps) {
   const innerRef = React.useRef<HTMLInputElement>(null);
   const resolvedRef = (ref as React.RefObject<HTMLInputElement>) || innerRef;
 
@@ -18,6 +29,11 @@ function Checkbox({ className, indeterminate, checked, ref, ...props }: Checkbox
     }
   }, [resolvedRef, indeterminate]);
 
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    onChange?.(e);
+    onCheckedChange?.(e.target.checked);
+  };
+
   return (
     <label className="relative inline-flex items-center">
       <input
@@ -25,6 +41,7 @@ function Checkbox({ className, indeterminate, checked, ref, ...props }: Checkbox
         ref={resolvedRef}
         checked={checked}
         className="peer sr-only"
+        onChange={handleChange}
         {...props}
       />
       <div

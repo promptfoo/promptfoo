@@ -1,7 +1,6 @@
 import React from 'react';
 
-import { createAppTheme } from '@app/components/PageShell';
-import { ThemeProvider } from '@mui/material/styles';
+import { TooltipProvider } from '@app/components/ui/tooltip';
 import { Severity, severityDisplayNames } from '@promptfoo/redteam/constants';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -15,7 +14,6 @@ vi.mock('./store', () => ({
 
 describe('Overview', () => {
   const mockedUseReportStore = vi.mocked(useReportStore);
-  const defaultTheme = createAppTheme(false);
   const mockRef: React.MutableRefObject<HTMLDivElement | null> = { current: null };
 
   beforeEach(() => {
@@ -30,25 +28,31 @@ describe('Overview', () => {
     });
   });
 
-  const renderOverview = (
-    categoryStats: any,
-    plugins: RedteamPluginObject[],
-    theme = defaultTheme,
-  ) => {
+  const renderOverview = (categoryStats: any, plugins: RedteamPluginObject[]) => {
     return render(
-      <ThemeProvider theme={theme}>
+      <TooltipProvider>
         <Overview
           categoryStats={categoryStats}
           plugins={plugins}
           vulnerabilitiesDataGridRef={mockRef}
         />
-      </ThemeProvider>,
+      </TooltipProvider>,
     );
   };
 
+  // Helper to find the card content by severity name and check its count
   const expectSeverityCardToHaveCount = (severity: Severity, expectedCount: string) => {
-    const card = screen.getByText(severityDisplayNames[severity]).closest('.MuiCardContent-root');
-    expect(card).toHaveTextContent(expectedCount);
+    // Find the severity title text, then get the parent card content
+    const titleElement = screen.getByText(severityDisplayNames[severity]);
+    const cardContent = titleElement.parentElement;
+    expect(cardContent).toHaveTextContent(expectedCount);
+  };
+
+  // Helper to find and click a severity card
+  const getSeverityCard = (severity: Severity) => {
+    const titleElement = screen.getByText(severityDisplayNames[severity]);
+    // Navigate up to find the card element (parent of CardContent)
+    return titleElement.closest('[role="button"]') || titleElement.parentElement?.parentElement;
   };
 
   it('should display zero issues for all severities when categoryStats is empty', () => {
@@ -218,15 +222,9 @@ describe('Overview', () => {
 
     renderOverview(categoryStats, plugins);
 
-    const criticalCard = screen
-      .getByText(severityDisplayNames[Severity.Critical])
-      .closest('.MuiCardContent-root');
-    const highCard = screen
-      .getByText(severityDisplayNames[Severity.High])
-      .closest('.MuiCardContent-root');
-    const mediumCard = screen
-      .getByText(severityDisplayNames[Severity.Medium])
-      .closest('.MuiCardContent-root');
+    const criticalCard = getSeverityCard(Severity.Critical);
+    const highCard = getSeverityCard(Severity.High);
+    const mediumCard = getSeverityCard(Severity.Medium);
 
     fireEvent.click(criticalCard!);
     expect(mockElement.scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth' });
@@ -265,9 +263,7 @@ describe('Overview', () => {
     renderOverview(categoryStats, plugins);
 
     // Find and click the Critical severity card
-    const criticalCard = screen
-      .getByText(severityDisplayNames[Severity.Critical])
-      .closest('.MuiCardContent-root');
+    const criticalCard = getSeverityCard(Severity.Critical);
     fireEvent.click(criticalCard!);
 
     // Check that scrollIntoView was called
@@ -287,9 +283,7 @@ describe('Overview', () => {
     renderOverview(categoryStats, plugins);
 
     // Find and click the High severity card
-    const highCard = screen
-      .getByText(severityDisplayNames[Severity.High])
-      .closest('.MuiCardContent-root');
+    const highCard = getSeverityCard(Severity.High);
 
     // This should not throw an error even with null ref
     expect(() => fireEvent.click(highCard!)).not.toThrow();
@@ -308,83 +302,11 @@ describe('Overview', () => {
 
     renderOverview(categoryStats, plugins);
 
-    const criticalCard = screen
-      .getByText(severityDisplayNames[Severity.Critical])
-      .closest('.MuiCardContent-root');
+    const criticalCard = getSeverityCard(Severity.Critical);
 
     fireEvent.click(criticalCard!);
 
     expect(mockElement.scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth' });
-  });
-
-  it('should display severity cards with correct theme-derived colors in light mode', () => {
-    const lightTheme = createAppTheme(false);
-    const categoryStats = {
-      plugin1: { pass: 0, total: 1 },
-      plugin2: { pass: 0, total: 1 },
-      plugin3: { pass: 0, total: 1 },
-      plugin4: { pass: 0, total: 1 },
-    };
-
-    const plugins: RedteamPluginObject[] = [
-      { id: 'plugin1', severity: Severity.Critical },
-      { id: 'plugin2', severity: Severity.High },
-      { id: 'plugin3', severity: Severity.Medium },
-      { id: 'plugin4', severity: Severity.Low },
-    ];
-
-    renderOverview(categoryStats, plugins, lightTheme);
-
-    Object.values(Severity).forEach((severity) => {
-      const card = screen
-        .getByText(severityDisplayNames[severity])
-        .closest('.MuiCard-root') as HTMLElement;
-      const expectedColor = lightTheme.palette.custom.severity[severity].main;
-      const actualColor = getComputedStyle(card).borderLeftColor;
-
-      const hex = expectedColor.replace('#', '');
-      const r = parseInt(hex.slice(0, 2), 16);
-      const g = parseInt(hex.slice(2, 4), 16);
-      const b = parseInt(hex.slice(4, 6), 16);
-      const expectedRgb = `rgb(${r}, ${g}, ${b})`;
-
-      expect(actualColor).toBe(expectedRgb);
-    });
-  });
-
-  it('should display severity cards with correct theme-derived colors in dark mode', () => {
-    const darkTheme = createAppTheme(true);
-    const categoryStats = {
-      plugin1: { pass: 0, total: 1 },
-      plugin2: { pass: 0, total: 1 },
-      plugin3: { pass: 0, total: 1 },
-      plugin4: { pass: 0, total: 1 },
-    };
-
-    const plugins: RedteamPluginObject[] = [
-      { id: 'plugin1', severity: Severity.Critical },
-      { id: 'plugin2', severity: Severity.High },
-      { id: 'plugin3', severity: Severity.Medium },
-      { id: 'plugin4', severity: Severity.Low },
-    ];
-
-    renderOverview(categoryStats, plugins, darkTheme);
-
-    Object.values(Severity).forEach((severity) => {
-      const card = screen
-        .getByText(severityDisplayNames[severity])
-        .closest('.MuiCard-root') as HTMLElement;
-      const expectedColor = darkTheme.palette.custom.severity[severity].main;
-      const actualColor = getComputedStyle(card).borderLeftColor;
-
-      const hex = expectedColor.replace('#', '');
-      const r = parseInt(hex.slice(0, 2), 16);
-      const g = parseInt(hex.slice(2, 4), 16);
-      const b = parseInt(hex.slice(4, 6), 16);
-      const expectedRgb = `rgb(${r}, ${g}, ${b})`;
-
-      expect(actualColor).toBe(expectedRgb);
-    });
   });
 
   it('should display zero issues for all severities when pluginPassRateThreshold is 0', () => {
@@ -439,9 +361,7 @@ describe('Overview', () => {
 
     renderOverview(categoryStats, plugins);
 
-    const criticalCard = screen
-      .getByText(severityDisplayNames[Severity.Critical])
-      .closest('.MuiCardContent-root');
+    const criticalCard = getSeverityCard(Severity.Critical);
 
     fireEvent.click(criticalCard!);
 
@@ -473,9 +393,7 @@ describe('Overview', () => {
 
     renderOverview(categoryStats, plugins);
 
-    const criticalCard = screen
-      .getByText(severityDisplayNames[Severity.Critical])
-      .closest('.MuiCardContent-root');
+    const criticalCard = getSeverityCard(Severity.Critical);
 
     fireEvent.click(criticalCard!);
 

@@ -1,32 +1,24 @@
 import React from 'react';
 
-import { EVAL_ROUTES } from '@app/constants/routes';
-import CloseIcon from '@mui/icons-material/Close';
-import LightbulbOutlinedIcon from '@mui/icons-material/LightbulbOutlined';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import Chip from '@mui/material/Chip';
-import Drawer from '@mui/material/Drawer';
-import IconButton from '@mui/material/IconButton';
-import List from '@mui/material/List';
-import ListItem from '@mui/material/ListItem';
-import Tab from '@mui/material/Tab';
-import Tabs from '@mui/material/Tabs';
-import Tooltip from '@mui/material/Tooltip';
-import Typography from '@mui/material/Typography';
+import { Badge } from '@app/components/ui/badge';
+import { Button } from '@app/components/ui/button';
+import { Sheet, SheetContent, SheetTitle } from '@app/components/ui/sheet';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@app/components/ui/tabs';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import { cn } from '@app/lib/utils';
 import {
   categoryAliases,
   displayNameOverrides,
   type Strategy,
   strategyDescriptions,
 } from '@promptfoo/redteam/constants';
+import { Lightbulb } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import EvalOutputPromptDialog from '../../../eval/components/EvalOutputPromptDialog';
 import PluginStrategyFlow from './PluginStrategyFlow';
 import SuggestionsDialog from './SuggestionsDialog';
 import { getStrategyIdFromTest } from './shared';
 import type { EvaluateResult, GradingResult } from '@promptfoo/types';
-import './RiskCategoryDrawer.css';
 
 interface RiskCategoryDrawerProps {
   open: boolean;
@@ -138,16 +130,19 @@ const RiskCategoryDrawer = ({
 
   if (totalTests === 0) {
     return (
-      <Drawer anchor="right" open={open} onClose={onClose}>
-        <Box sx={{ width: 500, p: 2 }} className="risk-category-drawer">
-          <Typography variant="h6" gutterBottom>
-            {displayName}
-          </Typography>
-          <Typography variant="body1" sx={{ mt: 2, textAlign: 'center' }}>
-            No tests have been run for this category.
-          </Typography>
-        </Box>
-      </Drawer>
+      <Sheet open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
+        <SheetContent
+          side="right"
+          className="w-[500px] overflow-y-auto sm:max-w-[500px]"
+          aria-describedby={undefined}
+        >
+          <SheetTitle className="sr-only">{displayName}</SheetTitle>
+          <div className="risk-category-drawer">
+            <h2 className="mb-4 text-lg font-semibold">{displayName}</h2>
+            <p className="mt-4 text-center">No tests have been run for this category.</p>
+          </div>
+        </SheetContent>
+      </Sheet>
     );
   }
 
@@ -169,259 +164,203 @@ const RiskCategoryDrawer = ({
     return [...failures].sort(sortByPriorityStrategies);
   }, [failures]);
 
-  return (
-    <Drawer anchor="right" open={open} onClose={onClose}>
-      <Box sx={{ width: 750, p: 2 }} className="risk-category-drawer">
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-          <Typography variant="h6">{displayName}</Typography>
-          <IconButton onClick={onClose} size="small" aria-label="close drawer">
-            <CloseIcon />
-          </IconButton>
-        </Box>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-          <Box sx={{ textAlign: 'center', flex: 1 }}>
-            <Typography variant="h4" color="primary">
-              {numPassed.toString()}
-            </Typography>
-            <Typography variant="body2">Passed</Typography>
-          </Box>
-          <Box sx={{ textAlign: 'center', flex: 1 }}>
-            <Typography variant="h4">{totalTests.toString()}</Typography>
-            <Typography variant="body2">Total</Typography>
-          </Box>
-          <Box sx={{ textAlign: 'center', flex: 1 }}>
-            <Typography variant="h4" color={passPercentage >= 70 ? 'success.main' : 'error.main'}>
-              {`${passPercentage}%`}
-            </Typography>
-            <Typography variant="body2">Pass Rate</Typography>
-          </Box>
-        </Box>
-        <Button
-          variant="contained"
-          color="inherit"
-          fullWidth
-          onClick={(event) => {
-            // Check if any test has a pluginId in the metadata
-            const firstFailure = failures.length > 0 ? failures[0] : null;
-            const firstPass = passes.length > 0 ? passes[0] : null;
-            const testWithPluginId = firstFailure || firstPass;
-            const pluginId = testWithPluginId?.result?.metadata?.pluginId;
+  // Helper to render a test item (used for both failures and passes)
+  const renderTestItem = (
+    test: {
+      prompt: string;
+      output: string;
+      gradingResult?: GradingResult;
+      result?: EvaluateResult;
+    },
+    index: number,
+  ) => {
+    const strategyId = getStrategyIdFromTest(test);
+    const hasSuggestions = test.gradingResult?.componentResults?.some(
+      (result) => (result.suggestions?.length || 0) > 0,
+    );
 
-            const filterParam = encodeURIComponent(
-              JSON.stringify([
-                {
-                  type: 'plugin',
-                  operator: 'equals',
-                  value: pluginId,
-                },
-              ]),
-            );
-
-            const url = pluginId
-              ? `${EVAL_ROUTES.DETAIL(evalId)}?filter=${filterParam}`
-              : EVAL_ROUTES.DETAIL(evalId);
-            if (event.ctrlKey || event.metaKey) {
-              window.open(url, '_blank');
-            } else {
-              navigate(url);
-            }
-          }}
-        >
-          View All Logs
-        </Button>
-
-        <Tabs
-          value={activeTab}
-          onChange={(_, newValue) => setActiveTab(newValue)}
-          sx={{ borderBottom: 1, borderColor: 'divider', mt: 2 }}
-        >
-          <Tab label={`Flagged Tests (${failures.length})`} />
-          <Tab label={`Passed Tests (${passes.length})`} />
-          <Tab label="Flow Diagram" />
-        </Tabs>
-
-        {activeTab === 0 ? (
-          failures.length > 0 ? (
-            <List>
-              {sortedFailures.map((failure, index) => (
-                <ListItem
-                  key={index}
-                  className="failure-item"
-                  sx={{ position: 'relative', cursor: 'pointer' }}
-                  onClick={() => {
-                    setSelectedTest(failure);
-                    setDetailsDialogOpen(true);
-                  }}
-                >
-                  <Box sx={{ display: 'flex', alignItems: 'flex-start', width: '100%' }}>
-                    <Box sx={{ flexGrow: 1 }}>
-                      <Typography variant="subtitle1" className="prompt">
-                        {getPromptDisplayString(failure.prompt)}
-                      </Typography>
-                      <Typography variant="body2" className="output">
-                        {getOutputDisplay(failure.output)}
-                      </Typography>
-                      {failure.gradingResult &&
-                        (() => {
-                          const strategyId = getStrategyIdFromTest(failure);
-                          return (
-                            strategyId && (
-                              <Tooltip title={strategyDescriptions[strategyId as Strategy] || ''}>
-                                <Chip
-                                  size="small"
-                                  label={
-                                    displayNameOverrides[
-                                      strategyId as keyof typeof displayNameOverrides
-                                    ] || strategyId
-                                  }
-                                  sx={{ mt: 1 }}
-                                />
-                              </Tooltip>
-                            )
-                          );
-                        })()}
-                    </Box>
-                    <Box
-                      sx={{
-                        display: 'flex',
-                        opacity: 0,
-                        transition: 'opacity 0.2s',
-                        '.failure-item:hover &': {
-                          opacity: 1,
-                        },
-                      }}
-                    >
-                      {failure.gradingResult?.componentResults?.some(
-                        (result) => (result.suggestions?.length || 0) > 0,
-                      ) && (
-                        <IconButton
-                          onClick={(e) => {
-                            e.stopPropagation(); // Prevent list item click
-                            setCurrentGradingResult(failure.gradingResult);
-                            setSuggestionsDialogOpen(true);
-                          }}
-                          sx={{ ml: 1 }}
-                        >
-                          <LightbulbOutlinedIcon color="primary" />
-                        </IconButton>
-                      )}
-                    </Box>
-                  </Box>
-                </ListItem>
-              ))}
-            </List>
-          ) : (
-            <Box sx={{ mt: 2, textAlign: 'center' }}>
-              <Typography variant="body1">No failed tests</Typography>
-            </Box>
-          )
-        ) : activeTab === 1 ? (
-          passes.length > 0 ? (
-            <List>
-              {passes.map((pass, index) => (
-                <ListItem
-                  key={index}
-                  className="failure-item"
-                  sx={{ position: 'relative', cursor: 'pointer' }}
-                  onClick={() => {
-                    setSelectedTest(pass);
-                    setDetailsDialogOpen(true);
-                  }}
-                >
-                  <Box sx={{ display: 'flex', alignItems: 'flex-start', width: '100%' }}>
-                    <Box sx={{ flexGrow: 1 }}>
-                      <Typography variant="subtitle1" className="prompt">
-                        {getPromptDisplayString(pass.prompt)}
-                      </Typography>
-                      <Typography variant="body2" className="output">
-                        {getOutputDisplay(pass.output)}
-                      </Typography>
-                      {pass.gradingResult &&
-                        (() => {
-                          const strategyId = getStrategyIdFromTest(pass);
-                          return (
-                            strategyId && (
-                              <Tooltip title={strategyDescriptions[strategyId as Strategy] || ''}>
-                                <Chip
-                                  size="small"
-                                  label={
-                                    displayNameOverrides[
-                                      strategyId as keyof typeof displayNameOverrides
-                                    ] || strategyId
-                                  }
-                                  sx={{ mt: 1 }}
-                                />
-                              </Tooltip>
-                            )
-                          );
-                        })()}
-                    </Box>
-                    <Box
-                      sx={{
-                        display: 'flex',
-                        opacity: 0,
-                        transition: 'opacity 0.2s',
-                        '.failure-item:hover &': {
-                          opacity: 1,
-                        },
-                      }}
-                    >
-                      {pass.gradingResult?.componentResults?.some(
-                        (result) => (result.suggestions?.length || 0) > 0,
-                      ) && (
-                        <IconButton
-                          onClick={(e) => {
-                            e.stopPropagation(); // Prevent list item click
-                            setCurrentGradingResult(pass.gradingResult);
-                            setSuggestionsDialogOpen(true);
-                          }}
-                          sx={{ ml: 1 }}
-                        >
-                          <LightbulbOutlinedIcon color="primary" />
-                        </IconButton>
-                      )}
-                    </Box>
-                  </Box>
-                </ListItem>
-              ))}
-            </List>
-          ) : (
-            <Box sx={{ mt: 2, textAlign: 'center' }}>
-              <Typography variant="body1">No passed tests</Typography>
-            </Box>
-          )
-        ) : (
-          <Box sx={{ mt: 2 }}>
-            <Typography
-              variant="h6"
-              gutterBottom
-              align="center"
-              sx={{ mb: 3, color: 'text.primary' }}
+    return (
+      <div
+        key={index}
+        className="failure-item group relative cursor-pointer border-b border-border py-3 transition-colors hover:bg-muted/50"
+        onClick={() => {
+          setSelectedTest(test);
+          setDetailsDialogOpen(true);
+        }}
+      >
+        <div className="flex w-full items-start">
+          <div className="min-w-0 flex-1">
+            <p className="prompt text-sm font-medium">{getPromptDisplayString(test.prompt)}</p>
+            <p className="output mt-1 text-sm text-muted-foreground">
+              {getOutputDisplay(test.output)}
+            </p>
+            {test.gradingResult && strategyId && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="mt-2 inline-block">
+                    <Badge variant="secondary">
+                      {displayNameOverrides[strategyId as keyof typeof displayNameOverrides] ||
+                        strategyId}
+                    </Badge>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {strategyDescriptions[strategyId as Strategy] || ''}
+                </TooltipContent>
+              </Tooltip>
+            )}
+          </div>
+          {hasSuggestions && (
+            <button
+              className="ml-2 rounded-md p-1.5 opacity-0 transition-opacity hover:bg-muted group-hover:opacity-100"
+              onClick={(e) => {
+                e.stopPropagation();
+                setCurrentGradingResult(test.gradingResult);
+                setSuggestionsDialogOpen(true);
+              }}
             >
-              Simulated User - Attack Performance
-            </Typography>
-            <PluginStrategyFlow failuresByPlugin={failures} passesByPlugin={passes} />
-          </Box>
-        )}
-      </Box>
-      <SuggestionsDialog
-        open={suggestionsDialogOpen}
-        onClose={() => setSuggestionsDialogOpen(false)}
-        gradingResult={currentGradingResult}
-      />
-      <EvalOutputPromptDialog
-        open={detailsDialogOpen}
-        onClose={() => setDetailsDialogOpen(false)}
-        prompt={selectedTest?.result?.prompt.raw || 'Unknown'}
-        output={
-          typeof selectedTest?.result?.response?.output === 'object'
-            ? JSON.stringify(selectedTest?.result?.response?.output)
-            : selectedTest?.result?.response?.output
-        }
-        gradingResults={selectedTest?.gradingResult ? [selectedTest.gradingResult] : undefined}
-        metadata={selectedTest?.result?.metadata}
-      />
-    </Drawer>
+              <Lightbulb className="h-4 w-4 text-primary" />
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <Sheet open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
+      <SheetContent
+        side="right"
+        className="w-[750px] overflow-y-auto sm:max-w-[750px]"
+        aria-describedby={undefined}
+      >
+        <SheetTitle className="sr-only">{displayName}</SheetTitle>
+        <div className="risk-category-drawer p-2">
+          <h2 className="mb-4 text-lg font-semibold">{displayName}</h2>
+
+          {/* Stats row */}
+          <div className="mb-4 flex items-center justify-between">
+            <div className="flex-1 text-center">
+              <p className="text-3xl font-bold text-primary">{numPassed}</p>
+              <p className="text-sm text-muted-foreground">Passed</p>
+            </div>
+            <div className="flex-1 text-center">
+              <p className="text-3xl font-bold">{totalTests}</p>
+              <p className="text-sm text-muted-foreground">Total</p>
+            </div>
+            <div className="flex-1 text-center">
+              <p
+                className={cn(
+                  'text-3xl font-bold',
+                  passPercentage >= 70
+                    ? 'text-emerald-600 dark:text-emerald-500'
+                    : 'text-destructive',
+                )}
+              >
+                {passPercentage}%
+              </p>
+              <p className="text-sm text-muted-foreground">Pass Rate</p>
+            </div>
+          </div>
+
+          <Button
+            variant="outline"
+            className="w-full"
+            onClick={(event) => {
+              const firstFailure = failures.length > 0 ? failures[0] : null;
+              const firstPass = passes.length > 0 ? passes[0] : null;
+              const testWithPluginId = firstFailure || firstPass;
+              const pluginId = testWithPluginId?.result?.metadata?.pluginId;
+
+              const filterParam = encodeURIComponent(
+                JSON.stringify([
+                  {
+                    type: 'plugin',
+                    operator: 'equals',
+                    value: pluginId,
+                  },
+                ]),
+              );
+
+              const url = pluginId ? `/eval/${evalId}?filter=${filterParam}` : `/eval/${evalId}`;
+              if (event.ctrlKey || event.metaKey) {
+                window.open(url, '_blank');
+              } else {
+                navigate(url);
+              }
+            }}
+          >
+            View All Logs
+          </Button>
+
+          <Tabs
+            defaultValue="flagged"
+            value={activeTab === 0 ? 'flagged' : activeTab === 1 ? 'passed' : 'flow'}
+            onValueChange={(value) =>
+              setActiveTab(value === 'flagged' ? 0 : value === 'passed' ? 1 : 2)
+            }
+            className="mt-4"
+          >
+            <TabsList className="w-full">
+              <TabsTrigger value="flagged" className="flex-1">
+                Flagged Tests ({failures.length})
+              </TabsTrigger>
+              <TabsTrigger value="passed" className="flex-1">
+                Passed Tests ({passes.length})
+              </TabsTrigger>
+              <TabsTrigger value="flow" className="flex-1">
+                Flow Diagram
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="flagged">
+              {failures.length > 0 ? (
+                <div className="mt-2">
+                  {sortedFailures.map((failure, i) => renderTestItem(failure, i))}
+                </div>
+              ) : (
+                <p className="mt-4 text-center text-muted-foreground">No failed tests</p>
+              )}
+            </TabsContent>
+
+            <TabsContent value="passed">
+              {passes.length > 0 ? (
+                <div className="mt-2">{passes.map((pass, i) => renderTestItem(pass, i))}</div>
+              ) : (
+                <p className="mt-4 text-center text-muted-foreground">No passed tests</p>
+              )}
+            </TabsContent>
+
+            <TabsContent value="flow">
+              <div className="mt-4">
+                <h3 className="mb-3 text-center text-lg font-semibold">
+                  Simulated User - Attack Performance
+                </h3>
+                <PluginStrategyFlow failuresByPlugin={failures} passesByPlugin={passes} />
+              </div>
+            </TabsContent>
+          </Tabs>
+        </div>
+
+        <SuggestionsDialog
+          open={suggestionsDialogOpen}
+          onClose={() => setSuggestionsDialogOpen(false)}
+          gradingResult={currentGradingResult}
+        />
+        <EvalOutputPromptDialog
+          open={detailsDialogOpen}
+          onClose={() => setDetailsDialogOpen(false)}
+          prompt={selectedTest?.result?.prompt.raw || 'Unknown'}
+          output={
+            typeof selectedTest?.result?.response?.output === 'object'
+              ? JSON.stringify(selectedTest?.result?.response?.output)
+              : selectedTest?.result?.response?.output
+          }
+          gradingResults={selectedTest?.gradingResult ? [selectedTest.gradingResult] : undefined}
+          metadata={selectedTest?.result?.metadata}
+        />
+      </SheetContent>
+    </Sheet>
   );
 };
 
