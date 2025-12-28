@@ -392,6 +392,8 @@ export async function streamEvalCsv(eval_: Eval, options: StreamCsvOptions): Pro
   await write(csvStringify([headers]));
 
   // Stream results in batches
+  const numPrompts = prompts.length;
+
   for await (const batchResults of eval_.fetchResultsBatched()) {
     // Group results by testIdx to reconstruct table rows
     const rowsByTestIdx = new Map<
@@ -401,18 +403,21 @@ export async function streamEvalCsv(eval_: Eval, options: StreamCsvOptions): Pro
 
     for (const result of batchResults) {
       if (!rowsByTestIdx.has(result.testIdx)) {
+        // Pre-allocate outputs array with correct size for all prompts
+        // This ensures outputs align with prompt columns regardless of result order
         rowsByTestIdx.set(result.testIdx, {
           testIdx: result.testIdx,
           vars: varNames.map((varName) => {
             const value = result.testCase?.vars?.[varName];
             return value !== undefined ? String(value) : '';
           }),
-          outputs: [],
+          outputs: new Array(numPrompts).fill(null),
           test: { description: result.testCase?.description },
         });
       }
       const row = rowsByTestIdx.get(result.testIdx)!;
-      row.outputs.push({
+      // Use promptIdx to position output correctly (matches prompt column order)
+      row.outputs[result.promptIdx] = {
         text: result.response?.output ?? '',
         pass: result.success,
         score: result.score,
@@ -420,7 +425,7 @@ export async function streamEvalCsv(eval_: Eval, options: StreamCsvOptions): Pro
         failureReason: result.failureReason,
         gradingResult: result.gradingResult,
         metadata: result.metadata,
-      });
+      };
     }
 
     // Convert to CSV rows and write
