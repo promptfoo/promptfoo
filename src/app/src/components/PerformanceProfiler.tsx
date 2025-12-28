@@ -1,4 +1,5 @@
 import React, { Profiler } from 'react';
+
 import { onRenderCallback } from '@app/utils/performanceProfiler';
 
 interface PerformanceProfilerProps {

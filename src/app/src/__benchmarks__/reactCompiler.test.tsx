@@ -9,8 +9,9 @@
  */
 
 import { Profiler, useState } from 'react';
-import { render, screen, fireEvent, cleanup } from '@testing-library/react';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 // Test components that simulate common patterns
 function ExpensiveChild({ value }: { value: number }) {
