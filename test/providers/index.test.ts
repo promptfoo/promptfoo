@@ -956,6 +956,115 @@ describe('loadApiProvider', () => {
     delete process.env.MY_PORT;
   });
 
+  it('supports templating in provider URL with context env overrides', async () => {
+    const provider = await loadApiProvider('https://{{ env.MY_HOST }}:{{ env.MY_PORT }}/query', {
+      env: {
+        MY_HOST: 'api.example.com',
+        MY_PORT: '8080',
+      },
+      options: {
+        config: {
+          body: {},
+        },
+      },
+    });
+
+    expect(provider.id()).toBe('https://api.example.com:8080/query');
+  });
+
+  it('uses provider env overrides when rendering provider config', async () => {
+    const provider = await loadApiProvider('echo', {
+      options: {
+        env: {
+          MY_API_KEY: 'secret',
+        },
+        config: {
+          apiKey: '{{ env.MY_API_KEY }}',
+        },
+      },
+    });
+
+    expect(provider.config.apiKey).toBe('secret');
+  });
+
+  it('passes provider env overrides to provider instances', async () => {
+    const provider = (await loadApiProvider('openai:chat', {
+      options: {
+        env: {
+          OPENAI_API_KEY: 'override-key',
+        },
+        config: {
+          apiKeyRequired: false,
+        },
+      },
+    })) as OpenAiChatCompletionProvider;
+
+    expect(provider.env?.OPENAI_API_KEY).toBe('override-key');
+  });
+
+  it('isolates env overrides between multiple provider loads', async () => {
+    // First provider with HOST=dev
+    const devProvider = await loadApiProvider('https://{{ env.HOST }}/v1/api', {
+      options: {
+        env: {
+          HOST: 'dev.example.com',
+        },
+        config: {
+          body: {},
+        },
+      },
+    });
+
+    // Second provider with HOST=prod
+    const prodProvider = await loadApiProvider('https://{{ env.HOST }}/v1/api', {
+      options: {
+        env: {
+          HOST: 'prod.example.com',
+        },
+        config: {
+          body: {},
+        },
+      },
+    });
+
+    // Each provider should have its own resolved URL
+    expect(devProvider.id()).toBe('https://dev.example.com/v1/api');
+    expect(prodProvider.id()).toBe('https://prod.example.com/v1/api');
+  });
+
+  it('options.env takes precedence over context.env for same keys', async () => {
+    const provider = await loadApiProvider('https://{{ env.HOST }}:{{ env.PORT }}/query', {
+      env: {
+        HOST: 'context-host.com',
+        PORT: '8080',
+      },
+      options: {
+        env: {
+          HOST: 'options-host.com', // Should override context.env.HOST
+        },
+        config: {
+          body: {},
+        },
+      },
+    });
+
+    // HOST should come from options.env, PORT from context.env
+    expect(provider.id()).toBe('https://options-host.com:8080/query');
+  });
+
+  it('renders label using env overrides', async () => {
+    const provider = await loadApiProvider('echo', {
+      options: {
+        label: 'API ({{ env.ENVIRONMENT }})',
+        env: {
+          ENVIRONMENT: 'staging',
+        },
+      },
+    });
+
+    expect(provider.label).toBe('API (staging)');
+  });
+
   it('loadApiProvider with yaml filepath containing multiple providers', async () => {
     const mockYamlContent = dedent`
     - id: 'openai:gpt-4o-mini'
