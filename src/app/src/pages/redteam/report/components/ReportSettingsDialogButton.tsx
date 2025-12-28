@@ -1,15 +1,18 @@
 import React from 'react';
 
-import SettingsIcon from '@mui/icons-material/Settings';
-import Button from '@mui/material/Button';
-import Dialog from '@mui/material/Dialog';
-import DialogActions from '@mui/material/DialogActions';
-import DialogContent from '@mui/material/DialogContent';
-import DialogTitle from '@mui/material/DialogTitle';
-import IconButton from '@mui/material/IconButton';
-import Slider from '@mui/material/Slider';
-import Tooltip from '@mui/material/Tooltip';
-import Typography from '@mui/material/Typography';
+import { Button } from '@app/components/ui/button';
+import { CheckboxWithLabel } from '@app/components/ui/checkbox';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@app/components/ui/dialog';
+import { SliderWithLabel } from '@app/components/ui/slider';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@app/components/ui/tooltip';
+import { Settings } from 'lucide-react';
 import { useReportStore } from './store';
 
 const ReportSettingsDialogButton = () => {
@@ -21,73 +24,53 @@ const ReportSettingsDialogButton = () => {
   } = useReportStore();
   const [open, setOpen] = React.useState(false);
 
-  const handleOpen = () => {
-    setOpen(true);
-  };
-
-  const handleClose = () => {
-    setOpen(false);
-  };
+  // Handle NaN and out-of-range values
+  const safeThreshold = Number.isNaN(pluginPassRateThreshold)
+    ? 0
+    : Math.min(1, Math.max(0, pluginPassRateThreshold || 0));
 
   return (
-    <>
-      <Tooltip title="Report Settings" placement="top">
-        <IconButton onClick={handleOpen} aria-label="settings">
-          <SettingsIcon />
-        </IconButton>
-      </Tooltip>
-      <Dialog open={open} onClose={handleClose} fullWidth maxWidth="sm">
-        <DialogTitle>Report Settings</DialogTitle>
-        <DialogContent>
-          <Typography component="div" sx={{ padding: '16px 0' }}>
-            <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
-              <input
-                type="checkbox"
-                checked={showPercentagesOnRiskCards}
-                onChange={(e) => setShowPercentagesOnRiskCards(e.target.checked)}
-                style={{ marginRight: '10px' }}
-              />
-              Show percentages on risk cards
-            </label>
-          </Typography>
-          <Typography component="div" sx={{ padding: '16px 0' }}>
-            <label>
-              Plugin Pass Rate Threshold: {(() => {
-                // Handle NaN and out-of-range values
-                if (Number.isNaN(pluginPassRateThreshold)) {
-                  return 'NaN';
-                }
-                const clampedThreshold = Math.min(1, Math.max(0, pluginPassRateThreshold || 0));
-                return (clampedThreshold * 100).toFixed(0);
-              })()}%
-            </label>
-            <Typography variant="body2" color="textSecondary" sx={{ mt: 1 }}>
-              Sets the threshold for considering a plugin as passed on the risk cards.
-            </Typography>
-            <Slider
-              value={
-                Number.isNaN(pluginPassRateThreshold)
-                  ? 0
-                  : Math.min(1, Math.max(0, pluginPassRateThreshold || 0))
-              }
-              onChange={(_, newValue) => setPluginPassRateThreshold(newValue as number)}
-              aria-labelledby="plugin-pass-rate-threshold-slider"
-              step={0.05}
-              marks
+    <TooltipProvider>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <DialogTrigger asChild>
+              <Button variant="ghost" size="icon" aria-label="settings">
+                <Settings className="h-5 w-5" />
+              </Button>
+            </DialogTrigger>
+          </TooltipTrigger>
+          <TooltipContent side="top">Report Settings</TooltipContent>
+        </Tooltip>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Report Settings</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-6 py-4">
+            <CheckboxWithLabel
+              label="Show percentages on risk cards"
+              checked={showPercentagesOnRiskCards}
+              onChange={setShowPercentagesOnRiskCards}
+            />
+
+            <SliderWithLabel
+              label="Plugin Pass Rate Threshold"
+              description="Sets the threshold for considering a plugin as passed on the risk cards."
+              value={safeThreshold}
+              onValueChange={setPluginPassRateThreshold}
               min={0}
               max={1}
-              valueLabelDisplay="auto"
-              valueLabelFormat={(value) => `${(value * 100).toFixed(0)}%`}
+              step={0.05}
+              showMarks
+              formatValue={(v) => `${(v * 100).toFixed(0)}%`}
             />
-          </Typography>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setOpen(false)}>Close</Button>
+          </DialogFooter>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={handleClose} variant="contained" color="primary">
-            Close
-          </Button>
-        </DialogActions>
       </Dialog>
-    </>
+    </TooltipProvider>
   );
 };
 

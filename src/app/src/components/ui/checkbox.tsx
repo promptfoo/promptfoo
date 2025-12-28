@@ -1,7 +1,9 @@
 import * as React from 'react';
 
 import { cn } from '@app/lib/utils';
-import { Check, Minus } from 'lucide-react';
+import { Check, Info, Minus } from 'lucide-react';
+
+import { Tooltip, TooltipContent, TooltipTrigger } from './tooltip';
 
 export interface CheckboxProps extends React.InputHTMLAttributes<HTMLInputElement> {
   indeterminate?: boolean;
@@ -50,4 +52,92 @@ function Checkbox({ className, indeterminate, checked, ref, ...props }: Checkbox
   );
 }
 
-export { Checkbox };
+/**
+ * CheckboxWithLabel - A convenience component that combines Checkbox with a label and optional tooltip.
+ */
+interface CheckboxWithLabelProps extends Omit<CheckboxProps, 'onChange' | 'size'> {
+  /**
+   * The label text for the checkbox.
+   */
+  label: React.ReactNode;
+  /**
+   * Optional tooltip text shown when hovering over an info icon.
+   */
+  tooltipText?: React.ReactNode;
+  /**
+   * Callback when checked state changes.
+   */
+  onChange?: (checked: boolean) => void;
+  /**
+   * Size variant of the component.
+   * @default "default"
+   */
+  size?: 'sm' | 'default';
+}
+
+function CheckboxWithLabel({
+  className,
+  label,
+  tooltipText,
+  checked,
+  onChange,
+  disabled,
+  size = 'default',
+  ...props
+}: CheckboxWithLabelProps) {
+  const id = React.useId();
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    onChange?.(e.target.checked);
+  };
+
+  return (
+    <div
+      className={cn(
+        'flex items-center gap-2 rounded px-1 -mx-1 py-1 transition-colors',
+        !disabled && 'hover:bg-muted/50 cursor-pointer',
+        disabled && 'opacity-50 cursor-not-allowed',
+        className,
+      )}
+      onClick={() => !disabled && onChange?.(!checked)}
+    >
+      <div className="shrink-0" onClick={(e) => e.stopPropagation()}>
+        <Checkbox
+          id={id}
+          checked={checked}
+          onChange={handleChange}
+          disabled={disabled}
+          {...props}
+        />
+      </div>
+      <label
+        htmlFor={id}
+        className={cn(
+          'flex-1 leading-none cursor-pointer select-none',
+          size === 'sm' ? 'text-xs' : 'text-sm',
+          disabled && 'cursor-not-allowed',
+        )}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {label}
+      </label>
+      {tooltipText && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Info
+              className={cn(
+                'text-muted-foreground/40 hover:text-muted-foreground cursor-help transition-colors',
+                size === 'sm' ? 'h-3.5 w-3.5' : 'h-4 w-4',
+              )}
+            />
+          </TooltipTrigger>
+          <TooltipContent side="top" className="max-w-xs">
+            {tooltipText}
+          </TooltipContent>
+        </Tooltip>
+      )}
+    </div>
+  );
+}
+
+export { Checkbox, CheckboxWithLabel };

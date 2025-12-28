@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useResultsViewSettingsStore } from '../../store';
 import SettingsPanel from './SettingsPanel';
@@ -104,35 +105,35 @@ describe('SettingsPanel', () => {
     expect(mockStore[setter]).toHaveBeenCalledWith(expectedNewValue);
   });
 
-  it.each([
-    {
-      description: 'standard value change',
-      initialValue: 500,
-      newValue: 100,
-      expectedValue: 100,
-    },
-    {
-      description: 'set to infinity when value is 1001',
-      initialValue: 500,
-      newValue: 1001,
-      expectedValue: Number.POSITIVE_INFINITY,
-    },
-  ])('should update maxTextLength for $description', ({
-    initialValue,
-    newValue,
-    expectedValue,
-  }) => {
+  it('should update maxTextLength to minimum when Home key is pressed', async () => {
+    const user = userEvent.setup();
     render(<SettingsPanel />);
 
     const slider = screen.getByRole('slider', { name: /max text length/i });
     expect(slider).toBeInTheDocument();
-    expect(slider).toHaveAttribute('aria-valuenow', String(initialValue));
+    expect(slider).toHaveAttribute('aria-valuenow', '500');
 
-    fireEvent.change(slider, { target: { value: newValue } });
-    fireEvent.mouseUp(slider);
+    // Focus the slider and press Home to go to min (25)
+    await user.click(slider);
+    await user.keyboard('{Home}');
 
-    expect(mockStore.setMaxTextLength).toHaveBeenCalledTimes(1);
-    expect(mockStore.setMaxTextLength).toHaveBeenCalledWith(expectedValue);
+    expect(mockStore.setMaxTextLength).toHaveBeenCalledWith(25);
+  });
+
+  it('should update maxTextLength to infinity when End key is pressed', async () => {
+    const user = userEvent.setup();
+    render(<SettingsPanel />);
+
+    const slider = screen.getByRole('slider', { name: /max text length/i });
+    expect(slider).toBeInTheDocument();
+    expect(slider).toHaveAttribute('aria-valuenow', '500');
+
+    // Focus the slider and press End to go to max (1001)
+    await user.click(slider);
+    await user.keyboard('{End}');
+
+    // When value is 1001, the component converts it to POSITIVE_INFINITY
+    expect(mockStore.setMaxTextLength).toHaveBeenCalledWith(Number.POSITIVE_INFINITY);
   });
 
   it('should set maxTextLength to POSITIVE_INFINITY when the store has POSITIVE_INFINITY value', () => {
@@ -147,20 +148,25 @@ describe('SettingsPanel', () => {
       name: /max text length/i,
     });
     expect(slider).toBeInTheDocument();
-    expect((slider as HTMLInputElement).value).toBe('1001');
+    // Radix Slider uses aria-valuenow, not .value
+    expect(slider).toHaveAttribute('aria-valuenow', '1001');
   });
 
-  it('should update localMaxTextLength when the text length slider is moved', () => {
+  it('should update localMaxTextLength when the slider is moved with arrow keys', async () => {
+    const user = userEvent.setup();
     render(<SettingsPanel />);
 
     const slider = screen.getByRole('slider', {
       name: /max text length/i,
     });
     expect(slider).toBeInTheDocument();
+    expect(slider).toHaveAttribute('aria-valuenow', '500');
 
-    fireEvent.change(slider, { target: { value: '300' } });
+    // Press ArrowRight to increase by step (1)
+    await user.click(slider);
+    await user.keyboard('{ArrowRight}');
 
-    expect(slider).toHaveAttribute('aria-valuenow', '300');
+    expect(slider).toHaveAttribute('aria-valuenow', '501');
   });
 
   it('should disable Pass reasons when Pass/fail indicators is off', () => {
