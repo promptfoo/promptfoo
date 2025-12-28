@@ -1273,31 +1273,31 @@ describe('file utilities', () => {
       vi.clearAllMocks();
     });
 
-    it('reads JSON output', async () => {
+    it('reads JSON output', () => {
       const outputPath = 'output.json';
       vi.mocked(fs.readFileSync).mockReturnValue('{}');
-      const output = await readOutput(outputPath);
+      const output = readOutput(outputPath);
       expect(output).toEqual({});
     });
 
-    it('fails for csv output', async () => {
-      await expect(readOutput('output.csv')).rejects.toThrow(
+    it('fails for csv output', () => {
+      expect(() => readOutput('output.csv')).toThrow(
         'Unsupported output file format: csv currently only supports json',
       );
     });
 
-    it('fails for yaml output', async () => {
-      await expect(readOutput('output.yaml')).rejects.toThrow(
+    it('fails for yaml output', () => {
+      expect(() => readOutput('output.yaml')).toThrow(
         'Unsupported output file format: yaml currently only supports json',
       );
 
-      await expect(readOutput('output.yml')).rejects.toThrow(
+      expect(() => readOutput('output.yml')).toThrow(
         'Unsupported output file format: yml currently only supports json',
       );
     });
 
-    it('fails for xml output', async () => {
-      await expect(readOutput('output.xml')).rejects.toThrow(
+    it('fails for xml output', () => {
+      expect(() => readOutput('output.xml')).toThrow(
         'Unsupported output file format: xml currently only supports json',
       );
     });
