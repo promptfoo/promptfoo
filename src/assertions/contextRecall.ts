@@ -1,5 +1,6 @@
 import { matchesContextRecall } from '../matchers';
 import invariant from '../util/invariant';
+import { defineAssertions } from './assertionDefinition';
 import { resolveContext } from './contextUtils';
 
 import type { AssertionParams, GradingResult } from '../types/index';
@@ -50,3 +51,15 @@ export const handleContextRecall = async ({
     },
   };
 };
+
+export const contextRecallDefinitions = defineAssertions({
+  'context-recall': {
+    label: 'Context Recall',
+    description: 'Measures how much context is captured in the output',
+    tags: ['ai-evaluation', 'rag'],
+    valueType: 'none',
+    requiresLlm: true,
+    supportsThreshold: true,
+    handler: handleContextRecall,
+  },
+});

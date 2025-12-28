@@ -2,6 +2,7 @@ import { runPythonCode } from '../python/wrapper';
 import { type GradingResult, isGradingResult } from '../types/index';
 import { mapSnakeCaseToCamelCase } from '../util/caseMapping';
 import invariant from '../util/invariant';
+import { defineAssertions } from './assertionDefinition';
 
 import type { AssertionParams } from '../types/index';
 
@@ -123,3 +124,14 @@ ${
     assertion,
   };
 };
+
+export const pythonDefinitions = defineAssertions({
+  python: {
+    label: 'Python',
+    description: 'Custom Python assertion function',
+    tags: ['custom'],
+    valueType: 'code',
+    handler: handlePython,
+    learnMoreUrl: 'https://promptfoo.dev/docs/configuration/expected-outputs#python',
+  },
+});

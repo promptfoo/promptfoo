@@ -2,6 +2,7 @@ import { runRubyCode } from '../ruby/wrapper';
 import { type GradingResult, isGradingResult } from '../types/index';
 import { mapSnakeCaseToCamelCase } from '../util/caseMapping';
 import invariant from '../util/invariant';
+import { defineAssertions } from './assertionDefinition';
 
 import type { AssertionParams } from '../types/index';
 
@@ -124,3 +125,14 @@ end
     assertion,
   };
 };
+
+export const rubyDefinitions = defineAssertions({
+  ruby: {
+    label: 'Ruby',
+    description: 'Custom Ruby assertion function',
+    tags: ['custom'],
+    valueType: 'code',
+    handler: handleRuby,
+    learnMoreUrl: 'https://promptfoo.dev/docs/configuration/expected-outputs#ruby',
+  },
+});

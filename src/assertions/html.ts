@@ -1,4 +1,5 @@
 import { JSDOM } from 'jsdom';
+import { defineAssertions } from './assertionDefinition';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
@@ -313,3 +314,20 @@ export const handleIsHtml = ({
     assertion,
   };
 };
+
+export const htmlDefinitions = defineAssertions({
+  'is-html': {
+    label: 'Is HTML',
+    description: 'Output is valid HTML',
+    tags: ['format'],
+    valueType: 'none',
+    handler: handleIsHtml,
+  },
+  'contains-html': {
+    label: 'Contains HTML',
+    description: 'Output contains valid HTML somewhere',
+    tags: ['format'],
+    valueType: 'none',
+    handler: handleContainsHtml,
+  },
+});

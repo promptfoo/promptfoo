@@ -1,5 +1,6 @@
 import { validateFunctionCall } from '../providers/openai/util';
 import { maybeLoadToolsFromExternalFile } from '../util/index';
+import { defineAssertions } from './assertionDefinition';
 
 import type { OpenAiChatCompletionProvider } from '../providers/openai/chat';
 import type { AssertionParams, GradingResult } from '../types/index';
@@ -105,3 +106,13 @@ export const handleIsValidOpenAiToolsCall = async ({
     };
   }
 };
+
+export const openaiDefinitions = defineAssertions({
+  'is-valid-openai-tools-call': {
+    label: 'Valid OpenAI Tools Call',
+    description: 'Output is a valid OpenAI tools call',
+    tags: ['format'],
+    valueType: 'custom',
+    handler: handleIsValidOpenAiToolsCall,
+  },
+});

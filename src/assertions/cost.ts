@@ -1,3 +1,5 @@
+import { defineAssertions } from './assertionDefinition';
+
 import type { AssertionParams, GradingResult } from '../types/index';
 
 export const handleCost = ({ cost, assertion }: AssertionParams): GradingResult => {
@@ -18,3 +20,13 @@ export const handleCost = ({ cost, assertion }: AssertionParams): GradingResult 
     assertion,
   };
 };
+
+export const costDefinitions = defineAssertions({
+  cost: {
+    label: 'Cost',
+    description: 'API call cost is below threshold',
+    tags: ['performance'],
+    valueType: 'number',
+    handler: handleCost,
+  },
+});

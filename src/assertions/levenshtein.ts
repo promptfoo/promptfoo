@@ -1,5 +1,6 @@
 import { distance } from 'fastest-levenshtein';
 import invariant from '../util/invariant';
+import { defineAssertions } from './assertionDefinition';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
@@ -24,3 +25,14 @@ export function handleLevenshtein({
     assertion,
   };
 }
+
+export const levenshteinDefinitions = defineAssertions({
+  levenshtein: {
+    label: 'Levenshtein Distance',
+    description: 'Edit distance between output and expected text',
+    tags: ['similarity'],
+    valueType: 'reference',
+    supportsThreshold: true,
+    handler: handleLevenshtein,
+  },
+});

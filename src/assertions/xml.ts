@@ -1,4 +1,5 @@
 import { XMLParser } from 'fast-xml-parser';
+import { defineAssertions } from './assertionDefinition';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
@@ -102,3 +103,20 @@ export const handleIsXml = ({
     assertion,
   };
 };
+
+export const xmlDefinitions = defineAssertions({
+  'is-xml': {
+    label: 'Is XML',
+    description: 'Output is valid XML',
+    tags: ['format'],
+    valueType: 'none',
+    handler: handleIsXml,
+  },
+  'contains-xml': {
+    label: 'Contains XML',
+    description: 'Output contains valid XML somewhere',
+    tags: ['format'],
+    valueType: 'none',
+    handler: handleIsXml, // Same handler handles both based on baseType
+  },
+});

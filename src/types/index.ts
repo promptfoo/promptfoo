@@ -447,7 +447,11 @@ export function isGradingResult(result: any): result is GradingResult {
   );
 }
 
-export const BaseAssertionTypesSchema = z.enum([
+/**
+ * Canonical list of base assertion types.
+ * This is the single source of truth - used by both the Zod schema and UI components.
+ */
+export const BASE_ASSERTION_TYPES = [
   'answer-relevance',
   'bleu',
   'classifier',
@@ -484,17 +488,18 @@ export const BaseAssertionTypesSchema = z.enum([
   'latency',
   'levenshtein',
   'llm-rubric',
-  'pi',
   'meteor',
   'model-graded-closedqa',
   'model-graded-factuality',
   'moderation',
   'perplexity',
   'perplexity-score',
+  'pi',
   'python',
   'regex',
   'rouge-n',
   'ruby',
+  'search-rubric',
   'similar',
   'similar:cosine',
   'similar:dot',
@@ -504,22 +509,26 @@ export const BaseAssertionTypesSchema = z.enum([
   'trace-error-spans',
   'trace-span-count',
   'trace-span-duration',
-  'search-rubric',
   'webhook',
-]);
+] as const;
+
+export const BaseAssertionTypesSchema = z.enum(BASE_ASSERTION_TYPES);
 
 export type BaseAssertionTypes = z.infer<typeof BaseAssertionTypesSchema>;
 
 type NotPrefixed<T extends string> = `not-${T}`;
 
-// The 'human' assertion type is added via the web UI to allow manual grading.
-// The 'select-best' assertion type compares all variations for a given test case
-// and selects the highest scoring one after all other assertions have completed.
-// The 'max-score' assertion type selects the output with the highest aggregate score
-// from other assertions.
-export type SpecialAssertionTypes = 'select-best' | 'human' | 'max-score';
+/**
+ * Special assertion types that don't follow standard patterns.
+ * - 'human': Added via web UI for manual grading
+ * - 'select-best': Compares all variations and selects the highest scoring one
+ * - 'max-score': Selects the output with the highest aggregate score
+ */
+export const SPECIAL_ASSERTION_TYPES = ['select-best', 'human', 'max-score'] as const;
 
-export const SpecialAssertionTypesSchema = z.enum(['select-best', 'human', 'max-score']);
+export type SpecialAssertionTypes = (typeof SPECIAL_ASSERTION_TYPES)[number];
+
+export const SpecialAssertionTypesSchema = z.enum(SPECIAL_ASSERTION_TYPES);
 
 export const NotPrefixedAssertionTypesSchema = BaseAssertionTypesSchema.transform(
   (baseType) => `not-${baseType}` as NotPrefixed<BaseAssertionTypes>,

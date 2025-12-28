@@ -1,5 +1,6 @@
 import { matchesContextFaithfulness } from '../matchers';
 import invariant from '../util/invariant';
+import { defineAssertions } from './assertionDefinition';
 import { resolveContext } from './contextUtils';
 
 import type { AssertionParams, GradingResult } from '../types/index';
@@ -57,3 +58,15 @@ export async function handleContextFaithfulness({
     },
   };
 }
+
+export const contextFaithfulnessDefinitions = defineAssertions({
+  'context-faithfulness': {
+    label: 'Context Faithfulness',
+    description: 'Checks if output is faithful to the provided context',
+    tags: ['ai-evaluation', 'rag'],
+    valueType: 'none',
+    requiresLlm: true,
+    supportsThreshold: true,
+    handler: handleContextFaithfulness,
+  },
+});

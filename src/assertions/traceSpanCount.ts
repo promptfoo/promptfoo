@@ -1,3 +1,4 @@
+import { defineAssertions } from './assertionDefinition';
 import { matchesPattern } from './traceUtils';
 
 import type { AssertionParams, GradingResult } from '../types/index';
@@ -63,3 +64,13 @@ export const handleTraceSpanCount = ({
     assertion,
   };
 };
+
+export const traceSpanCountDefinitions = defineAssertions({
+  'trace-span-count': {
+    label: 'Trace Span Count',
+    description: 'Validates the number of spans in a trace',
+    tags: ['performance'],
+    valueType: 'custom',
+    handler: handleTraceSpanCount,
+  },
+});

@@ -1,5 +1,6 @@
 import * as rouge from 'js-rouge';
 import invariant from '../util/invariant';
+import { defineAssertions } from './assertionDefinition';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
@@ -27,3 +28,14 @@ export function handleRougeScore({
     assertion,
   };
 }
+
+export const rougeDefinitions = defineAssertions({
+  'rouge-n': {
+    label: 'ROUGE-N',
+    description: 'ROUGE-N score for text overlap measurement',
+    tags: ['similarity'],
+    valueType: 'reference',
+    supportsThreshold: true,
+    handler: handleRougeScore,
+  },
+});

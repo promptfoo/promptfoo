@@ -1,4 +1,5 @@
 import { isBasicRefusal } from '../redteam/util';
+import { defineAssertions } from './assertionDefinition';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
@@ -34,3 +35,13 @@ export function handleIsRefusal(params: AssertionParams): GradingResult {
     assertion,
   };
 }
+
+export const refusalDefinitions = defineAssertions({
+  'is-refusal': {
+    label: 'Is Refusal',
+    description: 'Checks if the model refused to answer',
+    tags: ['safety'],
+    valueType: 'none',
+    handler: handleIsRefusal,
+  },
+});

@@ -1,5 +1,6 @@
 import { matchesLlmRubric } from '../matchers';
 import invariant from '../util/invariant';
+import { defineAssertions } from './assertionDefinition';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
@@ -33,3 +34,15 @@ export const handleLlmRubric = ({
     providerCallContext,
   );
 };
+
+export const llmRubricDefinitions = defineAssertions({
+  'llm-rubric': {
+    label: 'LLM Rubric',
+    description: 'AI evaluates output against custom criteria',
+    tags: ['ai-evaluation'],
+    valueType: 'text',
+    requiresLlm: true,
+    handler: handleLlmRubric,
+    learnMoreUrl: 'https://promptfoo.dev/docs/configuration/expected-outputs#llm-rubric',
+  },
+});

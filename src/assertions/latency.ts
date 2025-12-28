@@ -1,3 +1,5 @@
+import { defineAssertions } from './assertionDefinition';
+
 import type { AssertionParams, GradingResult } from '../types/index';
 
 export const handleLatency = ({ assertion, latencyMs }: AssertionParams): GradingResult => {
@@ -19,3 +21,13 @@ export const handleLatency = ({ assertion, latencyMs }: AssertionParams): Gradin
     assertion,
   };
 };
+
+export const latencyDefinitions = defineAssertions({
+  latency: {
+    label: 'Latency',
+    description: 'Response time is below threshold',
+    tags: ['performance'],
+    valueType: 'number',
+    handler: handleLatency,
+  },
+});

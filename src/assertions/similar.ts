@@ -1,5 +1,6 @@
 import { matchesSimilarity } from '../matchers';
 import invariant from '../util/invariant';
+import { defineAssertions } from './assertionDefinition';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
@@ -76,3 +77,43 @@ export const handleSimilar = async ({
     };
   }
 };
+
+export const similarDefinitions = defineAssertions({
+  similar: {
+    label: 'Semantic Similarity',
+    description: 'Output is semantically similar to expected text',
+    tags: ['similarity', 'embeddings'],
+    valueType: 'reference',
+    requiresLlm: true,
+    supportsThreshold: true,
+    handler: handleSimilar,
+    learnMoreUrl: 'https://promptfoo.dev/docs/configuration/expected-outputs/similar',
+  },
+  'similar:cosine': {
+    label: 'Cosine Similarity',
+    description: 'Cosine similarity between output and reference embeddings',
+    tags: ['similarity', 'embeddings'],
+    valueType: 'reference',
+    requiresLlm: true,
+    supportsThreshold: true,
+    handler: handleSimilar,
+  },
+  'similar:dot': {
+    label: 'Dot Product Similarity',
+    description: 'Dot product similarity between output and reference embeddings',
+    tags: ['similarity', 'embeddings'],
+    valueType: 'reference',
+    requiresLlm: true,
+    supportsThreshold: true,
+    handler: handleSimilar,
+  },
+  'similar:euclidean': {
+    label: 'Euclidean Distance',
+    description: 'Euclidean distance between output and reference embeddings',
+    tags: ['similarity', 'embeddings'],
+    valueType: 'reference',
+    requiresLlm: true,
+    supportsThreshold: true,
+    handler: handleSimilar,
+  },
+});

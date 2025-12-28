@@ -1,5 +1,6 @@
 import { matchesAnswerRelevance } from '../matchers';
 import invariant from '../util/invariant';
+import { defineAssertions } from './assertionDefinition';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
@@ -28,3 +29,15 @@ export const handleAnswerRelevance = async ({
     )),
   };
 };
+
+export const answerRelevanceDefinitions = defineAssertions({
+  'answer-relevance': {
+    label: 'Answer Relevance',
+    description: 'Evaluates if the answer is relevant to the question',
+    tags: ['ai-evaluation', 'rag'],
+    valueType: 'none',
+    requiresLlm: true,
+    supportsThreshold: true,
+    handler: handleAnswerRelevance,
+  },
+});

@@ -1,4 +1,5 @@
 import logger from '../logger';
+import { defineAssertions } from './assertionDefinition';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
@@ -53,3 +54,15 @@ export const handleGuardrails = async ({
     assertion,
   };
 };
+
+export const guardrailsDefinitions = defineAssertions({
+  guardrails: {
+    label: 'Guardrails',
+    description: 'Validates output against safety guardrails',
+    tags: ['safety', 'external'],
+    valueType: 'custom',
+    requiresLlm: true,
+    handler: handleGuardrails,
+    learnMoreUrl: 'https://promptfoo.dev/docs/configuration/expected-outputs/guardrails',
+  },
+});

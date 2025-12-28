@@ -1,4 +1,5 @@
 import invariant from '../util/invariant';
+import { defineAssertions } from './assertionDefinition';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
@@ -23,3 +24,13 @@ export const handleStartsWith = ({
     assertion,
   };
 };
+
+export const startsWithDefinitions = defineAssertions({
+  'starts-with': {
+    label: 'Starts With',
+    description: 'Output starts with the specified text',
+    tags: ['text-matching'],
+    valueType: 'string',
+    handler: handleStartsWith,
+  },
+});

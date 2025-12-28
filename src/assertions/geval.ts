@@ -1,5 +1,6 @@
 import { matchesGEval } from '../matchers';
 import invariant from '../util/invariant';
+import { defineAssertions } from './assertionDefinition';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
@@ -59,3 +60,15 @@ export const handleGEval = async ({
     };
   }
 };
+
+export const gevalDefinitions = defineAssertions({
+  'g-eval': {
+    label: 'G-Eval',
+    description: 'G-Eval framework for LLM-based evaluation',
+    tags: ['ai-evaluation'],
+    valueType: 'custom',
+    requiresLlm: true,
+    supportsThreshold: true,
+    handler: handleGEval,
+  },
+});

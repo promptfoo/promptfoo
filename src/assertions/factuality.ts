@@ -1,5 +1,6 @@
 import { matchesFactuality } from '../matchers';
 import invariant from '../util/invariant';
+import { defineAssertions } from './assertionDefinition';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
@@ -31,3 +32,23 @@ export const handleFactuality = async ({
     )),
   };
 };
+
+export const factualityDefinitions = defineAssertions({
+  factuality: {
+    label: 'Factuality',
+    description: 'Checks if output is factually consistent with context',
+    tags: ['ai-evaluation'],
+    valueType: 'text',
+    requiresLlm: true,
+    handler: handleFactuality,
+    learnMoreUrl: 'https://promptfoo.dev/docs/configuration/expected-outputs#factuality',
+  },
+  'model-graded-factuality': {
+    label: 'Model-Graded Factuality',
+    description: 'Uses LLM to grade factual accuracy of output',
+    tags: ['ai-evaluation'],
+    valueType: 'text',
+    requiresLlm: true,
+    handler: handleFactuality,
+  },
+});

@@ -1,5 +1,6 @@
 import { matchesClassification } from '../matchers';
 import invariant from '../util/invariant';
+import { defineAssertions } from './assertionDefinition';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
@@ -32,3 +33,15 @@ export async function handleClassifier({
     ...classificationResult,
   };
 }
+
+export const classifierDefinitions = defineAssertions({
+  classifier: {
+    label: 'HuggingFace Classifier',
+    description: 'Classifies output using HuggingFace models (sentiment, toxicity, etc.)',
+    tags: ['ai-evaluation', 'embeddings'],
+    valueType: 'string',
+    supportsThreshold: true,
+    handler: handleClassifier,
+    learnMoreUrl: 'https://promptfoo.dev/docs/configuration/expected-outputs/classifier',
+  },
+});

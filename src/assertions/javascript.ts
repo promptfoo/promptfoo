@@ -1,6 +1,7 @@
 import { type GradingResult, isGradingResult } from '../types/index';
 import invariant from '../util/invariant';
 import { getProcessShim } from '../util/processShim';
+import { defineAssertions } from './assertionDefinition';
 
 import type { AssertionParams } from '../types/index';
 
@@ -206,3 +207,14 @@ ${renderedValue}`,
     assertion,
   };
 };
+
+export const javascriptDefinitions = defineAssertions({
+  javascript: {
+    label: 'JavaScript',
+    description: 'Custom JavaScript assertion function',
+    tags: ['custom'],
+    valueType: 'code',
+    handler: handleJavascript,
+    learnMoreUrl: 'https://promptfoo.dev/docs/configuration/expected-outputs#javascript',
+  },
+});

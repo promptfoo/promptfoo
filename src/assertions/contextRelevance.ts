@@ -1,5 +1,6 @@
 import { matchesContextRelevance } from '../matchers';
 import invariant from '../util/invariant';
+import { defineAssertions } from './assertionDefinition';
 import { resolveContext } from './contextUtils';
 
 import type { AssertionParams, GradingResult } from '../types/index';
@@ -54,3 +55,15 @@ export const handleContextRelevance = async ({
     },
   };
 };
+
+export const contextRelevanceDefinitions = defineAssertions({
+  'context-relevance': {
+    label: 'Context Relevance',
+    description: 'Evaluates relevance of retrieved context',
+    tags: ['ai-evaluation', 'rag'],
+    valueType: 'none',
+    requiresLlm: true,
+    supportsThreshold: true,
+    handler: handleContextRelevance,
+  },
+});

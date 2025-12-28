@@ -1,4 +1,5 @@
 import { type Option as sqlParserOption } from 'node-sql-parser';
+import { defineAssertions } from './assertionDefinition';
 import { coerceString } from './utils';
 
 import type { AssertionParams, GradingResult } from '../types/index';
@@ -157,3 +158,20 @@ export const handleContainsSql = async (
   }
   return handleIsSql(assertionParams);
 };
+
+export const sqlDefinitions = defineAssertions({
+  'is-sql': {
+    label: 'Is SQL',
+    description: 'Output is valid SQL',
+    tags: ['format'],
+    valueType: 'none',
+    handler: handleIsSql,
+  },
+  'contains-sql': {
+    label: 'Contains SQL',
+    description: 'Output contains valid SQL somewhere',
+    tags: ['format'],
+    valueType: 'none',
+    handler: handleContainsSql,
+  },
+});

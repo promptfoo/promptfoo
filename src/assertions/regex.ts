@@ -1,4 +1,5 @@
 import invariant from '../util/invariant';
+import { defineAssertions } from './assertionDefinition';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
@@ -31,3 +32,13 @@ export const handleRegex = ({
     assertion,
   };
 };
+
+export const regexDefinitions = defineAssertions({
+  regex: {
+    label: 'Regex Match',
+    description: 'Output matches a regular expression pattern',
+    tags: ['text-matching'],
+    valueType: 'regex',
+    handler: handleRegex,
+  },
+});

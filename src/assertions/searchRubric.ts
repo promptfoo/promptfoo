@@ -1,4 +1,5 @@
 import { matchesSearchRubric } from '../matchers';
+import { defineAssertions } from './assertionDefinition';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
@@ -35,3 +36,14 @@ export async function handleSearchRubric({
 
   return result;
 }
+
+export const searchRubricDefinitions = defineAssertions({
+  'search-rubric': {
+    label: 'Search Rubric',
+    description: 'Evaluates search/retrieval quality using LLM grading',
+    tags: ['ai-evaluation'],
+    valueType: 'text',
+    requiresLlm: true,
+    handler: handleSearchRubric,
+  },
+});

@@ -1,6 +1,7 @@
 // These assertions are ported from DeepEval.
 // https://docs.confident-ai.com/docs/metrics-conversation-relevancy. See APACHE_LICENSE for license.
 
+import { defineAssertions } from '../../assertions/assertionDefinition';
 import { callProviderWithContext, getAndCheckProvider } from '../../matchers';
 import { getDefaultProviders } from '../../providers/defaults';
 import invariant from '../../util/invariant';
@@ -130,3 +131,15 @@ export const handleConversationRelevance = async ({
     tokensUsed: tokensUsed.total > 0 ? tokensUsed : undefined,
   };
 };
+
+export const conversationRelevanceDefinitions = defineAssertions({
+  'conversation-relevance': {
+    label: 'Conversation Relevance',
+    description: 'Evaluates if the response is relevant to the conversation context',
+    tags: ['ai-evaluation', 'rag'],
+    valueType: 'none',
+    requiresLlm: true,
+    supportsThreshold: true,
+    handler: handleConversationRelevance,
+  },
+});

@@ -1,4 +1,5 @@
 import invariant from '../util/invariant';
+import { defineAssertions } from './assertionDefinition';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
@@ -293,3 +294,14 @@ export async function handleMeteorAssertion({
     assertion,
   };
 }
+
+export const meteorDefinitions = defineAssertions({
+  meteor: {
+    label: 'METEOR Score',
+    description: 'METEOR score for translation/generation quality',
+    tags: ['similarity'],
+    valueType: 'reference',
+    supportsThreshold: true,
+    handler: handleMeteorAssertion,
+  },
+});

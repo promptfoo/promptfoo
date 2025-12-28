@@ -1,4 +1,5 @@
 import invariant from '../util/invariant';
+import { defineAssertions } from './assertionDefinition';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
@@ -33,3 +34,13 @@ export function handleFinishReason({
     assertion,
   };
 }
+
+export const finishReasonDefinitions = defineAssertions({
+  'finish-reason': {
+    label: 'Finish Reason',
+    description: 'Checks the model finish reason (stop, length, etc.)',
+    tags: ['performance'],
+    valueType: 'string',
+    handler: handleFinishReason,
+  },
+});

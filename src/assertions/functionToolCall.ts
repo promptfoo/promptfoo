@@ -4,6 +4,7 @@ import { validateFunctionCall as validateGoogleFunctionCall } from '../providers
 import { VertexChatProvider } from '../providers/google/vertex';
 import { OpenAiChatCompletionProvider } from '../providers/openai/chat';
 import { validateFunctionCall as validateOpenAIFunctionCall } from '../providers/openai/util';
+import { defineAssertions } from './assertionDefinition';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
@@ -48,3 +49,20 @@ export const handleIsValidFunctionCall = ({
     };
   }
 };
+
+export const functionToolCallDefinitions = defineAssertions({
+  'is-valid-function-call': {
+    label: 'Valid Function Call',
+    description: 'Output is a valid function call format',
+    tags: ['format'],
+    valueType: 'custom',
+    handler: handleIsValidFunctionCall,
+  },
+  'is-valid-openai-function-call': {
+    label: 'Valid OpenAI Function Call',
+    description: 'Output is a valid OpenAI function call',
+    tags: ['format'],
+    valueType: 'custom',
+    handler: handleIsValidFunctionCall,
+  },
+});

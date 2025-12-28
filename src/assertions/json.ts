@@ -1,6 +1,7 @@
 import yaml from 'js-yaml';
 import invariant from '../util/invariant';
 import { extractJsonObjects, getAjv } from '../util/json';
+import { defineAssertions } from './assertionDefinition';
 import type { ValidateFunction } from 'ajv';
 
 import type { AssertionParams, GradingResult } from '../types/index';
@@ -104,3 +105,20 @@ export function handleContainsJson({
     assertion,
   };
 }
+
+export const jsonDefinitions = defineAssertions({
+  'is-json': {
+    label: 'Is JSON',
+    description: 'Output is valid JSON',
+    tags: ['format'],
+    valueType: 'schema',
+    handler: handleIsJson,
+  },
+  'contains-json': {
+    label: 'Contains JSON',
+    description: 'Output contains valid JSON somewhere',
+    tags: ['format'],
+    valueType: 'schema',
+    handler: handleContainsJson,
+  },
+});

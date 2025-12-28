@@ -1,6 +1,7 @@
 import { getEnvInt } from '../envars';
 import { fetchWithRetries } from '../util/fetch/index';
 import invariant from '../util/invariant';
+import { defineAssertions } from './assertionDefinition';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
@@ -65,3 +66,13 @@ export async function handleWebhook({
     };
   }
 }
+
+export const webhookDefinitions = defineAssertions({
+  webhook: {
+    label: 'Webhook',
+    description: 'External webhook validates the output',
+    tags: ['custom', 'external'],
+    valueType: 'string',
+    handler: handleWebhook,
+  },
+});

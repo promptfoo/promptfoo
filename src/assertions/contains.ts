@@ -1,4 +1,5 @@
 import invariant from '../util/invariant';
+import { defineAssertions } from './assertionDefinition';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
@@ -152,3 +153,53 @@ export const handleIContainsAll = ({
     assertion,
   };
 };
+
+/**
+ * Assertion definitions for text containment checks.
+ * Includes metadata and handler references for each assertion type.
+ */
+export const containsDefinitions = defineAssertions({
+  contains: {
+    label: 'Contains',
+    description: 'Output contains the specified text (case-sensitive)',
+    tags: ['text-matching'],
+    valueType: 'string',
+    handler: handleContains,
+    learnMoreUrl: 'https://promptfoo.dev/docs/configuration/expected-outputs#contains',
+  },
+  icontains: {
+    label: 'Contains (Case-Insensitive)',
+    description: 'Output contains the specified text (case-insensitive)',
+    tags: ['text-matching'],
+    valueType: 'string',
+    handler: handleIContains,
+  },
+  'contains-all': {
+    label: 'Contains All',
+    description: 'Output contains all specified strings',
+    tags: ['text-matching'],
+    valueType: 'array',
+    handler: handleContainsAll,
+  },
+  'contains-any': {
+    label: 'Contains Any',
+    description: 'Output contains at least one of the specified strings',
+    tags: ['text-matching'],
+    valueType: 'array',
+    handler: handleContainsAny,
+  },
+  'icontains-all': {
+    label: 'Contains All (Case-Insensitive)',
+    description: 'Output contains all specified strings (case-insensitive)',
+    tags: ['text-matching'],
+    valueType: 'array',
+    handler: handleIContainsAll,
+  },
+  'icontains-any': {
+    label: 'Contains Any (Case-Insensitive)',
+    description: 'Output contains at least one of the specified strings (case-insensitive)',
+    tags: ['text-matching'],
+    valueType: 'array',
+    handler: handleIContainsAny,
+  },
+});

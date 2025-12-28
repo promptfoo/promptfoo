@@ -1,3 +1,5 @@
+import { defineAssertions } from './assertionDefinition';
+
 import type { AssertionParams, GradingResult } from '../types/index';
 
 export function handlePerplexity({ logProbs, assertion }: AssertionParams): GradingResult {
@@ -42,3 +44,20 @@ export function handlePerplexityScore({ logProbs, assertion }: AssertionParams):
     assertion,
   };
 }
+
+export const perplexityDefinitions = defineAssertions({
+  perplexity: {
+    label: 'Perplexity',
+    description: 'Model perplexity is below threshold',
+    tags: ['performance'],
+    valueType: 'number',
+    handler: handlePerplexity,
+  },
+  'perplexity-score': {
+    label: 'Perplexity Score',
+    description: 'Normalized perplexity score check',
+    tags: ['performance'],
+    valueType: 'number',
+    handler: handlePerplexityScore,
+  },
+});

@@ -10,6 +10,7 @@
  */
 
 import invariant from '../util/invariant';
+import { defineAssertions } from './assertionDefinition';
 import { getNGrams } from './ngrams';
 
 import type { AssertionParams, GradingResult } from '../types/index';
@@ -148,3 +149,14 @@ export function handleBleuScore({
     assertion,
   };
 }
+
+export const bleuDefinitions = defineAssertions({
+  bleu: {
+    label: 'BLEU Score',
+    description: 'BLEU score for translation/generation quality',
+    tags: ['similarity'],
+    valueType: 'reference',
+    supportsThreshold: true,
+    handler: handleBleuScore,
+  },
+});

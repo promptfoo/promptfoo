@@ -1,4 +1,5 @@
 import invariant from '../util/invariant';
+import { defineAssertions } from './assertionDefinition';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
@@ -230,3 +231,14 @@ export const handleToolCallF1 = ({
     assertion,
   };
 };
+
+export const toolCallF1Definitions = defineAssertions({
+  'tool-call-f1': {
+    label: 'Tool Call F1',
+    description: 'F1 score for tool/function call accuracy',
+    tags: ['format'],
+    valueType: 'array',
+    supportsThreshold: true,
+    handler: handleToolCallF1,
+  },
+});

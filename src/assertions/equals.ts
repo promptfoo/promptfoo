@@ -1,5 +1,7 @@
 import util from 'util';
 
+import { defineAssertions } from './assertionDefinition';
+
 import type { AssertionParams, GradingResult } from '../types/index';
 
 export const handleEquals = async ({
@@ -32,3 +34,13 @@ export const handleEquals = async ({
     assertion,
   };
 };
+
+export const equalsDefinitions = defineAssertions({
+  equals: {
+    label: 'Equals',
+    description: 'Output exactly matches the expected text',
+    tags: ['text-matching'],
+    valueType: 'text',
+    handler: handleEquals,
+  },
+});

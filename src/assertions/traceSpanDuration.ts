@@ -1,3 +1,4 @@
+import { defineAssertions } from './assertionDefinition';
 import { matchesPattern } from './traceUtils';
 
 import type { AssertionParams, GradingResult } from '../types/index';
@@ -103,3 +104,13 @@ export const handleTraceSpanDuration = ({
     assertion,
   };
 };
+
+export const traceSpanDurationDefinitions = defineAssertions({
+  'trace-span-duration': {
+    label: 'Trace Span Duration',
+    description: 'Validates the duration of spans in a trace',
+    tags: ['performance'],
+    valueType: 'custom',
+    handler: handleTraceSpanDuration,
+  },
+});

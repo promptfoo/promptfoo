@@ -1,6 +1,7 @@
 import { matchesModeration } from '../matchers';
 import { parseChatPrompt } from '../providers/shared';
 import invariant from '../util/invariant';
+import { defineAssertions } from './assertionDefinition';
 
 import type { AssertionParams, GradingResult } from '../types/index';
 
@@ -50,3 +51,15 @@ export const handleModeration = async ({
     assertion,
   };
 };
+
+export const moderationDefinitions = defineAssertions({
+  moderation: {
+    label: 'Moderation',
+    description: 'Checks output against content moderation policies',
+    tags: ['safety', 'external'],
+    valueType: 'none',
+    requiresLlm: true,
+    handler: handleModeration,
+    learnMoreUrl: 'https://promptfoo.dev/docs/configuration/expected-outputs/moderation',
+  },
+});

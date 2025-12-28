@@ -1,4 +1,5 @@
 import invariant from '../util/invariant';
+import { defineAssertions } from './assertionDefinition';
 import { getNGrams } from './ngrams';
 
 import type { AssertionParams, GradingResult } from '../types/index';
@@ -172,3 +173,14 @@ export function handleGleuScore({
     assertion,
   };
 }
+
+export const gleuDefinitions = defineAssertions({
+  gleu: {
+    label: 'GLEU Score',
+    description: 'Google-BLEU score for translation/generation quality',
+    tags: ['similarity'],
+    valueType: 'reference',
+    supportsThreshold: true,
+    handler: handleGleuScore,
+  },
+});

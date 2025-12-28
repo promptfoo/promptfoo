@@ -1,3 +1,4 @@
+import { defineAssertions } from './assertionDefinition';
 import { matchesPattern } from './traceUtils';
 
 import type { AssertionParams, GradingResult } from '../types/index';
@@ -154,3 +155,13 @@ export const handleTraceErrorSpans = ({
     assertion,
   };
 };
+
+export const traceErrorSpansDefinitions = defineAssertions({
+  'trace-error-spans': {
+    label: 'Trace Error Spans',
+    description: 'Validates error spans in a trace',
+    tags: ['performance'],
+    valueType: 'custom',
+    handler: handleTraceErrorSpans,
+  },
+});
