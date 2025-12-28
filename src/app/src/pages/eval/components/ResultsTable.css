@@ -825,3 +825,53 @@ thead .header-dismiss {
 [data-theme='dark'] .results-table tr .cell a {
   color: var(--link-color, #58a6ff);
 }
+
+/* Tables in markdown content */
+.results-table tr .cell table {
+  border-collapse: collapse;
+  margin: 0.4em 0;
+  font-size: 0.9em;
+  width: auto;
+}
+
+.results-table tr .cell th,
+.results-table tr .cell td {
+  border: 1px solid var(--border-color);
+  padding: 0.35em 0.6em;
+  text-align: left;
+}
+
+.results-table tr .cell th {
+  background: rgba(0, 0, 0, 0.04);
+  font-weight: 600;
+}
+
+.results-table tr .cell tr:nth-child(even) td {
+  background: rgba(0, 0, 0, 0.02);
+}
+
+/* Dark mode table styles */
+[data-theme='dark'] .results-table tr .cell th {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+[data-theme='dark'] .results-table tr .cell tr:nth-child(even) td {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+/* Dark mode code blocks - better contrast */
+[data-theme='dark'] .results-table tr .cell pre {
+  background: #1e1e1e;
+  border: 1px solid #3d3d3d;
+}
+
+[data-theme='dark'] .results-table tr .cell code:not(pre code) {
+  background: #2d2d2d;
+  border: 1px solid #3d3d3d;
+}
+
+/* Dark mode blockquote - more visible border */
+[data-theme='dark'] .results-table tr .cell blockquote {
+  border-left-color: #606060;
+  background: rgba(255, 255, 255, 0.03);
+}
