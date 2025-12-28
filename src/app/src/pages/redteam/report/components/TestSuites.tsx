@@ -5,7 +5,9 @@ import { Button } from '@app/components/ui/button';
 import { Card } from '@app/components/ui/card';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { EVAL_ROUTES } from '@app/constants/routes';
+import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
 import { useTelemetry } from '@app/hooks/useTelemetry';
+import { formatASRForDisplay } from '@app/utils/redteam';
 import {
   categoryAliases,
   displayNameOverrides,
@@ -15,16 +17,6 @@ import {
   severityRiskScores,
   subCategoryDescriptions,
 } from '@promptfoo/redteam/constants';
-import { getRiskCategorySeverityMap } from '@promptfoo/redteam/sharedFrontend';
-import { Download } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
-import { getSeverityColor } from '../utils/color';
-import { getStrategyIdFromTest } from './shared';
-import type { RedteamPluginObject } from '@promptfoo/redteam/types';
-import type { ColumnDef, SortingState } from '@tanstack/react-table';
-
-import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
-import { formatASRForDisplay } from '@app/utils/redteam';
 import { calculateAttackSuccessRate } from '@promptfoo/redteam/metrics';
 import {
   formatPolicyIdentifierAsMetric,
@@ -35,8 +27,15 @@ import {
   calculatePluginRiskScore,
   prepareTestResultsFromStats,
 } from '@promptfoo/redteam/riskScoring';
+import { getRiskCategorySeverityMap } from '@promptfoo/redteam/sharedFrontend';
+import { Download } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { getSeverityColor } from '../utils/color';
 import { type TestResultStats } from './FrameworkComplianceUtils';
+import { getStrategyIdFromTest } from './shared';
 import { useReportStore } from './store';
+import type { RedteamPluginObject } from '@promptfoo/redteam/types';
+import type { ColumnDef, SortingState } from '@tanstack/react-table';
 
 interface TestSuitesProps {
   evalId: string;

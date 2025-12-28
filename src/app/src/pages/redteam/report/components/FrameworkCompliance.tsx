@@ -12,12 +12,14 @@ import {
 } from '@promptfoo/redteam/constants';
 import { calculateAttackSuccessRate } from '@promptfoo/redteam/metrics';
 import FrameworkCard from './FrameworkCard';
-import { categorizePlugins, expandPluginCollections } from './FrameworkComplianceUtils';
+import {
+  categorizePlugins,
+  expandPluginCollections,
+  type TestResultStats,
+} from './FrameworkComplianceUtils';
 import CSVExporter from './FrameworkCsvExporter';
 import { useReportStore } from './store';
 import type { UnifiedConfig } from '@promptfoo/types';
-
-import { type TestResultStats } from './FrameworkComplianceUtils';
 
 interface FrameworkComplianceProps {
   evalId: string;

@@ -47,8 +47,9 @@ const Overview = ({ categoryStats, plugins, vulnerabilitiesDataGridRef }: Overvi
       setSeverityFilter(null);
     } else {
       setSeverityFilter(severity);
+      // Only scroll when applying a filter, not when clearing
+      vulnerabilitiesDataGridRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
-    vulnerabilitiesDataGridRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
   return (
