@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, type Mock, vi } from 'vitest';
 import PluginConfigDialog from './PluginConfigDialog';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';

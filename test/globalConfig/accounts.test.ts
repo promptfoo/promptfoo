@@ -1,6 +1,6 @@
-import { vi, describe, it, expect, beforeEach } from 'vitest';
 import input from '@inquirer/input';
 import chalk from 'chalk';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getEnvString, isCI } from '../../src/envars';
 import {
   checkEmailStatus,
@@ -152,6 +152,10 @@ describe('accounts', () => {
 
   describe('setUserEmail', () => {
     it('should write email to global config', () => {
+      // Must mock readGlobalConfig to ensure clean state (no leftover account properties from other tests)
+      vi.mocked(readGlobalConfig).mockReturnValue({
+        id: 'test-id',
+      });
       const email = 'test@example.com';
       setUserEmail(email);
       expect(writeGlobalConfigPartial).toHaveBeenCalledWith({

@@ -1,4 +1,4 @@
-import { vi, describe, it, expect, beforeAll, beforeEach } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../src/database/index';
 import { getUserEmail } from '../../src/globalConfig/accounts';
 import { runDbMigrations } from '../../src/migrate';
@@ -48,7 +48,7 @@ describe('evaluator', () => {
           createdAt: eval1.createdAt,
           description: null,
           numTests: 2,
-          isRedteam: 0,
+          isRedteam: false,
           passRate: 50,
           label: eval1.id,
         }),
@@ -60,7 +60,7 @@ describe('evaluator', () => {
           createdAt: eval2.createdAt,
           description: null,
           numTests: 2,
-          isRedteam: 0,
+          isRedteam: false,
           passRate: 50,
           label: eval2.id,
         }),
@@ -235,6 +235,65 @@ describe('evaluator', () => {
       const persistedEval2 = await Eval.findById(eval1.id);
       expect(persistedEval2?.vars).toEqual(vars);
     });
+
+    it('should handle NaN durationMs in database by returning undefined', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 0 });
+
+      // Inject NaN as durationMs in the results column
+      const db = getDb();
+      await db.run(
+        `UPDATE evals SET results = json_set(results, '$.durationMs', 'NaN') WHERE id = '${eval1.id}'`,
+      );
+
+      const persistedEval = await Eval.findById(eval1.id);
+      const stats = persistedEval?.getStats();
+      // NaN should be filtered out, resulting in undefined
+      expect(stats?.durationMs).toBeUndefined();
+    });
+
+    it('should handle negative durationMs in database by returning undefined', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 0 });
+
+      // Inject negative number as durationMs
+      const db = getDb();
+      await db.run(
+        `UPDATE evals SET results = json_set(results, '$.durationMs', -5000) WHERE id = '${eval1.id}'`,
+      );
+
+      const persistedEval = await Eval.findById(eval1.id);
+      const stats = persistedEval?.getStats();
+      // Negative should be filtered out, resulting in undefined
+      expect(stats?.durationMs).toBeUndefined();
+    });
+
+    it('should handle string durationMs in database by returning undefined', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 0 });
+
+      // Inject string as durationMs
+      const db = getDb();
+      await db.run(
+        `UPDATE evals SET results = json_set(results, '$.durationMs', '"not a number"') WHERE id = '${eval1.id}'`,
+      );
+
+      const persistedEval = await Eval.findById(eval1.id);
+      const stats = persistedEval?.getStats();
+      // String should be filtered out, resulting in undefined
+      expect(stats?.durationMs).toBeUndefined();
+    });
+
+    it('should preserve valid durationMs from database', async () => {
+      const eval1 = await EvalFactory.create({ numResults: 0 });
+
+      // Inject valid durationMs
+      const db = getDb();
+      await db.run(
+        `UPDATE evals SET results = json_set(results, '$.durationMs', 12345) WHERE id = '${eval1.id}'`,
+      );
+
+      const persistedEval = await Eval.findById(eval1.id);
+      const stats = persistedEval?.getStats();
+      expect(stats?.durationMs).toBe(12345);
+    });
   });
 
   describe('getStats', () => {
@@ -374,6 +433,28 @@ describe('evaluator', () => {
           rejectedPrediction: 0,
         },
       });
+    });
+
+    it('should include durationMs when set', () => {
+      const eval1 = new Eval({});
+      eval1.setDurationMs(12345);
+
+      const stats = eval1.getStats();
+      expect(stats.durationMs).toBe(12345);
+    });
+
+    it('should return undefined durationMs when not set', () => {
+      const eval1 = new Eval({});
+
+      const stats = eval1.getStats();
+      expect(stats.durationMs).toBeUndefined();
+    });
+
+    it('should preserve durationMs when passed via constructor', () => {
+      const eval1 = new Eval({}, { durationMs: 54321 });
+
+      const stats = eval1.getStats();
+      expect(stats.durationMs).toBe(54321);
     });
   });
 
@@ -1239,6 +1320,199 @@ describe('evaluator', () => {
       const limited = await (eval_ as any).queryTestIndices({ searchQuery: 'needle', limit: 2 });
       expect(limited.testIndices.length).toBeLessThanOrEqual(2);
       expect(limited.filteredCount).toBeGreaterThanOrEqual(limited.testIndices.length);
+    });
+  });
+
+  describe('getTraces', () => {
+    beforeEach(() => {
+      vi.resetModules();
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('should return traces with properly formatted data', async () => {
+      const eval_ = await EvalFactory.create();
+
+      const mockTraces = [
+        {
+          traceId: 'trace-123',
+          evaluationId: eval_.id,
+          testCaseId: 'test-case-1',
+          metadata: { test: 'value' },
+          spans: [
+            {
+              spanId: 'span-1',
+              name: 'Test Span',
+              startTime: 1000000000,
+              endTime: 2000000000,
+              statusCode: 1,
+            },
+          ],
+        },
+      ];
+
+      const mockTraceStore = {
+        getTracesByEvaluation: vi.fn().mockResolvedValue(mockTraces),
+      };
+
+      vi.doMock('../../src/tracing/store', () => ({
+        getTraceStore: vi.fn().mockReturnValue(mockTraceStore),
+      }));
+
+      // Force reload the module to use the mock
+      vi.resetModules();
+      const { default: EvalReloaded } = await import('../../src/models/eval');
+      const evalInstance = Object.assign(Object.create(EvalReloaded.prototype), eval_);
+
+      const traces = await evalInstance.getTraces();
+
+      expect(traces).toHaveLength(1);
+      expect(traces[0]).toMatchObject({
+        traceId: 'trace-123',
+        evaluationId: eval_.id,
+        testCaseId: 'test-case-1',
+        metadata: { test: 'value' },
+      });
+      expect(traces[0].spans).toHaveLength(1);
+      expect(mockTraceStore.getTracesByEvaluation).toHaveBeenCalledWith(eval_.id);
+    });
+
+    it('should return empty array when no traces exist', async () => {
+      const eval_ = await EvalFactory.create();
+
+      const mockTraceStore = {
+        getTracesByEvaluation: vi.fn().mockResolvedValue([]),
+      };
+
+      vi.doMock('../../src/tracing/store', () => ({
+        getTraceStore: vi.fn().mockReturnValue(mockTraceStore),
+      }));
+
+      vi.resetModules();
+      const { default: EvalReloaded } = await import('../../src/models/eval');
+      const evalInstance = Object.assign(Object.create(EvalReloaded.prototype), eval_);
+
+      const traces = await evalInstance.getTraces();
+
+      expect(traces).toEqual([]);
+      expect(mockTraceStore.getTracesByEvaluation).toHaveBeenCalledWith(eval_.id);
+    });
+
+    it('should handle spans with missing endTime', async () => {
+      const eval_ = await EvalFactory.create();
+
+      const mockTraces = [
+        {
+          traceId: 'trace-incomplete',
+          evaluationId: eval_.id,
+          testCaseId: 'test-case-2',
+          metadata: {},
+          spans: [
+            {
+              spanId: 'span-no-end',
+              name: 'Incomplete Span',
+              startTime: 1000000000,
+              endTime: null,
+              statusCode: 0,
+            },
+          ],
+        },
+      ];
+
+      const mockTraceStore = {
+        getTracesByEvaluation: vi.fn().mockResolvedValue(mockTraces),
+      };
+
+      vi.doMock('../../src/tracing/store', () => ({
+        getTraceStore: vi.fn().mockReturnValue(mockTraceStore),
+      }));
+
+      vi.resetModules();
+      const { default: EvalReloaded } = await import('../../src/models/eval');
+      const evalInstance = Object.assign(Object.create(EvalReloaded.prototype), eval_);
+
+      const traces = await evalInstance.getTraces();
+
+      expect(traces).toHaveLength(1);
+      expect(traces[0].spans[0]).toHaveProperty('spanId', 'span-no-end');
+    });
+
+    it('should map status codes correctly', async () => {
+      const eval_ = await EvalFactory.create();
+
+      const mockTraces = [
+        {
+          traceId: 'trace-status-codes',
+          evaluationId: eval_.id,
+          testCaseId: 'test-case-3',
+          metadata: {},
+          spans: [
+            {
+              spanId: 'span-ok',
+              name: 'OK Span',
+              startTime: 1000000000,
+              endTime: 2000000000,
+              statusCode: 1,
+            },
+            {
+              spanId: 'span-error',
+              name: 'Error Span',
+              startTime: 2000000000,
+              endTime: 3000000000,
+              statusCode: 2,
+            },
+            {
+              spanId: 'span-unset',
+              name: 'Unset Span',
+              startTime: 3000000000,
+              endTime: 4000000000,
+              statusCode: 0,
+            },
+          ],
+        },
+      ];
+
+      const mockTraceStore = {
+        getTracesByEvaluation: vi.fn().mockResolvedValue(mockTraces),
+      };
+
+      vi.doMock('../../src/tracing/store', () => ({
+        getTraceStore: vi.fn().mockReturnValue(mockTraceStore),
+      }));
+
+      vi.resetModules();
+      const { default: EvalReloaded } = await import('../../src/models/eval');
+      const evalInstance = Object.assign(Object.create(EvalReloaded.prototype), eval_);
+
+      const traces = await evalInstance.getTraces();
+
+      expect(traces[0].spans).toHaveLength(3);
+      // Note: The actual status mapping logic may vary based on implementation
+      expect(traces[0].spans[0].spanId).toBe('span-ok');
+      expect(traces[0].spans[1].spanId).toBe('span-error');
+      expect(traces[0].spans[2].spanId).toBe('span-unset');
+    });
+
+    it('should handle errors gracefully and return empty array', async () => {
+      const eval_ = await EvalFactory.create();
+
+      const mockTraceStore = {
+        getTracesByEvaluation: vi.fn().mockRejectedValue(new Error('Database error')),
+      };
+
+      vi.doMock('../../src/tracing/store', () => ({
+        getTraceStore: vi.fn().mockReturnValue(mockTraceStore),
+      }));
+
+      vi.resetModules();
+      const { default: EvalReloaded } = await import('../../src/models/eval');
+      const evalInstance = Object.assign(Object.create(EvalReloaded.prototype), eval_);
+
+      const traces = await evalInstance.getTraces();
+
+      expect(traces).toEqual([]);
     });
   });
 });

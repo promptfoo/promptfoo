@@ -1,12 +1,16 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { callOpenAiImageApi } from '../../../src/providers/openai/image';
 import { REQUEST_TIMEOUT_MS } from '../../../src/providers/shared';
 import { createXAIImageProvider, XAIImageProvider } from '../../../src/providers/xai/image';
 
-jest.mock('../../../src/logger');
-jest.mock('../../../src/providers/openai/image', () => ({
-  ...jest.requireActual('../../../src/providers/openai/image'),
-  callOpenAiImageApi: jest.fn(),
-}));
+vi.mock('../../../src/logger');
+vi.mock('../../../src/providers/openai/image', async () => {
+  const actual = await vi.importActual('../../../src/providers/openai/image');
+  return {
+    ...actual,
+    callOpenAiImageApi: vi.fn(),
+  };
+});
 
 describe('XAI Image Provider', () => {
   const mockApiKey = 'test-api-key';
@@ -51,9 +55,13 @@ describe('XAI Image Provider', () => {
   };
 
   beforeEach(() => {
-    jest.resetAllMocks();
-    jest.clearAllMocks();
-    jest.mocked(callOpenAiImageApi).mockResolvedValue(mockSuccessResponse);
+    vi.resetAllMocks();
+    vi.clearAllMocks();
+    vi.mocked(callOpenAiImageApi).mockResolvedValue(mockSuccessResponse);
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
   });
 
   describe('Provider creation and configuration', () => {
@@ -123,7 +131,7 @@ describe('XAI Image Provider', () => {
         config: { apiKey: mockApiKey },
       });
 
-      jest.mocked(callOpenAiImageApi).mockResolvedValue(mockCachedResponse);
+      vi.mocked(callOpenAiImageApi).mockResolvedValue(mockCachedResponse);
 
       const result = await provider.callApi('test prompt');
 
@@ -236,7 +244,7 @@ describe('XAI Image Provider', () => {
         statusText: 'Bad Request',
       };
 
-      jest.mocked(callOpenAiImageApi).mockResolvedValue(errorResponse);
+      vi.mocked(callOpenAiImageApi).mockResolvedValue(errorResponse);
 
       const result = await provider.callApi('test prompt');
 
@@ -249,7 +257,7 @@ describe('XAI Image Provider', () => {
         config: { apiKey: mockApiKey },
       });
 
-      jest.mocked(callOpenAiImageApi).mockResolvedValue({
+      vi.mocked(callOpenAiImageApi).mockResolvedValue({
         data: 'Error message',
         cached: false,
         status: 500,
@@ -267,7 +275,7 @@ describe('XAI Image Provider', () => {
         config: { apiKey: mockApiKey },
       });
 
-      jest.mocked(callOpenAiImageApi).mockRejectedValue(new Error('Network error'));
+      vi.mocked(callOpenAiImageApi).mockRejectedValue(new Error('Network error'));
 
       const result = await provider.callApi('test prompt');
 
@@ -280,7 +288,7 @@ describe('XAI Image Provider', () => {
         config: { apiKey: mockApiKey },
       });
 
-      jest.mocked(callOpenAiImageApi).mockResolvedValue({
+      vi.mocked(callOpenAiImageApi).mockResolvedValue({
         data: { data: [{}] },
         cached: false,
         status: 200,
@@ -298,7 +306,7 @@ describe('XAI Image Provider', () => {
         config: { apiKey: mockApiKey },
       });
 
-      jest.mocked(callOpenAiImageApi).mockResolvedValue({
+      vi.mocked(callOpenAiImageApi).mockResolvedValue({
         data: { error: 'Invalid request' },
         cached: false,
         status: 400,
@@ -316,7 +324,7 @@ describe('XAI Image Provider', () => {
         config: { apiKey: mockApiKey, response_format: 'b64_json' },
       });
 
-      jest.mocked(callOpenAiImageApi).mockResolvedValue(mockBase64Response);
+      vi.mocked(callOpenAiImageApi).mockResolvedValue(mockBase64Response);
 
       const result = await provider.callApi('test prompt');
 
@@ -344,7 +352,7 @@ describe('XAI Image Provider', () => {
         config: { apiKey: mockApiKey, response_format: 'b64_json' },
       });
 
-      jest.mocked(callOpenAiImageApi).mockResolvedValue({
+      vi.mocked(callOpenAiImageApi).mockResolvedValue({
         data: { data: [{}] },
         cached: false,
         status: 200,
@@ -513,7 +521,7 @@ describe('XAI Image Provider', () => {
         config: { apiKey: mockApiKey },
       });
 
-      jest.mocked(callOpenAiImageApi).mockResolvedValue(mockCachedResponse);
+      vi.mocked(callOpenAiImageApi).mockResolvedValue(mockCachedResponse);
 
       const result = await provider.callApi('test prompt');
       expect(result.cost).toBe(0);
@@ -539,7 +547,7 @@ describe('XAI Image Provider', () => {
         statusText: 'OK',
       };
 
-      jest.mocked(callOpenAiImageApi).mockResolvedValue(multiImageResponse);
+      vi.mocked(callOpenAiImageApi).mockResolvedValue(multiImageResponse);
 
       const result = await provider.callApi('test prompt');
       expect(result.cost).toBeCloseTo(0.21, 2); // 3 images * $0.07

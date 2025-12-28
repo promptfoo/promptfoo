@@ -1,12 +1,35 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../../src/cache';
 import logger from '../../../src/logger';
 import { AzureChatCompletionProvider } from '../../../src/providers/azure/chat';
 
-jest.mock('../../../src/cache', () => ({
-  fetchWithCache: jest.fn(),
-}));
+vi.mock('../../../src/cache', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    fetchWithCache: vi.fn(),
+  };
+});
+
+const setAuthHeaders = (
+  provider: AzureChatCompletionProvider,
+  headers: Record<string, string> = { 'api-key': 'test-key' },
+) => {
+  (provider as any).authHeaders = headers;
+  (provider as any).initialized = true;
+};
 
 describe('AzureChatCompletionProvider', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.spyOn(AzureChatCompletionProvider.prototype as any, 'getAuthHeaders').mockResolvedValue({
+      'api-key': 'test-key',
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   describe('config merging', () => {
     let provider: AzureChatCompletionProvider;
 
@@ -20,6 +43,7 @@ describe('AzureChatCompletionProvider', () => {
           temperature: 0.5,
         },
       });
+      setAuthHeaders(provider);
     });
 
     it('should use provider config when no prompt config exists', async () => {
@@ -186,10 +210,11 @@ describe('AzureChatCompletionProvider', () => {
           apiKey: 'test-key',
         },
       });
+      setAuthHeaders(provider);
     });
 
     afterEach(() => {
-      jest.resetAllMocks();
+      vi.resetAllMocks();
     });
 
     it('should parse JSON response with json_schema format when finish_reason is not content_filter', async () => {
@@ -231,26 +256,28 @@ describe('AzureChatCompletionProvider', () => {
         },
       };
 
-      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: mockResponse,
         cached: false,
         status: 200,
         statusText: 'OK',
       });
 
+      vi.spyOn(logger, 'warn');
+
       const result = await provider.callApi('test prompt');
       expect(result.output).toEqual({ test: 'value' });
     });
 
     it('should handle API errors', async () => {
-      jest.mocked(fetchWithCache).mockRejectedValueOnce(new Error('API Error'));
+      vi.mocked(fetchWithCache).mockRejectedValueOnce(new Error('API Error'));
 
       const result = await provider.callApi('test prompt');
       expect(result.error).toBe('API call error: API Error');
     });
 
     it('should handle invalid JSON response', async () => {
-      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: 'invalid json',
         cached: false,
         status: 200,
@@ -292,12 +319,14 @@ describe('AzureChatCompletionProvider', () => {
         },
       };
 
-      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: mockResponse,
         cached: false,
         status: 200,
         statusText: 'OK',
       });
+
+      vi.spyOn(logger, 'warn');
 
       const result = await provider.callApi('test prompt');
       expect(result.output).toEqual([
@@ -312,7 +341,7 @@ describe('AzureChatCompletionProvider', () => {
     });
 
     it('should pass custom headers from config to fetchWithCache', async () => {
-      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: {
           choices: [{ message: { content: 'test' } }],
           usage: {},
@@ -364,10 +393,11 @@ describe('AzureChatCompletionProvider', () => {
           apiKey: 'test-key',
         },
       });
+      setAuthHeaders(provider);
     });
 
     afterEach(() => {
-      jest.resetAllMocks();
+      vi.resetAllMocks();
     });
 
     it('should parse JSON response when prompt config specifies json_object format', async () => {
@@ -393,7 +423,7 @@ describe('AzureChatCompletionProvider', () => {
         },
       };
 
-      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: mockResponse,
         cached: false,
         status: 200,
@@ -440,7 +470,7 @@ describe('AzureChatCompletionProvider', () => {
         },
       };
 
-      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: mockResponse,
         cached: false,
         status: 200,
@@ -476,12 +506,14 @@ describe('AzureChatCompletionProvider', () => {
         usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
       };
 
-      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: mockResponse,
         cached: false,
         status: 200,
         statusText: 'OK',
       });
+
+      (provider as any).apiVersion = '2024-custom';
 
       await provider.callApi('test prompt', {
         prompt: {
@@ -496,7 +528,7 @@ describe('AzureChatCompletionProvider', () => {
       });
 
       // Verify the URL includes extensions and uses the custom API version
-      expect(jest.mocked(fetchWithCache).mock.calls[0][0]).toContain(
+      expect(vi.mocked(fetchWithCache).mock.calls[0][0]).toContain(
         '/extensions/chat/completions?api-version=2024-custom',
       );
     });
@@ -515,12 +547,14 @@ describe('AzureChatCompletionProvider', () => {
         usage: { total_tokens: 10, prompt_tokens: 5, completion_tokens: 5 },
       };
 
-      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: mockResponse,
         cached: false,
         status: 200,
         statusText: 'OK',
       });
+
+      (provider as any).apiVersion = '2024-custom';
 
       await provider.callApi('test prompt', {
         prompt: {
@@ -535,8 +569,8 @@ describe('AzureChatCompletionProvider', () => {
       });
 
       // Verify the URL doesn't include the legacy extensions path
-      expect(jest.mocked(fetchWithCache).mock.calls[0][0]).not.toContain('extensions');
-      expect(jest.mocked(fetchWithCache).mock.calls[0][0]).toContain(
+      expect(vi.mocked(fetchWithCache).mock.calls[0][0]).not.toContain('extensions');
+      expect(vi.mocked(fetchWithCache).mock.calls[0][0]).toContain(
         '/chat/completions?api-version=2024-custom',
       );
     });
@@ -636,7 +670,7 @@ describe('AzureChatCompletionProvider', () => {
     });
 
     afterEach(() => {
-      jest.resetAllMocks();
+      vi.resetAllMocks();
     });
 
     it('should detect output content filtering', async () => {
@@ -684,12 +718,14 @@ describe('AzureChatCompletionProvider', () => {
         },
       };
 
-      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: mockResponse,
         cached: false,
         status: 200,
         statusText: 'OK',
       });
+
+      vi.spyOn(logger, 'warn');
 
       const result = await provider.callApi('test prompt');
 
@@ -738,7 +774,7 @@ describe('AzureChatCompletionProvider', () => {
         },
       };
 
-      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: mockResponse,
         cached: false,
         status: 400,
@@ -828,12 +864,14 @@ describe('AzureChatCompletionProvider', () => {
         },
       };
 
-      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: mockResponse,
         cached: false,
         status: 200,
         statusText: 'OK',
       });
+
+      const warnSpy = vi.spyOn(logger, 'warn');
 
       const result = await provider.callApi('test prompt');
 
@@ -844,7 +882,7 @@ describe('AzureChatCompletionProvider', () => {
       });
       expect(result.output).toBe('generated text');
       expect(result.finishReason).toBe('stop');
-      expect(logger.warn).toHaveBeenCalledWith(
+      expect(warnSpy).toHaveBeenCalledWith(
         'Content filtering system is down or otherwise unable to complete the request in time: content_filter_error The contents are not filtered',
       );
     });
@@ -878,7 +916,7 @@ describe('AzureChatCompletionProvider', () => {
         },
       };
 
-      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: mockResponse,
         cached: false,
         status: 200,
@@ -925,7 +963,7 @@ describe('AzureChatCompletionProvider', () => {
         },
       };
 
-      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: mockResponse,
         cached: false,
         status: 200,
@@ -992,7 +1030,7 @@ describe('AzureChatCompletionProvider', () => {
         },
       };
 
-      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: mockResponse,
         cached: false,
         status: 200,
@@ -1049,7 +1087,7 @@ describe('AzureChatCompletionProvider', () => {
         },
       };
 
-      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: mockResponse,
         cached: false,
         status: 200,
@@ -1103,7 +1141,7 @@ describe('AzureChatCompletionProvider', () => {
         },
       };
 
-      jest.mocked(fetchWithCache).mockResolvedValueOnce({
+      vi.mocked(fetchWithCache).mockResolvedValueOnce({
         data: mockResponse,
         cached: false,
         status: 200,

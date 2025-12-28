@@ -86,7 +86,7 @@ def call_api(prompt, options, context):
     # Initialize your LangChain components
     llm = ChatOpenAI(
         temperature=0.7,
-        model_name="gpt-4.1-mini"
+        model_name="gpt-5-mini"
     )
 
     # Create your chain
@@ -165,7 +165,7 @@ targets:
     label: 'LangChain App'
 
 redteam:
-  # Purpose is a short description of your application.  It's used to generate highly relevant malicious test cases.
+  # Purpose is a short description of your application. It's used to generate highly relevant malicious test cases.
   purpose: 'A customer support agent for Acme, Inc...'
 
   # Number of test cases per plugin.

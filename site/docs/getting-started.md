@@ -86,7 +86,7 @@ To configure your evaluation:
    providers:
      - openai:gpt-5
      - openai:gpt-5-mini
-     - anthropic:messages:claude-sonnet-4-20250514
+     - anthropic:messages:claude-sonnet-4-5-20250929
      - vertex:gemini-2.5-pro
      # Or use your own custom provider
      - file://path/to/custom/provider.py
@@ -95,7 +95,7 @@ To configure your evaluation:
    Each provider is specified using a simple format: `provider_name:model_name`. For example:
    - `openai:gpt-5` for GPT-5
    - `openai:gpt-5-mini` for OpenAI's GPT-5 Mini
-   - `anthropic:messages:claude-sonnet-4-20250514` for Anthropic's Claude
+   - `anthropic:messages:claude-sonnet-4-5-20250929` for Anthropic's Claude
    - `bedrock:us.meta.llama3-3-70b-instruct-v1:0` for Meta's Llama 3.3 70B via AWS Bedrock
 
    Most providers need authentication. For OpenAI:

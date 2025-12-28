@@ -1,9 +1,9 @@
+import { type ApiHealthResult, useApiHealth } from '@app/hooks/useApiHealth';
 import { callApi } from '@app/utils/api';
 import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Purpose from './Purpose';
-import { useApiHealth, type ApiHealthResult } from '@app/hooks/useApiHealth';
 import type { DefinedUseQueryResult } from '@tanstack/react-query';
 
 const mockUpdateApplicationDefinition = vi.fn();

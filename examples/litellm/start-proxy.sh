@@ -30,7 +30,7 @@ echo ""
 # Start the proxy with models used in the example
 litellm \
   --model gpt-4.1 \
-  --model claude-sonnet-4-20250514 \
+  --model claude-sonnet-4-5-20250929 \
   --model gemini-2.5-pro \
   --model text-embedding-3-large \
   --port 4000

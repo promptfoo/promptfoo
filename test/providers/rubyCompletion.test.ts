@@ -1,47 +1,96 @@
 import fs from 'fs';
 import path from 'path';
 
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getCache, isCacheEnabled } from '../../src/cache';
 import { RubyProvider } from '../../src/providers/rubyCompletion';
 import * as rubyUtils from '../../src/ruby/rubyUtils';
 import { runRuby } from '../../src/ruby/rubyUtils';
 
-jest.mock('../../src/ruby/rubyUtils');
-jest.mock('../../src/cache');
-jest.mock('fs');
-jest.mock('path');
-jest.mock('../../src/util', () => ({
-  ...jest.requireActual('../../src/util'),
-  parsePathOrGlob: jest.fn((_basePath, runPath) => {
-    // Handle the special case for testing function names
-    if (runPath === 'script.rb:custom_function') {
-      return {
-        filePath: 'script.rb',
-        functionName: 'custom_function',
-        isPathPattern: false,
-        extension: '.rb',
-      };
-    }
-
-    // Default case
-    return {
-      filePath: runPath,
-      functionName: undefined,
-      isPathPattern: false,
-      extension: path.extname(runPath),
-    };
-  }),
+const fsMocks = vi.hoisted(() => ({
+  readFileSync: vi.fn(),
 }));
 
+const pathMocks = vi.hoisted(() => {
+  const actualPath = require('path') as typeof import('path');
+  return {
+    extname: vi.fn(actualPath.extname),
+    resolve: vi.fn(actualPath.resolve),
+  };
+});
+
+vi.mock('../../src/ruby/rubyUtils', async () => {
+  const actual = await vi.importActual<typeof import('../../src/ruby/rubyUtils')>(
+    '../../src/ruby/rubyUtils',
+  );
+  return {
+    ...actual,
+    runRuby: vi.fn(),
+  };
+});
+
+vi.mock('../../src/cache', async () => {
+  const actual = await vi.importActual<typeof import('../../src/cache')>('../../src/cache');
+  return {
+    ...actual,
+    getCache: vi.fn(),
+    isCacheEnabled: vi.fn(),
+  };
+});
+
+vi.mock('fs', async () => {
+  const actual = await vi.importActual<typeof import('fs')>('fs');
+  return {
+    ...actual,
+    ...fsMocks,
+    default: { ...actual, ...fsMocks },
+  };
+});
+
+vi.mock('path', async () => {
+  const actual = await vi.importActual<typeof import('path')>('path');
+  return {
+    ...actual,
+    ...pathMocks,
+    default: { ...actual, ...pathMocks },
+  };
+});
+
+vi.mock('../../src/util', async () => {
+  const actual = await vi.importActual<typeof import('../../src/util')>('../../src/util');
+  return {
+    ...actual,
+    parsePathOrGlob: vi.fn((_basePath, runPath) => {
+      // Handle the special case for testing function names
+      if (runPath === 'script.rb:custom_function') {
+        return {
+          filePath: 'script.rb',
+          functionName: 'custom_function',
+          isPathPattern: false,
+          extension: '.rb',
+        };
+      }
+
+      // Default case
+      return {
+        filePath: runPath,
+        functionName: undefined,
+        isPathPattern: false,
+        extension: path.extname(runPath),
+      };
+    }),
+  };
+});
+
 describe('RubyProvider', () => {
-  const mockRunRuby = jest.mocked(runRuby);
-  const mockGetCache = jest.mocked(jest.mocked(getCache));
-  const mockIsCacheEnabled = jest.mocked(isCacheEnabled);
-  const mockReadFileSync = jest.mocked(fs.readFileSync);
-  const mockResolve = jest.mocked(path.resolve);
+  const mockRunRuby = vi.mocked(runRuby);
+  const mockGetCache = vi.mocked(vi.mocked(getCache));
+  const mockIsCacheEnabled = vi.mocked(isCacheEnabled);
+  const mockReadFileSync = vi.mocked(fs.readFileSync);
+  const mockResolve = vi.mocked(path.resolve);
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     // Reset mocked implementations to avoid test interference
     mockRunRuby.mockReset();
     // Reset Ruby state to avoid test interference
@@ -49,8 +98,8 @@ describe('RubyProvider', () => {
     rubyUtils.state.validationPromise = null;
     rubyUtils.state.validatingPath = null;
     mockGetCache.mockResolvedValue({
-      get: jest.fn(),
-      set: jest.fn(),
+      get: vi.fn(),
+      set: vi.fn(),
     } as never);
     mockIsCacheEnabled.mockReturnValue(false);
     mockReadFileSync.mockReturnValue('mock file content');
@@ -58,7 +107,7 @@ describe('RubyProvider', () => {
   });
 
   afterEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('constructor', () => {
@@ -212,15 +261,15 @@ describe('RubyProvider', () => {
       const provider = new RubyProvider('script.rb');
       mockIsCacheEnabled.mockReturnValue(true);
       const mockCache = {
-        get: jest.fn().mockResolvedValue(JSON.stringify({ output: 'cached result' })),
-        set: jest.fn(),
+        get: vi.fn().mockResolvedValue(JSON.stringify({ output: 'cached result' })),
+        set: vi.fn(),
       };
-      jest.mocked(mockGetCache).mockResolvedValue(mockCache as never);
+      vi.mocked(mockGetCache).mockResolvedValue(mockCache as never);
 
       const result = await provider.callApi('test prompt');
 
       expect(mockCache.get).toHaveBeenCalledWith(
-        'ruby:undefined:default:call_api:5633d479dfae75ba7a78914ee380fa202bd6126e7c6b7c22e3ebc9e1a6ddc871:test prompt:undefined:undefined',
+        'ruby:script.rb:default:call_api:5633d479dfae75ba7a78914ee380fa202bd6126e7c6b7c22e3ebc9e1a6ddc871:test prompt:undefined:undefined',
       );
       expect(mockRunRuby).not.toHaveBeenCalled();
       expect(result).toEqual({ output: 'cached result', cached: true });
@@ -230,8 +279,8 @@ describe('RubyProvider', () => {
       const provider = new RubyProvider('script.rb');
       mockIsCacheEnabled.mockReturnValue(true);
       const mockCache = {
-        get: jest.fn().mockResolvedValue(null),
-        set: jest.fn(),
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn(),
       };
       mockGetCache.mockResolvedValue(mockCache as never);
       mockRunRuby.mockResolvedValue({ output: 'new result' });
@@ -239,7 +288,7 @@ describe('RubyProvider', () => {
       await provider.callApi('test prompt');
 
       expect(mockCache.set).toHaveBeenCalledWith(
-        'ruby:undefined:default:call_api:5633d479dfae75ba7a78914ee380fa202bd6126e7c6b7c22e3ebc9e1a6ddc871:test prompt:undefined:undefined',
+        'ruby:script.rb:default:call_api:5633d479dfae75ba7a78914ee380fa202bd6126e7c6b7c22e3ebc9e1a6ddc871:test prompt:undefined:undefined',
         '{"output":"new result"}',
       );
     });
@@ -248,7 +297,7 @@ describe('RubyProvider', () => {
       const provider = new RubyProvider('script.rb');
       mockIsCacheEnabled.mockReturnValue(true);
       const mockCache = {
-        get: jest.fn().mockResolvedValue(
+        get: vi.fn().mockResolvedValue(
           JSON.stringify({
             output: 'cached result with token usage',
             tokenUsage: {
@@ -258,9 +307,9 @@ describe('RubyProvider', () => {
             },
           }),
         ),
-        set: jest.fn(),
+        set: vi.fn(),
       };
-      jest.mocked(mockGetCache).mockResolvedValue(mockCache as never);
+      vi.mocked(mockGetCache).mockResolvedValue(mockCache as never);
 
       const result = await provider.callApi('test prompt');
 
@@ -271,6 +320,7 @@ describe('RubyProvider', () => {
         tokenUsage: {
           cached: 25,
           total: 25,
+          numRequests: 1,
         },
       });
     });
@@ -279,8 +329,8 @@ describe('RubyProvider', () => {
       const provider = new RubyProvider('script.rb');
       mockIsCacheEnabled.mockReturnValue(true);
       const mockCache = {
-        get: jest.fn().mockResolvedValue(null),
-        set: jest.fn(),
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn(),
       };
       mockGetCache.mockResolvedValue(mockCache as never);
       mockRunRuby.mockResolvedValue({
@@ -309,14 +359,14 @@ describe('RubyProvider', () => {
       const provider = new RubyProvider('script.rb');
       mockIsCacheEnabled.mockReturnValue(true);
       const mockCache = {
-        get: jest.fn().mockResolvedValue(
+        get: vi.fn().mockResolvedValue(
           JSON.stringify({
             output: 'cached result with no token usage',
           }),
         ),
-        set: jest.fn(),
+        set: vi.fn(),
       };
-      jest.mocked(mockGetCache).mockResolvedValue(mockCache as never);
+      vi.mocked(mockGetCache).mockResolvedValue(mockCache as never);
 
       const result = await provider.callApi('test prompt');
 
@@ -329,7 +379,7 @@ describe('RubyProvider', () => {
       const provider = new RubyProvider('script.rb');
       mockIsCacheEnabled.mockReturnValue(true);
       const mockCache = {
-        get: jest.fn().mockResolvedValue(
+        get: vi.fn().mockResolvedValue(
           JSON.stringify({
             output: 'cached result with zero token usage',
             tokenUsage: {
@@ -339,9 +389,9 @@ describe('RubyProvider', () => {
             },
           }),
         ),
-        set: jest.fn(),
+        set: vi.fn(),
       };
-      jest.mocked(mockGetCache).mockResolvedValue(mockCache as never);
+      vi.mocked(mockGetCache).mockResolvedValue(mockCache as never);
 
       const result = await provider.callApi('test prompt');
 
@@ -349,6 +399,7 @@ describe('RubyProvider', () => {
       expect(result.tokenUsage).toEqual({
         cached: 0,
         total: 0,
+        numRequests: 1,
       });
       expect(result.cached).toBe(true);
     });
@@ -357,8 +408,8 @@ describe('RubyProvider', () => {
       const provider = new RubyProvider('script.rb');
       mockIsCacheEnabled.mockReturnValue(true);
       const mockCache = {
-        get: jest.fn().mockResolvedValue(null),
-        set: jest.fn(),
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn(),
       };
       mockGetCache.mockResolvedValue(mockCache as never);
       mockRunRuby.mockResolvedValue({
@@ -374,8 +425,8 @@ describe('RubyProvider', () => {
     it('should properly use different cache keys for different function names', async () => {
       mockIsCacheEnabled.mockReturnValue(true);
       const mockCache = {
-        get: jest.fn().mockResolvedValue(null),
-        set: jest.fn(),
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn(),
       };
       mockGetCache.mockResolvedValue(mockCache as never);
       mockRunRuby.mockResolvedValue({ output: 'test output' });

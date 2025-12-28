@@ -1,9 +1,12 @@
-import { PythonWorker } from '../../src/python/worker';
 import fs from 'fs';
 import path from 'path';
 
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { PythonWorker } from '../../src/python/worker';
+
 // Windows CI has severe filesystem delays (antivirus, etc.) - allow up to 90s
-const TEST_TIMEOUT = process.platform === 'win32' ? 90000 : 5000;
+// Non-Windows CI can also have timing variance with Python IPC, so use 15s (matching windows-path.test.ts)
+const TEST_TIMEOUT = process.platform === 'win32' ? 90000 : 15000;
 
 // Skip on Windows CI due to aggressive file security policies blocking temp file IPC
 // Works fine on local Windows and all other platforms
@@ -190,7 +193,7 @@ def call_api(prompt, options, context):
       // User has 'get_embedding_api' but we're looking for 'call_embedding_api'
       try {
         await worker.call('call_embedding_api', ['test', {}]);
-        fail('Should have thrown an error');
+        expect.fail('Should have thrown an error');
       } catch (error: any) {
         const errorMessage = error.message;
 

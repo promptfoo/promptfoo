@@ -69,6 +69,34 @@ type EnvVars = {
   PROMPTFOO_ENABLE_UNBLOCKING?: boolean;
 
   //=========================================================================
+  // OpenTelemetry tracing configuration
+  //=========================================================================
+  /**
+   * Enable OpenTelemetry tracing for all LLM provider calls.
+   */
+  PROMPTFOO_OTEL_ENABLED?: boolean;
+  /**
+   * Service name to use in OTEL traces. Defaults to 'promptfoo'.
+   */
+  PROMPTFOO_OTEL_SERVICE_NAME?: string;
+  /**
+   * OTLP endpoint URL for exporting traces to external backends.
+   */
+  PROMPTFOO_OTEL_ENDPOINT?: string;
+  /**
+   * Whether to export traces to the local TraceStore (SQLite). Defaults to true.
+   */
+  PROMPTFOO_OTEL_LOCAL_EXPORT?: boolean;
+  /**
+   * Enable OTEL debug logging.
+   */
+  PROMPTFOO_OTEL_DEBUG?: boolean;
+  /**
+   * Standard OTEL environment variable for OTLP endpoint.
+   */
+  OTEL_EXPORTER_OTLP_ENDPOINT?: string;
+
+  //=========================================================================
   // promptfoo configuration options
   //=========================================================================
   PROMPTFOO_ASSERTIONS_MAX_CONCURRENCY?: number;
@@ -84,9 +112,11 @@ type EnvVars = {
   PROMPTFOO_CSV_STRICT?: boolean;
   PROMPTFOO_DELAY_MS?: number;
   PROMPTFOO_FAILED_TEST_EXIT_CODE?: number;
+  PROMPTFOO_INLINE_MEDIA?: boolean;
   PROMPTFOO_INSECURE_SSL?: boolean | string;
   PROMPTFOO_JAILBREAK_TEMPERATURE?: string;
   PROMPTFOO_LOG_DIR?: string;
+  PROMPTFOO_MEDIA_PATH?: string;
   PROMPTFOO_MAX_HARMFUL_TESTS_PER_REQUEST?: number;
   PROMPTFOO_NUM_JAILBREAK_ITERATIONS?: string;
   PROMPTFOO_PASS_RATE_THRESHOLD?: number;
@@ -100,6 +130,7 @@ type EnvVars = {
   PROMPTFOO_REQUIRE_JSON_PROMPTS?: boolean;
   PROMPTFOO_SHARING_APP_BASE_URL?: string;
   PROMPTFOO_SHARE_CHUNK_SIZE?: number;
+  PROMPTFOO_SHARE_INLINE_BLOBS?: boolean;
   PROMPTFOO_UNALIGNED_INFERENCE_ENDPOINT?: string;
   PROMPTFOO_CA_CERT_PATH?: string;
   PROMPTFOO_PFX_CERT_PATH?: string;
@@ -133,6 +164,26 @@ type EnvVars = {
   REQUEST_TIMEOUT_MS?: number;
   RESULT_HISTORY_LENGTH?: number;
   WEBHOOK_TIMEOUT?: number;
+
+  //=========================================================================
+  // MCP (Model Context Protocol) settings
+  //=========================================================================
+  /**
+   * Default timeout in milliseconds for MCP tool calls.
+   * This overrides the MCP SDK's default 60-second timeout.
+   * Can be overridden per-provider via config.mcp.timeout.
+   */
+  MCP_REQUEST_TIMEOUT_MS?: number;
+  /**
+   * Enable debug logging for MCP connections.
+   * Can be overridden per-provider via config.mcp.debug.
+   */
+  MCP_DEBUG?: boolean;
+  /**
+   * Enable verbose output for MCP connections.
+   * Can be overridden per-provider via config.mcp.verbose.
+   */
+  MCP_VERBOSE?: boolean;
 
   // Posthog
   PROMPTFOO_POSTHOG_KEY?: string;
@@ -239,6 +290,9 @@ type EnvVars = {
   // CDP
   CDP_DOMAIN?: string;
 
+  // ElevenLabs
+  ELEVENLABS_API_KEY?: string;
+
   // FAL
   FAL_KEY?: string;
 
@@ -298,6 +352,9 @@ type EnvVars = {
   OPENAI_STOP?: string;
   OPENAI_TEMPERATURE?: number;
   OPENAI_TOP_P?: number;
+
+  // OpenAI Codex SDK
+  CODEX_API_KEY?: string;
 
   // OpenRouter
   OPENROUTER_API_KEY?: string;

@@ -1,3 +1,4 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchWithCache } from '../../src/cache';
 import {
   extractGoalFromPrompt,
@@ -8,9 +9,10 @@ import {
   normalizeApostrophes,
   removePrefix,
 } from '../../src/redteam/util';
+
 import type { CallApiContextParams, ProviderResponse } from '../../src/types/index';
 
-jest.mock('../../src/cache');
+vi.mock('../../src/cache');
 
 describe('removePrefix', () => {
   it('should remove a simple prefix', () => {
@@ -118,11 +120,11 @@ describe('getShortPluginId', () => {
 
 describe('extractGoalFromPrompt', () => {
   beforeEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   it('should successfully extract goal', async () => {
-    jest.mocked(fetchWithCache).mockResolvedValue({
+    vi.mocked(fetchWithCache).mockResolvedValue({
       cached: false,
       status: 200,
       statusText: 'OK',
@@ -136,7 +138,7 @@ describe('extractGoalFromPrompt', () => {
   });
 
   it('should return null on HTTP error', async () => {
-    jest.mocked(fetchWithCache).mockResolvedValue({
+    vi.mocked(fetchWithCache).mockResolvedValue({
       cached: false,
       status: 500,
       statusText: 'Internal Server Error',
@@ -150,7 +152,7 @@ describe('extractGoalFromPrompt', () => {
   });
 
   it('should return null when no intent returned', async () => {
-    jest.mocked(fetchWithCache).mockResolvedValue({
+    vi.mocked(fetchWithCache).mockResolvedValue({
       cached: false,
       status: 200,
       statusText: 'OK',
@@ -164,14 +166,14 @@ describe('extractGoalFromPrompt', () => {
   });
 
   it('should return null when API throws error', async () => {
-    jest.mocked(fetchWithCache).mockRejectedValue(new Error('API error'));
+    vi.mocked(fetchWithCache).mockRejectedValue(new Error('API error'));
 
     const result = await extractGoalFromPrompt('test prompt', 'test purpose');
     expect(result).toBeNull();
   });
 
   it('should handle empty prompt and purpose', async () => {
-    jest.mocked(fetchWithCache).mockResolvedValue({
+    vi.mocked(fetchWithCache).mockResolvedValue({
       cached: false,
       status: 200,
       statusText: 'OK',
@@ -185,7 +187,7 @@ describe('extractGoalFromPrompt', () => {
   });
 
   it('should include plugin context when pluginId is provided', async () => {
-    jest.mocked(fetchWithCache).mockResolvedValue({
+    vi.mocked(fetchWithCache).mockResolvedValue({
       cached: false,
       status: 200,
       statusText: 'OK',
@@ -274,7 +276,7 @@ describe('extractGoalFromPrompt', () => {
   });
 
   it('should proceed with API call for non-dataset plugins', async () => {
-    jest.mocked(fetchWithCache).mockResolvedValue({
+    vi.mocked(fetchWithCache).mockResolvedValue({
       cached: false,
       status: 200,
       statusText: 'OK',
@@ -291,7 +293,7 @@ describe('extractGoalFromPrompt', () => {
   });
 
   it('should proceed with API call for non-dataset plugins with full plugin ID', async () => {
-    jest.mocked(fetchWithCache).mockResolvedValue({
+    vi.mocked(fetchWithCache).mockResolvedValue({
       cached: false,
       status: 200,
       statusText: 'OK',
@@ -312,7 +314,7 @@ describe('extractGoalFromPrompt', () => {
   });
 
   it('should include policy in request body when policy is provided', async () => {
-    jest.mocked(fetchWithCache).mockResolvedValue({
+    vi.mocked(fetchWithCache).mockResolvedValue({
       cached: false,
       status: 200,
       statusText: 'OK',
@@ -343,7 +345,7 @@ describe('extractGoalFromPrompt', () => {
     );
 
     // Verify the actual policy text is in the body
-    const fetchCalls = jest.mocked(fetchWithCache).mock.calls;
+    const fetchCalls = vi.mocked(fetchWithCache).mock.calls;
     expect(fetchCalls.length).toBeGreaterThan(0);
     const requestInit = fetchCalls[0][1];
     if (!requestInit) {
@@ -359,7 +361,7 @@ describe('extractGoalFromPrompt', () => {
   });
 
   it('should NOT include policy in request body when policy is not provided', async () => {
-    jest.mocked(fetchWithCache).mockResolvedValue({
+    vi.mocked(fetchWithCache).mockResolvedValue({
       cached: false,
       status: 200,
       statusText: 'OK',
@@ -377,7 +379,7 @@ describe('extractGoalFromPrompt', () => {
     expect(result).toBe('goal without policy');
 
     // Verify that the API was called without policy in the request body
-    const fetchCalls = jest.mocked(fetchWithCache).mock.calls;
+    const fetchCalls = vi.mocked(fetchWithCache).mock.calls;
     expect(fetchCalls.length).toBeGreaterThan(0);
     const requestInit = fetchCalls[0][1];
     if (!requestInit) {
@@ -393,7 +395,7 @@ describe('extractGoalFromPrompt', () => {
   });
 
   it('should NOT include policy when policy is empty string', async () => {
-    jest.mocked(fetchWithCache).mockResolvedValue({
+    vi.mocked(fetchWithCache).mockResolvedValue({
       cached: false,
       status: 200,
       statusText: 'OK',
@@ -412,7 +414,7 @@ describe('extractGoalFromPrompt', () => {
     expect(result).toBe('goal without policy');
 
     // Verify that the API was called without policy in the request body
-    const fetchCalls = jest.mocked(fetchWithCache).mock.calls;
+    const fetchCalls = vi.mocked(fetchWithCache).mock.calls;
     expect(fetchCalls.length).toBeGreaterThan(0);
     const requestInit = fetchCalls[0][1];
     if (!requestInit) {

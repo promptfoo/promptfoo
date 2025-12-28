@@ -5,7 +5,7 @@ import { getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import telemetry from '../../telemetry';
 import { createEmptyTokenUsage } from '../../util/tokenUsageUtils';
-import { AwsBedrockGenericProvider } from './index';
+import { AwsBedrockGenericProvider } from './base';
 import type {
   BedrockAgentRuntimeClient,
   RetrieveAndGenerateCommandInput,
@@ -28,6 +28,7 @@ interface BedrockKnowledgeBaseOptions {
   max_tokens?: number;
   top_p?: number;
   top_k?: number;
+  numberOfResults?: number;
 }
 
 // Define citation types for metadata
@@ -197,6 +198,16 @@ export class AwsBedrockKnowledgeBaseProvider
     // Only include modelArn if explicitly configured or if it's a valid model
     if (this.kbConfig.modelArn || this.modelName !== 'default') {
       knowledgeBaseConfiguration.modelArn = modelArn;
+    }
+
+    // Only add retrieval configuration when numberOfResults is explicitly configured
+    // This preserves backwards compatibility with AWS default behavior
+    if (this.kbConfig.numberOfResults !== undefined) {
+      knowledgeBaseConfiguration.retrievalConfiguration = {
+        vectorSearchConfiguration: {
+          numberOfResults: this.kbConfig.numberOfResults,
+        },
+      };
     }
 
     const params: RetrieveAndGenerateCommandInput = {

@@ -1,8 +1,9 @@
 import { Request, Response } from 'express';
+import { afterEach, beforeEach, describe, expect, it, Mock, vi } from 'vitest';
 import { updateResult } from '../../src/util/database';
 
 // Mock dependencies
-jest.mock('../../src/util/database');
+vi.mock('../../src/util/database');
 
 // Import the handler directly to avoid Express overhead
 const patchHandler = (req: Request, res: Response): void => {
@@ -25,15 +26,15 @@ const patchHandler = (req: Request, res: Response): void => {
 describe('evalRouter - PATCH /:id', () => {
   let mockReq: Partial<Request>;
   let mockRes: Partial<Response>;
-  let jsonMock: jest.Mock;
-  let statusMock: jest.Mock;
+  let jsonMock: Mock;
+  let statusMock: Mock;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 
     // Create lightweight mocks for Request and Response
-    jsonMock = jest.fn();
-    statusMock = jest.fn().mockReturnThis();
+    jsonMock = vi.fn();
+    statusMock = vi.fn().mockReturnThis();
 
     mockRes = {
       json: jsonMock,
@@ -47,7 +48,7 @@ describe('evalRouter - PATCH /:id', () => {
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   it('should update eval config including description', async () => {
@@ -61,7 +62,7 @@ describe('evalRouter - PATCH /:id', () => {
     mockReq.body = { config: newConfig };
 
     // Mock updateResult to resolve immediately
-    (updateResult as jest.Mock).mockResolvedValue(undefined);
+    (updateResult as Mock).mockResolvedValue(undefined);
 
     // Call the handler directly
     patchHandler(mockReq as Request, mockRes as Response);
@@ -87,7 +88,7 @@ describe('evalRouter - PATCH /:id', () => {
     mockReq.body = { config: { description: 'New Description' } };
 
     // Mock updateResult to throw an error
-    (updateResult as jest.Mock).mockImplementation(() => {
+    (updateResult as Mock).mockImplementation(function () {
       throw new Error('Database error');
     });
 

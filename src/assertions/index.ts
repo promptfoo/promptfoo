@@ -23,6 +23,8 @@ import {
 } from '../matchers';
 import { isPackagePath, loadFromPackage } from '../providers/packageParser';
 import { runPython } from '../python/pythonUtils';
+import { generateSpanId, generateTraceparent } from '../tracing/evaluatorTracing';
+import { getTraceStore } from '../tracing/store';
 import {
   type ApiProvider,
   type Assertion,
@@ -72,13 +74,15 @@ import { handlePerplexity, handlePerplexityScore } from './perplexity';
 import { handlePiScorer } from './pi';
 import { handlePython } from './python';
 import { handleRedteam } from './redteam';
-import { handleRuby } from './ruby';
 import { handleIsRefusal } from './refusal';
 import { handleRegex } from './regex';
 import { handleRougeScore } from './rouge';
+import { handleRuby } from './ruby';
+import { handleSearchRubric } from './searchRubric';
 import { handleSimilar } from './similar';
 import { handleContainsSql, handleIsSql } from './sql';
 import { handleStartsWith } from './startsWith';
+import { handleToolCallF1 } from './toolCallF1';
 import { handleTraceErrorSpans } from './traceErrorSpans';
 import { handleTraceSpanCount } from './traceSpanCount';
 import { handleTraceSpanDuration } from './traceSpanDuration';
@@ -105,6 +109,7 @@ export const MODEL_GRADED_ASSERTION_TYPES = new Set<AssertionType>([
   'llm-rubric',
   'model-graded-closedqa',
   'model-graded-factuality',
+  'search-rubric',
 ]);
 
 const ASSERTION_HANDLERS: Record<
@@ -149,7 +154,7 @@ const ASSERTION_HANDLERS: Record<
   'llm-rubric': handleLlmRubric,
   meteor: async (params: AssertionParams) => {
     try {
-      const { handleMeteorAssertion } = await import('./meteor');
+      const { handleMeteorAssertion } = await import('./meteor.js');
       return handleMeteorAssertion(params);
     } catch (error) {
       if (
@@ -178,11 +183,13 @@ const ASSERTION_HANDLERS: Record<
   regex: handleRegex,
   ruby: handleRuby,
   'rouge-n': handleRougeScore,
+  'search-rubric': handleSearchRubric,
   similar: handleSimilar,
   'similar:cosine': handleSimilar,
   'similar:dot': handleSimilar,
   'similar:euclidean': handleSimilar,
   'starts-with': handleStartsWith,
+  'tool-call-f1': handleToolCallF1,
   'trace-error-spans': handleTraceErrorSpans,
   'trace-span-count': handleTraceSpanCount,
   'trace-span-duration': handleTraceSpanDuration,
@@ -256,12 +263,14 @@ export async function runAssertion({
   // Add trace data if traceId is available
   if (traceId) {
     try {
-      const { getTraceStore } = await import('../tracing/store');
       const traceStore = getTraceStore();
       const traceData = await traceStore.getTrace(traceId);
       if (traceData) {
         context.trace = {
           traceId: traceData.traceId,
+          evaluationId: traceData.evaluationId,
+          testCaseId: traceData.testCaseId,
+          metadata: traceData.metadata,
           spans: traceData.spans || [],
         };
       }
@@ -309,7 +318,7 @@ export async function runAssertion({
         }
       } else if (filePath.endsWith('.rb')) {
         try {
-          const { runRuby } = await import('../ruby/rubyUtils');
+          const { runRuby } = await import('../ruby/rubyUtils.js');
           const rubyScriptOutput = await runRuby(filePath, functionName || 'get_assert', [
             output,
             context,
@@ -400,11 +409,14 @@ export async function runAssertion({
   }
 
   // Construct CallApiContextParams for model-graded assertions that need originalProvider
+  // Generate traceparent for grader calls to link them to the main trace
+  const graderTraceparent = traceId ? generateTraceparent(traceId, generateSpanId()) : undefined;
   const providerCallContext: CallApiContextParams | undefined = provider
     ? {
         originalProvider: provider,
         prompt: { raw: prompt || '', label: '' },
         vars: test.vars || {},
+        ...(graderTraceparent && { traceparent: graderTraceparent }),
       }
     : undefined;
 

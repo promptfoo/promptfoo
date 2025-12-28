@@ -88,6 +88,60 @@ This example shows Claude Agent SDK integration with:
 (cd mcp && promptfoo eval)
 ```
 
+### Structured Output
+
+This example demonstrates Claude Agent SDK's structured output feature, which returns validated JSON that conforms to a schema. It includes:
+
+- **JSON schema validation**: Define expected output structure with types, enums, and required fields
+- **Code analysis task**: Agent analyzes a Python function for bugs
+- **Assertion testing**: Validates that output matches expected schema and contains correct analysis
+
+**Location**: `./structured-output/`
+
+**Usage**:
+
+```bash
+(cd structured-output && promptfoo eval)
+```
+
+### Advanced Options
+
+This example demonstrates advanced Claude Agent SDK configuration options including sandbox settings, runtime configuration, permission bypass, and CLI arguments.
+
+**Location**: `./advanced-options/`
+
+**Usage**:
+
+```bash
+(cd advanced-options && promptfoo eval)
+```
+
+**Features demonstrated**:
+
+- **Sandbox configuration**: Run commands in isolated environments with network restrictions
+- **Runtime configuration**: Specify JavaScript runtime (node, bun, deno)
+- **Extra CLI arguments**: Pass additional flags to Claude Code
+- **Setting sources**: Control where SDK loads settings from
+- **Permission bypass**: Safely bypass permissions for automated testing
+
+### AskUserQuestion Handling
+
+This example demonstrates handling the `AskUserQuestion` tool in automated evaluations. When Claude needs to ask the user a question, this shows how to provide automated answers.
+
+**Location**: `./ask-user-question/`
+
+**Usage**:
+
+```bash
+(cd ask-user-question && promptfoo eval)
+```
+
+**Features demonstrated**:
+
+- **Convenience option**: Use `ask_user_question.behavior` for simple automated responses
+- **First option selection**: Automatically select the first available option
+- **Tool enablement**: Enable `AskUserQuestion` via `append_allowed_tools`
+
 ### Cyber Espionage Red Team
 
 This example demonstrates testing AI agents against cyber espionage attack patterns based on Anthropic's ["Disrupting AI Espionage"](https://www.anthropic.com/news/disrupting-AI-espionage) blog post. It includes:

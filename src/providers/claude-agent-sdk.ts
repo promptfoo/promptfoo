@@ -1,33 +1,42 @@
-import { createRequire } from 'node:module';
-import crypto from 'crypto';
-import fs from 'fs';
-import os from 'os';
-import path from 'path';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
 import dedent from 'dedent';
-import { getCache, isCacheEnabled } from '../cache';
 import cliState from '../cliState';
 import { getEnvString } from '../envars';
-import { importModule } from '../esm';
+import { importModule, resolvePackageEntryPoint } from '../esm';
 import logger from '../logger';
+import { cacheResponse, getCachedResponse, initializeAgenticCache } from './agentic-utils';
 import { ANTHROPIC_MODELS } from './anthropic/util';
 import { transformMCPConfigToClaudeCode } from './mcp/transform';
 import { MCPConfig } from './mcp/types';
-import type { Options as QueryOptions, SettingSource } from '@anthropic-ai/claude-agent-sdk';
+import type {
+  AgentDefinition,
+  CanUseTool,
+  HookCallbackMatcher,
+  HookEvent,
+  OutputFormat,
+  PermissionResult,
+  Options as QueryOptions,
+  SandboxSettings,
+  SettingSource,
+  SpawnedProcess,
+  SpawnOptions,
+} from '@anthropic-ai/claude-agent-sdk';
 
+import type { EnvOverrides } from '../types/env';
 import type {
   ApiProvider,
   CallApiContextParams,
   CallApiOptionsParams,
   ProviderResponse,
 } from '../types/index';
-import type { EnvOverrides } from '../types/env';
 
 /**
  * Claude Agent SDK Provider
  *
- * This provider requires the @anthropic-ai/claude-agent-sdk package, which has a
- * proprietary license and is not installed by default. Users must install it separately:
+ * This provider requires the @anthropic-ai/claude-agent-sdk package to be installed separately:
  *   npm install @anthropic-ai/claude-agent-sdk
  *
  * Two default configurations:
@@ -57,17 +66,26 @@ export const CLAUDE_CODE_MODEL_ALIASES = [
 
 /**
  * Helper to load the Claude Agent SDK ESM module
- * Uses the same pattern as other providers for resolving npm packages
+ * Uses resolvePackageEntryPoint to handle ESM-only packages with restrictive exports
  */
 async function loadClaudeCodeSDK(): Promise<typeof import('@anthropic-ai/claude-agent-sdk')> {
+  const basePath =
+    cliState.basePath && path.isAbsolute(cliState.basePath) ? cliState.basePath : process.cwd();
+
+  const claudeCodePath = resolvePackageEntryPoint('@anthropic-ai/claude-agent-sdk', basePath);
+
+  if (!claudeCodePath) {
+    throw new Error(
+      dedent`The @anthropic-ai/claude-agent-sdk package is required but not installed.
+
+      To use the Claude Agent SDK provider, install it with:
+        npm install @anthropic-ai/claude-agent-sdk
+
+      For more information, see: https://www.promptfoo.dev/docs/providers/claude-agent-sdk/`,
+    );
+  }
+
   try {
-    // Use a file path for createRequire to ensure proper module resolution
-    // createRequire needs an absolute path, not a relative one
-    const basePath =
-      cliState.basePath && path.isAbsolute(cliState.basePath) ? cliState.basePath : process.cwd();
-    const resolveFrom = path.join(basePath, 'package.json');
-    const require = createRequire(resolveFrom);
-    const claudeCodePath = require.resolve('@anthropic-ai/claude-agent-sdk');
     return importModule(claudeCodePath);
   } catch (err) {
     logger.error(`Failed to load Claude Agent SDK: ${err}`);
@@ -75,11 +93,13 @@ async function loadClaudeCodeSDK(): Promise<typeof import('@anthropic-ai/claude-
       logger.error((err as any).stack);
     }
     throw new Error(
-      dedent`The @anthropic-ai/claude-agent-sdk package is required but not installed.
+      dedent`Failed to load @anthropic-ai/claude-agent-sdk.
 
-      This package has a proprietary license and is not installed by default.
+      The package was found but could not be loaded. This may be due to:
+      - Incompatible Node.js version (requires Node.js 20+)
+      - Corrupted installation
 
-      To use the Claude Agent SDK provider, install it with:
+      Try reinstalling:
         npm install @anthropic-ai/claude-agent-sdk
 
       For more information, see: https://www.promptfoo.dev/docs/providers/claude-agent-sdk/`,
@@ -111,8 +131,9 @@ export interface ClaudeCodeOptions {
 
   /**
    * User can set more dangerous 'acceptEdits' or 'bypassPermissions' if they know what they're doing,
+   * - 'dontAsk' mode denies permissions that aren't pre-approved without prompting
    */
-  permission_mode?: 'default' | 'plan' | 'acceptEdits' | 'bypassPermissions';
+  permission_mode?: 'default' | 'plan' | 'acceptEdits' | 'bypassPermissions' | 'dontAsk';
 
   /**
    * User can set a custom system prompt, or append to the default Claude Agent SDK system prompt
@@ -137,6 +158,318 @@ export interface ClaudeCodeOptions {
    * if not supplied, it won't look for any settings, CLAUDE.md, or slash commands
    */
   setting_sources?: SettingSource[];
+
+  /**
+   * 'plugins' allows loading Claude Code plugins from local file system paths
+   * Each plugin must be a directory containing .claude-plugin/plugin.json manifest
+   */
+  plugins?: Array<{ type: 'local'; path: string }>;
+
+  /**
+   * Maximum budget in USD for this session. When exceeded, the SDK will stop with error_max_budget_usd.
+   * Useful for cost control in automated evaluations.
+   */
+  max_budget_usd?: number;
+
+  /**
+   * Additional directories the agent can access beyond the working directory.
+   * Useful when the agent needs to read files from multiple locations.
+   */
+  additional_directories?: string[];
+
+  /**
+   * Session ID to resume a previous conversation. The agent will continue from where it left off.
+   * Use with 'fork_session' to branch instead of continuing the same session.
+   */
+  resume?: string;
+
+  /**
+   * When true and 'resume' is set, creates a new session branching from the resumed point
+   * instead of continuing the original session.
+   */
+  fork_session?: boolean;
+
+  /**
+   * When resuming, only restore messages up to this message UUID.
+   * Allows resuming from a specific point in the conversation history.
+   */
+  resume_session_at?: string;
+
+  /**
+   * When true, continues from the previous conversation without requiring a resume session ID.
+   */
+  continue?: boolean;
+
+  /**
+   * Programmatic agent definitions. Allows defining custom subagents inline without filesystem dependencies.
+   * Keys are agent names, values are agent definitions with description, tools, and prompt.
+   */
+  agents?: Record<string, AgentDefinition>;
+
+  /**
+   * Output format specification for structured outputs.
+   * When set, the agent will return validated JSON matching the provided schema.
+   */
+  output_format?: OutputFormat;
+
+  /**
+   * Hooks for intercepting events during agent execution.
+   * Allows custom logic at various points like PreToolUse, PostToolUse, etc.
+   */
+  hooks?: Partial<Record<HookEvent, HookCallbackMatcher[]>>;
+
+  /**
+   * When true, includes partial/streaming messages in the response.
+   * Useful for debugging or when you need to see intermediate outputs.
+   */
+  include_partial_messages?: boolean;
+
+  /**
+   * Enable beta features. Currently supports:
+   * - 'context-1m-2025-08-07' - Enable 1M token context window (Sonnet 4/4.5 only)
+   *
+   * @see https://docs.anthropic.com/en/api/beta-headers
+   */
+  betas?: 'context-1m-2025-08-07'[];
+
+  /**
+   * Sandbox settings for command execution isolation.
+   * When enabled, commands are executed in a sandboxed environment that restricts
+   * filesystem and network access. This provides an additional security layer.
+   *
+   * @example Enable sandboxing with auto-allow
+   * ```yaml
+   * sandbox:
+   *   enabled: true
+   *   autoAllowBashIfSandboxed: true
+   * ```
+   *
+   * @example Configure network options
+   * ```yaml
+   * sandbox:
+   *   enabled: true
+   *   network:
+   *     allowLocalBinding: true
+   *     allowedDomains:
+   *       - api.example.com
+   * ```
+   *
+   * @see https://docs.anthropic.com/en/docs/claude-code/settings#sandbox-settings
+   */
+  sandbox?: SandboxSettings;
+
+  /**
+   * Must be set to true when using permission_mode: 'bypassPermissions'.
+   * This is a safety measure to ensure intentional bypassing of permissions.
+   */
+  allow_dangerously_skip_permissions?: boolean;
+
+  /**
+   * MCP tool name to use for permission prompts. When set, permission requests
+   * will be routed through this MCP tool instead of the default handler.
+   */
+  permission_prompt_tool_name?: string;
+
+  /**
+   * Callback for stderr output from the Claude Code process.
+   * Useful for debugging and logging.
+   *
+   * Note: This option is only available when using the provider programmatically,
+   * not via YAML config.
+   */
+  stderr?: (data: string) => void;
+
+  /**
+   * JavaScript runtime to use for executing Claude Code.
+   * Auto-detected if not specified.
+   */
+  executable?: 'bun' | 'deno' | 'node';
+
+  /**
+   * Additional arguments to pass to the JavaScript runtime executable.
+   */
+  executable_args?: string[];
+
+  /**
+   * Additional CLI arguments to pass to Claude Code.
+   * Keys are argument names (without --), values are argument values.
+   * Use null for boolean flags.
+   *
+   * @example
+   * ```yaml
+   * extra_args:
+   *   verbose: null  # Adds --verbose flag
+   *   timeout: "30"  # Adds --timeout 30
+   * ```
+   */
+  extra_args?: Record<string, string | null>;
+
+  /**
+   * Path to the Claude Code executable. Uses the built-in executable if not specified.
+   * Useful for testing with custom builds or specific versions.
+   */
+  path_to_claude_code_executable?: string;
+
+  /**
+   * Specify the base set of available built-in tools.
+   * - `string[]` - Array of specific tool names (e.g., `['Bash', 'Read', 'Edit']`)
+   * - `[]` (empty array) - Disable all built-in tools
+   * - `{ type: 'preset', preset: 'claude_code' }` - Use all default Claude Code tools
+   *
+   * This is different from 'custom_allowed_tools' - 'tools' specifies the base set,
+   * while 'allowedTools' filters from that base.
+   *
+   * @example Use all default tools
+   * ```yaml
+   * tools:
+   *   type: preset
+   *   preset: claude_code
+   * ```
+   *
+   * @example Use only specific tools
+   * ```yaml
+   * tools:
+   *   - Bash
+   *   - Read
+   *   - Edit
+   * ```
+   */
+  tools?: string[] | { type: 'preset'; preset: 'claude_code' };
+
+  /**
+   * Enable file checkpointing to track file changes during the session.
+   * When enabled, files can be rewound to their state at any user message
+   * using the Query.rewindFiles() method.
+   *
+   * File checkpointing creates backups of files before they are modified,
+   * allowing restoration to previous states.
+   *
+   * @default false
+   */
+  enable_file_checkpointing?: boolean;
+
+  /**
+   * When false, disables session persistence to disk. Sessions will not be
+   * saved to ~/.claude/projects/ and cannot be resumed later. Useful for
+   * ephemeral or automated workflows where session history is not needed.
+   *
+   * @default true
+   */
+  persist_session?: boolean;
+
+  /**
+   * Custom function to spawn the Claude Code process.
+   * Use this to run Claude Code in VMs, containers, or remote environments.
+   *
+   * When provided, this function is called instead of the default local spawn.
+   *
+   * Note: This option is only available when using the provider programmatically,
+   * not via YAML config.
+   *
+   * @example
+   * ```typescript
+   * spawn_claude_code_process: (options) => {
+   *   // Custom spawn logic for VM execution
+   *   // options contains: command, args, cwd, env, signal
+   *   return myVMProcess; // Must satisfy SpawnedProcess interface
+   * }
+   * ```
+   */
+  spawn_claude_code_process?: (options: SpawnOptions) => SpawnedProcess;
+
+  /**
+   * Configuration for handling AskUserQuestion tool in automated evaluations.
+   * Since there's no human to answer questions, this provides automated responses.
+   *
+   * @example
+   * ```yaml
+   * ask_user_question:
+   *   behavior: first_option  # Always select the first option
+   * ```
+   */
+  ask_user_question?: {
+    /**
+     * Default behavior for answering questions:
+     * - 'first_option': Always select the first option (default)
+     * - 'random': Randomly select from available options
+     * - 'deny': Deny the tool use (agent cannot ask questions)
+     */
+    behavior?: 'first_option' | 'random' | 'deny';
+  };
+}
+
+/**
+ * Type for AskUserQuestion tool input from the SDK
+ */
+interface AskUserQuestionToolInput {
+  questions: Array<{
+    question: string;
+    header: string;
+    options: Array<{ label: string; description: string }>;
+    multiSelect: boolean;
+  }>;
+  answers?: Record<string, string>;
+}
+
+/**
+ * Creates a canUseTool callback for handling AskUserQuestion tool in automated evaluations.
+ * This provides automated responses to questions that would normally require user input.
+ *
+ * The callback wraps an optional user-provided canUseTool and handles AskUserQuestion specifically,
+ * deferring to the wrapped callback for all other tools.
+ */
+function createAskUserQuestionCanUseTool(
+  behavior: 'first_option' | 'random' | 'deny' = 'first_option',
+  wrappedCanUseTool?: CanUseTool,
+): CanUseTool {
+  return async (toolName, input, options): Promise<PermissionResult> => {
+    // Only handle AskUserQuestion tool
+    if (toolName !== 'AskUserQuestion') {
+      // Defer to wrapped callback or allow by default
+      if (wrappedCanUseTool) {
+        return wrappedCanUseTool(toolName, input, options);
+      }
+      return { behavior: 'allow', updatedInput: input };
+    }
+
+    // Deny the tool use if configured to do so
+    if (behavior === 'deny') {
+      return {
+        behavior: 'deny',
+        message: 'AskUserQuestion is disabled in automated evaluation mode',
+      };
+    }
+
+    const toolInput = input as unknown as AskUserQuestionToolInput;
+    const answers: Record<string, string> = {};
+
+    // Generate answers for each question based on the configured behavior
+    for (const question of toolInput.questions) {
+      if (!question.options || question.options.length === 0) {
+        continue;
+      }
+
+      let selectedLabels: string[];
+      if (behavior === 'random') {
+        const randomIndex = Math.floor(Math.random() * question.options.length);
+        selectedLabels = [question.options[randomIndex].label];
+      } else {
+        // first_option (default)
+        selectedLabels = [question.options[0].label];
+      }
+
+      // Multi-select answers are comma-separated strings per SDK documentation
+      answers[question.question] = selectedLabels.join(', ');
+    }
+
+    return {
+      behavior: 'allow',
+      updatedInput: {
+        questions: toolInput.questions, // Pass through original questions
+        answers,
+      },
+    };
+  };
 }
 
 export class ClaudeCodeSDKProvider implements ApiProvider {
@@ -247,6 +580,16 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       throw new Error('Cannot specify both custom_allowed_tools and append_allowed_tools');
     }
 
+    // Validate that bypassPermissions mode requires the safety flag
+    if (
+      config.permission_mode === 'bypassPermissions' &&
+      !config.allow_dangerously_skip_permissions
+    ) {
+      throw new Error(
+        "permission_mode 'bypassPermissions' requires allow_dangerously_skip_permissions: true as a safety measure",
+      );
+    }
+
     // De-dupe and sort allowed/disallowed tools for cache key consistency
     const defaultAllowedTools = config.working_dir ? FS_READONLY_ALLOWED_TOOLS : [];
 
@@ -272,9 +615,19 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       isTempDir = true;
     }
 
+    // Create canUseTool callback for ask_user_question convenience option
+    // AskUserQuestion is handled via canUseTool per SDK documentation
+    let canUseTool: CanUseTool | undefined;
+    if (config.ask_user_question) {
+      canUseTool = createAskUserQuestionCanUseTool(config.ask_user_question.behavior);
+    }
+
     // Just the keys we'll use to compute the cache key first
     // Lets us avoid unnecessary work and cleanup if there's a cache hit
-    const cacheKeyQueryOptions: Omit<QueryOptions, 'abortController' | 'mcpServers' | 'cwd'> = {
+    const cacheKeyQueryOptions: Omit<
+      QueryOptions,
+      'abortController' | 'mcpServers' | 'cwd' | 'stderr' | 'spawnClaudeCodeProcess'
+    > = {
       maxTurns: config.max_turns,
       model: config.model,
       fallbackModel: config.fallback_model,
@@ -290,62 +643,54 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       maxThinkingTokens: config.max_thinking_tokens,
       allowedTools,
       disallowedTools,
+      plugins: config.plugins,
+      maxBudgetUsd: config.max_budget_usd,
+      additionalDirectories: config.additional_directories,
+      resume: config.resume,
+      forkSession: config.fork_session,
+      resumeSessionAt: config.resume_session_at,
+      continue: config.continue,
+      agents: config.agents,
+      outputFormat: config.output_format,
+      hooks: config.hooks,
+      includePartialMessages: config.include_partial_messages,
+      betas: config.betas,
+      // New options
+      sandbox: config.sandbox,
+      allowDangerouslySkipPermissions: config.allow_dangerously_skip_permissions,
+      permissionPromptToolName: config.permission_prompt_tool_name,
+      executable: config.executable,
+      executableArgs: config.executable_args,
+      extraArgs: config.extra_args,
+      pathToClaudeCodeExecutable: config.path_to_claude_code_executable,
+      settingSources: config.setting_sources,
+      tools: config.tools,
+      enableFileCheckpointing: config.enable_file_checkpointing,
+      persistSession: config.persist_session,
       env,
     };
 
-    let shouldCache = isCacheEnabled();
+    // Cache handling using shared utilities
+    const cacheResult = await initializeAgenticCache(
+      {
+        cacheKeyPrefix: 'anthropic:claude-agent-sdk',
+        workingDir: config.working_dir,
+        bustCache: context?.bustCache,
+      },
+      {
+        prompt,
+        cacheKeyQueryOptions,
+      },
+    );
 
-    // If we're caching, only read from cache if we're not busting it (we can still write to it when busting)
-
-    let cache: Awaited<ReturnType<typeof getCache>> | undefined;
-    let cacheKey: string | undefined;
-    if (shouldCache) {
-      let workingDirFingerprint: string | null = null;
-      if (config.working_dir) {
-        try {
-          workingDirFingerprint = await getWorkingDirFingerprint(config.working_dir);
-        } catch (error) {
-          logger.error(
-            dedent`Error getting working directory fingerprint for cache key - ${config.working_dir}: ${String(error)}
-            
-            Caching is disabled.`,
-          );
-          shouldCache = false;
-        }
-      }
-
-      if (shouldCache) {
-        cache = await getCache();
-        const stringified = JSON.stringify({
-          prompt,
-          cacheKeyQueryOptions,
-          workingDirFingerprint,
-        });
-        // Hash to avoid super long cache keys or including sensitive env vars in the key
-        const hash = crypto.createHash('sha256').update(stringified).digest('hex');
-        cacheKey = `anthropic:claude-agent-sdk:${hash}`;
-      }
-    }
-
-    const shouldReadCache = shouldCache && !context?.bustCache;
-    const shouldWriteCache = shouldCache;
-
-    if (shouldReadCache && cache && cacheKey) {
-      try {
-        const cachedResponse = await cache.get<string | undefined>(cacheKey);
-        if (cachedResponse) {
-          logger.debug(
-            `Returning cached response for ${prompt} (cache key: ${cacheKey}): ${cachedResponse}`,
-          );
-          return JSON.parse(cachedResponse);
-        }
-      } catch (error) {
-        logger.error(`Error getting cached response for ${prompt}: ${String(error)}`);
-      }
+    // Check cache for existing response
+    const cachedResponse = await getCachedResponse(cacheResult, 'Claude Agent SDK');
+    if (cachedResponse) {
+      return cachedResponse;
     }
 
     // Transform MCP config to Claude Agent SDK MCP servers
-    const mcpServers = config.mcp ? transformMCPConfigToClaudeCode(config.mcp) : {};
+    const mcpServers = config.mcp ? await transformMCPConfigToClaudeCode(config.mcp) : {};
 
     if (workingDir) {
       // verify the working dir exists and is a directory
@@ -386,6 +731,10 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
       abortController,
       mcpServers,
       cwd: workingDir,
+      // Callbacks are not included in cache key since they're functions
+      stderr: config.stderr,
+      spawnClaudeCodeProcess: config.spawn_claude_code_process,
+      canUseTool,
     };
     const queryParams = { prompt, options };
 
@@ -425,21 +774,26 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
           const sessionId = msg.session_id;
           if (msg.subtype == 'success') {
             logger.debug(`Claude Agent SDK response: ${raw}`);
-            const response = {
-              output: msg.result,
+            // When structured output is enabled and available, use it as the output
+            // Otherwise fall back to the text result
+            const output = msg.structured_output !== undefined ? msg.structured_output : msg.result;
+            const response: ProviderResponse = {
+              output,
               tokenUsage,
               cost,
               raw,
               sessionId,
             };
-
-            if (shouldWriteCache && cache && cacheKey) {
-              try {
-                await cache.set(cacheKey, JSON.stringify(response));
-              } catch (error) {
-                logger.error(`Error caching response for ${prompt}: ${String(error)}`);
-              }
+            // Include structured output in metadata if available
+            if (msg.structured_output !== undefined) {
+              response.metadata = {
+                ...response.metadata,
+                structuredOutput: msg.structured_output,
+              };
             }
+
+            // Cache the response using shared utilities
+            await cacheResponse(cacheResult, response, 'Claude Agent SDK');
             return response;
           } else {
             return {
@@ -492,54 +846,4 @@ export class ClaudeCodeSDKProvider implements ApiProvider {
   async cleanup(): Promise<void> {
     // no cleanup needed
   }
-}
-
-/**
- * Get a fingerprint for the working directory to use as a cache key. Checks directory mtime and descendant file mtimes recursively.
- *
- * This allows for caching prompts that use the same working directory when the files haven't changed.
- *
- * Simple/naive approach with recursion, statSync/readdirSync, and sanity-check timeout should be fine for normal use cases—even with thousands of files it's likely fast enough. Could be optimized later to remove recursion and use async fs calls with a queue and batching if it ever becomes an issue.
- */
-const FINGERPRINT_TIMEOUT_MS = 2000;
-async function getWorkingDirFingerprint(workingDir: string): Promise<string> {
-  const dirStat = fs.statSync(workingDir);
-  const dirMtime = dirStat.mtimeMs;
-
-  const startTime = Date.now();
-
-  // Recursively get all files
-  const getAllFiles = (dir: string, files: string[] = []): string[] => {
-    if (Date.now() - startTime > FINGERPRINT_TIMEOUT_MS) {
-      throw new Error('Working directory fingerprint timed out');
-    }
-
-    const entries = fs.readdirSync(dir, { withFileTypes: true });
-
-    for (const entry of entries) {
-      const fullPath = path.join(dir, entry.name);
-      if (entry.isDirectory()) {
-        getAllFiles(fullPath, files);
-      } else if (entry.isFile()) {
-        files.push(fullPath);
-      }
-    }
-    return files;
-  };
-
-  const allFiles = getAllFiles(workingDir);
-
-  // Create fingerprint from directory mtime + all file mtimes
-  const fileMtimes = allFiles
-    .map((file: string) => {
-      const stat = fs.statSync(file);
-      const relativePath = path.relative(workingDir, file);
-      return `${relativePath}:${stat.mtimeMs}`;
-    })
-    .sort(); // Sort for consistent ordering
-
-  const fingerprintData = `dir:${dirMtime};files:${fileMtimes.join(',')}`;
-  const fingerprint = crypto.createHash('sha256').update(fingerprintData).digest('hex');
-
-  return fingerprint;
 }

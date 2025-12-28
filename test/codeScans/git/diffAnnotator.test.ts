@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest';
 import { annotateSingleFileDiffWithLineNumbers } from '../../../src/codeScan/git/diffAnnotator';
 
 describe('annotateDiffWithLineNumbers', () => {

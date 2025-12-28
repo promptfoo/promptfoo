@@ -1,16 +1,17 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleLlmRubric } from '../../src/assertions/llmRubric';
 import { matchesLlmRubric } from '../../src/matchers';
 
 import type { Assertion, AssertionParams, GradingResult } from '../../src/types/index';
 
-jest.mock('../../src/matchers');
+vi.mock('../../src/matchers');
 
 describe('handleLlmRubric', () => {
   beforeEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
-  const mockMatchesLlmRubric = jest.mocked(matchesLlmRubric);
+  const mockMatchesLlmRubric = vi.mocked(matchesLlmRubric);
 
   const defaultParams: AssertionParams = {
     assertion: {
@@ -406,6 +407,30 @@ describe('handleLlmRubric', () => {
       params.assertion,
       undefined,
       undefined,
+    );
+  });
+
+  it('should pass through renderedGradingPrompt metadata from matchesLlmRubric', async () => {
+    const params = {
+      ...defaultParams,
+      renderedValue: 'test rubric',
+    };
+
+    const expectedResult: GradingResult = {
+      pass: true,
+      score: 1,
+      reason: 'test reason',
+      metadata: {
+        renderedGradingPrompt: '[{"role":"system","content":"grading instructions"}]',
+      },
+    };
+
+    mockMatchesLlmRubric.mockResolvedValue(expectedResult);
+
+    const result = await handleLlmRubric(params);
+
+    expect(result.metadata?.renderedGradingPrompt).toBe(
+      '[{"role":"system","content":"grading instructions"}]',
     );
   });
 });

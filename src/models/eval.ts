@@ -1,5 +1,3 @@
-import { randomUUID } from 'crypto';
-
 import { and, desc, eq, sql } from 'drizzle-orm';
 import { DEFAULT_QUERY_LIMIT } from '../constants';
 import { getDb } from '../database/index';
@@ -19,7 +17,9 @@ import { getUserEmail } from '../globalConfig/accounts';
 import logger from '../logger';
 import { hashPrompt } from '../prompts/utils';
 import { PLUGIN_CATEGORIES } from '../redteam/constants';
+import { calculateAttackSuccessRate } from '../redteam/metrics';
 import { getRiskCategorySeverityMap } from '../redteam/sharedFrontend';
+import { getTraceStore } from '../tracing/store';
 import {
   type CompletedPrompt,
   type EvalSummary,
@@ -34,18 +34,21 @@ import {
   type ResultsFile,
   type UnifiedConfig,
 } from '../types/index';
+import { calculateFilteredMetrics } from '../util/calculateFilteredMetrics';
 import { convertResultsToTable } from '../util/convertEvalResultsToTable';
 import { randomSequence, sha256 } from '../util/createHash';
 import { convertTestResultsToTableRow } from '../util/exportToFile/index';
 import invariant from '../util/invariant';
 import { getCurrentTimestamp } from '../util/time';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
-import { getCachedResultsCount, queryTestIndicesOptimized } from './evalPerformance';
+import {
+  getCachedResultsCount,
+  getTotalResultRowCount,
+  queryTestIndicesOptimized,
+} from './evalPerformance';
 import EvalResult from './evalResult';
-import { calculateFilteredMetrics } from '../util/calculateFilteredMetrics';
 
-import type { EvalResultsFilterMode } from '../types/index';
-import { calculateAttackSuccessRate } from '../redteam/metrics';
+import type { EvalResultsFilterMode, TraceData } from '../types/index';
 
 /**
  * Database query result type interfaces
@@ -243,6 +246,7 @@ export default class Eval {
   _resultsLoaded: boolean = false;
   runtimeOptions?: Partial<import('../types').EvaluateOptions>;
   _shared: boolean = false;
+  durationMs?: number;
 
   static async latest() {
     const db = getDb();
@@ -282,6 +286,16 @@ export default class Eval {
     const eval_ = evalData[0];
     const datasetId = datasetResults[0]?.datasetId;
 
+    // Extract durationMs from results column (for V4 evals)
+    // Validate that it's a finite positive number to guard against corrupted data
+    const resultsObj = eval_.results as Record<string, unknown> | undefined;
+    const rawDurationMs =
+      resultsObj && 'durationMs' in resultsObj ? resultsObj.durationMs : undefined;
+    const durationMs =
+      typeof rawDurationMs === 'number' && Number.isFinite(rawDurationMs) && rawDurationMs >= 0
+        ? rawDurationMs
+        : undefined;
+
     const evalInstance = new Eval(eval_.config, {
       id: eval_.id,
       createdAt: new Date(eval_.createdAt),
@@ -292,6 +306,7 @@ export default class Eval {
       persisted: true,
       vars: eval_.vars || [],
       runtimeOptions: (eval_ as any).runtimeOptions,
+      durationMs,
     });
     if (eval_.results && 'table' in eval_.results) {
       evalInstance.oldResults = eval_.results as EvaluateSummaryV2;
@@ -390,7 +405,7 @@ export default class Eval {
       if (opts?.results && opts.results.length > 0) {
         const res = db
           .insert(evalResultsTable)
-          .values(opts.results?.map((r) => ({ ...r, evalId, id: randomUUID() })))
+          .values(opts.results?.map((r) => ({ ...r, evalId, id: crypto.randomUUID() })))
           .run();
         logger.debug(`Inserted ${res.changes} eval results`);
       }
@@ -460,6 +475,7 @@ export default class Eval {
       persisted?: boolean;
       vars?: string[];
       runtimeOptions?: Partial<import('../types').EvaluateOptions>;
+      durationMs?: number;
     },
   ) {
     const createdAt = opts?.createdAt || new Date();
@@ -474,6 +490,7 @@ export default class Eval {
     this._resultsLoaded = false;
     this.vars = opts?.vars || [];
     this.runtimeOptions = opts?.runtimeOptions;
+    this.durationMs = opts?.durationMs;
   }
 
   version() {
@@ -509,6 +526,9 @@ export default class Eval {
     if (this.useOldResults()) {
       invariant(this.oldResults, 'Old results not found');
       updateObj.results = this.oldResults;
+    } else if (this.durationMs !== undefined) {
+      // For V4 evals, store durationMs in the results column
+      updateObj.results = { durationMs: this.durationMs };
     }
     db.update(evalsTable).set(updateObj).where(eq(evalsTable.id, this.id)).run();
     this.persisted = true;
@@ -520,6 +540,10 @@ export default class Eval {
 
   addVar(varName: string) {
     this.vars.push(varName);
+  }
+
+  setDurationMs(durationMs: number) {
+    this.durationMs = durationMs;
   }
 
   getPrompts() {
@@ -547,8 +571,8 @@ export default class Eval {
       this.results.push(newResult);
     }
     if (this.persisted) {
-      // Notify watchers that new results are available
-      updateSignalFile();
+      // Notify watchers that new results are available, passing the eval ID
+      updateSignalFile(this.id);
     }
   }
 
@@ -559,8 +583,17 @@ export default class Eval {
   }
 
   async getResultsCount(): Promise<number> {
-    // Use cached count for better performance
+    // Returns distinct test count (unique test cases) - used for UI display
     return getCachedResultsCount(this.id);
+  }
+
+  /**
+   * Get the total count of all result rows for this eval.
+   * Use this when iterating over all results (e.g., for sharing progress).
+   * This may be higher than getResultsCount() when there are multiple prompts/providers.
+   */
+  async getTotalResultRowCount(): Promise<number> {
+    return getTotalResultRowCount(this.id);
   }
 
   async fetchResultsByTestIdx(testIdx: number) {
@@ -989,6 +1022,7 @@ export default class Eval {
       failures: 0,
       errors: 0,
       tokenUsage: createEmptyTokenUsage(),
+      durationMs: this.durationMs,
     };
 
     for (const prompt of this.prompts) {
@@ -1036,7 +1070,53 @@ export default class Eval {
     };
   }
 
+  async getTraces(): Promise<TraceData[]> {
+    try {
+      const traceStore = getTraceStore();
+      const tracesData = await traceStore.getTracesByEvaluation(this.id);
+
+      // Transform trace data to match the expected schema
+      return tracesData.map((trace: TraceData) => ({
+        traceId: trace.traceId,
+        evaluationId: trace.evaluationId,
+        testCaseId: trace.testCaseId,
+        metadata: trace.metadata,
+        spans: (trace.spans || []).map((span: any) => {
+          // Calculate duration
+          const durationMs =
+            span.endTime && span.startTime ? (span.endTime - span.startTime) / 1000000 : undefined;
+
+          // Map status code
+          const statusCode =
+            span.statusCode === 1 ? 'ok' : span.statusCode === 2 ? 'error' : 'unset';
+
+          return {
+            spanId: span.spanId,
+            parentSpanId: span.parentSpanId,
+            name: span.name,
+            kind: span.kind || 'unspecified',
+            startTime: span.startTime,
+            endTime: span.endTime,
+            durationMs,
+            attributes: span.attributes || {},
+            status: {
+              code: statusCode,
+              message: span.statusMessage,
+            },
+            depth: 0, // Will be calculated on the server side when storing
+            events: span.events || [],
+          };
+        }),
+      }));
+    } catch (error) {
+      logger.debug(`Failed to fetch traces for eval ${this.id}: ${error}`);
+      return [];
+    }
+  }
+
   async toResultsFile(): Promise<ResultsFile> {
+    const traces = await this.getTraces();
+
     const results: ResultsFile = {
       version: this.version(),
       createdAt: new Date(this.createdAt).toISOString(),
@@ -1045,6 +1125,7 @@ export default class Eval {
       author: this.author || null,
       prompts: this.getPrompts(),
       datasetId: this.datasetId || null,
+      ...(traces.length > 0 && { traces }),
     };
 
     return results;
@@ -1195,7 +1276,7 @@ export default class Eval {
         const now = Date.now();
         const copiedResults = batch.map((result) => ({
           ...result,
-          id: randomUUID(),
+          id: crypto.randomUUID(),
           evalId: newEvalId,
           createdAt: now,
           updatedAt: now,
@@ -1362,7 +1443,7 @@ export async function getEvalSummaries(
       description: result.description,
       numTests: testCount,
       datasetId: result.datasetId,
-      isRedteam: result.isRedteam,
+      isRedteam: Boolean(result.isRedteam),
       passRate: testRunCount > 0 ? (passCount / testRunCount) * 100 : 0,
       label: result.description ? `${result.description} (${result.evalId})` : result.evalId,
       providers: deserializedProviders,

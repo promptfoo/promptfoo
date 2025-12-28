@@ -2,14 +2,15 @@
  * Integration test to verify function providers work end-to-end in grading scenarios
  * This tests the exact issue from #3784: function providers in defaultTest.options.provider
  */
+import { describe, expect, it, vi } from 'vitest';
 import { getGradingProvider } from '../../src/matchers';
-import type { ApiProvider } from '../../src/types/providers';
-import type { ProviderType } from '../../src/types/providers';
+
+import type { ApiProvider, ProviderType } from '../../src/types/providers';
 
 describe('Function Provider Integration - Issue #3784', () => {
   it('should work with getGradingProvider when passed as ApiProvider object', async () => {
     // Create a mock function provider (simulating what resolveProvider returns)
-    const mockFunctionProvider: any = jest.fn(async (prompt: string) => {
+    const mockFunctionProvider: any = vi.fn(async (prompt: string) => {
       return { output: `Graded: ${prompt}` };
     });
     mockFunctionProvider.label = 'test-grader';
@@ -35,7 +36,7 @@ describe('Function Provider Integration - Issue #3784', () => {
   });
 
   it('should actually call the function provider', async () => {
-    const mockFunctionProvider: any = jest.fn(async (prompt: string) => {
+    const mockFunctionProvider: any = vi.fn(async (prompt: string) => {
       return { output: `Response for: ${prompt}` };
     });
 
@@ -58,7 +59,7 @@ describe('Function Provider Integration - Issue #3784', () => {
   });
 
   it('should handle function provider without label', async () => {
-    const mockFunctionProvider: any = jest.fn(async (prompt: string) => {
+    const mockFunctionProvider: any = vi.fn(async (prompt: string) => {
       return { output: `Graded: ${prompt}` };
     });
 
@@ -79,7 +80,7 @@ describe('Function Provider Integration - Issue #3784', () => {
   });
 
   it('should correctly identify as ApiProvider based on type check', async () => {
-    const mockFunctionProvider: any = jest.fn(async () => ({ output: 'test' }));
+    const mockFunctionProvider: any = vi.fn(async () => ({ output: 'test' }));
 
     const resolvedProvider: ApiProvider = {
       id: () => 'test',

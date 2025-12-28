@@ -1,14 +1,14 @@
 import { fetchWithCache } from '../../cache';
 import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
-import { renderVarsInObject, maybeLoadToolsFromExternalFile } from '../../util/index';
 import { maybeLoadFromExternalFile } from '../../util/file';
+import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util/index';
+import invariant from '../../util/invariant';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
+import { ResponsesProcessor } from '../responses/index';
 import { REQUEST_TIMEOUT_MS } from '../shared';
 import { AzureGenericProvider } from './generic';
 import { calculateAzureCost } from './util';
-import { ResponsesProcessor } from '../responses/index';
-import invariant from '../../util/invariant';
 
 import type {
   CallApiContextParams,
@@ -45,12 +45,37 @@ export class AzureResponsesProvider extends AzureGenericProvider {
     // TODO: Initialize MCP if needed
   }
 
+  /**
+   * Check if the current deployment is a reasoning model.
+   * Reasoning models use max_completion_tokens instead of max_tokens,
+   * don't support temperature, and accept reasoning_effort parameter.
+   */
   isReasoningModel(): boolean {
+    // Check explicit config flags first (match chat.ts behavior)
+    if (this.config.isReasoningModel || this.config.o1) {
+      return true;
+    }
+
+    const lowerName = this.deploymentName.toLowerCase();
     return (
-      this.deploymentName.startsWith('o1') ||
-      this.deploymentName.startsWith('o3') ||
-      this.deploymentName.startsWith('o4') ||
-      this.deploymentName.startsWith('gpt-5')
+      // OpenAI reasoning models
+      lowerName.startsWith('o1') ||
+      lowerName.includes('-o1') ||
+      lowerName.startsWith('o3') ||
+      lowerName.includes('-o3') ||
+      lowerName.startsWith('o4') ||
+      lowerName.includes('-o4') ||
+      // GPT-5 series (reasoning by default)
+      lowerName.startsWith('gpt-5') ||
+      lowerName.includes('-gpt-5') ||
+      // DeepSeek reasoning models
+      lowerName.includes('deepseek-r1') ||
+      lowerName.includes('deepseek_r1') ||
+      // Microsoft Phi reasoning models
+      lowerName.includes('phi-4-reasoning') ||
+      lowerName.includes('phi-4-mini-reasoning') ||
+      // xAI Grok reasoning models
+      (lowerName.includes('grok') && lowerName.includes('reasoning'))
     );
   }
 
@@ -130,6 +155,11 @@ export class AzureResponsesProvider extends AzureGenericProvider {
       textFormat = { format: { type: 'text' } };
     }
 
+    // Add verbosity for reasoning models if configured
+    if (isReasoningModel && config.verbosity) {
+      textFormat = { ...textFormat, verbosity: config.verbosity };
+    }
+
     // Azure Responses API uses 'model' field for deployment name
     const body = {
       model: this.deploymentName,
@@ -180,8 +210,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
           'Example: AZURE_API_HOST=your-resource.openai.azure.com',
       );
     }
-
-    if (!this.authHeaders || !this.authHeaders['api-key']) {
+    if (!this.authHeaders['api-key'] && !this.authHeaders.Authorization) {
       throw new Error(
         'Azure API authentication failed. Set AZURE_API_KEY environment variable or configure apiKey in provider config.\n' +
           'You can also use Microsoft Entra ID authentication.',

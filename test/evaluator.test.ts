@@ -1,8 +1,10 @@
 import { randomUUID } from 'crypto';
 import fs from 'fs';
 
-import glob from 'glob';
-import { DEFAULT_MAX_CONCURRENCY, FILE_METADATA_KEY } from '../src/constants';
+import { glob } from 'glob';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import cliState from '../src/cliState';
+import { FILE_METADATA_KEY } from '../src/constants';
 import {
   evaluate,
   formatVarsForDisplay,
@@ -14,7 +16,6 @@ import { runExtensionHook } from '../src/evaluatorHelpers';
 import logger from '../src/logger';
 import { runDbMigrations } from '../src/migrate';
 import Eval from '../src/models/eval';
-import { strategyDisplayNames } from '../src/redteam/constants/metadata';
 import {
   type ApiProvider,
   type Prompt,
@@ -25,12 +26,14 @@ import { processConfigFileReferences } from '../src/util/fileReference';
 import { sleep } from '../src/util/time';
 import { createEmptyTokenUsage } from '../src/util/tokenUsageUtils';
 
-jest.mock('../src/util/transform', () => ({
+vi.mock('../src/util/transform', () => ({
   TransformInputType: {
     OUTPUT: 'output',
     VARS: 'vars',
   },
-  transform: jest.fn().mockImplementation(async (code, input, context, _skipWrap, _inputType) => {
+  // Provide a process shim for ESM compatibility in inline JavaScript code
+  getProcessShim: vi.fn().mockReturnValue(process),
+  transform: vi.fn().mockImplementation(async (code, input, context, _skipWrap, _inputType) => {
     if (typeof code === 'string' && code.includes('vars.transformed = true')) {
       return { ...input, transformed: true };
     }
@@ -151,59 +154,80 @@ jest.mock('../src/util/transform', () => ({
   }),
 }));
 
-jest.mock('../src/util/fileReference', () => ({
-  ...jest.requireActual('../src/util/fileReference'),
-  processConfigFileReferences: jest.fn().mockImplementation(async (config) => {
-    if (
-      typeof config === 'object' &&
-      config !== null &&
-      config.tests &&
-      Array.isArray(config.tests)
-    ) {
-      const result = {
-        ...config,
-        tests: config.tests.map((test: any) => {
-          return {
-            ...test,
-            vars:
-              test.vars.var1 === 'file://test/fixtures/test_file.txt'
-                ? {
-                    var1: '<h1>Sample Report</h1><p>This is a test report with some data for the year 2023.</p>',
-                  }
-                : test.vars,
-          };
-        }),
-      };
-      return result;
-    }
-    return config;
-  }),
-}));
+vi.mock('../src/util/fileReference', async () => {
+  const actual = await vi.importActual<typeof import('../src/util/fileReference')>(
+    '../src/util/fileReference',
+  );
+  return {
+    ...actual,
+    processConfigFileReferences: vi.fn().mockImplementation(async (config) => {
+      if (
+        typeof config === 'object' &&
+        config !== null &&
+        config.tests &&
+        Array.isArray(config.tests)
+      ) {
+        const result = {
+          ...config,
+          tests: config.tests.map((test: any) => {
+            return {
+              ...test,
+              vars:
+                test.vars.var1 === 'file://test/fixtures/test_file.txt'
+                  ? {
+                      var1: '<h1>Sample Report</h1><p>This is a test report with some data for the year 2023.</p>',
+                    }
+                  : test.vars,
+            };
+          }),
+        };
+        return result;
+      }
+      return config;
+    }),
+  };
+});
 
-jest.mock('proxy-agent', () => ({
-  ProxyAgent: jest.fn().mockImplementation(() => ({})),
+vi.mock('proxy-agent', () => ({
+  ProxyAgent: vi.fn().mockImplementation(() => ({})),
 }));
-jest.mock('glob', () => ({
-  globSync: jest.fn().mockImplementation((pattern) => {
+vi.mock('glob', () => {
+  const globSync = vi.fn().mockImplementation((pattern) => {
     if (pattern.includes('test/fixtures/test_file.txt')) {
       return [pattern];
     }
     return [];
-  }),
-  hasMagic: jest.fn((pattern: string | string[]) => {
+  });
+  const hasMagic = vi.fn((pattern: string | string[]) => {
     const p = Array.isArray(pattern) ? pattern.join('') : pattern;
     return p.includes('*') || p.includes('?') || p.includes('[') || p.includes('{');
-  }),
-}));
+  });
+  const glob = Object.assign(vi.fn(), { globSync, hasMagic, sync: globSync });
+  return {
+    default: { globSync, hasMagic },
+    glob,
+    globSync,
+    hasMagic,
+  };
+});
 
-jest.mock('../src/esm');
+vi.mock('../src/esm', async (importOriginal) => {
+  return {
+    ...(await importOriginal()),
+    importModule: vi.fn(),
+  };
+});
 
-jest.mock('../src/evaluatorHelpers', () => ({
-  ...jest.requireActual('../src/evaluatorHelpers'),
-  runExtensionHook: jest.fn().mockImplementation((_extensions, _hookName, context) => context),
-}));
+vi.mock('../src/evaluatorHelpers', async () => {
+  const actual =
+    await vi.importActual<typeof import('../src/evaluatorHelpers')>('../src/evaluatorHelpers');
+  return {
+    ...actual,
+    runExtensionHook: vi.fn().mockImplementation((_extensions, _hookName, context) => context),
+  };
+});
 
-jest.mock('../src/cliState', () => ({
+vi.mock('../src/cliState', () => ({
   __esModule: true,
   default: {
     resume: false,
@@ -212,58 +236,71 @@ jest.mock('../src/cliState', () => ({
   },
 }));
 
-jest.mock('../src/models/prompt', () => ({
-  generateIdFromPrompt: jest.fn((prompt) => `prompt-${prompt.label || 'default'}`),
+vi.mock('../src/models/prompt', () => ({
+  generateIdFromPrompt: vi.fn((prompt) => `prompt-${prompt.label || 'default'}`),
 }));
 
-jest.mock('../src/util/time', () => ({
-  ...jest.requireActual('../src/util/time'),
-  sleep: jest.fn(),
-}));
+vi.mock('../src/util/time', async () => {
+  const actual = await vi.importActual<typeof import('../src/util/time')>('../src/util/time');
+  return {
+    ...actual,
+    sleep: vi.fn(),
+  };
+});
 
-jest.mock('../src/util/fileExtensions', () => ({
-  isImageFile: jest
-    .fn()
-    .mockImplementation((filePath) => filePath.endsWith('.jpg') || filePath.endsWith('.png')),
-  isVideoFile: jest.fn().mockImplementation((filePath) => filePath.endsWith('.mp4')),
-  isAudioFile: jest.fn().mockImplementation((filePath) => filePath.endsWith('.mp3')),
-  isJavascriptFile: jest.fn().mockReturnValue(false),
-}));
+vi.mock('../src/util/fileExtensions', async () => {
+  const actual = await vi.importActual<typeof import('../src/util/fileExtensions')>(
+    '../src/util/fileExtensions',
+  );
+  return {
+    ...actual,
+    isImageFile: vi
+      .fn()
+      .mockImplementation((filePath) => filePath.endsWith('.jpg') || filePath.endsWith('.png')),
+    isVideoFile: vi.fn().mockImplementation((filePath) => filePath.endsWith('.mp4')),
+    isAudioFile: vi.fn().mockImplementation((filePath) => filePath.endsWith('.mp3')),
+    isJavascriptFile: vi.fn().mockReturnValue(false),
+  };
+});
 
-jest.mock('../src/util/functions/loadFunction', () => ({
-  ...jest.requireActual('../src/util/functions/loadFunction'),
-  loadFunction: jest.fn().mockImplementation((options) => {
-    if (options.filePath.includes('scoring')) {
-      return Promise.resolve((_metrics: Record<string, number>) => ({
-        pass: true,
-        score: 0.75,
-        reason: 'Custom scoring reason',
-      }));
-    }
-    return Promise.resolve(() => {});
-  }),
-  parseFileUrl: jest.requireActual('../src/util/functions/loadFunction').parseFileUrl,
-}));
+vi.mock('../src/util/functions/loadFunction', async () => {
+  const actual = await vi.importActual<typeof import('../src/util/functions/loadFunction')>(
+    '../src/util/functions/loadFunction',
+  );
+  return {
+    ...actual,
+    loadFunction: vi.fn().mockImplementation((options) => {
+      if (options.filePath.includes('scoring')) {
+        return Promise.resolve((_metrics: Record<string, number>) => ({
+          pass: true,
+          score: 0.75,
+          reason: 'Custom scoring reason',
+        }));
+      }
+      return Promise.resolve(() => {});
+    }),
+  };
+});
 
 const mockApiProvider: ApiProvider = {
-  id: jest.fn().mockReturnValue('test-provider'),
-  callApi: jest.fn().mockResolvedValue({
+  id: vi.fn().mockReturnValue('test-provider'),
+  callApi: vi.fn().mockResolvedValue({
     output: 'Test output',
     tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
   }),
 };
 
 const mockApiProvider2: ApiProvider = {
-  id: jest.fn().mockReturnValue('test-provider-2'),
-  callApi: jest.fn().mockResolvedValue({
+  id: vi.fn().mockReturnValue('test-provider-2'),
+  callApi: vi.fn().mockResolvedValue({
     output: 'Test output',
     tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
   }),
 };
 
 const mockReasoningApiProvider: ApiProvider = {
-  id: jest.fn().mockReturnValue('test-reasoning-provider'),
-  callApi: jest.fn().mockResolvedValue({
+  id: vi.fn().mockReturnValue('test-reasoning-provider'),
+  callApi: vi.fn().mockResolvedValue({
     output: 'Test output',
     tokenUsage: {
       total: 21,
@@ -277,16 +314,16 @@ const mockReasoningApiProvider: ApiProvider = {
 };
 
 const mockGradingApiProviderPasses: ApiProvider = {
-  id: jest.fn().mockReturnValue('test-grading-provider'),
-  callApi: jest.fn().mockResolvedValue({
+  id: vi.fn().mockReturnValue('test-grading-provider'),
+  callApi: vi.fn().mockResolvedValue({
     output: JSON.stringify({ pass: true, reason: 'Test grading output' }),
     tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
   }),
 };
 
 const mockGradingApiProviderFails: ApiProvider = {
-  id: jest.fn().mockReturnValue('test-grading-provider'),
-  callApi: jest.fn().mockResolvedValue({
+  id: vi.fn().mockReturnValue('test-grading-provider'),
+  callApi: vi.fn().mockResolvedValue({
     output: JSON.stringify({ pass: false, reason: 'Grading failed reason' }),
     tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
   }),
@@ -302,18 +339,21 @@ describe('evaluator', () => {
   });
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
+    // Reset runExtensionHook to default implementation (other tests may have overridden it)
+    vi.mocked(runExtensionHook).mockReset();
+    vi.mocked(runExtensionHook).mockImplementation(
+      async (_extensions, _hookName, context) => context,
+    );
     // Reset cliState for each test to ensure clean state
-    const cliState = require('../src/cliState').default;
     cliState.resume = false;
     cliState.basePath = '';
     cliState.webUI = false;
   });
 
   afterEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     // Reset cliState after each test
-    const cliState = require('../src/cliState').default;
     cliState.resume = false;
     if (global.gc) {
       global.gc(); // Force garbage collection
@@ -322,8 +362,8 @@ describe('evaluator', () => {
 
   afterAll(() => {
     // Clear all module mocks to prevent any lingering state
-    jest.restoreAllMocks();
-    jest.resetModules();
+    vi.restoreAllMocks();
+    vi.resetModules();
   });
 
   it('evaluate with vars', async () => {
@@ -379,87 +419,6 @@ describe('evaluator', () => {
     expect(summary.results[0].prompt.raw).toBe('Test prompt value1 value2');
     expect(summary.results[0].prompt.label).toBe('Test prompt {{ var1 }} {{ var2 }}');
     expect(summary.results[0].response?.output).toBe('Test output');
-  });
-
-  it('runs Simba test cases after other providers during evaluate', async () => {
-    const callOrder: string[] = [];
-
-    const normalProvider: ApiProvider = {
-      id: jest.fn().mockReturnValue('normal-provider'),
-      label: 'Normal provider',
-      delay: 0,
-      callApi: jest.fn().mockImplementation(async () => {
-        callOrder.push('normal');
-        return {
-          output: 'normal output',
-          tokenUsage: {
-            total: 1,
-            prompt: 1,
-            completion: 0,
-            cached: 0,
-            numRequests: 1,
-            completionDetails: {
-              reasoning: 0,
-              acceptedPrediction: 0,
-              rejectedPrediction: 0,
-            },
-          },
-        };
-      }),
-    };
-
-    const runResults = [
-      {
-        promptIdx: -1,
-        testIdx: -1,
-        testCase: { assert: [] },
-        promptId: 'simba-case',
-        provider: {
-          id: 'promptfoo:redteam:simba',
-          label: strategyDisplayNames.simba,
-        },
-        prompt: {
-          raw: 'Test prompt',
-          label: strategyDisplayNames.simba,
-        },
-        vars: {},
-        failureReason: ResultFailureReason.NONE,
-        success: true,
-        score: 1,
-        latencyMs: 5,
-        namedScores: {},
-      },
-    ];
-
-    const agentProvider = {
-      id: jest.fn().mockReturnValue('promptfoo:redteam:simba'),
-      label: strategyDisplayNames.simba,
-      delay: 0,
-      callApi: jest.fn(),
-      runSimba: jest.fn().mockImplementation(async () => {
-        callOrder.push('simba');
-        return runResults.map((result) => ({ ...result }));
-      }),
-    } as unknown as ApiProvider & { runSimba: jest.Mock };
-
-    const testSuite: TestSuite = {
-      providers: [normalProvider, agentProvider],
-      prompts: [toPrompt('Test prompt')],
-      tests: [{}],
-    };
-
-    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    const addResultSpy = jest.spyOn(evalRecord, 'addResult');
-
-    await evaluate(testSuite, evalRecord, { maxConcurrency: 2 });
-
-    expect(callOrder).toEqual(['normal', 'simba']);
-    expect(normalProvider.callApi).toHaveBeenCalledTimes(1);
-    expect(agentProvider.runSimba as jest.Mock).toHaveBeenCalledTimes(1);
-    expect(agentProvider.callApi as jest.Mock).not.toHaveBeenCalled();
-    expect(addResultSpy).toHaveBeenCalledTimes(2);
-    expect(addResultSpy.mock.calls[0][0].provider.id).toBe('normal-provider');
-    expect(addResultSpy.mock.calls[1][0].provider.id).toBe('promptfoo:redteam:simba');
   });
 
   it('evaluate with vars - no escaping', async () => {
@@ -556,7 +515,7 @@ describe('evaluator', () => {
 
   it('evaluate with vars from file', async () => {
     const originalReadFileSync = fs.readFileSync;
-    jest.spyOn(fs, 'readFileSync').mockImplementation((path) => {
+    vi.spyOn(fs, 'readFileSync').mockImplementation((path) => {
       if (typeof path === 'string' && path.includes('test_file.txt')) {
         return '<h1>Sample Report</h1><p>This is a test report with some data for the year 2023.</p>';
       }
@@ -566,7 +525,7 @@ describe('evaluator', () => {
     const evalHelpers = await import('../src/evaluatorHelpers');
     const originalRenderPrompt = evalHelpers.renderPrompt;
 
-    const mockRenderPrompt = jest.spyOn(evalHelpers, 'renderPrompt');
+    const mockRenderPrompt = vi.spyOn(evalHelpers, 'renderPrompt');
     mockRenderPrompt.mockImplementation(async (prompt, vars) => {
       if (prompt.raw.includes('{{ var1 }}')) {
         return 'Test prompt <h1>Sample Report</h1><p>This is a test report with some data for the year 2023.</p>';
@@ -1087,8 +1046,8 @@ describe('evaluator', () => {
 
   it('evaluate with transform option - json provider', async () => {
     const mockApiJsonProvider: ApiProvider = {
-      id: jest.fn().mockReturnValue('test-provider-json'),
-      callApi: jest.fn().mockResolvedValue({
+      id: vi.fn().mockReturnValue('test-provider-json'),
+      callApi: vi.fn().mockResolvedValue({
         output: '{"output": "testing", "value": 123}',
         tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
       }),
@@ -1123,8 +1082,8 @@ describe('evaluator', () => {
 
   it('evaluate with provider transform', async () => {
     const mockApiProviderWithTransform: ApiProvider = {
-      id: jest.fn().mockReturnValue('test-provider-transform'),
-      callApi: jest.fn().mockResolvedValue({
+      id: vi.fn().mockReturnValue('test-provider-transform'),
+      callApi: vi.fn().mockResolvedValue({
         output: 'Original output',
         tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
       }),
@@ -1218,8 +1177,8 @@ describe('evaluator', () => {
 
   it('evaluate with metadata passed to test transform', async () => {
     const mockApiProviderWithMetadata: ApiProvider = {
-      id: jest.fn().mockReturnValue('test-provider-metadata'),
-      callApi: jest.fn().mockResolvedValue({
+      id: vi.fn().mockReturnValue('test-provider-metadata'),
+      callApi: vi.fn().mockResolvedValue({
         output: 'Test output',
         metadata: { responseTime: 123, modelVersion: 'v1.0' },
         tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
@@ -1258,8 +1217,8 @@ describe('evaluator', () => {
 
   it('evaluate with metadata passed to test transform - no metadata case', async () => {
     const mockApiProviderNoMetadata: ApiProvider = {
-      id: jest.fn().mockReturnValue('test-provider-no-metadata'),
-      callApi: jest.fn().mockResolvedValue({
+      id: vi.fn().mockReturnValue('test-provider-no-metadata'),
+      callApi: vi.fn().mockResolvedValue({
         output: 'Test output',
         tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
       }),
@@ -1294,8 +1253,8 @@ describe('evaluator', () => {
 
   it('evaluate with metadata passed to test transform - empty metadata', async () => {
     const mockApiProviderEmptyMetadata: ApiProvider = {
-      id: jest.fn().mockReturnValue('test-provider-empty-metadata'),
-      callApi: jest.fn().mockResolvedValue({
+      id: vi.fn().mockReturnValue('test-provider-empty-metadata'),
+      callApi: vi.fn().mockResolvedValue({
         output: 'Test output',
         metadata: {},
         tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
@@ -1332,8 +1291,8 @@ describe('evaluator', () => {
 
   it('evaluate with metadata preserved alongside other context properties', async () => {
     const mockApiProviderWithMetadata: ApiProvider = {
-      id: jest.fn().mockReturnValue('test-provider-metadata-context'),
-      callApi: jest.fn().mockResolvedValue({
+      id: vi.fn().mockReturnValue('test-provider-metadata-context'),
+      callApi: vi.fn().mockResolvedValue({
         output: 'Test output',
         metadata: { modelInfo: 'gpt-4' },
         tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
@@ -1371,8 +1330,8 @@ describe('evaluator', () => {
 
   it('evaluate with context in vars transform in defaultTest', async () => {
     const mockApiProvider: ApiProvider = {
-      id: jest.fn().mockReturnValue('test-provider'),
-      callApi: jest.fn().mockResolvedValue({
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn().mockResolvedValue({
         output: 'Test output',
         tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
       }),
@@ -1430,8 +1389,8 @@ describe('evaluator', () => {
 
   it('evaluate with provider transform and test transform', async () => {
     const mockApiProviderWithTransform: ApiProvider = {
-      id: jest.fn().mockReturnValue('test-provider-transform'),
-      callApi: jest.fn().mockResolvedValue({
+      id: vi.fn().mockReturnValue('test-provider-transform'),
+      callApi: vi.fn().mockResolvedValue({
         output: 'Original output',
         tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
       }),
@@ -1535,8 +1494,8 @@ describe('evaluator', () => {
 
   it('evaluate with allowed prompts filtering', async () => {
     const mockApiProvider: ApiProvider = {
-      id: jest.fn().mockReturnValue('test-provider'),
-      callApi: jest.fn().mockResolvedValue({
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn().mockResolvedValue({
         output: 'Test output',
         tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
       }),
@@ -1574,8 +1533,8 @@ describe('evaluator', () => {
 
   it('evaluate with scenarios', async () => {
     const mockApiProvider: ApiProvider = {
-      id: jest.fn().mockReturnValue('test-provider'),
-      callApi: jest
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi
         .fn()
         .mockResolvedValueOnce({
           output: 'Hola mundo',
@@ -1632,8 +1591,8 @@ describe('evaluator', () => {
 
   it('evaluate with scenarios and multiple vars', async () => {
     const mockApiProvider: ApiProvider = {
-      id: jest.fn().mockReturnValue('test-provider'),
-      callApi: jest
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi
         .fn()
         .mockResolvedValueOnce({
           output: 'Spanish Hola',
@@ -1693,8 +1652,8 @@ describe('evaluator', () => {
 
   it('evaluate with scenarios and defaultTest', async () => {
     const mockApiProvider: ApiProvider = {
-      id: jest.fn().mockReturnValue('test-provider'),
-      callApi: jest.fn().mockResolvedValue({
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn().mockResolvedValue({
         output: 'Hello, World',
         tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
       }),
@@ -1771,6 +1730,7 @@ describe('evaluator', () => {
       defaultKey: 'defaultValue',
       configKey: 'configValue',
       testKey: 'testValue',
+      conversationId: '__scenario_0__', // Auto-generated for scenario isolation
     });
 
     expect(mockApiProvider.callApi).toHaveBeenCalledTimes(2);
@@ -1850,8 +1810,8 @@ describe('evaluator', () => {
 
   it('merges response metadata with test metadata', async () => {
     const mockProviderWithMetadata: ApiProvider = {
-      id: jest.fn().mockReturnValue('test-provider-with-metadata'),
-      callApi: jest.fn().mockResolvedValue({
+      id: vi.fn().mockReturnValue('test-provider-with-metadata'),
+      callApi: vi.fn().mockResolvedValue({
         output: 'Test output',
         tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
         metadata: { responseKey: 'responseValue' },
@@ -1881,8 +1841,8 @@ describe('evaluator', () => {
 
   it('evaluate with _conversation variable', async () => {
     const mockApiProvider: ApiProvider = {
-      id: jest.fn().mockReturnValue('test-provider'),
-      callApi: jest.fn().mockImplementation((prompt) =>
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn().mockImplementation((prompt) =>
         Promise.resolve({
           output: prompt,
           tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
@@ -1917,7 +1877,7 @@ describe('evaluator', () => {
     const mockLabeledProvider: ApiProvider = {
       id: () => 'labeled-provider-id',
       label: 'Labeled Provider',
-      callApi: jest.fn().mockResolvedValue({
+      callApi: vi.fn().mockResolvedValue({
         output: 'Labeled Provider Output',
         tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
       }),
@@ -1925,7 +1885,7 @@ describe('evaluator', () => {
 
     const mockUnlabeledProvider: ApiProvider = {
       id: () => 'unlabeled-provider-id',
-      callApi: jest.fn().mockResolvedValue({
+      callApi: vi.fn().mockResolvedValue({
         output: 'Unlabeled Provider Output',
         tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
       }),
@@ -2017,8 +1977,8 @@ describe('evaluator', () => {
 
   it('evaluate with multiple transforms', async () => {
     const mockApiProviderWithTransform: ApiProvider = {
-      id: jest.fn().mockReturnValue('test-provider-transform'),
-      callApi: jest.fn().mockResolvedValue({
+      id: vi.fn().mockReturnValue('test-provider-transform'),
+      callApi: vi.fn().mockResolvedValue({
         output: 'Original output',
         tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
       }),
@@ -2054,8 +2014,8 @@ describe('evaluator', () => {
 
   it('evaluate with provider transform and test postprocess (deprecated)', async () => {
     const mockApiProviderWithTransform: ApiProvider = {
-      id: jest.fn().mockReturnValue('test-provider-transform'),
-      callApi: jest.fn().mockResolvedValue({
+      id: vi.fn().mockReturnValue('test-provider-transform'),
+      callApi: vi.fn().mockResolvedValue({
         output: 'Original output',
         tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
       }),
@@ -2095,8 +2055,8 @@ describe('evaluator', () => {
 
   it('evaluate with provider transform, test transform, and test postprocess (deprecated)', async () => {
     const mockApiProviderWithTransform: ApiProvider = {
-      id: jest.fn().mockReturnValue('test-provider-transform'),
-      callApi: jest.fn().mockResolvedValue({
+      id: vi.fn().mockReturnValue('test-provider-transform'),
+      callApi: vi.fn().mockResolvedValue({
         output: 'Original output',
         tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
       }),
@@ -2142,8 +2102,8 @@ describe('evaluator', () => {
 
   it('evaluate with no output', async () => {
     const mockApiProviderNoOutput: ApiProvider = {
-      id: jest.fn().mockReturnValue('test-provider-no-output'),
-      callApi: jest.fn().mockResolvedValue({
+      id: vi.fn().mockReturnValue('test-provider-no-output'),
+      callApi: vi.fn().mockResolvedValue({
         output: null,
         tokenUsage: { total: 5, prompt: 5, completion: 0, cached: 0, numRequests: 1 },
       }),
@@ -2168,8 +2128,8 @@ describe('evaluator', () => {
 
   it('evaluate with false output', async () => {
     const mockApiProviderNoOutput: ApiProvider = {
-      id: jest.fn().mockReturnValue('test-provider-no-output'),
-      callApi: jest.fn().mockResolvedValue({
+      id: vi.fn().mockReturnValue('test-provider-no-output'),
+      callApi: vi.fn().mockResolvedValue({
         output: false,
         tokenUsage: { total: 5, prompt: 5, completion: 0, cached: 0, numRequests: 1 },
       }),
@@ -2193,8 +2153,8 @@ describe('evaluator', () => {
 
   it('should apply prompt config to provider call', async () => {
     const mockApiProvider: ApiProvider = {
-      id: jest.fn().mockReturnValue('test-provider'),
-      callApi: jest.fn().mockResolvedValue({
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn().mockResolvedValue({
         output: 'Test response',
         tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
       }),
@@ -2273,7 +2233,7 @@ describe('evaluator', () => {
       extensions: [mockExtension],
     };
 
-    const mockedRunExtensionHook = jest.mocked(runExtensionHook);
+    const mockedRunExtensionHook = vi.mocked(runExtensionHook);
     mockedRunExtensionHook.mockClear();
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
     await evaluate(testSuite, evalRecord, {});
@@ -2413,7 +2373,7 @@ describe('evaluator', () => {
   it('should maintain separate conversation histories based on metadata.conversationId', async () => {
     const mockApiProvider = {
       id: () => 'test-provider',
-      callApi: jest.fn().mockImplementation((_prompt) => ({
+      callApi: vi.fn().mockImplementation((_prompt) => ({
         output: 'Test output',
       })),
     };
@@ -2487,11 +2447,136 @@ describe('evaluator', () => {
     );
   });
 
+  it('should maintain separate conversation histories between scenarios without explicit conversationId', async () => {
+    // This test verifies the fix for GitHub issue #384:
+    // Scenarios should have isolated _conversation state by default
+    const mockApiProvider = {
+      id: () => 'test-provider',
+      callApi: vi.fn().mockImplementation((_prompt) => ({
+        output: 'Test output',
+      })),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [
+        {
+          raw: '{% for completion in _conversation %}Previous: {{ completion.input }} -> {{ completion.output }}\n{% endfor %}Current: {{ question }}',
+          label: 'Conversation test',
+        },
+      ],
+      scenarios: [
+        {
+          // First scenario - conversation about books
+          config: [{}],
+          tests: [
+            { vars: { question: 'Recommend a sci-fi book' } },
+            { vars: { question: 'Tell me more about it' } },
+          ],
+        },
+        {
+          // Second scenario - conversation about recipes
+          // Should NOT include history from first scenario
+          config: [{}],
+          tests: [
+            { vars: { question: 'Suggest a pasta recipe' } },
+            { vars: { question: 'How long does it take?' } },
+          ],
+        },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+
+    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(4);
+
+    // First scenario, first question - no history
+    const firstCall = mockApiProvider.callApi.mock.calls[0][0];
+    expect(firstCall).toContain('Current: Recommend a sci-fi book');
+    expect(firstCall).not.toContain('Previous:');
+
+    // First scenario, second question - should have first scenario's history
+    const secondCall = mockApiProvider.callApi.mock.calls[1][0];
+    expect(secondCall).toContain('Previous: ');
+    expect(secondCall).toContain('Recommend a sci-fi book');
+    expect(secondCall).toContain('Current: Tell me more about it');
+
+    // Second scenario, first question - should NOT have first scenario's history
+    // This is the key assertion that verifies the fix for issue #384
+    const thirdCall = mockApiProvider.callApi.mock.calls[2][0];
+    expect(thirdCall).toContain('Current: Suggest a pasta recipe');
+    expect(thirdCall).not.toContain('Previous:');
+    expect(thirdCall).not.toContain('sci-fi');
+    expect(thirdCall).not.toContain('Recommend');
+
+    // Second scenario, second question - should only have second scenario's history
+    const fourthCall = mockApiProvider.callApi.mock.calls[3][0];
+    expect(fourthCall).toContain('Previous: ');
+    expect(fourthCall).toContain('Suggest a pasta recipe');
+    expect(fourthCall).toContain('Current: How long does it take?');
+    expect(fourthCall).not.toContain('sci-fi');
+  });
+
+  it('should allow scenarios to share conversation history with explicit conversationId', async () => {
+    // This test verifies that users can still explicitly share conversations across scenarios
+    const mockApiProvider = {
+      id: () => 'test-provider',
+      callApi: vi.fn().mockImplementation((_prompt) => ({
+        output: 'Test output',
+      })),
+    };
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [
+        {
+          raw: '{% for completion in _conversation %}Previous: {{ completion.input }}\n{% endfor %}Current: {{ question }}',
+          label: 'Conversation test',
+        },
+      ],
+      scenarios: [
+        {
+          config: [{}],
+          tests: [
+            {
+              vars: { question: 'Question from scenario 1' },
+              metadata: { conversationId: 'shared-conversation' },
+            },
+          ],
+        },
+        {
+          config: [{}],
+          tests: [
+            {
+              vars: { question: 'Question from scenario 2' },
+              metadata: { conversationId: 'shared-conversation' },
+            },
+          ],
+        },
+      ],
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+
+    expect(mockApiProvider.callApi).toHaveBeenCalledTimes(2);
+
+    // First scenario - no history
+    const firstCall = mockApiProvider.callApi.mock.calls[0][0];
+    expect(firstCall).not.toContain('Previous:');
+
+    // Second scenario - SHOULD have first scenario's history because they share conversationId
+    const secondCall = mockApiProvider.callApi.mock.calls[1][0];
+    expect(secondCall).toContain('Previous: ');
+    expect(secondCall).toContain('Question from scenario 1');
+  });
+
   it('evaluates with provider delay', async () => {
     const mockApiProvider: ApiProvider = {
-      id: jest.fn().mockReturnValue('test-provider'),
+      id: vi.fn().mockReturnValue('test-provider'),
       delay: 100,
-      callApi: jest.fn().mockResolvedValue({
+      callApi: vi.fn().mockResolvedValue({
         output: 'Test output',
         tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
       }),
@@ -2512,8 +2597,8 @@ describe('evaluator', () => {
 
   it('evaluates with no provider delay', async () => {
     const mockApiProvider: ApiProvider = {
-      id: jest.fn().mockReturnValue('test-provider'),
-      callApi: jest.fn().mockResolvedValue({
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn().mockResolvedValue({
         output: 'Test output',
         tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
       }),
@@ -2535,9 +2620,9 @@ describe('evaluator', () => {
 
   it('skips delay for cached responses', async () => {
     const mockApiProvider: ApiProvider = {
-      id: jest.fn().mockReturnValue('test-provider'),
+      id: vi.fn().mockReturnValue('test-provider'),
       delay: 100,
-      callApi: jest.fn().mockResolvedValue({
+      callApi: vi.fn().mockResolvedValue({
         output: 'Test output',
         tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
         cached: true,
@@ -2564,15 +2649,15 @@ describe('evaluator', () => {
     circularObj.self = circularObj;
 
     const mockApiProvider: ApiProvider = {
-      id: jest.fn().mockReturnValue('test-provider'),
-      callApi: jest.fn().mockResolvedValue({
+      id: vi.fn().mockReturnValue('test-provider'),
+      callApi: vi.fn().mockResolvedValue({
         output: 'Test output',
         tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
       }),
     };
 
     // Mock Eval.prototype.addResult to throw an error
-    const mockAddResult = jest.fn().mockRejectedValue(new Error('Mock save error'));
+    const mockAddResult = vi.fn().mockRejectedValue(new Error('Mock save error'));
     const originalAddResult = Eval.prototype.addResult;
     Eval.prototype.addResult = mockAddResult;
 
@@ -2588,7 +2673,7 @@ describe('evaluator', () => {
     };
 
     const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
-    const errorSpy = jest.spyOn(logger, 'error');
+    const errorSpy = vi.spyOn(logger, 'error');
     await evaluate(testSuite, evalRecord, {});
     expect(errorSpy).toHaveBeenCalledWith(
       expect.stringContaining('Error saving result: Error: Mock save error'),
@@ -2631,8 +2716,8 @@ describe('evaluator', () => {
 
   it('evaluate with provider error response', async () => {
     const mockApiProviderWithError: ApiProvider = {
-      id: jest.fn().mockReturnValue('test-provider-error'),
-      callApi: jest.fn().mockResolvedValue({
+      id: vi.fn().mockReturnValue('test-provider-error'),
+      callApi: vi.fn().mockResolvedValue({
         output: 'Some output',
         error: 'API error occurred',
         tokenUsage: { total: 5, prompt: 5, completion: 0, cached: 0, numRequests: 1 },
@@ -2670,12 +2755,12 @@ describe('evaluator', () => {
   });
 
   it('should handle evaluation timeout', async () => {
-    const mockAddResult = jest.fn().mockResolvedValue(undefined);
+    const mockAddResult = vi.fn().mockResolvedValue(undefined);
     let longTimer: NodeJS.Timeout | null = null;
 
     const slowApiProvider: ApiProvider = {
-      id: jest.fn().mockReturnValue('slow-provider'),
-      callApi: jest.fn().mockImplementation(() => {
+      id: vi.fn().mockReturnValue('slow-provider'),
+      callApi: vi.fn().mockImplementation(() => {
         return new Promise((resolve) => {
           longTimer = setTimeout(() => {
             resolve({
@@ -2685,7 +2770,7 @@ describe('evaluator', () => {
           }, 5000);
         });
       }),
-      cleanup: jest.fn(),
+      cleanup: vi.fn(),
     };
 
     const mockEval = {
@@ -2695,10 +2780,10 @@ describe('evaluator', () => {
       persisted: false,
       config: {},
       addResult: mockAddResult,
-      addPrompts: jest.fn().mockResolvedValue(undefined),
-      fetchResultsByTestIdx: jest.fn().mockResolvedValue([]),
-      getResults: jest.fn().mockResolvedValue([]),
-      toEvaluateSummary: jest.fn().mockResolvedValue({
+      addPrompts: vi.fn().mockResolvedValue(undefined),
+      fetchResultsByTestIdx: vi.fn().mockResolvedValue([]),
+      getResults: vi.fn().mockResolvedValue([]),
+      toEvaluateSummary: vi.fn().mockResolvedValue({
         results: [],
         prompts: [],
         stats: {
@@ -2708,8 +2793,9 @@ describe('evaluator', () => {
           tokenUsage: createEmptyTokenUsage(),
         },
       }),
-      save: jest.fn().mockResolvedValue(undefined),
-      setVars: jest.fn().mockResolvedValue(undefined),
+      save: vi.fn().mockResolvedValue(undefined),
+      setVars: vi.fn().mockResolvedValue(undefined),
+      setDurationMs: vi.fn(),
     };
 
     const testSuite: TestSuite = {
@@ -2747,12 +2833,12 @@ describe('evaluator', () => {
   });
 
   it('should abort when exceeding maxEvalTimeMs', async () => {
-    const mockAddResult = jest.fn().mockResolvedValue(undefined);
+    const mockAddResult = vi.fn().mockResolvedValue(undefined);
     let longTimer: NodeJS.Timeout | null = null;
 
     const slowApiProvider: ApiProvider = {
-      id: jest.fn().mockReturnValue('slow-provider'),
-      callApi: jest.fn().mockImplementation((_, __, opts) => {
+      id: vi.fn().mockReturnValue('slow-provider'),
+      callApi: vi.fn().mockImplementation((_, __, opts) => {
         return new Promise((resolve, reject) => {
           longTimer = setTimeout(() => {
             resolve({
@@ -2769,7 +2855,7 @@ describe('evaluator', () => {
           });
         });
       }),
-      cleanup: jest.fn(),
+      cleanup: vi.fn(),
     };
 
     const mockEval = {
@@ -2779,10 +2865,10 @@ describe('evaluator', () => {
       persisted: false,
       config: {},
       addResult: mockAddResult,
-      addPrompts: jest.fn().mockResolvedValue(undefined),
-      fetchResultsByTestIdx: jest.fn().mockResolvedValue([]),
-      getResults: jest.fn().mockResolvedValue([]),
-      toEvaluateSummary: jest.fn().mockResolvedValue({
+      addPrompts: vi.fn().mockResolvedValue(undefined),
+      fetchResultsByTestIdx: vi.fn().mockResolvedValue([]),
+      getResults: vi.fn().mockResolvedValue([]),
+      toEvaluateSummary: vi.fn().mockResolvedValue({
         results: [],
         prompts: [],
         stats: {
@@ -2792,8 +2878,9 @@ describe('evaluator', () => {
           tokenUsage: createEmptyTokenUsage(),
         },
       }),
-      save: jest.fn().mockResolvedValue(undefined),
-      setVars: jest.fn().mockResolvedValue(undefined),
+      save: vi.fn().mockResolvedValue(undefined),
+      setVars: vi.fn().mockResolvedValue(undefined),
+      setDurationMs: vi.fn(),
     };
 
     const testSuite: TestSuite = {
@@ -2876,7 +2963,7 @@ describe('evaluator', () => {
     const contexts: Array<Record<string, any> | undefined> = [];
     const provider: ApiProvider = {
       id: () => 'mock-provider',
-      callApi: jest
+      callApi: vi
         .fn()
         .mockImplementation(async (_prompt: string, context?: Record<string, any>) => {
           contexts.push(context);
@@ -2922,8 +3009,8 @@ describe('evaluator', () => {
   it('should NOT include assertion tokens in main token totals', async () => {
     // Mock provider that returns fixed token usage
     const providerWithTokens: ApiProvider = {
-      id: jest.fn().mockReturnValue('provider-with-tokens'),
-      callApi: jest.fn().mockResolvedValue({
+      id: vi.fn().mockReturnValue('provider-with-tokens'),
+      callApi: vi.fn().mockResolvedValue({
         output: 'Test response',
         tokenUsage: {
           total: 100,
@@ -2937,8 +3024,8 @@ describe('evaluator', () => {
 
     // Mock grading provider that also returns token usage
     const gradingProviderWithTokens: ApiProvider = {
-      id: jest.fn().mockReturnValue('grading-provider'),
-      callApi: jest.fn().mockResolvedValue({
+      id: vi.fn().mockReturnValue('grading-provider'),
+      callApi: vi.fn().mockResolvedValue({
         output: JSON.stringify({
           pass: true,
           score: 1,
@@ -3012,7 +3099,7 @@ describe('evaluator', () => {
   it('should include sessionId in metadata for afterEach hook', async () => {
     const mockApiProvider = {
       id: () => 'test-provider',
-      callApi: jest.fn().mockResolvedValue({
+      callApi: vi.fn().mockResolvedValue({
         output: 'Test output',
         sessionId: 'test-session-123',
       }),
@@ -3021,7 +3108,7 @@ describe('evaluator', () => {
     const mockExtension = 'file://test-extension.js';
     let capturedContext: any;
 
-    const mockedRunExtensionHook = jest.mocked(runExtensionHook);
+    const mockedRunExtensionHook = vi.mocked(runExtensionHook);
     mockedRunExtensionHook.mockImplementation(async (_extensions, hookName, context) => {
       if (hookName === 'afterEach') {
         capturedContext = context;
@@ -3050,7 +3137,7 @@ describe('evaluator', () => {
   it('should use sessionId from vars if not in response', async () => {
     const mockApiProvider = {
       id: () => 'test-provider',
-      callApi: jest.fn().mockResolvedValue({
+      callApi: vi.fn().mockResolvedValue({
         output: 'Test output',
         // No sessionId in response
       }),
@@ -3059,7 +3146,7 @@ describe('evaluator', () => {
     const mockExtension = 'file://test-extension.js';
     let capturedContext: any;
 
-    const mockedRunExtensionHook = jest.mocked(runExtensionHook);
+    const mockedRunExtensionHook = vi.mocked(runExtensionHook);
     mockedRunExtensionHook.mockImplementation(async (_extensions, hookName, context) => {
       if (hookName === 'afterEach') {
         capturedContext = context;
@@ -3088,7 +3175,7 @@ describe('evaluator', () => {
   it('should prioritize response sessionId over vars sessionId', async () => {
     const mockApiProvider = {
       id: () => 'test-provider',
-      callApi: jest.fn().mockResolvedValue({
+      callApi: vi.fn().mockResolvedValue({
         output: 'Test output',
         sessionId: 'response-session-priority',
       }),
@@ -3097,7 +3184,7 @@ describe('evaluator', () => {
     const mockExtension = 'file://test-extension.js';
     let capturedContext: any;
 
-    const mockedRunExtensionHook = jest.mocked(runExtensionHook);
+    const mockedRunExtensionHook = vi.mocked(runExtensionHook);
     mockedRunExtensionHook.mockImplementation(async (_extensions, hookName, context) => {
       if (hookName === 'afterEach') {
         capturedContext = context;
@@ -3127,7 +3214,7 @@ describe('evaluator', () => {
   it('should include sessionIds array from test metadata for iterative providers', async () => {
     const mockApiProvider = {
       id: () => 'test-provider',
-      callApi: jest.fn().mockResolvedValue({
+      callApi: vi.fn().mockResolvedValue({
         output: 'Test output',
       }),
     };
@@ -3135,7 +3222,7 @@ describe('evaluator', () => {
     const mockExtension = 'file://test-extension.js';
     let capturedContext: any;
 
-    const mockedRunExtensionHook = jest.mocked(runExtensionHook);
+    const mockedRunExtensionHook = vi.mocked(runExtensionHook);
     mockedRunExtensionHook.mockImplementation(async (_extensions, hookName, context) => {
       if (hookName === 'afterEach') {
         capturedContext = context;
@@ -3172,7 +3259,7 @@ describe('evaluator', () => {
   it('should handle empty sessionIds array', async () => {
     const mockApiProvider = {
       id: () => 'test-provider',
-      callApi: jest.fn().mockResolvedValue({
+      callApi: vi.fn().mockResolvedValue({
         output: 'Test output',
       }),
     };
@@ -3180,7 +3267,7 @@ describe('evaluator', () => {
     const mockExtension = 'file://test-extension.js';
     let capturedContext: any;
 
-    const mockedRunExtensionHook = jest.mocked(runExtensionHook);
+    const mockedRunExtensionHook = vi.mocked(runExtensionHook);
     mockedRunExtensionHook.mockImplementation(async (_extensions, hookName, context) => {
       if (hookName === 'afterEach') {
         capturedContext = context;
@@ -3228,7 +3315,7 @@ describe('generateVarCombinations', () => {
 
   it('should handle file paths and expand them into combinations', () => {
     const vars = { language: 'English', greeting: 'file:///path/to/greetings/*.txt' };
-    jest.spyOn(glob, 'globSync').mockReturnValue(['greeting1.txt', 'greeting2.txt']);
+    vi.spyOn(glob, 'globSync').mockReturnValue(['greeting1.txt', 'greeting2.txt']);
     const expected = [
       { language: 'English', greeting: 'file://greeting1.txt' },
       { language: 'English', greeting: 'file://greeting2.txt' },
@@ -3298,12 +3385,12 @@ describe('isAllowedPrompt', () => {
 
 describe('runEval', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   const mockProvider: ApiProvider = {
-    id: jest.fn().mockReturnValue('test-provider'),
-    callApi: jest.fn().mockResolvedValue({
+    id: vi.fn().mockReturnValue('test-provider'),
+    callApi: vi.fn().mockResolvedValue({
       output: 'Test output',
       tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
     }),
@@ -3375,8 +3462,8 @@ describe('runEval', () => {
     const conversations: Record<string, any[]> = {};
 
     const providerWithSession: ApiProvider = {
-      id: jest.fn().mockReturnValue('session-provider'),
-      callApi: jest.fn().mockResolvedValue({
+      id: vi.fn().mockReturnValue('session-provider'),
+      callApi: vi.fn().mockResolvedValue({
         output: 'Test output',
         sessionId: 'response-session-123',
         metadata: { existing: 'value' },
@@ -3404,8 +3491,8 @@ describe('runEval', () => {
     const conversations: Record<string, any[]> = {};
 
     const providerWithoutSession: ApiProvider = {
-      id: jest.fn().mockReturnValue('vars-session-provider'),
-      callApi: jest.fn().mockResolvedValue({
+      id: vi.fn().mockReturnValue('vars-session-provider'),
+      callApi: vi.fn().mockResolvedValue({
         output: 'Test output',
         tokenUsage: { total: 0, prompt: 0, completion: 0, cached: 0, numRequests: 0 },
       }),
@@ -3429,8 +3516,8 @@ describe('runEval', () => {
     const conversations: Record<string, any[]> = {};
 
     const providerWithMetadataSession: ApiProvider = {
-      id: jest.fn().mockReturnValue('metadata-session-provider'),
-      callApi: jest.fn().mockResolvedValue({
+      id: vi.fn().mockReturnValue('metadata-session-provider'),
+      callApi: vi.fn().mockResolvedValue({
         output: 'Test output',
         metadata: { sessionId: 'metadata-session-789', existing: 'keep-me' },
         tokenUsage: { total: 0, prompt: 0, completion: 0, cached: 0, numRequests: 0 },
@@ -3456,8 +3543,8 @@ describe('runEval', () => {
     const conversations: Record<string, any[]> = {};
 
     const providerWithMetadataSession: ApiProvider = {
-      id: jest.fn().mockReturnValue('metadata-session-provider'),
-      callApi: jest.fn().mockResolvedValue({
+      id: vi.fn().mockReturnValue('metadata-session-provider'),
+      callApi: vi.fn().mockResolvedValue({
         output: 'Test output',
         metadata: { sessionId: 'metadata-session-priority' },
         tokenUsage: { total: 0, prompt: 0, completion: 0, cached: 0, numRequests: 0 },
@@ -3480,8 +3567,8 @@ describe('runEval', () => {
     const conversations: Record<string, any[]> = {};
 
     const providerWithSessionIds: ApiProvider = {
-      id: jest.fn().mockReturnValue('metadata-session-ids-provider'),
-      callApi: jest.fn().mockResolvedValue({
+      id: vi.fn().mockReturnValue('metadata-session-ids-provider'),
+      callApi: vi.fn().mockResolvedValue({
         output: 'Test output',
         metadata: { sessionIds: ['session-a', 'session-b'] },
         tokenUsage: { total: 0, prompt: 0, completion: 0, cached: 0, numRequests: 0 },
@@ -3554,8 +3641,8 @@ describe('runEval', () => {
 
   it('should handle provider errors', async () => {
     const errorProvider: ApiProvider = {
-      id: jest.fn().mockReturnValue('error-provider'),
-      callApi: jest.fn().mockRejectedValue(new Error('API Error')),
+      id: vi.fn().mockReturnValue('error-provider'),
+      callApi: vi.fn().mockRejectedValue(new Error('API Error')),
     };
 
     // Define defaultOptions locally for this test
@@ -3583,8 +3670,8 @@ describe('runEval', () => {
 
   it('should handle null output differently for red team tests', async () => {
     const nullOutputProvider: ApiProvider = {
-      id: jest.fn().mockReturnValue('null-provider'),
-      callApi: jest.fn().mockResolvedValue({
+      id: vi.fn().mockReturnValue('null-provider'),
+      callApi: vi.fn().mockResolvedValue({
         output: null,
         tokenUsage: { total: 5, prompt: 5, completion: 0, cached: 0, numRequests: 1 },
       }),
@@ -3621,8 +3708,8 @@ describe('runEval', () => {
 
   it('should apply transforms in correct order', async () => {
     const providerWithTransform: ApiProvider = {
-      id: jest.fn().mockReturnValue('transform-provider'),
-      callApi: jest.fn().mockResolvedValue({
+      id: vi.fn().mockReturnValue('transform-provider'),
+      callApi: vi.fn().mockResolvedValue({
         output: 'original',
         tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
       }),
@@ -3642,189 +3729,6 @@ describe('runEval', () => {
 
     expect(results[0].success).toBe(true);
     expect(results[0].response?.output).toBe('original-provider-test');
-  });
-
-  it('delegates Simba providers to runSimba using evaluateOptions maxConcurrency', async () => {
-    const runSimbaResults = [
-      {
-        promptIdx: -1,
-        testIdx: -1,
-        testCase: { assert: [] },
-        promptId: 'simba-case',
-        provider: {
-          id: 'promptfoo:redteam:simba',
-          label: strategyDisplayNames.simba,
-        },
-        prompt: { raw: 'Simba prompt', label: 'simba-label' },
-        vars: {},
-        failureReason: ResultFailureReason.NONE,
-        success: true,
-        score: 1,
-        latencyMs: 50,
-        namedScores: {},
-      },
-    ];
-
-    const runSimbaMock = jest.fn().mockResolvedValue(runSimbaResults);
-    const agentProvider = {
-      id: jest.fn().mockReturnValue('promptfoo:redteam:simba'),
-      label: strategyDisplayNames.simba,
-      delay: 0,
-      callApi: jest.fn(),
-      runSimba: runSimbaMock,
-    } as unknown as ApiProvider & { runSimba: jest.Mock };
-
-    const options = {
-      ...defaultOptions,
-      testIdx: 5,
-      promptIdx: 2,
-      evaluateOptions: { maxConcurrency: 7 },
-      concurrency: 99,
-    };
-
-    const results = await runEval({
-      ...options,
-      provider: agentProvider,
-      prompt: { raw: 'Simba prompt', label: 'simba-label' },
-      test: {},
-      conversations: {},
-      registers: {},
-      isRedteam: true,
-    });
-
-    expect(runSimbaMock).toHaveBeenCalledTimes(1);
-    expect(runSimbaMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        prompt: 'Simba prompt',
-        context: expect.objectContaining({ vars: {} }),
-        options: undefined,
-        concurrency: 7,
-      }),
-    );
-    expect(agentProvider.callApi as jest.Mock).not.toHaveBeenCalled();
-    expect(results).toHaveLength(1);
-    expect(results[0].promptIdx).toBe(2);
-    expect(results[0].testIdx).toBe(5);
-    expect(results[0].success).toBe(true);
-  });
-
-  it('uses default Simba concurrency when evaluateOptions are not provided', async () => {
-    const runSimbaResults = [
-      {
-        promptIdx: -1,
-        testIdx: -1,
-        testCase: { assert: [] },
-        promptId: 'simba-case',
-        provider: {
-          id: 'promptfoo:redteam:simba',
-          label: strategyDisplayNames.simba,
-        },
-        prompt: { raw: 'Simba prompt', label: 'simba-label' },
-        vars: {},
-        failureReason: ResultFailureReason.NONE,
-        success: true,
-        score: 1,
-        latencyMs: 50,
-        namedScores: {},
-      },
-    ];
-
-    const runSimbaMock = jest.fn().mockResolvedValue(runSimbaResults);
-    const agentProvider = {
-      id: jest.fn().mockReturnValue('promptfoo:redteam:simba'),
-      label: strategyDisplayNames.simba,
-      delay: 0,
-      callApi: jest.fn(),
-      runSimba: runSimbaMock,
-    } as unknown as ApiProvider & { runSimba: jest.Mock };
-
-    const results = await runEval({
-      ...defaultOptions,
-      provider: agentProvider,
-      prompt: { raw: 'Simba prompt', label: 'simba-label' },
-      test: {},
-      conversations: {},
-      registers: {},
-      isRedteam: true,
-    });
-
-    expect(runSimbaMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        prompt: 'Simba prompt',
-        context: expect.any(Object),
-        options: undefined,
-        concurrency: DEFAULT_MAX_CONCURRENCY,
-      }),
-    );
-    expect(results[0].promptIdx).toBe(defaultOptions.promptIdx);
-    expect(results[0].testIdx).toBe(defaultOptions.testIdx);
-  });
-
-  it('assigns sequential test indices when runSimba returns multiple results', async () => {
-    const runSimbaResults = [
-      {
-        promptIdx: -1,
-        testIdx: -1,
-        testCase: { assert: [] },
-        promptId: 'simba-case-1',
-        provider: {
-          id: 'promptfoo:redteam:simba',
-          label: strategyDisplayNames.simba,
-        },
-        prompt: { raw: 'Simba prompt', label: 'simba-label' },
-        vars: {},
-        failureReason: ResultFailureReason.NONE,
-        success: true,
-        score: 1,
-        latencyMs: 10,
-        namedScores: {},
-      },
-      {
-        promptIdx: -1,
-        testIdx: -1,
-        testCase: { assert: [] },
-        promptId: 'simba-case-2',
-        provider: {
-          id: 'promptfoo:redteam:simba',
-          label: strategyDisplayNames.simba,
-        },
-        prompt: { raw: 'Simba prompt', label: 'simba-label' },
-        vars: {},
-        failureReason: ResultFailureReason.NONE,
-        success: true,
-        score: 0.5,
-        latencyMs: 20,
-        namedScores: {},
-      },
-    ];
-
-    const runSimbaMock = jest.fn().mockResolvedValue(runSimbaResults);
-    const agentProvider = {
-      id: jest.fn().mockReturnValue('promptfoo:redteam:simba'),
-      label: strategyDisplayNames.simba,
-      delay: 0,
-      callApi: jest.fn(),
-      runSimba: runSimbaMock,
-    } as unknown as ApiProvider & { runSimba: jest.Mock };
-
-    const results = await runEval({
-      ...defaultOptions,
-      testIdx: 10,
-      promptIdx: 3,
-      provider: agentProvider,
-      prompt: { raw: 'Simba prompt', label: 'simba-label' },
-      test: {},
-      conversations: {},
-      registers: {},
-      isRedteam: true,
-    });
-
-    expect(runSimbaMock).toHaveBeenCalledTimes(1);
-    expect(results).toHaveLength(2);
-    expect(results[0].testIdx).toBe(10);
-    expect(results[0].promptIdx).toBe(3);
-    expect(results[1].testIdx).toBe(11);
-    expect(results[1].promptIdx).toBe(3);
   });
 
   it('should accumulate token usage correctly', async () => {
@@ -3997,13 +3901,18 @@ describe('evaluator defaultTest merging', () => {
   });
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
+    // Reset runExtensionHook to default implementation (other tests may have overridden it)
+    vi.mocked(runExtensionHook).mockReset();
+    vi.mocked(runExtensionHook).mockImplementation(
+      async (_extensions, _hookName, context) => context,
+    );
   });
 
   it('should merge defaultTest.options.provider with test case options', async () => {
     const mockProvider: ApiProvider = {
-      id: jest.fn().mockReturnValue('mock-provider'),
-      callApi: jest.fn().mockResolvedValue({
+      id: vi.fn().mockReturnValue('mock-provider'),
+      callApi: vi.fn().mockResolvedValue({
         output: 'Test output',
         tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
       }),
@@ -4059,8 +3968,8 @@ describe('evaluator defaultTest merging', () => {
 
   it('should allow test case options to override defaultTest options', async () => {
     const mockProvider: ApiProvider = {
-      id: jest.fn().mockReturnValue('mock-provider'),
-      callApi: jest.fn().mockResolvedValue({
+      id: vi.fn().mockReturnValue('mock-provider'),
+      callApi: vi.fn().mockResolvedValue({
         output: 'Test output',
         tokenUsage: { total: 10, prompt: 5, completion: 5, cached: 0, numRequests: 1 },
       }),
@@ -4109,7 +4018,12 @@ describe('Evaluator with external defaultTest', () => {
   });
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
+    // Reset runExtensionHook to default implementation (other tests may have overridden it)
+    vi.mocked(runExtensionHook).mockReset();
+    vi.mocked(runExtensionHook).mockImplementation(
+      async (_extensions, _hookName, context) => context,
+    );
   });
 
   it('should handle string defaultTest gracefully', async () => {
@@ -4225,8 +4139,6 @@ describe('Evaluator with external defaultTest', () => {
   });
 
   it('should preserve metrics from existing prompts when resuming evaluation', async () => {
-    const cliState = require('../src/cliState').default;
-
     // Store original resume state and ensure it's false
     const originalResume = cliState.resume;
     cliState.resume = false;
@@ -4322,5 +4234,171 @@ describe('Evaluator with external defaultTest', () => {
       // Always restore original state
       cliState.resume = originalResume;
     }
+  });
+});
+
+describe('defaultTest normalization for extensions', () => {
+  beforeAll(async () => {
+    await runDbMigrations();
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // Reset runExtensionHook to default implementation (other tests may have overridden it)
+    vi.mocked(runExtensionHook).mockReset();
+    vi.mocked(runExtensionHook).mockImplementation(
+      async (_extensions, _hookName, context) => context,
+    );
+  });
+
+  it('should initialize defaultTest when undefined and extensions are present', async () => {
+    const mockExtension = 'file://test-extension.js';
+    let capturedSuite: TestSuite | undefined;
+
+    const mockedRunExtensionHook = vi.mocked(runExtensionHook);
+    mockedRunExtensionHook.mockImplementation(async (_extensions, hookName, context) => {
+      if (hookName === 'beforeAll') {
+        capturedSuite = (context as { suite: TestSuite }).suite;
+      }
+      return context;
+    });
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [{ raw: 'Test prompt', label: 'test' }],
+      tests: [{ vars: { var: 'value' } }],
+      extensions: [mockExtension],
+      // No defaultTest defined
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+
+    expect(capturedSuite).toBeDefined();
+    expect(capturedSuite!.defaultTest).toBeDefined();
+    expect(capturedSuite!.defaultTest).toEqual({ assert: [] });
+  });
+
+  it('should initialize defaultTest.assert when defaultTest exists but assert is undefined', async () => {
+    const mockExtension = 'file://test-extension.js';
+    let capturedSuite: TestSuite | undefined;
+
+    const mockedRunExtensionHook = vi.mocked(runExtensionHook);
+    mockedRunExtensionHook.mockImplementation(async (_extensions, hookName, context) => {
+      if (hookName === 'beforeAll') {
+        capturedSuite = (context as { suite: TestSuite }).suite;
+      }
+      return context;
+    });
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [{ raw: 'Test prompt', label: 'test' }],
+      tests: [{ vars: { var: 'value' } }],
+      extensions: [mockExtension],
+      defaultTest: {
+        vars: { defaultVar: 'defaultValue' },
+        // No assert defined
+      },
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+
+    expect(capturedSuite).toBeDefined();
+    expect(capturedSuite!.defaultTest).toBeDefined();
+    const defaultTest = capturedSuite!.defaultTest as Record<string, unknown>;
+    expect(defaultTest.vars).toEqual({ defaultVar: 'defaultValue' });
+    expect(defaultTest.assert).toEqual([]);
+  });
+
+  it('should preserve existing defaultTest.assert when extensions are present', async () => {
+    const mockExtension = 'file://test-extension.js';
+    let capturedSuite: TestSuite | undefined;
+
+    const mockedRunExtensionHook = vi.mocked(runExtensionHook);
+    mockedRunExtensionHook.mockImplementation(async (_extensions, hookName, context) => {
+      if (hookName === 'beforeAll') {
+        capturedSuite = (context as { suite: TestSuite }).suite;
+      }
+      return context;
+    });
+
+    const existingAssertions = [
+      { type: 'contains' as const, value: 'expected' },
+      { type: 'not-contains' as const, value: 'unexpected' },
+    ];
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [{ raw: 'Test prompt', label: 'test' }],
+      tests: [{ vars: { var: 'value' } }],
+      extensions: [mockExtension],
+      defaultTest: {
+        assert: existingAssertions,
+      },
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+
+    expect(capturedSuite).toBeDefined();
+    const defaultTest = capturedSuite!.defaultTest as Record<string, unknown>;
+    expect(defaultTest.assert).toBe(existingAssertions); // Same reference
+    expect(defaultTest.assert).toHaveLength(2);
+  });
+
+  it('should not modify defaultTest when no extensions are present', async () => {
+    const mockedRunExtensionHook = vi.mocked(runExtensionHook);
+    mockedRunExtensionHook.mockClear();
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [{ raw: 'Test prompt', label: 'test' }],
+      tests: [{ vars: { var: 'value' } }],
+      // No extensions
+      // No defaultTest
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+
+    // runExtensionHook should still be called (with empty/undefined extensions)
+    // but the beforeAll hook call should receive the original suite without normalization
+    const beforeAllCall = mockedRunExtensionHook.mock.calls.find((call) => call[1] === 'beforeAll');
+    expect(beforeAllCall).toBeDefined();
+    // When no extensions, defaultTest should remain undefined (not normalized)
+    // Note: The normalization only happens when extensions?.length is truthy
+  });
+
+  it('should allow extensions to push to defaultTest.assert safely', async () => {
+    const mockExtension = 'file://test-extension.js';
+
+    const mockedRunExtensionHook = vi.mocked(runExtensionHook);
+    mockedRunExtensionHook.mockImplementation(async (_extensions, hookName, context) => {
+      if (hookName === 'beforeAll') {
+        // Simulate what an extension would do - push to assert array
+        // This should work because defaultTest.assert is guaranteed to be an array
+        const suite = (context as { suite: TestSuite }).suite;
+        const defaultTest = suite.defaultTest as Exclude<typeof suite.defaultTest, string>;
+        defaultTest!.assert!.push({ type: 'is-json' as const });
+      }
+      return context;
+    });
+
+    const testSuite: TestSuite = {
+      providers: [mockApiProvider],
+      prompts: [{ raw: 'Test prompt', label: 'test' }],
+      tests: [{ vars: { var: 'value' } }],
+      extensions: [mockExtension],
+      // No defaultTest - will be initialized by evaluator
+    };
+
+    const evalRecord = await Eval.create({}, testSuite.prompts, { id: randomUUID() });
+    await evaluate(testSuite, evalRecord, {});
+
+    // The assertion added by the extension should be present in the results
+    const summary = await evalRecord.toEvaluateSummary();
+    expect(summary.results[0].testCase.assert).toContainEqual({ type: 'is-json' });
   });
 });

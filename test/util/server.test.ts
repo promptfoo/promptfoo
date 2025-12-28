@@ -1,4 +1,5 @@
 import opener from 'opener';
+import { beforeEach, describe, expect, it, type MockedFunction, vi } from 'vitest';
 import { getDefaultPort, VERSION } from '../../src/constants';
 import logger from '../../src/logger';
 import * as remoteGeneration from '../../src/redteam/remoteGeneration';
@@ -13,42 +14,44 @@ import {
 } from '../../src/util/server';
 
 // Mock opener
-jest.mock('opener', () => jest.fn());
+vi.mock('opener', () => ({ default: vi.fn() }));
 
 // Mock logger
-jest.mock('../../src/logger', () => ({
-  info: jest.fn(),
-  debug: jest.fn(),
-  error: jest.fn(),
+vi.mock('../../src/logger', () => ({
+  default: {
+    info: vi.fn(),
+    debug: vi.fn(),
+    error: vi.fn(),
+  },
 }));
 
 // Mock the readline utilities
-jest.mock('../../src/util/readline', () => ({
-  promptYesNo: jest.fn(),
-  promptUser: jest.fn(),
-  createReadlineInterface: jest.fn(),
+vi.mock('../../src/util/readline', () => ({
+  promptYesNo: vi.fn(),
+  promptUser: vi.fn(),
+  createReadlineInterface: vi.fn(),
 }));
 
 // Mock fetchWithProxy
-jest.mock('../../src/util/fetch', () => ({
-  fetchWithProxy: jest.fn(),
+vi.mock('../../src/util/fetch', () => ({
+  fetchWithProxy: vi.fn(),
 }));
 
 // Mock remoteGeneration
-jest.mock('../../src/redteam/remoteGeneration', () => ({
-  getRemoteVersionUrl: jest.fn(),
+vi.mock('../../src/redteam/remoteGeneration', () => ({
+  getRemoteVersionUrl: vi.fn(),
 }));
 
 // Import the mocked fetchWithProxy for use in tests
 import * as fetchModule from '../../src/util/fetch/index';
 
-const mockFetchWithProxy = fetchModule.fetchWithProxy as jest.MockedFunction<
+const mockFetchWithProxy = fetchModule.fetchWithProxy as MockedFunction<
   typeof fetchModule.fetchWithProxy
 >;
 
 describe('Server Utilities', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('checkServerRunning', () => {
@@ -145,7 +148,7 @@ describe('Server Utilities', () => {
     });
 
     it('should handle opener errors gracefully', async () => {
-      jest.mocked(opener).mockImplementationOnce(() => {
+      vi.mocked(opener).mockImplementationOnce(() => {
         throw new Error('Failed to open browser');
       });
 
@@ -156,7 +159,7 @@ describe('Server Utilities', () => {
 
     it('should ask user before opening browser when BrowserBehavior.ASK', async () => {
       // Mock promptYesNo to return true
-      jest.mocked(readlineUtils.promptYesNo).mockResolvedValueOnce(true);
+      vi.mocked(readlineUtils.promptYesNo).mockResolvedValueOnce(true);
 
       await openBrowser(BrowserBehavior.ASK);
 
@@ -166,7 +169,7 @@ describe('Server Utilities', () => {
 
     it('should not open browser when user answers no to ASK prompt', async () => {
       // Mock promptYesNo to return false
-      jest.mocked(readlineUtils.promptYesNo).mockResolvedValueOnce(false);
+      vi.mocked(readlineUtils.promptYesNo).mockResolvedValueOnce(false);
 
       await openBrowser(BrowserBehavior.ASK);
 
@@ -188,11 +191,11 @@ describe('Server Utilities', () => {
     beforeEach(() => {
       // Clear the feature cache before each test to ensure isolation
       __clearFeatureCache();
-      jest.clearAllMocks();
+      vi.clearAllMocks();
       // Setup default mock for getRemoteVersionUrl to return a valid URL
-      jest
-        .mocked(remoteGeneration.getRemoteVersionUrl)
-        .mockReturnValue('https://api.promptfoo.app/version');
+      vi.mocked(remoteGeneration.getRemoteVersionUrl).mockReturnValue(
+        'https://api.promptfoo.app/version',
+      );
     });
 
     it('should return true when server buildDate is after required date', async () => {
@@ -250,7 +253,7 @@ describe('Server Utilities', () => {
 
     it('should return true when no remote URL is available (local server assumption)', async () => {
       // Mock getRemoteVersionUrl to return null for this specific test
-      jest.mocked(remoteGeneration.getRemoteVersionUrl).mockReturnValueOnce(null);
+      vi.mocked(remoteGeneration.getRemoteVersionUrl).mockReturnValueOnce(null);
 
       const result = await checkServerFeatureSupport(featureName, '2024-01-01T00:00:00Z');
 

@@ -1,11 +1,13 @@
 ---
 sidebar_label: Adaline Gateway
-description: "Access multiple LLM providers via Adaline's unified API gateway with automatic failover, routing, and usage optimization"
+description: 'Use Adaline Gateway to test OpenAI, Anthropic, Google, Azure, Groq, and 200+ LLMs with a unified API. Fully local, not a proxy.'
+keywords:
+  [adaline, gateway, unified llm api, multi-provider, openai, anthropic, google, azure, groq]
 ---
 
 # Adaline Gateway
 
-Adaline Gateway is a fully local production-grade Super SDK that provides a simple, unified, and powerful interface for calling more than 200+ LLMs.
+Adaline Gateway is a fully local production-grade Super SDK that provides a simple, unified, and powerful interface for calling 300+ LLMs.
 
 - Adaline Gateway runs locally within Promptfoo, it is not a proxy.
 - Adaline Gateway uses custom types for config/parameters, prompts, tools that will work across LLMs. This allows users to set up their Promptfoo config prompts, tests, assertions just once and have them work flawlessly across providers.
@@ -53,9 +55,9 @@ Note: In case of `azureopenai` the `<model_name>` is the name of your Azure Open
 
 Examples:
 
-- `adaline:openai:chat:gpt-4.1-mini`
+- `adaline:openai:chat:gpt-5.2`
 - `adaline:azureopenai:chat:my-gpt-4o-deployment`
-- `adaline:google:chat:gemini-1.5-flash`
+- `adaline:google:chat:gemini-2.5-flash`
 - `adaline:togetherai:chat:meta-llama/Meta-Llama-3-8B-Instruct-Turbo`
 - `adaline:openai:embedding:text-embedding-3-large`
 - `adaline:voyage:embedding:voyage-3`
@@ -71,7 +73,7 @@ adaline provider uses API keys set using standard Promptfoo env variables such a
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: adaline:openai:chat:gpt-4.1-mini
+  - id: adaline:openai:chat:gpt-5.2
     config:
       apiKey: sk-random-openai-api-key
 ```
@@ -84,7 +86,7 @@ LLM parameters can be set in `config`, example:
 
 ```yaml title="promptfooconfig.yaml"
 providers:
-  - id: adaline:openai:chat:gpt-4.1-mini
+  - id: adaline:openai:chat:gpt-5.2
     config:
       temperature: 0.8
       maxTokens: 300
@@ -360,7 +362,7 @@ prompts:
   - 'What is the weather like in {{city}}?'
 
 providers:
-  - id: adaline:openai:chat:gpt-4.1-mini
+  - id: adaline:openai:chat:gpt-5.2
     config:
       tools:
         [
@@ -426,7 +428,7 @@ prompts:
   - 'What is the weather like in {{city}}?'
 
 providers:
-  - id: adaline:google:chat:gemini-1.5-flash
+  - id: adaline:google:chat:gemini-2.5-flash
     config:
       tools:
         [
@@ -497,9 +499,9 @@ tests:
 prompts:
   - file://prompt.json
 providers:
-  - id: adaline:openai:chat:gpt-4.1
-  - id: adaline:anthropic:chat:claude-3-opus-20240229
-  - id: adaline:google:chat:gemini-1.5-pro
+  - id: adaline:openai:chat:gpt-5.2
+  - id: adaline:anthropic:chat:claude-opus-4-1-20250805
+  - id: adaline:google:chat:gemini-2.5-pro
 
 tests:
   - vars:
@@ -545,7 +547,7 @@ prompts:
   - 'Analyze the following customer support query: "{{query}}"'
 
 providers:
-  - id: adaline:openai:chat:gpt-4.1-mini
+  - id: adaline:openai:chat:gpt-5.2
     config:
       seed: 322431
       responseFormat: json_schema
@@ -707,7 +709,7 @@ derivedMetrics:
 prompts:
   - file://prompt.json
 providers:
-  - id: adaline:openai:chat:gpt-4.1
+  - id: adaline:openai:chat:gpt-5.2
 
 tests:
   - vars:

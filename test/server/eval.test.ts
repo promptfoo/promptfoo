@@ -1,4 +1,5 @@
 import request from 'supertest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { runDbMigrations } from '../../src/migrate';
 import Eval from '../../src/models/eval';
 import EvalResult from '../../src/models/evalResult';

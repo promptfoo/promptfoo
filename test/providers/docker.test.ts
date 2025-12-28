@@ -1,26 +1,27 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { fetchWithCache } from '../../src/cache';
+import logger from '../../src/logger';
 import {
   createDockerProvider,
-  fetchLocalModels,
-  hasLocalModel,
-  parseProviderPath,
   DMRChatCompletionProvider,
   DMRCompletionProvider,
   DMREmbeddingProvider,
+  fetchLocalModels,
+  hasLocalModel,
+  parseProviderPath,
 } from '../../src/providers/docker';
-import { fetchWithCache } from '../../src/cache';
-import logger from '../../src/logger';
 
-jest.mock('../../src/cache');
-jest.mock('../../src/logger');
+vi.mock('../../src/cache');
+vi.mock('../../src/logger');
 
 describe('docker model runner provider', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('fetchLocalModels', () => {
     it('should throw a helpful error if cannot connect to DMR endpoint', async () => {
-      jest.mocked(fetchWithCache).mockRejectedValue(new Error('some error'));
+      vi.mocked(fetchWithCache).mockRejectedValue(new Error('some error'));
 
       await expect(fetchLocalModels('http://localhost:12434/engines/v1')).rejects.toThrow(
         'Failed to connect to Docker Model Runner. Is it enabled? Are the API endpoints enabled? For details, see https://docs.docker.com/ai/model-runner.',
@@ -30,7 +31,7 @@ describe('docker model runner provider', () => {
 
   describe('hasLocalModel', () => {
     it('returns true if the model exists', async () => {
-      jest.mocked(fetchWithCache).mockResolvedValue({
+      vi.mocked(fetchWithCache).mockResolvedValue({
         data: {
           data: [
             {
@@ -52,7 +53,7 @@ describe('docker model runner provider', () => {
     });
 
     it('returns false if the model does not exists', async () => {
-      jest.mocked(fetchWithCache).mockResolvedValue({
+      vi.mocked(fetchWithCache).mockResolvedValue({
         data: {
           data: [
             {
@@ -141,14 +142,13 @@ describe('docker model runner provider', () => {
   describe('DMR Provider Classes', () => {
     beforeEach(() => {
       // Clear mocks
-      jest.clearAllMocks();
+      vi.clearAllMocks();
     });
 
     describe('DMRChatCompletionProvider', () => {
       it('warns when model is not found but continues execution', async () => {
         // First call is for model check, second is for actual API call
-        jest
-          .mocked(fetchWithCache)
+        vi.mocked(fetchWithCache)
           .mockResolvedValueOnce({
             data: { data: [] }, // No models found
             cached: false,
@@ -184,8 +184,7 @@ describe('docker model runner provider', () => {
       });
 
       it('does not warn when model exists', async () => {
-        jest
-          .mocked(fetchWithCache)
+        vi.mocked(fetchWithCache)
           .mockResolvedValueOnce({
             data: { data: [{ id: 'ai/existing-model' }] }, // Model exists
             cached: false,
@@ -212,8 +211,7 @@ describe('docker model runner provider', () => {
 
     describe('DMRCompletionProvider', () => {
       it('warns when model is not found but continues execution', async () => {
-        jest
-          .mocked(fetchWithCache)
+        vi.mocked(fetchWithCache)
           .mockResolvedValueOnce({
             data: { data: [] }, // No models found
             cached: false,
@@ -243,8 +241,7 @@ describe('docker model runner provider', () => {
 
     describe('DMREmbeddingProvider', () => {
       it('warns when model is not found but continues execution', async () => {
-        jest
-          .mocked(fetchWithCache)
+        vi.mocked(fetchWithCache)
           .mockResolvedValueOnce({
             data: { data: [] }, // No models found
             cached: false,

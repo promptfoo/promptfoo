@@ -1,9 +1,10 @@
+import { describe, expect, it } from 'vitest';
 import { ResultFailureReason } from '../../../src/types/index';
+import { getHeaderForTable } from '../../../src/util/exportToFile/getHeaderForTable';
 import {
   convertEvalResultToTableCell,
   convertTestResultsToTableRow,
 } from '../../../src/util/exportToFile/index';
-import { getHeaderForTable } from '../../../src/util/exportToFile/getHeaderForTable';
 
 import type Eval from '../../../src/models/eval';
 import type EvalResult from '../../../src/models/evalResult';

@@ -1,13 +1,14 @@
 import readline from 'readline';
 
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createReadlineInterface, promptUser, promptYesNo } from '../../src/util/readline';
 
-jest.mock('readline');
+vi.mock('readline');
 
-jest.mock('../../src/util/readline', () => ({
-  createReadlineInterface: jest.fn(),
-  promptUser: jest.fn(),
-  promptYesNo: jest.fn(),
+vi.mock('../../src/util/readline', () => ({
+  createReadlineInterface: vi.fn(),
+  promptUser: vi.fn(),
+  promptYesNo: vi.fn(),
 }));
 
 describe('readline utils', () => {
@@ -15,23 +16,23 @@ describe('readline utils', () => {
 
   beforeEach(() => {
     mockInterface = {
-      question: jest.fn(),
-      close: jest.fn(),
-      on: jest.fn(),
+      question: vi.fn(),
+      close: vi.fn(),
+      on: vi.fn(),
     };
 
-    jest.mocked(readline.createInterface).mockReturnValue(mockInterface);
-    jest.mocked(createReadlineInterface).mockReturnValue(mockInterface);
-    jest.mocked(promptUser).mockReset();
-    jest.mocked(promptYesNo).mockReset();
+    vi.mocked(readline.createInterface).mockReturnValue(mockInterface);
+    vi.mocked(createReadlineInterface).mockReturnValue(mockInterface);
+    vi.mocked(promptUser).mockReset();
+    vi.mocked(promptYesNo).mockReset();
   });
 
   afterEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
   });
 
   afterAll(() => {
-    jest.restoreAllMocks();
+    vi.restoreAllMocks();
   });
 
   describe('createReadlineInterface', () => {
@@ -48,7 +49,7 @@ describe('readline utils', () => {
       const question = 'Test question?';
       const answer = 'Test answer';
 
-      jest.mocked(promptUser).mockResolvedValue(answer);
+      vi.mocked(promptUser).mockResolvedValue(answer);
 
       const result = await promptUser(question);
       expect(result).toBe(answer);
@@ -58,7 +59,7 @@ describe('readline utils', () => {
     it('should reject on error', async () => {
       const error = new Error('Test error');
 
-      jest.mocked(promptUser).mockRejectedValue(error);
+      vi.mocked(promptUser).mockRejectedValue(error);
 
       await expect(promptUser('Test question?')).rejects.toThrow(error);
     });
@@ -66,7 +67,7 @@ describe('readline utils', () => {
     it('should reject if readline creation fails', async () => {
       const error = new Error('Creation failed');
 
-      jest.mocked(promptUser).mockRejectedValue(error);
+      vi.mocked(promptUser).mockRejectedValue(error);
 
       await expect(promptUser('Test question?')).rejects.toThrow(error);
     });
@@ -74,7 +75,7 @@ describe('readline utils', () => {
 
   describe('promptYesNo', () => {
     it('should return true for "y" with default no', async () => {
-      jest.mocked(promptYesNo).mockResolvedValue(true);
+      vi.mocked(promptYesNo).mockResolvedValue(true);
 
       const result = await promptYesNo('Test question?', false);
       expect(result).toBe(true);
@@ -82,7 +83,7 @@ describe('readline utils', () => {
     });
 
     it('should return false for "n" with default yes', async () => {
-      jest.mocked(promptYesNo).mockResolvedValue(false);
+      vi.mocked(promptYesNo).mockResolvedValue(false);
 
       const result = await promptYesNo('Test question?', true);
       expect(result).toBe(false);
@@ -90,21 +91,21 @@ describe('readline utils', () => {
     });
 
     it('should return default value for empty response', async () => {
-      jest.mocked(promptYesNo).mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+      vi.mocked(promptYesNo).mockResolvedValueOnce(true).mockResolvedValueOnce(false);
 
       await expect(promptYesNo('Test question?', true)).resolves.toBe(true);
       await expect(promptYesNo('Test question?', false)).resolves.toBe(false);
     });
 
     it('should handle different case inputs', async () => {
-      jest.mocked(promptYesNo).mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+      vi.mocked(promptYesNo).mockResolvedValueOnce(true).mockResolvedValueOnce(false);
 
       await expect(promptYesNo('Test question?')).resolves.toBe(true);
       await expect(promptYesNo('Test question?', true)).resolves.toBe(false);
     });
 
     it('should append correct suffix based on default value', async () => {
-      jest.mocked(promptYesNo).mockResolvedValue(true);
+      vi.mocked(promptYesNo).mockResolvedValue(true);
 
       await promptYesNo('Test question?', true);
       expect(promptYesNo).toHaveBeenCalledWith('Test question?', true);
@@ -114,7 +115,7 @@ describe('readline utils', () => {
     });
 
     it('should return true for non-n input with defaultYes true', async () => {
-      jest.mocked(promptYesNo).mockResolvedValue(true);
+      vi.mocked(promptYesNo).mockResolvedValue(true);
 
       const result = await promptYesNo('Test question?', true);
       expect(result).toBe(true);
@@ -122,7 +123,7 @@ describe('readline utils', () => {
     });
 
     it('should return false for input not starting with y with defaultYes false', async () => {
-      jest.mocked(promptYesNo).mockResolvedValue(false);
+      vi.mocked(promptYesNo).mockResolvedValue(false);
 
       const result = await promptYesNo('Test question?', false);
       expect(result).toBe(false);
