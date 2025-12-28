@@ -6,9 +6,11 @@ import { globSync, hasMagic } from 'glob';
 import yaml from 'js-yaml';
 import nunjucks from 'nunjucks';
 import cliState from '../cliState';
+import { getEnvBool } from '../envars';
 import logger from '../logger';
 import { isJavascriptFile } from './fileExtensions';
 import { parseFileUrl } from './functions/loadFunction';
+import { safeResolve } from './pathUtils';
 
 type CsvParseOptionsWithColumns<T> = Omit<CsvOptions<T>, 'columns'> & {
   columns: Exclude<CsvOptions['columns'], undefined | false>;
@@ -249,4 +251,70 @@ export function maybeLoadConfigFromExternalFile(
     return result;
   }
   return maybeLoadFromExternalFile(config, context);
+}
+
+/**
+ * Parses a file path or glob pattern to extract function names and file extensions.
+ * Function names can be specified in the filename like this:
+ * prompt.py:myFunction or prompts.js:myFunction.
+ * @param basePath - The base path for file resolution.
+ * @param promptPath - The path or glob pattern.
+ * @returns Parsed details including function name, file extension, and directory status.
+ */
+export function parsePathOrGlob(
+  basePath: string,
+  promptPath: string,
+): {
+  extension?: string;
+  functionName?: string;
+  isPathPattern: boolean;
+  filePath: string;
+} {
+  if (promptPath.startsWith('file://')) {
+    promptPath = promptPath.slice('file://'.length);
+  }
+  const filePath = path.resolve(basePath, promptPath);
+
+  let filename = path.relative(basePath, filePath);
+  let functionName: string | undefined;
+
+  if (filename.includes(':')) {
+    // Windows-aware path parsing: check if colon is part of drive letter
+    const lastColonIndex = filename.lastIndexOf(':');
+    if (lastColonIndex > 1) {
+      const pathWithoutFunction = filename.slice(0, lastColonIndex);
+      if (
+        isJavascriptFile(pathWithoutFunction) ||
+        pathWithoutFunction.endsWith('.py') ||
+        pathWithoutFunction.endsWith('.go') ||
+        pathWithoutFunction.endsWith('.rb')
+      ) {
+        functionName = filename.slice(lastColonIndex + 1);
+        filename = pathWithoutFunction;
+      }
+    }
+  }
+
+  // verify that filename without function exists
+  let stats;
+  try {
+    stats = fs.statSync(path.join(basePath, filename));
+  } catch (err) {
+    if (getEnvBool('PROMPTFOO_STRICT_FILES')) {
+      throw err;
+    }
+  }
+
+  // Check for glob patterns in the original path or the resolved path
+  // On Windows, normalize separators for cross-platform glob pattern detection
+  const normalizedFilePath = filePath.replace(/\\/g, '/');
+  const isPathPattern =
+    stats?.isDirectory() || hasMagic(promptPath) || hasMagic(normalizedFilePath);
+  const safeFilename = path.relative(basePath, safeResolve(basePath, filename));
+  return {
+    extension: isPathPattern ? undefined : path.parse(safeFilename).ext,
+    filePath: safeFilename.startsWith(basePath) ? safeFilename : path.join(basePath, safeFilename),
+    functionName,
+    isPathPattern,
+  };
 }
