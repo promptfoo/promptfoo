@@ -33,7 +33,7 @@ import { parseFileUrl } from './functions/loadFunction';
 import cliState from '../cliState';
 import { safeResolve } from './pathUtils';
 import { getNunjucksEngine } from './templates';
-import { evalTableToCsv } from '../server/utils/evalTableUtils';
+import { streamEvalCsv } from '../server/utils/evalTableUtils';
 
 import type Eval from '../models/eval';
 import type { Vars } from '../types/index';
@@ -169,16 +169,16 @@ export async function writeOutput(
   const metadata = createOutputMetadata(evalRecord);
 
   if (outputExtension === 'csv') {
-    // Use getTablePage with unlimited results - same path as WebUI export for true parity
-    const UNLIMITED_RESULTS = Number.MAX_SAFE_INTEGER;
-    const tableResult = await evalRecord.getTablePage({
-      offset: 0,
-      limit: UNLIMITED_RESULTS,
-    });
-    const csvData = evalTableToCsv(tableResult, {
+    // Use streaming for memory-efficient CSV export
+    // This processes results in batches instead of loading everything into memory
+    const writeStream = fs.createWriteStream(outputPath);
+    await streamEvalCsv(evalRecord, {
       isRedteam: Boolean(evalRecord.config.redteam),
+      write: (data: string) => {
+        writeStream.write(data);
+      },
     });
-    fs.writeFileSync(outputPath, csvData);
+    writeStream.end();
   } else if (outputExtension === 'json') {
     await writeJsonOutputSafely(outputPath, evalRecord, shareableUrl);
   } else if (outputExtension === 'yaml' || outputExtension === 'yml' || outputExtension === 'txt') {
