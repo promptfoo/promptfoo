@@ -1271,6 +1271,8 @@ describe('file utilities', () => {
   describe('readOutput', () => {
     beforeEach(() => {
       vi.clearAllMocks();
+      // Reset fs.readFileSync mock to clear any mockReturnValue from other tests
+      vi.mocked(fs.readFileSync).mockReset();
     });
 
     it('reads JSON output', () => {
