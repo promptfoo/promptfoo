@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 
 import EnterpriseBanner from '@app/components/EnterpriseBanner';
 import { IS_RUNNING_LOCALLY } from '@app/constants';
+import { EVAL_ROUTES } from '@app/constants/routes';
 import { ShiftKeyProvider } from '@app/contexts/ShiftKeyContext';
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import useApiConfig from '@app/stores/apiConfig';
@@ -120,7 +121,7 @@ export default function Eval({ fetchId }: EvalOptions) {
   const handleRecentEvalSelection = useCallback(
     async (id: string) => {
       navigate({
-        pathname: `/eval/${encodeURIComponent(id)}`,
+        pathname: EVAL_ROUTES.DETAIL(id),
         search: searchParams.toString(),
       });
     },
