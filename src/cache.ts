@@ -11,6 +11,7 @@ import { REQUEST_TIMEOUT_MS } from './providers/shared';
 import { getConfigDirectoryPath } from './util/config/manage';
 import { fetchWithRetries } from './util/fetch/index';
 import type { Cache } from 'cache-manager';
+
 import type { CacheOptions } from './types/cache';
 
 export type { CacheOptions };
