@@ -33,6 +33,7 @@ import invariant from '../util/invariant';
 import { promptfooCommand } from '../util/promptfooCommand';
 import { TokenUsageTracker } from '../util/tokenUsage';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
+import { formatDuration } from '../util/formatDuration';
 import { filterProviders } from './eval/filterProviders';
 import { filterTests } from './eval/filterTests';
 import { generateEvalSummary } from './eval/summary';
@@ -873,19 +874,6 @@ export async function doEval(
       }
     }
 
-    // Await background share before displaying results (if started)
-    let shareableUrl: string | null = null;
-    if (sharePromise) {
-      try {
-        shareableUrl = await sharePromise;
-        if (shareableUrl) {
-          evalRecord.shared = true;
-        }
-      } catch (err) {
-        logger.debug(`Share failed: ${err}`);
-      }
-    }
-
     // Skip banner output in Ink UI mode - already shown in the interactive UI
     if (!useInkUI) {
       printBorder();
@@ -924,15 +912,9 @@ export async function doEval(
       printBorder();
     }
 
-    // Format and display duration
-    const duration = Math.round((Date.now() - startTime) / 1000);
-    const durationDisplay = formatDuration(duration);
-
-    const isRedteam = Boolean(config.redteam);
-    const tracker = TokenUsageTracker.getInstance();
-
     // Skip token usage and final stats in Ink UI mode - already shown in the interactive UI
     if (!useInkUI) {
+      const durationDisplay = formatDuration(duration);
       // Handle token usage display
       if (tokenUsage.total > 0 || (tokenUsage.prompt || 0) + (tokenUsage.completion || 0) > 0) {
         const combinedTotal = (tokenUsage.prompt || 0) + (tokenUsage.completion || 0);

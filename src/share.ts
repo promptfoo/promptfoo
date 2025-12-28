@@ -337,7 +337,7 @@ async function sendChunkedResults(
 
           if (progressBar) {
             progressBar.increment(currentChunk.length);
-          } else if (!isInkUI && !isSilent) {
+          } else if (!isInkUI && !silent) {
             logger.info(
               `Progress: ${totalSent}/${totalResults} results shared (${Math.round((totalSent / totalResults) * 100)}%)`,
             );
@@ -362,7 +362,7 @@ async function sendChunkedResults(
 
       if (progressBar) {
         progressBar.increment(currentChunk.length);
-      } else if (!isInkUI && !isSilent) {
+      } else if (!isInkUI && !silent) {
         logger.info(`Progress: ${totalSent}/${totalResults} results shared (100%)`);
       }
     }
