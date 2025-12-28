@@ -1,6 +1,13 @@
 import React from 'react';
 
+import { Badge } from '@app/components/ui/badge';
 import { Button } from '@app/components/ui/button';
+import { Card } from '@app/components/ui/card';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@app/components/ui/collapsible';
 import {
   Dialog,
   DialogContent,
@@ -9,14 +16,22 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@app/components/ui/dialog';
-import { ContentCopyIcon, DeleteIcon, EditIcon, UploadIcon } from '@app/components/ui/icons';
+import {
+  ChevronDownIcon,
+  ChevronUpIcon,
+  ContentCopyIcon,
+  DeleteIcon,
+  EditIcon,
+  UploadIcon,
+} from '@app/components/ui/icons';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
 import { useStore } from '@app/stores/evalConfig';
 import { testCaseFromCsvRow } from '@promptfoo/csv';
+import AssertsForm from './AssertsForm';
 import TestCaseDialog from './TestCaseDialog';
-import type { CsvRow, TestCase } from '@promptfoo/types';
+import type { Assertion, CsvRow, TestCase } from '@promptfoo/types';
 
 interface TestCasesSectionProps {
   varsList: string[];
@@ -56,7 +71,19 @@ const TestCasesSection = ({ varsList }: TestCasesSectionProps) => {
   const [testCaseDialogOpen, setTestCaseDialogOpen] = React.useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
   const [testCaseToDelete, setTestCaseToDelete] = React.useState<number | null>(null);
+  const [defaultAssertsOpen, setDefaultAssertsOpen] = React.useState(false);
   const { showToast } = useToast();
+
+  // Default assertions that apply to all test cases
+  const defaultAsserts = (config.defaultTest?.assert || []) as Assertion[];
+  const setDefaultAsserts = (asserts: Assertion[]) => {
+    updateConfig({
+      defaultTest: {
+        ...config.defaultTest,
+        assert: asserts,
+      },
+    });
+  };
 
   const handleAddTestCase = (testCase: TestCase, shouldClose: boolean) => {
     if (editingTestCaseIndex === null) {
@@ -268,6 +295,39 @@ const TestCasesSection = ({ varsList }: TestCasesSectionProps) => {
           <Button onClick={() => setTestCaseDialogOpen(true)}>Add Test Case</Button>
         </div>
       </div>
+
+      {/* Default Assertions Section */}
+      <Card className="overflow-hidden">
+        <Collapsible open={defaultAssertsOpen} onOpenChange={setDefaultAssertsOpen}>
+          <CollapsibleTrigger asChild>
+            <button
+              type="button"
+              className={cn(
+                'w-full flex items-center justify-between p-4 text-left',
+                'hover:bg-muted/50 transition-colors',
+              )}
+            >
+              <div className="flex items-center gap-3">
+                <span className="font-medium">Default Assertions</span>
+                {defaultAsserts.length > 0 && (
+                  <Badge variant="secondary">{defaultAsserts.length}</Badge>
+                )}
+                <span className="text-sm text-muted-foreground">Applied to all test cases</span>
+              </div>
+              {defaultAssertsOpen ? (
+                <ChevronUpIcon className="h-4 w-4 text-muted-foreground" />
+              ) : (
+                <ChevronDownIcon className="h-4 w-4 text-muted-foreground" />
+              )}
+            </button>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <div className="border-t border-border p-4">
+              <AssertsForm onAdd={setDefaultAsserts} initialValues={defaultAsserts} />
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
+      </Card>
 
       {/* Test Cases Table */}
       <div className="rounded-lg border border-border overflow-hidden">

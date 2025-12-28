@@ -8,7 +8,9 @@ import { Label } from '@app/components/ui/label';
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from '@app/components/ui/select';
@@ -20,88 +22,140 @@ interface AssertsFormProps {
   initialValues: Assertion[];
 }
 
-// Most common assertion types first, then alphabetically by category
-const assertTypes: AssertionType[] = [
-  // Most common LLM-based assertions
-  'similar',
-  'llm-rubric',
-  'factuality',
-  'model-graded-closedqa',
+// Assertion type metadata with descriptions
+interface AssertionTypeInfo {
+  type: AssertionType;
+  description: string;
+  requiresLlm?: boolean;
+}
 
-  // Common string matching
-  'contains',
-  'icontains',
-  'equals',
-  'starts-with',
-  'regex',
+// Organized assertion types by category with descriptions
+const ASSERTION_CATEGORIES: Record<string, AssertionTypeInfo[]> = {
+  'AI Evaluation': [
+    {
+      type: 'llm-rubric',
+      description: 'AI evaluates output against custom criteria',
+      requiresLlm: true,
+    },
+    {
+      type: 'factuality',
+      description: 'Checks if output is factually consistent with context',
+      requiresLlm: true,
+    },
+    {
+      type: 'answer-relevance',
+      description: 'Evaluates if the answer is relevant to the question',
+      requiresLlm: true,
+    },
+    {
+      type: 'model-graded-closedqa',
+      description: 'Grades answer correctness for closed-domain questions',
+      requiresLlm: true,
+    },
+    {
+      type: 'context-faithfulness',
+      description: 'Checks if output is faithful to the provided context',
+      requiresLlm: true,
+    },
+    {
+      type: 'context-recall',
+      description: 'Measures how much context is captured in the output',
+      requiresLlm: true,
+    },
+    {
+      type: 'context-relevance',
+      description: 'Evaluates relevance of retrieved context',
+      requiresLlm: true,
+    },
+    { type: 'g-eval', description: 'G-Eval framework for LLM-based evaluation', requiresLlm: true },
+    {
+      type: 'moderation',
+      description: 'Checks output against content moderation policies',
+      requiresLlm: true,
+    },
+    {
+      type: 'select-best',
+      description: 'Selects the best output from multiple options',
+      requiresLlm: true,
+    },
+  ],
+  'Text Matching': [
+    { type: 'contains', description: 'Output contains the specified text (case-sensitive)' },
+    { type: 'icontains', description: 'Output contains the specified text (case-insensitive)' },
+    { type: 'equals', description: 'Output exactly matches the expected text' },
+    { type: 'starts-with', description: 'Output starts with the specified text' },
+    { type: 'regex', description: 'Output matches a regular expression pattern' },
+    { type: 'contains-all', description: 'Output contains all specified strings' },
+    { type: 'contains-any', description: 'Output contains at least one of the specified strings' },
+  ],
+  Similarity: [
+    {
+      type: 'similar',
+      description: 'Output is semantically similar to expected text',
+      requiresLlm: true,
+    },
+    { type: 'levenshtein', description: 'Edit distance between output and expected text' },
+    { type: 'rouge-n', description: 'ROUGE-N score for text overlap measurement' },
+    { type: 'bleu', description: 'BLEU score for translation/generation quality' },
+    { type: 'classifier', description: 'Output matches a classification label' },
+  ],
+  'Format Validation': [
+    { type: 'is-json', description: 'Output is valid JSON' },
+    { type: 'contains-json', description: 'Output contains valid JSON somewhere' },
+    { type: 'is-xml', description: 'Output is valid XML' },
+    { type: 'contains-xml', description: 'Output contains valid XML somewhere' },
+    { type: 'is-sql', description: 'Output is valid SQL' },
+    { type: 'contains-sql', description: 'Output contains valid SQL somewhere' },
+    { type: 'is-valid-function-call', description: 'Output is a valid function call format' },
+    {
+      type: 'is-valid-openai-function-call',
+      description: 'Output is a valid OpenAI function call',
+    },
+    { type: 'is-valid-openai-tools-call', description: 'Output is a valid OpenAI tools call' },
+  ],
+  'Safety & Security': [
+    { type: 'pi', description: 'Prompt injection detection', requiresLlm: true },
+  ],
+  Performance: [
+    { type: 'cost', description: 'API call cost is below threshold' },
+    { type: 'latency', description: 'Response time is below threshold' },
+    { type: 'perplexity', description: 'Model perplexity is below threshold' },
+    { type: 'perplexity-score', description: 'Normalized perplexity score check' },
+    { type: 'finish-reason', description: 'Checks the model finish reason (stop, length, etc.)' },
+  ],
+  Custom: [
+    { type: 'javascript', description: 'Custom JavaScript assertion function' },
+    { type: 'python', description: 'Custom Python assertion function' },
+    { type: 'webhook', description: 'External webhook validates the output' },
+  ],
+  Negations: [
+    { type: 'not-contains', description: 'Output does NOT contain the specified text' },
+    { type: 'not-icontains', description: 'Output does NOT contain text (case-insensitive)' },
+    { type: 'not-equals', description: 'Output does NOT exactly match the text' },
+    { type: 'not-starts-with', description: 'Output does NOT start with the text' },
+    { type: 'not-regex', description: 'Output does NOT match the regex pattern' },
+    { type: 'not-contains-all', description: 'Output does NOT contain all specified strings' },
+    { type: 'not-contains-any', description: 'Output does NOT contain any of the strings' },
+    { type: 'not-contains-json', description: 'Output does NOT contain valid JSON' },
+    { type: 'not-is-json', description: 'Output is NOT valid JSON' },
+    { type: 'not-similar', description: 'Output is NOT semantically similar' },
+    { type: 'not-rouge-n', description: 'ROUGE-N score is below threshold' },
+    { type: 'not-webhook', description: 'Webhook returns failure' },
+  ],
+};
 
-  // Multiple value matching
-  'contains-all',
-  'contains-any',
+// Flatten for lookup
+const ASSERTION_TYPE_INFO: Record<string, AssertionTypeInfo> = {};
+for (const types of Object.values(ASSERTION_CATEGORIES)) {
+  for (const info of types) {
+    ASSERTION_TYPE_INFO[info.type] = info;
+  }
+}
 
-  // Format validation
-  'is-json',
-  'contains-json',
-  'is-xml',
-  'contains-xml',
-  'is-sql',
-  'contains-sql',
-
-  // Other LLM-based
-  'answer-relevance',
-  'context-faithfulness',
-  'context-recall',
-  'context-relevance',
-  'g-eval',
-  'moderation',
-  'pi',
-  'select-best',
-
-  // Function call validation
-  'is-valid-function-call',
-  'is-valid-openai-function-call',
-  'is-valid-openai-tools-call',
-
-  // Metrics
-  'bleu',
-  'cost',
-  'finish-reason',
-  'latency',
-  'perplexity',
-  'perplexity-score',
-  'rouge-n',
-  'webhook',
-
-  // Negations
-  'not-contains',
-  'not-contains-all',
-  'not-contains-any',
-  'not-contains-json',
-  'not-equals',
-  'not-icontains',
-  'not-is-json',
-  'not-regex',
-  'not-rouge-n',
-  'not-similar',
-  'not-starts-with',
-  'not-webhook',
-];
-
-// Assertion types that require an LLM
-const LLM_ASSERTION_TYPES = new Set<AssertionType>([
-  'similar',
-  'llm-rubric',
-  'factuality',
-  'model-graded-closedqa',
-  'answer-relevance',
-  'context-faithfulness',
-  'context-recall',
-  'context-relevance',
-  'g-eval',
-  'moderation',
-  'pi',
-  'select-best',
-]);
+// Helper to check if type requires LLM
+const requiresLlm = (type: string): boolean => {
+  return ASSERTION_TYPE_INFO[type]?.requiresLlm ?? false;
+};
 
 const AssertsForm = ({ onAdd, initialValues }: AssertsFormProps) => {
   const [asserts, setAsserts] = useState<Assertion[]>(initialValues || []);
@@ -133,7 +187,7 @@ const AssertsForm = ({ onAdd, initialValues }: AssertsFormProps) => {
                     <Label htmlFor={`assert-type-${index}`} className="text-sm font-medium">
                       Type
                     </Label>
-                    {LLM_ASSERTION_TYPES.has(assert.type) && (
+                    {requiresLlm(assert.type) && (
                       <Badge variant="secondary" className="text-xs">
                         LLM
                       </Badge>
@@ -164,12 +218,28 @@ const AssertsForm = ({ onAdd, initialValues }: AssertsFormProps) => {
                   <SelectTrigger id={`assert-type-${index}`}>
                     <SelectValue placeholder="Select type" />
                   </SelectTrigger>
-                  <SelectContent className="max-h-[300px]">
-                    {assertTypes.map((type) => (
-                      <SelectItem key={type} value={type}>
-                        {type}
-                        {LLM_ASSERTION_TYPES.has(type) && ' (LLM)'}
-                      </SelectItem>
+                  <SelectContent className="max-h-[400px]">
+                    {Object.entries(ASSERTION_CATEGORIES).map(([category, types]) => (
+                      <SelectGroup key={category}>
+                        <SelectLabel className="text-xs font-semibold text-muted-foreground uppercase tracking-wide px-2 py-1.5">
+                          {category}
+                        </SelectLabel>
+                        {types.map(({ type, description, requiresLlm: isLlm }) => (
+                          <SelectItem key={type} value={type} className="py-2">
+                            <div className="flex flex-col gap-0.5">
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium">{type}</span>
+                                {isLlm && (
+                                  <Badge variant="secondary" className="text-[10px] px-1 py-0">
+                                    LLM
+                                  </Badge>
+                                )}
+                              </div>
+                              <span className="text-xs text-muted-foreground">{description}</span>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
                     ))}
                   </SelectContent>
                 </Select>

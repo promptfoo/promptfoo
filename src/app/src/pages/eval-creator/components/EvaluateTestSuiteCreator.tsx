@@ -105,14 +105,45 @@ const EvaluateTestSuiteCreator = () => {
     };
   }, []);
 
+  /**
+   * Extract variables from Nunjucks templates.
+   * Handles:
+   * - Simple variables: {{ variable }}
+   * - Variables with filters: {{ variable | filter }}
+   * - Variables with dot notation: {{ user.name }}
+   * - If statements: {% if condition %}
+   * - For loops: {% for item in items %}
+   */
   const extractVarsFromPrompts = (prompts: string[]): string[] => {
-    const varRegex = /{{\s*(\w+)\s*}}/g;
     const varsSet = new Set<string>();
 
+    // Regex to match:
+    // 1. {{ variable }} or {{ variable | filter }}
+    // 2. {% if/for variable ... %}
+    const varRegex =
+      /\{\{[\s]*([^{}\s|]+)[\s]*(?:\|[^}]+)?\}\}|\{%[\s]*(?:if|for)[\s]+([^{}\s]+)[\s]*.*?%\}/g;
+    const commentRegex = /\{#[\s\S]*?#\}/g;
+    const forLoopRegex = /\{%[\s]*for[\s]+(\w+)[\s]+in[\s]+(\w+)[\s]*%\}/g;
+
     prompts.forEach((prompt) => {
+      // Remove comments first
+      const cleanPrompt = prompt.replace(commentRegex, '');
+
+      // Extract loop variables to exclude them
+      const loopVars = new Set<string>();
+      let forMatch;
+      while ((forMatch = forLoopRegex.exec(cleanPrompt)) !== null) {
+        loopVars.add(forMatch[1]); // Loop variable (e.g., "item" in "for item in items")
+        varsSet.add(forMatch[2]); // Iterated collection (e.g., "items")
+      }
+
+      // Extract all other variables
       let match;
-      while ((match = varRegex.exec(prompt)) !== null) {
-        varsSet.add(match[1]);
+      while ((match = varRegex.exec(cleanPrompt)) !== null) {
+        const variable = match[1] || match[2];
+        if (variable && !loopVars.has(variable)) {
+          varsSet.add(variable);
+        }
       }
     });
 

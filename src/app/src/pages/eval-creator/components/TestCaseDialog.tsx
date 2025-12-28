@@ -8,6 +8,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@app/components/ui/dialog';
+import { Input } from '@app/components/ui/input';
+import { Label } from '@app/components/ui/label';
 import AssertsForm from './AssertsForm';
 import VarsForm from './VarsForm';
 import type { Assertion, TestCase } from '@promptfoo/types';
@@ -64,6 +66,20 @@ const TestCaseForm = ({ open, onAdd, varsList, initialValues, onCancel }: TestCa
         </DialogHeader>
 
         <div className="space-y-6 py-4">
+          {/* Description field */}
+          <div className="space-y-2">
+            <Label htmlFor="test-description">Description (optional)</Label>
+            <Input
+              id="test-description"
+              placeholder="What does this test case verify?"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              A brief description to help identify this test case
+            </p>
+          </div>
+
           <VarsForm
             onAdd={(vars) => setVars(vars)}
             varsList={varsList}
