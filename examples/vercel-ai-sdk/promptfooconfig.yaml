@@ -1,20 +1,20 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
 #
-# Provider Prompt Reporting with Vercel AI SDK
+# Vercel AI SDK Example
 #
-# This example demonstrates dynamic prompt construction and reporting.
-# The provider builds different prompts based on persona, task_type, and context,
+# Demonstrates dynamic prompt construction with the Vercel AI SDK.
+# The provider builds prompts based on persona, task type, and context,
 # then reports the actual prompt sent to the LLM.
 #
 # Setup:
-#   cd examples/provider-prompt-reporting
+#   cd examples/vercel-ai-sdk
 #   npm install
 #   export OPENAI_API_KEY=sk-...
 #
 # Run:
 #   npx promptfoo@latest eval
 
-description: Dynamic prompt construction with Vercel AI SDK
+description: Vercel AI SDK with dynamic prompt construction
 
 providers:
   - id: file://./aiSdkProvider.mjs

@@ -1,5 +1,5 @@
 {
-  "name": "provider-prompt-reporting",
+  "name": "vercel-ai-sdk",
   "version": "1.0.0",
   "type": "module",
   "dependencies": {

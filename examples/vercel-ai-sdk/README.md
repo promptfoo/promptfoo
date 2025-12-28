@@ -1,30 +1,25 @@
-# provider-prompt-reporting (Dynamic Prompt Reporting)
+# vercel-ai-sdk (Vercel AI SDK Provider)
 
-Demonstrates how providers can report the **actual prompt** they sent to the LLM, enabling proper assertions and debugging when prompts are constructed dynamically.
+Demonstrates dynamic prompt construction using the [Vercel AI SDK](https://ai-sdk.dev) with promptfoo's provider prompt reporting feature.
 
-## The Problem
+## Why This Matters
 
-Modern LLM applications don't use simple templates—they dynamically construct prompts with:
+Modern LLM applications dynamically construct prompts with:
 
 - **System instructions** tailored to the task
 - **Few-shot examples** selected at runtime
 - **Retrieved context** from RAG pipelines
 - **User preferences** and safety guardrails
 
-Without prompt reporting, promptfoo shows `{{topic}}` as the prompt, making it impossible to:
+Without prompt reporting, promptfoo shows `{{topic}}` as the prompt, making it impossible to debug what was actually sent or run assertions on the real prompt content.
 
-- Debug what was actually sent to the model
-- Run assertions on the real prompt content
-- Perform moderation checks on dynamic content
+## How It Works
 
-## The Solution
-
-This example uses the [Vercel AI SDK](https://ai-sdk.dev) (20M+ monthly downloads) to demonstrate how providers report the actual prompt:
+The provider reports the actual prompt it sent using the `prompt` field:
 
 ```javascript
 return {
   output: result.text,
-  // Report what was actually sent to the LLM
   prompt: [
     { role: 'system', content: dynamicSystemPrompt },
     { role: 'user', content: dynamicUserPrompt },
@@ -44,30 +39,19 @@ return {
 ## Running the Example
 
 ```bash
-# Initialize
-npx promptfoo@latest init --example provider-prompt-reporting
-cd provider-prompt-reporting
-
-# Install dependencies
+npx promptfoo@latest init --example vercel-ai-sdk
+cd vercel-ai-sdk
 npm install
-
-# Set your API key
 export OPENAI_API_KEY=sk-...
-
-# Run the evaluation
 npx promptfoo@latest eval
-
-# View results in browser
 npx promptfoo@latest view
 ```
 
 ## What You'll See
 
-In the promptfoo UI, click on any result to see **"Actual Prompt Sent"** showing the full dynamically-constructed prompt instead of just `{{topic}}`.
+In the promptfoo UI, click any result to see **"Actual Prompt Sent"** showing the full dynamically-constructed prompt instead of just `{{topic}}`.
 
-Example transformation:
-
-**Input (what you write):**
+**Input:**
 
 ```yaml
 vars:
@@ -77,7 +61,7 @@ vars:
   audience: college students
 ```
 
-**Actual Prompt Sent (what the LLM receives):**
+**Actual Prompt Sent:**
 
 ```
 System: You are a world-class expert in quantum physics.
@@ -116,7 +100,7 @@ const chain = prompt.pipe(model);
 const result = await chain.invoke(input);
 return {
   output: result,
-  prompt: prompt.format(input), // Report the formatted prompt
+  prompt: prompt.format(input),
 };
 
 // Custom RAG
@@ -125,7 +109,7 @@ const fullPrompt = `Context: ${context}\n\nQuestion: ${query}`;
 const result = await llm.generate(fullPrompt);
 return {
   output: result,
-  prompt: fullPrompt, // Report prompt with retrieved context
+  prompt: fullPrompt,
 };
 ```
 
