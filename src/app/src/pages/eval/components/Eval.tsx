@@ -20,6 +20,7 @@ import type { ResultLightweightWithLabel } from '@promptfoo/types';
 interface SocketEvalNotification {
   evalId: string;
 }
+
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { io as SocketIOClient } from 'socket.io-client';
 import EmptyState from './EmptyState';
