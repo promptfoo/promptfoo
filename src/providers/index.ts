@@ -422,14 +422,30 @@ export async function loadApiProviders(
  * @param providerPaths - The list of providers to get the IDs of.
  * @returns The IDs of the providers in the providerPaths list.
  */
+function getProviderIdsFromFile(providerPath: string): string[] {
+  const basePath = cliState.basePath || process.cwd();
+  const configs = loadProviderConfigsFromFile(providerPath, basePath);
+  const relativePath = providerPath.slice('file://'.length);
+  return configs.map((config) => {
+    invariant(config.id, `Provider config in ${relativePath} must have an id`);
+    return config.id;
+  });
+}
+
 export function getProviderIds(providerPaths: TestSuiteConfig['providers']): string[] {
   if (typeof providerPaths === 'string') {
+    if (isFileReference(providerPaths)) {
+      return getProviderIdsFromFile(providerPaths);
+    }
     return [providerPaths];
   } else if (typeof providerPaths === 'function') {
     return ['custom-function'];
   } else if (Array.isArray(providerPaths)) {
-    return providerPaths.map((provider, idx) => {
+    return providerPaths.flatMap((provider, idx) => {
       if (typeof provider === 'string') {
+        if (isFileReference(provider)) {
+          return getProviderIdsFromFile(provider);
+        }
         return provider;
       }
       if (typeof provider === 'function') {
