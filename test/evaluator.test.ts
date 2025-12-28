@@ -2959,7 +2959,7 @@ describe('evaluator', () => {
     });
   });
 
-  it('forces cache busting for repeat iterations', async () => {
+  it('passes repeatIndex to provider for per-repeat caching', async () => {
     const contexts: Array<Record<string, any> | undefined> = [];
     const provider: ApiProvider = {
       id: () => 'mock-provider',
@@ -2994,6 +2994,7 @@ describe('evaluator', () => {
     });
 
     expect(contexts[0]?.bustCache).toBeFalsy();
+    expect(contexts[0]?.repeatIndex).toBe(0);
 
     contexts.length = 0;
 
@@ -3003,7 +3004,10 @@ describe('evaluator', () => {
       repeatIndex: 1,
     });
 
-    expect(contexts[0]?.bustCache).toBe(true);
+    // With per-repeat caching, bustCache is NOT forced for repeatIndex > 0
+    // Instead, repeatIndex is passed to the provider to create unique cache keys
+    expect(contexts[0]?.bustCache).toBeFalsy();
+    expect(contexts[0]?.repeatIndex).toBe(1);
   });
 
   it('should NOT include assertion tokens in main token totals', async () => {

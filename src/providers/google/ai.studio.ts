@@ -326,7 +326,7 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
         },
         REQUEST_TIMEOUT_MS,
         'json',
-        false,
+        getCacheOptions(context),
       )) as {
         data: GeminiResponseData;
         cached: boolean;

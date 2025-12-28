@@ -153,7 +153,7 @@ describe('HttpProvider', () => {
       }),
       expect.any(Number),
       'text',
-      undefined,
+      { bust: undefined, repeatIndex: undefined },
       undefined,
     );
   });
@@ -201,7 +201,7 @@ describe('HttpProvider', () => {
       }),
       expect.any(Number),
       'text',
-      undefined,
+      { bust: undefined, repeatIndex: undefined },
       undefined,
     );
   });
@@ -234,7 +234,7 @@ describe('HttpProvider', () => {
       }),
       expect.any(Number),
       'text',
-      undefined,
+      { bust: undefined, repeatIndex: undefined },
       undefined,
     );
   });
@@ -293,7 +293,7 @@ describe('HttpProvider', () => {
       },
       expect.any(Number),
       'text',
-      undefined,
+      { bust: undefined, repeatIndex: undefined },
       undefined,
     );
   });
@@ -342,7 +342,7 @@ describe('HttpProvider', () => {
       }),
       expect.any(Number),
       'text',
-      undefined,
+      { bust: undefined, repeatIndex: undefined },
       undefined,
     );
   });
@@ -382,7 +382,7 @@ describe('HttpProvider', () => {
         }),
         expect.any(Number),
         'text',
-        undefined,
+        { bust: undefined, repeatIndex: undefined },
         undefined,
       );
       expect(result.output).toEqual({ result: 'success' });
@@ -425,7 +425,7 @@ describe('HttpProvider', () => {
         },
         expect.any(Number),
         'text',
-        undefined,
+        { bust: undefined, repeatIndex: undefined },
         undefined,
       );
       expect(result.output).toEqual({ result: 'received' });
@@ -468,7 +468,7 @@ describe('HttpProvider', () => {
         }),
         expect.any(Number),
         'text',
-        undefined,
+        { bust: undefined, repeatIndex: undefined },
         undefined,
       );
       expect(result.output).toEqual({ user: { id: '12345', name: 'Test User' } });
@@ -512,7 +512,7 @@ describe('HttpProvider', () => {
         }),
         expect.any(Number),
         'text',
-        undefined,
+        { bust: undefined, repeatIndex: undefined },
         undefined,
       );
       expect(result.output).toEqual({ result: 'success' });
@@ -566,7 +566,7 @@ describe('HttpProvider', () => {
         }),
         expect.any(Number),
         'text',
-        undefined,
+        { bust: undefined, repeatIndex: undefined },
         undefined,
       );
     });
@@ -606,7 +606,7 @@ describe('HttpProvider', () => {
         }),
         expect.any(Number),
         'text',
-        undefined,
+        { bust: undefined, repeatIndex: undefined },
         undefined,
       );
       expect(result.output).toEqual({ result: 'success' });
@@ -647,7 +647,7 @@ describe('HttpProvider', () => {
         }),
         expect.any(Number),
         'text',
-        undefined,
+        { bust: undefined, repeatIndex: undefined },
         undefined,
       );
       expect(result.output).toEqual({ result: 'success' });
@@ -687,7 +687,7 @@ describe('HttpProvider', () => {
         }),
         expect.any(Number),
         'text',
-        undefined,
+        { bust: undefined, repeatIndex: undefined },
         undefined,
       );
       expect(result.output).toEqual({ result: 'success' });
@@ -738,7 +738,7 @@ describe('HttpProvider', () => {
         }),
         expect.any(Number),
         'text',
-        undefined,
+        { bust: undefined, repeatIndex: undefined },
         undefined,
       );
 
@@ -790,7 +790,7 @@ describe('HttpProvider', () => {
         }),
         expect.any(Number),
         'text',
-        undefined,
+        { bust: undefined, repeatIndex: undefined },
         undefined,
       );
       expect(result.output).toEqual({ result: 'ok' });
@@ -837,7 +837,7 @@ describe('HttpProvider', () => {
         }),
         expect.any(Number),
         'text',
-        undefined,
+        { bust: undefined, repeatIndex: undefined },
         undefined,
       );
       expect(result.output).toEqual({ result: 'ok' });
@@ -882,7 +882,7 @@ describe('HttpProvider', () => {
         }),
         expect.any(Number),
         'text',
-        undefined,
+        { bust: undefined, repeatIndex: undefined },
         undefined,
       );
       expect(result.output).toEqual({ ok: true });
@@ -915,7 +915,7 @@ describe('HttpProvider', () => {
         }),
         expect.any(Number),
         'text',
-        undefined,
+        { bust: undefined, repeatIndex: undefined },
         undefined,
       );
       expect(result.output).toEqual({ ok: true });
@@ -1562,7 +1562,7 @@ describe('HttpProvider', () => {
         }),
         expect.any(Number),
         'text',
-        undefined,
+        { bust: undefined, repeatIndex: undefined },
         undefined,
       );
     });
@@ -1601,7 +1601,7 @@ describe('HttpProvider', () => {
         }),
         expect.any(Number),
         'text',
-        undefined,
+        { bust: undefined, repeatIndex: undefined },
         undefined,
       );
     });
@@ -1785,7 +1785,7 @@ describe('HttpProvider', () => {
       }),
       expect.any(Number),
       'text',
-      undefined,
+      { bust: undefined, repeatIndex: undefined },
       undefined,
     );
   });
@@ -1816,7 +1816,7 @@ describe('HttpProvider', () => {
       }),
       expect.any(Number),
       'text',
-      undefined,
+      { bust: undefined, repeatIndex: undefined },
       undefined,
     );
   });
@@ -2050,7 +2050,7 @@ describe('HttpProvider', () => {
         }),
         expect.any(Number),
         'text',
-        undefined,
+        { bust: undefined, repeatIndex: undefined },
         undefined,
       );
     });
@@ -2082,7 +2082,7 @@ describe('HttpProvider', () => {
         }),
         expect.any(Number),
         'text',
-        undefined,
+        { bust: undefined, repeatIndex: undefined },
         undefined,
       );
     });
@@ -2114,7 +2114,7 @@ describe('HttpProvider', () => {
         }),
         expect.any(Number),
         'text',
-        undefined,
+        { bust: undefined, repeatIndex: undefined },
         undefined,
       );
     });
@@ -2146,7 +2146,7 @@ describe('HttpProvider', () => {
         }),
         expect.any(Number),
         'text',
-        undefined,
+        { bust: undefined, repeatIndex: undefined },
         undefined,
       );
     });
@@ -2193,7 +2193,7 @@ describe('HttpProvider', () => {
         }),
         expect.any(Number),
         'text',
-        undefined,
+        { bust: undefined, repeatIndex: undefined },
         undefined,
       );
     });
@@ -2258,7 +2258,7 @@ describe('HttpProvider', () => {
         }),
         expect.any(Number),
         'text',
-        undefined,
+        { bust: undefined, repeatIndex: undefined },
         undefined,
       );
     });
@@ -2379,7 +2379,7 @@ describe('HttpProvider', () => {
       }),
       expect.any(Number),
       'text',
-      undefined,
+      { bust: undefined, repeatIndex: undefined },
       2,
     );
   });
@@ -2414,7 +2414,7 @@ describe('HttpProvider', () => {
       expect.any(Object),
       expect.any(Number),
       'text',
-      undefined,
+      { bust: undefined, repeatIndex: undefined },
       undefined,
     );
   });
@@ -2451,7 +2451,7 @@ describe('HttpProvider', () => {
       expect.any(Object),
       expect.any(Number),
       'text',
-      undefined,
+      { bust: undefined, repeatIndex: undefined },
       undefined,
     );
   });
@@ -2667,7 +2667,7 @@ describe('content type handling', () => {
       }),
       expect.any(Number),
       'text',
-      undefined,
+      { bust: undefined, repeatIndex: undefined },
       undefined,
     );
   });
@@ -2699,7 +2699,7 @@ describe('content type handling', () => {
       }),
       expect.any(Number),
       'text',
-      undefined,
+      { bust: undefined, repeatIndex: undefined },
       undefined,
     );
   });
@@ -2749,7 +2749,7 @@ describe('request transformation', () => {
       },
       REQUEST_TIMEOUT_MS,
       'text',
-      undefined,
+      { bust: undefined, repeatIndex: undefined },
       undefined,
     );
   });
@@ -2785,7 +2785,7 @@ describe('request transformation', () => {
       },
       REQUEST_TIMEOUT_MS,
       'text',
-      undefined,
+      { bust: undefined, repeatIndex: undefined },
       undefined,
     );
   });
@@ -5245,7 +5245,7 @@ describe('HttpProvider - Sanitization', () => {
         }),
         expect.any(Number),
         'text',
-        undefined,
+        { bust: undefined, repeatIndex: undefined },
         undefined,
       );
     });
@@ -5482,7 +5482,7 @@ describe('HttpProvider - Abort Signal Handling', () => {
       expect.objectContaining({ signal: abortController.signal }),
       expect.any(Number),
       expect.any(String),
-      undefined,
+      { bust: undefined, repeatIndex: undefined },
       undefined,
     );
   });
@@ -5518,7 +5518,7 @@ describe('HttpProvider - Abort Signal Handling', () => {
       expect.objectContaining({ signal: abortController.signal }),
       expect.any(Number),
       expect.any(String),
-      undefined,
+      { bust: undefined, repeatIndex: undefined },
       undefined,
     );
   });
@@ -5548,7 +5548,7 @@ describe('HttpProvider - Abort Signal Handling', () => {
       expect.not.objectContaining({ signal: expect.anything() }),
       expect.any(Number),
       expect.any(String),
-      undefined,
+      { bust: undefined, repeatIndex: undefined },
       undefined,
     );
   });
@@ -5982,7 +5982,7 @@ describe('HttpProvider - Bearer Authentication', () => {
       }),
       expect.any(Number),
       'text',
-      undefined,
+      { bust: undefined, repeatIndex: undefined },
       undefined,
     );
   });
@@ -6069,7 +6069,7 @@ describe('HttpProvider - API Key Authentication', () => {
       }),
       expect.any(Number),
       'text',
-      undefined,
+      { bust: undefined, repeatIndex: undefined },
       undefined,
     );
   });
@@ -6251,7 +6251,7 @@ describe('HttpProvider - API Key Authentication', () => {
       }),
       expect.any(Number),
       'text',
-      undefined,
+      { bust: undefined, repeatIndex: undefined },
       undefined,
     );
   });
