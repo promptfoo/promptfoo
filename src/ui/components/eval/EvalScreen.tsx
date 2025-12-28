@@ -8,8 +8,8 @@
 import { Box, Text, useApp } from 'ink';
 import React, { memo, useEffect, useRef, useState } from 'react';
 import { useEval, useEvalState } from '../../contexts/EvalContext';
-import { useCompactMode } from '../../contexts/UIContext';
 import { useKeypress } from '../../hooks/useKeypress';
+import { useTerminalTitle } from '../../hooks/useTerminalTitle';
 import { useTokenMetrics } from '../../hooks/useTokenMetrics';
 import {
   formatCost,
@@ -17,8 +17,6 @@ import {
   formatTokens,
   formatAvgLatency,
   truncate,
-  setTerminalTitle,
-  clearTerminalTitle,
   calculateETA,
   formatETA,
 } from '../../utils/format';
@@ -386,8 +384,6 @@ export function EvalScreen({
 }: EvalScreenProps) {
   const { exit } = useApp();
   const { state, dispatch, isComplete, isRunning } = useEval();
-  // Note: isCompact could be used for responsive layout in future
-  const _compactMode = useCompactMode();
   const completeCalled = useRef(false);
   const isRawModeSupported = process.stdin.isTTY && typeof process.stdin.setRawMode === 'function';
 
@@ -451,27 +447,22 @@ export function EvalScreen({
   const etaMs = calculateETA(completedTests, state.totalTests, state.elapsedMs);
   const etaDisplay = formatETA(etaMs);
 
-  // Update terminal title with progress during evaluation
-  useEffect(() => {
+  // Compute terminal title - null when not actively evaluating
+  const terminalTitle = (() => {
     if (state.phase !== 'evaluating' && state.phase !== 'grading') {
-      clearTerminalTitle();
-      return;
+      return null;
     }
-
     const percent =
       state.totalTests > 0 ? Math.round((completedTests / state.totalTests) * 100) : 0;
     const titleParts = [`promptfoo: ${completedTests}/${state.totalTests} (${percent}%)`];
-
-    // Add ETA to title if available
     if (etaDisplay) {
       titleParts.push(etaDisplay);
     }
+    return titleParts.join(' - ');
+  })();
 
-    setTerminalTitle(titleParts.join(' - '));
-
-    // Clear title on unmount
-    return () => clearTerminalTitle();
-  }, [state.phase, completedTests, state.totalTests, etaDisplay]);
+  // Update terminal title via Ink's stdout (handles cleanup automatically)
+  useTerminalTitle(terminalTitle);
 
   // Call onComplete when done
   useEffect(() => {

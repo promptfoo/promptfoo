@@ -39,6 +39,10 @@ function tokenUsageToPayload(usage: TokenUsage | undefined): TokenMetricsPayload
  * This function strips the constructor name suffix to get the base provider ID.
  */
 function normalizeProviderId(trackerId: string): string {
+  // Handle null/empty provider IDs
+  if (!trackerId || trackerId.trim() === '') {
+    return 'unknown-provider';
+  }
   // Match pattern: "provider-id (ConstructorName)"
   const match = trackerId.match(/^(.+?)\s+\([^)]+\)$/);
   return match ? match[1] : trackerId;

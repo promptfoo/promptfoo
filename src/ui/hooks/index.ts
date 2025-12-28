@@ -25,3 +25,5 @@ export {
   getStaticTerminalSize,
   type TerminalSize,
 } from './useTerminalSize';
+
+export { useTerminalTitle } from './useTerminalTitle';

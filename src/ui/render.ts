@@ -157,14 +157,20 @@ export async function renderInteractive(
 
   // Signal handlers with proper exit codes and cleanup
   // Exit codes: 130 = 128 + SIGINT(2), 143 = 128 + SIGTERM(15)
+  // Uses process.exitCode instead of process.exit() to allow async cleanup
   const handleSigint = () => {
     if (!isCleanedUp) {
       isCleanedUp = true;
       instance.unmount();
     }
-    // Invoke callback for abort/cancel logic before exit
+    // Invoke callback for abort/cancel logic
     onSignal?.('SIGINT');
-    process.exit(130);
+    // Set exit code and schedule graceful shutdown
+    // This allows pending async operations to complete
+    process.exitCode = 130;
+    setImmediate(() => {
+      process.exit();
+    });
   };
 
   const handleSigterm = () => {
@@ -172,9 +178,13 @@ export async function renderInteractive(
       isCleanedUp = true;
       instance.unmount();
     }
-    // Invoke callback for abort/cancel logic before exit
+    // Invoke callback for abort/cancel logic
     onSignal?.('SIGTERM');
-    process.exit(143);
+    // Set exit code and schedule graceful shutdown
+    process.exitCode = 143;
+    setImmediate(() => {
+      process.exit();
+    });
   };
 
   process.once('SIGINT', handleSigint);
