@@ -1,9 +1,8 @@
-import { vi } from 'vitest';
-
 import chalk from 'chalk';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { checkNodeVersion } from '../src/checkNodeVersion';
-import { ENGINES } from '../src/version';
 import logger from '../src/logger';
+import { ENGINES } from '../src/version';
 
 vi.mock('../src/logger', () => ({
   default: {

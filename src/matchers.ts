@@ -1,16 +1,19 @@
 import * as fs from 'fs';
 import path from 'path';
 
+import { serializeContext } from './assertions/contextUtils';
 import { loadFromJavaScriptFile } from './assertions/utils';
 import cliState from './cliState';
 import { getEnvBool, getEnvString } from './envars';
 import logger from './logger';
+import { DEFAULT_WEB_SEARCH_PROMPT } from './prompts/grading';
 import {
   ANSWER_RELEVANCY_GENERATE,
   CONTEXT_FAITHFULNESS_LONGFORM,
   CONTEXT_FAITHFULNESS_NLI_STATEMENTS,
   CONTEXT_RECALL,
   CONTEXT_RECALL_ATTRIBUTED_TOKEN,
+  CONTEXT_RECALL_NOT_ATTRIBUTED_TOKEN,
   CONTEXT_RELEVANCE,
   CONTEXT_RELEVANCE_BAD,
   DEFAULT_GRADING_PROMPT,
@@ -20,20 +23,18 @@ import {
   PROMPTFOO_FACTUALITY_PROMPT,
   SELECT_BEST_PROMPT,
 } from './prompts/index';
-import { loadApiProvider } from './providers/index';
 import { getDefaultProviders } from './providers/defaults';
+import { loadApiProvider } from './providers/index';
 import { hasWebSearchCapability, loadWebSearchProvider } from './providers/webSearchUtils';
-import { DEFAULT_WEB_SEARCH_PROMPT } from './prompts/grading';
 import { LLAMA_GUARD_REPLICATE_PROVIDER } from './redteam/constants';
 import { shouldGenerateRemote } from './redteam/remoteGeneration';
 import { doRemoteGrading } from './remoteGrading';
 import { doRemoteScoringWithPi } from './remoteScoring';
 import { getNunjucksEngineForFilePath, maybeLoadFromExternalFile } from './util/file';
-import { parseFileUrl } from './util/functions/loadFunction';
 import { isJavascriptFile } from './util/fileExtensions';
+import { parseFileUrl } from './util/functions/loadFunction';
 import invariant from './util/invariant';
 import { extractFirstJsonObject, extractJsonObjects } from './util/json';
-import { serializeContext } from './assertions/contextUtils';
 import { getNunjucksEngine } from './util/templates';
 import { accumulateTokenUsage } from './util/tokenUsageUtils';
 
@@ -99,7 +100,7 @@ function euclideanDistance(vecA: number[], vecB: number[]): number {
  * override. This ensures originalProvider from context is preserved while
  * allowing this call to specify its own prompt metadata.
  */
-function callProviderWithContext(
+export function callProviderWithContext(
   provider: ApiProvider,
   prompt: string,
   label: string,
@@ -737,6 +738,9 @@ export async function matchesLlmRubric(
         rejectedPrediction: 0,
       },
     },
+    metadata: {
+      renderedGradingPrompt: prompt,
+    },
   };
 }
 
@@ -1274,12 +1278,23 @@ export async function matchesContextRecall(
   }
 
   invariant(typeof resp.output === 'string', 'context-recall produced malformed response');
-  const sentences = splitIntoSentences(resp.output);
+
+  // Filter to only include lines that contain attribution markers.
+  // This handles cases where LLMs add preamble text before the classification list.
+  // See: https://github.com/promptfoo/promptfoo/issues/1506
+  const attributedTokenLower = CONTEXT_RECALL_ATTRIBUTED_TOKEN.toLowerCase();
+  const notAttributedTokenLower = CONTEXT_RECALL_NOT_ATTRIBUTED_TOKEN.toLowerCase();
+  const sentences = splitIntoSentences(resp.output).filter((line) => {
+    const lowerLine = line.toLowerCase();
+    return lowerLine.includes(attributedTokenLower) || lowerLine.includes(notAttributedTokenLower);
+  });
+
   const sentenceAttributions: { sentence: string; attributed: boolean }[] = [];
   let numerator = 0;
 
   for (const sentence of sentences) {
-    const isAttributed = sentence.includes(CONTEXT_RECALL_ATTRIBUTED_TOKEN);
+    // Case-insensitive check for attribution - handles [ATTRIBUTED], [Attributed], etc.
+    const isAttributed = sentence.toLowerCase().includes(attributedTokenLower);
     if (isAttributed) {
       numerator++;
     }
@@ -1742,6 +1757,7 @@ export async function matchesSearchRubric(
   vars?: Record<string, string | object>,
   assertion?: Assertion,
   _provider?: ApiProvider,
+  providerCallContext?: CallApiContextParams,
 ): Promise<GradingResult> {
   if (!grading) {
     throw new Error(
@@ -1786,7 +1802,13 @@ export async function matchesSearchRubric(
   });
 
   // Get the evaluation from the search provider
-  const resp = await searchProvider.callApi(prompt);
+  const resp = await callProviderWithContext(
+    searchProvider,
+    prompt,
+    'search-rubric',
+    { output: tryParse(llmOutput), rubric, ...(vars || {}) },
+    providerCallContext,
+  );
 
   if (resp.error || !resp.output) {
     return {

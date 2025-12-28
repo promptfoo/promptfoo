@@ -1,10 +1,10 @@
+import * as ReactDOM from 'react-dom/client';
+
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import type { AssertionType, GradingResult } from '@promptfoo/types';
-import * as ReactDOM from 'react-dom/client';
-import { v4 as uuidv4 } from 'uuid';
 
 // Mock the Citations component to verify it receives the correct props
 vi.mock('./Citations', () => ({
@@ -900,7 +900,7 @@ describe('EvalOutputPromptDialog cloud config', () => {
       cloudConfig: customCloudConfig,
       metadata: {
         policyName: 'Test Policy',
-        policyId: uuidv4(),
+        policyId: crypto.randomUUID(),
       },
     };
 
@@ -1146,5 +1146,38 @@ describe('EvalOutputPromptDialog traces tab visibility', () => {
       expect(screen.getByRole('tab', { name: 'Prompt & Output' })).toBeInTheDocument();
     });
     expect(screen.queryByRole('tab', { name: 'Traces' })).not.toBeInTheDocument();
+  });
+
+  describe('object content handling (issue #768)', () => {
+    it('safely renders prompt when passed as object instead of string', async () => {
+      // This tests the fix for GitHub issue #768 where custom providers
+      // return objects for output/prompt causing React Error #31
+      const propsWithObjectPrompt = {
+        ...defaultProps,
+        // Simulate object being passed where string is expected (runtime type mismatch)
+        prompt: { statement: 'test statement', reason: 'test reason', verdict: 'pass' } as any,
+      };
+
+      // Should not throw React Error #31
+      expect(() => render(<EvalOutputPromptDialog {...propsWithObjectPrompt} />)).not.toThrow();
+
+      await waitFor(() => {
+        // Object should be serialized to JSON string
+        expect(screen.getByText(/test statement/)).toBeInTheDocument();
+      });
+    });
+
+    it('safely renders output when passed as object instead of string', async () => {
+      const propsWithObjectOutput = {
+        ...defaultProps,
+        output: { statement: 'output statement', reason: 'output reason', verdict: 'fail' } as any,
+      };
+
+      expect(() => render(<EvalOutputPromptDialog {...propsWithObjectOutput} />)).not.toThrow();
+
+      await waitFor(() => {
+        expect(screen.getByText(/output statement/)).toBeInTheDocument();
+      });
+    });
   });
 });

@@ -5,9 +5,15 @@ import cliState from '../../cliState';
 import { getEnvString } from '../../envars';
 import { importModule } from '../../esm';
 import logger from '../../logger';
-import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util/index';
+import {
+  type GenAISpanContext,
+  type GenAISpanResult,
+  withGenAISpan,
+} from '../../tracing/genaiTracer';
+import { fetchWithProxy } from '../../util/fetch/index';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { isJavascriptFile } from '../../util/fileExtensions';
+import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util/index';
 import { isValidJson } from '../../util/json';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToGoogle } from '../mcp/transform';
@@ -23,6 +29,7 @@ import {
   resolveProjectId,
 } from './util';
 
+import type { EnvOverrides } from '../../types/env';
 import type {
   ApiEmbeddingProvider,
   ApiProvider,
@@ -32,7 +39,6 @@ import type {
   ProviderResponse,
   TokenUsage,
 } from '../../types/index';
-import type { EnvOverrides } from '../../types/env';
 import type { ClaudeRequest, ClaudeResponse, CompletionOptions } from './types';
 import type {
   GeminiApiResponse,
@@ -44,6 +50,19 @@ import type {
 
 // Type for Google API errors - using 'any' to avoid gaxios dependency
 type GaxiosError = any;
+
+function getVertexApiHost(
+  region: string,
+  configApiHost?: string,
+  envOverrides?: EnvOverrides,
+): string {
+  return (
+    configApiHost ||
+    envOverrides?.VERTEX_API_HOST ||
+    getEnvString('VERTEX_API_HOST') ||
+    (region === 'global' ? 'aiplatform.googleapis.com' : `${region}-aiplatform.googleapis.com`)
+  );
+}
 
 class VertexGenericProvider implements ApiProvider {
   modelName: string;
@@ -70,13 +89,8 @@ class VertexGenericProvider implements ApiProvider {
     return `[Google Vertex Provider ${this.modelName}]`;
   }
 
-  getApiHost(): string | undefined {
-    return (
-      this.config.apiHost ||
-      this.env?.VERTEX_API_HOST ||
-      getEnvString('VERTEX_API_HOST') ||
-      `${this.getRegion()}-aiplatform.googleapis.com`
-    );
+  getApiHost(): string {
+    return getVertexApiHost(this.getRegion(), this.config.apiHost, this.env);
   }
 
   async getProjectId(): Promise<string> {
@@ -84,12 +98,13 @@ class VertexGenericProvider implements ApiProvider {
   }
 
   getApiKey(): string | undefined {
+    // For Vertex provider, prioritize VERTEX_API_KEY over GEMINI_API_KEY
     return (
       this.config.apiKey ||
-      this.env?.GEMINI_API_KEY ||
       this.env?.VERTEX_API_KEY ||
-      getEnvString('GEMINI_API_KEY') ||
-      getEnvString('VERTEX_API_KEY')
+      this.env?.GEMINI_API_KEY ||
+      getEnvString('VERTEX_API_KEY') ||
+      getEnvString('GEMINI_API_KEY')
     );
   }
 
@@ -156,6 +171,53 @@ export class VertexChatProvider extends VertexGenericProvider {
   }
 
   async callApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
+    // Determine the system based on model name
+    let system = 'vertex';
+    if (this.modelName.includes('claude')) {
+      system = 'vertex:anthropic';
+    } else if (this.modelName.includes('gemini')) {
+      system = 'vertex:gemini';
+    } else if (this.modelName.includes('llama')) {
+      system = 'vertex:llama';
+    } else {
+      system = 'vertex:palm2';
+    }
+
+    // Set up tracing context
+    const spanContext: GenAISpanContext = {
+      system,
+      operationName: 'chat',
+      model: this.modelName,
+      providerId: this.id(),
+      temperature: this.config.temperature,
+      topP: this.config.topP,
+      maxTokens: this.config.maxOutputTokens || this.config.max_tokens,
+      testIndex: context?.test?.vars?.__testIdx as number | undefined,
+      promptLabel: context?.prompt?.label,
+      // W3C Trace Context for linking to evaluation trace
+      traceparent: context?.traceparent,
+    };
+
+    // Result extractor to set response attributes on the span
+    const resultExtractor = (response: ProviderResponse): GenAISpanResult => {
+      const result: GenAISpanResult = {};
+      if (response.tokenUsage) {
+        result.tokenUsage = {
+          prompt: response.tokenUsage.prompt,
+          completion: response.tokenUsage.completion,
+          total: response.tokenUsage.total,
+        };
+      }
+      return result;
+    };
+
+    return withGenAISpan(spanContext, () => this.callApiInternal(prompt, context), resultExtractor);
+  }
+
+  private async callApiInternal(
+    prompt: string,
+    context?: CallApiContextParams,
+  ): Promise<ProviderResponse> {
     if (this.modelName.includes('claude')) {
       return this.callClaudeApi(prompt, context);
     } else if (this.modelName.includes('gemini')) {
@@ -260,6 +322,7 @@ export class VertexChatProvider extends VertexGenericProvider {
         total: data.usage.input_tokens + data.usage.output_tokens || 0,
         prompt: data.usage.input_tokens || 0,
         completion: data.usage.output_tokens || 0,
+        numRequests: 1,
       };
 
       const response = {
@@ -278,6 +341,29 @@ export class VertexChatProvider extends VertexGenericProvider {
         error: `Claude API response error: ${String(err)}. Response data: ${JSON.stringify(data)}`,
       };
     }
+  }
+
+  /**
+   * Check if express mode should be used (API key without OAuth)
+   * Express mode uses a simplified endpoint format without project/location.
+   *
+   * Express mode is AUTOMATIC when:
+   * 1. API key is available (VERTEX_API_KEY or GEMINI_API_KEY), AND
+   * 2. No explicit projectId in config, AND
+   * 3. No explicit credentials in config, AND
+   * 4. User hasn't explicitly disabled it (expressMode !== false)
+   *
+   * This mirrors how AWS Bedrock handles authentication - automatic detection
+   * of the simplest auth method available.
+   */
+  private isExpressMode(): boolean {
+    const hasApiKey = Boolean(this.getApiKey());
+    const hasExplicitProjectId = Boolean(this.config.projectId);
+    const hasExplicitCredentials = Boolean(this.config.credentials);
+    const explicitlyDisabled = this.config.expressMode === false;
+
+    // Express mode is automatic when API key is available and no explicit OAuth config
+    return hasApiKey && !hasExplicitProjectId && !hasExplicitCredentials && !explicitlyDisabled;
   }
 
   async callGeminiApi(prompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
@@ -387,18 +473,51 @@ export class VertexChatProvider extends VertexGenericProvider {
     if (response === undefined) {
       let data;
       try {
-        const client = await this.getClientWithCredentials();
-        const projectId = await this.getProjectId();
-        const url = `https://${this.getApiHost()}/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/${this.getPublisher()}/models/${
-          this.modelName
-        }:streamGenerateContent`;
-        const res = await client.request({
-          url,
-          method: 'POST',
-          data: body,
-          timeout: REQUEST_TIMEOUT_MS,
-        });
-        data = res.data as GeminiApiResponse;
+        // Default to non-streaming (generateContent) since:
+        // 1. Model Armor floor settings only work with non-streaming endpoint
+        // 2. Promptfoo collects full responses for evaluation anyway
+        // Set streaming: true to use streamGenerateContent if needed
+        const endpoint = config.streaming === true ? 'streamGenerateContent' : 'generateContent';
+
+        // Check if we should use express mode (API key without OAuth)
+        if (this.isExpressMode()) {
+          // Express mode: use simplified endpoint with API key
+          const apiKey = this.getApiKey();
+          const url = `https://aiplatform.googleapis.com/${this.getApiVersion()}/publishers/${this.getPublisher()}/models/${this.modelName}:${endpoint}?key=${apiKey}`;
+
+          const res = await fetchWithProxy(url, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(body),
+            signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+          });
+
+          if (!res.ok) {
+            const errorData = await res.json().catch(() => null);
+            logger.debug(`Gemini API express mode error:\n${JSON.stringify(errorData)}`);
+            return {
+              error: `API call error: ${res.status} ${res.statusText}${errorData ? `: ${JSON.stringify(errorData)}` : ''}`,
+            };
+          }
+
+          data = (await res.json()) as GeminiApiResponse;
+        } else {
+          // Standard mode: use OAuth and full endpoint
+          const client = await this.getClientWithCredentials();
+          const projectId = await this.getProjectId();
+          const url = `https://${this.getApiHost()}/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/${this.getPublisher()}/models/${
+            this.modelName
+          }:${endpoint}`;
+          const res = await client.request({
+            url,
+            method: 'POST',
+            data: body,
+            timeout: REQUEST_TIMEOUT_MS,
+          });
+          data = res.data as GeminiApiResponse;
+        }
       } catch (err) {
         const geminiError = err as GaxiosError;
         if (
@@ -411,7 +530,7 @@ export class VertexChatProvider extends VertexGenericProvider {
           const code = errorDetails.code;
           const message = errorDetails.message;
           const status = errorDetails.status;
-          logger.debug(`Gemini API error:\n${JSON.stringify(errorDetails)}`);
+          logger.error(`Gemini API error:\n${JSON.stringify(errorDetails)}`);
           return {
             error: `API call error: Status ${status}, Code ${code}, Message:\n\n${message}`,
           };
@@ -423,14 +542,17 @@ export class VertexChatProvider extends VertexGenericProvider {
       }
 
       try {
-        const dataWithError = data as GeminiErrorResponse[];
+        // Normalize response: non-streaming returns single object, streaming returns array
+        const normalizedData = Array.isArray(data) ? data : [data];
+
+        const dataWithError = normalizedData as GeminiErrorResponse[];
         const error = dataWithError[0]?.error;
         if (error) {
           return {
             error: `Error ${error.code}: ${error.message}`,
           };
         }
-        const dataWithResponse = data as GeminiResponseData[];
+        const dataWithResponse = normalizedData as GeminiResponseData[];
         let output;
         for (const datum of dataWithResponse) {
           // Check for blockReason first (before getCandidate) since blocked responses have no candidates
@@ -455,26 +577,13 @@ export class VertexChatProvider extends VertexGenericProvider {
               reason: blockReasonMessage,
             };
 
-            if (cliState.config?.redteam) {
-              // Refusals are not errors during redteams, they're actually successes.
-              return {
-                output: blockReasonMessage,
-                tokenUsage,
-                guardrails,
-                metadata: {
-                  modelArmor: isModelArmor
-                    ? {
-                        blockReason: datum.promptFeedback.blockReason,
-                        ...(datum.promptFeedback.blockReasonMessage && {
-                          blockReasonMessage: datum.promptFeedback.blockReasonMessage,
-                        }),
-                      }
-                    : undefined,
-                },
-              };
-            }
+            // Return as output (not error) so guardrails assertions can evaluate the block:
+            // - In redteam mode: refusals are successes (model correctly refused harmful content)
+            // - In non-redteam mode: allows guardrails/not-guardrails assertions to run
+            // The guardrails object (flagged=true) indicates the block, metadata has details
             return {
-              error: blockReasonMessage,
+              output: blockReasonMessage,
+              tokenUsage,
               guardrails,
               metadata: {
                 modelArmor: isModelArmor
@@ -490,8 +599,16 @@ export class VertexChatProvider extends VertexGenericProvider {
           }
 
           const candidate = getCandidate(datum);
-          if (candidate.finishReason && candidate.finishReason === 'SAFETY') {
-            const finishReason = 'Content was blocked due to safety settings.';
+          const safetyFinishReasons = [
+            'SAFETY',
+            'PROHIBITED_CONTENT',
+            'RECITATION',
+            'BLOCKLIST',
+            'SPII',
+            'IMAGE_SAFETY',
+          ];
+          if (candidate.finishReason && safetyFinishReasons.includes(candidate.finishReason)) {
+            const finishReason = `Content was blocked due to safety settings with finish reason: ${candidate.finishReason}.`;
             const tokenUsage = {
               total: datum.usageMetadata?.totalTokenCount || 0,
               prompt: datum.usageMetadata?.promptTokenCount || 0,
@@ -509,7 +626,20 @@ export class VertexChatProvider extends VertexGenericProvider {
               return { output: finishReason, tokenUsage, guardrails };
             }
             return { error: finishReason, guardrails };
+          } else if (candidate.finishReason && candidate.finishReason === 'MAX_TOKENS') {
+            // MAX_TOKENS is treated as a successful completion with the generated output
+            if (candidate.content?.parts) {
+              output = mergeParts(output, formatCandidateContents(candidate));
+            }
+            const outputTokens = datum.usageMetadata?.candidatesTokenCount || 0;
+            logger.debug(`Gemini API: MAX_TOKENS reached`, {
+              finishReason: candidate.finishReason,
+              outputTokens,
+              totalTokens: datum.usageMetadata?.totalTokenCount || 0,
+            });
+            // Continue processing - do not return error
           } else if (candidate.finishReason && candidate.finishReason !== 'STOP') {
+            logger.error(`Gemini API error due to finish reason: ${candidate.finishReason}.`);
             // e.g. MALFORMED_FUNCTION_CALL
             return {
               error: `Finish reason ${candidate.finishReason}: ${JSON.stringify(data)}`,
@@ -851,6 +981,7 @@ export class VertexChatProvider extends VertexGenericProvider {
         total: data.usage?.total_tokens || 0,
         prompt: data.usage?.prompt_tokens || 0,
         completion: data.usage?.completion_tokens || 0,
+        numRequests: 1,
       };
 
       const response = {
@@ -1009,6 +1140,10 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
     return this.config.apiVersion || 'v1';
   }
 
+  getApiHost(): string {
+    return getVertexApiHost(this.getRegion(), this.config.apiHost, this.env);
+  }
+
   async getProjectId(): Promise<string> {
     return await resolveProjectId(this.config, this.env);
   }
@@ -1030,7 +1165,7 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
     try {
       const client = await this.getClientWithCredentials();
       const projectId = await this.getProjectId();
-      const url = `https://${this.getRegion()}-aiplatform.googleapis.com/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/google/models/${
+      const url = `https://${this.getApiHost()}/${this.getApiVersion()}/projects/${projectId}/locations/${this.getRegion()}/publishers/google/models/${
         this.modelName
       }:predict`;
       const res = await client.request<any>({
@@ -1053,6 +1188,7 @@ export class VertexEmbeddingProvider implements ApiEmbeddingProvider {
         embedding,
         tokenUsage: {
           total: tokenCount,
+          numRequests: 1,
         },
       };
     } catch (err) {

@@ -1,5 +1,4 @@
-import { vi } from 'vitest';
-
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as cache from '../src/cache';
 import { evaluate as doEvaluate } from '../src/evaluator';
 import * as index from '../src/index';
@@ -7,8 +6,8 @@ import { evaluate } from '../src/index';
 import Eval from '../src/models/eval';
 import { readProviderPromptMap } from '../src/prompts/index';
 import * as providers from '../src/providers/index';
-import { writeMultipleOutputs, writeOutput } from '../src/util/index';
 import * as fileUtils from '../src/util/file';
+import { writeMultipleOutputs, writeOutput } from '../src/util/index';
 
 vi.mock('../src/cache');
 vi.mock('../src/database', () => ({
@@ -86,7 +85,9 @@ describe('index.ts exports', () => {
   ];
 
   const expectedSchemaExports = [
+    'AssertionOrSetSchema',
     'AssertionSchema',
+    'AssertionSetSchema',
     'AssertionTypeSchema',
     'AtomicTestCaseSchema',
     'BaseAssertionTypesSchema',

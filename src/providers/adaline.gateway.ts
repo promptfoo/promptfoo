@@ -41,6 +41,7 @@ import type {
   ToolType as GatewayToolType,
 } from '@adaline/types';
 
+import type { EnvOverrides } from '../types/env';
 import type {
   ApiProvider,
   CallApiContextParams,
@@ -50,7 +51,6 @@ import type {
   ProviderResponse,
   TokenUsage,
 } from '../types/index';
-import type { EnvOverrides } from '../types/env';
 import type { OpenAiCompletionOptions } from './openai/types';
 
 // Allows Adaline Gateway to R/W Promptfoo's cache
@@ -269,6 +269,7 @@ export class AdalineGatewayEmbeddingProvider extends AdalineGatewayGenericProvid
         tokenUsage: {
           total: response.response.usage?.totalTokens,
           cached: response.cached ? response.response.usage?.totalTokens : 0,
+          numRequests: 1,
         },
       };
     } catch (error) {
@@ -698,7 +699,7 @@ export class AdalineGatewayChatProvider extends AdalineGatewayGenericProvider {
       }
 
       const logProbs = response.response.logProbs?.map((logProb: any) => logProb.logProb);
-      const tokenUsage: TokenUsage = {};
+      const tokenUsage: TokenUsage = { numRequests: 1 };
       if (response.cached) {
         tokenUsage.cached = response.response.usage?.totalTokens;
         tokenUsage.total = response.response.usage?.totalTokens;

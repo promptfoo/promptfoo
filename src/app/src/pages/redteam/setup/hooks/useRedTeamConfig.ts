@@ -275,13 +275,7 @@ export const useRedTeamConfig = create<RedTeamConfigState>()(
         })),
       updatePlugins: (plugins) =>
         set((state) => {
-          const stringifiedCurrentPlugins = JSON.stringify(state.config.plugins);
-          const stringifiedNewPlugins = JSON.stringify(plugins);
-
-          if (stringifiedCurrentPlugins === stringifiedNewPlugins) {
-            return state;
-          }
-
+          // First compute the merged plugins
           const newPlugins = plugins.map((plugin) => {
             if (typeof plugin === 'string' || !plugin.config) {
               return plugin;
@@ -304,6 +298,13 @@ export const useRedTeamConfig = create<RedTeamConfigState>()(
 
             return plugin;
           });
+
+          // Compare OUTPUT vs current state (not input vs state)
+          // This prevents infinite loops when merge logic preserves extra properties
+          // that weren't in the input but existed in the current state
+          if (JSON.stringify(newPlugins) === JSON.stringify(state.config.plugins)) {
+            return state;
+          }
 
           return {
             config: {

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Strategy } from '../../../src/redteam/strategies/types';
 import { applyRuntimeTransforms } from '../../../src/redteam/shared/runtimeTransform';
+
+import type { Strategy } from '../../../src/redteam/strategies/types';
 import type { TestCaseWithPlugin } from '../../../src/types';
 
 describe('runtimeTransform', () => {
@@ -217,7 +218,7 @@ describe('runtimeTransform', () => {
     });
 
     it('should handle different inject variable names', async () => {
-      const result = await applyRuntimeTransforms('test', 'query', ['base64'], mockStrategies);
+      await applyRuntimeTransforms('test', 'query', ['base64'], mockStrategies);
 
       // The strategy should receive the correct inject var name
       expect(mockBase64Strategy.action).toHaveBeenCalledWith(

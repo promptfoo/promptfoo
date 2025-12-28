@@ -1,5 +1,4 @@
-import { vi } from 'vitest';
-
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getAuthor, getUserEmail, setUserEmail } from '../src/globalConfig/accounts';
 import { readGlobalConfig, writeGlobalConfigPartial } from '../src/globalConfig/globalConfig';
 

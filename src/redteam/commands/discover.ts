@@ -11,8 +11,8 @@ import { renderPrompt } from '../../evaluatorHelpers';
 import { getUserEmail } from '../../globalConfig/accounts';
 import { cloudConfig } from '../../globalConfig/cloud';
 import logger from '../../logger';
-import { loadApiProvider, loadApiProviders } from '../../providers/index';
 import { HttpProvider } from '../../providers/http';
+import { loadApiProvider, loadApiProviders } from '../../providers/index';
 import telemetry from '../../telemetry';
 import { getProviderFromCloud } from '../../util/cloud';
 import { readConfig } from '../../util/config/load';
@@ -320,9 +320,6 @@ export function discoverCommand(
       }
 
       // Record telemetry:
-      telemetry.record('command_used', {
-        name: `redteam ${COMMAND}`,
-      });
       telemetry.record('redteam discover', {});
 
       let config: UnifiedConfig | null = null;

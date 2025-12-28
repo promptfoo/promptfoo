@@ -89,7 +89,7 @@ describe('CloudflareAi Provider', () => {
     total: 50,
     prompt: 25,
     completion: 25,
-    cached: undefined,
+    numRequests: 1,
   };
 
   describe('CloudflareAiChatCompletionProvider', () => {
@@ -629,7 +629,7 @@ describe('CloudflareAi Provider', () => {
         total: 50,
         prompt: 25,
         completion: 0,
-        cached: undefined,
+        numRequests: 1,
       });
     });
 

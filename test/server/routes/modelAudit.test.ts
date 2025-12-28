@@ -1,5 +1,8 @@
 import { spawn } from 'child_process';
 import fs from 'fs';
+import os from 'os';
+import path from 'path';
+
 import request from 'supertest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../../../src/server/server';
@@ -22,6 +25,10 @@ describe('Model Audit Routes', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    // Reset mock implementations to ensure test isolation when tests run in random order.
+    // vi.clearAllMocks() only clears call history, not mockResolvedValue/mockReturnValue.
+    mockedCheckModelAuditInstalled.mockReset();
+    mockedSpawn.mockReset();
     app = createApp();
   });
 
@@ -31,7 +38,7 @@ describe('Model Audit Routes', () => {
       mockedCheckModelAuditInstalled.mockResolvedValue({ installed: true, version: '0.2.20' });
 
       // Create a temporary test file
-      const testFilePath = '/tmp/test-model-audit-scan.pkl';
+      const testFilePath = path.join(os.tmpdir(), 'test-model-audit-scan.pkl');
       fs.writeFileSync(testFilePath, 'test data');
 
       const mockScanOutput = JSON.stringify({
@@ -70,7 +77,7 @@ describe('Model Audit Routes', () => {
     it('should handle request with empty options object', async () => {
       mockedCheckModelAuditInstalled.mockResolvedValue({ installed: true, version: '0.2.20' });
 
-      const testFilePath = '/tmp/test-model-audit-scan-2.pkl';
+      const testFilePath = path.join(os.tmpdir(), 'test-model-audit-scan-2.pkl');
       fs.writeFileSync(testFilePath, 'test data');
 
       const mockScanOutput = JSON.stringify({
@@ -120,7 +127,7 @@ describe('Model Audit Routes', () => {
     it('should return 400 when modelaudit is not installed', async () => {
       mockedCheckModelAuditInstalled.mockResolvedValue({ installed: false, version: null });
 
-      const testFilePath = '/tmp/test-model-audit-not-installed.pkl';
+      const testFilePath = path.join(os.tmpdir(), 'test-model-audit-not-installed.pkl');
       fs.writeFileSync(testFilePath, 'test data');
 
       const response = await request(app)

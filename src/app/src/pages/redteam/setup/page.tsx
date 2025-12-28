@@ -53,8 +53,9 @@ import type { RedteamStrategy } from '@promptfoo/types';
 
 import './page.css';
 
+import { NAVBAR_HEIGHT, SIDEBAR_WIDTH } from './constants';
+
 import type { Config, RedteamUITarget } from './types';
-import { SIDEBAR_WIDTH, NAVBAR_HEIGHT } from './constants';
 
 // Re-export for backward compatibility
 export { SIDEBAR_WIDTH };

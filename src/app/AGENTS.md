@@ -1,227 +1,273 @@
 # Frontend Application
 
-**What this is:** React-based web UI (Vite + TypeScript + MUI). Separate workspace from main codebase.
+React-based web UI using Vite + TypeScript. Separate workspace from main codebase.
 
-## CRITICAL: API Calls
+**IMPORTANT: Active Migration** - We are migrating from MUI to Promptfoo's Design system + Radix UI. See `MIGRATION.md` for the full plan.
+
+## CRITICAL: Use callApi()
 
 **NEVER use `fetch()` directly. ALWAYS use `callApi()`:**
 
 ```typescript
 import { callApi } from '@app/utils/api';
-
-// Correct - Handles dev/prod API URLs
 const data = await callApi('/traces/evaluation/123');
-
-// Wrong - Will fail in development
-const data = await fetch('/api/traces/evaluation/123');
 ```
 
-**Why:** `callApi` handles API base URL differences between dev (proxy to localhost:3000) and production.
+This handles API base URL differences between dev and production.
 
 ## Tech Stack
 
-- **React 18** + **TypeScript** + **Vite** (not Next.js, not CRA)
-- **Vitest** for testing (same as main codebase)
-- **MUI (Material-UI)** - Component library
-- **Zustand** - State management (not Redux)
-- **React Router v7** - Routing
-- **Socket.io Client** - Real-time updates
+**Current (in migration):**
 
-## Design Principles
+- **React 19** + TypeScript + Vite
+- **MUI v7** (Material-UI) - legacy, being phased out
+- **Promptfoo's Design system + Radix UI** - new component library
+- **Tailwind CSS** - styling
+- **Vitest** for testing
+- Zustand for state management
+- React Router v7
 
-- Focus on atomic design, building components with reusability and composability
-- Keep components small when possible
-- Break out repeated patterns into reusable components
-- **Reusability**: Design small, composable parts with clear boundaries and APIs
-- **Consistency**: Use design tokens (color, spacing, type) and shared patterns
-- **Single responsibility**: Each component does one thing well
-- **Composition over inheritance**: Build complex UIs by assembling simpler pieces
-- Use icons from @mui/icons-material
+**Target Stack:**
+
+- React 19 + TypeScript + Vite
+- Promptfoo's Design system + Radix UI primitives
+- Tailwind CSS for styling
+- Lucide React for icons
+
+## Modern React 19 Patterns
+
+Use modern React 19 patterns throughout:
+
+- **`use()` hook** for reading promises and context
+- **Actions** with `useActionState` and `useFormStatus` for form handling
+- **`useOptimistic`** for optimistic UI updates
+- **Refs as props** - no need for `forwardRef` in most cases
+- **Async transitions** with `useTransition` for non-blocking updates
+
+Avoid legacy patterns like class components, legacy context, or string refs.
+
+## Component Guidelines (Migration in Progress)
+
+### For NEW Code: Use shadcn/Radix
+
+```typescript
+// New components - use Promptfoo's Design system from components/ui/
+import { Button } from '@app/components/ui/button';
+import { Dialog, DialogContent, DialogHeader } from '@app/components/ui/dialog';
+import { Input } from '@app/components/ui/input';
+
+// Icons - use Lucide
+import { Check, X, ChevronDown } from 'lucide-react';
+
+// Styling - use Tailwind + cn()
+import { cn } from '@app/lib/utils';
+<Button className={cn('w-full', isActive && 'bg-primary')}>Click</Button>
+```
+
+### For EXISTING Code: MUI (Legacy)
+
+When modifying existing MUI components, fix bugs in place. Only migrate when doing significant refactors.
+
+```typescript
+// Legacy imports - prefix clearly when mixing
+import { Button as MuiButton } from '@mui/material';
+```
+
+### Styling Approach
+
+**New code:** Tailwind CSS classes + `cn()` utility
+
+```tsx
+<div className="flex items-center gap-2 p-4 rounded-lg border">
+  <span className="text-sm text-muted-foreground">Label</span>
+</div>
+```
+
+**Legacy code:** MUI `sx` prop or `styled()`
+
+```tsx
+// Don't add new styled() components - use Tailwind instead
+```
+
+### Design Tokens
+
+Use CSS variables via Tailwind:
+
+```tsx
+// Colors
+className = 'text-primary bg-background border-border';
+className = 'text-destructive bg-destructive/10';
+
+// Severity (custom)
+className = 'text-severity-critical';
+className = 'bg-severity-high/20';
+
+// Spacing - use Tailwind scale
+className = 'p-4 gap-2 m-6';
+```
 
 ## Directory Structure
 
-```
+```plaintext
 src/app/src/
-├── components/    # Reusable UI components
-├── pages/        # Route pages
-├── hooks/        # Custom React hooks
-├── store/        # Zustand state stores
-├── contexts/     # React contexts
-└── utils/        # Including the critical api.ts
+├── components/
+│   ├── ui/            # NEW: shadcn/Radix primitives
+│   │   ├── button.tsx
+│   │   ├── dialog.tsx
+│   │   ├── input.tsx
+│   │   └── ...
+│   ├── legacy/        # MUI components (being migrated)
+│   └── ...            # Feature components
+├── pages/             # Route pages
+├── hooks/             # Custom React hooks
+├── store/             # Zustand stores
+├── lib/               # Utilities (cn, etc.)
+├── styles/            # Global styles, tokens
+└── utils/             # Including api.ts
 ```
 
 ## Development
 
 ```bash
-npm run dev:app    # From root
-npm run dev        # From src/app/
+npm run dev:app    # From root, runs on localhost:5173
 ```
 
-Runs on `http://localhost:5173` (Vite default).
-
-## Testing
-
-### Running Tests
+## Testing with Vitest
 
 ```bash
-# From src/app/
-npm run test       # Run all tests
-
-# From project root
-npm run test:app
-
-# Run specific test file
-npm run test -- src/components/JsonTextField.test.tsx
-
-# Run with coverage
-npm run test -- --coverage
+npm run test       # From src/app/
+npm run test:app   # From project root
 ```
 
-**Note:** Both frontend and backend tests use **Vitest**.
+See `src/app/src/hooks/usePageMeta.test.ts` for patterns. Use `vi.fn()` for mocks, `vi.mock()` for modules.
 
-### Vitest Imports
+## Key Patterns
 
-**Import from vitest when you need mocking utilities:**
+- **Zustand stores**: See `src/app/src/store/` for patterns
+- **Custom hooks**: See `src/app/src/hooks/` for patterns
+- **New components**: Use `components/ui/` primitives, compose with Tailwind
+- **Icons**: Use Lucide React (new) or `@mui/icons-material` (legacy)
+- **Route constants**: Use `EVAL_ROUTES`, `REDTEAM_ROUTES`, `ROUTES` from `@app/constants/routes`
 
-```typescript
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+```tsx
+import { EVAL_ROUTES, ROUTES } from '@app/constants/routes';
+
+// Navigation
+<Link to={EVAL_ROUTES.DETAIL(evalId)}>View Eval</Link>
+<Link to={ROUTES.PROMPT_DETAIL(promptId)}>View Prompt</Link>
 ```
 
-**Note:** With `globals: true` in vitest config, `describe`, `it`, `expect`, etc. are available without imports. Only `vi` needs to be imported for mocking.
+## Design Principles
 
-### Writing Vitest Tests
+- **Small, composable primitives** - Single responsibility, compose together
+- **Design tokens over hardcoded values** - Use CSS variables via Tailwind
+- **Reuse before creating** - Check `components/ui/` first
+- **Prefer composition** - Build complex UI from simple primitives
+- **Accessibility first** - Radix primitives are accessible by default
 
-**Basic component test:**
+### Visual Design Rules
 
-```typescript
-import { render, screen, fireEvent } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
-import MyComponent from './MyComponent';
+**Borders (IMPORTANT):**
 
-describe('MyComponent', () => {
-  it('should render correctly', () => {
-    render(<MyComponent title="Test" />);
-    expect(screen.getByText('Test')).toBeInTheDocument();
-  });
+- **Never use harsh black borders** - they look dated and jarring
+- Use `border-border` for standard borders (soft blue-gray)
+- For dark mode, borders should be subtle (use opacity: `dark:border-gray-800/50`)
+- Consider `shadow-sm` or `ring-1 ring-black/5` instead of borders for elevation
+- Reserve `border-2` for focus/selected states only
 
-  it('should handle user interaction', async () => {
-    const onAction = vi.fn();
-    render(<MyComponent onAction={onAction} />);
+```tsx
+// Good
+className = 'border border-border'; // Soft, uses CSS variable
+className = 'rounded-lg shadow-sm'; // Borderless with shadow
+className = 'border border-red-200 dark:border-red-900/50'; // Severity with opacity
 
-    const button = screen.getByRole('button');
-    fireEvent.click(button);
-
-    expect(onAction).toHaveBeenCalledTimes(1);
-  });
-});
+// Bad
+className = 'border border-black'; // Never pure black
+className = 'border-2 border-gray-900'; // Too harsh
 ```
 
-**Mocking functions:**
+**Colors:**
 
-```typescript
-import { vi } from 'vitest';
+- Use opacity modifiers in dark mode: `dark:bg-red-950/30` not `dark:bg-red-900`
+- Severity colors: red (critical), amber (warning), blue (info), emerald (success)
+- Text on colored backgrounds: use `*-700` in light mode, `*-300` in dark mode
 
-// Mock a function
-const mockFn = vi.fn();
+### Component Composition Example
 
-// Mock a module
-vi.mock('@app/utils/api', () => ({
-  callApi: vi.fn().mockResolvedValue({ data: 'test' }),
-}));
-```
-
-## Common Patterns
-
-### Zustand State Management
-
-```typescript
-import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
-
-interface MyState {
-  value: string | null;
-  setValue: (value: string) => void;
+```tsx
+// Good - compose from primitives
+function ConfirmDialog({ title, onConfirm }) {
+  return (
+    <Dialog>
+      <DialogContent>
+        <DialogHeader>{title}</DialogHeader>
+        <DialogFooter>
+          <Button variant="outline">Cancel</Button>
+          <Button variant="destructive" onClick={onConfirm}>Confirm</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
 }
 
-export const useMyStore = create<MyState>()(
-  persist(
-    (set, get) => ({
-      value: null,
-      setValue: (value) => set({ value }),
-    }),
-    { name: 'my-store', skipHydration: true },
-  ),
-);
-
-// Access state outside components
-const currentValue = useMyStore.getState().value;
+// Bad - monolithic component with many props
+function ConfirmDialog({ title, cancelText, confirmText, variant, size, ... }) {
+  // Too many props, hard to maintain
+}
 ```
 
-### Custom Hooks Pattern
+## React Hooks: useMemo vs useCallback
+
+- **`useMemo`**: Use when computing a value (non-callable result)
+- **`useCallback`**: Use when creating a stable function reference
 
 ```typescript
-export const useMyHook = () => {
-  const context = useContext(MyContext);
-  if (context === undefined) {
-    throw new Error('useMyHook must be used within a MyProvider');
-  }
-  return context;
-};
+// Good - useMemo for computed values
+const tooltipMessage = useMemo(() => {
+  return apiStatus === 'blocked' ? 'Connection failed' : undefined;
+}, [apiStatus]);
+
+// Good - useCallback for functions with arguments
+const handleClick = useCallback((id: string) => {
+  console.log('Clicked:', id);
+}, []);
+
+// Bad - useCallback for computed values
+const getTooltipMessage = useCallback(() => {
+  return apiStatus === 'blocked' ? 'Connection failed' : undefined;
+}, [apiStatus]);
 ```
 
-### MUI Styled Components
+## Anti-Patterns
 
-```typescript
-import { styled } from '@mui/material/styles';
-import Box from '@mui/material/Box';
+**General:**
 
-const StyledBox = styled(Box)(({ theme }) => ({
-  padding: theme.spacing(2),
-  backgroundColor: theme.palette.background.paper,
-}));
-```
+- Using `fetch()` instead of `callApi()`
+- Hardcoded route strings (use constants from `@app/constants/routes`)
+- Legacy React patterns (class components, legacy lifecycle methods)
+- Over-memoization of simple values
+- Using `useCallback` for computed values (use `useMemo` instead)
 
-## Anti-Patterns to Avoid
+**Migration-specific:**
 
-### Using fetch() instead of callApi()
-
-```typescript
-// NEVER DO THIS
-const response = await fetch('/api/endpoint');
-
-// ALWAYS DO THIS
-const response = await callApi('/endpoint');
-```
-
-### Using @jest/globals (removed)
-
-```typescript
-// WRONG - Jest has been removed from this project
-import { describe, it, expect } from '@jest/globals';
-
-// CORRECT - Use vitest (or globals are available without import)
-import { vi } from 'vitest'; // Only needed for mocking
-```
-
-### Over-optimization
-
-```typescript
-// Unnecessary memoization
-const value = useMemo(() => prop1 + prop2, [prop1, prop2]);
-
-// Just calculate directly
-const value = prop1 + prop2;
-```
-
-## DRY Principles
-
-Check existing patterns before creating new ones:
-
-1. **Components** - `src/app/src/components/`
-2. **Hooks** - `src/app/src/hooks/`
-3. **Utils** - `src/app/src/utils/`
-4. **Stores** - `src/app/src/stores/`
+- Adding new MUI components (use shadcn/Radix instead)
+- Adding new `styled()` components (use Tailwind instead)
+- Hardcoded colors/spacing (use design tokens)
+- Mixing MUI and shadcn in the same component
+- Creating new monolithic components instead of composing primitives
+- Using MUI icons in new code (use Lucide)
 
 ## Path Alias
 
-`@app/*` maps to `src/*` (configured in `vite.config.ts`).
+- `@app/*` maps to `src/*` (configured in vite.config.ts)
+- `@/components/ui/*` - shadcn/Radix primitives
+
+## Migration Reference
+
+See `MIGRATION.md` for:
+
+- Full migration plan with phases
+- Component mapping (MUI → Radix)
+- Icon migration strategy
+- Design token definitions
+- Coexistence rules during migration

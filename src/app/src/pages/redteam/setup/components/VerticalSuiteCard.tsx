@@ -1,6 +1,10 @@
 import React, { useCallback, useMemo, useState } from 'react';
+
+import { useApiHealth } from '@app/hooks/useApiHealth';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import LockIcon from '@mui/icons-material/Lock';
+import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Checkbox from '@mui/material/Checkbox';
@@ -18,16 +22,13 @@ import {
   Severity,
   subCategoryDescriptions,
 } from '@promptfoo/redteam/constants';
-import type { Plugin } from '@promptfoo/redteam/constants';
-import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
-import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
-import { TestCaseGenerateButton } from './TestCaseDialog';
-import { useTestCaseGeneration } from './TestCaseGenerationProvider';
-import { useApiHealth } from '@app/hooks/useApiHealth';
 import {
   getPluginDocumentationUrl,
   hasSpecificPluginDocumentation,
 } from './pluginDocumentationMap';
+import { TestCaseGenerateButton } from './TestCaseDialog';
+import { useTestCaseGeneration } from './TestCaseGenerationProvider';
+import type { Plugin } from '@promptfoo/redteam/constants';
 
 interface PluginGroup {
   name: string;

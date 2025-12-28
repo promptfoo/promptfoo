@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
 import * as evaluatorHelpers from '../../../../src/evaluatorHelpers';
 import { CrescendoProvider, MemorySystem } from '../../../../src/redteam/providers/crescendo/index';
-import type { Message } from '../../../../src/redteam/providers/shared';
 import { redteamProviderManager, tryUnblocking } from '../../../../src/redteam/providers/shared';
 import { checkServerFeatureSupport } from '../../../../src/util/server';
+
+import type { Message } from '../../../../src/redteam/providers/shared';
 
 // Hoisted mock for getGraderById
 const mockGetGraderById = vi.hoisted(() => vi.fn());
@@ -1650,12 +1650,13 @@ describe('CrescendoProvider', () => {
       await provider.callApi('test prompt', context);
 
       // Should track scoring provider token usage via TokenUsageTracker
+      // Scoring provider is called twice per round: refusal check + internal evaluator
       const scoringUsage = tracker.getProviderUsage('mock-scoring');
       expect(scoringUsage).toMatchObject({
-        total: 40,
-        prompt: 18,
-        completion: 22,
-        numRequests: 1,
+        total: 80, // 40 * 2 calls
+        prompt: 36, // 18 * 2 calls
+        completion: 44, // 22 * 2 calls
+        numRequests: 2,
         cached: 0,
       });
     });

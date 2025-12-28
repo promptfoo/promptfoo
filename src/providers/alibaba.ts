@@ -1,8 +1,8 @@
+import logger from '../logger';
 import { OpenAiChatCompletionProvider } from './openai/chat';
 import { OpenAiEmbeddingProvider } from './openai/embedding';
 
 import type { ProviderOptions } from '../types/index';
-import logger from '../logger';
 
 const KNOWN_MODELS = new Set([
   // Qwen3-Max

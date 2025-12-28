@@ -41,18 +41,9 @@ strategies:
 
 One plugin can be tested with multiple strategies for comprehensive coverage.
 
-## Security Requirements
+## Logging
 
-**Always sanitize when logging** (test content may be harmful/sensitive):
-
-```typescript
-logger.debug('[RedTeam] Test result', {
-  prompt: testCase.prompt, // May contain exploits
-  output: response.output, // May contain harmful content
-});
-```
-
-Second parameter is auto-sanitized.
+See `docs/logging.md` - especially important here since test content may contain harmful/sensitive data.
 
 ## Adding New Plugins
 
@@ -62,6 +53,18 @@ Second parameter is auto-sanitized.
 4. Add tests in `test/redteam/`
 
 See `src/redteam/plugins/pii.ts` for reference pattern.
+
+## Plugin/Grader Standards
+
+**CRITICAL:** All graders must use standardized tags per `.claude/skills/redteam-plugin-development/skill.md`
+
+Quick reference:
+
+- User prompt: `<UserQuery>{{prompt}}</UserQuery>` (NOT `<UserPrompt>`, `<UserInput>`, or `<prompt>`)
+- Purpose: `<purpose>{{purpose}}</purpose>`
+- Entities: `<AllowedEntities>` with `<Entity>` children
+
+See `src/redteam/plugins/harmful/graders.ts` for reference implementation.
 
 ## Risk Scoring
 

@@ -1,7 +1,7 @@
-import { vi } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runAssertion } from '../../src/assertions/index';
 import { OpenAiChatCompletionProvider } from '../../src/providers/openai/chat';
 import { DefaultEmbeddingProvider } from '../../src/providers/openai/defaults';
@@ -782,7 +782,7 @@ describe('runAssertion', () => {
     });
     expect(result).toMatchObject({
       pass: false,
-      reason: `SQL validation failed: authority = 'update::null::employees' is required in table whiteList to execute SQL = 'UPDATE employees SET department_id = 2 WHERE employee_id = 1'.`,
+      reason: `SQL references unauthorized table(s). Found: [update::null::employees]. Allowed: [(select|update|insert|delete)::null::departments].`,
     });
   });
 
@@ -814,7 +814,7 @@ describe('runAssertion', () => {
     });
     expect(result).toMatchObject({
       pass: false,
-      reason: `SQL validation failed: authority = 'select::null::age' is required in column whiteList to execute SQL = 'SELECT age FROM a WHERE id = 1'.`,
+      reason: `SQL references unauthorized column(s). Found: [select::null::age, select::null::id]. Allowed: [select::null::name, update::null::id].`,
     });
   });
 
@@ -846,7 +846,7 @@ describe('runAssertion', () => {
     });
     expect(result).toMatchObject({
       pass: false,
-      reason: `SQL validation failed: authority = 'insert::departments::name' is required in column whiteList to execute SQL = 'INSERT INTO departments (name) VALUES ('HR')'.`,
+      reason: `SQL references unauthorized column(s). Found: [insert::departments::name]. Allowed: [select::null::name, update::null::id].`,
     });
   });
 
@@ -862,7 +862,7 @@ describe('runAssertion', () => {
     });
     expect(result).toMatchObject({
       pass: false,
-      reason: `SQL validation failed: authority = 'update::null::a' is required in table whiteList to execute SQL = 'UPDATE a SET id = 1'.`,
+      reason: `SQL references unauthorized table(s). Found: [update::null::a]. Allowed: [(select|update|insert|delete)::null::departments].`,
     });
   });
 
@@ -878,7 +878,7 @@ describe('runAssertion', () => {
     });
     expect(result).toMatchObject({
       pass: false,
-      reason: `SQL validation failed: authority = 'delete::null::employees' is required in table whiteList to execute SQL = 'DELETE FROM employees;'. SQL validation failed: authority = 'delete::employees::(.*)' is required in column whiteList to execute SQL = 'DELETE FROM employees;'.`,
+      reason: `SQL references unauthorized table(s). Found: [delete::null::employees]. Allowed: [(select|update|insert|delete)::null::departments]. SQL references unauthorized column(s). Found: [delete::employees::(.*)]. Allowed: [select::null::name, update::null::id].`,
     });
   });
 

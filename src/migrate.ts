@@ -1,6 +1,7 @@
-import * as path from 'path';
-import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import * as path from 'path';
+
 import { getDirectory } from './esm';
 
 /**
@@ -54,10 +55,10 @@ export async function runDbMigrations(): Promise<void> {
         const dir = getCurrentDir();
         let migrationsFolder: string;
         if (dir.includes('dist/src')) {
-          // When running from bundled server (e.g., dist/src/server/index.js)
-          // Navigate to project root and find drizzle folder
+          // When running from bundled dist (e.g., npx promptfoo or dist/src/main.js)
+          // Navigate to project root and find drizzle folder in dist
           const projectRoot = dir.split('dist/src')[0];
-          migrationsFolder = path.join(projectRoot, 'drizzle');
+          migrationsFolder = path.join(projectRoot, 'dist', 'drizzle');
         }
         // PF Cloud runtime scans:
         else if (dir.includes('dist/server/src')) {
