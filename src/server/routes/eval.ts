@@ -231,6 +231,7 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
         searchQuery: searchText,
         filters: filters as string[],
         comparisonEvalIds: comparisonEvalIds as string[],
+        findEvalById: Eval.findById.bind(Eval),
       });
       setDownloadHeaders(res, `${id}.csv`, 'text/csv');
       res.send(csvData);

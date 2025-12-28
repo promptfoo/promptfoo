@@ -25,6 +25,12 @@ export interface GenerateEvalCsvOptions {
   filters?: string[];
   /** Comparison eval IDs for side-by-side comparison exports */
   comparisonEvalIds?: string[];
+  /**
+   * Function to find an eval by ID. Required for comparison exports.
+   * Pass Eval.findById when calling from server routes.
+   * If not provided, comparison exports will throw an error.
+   */
+  findEvalById?: (id: string) => Promise<Eval | null | undefined>;
 }
 
 /**
@@ -114,91 +120,18 @@ export function evalTableToCsv(
   table: { head: { prompts: Prompt[]; vars: string[] }; body: EvaluateTableRow[] },
   options: { isRedteam?: boolean } = { isRedteam: false },
 ): string {
-  const csvRows: any[][] = [];
   const { isRedteam } = options;
-
-  // Check if any rows have descriptions
   const hasDescriptions = table.body.some((row) => row.test.description);
 
-  // Create headers with columns for output, status, score, named scores, grader reason, and comment
-  const headers: string[] = [
-    ...(hasDescriptions ? ['Description'] : []),
-    ...table.head.vars,
-    ...table.head.prompts.flatMap((prompt) => {
-      // Handle both Prompt and CompletedPrompt types
-      const provider = (prompt as any).provider || '';
-      const label = provider ? `[${provider}] ${prompt.label}` : prompt.label;
-      // Output column uses the prompt label, followed by metadata columns
-      return [label, 'Status', 'Score', 'Named Scores', 'Grader Reason', 'Comment'];
-    }),
-  ];
-
-  if (isRedteam) {
-    headers.push(...REDTEAM_METADATA_COLUMNS);
-  }
-  csvRows.push(headers);
-
-  // Compute stable key ordering for redteam metadata columns
-  const redteamKeys = Object.keys(REDTEAM_METADATA_KEYS_TO_CSV_COLUMN_NAMES);
-
-  // Process body rows with separate columns for output, status, score, named scores, etc.
-  table.body.forEach((row) => {
-    const rowValues: any[] = [
-      ...(hasDescriptions ? [row.test.description || ''] : []),
-      ...row.vars,
-      ...row.outputs.flatMap((output) => {
-        if (!output) {
-          return ['', '', '', '', '', ''];
-        }
-
-        const status = getOutputStatus(output);
-        const score = output.score?.toFixed(2) ?? '';
-        const namedScores = formatNamedScores(output.namedScores);
-
-        return [
-          // Pure LLM output text (no prefix)
-          output.text || '',
-          // Status as separate column
-          status,
-          // Score as separate column
-          score,
-          // Named scores as JSON
-          namedScores,
-          // Grader reason
-          output.gradingResult?.reason || '',
-          // Comment
-          output.gradingResult?.comment || '',
-        ];
-      }),
-    ];
-
-    // Add redteam metadata once per row (using first output's metadata)
-    if (isRedteam) {
-      const firstOutputMetadata = row.outputs[0]?.metadata;
-      for (const key of redteamKeys) {
-        let value = firstOutputMetadata?.[key];
-        // Default strategyId to 'basic' for strategy-less tests
-        if (key === 'strategyId' && (value === null || value === undefined)) {
-          value = 'basic';
-        }
-        if (value === null || value === undefined) {
-          rowValues.push('');
-        } else if (
-          typeof value === 'string' ||
-          typeof value === 'number' ||
-          typeof value === 'boolean'
-        ) {
-          // Don't stringify primitives - add them directly
-          rowValues.push(value.toString());
-        } else {
-          // Stringify objects and arrays
-          rowValues.push(JSON.stringify(value));
-        }
-      }
-    }
-
-    csvRows.push(rowValues);
+  const headers = buildCsvHeaders(table.head.vars, table.head.prompts, {
+    hasDescriptions,
+    isRedteam,
   });
+
+  const csvRows = [
+    headers,
+    ...table.body.map((row) => tableRowToCsvValues(row, { hasDescriptions, isRedteam })),
+  ];
 
   return csvStringify(csvRows);
 }
@@ -262,6 +195,96 @@ function mergeComparisonTables(
 }
 
 /**
+ * Build CSV headers for an evaluation table.
+ *
+ * @param vars - Variable names from the table head
+ * @param prompts - Prompt definitions from the table head
+ * @param options - Export options
+ * @returns Array of header strings
+ */
+export function buildCsvHeaders(
+  vars: string[],
+  prompts: Prompt[],
+  options: { hasDescriptions?: boolean; isRedteam?: boolean } = {},
+): string[] {
+  const headers: string[] = [
+    ...(options.hasDescriptions ? ['Description'] : []),
+    ...vars,
+    ...prompts.flatMap((prompt) => {
+      const provider = (prompt as any).provider || '';
+      const label = provider ? `[${provider}] ${prompt.label}` : prompt.label;
+      return [label, 'Status', 'Score', 'Named Scores', 'Grader Reason', 'Comment'];
+    }),
+  ];
+
+  if (options.isRedteam) {
+    headers.push(...REDTEAM_METADATA_COLUMNS);
+  }
+
+  return headers;
+}
+
+/**
+ * Convert a single table row to CSV row values.
+ *
+ * @param row - The table row to convert
+ * @param options - Export options
+ * @returns Array of values for the CSV row
+ */
+export function tableRowToCsvValues(
+  row: EvaluateTableRow,
+  options: { hasDescriptions?: boolean; isRedteam?: boolean } = {},
+): (string | number | boolean)[] {
+  const rowValues: (string | number | boolean)[] = [
+    ...(options.hasDescriptions ? [row.test.description || ''] : []),
+    ...row.vars,
+    ...row.outputs.flatMap((output) => {
+      if (!output) {
+        return ['', '', '', '', '', ''];
+      }
+
+      const status = getOutputStatus(output);
+      const score = output.score?.toFixed(2) ?? '';
+      const namedScores = formatNamedScores(output.namedScores);
+
+      return [
+        output.text || '',
+        status,
+        score,
+        namedScores,
+        output.gradingResult?.reason || '',
+        output.gradingResult?.comment || '',
+      ];
+    }),
+  ];
+
+  // Add redteam metadata once per row (using first output's metadata)
+  if (options.isRedteam) {
+    const redteamKeys = Object.keys(REDTEAM_METADATA_KEYS_TO_CSV_COLUMN_NAMES);
+    const firstOutputMetadata = row.outputs[0]?.metadata;
+    for (const key of redteamKeys) {
+      let value = firstOutputMetadata?.[key];
+      if (key === 'strategyId' && (value === null || value === undefined)) {
+        value = 'basic';
+      }
+      if (value === null || value === undefined) {
+        rowValues.push('');
+      } else if (
+        typeof value === 'string' ||
+        typeof value === 'number' ||
+        typeof value === 'boolean'
+      ) {
+        rowValues.push(value.toString());
+      } else {
+        rowValues.push(JSON.stringify(value));
+      }
+    }
+  }
+
+  return rowValues;
+}
+
+/**
  * High-level function to generate CSV from an evaluation.
  *
  * This is the single source of truth for ALL CSV generation, used by both:
@@ -274,14 +297,12 @@ function mergeComparisonTables(
  * @param options - Export options including filters and comparison eval IDs
  * @returns CSV formatted string
  * @throws ComparisonEvalNotFoundError if a comparison eval ID is not found
+ * @throws Error if comparison exports requested without findEvalById callback
  */
 export async function generateEvalCsv(
   eval_: Eval,
   options: GenerateEvalCsvOptions = {},
 ): Promise<string> {
-  // Import Eval dynamically to avoid circular dependencies
-  const { default: EvalModel } = await import('../../models/eval');
-
   const UNLIMITED_RESULTS = Number.MAX_SAFE_INTEGER;
 
   // Fetch main table
@@ -297,12 +318,19 @@ export async function generateEvalCsv(
 
   // Handle comparison evals if provided
   if (options.comparisonEvalIds && options.comparisonEvalIds.length > 0) {
+    if (!options.findEvalById) {
+      throw new Error(
+        'findEvalById callback is required for comparison exports. ' +
+          'Pass Eval.findById when calling from server routes.',
+      );
+    }
+
     const indices = mainTable.body.map((row) => row.testIdx);
 
     // Fetch comparison evals and their tables
     const comparisonData = await Promise.all(
       options.comparisonEvalIds.map(async (comparisonEvalId) => {
-        const comparisonEval = await EvalModel.findById(comparisonEvalId);
+        const comparisonEval = await options.findEvalById!(comparisonEvalId);
         if (!comparisonEval) {
           throw new ComparisonEvalNotFoundError(comparisonEvalId);
         }
@@ -327,4 +355,81 @@ export async function generateEvalCsv(
   return evalTableToCsv(finalTable, {
     isRedteam: Boolean(eval_.config.redteam),
   });
+}
+
+/**
+ * Options for streaming CSV export.
+ */
+export interface StreamCsvOptions {
+  /** Whether this is a redteam eval */
+  isRedteam?: boolean;
+  /** Callback to write a chunk of CSV data */
+  write: (data: string) => void | Promise<void>;
+}
+
+/**
+ * Stream CSV data from an evaluation in batches.
+ *
+ * This is more memory-efficient for large evaluations as it processes
+ * results in batches rather than loading everything into memory.
+ *
+ * @param eval_ - The evaluation to export
+ * @param options - Streaming options including the write callback
+ */
+export async function streamEvalCsv(eval_: Eval, options: StreamCsvOptions): Promise<void> {
+  const { isRedteam = false, write } = options;
+  const varNames = eval_.vars;
+  const prompts = eval_.prompts;
+
+  // For streaming, we assume descriptions may exist to ensure consistent columns
+  const hasDescriptions = true;
+
+  // Write headers
+  const headers = buildCsvHeaders(varNames, prompts, {
+    hasDescriptions,
+    isRedteam,
+  });
+  await write(csvStringify([headers]));
+
+  // Stream results in batches
+  for await (const batchResults of eval_.fetchResultsBatched()) {
+    // Group results by testIdx to reconstruct table rows
+    const rowsByTestIdx = new Map<
+      number,
+      { testIdx: number; vars: string[]; outputs: any[]; test: { description?: string } }
+    >();
+
+    for (const result of batchResults) {
+      if (!rowsByTestIdx.has(result.testIdx)) {
+        rowsByTestIdx.set(result.testIdx, {
+          testIdx: result.testIdx,
+          vars: varNames.map((varName) => {
+            const value = result.testCase?.vars?.[varName];
+            return value !== undefined ? String(value) : '';
+          }),
+          outputs: [],
+          test: { description: result.testCase?.description },
+        });
+      }
+      const row = rowsByTestIdx.get(result.testIdx)!;
+      row.outputs.push({
+        text: result.response?.output ?? '',
+        pass: result.success,
+        score: result.score,
+        namedScores: result.namedScores,
+        failureReason: result.failureReason,
+        gradingResult: result.gradingResult,
+        metadata: result.metadata,
+      });
+    }
+
+    // Convert to CSV rows and write
+    const csvRows = Array.from(rowsByTestIdx.values()).map((row) =>
+      tableRowToCsvValues(row as EvaluateTableRow, { hasDescriptions, isRedteam }),
+    );
+
+    if (csvRows.length > 0) {
+      await write(csvStringify(csvRows));
+    }
+  }
 }

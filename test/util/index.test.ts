@@ -58,6 +58,10 @@ vi.mock('fs', async () => {
     readdirSync: vi.fn(),
     existsSync: vi.fn(),
     mkdirSync: vi.fn(),
+    createWriteStream: vi.fn(() => ({
+      write: vi.fn(),
+      end: vi.fn(),
+    })),
   };
 });
 
@@ -395,7 +399,8 @@ describe('util', () => {
       const shareableUrl = null;
       await writeOutput(outputPath, eval_, shareableUrl);
 
-      expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
+      // CSV output uses streaming for memory efficiency
+      expect(fs.createWriteStream).toHaveBeenCalledTimes(1);
     });
 
     it('writeOutput with JSON output', async () => {

@@ -15,6 +15,7 @@ import { getDirectory, importModule } from '../esm';
 import { writeCsvToGoogleSheet } from '../googleSheets';
 import logger from '../logger';
 import { runPython } from '../python/pythonUtils';
+import { streamEvalCsv } from '../server/utils/evalTableUtils';
 import {
   type CsvRow,
   type EvaluateResult,
@@ -33,7 +34,6 @@ import { isJavascriptFile } from './fileExtensions';
 import { parseFileUrl } from './functions/loadFunction';
 import { safeResolve } from './pathUtils';
 import { getNunjucksEngine } from './templates';
-import { generateEvalCsv } from '../server/utils/evalTableUtils';
 
 import type Eval from '../models/eval';
 import type { Vars } from '../types/index';
@@ -169,9 +169,16 @@ export async function writeOutput(
   const metadata = createOutputMetadata(evalRecord);
 
   if (outputExtension === 'csv') {
-    // Use shared generateEvalCsv - single source of truth for CSV generation
-    const csvData = await generateEvalCsv(evalRecord);
-    fs.writeFileSync(outputPath, csvData);
+    // Use streaming for memory-efficient CSV export
+    // This processes results in batches instead of loading everything into memory
+    const writeStream = fs.createWriteStream(outputPath);
+    await streamEvalCsv(evalRecord, {
+      isRedteam: Boolean(evalRecord.config.redteam),
+      write: (data: string) => {
+        writeStream.write(data);
+      },
+    });
+    writeStream.end();
   } else if (outputExtension === 'json') {
     await writeJsonOutputSafely(outputPath, evalRecord, shareableUrl);
   } else if (outputExtension === 'yaml' || outputExtension === 'yml' || outputExtension === 'txt') {
