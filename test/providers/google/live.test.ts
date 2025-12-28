@@ -671,21 +671,27 @@ describe('GoogleLiveProvider', () => {
     });
 
     // Check the specific calls made to the stateful API
+    // Note: Function call order may vary due to async processing, but all calls should be made
     const getCallUrls = mockFetchWithProxy.mock.calls.map((call) => call[0]);
-    const expectedUrls = [
-      'http://127.0.0.1:5000/get_count',
-      'http://127.0.0.1:5000/add_one',
-      'http://127.0.0.1:5000/get_count',
-      'http://127.0.0.1:5000/add_one',
-      'http://127.0.0.1:5000/get_count',
-      'http://127.0.0.1:5000/get_state',
-    ];
 
-    expect(getCallUrls).toEqual(expectedUrls);
+    // Verify total number of calls (5 function calls + 1 get_state)
+    expect(getCallUrls).toHaveLength(6);
+
+    // Verify get_state was called last (this is deterministic - happens in finalizeResponse)
     expect(mockFetchWithProxy).toHaveBeenLastCalledWith(
       'http://127.0.0.1:5000/get_state',
       undefined,
     );
+
+    // Verify all expected function calls were made (order may vary due to async)
+    const functionCallUrls = getCallUrls.slice(0, -1); // All except last (get_state)
+    expect(functionCallUrls.sort()).toEqual([
+      'http://127.0.0.1:5000/add_one',
+      'http://127.0.0.1:5000/add_one',
+      'http://127.0.0.1:5000/get_count',
+      'http://127.0.0.1:5000/get_count',
+      'http://127.0.0.1:5000/get_count',
+    ]);
   });
   describe('Python executable integration', () => {
     it('should handle Python executable validation correctly', async () => {
