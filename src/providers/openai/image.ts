@@ -1,4 +1,4 @@
-import { fetchWithCache, type CacheOptions } from '../../cache';
+import { type CacheOptions, fetchWithCache } from '../../cache';
 import logger from '../../logger';
 import { ellipsize } from '../../util/text';
 import { getCacheOptions, REQUEST_TIMEOUT_MS } from '../shared';
@@ -315,7 +315,7 @@ export async function callOpenAiImageApi(
     },
     timeout,
     'json',
-    cacheOptions,
+    cacheOptions ?? false,
   );
 }
 

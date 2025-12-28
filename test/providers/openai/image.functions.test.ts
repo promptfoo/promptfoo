@@ -229,7 +229,7 @@ describe('OpenAI Image Provider Functions', () => {
         },
         timeout,
         'json',
-        undefined,
+        false,
       );
       expect(result).toEqual(mockResponse);
     });

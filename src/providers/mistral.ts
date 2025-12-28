@@ -310,7 +310,10 @@ export class MistralChatCompletionProvider implements ApiProvider {
       ...(config?.response_format ? { response_format: config.response_format } : {}),
     };
 
-    const cacheKey = `mistral:${JSON.stringify(params)}`;
+    // Include repeatIndex in cache key for per-repeat caching
+    const repeatIndex = context?.repeatIndex;
+    const repeatSuffix = repeatIndex !== undefined && repeatIndex > 0 ? `:repeat${repeatIndex}` : '';
+    const cacheKey = `mistral:${JSON.stringify(params)}${repeatSuffix}`;
     if (isCacheEnabled()) {
       const cache = getCache();
       if (cache) {
