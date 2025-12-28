@@ -153,9 +153,12 @@ table.results-table,
 
 .results-table tr .cell-actions {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 0.5rem;
   position: absolute;
   top: 1rem;
+  left: 0;
   right: 0.75rem;
   line-height: 0;
   font-size: 1.25rem;
@@ -495,7 +498,7 @@ table.results-table,
 .results-table-sticky {
   position: sticky;
   top: 0;
-  z-index: 100;
+  z-index: 10;
   transition: transform 0.2s ease-out;
 }
 
@@ -508,7 +511,7 @@ table.results-table,
   top: 8px;
   right: 8px;
   cursor: pointer;
-  z-index: 101;
+  z-index: 11;
   padding: 4px;
   border-radius: 100%;
   background: #eee;

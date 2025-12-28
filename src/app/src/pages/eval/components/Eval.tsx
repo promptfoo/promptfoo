@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 
 import EnterpriseBanner from '@app/components/EnterpriseBanner';
 import { IS_RUNNING_LOCALLY } from '@app/constants';
+import { EVAL_ROUTES } from '@app/constants/routes';
 import { ShiftKeyProvider } from '@app/contexts/ShiftKeyContext';
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import useApiConfig from '@app/stores/apiConfig';
@@ -120,7 +121,7 @@ export default function Eval({ fetchId }: EvalOptions) {
   const handleRecentEvalSelection = useCallback(
     async (id: string) => {
       navigate({
-        pathname: `/eval/${encodeURIComponent(id)}`,
+        pathname: EVAL_ROUTES.DETAIL(id),
         search: searchParams.toString(),
       });
     },
@@ -144,20 +145,26 @@ export default function Eval({ fetchId }: EvalOptions) {
         // Do search params need to be removed?
         if (_filters.appliedCount === 0) {
           // clear the search params
-          setSearchParams((prev) => {
-            prev.delete('filter');
-            return prev;
-          });
+          setSearchParams(
+            (prev) => {
+              prev.delete('filter');
+              return prev;
+            },
+            { replace: true },
+          );
         } else if (_filters.appliedCount > 0) {
           // Serialize the filters to a JSON string
           const serializedFilters = JSON.stringify(Object.values(_filters.values));
           // Check whether the serialized filters are already in the search params
           if (_searchParams.get('filter') !== serializedFilters) {
             // Add each filter to the search params
-            setSearchParams((prev) => {
-              prev.set('filter', serializedFilters);
-              return prev;
-            });
+            setSearchParams(
+              (prev) => {
+                prev.set('filter', serializedFilters);
+                return prev;
+              },
+              { replace: true },
+            );
           }
         }
       },
@@ -201,7 +208,35 @@ export default function Eval({ fetchId }: EvalOptions) {
     } else if (IS_RUNNING_LOCALLY) {
       console.log('Eval init: Using local server websocket');
 
-      const socket = SocketIOClient(apiBaseUrl || '');
+      // Determine socket path based on deployment configuration:
+      // - If apiBaseUrl points to a different origin, use default /socket.io (remote server manages its own)
+      // - If apiBaseUrl has a path component on same origin, derive socket path from it
+      // - If no apiBaseUrl, use VITE_PUBLIC_BASENAME for same-origin reverse proxy deployments
+      let socketPath = '/socket.io';
+      let socketUrl = '';
+
+      if (apiBaseUrl) {
+        try {
+          const url = new URL(apiBaseUrl, window.location.origin);
+          const isSameOrigin = url.origin === window.location.origin;
+          if (isSameOrigin && url.pathname !== '/') {
+            // Same origin with path prefix - derive socket path from API base
+            socketPath = `${url.pathname.replace(/\/$/, '')}/socket.io`;
+          }
+          // For different origins, use default /socket.io and connect to that host
+          socketUrl = isSameOrigin ? '' : apiBaseUrl;
+        } catch {
+          // Invalid URL, fall back to defaults
+        }
+      } else {
+        // No apiBaseUrl - use build-time base path for same-origin deployment
+        const basePath = import.meta.env.VITE_PUBLIC_BASENAME || '';
+        if (basePath) {
+          socketPath = `${basePath}/socket.io`;
+        }
+      }
+
+      const socket = SocketIOClient(socketUrl, { path: socketPath });
 
       /**
        * Populates the table store with the most recent eval result.

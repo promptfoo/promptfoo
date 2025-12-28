@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 
 import ErrorBoundary from '@app/components/ErrorBoundary';
+import { ROUTES } from '@app/constants/routes';
 import { useToast } from '@app/hooks/useToast';
 import { callApi } from '@app/utils/api';
 import { normalizeMediaText, resolveAudioSource, resolveImageSource } from '@app/utils/media';
@@ -169,7 +170,7 @@ function TableHeader({
           {resourceId && (
             <Tooltip title="View other evals and datasets for this prompt">
               <span className="action">
-                <Link to={`/prompts/?id=${resourceId}`} target="_blank">
+                <Link to={ROUTES.PROMPT_DETAIL(resourceId)} target="_blank">
                   <OpenInNewIcon fontSize="small" />
                 </Link>
               </span>
@@ -1439,7 +1440,7 @@ function ResultsTable({
             alignItems: 'center',
             justifyContent: 'center',
             backgroundColor: (theme) => alpha(theme.palette.background.default, 0.7),
-            zIndex: 1000,
+            zIndex: 20,
             opacity: isFetching ? 1 : 0,
             pointerEvents: isFetching ? 'auto' : 'none',
             transition: 'opacity 0.3s ease-in-out',
@@ -1567,7 +1568,7 @@ function ResultsTable({
         sx={{
           position: 'sticky',
           bottom: 0,
-          zIndex: 1000,
+          zIndex: 10,
           display: 'flex',
           alignItems: 'center',
           gap: 2,

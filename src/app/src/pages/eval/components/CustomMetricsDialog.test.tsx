@@ -85,7 +85,7 @@ describe('MetricsTable', () => {
     const user = userEvent.setup();
 
     const metricText = await screen.findByText('accuracy');
-    const row = metricText.closest('[role="row"]');
+    const row = metricText.closest('tr');
     expect(row).not.toBeNull();
 
     const filterButton = within(row as HTMLElement).getByRole('button');
@@ -127,12 +127,12 @@ describe('MetricsTable', () => {
     expect(container.firstChild).toBeNull();
   });
 
-  it('should render the DataGrid with metric columns and rows when table data and promptMetricNames are available', async () => {
+  it('should render the DataTable with metric columns and rows when table data and promptMetricNames are available', async () => {
     render(<CustomMetricsDialog open={true} onClose={mockOnClose} />);
 
-    const dataGrid = await screen.findByRole('grid');
+    const dataTable = await screen.findByRole('table');
 
-    expect(dataGrid).toBeInTheDocument();
+    expect(dataTable).toBeInTheDocument();
   });
 
   it('should return null when promptMetricNames is empty', () => {
@@ -162,9 +162,9 @@ describe('MetricsTable', () => {
 
     render(<CustomMetricsDialog open={true} onClose={mockOnClose} />);
 
-    const dataGrid = screen.queryByRole('grid');
+    const dataTable = screen.queryByRole('table');
 
-    expect(dataGrid).toBeNull();
+    expect(dataTable).toBeNull();
   });
 
   it('should render without error when config is null', () => {
@@ -184,7 +184,7 @@ describe('MetricsTable', () => {
 
     render(<CustomMetricsDialog open={true} onClose={mockOnClose} />);
 
-    expect(screen.getByRole('grid')).toBeInTheDocument();
+    expect(screen.getByRole('table')).toBeInTheDocument();
   });
 
   it('should display the original policy metric when the policy ID is not found in policiesById', async () => {
@@ -318,8 +318,8 @@ describe('MetricsTable', () => {
 
     render(<CustomMetricsDialog open={true} onClose={mockOnClose} />);
 
-    const dataGridElement = screen.getByRole('grid');
-    expect(dataGridElement).toBeInTheDocument();
+    const dataTableElement = screen.getByRole('table');
+    expect(dataTableElement).toBeInTheDocument();
 
     const accuracyElement = screen.getByText('accuracy');
     expect(accuracyElement).toBeInTheDocument();

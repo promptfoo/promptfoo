@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.120.8](https://github.com/promptfoo/promptfoo/compare/0.120.7...0.120.8) (2025-12-21)
+
+### Features
+
+- **redteam:** add --description flag to redteam run command ([#6796](https://github.com/promptfoo/promptfoo/issues/6796)) ([95cc2ff](https://github.com/promptfoo/promptfoo/commit/95cc2ffe1075b00620647369beb9bb331af95858))
+- **server:** add configurable base path support ([#6758](https://github.com/promptfoo/promptfoo/issues/6758)) ([9395a28](https://github.com/promptfoo/promptfoo/commit/9395a28766275ec6105bd86ee7ecee8979a1c4f4))
+
+### Bug Fixes
+
+- Entra id support in azure:responses provider ([#6794](https://github.com/promptfoo/promptfoo/issues/6794)) ([47e1db5](https://github.com/promptfoo/promptfoo/commit/47e1db552aabc3c61d38d7022de819d0f0eb5073))
+- **redteam:** Add error handling to citation strategy ([#6735](https://github.com/promptfoo/promptfoo/issues/6735)) ([55ac248](https://github.com/promptfoo/promptfoo/commit/55ac248e51b37588230c959d11f9bbb2dd8b12b6))
+
 ## [0.120.7](https://github.com/promptfoo/promptfoo/compare/0.120.6...0.120.7) (2025-12-19)
 
 ### Features
@@ -331,6 +343,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - feat(ci): add JavaScript-based changelog validator replacing bash script for PR number and Unreleased section enforcement (#6252)
 - feat(providers): add metadata extraction for OpenAI Responses API - extract responseId and model to metadata for debugging and response tracking (#6267)
 - refactor(webui): remove useImperativeHandle from ProviderConfigEditor - replace imperative ref API with onValidationRequest callback pattern for better React 19 compatibility and more idiomatic component design (#6328)
+- refactor(webui): ports custom policy generation to cloud (#6461)
 
 ### Fixed
 

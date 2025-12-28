@@ -61,7 +61,6 @@ export function isStrategyConfigured(strategyId: string, strategy: RedteamStrate
 }
 
 const STRATEGY_PROBE_MULTIPLIER: Record<Strategy, number> = {
-  simba: 10,
   audio: 1,
   'authoritative-markup-injection': 1,
   base64: 1,

@@ -19,7 +19,12 @@ import {
   HuggingfaceTextClassificationProvider,
   HuggingfaceTextGenerationProvider,
 } from '../../src/providers/huggingface';
-import { getProviderIds, loadApiProvider, loadApiProviders } from '../../src/providers/index';
+import {
+  getProviderIds,
+  loadApiProvider,
+  loadApiProviders,
+  resolveProviderConfigs,
+} from '../../src/providers/index';
 import { LlamaProvider } from '../../src/providers/llama';
 import {
   OllamaChatProvider,
@@ -952,6 +957,115 @@ describe('loadApiProvider', () => {
     delete process.env.MY_PORT;
   });
 
+  it('supports templating in provider URL with context env overrides', async () => {
+    const provider = await loadApiProvider('https://{{ env.MY_HOST }}:{{ env.MY_PORT }}/query', {
+      env: {
+        MY_HOST: 'api.example.com',
+        MY_PORT: '8080',
+      },
+      options: {
+        config: {
+          body: {},
+        },
+      },
+    });
+
+    expect(provider.id()).toBe('https://api.example.com:8080/query');
+  });
+
+  it('uses provider env overrides when rendering provider config', async () => {
+    const provider = await loadApiProvider('echo', {
+      options: {
+        env: {
+          MY_API_KEY: 'secret',
+        },
+        config: {
+          apiKey: '{{ env.MY_API_KEY }}',
+        },
+      },
+    });
+
+    expect(provider.config.apiKey).toBe('secret');
+  });
+
+  it('passes provider env overrides to provider instances', async () => {
+    const provider = (await loadApiProvider('openai:chat', {
+      options: {
+        env: {
+          OPENAI_API_KEY: 'override-key',
+        },
+        config: {
+          apiKeyRequired: false,
+        },
+      },
+    })) as OpenAiChatCompletionProvider;
+
+    expect(provider.env?.OPENAI_API_KEY).toBe('override-key');
+  });
+
+  it('isolates env overrides between multiple provider loads', async () => {
+    // First provider with HOST=dev
+    const devProvider = await loadApiProvider('https://{{ env.HOST }}/v1/api', {
+      options: {
+        env: {
+          HOST: 'dev.example.com',
+        },
+        config: {
+          body: {},
+        },
+      },
+    });
+
+    // Second provider with HOST=prod
+    const prodProvider = await loadApiProvider('https://{{ env.HOST }}/v1/api', {
+      options: {
+        env: {
+          HOST: 'prod.example.com',
+        },
+        config: {
+          body: {},
+        },
+      },
+    });
+
+    // Each provider should have its own resolved URL
+    expect(devProvider.id()).toBe('https://dev.example.com/v1/api');
+    expect(prodProvider.id()).toBe('https://prod.example.com/v1/api');
+  });
+
+  it('options.env takes precedence over context.env for same keys', async () => {
+    const provider = await loadApiProvider('https://{{ env.HOST }}:{{ env.PORT }}/query', {
+      env: {
+        HOST: 'context-host.com',
+        PORT: '8080',
+      },
+      options: {
+        env: {
+          HOST: 'options-host.com', // Should override context.env.HOST
+        },
+        config: {
+          body: {},
+        },
+      },
+    });
+
+    // HOST should come from options.env, PORT from context.env
+    expect(provider.id()).toBe('https://options-host.com:8080/query');
+  });
+
+  it('renders label using env overrides', async () => {
+    const provider = await loadApiProvider('echo', {
+      options: {
+        label: 'API ({{ env.ENVIRONMENT }})',
+        env: {
+          ENVIRONMENT: 'staging',
+        },
+      },
+    });
+
+    expect(provider.label).toBe('API (staging)');
+  });
+
   it('loadApiProvider with yaml filepath containing multiple providers', async () => {
     const mockYamlContent = dedent`
     - id: 'openai:gpt-4o-mini'
@@ -1374,5 +1488,234 @@ describe('resolveProvider', () => {
 
     expect(result).toBeDefined();
     expect(typeof result.id).toBe('function');
+  });
+});
+
+describe('resolveProviderConfigs', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should preserve string providers as-is', () => {
+    const result = resolveProviderConfigs(['openai:gpt-4']);
+
+    // Non-file string providers are preserved for loadApiProviders to handle
+    expect(result).toEqual(['openai:gpt-4']);
+  });
+
+  it('should pass through ProviderOptions objects unchanged', () => {
+    const providerOptions = {
+      id: 'openai:gpt-4',
+      prompts: ['prompt1', 'prompt2'],
+      config: { temperature: 0.7 },
+    };
+
+    const result = resolveProviderConfigs([providerOptions]);
+
+    expect(result).toEqual([providerOptions]);
+  });
+
+  it('should preserve ProviderOptionsMap format', () => {
+    const providerMap = {
+      'openai:gpt-4': {
+        prompts: ['prompt1'],
+        label: 'GPT-4 Model',
+      },
+    };
+    const result = resolveProviderConfigs([providerMap]);
+
+    // ProviderOptionsMap is preserved for loadApiProviders to handle
+    expect(result).toEqual([providerMap]);
+  });
+
+  it('should preserve ProviderOptionsMap with explicit id', () => {
+    const providerMap = {
+      'openai:gpt-4': {
+        id: 'custom-id',
+        prompts: ['prompt1'],
+      },
+    };
+    const result = resolveProviderConfigs([providerMap]);
+
+    // ProviderOptionsMap is preserved for loadApiProviders to handle
+    expect(result).toEqual([providerMap]);
+  });
+
+  it('should preserve function providers as-is', () => {
+    const providerFn = (() => Promise.resolve({ output: 'test' })) as ProviderFunction;
+
+    const result = resolveProviderConfigs([providerFn]);
+
+    // Functions are preserved for loadApiProviders to handle
+    expect(result).toEqual([providerFn]);
+  });
+
+  it('should preserve function providers with label as-is', () => {
+    const providerFn = (() => Promise.resolve({ output: 'test' })) as ProviderFunction;
+    (providerFn as any).label = 'My Custom Function';
+
+    const result = resolveProviderConfigs([providerFn]);
+
+    // Functions are preserved for loadApiProviders to handle
+    expect(result).toEqual([providerFn]);
+  });
+
+  it('should resolve file:// YAML references and preserve prompts field', () => {
+    const yamlContent = `
+id: ollama:phi3
+label: Phi3 Model
+prompts:
+  - phi3_prompt
+config:
+  temperature: 0.5
+`;
+    mockFsReadFileSync.mockReturnValue(yamlContent);
+
+    const basePath = path.join(path.sep, 'test', 'path');
+    const result = resolveProviderConfigs(['file://./providers/phi3.yaml'], {
+      basePath,
+    });
+
+    expect(mockFsReadFileSync).toHaveBeenCalledWith(
+      path.join(basePath, 'providers', 'phi3.yaml'),
+      'utf8',
+    );
+    expect(result).toEqual([
+      {
+        id: 'ollama:phi3',
+        label: 'Phi3 Model',
+        prompts: ['phi3_prompt'],
+        config: { temperature: 0.5 },
+      },
+    ]);
+  });
+
+  it('should resolve file:// with multiple providers in single file', () => {
+    const yamlContent = `
+- id: ollama:phi3
+  prompts:
+    - phi3_prompt
+- id: ollama:gemma
+  prompts:
+    - gemma_prompt
+`;
+    mockFsReadFileSync.mockReturnValue(yamlContent);
+
+    const basePath = path.join(path.sep, 'test', 'path');
+    const result = resolveProviderConfigs(['file://./providers.yaml'], {
+      basePath,
+    });
+
+    expect(Array.isArray(result)).toBe(true);
+    expect((result as any[]).length).toBe(2);
+    expect((result as any[])[0]).toEqual({ id: 'ollama:phi3', prompts: ['phi3_prompt'] });
+    expect((result as any[])[1]).toEqual({ id: 'ollama:gemma', prompts: ['gemma_prompt'] });
+  });
+
+  it('should handle mixed provider types preserving non-file providers', () => {
+    const yamlContent = `
+id: ollama:phi3
+prompts:
+  - phi3_prompt
+`;
+    mockFsReadFileSync.mockReturnValue(yamlContent);
+
+    const basePath = path.join(path.sep, 'test');
+    const providerOptions = { id: 'anthropic:claude-3', prompts: ['claude_prompt'] };
+    const result = resolveProviderConfigs(['openai:gpt-4', providerOptions, 'file://./phi3.yaml'], {
+      basePath,
+    });
+
+    expect(Array.isArray(result)).toBe(true);
+    expect((result as any[]).length).toBe(3);
+    // String providers are preserved as-is
+    expect((result as any[])[0]).toEqual('openai:gpt-4');
+    // ProviderOptions are preserved as-is
+    expect((result as any[])[1]).toEqual(providerOptions);
+    // file:// references are resolved to ProviderOptions
+    expect((result as any[])[2]).toEqual({ id: 'ollama:phi3', prompts: ['phi3_prompt'] });
+  });
+
+  it('should preserve single string provider (not array)', () => {
+    const result = resolveProviderConfigs('openai:gpt-4');
+
+    // Single non-file string is preserved as-is
+    expect(result).toEqual('openai:gpt-4');
+  });
+
+  it('should resolve single file:// string provider (not array)', () => {
+    const yamlContent = `
+id: ollama:phi3
+prompts:
+  - phi3_prompt
+`;
+    mockFsReadFileSync.mockReturnValue(yamlContent);
+
+    const basePath = path.join(path.sep, 'test');
+    const result = resolveProviderConfigs('file://./phi3.yaml', { basePath });
+
+    // file:// references are resolved to array of ProviderOptions
+    expect(result).toEqual([{ id: 'ollama:phi3', prompts: ['phi3_prompt'] }]);
+  });
+
+  it('should preserve single function provider (not array)', () => {
+    const providerFn = (() => Promise.resolve({ output: 'test' })) as ProviderFunction;
+
+    const result = resolveProviderConfigs(providerFn);
+
+    // Functions are preserved as-is
+    expect(result).toBe(providerFn);
+  });
+
+  it('should return input as-is for non-array, non-string, non-function input', () => {
+    const emptyObj = {} as any;
+    const result = resolveProviderConfigs(emptyObj);
+
+    // Non-standard input is returned as-is
+    expect(result).toBe(emptyObj);
+  });
+
+  it('should handle absolute file paths', () => {
+    const yamlContent = `
+id: ollama:phi3
+prompts:
+  - phi3_prompt
+`;
+    mockFsReadFileSync.mockReturnValue(yamlContent);
+
+    const absolutePath = path.join(path.sep, 'absolute', 'path', 'provider.yaml');
+    const result = resolveProviderConfigs([`file://${absolutePath}`]);
+
+    expect(mockFsReadFileSync).toHaveBeenCalledWith(absolutePath, 'utf8');
+    expect(result).toEqual([{ id: 'ollama:phi3', prompts: ['phi3_prompt'] }]);
+  });
+
+  it('should handle .yml extension', () => {
+    const yamlContent = `
+id: ollama:phi3
+prompts:
+  - phi3_prompt
+`;
+    mockFsReadFileSync.mockReturnValue(yamlContent);
+
+    const basePath = path.join(path.sep, 'test');
+    const result = resolveProviderConfigs(['file://./provider.yml'], { basePath });
+
+    expect(mockFsReadFileSync).toHaveBeenCalledWith(path.join(basePath, 'provider.yml'), 'utf8');
+    expect(result).toEqual([{ id: 'ollama:phi3', prompts: ['phi3_prompt'] }]);
+  });
+
+  it('should handle .json extension', () => {
+    const jsonContent = JSON.stringify({
+      id: 'openai:gpt-4',
+      prompts: ['gpt_prompt'],
+    });
+    mockFsReadFileSync.mockReturnValue(jsonContent);
+
+    const basePath = path.join(path.sep, 'test');
+    const result = resolveProviderConfigs(['file://./provider.json'], { basePath });
+
+    expect(mockFsReadFileSync).toHaveBeenCalledWith(path.join(basePath, 'provider.json'), 'utf8');
+    expect(result).toEqual([{ id: 'openai:gpt-4', prompts: ['gpt_prompt'] }]);
   });
 });

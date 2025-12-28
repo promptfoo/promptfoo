@@ -21,8 +21,7 @@ import { CIProgressReporter } from './progress/ciProgressReporter';
 import { maybeEmitAzureOpenAiWarning } from './providers/azure/warnings';
 import { providerRegistry } from './providers/providerRegistry';
 import { isPromptfooSampleTarget } from './providers/shared';
-import { strategyDisplayNames } from './redteam/constants';
-import { getSessionId, isSimbaTestCase } from './redteam/util';
+import { getSessionId } from './redteam/util';
 import { generatePrompts } from './suggestions';
 import telemetry from './telemetry';
 import {
@@ -65,6 +64,7 @@ import type { SingleBar } from 'cli-progress';
 import type winston from 'winston';
 
 import type Eval from './models/eval';
+import type EvalResult from './models/evalResult';
 import type {
   EvalConversations,
   EvalRegisters,
@@ -302,7 +302,7 @@ export async function runEval({
 
   // Set up vars with a shallow copy to prevent mutation of the original test.vars.
   // This is important because providers (especially multi-turn strategies like GOAT,
-  // Crescendo, SIMBA) may add runtime variables like sessionId to vars during execution.
+  // Crescendo) may add runtime variables like sessionId to vars during execution.
   // Without this copy, those mutations would persist to the stored testCase, causing
   // test matching to fail when using --filter-errors-only or --filter-failing.
   const vars = { ...(test.vars || {}) };
@@ -399,35 +399,11 @@ export async function runEval({
         callApiContext.testCaseId = traceContext.testCaseId;
       }
 
-      // Handle Simba providers specially - they use runSimba instead of callApi
-      if (activeProvider.id() === 'promptfoo:redteam:simba') {
-        const simbaProvider = activeProvider as any;
-        if (simbaProvider.runSimba) {
-          // Simba returns EvaluateResult[] directly, so we need to return early
-          const simbaResults: EvaluateResult[] = await simbaProvider.runSimba({
-            prompt: renderedPrompt,
-            context: callApiContext,
-            options: abortSignal ? { abortSignal } : undefined,
-            concurrency: evaluateOptions?.maxConcurrency ?? DEFAULT_MAX_CONCURRENCY,
-          });
-
-          // Update results with proper indices for Simba
-          for (const result of simbaResults) {
-            result.promptIdx = promptIdx;
-            result.testIdx = testIdx++;
-          }
-
-          return simbaResults;
-        } else {
-          throw new Error('Simba provider does not have runSimba method');
-        }
-      } else {
-        response = await activeProvider.callApi(
-          renderedPrompt,
-          callApiContext,
-          abortSignal ? { abortSignal } : undefined,
-        );
-      }
+      response = await activeProvider.callApi(
+        renderedPrompt,
+        callApiContext,
+        abortSignal ? { abortSignal } : undefined,
+      );
 
       logger.debug(`Provider response properties: ${Object.keys(response).join(', ')}`);
       logger.debug(`Provider response cached property explicitly: ${response.cached}`);
@@ -741,6 +717,40 @@ class Evaluator {
     this.fileWriters = jsonlFiles.map((p) => new JsonlFileWriter(p));
   }
 
+  /**
+   * Updates metrics and stats after a comparison assertion (select-best or max-score).
+   */
+  private updateComparisonStats(
+    result: EvalResult,
+    passed: boolean,
+    reason: string,
+    tokensUsed: TokenUsage | undefined,
+    wasSuccess: boolean,
+    wasScore: number,
+    metrics: CompletedPrompt['metrics'] | undefined,
+  ): void {
+    if (metrics) {
+      metrics.assertPassCount += passed ? 1 : 0;
+      metrics.assertFailCount += passed ? 0 : 1;
+      if (tokensUsed) {
+        updateAssertionMetrics(metrics, tokensUsed);
+      }
+      if (!passed && result.score !== wasScore) {
+        metrics.score += result.score - wasScore;
+      }
+    }
+    if (wasSuccess && !result.success) {
+      result.failureReason = ResultFailureReason.ASSERT;
+      result.error = reason;
+      if (metrics) {
+        metrics.testPassCount -= 1;
+        metrics.testFailCount += 1;
+      }
+      this.stats.successes -= 1;
+      this.stats.failures += 1;
+    }
+  }
+
   private async _runEvaluation(): Promise<Eval> {
     const { options } = this;
     let { testSuite } = this;
@@ -774,7 +784,9 @@ class Evaluator {
       }
     };
 
-    logger.info(`Starting evaluation ${this.evalRecord.id}`);
+    if (!options.silent) {
+      logger.info(`Starting evaluation ${this.evalRecord.id}`);
+    }
 
     // Add abort checks at key points
     checkAbort();
@@ -1275,11 +1287,6 @@ class Evaluator {
           await writer.write(row);
         }
 
-        if (row.metadata?.simbaSessionId) {
-          this.evalRecord.config.metadata ??= {};
-          this.evalRecord.config.metadata.simbaSessionId = row.metadata.simbaSessionId;
-        }
-
         const { promptIdx } = row;
         const metrics = prompts[promptIdx].metrics;
         invariant(metrics, 'Expected prompt.metrics to be set');
@@ -1506,15 +1513,12 @@ class Evaluator {
       }
     };
 
-    // Separate serial, concurrent, and Simba eval options
+    // Separate serial and concurrent eval options
     const serialRunEvalOptions: RunEvalOptions[] = [];
     const concurrentRunEvalOptions: RunEvalOptions[] = [];
-    const simbaRunEvalOptions: RunEvalOptions[] = [];
 
     for (const evalOption of runEvalOptions) {
-      if (isSimbaTestCase(evalOption)) {
-        simbaRunEvalOptions.push(evalOption);
-      } else if (evalOption.test.options?.runSerially) {
+      if (evalOption.test.options?.runSerially) {
         serialRunEvalOptions.push(evalOption);
       } else {
         concurrentRunEvalOptions.push(evalOption);
@@ -1522,13 +1526,15 @@ class Evaluator {
     }
 
     // Print info messages before starting progress bar
-    if (serialRunEvalOptions.length > 0) {
-      logger.info(`Running ${serialRunEvalOptions.length} test cases serially...`);
-    }
-    if (concurrentRunEvalOptions.length > 0) {
-      logger.info(
-        `Running ${concurrentRunEvalOptions.length} test cases (up to ${concurrency} at a time)...`,
-      );
+    if (!this.options.silent) {
+      if (serialRunEvalOptions.length > 0) {
+        logger.info(`Running ${serialRunEvalOptions.length} test cases serially...`);
+      }
+      if (concurrentRunEvalOptions.length > 0) {
+        logger.info(
+          `Running ${concurrentRunEvalOptions.length} test cases (up to ${concurrency} at a time)...`,
+        );
+      }
     }
 
     // Now start the progress bar after info messages
@@ -1563,28 +1569,6 @@ class Evaluator {
         processedIndices.add(idx);
         await this.evalRecord.addPrompts(prompts);
       });
-
-      // Finally run Simba evaluations sequentially (they have their own internal concurrency)
-      if (simbaRunEvalOptions.length > 0) {
-        if (progressBarManager) {
-          progressBarManager.complete();
-          progressBarManager.stop();
-        }
-
-        for (const evalStep of simbaRunEvalOptions) {
-          if (isWebUI) {
-            const provider = evalStep.provider.label || evalStep.provider.id();
-            const vars = formatVarsForDisplay(evalStep.test.vars || {}, 50);
-            logger.info(
-              `[${numComplete}/${runEvalOptions.length}] Running ${strategyDisplayNames.simba} ${provider} with vars: ${vars}`,
-            );
-          }
-          checkAbort();
-          const idx = runEvalOptions.indexOf(evalStep);
-          await processEvalStepWithTimeout(evalStep, idx);
-          processedIndices.add(idx);
-        }
-      }
     } catch (err) {
       if (options.abortSignal?.aborted) {
         // User interruption or max duration timeout
@@ -1659,6 +1643,9 @@ class Evaluator {
         for (let index = 0; index < resultsToCompare.length; index++) {
           const result = resultsToCompare[index];
           const gradingResult = gradingResults[index];
+          const wasSuccess = result.success;
+          const wasScore = result.score;
+          const metrics = prompts[result.promptIdx]?.metrics;
           if (result.gradingResult) {
             result.gradingResult.tokensUsed = result.gradingResult.tokensUsed || {
               total: 0,
@@ -1708,8 +1695,25 @@ class Evaluator {
             }
             result.gradingResult.componentResults.push(gradingResult);
           } else {
-            result.gradingResult = gradingResult;
+            const newPass = result.success && gradingResult.pass;
+            result.gradingResult = {
+              ...gradingResult,
+              pass: newPass,
+            };
+            result.success = newPass;
+            if (!gradingResult.pass) {
+              result.score = result.gradingResult.score = gradingResult.score;
+            }
           }
+          this.updateComparisonStats(
+            result,
+            gradingResult.pass,
+            gradingResult.reason || '',
+            gradingResult.tokensUsed,
+            wasSuccess,
+            wasScore,
+            metrics,
+          );
           if (this.evalRecord.persisted) {
             await result.save();
           }
@@ -1775,11 +1779,26 @@ class Evaluator {
             // Preserve existing gradingResult data and add max-score result to componentResults
             const existingComponentResults = result.gradingResult?.componentResults || [];
             const existingGradingResult = result.gradingResult;
+            const wasSuccess = result.success;
+            const wasScore = result.score;
+            const metrics = prompts[result.promptIdx]?.metrics;
+            const comparisonPassed = maxScoreGradingResult.pass;
+            const previousPass = existingGradingResult?.pass ?? result.success;
+            const nextPass = previousPass && comparisonPassed;
+
+            // When max-score fails, update score like select-best does
+            const newScore = comparisonPassed
+              ? (existingGradingResult?.score ?? result.score)
+              : maxScoreGradingResult.score;
 
             result.gradingResult = {
-              pass: maxScoreGradingResult.pass,
-              score: maxScoreGradingResult.score,
-              reason: maxScoreGradingResult.reason,
+              ...(existingGradingResult || {}),
+              pass: nextPass,
+              score: newScore,
+              reason:
+                !comparisonPassed && previousPass
+                  ? maxScoreGradingResult.reason
+                  : (existingGradingResult?.reason ?? ''),
               componentResults: [...existingComponentResults, maxScoreGradingResult],
               namedScores: {
                 ...(existingGradingResult?.namedScores || {}),
@@ -1789,9 +1808,20 @@ class Evaluator {
               assertion: maxScoreAssertion,
             };
 
-            // Don't overwrite overall success/score - max-score is just another assertion
-            // The overall result should be determined by all assertions, not just max-score
-
+            // Max-score is an additional assertion, so overall pass depends on existing asserts too.
+            result.success = nextPass;
+            if (!comparisonPassed) {
+              result.score = newScore;
+            }
+            this.updateComparisonStats(
+              result,
+              comparisonPassed,
+              maxScoreGradingResult.reason || '',
+              maxScoreGradingResult.tokensUsed,
+              wasSuccess,
+              wasScore,
+              metrics,
+            );
             if (this.evalRecord.persisted) {
               await result.save();
             }
