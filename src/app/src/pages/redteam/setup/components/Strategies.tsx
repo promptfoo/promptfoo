@@ -88,7 +88,9 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
   // Check if config has multi-turn strategies
   const hasMultiTurnStrategies = useMemo(
     () =>
-      (config.strategies ?? []).some((s) => s && MULTI_TURN_STRATEGIES.includes(getStrategyId(s))),
+      (config.strategies ?? []).some(
+        (s) => s && MULTI_TURN_STRATEGIES.includes(getStrategyId(s) as any),
+      ),
     [config.strategies],
   );
 
