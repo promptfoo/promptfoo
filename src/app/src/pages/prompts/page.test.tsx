@@ -1,7 +1,7 @@
+import { createTheme, ThemeProvider } from '@mui/material/styles';
 import { render, screen, waitFor } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock socket.io-client
 const mockSocket = {
