@@ -319,7 +319,11 @@ describe('getProviderDisplayName', () => {
 
     it('handles record-key matchType with multiple colons', () => {
       const config = { id: 'google:gemini-2.0-flash:thinking', config: { temperature: 0.5 } };
-      const result = getProviderDisplayName('google:gemini-2.0-flash:thinking', config, 'record-key');
+      const result = getProviderDisplayName(
+        'google:gemini-2.0-flash:thinking',
+        config,
+        'record-key',
+      );
       expect(result.prefix).toBe('google');
       expect(result.name).toBe('gemini-2.0-flash:thinking');
     });
