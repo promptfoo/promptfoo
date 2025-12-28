@@ -1,22 +1,14 @@
 # yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
-description: Gemini native image generation
+description: '[google-gemini-image] Gemini native image generation'
 
 prompts:
   - 'Create a {{quality}} image of {{subject}} with {{style}} aesthetic'
 
 providers:
-  # Gemini 2.5 Flash - Fast image generation (generally available)
-  # Note: imageSize is not supported for Gemini 2.5 models
+  # Gemini 2.5 Flash - Fast image generation
   - id: google:gemini-2.5-flash-image
     config:
       imageAspectRatio: '16:9'
-
-  # Gemini 3 Pro - Advanced image generation with reasoning (global endpoint only)
-  # imageSize is only supported for Gemini 3 models
-  - id: google:gemini-3-pro-image-preview
-    config:
-      imageAspectRatio: '16:9'
-      imageSize: '2K'
 
 defaultTest:
   assert:

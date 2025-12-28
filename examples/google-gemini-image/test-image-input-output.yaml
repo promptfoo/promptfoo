@@ -1,0 +1,56 @@
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+description: '[google-gemini-image] Image Input + Output'
+
+prompts:
+  # Image input with image output requests
+  - |
+    Look at this image and create a new image based on it: {{transformation}}
+
+    {{input_image}}
+
+  - |
+    Take the style from this image and apply it to: {{new_subject}}
+
+    {{input_image}}
+
+providers:
+  - id: google:gemini-2.5-flash-image
+    label: 'Image Input+Output 🎨'
+    config:
+      generationConfig:
+        temperature: 0.8
+        maxOutputTokens: 1024
+        responseModalities:
+          - IMAGE
+          - TEXT
+
+tests:
+  # 🎭 Image transformation tests
+  - description: '🟦➡️🤖 Transform geometric shapes to robot'
+    vars:
+      input_image: 'file://images/geometric-shapes.png'
+      transformation: 'Transform these geometric shapes into a futuristic robot version with glowing LED eyes and metallic texture'
+    assert:
+      - type: contains
+        value: '![Generated Image]'
+      - type: javascript
+        value: |
+          // Main requirement: should generate a new image
+          const hasNewImage = output.includes('![Generated Image]') && output.includes('data:image');
+          return hasNewImage;
+
+  - description: '🌅 Style transfer to dragon'
+    vars:
+      input_image: 'file://images/simple-landscape.png'
+      new_subject: 'a majestic dragon breathing rainbow fire'
+    assert:
+      - type: contains
+        value: 'data:image'
+
+  - description: '🌈 Color scheme inspiration'
+    vars:
+      input_image: 'file://images/color-gradient.png'
+      transformation: 'Create a sunset landscape using the same color palette as this gradient image'
+    assert:
+      - type: contains
+        value: '![Generated Image]'
