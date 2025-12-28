@@ -1323,6 +1323,35 @@ describe('evaluator', () => {
     });
   });
 
+  describe('latestId', () => {
+    it('should return the ID of the most recent evaluation', async () => {
+      await EvalFactory.create();
+      await EvalFactory.create();
+      const eval3 = await EvalFactory.create();
+
+      const latestId = await Eval.latestId();
+
+      // The most recently created eval should be returned
+      expect(latestId).toBe(eval3.id);
+    });
+
+    it('should return undefined when no evaluations exist', async () => {
+      const latestId = await Eval.latestId();
+
+      expect(latestId).toBeUndefined();
+    });
+
+    it('should return only the ID without loading the full eval object', async () => {
+      const eval1 = await EvalFactory.create();
+
+      const latestId = await Eval.latestId();
+
+      // Verify it returns a string ID, not an Eval object
+      expect(typeof latestId).toBe('string');
+      expect(latestId).toBe(eval1.id);
+    });
+  });
+
   describe('getTraces', () => {
     beforeEach(() => {
       vi.resetModules();
