@@ -1,5 +1,9 @@
 // Barrel file re-exporting from specialized modules for backwards compatibility
 
+// Test case comparison
+export { filterRuntimeVars, resultIsForTestCase, varsMatch } from './comparison';
+// Environment setup
+export { setupEnv } from './env';
 // File operations
 export {
   maybeLoadToolsFromExternalFile,
@@ -7,21 +11,11 @@ export {
   readFilters,
   readOutput,
 } from './file';
-
 // Output operations
 export { createOutputMetadata, writeMultipleOutputs, writeOutput } from './output';
-
-// Environment setup
-export { setupEnv } from './env';
-
-// Template rendering
-export { renderEnvOnlyInObject, renderVarsInObject } from './render';
-
-// Test case comparison
-export { filterRuntimeVars, resultIsForTestCase, varsMatch } from './comparison';
-
 // Provider utilities
 export { providerToIdentifier } from './provider';
-
+// Template rendering
+export { renderEnvOnlyInObject, renderVarsInObject } from './render';
 // Runtime utilities
 export { isRunningUnderNpx, printBorder } from './runtime';

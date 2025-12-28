@@ -10,14 +10,15 @@ import { VERSION } from '../constants';
 import { getDirectory } from '../esm';
 import { writeCsvToGoogleSheet } from '../googleSheets';
 import logger from '../logger';
-import type Eval from '../models/eval';
-import type EvalResult from '../models/evalResult';
 import { type CsvRow, type OutputFile, OutputFileExtension, ResultFailureReason } from '../types';
-import type { EvaluateTableOutput } from '../types';
-import invariant from './invariant';
 import { getHeaderForTable } from './exportToFile/getHeaderForTable';
 import { convertTestResultsToTableRow } from './exportToFile/index';
+import invariant from './invariant';
 import { getNunjucksEngine } from './templates';
+
+import type Eval from '../models/eval';
+import type EvalResult from '../models/evalResult';
+import type { EvaluateTableOutput } from '../types';
 
 const outputToSimpleString = (output: EvaluateTableOutput) => {
   const passFailText = output.pass

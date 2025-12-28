@@ -10,11 +10,12 @@ import { getEnvBool } from '../envars';
 import { importModule } from '../esm';
 import logger from '../logger';
 import { runPython } from '../python/pythonUtils';
-import type { NunjucksFilterMap, OutputFile } from '../types';
 import { isJavascriptFile } from './fileExtensions';
 import { parseFileUrl } from './functions/loadFunction';
 import { safeResolve } from './pathUtils';
 import { renderVarsInObject } from './render';
+
+import type { NunjucksFilterMap, OutputFile } from '../types';
 
 type CsvParseOptionsWithColumns<T> = Omit<CsvOptions<T>, 'columns'> & {
   columns: Exclude<CsvOptions['columns'], undefined | false>;

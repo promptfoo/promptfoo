@@ -1,8 +1,8 @@
 import deepEqual from 'fast-deep-equal';
-
 import { type EvaluateResult, type TestCase } from '../types';
-import type { Vars } from '../types/index';
 import { providerToIdentifier } from './provider';
+
+import type { Vars } from '../types/index';
 
 /**
  * Runtime variables that are added during evaluation but aren't part

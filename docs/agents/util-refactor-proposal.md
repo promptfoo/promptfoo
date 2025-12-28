@@ -9,6 +9,7 @@
 ## Problem Statement
 
 `src/util/index.ts` is 828 lines / 29KB - the largest util file. It mixes unrelated concerns:
+
 - File I/O (read/write)
 - Environment setup
 - Provider utilities
@@ -78,31 +79,37 @@ src/util/
 ## Implementation Phases
 
 ### Phase 1: Create new modules with complex functions
+
 - Create `output.ts` ← writeOutput, writeMultipleOutputs, createOutputMetadata
 - Create `env.ts` ← setupEnv
 - Create `render.ts` ← renderVarsInObject, renderEnvOnlyInObject
 
 ### Phase 2: Expand file.ts with file operations
+
 - Move parsePathOrGlob
 - Move readFilters
 - Move readOutput
 - Move maybeLoadToolsFromExternalFile
 
 ### Phase 3: Create remaining focused modules
+
 - Create `comparison.ts` ← varsMatch, resultIsForTestCase, filterRuntimeVars
 - Create `provider.ts` ← providerToIdentifier
 - Create `runtime.ts` ← isRunningUnderNpx
 
 ### Phase 4: Transform index.ts to barrel file
+
 - Replace implementations with re-exports
 - Verify no breaking changes
 
 ### Phase 5: Update internal imports (gradual)
+
 - Change imports to use specific modules where beneficial
 
 ## Validation
 
 After each step:
+
 1. Run `npm run build` to verify compilation
 2. Run `npm test` to verify functionality
 3. Check for circular dependencies
@@ -111,6 +118,7 @@ After each step:
 ## Circular Dependency Prevention
 
 The current codebase has NO circular dependencies. This refactor maintains that by:
+
 - Keeping pure utilities at base level (invariant, createHash, etc.)
 - Having higher-level utilities import from lower-level ones only
 - Using the barrel file (index.ts) only for external consumers
