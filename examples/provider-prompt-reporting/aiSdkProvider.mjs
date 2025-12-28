@@ -16,8 +16,8 @@
  *   npm install ai @ai-sdk/openai
  *   OPENAI_API_KEY=sk-... npx promptfoo@latest eval
  */
-import { generateText } from 'ai';
 import { openai } from '@ai-sdk/openai';
+import { generateText } from 'ai';
 
 // =============================================================================
 // PROMPT TEMPLATES - These simulate what frameworks like LangChain do
