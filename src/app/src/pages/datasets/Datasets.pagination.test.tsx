@@ -9,8 +9,6 @@
  * clicked rows to the original data, regardless of sorting and pagination.
  */
 import { render, screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import React from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Datasets from './Datasets';
@@ -39,34 +37,19 @@ describe('Issue #2248: Dataset pagination row click bug', () => {
     vi.clearAllMocks();
   });
 
-  it('should pass the correct dataset object to handleRowClick regardless of visual position', async () => {
+  it('should render the Datasets component with test data', async () => {
     const testData = generateTestData();
 
-    // Track what dataset is passed to the dialog
-    let lastClickedDataset: DatasetRow | null = null;
-
-    // Create a wrapper component to intercept the row click
-    const TestWrapper = () => {
-      const [clickedDataset, setClickedDataset] = React.useState<DatasetRow | null>(null);
-
-      // We'll verify by checking the dialog content
-      return (
-        <MemoryRouter>
-          <Datasets data={testData} isLoading={false} error={null} />
-        </MemoryRouter>
-      );
-    };
-
-    render(<TestWrapper />);
+    render(
+      <MemoryRouter>
+        <Datasets data={testData} isLoading={false} error={null} />
+      </MemoryRouter>,
+    );
 
     // Wait for the table to render
     await waitFor(() => {
       expect(screen.getByText('Datasets')).toBeInTheDocument();
     });
-
-    // Find all clickable rows and click each one, verifying the dialog shows correct data
-    // We can't easily paginate in the test, but we can verify the click handler logic
-    // by checking that clicking any row shows that row's data in the dialog
   });
 
   it('verifies handleRowClick finds correct index using ID matching', () => {
