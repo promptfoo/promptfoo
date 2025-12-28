@@ -70,12 +70,15 @@ export function useTokenMetrics(
   const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Track if we've dispatched at least once (for immediate first update)
   const hasDispatched = useRef(false);
+  // Track mounted state to prevent updates after unmount
+  const isMounted = useRef(true);
 
   /**
    * Flush all pending updates to the UI.
    */
   const flushUpdates = useCallback(() => {
-    if (pendingUpdates.current.size === 0) {
+    // Don't dispatch if unmounted (prevents race with debounce timer)
+    if (!isMounted.current || pendingUpdates.current.size === 0) {
       return;
     }
 
@@ -142,6 +145,9 @@ export function useTokenMetrics(
       return;
     }
 
+    // Reset mounted state when starting
+    isMounted.current = true;
+
     // Subscribe to token usage updates
     const tracker = TokenUsageTracker.getInstance();
     const unsubscribe = tracker.subscribe(handleUsageUpdate);
@@ -155,16 +161,18 @@ export function useTokenMetrics(
     }
 
     return () => {
+      // Mark as unmounted first to prevent any pending timers from dispatching
+      isMounted.current = false;
       // Unsubscribe
       unsubscribe();
-      // Flush any pending updates before unmounting
+      // Clear any pending timers
       if (debounceTimer.current) {
         clearTimeout(debounceTimer.current);
         debounceTimer.current = null;
       }
-      flushUpdates();
+      pendingUpdates.current.clear();
     };
-  }, [isRunning, handleUsageUpdate, flushUpdates]);
+  }, [isRunning, handleUsageUpdate]);
 }
 
 /**

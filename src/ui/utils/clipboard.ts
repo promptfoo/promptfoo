@@ -2,10 +2,11 @@
  * Cross-platform clipboard utility for the Ink UI.
  *
  * Uses native system commands for clipboard access to avoid
- * additional dependencies.
+ * additional dependencies. All operations are async to avoid
+ * blocking the event loop.
  */
 
-import { execSync } from 'child_process';
+import { spawn, execSync } from 'child_process';
 
 export interface ClipboardResult {
   success: boolean;
@@ -38,9 +39,12 @@ function getClipboardCommand(): { command: string; args: string[] } | null {
 }
 
 /**
- * Copy text to the system clipboard.
+ * Copy text to the system clipboard asynchronously.
+ *
+ * Uses spawn instead of execSync to avoid blocking the event loop,
+ * which keeps the UI responsive during clipboard operations.
  */
-export function copyToClipboard(text: string): ClipboardResult {
+export async function copyToClipboard(text: string): Promise<ClipboardResult> {
   const clipboardCmd = getClipboardCommand();
 
   if (!clipboardCmd) {
@@ -50,42 +54,62 @@ export function copyToClipboard(text: string): ClipboardResult {
     };
   }
 
-  try {
-    const { command, args } = clipboardCmd;
-    const fullCommand = args.length > 0 ? `${command} ${args.join(' ')}` : command;
+  const tryClipboardCommand = (command: string, args: string[]): Promise<ClipboardResult> => {
+    return new Promise((resolve) => {
+      const proc = spawn(command, args, {
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
 
-    // Use execSync with input to pipe text to clipboard command
-    execSync(fullCommand, {
-      input: text,
-      encoding: 'utf-8',
-      stdio: ['pipe', 'pipe', 'pipe'],
-    });
+      let errorOutput = '';
 
-    return { success: true };
-  } catch (error) {
-    // Try xsel as fallback on Linux
-    if (process.platform === 'linux') {
-      try {
-        execSync('xsel --clipboard --input', {
-          input: text,
-          encoding: 'utf-8',
-          stdio: ['pipe', 'pipe', 'pipe'],
+      proc.stderr?.on('data', (data: Buffer) => {
+        errorOutput += data.toString();
+      });
+
+      proc.on('error', (err) => {
+        resolve({
+          success: false,
+          error: err.message,
         });
-        return { success: true };
-      } catch {
-        // xsel also failed
-      }
-    }
+      });
 
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to copy to clipboard',
-    };
+      proc.on('close', (code) => {
+        if (code === 0) {
+          resolve({ success: true });
+        } else {
+          resolve({
+            success: false,
+            error: errorOutput || `Process exited with code ${code}`,
+          });
+        }
+      });
+
+      // Write text to stdin and close it
+      proc.stdin?.write(text);
+      proc.stdin?.end();
+    });
+  };
+
+  const { command, args } = clipboardCmd;
+  const result = await tryClipboardCommand(command, args);
+
+  // Try xsel as fallback on Linux if xclip failed
+  if (!result.success && process.platform === 'linux') {
+    const fallbackResult = await tryClipboardCommand('xsel', ['--clipboard', '--input']);
+    if (fallbackResult.success) {
+      return fallbackResult;
+    }
   }
+
+  return result;
 }
 
 /**
  * Check if clipboard is available on this platform.
+ *
+ * Note: This is intentionally synchronous since it's typically called
+ * once at startup to determine UI capabilities. The actual copy
+ * operation is async to avoid blocking during user interaction.
  */
 export function isClipboardAvailable(): boolean {
   const clipboardCmd = getClipboardCommand();

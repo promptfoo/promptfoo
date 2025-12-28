@@ -9,7 +9,7 @@ import { Box, Text, useApp } from 'ink';
 import React, { memo, useEffect, useRef, useState } from 'react';
 import { useEval, useEvalState } from '../../contexts/EvalContext';
 import { useCompactMode } from '../../contexts/UIContext';
-import { useNavigationKeys } from '../../hooks/useKeypress';
+import { useKeypress } from '../../hooks/useKeypress';
 import { useTokenMetrics } from '../../hooks/useTokenMetrics';
 import {
   formatCost,
@@ -393,7 +393,7 @@ export function EvalScreen({
 
   // Stabilized timestamp for activity detection - only updates on TICK
   // This prevents spurious re-renders from other state changes (like spinner updates)
-  const [activityNow, setActivityNow] = useState(Date.now);
+  const [activityNow, setActivityNow] = useState(() => Date.now());
 
   // Check if we're in results phase - if so, ResultsTable handles keyboard input
   const inResultsPhase = state.sessionPhase === 'results';
@@ -401,53 +401,35 @@ export function EvalScreen({
   // Poll TokenUsageTracker for real-time token metrics
   useTokenMetrics(dispatch, state.providerOrder, isRunning, 500);
 
-  // Handle keyboard input - only if raw mode is supported AND not in results phase
-  // When results table is shown, it handles all keyboard input
-  useNavigationKeys(
-    isRawModeSupported && !inResultsPhase
-      ? {
-          onEscape: () => {
-            onExit?.();
-            exit();
-          },
-        }
-      : {},
-  );
-
-  // Handle additional key bindings - only if raw mode is supported AND not in results phase
-  useEffect(() => {
-    // Disable when in results phase - ResultsTable handles keyboard input
-    if (!isRawModeSupported || inResultsPhase) {
-      return;
-    }
-
-    const handleInput = (data: Buffer) => {
-      const key = data.toString();
-      switch (key.toLowerCase()) {
-        case 'q':
-          onExit?.();
-          exit();
-          break;
-        case 'e':
-          dispatch({ type: 'TOGGLE_ERROR_DETAILS' });
-          break;
-        case 'v':
-          // Toggle verbose mode and update transport log level
-          dispatch({ type: 'TOGGLE_VERBOSE' });
-          // When toggling verbose, also update the log capture level
-          // We'll read the new state from the next render, so we check current state
-          // If currently NOT verbose, we're toggling TO verbose (debug level)
-          // If currently verbose, we're toggling OFF verbose (warn level)
-          setInkUITransportLevel(state.showVerbose ? 'warn' : 'debug');
-          break;
+  // Consolidated keyboard input handler using Ink's useInput internally
+  // Disabled when in results phase - ResultsTable handles keyboard input
+  useKeypress(
+    (key) => {
+      // Handle escape and 'q' for exit
+      if (key.name === 'escape' || key.key.toLowerCase() === 'q') {
+        onExit?.();
+        exit();
+        return;
       }
-    };
 
-    process.stdin.on('data', handleInput);
-    return () => {
-      process.stdin.off('data', handleInput);
-    };
-  }, [dispatch, exit, onExit, isRawModeSupported, state.showVerbose, inResultsPhase]);
+      // Handle 'e' for toggling error details
+      if (key.key.toLowerCase() === 'e') {
+        dispatch({ type: 'TOGGLE_ERROR_DETAILS' });
+        return;
+      }
+
+      // Handle 'v' for toggling verbose mode
+      if (key.key.toLowerCase() === 'v') {
+        dispatch({ type: 'TOGGLE_VERBOSE' });
+        // Update the log capture level based on current state
+        // If currently NOT verbose, we're toggling TO verbose (debug level)
+        // If currently verbose, we're toggling OFF verbose (warn level)
+        setInkUITransportLevel(state.showVerbose ? 'warn' : 'debug');
+        return;
+      }
+    },
+    { isActive: isRawModeSupported && !inResultsPhase },
+  );
 
   // Update elapsed time while running (also triggers activity indicator refresh)
   useEffect(() => {

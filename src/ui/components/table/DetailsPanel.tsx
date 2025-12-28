@@ -448,10 +448,10 @@ export function DetailsPanel({
     [activeSection, getSectionContent, maxContentLines],
   );
 
-  // Handle copying
-  const handleCopy = useCallback(() => {
+  // Handle copying (async to avoid blocking UI)
+  const handleCopy = useCallback(async () => {
     const content = getSectionContent(activeSection);
-    const result = copyToClipboard(content);
+    const result = await copyToClipboard(content);
     if (result.success) {
       setNotification(`Copied ${activeSection}`);
       setTimeout(() => setNotification(null), 2000);

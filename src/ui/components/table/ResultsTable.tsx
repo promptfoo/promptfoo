@@ -404,11 +404,11 @@ export function ResultsTable({
   // Process data for rendering
   const processedRows = useMemo(() => processTableData(data, maxCellLength), [data, maxCellLength]);
 
-  // Handle copy operation
-  const handleCopy = useCallback(() => {
+  // Handle copy operation (async to avoid blocking UI)
+  const handleCopy = useCallback(async () => {
     // Copy filtered results as JSON
     const content = convertTableToFormat(data, 'json');
-    const result = copyToClipboard(content);
+    const result = await copyToClipboard(content);
 
     if (result.success) {
       setNotification({ message: 'Results copied to clipboard', type: 'success' });
