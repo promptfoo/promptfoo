@@ -17,9 +17,7 @@ describe('markdown-config', () => {
       expect(typeof REMARK_PLUGINS[0]).toBe('function');
     });
 
-    it('should be a readonly array', () => {
-      // TypeScript enforces this at compile time with `as const`
-      // At runtime, we can verify it's an array
+    it('should be an array', () => {
       expect(Array.isArray(REMARK_PLUGINS)).toBe(true);
     });
   });

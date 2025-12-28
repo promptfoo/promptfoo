@@ -7,7 +7,7 @@ import remarkGfm from 'remark-gfm';
  *
  * @see https://github.com/promptfoo/promptfoo/issues/969
  */
-export const REMARK_PLUGINS = [remarkGfm] as const;
+export const REMARK_PLUGINS = [remarkGfm];
 
 /**
  * Identity URL transform that allows all URLs including data: URIs.
