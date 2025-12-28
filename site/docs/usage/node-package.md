@@ -272,4 +272,4 @@ const results = await promptfoo.evaluate({
 console.log(results.shareableUrl); // https://app.promptfoo.dev/eval/abc123
 ```
 
-Requires a [Promptfoo Cloud](/docs/cloud/overview) account or self-hosted server. For self-hosted, pass `sharing: { apiBaseUrl, appBaseUrl }` instead of `true`.
+Requires a [Promptfoo Cloud](/docs/enterprise) account or self-hosted server. For self-hosted, pass `sharing: { apiBaseUrl, appBaseUrl }` instead of `true`.
