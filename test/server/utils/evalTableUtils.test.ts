@@ -1,11 +1,17 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { evalTableToCsv, evalTableToJson } from '../../../src/server/utils/evalTableUtils';
+import {
+  evalTableToCsv,
+  evalTableToJson,
+  streamEvalCsv,
+} from '../../../src/server/utils/evalTableUtils';
 import { ResultFailureReason } from '../../../src/types/index';
 
+import type Eval from '../../../src/models/eval';
 import type {
   CompletedPrompt,
   EvaluateTableOutput,
   EvaluateTableRow,
+  Prompt,
 } from '../../../src/types/index';
 
 describe('evalTableUtils', () => {
@@ -1046,6 +1052,182 @@ describe('evalTableUtils', () => {
         custom: 'data',
         nested: { value: 123 },
       });
+    });
+  });
+
+  describe('streamEvalCsv', () => {
+    it('should order outputs by promptIdx regardless of database return order', async () => {
+      // Simulate results coming back in non-sequential order (prompt 2, then 0, then 1)
+      const mockResults = [
+        {
+          testIdx: 0,
+          promptIdx: 2, // Third prompt, but returned first
+          testCase: { vars: { name: 'Alice' }, description: 'Test 1' },
+          response: { output: 'Third output' },
+          success: true,
+          score: 1,
+          namedScores: {},
+          failureReason: ResultFailureReason.NONE,
+          gradingResult: null,
+          metadata: {},
+        },
+        {
+          testIdx: 0,
+          promptIdx: 0, // First prompt, returned second
+          testCase: { vars: { name: 'Alice' }, description: 'Test 1' },
+          response: { output: 'First output' },
+          success: true,
+          score: 1,
+          namedScores: {},
+          failureReason: ResultFailureReason.NONE,
+          gradingResult: null,
+          metadata: {},
+        },
+        {
+          testIdx: 0,
+          promptIdx: 1, // Second prompt, returned third
+          testCase: { vars: { name: 'Alice' }, description: 'Test 1' },
+          response: { output: 'Second output' },
+          success: true,
+          score: 1,
+          namedScores: {},
+          failureReason: ResultFailureReason.NONE,
+          gradingResult: null,
+          metadata: {},
+        },
+      ];
+
+      const mockEval = {
+        vars: ['name'],
+        prompts: [
+          { label: 'Prompt 1' } as Prompt,
+          { label: 'Prompt 2' } as Prompt,
+          { label: 'Prompt 3' } as Prompt,
+        ],
+        fetchResultsBatched: async function* () {
+          yield mockResults;
+        },
+      } as unknown as Eval;
+
+      const chunks: string[] = [];
+      await streamEvalCsv(mockEval, {
+        isRedteam: false,
+        write: (data: string) => {
+          chunks.push(data);
+        },
+      });
+
+      const csv = chunks.join('');
+      const lines = csv.split('\n').filter((line) => line.trim());
+
+      // Header should have prompts in order
+      expect(lines[0]).toContain('Prompt 1');
+      expect(lines[0]).toContain('Prompt 2');
+      expect(lines[0]).toContain('Prompt 3');
+
+      // Data row should have outputs in correct column order
+      // (First output under Prompt 1, Second under Prompt 2, Third under Prompt 3)
+      expect(lines[1]).toContain('First output');
+      expect(lines[1]).toContain('Second output');
+      expect(lines[1]).toContain('Third output');
+
+      // Verify order: First should come before Second, Second before Third
+      const firstIdx = lines[1].indexOf('First output');
+      const secondIdx = lines[1].indexOf('Second output');
+      const thirdIdx = lines[1].indexOf('Third output');
+      expect(firstIdx).toBeLessThan(secondIdx);
+      expect(secondIdx).toBeLessThan(thirdIdx);
+    });
+
+    it('should handle multiple test cases with out-of-order results', async () => {
+      const mockResults = [
+        // Test 1 results (out of order)
+        {
+          testIdx: 0,
+          promptIdx: 1,
+          testCase: { vars: { name: 'Alice' } },
+          response: { output: 'Alice-P2' },
+          success: true,
+          score: 1,
+          namedScores: {},
+          failureReason: ResultFailureReason.NONE,
+          gradingResult: null,
+          metadata: {},
+        },
+        {
+          testIdx: 0,
+          promptIdx: 0,
+          testCase: { vars: { name: 'Alice' } },
+          response: { output: 'Alice-P1' },
+          success: true,
+          score: 1,
+          namedScores: {},
+          failureReason: ResultFailureReason.NONE,
+          gradingResult: null,
+          metadata: {},
+        },
+        // Test 2 results (out of order)
+        {
+          testIdx: 1,
+          promptIdx: 1,
+          testCase: { vars: { name: 'Bob' } },
+          response: { output: 'Bob-P2' },
+          success: true,
+          score: 1,
+          namedScores: {},
+          failureReason: ResultFailureReason.NONE,
+          gradingResult: null,
+          metadata: {},
+        },
+        {
+          testIdx: 1,
+          promptIdx: 0,
+          testCase: { vars: { name: 'Bob' } },
+          response: { output: 'Bob-P1' },
+          success: true,
+          score: 1,
+          namedScores: {},
+          failureReason: ResultFailureReason.NONE,
+          gradingResult: null,
+          metadata: {},
+        },
+      ];
+
+      const mockEval = {
+        vars: ['name'],
+        prompts: [{ label: 'Prompt 1' } as Prompt, { label: 'Prompt 2' } as Prompt],
+        fetchResultsBatched: async function* () {
+          yield mockResults;
+        },
+      } as unknown as Eval;
+
+      const chunks: string[] = [];
+      await streamEvalCsv(mockEval, {
+        isRedteam: false,
+        write: (data: string) => {
+          chunks.push(data);
+        },
+      });
+
+      const csv = chunks.join('');
+      const lines = csv.split('\n').filter((line) => line.trim());
+
+      // Should have header + 2 data rows
+      expect(lines.length).toBe(3);
+
+      // Check Alice row has correct ordering
+      const aliceLine = lines.find((l) => l.includes('Alice'));
+      expect(aliceLine).toBeDefined();
+      const aliceP1Idx = aliceLine!.indexOf('Alice-P1');
+      const aliceP2Idx = aliceLine!.indexOf('Alice-P2');
+      expect(aliceP1Idx).toBeLessThan(aliceP2Idx);
+
+      // Check Bob row has correct ordering
+      const bobLine = lines.find((l) => l.includes('Bob'));
+      expect(bobLine).toBeDefined();
+      const bobP1Idx = bobLine!.indexOf('Bob-P1');
+      const bobP2Idx = bobLine!.indexOf('Bob-P2');
+      expect(bobP1Idx).toBeLessThan(bobP2Idx);
     });
   });
 });
