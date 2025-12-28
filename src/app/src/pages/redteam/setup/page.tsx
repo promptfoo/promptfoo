@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import ErrorBoundary from '@app/components/ErrorBoundary';
 import PylonChat from '@app/components/PylonChat';
@@ -45,6 +45,7 @@ import Strategies from './components/Strategies';
 import TargetConfiguration from './components/Targets/TargetConfiguration';
 import TargetTypeSelection from './components/Targets/TargetTypeSelection';
 import { TestCaseGenerationProvider } from './components/TestCaseGenerationProvider';
+import { usePendingRecon } from './hooks/usePendingRecon';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from './hooks/useRedTeamConfig';
 import { useSetupState } from './hooks/useSetupState';
 import { generateOrderedYaml } from './utils/yamlHelpers';
@@ -285,6 +286,19 @@ export default function RedTeamSetupPage() {
   const [savedConfigs, setSavedConfigs] = useState<SavedConfig[]>([]);
   const [configName, setConfigName] = useState('');
   const toast = useToast();
+
+  // Handle pending recon from CLI handoff
+  const handleReconApplied = useCallback(
+    (tabIndex: number) => {
+      setValue(tabIndex);
+      // Skip setup modal if recon was applied
+      setSetupModalOpen(false);
+      markSetupAsSeen();
+      toast.showToast('Recon configuration applied! Review and configure your target.', 'success');
+    },
+    [markSetupAsSeen, toast],
+  );
+  const { isLoading: isReconLoading, reconApplied } = usePendingRecon(handleReconApplied);
 
   // Add new state:
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
