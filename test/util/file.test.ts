@@ -40,9 +40,9 @@ vi.mock('fs', async () => {
 
 vi.mock('glob', () => ({
   globSync: vi.fn(),
-  hasMagic: (path: string) => {
+  hasMagic: vi.fn((path: string) => {
     return /[*?[\]{}]/.test(path) && !path.includes('\\');
-  },
+  }),
 }));
 
 vi.mock('../../src/esm', () => ({
