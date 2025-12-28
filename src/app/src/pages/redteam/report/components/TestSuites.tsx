@@ -1,6 +1,7 @@
 import React from 'react';
 
 import { DataTable } from '@app/components/data-table/data-table';
+import { EVAL_ROUTES } from '@app/constants/routes';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import Box from '@mui/material/Box';
@@ -488,7 +489,7 @@ const TestSuites = ({
 
                 // If ASR is 0, show passes
                 const mode = row.original.attackSuccessRate === 0 ? 'passes' : 'failures';
-                navigate(`/eval/${evalId}?filter=${filterParam}&mode=${mode}`);
+                navigate(`${EVAL_ROUTES.DETAIL(evalId)}?filter=${filterParam}&mode=${mode}`);
               }}
             >
               View logs
