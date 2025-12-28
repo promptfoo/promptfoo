@@ -1,3 +1,4 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import logger from '../../../src/logger';
 import {
   OpenAIGuardrailsPlugin,
@@ -5,15 +6,15 @@ import {
 } from '../../../src/redteam/plugins/openaiGuardrails';
 import { fetchWithTimeout } from '../../../src/util/fetch/index';
 
-jest.mock('fs');
-jest.mock('../../../src/util/fetch');
-jest.mock('../../../src/logger');
+vi.mock('fs');
+vi.mock('../../../src/util/fetch');
+vi.mock('../../../src/logger');
 
 describe('OpenAIGuardrailsPlugin', () => {
   let plugin: OpenAIGuardrailsPlugin;
 
   beforeEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
     plugin = new OpenAIGuardrailsPlugin({} as any, 'test', 'input');
   });
 
@@ -22,7 +23,7 @@ describe('OpenAIGuardrailsPlugin', () => {
       const mockData = `{"id":"jailbreak-01930","expected_triggers":{"Jailbreak":true},"data":"Test jailbreak prompt 1"}
 {"id":"jailbreak-01931","expected_triggers":{"Jailbreak":true},"data":"Test jailbreak prompt 2"}`;
 
-      jest.mocked(fetchWithTimeout).mockResolvedValue({
+      vi.mocked(fetchWithTimeout).mockResolvedValue({
         ok: true,
         text: () => Promise.resolve(mockData),
       } as Response);
@@ -42,7 +43,7 @@ describe('OpenAIGuardrailsPlugin', () => {
 {"id":"safe-00001","expected_triggers":{"Jailbreak":false},"data":"Safe prompt"}
 {"id":"jailbreak-01931","expected_triggers":{"Jailbreak":true},"data":"Another jailbreak"}`;
 
-      jest.mocked(fetchWithTimeout).mockResolvedValue({
+      vi.mocked(fetchWithTimeout).mockResolvedValue({
         ok: true,
         text: () => Promise.resolve(mockData),
       } as Response);
@@ -57,7 +58,7 @@ describe('OpenAIGuardrailsPlugin', () => {
 
 {"id":"jailbreak-01931","expected_triggers":{"Jailbreak":true},"data":"Another jailbreak"}`;
 
-      jest.mocked(fetchWithTimeout).mockResolvedValue({
+      vi.mocked(fetchWithTimeout).mockResolvedValue({
         ok: true,
         text: () => Promise.resolve(mockData),
       } as Response);
@@ -75,7 +76,7 @@ describe('OpenAIGuardrailsPlugin', () => {
         .map((obj) => JSON.stringify(obj))
         .join('\n');
 
-      jest.mocked(fetchWithTimeout).mockResolvedValue({
+      vi.mocked(fetchWithTimeout).mockResolvedValue({
         ok: true,
         text: () => Promise.resolve(mockData),
       } as Response);
@@ -85,7 +86,7 @@ describe('OpenAIGuardrailsPlugin', () => {
     });
 
     it('should handle fetch errors gracefully', async () => {
-      jest.mocked(fetchWithTimeout).mockRejectedValue(new Error('Fetch failed'));
+      vi.mocked(fetchWithTimeout).mockRejectedValue(new Error('Fetch failed'));
       const result = await fetchDataset(1);
       expect(result).toEqual([]);
       expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Error fetching dataset'));
@@ -95,7 +96,7 @@ describe('OpenAIGuardrailsPlugin', () => {
       const mockData = `{"id":"jailbreak-01930","expected_triggers":{"Jailbreak":true},"data":"Test"}
 {this is not valid json}`;
 
-      jest.mocked(fetchWithTimeout).mockResolvedValue({
+      vi.mocked(fetchWithTimeout).mockResolvedValue({
         ok: true,
         text: () => Promise.resolve(mockData),
       } as Response);
@@ -141,7 +142,7 @@ describe('OpenAIGuardrailsPlugin', () => {
     it('should generate tests correctly', async () => {
       const mockData = `{"id":"jailbreak-01930","expected_triggers":{"Jailbreak":true},"data":"Test jailbreak prompt"}`;
 
-      jest.mocked(fetchWithTimeout).mockResolvedValue({
+      vi.mocked(fetchWithTimeout).mockResolvedValue({
         ok: true,
         text: () => Promise.resolve(mockData),
       } as Response);
@@ -161,7 +162,7 @@ describe('OpenAIGuardrailsPlugin', () => {
     });
 
     it('should handle fetch errors gracefully in generateTests', async () => {
-      jest.mocked(fetchWithTimeout).mockRejectedValue(new Error('Fetch failed'));
+      vi.mocked(fetchWithTimeout).mockRejectedValue(new Error('Fetch failed'));
       const tests = await plugin.generateTests(1);
       expect(tests).toEqual([]);
       expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Error fetching dataset'));
@@ -175,7 +176,7 @@ describe('OpenAIGuardrailsPlugin', () => {
 {"id":"safe-00001","expected_triggers":{"Jailbreak":false},"data":"Safe prompt 1"}
 {"id":"safe-00002","expected_triggers":{"Jailbreak":false},"data":"Safe prompt 2"}`;
 
-      jest.mocked(fetchWithTimeout).mockResolvedValue({
+      vi.mocked(fetchWithTimeout).mockResolvedValue({
         ok: true,
         text: () => Promise.resolve(mockData),
       } as Response);
@@ -202,7 +203,7 @@ describe('OpenAIGuardrailsPlugin', () => {
       }));
       const mockData = [...jailbreakData, ...safeData].map((obj) => JSON.stringify(obj)).join('\n');
 
-      jest.mocked(fetchWithTimeout).mockResolvedValue({
+      vi.mocked(fetchWithTimeout).mockResolvedValue({
         ok: true,
         text: () => Promise.resolve(mockData),
       } as Response);
@@ -219,7 +220,7 @@ describe('OpenAIGuardrailsPlugin', () => {
       const mockData = `{"id":"jailbreak-01930","expected_triggers":{"Jailbreak":true},"data":"Jailbreak prompt"}
 {"id":"safe-00001","expected_triggers":{"Jailbreak":false},"data":"Safe prompt"}`;
 
-      jest.mocked(fetchWithTimeout).mockResolvedValue({
+      vi.mocked(fetchWithTimeout).mockResolvedValue({
         ok: true,
         text: () => Promise.resolve(mockData),
       } as Response);
@@ -251,7 +252,7 @@ describe('OpenAIGuardrailsPlugin', () => {
       const mockData = `{"id":"safe-00001","expected_triggers":{"Jailbreak":false},"data":"What is the weather today?"}
 {"id":"jailbreak-01930","expected_triggers":{"Jailbreak":true},"data":"Jailbreak attempt"}`;
 
-      jest.mocked(fetchWithTimeout).mockResolvedValue({
+      vi.mocked(fetchWithTimeout).mockResolvedValue({
         ok: true,
         text: () => Promise.resolve(mockData),
       } as Response);
@@ -277,7 +278,7 @@ describe('OpenAIGuardrailsPlugin', () => {
       const mockData = `{"id":"safe-00001","expected_triggers":{"Jailbreak":false},"data":"What is the weather today?"}
 {"id":"jailbreak-01930","expected_triggers":{"Jailbreak":true},"data":"Jailbreak attempt"}`;
 
-      jest.mocked(fetchWithTimeout).mockResolvedValue({
+      vi.mocked(fetchWithTimeout).mockResolvedValue({
         ok: true,
         text: () => Promise.resolve(mockData),
       } as Response);
@@ -307,7 +308,7 @@ describe('OpenAIGuardrailsPlugin', () => {
 {"id":"safe-00001","expected_triggers":{"Jailbreak":false},"data":"Safe prompt"}
 {"id":"jailbreak-01931","expected_triggers":{"Jailbreak":true},"data":"Another jailbreak"}`;
 
-      jest.mocked(fetchWithTimeout).mockResolvedValue({
+      vi.mocked(fetchWithTimeout).mockResolvedValue({
         ok: true,
         text: () => Promise.resolve(mockData),
       } as Response);

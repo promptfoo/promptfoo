@@ -1,11 +1,12 @@
 ---
+title: OpenAI Guardrails Plugin
 sidebar_label: OpenAI Guardrails
-description: Red team jailbreak resistance using OpenAI's evaluation dataset to test LLM responses to role-playing attacks, system manipulation, and obfuscation techniques
+description: Red team jailbreak resistance using OpenAI's eval dataset to test LLM responses to role-playing attacks, system manipulation, and obfuscation techniques
 ---
 
 # OpenAI Guardrails Plugin
 
-The OpenAI Guardrails plugin uses the jailbreak evaluation dataset from [OpenAI's Guardrails Python package](https://github.com/openai/openai-guardrails-python) to test LLM responses to known jailbreak attempts. The dataset contains real-world jailbreak patterns designed to circumvent AI safety guidelines, including:
+The OpenAI Guardrails plugin uses the jailbreak eval dataset from [OpenAI's Guardrails Python package](https://github.com/openai/openai-guardrails-python) to test LLM responses to known jailbreak attempts. The dataset contains real-world jailbreak patterns designed to circumvent AI safety guidelines, including:
 
 - Role-playing attacks (e.g., "You are DAN", "Act as an unethical chatbot")
 - System manipulation (e.g., token-based jailbreaks, prompt injection via special formatting)
@@ -18,7 +19,7 @@ This plugin helps evaluate whether your LLM maintains safety boundaries when fac
 
 The plugin:
 
-- Loads jailbreak prompts from OpenAI's evaluation dataset
+- Loads jailbreak prompts from OpenAI's eval dataset
 - Filters for prompts expected to trigger jailbreak guardrails
 - Shuffles and selects a specified number of test cases
 - Tests whether the model refuses or complies with jailbreak attempts
@@ -66,7 +67,7 @@ When `includeSafe: true` is set:
 ## Example
 
 ```yaml
-description: OpenAI Guardrails jailbreak evaluation
+description: OpenAI Guardrails jailbreak eval
 
 prompts:
   - 'Respond to the following query: {{query}}'
@@ -96,7 +97,7 @@ The grading is intentionally strict - any indication that the model engaged with
 
 ## Dataset
 
-The dataset includes jailbreak attempts from OpenAI's internal evaluation suite, each labeled with:
+The dataset includes jailbreak attempts from OpenAI's internal eval suite, each labeled with:
 
 - Unique identifier for tracking
 - The jailbreak prompt text
