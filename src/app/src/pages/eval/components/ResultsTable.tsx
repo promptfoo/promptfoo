@@ -45,7 +45,12 @@ import { useFilterMode } from './FilterModeProvider';
 import MarkdownErrorBoundary from './MarkdownErrorBoundary';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import TruncatedText from './TruncatedText';
-import type { CellContext, ColumnDef, VisibilityState } from '@tanstack/table-core';
+import type {
+  CellContext,
+  ColumnDef,
+  ColumnSizingState,
+  VisibilityState,
+} from '@tanstack/table-core';
 
 import type { TruncatedTextProps } from './TruncatedText';
 import './ResultsTable.css';
@@ -327,6 +332,10 @@ function ResultsTable({
     pageIndex: 0,
     pageSize: filteredResultsCount > 10 ? 50 : 10,
   });
+
+  // Persist column sizing state to prevent header resize flicker during pagination.
+  // Without this, column widths reset when columns memo recalculates (due to deps like passRates changing).
+  const [columnSizing, setColumnSizing] = React.useState<ColumnSizingState>({});
 
   /**
    * Reset the pagination state when the filtered results count changes.
@@ -1247,8 +1256,10 @@ function ResultsTable({
     pageCount,
     state: {
       columnVisibility,
+      columnSizing,
       pagination,
     },
+    onColumnSizingChange: setColumnSizing,
     enableColumnResizing: true,
   });
 
