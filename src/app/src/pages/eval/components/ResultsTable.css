@@ -784,7 +784,8 @@ thead .header-dismiss {
   padding: 0.1em 0.3em;
   background: var(--variable-background-color);
   border-radius: 3px;
-  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+  font-family:
+    ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
 }
 
 /* Code blocks - compact styling */
@@ -792,7 +793,8 @@ thead .header-dismiss {
   margin: 0.4em 0;
   padding: 0.5em;
   font-size: 0.85em;
-  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+  font-family:
+    ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
   background: var(--variable-background-color);
   border-radius: 4px;
   overflow-x: auto;
@@ -874,8 +876,8 @@ thead .header-dismiss {
 }
 
 /* Also override for any language-specific code */
-[data-theme='dark'] .results-table tr .cell pre code[class*="language-"],
-[data-theme='dark'] .results-table tr .cell code[class*="language-"] {
+[data-theme='dark'] .results-table tr .cell pre code[class*='language-'],
+[data-theme='dark'] .results-table tr .cell code[class*='language-'] {
   text-shadow: none;
 }
 
