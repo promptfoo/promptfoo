@@ -1,5 +1,5 @@
-// biome-ignore lint/correctness/noUnusedImports: React is required for JSX
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
+
 import styles from './styles.module.css';
 
 const CACHE_KEY = 'github_stars_cache_promptfoo';
@@ -56,7 +56,6 @@ export default function GitHubStars(): React.ReactElement {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
 
-    // biome-ignore lint/style/noRestrictedGlobals: Browser fetch is appropriate for client-side component
     fetch('https://api.github.com/repos/promptfoo/promptfoo', {
       signal: controller.signal,
     })

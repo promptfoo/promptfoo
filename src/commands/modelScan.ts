@@ -1,7 +1,12 @@
-import type { ChildProcess } from 'child_process';
 import { spawn } from 'child_process';
+import crypto from 'crypto';
+import { unlinkSync } from 'fs';
+import fs from 'fs/promises';
+import os from 'os';
+import path from 'path';
 
 import chalk from 'chalk';
+import semver from 'semver';
 import { z } from 'zod';
 import { getAuthor } from '../globalConfig/accounts';
 import logger from '../logger';
@@ -15,7 +20,7 @@ import {
 import { DEPRECATED_OPTIONS_MAP, parseModelAuditArgs } from '../util/modelAuditCliParser';
 import type { Command } from 'commander';
 
-import type { ModelAuditScanResults, ModelAuditIssue } from '../types/modelAudit';
+import type { ModelAuditIssue, ModelAuditScanResults } from '../types/modelAudit';
 
 // ============================================================================
 // Types
@@ -59,6 +64,33 @@ interface ScanOptions {
 // ============================================================================
 
 /**
+ * Create a unique temp file path for JSON output.
+ * Uses crypto.randomUUID() for better security against TOCTOU attacks.
+ * @internal Exported for testing
+ */
+export function createTempOutputPath(): string {
+  const tempDir = os.tmpdir();
+  const uuid = crypto.randomUUID();
+  return path.join(tempDir, `promptfoo-modelscan-${uuid}.json`);
+}
+
+/**
+ * Check if modelaudit version supports CLI UI with --output flag.
+ * This feature was added in v0.2.20.
+ * @internal Exported for testing
+ */
+export function supportsCliUiWithOutput(version: string | null): boolean {
+  if (!version) {
+    return false;
+  }
+  const parsed = semver.valid(semver.coerce(version));
+  if (!parsed) {
+    return false;
+  }
+  return semver.gte(parsed, '0.2.20');
+}
+
+/**
  * Check if modelaudit is installed and get its version.
  */
 export async function checkModelAuditInstalled(): Promise<{
@@ -77,6 +109,20 @@ function hasErrorsInResults(results: ModelAuditScanResults): boolean {
     results.has_errors ||
       results.issues?.some((issue) => issue.severity === 'critical' || issue.severity === 'error'),
   );
+}
+
+/**
+ * Check if exit code indicates a process error (signal termination or crash).
+ *
+ * modelaudit exit codes:
+ * - 0: Scan completed successfully, no security issues found
+ * - 1: Scan completed successfully, security issues were found (NOT an error)
+ * - 2+: Fatal errors (e.g., invalid arguments, crash, signal termination)
+ *
+ * This differs from standard Unix conventions where exit 1 = general failure.
+ */
+function isProcessError(code: number | null): code is number {
+  return code !== null && code > 1;
 }
 
 /**
@@ -127,6 +173,11 @@ function warnDeprecatedOptions(options: Record<string, unknown>): void {
 /**
  * Spawn modelaudit with proper signal handling and Promise wrapper.
  * Returns stdout/stderr content when capturing output, or empty strings for inherited stdio.
+ *
+ * Signal handling note: Node.js does NOT automatically forward signals to child
+ * processes, even with inherited stdio. When the parent receives SIGINT (Ctrl+C)
+ * or SIGTERM, the child keeps running unless we explicitly kill it. This affects
+ * ALL code paths that use this function (--no-write, saveToDatabase, etc.).
  */
 function spawnModelAudit(
   args: string[],
@@ -146,12 +197,12 @@ function spawnModelAudit(
       ? { env: options.env }
       : { stdio: 'inherit' as const, env: options.env };
 
-    const modelAudit: ChildProcess = spawn('modelaudit', args, spawnOptions);
+    const childProcess = spawn('modelaudit', args, spawnOptions);
 
-    // Graceful shutdown - kill child on SIGINT/SIGTERM
+    // Graceful shutdown - forward SIGINT/SIGTERM to child process
     const cleanup = () => {
-      if (!modelAudit.killed) {
-        modelAudit.kill('SIGTERM');
+      if (!childProcess.killed) {
+        childProcess.kill('SIGTERM');
       }
     };
     process.once('SIGINT', cleanup);
@@ -163,20 +214,20 @@ function spawnModelAudit(
     };
 
     if (options.captureOutput) {
-      modelAudit.stdout?.on('data', (data: Buffer) => {
+      childProcess.stdout?.on('data', (data: Buffer) => {
         const str = data.toString();
         stdout += str;
         options.onStdout?.(str);
       });
 
-      modelAudit.stderr?.on('data', (data: Buffer) => {
+      childProcess.stderr?.on('data', (data: Buffer) => {
         const str = data.toString();
         stderr += str;
         options.onStderr?.(str);
       });
     }
 
-    modelAudit.on('error', (error: Error) => {
+    childProcess.on('error', (error: Error) => {
       removeListeners();
       if (settled) {
         return;
@@ -185,7 +236,7 @@ function spawnModelAudit(
       reject(error);
     });
 
-    modelAudit.on('close', (code: number | null) => {
+    childProcess.on('close', (code: number | null) => {
       removeListeners();
       if (settled) {
         return;
@@ -440,26 +491,17 @@ async function saveAuditRecord(
 }
 
 /**
- * Process scan results: parse JSON, save to database, display summary.
+ * Common logic for processing scan results after JSON is obtained.
+ * Parses JSON, saves to database, and displays summary.
  */
-async function processScanResults(
-  spawnResult: SpawnResult,
+async function processJsonResults(
+  jsonOutput: string,
+  exitCode: number,
   paths: string[],
   options: ScanOptions,
   currentScannerVersion: string | null,
   existingAudit: ModelAudit | null,
 ): Promise<number> {
-  // Handle non-zero exit codes (0 and 1 are both valid - 1 means issues found)
-  if (spawnResult.code !== null && spawnResult.code !== 0 && spawnResult.code !== 1) {
-    logger.error(`Model scan process exited with code ${spawnResult.code}`);
-    if (spawnResult.stderr) {
-      logger.error(`Error output: ${spawnResult.stderr}`);
-    }
-    return spawnResult.code;
-  }
-
-  // Parse JSON output
-  const jsonOutput = spawnResult.stdout.trim();
   if (!jsonOutput) {
     logger.error('No output received from model scan');
     return 1;
@@ -471,7 +513,7 @@ async function processScanResults(
   } catch (error) {
     logger.error(`Failed to parse scan results: ${error}`);
     if (options.verbose) {
-      logger.error(`Raw output: ${spawnResult.stdout}`);
+      logger.error(`Raw output: ${jsonOutput}`);
     }
     return 1;
   }
@@ -487,19 +529,110 @@ async function processScanResults(
     revisionInfo,
   );
 
-  // Display summary (unless JSON format requested)
+  // Display summary (unless JSON format requested by user)
   if (options.format !== 'json') {
     displayScanSummary(results, audit.id, currentScannerVersion, existingAudit !== null);
   }
 
-  // Save to file if requested
+  // Save to user-specified output file if requested
   if (options.output) {
-    const fs = await import('fs');
-    fs.writeFileSync(options.output, JSON.stringify(results, null, 2));
-    logger.info(`Results also saved to ${options.output}`);
+    try {
+      await fs.writeFile(options.output, JSON.stringify(results, null, 2));
+      logger.info(`Results also saved to ${options.output}`);
+    } catch (error) {
+      logger.error(`Failed to save results to ${options.output}: ${error}`);
+    }
   }
 
-  return spawnResult.code || 0;
+  return exitCode;
+}
+
+/**
+ * Process scan results from a JSON file (used when CLI UI is displayed).
+ * Reads JSON from temp file, processes results, and cleans up the temp file.
+ */
+async function processScanResultsFromFile(
+  spawnResult: SpawnResult,
+  jsonFilePath: string,
+  paths: string[],
+  options: ScanOptions,
+  currentScannerVersion: string | null,
+  existingAudit: ModelAudit | null,
+): Promise<number> {
+  // Helper to clean up temp file
+  const cleanupTempFile = async () => {
+    try {
+      await fs.unlink(jsonFilePath);
+    } catch (error) {
+      logger.debug(`Failed to cleanup temp file ${jsonFilePath}: ${error}`);
+    }
+  };
+
+  // Handle process errors (stderr already displayed via inherited stdio)
+  if (isProcessError(spawnResult.code)) {
+    logger.error(`Model scan process exited with code ${spawnResult.code}`);
+    await cleanupTempFile();
+    return spawnResult.code;
+  }
+
+  // Read JSON from temp file
+  let jsonOutput: string;
+  try {
+    jsonOutput = (await fs.readFile(jsonFilePath, 'utf-8')).trim();
+  } catch (error) {
+    logger.error(`Failed to read scan results from file: ${error}`);
+    await cleanupTempFile();
+    return 1;
+  }
+
+  // Clean up temp file after successful read
+  await cleanupTempFile();
+
+  return processJsonResults(
+    jsonOutput,
+    spawnResult.code || 0,
+    paths,
+    options,
+    currentScannerVersion,
+    existingAudit,
+  );
+}
+
+/**
+ * Process scan results from stdout (used for older modelaudit versions).
+ * Parses JSON from captured stdout and saves to database.
+ */
+async function processScanResultsFromStdout(
+  spawnResult: SpawnResult,
+  paths: string[],
+  options: ScanOptions,
+  currentScannerVersion: string | null,
+  existingAudit: ModelAudit | null,
+): Promise<number> {
+  // Handle process errors
+  if (isProcessError(spawnResult.code)) {
+    logger.error(`Model scan process exited with code ${spawnResult.code}`);
+    if (spawnResult.stderr) {
+      logger.error(spawnResult.stderr);
+    }
+    return spawnResult.code;
+  }
+
+  const jsonOutput = spawnResult.stdout.trim();
+  if (!jsonOutput && spawnResult.stderr) {
+    logger.error('No output received from model scan');
+    logger.error(spawnResult.stderr);
+    return 1;
+  }
+
+  return processJsonResults(
+    jsonOutput,
+    spawnResult.code || 0,
+    paths,
+    options,
+    currentScannerVersion,
+    existingAudit,
+  );
 }
 
 // ============================================================================
@@ -627,30 +760,87 @@ export function modelScanCommand(program: Command): void {
 
       try {
         if (saveToDatabase) {
-          // Capture output for database storage
-          const spawnResult = await spawnModelAudit(args, {
-            captureOutput: true,
-            env: delegationEnv,
-            onStdout: (data) => {
-              // Show raw JSON if user explicitly requested it
-              if (options.format === 'json' && !options.output) {
-                process.stdout.write(data);
-              }
-            },
-            onStderr: (data) => {
-              if (options.verbose) {
-                process.stderr.write(data);
-              }
-            },
-          });
+          // Check if modelaudit version supports CLI UI with --output flag (v0.2.20+)
+          const useCliUiFlow = supportsCliUiWithOutput(currentScannerVersion);
 
-          process.exitCode = await processScanResults(
-            spawnResult,
-            paths,
-            options,
-            currentScannerVersion,
-            existingAuditToUpdate,
-          );
+          if (useCliUiFlow) {
+            // Use temp file for JSON output so CLI UI can display
+            // (modelaudit 0.2.20+ shows CLI UI when --output is used)
+            const tempOutputPath = createTempOutputPath();
+            args.push('--output', tempOutputPath);
+
+            // Cleanup handler for temp file on abnormal termination.
+            // Note: Child process termination is handled by spawnModelAudit's signal
+            // handlers - this only handles temp file cleanup.
+            //
+            // IMPORTANT: We use unlinkSync (synchronous) instead of fs.promises.unlink
+            // because signal handlers must complete synchronously. Async operations
+            // in signal handlers are unsafe - the process may exit before they complete.
+            let cleanedUp = false;
+            const cleanupTempFileOnExit = () => {
+              if (cleanedUp) {
+                return;
+              }
+              cleanedUp = true;
+              try {
+                unlinkSync(tempOutputPath);
+              } catch {
+                // Ignore - file may already be cleaned up or doesn't exist
+              }
+            };
+
+            // Register cleanup handlers for abnormal termination.
+            // We use once() so handlers auto-remove after firing, but we also manually
+            // remove them in finally{} for the normal exit path. The cleanedUp flag
+            // prevents double-cleanup if a signal fires between our manual cleanup call
+            // and removeListener calls. This belt-and-suspenders approach ensures:
+            // 1. Normal exit: finally{} cleans up and removes handlers
+            // 2. Signal during await: once() handler cleans up, auto-removes itself
+            // 3. Signal during finally{}: cleanedUp flag prevents double-cleanup
+            process.once('exit', cleanupTempFileOnExit);
+            process.once('SIGINT', cleanupTempFileOnExit);
+            process.once('SIGTERM', cleanupTempFileOnExit);
+
+            try {
+              // Use inherited stdio so CLI UI displays (spinners, progress, colors)
+              const spawnResult = await spawnModelAudit(args, {
+                captureOutput: false,
+                env: delegationEnv,
+              });
+
+              // Read JSON from temp file and process results
+              process.exitCode = await processScanResultsFromFile(
+                spawnResult,
+                tempOutputPath,
+                paths,
+                options,
+                currentScannerVersion,
+                existingAuditToUpdate,
+              );
+            } finally {
+              // Cleanup first, then remove handlers. Order matters: if we removed
+              // handlers first, a signal arriving before cleanup would be missed.
+              cleanupTempFileOnExit();
+              process.removeListener('exit', cleanupTempFileOnExit);
+              process.removeListener('SIGINT', cleanupTempFileOnExit);
+              process.removeListener('SIGTERM', cleanupTempFileOnExit);
+            }
+          } else {
+            // Fallback for older modelaudit versions: capture stdout for JSON
+            logger.debug('Using stdout capture (modelaudit < 0.2.20)');
+            const spawnResult = await spawnModelAudit(args, {
+              captureOutput: true,
+              env: delegationEnv,
+            });
+
+            process.exitCode = await processScanResultsFromStdout(
+              spawnResult,
+              paths,
+              options,
+              currentScannerVersion,
+              existingAuditToUpdate,
+            );
+          }
         } else {
           // Pass through to terminal (inherited stdio)
           const spawnResult = await spawnModelAudit(args, {

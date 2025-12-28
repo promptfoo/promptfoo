@@ -1,10 +1,10 @@
+import * as ReactDOM from 'react-dom/client';
+
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import type { AssertionType, GradingResult } from '@promptfoo/types';
-import * as ReactDOM from 'react-dom/client';
-import { v4 as uuidv4 } from 'uuid';
 
 // Mock the Citations component to verify it receives the correct props
 vi.mock('./Citations', () => ({
@@ -115,7 +115,8 @@ describe('EvalOutputPromptDialog', () => {
     });
     expect(screen.getByText('Metric')).toBeInTheDocument();
     expect(screen.getByText('contains')).toBeInTheDocument();
-    expect(screen.getByText('✅')).toBeInTheDocument();
+    // CircleCheck icon is an SVG with emerald color indicating pass (use document.body because Sheet uses portals)
+    expect(document.body.querySelector('svg.text-emerald-600')).toBeInTheDocument();
   });
 
   it('does not display metrics column when no metrics are present', async () => {
@@ -162,20 +163,24 @@ describe('EvalOutputPromptDialog', () => {
 
     render(<EvalOutputPromptDialog {...defaultProps} />);
 
-    // Find the prompt content box and trigger hover to make copy button visible
-    const promptBox = screen.getByText('Test prompt').closest('.MuiPaper-root');
-    expect(promptBox).toBeInTheDocument();
+    // Find the prompt section - the outer container that has the hover handler
+    const promptText = screen.getByText('Test prompt');
+    const promptContainer = promptText.closest('.relative');
+    expect(promptContainer).toBeInTheDocument();
 
-    fireEvent.mouseEnter(promptBox!);
+    // Trigger hover to make copy button visible
+    fireEvent.mouseEnter(promptContainer!);
 
-    // Find all copy buttons and select the first one (for the prompt)
-    const copyIcons = screen.getAllByTestId('ContentCopyIcon');
-    const copyButton = copyIcons[0].closest('button');
+    // Wait for the copy button to appear after hover
+    const copyButton = await screen.findByRole('button', { name: /^copy\s*$/i });
     expect(copyButton).toBeInTheDocument();
-    await userEvent.click(copyButton!);
+    await userEvent.click(copyButton);
 
     expect(mockClipboard.writeText).toHaveBeenCalledWith('Test prompt');
-    expect(screen.getByTestId('CheckIcon')).toBeInTheDocument();
+    // Wait for Check icon to appear after state update (use document.body because Sheet uses portals)
+    await waitFor(() => {
+      expect(document.body.querySelector('svg.lucide-check')).toBeInTheDocument();
+    });
   });
 
   it('copies assertion value to clipboard when copy button is clicked', async () => {
@@ -201,7 +206,10 @@ describe('EvalOutputPromptDialog', () => {
     await userEvent.click(copyButton);
 
     expect(mockClipboard.writeText).toHaveBeenCalledWith('expected value');
-    expect(screen.getByTestId('CheckIcon')).toBeInTheDocument();
+    // Wait for Check icon to appear after state update (use document.body because Sheet uses portals)
+    await waitFor(() => {
+      expect(document.body.querySelector('svg.lucide-check')).toBeInTheDocument();
+    });
   });
 
   it('expands truncated values when clicked', async () => {
@@ -384,23 +392,23 @@ describe('EvalOutputPromptDialog', () => {
   });
 
   it('passes undefined promptIndex to DebuggingPanel when promptIndex is not provided', async () => {
+    // Use the module-level mock - vi.clearAllMocks() doesn't reset mockResolvedValue
     render(<EvalOutputPromptDialog {...defaultProps} promptIndex={undefined} />);
 
     // Wait for traces tab to be available
     await waitFor(() => {
-      expect(screen.getByRole('tab', { name: /traces/i })).toBeInTheDocument();
+      expect(screen.getByText('Traces')).toBeInTheDocument();
     });
 
-    const tracesTab = screen.getByRole('tab', { name: /traces/i });
-    await act(async () => {
-      fireEvent.click(tracesTab);
-    });
+    const tracesTab = screen.getByText('Traces');
+    await userEvent.click(tracesTab);
 
     const debuggingPanel = screen.getByTestId('mock-debugging-panel');
     expect(debuggingPanel.getAttribute('data-prompt-index')).toBeNull();
   });
 
   it('passes promptIndex to DebuggingPanel when testIndex is undefined', async () => {
+    // Use the module-level mock - vi.clearAllMocks() doesn't reset mockResolvedValue
     const promptIndex = 1;
     render(
       <EvalOutputPromptDialog {...defaultProps} testIndex={undefined} promptIndex={promptIndex} />,
@@ -412,9 +420,7 @@ describe('EvalOutputPromptDialog', () => {
     });
 
     const tracesTab = screen.getByText('Traces');
-    await act(async () => {
-      fireEvent.click(tracesTab);
-    });
+    await userEvent.click(tracesTab);
 
     expect(MockDebuggingPanel).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -900,7 +906,7 @@ describe('EvalOutputPromptDialog cloud config', () => {
       cloudConfig: customCloudConfig,
       metadata: {
         policyName: 'Test Policy',
-        policyId: uuidv4(),
+        policyId: crypto.randomUUID(),
       },
     };
 
@@ -1146,5 +1152,38 @@ describe('EvalOutputPromptDialog traces tab visibility', () => {
       expect(screen.getByRole('tab', { name: 'Prompt & Output' })).toBeInTheDocument();
     });
     expect(screen.queryByRole('tab', { name: 'Traces' })).not.toBeInTheDocument();
+  });
+
+  describe('object content handling (issue #768)', () => {
+    it('safely renders prompt when passed as object instead of string', async () => {
+      // This tests the fix for GitHub issue #768 where custom providers
+      // return objects for output/prompt causing React Error #31
+      const propsWithObjectPrompt = {
+        ...defaultProps,
+        // Simulate object being passed where string is expected (runtime type mismatch)
+        prompt: { statement: 'test statement', reason: 'test reason', verdict: 'pass' } as any,
+      };
+
+      // Should not throw React Error #31
+      expect(() => render(<EvalOutputPromptDialog {...propsWithObjectPrompt} />)).not.toThrow();
+
+      await waitFor(() => {
+        // Object should be serialized to JSON string
+        expect(screen.getByText(/test statement/)).toBeInTheDocument();
+      });
+    });
+
+    it('safely renders output when passed as object instead of string', async () => {
+      const propsWithObjectOutput = {
+        ...defaultProps,
+        output: { statement: 'output statement', reason: 'output reason', verdict: 'fail' } as any,
+      };
+
+      expect(() => render(<EvalOutputPromptDialog {...propsWithObjectOutput} />)).not.toThrow();
+
+      await waitFor(() => {
+        expect(screen.getByText(/output statement/)).toBeInTheDocument();
+      });
+    });
   });
 });

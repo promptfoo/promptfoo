@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi, type MockedFunction } from 'vitest';
+import { beforeEach, describe, expect, it, type MockedFunction, vi } from 'vitest';
 import { renderPrompt } from '../src/evaluatorHelpers';
 import * as langfuseIntegration from '../src/integrations/langfuse';
 

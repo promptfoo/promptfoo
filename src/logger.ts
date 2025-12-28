@@ -7,6 +7,7 @@ import cliState from './cliState';
 import { getEnvBool, getEnvString } from './envars';
 import { getConfigDirectoryPath } from './util/config/manage';
 import { safeJsonStringify } from './util/json';
+import { getLogFiles } from './util/logFiles';
 import { sanitizeObject, sanitizeUrl } from './util/sanitizer';
 
 const MAX_LOG_FILES = 50;
@@ -109,7 +110,12 @@ export function getCallerLocation(): string {
   return '';
 }
 
-type StrictLogMethod = (message: string) => winston.Logger;
+/**
+ * Log input can be a simple string or a structured object with message field.
+ * Structured objects are used when setStructuredLogging(true) is enabled.
+ */
+type LogInput = string | { message: string; [key: string]: unknown };
+type StrictLogMethod = (input: LogInput) => winston.Logger;
 type StrictLogger = Omit<winston.Logger, keyof typeof LOG_LEVELS> & {
   [K in keyof typeof LOG_LEVELS]: StrictLogMethod;
 };
@@ -207,15 +213,7 @@ function setupLogDirectory(): string {
 
   // Clean up old log files
   try {
-    const logFiles = fs
-      .readdirSync(logDir)
-      .filter((file) => file.startsWith('promptfoo-') && file.endsWith('.log'))
-      .map((file) => ({
-        name: file,
-        path: path.join(logDir, file),
-        mtime: fs.statSync(path.join(logDir, file)).mtime,
-      }))
-      .sort((a, b) => b.mtime.getTime() - a.mtime.getTime()); // Sort by newest first
+    const logFiles = getLogFiles(logDir);
 
     // Remove old files
     if (logFiles.length >= MAX_LOG_FILES) {
@@ -278,10 +276,11 @@ export function initializeRunLogging(): void {
 }
 
 /**
- * Creates a logger method for the specified log level
+ * Creates a logger method for the specified log level.
+ * Accepts either a string message or a structured object with a message field.
  */
 function createLogMethod(level: keyof typeof LOG_LEVELS): StrictLogMethod {
-  return (message: string) => {
+  return (input: LogInput) => {
     const location =
       level === 'debug' ? getCallerLocation() : isDebugEnabled() ? getCallerLocation() : '';
 
@@ -289,6 +288,8 @@ function createLogMethod(level: keyof typeof LOG_LEVELS): StrictLogMethod {
       initializeSourceMapSupport();
     }
 
+    // Handle both string and structured object inputs
+    const message = typeof input === 'string' ? input : input.message;
     return winstonLogger[level]({ message, location });
   };
 }
@@ -357,8 +358,16 @@ function sanitizeContext(context: SanitizedLogContext): Record<string, any> {
 }
 
 /**
- * Creates a log method that accepts an optional context parameter
- * If context is provided, it will be sanitized and formatted
+ * Creates a log method that accepts an optional context parameter.
+ * If context is provided, it will be sanitized and formatted.
+ *
+ * When structured logging is enabled (via setStructuredLogging(true)):
+ * - Passes { message, ...context } object to the logger
+ * - Ideal for cloud logging integrations that expect structured data
+ *
+ * When structured logging is disabled (default):
+ * - Formats context as JSON string appended to message
+ * - Suitable for CLI/console output
  */
 function createLogMethodWithContext(
   level: keyof typeof LOG_LEVELS,
@@ -375,8 +384,15 @@ function createLogMethodWithContext(
     }
 
     const sanitized = sanitizeContext(context);
-    const contextStr = safeJsonStringify(sanitized, true);
-    internalLogger[level](`${message}\n${contextStr}`);
+
+    if (useStructuredLogging) {
+      // Structured mode: pass object with message field for cloud logging systems
+      internalLogger[level]({ message, ...sanitized });
+    } else {
+      // Default mode: format as string for CLI/console output
+      const contextStr = safeJsonStringify(sanitized, true);
+      internalLogger[level](`${message}\n${contextStr}`);
+    }
   };
 }
 
@@ -442,9 +458,12 @@ export async function logRequestResponse(options: {
   };
 
   if (useStructuredLogging) {
-    logMethod(sanitizeObject(logObject, { context: 'log object for structured logging' }));
+    // Pass message and context separately to use the wrapper's structured logging path.
+    // This ensures proper typing and consistent handling with other structured log calls.
+    const { message, ...context } = logObject;
+    logMethod(message, context);
   } else {
-    logMethod(`Api Request`, logObject);
+    logMethod('Api Request', logObject);
   }
 }
 
@@ -453,10 +472,6 @@ export async function logRequestResponse(options: {
  * Should be called during graceful shutdown to prevent event loop hanging
  *
  * IMPORTANT: All logging should be done BEFORE calling this function
- *
- * Note: Winston's 'flush' and 'finish' events are unreliable (fire before actual flush).
- * We use a short timeout to let Winston flush its internal buffer before removing transports.
- * See: https://github.com/winstonjs/winston/issues/1504
  */
 export async function closeLogger(): Promise<void> {
   // Set shutdown flag FIRST to prevent new writes during cleanup
@@ -470,13 +485,41 @@ export async function closeLogger(): Promise<void> {
       return;
     }
 
-    // Wait briefly for Winston to flush its internal write buffer
-    // This prevents "write after end" errors when remove() triggers stream closure
-    // 100ms is sufficient for Winston to complete pending async writes
-    await new Promise((resolve) => setTimeout(resolve, 100));
-
-    // Remove transports to allow process to exit (prevents event loop hanging)
+    // Add temporary error handlers to catch "write after end" errors during shutdown.
+    // This can happen due to a race condition where the pipe from winston's Transform
+    // stream still has data when _final() calls transport.end(). The error handlers
+    // prevent this from becoming an uncaught exception that crashes the process.
+    const errorHandlers = new Map<winston.transport, (err: Error) => void>();
     for (const transport of fileTransports) {
+      const handler = (err: Error) => {
+        // Silently ignore "write after end" errors during shutdown - this is expected
+        // when the logger has buffered data that races with transport closing
+        if (err?.message?.includes('write after end')) {
+          return;
+        }
+        console.error(`Transport error during shutdown: ${err}`);
+      };
+      errorHandlers.set(transport, handler);
+      transport.on('error', handler);
+    }
+
+    // Use winstonLogger.end() instead of ending transports directly.
+    // This properly triggers winston's _final() method which:
+    // 1. Waits for all piped data to flush through the transform stream
+    // 2. Calls transport.end() on each transport in sequence
+    // 3. Waits for each transport's 'finish' event before proceeding
+    // This significantly reduces "write after end" errors from data still in the pipeline.
+    await new Promise<void>((resolve) => {
+      winstonLogger.once('finish', resolve);
+      winstonLogger.end();
+    });
+
+    // Remove error handlers and file transports
+    for (const transport of fileTransports) {
+      const handler = errorHandlers.get(transport);
+      if (handler) {
+        transport.off('error', handler);
+      }
       winstonLogger.remove(transport);
     }
   } catch (error) {

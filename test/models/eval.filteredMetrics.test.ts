@@ -9,7 +9,7 @@
  * will be inaccurate!
  */
 
-import { vi, describe, it, expect, beforeAll, beforeEach, afterEach } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDb } from '../../src/database/index';
 import { runDbMigrations } from '../../src/migrate';
 import EvalFactory from '../factories/evalFactory';

@@ -9,6 +9,7 @@ import logger, { setLogCallback, setLogLevel } from '../logger';
 import { checkRemoteHealth } from '../util/apiHealth';
 import { loadDefaultConfig } from '../util/config/default';
 import { promptfooCommand } from '../util/promptfooCommand';
+import { initVerboseToggle } from '../util/verboseToggle';
 import { doGenerateRedteam } from './commands/generate';
 import { getRemoteHealthUrl } from './remoteGeneration';
 
@@ -22,6 +23,10 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
   if (options.logCallback) {
     setLogCallback(options.logCallback);
   }
+
+  // Enable live verbose toggle (press 'v' to toggle debug logs)
+  // Only works in interactive TTY mode, not in CI or web UI
+  const verboseToggleCleanup = options.logCallback ? null : initVerboseToggle();
 
   let configPath: string = options.config ?? 'promptfooconfig.yaml';
 
@@ -89,15 +94,20 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
   // Check if redteam.yaml exists before running evaluation
   if (!redteamConfig || !fs.existsSync(redteamPath)) {
     logger.info('No test cases generated. Skipping scan.');
+    if (verboseToggleCleanup) {
+      verboseToggleCleanup();
+    }
     return;
   }
 
   // Run evaluation
   logger.info('Running scan...');
   const { defaultConfig } = await loadDefaultConfig();
+  // Exclude 'description' from options to avoid conflict with Commander's description method
+  const { description: _description, ...evalOptions } = options;
   const evalResult = await doEval(
     {
-      ...options,
+      ...evalOptions,
       config: [redteamPath],
       output: options.output ? [options.output] : undefined,
       cache: true,
@@ -129,8 +139,11 @@ export async function doRedteamRun(options: RedteamRunOptions): Promise<Eval | u
     }
   }
 
-  // Clear the callback when done
+  // Cleanup
   setLogCallback(null);
+  if (verboseToggleCleanup) {
+    verboseToggleCleanup();
+  }
   return evalResult;
 }
 

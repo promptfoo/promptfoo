@@ -55,7 +55,7 @@ michael:
 shuo:
   name: Guangshuo Zang
   title: Staff Engineer
-  url: https://github.com/guangshuo
+  url: https://github.com/mrflounder
   image_url: /img/team/shuo.jpeg
 
 steve:
@@ -87,9 +87,3 @@ will:
   title: Senior Engineer
   url: https://github.com/willholley
   image_url: /img/team/will.jpeg
-
-drishti-portkey:
-  name: Drishti Shah
-  title: Guest Author (Portkey)
-  url: https://portkey.ai
-  image_url: /img/logo-panda.svg

@@ -29,6 +29,7 @@ vi.mock('./store', () => ({
     prettifyJson: false,
     renderMarkdown: true,
     showPassFail: true,
+    showPassReasons: false,
     showPrompts: true,
     maxImageWidth: 256,
     maxImageHeight: 256,
@@ -1435,6 +1436,164 @@ describe('isImageProvider helper function', () => {
   });
 });
 
+describe('EvalOutputCell provider error display', () => {
+  const mockOnRating = vi.fn();
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('displays provider-level error in fail reasons', () => {
+    const propsWithError: MockEvalOutputCellProps = {
+      firstOutput: {
+        cost: 0,
+        id: 'test-id',
+        latencyMs: 100,
+        namedScores: {},
+        pass: false,
+        failureReason: ResultFailureReason.ERROR,
+        prompt: 'Test prompt',
+        provider: 'test-provider',
+        score: 0,
+        text: '',
+        testCase: {},
+      },
+      maxTextLength: 100,
+      onRating: mockOnRating,
+      output: {
+        cost: 0,
+        id: 'test-id',
+        latencyMs: 100,
+        namedScores: {},
+        pass: false,
+        failureReason: ResultFailureReason.ERROR,
+        prompt: 'Test prompt',
+        provider: 'file://error_provider.py',
+        score: 0,
+        text: '',
+        testCase: {},
+        error: 'ConnectionError: Failed to connect to API server',
+      },
+      promptIndex: 0,
+      rowIndex: 0,
+      searchText: '',
+      showDiffs: false,
+      showStats: true,
+    };
+
+    renderWithProviders(<EvalOutputCell {...propsWithError} />);
+
+    // The error message should be displayed in the fail reason carousel
+    expect(
+      screen.getByText('ConnectionError: Failed to connect to API server'),
+    ).toBeInTheDocument();
+  });
+
+  it('displays provider error alongside assertion failures', () => {
+    const propsWithErrorAndAssertions: MockEvalOutputCellProps = {
+      firstOutput: {
+        cost: 0,
+        id: 'test-id',
+        latencyMs: 100,
+        namedScores: {},
+        pass: false,
+        failureReason: ResultFailureReason.ERROR,
+        prompt: 'Test prompt',
+        provider: 'test-provider',
+        score: 0,
+        text: '',
+        testCase: {},
+      },
+      maxTextLength: 100,
+      onRating: mockOnRating,
+      output: {
+        cost: 0,
+        gradingResult: {
+          componentResults: [
+            {
+              assertion: {
+                type: 'contains' as AssertionType,
+                value: 'expected',
+              },
+              pass: false,
+              reason: 'Output does not contain expected value',
+              score: 0,
+            },
+          ],
+          pass: false,
+          reason: 'Assertion failed',
+          score: 0,
+        },
+        id: 'test-id',
+        latencyMs: 100,
+        namedScores: {},
+        pass: false,
+        failureReason: ResultFailureReason.ERROR,
+        prompt: 'Test prompt',
+        provider: 'file://error_provider.py',
+        score: 0,
+        text: '',
+        testCase: {},
+        error: 'AuthenticationError: Invalid API key',
+      },
+      promptIndex: 0,
+      rowIndex: 0,
+      searchText: '',
+      showDiffs: false,
+      showStats: true,
+    };
+
+    renderWithProviders(<EvalOutputCell {...propsWithErrorAndAssertions} />);
+
+    // The provider error should be displayed (it's unshifted to the front)
+    expect(screen.getByText('AuthenticationError: Invalid API key')).toBeInTheDocument();
+  });
+
+  it('does not display error when output.error is null', () => {
+    const propsWithNullError: MockEvalOutputCellProps = {
+      firstOutput: {
+        cost: 0,
+        id: 'test-id',
+        latencyMs: 100,
+        namedScores: {},
+        pass: true,
+        failureReason: ResultFailureReason.NONE,
+        prompt: 'Test prompt',
+        provider: 'test-provider',
+        score: 1,
+        text: 'Success output',
+        testCase: {},
+      },
+      maxTextLength: 100,
+      onRating: mockOnRating,
+      output: {
+        cost: 0,
+        id: 'test-id',
+        latencyMs: 100,
+        namedScores: {},
+        pass: true,
+        failureReason: ResultFailureReason.NONE,
+        prompt: 'Test prompt',
+        provider: 'test-provider',
+        score: 1,
+        text: 'Success output',
+        testCase: {},
+        error: null,
+      },
+      promptIndex: 0,
+      rowIndex: 0,
+      searchText: '',
+      showDiffs: false,
+      showStats: true,
+    };
+
+    const { container } = renderWithProviders(<EvalOutputCell {...propsWithNullError} />);
+
+    // No fail-reason element should be present
+    expect(container.querySelector('.fail-reason')).not.toBeInTheDocument();
+  });
+});
+
 describe('EvalOutputCell thumbs up/down toggle functionality', () => {
   const mockOnRating = vi.fn();
 
@@ -1561,5 +1720,74 @@ describe('EvalOutputCell thumbs up/down toggle functionality', () => {
 
     // Verify comment is passed to onRating
     expect(mockOnRating).toHaveBeenCalledWith(true, undefined, 'Important comment');
+  });
+});
+
+describe('EvalOutputCell pass reasons setting', () => {
+  const mockOnRating = vi.fn();
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  // Default mock has showPassReasons: false
+  it('should not show pass reasons when showPassReasons setting is false', () => {
+    const propsWithPassReasons: MockEvalOutputCellProps = {
+      firstOutput: {
+        cost: 0,
+        id: 'test-id',
+        latencyMs: 100,
+        namedScores: {},
+        pass: true,
+        failureReason: ResultFailureReason.NONE,
+        prompt: 'Test prompt',
+        provider: 'test-provider',
+        score: 0.9,
+        text: 'Test output text',
+        testCase: {},
+      },
+      maxTextLength: 100,
+      onRating: mockOnRating,
+      output: {
+        cost: 0,
+        gradingResult: {
+          componentResults: [
+            {
+              assertion: {
+                metric: 'accuracy',
+                type: 'llm-rubric' as AssertionType,
+                value: 'Check if response is helpful',
+              },
+              pass: true,
+              reason: 'The response was helpful and addressed all points',
+              score: 0.9,
+            },
+          ],
+          pass: true,
+          reason: 'Test passed',
+          score: 0.9,
+        },
+        id: 'test-id',
+        latencyMs: 100,
+        namedScores: {},
+        pass: true,
+        failureReason: ResultFailureReason.NONE,
+        prompt: 'Test prompt',
+        provider: 'test-provider',
+        score: 0.9,
+        text: 'Test output text',
+        testCase: {},
+      },
+      promptIndex: 0,
+      rowIndex: 0,
+      searchText: '',
+      showDiffs: false,
+      showStats: true,
+    };
+
+    const { container } = renderWithProviders(<EvalOutputCell {...propsWithPassReasons} />);
+
+    // Pass reasons should not be visible when setting is false (default)
+    expect(container.querySelector('.pass-reasons')).not.toBeInTheDocument();
   });
 });

@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import { Link as RouterLink } from 'react-router-dom';
-
 import { useApiHealth } from '@app/hooks/useApiHealth';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
@@ -21,25 +19,26 @@ import {
   strategyDescriptions,
   strategyDisplayNames,
 } from '@promptfoo/redteam/constants';
-import type { RedteamStrategyObject } from '@promptfoo/redteam/types';
-
+import { Link as RouterLink } from 'react-router-dom';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import EstimationsDisplay from './EstimationsDisplay';
 import PageWrapper from './PageWrapper';
+import StrategyConfigDialog from './StrategyConfigDialog';
 import { AgenticStrategiesGroup } from './strategies/AgenticStrategiesGroup';
 import { PresetSelector } from './strategies/PresetSelector';
 import { RecommendedOptions } from './strategies/RecommendedOptions';
 import { StrategySection } from './strategies/StrategySection';
 import { SystemConfiguration } from './strategies/SystemConfiguration';
-import type { ConfigDialogState, StrategyCardData } from './strategies/types';
-import { TestCaseGenerationProvider } from './TestCaseGenerationProvider';
 import { type PresetId, STRATEGY_PRESETS, type StrategyPreset } from './strategies/types';
 import {
   getStrategyId,
   isStrategyConfigured,
   STRATEGIES_REQUIRING_CONFIG,
 } from './strategies/utils';
-import StrategyConfigDialog from './StrategyConfigDialog';
+import { TestCaseGenerationProvider } from './TestCaseGenerationProvider';
+import type { RedteamStrategyObject } from '@promptfoo/redteam/types';
+
+import type { ConfigDialogState, StrategyCardData } from './strategies/types';
 
 // ------------------------------------------------------------------
 // Types & Interfaces
@@ -68,7 +67,7 @@ const UI_STRATEGY_DESCRIPTIONS: Record<string, string> = {
 };
 
 const availableStrategies: StrategyCardData[] = ALL_STRATEGIES.filter(
-  (id) => id !== 'default' && id !== 'multilingual' && id !== 'simba',
+  (id) => id !== 'default' && id !== 'multilingual',
 ).map((id) => ({
   id,
   name: strategyDisplayNames[id] || id,
@@ -85,7 +84,17 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
   } = useApiHealth();
 
   const [isStatefulValue, setIsStatefulValue] = useState(config.target?.config?.stateful === true);
-  const [isMultiTurnEnabled, setIsMultiTurnEnabled] = useState(false);
+
+  // Check if config has multi-turn strategies
+  const hasMultiTurnStrategies = useMemo(
+    () =>
+      (config.strategies ?? []).some(
+        (s) => s && MULTI_TURN_STRATEGIES.includes(getStrategyId(s) as any),
+      ),
+    [config.strategies],
+  );
+
+  const [isMultiTurnEnabled, setIsMultiTurnEnabled] = useState(hasMultiTurnStrategies);
 
   const [configDialog, setConfigDialog] = useState<ConfigDialogState>({
     isOpen: false,
@@ -159,6 +168,12 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
     };
   }, []);
 
+  // Sync isMultiTurnEnabled when config.strategies changes
+  // This keeps the toggle in sync with the actual state of strategies
+  useEffect(() => {
+    setIsMultiTurnEnabled(hasMultiTurnStrategies);
+  }, [hasMultiTurnStrategies]);
+
   // Determine the initially selected preset
   const initialPreset = useMemo(() => {
     if (!Array.isArray(config.strategies)) {
@@ -168,10 +183,6 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
     const hasMultiTurn = config.strategies.some(
       (s) => s && MULTI_TURN_STRATEGIES.includes(getStrategyId(s) as any),
     );
-
-    if (hasMultiTurn) {
-      setIsMultiTurnEnabled(true);
-    }
 
     const matchedPresetId = Object.entries(STRATEGY_PRESETS).find(([_presetId, preset]) => {
       if (!preset) {
@@ -657,7 +668,7 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
         </Alert>
       )}
 
-      <TestCaseGenerationProvider redTeamConfig={config}>
+      <TestCaseGenerationProvider redTeamConfig={config} allowPluginChange>
         <Box>
           <EstimationsDisplay config={config} />
 

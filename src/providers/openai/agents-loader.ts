@@ -1,9 +1,11 @@
 import path from 'path';
-import type { Agent } from '@openai/agents';
+
+import cliState from '../../cliState';
 import { importModule } from '../../esm';
 import logger from '../../logger';
-import cliState from '../../cliState';
-import type { AgentDefinition, ToolDefinition, HandoffDefinition } from './agents-types';
+import type { Agent } from '@openai/agents';
+
+import type { AgentDefinition, HandoffDefinition, ToolDefinition } from './agents-types';
 
 /**
  * Load agent definition from file path or return inline definition

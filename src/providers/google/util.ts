@@ -12,6 +12,7 @@ import { VALID_SCHEMA_TYPES } from './types';
 import type { AnySchema } from 'ajv';
 import type { GoogleAuth } from 'google-auth-library';
 
+import type { EnvOverrides } from '../../types/env';
 import type { Content, FunctionCall, Part, Tool } from './types';
 
 const ajv = getAjv();
@@ -170,6 +171,7 @@ export function maybeCoerceToGeminiFormat(
   // Handle native Gemini format with system_instruction
   if (
     typeof contents === 'object' &&
+    contents !== null &&
     !Array.isArray(contents) &&
     'system_instruction' in contents
   ) {
@@ -246,13 +248,18 @@ export function maybeCoerceToGeminiFormat(
       }
     });
     coerced = true;
-  } else if (typeof contents === 'object' && 'parts' in contents) {
+  } else if (typeof contents === 'object' && contents !== null && 'parts' in contents) {
     // This might be a single content object
     coercedContents = [contents as z.infer<typeof ContentSchema>];
     coerced = true;
   } else {
     logger.warn(`Unknown format for Gemini: ${JSON.stringify(contents)}`);
-    return { contents: contents as GeminiFormat, coerced: false, systemInstruction: undefined };
+    // Ensure we always return an array, even for unknown formats
+    // This prevents "contents.map is not a function" errors downstream
+    // For arrays that don't match known formats, we still return them as-is
+    // since they're already arrays and won't cause .map() errors
+    const fallbackContents: GeminiFormat = Array.isArray(contents) ? contents : [];
+    return { contents: fallbackContents, coerced: false, systemInstruction: undefined };
   }
 
   let systemPromptParts: { text: string }[] = [];
@@ -362,7 +369,7 @@ export async function getGoogleClient({ credentials }: { credentials?: string } 
  */
 export async function resolveProjectId(
   config: { projectId?: string; credentials?: string },
-  env?: Record<string, string>,
+  env?: EnvOverrides,
 ): Promise<string> {
   const processedCredentials = loadCredentials(config.credentials);
   const { projectId: googleProjectId } = await getGoogleClient({
@@ -621,6 +628,16 @@ function processImagesInContents(
 ): GeminiFormat {
   if (!contextVars) {
     return contents;
+  }
+
+  // Guard: ensure contents is an array
+  if (!Array.isArray(contents)) {
+    logger.warn('[Google] contents is not an array in processImagesInContents', {
+      contentsType: typeof contents,
+      contentsValue: contents,
+    });
+    // Return empty array as fallback to prevent .map() error
+    return [];
   }
 
   const base64ToVarName = new Map<string, string>();

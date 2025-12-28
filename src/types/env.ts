@@ -34,6 +34,7 @@ export const ProviderEnvOverridesSchema = z.object({
   DATABRICKS_WORKSPACE_URL: z.string().optional(),
   DOCKER_MODEL_RUNNER_BASE_URL: z.string().optional(),
   DOCKER_MODEL_RUNNER_API_KEY: z.string().optional(),
+  ELEVENLABS_API_KEY: z.string().optional(),
   FAL_KEY: z.string().optional(),
   GITHUB_TOKEN: z.string().optional(),
   GOOGLE_API_HOST: z.string().optional(),
@@ -109,4 +110,7 @@ export const ProviderEnvOverridesSchema = z.object({
   PROMPTFOO_EVAL_TIMEOUT_MS: z.string().optional(),
 });
 
-export type EnvOverrides = z.infer<typeof ProviderEnvOverridesSchema>;
+// Allow arbitrary environment variables for template rendering (e.g., {{ env.MY_CUSTOM_VAR }})
+// while maintaining type safety for known env vars
+export type EnvOverrides = z.infer<typeof ProviderEnvOverridesSchema> &
+  Record<string, string | undefined>;

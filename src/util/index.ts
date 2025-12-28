@@ -9,11 +9,13 @@ import deepEqual from 'fast-deep-equal';
 import { XMLBuilder } from 'fast-xml-parser';
 import { globSync, hasMagic } from 'glob';
 import yaml from 'js-yaml';
+import cliState from '../cliState';
 import { TERMINAL_MAX_WIDTH, VERSION } from '../constants';
 import { getEnvBool, getEnvString } from '../envars';
 import { getDirectory, importModule } from '../esm';
 import { writeCsvToGoogleSheet } from '../googleSheets';
 import logger from '../logger';
+import { runPython } from '../python/pythonUtils';
 import {
   type CsvRow,
   type EvaluateResult,
@@ -29,16 +31,15 @@ import {
 import invariant from '../util/invariant';
 import { getHeaderForTable } from './exportToFile/getHeaderForTable';
 import { convertTestResultsToTableRow } from './exportToFile/index';
-import { runPython } from '../python/pythonUtils';
 import { maybeLoadFromExternalFile } from './file';
 import { isJavascriptFile } from './fileExtensions';
 import { parseFileUrl } from './functions/loadFunction';
-import cliState from '../cliState';
 import { safeResolve } from './pathUtils';
 import { getNunjucksEngine } from './templates';
 
 import type Eval from '../models/eval';
 import type EvalResult from '../models/evalResult';
+import type { EnvOverrides } from '../types/env';
 import type { Vars } from '../types/index';
 
 const outputToSimpleString = (output: EvaluateTableOutput) => {
@@ -324,10 +325,44 @@ export function printBorder() {
   logger.info(border);
 }
 
-export function setupEnv(envPath: string | undefined) {
+/**
+ * Load environment variables from .env file(s).
+ * @param envPath - Single path, array of paths, or undefined for default .env loading.
+ *                  When paths are explicitly specified, all files must exist or an error is thrown.
+ *                  When multiple files are provided, later files override values from earlier files.
+ */
+export function setupEnv(envPath: string | string[] | undefined) {
   if (envPath) {
-    logger.info(`Loading environment variables from ${envPath}`);
-    dotenv.config({ path: envPath, override: true, quiet: true });
+    // Normalize to array and expand comma-separated values
+    const rawPaths = Array.isArray(envPath) ? envPath : [envPath];
+    const paths = rawPaths
+      .flatMap((p) => (p.includes(',') ? p.split(',').map((s) => s.trim()) : p.trim()))
+      .filter((p) => p.length > 0);
+
+    if (paths.length === 0) {
+      dotenv.config({ quiet: true });
+      return;
+    }
+
+    // Validate all files exist before loading
+    for (const p of paths) {
+      if (!fs.existsSync(p)) {
+        throw new Error(`Environment file not found: ${p}`);
+      }
+    }
+
+    // Log files being loaded
+    if (paths.length === 1) {
+      logger.info(`Loading environment variables from ${paths[0]}`);
+    } else {
+      logger.info(`Loading environment variables from: ${paths.join(', ')}`);
+    }
+
+    // dotenv v16+ supports array of paths
+    // Files are loaded in order, later files override earlier values with override:true
+    // Pass single string when only one path for backward compatibility
+    const pathArg = paths.length === 1 ? paths[0] : paths;
+    dotenv.config({ path: pathArg, override: true, quiet: true });
   } else {
     dotenv.config({ quiet: true });
   }
@@ -404,15 +439,31 @@ export function providerToIdentifier(
 }
 
 /**
- * Filters out runtime-only variables that are added during evaluation
- * but aren't part of the original test definition
+ * Runtime variables that are added during evaluation but aren't part
+ * of the original test definition. These should be filtered when
+ * comparing test cases for matching purposes.
+ *
+ * - _conversation: Added by the evaluator for multi-turn conversations
+ * - sessionId: Added by multi-turn strategy providers (GOAT, Crescendo, SIMBA)
  */
-function filterRuntimeVars(vars: Vars | undefined): Vars | undefined {
+const RUNTIME_VAR_KEYS = ['_conversation', 'sessionId'] as const;
+
+/**
+ * Filters out runtime-only variables that are added during evaluation
+ * but aren't part of the original test definition.
+ *
+ * This is used when comparing test cases to determine if a result
+ * corresponds to a particular test, regardless of runtime state.
+ */
+export function filterRuntimeVars(vars: Vars | undefined): Vars | undefined {
   if (!vars) {
     return vars;
   }
-  const { _conversation, ...userVars } = vars;
-  return userVars;
+  const filtered = { ...vars };
+  for (const key of RUNTIME_VAR_KEYS) {
+    delete filtered[key];
+  }
+  return filtered;
 }
 
 export function varsMatch(vars1: Vars | undefined, vars2: Vars | undefined) {
@@ -424,9 +475,8 @@ export function resultIsForTestCase(result: EvaluateResult, testCase: TestCase):
     ? providerToIdentifier(testCase.provider) === providerToIdentifier(result.provider)
     : true;
 
-  // Filter out runtime variables like _conversation when matching
-  // These are added during evaluation but shouldn't affect test matching
-  // Use result.vars (not result.testCase.vars) as it contains the actual vars used during evaluation
+  // Filter out runtime variables like _conversation and sessionId when matching.
+  // These are added by multi-turn providers during evaluation but shouldn't affect test matching.
   const resultVars = filterRuntimeVars(result.vars);
   const testVars = filterRuntimeVars(testCase.vars);
   return varsMatch(testVars, resultVars) && providersMatch;
@@ -453,7 +503,7 @@ export function resultIsForTestCase(result: EvaluateResult, testCase: TestCase):
  * @param obj - The object to process
  * @returns The object with only env templates rendered
  */
-export function renderEnvOnlyInObject<T>(obj: T): T {
+export function renderEnvOnlyInObject<T>(obj: T, envOverrides?: EnvOverrides): T {
   if (getEnvBool('PROMPTFOO_DISABLE_TEMPLATING')) {
     return obj;
   }
@@ -470,7 +520,11 @@ export function renderEnvOnlyInObject<T>(obj: T): T {
     }
 
     const nunjucks = getNunjucksEngine();
-    const envGlobals = nunjucks.getGlobal('env') as Record<string, string | undefined>;
+    const baseEnvGlobals = nunjucks.getGlobal('env') as Record<
+      string,
+      string | number | boolean | undefined
+    >;
+    const envGlobals = envOverrides ? { ...baseEnvGlobals, ...envOverrides } : baseEnvGlobals;
 
     // Match ALL Nunjucks templates {{ ... }}
     // The pattern (?:[^}]|\}(?!\}))* matches content that may contain } but not }}
@@ -507,13 +561,13 @@ export function renderEnvOnlyInObject<T>(obj: T): T {
   }
 
   if (Array.isArray(obj)) {
-    return obj.map((item) => renderEnvOnlyInObject(item)) as unknown as T;
+    return obj.map((item) => renderEnvOnlyInObject(item, envOverrides)) as unknown as T;
   }
 
   if (typeof obj === 'object' && obj !== null) {
     const result: Record<string, unknown> = {};
     for (const key in obj) {
-      result[key] = renderEnvOnlyInObject((obj as Record<string, unknown>)[key]);
+      result[key] = renderEnvOnlyInObject((obj as Record<string, unknown>)[key], envOverrides);
     }
     return result as T;
   }

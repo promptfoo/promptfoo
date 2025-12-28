@@ -1,4 +1,9 @@
 import { useCallback, useMemo, useState } from 'react';
+
+import { useApiHealth } from '@app/hooks/useApiHealth';
+import useCloudConfig from '@app/hooks/useCloudConfig';
+import { useTelemetry } from '@app/hooks/useTelemetry';
+import { useToast } from '@app/hooks/useToast';
 import ErrorIcon from '@mui/icons-material/Error';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import RemoveIcon from '@mui/icons-material/Remove';
@@ -30,6 +35,7 @@ import {
   MCP_PLUGINS,
   MITRE_ATLAS_MAPPING,
   NIST_AI_RMF_MAPPING,
+  OWASP_AGENTIC_REDTEAM_MAPPING,
   OWASP_API_TOP_10_MAPPING,
   OWASP_LLM_RED_TEAM_MAPPING,
   OWASP_LLM_TOP_10_MAPPING,
@@ -39,24 +45,20 @@ import {
   subCategoryDescriptions,
   UI_DISABLED_WHEN_REMOTE_UNAVAILABLE,
 } from '@promptfoo/redteam/constants';
-import type { PluginConfig } from '@promptfoo/redteam/types';
 import { ErrorBoundary } from 'react-error-boundary';
-import { useTelemetry } from '@app/hooks/useTelemetry';
-import { useToast } from '@app/hooks/useToast';
 import PluginConfigDialog from './PluginConfigDialog';
 import PresetCard from './PresetCard';
 import {
   getPluginDocumentationUrl,
   hasSpecificPluginDocumentation,
 } from './pluginDocumentationMap';
+import { TestCaseGenerateButton } from './TestCaseDialog';
+import { useTestCaseGeneration } from './TestCaseGenerationProvider';
+import VerticalSuiteCard from './VerticalSuiteCard';
+import { DOMAIN_SPECIFIC_PLUGINS, VERTICAL_SUITES } from './verticalSuites';
+import type { PluginConfig } from '@promptfoo/redteam/types';
 
 import type { LocalPluginConfig } from '../types';
-import { useTestCaseGeneration } from './TestCaseGenerationProvider';
-import { TestCaseGenerateButton } from './TestCaseDialog';
-import { useApiHealth } from '@app/hooks/useApiHealth';
-import useCloudConfig from '@app/hooks/useCloudConfig';
-import VerticalSuiteCard from './VerticalSuiteCard';
-import { VERTICAL_SUITES, DOMAIN_SPECIFIC_PLUGINS } from './verticalSuites';
 
 const ErrorFallback = ({ error }: { error: Error }) => (
   <div role="alert">
@@ -174,6 +176,10 @@ export default function PluginsTab({
       {
         name: 'OWASP API Top 10',
         plugins: new Set(Object.values(OWASP_API_TOP_10_MAPPING).flatMap((v) => v.plugins)),
+      },
+      {
+        name: 'OWASP Agentic AI Top 10',
+        plugins: new Set(Object.values(OWASP_AGENTIC_REDTEAM_MAPPING).flatMap((v) => v.plugins)),
       },
       {
         name: 'MITRE',

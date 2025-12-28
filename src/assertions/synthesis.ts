@@ -1,8 +1,8 @@
 import dedent from 'dedent';
 import cliState from '../cliState';
 import logger from '../logger';
-import { loadApiProvider } from '../providers/index';
 import { getDefaultProviders } from '../providers/defaults';
+import { loadApiProvider } from '../providers/index';
 import { sampleArray } from '../util/generation';
 import invariant from '../util/invariant';
 import { extractJsonObjects } from '../util/json';

@@ -1,12 +1,9 @@
-import React, { useMemo } from 'react';
-
-import { diffJson, diffSentences, diffWords } from 'diff';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import React from 'react';
 
 import useCloudConfig from '@app/hooks/useCloudConfig';
 import { useEvalOperations } from '@app/hooks/useEvalOperations';
 import { useShiftKey } from '@app/hooks/useShiftKey';
+import { normalizeMediaText, resolveAudioSource, resolveImageSource } from '@app/utils/media';
 import {
   Check,
   ContentCopy,
@@ -21,7 +18,9 @@ import {
 import IconButton from '@mui/material/IconButton';
 import Tooltip, { TooltipProps } from '@mui/material/Tooltip';
 import { type EvaluateTableOutput, ResultFailureReason } from '@promptfoo/types';
-
+import { diffJson, diffSentences, diffWords } from 'diff';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import CustomMetrics from './CustomMetrics';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import FailReasonCarousel from './FailReasonCarousel';
@@ -117,8 +116,15 @@ function EvalOutputCell({
   showDiffs: boolean;
   searchText?: string;
 }) {
-  const { renderMarkdown, prettifyJson, showPrompts, showPassFail, maxImageWidth, maxImageHeight } =
-    useResultsViewSettingsStore();
+  const {
+    renderMarkdown,
+    prettifyJson,
+    showPrompts,
+    showPassFail,
+    showPassReasons,
+    maxImageWidth,
+    maxImageHeight,
+  } = useResultsViewSettingsStore();
 
   const { shouldHighlightSearchText, addFilter, resetFilters } = useTableStore();
   const { data: cloudConfig } = useCloudConfig();
@@ -181,20 +187,37 @@ function EvalOutputCell({
   };
 
   const text = typeof output.text === 'string' ? output.text : JSON.stringify(output.text);
+  const normalizedText = normalizeMediaText(text);
+  const inlineImageSrc = resolveImageSource(text);
+  const outputAudioSource = resolveAudioSource(output.audio);
   let node: React.ReactNode | undefined;
   let failReasons: string[] = [];
+  let passReasons: string[] = [];
 
   // Extract response audio from the last turn of redteamHistory for display in the cell
   const redteamHistory = output.metadata?.redteamHistory || output.metadata?.redteamTreeHistory;
   const lastTurn = redteamHistory?.[redteamHistory.length - 1];
-  const responseAudio = lastTurn?.outputAudio as { data?: string; format?: string } | undefined;
+  const responseAudio = lastTurn?.outputAudio as
+    | { data?: string; format?: string; blobRef?: { uri?: string; hash?: string } }
+    | undefined;
+  const responseAudioSource = resolveAudioSource(responseAudio);
 
-  // Extract failure reasons from component results
+  // Extract failure and pass reasons from component results
   if (output.gradingResult?.componentResults) {
     failReasons = output.gradingResult.componentResults
       .filter((result) => (result ? !result.pass : false))
       .map((result) => result.reason)
       .filter((reason) => reason); // Filter out empty/undefined reasons
+
+    passReasons = output.gradingResult.componentResults
+      .filter((result) => (result ? result.pass : false))
+      .map((result) => result.reason)
+      .filter((reason) => reason); // Filter out empty/undefined reasons
+  }
+
+  // Include provider-level error if present (e.g., from Python provider returning error)
+  if (output.error) {
+    failReasons.unshift(output.error);
   }
 
   if (showDiffs && firstOutput) {
@@ -269,33 +292,40 @@ function EvalOutputCell({
       console.error('Invalid regular expression:', (error as Error).message);
     }
   } else if (
-    text?.match(/^data:(image\/[a-z]+|application\/octet-stream|image\/svg\+xml);(base64,)?/)
+    text?.match(/^data:(image\/[a-z]+|application\/octet-stream|image\/svg\+xml);(base64,)?/) ||
+    inlineImageSrc
   ) {
+    const src = inlineImageSrc || text;
     node = (
       <img
-        src={text}
+        src={src}
         alt={output.prompt}
         style={{ width: '100%' }}
-        onClick={() => toggleLightbox(text)}
+        onClick={() => toggleLightbox(src)}
       />
     );
   } else if (output.audio) {
-    node = (
-      <div className="audio-output">
-        <audio controls style={{ width: '100%' }} data-testid="audio-player">
-          <source
-            src={`data:audio/${output.audio.format || 'mp3'};base64,${output.audio.data}`}
-            type={`audio/${output.audio.format || 'mp3'}`}
-          />
-          Your browser does not support the audio element.
-        </audio>
-        {output.audio.transcript && (
-          <div className="transcript">
-            <strong>Transcript:</strong> {output.audio.transcript}
-          </div>
-        )}
-      </div>
-    );
+    if (outputAudioSource) {
+      node = (
+        <div className="audio-output">
+          <audio controls style={{ width: '100%' }} data-testid="audio-player">
+            <source src={outputAudioSource.src} type={outputAudioSource.type || 'audio/mpeg'} />
+            Your browser does not support the audio element.
+          </audio>
+          {output.audio.transcript && (
+            <div className="transcript">
+              <strong>Transcript:</strong> {output.audio.transcript}
+            </div>
+          )}
+        </div>
+      );
+    } else if (output.audio.transcript) {
+      node = (
+        <div className="transcript">
+          <strong>Transcript:</strong> {output.audio.transcript}
+        </div>
+      );
+    }
   } else if ((prettifyJson || renderMarkdown) && !showDiffs) {
     // When both prettifyJson and renderMarkdown are enabled,
     // display as JSON if it's a valid object/array, otherwise render as Markdown
@@ -329,22 +359,19 @@ function EvalOutputCell({
             ),
           }}
         >
-          {text}
+          {normalizedText}
         </ReactMarkdown>
       );
     }
   }
 
-  const handleRating = React.useCallback(
-    (isPass: boolean) => {
-      const newRating = activeRating === isPass ? null : isPass;
-      setActiveRating(newRating);
-      onRating(newRating, undefined, output.gradingResult?.comment);
-    },
-    [activeRating, onRating, output.gradingResult?.comment],
-  );
+  const handleRating = (isPass: boolean) => {
+    const newRating = activeRating === isPass ? null : isPass;
+    setActiveRating(newRating);
+    onRating(newRating, undefined, output.gradingResult?.comment);
+  };
 
-  const handleSetScore = React.useCallback(() => {
+  const handleSetScore = () => {
     const score = prompt('Set test score (0.0 - 1.0):', String(output.score));
     if (score !== null) {
       const parsedScore = Number.parseFloat(score);
@@ -354,10 +381,10 @@ function EvalOutputCell({
         alert('Invalid score. Please enter a value between 0.0 and 1.0.');
       }
     }
-  }, [onRating, output.score, output.gradingResult?.comment]);
+  };
 
   const [linked, setLinked] = React.useState(false);
-  const handleRowShareLink = React.useCallback(() => {
+  const handleRowShareLink = () => {
     const url = new URL(window.location.href);
     url.searchParams.set('rowId', String(rowIndex + 1));
 
@@ -370,13 +397,20 @@ function EvalOutputCell({
       .catch((error) => {
         console.error('Failed to copy link to clipboard:', error);
       });
-  }, [rowIndex]);
+  };
 
   const [copied, setCopied] = React.useState(false);
-  const handleCopy = React.useCallback(() => {
-    navigator.clipboard.writeText(output.text);
-    setCopied(true);
-  }, [output.text]);
+  const handleCopy = () => {
+    navigator.clipboard
+      .writeText(text)
+      .then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 3000);
+      })
+      .catch((error) => {
+        console.error('Failed to copy output to clipboard:', error);
+      });
+  };
 
   let tokenUsageDisplay;
   let latencyDisplay;
@@ -457,26 +491,18 @@ function EvalOutputCell({
     }
   }
 
-  const cellStyle = useMemo(() => {
-    const base = output.gradingResult?.comment?.startsWith('!highlight')
-      ? {
-          backgroundColor: 'var(--cell-highlight-color)',
-        }
-      : {};
-
-    return {
-      ...base,
-      '--max-image-width': `${maxImageWidth}px`,
-      '--max-image-height': `${maxImageHeight}px`,
-    } as CSSPropertiesWithCustomVars;
-  }, [output.gradingResult?.comment, maxImageWidth, maxImageHeight]);
+  const cellStyle: CSSPropertiesWithCustomVars = {
+    ...(output.gradingResult?.comment?.startsWith('!highlight')
+      ? { backgroundColor: 'var(--cell-highlight-color)' }
+      : {}),
+    '--max-image-width': `${maxImageWidth}px`,
+    '--max-image-height': `${maxImageHeight}px`,
+  };
 
   // Style for main content area when highlighted
-  const contentStyle = useMemo(() => {
-    return output.gradingResult?.comment?.startsWith('!highlight')
-      ? { color: 'var(--cell-highlight-text-color)' }
-      : {};
-  }, [output.gradingResult?.comment]);
+  const contentStyle = output.gradingResult?.comment?.startsWith('!highlight')
+    ? { color: 'var(--cell-highlight-text-color)' }
+    : {};
 
   // Pass/fail badge creation
   let passCount = 0;
@@ -557,32 +583,27 @@ function EvalOutputCell({
       .join('\n\n');
   };
 
-  const providerOverride = useMemo(() => {
-    const provider = output.testCase?.provider;
-    let testCaseProvider: string | null = null;
-
-    if (!provider) {
-      return null;
-    }
-
-    if (typeof provider === 'string') {
-      testCaseProvider = provider;
-    } else if (typeof provider === 'object' && 'id' in provider) {
-      const id = provider.id;
-      if (typeof id === 'string') {
-        testCaseProvider = id;
-      }
-    }
-
-    if (testCaseProvider) {
-      return (
+  // Compute provider override badge for test case-level model overrides
+  let providerOverride: React.ReactNode = null;
+  const testCaseProvider = output.testCase?.provider;
+  if (testCaseProvider) {
+    const providerId: string | null =
+      typeof testCaseProvider === 'string'
+        ? testCaseProvider
+        : typeof testCaseProvider === 'object' &&
+            testCaseProvider !== null &&
+            'id' in testCaseProvider &&
+            typeof testCaseProvider.id === 'string'
+          ? testCaseProvider.id
+          : null;
+    if (providerId) {
+      providerOverride = (
         <Tooltip title="Model override for this test" arrow placement="top">
-          <span className="provider pill">{testCaseProvider}</span>
+          <span className="provider pill">{providerId}</span>
         </Tooltip>
       );
     }
-    return null;
-  }, [output]);
+  }
 
   const commentTextToDisplay = output.gradingResult?.comment?.startsWith('!highlight')
     ? output.gradingResult.comment.slice('!highlight'.length).trim()
@@ -745,33 +766,41 @@ function EvalOutputCell({
               <FailReasonCarousel failReasons={failReasons} />
             </span>
           )}
+          {showPassReasons && passReasons.length > 0 && (
+            <div className="pass-reasons">
+              {passReasons.map((reason, index) => (
+                <div key={index} className="pass-reason">
+                  {reason}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
       {showPrompts && firstOutput.prompt && (
         <div className="prompt">
           <span className="pill">Prompt</span>
-          {output.prompt}
+          {typeof output.prompt === 'string'
+            ? output.prompt
+            : JSON.stringify(output.prompt, null, 2)}
         </div>
       )}
       {/* Show response audio from redteam history if available (target's audio response) */}
-      {responseAudio?.data && (
+      {responseAudioSource?.src && (
         <div className="response-audio" style={{ marginBottom: '8px' }}>
           <audio
             controls
             style={{ width: '100%', height: '32px' }}
             data-testid="response-audio-player"
           >
-            <source
-              src={`data:audio/${responseAudio.format || 'mp3'};base64,${responseAudio.data}`}
-              type={`audio/${responseAudio.format || 'mp3'}`}
-            />
+            <source src={responseAudioSource.src} type={responseAudioSource.type || 'audio/mpeg'} />
             Your browser does not support the audio element.
           </audio>
         </div>
       )}
       <div style={contentStyle}>
         <TruncatedText
-          text={node || text}
+          text={node || normalizedText}
           maxLength={renderMarkdown && isImageProvider(output.provider) ? 0 : maxTextLength}
         />
       </div>

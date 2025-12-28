@@ -14,6 +14,7 @@ The `vertex` provider enables integration with Google's [Vertex AI](https://clou
 
 **Gemini 3.0 (Preview):**
 
+- `vertex:gemini-3-flash-preview` - Frontier intelligence with Pro-grade reasoning at Flash-level speed, thinking, and grounding ($0.50/1M input, $3/1M output)
 - `vertex:gemini-3-pro-preview` - Advanced reasoning, multimodal understanding, and agentic capabilities
 
 **Gemini 2.5:**
@@ -259,7 +260,37 @@ export VERTEX_PROJECT_ID="your-project-id"
 
 **Note:** Access tokens expire after 1 hour. For long-running evaluations, use Application Default Credentials or Service Account authentication.
 
-#### 5. Environment Variables
+#### Option 5: Express Mode API Key (Quick Start)
+
+Vertex AI Express Mode provides simplified authentication using an API key. **Express mode is automatic** when you have an API key and no explicit `projectId` or `credentials` configured.
+
+1. Create an API key in the [Google Cloud Console](https://console.cloud.google.com/apis/credentials) or [Vertex AI Studio](https://console.cloud.google.com/vertex-ai)
+2. Set the environment variable:
+
+```bash
+export VERTEX_API_KEY="your-express-mode-api-key"
+# or
+export GEMINI_API_KEY="your-express-mode-api-key"
+```
+
+```yaml
+providers:
+  - id: vertex:gemini-3-flash-preview
+    config:
+      temperature: 0.7
+      # No expressMode needed - it's automatic with API key!
+```
+
+Express mode benefits:
+
+- No project ID or region required
+- Simpler setup for quick testing
+- Works with Gemini models
+- Automatic detection (no config flag needed)
+
+To force OAuth authentication when you have an API key set, use `expressMode: false`.
+
+#### Environment Variables
 
 Promptfoo automatically loads environment variables from your shell or a `.env` file. Create a `.env` file in your project root:
 
@@ -551,6 +582,8 @@ defaultTest:
 | `responseSchema`                   | JSON schema for structured output (supports `file://`) | None                                 |
 | `toolConfig`                       | Tool/function calling config                           | None                                 |
 | `systemInstruction`                | System prompt (supports `{{var}}` and `file://`)       | None                                 |
+| `expressMode`                      | Set to `false` to force OAuth when API key is present  | Auto-detected                        |
+| `streaming`                        | Use streaming API (`streamGenerateContent`)            | `false`                              |
 
 :::note
 Not all models support all parameters. See [Google's documentation](https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/overview) for model-specific details.
@@ -777,7 +810,48 @@ providers:
 
 ### Thinking Configuration
 
-For models that support thinking capabilities (like Gemini 2.5 Flash), you can configure the thinking budget:
+For models that support thinking capabilities, you can configure how the model reasons through problems.
+
+#### Gemini 3 Models (thinkingLevel)
+
+Gemini 3 models use `thinkingLevel` instead of `thinkingBudget`:
+
+```yaml
+providers:
+  # Gemini 3 Flash supports: MINIMAL, LOW, MEDIUM, HIGH
+  - id: vertex:gemini-3-flash-preview
+    config:
+      generationConfig:
+        thinkingConfig:
+          thinkingLevel: MEDIUM # Balanced approach for moderate complexity
+
+  # Gemini 3 Pro supports: LOW, HIGH
+  - id: vertex:gemini-3-pro-preview
+    config:
+      generationConfig:
+        thinkingConfig:
+          thinkingLevel: HIGH # Maximizes reasoning depth (default)
+```
+
+Thinking levels for Gemini 3 Flash:
+
+| Level   | Description                                                  |
+| ------- | ------------------------------------------------------------ |
+| MINIMAL | Fewest tokens for thinking. Best for low-complexity tasks.   |
+| LOW     | Fewer tokens. Suitable for simpler tasks, high-throughput.   |
+| MEDIUM  | Balanced approach for moderate complexity.                   |
+| HIGH    | More tokens for deep reasoning. Default for complex prompts. |
+
+Thinking levels for Gemini 3 Pro:
+
+| Level | Description                               |
+| ----- | ----------------------------------------- |
+| LOW   | Minimizes latency and cost. Simple tasks. |
+| HIGH  | Maximizes reasoning depth. Default.       |
+
+#### Gemini 2.5 Models (thinkingBudget)
+
+Gemini 2.5 models use `thinkingBudget` to control token allocation:
 
 ```yaml
 providers:
@@ -797,11 +871,13 @@ The thinking configuration allows the model to show its reasoning process before
 - Step-by-step analysis
 - Decision making tasks
 
-When using thinking configuration:
+When using `thinkingBudget`:
 
-- The `thinkingBudget` must be at least 1024 tokens
+- The budget must be at least 1024 tokens
 - The budget is counted towards your total token usage
 - The model will show its reasoning process in the response
+
+**Note:** You cannot use both `thinkingLevel` and `thinkingBudget` in the same request.
 
 ### Search Grounding
 
@@ -879,6 +955,11 @@ providers:
         promptTemplate: projects/${VERTEX_PROJECT_ID}/locations/us-central1/templates/basic-safety
         responseTemplate: projects/${VERTEX_PROJECT_ID}/locations/us-central1/templates/basic-safety
 ```
+
+| Option                        | Description                                 |
+| ----------------------------- | ------------------------------------------- |
+| `modelArmor.promptTemplate`   | Template path for screening input prompts   |
+| `modelArmor.responseTemplate` | Template path for screening model responses |
 
 #### Prerequisites
 

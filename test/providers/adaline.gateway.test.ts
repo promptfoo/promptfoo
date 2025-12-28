@@ -1,13 +1,12 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Mocked } from 'vitest';
-
 import { Gateway } from '@adaline/gateway';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getCache } from '../../src/cache';
 import {
   AdalineGatewayCachePlugin,
   AdalineGatewayChatProvider,
   AdalineGatewayEmbeddingProvider,
 } from '../../src/providers/adaline.gateway';
+import type { Mocked } from 'vitest';
 
 vi.mock('@adaline/gateway', async (importOriginal) => {
   const GatewayMock = vi.fn(function () {
@@ -121,6 +120,7 @@ describe('AdalineGatewayEmbeddingProvider', () => {
       tokenUsage: {
         total: 100,
         cached: 0,
+        numRequests: 1,
       },
     });
   });
@@ -142,6 +142,7 @@ describe('AdalineGatewayEmbeddingProvider', () => {
       tokenUsage: {
         total: 100,
         cached: 100,
+        numRequests: 1,
       },
     });
   });
@@ -190,6 +191,7 @@ describe('AdalineGatewayChatProvider', () => {
         prompt: 10,
         completion: 20,
         total: 30,
+        numRequests: 1,
       },
       cached: false,
       cost: expect.any(Number),

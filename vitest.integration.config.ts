@@ -1,5 +1,6 @@
-import { defineConfig } from 'vitest/config';
 import os from 'os';
+
+import { defineConfig } from 'vitest/config';
 
 const cpuCount = os.cpus().length;
 // Use most cores but leave 2 for system/main process
@@ -16,6 +17,13 @@ export default defineConfig({
     include: ['**/*.integration.test.ts'],
     root: '.',
     setupFiles: ['./vitest.setup.ts'],
+
+    // Run tests in random order to catch test isolation issues early.
+    // Tests should not depend on execution order or shared state.
+    // Override with --sequence.shuffle=false when debugging specific failures.
+    sequence: {
+      shuffle: true,
+    },
 
     // Use forks for better memory isolation
     pool: 'forks',

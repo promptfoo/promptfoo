@@ -1,12 +1,23 @@
 // These metrics are ported from DeepEval.
 // https://docs.confident-ai.com/docs/metrics-conversation-relevancy. See APACHE_LICENSE for license.
-import { getAndCheckProvider, fail } from '../../matchers';
+import {
+  callProviderWithContext,
+  fail,
+  getAndCheckProvider,
+  loadRubricPrompt,
+} from '../../matchers';
 import { getDefaultProviders } from '../../providers/defaults';
-import type { GradingConfig, GradingResult, TokenUsage } from '../../types/index';
 import invariant from '../../util/invariant';
 import { extractJsonObjects } from '../../util/json';
 import { getNunjucksEngine } from '../../util/templates';
 import { ConversationRelevancyTemplate, type MessageRole } from './conversationRelevancyTemplate';
+
+import type {
+  CallApiContextParams,
+  GradingConfig,
+  GradingResult,
+  TokenUsage,
+} from '../../types/index';
 
 const nunjucks = getNunjucksEngine(undefined, false, true);
 
@@ -25,6 +36,7 @@ export async function matchesConversationRelevance(
   threshold: number,
   vars?: Record<string, string | object>,
   grading?: GradingConfig,
+  providerCallContext?: CallApiContextParams,
 ): Promise<Omit<GradingResult, 'assertion'>> {
   const textProvider = await getAndCheckProvider(
     'text',
@@ -55,13 +67,15 @@ export async function matchesConversationRelevance(
   }
 
   // Generate verdict using the template
-  const rubricPrompt = grading?.rubricPrompt;
+  // Load rubric prompt from file if specified, supporting file:// references with templates
+  const loadedRubricPrompt = grading?.rubricPrompt
+    ? await loadRubricPrompt(grading.rubricPrompt, '')
+    : '';
 
   let promptText: string;
-  if (rubricPrompt) {
+  if (loadedRubricPrompt) {
     // Use custom rubric prompt with nunjucks rendering
-    invariant(typeof rubricPrompt === 'string', 'rubricPrompt must be a string');
-    promptText = nunjucks.renderString(rubricPrompt, {
+    promptText = nunjucks.renderString(loadedRubricPrompt, {
       messages: renderedMessages,
       ...(vars || {}),
     });
@@ -70,7 +84,13 @@ export async function matchesConversationRelevance(
     promptText = ConversationRelevancyTemplate.generateVerdicts(messageRoles);
   }
 
-  const resp = await textProvider.callApi(promptText);
+  const resp = await callProviderWithContext(
+    textProvider,
+    promptText,
+    'conversation-relevance',
+    { messages: renderedMessages, ...(vars || {}) },
+    providerCallContext,
+  );
   if (resp.error || !resp.output) {
     return fail(resp.error || 'No output', resp.tokenUsage);
   }

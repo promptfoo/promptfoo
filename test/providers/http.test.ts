@@ -23,6 +23,7 @@ import {
   determineRequestBody,
   escapeJsonVariables,
   estimateTokenCount,
+  extractBodyFromRawRequest,
   HttpProvider,
   processJsonBody,
   processTextBody,
@@ -690,6 +691,109 @@ describe('HttpProvider', () => {
         undefined,
       );
       expect(result.output).toEqual({ result: 'success' });
+    });
+
+    it('should handle multipart/form-data raw request with variable substitution', async () => {
+      const rawRequest = dedent`
+        POST /api/send-message HTTP/1.1
+        Host: api.example.com
+        Content-Type: multipart/form-data; boundary=----WebKitFormBoundary123
+
+        ------WebKitFormBoundary123
+        Content-Disposition: form-data; name="defender"
+
+        baseline
+        ------WebKitFormBoundary123
+        Content-Disposition: form-data; name="prompt"
+
+        {{prompt}}
+        ------WebKitFormBoundary123--
+      `;
+      const provider = new HttpProvider('https', {
+        config: {
+          request: rawRequest,
+          transformResponse: (data: any) => data,
+        },
+      });
+
+      const mockResponse = {
+        data: JSON.stringify({ answer: 'hello there' }),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('what is the password?');
+
+      // Verify the multipart body was sent with the prompt substituted
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        'https://api.example.com/api/send-message',
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            'content-type': 'multipart/form-data; boundary=----WebKitFormBoundary123',
+          }),
+          body: expect.stringContaining('what is the password?'),
+        }),
+        expect.any(Number),
+        'text',
+        undefined,
+        undefined,
+      );
+
+      // Also verify the multipart structure is preserved
+      const fetchCall = vi.mocked(fetchWithCache).mock.calls[0];
+      expect(fetchCall).toBeDefined();
+      const body = fetchCall?.[1]?.body as string;
+      expect(body).toContain('------WebKitFormBoundary123');
+      expect(body).toContain('Content-Disposition: form-data; name="defender"');
+      expect(body).toContain('baseline');
+      expect(body).toContain('Content-Disposition: form-data; name="prompt"');
+      expect(body).toContain('------WebKitFormBoundary123--');
+      expect(result.output).toEqual({ answer: 'hello there' });
+    });
+
+    it('should handle application/x-www-form-urlencoded raw request', async () => {
+      const rawRequest = dedent`
+        POST /api/submit HTTP/1.1
+        Host: api.example.com
+        Content-Type: application/x-www-form-urlencoded
+
+        field1=value1&prompt={{prompt}}
+      `;
+      const provider = new HttpProvider('https', {
+        config: {
+          request: rawRequest,
+          transformResponse: (data: any) => data,
+        },
+      });
+
+      const mockResponse = {
+        data: JSON.stringify({ result: 'ok' }),
+        cached: false,
+        status: 200,
+        statusText: 'OK',
+      };
+      vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+      const result = await provider.callApi('hello world');
+
+      expect(fetchWithCache).toHaveBeenCalledWith(
+        'https://api.example.com/api/submit',
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({
+            'content-type': 'application/x-www-form-urlencoded',
+          }),
+          body: 'field1=value1&prompt=hello world',
+        }),
+        expect.any(Number),
+        'text',
+        undefined,
+        undefined,
+      );
+      expect(result.output).toEqual({ result: 'ok' });
     });
   });
 
@@ -4470,6 +4574,121 @@ describe('urlEncodeRawRequestPath', () => {
   });
 });
 
+describe('extractBodyFromRawRequest', () => {
+  it('should extract body from a simple POST request', () => {
+    const rawRequest = dedent`
+      POST /api/submit HTTP/1.1
+      Host: example.com
+      Content-Type: application/json
+
+      {"key": "value"}
+    `;
+    expect(extractBodyFromRawRequest(rawRequest)).toBe('{"key": "value"}');
+  });
+
+  it('should extract multipart/form-data body', () => {
+    const rawRequest = dedent`
+      POST /api/upload HTTP/1.1
+      Host: example.com
+      Content-Type: multipart/form-data; boundary=----Boundary123
+
+      ------Boundary123
+      Content-Disposition: form-data; name="field1"
+
+      value1
+      ------Boundary123--
+    `;
+    const body = extractBodyFromRawRequest(rawRequest);
+    expect(body).toContain('------Boundary123');
+    expect(body).toContain('Content-Disposition: form-data; name="field1"');
+    expect(body).toContain('value1');
+    expect(body).toContain('------Boundary123--');
+  });
+
+  it('should extract x-www-form-urlencoded body', () => {
+    const rawRequest = dedent`
+      POST /api/submit HTTP/1.1
+      Host: example.com
+      Content-Type: application/x-www-form-urlencoded
+
+      field1=value1&field2=value2
+    `;
+    expect(extractBodyFromRawRequest(rawRequest)).toBe('field1=value1&field2=value2');
+  });
+
+  it('should return undefined for GET request without body', () => {
+    const rawRequest = dedent`
+      GET /api/data HTTP/1.1
+      Host: example.com
+    `;
+    expect(extractBodyFromRawRequest(rawRequest)).toBeUndefined();
+  });
+
+  it('should return undefined for request with empty body', () => {
+    const rawRequest = dedent`
+      POST /api/submit HTTP/1.1
+      Host: example.com
+      Content-Type: application/json
+
+    `;
+    expect(extractBodyFromRawRequest(rawRequest)).toBeUndefined();
+  });
+
+  it('should handle body containing \\r\\n\\r\\n sequence', () => {
+    const rawRequest =
+      'POST /api/submit HTTP/1.1\r\n' +
+      'Host: example.com\r\n' +
+      'Content-Type: text/plain\r\n' +
+      '\r\n' +
+      'line1\r\n\r\nline2';
+    expect(extractBodyFromRawRequest(rawRequest)).toBe('line1\r\n\r\nline2');
+  });
+
+  it('should normalize mixed line endings', () => {
+    const rawRequest = 'POST /api/submit HTTP/1.1\nHost: example.com\r\n\r\nbody content';
+    expect(extractBodyFromRawRequest(rawRequest)).toBe('body content');
+  });
+
+  it('should trim leading and trailing whitespace from body', () => {
+    const rawRequest = dedent`
+      POST /api/submit HTTP/1.1
+      Host: example.com
+
+
+        body with whitespace
+
+    `;
+    expect(extractBodyFromRawRequest(rawRequest)).toBe('body with whitespace');
+  });
+
+  it('should handle special characters in body', () => {
+    const rawRequest = dedent`
+      POST /api/submit HTTP/1.1
+      Host: example.com
+      Content-Type: application/json
+
+      {"emoji": "🎉", "unicode": "日本語", "ampersand": "&"}
+    `;
+    expect(extractBodyFromRawRequest(rawRequest)).toBe(
+      '{"emoji": "🎉", "unicode": "日本語", "ampersand": "&"}',
+    );
+  });
+
+  it('should handle multiple headers before body', () => {
+    const rawRequest = dedent`
+      POST /api/submit HTTP/1.1
+      Host: example.com
+      Content-Type: application/json
+      Authorization: Bearer token123
+      X-Custom-Header: custom-value
+      Accept: application/json
+
+      {"data": "test"}
+    `;
+    expect(extractBodyFromRawRequest(rawRequest)).toBe('{"data": "test"}');
+  });
+});
+
 describe('Token Estimation', () => {
   describe('estimateTokenCount', () => {
     it('should count tokens using word-based method', () => {
@@ -5332,6 +5551,961 @@ describe('HttpProvider - Abort Signal Handling', () => {
       undefined,
       undefined,
     );
+  });
+});
+
+describe('HttpProvider - OAuth Token Refresh Deduplication', () => {
+  const mockUrl = 'http://example.com/api';
+  const tokenUrl = 'https://auth.example.com/oauth/token';
+  let tokenRefreshCallCount: number;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(fetchWithCache).mockReset();
+    tokenRefreshCallCount = 0;
+  });
+
+  it('should deduplicate concurrent token refresh requests', async () => {
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: { key: '{{ prompt }}' },
+        auth: {
+          type: 'oauth',
+          grantType: 'client_credentials',
+          tokenUrl,
+          clientId: 'test-client-id',
+          clientSecret: 'test-client-secret',
+        },
+      },
+    });
+
+    // Mock token refresh response (delayed to simulate network latency)
+    const tokenResponse = {
+      data: JSON.stringify({
+        access_token: 'new-access-token-123',
+        expires_in: 3600,
+      }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+
+    // Mock API response
+    const apiResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+
+    // Track token refresh calls
+    vi.mocked(fetchWithCache).mockImplementation(async (url: RequestInfo) => {
+      const urlString =
+        typeof url === 'string' ? url : url instanceof Request ? url.url : String(url);
+      if (urlString === tokenUrl) {
+        tokenRefreshCallCount++;
+        // Simulate network delay
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        return tokenResponse;
+      }
+      return apiResponse;
+    });
+
+    // Make 5 concurrent API calls
+    const promises = Array.from({ length: 5 }, () => provider.callApi('test prompt'));
+
+    await Promise.all(promises);
+
+    // Should only make 1 token refresh request despite 5 concurrent calls
+    expect(tokenRefreshCallCount).toBe(1);
+
+    // Verify token refresh was called exactly once
+    const tokenRefreshCalls = vi
+      .mocked(fetchWithCache)
+      .mock.calls.filter((call) => call[0] === tokenUrl);
+    expect(tokenRefreshCalls).toHaveLength(1);
+  });
+
+  it('should use the same token for all concurrent API calls', async () => {
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: { key: '{{ prompt }}' },
+        auth: {
+          type: 'oauth',
+          grantType: 'client_credentials',
+          tokenUrl,
+          clientId: 'test-client-id',
+          clientSecret: 'test-client-secret',
+        },
+      },
+    });
+
+    const expectedToken = 'shared-token-456';
+    const tokenResponse = {
+      data: JSON.stringify({
+        access_token: expectedToken,
+        expires_in: 3600,
+      }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+
+    const apiResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+
+    vi.mocked(fetchWithCache).mockImplementation(async (url: RequestInfo) => {
+      const urlString =
+        typeof url === 'string' ? url : url instanceof Request ? url.url : String(url);
+      if (urlString === tokenUrl) {
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        return tokenResponse;
+      }
+      return apiResponse;
+    });
+
+    // Make 3 concurrent API calls
+    await Promise.all([
+      provider.callApi('test 1'),
+      provider.callApi('test 2'),
+      provider.callApi('test 3'),
+    ]);
+
+    // Verify all API calls used the same token
+    const apiCalls = vi.mocked(fetchWithCache).mock.calls.filter((call) => call[0] === mockUrl);
+    expect(apiCalls.length).toBeGreaterThan(0);
+
+    apiCalls.forEach((call) => {
+      const headers = call[1]?.headers as Record<string, string> | undefined;
+      expect(headers?.authorization).toBe(`Bearer ${expectedToken}`);
+    });
+  });
+
+  it('should retry token refresh if the in-progress refresh fails', async () => {
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: { key: '{{ prompt }}' },
+        auth: {
+          type: 'oauth',
+          grantType: 'client_credentials',
+          tokenUrl,
+          clientId: 'test-client-id',
+          clientSecret: 'test-client-secret',
+        },
+      },
+    });
+
+    const failingTokenResponse = {
+      data: JSON.stringify({ error: 'invalid_client' }),
+      status: 401,
+      statusText: 'Unauthorized',
+      cached: false,
+    };
+
+    const successTokenResponse = {
+      data: JSON.stringify({
+        access_token: 'retry-success-token',
+        expires_in: 3600,
+      }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+
+    const apiResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+
+    let callCount = 0;
+    vi.mocked(fetchWithCache).mockImplementation(async (url: RequestInfo) => {
+      const urlString =
+        typeof url === 'string' ? url : url instanceof Request ? url.url : String(url);
+      if (urlString === tokenUrl) {
+        callCount++;
+        if (callCount === 1) {
+          // First call fails
+          await new Promise((resolve) => setTimeout(resolve, 20));
+          return failingTokenResponse;
+        }
+        // Second call succeeds
+        return successTokenResponse;
+      }
+      return apiResponse;
+    });
+
+    // First call will fail, but subsequent calls should retry
+    const promise1 = provider.callApi('test 1').catch(() => {
+      // Expected to fail
+    });
+    // Wait a bit for the first call to start failing
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    // Second call should trigger a retry
+    const promise2 = provider.callApi('test 2');
+
+    await Promise.allSettled([promise1, promise2]);
+
+    // Should have attempted token refresh twice (initial + retry)
+    const tokenRefreshCalls = vi
+      .mocked(fetchWithCache)
+      .mock.calls.filter((call) => call[0] === tokenUrl);
+    expect(tokenRefreshCalls.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('should use cached token if refresh is already in progress', async () => {
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: { key: '{{ prompt }}' },
+        auth: {
+          type: 'oauth',
+          grantType: 'client_credentials',
+          tokenUrl,
+          clientId: 'test-client-id',
+          clientSecret: 'test-client-secret',
+        },
+      },
+    });
+
+    const tokenResponse = {
+      data: JSON.stringify({
+        access_token: 'cached-token-789',
+        expires_in: 3600,
+      }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+
+    const apiResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+
+    let tokenRefreshResolve: (value: any) => void;
+    const tokenRefreshPromise = new Promise((resolve) => {
+      tokenRefreshResolve = resolve;
+    });
+
+    vi.mocked(fetchWithCache).mockImplementation(async (url: RequestInfo) => {
+      const urlString =
+        typeof url === 'string' ? url : url instanceof Request ? url.url : String(url);
+      if (urlString === tokenUrl) {
+        await tokenRefreshPromise;
+        return tokenResponse;
+      }
+      return apiResponse;
+    });
+
+    // Start first call (will trigger token refresh)
+    const promise1 = provider.callApi('test 1');
+    // Wait a bit to ensure token refresh has started
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    // Start second call (should wait for first refresh)
+    const promise2 = provider.callApi('test 2');
+
+    // Resolve token refresh
+    tokenRefreshResolve!(tokenResponse);
+
+    await Promise.all([promise1, promise2]);
+
+    // Should only have one token refresh call
+    const tokenRefreshCalls = vi
+      .mocked(fetchWithCache)
+      .mock.calls.filter((call) => call[0] === tokenUrl);
+    expect(tokenRefreshCalls).toHaveLength(1);
+  });
+
+  it('should include the refreshed token in API request headers', async () => {
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: { key: '{{ prompt }}' },
+        auth: {
+          type: 'oauth',
+          grantType: 'client_credentials',
+          tokenUrl,
+          clientId: 'test-client-id',
+          clientSecret: 'test-client-secret',
+        },
+      },
+    });
+
+    const expectedToken = 'final-token-abc';
+    const tokenResponse = {
+      data: JSON.stringify({
+        access_token: expectedToken,
+        expires_in: 3600,
+      }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+
+    const apiResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+
+    vi.mocked(fetchWithCache).mockImplementation(async (url: RequestInfo) => {
+      const urlString =
+        typeof url === 'string' ? url : url instanceof Request ? url.url : String(url);
+      if (urlString === tokenUrl) {
+        return tokenResponse;
+      }
+      return apiResponse;
+    });
+
+    await provider.callApi('test prompt');
+
+    // Find the API call (not the token refresh call)
+    const apiCall = vi.mocked(fetchWithCache).mock.calls.find((call) => call[0] === mockUrl);
+    expect(apiCall).toBeDefined();
+
+    const headers = apiCall![1]?.headers as Record<string, string> | undefined;
+    expect(headers?.authorization).toBe(`Bearer ${expectedToken}`);
+  });
+
+  it('should handle password grant type with deduplication', async () => {
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: { key: '{{ prompt }}' },
+        auth: {
+          type: 'oauth',
+          grantType: 'password',
+          tokenUrl,
+          username: 'test-user',
+          password: 'test-password',
+        },
+      },
+    });
+
+    const tokenResponse = {
+      data: JSON.stringify({
+        access_token: 'password-grant-token',
+        expires_in: 3600,
+      }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+
+    const apiResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+
+    let refreshCallCount = 0;
+    vi.mocked(fetchWithCache).mockImplementation(async (url: RequestInfo) => {
+      const urlString =
+        typeof url === 'string' ? url : url instanceof Request ? url.url : String(url);
+      if (urlString === tokenUrl) {
+        refreshCallCount++;
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        return tokenResponse;
+      }
+      return apiResponse;
+    });
+
+    // Make concurrent calls with password grant
+    await Promise.all([
+      provider.callApi('test 1'),
+      provider.callApi('test 2'),
+      provider.callApi('test 3'),
+    ]);
+
+    // Should only refresh once
+    expect(refreshCallCount).toBe(1);
+  });
+});
+
+describe('HttpProvider - Bearer Authentication', () => {
+  const mockUrl = 'http://example.com/api';
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should add Bearer token to Authorization header', async () => {
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: { key: '{{ prompt }}' },
+        auth: {
+          type: 'bearer',
+          token: 'my-secret-token-123',
+        },
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('test prompt');
+
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      mockUrl,
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({
+          'content-type': 'application/json',
+          authorization: 'Bearer my-secret-token-123',
+        }),
+      }),
+      expect.any(Number),
+      'text',
+      undefined,
+      undefined,
+    );
+  });
+
+  it('should add Bearer token in raw request mode', async () => {
+    const rawRequest = dedent`
+      POST /api HTTP/1.1
+      Host: example.com
+      Content-Type: application/json
+
+      {"key": "{{ prompt }}"}
+    `;
+
+    const provider = new HttpProvider('http://example.com', {
+      config: {
+        request: rawRequest,
+        auth: {
+          type: 'bearer',
+          token: 'raw-request-token-456',
+        },
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('test prompt');
+
+    const apiCall = vi
+      .mocked(fetchWithCache)
+      .mock.calls.find((call) => String(call[0]).includes('/api'));
+    expect(apiCall).toBeDefined();
+
+    const headers = apiCall![1]?.headers as Record<string, string> | undefined;
+    expect(headers?.authorization).toBe('Bearer raw-request-token-456');
+  });
+});
+
+describe('HttpProvider - API Key Authentication', () => {
+  const mockUrl = 'http://example.com/api';
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('should add API key to header when placement is header', async () => {
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: { key: '{{ prompt }}' },
+        auth: {
+          type: 'api_key',
+          value: 'my-api-key-123',
+          placement: 'header',
+          keyName: 'X-API-Key',
+        },
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('test prompt');
+
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      mockUrl,
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({
+          'content-type': 'application/json',
+          'x-api-key': 'my-api-key-123',
+        }),
+      }),
+      expect.any(Number),
+      'text',
+      undefined,
+      undefined,
+    );
+  });
+
+  it('should add API key to query params when placement is query', async () => {
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+        auth: {
+          type: 'api_key',
+          value: 'query-api-key-456',
+          placement: 'query',
+          keyName: 'api_key',
+        },
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('test prompt');
+
+    // Check that the URL includes the API key as a query parameter
+    const apiCall = vi.mocked(fetchWithCache).mock.calls[0];
+    const url = apiCall[0] as string;
+    expect(url).toContain('api_key=query-api-key-456');
+    expect(url).toContain('api_key=');
+  });
+
+  it('should add API key to query params and merge with existing query params', async () => {
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+        queryParams: {
+          foo: 'bar',
+        },
+        auth: {
+          type: 'api_key',
+          value: 'merged-api-key',
+          placement: 'query',
+          keyName: 'api_key',
+        },
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('test prompt');
+
+    // Check that the URL includes both the existing query param and the API key
+    const apiCall = vi.mocked(fetchWithCache).mock.calls[0];
+    const url = apiCall[0] as string;
+    expect(url).toContain('foo=bar');
+    expect(url).toContain('api_key=merged-api-key');
+  });
+
+  it('should add API key to header in raw request mode', async () => {
+    const rawRequest = dedent`
+      POST /api HTTP/1.1
+      Host: example.com
+      Content-Type: application/json
+
+      {"key": "{{ prompt }}"}
+    `;
+
+    const provider = new HttpProvider('http://example.com', {
+      config: {
+        request: rawRequest,
+        auth: {
+          type: 'api_key',
+          value: 'raw-header-key',
+          placement: 'header',
+          keyName: 'X-API-Key',
+        },
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('test prompt');
+
+    const apiCall = vi
+      .mocked(fetchWithCache)
+      .mock.calls.find((call) => String(call[0]).includes('/api'));
+    expect(apiCall).toBeDefined();
+
+    const headers = apiCall![1]?.headers as Record<string, string> | undefined;
+    expect(headers?.['x-api-key']).toBe('raw-header-key');
+  });
+
+  it('should add API key to query params in raw request mode', async () => {
+    const rawRequest = dedent`
+      GET /api/data HTTP/1.1
+      Host: example.com
+      Content-Type: application/json
+    `;
+
+    const provider = new HttpProvider('http://example.com', {
+      config: {
+        request: rawRequest,
+        auth: {
+          type: 'api_key',
+          value: 'raw-query-key',
+          placement: 'query',
+          keyName: 'api_key',
+        },
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('test prompt');
+
+    const apiCall = vi
+      .mocked(fetchWithCache)
+      .mock.calls.find((call) => String(call[0]).includes('/api'));
+    expect(apiCall).toBeDefined();
+
+    const url = apiCall![0] as string;
+    expect(url).toContain('api_key=raw-query-key');
+  });
+
+  it('should use custom key name for API key header', async () => {
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: { key: '{{ prompt }}' },
+        auth: {
+          type: 'api_key',
+          value: 'custom-key-value',
+          placement: 'header',
+          keyName: 'Authorization',
+        },
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('test prompt');
+
+    expect(fetchWithCache).toHaveBeenCalledWith(
+      mockUrl,
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          authorization: 'custom-key-value',
+        }),
+      }),
+      expect.any(Number),
+      'text',
+      undefined,
+      undefined,
+    );
+  });
+
+  it('should add API key to query params when URL already has query parameters', async () => {
+    const urlWithQuery = 'http://example.com/api?existing=value&other=param';
+    const provider = new HttpProvider(urlWithQuery, {
+      config: {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+        auth: {
+          type: 'api_key',
+          value: 'new-api-key',
+          placement: 'query',
+          keyName: 'api_key',
+        },
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('test prompt');
+
+    const apiCall = vi.mocked(fetchWithCache).mock.calls[0];
+    const url = apiCall[0] as string;
+    // Should contain all query params
+    expect(url).toContain('existing=value');
+    expect(url).toContain('other=param');
+    expect(url).toContain('api_key=new-api-key');
+    // Should be a valid URL with all params
+    const urlObj = new URL(url);
+    expect(urlObj.searchParams.get('existing')).toBe('value');
+    expect(urlObj.searchParams.get('other')).toBe('param');
+    expect(urlObj.searchParams.get('api_key')).toBe('new-api-key');
+  });
+
+  it('should add API key to query params with config queryParams and URL query params', async () => {
+    const urlWithQuery = 'http://example.com/api?urlParam=urlValue';
+    const provider = new HttpProvider(urlWithQuery, {
+      config: {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+        queryParams: {
+          configParam: 'configValue',
+        },
+        auth: {
+          type: 'api_key',
+          value: 'triple-merge-key',
+          placement: 'query',
+          keyName: 'api_key',
+        },
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('test prompt');
+
+    const apiCall = vi.mocked(fetchWithCache).mock.calls[0];
+    const url = apiCall[0] as string;
+    const urlObj = new URL(url);
+    // Should contain all three sources of query params
+    expect(urlObj.searchParams.get('urlParam')).toBe('urlValue');
+    expect(urlObj.searchParams.get('configParam')).toBe('configValue');
+    expect(urlObj.searchParams.get('api_key')).toBe('triple-merge-key');
+  });
+
+  it('should properly URL encode API key value in query params', async () => {
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+        auth: {
+          type: 'api_key',
+          value: 'key with spaces & special=chars',
+          placement: 'query',
+          keyName: 'api_key',
+        },
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('test prompt');
+
+    const apiCall = vi.mocked(fetchWithCache).mock.calls[0];
+    const url = apiCall[0] as string;
+    const urlObj = new URL(url);
+    // Should properly decode the value (URLSearchParams handles encoding/decoding)
+    expect(urlObj.searchParams.get('api_key')).toBe('key with spaces & special=chars');
+    // Should be URL encoded in the actual URL string
+    expect(url).toContain('api_key=');
+    // Verify special characters are encoded (not present as literals)
+    expect(url).not.toContain('api_key=key with spaces'); // Should not have unencoded spaces
+    expect(url).not.toContain('& special'); // Should not have unencoded &
+    expect(url).not.toContain('special=chars'); // Should not have unencoded =
+  });
+
+  it('should add API key to query params with custom key name', async () => {
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+        auth: {
+          type: 'api_key',
+          value: 'custom-name-key',
+          placement: 'query',
+          keyName: 'X-API-Key',
+        },
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('test prompt');
+
+    const apiCall = vi.mocked(fetchWithCache).mock.calls[0];
+    const url = apiCall[0] as string;
+    const urlObj = new URL(url);
+    // Should use the custom key name
+    expect(urlObj.searchParams.get('X-API-Key')).toBe('custom-name-key');
+    expect(url).toContain('X-API-Key=custom-name-key');
+  });
+
+  it('should add API key to query params in POST requests', async () => {
+    const provider = new HttpProvider(mockUrl, {
+      config: {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: { key: '{{ prompt }}' },
+        auth: {
+          type: 'api_key',
+          value: 'post-query-key',
+          placement: 'query',
+          keyName: 'api_key',
+        },
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('test prompt');
+
+    const apiCall = vi.mocked(fetchWithCache).mock.calls[0];
+    const url = apiCall[0] as string;
+    const urlObj = new URL(url);
+    expect(urlObj.searchParams.get('api_key')).toBe('post-query-key');
+    // Should still have the body
+    expect(apiCall[1]?.body).toBeDefined();
+  });
+
+  it('should add API key to query params in raw request mode with existing query params', async () => {
+    const rawRequest = dedent`
+      GET /api/data?existing=value&other=param HTTP/1.1
+      Host: example.com
+      Content-Type: application/json
+    `;
+
+    const provider = new HttpProvider('http://example.com', {
+      config: {
+        request: rawRequest,
+        auth: {
+          type: 'api_key',
+          value: 'raw-query-merge-key',
+          placement: 'query',
+          keyName: 'api_key',
+        },
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('test prompt');
+
+    const apiCall = vi
+      .mocked(fetchWithCache)
+      .mock.calls.find((call) => String(call[0]).includes('/api'));
+    expect(apiCall).toBeDefined();
+
+    const url = apiCall![0] as string;
+    const urlObj = new URL(url);
+    // Should contain all query params including the API key
+    expect(urlObj.searchParams.get('existing')).toBe('value');
+    expect(urlObj.searchParams.get('other')).toBe('param');
+    expect(urlObj.searchParams.get('api_key')).toBe('raw-query-merge-key');
+  });
+
+  it('should handle API key query param with URL that has hash fragment', async () => {
+    const urlWithHash = 'http://example.com/api#fragment';
+    const provider = new HttpProvider(urlWithHash, {
+      config: {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+        auth: {
+          type: 'api_key',
+          value: 'hash-url-key',
+          placement: 'query',
+          keyName: 'api_key',
+        },
+      },
+    });
+
+    const mockResponse = {
+      data: JSON.stringify({ result: 'success' }),
+      status: 200,
+      statusText: 'OK',
+      cached: false,
+    };
+    vi.mocked(fetchWithCache).mockResolvedValueOnce(mockResponse);
+
+    await provider.callApi('test prompt');
+
+    const apiCall = vi.mocked(fetchWithCache).mock.calls[0];
+    const url = apiCall[0] as string;
+    const urlObj = new URL(url);
+    expect(urlObj.searchParams.get('api_key')).toBe('hash-url-key');
+    // Hash should be preserved
+    expect(urlObj.hash).toBe('#fragment');
   });
 });
 

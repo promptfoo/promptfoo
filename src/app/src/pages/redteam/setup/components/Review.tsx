@@ -1,11 +1,13 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import Code from '@app/components/Code';
+import { EVAL_ROUTES, REDTEAM_ROUTES } from '@app/constants/routes';
 import { useApiHealth } from '@app/hooks/useApiHealth';
 import { useEmailVerification } from '@app/hooks/useEmailVerification';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import YamlEditor from '@app/pages/eval-creator/components/YamlEditor';
+import { useRedteamJobStore } from '@app/stores/redteamJobStore';
 import { callApi } from '@app/utils/api';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import CloseIcon from '@mui/icons-material/Close';
@@ -17,7 +19,6 @@ import SearchIcon from '@mui/icons-material/Search';
 import StopIcon from '@mui/icons-material/Stop';
 import TuneIcon from '@mui/icons-material/Tune';
 import VisibilityIcon from '@mui/icons-material/Visibility';
-import Grid from '@mui/material/Grid';
 import Accordion from '@mui/material/Accordion';
 import AccordionDetails from '@mui/material/AccordionDetails';
 import AccordionSummary from '@mui/material/AccordionSummary';
@@ -30,33 +31,32 @@ import Dialog from '@mui/material/Dialog';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import Divider from '@mui/material/Divider';
+import Grid from '@mui/material/Grid';
 import IconButton from '@mui/material/IconButton';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import { useTheme } from '@mui/material/styles';
 import TextField from '@mui/material/TextField';
+import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { isFoundationModelProvider } from '@promptfoo/constants';
 import { REDTEAM_DEFAULTS, strategyDisplayNames } from '@promptfoo/redteam/constants';
+import {
+  isValidPolicyObject,
+  makeDefaultPolicyName,
+} from '@promptfoo/redteam/plugins/policy/utils';
 import { getUnifiedConfig } from '@promptfoo/redteam/sharedFrontend';
 import { Link } from 'react-router-dom';
 import { useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import { generateOrderedYaml } from '../utils/yamlHelpers';
 import DefaultTestVariables from './DefaultTestVariables';
 import { EmailVerificationDialog } from './EmailVerificationDialog';
+import EstimationsDisplay from './EstimationsDisplay';
 import { LogViewer } from './LogViewer';
 import PageWrapper from './PageWrapper';
 import { RunOptionsContent } from './RunOptions';
-import type { RedteamRunOptions } from '@promptfoo/types';
-
-import type { RedteamPlugin, Policy, PolicyObject } from '@promptfoo/redteam/types';
-import type { Job } from '@promptfoo/types';
-import EstimationsDisplay from './EstimationsDisplay';
-import Tooltip from '@mui/material/Tooltip';
-import {
-  isValidPolicyObject,
-  makeDefaultPolicyName,
-} from '@promptfoo/redteam/plugins/policy/utils';
+import type { Policy, PolicyObject, RedteamPlugin } from '@promptfoo/redteam/types';
+import type { Job, RedteamRunOptions } from '@promptfoo/types';
 
 interface ReviewProps {
   onBack?: () => void;
@@ -88,6 +88,8 @@ export default function Review({
     data: { status: apiHealthStatus },
     isLoading: isCheckingApiHealth,
   } = useApiHealth();
+  const { jobId: savedJobId, setJob, clearJob, _hasHydrated } = useRedteamJobStore();
+  const pollIntervalRef = useRef<number | null>(null);
   const [isYamlDialogOpen, setIsYamlDialogOpen] = React.useState(false);
   const yamlContent = useMemo(() => generateOrderedYaml(config), [config]);
 
@@ -100,7 +102,6 @@ export default function Review({
     String(config.maxConcurrency || REDTEAM_DEFAULTS.MAX_CONCURRENCY),
   );
   const [isJobStatusDialogOpen, setIsJobStatusDialogOpen] = useState(false);
-  const [pollInterval, setPollInterval] = useState<number | null>(null);
   const [isEmailDialogOpen, setIsEmailDialogOpen] = useState(false);
   const [emailVerificationMessage, setEmailVerificationMessage] = useState('');
   const [emailVerificationError, setEmailVerificationError] = useState<string | null>(null);
@@ -194,6 +195,79 @@ export default function Review({
   useEffect(() => {
     setMaxConcurrency(String(config.maxConcurrency || REDTEAM_DEFAULTS.MAX_CONCURRENCY));
   }, [config.maxConcurrency]);
+
+  // Track if recovery has been attempted to prevent duplicate runs
+  const hasAttemptedRecovery = useRef(false);
+
+  // Recover job state on mount (e.g., after navigation)
+  // Wait for Zustand to hydrate from localStorage before checking savedJobId
+  // Using "use no memo" - this effect intentionally runs once after hydration with limited deps
+  useEffect(() => {
+    'use no memo';
+    if (!_hasHydrated || hasAttemptedRecovery.current) {
+      return;
+    }
+    hasAttemptedRecovery.current = true;
+
+    const recoverJob = async () => {
+      // Check what the server thinks is running
+      const { hasRunningJob, jobId: serverJobId } = await checkForRunningJob();
+
+      if (hasRunningJob && serverJobId) {
+        // Server has a running job - reconnect to it
+        try {
+          const jobResponse = await callApi(`/eval/job/${serverJobId}`);
+          if (jobResponse.ok) {
+            const job = (await jobResponse.json()) as Job;
+            setLogs(job.logs || []);
+
+            if (job.status === 'in-progress') {
+              setIsRunning(true);
+              setJob(serverJobId);
+              startPolling(serverJobId);
+            } else if (job.status === 'complete' && job.evalId) {
+              setEvalId(job.evalId);
+              clearJob();
+            } else if (job.status === 'error') {
+              setLogs(job.logs || []);
+              showToast('Previous job failed. Check logs for details.', 'error');
+              clearJob();
+            }
+          } else {
+            // Server reported a running job but we couldn't fetch it
+            showToast('Could not reconnect to running job.', 'error');
+            clearJob();
+          }
+        } catch (error) {
+          console.error('Failed to recover job:', error);
+          showToast('Failed to reconnect to running job.', 'error');
+          clearJob();
+        }
+      } else if (savedJobId) {
+        // We have a saved job ID but server says nothing running
+        // Check if it completed while we were away
+        try {
+          const jobResponse = await callApi(`/eval/job/${savedJobId}`);
+          if (jobResponse.ok) {
+            const job = (await jobResponse.json()) as Job;
+            setLogs(job.logs || []);
+
+            if (job.status === 'complete' && job.evalId) {
+              setEvalId(job.evalId);
+              showToast('Your evaluation completed!', 'success');
+            } else if (job.status === 'error') {
+              showToast('Previous job failed. Check logs for details.', 'error');
+            }
+          }
+        } catch {
+          // Job doesn't exist anymore (server restarted or cleaned up)
+        }
+        clearJob();
+      }
+    };
+
+    recoverJob();
+  }, [_hasHydrated]); // Run once after hydration completes
 
   const handleSaveYaml = () => {
     const blob = new Blob([yamlContent], { type: 'text/yaml' });
@@ -315,6 +389,71 @@ export default function Review({
     }
   };
 
+  const startPolling = useCallback(
+    (jobId: string) => {
+      // Clear any existing interval
+      if (pollIntervalRef.current) {
+        window.clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }
+
+      const interval = window.setInterval(async () => {
+        try {
+          const statusResponse = await callApi(`/eval/job/${jobId}`);
+          if (!statusResponse.ok) {
+            // Job not found - likely server restarted
+            window.clearInterval(interval);
+            pollIntervalRef.current = null;
+            setIsRunning(false);
+            clearJob();
+            showToast('Job was interrupted. Please try again.', 'error');
+            return;
+          }
+
+          const status = (await statusResponse.json()) as Job;
+
+          if (status.logs) {
+            setLogs(status.logs);
+          }
+
+          if (status.status === 'complete' || status.status === 'error') {
+            window.clearInterval(interval);
+            pollIntervalRef.current = null;
+            setIsRunning(false);
+            clearJob();
+
+            if (status.status === 'complete' && status.result && status.evalId) {
+              setEvalId(status.evalId);
+
+              recordEvent('funnel', {
+                type: 'redteam',
+                step: 'webui_evaluation_completed',
+                source: 'webui',
+                evalId: status.evalId,
+              });
+            } else if (status.status === 'complete') {
+              console.warn('No evaluation result was generated');
+              showToast(
+                'The evaluation completed but no results were generated. Please check the logs for details.',
+                'warning',
+              );
+            } else {
+              showToast(
+                'An error occurred during evaluation. Please check the logs for details.',
+                'error',
+              );
+            }
+          }
+        } catch (error) {
+          console.error('Error polling job status:', error);
+        }
+      }, 1000);
+
+      pollIntervalRef.current = interval;
+    },
+    [clearJob, recordEvent, showToast],
+  );
+
   const handleRunWithSettings = async () => {
     // Check email verification first
     const emailResult = await checkEmailStatus();
@@ -346,9 +485,10 @@ export default function Review({
       return;
     }
 
-    if (pollInterval) {
-      window.clearInterval(pollInterval);
-      setPollInterval(null);
+    // Clear any existing polling interval before starting a new job
+    if (pollIntervalRef.current) {
+      window.clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
     }
 
     recordEvent('feature_used', {
@@ -395,45 +535,9 @@ export default function Review({
 
       const { id } = await response.json();
 
-      const interval = window.setInterval(async () => {
-        const statusResponse = await callApi(`/eval/job/${id}`);
-        const status = (await statusResponse.json()) as Job;
-
-        if (status.logs) {
-          setLogs(status.logs);
-        }
-
-        if (status.status === 'complete' || status.status === 'error') {
-          window.clearInterval(interval);
-          setPollInterval(null);
-          setIsRunning(false);
-
-          if (status.status === 'complete' && status.result && status.evalId) {
-            setEvalId(status.evalId);
-
-            // Track funnel milestone - evaluation completed
-            recordEvent('funnel', {
-              type: 'redteam',
-              step: 'webui_evaluation_completed',
-              source: 'webui',
-              evalId: status.evalId,
-            });
-          } else if (status.status === 'complete') {
-            console.warn('No evaluation result was generated');
-            showToast(
-              'The evaluation completed but no results were generated. Please check the logs for details.',
-              'warning',
-            );
-          } else {
-            showToast(
-              'An error occurred during evaluation. Please check the logs for details.',
-              'error',
-            );
-          }
-        }
-      }, 1000);
-
-      setPollInterval(interval);
+      // Save job ID to persistent store and start polling
+      setJob(id);
+      startPolling(id);
     } catch (error) {
       console.error('Error running redteam:', error);
       setIsRunning(false);
@@ -451,12 +555,13 @@ export default function Review({
         method: 'POST',
       });
 
-      if (pollInterval) {
-        window.clearInterval(pollInterval);
-        setPollInterval(null);
+      if (pollIntervalRef.current) {
+        window.clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
       }
 
       setIsRunning(false);
+      clearJob();
       showToast('Cancel request submitted', 'success');
     } catch (error) {
       console.error('Error cancelling job:', error);
@@ -479,11 +584,11 @@ export default function Review({
 
   useEffect(() => {
     return () => {
-      if (pollInterval) {
-        window.clearInterval(pollInterval);
+      if (pollIntervalRef.current) {
+        window.clearInterval(pollIntervalRef.current);
       }
     };
-  }, [pollInterval]);
+  }, []);
 
   return (
     <PageWrapper title="Review & Run" onBack={onBack}>
@@ -1190,7 +1295,7 @@ export default function Review({
                     <Button
                       variant="contained"
                       color="success"
-                      href={`/reports?evalId=${evalId}`}
+                      href={REDTEAM_ROUTES.REPORT_DETAIL(evalId)}
                       startIcon={<AssessmentIcon />}
                     >
                       View Report
@@ -1198,7 +1303,7 @@ export default function Review({
                     <Button
                       variant="contained"
                       color="success"
-                      href={`/eval?evalId=${evalId}`}
+                      href={EVAL_ROUTES.DETAIL(evalId)}
                       startIcon={<SearchIcon />}
                     >
                       View Probes

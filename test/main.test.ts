@@ -2,8 +2,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+
 import { Command } from 'commander';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setLogLevel } from '../src/logger';
 import { addCommonOptionsRecursively, isMainModule } from '../src/main';
 import { setupEnv } from '../src/util/index';
@@ -17,6 +18,11 @@ vi.mock('../src/logger', () => ({
   __esModule: true,
   default: { debug: vi.fn() },
   setLogLevel: vi.fn(),
+}));
+
+vi.mock('../src/telemetry', () => ({
+  __esModule: true,
+  default: { record: vi.fn() },
 }));
 
 // Mock code scan commands to avoid ESM import issues with execa
@@ -165,16 +171,23 @@ describe('addCommonOptionsRecursively', () => {
     // Get the hook function
     const preActionFn = mockHookRegister.mock.calls[0][1];
 
+    // Create mock command object with name() and parent for telemetry
+    const createMockCommand = (opts: Record<string, unknown>, commandName = 'test') => ({
+      opts: () => opts,
+      name: () => commandName,
+      parent: null,
+    });
+
     // Test verbose option
-    preActionFn({ opts: () => ({ verbose: true }) });
+    preActionFn(createMockCommand({ verbose: true }));
     expect(setLogLevel).toHaveBeenCalledWith('debug');
 
     // Test env-file option
-    preActionFn({ opts: () => ({ envFile: '.env.test' }) });
+    preActionFn(createMockCommand({ envFile: '.env.test' }));
     expect(setupEnv).toHaveBeenCalledWith('.env.test');
 
     // Test both options together
-    preActionFn({ opts: () => ({ verbose: true, envFile: '.env.combined' }) });
+    preActionFn(createMockCommand({ verbose: true, envFile: '.env.combined' }));
     expect(setLogLevel).toHaveBeenCalledWith('debug');
     expect(setupEnv).toHaveBeenCalledWith('.env.combined');
   });

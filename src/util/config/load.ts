@@ -11,12 +11,13 @@ import { fromError } from 'zod-validation-error';
 import { readAssertions } from '../../assertions/index';
 import { validateAssertions } from '../../assertions/validateAssertions';
 import cliState from '../../cliState';
+import { filterProviderConfigs } from '../../commands/eval/filterProviders';
 import { filterTests } from '../../commands/eval/filterTests';
 import { getEnvBool, isCI } from '../../envars';
 import { importModule } from '../../esm';
 import logger from '../../logger';
 import { readPrompts, readProviderPromptMap } from '../../prompts/index';
-import { loadApiProviders } from '../../providers/index';
+import { loadApiProviders, resolveProviderConfigs } from '../../providers/index';
 import telemetry from '../../telemetry';
 import {
   type CommandLineOptions,
@@ -30,12 +31,12 @@ import {
   type UnifiedConfig,
   UnifiedConfigSchema,
 } from '../../types/index';
-import { readFilters } from '../../util/index';
-import { promptfooCommand } from '../promptfooCommand';
 import { maybeLoadFromExternalFile } from '../../util/file';
 import { isJavascriptFile } from '../../util/fileExtensions';
+import { readFilters } from '../../util/index';
 import invariant from '../../util/invariant';
 import { PromptSchema } from '../../validators/prompts';
+import { promptfooCommand } from '../promptfooCommand';
 import { readTest, readTests } from '../testCaseReader';
 
 /**
@@ -608,9 +609,33 @@ export async function resolveConfigs(
   }
 
   invariant(Array.isArray(config.providers), 'providers must be an array');
+
+  // Resolve provider configs: loads file:// references while preserving non-file providers.
+  // This enables:
+  // 1. Building the provider-prompt map with `prompts` filters from external files (#1307)
+  // 2. Filtering by resolved provider ids/labels (not just file paths)
+  // 3. Avoiding double file I/O (files are read once here, not again in loadApiProviders)
+  const resolvedProviderConfigs = resolveProviderConfigs(config.providers, { basePath });
+
+  // Filter providers BEFORE instantiation to avoid loading providers that won't be used.
+  // Filtering on resolved configs allows matching by provider id/label from file-based providers.
+  const filterOption = cmdObj.filterProviders || cmdObj.filterTargets;
+  const filteredProviderConfigs = filterProviderConfigs(resolvedProviderConfigs, filterOption);
+
+  if (
+    filterOption &&
+    Array.isArray(filteredProviderConfigs) &&
+    filteredProviderConfigs.length === 0
+  ) {
+    logger.warn(
+      `No providers matched the filter "${filterOption}". Check your --filter-providers/--filter-targets value.`,
+    );
+  }
+
   // Parse prompts, providers, and tests
+  // Pass filtered resolved configs to avoid re-reading files
   const parsedPrompts = await readPrompts(config.prompts, cmdObj.prompts ? undefined : basePath);
-  const parsedProviders = await loadApiProviders(config.providers, {
+  const parsedProviders = await loadApiProviders(filteredProviderConfigs, {
     env: config.env,
     basePath,
   });
@@ -661,7 +686,13 @@ export async function resolveConfigs(
     }
   }
 
-  const parsedProviderPromptMap = readProviderPromptMap(config, parsedPrompts);
+  // Build provider-prompt map using filtered resolved configs (not raw config with file:// strings)
+  // This ensures that `prompts` filters from external provider files are respected (#1307)
+  // and that the map is consistent with the filtered providers
+  const parsedProviderPromptMap = readProviderPromptMap(
+    { providers: filteredProviderConfigs },
+    parsedPrompts,
+  );
 
   if (parsedPrompts.length === 0) {
     logger.error('No prompts found');
@@ -698,20 +729,30 @@ export async function resolveConfigs(
     tracing: config.tracing,
   };
 
-  if (testSuite.tests) {
-    validateAssertions(testSuite.tests);
-  }
+  // Validate assertions in tests and defaultTest using Zod schema
+  // Note: defaultTest can be a string (file://) reference, so only pass if it's an object
+  validateAssertions(
+    testSuite.tests || [],
+    typeof testSuite.defaultTest === 'object' ? testSuite.defaultTest : undefined,
+  );
 
   cliState.config = config;
 
   // Extract commandLineOptions from either explicit config files or default config
   let commandLineOptions = fileConfig.commandLineOptions || defaultConfig.commandLineOptions;
 
-  // Resolve relative envPath against the config file directory
-  if (commandLineOptions?.envPath && !path.isAbsolute(commandLineOptions.envPath) && basePath) {
+  // Resolve relative envPath(s) against the config file directory
+  if (commandLineOptions?.envPath && basePath) {
+    const envPaths = Array.isArray(commandLineOptions.envPath)
+      ? commandLineOptions.envPath
+      : [commandLineOptions.envPath];
+
+    const resolvedPaths = envPaths.map((p) => (path.isAbsolute(p) ? p : path.resolve(basePath, p)));
+
     commandLineOptions = {
       ...commandLineOptions,
-      envPath: path.resolve(basePath, commandLineOptions.envPath),
+      // Keep as single string if only one path, array otherwise
+      envPath: resolvedPaths.length === 1 ? resolvedPaths[0] : resolvedPaths,
     };
   }
 
