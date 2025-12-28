@@ -2,18 +2,20 @@
  * Tests for export utility.
  */
 
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
-  EXPORT_FORMATS,
   convertTableToFormat,
-  generateDefaultFilename,
-  exportTableToFile,
-  getFormatFromKey,
+  EXPORT_FORMATS,
   type ExportFormat,
+  exportTableToFile,
+  generateDefaultFilename,
+  getFormatFromKey,
 } from '../../../src/ui/utils/export';
+
 import type { EvaluateTable } from '../../../src/types/index';
 
 describe('export utility', () => {

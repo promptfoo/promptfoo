@@ -2,10 +2,11 @@
  * Tests for clipboard utility.
  */
 
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import type { ChildProcess } from 'child_process';
 import * as childProcess from 'child_process';
 import { EventEmitter } from 'events';
+import type { ChildProcess } from 'child_process';
+
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { copyToClipboard, isClipboardAvailable } from '../../../src/ui/utils/clipboard';
 
 // Mock child_process
@@ -19,7 +20,7 @@ vi.mock('child_process', () => ({
  */
 function createMockProcess(exitCode: number = 0, error?: Error): ChildProcess {
   const proc = new EventEmitter() as ChildProcess;
-  const stdinEmitter = new EventEmitter();
+  const _stdinEmitter = new EventEmitter();
   const stderrEmitter = new EventEmitter();
 
   proc.stdin = {
