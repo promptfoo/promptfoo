@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 
+import { EVAL_ROUTES } from '@app/constants/routes';
 import { callApiTyped } from '@app/utils/apiClient';
 import CloseIcon from '@mui/icons-material/Close';
 import Dialog from '@mui/material/Dialog';
@@ -605,7 +606,7 @@ function PerformanceOverTimeChart({ evalId }: ChartProps) {
       onClick: (_event: any, elements: any) => {
         if (elements.length > 0) {
           const index = elements[0].index;
-          window.open(`/eval/?evalId=${chartData[index].evalData.evalId}`, '_blank');
+          window.open(EVAL_ROUTES.DETAIL(chartData[index].evalData.evalId), '_blank');
         }
       },
     };

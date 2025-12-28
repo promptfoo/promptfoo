@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import { DataTable } from './data-table';
 import type { ColumnDef } from '@tanstack/react-table';
@@ -111,5 +112,34 @@ describe('DataTable', () => {
     // Should show data but not toolbar
     expect(screen.getByText('Test Item 1')).toBeInTheDocument();
     expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
+  });
+
+  it('should show toolbar when filter returns no results so users can clear filters', async () => {
+    const user = userEvent.setup();
+    const toolbarActions = <button data-testid="custom-action">Add Item</button>;
+
+    const data: TestRow[] = [
+      { id: '1', name: 'Apple' },
+      { id: '2', name: 'Banana' },
+    ];
+
+    render(<DataTable columns={columns} data={data} showToolbar toolbarActions={toolbarActions} />);
+
+    // Initially shows all data
+    expect(screen.getByText('Apple')).toBeInTheDocument();
+    expect(screen.getByText('Banana')).toBeInTheDocument();
+
+    // Type a search term that matches nothing
+    const searchInput = screen.getByPlaceholderText('Search...');
+    await user.type(searchInput, 'xyz-no-match');
+
+    // Data should be filtered out
+    expect(screen.queryByText('Apple')).not.toBeInTheDocument();
+    expect(screen.queryByText('Banana')).not.toBeInTheDocument();
+
+    // But toolbar should still be visible so user can clear/modify the filter
+    expect(screen.getByPlaceholderText('Search...')).toBeInTheDocument();
+    expect(screen.getByTestId('custom-action')).toBeInTheDocument();
+    expect(screen.getByText('No results match your search')).toBeInTheDocument();
   });
 });

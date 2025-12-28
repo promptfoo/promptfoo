@@ -1,6 +1,7 @@
 import React from 'react';
 
 import { IS_RUNNING_LOCALLY } from '@app/constants';
+import { EVAL_ROUTES, REDTEAM_ROUTES } from '@app/constants/routes';
 import { useToast } from '@app/hooks/useToast';
 import { useStore as useMainStore } from '@app/stores/evalConfig';
 import { fetchUserEmail, updateEvalAuthor } from '@app/utils/api';
@@ -223,7 +224,7 @@ export default function ResultsView({
 
   const handleSearchTextChange = React.useCallback(
     (text: string) => {
-      setSearchParams((prev) => ({ ...prev, search: text }));
+      setSearchParams((prev) => ({ ...prev, search: text }), { replace: true });
       setSearchText(text);
     },
     [setSearchParams],
@@ -263,6 +264,9 @@ export default function ResultsView({
 
   const currentEvalId = evalId || defaultEvalId || 'default';
 
+  // Valid evalId for navigation (no fallback to 'default')
+  const validEvalId = evalId || defaultEvalId;
+
   // Handle menu close
   const handleMenuClose = () => {
     setAnchorEl(null);
@@ -288,7 +292,7 @@ export default function ResultsView({
       if (!IS_RUNNING_LOCALLY) {
         // For non-local instances, include base path in the URL
         const basePath = import.meta.env.VITE_PUBLIC_BASENAME || '';
-        return `${window.location.host}${basePath}/eval/?evalId=${id}`;
+        return `${window.location.host}${basePath}${EVAL_ROUTES.DETAIL(id)}`;
       }
 
       const data = await callApiTyped<ShareResultsResponse>('/results/share', {
@@ -436,7 +440,7 @@ export default function ResultsView({
         });
 
         // Open in new tab (Google Docs pattern)
-        window.open(`/eval/${data.id}`, '_blank');
+        window.open(EVAL_ROUTES.DETAIL(data.id), '_blank');
 
         // Show success toast
         showToast(
@@ -969,13 +973,13 @@ export default function ResultsView({
                   </Menu>
                 )}
                 {/* TODO(Michael): Remove config.metadata.redteam check (2024-08-18) */}
-                {(config?.redteam || config?.metadata?.redteam) && (
+                {(config?.redteam || config?.metadata?.redteam) && validEvalId && (
                   <Tooltip title="View vulnerability scan report" placement="bottom">
                     <Button
                       color="primary"
                       variant="contained"
                       startIcon={<EyeIcon />}
-                      onClick={() => navigate(`/reports/?evalId=${evalId || defaultEvalId}`)}
+                      onClick={() => navigate(REDTEAM_ROUTES.REPORT_DETAIL(validEvalId))}
                     >
                       Vulnerability Report
                     </Button>

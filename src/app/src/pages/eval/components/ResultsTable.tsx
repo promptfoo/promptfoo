@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 
 import ErrorBoundary from '@app/components/ErrorBoundary';
+import { ROUTES } from '@app/constants/routes';
 import { useToast } from '@app/hooks/useToast';
 import { callApiTyped } from '@app/utils/apiClient';
 import { normalizeMediaText, resolveAudioSource, resolveImageSource } from '@app/utils/media';
@@ -170,7 +171,7 @@ function TableHeader({
           {resourceId && (
             <Tooltip title="View other evals and datasets for this prompt">
               <span className="action">
-                <Link to={`/prompts/?id=${resourceId}`} target="_blank">
+                <Link to={ROUTES.PROMPT_DETAIL(resourceId)} target="_blank">
                   <OpenInNewIcon fontSize="small" />
                 </Link>
               </span>

@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from '@app/components/ui/dialog';
 import { DeleteIcon } from '@app/components/ui/icons';
+import { EVAL_ROUTES } from '@app/constants/routes';
 import { cn } from '@app/lib/utils';
 import { callApiTyped } from '@app/utils/apiClient';
 import { formatDataGridDate } from '@app/utils/date';
@@ -19,18 +20,8 @@ import { Tooltip } from '@mui/material';
 import invariant from '@promptfoo/util/invariant';
 import { Link, useLocation } from 'react-router-dom';
 import type { GetResultsResponse } from '@promptfoo/dtos';
+import type { EvalSummary } from '@promptfoo/types';
 import type { ColumnDef, RowSelectionState } from '@tanstack/react-table';
-
-type Eval = {
-  createdAt: number;
-  datasetId: string;
-  description: string | null;
-  evalId: string;
-  isRedteam: number;
-  label: string;
-  numTests: number;
-  passRate: number;
-};
 
 interface EvalsTableProps {
   onEvalSelected: (evalId: string) => void;
@@ -51,7 +42,7 @@ export default function EvalsTable({
     invariant(focusedEvalId, 'focusedEvalId is required when filterByDatasetId is true');
   }
 
-  const [evals, setEvals] = useState<Eval[]>([]);
+  const [evals, setEvals] = useState<EvalSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
@@ -67,7 +58,7 @@ export default function EvalsTable({
         cache: 'no-store',
         signal,
       });
-      setEvals(data.data as Eval[]);
+      setEvals(data.data as EvalSummary[]);
       setError(null);
     } catch (err) {
       if ((err as Error).name !== 'AbortError') {
@@ -105,7 +96,7 @@ export default function EvalsTable({
   }, [evals, filterByDatasetId, focusedEvalId]);
 
   const hasRedteamEvals = useMemo(() => {
-    return evals.some(({ isRedteam }) => isRedteam === 1);
+    return evals.some(({ isRedteam }) => isRedteam);
   }, [evals]);
 
   // Get selected eval IDs from row selection state
@@ -167,7 +158,7 @@ export default function EvalsTable({
   }, [rows]);
 
   // Column definitions
-  const columns: ColumnDef<Eval>[] = useMemo(
+  const columns: ColumnDef<EvalSummary>[] = useMemo(
     () => [
       {
         accessorKey: 'evalId',
@@ -179,7 +170,7 @@ export default function EvalsTable({
           }
           return (
             <Link
-              to={`/eval/${evalId}`}
+              to={EVAL_ROUTES.DETAIL(evalId)}
               onClick={(e) => {
                 e.preventDefault();
                 onEvalSelected(evalId);
@@ -205,10 +196,10 @@ export default function EvalsTable({
         ? [
             {
               id: 'type',
-              accessorFn: (row) => (row.isRedteam === 1 ? 'Red Team' : 'Eval'),
+              accessorFn: (row) => (row.isRedteam ? 'Red Team' : 'Eval'),
               header: 'Type',
               cell: ({ row }) => {
-                const isRedteam = row.original.isRedteam === 1;
+                const isRedteam = row.original.isRedteam;
                 return (
                   <Badge
                     variant={isRedteam ? 'destructive' : 'secondary'}
@@ -229,7 +220,7 @@ export default function EvalsTable({
                 ],
               },
               size: 100,
-            } as ColumnDef<Eval>,
+            } as ColumnDef<EvalSummary>,
           ]
         : []),
       {

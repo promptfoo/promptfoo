@@ -66,6 +66,14 @@
 :root {
   font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
 
+  /* Z-index scale for layered components
+   * Modal < Dropdown ensures nested dropdowns appear above modals
+   * Values >= 1300 for MUI compatibility during migration */
+  --z-modal-backdrop: 1300;
+  --z-modal: 1310;
+  --z-dropdown: 1400;
+  --z-tooltip: 1500;
+
   /* Design tokens - Light mode (aligned with MUI theme) */
   --background: 210 40% 98%; /* #f8fafc - slate-50 */
   --foreground: 222.2 47.4% 11.2%; /* #0f172a - slate-900 */

@@ -1,6 +1,7 @@
 import React from 'react';
 
 import EnterpriseBanner from '@app/components/EnterpriseBanner';
+import { EVAL_ROUTES } from '@app/constants/routes';
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { callApiTyped } from '@app/utils/apiClient';
@@ -605,7 +606,7 @@ const App = () => {
           sx={{ position: 'relative' }}
           aria-label="view all logs"
           onClick={(event) => {
-            const url = `/eval/${evalId}`;
+            const url = EVAL_ROUTES.DETAIL(evalId);
             if (event.ctrlKey || event.metaKey) {
               window.open(url, '_blank');
             } else if (evalId) {

@@ -147,6 +147,15 @@ See `src/app/src/hooks/usePageMeta.test.ts` for patterns. Use `vi.fn()` for mock
 - **Custom hooks**: See `src/app/src/hooks/` for patterns
 - **New components**: Use `components/ui/` primitives, compose with Tailwind
 - **Icons**: Use Lucide React (new) or `@mui/icons-material` (legacy)
+- **Route constants**: Use `EVAL_ROUTES`, `REDTEAM_ROUTES`, `ROUTES` from `@app/constants/routes`
+
+```tsx
+import { EVAL_ROUTES, ROUTES } from '@app/constants/routes';
+
+// Navigation
+<Link to={EVAL_ROUTES.DETAIL(evalId)}>View Eval</Link>
+<Link to={ROUTES.PROMPT_DETAIL(promptId)}>View Prompt</Link>
+```
 
 ## Design Principles
 
@@ -234,6 +243,7 @@ const getTooltipMessage = useCallback(() => {
 **General:**
 
 - Using `fetch()` instead of `callApi()`
+- Hardcoded route strings (use constants from `@app/constants/routes`)
 - Legacy React patterns (class components, legacy lifecycle methods)
 - Over-memoization of simple values
 - Using `useCallback` for computed values (use `useMemo` instead)
