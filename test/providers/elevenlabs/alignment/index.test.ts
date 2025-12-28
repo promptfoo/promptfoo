@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ElevenLabsAlignmentProvider } from '../../../../src/providers/elevenlabs/alignment';
 
+import type { CallApiContextParams } from '../../../../src/types/providers';
+
 // Mock dependencies
 vi.mock('../../../../src/providers/elevenlabs/client');
 
@@ -121,7 +123,7 @@ describe('ElevenLabsAlignmentProvider', () => {
 
       const response = await provider.callApi('', {
         vars: { audioFile: '/path/to/audio.mp3' },
-      });
+      } as unknown as CallApiContextParams);
 
       expect(response.error).toContain('Transcript is required');
     });
@@ -143,7 +145,7 @@ describe('ElevenLabsAlignmentProvider', () => {
 
       const response = await provider.callApi('Hello world', {
         vars: { audioFile: '/path/to/audio.mp3' },
-      });
+      } as unknown as CallApiContextParams);
 
       expect(response.error).toBeUndefined();
       expect(response.output).toContain('"words"');
@@ -173,7 +175,7 @@ describe('ElevenLabsAlignmentProvider', () => {
 
       const response = await provider.callApi('Hello world', {
         vars: { audioFile: '/path/to/audio.mp3', format: 'srt' },
-      });
+      } as unknown as CallApiContextParams);
 
       expect(response.error).toBeUndefined();
       expect(response.output).toContain('-->');
@@ -211,7 +213,7 @@ describe('ElevenLabsAlignmentProvider', () => {
 
       const response = await provider.callApi('Hello world', {
         vars: { audioFile: '/path/to/audio.mp3', format: 'vtt' },
-      });
+      } as unknown as CallApiContextParams);
 
       expect(response.error).toBeUndefined();
       expect(response.output).toContain('WEBVTT');
@@ -238,8 +240,8 @@ describe('ElevenLabsAlignmentProvider', () => {
         vars: {
           audioFile: '/path/to/audio.mp3',
           includeCharacterAlignments: true,
-        },
-      });
+        } as unknown as Record<string, string | object>,
+      } as unknown as CallApiContextParams);
 
       expect(response.error).toBeUndefined();
       expect(response.metadata?.characterCount).toBe(2);
@@ -267,7 +269,7 @@ describe('ElevenLabsAlignmentProvider', () => {
 
       const response = await provider.callApi('Test transcript', {
         vars: { audioFile: '/path/to/audio.mp3' },
-      });
+      } as unknown as CallApiContextParams);
 
       expect(response.error).toBeUndefined();
       expect((provider as any).client.upload).toHaveBeenCalledWith(
@@ -287,7 +289,7 @@ describe('ElevenLabsAlignmentProvider', () => {
 
       const response = await provider.callApi('transcript', {
         vars: { audioFile: '/path/to/missing.mp3' },
-      });
+      } as unknown as CallApiContextParams);
 
       expect(response.error).toContain('Failed to align audio');
     });
@@ -302,7 +304,7 @@ describe('ElevenLabsAlignmentProvider', () => {
 
       const response = await provider.callApi('transcript', {
         vars: { audioFile: '/path/to/audio.mp3' },
-      });
+      } as unknown as CallApiContextParams);
 
       expect(response.error).toContain('Failed to align audio');
     });
@@ -338,7 +340,7 @@ describe('ElevenLabsAlignmentProvider', () => {
 
       const response = await provider.callApi('This is a test', {
         vars: { audioFile: '/path/to/audio.mp3', format: 'srt' },
-      });
+      } as unknown as CallApiContextParams);
 
       expect(response.output).toContain('This is a test');
       expect(response.output).toMatch(/\d+\n\d{2}:\d{2}:\d{2},\d{3} --> \d{2}:\d{2}:\d{2},\d{3}\n/);

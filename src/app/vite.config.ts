@@ -1,15 +1,69 @@
 /// <reference types="vitest" />
 
+import { fileURLToPath } from 'node:url';
 import os from 'os';
 import path from 'path';
-import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 import react from '@vitejs/plugin-react';
-import { defineConfig } from 'vitest/config';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
+import { defineConfig, type Plugin } from 'vitest/config';
 import packageJson from '../../package.json' with { type: 'json' };
+
+/**
+ * Plugin to replace Node.js modules with browser-compatible versions.
+ * This allows us to avoid bundling heavy Node polyfills by providing
+ * lightweight browser implementations.
+ */
+function browserModulesPlugin(): Plugin {
+  // Map of Node module paths to their browser replacements
+  const replacements: Array<{ nodePath: string; browserPath: string; patterns: string[] }> = [
+    {
+      // logger.ts uses fs, path, winston - replace with console-based logger
+      nodePath: path.resolve(__dirname, '../logger.ts'),
+      browserPath: path.resolve(__dirname, '../logger.browser.ts'),
+      patterns: ['./logger', '../logger', '/logger'],
+    },
+    {
+      // createHash.ts uses Node crypto - replace with pure JS SHA-256
+      nodePath: path.resolve(__dirname, '../util/createHash.ts'),
+      browserPath: path.resolve(__dirname, '../util/createHash.browser.ts'),
+      patterns: ['./createHash', '../createHash', '/createHash'],
+    },
+  ];
+
+  return {
+    name: 'browser-modules',
+    enforce: 'pre',
+    resolveId(source, importer) {
+      if (!importer) {
+        return null;
+      }
+
+      for (const { nodePath, browserPath, patterns } of replacements) {
+        // Check if source matches any of the patterns
+        const matches = patterns.some((p) => source === p || source.endsWith(p));
+        if (!matches) {
+          continue;
+        }
+
+        // Resolve the import path
+        const resolvedPath = path.resolve(path.dirname(importer), source);
+
+        // Check if it matches the node module path (with or without .ts extension)
+        if (
+          resolvedPath === nodePath ||
+          resolvedPath === nodePath.replace('.ts', '') ||
+          resolvedPath + '.ts' === nodePath
+        ) {
+          return browserPath;
+        }
+      }
+      return null;
+    },
+  };
+}
 
 // Calculate max forks for test parallelization
 const cpuCount = os.cpus().length;
@@ -37,12 +91,21 @@ export default defineConfig({
   },
   base: process.env.VITE_PUBLIC_BASENAME || '/',
   plugins: [
+    browserModulesPlugin(),
     react({
       babel: {
         plugins: [['babel-plugin-react-compiler', {}]],
       },
     }),
-    nodePolyfills(),
+    // Node.js polyfills - only include what we actually need
+    // See: https://github.com/nicolo-ribaudo/vite-plugin-node-polyfills
+    //
+    // crypto and fs are replaced by browserModulesPlugin above:
+    //   - createHash.browser.ts uses native SubtleCrypto
+    //   - logger.browser.ts uses console
+    nodePolyfills({
+      include: ['buffer', 'events', 'os', 'path', 'process', 'stream', 'util', 'vm'],
+    }),
   ],
   resolve: {
     alias: {
@@ -72,7 +135,7 @@ export default defineConfig({
           'vendor-react': ['react', 'react-dom', 'react-router-dom'],
           'vendor-mui-core': ['@mui/material', '@mui/system'],
           'vendor-mui-icons': ['@mui/icons-material'],
-          'vendor-mui-x': ['@mui/x-data-grid', '@mui/x-charts'],
+          'vendor-mui-x': ['@mui/x-charts'],
           'vendor-charts': ['recharts', 'chart.js'],
           'vendor-utils': ['js-yaml', 'diff', 'csv-parse', 'csv-stringify'],
           'vendor-syntax': ['prismjs'],
@@ -92,7 +155,7 @@ export default defineConfig({
     // Force vitest to transform MUI packages including CSS imports
     server: {
       deps: {
-        inline: ['@mui/x-data-grid', '@mui/x-charts', 'node-stdlib-browser'],
+        inline: ['@mui/x-charts', 'node-stdlib-browser'],
       },
     },
     // Fix ESM directory import issue with punycode in node-stdlib-browser
@@ -166,5 +229,6 @@ export default defineConfig({
     'import.meta.env.VITE_POSTHOG_HOST': JSON.stringify(
       process.env.PROMPTFOO_POSTHOG_HOST || 'https://a.promptfoo.app',
     ),
+    'import.meta.env.VITE_PUBLIC_BASENAME': JSON.stringify(process.env.VITE_PUBLIC_BASENAME || ''),
   },
 });

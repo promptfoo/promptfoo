@@ -1,5 +1,6 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
 import cliProgress from 'cli-progress';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
 import type { RunEvalOptions } from '../src/types/index';
 
 // Create hoisted mock functions

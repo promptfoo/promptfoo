@@ -5,9 +5,11 @@
  */
 
 import type { ChildProcess } from 'child_process';
-import type { Socket } from 'socket.io-client';
-import type ora from 'ora';
+
 import logger from '../../logger';
+import type ora from 'ora';
+import type { Socket } from 'socket.io-client';
+
 import type { SocketIoMcpBridge } from '../mcp/transport';
 
 /**

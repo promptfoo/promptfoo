@@ -7,6 +7,7 @@ import cliState from './cliState';
 import { getEnvBool, getEnvString } from './envars';
 import { getConfigDirectoryPath } from './util/config/manage';
 import { safeJsonStringify } from './util/json';
+import { getLogFiles } from './util/logFiles';
 import { sanitizeObject, sanitizeUrl } from './util/sanitizer';
 
 const MAX_LOG_FILES = 50;
@@ -207,15 +208,7 @@ function setupLogDirectory(): string {
 
   // Clean up old log files
   try {
-    const logFiles = fs
-      .readdirSync(logDir)
-      .filter((file) => file.startsWith('promptfoo-') && file.endsWith('.log'))
-      .map((file) => ({
-        name: file,
-        path: path.join(logDir, file),
-        mtime: fs.statSync(path.join(logDir, file)).mtime,
-      }))
-      .sort((a, b) => b.mtime.getTime() - a.mtime.getTime()); // Sort by newest first
+    const logFiles = getLogFiles(logDir);
 
     // Remove old files
     if (logFiles.length >= MAX_LOG_FILES) {

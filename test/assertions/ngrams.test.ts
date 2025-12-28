@@ -1,5 +1,5 @@
-import { getNGrams } from '../../src/assertions/ngrams';
 import { describe, expect, it } from 'vitest';
+import { getNGrams } from '../../src/assertions/ngrams';
 
 describe('getNGrams', () => {
   it('should generate unigrams correctly', () => {

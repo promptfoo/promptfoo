@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ElevenLabsAgentsProvider } from '../../../../src/providers/elevenlabs/agents';
+
 import type { AgentSimulationResponse } from '../../../../src/providers/elevenlabs/agents/types';
 
 // Mock dependencies
@@ -50,15 +51,14 @@ describe('ElevenLabsAgentsProvider', () => {
           agentId: 'test-agent-123',
           maxTurns: 5,
           simulatedUser: {
-            persona: 'helpful customer',
-            first_message: 'Hello',
+            prompt: 'helpful customer',
           },
         },
       });
 
       expect(provider.config.agentId).toBe('test-agent-123');
       expect(provider.config.maxTurns).toBe(5);
-      expect(provider.config.simulatedUser?.persona).toBe('helpful customer');
+      expect(provider.config.simulatedUser?.prompt).toBe('helpful customer');
     });
 
     it('should use custom label if provided', () => {
@@ -70,15 +70,15 @@ describe('ElevenLabsAgentsProvider', () => {
     });
 
     it('should respect environment variable overrides', () => {
-      const env = { CUSTOM_API_KEY: 'custom-key' };
+      process.env.CUSTOM_API_KEY = 'custom-key';
       const provider = new ElevenLabsAgentsProvider('elevenlabs:agent', {
         config: {
           apiKeyEnvar: 'CUSTOM_API_KEY',
         },
-        env,
       });
 
       expect(provider).toBeDefined();
+      delete process.env.CUSTOM_API_KEY;
     });
   });
 
@@ -181,15 +181,15 @@ describe('ElevenLabsAgentsProvider', () => {
 
       // Verify conversation data is present
       expect(result.metadata).toBeDefined();
-      expect(result.metadata.conversationHistory).toBeDefined();
-      expect(result.metadata.conversationHistory.length).toBe(4);
+      expect(result.metadata!.conversationHistory).toBeDefined();
+      expect(result.metadata!.conversationHistory.length).toBe(4);
 
       // Verify tool usage is tracked
-      expect(result.metadata.toolUsageAnalysis).toBeDefined();
-      expect(result.metadata.toolUsageAnalysis.totalCalls).toBe(1);
-      expect(result.metadata.toolUsageAnalysis.successfulCalls).toBe(1);
-      expect(result.metadata.toolUsageAnalysis.failedCalls).toBe(0);
-      expect(result.metadata.toolUsageAnalysis.callsByTool.get('get_weather')).toBe(1);
+      expect(result.metadata!.toolUsageAnalysis).toBeDefined();
+      expect(result.metadata!.toolUsageAnalysis.totalCalls).toBe(1);
+      expect(result.metadata!.toolUsageAnalysis.successfulCalls).toBe(1);
+      expect(result.metadata!.toolUsageAnalysis.failedCalls).toBe(0);
+      expect(result.metadata!.toolUsageAnalysis.callsByTool.get('get_weather')).toBe(1);
 
       // Verify LLM usage is tracked
       expect(result.tokenUsage).toEqual({
@@ -219,7 +219,8 @@ describe('ElevenLabsAgentsProvider', () => {
         },
       });
 
-      const mockApiResponse: AgentSimulationResponse = {
+      // Mock the raw API response format (differs from typed interface)
+      const mockApiResponse = {
         conversation_id: 'conv_abc123',
         status: 'completed',
         simulated_conversation: [
@@ -252,7 +253,7 @@ describe('ElevenLabsAgentsProvider', () => {
           completion_tokens: 30,
           model: 'gpt-4o-mini',
         },
-      };
+      } as unknown as AgentSimulationResponse;
 
       // Mock the client's post method on the provider instance
       (provider as any).client.post = vi.fn().mockResolvedValue(mockApiResponse);
@@ -260,12 +261,12 @@ describe('ElevenLabsAgentsProvider', () => {
       const result = await provider.callApi('Hello');
 
       // Verify evaluation results are present
-      expect(result.metadata.evaluationResults).toBeDefined();
-      expect(result.metadata.evaluationResults).toHaveLength(2);
-      expect(result.metadata.overallScore).toBeDefined();
+      expect(result.metadata!.evaluationResults).toBeDefined();
+      expect(result.metadata!.evaluationResults).toHaveLength(2);
+      expect(result.metadata!.overallScore).toBeDefined();
 
       // Find specific evaluation results
-      const helpfulnessResult = result.metadata.evaluationResults.find(
+      const helpfulnessResult = result.metadata!.evaluationResults.find(
         (r: any) => r.criterion === 'Helpfulness',
       );
       expect(helpfulnessResult).toEqual({
@@ -276,7 +277,7 @@ describe('ElevenLabsAgentsProvider', () => {
         evidence: undefined,
       });
 
-      const accuracyResult = result.metadata.evaluationResults.find(
+      const accuracyResult = result.metadata!.evaluationResults.find(
         (r: any) => r.criterion === 'Accuracy',
       );
       expect(accuracyResult).toEqual({
@@ -292,12 +293,11 @@ describe('ElevenLabsAgentsProvider', () => {
       const provider = new ElevenLabsAgentsProvider('elevenlabs:agent', {
         config: {
           agentId: 'test-agent-123',
-          toolMockConfig: [
-            {
-              name: 'get_weather',
-              mock_response: { temperature: 72, condition: 'sunny' },
+          toolMockConfig: {
+            get_weather: {
+              returnValue: { temperature: 72, condition: 'sunny' },
             },
-          ],
+          },
         },
       });
 

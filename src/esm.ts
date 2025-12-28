@@ -5,7 +5,6 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import vm from 'node:vm';
 
 import { resolveModulePath } from 'exsolve';
-
 import logger from './logger';
 import { safeResolve } from './util/pathUtils';
 

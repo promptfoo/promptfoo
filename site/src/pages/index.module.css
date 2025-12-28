@@ -684,7 +684,7 @@ html {
   font-family: 'Courier New', Courier, monospace;
   font-size: 0.95rem;
   font-weight: 600;
-  overflow-x: auto;
+  overflow: hidden;
   white-space: pre-wrap;
   word-wrap: break-word;
   position: relative;

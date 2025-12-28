@@ -4,8 +4,8 @@
  * This benchmark measures render performance of key components to verify
  * React Compiler is providing expected optimizations.
  *
- * Run:
- *   npm run test:app -- src/__benchmarks__/reactCompiler.test.tsx
+ * Run from src/app/:
+ *   pnpm test src/__benchmarks__/reactCompiler.test.tsx
  */
 
 import { Profiler, useState } from 'react';
