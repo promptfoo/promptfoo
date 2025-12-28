@@ -18,6 +18,7 @@ import { cloudConfig } from '../globalConfig/cloud';
 import logger from '../logger';
 import { runDbMigrations } from '../migrate';
 import Eval, { getEvalSummaries } from '../models/eval';
+import { getCachedResultsCount } from '../models/evalPerformance';
 import { getRemoteHealthUrl } from '../redteam/remoteGeneration';
 import { createShareableUrl, determineShareDomain, stripAuthFromUrl } from '../share';
 import telemetry, { TelemetryEventSchema } from '../telemetry';
@@ -323,28 +324,29 @@ export async function startServer(
   await runDbMigrations();
 
   const watcher = setupSignalWatcher(async () => {
-    // Try to get the specific eval that was updated from the signal file
+    // Get the eval ID from the signal file, or fall back to latest
+    // Use lightweight queries to avoid loading large eval objects into memory (issue #2507)
     const signalEvalId = readSignalEvalId();
-    const updatedEval = signalEvalId ? await Eval.findById(signalEvalId) : await Eval.latest();
+    const evalId = signalEvalId || (await Eval.latestId());
 
-    const results = await updatedEval?.getResultsCount();
+    if (!evalId) {
+      return;
+    }
 
-    if (results && results > 0) {
-      logger.debug(
-        `Emitting update for eval: ${updatedEval?.config?.description || updatedEval?.id || 'unknown'}`,
-      );
-      // Send minimal payload to avoid RangeError with large evals (issue #2507)
-      // The frontend only uses this as a notification to fetch data via REST API
-      io.emit('update', { evalId: updatedEval?.id });
+    // Use cached count query instead of loading full eval
+    const resultsCount = await getCachedResultsCount(evalId);
+
+    if (resultsCount > 0) {
+      logger.debug(`Emitting update for eval: ${evalId}`);
+      io.emit('update', { evalId });
       allPrompts = null;
     }
   });
 
   io.on('connection', async (socket) => {
-    // Send minimal payload to avoid RangeError with large evals (issue #2507)
-    // The frontend only uses this as a notification to fetch data via REST API
-    const latestEval = await Eval.latest();
-    socket.emit('init', latestEval ? { evalId: latestEval.id } : null);
+    // Use lightweight query to get just the ID (issue #2507)
+    const latestId = await Eval.latestId();
+    socket.emit('init', latestId ? { evalId: latestId } : null);
   });
 
   // Return a Promise that only resolves when the server shuts down

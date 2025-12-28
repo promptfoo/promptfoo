@@ -267,13 +267,13 @@ export default function Eval({ fetchId }: EvalOptions) {
         // Set streaming state when we start receiving data
         setIsStreaming(true);
 
-        const newRecentEvals = await fetchRecentFileEvals();
-        if (newRecentEvals && newRecentEvals.length > 0) {
-          const newId = newRecentEvals[0].evalId;
-          setDefaultEvalId(newId);
-          setEvalId(newId);
-          await loadEvalById(newId, true); // Pass true for isBackgroundUpdate since this is from socket
-        }
+        // Use the evalId from the notification directly - no need to fetch the list first
+        setDefaultEvalId(data.evalId);
+        setEvalId(data.evalId);
+        await loadEvalById(data.evalId, true);
+
+        // Refresh the recent evals list in background for the UI picker
+        fetchRecentFileEvals();
 
         // Clear streaming state after update is complete
         setIsStreaming(false);

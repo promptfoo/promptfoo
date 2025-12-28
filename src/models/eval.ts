@@ -248,7 +248,11 @@ export default class Eval {
   _shared: boolean = false;
   durationMs?: number;
 
-  static async latest() {
+  /**
+   * Get the ID of the most recent eval without loading the full object.
+   * Use this when you only need the ID (e.g., for socket.io notifications).
+   */
+  static async latestId(): Promise<string | undefined> {
     const db = getDb();
     const db_results = await db
       .select({
@@ -258,11 +262,15 @@ export default class Eval {
       .orderBy(desc(evalsTable.createdAt))
       .limit(1);
 
-    if (db_results.length === 0) {
+    return db_results.length > 0 ? db_results[0].id : undefined;
+  }
+
+  static async latest() {
+    const latestId = await Eval.latestId();
+    if (!latestId) {
       return undefined;
     }
-
-    return await Eval.findById(db_results[0].id);
+    return await Eval.findById(latestId);
   }
 
   static async findById(id: string) {
