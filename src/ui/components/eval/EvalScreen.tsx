@@ -33,6 +33,25 @@ export interface ShareContext {
   teamName?: string;
 }
 
+/**
+ * Props for the main evaluation screen component.
+ *
+ * The EvalScreen displays real-time evaluation progress with:
+ * - Per-provider status (progress bars, pass/fail counts)
+ * - Token usage and cost tracking
+ * - Keyboard shortcuts for navigation and control
+ * - Results table when evaluation completes
+ *
+ * @example
+ * ```tsx
+ * <EvalScreen
+ *   title="My Evaluation"
+ *   onComplete={() => console.log('Done!')}
+ *   onExit={() => process.exit(0)}
+ *   showHelp={true}
+ * />
+ * ```
+ */
 export interface EvalScreenProps {
   /** Title for the evaluation */
   title?: string;

@@ -222,7 +222,26 @@ function StatusBar({
 }
 
 /**
- * Calculate summary statistics from rows.
+ * Calculate summary statistics from table row data.
+ *
+ * Aggregates pass/fail/error counts, average scores, total cost, and
+ * average latency across all cells in the provided rows.
+ *
+ * @param rows - Array of table row data containing cells with test results
+ * @returns Summary statistics object containing:
+ *   - passCount: Number of passing tests
+ *   - failCount: Number of failing tests
+ *   - errorCount: Number of tests with errors
+ *   - totalTests: Total number of tests (pass + fail + error)
+ *   - avgScore: Average score across all cells (null if no scores)
+ *   - totalCost: Sum of all costs
+ *   - avgLatencyMs: Average latency in milliseconds (null if no latency data)
+ *
+ * @example
+ * ```ts
+ * const stats = calculateSummaryStats(tableRows);
+ * console.log(`Pass rate: ${(stats.passCount / stats.totalTests * 100).toFixed(1)}%`);
+ * ```
  */
 export function calculateSummaryStats(rows: TableRowData[]): {
   passCount: number;

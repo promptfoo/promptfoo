@@ -94,8 +94,34 @@ type NavigationAction =
 export type { NavigationAction };
 
 /**
- * Reduce navigation state based on action.
- * Exported for testing.
+ * Pure reducer function for table navigation state transitions.
+ *
+ * Handles all navigation actions (movement, pagination, selection) and
+ * maintains scroll offset to keep the selected row visible. This is the
+ * core logic for keyboard navigation in the results table.
+ *
+ * @param state - Current navigation state (selected row/col, scroll offset)
+ * @param action - Navigation action to perform (MOVE_UP, MOVE_DOWN, etc.)
+ * @param bounds - Table boundaries to constrain navigation:
+ *   - rowCount: Total number of rows
+ *   - colCount: Total number of columns
+ *   - visibleRows: Number of rows visible in viewport
+ *   - minCol: Minimum column index (0 if no index column, 1 if index column exists)
+ * @returns New navigation state after applying the action
+ *
+ * @example
+ * ```ts
+ * const newState = navigationReducer(
+ *   { selectedRow: 0, selectedCol: 1, scrollOffset: 0 },
+ *   { type: 'MOVE_DOWN' },
+ *   { rowCount: 100, colCount: 5, visibleRows: 25, minCol: 0 }
+ * );
+ * // Returns { selectedRow: 1, selectedCol: 1, scrollOffset: 0 }
+ * ```
+ *
+ * @remarks
+ * Exported for unit testing. In production, use the `useTableNavigation` hook
+ * which wraps this reducer with React state management.
  */
 export function navigationReducer(
   state: TableNavigationState,
@@ -734,7 +760,22 @@ export function useTableNavigation({
 }
 
 /**
- * Calculate visible row range based on scroll offset.
+ * Calculate the visible row range for virtual scrolling.
+ *
+ * Used to determine which rows should be rendered based on the current
+ * scroll position. Returns indices suitable for array slicing.
+ *
+ * @param scrollOffset - The current scroll offset (first visible row index)
+ * @param visibleRows - Maximum number of rows that can be displayed at once
+ * @param totalRows - Total number of rows in the dataset
+ * @returns Object with start (inclusive) and end (exclusive) row indices
+ *
+ * @example
+ * ```ts
+ * const { start, end } = getVisibleRowRange(10, 25, 100);
+ * // Returns { start: 10, end: 35 }
+ * const visibleData = allRows.slice(start, end);
+ * ```
  */
 export function getVisibleRowRange(
   scrollOffset: number,
