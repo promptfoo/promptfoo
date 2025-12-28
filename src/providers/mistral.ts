@@ -312,7 +312,8 @@ export class MistralChatCompletionProvider implements ApiProvider {
 
     // Include repeatIndex in cache key for per-repeat caching
     const repeatIndex = context?.repeatIndex;
-    const repeatSuffix = repeatIndex !== undefined && repeatIndex > 0 ? `:repeat${repeatIndex}` : '';
+    const repeatSuffix =
+      repeatIndex !== undefined && repeatIndex > 0 ? `:repeat${repeatIndex}` : '';
     const cacheKey = `mistral:${JSON.stringify(params)}${repeatSuffix}`;
     if (isCacheEnabled()) {
       const cache = getCache();
