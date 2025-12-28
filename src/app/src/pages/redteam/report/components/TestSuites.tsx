@@ -22,7 +22,6 @@ import { getSeverityColor } from '../utils/color';
 import { getStrategyIdFromTest } from './shared';
 import type { RedteamPluginObject } from '@promptfoo/redteam/types';
 import type { ColumnDef, SortingState } from '@tanstack/react-table';
-import './TestSuites.css';
 
 import { useCustomPoliciesMap } from '@app/hooks/useCustomPoliciesMap';
 import { formatASRForDisplay } from '@app/utils/redteam';
