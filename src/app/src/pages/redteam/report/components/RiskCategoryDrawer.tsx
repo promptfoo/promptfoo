@@ -19,7 +19,6 @@ import PluginStrategyFlow from './PluginStrategyFlow';
 import SuggestionsDialog from './SuggestionsDialog';
 import { getStrategyIdFromTest } from './shared';
 import type { EvaluateResult, GradingResult } from '@promptfoo/types';
-import './RiskCategoryDrawer.css';
 
 interface RiskCategoryDrawerProps {
   open: boolean;
