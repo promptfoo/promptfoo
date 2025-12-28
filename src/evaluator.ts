@@ -1811,9 +1811,14 @@ class Evaluator {
     // Load results from database for extensions (results may not be in memory for persisted evals)
     const allResults = await this.evalRecord.getResults();
 
+    // Convert EvalResult model instances to plain EvaluateResult objects for extensions
+    const resultsForExtension: EvaluateResult[] = allResults.map((result): EvaluateResult =>
+      'toEvaluateResult' in result ? result.toEvaluateResult() : result,
+    );
+
     await runExtensionHook(testSuite.extensions, 'afterAll', {
       prompts: this.evalRecord.prompts,
-      results: allResults,
+      results: resultsForExtension,
       suite: testSuite,
       evalId: this.evalRecord.id,
       config: this.evalRecord.config,
