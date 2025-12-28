@@ -327,7 +327,9 @@
       "better-sqlite3",
       "core-js",
       "core-js-pure",
-      "esbuild"
+      "esbuild",
+      "protobufjs",
+      "sharp"
     ],
     "ignoredBuiltDependencies": []
   }
