@@ -25,7 +25,10 @@ export default function TargetTypeSelection({ onNext, onBack }: TargetTypeSelect
   const { config, updateConfig, providerType, setProviderType } = useRedTeamConfig();
 
   // Check if we have a complete saved configuration
-  const hasCompleteSavedConfig = Boolean(config.target?.label?.trim() && config.target?.id);
+  // For custom providers, id is intentionally empty but providerType is set to 'custom'
+  const hasCompleteSavedConfig = Boolean(
+    config.target?.label?.trim() && (config.target?.id || providerType === 'custom'),
+  );
 
   const [selectedTarget, setSelectedTarget] = useState<ProviderOptions>(() => {
     // If we have a complete saved config, use it. Otherwise start fresh without a label
