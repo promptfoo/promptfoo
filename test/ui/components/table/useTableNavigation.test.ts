@@ -7,7 +7,8 @@ import {
   getVisibleRowRange,
   navigationReducer,
 } from '../../../../src/ui/components/table/useTableNavigation';
-import type { TableNavigationState, FilterMode } from '../../../../src/ui/components/table/types';
+
+import type { FilterMode, TableNavigationState } from '../../../../src/ui/components/table/types';
 
 /**
  * Helper to create a default navigation state.

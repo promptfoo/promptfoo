@@ -4,6 +4,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { calculateTableLayout } from '../../../../src/ui/components/table/useTableLayout';
+
 import type { EvaluateTable } from '../../../../src/types';
 
 // Mock table data

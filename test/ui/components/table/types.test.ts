@@ -3,8 +3,8 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { getCellStatus } from '../../../../src/ui/components/table/types';
 import { ResultFailureReason } from '../../../../src/types';
+import { getCellStatus } from '../../../../src/ui/components/table/types';
 
 describe('getCellStatus', () => {
   it('returns "pass" when pass is true', () => {

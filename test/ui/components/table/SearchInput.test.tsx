@@ -1,5 +1,3 @@
-import React from 'react';
-
 import { render } from 'ink-testing-library';
 import { describe, expect, it } from 'vitest';
 import { SearchInput } from '../../../../src/ui/components/table/SearchInput';

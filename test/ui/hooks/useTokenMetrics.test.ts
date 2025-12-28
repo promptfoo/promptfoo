@@ -2,7 +2,7 @@
  * Tests for useTokenMetrics hook and related utilities.
  */
 
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 // Test the normalizeProviderId function directly by recreating it
 // This matches the implementation in src/ui/hooks/useTokenMetrics.ts

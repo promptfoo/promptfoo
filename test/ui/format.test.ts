@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
+  calculateETA,
   formatAvgLatency,
   formatCost,
   formatDuration,
+  formatETA,
   formatLatency,
   formatPercent,
   formatRate,
   formatTokens,
   truncate,
-  calculateETA,
-  formatETA,
 } from '../../src/ui/utils/format';
 
 describe('Format Utilities', () => {

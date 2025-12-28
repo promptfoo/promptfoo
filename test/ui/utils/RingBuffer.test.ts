@@ -336,4 +336,152 @@ describe('RingBuffer', () => {
       expect(result).toEqual(['0:a', '1:b', '2:c']);
     });
   });
+
+  describe('edge cases', () => {
+    it('should handle capacity of 1', () => {
+      const buffer = new RingBuffer<number>(1);
+      expect(buffer.capacity).toBe(1);
+
+      buffer.push(1);
+      expect(buffer.size).toBe(1);
+      expect(buffer.toArray()).toEqual([1]);
+
+      buffer.push(2);
+      expect(buffer.size).toBe(1);
+      expect(buffer.toArray()).toEqual([2]);
+      expect(buffer.newest()).toBe(2);
+      expect(buffer.oldest()).toBe(2);
+    });
+
+    it('should handle multiple complete wraparounds', () => {
+      const buffer = new RingBuffer<number>(3);
+      // First wraparound
+      buffer.pushAll([1, 2, 3, 4, 5, 6]);
+      expect(buffer.toArray()).toEqual([4, 5, 6]);
+
+      // Second wraparound
+      buffer.pushAll([7, 8, 9]);
+      expect(buffer.toArray()).toEqual([7, 8, 9]);
+
+      // Third wraparound
+      buffer.pushAll([10, 11, 12]);
+      expect(buffer.toArray()).toEqual([10, 11, 12]);
+    });
+
+    it('should handle exact capacity fill without overflow', () => {
+      const buffer = new RingBuffer<number>(5);
+      buffer.pushAll([1, 2, 3, 4, 5]);
+
+      expect(buffer.size).toBe(5);
+      expect(buffer.isFull).toBe(true);
+      expect(buffer.toArray()).toEqual([1, 2, 3, 4, 5]);
+      expect(buffer.get(0)).toBe(1);
+      expect(buffer.get(4)).toBe(5);
+    });
+
+    it('should handle clear and refill cycle', () => {
+      const buffer = new RingBuffer<number>(3);
+      buffer.pushAll([1, 2, 3, 4]); // Overflow to [2, 3, 4]
+      buffer.clear();
+
+      expect(buffer.isEmpty).toBe(true);
+      expect(buffer.size).toBe(0);
+
+      // Refill should work correctly
+      buffer.pushAll([10, 20]);
+      expect(buffer.toArray()).toEqual([10, 20]);
+
+      // Overflow should still work
+      buffer.pushAll([30, 40]);
+      expect(buffer.toArray()).toEqual([20, 30, 40]);
+    });
+
+    it('should handle null and undefined values', () => {
+      const buffer = new RingBuffer<string | null | undefined>(5);
+      buffer.push('a');
+      buffer.push(null);
+      buffer.push(undefined);
+      buffer.push('b');
+
+      expect(buffer.toArray()).toEqual(['a', null, undefined, 'b']);
+      expect(buffer.get(1)).toBeNull();
+      expect(buffer.get(2)).toBeUndefined();
+    });
+
+    it('should handle empty object values', () => {
+      const buffer = new RingBuffer<object>(3);
+      const obj1 = {};
+      const obj2 = {};
+      buffer.push(obj1);
+      buffer.push(obj2);
+
+      expect(buffer.get(0)).toBe(obj1);
+      expect(buffer.get(1)).toBe(obj2);
+    });
+
+    it('should correctly report state after single item operations', () => {
+      const buffer = new RingBuffer<number>(3);
+
+      // Single push
+      buffer.push(1);
+      expect(buffer.size).toBe(1);
+      expect(buffer.isEmpty).toBe(false);
+      expect(buffer.isFull).toBe(false);
+      expect(buffer.newest()).toBe(1);
+      expect(buffer.oldest()).toBe(1);
+      expect(buffer.get(0)).toBe(1);
+      expect(buffer.get(1)).toBeUndefined();
+    });
+
+    it('should handle negative index in get correctly', () => {
+      const buffer = new RingBuffer<number>(5);
+      buffer.pushAll([1, 2, 3]);
+
+      expect(buffer.get(-1)).toBeUndefined();
+      expect(buffer.get(-100)).toBeUndefined();
+    });
+
+    it('should handle last() with various edge values', () => {
+      const buffer = new RingBuffer<number>(5);
+      buffer.pushAll([1, 2, 3, 4, 5]);
+
+      expect(buffer.last(-1)).toEqual([]);
+      expect(buffer.last(0)).toEqual([]);
+      expect(buffer.last(5)).toEqual([1, 2, 3, 4, 5]);
+      expect(buffer.last(10)).toEqual([1, 2, 3, 4, 5]);
+    });
+
+    it('should work with filter after overflow', () => {
+      const buffer = new RingBuffer<number>(4);
+      buffer.pushAll([1, 2, 3, 4, 5, 6]); // [3, 4, 5, 6]
+
+      const evens = buffer.filter((x) => x % 2 === 0);
+      expect(evens).toEqual([4, 6]);
+    });
+
+    it('should work with find after overflow', () => {
+      const buffer = new RingBuffer<{ id: number }>(3);
+      buffer.push({ id: 1 });
+      buffer.push({ id: 2 });
+      buffer.push({ id: 3 });
+      buffer.push({ id: 4 }); // [{ id: 2 }, { id: 3 }, { id: 4 }]
+
+      expect(buffer.find((x) => x.id === 1)).toBeUndefined();
+      expect(buffer.find((x) => x.id === 3)).toEqual({ id: 3 });
+    });
+
+    it('should maintain order consistency through iterator after multiple overwrites', () => {
+      const buffer = new RingBuffer<number>(3);
+
+      // Multiple cycles of overwrite
+      for (let i = 1; i <= 10; i++) {
+        buffer.push(i);
+      }
+
+      // Should have [8, 9, 10]
+      expect([...buffer]).toEqual([8, 9, 10]);
+      expect(buffer.toArray()).toEqual([8, 9, 10]);
+      expect(buffer.last(3)).toEqual([8, 9, 10]);
+    });
+  });
 });
