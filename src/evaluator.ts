@@ -250,10 +250,21 @@ function updateAssertionMetrics(
  * @returns Returns true if the prompt is allowed, false otherwise.
  */
 export function isAllowedPrompt(prompt: Prompt, allowedPrompts: string[] | undefined): boolean {
+  const promptLabel = prompt.label;
   return (
     !Array.isArray(allowedPrompts) ||
-    allowedPrompts.includes(prompt.label) ||
-    allowedPrompts.some((allowedPrompt) => prompt.label.startsWith(`${allowedPrompt}:`))
+    allowedPrompts.some((allowedPrompt) => {
+      if (allowedPrompt === promptLabel) {
+        return true;
+      }
+
+      if (allowedPrompt.endsWith('*')) {
+        const prefix = allowedPrompt.slice(0, -1);
+        return promptLabel.startsWith(prefix);
+      }
+
+      return promptLabel.startsWith(`${allowedPrompt}:`);
+    })
   );
 }
 
