@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import Code from '@app/components/Code';
 import { useApiHealth } from '@app/hooks/useApiHealth';
 import { useTelemetry } from '@app/hooks/useTelemetry';
-import { callApi } from '@app/utils/api';
+import { callApiTyped } from '@app/utils/apiClient';
 import { formatToolsAsJSDocs } from '@app/utils/discovery';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
@@ -23,6 +23,7 @@ import Typography from '@mui/material/Typography';
 import { type TargetPurposeDiscoveryResult } from '@promptfoo/redteam/commands/discover';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import PageWrapper from './PageWrapper';
+import type { DiscoverProviderResponse } from '@promptfoo/dtos';
 
 import type { ApplicationDefinition } from '../types';
 
@@ -219,20 +220,11 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
         setShowSlowDiscoveryMessage(true);
       }, 5000);
 
-      const response = await callApi('/providers/discover', {
+      const data = await callApiTyped<DiscoverProviderResponse>('/providers/discover', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(config.target),
+        body: config.target,
       });
-
-      if (!response.ok) {
-        const { error } = (await response.json()) as { error: string };
-        setDiscoveryError(error);
-        return;
-      }
-
-      const data = (await response.json()) as TargetPurposeDiscoveryResult;
-      setDiscoveryResult(data);
+      setDiscoveryResult(data as TargetPurposeDiscoveryResult);
 
       // Clear the timeout since discovery completed
       clearTimeout(slowDiscoveryTimeout);

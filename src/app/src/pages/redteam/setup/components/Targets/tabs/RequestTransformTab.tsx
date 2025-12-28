@@ -1,6 +1,6 @@
 import React from 'react';
 
-import { callApi } from '@app/utils/api';
+import { ApiRequestError, callApiTyped } from '@app/utils/apiClient';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -10,6 +10,7 @@ import dedent from 'dedent';
 import Prism from 'prismjs';
 import Editor from 'react-simple-code-editor';
 import TransformTestDialog from '../TransformTestDialog';
+import type { TestRequestTransformResponse } from '@promptfoo/dtos';
 import type { ProviderOptions } from '@promptfoo/types';
 
 interface RequestTransformTabProps {
@@ -56,42 +57,39 @@ const RequestTransformTab: React.FC<RequestTransformTabProps> = ({
 
   // Test handler function
   const handleTest = async (transformCode: string, testInput: string) => {
-    const response = await callApi('/providers/test-request-transform', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        transformCode,
-        prompt: testInput,
-      }),
-    });
+    try {
+      const data = await callApiTyped<TestRequestTransformResponse>(
+        '/providers/test-request-transform',
+        {
+          method: 'POST',
+          body: {
+            transformCode,
+            prompt: testInput,
+          },
+        },
+      );
 
-    if (!response.ok) {
-      let errorMessage = 'Failed to test transform';
-      try {
-        const errorData = await response.json();
-        errorMessage = errorData.error || errorMessage;
-      } catch {
-        errorMessage = `Server error: ${response.status} ${response.statusText}`;
+      if (data.success) {
+        return {
+          success: true,
+          result: data.result,
+        };
+      } else {
+        return {
+          success: false,
+          error: data.error || 'Transform failed',
+        };
+      }
+    } catch (err) {
+      if (err instanceof ApiRequestError) {
+        return {
+          success: false,
+          error: err.message,
+        };
       }
       return {
         success: false,
-        error: errorMessage,
-      };
-    }
-
-    const data = await response.json();
-
-    if (data.success) {
-      return {
-        success: true,
-        result: data.result,
-      };
-    } else {
-      return {
-        success: false,
-        error: data.error || 'Transform failed',
+        error: err instanceof Error ? err.message : 'Failed to test transform',
       };
     }
   };

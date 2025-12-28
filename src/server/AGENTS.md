@@ -1,52 +1,132 @@
-# Backend Server
+# Server Development Guide
 
-Express-based HTTP + WebSocket server for the web UI.
+## Overview
 
-## Tech Stack
-
-- Express 5 + Socket.io
-- Zod for request validation
-- Better SQLite3 + Drizzle ORM
+Express.js server with standardized middleware for API responses and request validation.
 
 ## Directory Structure
 
-```plaintext
+```
 src/server/
-├── index.ts       # Entry point
-├── server.ts      # Express app setup
-├── apiSchemas.ts  # Zod validation schemas
-└── routes/        # API endpoints
+├── middleware/         # Shared middleware
+│   ├── apiResponse.ts  # Error/success response utilities
+│   ├── validateRequest.ts # Zod request validation
+│   └── index.ts        # Barrel export
+├── routes/            # API route handlers
+└── index.ts           # Server entry point
 ```
 
-## Logging
+## Middleware
 
-See `docs/logging.md` - use logger with object context (auto-sanitized).
+### Error Responses
 
-## Response Format
+Use `handleRouteError` for consistent catch block handling:
 
 ```typescript
-res.json({ success: true, data: results });
-res.status(400).json({ success: false, error: 'Invalid input' });
+import { handleRouteError } from '../middleware';
+
+router.get('/', async (req, res) => {
+  try {
+    // ... route logic
+  } catch (error) {
+    handleRouteError(res, error, 'fetching configs', logger);
+    // Logs: "Error fetching configs: <message>"
+    // Returns: { success: false, error: "Failed fetching configs" }
+  }
+});
 ```
 
-## Database Access
+For specific error responses:
 
 ```typescript
-import { db } from '../database';
-import { evaluations } from '../database/schema';
-const results = await db.select().from(evaluations).where(eq(evaluations.id, id));
+import { sendError, HttpStatus } from '../middleware';
+
+// Not found
+sendError(res, HttpStatus.NOT_FOUND, 'Config not found');
+
+// Bad request with details
+sendError(res, HttpStatus.BAD_REQUEST, 'Invalid input', 'Expected numeric ID');
 ```
 
-## Development
+### Type-Safe Parameter Extraction
 
-```bash
-npm run dev:server   # Runs on localhost:3000
-npm run dev          # Both server + frontend
+Avoid `any` casts with type-safe extractors:
+
+```typescript
+import { getQueryString, getQueryNumber, getQueryBoolean, getParam } from '../middleware';
+
+// Query parameters
+const type = getQueryString(req, 'type'); // string | undefined
+const limit = getQueryNumber(req, 'limit', 10); // number (defaults to 10)
+const active = getQueryBoolean(req, 'active'); // boolean (defaults to false)
+
+// Route parameters
+const id = getParam(req, 'id'); // string (empty string if missing)
 ```
 
-## Guidelines
+### Request Validation
 
-- Validate requests with Zod schemas
-- Use proper HTTP status codes
-- Wrap responses in `{ success, data/error }`
-- Handle errors with try-catch
+Use `validateRequest` middleware with Zod schemas:
+
+```typescript
+import { validateRequest, type ValidatedRequest } from '../middleware';
+import { z } from 'zod';
+
+const CreateConfigSchema = z.object({
+  name: z.string().min(1),
+  type: z.enum(['redteam', 'eval']),
+});
+
+router.post(
+  '/',
+  validateRequest({ body: CreateConfigSchema }),
+  async (req: ValidatedRequest<{}, {}, z.infer<typeof CreateConfigSchema>>, res) => {
+    const { name, type } = req.body; // Fully typed!
+  },
+);
+```
+
+### Success Responses
+
+For new endpoints, optionally use wrapped success responses:
+
+```typescript
+import { sendSuccess, HttpStatus } from '../middleware';
+
+// 200 OK with data wrapper
+sendSuccess(res, { items: [...] });
+
+// 201 Created
+sendSuccess(res, { id: '123' }, HttpStatus.CREATED);
+```
+
+## Response Formats
+
+### Error Response Shape
+
+```json
+{
+  "success": false,
+  "error": "Human-readable error message",
+  "details": "Optional additional details"
+}
+```
+
+### Success Response Shape (wrapped)
+
+```json
+{
+  "success": true,
+  "data": {
+    /* response payload */
+  }
+}
+```
+
+## Best Practices
+
+1. **Use middleware utilities** instead of manual `res.status().json()`
+2. **Extract parameters** with type-safe extractors, not `as` casts
+3. **Centralize error handling** with `handleRouteError`
+4. **Validate requests** at the router level with Zod schemas
+5. **Use DTOs** from `src/dtos/` for response types

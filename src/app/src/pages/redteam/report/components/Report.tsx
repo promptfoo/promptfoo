@@ -3,7 +3,7 @@ import React from 'react';
 import EnterpriseBanner from '@app/components/EnterpriseBanner';
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import { useTelemetry } from '@app/hooks/useTelemetry';
-import { callApi } from '@app/utils/api';
+import { callApiTyped } from '@app/utils/apiClient';
 import { formatDataGridDate } from '@app/utils/date';
 import ClearIcon from '@mui/icons-material/Clear';
 import FilterListIcon from '@mui/icons-material/FilterList';
@@ -35,12 +35,12 @@ import {
   ResultFailureReason,
   type ResultLightweightWithLabel,
   type ResultsFile,
-  type SharedResults,
 } from '@promptfoo/types';
 import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
 import { useNavigate } from 'react-router-dom';
 import FrameworkCompliance from './FrameworkCompliance';
 import Overview from './Overview';
+import type { GetResultsByIdResponse, GetResultsResponse } from '@promptfoo/dtos';
 import './Report.css';
 
 import { type CategoryStats, type TestResultStats } from './FrameworkComplianceUtils';
@@ -74,19 +74,22 @@ const App = () => {
   const searchParams = new URLSearchParams(window.location.search);
   React.useEffect(() => {
     const fetchEvalById = async (id: string) => {
-      const resp = await callApi(`/results/${id}`, {
-        cache: 'no-store',
-      });
-      const body = (await resp.json()) as SharedResults;
-      setEvalData(body.data);
+      try {
+        const data = await callApiTyped<GetResultsByIdResponse>(`/results/${id}`, {
+          cache: 'no-store',
+        });
+        setEvalData(data.data as unknown as ResultsFile);
 
-      // Track funnel event for report viewed
-      recordEvent('funnel', {
-        type: 'redteam',
-        step: 'webui_report_viewed',
-        source: 'webui',
-        evalId: id,
-      });
+        // Track funnel event for report viewed
+        recordEvent('funnel', {
+          type: 'redteam',
+          step: 'webui_report_viewed',
+          source: 'webui',
+          evalId: id,
+        });
+      } catch (error) {
+        console.error('Error fetching eval by id:', error);
+      }
     };
 
     if (searchParams) {
@@ -98,14 +101,11 @@ const App = () => {
         // Need to fetch the latest evalId from the server
         const fetchLatestEvalId = async () => {
           try {
-            const resp = await callApi('/results', { cache: 'no-store' });
-            if (!resp.ok) {
-              console.error('Failed to fetch recent evals');
-              return;
-            }
-            const body = (await resp.json()) as { data: ResultLightweightWithLabel[] };
-            if (body.data && body.data.length > 0) {
-              const latestEvalId = body.data[0].evalId;
+            const data = await callApiTyped<GetResultsResponse>('/results', {
+              cache: 'no-store',
+            });
+            if (data.data && data.data.length > 0) {
+              const latestEvalId = (data.data[0] as unknown as ResultLightweightWithLabel).evalId;
               setEvalId(latestEvalId);
               fetchEvalById(latestEvalId);
             } else {

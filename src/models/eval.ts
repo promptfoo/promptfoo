@@ -882,7 +882,7 @@ export default class Eval {
     searchQuery?: string;
     filters?: string[];
   }): Promise<{
-    head: { prompts: Prompt[]; vars: string[] };
+    head: { prompts: CompletedPrompt[]; vars: string[] };
     body: EvaluateTableRow[];
     totalCount: number;
     filteredCount: number;

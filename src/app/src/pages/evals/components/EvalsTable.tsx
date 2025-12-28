@@ -13,11 +13,12 @@ import {
 } from '@app/components/ui/dialog';
 import { DeleteIcon } from '@app/components/ui/icons';
 import { cn } from '@app/lib/utils';
-import { callApi } from '@app/utils/api';
+import { callApiTyped } from '@app/utils/apiClient';
 import { formatDataGridDate } from '@app/utils/date';
 import { Tooltip } from '@mui/material';
 import invariant from '@promptfoo/util/invariant';
 import { Link, useLocation } from 'react-router-dom';
+import type { GetResultsResponse } from '@promptfoo/dtos';
 import type { ColumnDef, RowSelectionState } from '@tanstack/react-table';
 
 type Eval = {
@@ -62,12 +63,11 @@ export default function EvalsTable({
   const fetchEvals = useCallback(async (signal: AbortSignal) => {
     try {
       setIsLoading(true);
-      const response = await callApi('/results', { cache: 'no-store', signal });
-      if (!response.ok) {
-        throw new Error('Failed to fetch evals');
-      }
-      const body = (await response.json()) as { data: Eval[] };
-      setEvals(body.data);
+      const data = await callApiTyped<GetResultsResponse>('/results', {
+        cache: 'no-store',
+        signal,
+      });
+      setEvals(data.data as Eval[]);
       setError(null);
     } catch (err) {
       if ((err as Error).name !== 'AbortError') {
@@ -124,17 +124,10 @@ export default function EvalsTable({
   const handleConfirmDelete = async () => {
     try {
       setIsLoading(true);
-      const res = await callApi('/eval', {
+      await callApiTyped<void>('/eval', {
         method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ ids: selectedEvalIds }),
+        body: { ids: selectedEvalIds },
       });
-
-      if (!res.ok) {
-        throw new Error('Failed to delete evals');
-      }
 
       setEvals((prev) => prev.filter((e) => !selectedEvalIds.includes(e.evalId)));
       setRowSelection({});

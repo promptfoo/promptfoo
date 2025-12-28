@@ -411,6 +411,13 @@ type EnvVars = {
 
   // xAI
   XAI_API_KEY?: string;
+
+  /**
+   * Enable/disable shadow validation for API responses (DTO validation).
+   * Set to 'false' to disable. Enabled by default.
+   * @example SHADOW_VALIDATE_API=false
+   */
+  SHADOW_VALIDATE_API?: string;
 } & EnvOverrides;
 
 // Allow string access to any key for environment variables not explicitly listed

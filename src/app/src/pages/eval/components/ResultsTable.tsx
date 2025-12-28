@@ -2,7 +2,7 @@ import React, { useEffect, useRef } from 'react';
 
 import ErrorBoundary from '@app/components/ErrorBoundary';
 import { useToast } from '@app/hooks/useToast';
-import { callApi } from '@app/utils/api';
+import { callApiTyped } from '@app/utils/apiClient';
 import { normalizeMediaText, resolveAudioSource, resolveImageSource } from '@app/utils/media';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
@@ -44,6 +44,7 @@ import { useFilterMode } from './FilterModeProvider';
 import MarkdownErrorBoundary from './MarkdownErrorBoundary';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import TruncatedText from './TruncatedText';
+import type { UpdateEvalResponse, UpdateRatingResponse } from '@promptfoo/dtos';
 import type { CellContext, ColumnDef, VisibilityState } from '@tanstack/table-core';
 
 import type { TruncatedTextProps } from './TruncatedText';
@@ -468,26 +469,16 @@ function ResultsTable({
         showToast('Ratings are not saved in comparison mode', 'warning');
       } else {
         try {
-          let response;
           if (version && version >= 4) {
-            response = await callApi(`/eval/${evalId}/results/${resultId}/rating`, {
+            await callApiTyped<UpdateRatingResponse>(`/eval/${evalId}/results/${resultId}/rating`, {
               method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({ ...gradingResult }),
+              body: { ...gradingResult },
             });
           } else {
-            response = await callApi(`/eval/${evalId}`, {
+            await callApiTyped<UpdateEvalResponse>(`/eval/${evalId}`, {
               method: 'PATCH',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({ table: newTable }),
+              body: { table: newTable },
             });
-          }
-          if (!response.ok) {
-            throw new Error('Network response was not ok');
           }
         } catch (error) {
           console.error('Failed to update table:', error);

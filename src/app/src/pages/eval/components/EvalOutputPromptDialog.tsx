@@ -18,6 +18,7 @@ import { EvaluationPanel } from './EvaluationPanel';
 import { type ExpandedMetadataState, MetadataPanel } from './MetadataPanel';
 import { OutputsPanel } from './OutputsPanel';
 import { PromptEditor } from './PromptEditor';
+import type { ReplayRequest } from '@promptfoo/dtos';
 import type { GradingResult } from '@promptfoo/types';
 
 import type { Trace } from '../../../components/traces/TraceView';
@@ -149,21 +150,20 @@ function CodeDisplay({
 
 /**
  * Parameters for replaying an evaluation with a modified prompt.
+ * Re-exported from shared DTOs for convenience.
  */
-export interface ReplayEvaluationParams {
-  evaluationId: string;
-  testIndex?: number;
-  prompt: string;
-  variables?: Record<string, any>;
-}
+export type ReplayEvaluationParams = ReplayRequest;
 
 /**
- * Result from replaying an evaluation.
+ * Result from replaying an evaluation via the hook.
+ * Note: This is the simplified hook return type, not the raw API response.
+ * The hook returns either { output } on success or { error } on failure.
+ * See ReplayResponse in @promptfoo/dtos for the full API response shape.
  */
-export interface ReplayEvaluationResult {
+export type ReplayEvaluationResult = {
   output?: string;
   error?: string;
-}
+};
 
 /**
  * Filter configuration for table filtering.

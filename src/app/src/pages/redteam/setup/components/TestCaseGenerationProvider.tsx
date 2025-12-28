@@ -10,7 +10,7 @@ import React, {
 
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
-import { callApi } from '@app/utils/api';
+import { ApiRequestError, callApiTyped } from '@app/utils/apiClient';
 import {
   DEFAULT_MULTI_TURN_MAX_TURNS,
   isMultiTurnStrategy,
@@ -19,6 +19,7 @@ import {
 } from '@promptfoo/redteam/constants';
 import { type Config } from '../types';
 import { TestCaseDialog } from './TestCaseDialog';
+import type { GenerateTestResponse, TestProviderResponse } from '@promptfoo/dtos';
 import type { ConversationMessage } from '@promptfoo/redteam/types';
 
 import type {
@@ -107,14 +108,13 @@ async function callTestGenerationApi(
   maxTurns: number = 1,
   count: number = 1,
 ) {
-  return callApi('/redteam/generate-test', {
+  return callApiTyped<GenerateTestResponse>('/redteam/generate-test', {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json',
       'Cache-Control': 'no-cache, no-store, must-revalidate',
       Pragma: 'no-cache',
     },
-    body: JSON.stringify({
+    body: {
       plugin,
       strategy,
       config: { applicationDefinition: { purpose } },
@@ -122,7 +122,7 @@ async function callTestGenerationApi(
       turn,
       maxTurns,
       count,
-    }),
+    },
     signal: AbortSignal.any([AbortSignal.timeout(TEST_GENERATION_TIMEOUT), abortController.signal]),
   });
 }
@@ -135,15 +135,12 @@ async function callTestExecutionApi(
   prompt: GeneratedTestCase['prompt'],
   abortController: AbortController,
 ) {
-  return callApi('/providers/test', {
+  return callApiTyped<TestProviderResponse>('/providers/test', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
+    body: {
       providerOptions: target,
       prompt,
-    }),
+    },
     signal: AbortSignal.any([AbortSignal.timeout(TEST_EXECUTION_TIMEOUT), abortController.signal]),
   });
 }
@@ -251,7 +248,7 @@ export const TestCaseGenerationProvider: React.FC<{
 
         const history = getHistory(generatedTestCases, targetResponses);
 
-        const response = await callTestGenerationApi(
+        const data = await callTestGenerationApi(
           plugin,
           strategy,
           redTeamConfig.applicationDefinition.purpose ?? null,
@@ -261,20 +258,30 @@ export const TestCaseGenerationProvider: React.FC<{
           maxTurns,
         );
 
-        const data = await response.json();
-
-        if (data.error) {
-          throw new Error(data?.details ?? data.error);
+        // Handle single test case response (multi-turn always returns single)
+        if (data.kind === 'single') {
+          setGeneratedTestCases((prev) => [
+            ...prev,
+            {
+              prompt: data.prompt,
+              context: data.context,
+              metadata: data.metadata as GeneratedTestCase['metadata'],
+            },
+          ]);
+        } else {
+          // Batch response - use first test case for multi-turn continuation
+          const firstTestCase = data.testCases[0];
+          if (firstTestCase) {
+            setGeneratedTestCases((prev) => [
+              ...prev,
+              {
+                prompt: firstTestCase.prompt,
+                context: firstTestCase.context,
+                metadata: firstTestCase.metadata as GeneratedTestCase['metadata'],
+              },
+            ]);
+          }
         }
-
-        setGeneratedTestCases((prev) => [
-          ...prev,
-          {
-            prompt: data.prompt,
-            context: data.context,
-            metadata: data.metadata,
-          },
-        ]);
       } catch (error) {
         // Ignore abort errors (these happen when a new generation is triggered)
         if (error instanceof Error && error.name === 'AbortError') {
@@ -333,24 +340,17 @@ export const TestCaseGenerationProvider: React.FC<{
       setIsRunningTest(true);
 
       try {
-        const testResponse = await callTestExecutionApi(
+        const data = await callTestExecutionApi(
           redTeamConfig.target,
           testCase.prompt,
           abortController,
         );
 
-        if (!testResponse.ok) {
-          const errorData = await testResponse.json();
-          throw new Error(errorData.error || 'Failed to run test');
-        }
-
-        const { providerResponse } = await testResponse.json();
-
         setTargetResponses((prev) => [
           ...prev,
           {
-            output: providerResponse?.output ?? null,
-            error: providerResponse?.error ?? null,
+            output: data.providerResponse?.output ?? null,
+            error: data.providerResponse?.error ?? null,
           },
         ]);
 
@@ -362,11 +362,18 @@ export const TestCaseGenerationProvider: React.FC<{
         }
 
         console.error('Failed to run test against target:', error);
+        let errorMessage = 'Failed to run test against target';
+        if (error instanceof ApiRequestError) {
+          const errorData = error.responseData as { error?: string } | undefined;
+          errorMessage = errorData?.error || error.message;
+        } else if (error instanceof Error) {
+          errorMessage = error.message;
+        }
         setTargetResponses((prev) => [
           ...prev,
           {
             output: null,
-            error: error instanceof Error ? error.message : 'Failed to run test against target',
+            error: errorMessage,
           },
         ]);
         onErrorRef.current?.(error as Error);
@@ -415,7 +422,7 @@ export const TestCaseGenerationProvider: React.FC<{
           count,
         });
 
-        const response = await callTestGenerationApi(
+        const data = await callTestGenerationApi(
           targetPlugin,
           targetStrategy,
           redTeamConfig.applicationDefinition.purpose ?? null,
@@ -426,23 +433,21 @@ export const TestCaseGenerationProvider: React.FC<{
           count,
         );
 
-        const data = await response.json();
-
-        if (data.error) {
-          throw new Error(data?.details ?? data.error);
+        // Use discriminator for type-safe response handling
+        if (data.kind === 'batch') {
+          return data.testCases.map((tc) => ({
+            prompt: tc.prompt,
+            context: tc.context,
+            metadata: tc.metadata as GeneratedTestCase['metadata'],
+          }));
         }
 
-        // Handle batch response
-        if (data.testCases && Array.isArray(data.testCases)) {
-          return data.testCases as GeneratedTestCase[];
-        }
-
-        // Backward compatible: single test case response
+        // Single test case response
         return [
           {
             prompt: data.prompt,
             context: data.context,
-            metadata: data.metadata,
+            metadata: data.metadata as GeneratedTestCase['metadata'],
           },
         ];
       } catch (error) {

@@ -5,7 +5,7 @@ import { IS_RUNNING_LOCALLY } from '@app/constants';
 import { ShiftKeyProvider } from '@app/contexts/ShiftKeyContext';
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import useApiConfig from '@app/stores/apiConfig';
-import { callApi } from '@app/utils/api';
+import { callApiTyped } from '@app/utils/apiClient';
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
 import { type ResultLightweightWithLabel, type ResultsFile } from '@promptfoo/types';
@@ -14,6 +14,7 @@ import { io as SocketIOClient } from 'socket.io-client';
 import EmptyState from './EmptyState';
 import ResultsView from './ResultsView';
 import { ResultsFilter, useResultsViewSettingsStore, useTableStore } from './store';
+import type { GetResultsResponse } from '@promptfoo/dtos';
 import './Eval.css';
 
 import { useToast } from '@app/hooks/useToast';
@@ -65,14 +66,14 @@ export default function Eval({ fetchId }: EvalOptions) {
   // ================================
 
   const fetchRecentFileEvals = async () => {
-    const resp = await callApi(`/results`, { cache: 'no-store' });
-    if (!resp.ok) {
+    try {
+      const data = await callApiTyped<GetResultsResponse>('/results', { cache: 'no-store' });
+      setRecentEvals(data.data as unknown as ResultLightweightWithLabel[]);
+      return data.data as unknown as ResultLightweightWithLabel[];
+    } catch {
       setFailed(true);
       return;
     }
-    const body = (await resp.json()) as { data: ResultLightweightWithLabel[] };
-    setRecentEvals(body.data);
-    return body.data;
   };
 
   /**

@@ -7,6 +7,8 @@ import { getUpdateCommands } from '../../updates/updateCommands';
 import { isRunningUnderNpx } from '../../util/promptfooCommand';
 import type { Request, Response } from 'express';
 
+import type { GetVersionResponse } from '../../dtos/version.dto';
+
 const router = express.Router();
 
 // Cache for the latest version check
@@ -50,7 +52,7 @@ router.get('/', async (_req: Request, res: Response): Promise<void> => {
     const isNpx = isRunningUnderNpx();
     const updateCommands = getUpdateCommands({ selfHosted, isNpx });
 
-    const response = {
+    const response: GetVersionResponse = {
       currentVersion: VERSION,
       latestVersion,
       updateAvailable: latestVersion !== VERSION && latestVersion !== null,

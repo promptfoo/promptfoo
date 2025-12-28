@@ -6,13 +6,14 @@ import { CheckCircleIcon, ErrorIcon, RefreshIcon, SettingsIcon } from '@app/comp
 import { Spinner } from '@app/components/ui/spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { MODEL_AUDIT_ROUTES } from '@app/constants/routes';
-import { callApi } from '@app/utils/api';
+import { ApiRequestError, callApiTyped } from '@app/utils/apiClient';
 import { useNavigate } from 'react-router-dom';
 import AdvancedOptionsDialog from '../model-audit/components/AdvancedOptionsDialog';
 import ConfigurationTab from '../model-audit/components/ConfigurationTab';
 import ResultsTab from '../model-audit/components/ResultsTab';
 import ScannedFilesDialog from '../model-audit/components/ScannedFilesDialog';
 import { useModelAuditConfigStore, useModelAuditHistoryStore } from '../model-audit/stores';
+import type { ScanResponse } from '@promptfoo/dtos';
 
 import type { ScanResult } from '../model-audit/ModelAudit.types';
 
@@ -52,23 +53,15 @@ export default function ModelAuditSetupPage() {
     setError(null);
 
     try {
-      const response = await callApi('/model-audit/scan', {
+      const data = await callApiTyped<ScanResponse>('/model-audit/scan', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+        body: {
           paths: paths.map((p) => p.path),
           options: scanOptions,
-        }),
+        },
       });
 
-      const data: ScanResult & { auditId?: string; persisted?: boolean } = await response.json();
-
-      if (!response.ok) {
-        const errorData = data as unknown as { error: string };
-        throw new Error(errorData.error || 'Failed to run security scan');
-      }
-
-      setScanResults(data);
+      setScanResults(data as unknown as ScanResult);
       addRecentScan(paths);
 
       if (data.persisted) {
@@ -79,7 +72,13 @@ export default function ModelAuditSetupPage() {
         }
       }
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'An unexpected error occurred';
+      let errorMessage = 'An unexpected error occurred';
+      if (err instanceof ApiRequestError) {
+        const errorData = err.responseData as { error?: string } | undefined;
+        errorMessage = errorData?.error || err.message;
+      } else if (err instanceof Error) {
+        errorMessage = err.message;
+      }
       setError(errorMessage);
     } finally {
       setIsScanning(false);

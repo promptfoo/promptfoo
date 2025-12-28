@@ -1,5 +1,5 @@
 import { HIDDEN_METADATA_KEYS } from '@app/constants';
-import { callApi } from '@app/utils/api';
+import { callApiTyped } from '@app/utils/apiClient';
 import { Severity } from '@promptfoo/redteam/constants';
 import {
   isPolicyMetric,
@@ -11,6 +11,7 @@ import { getRiskCategorySeverityMap } from '@promptfoo/redteam/sharedFrontend';
 import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
 import { create } from 'zustand';
 import { persist, subscribeWithSelector } from 'zustand/middleware';
+import type { GetMetadataKeysResponse, GetMetadataValuesResponse } from '@promptfoo/dtos';
 import type { Policy, PolicyObject } from '@promptfoo/redteam/types';
 import type {
   EvalResultsFilterMode,
@@ -641,57 +642,48 @@ export const useTableStore = create<TableState>()(
           );
         });
 
-        const resp = await callApi(
+        const data = await callApiTyped<EvalTableDTO>(
           // Remove the origin as it was only added to satisfy the URL constructor.
           url
             .toString()
             .replace(window.location.origin, ''),
         );
 
-        if (resp.ok) {
-          const data = (await resp.json()) as EvalTableDTO;
+        // Build async options
+        const [redteamOptions, policyIdToNameMap] = await Promise.all([
+          buildRedteamFilterOptions(data.config, data.table),
+          extractPolicyIdToNameMap(data.config?.redteam?.plugins ?? []),
+        ]);
 
-          // Build async options
-          const [redteamOptions, policyIdToNameMap] = await Promise.all([
-            buildRedteamFilterOptions(data.config, data.table),
-            extractPolicyIdToNameMap(data.config?.redteam?.plugins ?? []),
-          ]);
-
-          set((prevState) => ({
-            table: data.table,
-            filteredResultsCount: data.filteredCount,
-            totalResultsCount: data.totalCount,
-            highlightedResultsCount: computeHighlightCount(data.table),
-            config: data.config,
-            version: data.version,
-            author: data.author,
-            evalId: skipSettingEvalId ? get().evalId : id,
-            isFetching: skipLoadingState ? prevState.isFetching : false,
-            shouldHighlightSearchText: searchText !== '',
-            // Store filtered metrics from backend (null when no filters or feature disabled)
-            filteredMetrics: data.filteredMetrics || null,
-            // Store evaluation-level stats including durationMs
-            stats: data.stats || null,
-            filters: {
-              ...prevState.filters,
-              options: {
-                metric: computeAvailableMetrics(data.table),
-                metadata: [],
-                ...redteamOptions,
-              },
-              policyIdToNameMap,
+        set((prevState) => ({
+          table: data.table,
+          filteredResultsCount: data.filteredCount,
+          totalResultsCount: data.totalCount,
+          highlightedResultsCount: computeHighlightCount(data.table),
+          config: data.config,
+          version: data.version,
+          author: data.author,
+          evalId: skipSettingEvalId ? get().evalId : id,
+          isFetching: skipLoadingState ? prevState.isFetching : false,
+          shouldHighlightSearchText: searchText !== '',
+          // Store filtered metrics from backend (null when no filters or feature disabled)
+          filteredMetrics: data.filteredMetrics || null,
+          // Store evaluation-level stats including durationMs
+          stats: data.stats || null,
+          filters: {
+            ...prevState.filters,
+            options: {
+              metric: computeAvailableMetrics(data.table),
+              metadata: [],
+              ...redteamOptions,
             },
-          }));
+            policyIdToNameMap,
+          },
+        }));
 
-          // Metadata keys will be fetched lazily when user opens metadata filter dropdown
+        // Metadata keys will be fetched lazily when user opens metadata filter dropdown
 
-          return data;
-        }
-
-        if (!skipLoadingState) {
-          set({ isFetching: false });
-        }
-        return null;
+        return data;
       } catch (error) {
         console.error('Error fetching eval data:', error);
         set({
@@ -881,32 +873,26 @@ export const useTableStore = create<TableState>()(
           url.searchParams.append('comparisonEvalIds', compId);
         });
 
-        const resp = await callApi(url.toString().replace(window.location.origin, ''), {
-          signal: abortController.signal,
-        });
+        const data = await callApiTyped<GetMetadataKeysResponse>(
+          url.toString().replace(window.location.origin, ''),
+          { signal: abortController.signal },
+        );
 
         // Clear timeout on successful response
         clearTimeout(timeoutId);
 
-        if (resp.ok) {
-          const data = await resp.json();
-          const filteredKeys = data.keys.filter(
-            (key: string) => !HIDDEN_METADATA_KEYS.includes(key),
-          );
+        const filteredKeys = data.keys.filter((key: string) => !HIDDEN_METADATA_KEYS.includes(key));
 
-          // Check if this request is still current before updating state
-          const latestState = get();
-          if (latestState.currentMetadataKeysRequest === abortController) {
-            set({
-              metadataKeys: filteredKeys,
-              metadataKeysLoading: false,
-              currentMetadataKeysRequest: null,
-            });
-          }
-          return filteredKeys;
-        } else {
-          throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
+        // Check if this request is still current before updating state
+        const latestState = get();
+        if (latestState.currentMetadataKeysRequest === abortController) {
+          set({
+            metadataKeys: filteredKeys,
+            metadataKeysLoading: false,
+            currentMetadataKeysRequest: null,
+          });
         }
+        return filteredKeys;
       } catch (error) {
         // Always clear timeout
         clearTimeout(timeoutId);
@@ -980,15 +966,11 @@ export const useTableStore = create<TableState>()(
           url.searchParams.append('comparisonEvalIds', compId);
         });
 
-        const resp = await callApi(url.toString().replace(window.location.origin, ''), {
-          signal: abortController.signal,
-        });
+        const data = await callApiTyped<GetMetadataValuesResponse>(
+          url.toString().replace(window.location.origin, ''),
+          { signal: abortController.signal },
+        );
 
-        if (!resp.ok) {
-          throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
-        }
-
-        const data = await resp.json();
         const values: string[] = Array.isArray(data.values) ? data.values : [];
 
         set((prevState) => ({

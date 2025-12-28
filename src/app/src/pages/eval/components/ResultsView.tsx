@@ -3,7 +3,8 @@ import React from 'react';
 import { IS_RUNNING_LOCALLY } from '@app/constants';
 import { useToast } from '@app/hooks/useToast';
 import { useStore as useMainStore } from '@app/stores/evalConfig';
-import { callApi, fetchUserEmail, updateEvalAuthor } from '@app/utils/api';
+import { fetchUserEmail, updateEvalAuthor } from '@app/utils/api';
+import { callApiTyped } from '@app/utils/apiClient';
 import { formatDuration } from '@app/utils/date';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
@@ -60,6 +61,12 @@ import ShareModal from './ShareModal';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import SettingsModal from './TableSettings/TableSettingsModal';
 import type { SelectChangeEvent } from '@mui/material/Select';
+import type {
+  CopyEvalResponse,
+  DeleteEvalResponse,
+  ShareResultsResponse,
+  UpdateEvalResponse,
+} from '@promptfoo/dtos';
 import type { EvalResultsFilterMode, ResultLightweightWithLabel } from '@promptfoo/types';
 import type { VisibilityState } from '@tanstack/table-core';
 import './ResultsView.css';
@@ -284,18 +291,11 @@ export default function ResultsView({
         return `${window.location.host}${basePath}/eval/?evalId=${id}`;
       }
 
-      const response = await callApi('/results/share', {
+      const data = await callApiTyped<ShareResultsResponse>('/results/share', {
         method: 'POST',
-        body: JSON.stringify({ id }),
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        body: { id },
       });
-      if (!response.ok) {
-        throw new Error('Failed to generate share URL');
-      }
-      const { url } = await response.json();
-      return url;
+      return data.url;
     } catch (error) {
       console.error('Failed to generate share URL:', error);
       throw error;
@@ -407,17 +407,10 @@ export default function ResultsView({
         invariant(config, 'Config must be loaded before updating its description');
         const newConfig = { ...config, description: newName };
 
-        const response = await callApi(`/eval/${evalId}`, {
+        await callApiTyped<UpdateEvalResponse>(`/eval/${evalId}`, {
           method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ config: newConfig }),
+          body: { config: newConfig },
         });
-
-        if (!response.ok) {
-          throw new Error('Failed to update eval name');
-        }
 
         setConfig(newConfig);
       } catch (error) {
@@ -437,25 +430,19 @@ export default function ResultsView({
       try {
         invariant(evalId, 'Eval ID must be set before copying');
 
-        const response = await callApi(`/eval/${evalId}/copy`, {
+        const data = await callApiTyped<CopyEvalResponse>(`/eval/${evalId}/copy`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ description }),
+          body: { description },
         });
 
-        if (!response.ok) {
-          throw new Error('Failed to copy evaluation');
-        }
-
-        const { id: newEvalId, distinctTestCount } = await response.json();
-
         // Open in new tab (Google Docs pattern)
-        window.open(`/eval/${newEvalId}`, '_blank');
+        window.open(`/eval/${data.id}`, '_blank');
 
         // Show success toast
-        showToast(`Copied ${distinctTestCount.toLocaleString()} results successfully`, 'success');
+        showToast(
+          `Copied ${data.distinctTestCount.toLocaleString()} results successfully`,
+          'success',
+        );
       } catch (error) {
         console.error('Failed to copy evaluation:', error);
         showToast(
@@ -516,14 +503,9 @@ export default function ResultsView({
     setIsDeleting(true);
 
     try {
-      const response = await callApi(`/eval/${evalId}`, {
+      await callApiTyped<DeleteEvalResponse>(`/eval/${evalId}`, {
         method: 'DELETE',
       });
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Failed to delete eval');
-      }
 
       showToast('Eval deleted', 'success');
 

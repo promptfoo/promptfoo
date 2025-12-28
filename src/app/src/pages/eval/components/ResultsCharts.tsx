@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 
-import { callApi } from '@app/utils/api';
+import { callApiTyped } from '@app/utils/apiClient';
 import CloseIcon from '@mui/icons-material/Close';
 import Dialog from '@mui/material/Dialog';
 import DialogContent from '@mui/material/DialogContent';
@@ -28,6 +28,7 @@ import {
 import { ErrorBoundary } from 'react-error-boundary';
 import { usePassRates } from './hooks';
 import { useTableStore } from './store';
+import type { GetHistoryResponse } from '@promptfoo/dtos';
 import type { EvaluateTable, UnifiedConfig } from '@promptfoo/types';
 
 interface ResultsChartsProps {
@@ -489,9 +490,10 @@ function PerformanceOverTimeChart({ evalId }: ChartProps) {
       }
 
       try {
-        const res = await callApi(`/history?description=${encodeURIComponent(config.description)}`);
-        const data = await res.json();
-        setProgressData(data.data);
+        const data = await callApiTyped<GetHistoryResponse>(
+          `/history?description=${encodeURIComponent(config.description)}`,
+        );
+        setProgressData(data.data as unknown as ProgressData[]);
       } catch (error) {
         console.error('Error fetching progress data:', error);
       }

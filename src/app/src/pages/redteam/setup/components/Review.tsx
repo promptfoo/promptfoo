@@ -7,7 +7,7 @@ import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
 import YamlEditor from '@app/pages/eval-creator/components/YamlEditor';
 import { useRedteamJobStore } from '@app/stores/redteamJobStore';
-import { callApi } from '@app/utils/api';
+import { ApiRequestError, callApiTyped } from '@app/utils/apiClient';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import CloseIcon from '@mui/icons-material/Close';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
@@ -54,8 +54,14 @@ import EstimationsDisplay from './EstimationsDisplay';
 import { LogViewer } from './LogViewer';
 import PageWrapper from './PageWrapper';
 import { RunOptionsContent } from './RunOptions';
+import type {
+  CancelRedteamResponse,
+  GetJobResponse,
+  GetRedteamStatusResponse,
+  RunRedteamResponse,
+} from '@promptfoo/dtos';
 import type { Policy, PolicyObject, RedteamPlugin } from '@promptfoo/redteam/types';
-import type { Job, RedteamRunOptions } from '@promptfoo/types';
+import type { RedteamRunOptions } from '@promptfoo/types';
 
 interface ReviewProps {
   onBack?: () => void;
@@ -67,11 +73,6 @@ interface ReviewProps {
 interface PolicyPlugin {
   id: 'policy';
   config: { policy: Policy };
-}
-
-interface JobStatusResponse {
-  hasRunningJob: boolean;
-  jobId?: string;
 }
 
 export default function Review({
@@ -213,48 +214,43 @@ export default function Review({
       if (hasRunningJob && serverJobId) {
         // Server has a running job - reconnect to it
         try {
-          const jobResponse = await callApi(`/eval/job/${serverJobId}`);
-          if (jobResponse.ok) {
-            const job = (await jobResponse.json()) as Job;
-            setLogs(job.logs || []);
+          const job = await callApiTyped<GetJobResponse>(`/eval/job/${serverJobId}`);
+          setLogs(job.logs || []);
 
-            if (job.status === 'in-progress') {
-              setIsRunning(true);
-              setJob(serverJobId);
-              startPolling(serverJobId);
-            } else if (job.status === 'complete' && job.evalId) {
-              setEvalId(job.evalId);
-              clearJob();
-            } else if (job.status === 'error') {
-              setLogs(job.logs || []);
-              showToast('Previous job failed. Check logs for details.', 'error');
-              clearJob();
-            }
-          } else {
-            // Server reported a running job but we couldn't fetch it
-            showToast('Could not reconnect to running job.', 'error');
+          if (job.status === 'in-progress') {
+            setIsRunning(true);
+            setJob(serverJobId);
+            startPolling(serverJobId);
+          } else if (job.status === 'complete' && job.evalId) {
+            setEvalId(job.evalId);
+            clearJob();
+          } else if (job.status === 'error') {
+            setLogs(job.logs || []);
+            showToast('Previous job failed. Check logs for details.', 'error');
             clearJob();
           }
         } catch (error) {
           console.error('Failed to recover job:', error);
-          showToast('Failed to reconnect to running job.', 'error');
+          showToast(
+            error instanceof ApiRequestError
+              ? 'Could not reconnect to running job.'
+              : 'Failed to reconnect to running job.',
+            'error',
+          );
           clearJob();
         }
       } else if (savedJobId) {
         // We have a saved job ID but server says nothing running
         // Check if it completed while we were away
         try {
-          const jobResponse = await callApi(`/eval/job/${savedJobId}`);
-          if (jobResponse.ok) {
-            const job = (await jobResponse.json()) as Job;
-            setLogs(job.logs || []);
+          const job = await callApiTyped<GetJobResponse>(`/eval/job/${savedJobId}`);
+          setLogs(job.logs || []);
 
-            if (job.status === 'complete' && job.evalId) {
-              setEvalId(job.evalId);
-              showToast('Your evaluation completed!', 'success');
-            } else if (job.status === 'error') {
-              showToast('Previous job failed. Check logs for details.', 'error');
-            }
+          if (job.status === 'complete' && job.evalId) {
+            setEvalId(job.evalId);
+            showToast('Your evaluation completed!', 'success');
+          } else if (job.status === 'error') {
+            showToast('Previous job failed. Check logs for details.', 'error');
           }
         } catch {
           // Job doesn't exist anymore (server restarted or cleaned up)
@@ -376,14 +372,12 @@ export default function Review({
     }
   }, [isRunning, apiHealthStatus]);
 
-  const checkForRunningJob = async (): Promise<JobStatusResponse> => {
+  const checkForRunningJob = async (): Promise<GetRedteamStatusResponse> => {
     try {
-      const response = await callApi('/redteam/status');
-      const data = await response.json();
-      return data;
+      return await callApiTyped<GetRedteamStatusResponse>('/redteam/status');
     } catch (error) {
       console.error('Error checking job status:', error);
-      return { hasRunningJob: false };
+      return { hasRunningJob: false, jobId: null };
     }
   };
 
@@ -397,18 +391,7 @@ export default function Review({
 
       const interval = window.setInterval(async () => {
         try {
-          const statusResponse = await callApi(`/eval/job/${jobId}`);
-          if (!statusResponse.ok) {
-            // Job not found - likely server restarted
-            window.clearInterval(interval);
-            pollIntervalRef.current = null;
-            setIsRunning(false);
-            clearJob();
-            showToast('Job was interrupted. Please try again.', 'error');
-            return;
-          }
-
-          const status = (await statusResponse.json()) as Job;
+          const status = await callApiTyped<GetJobResponse>(`/eval/job/${jobId}`);
 
           if (status.logs) {
             setLogs(status.logs);
@@ -443,6 +426,15 @@ export default function Review({
             }
           }
         } catch (error) {
+          // Job not found - likely server restarted
+          if (error instanceof ApiRequestError && error.status === 404) {
+            window.clearInterval(interval);
+            pollIntervalRef.current = null;
+            setIsRunning(false);
+            clearJob();
+            showToast('Job was interrupted. Please try again.', 'error');
+            return;
+          }
           console.error('Error polling job status:', error);
         }
       }, 1000);
@@ -517,21 +509,16 @@ export default function Review({
     setEvalId(null);
 
     try {
-      const response = await callApi('/redteam/run', {
+      const { id } = await callApiTyped<RunRedteamResponse>('/redteam/run', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+        body: {
           config: getUnifiedConfig(config),
           force: forceRegeneration,
           verbose: config.target.config.verbose,
           maxConcurrency,
           delay: config.target.config.delay,
-        }),
+        },
       });
-
-      const { id } = await response.json();
 
       // Save job ID to persistent store and start polling
       setJob(id);
@@ -549,7 +536,7 @@ export default function Review({
 
   const handleCancel = async () => {
     try {
-      await callApi('/redteam/cancel', {
+      await callApiTyped<CancelRedteamResponse>('/redteam/cancel', {
         method: 'POST',
       });
 

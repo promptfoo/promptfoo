@@ -1,7 +1,7 @@
 import React from 'react';
 
 import ChatMessages from '@app/pages/eval/components/ChatMessages';
-import { callApi } from '@app/utils/api';
+import { ApiRequestError, callApiTyped } from '@app/utils/apiClient';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ErrorIcon from '@mui/icons-material/Error';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
@@ -19,6 +19,7 @@ import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import type { Message } from '@app/pages/eval/components/ChatMessages';
+import type { TestSessionResponse } from '@promptfoo/dtos';
 import type { ProviderOptions } from '@promptfoo/types';
 
 interface SessionsTabProps {
@@ -59,46 +60,50 @@ const SessionsTab: React.FC<SessionsTabProps> = ({
 
     try {
       // Test session configuration through the backend API
-      const response = await callApi('/providers/test-session', {
+      const data = await callApiTyped<TestSessionResponse>('/providers/test-session', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+        body: {
           provider: selectedTarget,
           sessionConfig: {
             sessionSource: selectedTarget.config.sessionSource,
             sessionParser: selectedTarget.config.sessionParser,
           },
-        }),
+        },
       });
 
-      if (response.ok) {
-        const data: TestResult = await response.json();
+      // Map the response to our internal TestResult format
+      const result: TestResult = {
+        success: data.success,
+        message: data.message || (data.success ? 'Session test passed' : 'Session test failed'),
+        error: data.error,
+        details: data.sessionId ? { sessionId: data.sessionId } : undefined,
+      };
 
-        setTestResult(data);
+      setTestResult(result);
 
-        // Call the callback when test completes
-        if (onTestComplete) {
-          onTestComplete(data.success);
-        }
-      } else {
-        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-        setTestResult({
-          success: false,
-          message:
-            errorData.message || errorData.error || `Test failed with status: ${response.status}`,
-          reason: errorData.error || errorData.reason,
-          details: errorData.details,
-        });
-
-        // Call the callback with failure
-        if (onTestComplete) {
-          onTestComplete(false);
-        }
+      // Call the callback when test completes
+      if (onTestComplete) {
+        onTestComplete(data.success);
       }
     } catch (error) {
+      let errorMessage = 'Unknown error';
+      let errorDetails: TestResult['details'] | undefined;
+
+      if (error instanceof ApiRequestError) {
+        errorMessage = error.message;
+        // Try to extract details from the error response
+        const errorData = error.responseData as Record<string, unknown> | undefined;
+        if (errorData?.details) {
+          errorDetails = errorData.details as TestResult['details'];
+        }
+      } else if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+
       setTestResult({
         success: false,
-        message: `Test failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        message: `Test failed: ${errorMessage}`,
+        details: errorDetails,
       });
 
       // Call the callback with failure

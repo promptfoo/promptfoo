@@ -1,11 +1,12 @@
 import { useCallback } from 'react';
 
-import { callApi } from '@app/utils/api';
+import { ApiRequestError, callApiTyped } from '@app/utils/apiClient';
 import type { Trace } from '@app/components/traces/TraceView';
 import type {
   ReplayEvaluationParams,
   ReplayEvaluationResult,
 } from '@app/pages/eval/components/EvalOutputPromptDialog';
+import type { GetTracesByEvaluationResponse, ReplayResponse } from '@promptfoo/dtos';
 
 /**
  * Custom hook that provides eval-related API operations.
@@ -15,20 +16,10 @@ export function useEvalOperations() {
   const replayEvaluation = useCallback(
     async (params: ReplayEvaluationParams): Promise<ReplayEvaluationResult> => {
       try {
-        const response = await callApi('/eval/replay', {
+        const data = await callApiTyped<ReplayResponse>('/eval/replay', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(params),
+          body: params,
         });
-
-        if (!response.ok) {
-          const error = await response.text();
-          return { error: error || 'Failed to replay evaluation' };
-        }
-
-        const data = await response.json();
 
         if (data.error) {
           return { error: `Provider error: ${data.error}` };
@@ -36,6 +27,9 @@ export function useEvalOperations() {
 
         return { output: data.output || undefined };
       } catch (error) {
+        if (error instanceof ApiRequestError) {
+          return { error: error.body || 'Failed to replay evaluation' };
+        }
         return { error: error instanceof Error ? error.message : 'An error occurred' };
       }
     },
@@ -43,15 +37,9 @@ export function useEvalOperations() {
   );
 
   const fetchTraces = useCallback(async (evalId: string, signal: AbortSignal): Promise<Trace[]> => {
-    const response = await callApi(`/traces/evaluation/${evalId}`, {
+    const data = await callApiTyped<GetTracesByEvaluationResponse>(`/traces/evaluation/${evalId}`, {
       signal,
     });
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    const data = await response.json();
     return Array.isArray(data.traces) ? data.traces : [];
   }, []);
 

@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
 
-import { callApi } from '@app/utils/api';
+import { callApiTyped } from '@app/utils/apiClient';
 import InfoIcon from '@mui/icons-material/Info';
 import Alert from '@mui/material/Alert';
 import Link from '@mui/material/Link';
+import type { CheckShareDomainResponse } from '@promptfoo/dtos';
 
 interface EnterpriseBannerProps {
   evalId?: string;
@@ -28,15 +29,10 @@ const EnterpriseBanner = ({ evalId, sx }: EnterpriseBannerProps) => {
           return;
         }
 
-        const response = await callApi(`/results/share/check-domain?id=${evalId}`);
-
-        if (response.ok) {
-          const data = await response.json();
-          setIsCloudEnabled(data.isCloudEnabled);
-        } else {
-          // If we can't check, default to showing the banner
-          setIsCloudEnabled(false);
-        }
+        const data = await callApiTyped<CheckShareDomainResponse>(
+          `/results/share/check-domain?id=${evalId}`,
+        );
+        setIsCloudEnabled(data.isCloudEnabled);
       } catch (error) {
         console.error('Error checking cloud status:', error);
         setIsCloudEnabled(false);

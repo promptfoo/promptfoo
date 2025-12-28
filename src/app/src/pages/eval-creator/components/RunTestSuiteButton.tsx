@@ -3,8 +3,9 @@ import { useState } from 'react';
 import { Button } from '@app/components/ui/button';
 import { Spinner } from '@app/components/ui/spinner';
 import { useStore } from '@app/stores/evalConfig';
-import { callApi } from '@app/utils/api';
+import { callApiTyped } from '@app/utils/apiClient';
 import { useNavigate } from 'react-router-dom';
+import type { CreateJobResponse, GetJobResponse } from '@promptfoo/dtos';
 
 const RunTestSuiteButton = () => {
   const navigate = useNavigate();
@@ -48,30 +49,14 @@ const RunTestSuiteButton = () => {
     };
 
     try {
-      const response = await callApi('/eval/job', {
+      const job = await callApiTyped<CreateJobResponse>('/eval/job', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(testSuite),
+        body: testSuite,
       });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const job = await response.json();
 
       const intervalId = setInterval(async () => {
         try {
-          const progressResponse = await callApi(`/eval/job/${job.id}/`);
-
-          if (!progressResponse.ok) {
-            clearInterval(intervalId);
-            throw new Error(`HTTP error! status: ${progressResponse.status}`);
-          }
-
-          const progressData = await progressResponse.json();
+          const progressData = await callApiTyped<GetJobResponse>(`/eval/job/${job.id}/`);
 
           if (progressData.status === 'complete') {
             clearInterval(intervalId);
@@ -79,11 +64,11 @@ const RunTestSuiteButton = () => {
             if (progressData.evalId) {
               navigate(`/eval/${progressData.evalId}`);
             }
-          } else if (['failed', 'error'].includes(progressData.status)) {
+          } else if (progressData.status === 'error') {
             clearInterval(intervalId);
             setIsRunning(false);
             throw new Error(progressData.logs?.join('\n') || 'Job failed');
-          } else {
+          } else if (progressData.status === 'in-progress') {
             const percent =
               progressData.total === 0
                 ? 0

@@ -7,6 +7,9 @@ import { getEnvBool } from '../envars';
 import logger from '../logger';
 import { getConfigDirectoryPath } from '../util/config/manage';
 
+// Export mappers for database row → DTO conversion
+export * from './mappers';
+
 export class DrizzleLogWriter implements LogWriter {
   write(message: string) {
     if (getEnvBool('PROMPTFOO_ENABLE_DATABASE_LOGS', false)) {

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
-import { callApi } from '@app/utils/api';
+import { callApiTyped } from '@app/utils/apiClient';
 import CheckIcon from '@mui/icons-material/Check';
 import FileCopyIcon from '@mui/icons-material/FileCopy';
 import Button from '@mui/material/Button';
@@ -11,6 +11,7 @@ import DialogContentText from '@mui/material/DialogContentText';
 import DialogTitle from '@mui/material/DialogTitle';
 import IconButton from '@mui/material/IconButton';
 import TextField from '@mui/material/TextField';
+import type { CheckShareDomainResponse } from '@promptfoo/dtos';
 
 interface ShareModalProps {
   open: boolean;
@@ -34,35 +35,28 @@ const ShareModal = ({ open, onClose, evalId, onShare }: ShareModalProps) => {
       }
 
       try {
-        const response = await callApi(`/results/share/check-domain?id=${evalId}`);
-        const data = (await response.json()) as {
-          domain: string;
-          isCloudEnabled: boolean;
-          error?: string;
-        };
+        const data = await callApiTyped<CheckShareDomainResponse>(
+          `/results/share/check-domain?id=${evalId}`,
+        );
 
-        if (response.ok) {
-          const isPublicDomain = data.domain.includes('promptfoo.app');
-          if (isPublicDomain && !data.isCloudEnabled) {
-            setShowNeedsSignup(true);
-            return;
-          }
+        const isPublicDomain = data.domain.includes('promptfoo.app');
+        if (isPublicDomain && !data.isCloudEnabled) {
+          setShowNeedsSignup(true);
+          return;
+        }
 
-          // If it's not a public domain or we already have a URL, no need to generate
-          if (!shareUrl && !error) {
-            setIsLoading(true);
-            try {
-              const url = await onShare(evalId);
-              setShareUrl(url);
-            } catch (error) {
-              console.error('Failed to generate share URL:', error);
-              setError('Failed to generate share URL');
-            } finally {
-              setIsLoading(false);
-            }
+        // If it's not a public domain or we already have a URL, no need to generate
+        if (!shareUrl && !error) {
+          setIsLoading(true);
+          try {
+            const url = await onShare(evalId);
+            setShareUrl(url);
+          } catch (error) {
+            console.error('Failed to generate share URL:', error);
+            setError('Failed to generate share URL');
+          } finally {
+            setIsLoading(false);
           }
-        } else {
-          setError(data.error || 'Failed to check share domain');
         }
       } catch (error) {
         console.error('Failed to check share domain:', error);

@@ -3,14 +3,39 @@ import { Router } from 'express';
 import { getDb } from '../../database/index';
 import { configsTable } from '../../database/tables';
 import logger from '../../logger';
+import { normalizeTimestamp } from '../../util/time';
+import { getParam, getQueryString, HttpStatus, handleRouteError, sendError } from '../middleware';
 import type { Request, Response } from 'express';
+
+import {
+  CreateConfigRequestSchema,
+  type CreateConfigResponse,
+  type GetConfigResponse,
+  type GetConfigsByTypeResponse,
+  type GetConfigsResponse,
+} from '../../dtos/configs.dto';
+import { fromZodError } from 'zod-validation-error';
+
+/**
+ * Normalizes config timestamps to epoch milliseconds.
+ * Handles legacy SQLite CURRENT_TIMESTAMP strings.
+ */
+function normalizeConfigTimestamps<
+  T extends { createdAt: string | number; updatedAt: string | number },
+>(config: T): T & { createdAt: number; updatedAt: number } {
+  return {
+    ...config,
+    createdAt: normalizeTimestamp(config.createdAt),
+    updatedAt: normalizeTimestamp(config.updatedAt),
+  };
+}
 
 export const configsRouter = Router();
 
 configsRouter.get('/', async (req: Request, res: Response): Promise<void> => {
   const db = await getDb();
   try {
-    const type = req.query.type as string;
+    const type = getQueryString(req, 'type');
     const query = db
       .select({
         id: configsTable.id,
@@ -26,22 +51,30 @@ configsRouter.get('/', async (req: Request, res: Response): Promise<void> => {
       query.where(eq(configsTable.type, type));
     }
 
-    const configs = await query;
+    const rawConfigs = await query;
+    const configs = rawConfigs.map(normalizeConfigTimestamps);
     logger.info(`Loaded ${configs.length} configs${type ? ` of type ${type}` : ''}`);
 
-    res.json({ configs });
+    const response: GetConfigsResponse = { configs };
+    res.json(response);
   } catch (error) {
-    logger.error(`Error fetching configs: ${error}`);
-    res.status(500).json({ error: 'Failed to fetch configs' });
+    handleRouteError(res, error, 'fetching configs', logger);
   }
 });
 
 configsRouter.post('/', async (req: Request, res: Response): Promise<void> => {
+  const parseResult = CreateConfigRequestSchema.safeParse(req.body);
+  if (!parseResult.success) {
+    sendError(res, HttpStatus.BAD_REQUEST, 'Invalid request body', fromZodError(parseResult.error).toString());
+    return;
+  }
+
+  const { name, type, config } = parseResult.data;
   const db = await getDb();
   try {
-    const { name, type, config } = req.body;
     const id = crypto.randomUUID();
 
+    const now = Date.now();
     const [result] = await db
       .insert(configsTable)
       .values({
@@ -49,6 +82,8 @@ configsRouter.post('/', async (req: Request, res: Response): Promise<void> => {
         name,
         type,
         config,
+        createdAt: now,
+        updatedAt: now,
       })
       .returning({
         id: configsTable.id,
@@ -57,17 +92,18 @@ configsRouter.post('/', async (req: Request, res: Response): Promise<void> => {
 
     logger.info(`Saved config ${id} of type ${type}`);
 
-    res.json(result);
+    const response: CreateConfigResponse = result;
+    res.json(response);
   } catch (error) {
-    logger.error(`Error saving config: ${error}`);
-    res.status(500).json({ error: 'Failed to save config' });
+    handleRouteError(res, error, 'saving config', logger);
   }
 });
 
 configsRouter.get('/:type', async (req: Request, res: Response): Promise<void> => {
   const db = await getDb();
+  const type = getParam(req, 'type');
   try {
-    const configs = await db
+    const rawConfigs = await db
       .select({
         id: configsTable.id,
         name: configsTable.name,
@@ -75,37 +111,40 @@ configsRouter.get('/:type', async (req: Request, res: Response): Promise<void> =
         updatedAt: configsTable.updatedAt,
       })
       .from(configsTable)
-      .where(eq(configsTable.type, req.params.type))
+      .where(eq(configsTable.type, type))
       .orderBy(configsTable.updatedAt);
 
-    logger.info(`Loaded ${configs.length} configs of type ${req.params.type}`);
+    const configs = rawConfigs.map(normalizeConfigTimestamps);
+    logger.info(`Loaded ${configs.length} configs of type ${type}`);
 
-    res.json({ configs });
+    const response: GetConfigsByTypeResponse = { configs };
+    res.json(response);
   } catch (error) {
-    logger.error(`Error fetching configs: ${error}`);
-    res.status(500).json({ error: 'Failed to fetch configs' });
+    handleRouteError(res, error, 'fetching configs', logger);
   }
 });
 
 configsRouter.get('/:type/:id', async (req: Request, res: Response): Promise<void> => {
   const db = await getDb();
+  const type = getParam(req, 'type');
+  const id = getParam(req, 'id');
   try {
-    const config = await db
+    const rawConfig = await db
       .select()
       .from(configsTable)
-      .where(and(eq(configsTable.type, req.params.type), eq(configsTable.id, req.params.id)))
+      .where(and(eq(configsTable.type, type), eq(configsTable.id, id)))
       .limit(1);
 
-    logger.info(`Loaded config ${req.params.id} of type ${req.params.type}`);
+    logger.info(`Loaded config ${id} of type ${type}`);
 
-    if (!config.length) {
-      res.status(404).json({ error: 'Config not found' });
+    if (!rawConfig.length) {
+      sendError(res, HttpStatus.NOT_FOUND, 'Config not found');
       return;
     }
 
-    res.json(config[0]);
+    const config: GetConfigResponse = normalizeConfigTimestamps(rawConfig[0]);
+    res.json(config);
   } catch (error) {
-    logger.error(`Error fetching config: ${error}`);
-    res.status(500).json({ error: 'Failed to fetch config' });
+    handleRouteError(res, error, 'fetching config', logger);
   }
 });

@@ -2,6 +2,27 @@ import dedent from 'dedent';
 import { Router } from 'express';
 import { z } from 'zod';
 import { fromZodError } from 'zod-validation-error';
+import {
+  AddResultsRequestSchema,
+  CopyEvalRequestSchema,
+  type CopyEvalResponse,
+  type CreateEvalResponse,
+  type CreateJobResponse,
+  CreateEvalRequestV3Schema,
+  CreateEvalRequestV4Schema,
+  type DeleteEvalResponse,
+  type GetJobCompleteResponse,
+  type GetJobErrorResponse,
+  type GetJobInProgressResponse,
+  GetMetadataKeysQuerySchema,
+  type GetMetadataKeysResponse,
+  GetMetadataValuesQuerySchema,
+  type GetMetadataValuesResponse,
+  type ReplayResponse,
+  UpdateAuthorRequestSchema,
+  type UpdateAuthorResponse,
+  type UpdateEvalResponse,
+} from '../../dtos/eval.dto';
 import { getUserEmail, setUserEmail } from '../../globalConfig/accounts';
 import promptfoo from '../../index';
 import logger from '../../logger';
@@ -10,7 +31,6 @@ import EvalResult from '../../models/evalResult';
 import { EvalResultsFilterMode } from '../../types/index';
 import { deleteEval, deleteEvals, updateResult, writeResultsToDatabase } from '../../util/database';
 import invariant from '../../util/invariant';
-import { ApiSchemas } from '../apiSchemas';
 import { setDownloadHeaders } from '../utils/downloadHelpers';
 import { evalTableToCsv, evalTableToJson } from '../utils/evalTableUtils';
 import type { Request, Response } from 'express';
@@ -22,8 +42,9 @@ import type {
   GradingResult,
   Job,
   PromptMetrics,
-  ResultsFile,
 } from '../../index';
+
+import { toEvalResults, toResultsFile, toPrompts, toEvalConfig, toCompletedPrompts } from './evalConverters';
 
 export const evalRouter = Router();
 
@@ -80,7 +101,8 @@ evalRouter.post('/job', (req: Request, res: Response): void => {
       job.logs = [String(error)];
     });
 
-  res.json({ id });
+  const response: CreateJobResponse = { id };
+  res.json(response);
 });
 
 evalRouter.get('/job/:id', (req: Request, res: Response): void => {
@@ -91,24 +113,27 @@ evalRouter.get('/job/:id', (req: Request, res: Response): void => {
     return;
   }
   if (job.status === 'complete') {
-    res.json({
+    const response: GetJobCompleteResponse = {
       status: 'complete',
       result: job.result,
       evalId: job.evalId,
       logs: job.logs,
-    });
+    };
+    res.json(response);
   } else if (job.status === 'error') {
-    res.json({
+    const response: GetJobErrorResponse = {
       status: 'error',
       logs: job.logs,
-    });
+    };
+    res.json(response);
   } else {
-    res.json({
+    const response: GetJobInProgressResponse = {
       status: 'in-progress',
       progress: job.progress,
       total: job.total,
       logs: job.logs,
-    });
+    };
+    res.json(response);
   }
 });
 
@@ -123,7 +148,8 @@ evalRouter.patch('/:id', (req: Request, res: Response): void => {
 
   try {
     updateResult(id, config, table);
-    res.json({ message: 'Eval updated successfully' });
+    const response: UpdateEvalResponse = { message: 'Eval updated successfully' };
+    res.json(response);
   } catch {
     res.status(500).json({ error: 'Failed to update eval table' });
   }
@@ -131,16 +157,12 @@ evalRouter.patch('/:id', (req: Request, res: Response): void => {
 
 evalRouter.patch('/:id/author', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { id } = ApiSchemas.Eval.UpdateAuthor.Params.parse(req.params);
-    const { author } = ApiSchemas.Eval.UpdateAuthor.Request.parse(req.body);
+    const { id } = req.params;
+    const { author } = UpdateAuthorRequestSchema.parse(req.body);
 
     const eval_ = await Eval.findById(id);
     if (!eval_) {
       res.status(404).json({ error: 'Eval not found' });
-      return;
-    }
-    if (!author) {
-      res.status(400).json({ error: 'No author provided' });
       return;
     }
 
@@ -152,11 +174,8 @@ evalRouter.patch('/:id/author', async (req: Request, res: Response): Promise<voi
       setUserEmail(author);
     }
 
-    res.json(
-      ApiSchemas.Eval.UpdateAuthor.Response.parse({
-        message: 'Author updated successfully',
-      }),
-    );
+    const response: UpdateAuthorResponse = { message: 'Author updated successfully' };
+    res.json(response);
   } catch (error) {
     if (error instanceof z.ZodError) {
       const validationError = fromZodError(error);
@@ -352,7 +371,7 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
   }
 
   // Default response for table view
-  res.json({
+  const response: EvalTableDTO = {
     table: returnTable,
     totalCount: table.totalCount,
     filteredCount: table.filteredCount,
@@ -362,13 +381,14 @@ evalRouter.get('/:id/table', async (req: Request, res: Response): Promise<void> 
     version: eval_.version(),
     id,
     stats: eval_.getStats(),
-  } as EvalTableDTO);
+  };
+  res.json(response);
 });
 
 evalRouter.get('/:id/metadata-keys', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { id } = ApiSchemas.Eval.MetadataKeys.Params.parse(req.params);
-    const { comparisonEvalIds = [] } = ApiSchemas.Eval.MetadataKeys.Query.parse(req.query);
+    const { id } = req.params;
+    const { comparisonEvalIds = [] } = GetMetadataKeysQuerySchema.parse(req.query);
 
     const eval_ = await Eval.findById(id);
     if (!eval_) {
@@ -391,8 +411,7 @@ evalRouter.get('/:id/metadata-keys', async (req: Request, res: Response): Promis
     }
 
     const keys = await EvalQueries.getMetadataKeysFromEval(id, comparisonEvalIds);
-
-    const response = ApiSchemas.Eval.MetadataKeys.Response.parse({ keys });
+    const response: GetMetadataKeysResponse = { keys };
     res.json(response);
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -410,8 +429,8 @@ evalRouter.get('/:id/metadata-keys', async (req: Request, res: Response): Promis
 
 evalRouter.get('/:id/metadata-values', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { id } = ApiSchemas.Eval.MetadataValues.Params.parse(req.params);
-    const { key } = ApiSchemas.Eval.MetadataValues.Query.parse(req.query);
+    const { id } = req.params;
+    const { key } = GetMetadataValuesQuerySchema.parse(req.query);
 
     const eval_ = await Eval.findById(id);
     if (!eval_) {
@@ -420,7 +439,7 @@ evalRouter.get('/:id/metadata-values', async (req: Request, res: Response): Prom
     }
 
     const values = EvalQueries.getMetadataValuesFromEval(id, key);
-    const response = ApiSchemas.Eval.MetadataValues.Response.parse({ values });
+    const response: GetMetadataValuesResponse = { values };
     res.json(response);
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -438,12 +457,14 @@ evalRouter.get('/:id/metadata-values', async (req: Request, res: Response): Prom
 
 evalRouter.post('/:id/results', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const results = req.body as unknown as EvalResult[];
 
-  if (!Array.isArray(results)) {
-    res.status(400).json({ error: 'Results must be an array' });
+  const parseResult = AddResultsRequestSchema.safeParse(req.body);
+  if (!parseResult.success) {
+    res.status(400).json({ error: 'Invalid results format', details: fromZodError(parseResult.error).toString() });
     return;
   }
+  const results = toEvalResults(parseResult.data);
+
   const eval_ = await Eval.findById(id);
   if (!eval_) {
     res.status(404).json({ error: 'Eval not found' });
@@ -534,11 +555,12 @@ evalRouter.post('/replay', async (req: Request, res: Response): Promise<void> =>
     }
 
     // Return both output and any error information for debugging
-    res.json({
+    const response: ReplayResponse = {
       output: output || '',
       error: firstResult?.response?.error,
       response: firstResult?.response, // Include full response for debugging
-    });
+    };
+    res.json(response);
   } catch (error) {
     logger.error(`Failed to replay evaluation: ${error}`);
     res.status(500).json({ error: 'Failed to replay evaluation' });
@@ -612,6 +634,7 @@ evalRouter.post(
     await eval_.save();
     await result.save();
 
+    // Result is an EvalResult instance - return as JSON
     res.json(result);
   },
 );
@@ -619,29 +642,48 @@ evalRouter.post(
 evalRouter.post('/', async (req: Request, res: Response): Promise<void> => {
   const body = req.body;
   try {
-    if (body.data) {
+    // Try V3 format first (with data wrapper)
+    const v3Result = CreateEvalRequestV3Schema.safeParse(body);
+    if (v3Result.success) {
       logger.debug('[POST /api/eval] Saving eval results (v3) to database');
-      const { data: payload } = req.body as { data: ResultsFile };
+      const payload = toResultsFile(v3Result.data.data);
       const id = await writeResultsToDatabase(payload.results as EvaluateSummaryV2, payload.config);
-      res.json({ id });
-    } else {
-      const incEval = body as unknown as Eval;
+      const response: CreateEvalResponse = { id };
+      res.json(response);
+      return;
+    }
+
+    // Try V4 format (direct)
+    const v4Result = CreateEvalRequestV4Schema.safeParse(body);
+    if (v4Result.success) {
+      const incEval = v4Result.data;
       logger.debug('[POST /api/eval] Saving eval results (v4) to database');
-      const eval_ = await Eval.create(incEval.config, incEval.prompts || [], {
-        author: incEval.author,
-        createdAt: new Date(incEval.createdAt),
-        results: incEval.results,
-        vars: incEval.vars,
-      });
+      const eval_ = await Eval.create(
+        toEvalConfig(incEval.config),
+        toPrompts(incEval.prompts),
+        {
+          author: incEval.author,
+          createdAt: new Date(incEval.createdAt),
+          results: toEvalResults(incEval.results),
+          vars: incEval.vars,
+        },
+      );
       if (incEval.prompts) {
-        eval_.addPrompts(incEval.prompts);
+        eval_.addPrompts(toCompletedPrompts(incEval.prompts));
       }
       logger.debug(`[POST /api/eval] Eval created with ID: ${eval_.id}`);
-
       logger.debug(`[POST /api/eval] Saved ${incEval.results.length} results to eval ${eval_.id}`);
 
-      res.json({ id: eval_.id });
+      const response: CreateEvalResponse = { id: eval_.id };
+      res.json(response);
+      return;
     }
+
+    // Neither format matched
+    res.status(400).json({
+      error: 'Invalid request format',
+      details: 'Expected either v3 format (with data wrapper) or v4 format (direct)',
+    });
   } catch (error) {
     logger.error(dedent`Failed to write eval to database:
       Error: ${error}
@@ -654,7 +696,8 @@ evalRouter.delete('/:id', async (req: Request, res: Response): Promise<void> => 
   const { id } = req.params;
   try {
     await deleteEval(id);
-    res.json({ message: 'Eval deleted successfully' });
+    const response: DeleteEvalResponse = { message: 'Eval deleted successfully' };
+    res.json(response);
   } catch (error) {
     logger.error('[DELETE /eval/:id] Failed to delete eval', {
       evalId: id,
@@ -693,8 +736,8 @@ evalRouter.delete('/', (req: Request, res: Response) => {
  */
 evalRouter.post('/:id/copy', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { id } = ApiSchemas.Eval.Copy.Params.parse(req.params);
-    const { description } = ApiSchemas.Eval.Copy.Request.parse(req.body);
+    const { id } = req.params;
+    const { description } = CopyEvalRequestSchema.parse(req.body);
 
     const sourceEval = await Eval.findById(id);
     if (!sourceEval) {
@@ -714,11 +757,10 @@ evalRouter.post('/:id/copy', async (req: Request, res: Response): Promise<void> 
       distinctTestCount,
     });
 
-    const response = ApiSchemas.Eval.Copy.Response.parse({
+    const response: CopyEvalResponse = {
       id: newEval.id,
       distinctTestCount,
-    });
-
+    };
     res.status(201).json(response);
   } catch (error) {
     if (error instanceof z.ZodError) {

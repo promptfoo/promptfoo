@@ -3,10 +3,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { DataTable } from '@app/components/data-table/data-table';
 import { Badge } from '@app/components/ui/badge';
 import { cn } from '@app/lib/utils';
-import { callApi } from '@app/utils/api';
+import { callApiTyped } from '@app/utils/apiClient';
 import { formatDataGridDate } from '@app/utils/date';
 import { formatASRForDisplay } from '@app/utils/redteam';
 import { Link } from 'react-router-dom';
+import type { GetResultsResponse } from '@promptfoo/dtos';
 import type { EvalSummary } from '@promptfoo/types';
 import type { ColumnDef } from '@tanstack/react-table';
 
@@ -42,15 +43,14 @@ export default function ReportsTable({ onReportSelected }: ReportsTableProps) {
   const fetchReports = useCallback(async (signal: AbortSignal) => {
     try {
       setIsLoading(true);
-      const response = await callApi('/results?type=redteam&includeProviders=true', {
-        cache: 'no-store',
-        signal,
-      });
-      if (!response.ok) {
-        throw new Error(`${response.status}: ${response.statusText}`);
-      }
-      const body = (await response.json()) as { data: EvalSummary[] };
-      setReports(body.data);
+      const data = await callApiTyped<GetResultsResponse>(
+        '/results?type=redteam&includeProviders=true',
+        {
+          cache: 'no-store',
+          signal,
+        },
+      );
+      setReports(data.data as unknown as EvalSummary[]);
       setError(null);
     } catch (err) {
       if ((err as Error).name !== 'AbortError') {

@@ -1,5 +1,6 @@
-import { callApi, fetchUserId } from '@app/utils/api';
+import { callApiTyped } from '@app/utils/apiClient';
 import { create } from 'zustand';
+import type { GetUserEmailResponse, GetUserIdResponse, LogoutResponse } from '@promptfoo/dtos';
 
 interface UserState {
   email: string | null;
@@ -25,13 +26,8 @@ export const useUserStore = create<UserState>((set, getState) => ({
       return;
     }
     try {
-      const response = await callApi('/user/email', { cache: 'no-store' });
-      if (response.ok) {
-        const data = await response.json();
-        set({ email: data.email, isLoading: false });
-      } else {
-        throw new Error('Failed to fetch user email');
-      }
+      const data = await callApiTyped<GetUserEmailResponse>('/user/email', { cache: 'no-store' });
+      set({ email: data.email, isLoading: false });
     } catch (error) {
       console.error('Error fetching user email:', error);
       set({ email: null, isLoading: false });
@@ -42,8 +38,8 @@ export const useUserStore = create<UserState>((set, getState) => ({
       return;
     }
     try {
-      const userId = await fetchUserId();
-      set({ userId: userId || null });
+      const data = await callApiTyped<GetUserIdResponse>('/user/id');
+      set({ userId: data.id || null });
     } catch (error) {
       console.error('Error fetching user ID:', error);
       set({ userId: null });
@@ -51,20 +47,8 @@ export const useUserStore = create<UserState>((set, getState) => ({
   },
   logout: async () => {
     try {
-      const response = await callApi('/user/logout', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (response.ok) {
-        set({ email: null, userId: null, isLoading: false });
-      } else {
-        console.error('Logout failed');
-        // Clear local state even if logout API call fails
-        set({ email: null, userId: null, isLoading: false });
-      }
+      await callApiTyped<LogoutResponse>('/user/logout', { method: 'POST' });
+      set({ email: null, userId: null, isLoading: false });
     } catch (error) {
       console.error('Error during logout:', error);
       // Clear local state even if API call fails

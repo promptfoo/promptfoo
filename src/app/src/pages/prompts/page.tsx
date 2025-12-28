@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 
 import { usePageMeta } from '@app/hooks/usePageMeta';
-import { callApi } from '@app/utils/api';
+import { callApiTyped } from '@app/utils/apiClient';
 import ErrorBoundary from '../../components/ErrorBoundary';
 import Prompts from './Prompts';
+import type { GetPromptsResponse } from '@promptfoo/dtos';
 import type { ServerPromptWithMetadata } from '@promptfoo/types';
 
 interface PromptsPageProps {
@@ -20,10 +21,9 @@ function PromptsPageContent({ showDatasetColumn = true }: PromptsPageProps) {
       setIsLoading(true);
       setError(null);
       try {
-        const response = await callApi('/prompts');
-        const data = await response.json();
+        const data = await callApiTyped<GetPromptsResponse>('/prompts');
         if (data?.data) {
-          setPrompts(data.data);
+          setPrompts(data.data as ServerPromptWithMetadata[]);
         }
       } catch (error) {
         setError('Failed to load prompts. Please try again.');

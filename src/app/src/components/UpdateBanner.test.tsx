@@ -22,9 +22,11 @@ describe('UpdateBanner', () => {
         updateCommands: {
           primary: 'npm i -g promptfoo@latest',
           alternative: null,
+          commandType: 'npm',
         },
         commandType: 'npm',
         isNpx: false,
+        selfHosted: false,
       },
       loading: false,
       error: null,
@@ -59,9 +61,11 @@ describe('UpdateBanner', () => {
         updateCommands: {
           primary: 'npm i -g promptfoo@latest',
           alternative: null,
+          commandType: 'npm',
         },
         commandType: 'npm',
         isNpx: false,
+        selfHosted: false,
       },
       loading: false,
       error: null,
@@ -97,9 +101,11 @@ describe('UpdateBanner', () => {
         updateCommands: {
           primary: 'npm i -g promptfoo@latest',
           alternative: null,
+          commandType: 'npm',
         },
         commandType: 'npm',
         isNpx: false,
+        selfHosted: false,
       },
       loading: false,
       error: null,
@@ -128,7 +134,8 @@ describe('UpdateBanner', () => {
   });
 
   it('should render the copy command button with default text when commandType is undefined', () => {
-    const mockVersionCheckResult: ReturnType<typeof useVersionCheck> = {
+    // Test defensive handling of undefined commandType (edge case for unexpected API data)
+    const mockVersionCheckResult = {
       versionInfo: {
         updateAvailable: true,
         latestVersion: '2.0.0',
@@ -136,15 +143,17 @@ describe('UpdateBanner', () => {
         updateCommands: {
           primary: 'npm i -g promptfoo@latest',
           alternative: null,
+          commandType: undefined,
         },
         commandType: undefined,
         isNpx: false,
+        selfHosted: false,
       },
       loading: false,
       error: null,
       dismissed: false,
       dismiss: vi.fn(),
-    };
+    } as unknown as ReturnType<typeof useVersionCheck>;
     mockUseVersionCheck.mockReturnValue(mockVersionCheckResult);
 
     render(<UpdateBanner />);
@@ -154,7 +163,8 @@ describe('UpdateBanner', () => {
   });
 
   it('should render with default command text when commandType is null', () => {
-    const mockVersionCheckResult: ReturnType<typeof useVersionCheck> = {
+    // Test defensive handling of null commandType (edge case for unexpected API data)
+    const mockVersionCheckResult = {
       versionInfo: {
         updateAvailable: true,
         latestVersion: '2.0.0',
@@ -162,15 +172,17 @@ describe('UpdateBanner', () => {
         updateCommands: {
           primary: 'npm i -g promptfoo@latest',
           alternative: null,
+          commandType: undefined,
         },
         commandType: undefined,
         isNpx: false,
+        selfHosted: false,
       },
       loading: false,
       error: null,
       dismissed: false,
       dismiss: vi.fn(),
-    };
+    } as unknown as ReturnType<typeof useVersionCheck>;
     mockUseVersionCheck.mockReturnValue(mockVersionCheckResult);
 
     render(<UpdateBanner />);

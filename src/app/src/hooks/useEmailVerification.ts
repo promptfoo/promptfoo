@@ -1,14 +1,19 @@
 import { useCallback, useState } from 'react';
 
-import { callApi } from '@app/utils/api';
-import { EmailValidationStatus, UserEmailStatus } from '../../../types/email';
+import { ApiRequestError, callApiTyped } from '@app/utils/apiClient';
+import { EmailValidationStatus } from '@promptfoo/types/email';
+import type {
+  ClearUserEmailResponse,
+  GetEmailStatusResponse,
+  UpdateUserEmailRequest,
+  UpdateUserEmailResponse,
+} from '@promptfoo/dtos';
 
-interface EmailStatus {
-  hasEmail: boolean;
-  email?: string;
-  status: UserEmailStatus;
-  message?: string;
-}
+/**
+ * Email status response from the API.
+ * Re-exported from shared DTOs for convenience.
+ */
+export type EmailStatus = GetEmailStatusResponse;
 
 interface EmailVerificationResult {
   canProceed: boolean;
@@ -24,9 +29,8 @@ export function useEmailVerification() {
     async (options?: { validate?: boolean }): Promise<EmailVerificationResult> => {
       setIsChecking(true);
       try {
-        const validateParam = options?.validate ? '&validate=true' : '';
-        const response = await callApi(`/user/email/status?${validateParam}`);
-        const status: EmailStatus = await response.json();
+        const validateParam = options?.validate ? 'validate=true' : '';
+        const status = await callApiTyped<EmailStatus>(`/user/email/status?${validateParam}`);
 
         if (!status.hasEmail) {
           return {
@@ -82,41 +86,42 @@ export function useEmailVerification() {
 
   const saveEmail = useCallback(async (email: string): Promise<{ error?: string }> => {
     try {
-      // First set the email
-      const emailResponse = await callApi('/user/email', {
+      const body: UpdateUserEmailRequest = { email };
+      await callApiTyped<UpdateUserEmailResponse>('/user/email', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email }),
+        body,
       });
-
-      if (!emailResponse.ok) {
-        const errorData = await emailResponse.json();
-        return { error: errorData.error || 'Failed to set email' };
-      }
-
       return {};
     } catch (error) {
       console.error('Error setting email:', error);
+      if (error instanceof ApiRequestError && error.body) {
+        try {
+          const errorData = JSON.parse(error.body);
+          return { error: errorData.error || 'Failed to set email' };
+        } catch {
+          // Failed to parse error body
+        }
+      }
       return { error: `Failed to set email: ${error}` };
     }
   }, []);
 
   const clearEmail = useCallback(async (): Promise<{ error?: string }> => {
     try {
-      const emailResponse = await callApi('/user/email/clear', {
+      await callApiTyped<ClearUserEmailResponse>('/user/email/clear', {
         method: 'PUT',
       });
-
-      if (!emailResponse.ok) {
-        const errorData = await emailResponse.json();
-        return { error: errorData.error || 'Failed to clear email' };
-      }
-
       return {};
     } catch (error) {
       console.error('Error clearing email:', error);
+      if (error instanceof ApiRequestError && error.body) {
+        try {
+          const errorData = JSON.parse(error.body);
+          return { error: errorData.error || 'Failed to clear email' };
+        } catch {
+          // Failed to parse error body
+        }
+      }
       return { error: `Failed to clear email: ${error}` };
     }
   }, []);

@@ -1,3 +1,11 @@
+import {
+  type CloudApp,
+  CloudMeResponseSchema,
+  type CloudOrganization,
+  type CloudTeam,
+  type CloudUser,
+  validateCloudResponseSafe,
+} from '../dtos/cloud.dto';
 import { getEnvString } from '../envars';
 import logger from '../logger';
 import { readGlobalConfig, writeGlobalConfigPartial } from './globalConfig';
@@ -6,33 +14,8 @@ export const CLOUD_API_HOST = 'https://api.promptfoo.app';
 
 export const API_HOST = getEnvString('API_HOST', CLOUD_API_HOST);
 
-interface CloudUser {
-  id: string;
-  name: string;
-  email: string;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-interface CloudOrganization {
-  id: string;
-  name: string;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-interface CloudTeam {
-  id: string;
-  name: string;
-  slug: string;
-  organizationId: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-interface CloudApp {
-  url: string;
-}
+// Re-export types for backwards compatibility
+export type { CloudUser, CloudOrganization, CloudApp, CloudTeam };
 
 export class CloudConfig {
   private config: {
@@ -138,7 +121,18 @@ export class CloudConfig {
         throw new Error('Failed to validate API token: ' + response.statusText);
       }
 
-      const { user, organization, app } = await response.json();
+      const rawData = await response.json();
+      // Validate the response matches expected shape
+      const validationResult = validateCloudResponseSafe(rawData, CloudMeResponseSchema);
+      if (!validationResult.success) {
+        logger.warn(`[Cloud] API response validation warning: ${validationResult.error}`);
+        // Continue with raw data for backwards compatibility, but log the warning
+      }
+
+      // Use validated data if available, otherwise fall back to raw data
+      const { user, organization, app } = validationResult.success
+        ? validationResult.data
+        : rawData;
       this.setApiKey(token);
       this.setApiHost(apiHost);
       this.setAppUrl(app.url);
@@ -200,7 +194,7 @@ export class CloudConfig {
     this.saveConfig();
   }
 
-  cacheTeams(teams: CloudTeam[], organizationId?: string): void {
+  cacheTeams(teams: Pick<CloudTeam, 'id' | 'name' | 'slug'>[], organizationId?: string): void {
     if (organizationId) {
       if (!this.config.teams) {
         this.config.teams = {};

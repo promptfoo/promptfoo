@@ -9,6 +9,8 @@ import logger from '../../logger';
 import { getMediaStorage, mediaExists, retrieveMedia } from '../../storage';
 import type { Request, Response } from 'express';
 
+import type { GetMediaInfoResponse, GetMediaStatsResponse } from '../../dtos/media.dto';
+
 export const mediaRouter = express.Router();
 
 const ALLOWED_MEDIA_TYPES = new Set(['audio', 'image', 'video']);
@@ -26,23 +28,25 @@ mediaRouter.get('/stats', async (_req: Request, res: Response): Promise<void> =>
   try {
     const storage = getMediaStorage();
 
-    // LocalFileSystemProvider has a getStats method
-    if ('getStats' in storage && typeof storage.getStats === 'function') {
-      const stats = (storage as any).getStats();
-      res.json({
+    // Some storage providers (e.g., LocalFileSystemProvider) implement getStats
+    if (storage.getStats) {
+      const stats = storage.getStats();
+      const response: GetMediaStatsResponse = {
         success: true,
         data: {
           providerId: storage.providerId,
           ...stats,
         },
-      });
+      };
+      res.json(response);
     } else {
-      res.json({
+      const response: GetMediaStatsResponse = {
         success: true,
         data: {
           providerId: storage.providerId,
         },
-      });
+      };
+      res.json(response);
     }
   } catch (error) {
     logger.error('[Media API] Error getting storage stats', { error });
@@ -72,14 +76,20 @@ mediaRouter.get('/info/:type/:filename', async (req: Request, res: Response): Pr
     const storage = getMediaStorage();
     const url = await storage.getUrl(key);
 
-    res.json({
+    if (!url) {
+      res.status(500).json({ error: 'Failed to get media URL' });
+      return;
+    }
+
+    const response: GetMediaInfoResponse = {
       success: true,
       data: {
         key,
         exists: true,
         url,
       },
-    });
+    };
+    res.json(response);
   } catch (error) {
     logger.error('[Media API] Error getting media info', { error });
     res.status(500).json({ error: 'Failed to get media info' });

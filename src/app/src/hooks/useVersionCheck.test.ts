@@ -1,13 +1,21 @@
-import { callApi } from '@app/utils/api';
+import { ApiRequestError, callApiTyped } from '@app/utils/apiClient';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useVersionCheck } from './useVersionCheck';
 
-vi.mock('@app/utils/api', () => ({
-  callApi: vi.fn(),
-  fetchUserEmail: vi.fn(() => Promise.resolve('test@example.com')),
-  fetchUserId: vi.fn(() => Promise.resolve('test-user-id')),
-  updateEvalAuthor: vi.fn(() => Promise.resolve({})),
+vi.mock('@app/utils/apiClient', () => ({
+  callApiTyped: vi.fn(),
+  ApiRequestError: class extends Error {
+    constructor(
+      public readonly route: string,
+      public readonly status: number,
+      public readonly statusText: string,
+      public readonly body?: string,
+    ) {
+      super(`API request failed for ${route}: ${status} ${statusText}`);
+      this.name = 'ApiRequestError';
+    }
+  },
 }));
 
 describe('useVersionCheck', () => {
@@ -41,13 +49,12 @@ describe('useVersionCheck', () => {
       updateCommands: {
         primary: 'npm i -g promptfoo@latest',
         alternative: 'npx promptfoo@latest',
+        commandType: 'npm' as const,
       },
+      commandType: 'npm' as const,
     };
 
-    vi.mocked(callApi).mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve(mockVersionInfo),
-    } as Response);
+    vi.mocked(callApiTyped).mockResolvedValue(mockVersionInfo);
 
     const { result } = renderHook(() => useVersionCheck());
 
@@ -57,8 +64,8 @@ describe('useVersionCheck', () => {
 
     expect(result.current.versionInfo).toEqual(mockVersionInfo);
     expect(result.current.error).toBeNull();
-    expect(callApi).toHaveBeenCalledTimes(1);
-    expect(callApi).toHaveBeenCalledWith('/version');
+    expect(callApiTyped).toHaveBeenCalledTimes(1);
+    expect(callApiTyped).toHaveBeenCalledWith('/version');
   });
 
   it('should set dismissed=true if the latest version matches the value in localStorage', async () => {
@@ -71,16 +78,15 @@ describe('useVersionCheck', () => {
       updateCommands: {
         primary: 'npm i -g promptfoo@latest',
         alternative: 'npx promptfoo@latest',
+        commandType: 'npm' as const,
       },
+      commandType: 'npm' as const,
     };
     const STORAGE_KEY = 'promptfoo:update:dismissedVersion';
 
     localStorage.setItem(STORAGE_KEY, mockVersionInfo.latestVersion);
 
-    vi.mocked(callApi).mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve(mockVersionInfo),
-    } as Response);
+    vi.mocked(callApiTyped).mockResolvedValue(mockVersionInfo);
 
     const { result } = renderHook(() => useVersionCheck());
 
@@ -101,13 +107,12 @@ describe('useVersionCheck', () => {
       updateCommands: {
         primary: 'npm i -g promptfoo@latest',
         alternative: 'npx promptfoo@latest',
+        commandType: 'npm' as const,
       },
+      commandType: 'npm' as const,
     };
 
-    vi.mocked(callApi).mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve(mockVersionInfo),
-    } as Response);
+    vi.mocked(callApiTyped).mockResolvedValue(mockVersionInfo);
 
     const setItemSpy = vi.spyOn(Storage.prototype, 'setItem');
 
@@ -138,13 +143,12 @@ describe('useVersionCheck', () => {
       updateCommands: {
         primary: 'npm i -g promptfoo@latest',
         alternative: 'npx promptfoo@latest',
+        commandType: 'npm' as const,
       },
+      commandType: 'npm' as const,
     };
 
-    vi.mocked(callApi).mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve(mockVersionInfo),
-    } as Response);
+    vi.mocked(callApiTyped).mockResolvedValue(mockVersionInfo);
 
     const { result, rerender } = renderHook(() => useVersionCheck());
 
@@ -152,18 +156,18 @@ describe('useVersionCheck', () => {
       expect(result.current.loading).toBe(false);
     });
 
-    expect(callApi).toHaveBeenCalledTimes(1);
+    expect(callApiTyped).toHaveBeenCalledTimes(1);
 
     rerender();
 
     // Wait a short time to ensure no additional calls are made
     await new Promise((resolve) => setTimeout(resolve, 50));
 
-    expect(callApi).toHaveBeenCalledTimes(1);
+    expect(callApiTyped).toHaveBeenCalledTimes(1);
   });
 
   it('should handle network errors by setting loading=false and populating the error state', async () => {
-    vi.mocked(callApi).mockRejectedValue(new Error('Network error'));
+    vi.mocked(callApiTyped).mockRejectedValue(new Error('Network error'));
 
     const { result } = renderHook(() => useVersionCheck());
 
@@ -174,7 +178,28 @@ describe('useVersionCheck', () => {
     expect(result.current.loading).toBe(false);
     expect(result.current.error).toBeInstanceOf(Error);
     expect(result.current.error?.message).toBe('Network error');
-    expect(callApi).toHaveBeenCalledTimes(1);
-    expect(callApi).toHaveBeenCalledWith('/version');
+    expect(callApiTyped).toHaveBeenCalledTimes(1);
+    expect(callApiTyped).toHaveBeenCalledWith('/version');
+  });
+
+  it('should handle non-OK HTTP responses by setting error state', async () => {
+    // callApiTyped throws ApiRequestError for non-OK responses
+    const error = new ApiRequestError('/version', 500, 'Internal Server Error');
+    vi.mocked(callApiTyped).mockRejectedValue(error);
+
+    const { result } = renderHook(() => useVersionCheck());
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    expect(result.current.loading).toBe(false);
+    expect(result.current.error).toBeInstanceOf(Error);
+    expect(result.current.error?.message).toBe(
+      'API request failed for /version: 500 Internal Server Error',
+    );
+    expect(result.current.versionInfo).toBeNull();
+    expect(callApiTyped).toHaveBeenCalledTimes(1);
+    expect(callApiTyped).toHaveBeenCalledWith('/version');
   });
 });

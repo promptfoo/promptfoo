@@ -19,7 +19,16 @@ import { getAvailableProviders } from '../config/serverConfig';
 import type { Request, Response } from 'express';
 import type { ZodError } from 'zod';
 
-import type { ProviderOptions, ProviderTestResponse } from '../../types/providers';
+import {
+  HttpGeneratorRequestSchema,
+  type GetConfigStatusResponse,
+  type GetProvidersResponse,
+  type TestProviderResponse,
+  type TestRequestTransformResponse,
+  type TestResponseTransformResponse,
+  type TestSessionResponse,
+} from '../../dtos/providers.dto';
+import type { ProviderOptions } from '../../types/providers';
 
 export const providersRouter = Router();
 
@@ -42,10 +51,11 @@ providersRouter.get('/', (_req: Request, res: Response): void => {
     const providers = serverProviders.length > 0 ? serverProviders : defaultProviders;
     const hasCustomConfig = serverProviders.length > 0;
 
-    res.json({
+    const response: GetProvidersResponse = {
       success: true,
       data: { providers, hasCustomConfig },
-    });
+    };
+    res.json(response);
   } catch (error) {
     logger.error('[GET /api/providers] Error loading providers', { error });
     res.status(500).json({
@@ -72,10 +82,11 @@ providersRouter.get('/config-status', (_req: Request, res: Response): void => {
     const serverProviders = getAvailableProviders();
     const hasCustomConfig = serverProviders.length > 0;
 
-    res.json({
+    const response: GetConfigStatusResponse = {
       success: true,
       data: { hasCustomConfig },
-    });
+    };
+    res.json(response);
   } catch (error) {
     logger.error('[GET /api/providers/config-status] Error loading config status', { error });
     res.status(500).json({
@@ -128,7 +139,7 @@ providersRouter.post('/test', async (req: Request, res: Response): Promise<void>
   // Use refactored function with optional prompt
   const result = await testProviderConnectivity(loadedProvider, payload.prompt);
 
-  res.status(200).json({
+  const response: TestProviderResponse = {
     testResult: {
       success: result.success,
       message: result.message,
@@ -139,7 +150,8 @@ providersRouter.post('/test', async (req: Request, res: Response): Promise<void>
     },
     providerResponse: result.providerResponse,
     transformedRequest: result.transformedRequest,
-  } as ProviderTestResponse);
+  };
+  res.status(200).json(response);
 });
 
 providersRouter.post(
@@ -188,13 +200,13 @@ providersRouter.post(
 );
 
 providersRouter.post('/http-generator', async (req: Request, res: Response): Promise<void> => {
-  const { requestExample, responseExample } = req.body;
-
-  if (!requestExample) {
-    res.status(400).json({ error: 'Request example is required' });
+  const parseResult = HttpGeneratorRequestSchema.safeParse(req.body);
+  if (!parseResult.success) {
+    res.status(400).json({ error: fromZodError(parseResult.error).toString() });
     return;
   }
 
+  const { requestExample, responseExample } = parseResult.data;
   const HOST = getEnvString('PROMPTFOO_CLOUD_API_URL', 'https://api.promptfoo.app');
 
   try {
@@ -263,20 +275,22 @@ providersRouter.post(
 
       // Check if result is completely empty (no value at all)
       if (result === null || result === undefined) {
-        res.json({
+        const response: TestRequestTransformResponse = {
           success: false,
           error:
             'Transform returned null or undefined. Check your transform function. Did you forget to `return` the result?',
-        });
+        };
+        res.json(response);
         return;
       }
 
       // Return the result even if it's an empty string or other falsy value
       // as it might be intentional
-      res.json({
+      const response: TestRequestTransformResponse = {
         success: true,
         result,
-      });
+      };
+      res.json(response);
     } catch (error) {
       if (error instanceof z.ZodError) {
         res.status(400).json({
@@ -326,21 +340,23 @@ providersRouter.post(
 
       // Check if both output and raw are empty
       if (output === null || output === undefined || output === '') {
-        res.json({
+        const response: TestResponseTransformResponse = {
           success: false,
           error:
             'Transform returned empty result. Ensure that your sample response is correct, and check your extraction path or transform function are returning a valid result.',
           result: JSON.stringify(output),
-        });
+        };
+        res.json(response);
         return;
       }
 
       // If output is empty but raw has content, still return it as success
       // This handles cases where the result isn't a string but is still valid
-      res.json({
+      const response: TestResponseTransformResponse = {
         success: true,
         result: output,
-      });
+      };
+      res.json(response);
     } catch (error) {
       if (error instanceof z.ZodError) {
         res.status(400).json({
@@ -383,8 +399,7 @@ providersRouter.post('/test-session', async (req: Request, res: Response): Promi
     });
 
     // Use refactored function
-    const result = await testProviderSession(loadedProvider, sessionConfig);
-
+    const result: TestSessionResponse = await testProviderSession(loadedProvider, sessionConfig);
     res.json(result);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);

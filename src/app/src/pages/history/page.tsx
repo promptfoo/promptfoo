@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 
 import { usePageMeta } from '@app/hooks/usePageMeta';
-import { callApi } from '@app/utils/api';
+import { callApiTyped } from '@app/utils/apiClient';
 import ErrorBoundary from '../../components/ErrorBoundary';
 import History from './History';
+import type { GetHistoryResponse } from '@promptfoo/dtos';
 import type { StandaloneEval } from '@promptfoo/util/database';
 
 interface HistoryPageProps {
@@ -20,11 +21,9 @@ function HistoryPageContent({ showDatasetColumn = true }: HistoryPageProps) {
       setIsLoading(true);
       setError(null);
       try {
-        const response = await callApi(`/history`);
-        const data = await response.json();
-
+        const data = await callApiTyped<GetHistoryResponse>('/history');
         if (data?.data) {
-          setCols(data.data);
+          setCols(data.data as StandaloneEval[]);
         }
       } catch (err) {
         setError('Failed to load history data. Please try again.');

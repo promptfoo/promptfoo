@@ -6,7 +6,7 @@ import { UserProvider } from '@app/contexts/UserContext';
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
-import { callApi } from '@app/utils/api';
+import { ApiRequestError, callApiTyped } from '@app/utils/apiClient';
 import { formatDataGridDate } from '@app/utils/date';
 import AppIcon from '@mui/icons-material/Apps';
 import DownloadIcon from '@mui/icons-material/Download';
@@ -48,6 +48,11 @@ import { TestCaseGenerationProvider } from './components/TestCaseGenerationProvi
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from './hooks/useRedTeamConfig';
 import { useSetupState } from './hooks/useSetupState';
 import { generateOrderedYaml } from './utils/yamlHelpers';
+import type {
+  CreateConfigResponse,
+  GetConfigResponse,
+  GetConfigsByTypeResponse,
+} from '@promptfoo/dtos';
 import type { RedteamStrategy } from '@promptfoo/types';
 
 import './page.css';
@@ -398,35 +403,31 @@ export default function RedTeamSetupPage() {
     });
 
     try {
-      const response = await callApi('/configs', {
+      const data = await callApiTyped<CreateConfigResponse>('/configs', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+        body: {
           name: configName,
           type: 'redteam',
           config,
-        }),
+        },
       });
-      const data = await response.json();
-
-      if (data.error) {
-        throw new Error(data.error);
-      }
 
       toast.showToast('Configuration saved successfully', 'success');
       setSaveDialogOpen(false);
       lastSavedConfig.current = JSON.stringify(config);
       setHasUnsavedChanges(false);
       setConfigName(configName);
-      setConfigDate(data.createdAt);
+      setConfigDate(String(data.createdAt));
     } catch (error) {
       console.error('Failed to save configuration', error);
-      toast.showToast(
-        error instanceof Error ? error.message : 'Failed to save configuration',
-        'error',
-      );
+      let errorMessage = 'Failed to save configuration';
+      if (error instanceof ApiRequestError) {
+        const errorData = error.responseData as { error?: string } | undefined;
+        errorMessage = errorData?.error || error.message;
+      } else if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+      toast.showToast(errorMessage, 'error');
     }
 
     setHasUnsavedChanges(false);
@@ -435,43 +436,37 @@ export default function RedTeamSetupPage() {
   const loadConfigs = async () => {
     recordEvent('feature_used', { feature: 'redteam_config_load' });
     try {
-      const response = await callApi('/configs?type=redteam');
-      const data = await response.json();
-
-      if (data.error) {
-        throw new Error(data.error);
-      }
+      const data = await callApiTyped<GetConfigsByTypeResponse>('/configs?type=redteam');
 
       setHasUnsavedChanges(false);
 
       setSavedConfigs(
-        data.configs.sort(
+        (data.configs as unknown as SavedConfig[]).sort(
           (a: SavedConfig, b: SavedConfig) =>
             new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
         ),
       );
     } catch (error) {
       console.error('Failed to load configurations', error);
-      toast.showToast(
-        error instanceof Error ? error.message : 'Failed to load configurations',
-        'error',
-      );
+      let errorMessage = 'Failed to load configurations';
+      if (error instanceof ApiRequestError) {
+        const errorData = error.responseData as { error?: string } | undefined;
+        errorMessage = errorData?.error || error.message;
+      } else if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+      toast.showToast(errorMessage, 'error');
       setSavedConfigs([]);
     }
   };
 
   const handleLoadConfig = async (id: string) => {
     try {
-      const response = await callApi(`/configs/redteam/${id}`);
-      const data = await response.json();
+      const data = await callApiTyped<GetConfigResponse>(`/configs/redteam/${id}`);
 
-      if (data.error) {
-        throw new Error(data.error);
-      }
-
-      setFullConfig(data.config);
+      setFullConfig(data.config as Config);
       setConfigName(data.name);
-      setConfigDate(data.updatedAt);
+      setConfigDate(String(data.updatedAt));
       lastSavedConfig.current = JSON.stringify(data.config);
       setHasUnsavedChanges(false);
 
@@ -481,10 +476,14 @@ export default function RedTeamSetupPage() {
       window.location.reload();
     } catch (error) {
       console.error('Failed to load configuration', error);
-      toast.showToast(
-        error instanceof Error ? error.message : 'Failed to load configuration',
-        'error',
-      );
+      let errorMessage = 'Failed to load configuration';
+      if (error instanceof ApiRequestError) {
+        const errorData = error.responseData as { error?: string } | undefined;
+        errorMessage = errorData?.error || error.message;
+      } else if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+      toast.showToast(errorMessage, 'error');
     }
   };
 

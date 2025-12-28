@@ -11,6 +11,25 @@ import {
   REDTEAM_MODEL,
   type Strategy,
 } from '../../redteam/constants';
+
+// Type-safe sets for O(1) lookup
+const VALID_PLUGINS: ReadonlySet<string> = new Set(ALL_PLUGINS);
+const VALID_STRATEGIES: ReadonlySet<string> = new Set(ALL_STRATEGIES);
+
+/** Type guard for Plugin */
+function isValidPlugin(val: string): val is Plugin {
+  return VALID_PLUGINS.has(val);
+}
+
+/** Type guard for Strategy */
+function isValidStrategy(val: string): val is Strategy {
+  return VALID_STRATEGIES.has(val);
+}
+
+/** Type assertion for test cases with plugin metadata (plugins always set pluginId) */
+function asTestCasesWithPlugin(testCases: import('../../types').TestCase[]): import('../../types').TestCaseWithPlugin[] {
+  return testCases as import('../../types').TestCaseWithPlugin[];
+}
 import { PluginFactory, Plugins } from '../../redteam/plugins/index';
 import { redteamProviderManager } from '../../redteam/providers/shared';
 import { getRemoteGenerationUrl } from '../../redteam/remoteGeneration';
@@ -32,19 +51,27 @@ import {
 import { evalJobs } from './eval';
 import type { Request, Response } from 'express';
 
+import type {
+  CancelRedteamResponse,
+  GenerateTestBatchResponse,
+  GenerateTestSingleResponse,
+  GetRedteamStatusResponse,
+  RunRedteamResponse,
+} from '../../dtos/redteam.dto';
+
 export const redteamRouter = Router();
 
 const TestCaseGenerationSchema = z.object({
   plugin: z.object({
-    id: z.string().refine((val) => ALL_PLUGINS.includes(val as any), {
+    id: z.string().refine(isValidPlugin, {
       message: `Invalid plugin ID. Must be one of: ${ALL_PLUGINS.join(', ')}`,
-    }) as unknown as z.ZodType<Plugin>,
+    }),
     config: PluginConfigSchema.optional().default({}),
   }),
   strategy: z.object({
-    id: z.string().refine((val) => (ALL_STRATEGIES as string[]).includes(val), {
+    id: z.string().refine(isValidStrategy, {
       message: `Invalid strategy ID. Must be one of: ${ALL_STRATEGIES.join(', ')}`,
-    }) as unknown as z.ZodType<Strategy>,
+    }),
     config: StrategyConfigSchema.optional().default({}),
   }),
   config: z.object({
@@ -132,7 +159,7 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
         const strategyFactory = Strategies.find((s) => s.id === strategy.id) as StrategyFactory;
 
         const strategyTestCases = await strategyFactory.action(
-          testCases as any, // Cast to TestCaseWithPlugin[]
+          asTestCasesWithPlugin(testCases),
           injectVar,
           strategy.config || {},
           strategy.id,
@@ -180,11 +207,13 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
           stateful,
         });
 
-        res.json({
+        const response: GenerateTestSingleResponse = {
+          kind: 'single',
           prompt: multiTurnResult.prompt,
           context,
           metadata: multiTurnResult.metadata,
-        });
+        };
+        res.json(response);
         return;
       } catch (error) {
         if (error instanceof RemoteGenerationDisabledError) {
@@ -213,24 +242,28 @@ redteamRouter.post('/generate-test', async (req: Request, res: Response): Promis
         return { prompt, context, metadata };
       });
 
-      res.json({
+      const response: GenerateTestBatchResponse = {
+        kind: 'batch',
         testCases: batchResults,
         count: batchResults.length,
-      });
+      };
+      res.json(response);
       return;
     }
 
-    // Handle single test case response (backward compatible)
+    // Handle single test case response
     const testCase = finalTestCases[0];
     const generatedPrompt = extractGeneratedPrompt(testCase, injectVar);
     const baseMetadata =
       testCase.metadata && typeof testCase.metadata === 'object' ? testCase.metadata : {};
 
-    res.json({
+    const response: GenerateTestSingleResponse = {
+      kind: 'single',
       prompt: generatedPrompt,
       context,
       metadata: baseMetadata,
-    });
+    };
+    res.json(response);
   } catch (error) {
     logger.error(`Error generating test case: ${error}`);
     res.status(500).json({
@@ -326,7 +359,8 @@ redteamRouter.post('/run', async (req: Request, res: Response): Promise<void> =>
       }
     });
 
-  res.json({ id });
+  const response: RunRedteamResponse = { id };
+  res.json(response);
 });
 
 redteamRouter.post('/cancel', async (_req: Request, res: Response): Promise<void> => {
@@ -355,7 +389,8 @@ redteamRouter.post('/cancel', async (_req: Request, res: Response): Promise<void
   // Wait a moment to ensure cleanup
   await new Promise((resolve) => setTimeout(resolve, 100));
 
-  res.json({ message: 'Job cancelled' });
+  const response: CancelRedteamResponse = { message: 'Job cancelled' };
+  res.json(response);
 });
 
 /**
@@ -407,8 +442,9 @@ redteamRouter.post('/:taskId', async (req: Request, res: Response): Promise<void
 });
 
 redteamRouter.get('/status', async (_req: Request, res: Response): Promise<void> => {
-  res.json({
+  const response: GetRedteamStatusResponse = {
     hasRunningJob: currentJobId !== null,
     jobId: currentJobId,
-  });
+  };
+  res.json(response);
 });

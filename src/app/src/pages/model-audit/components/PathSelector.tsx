@@ -22,8 +22,9 @@ import { Input } from '@app/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@app/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
 import { cn } from '@app/lib/utils';
-import { callApi } from '@app/utils/api';
+import { callApiTyped } from '@app/utils/apiClient';
 import { useModelAuditConfigStore } from '../stores';
+import type { CheckPathResponse } from '@promptfoo/dtos';
 
 import type { ScanPath } from '../ModelAudit.types';
 
@@ -139,18 +140,15 @@ export default function PathSelector({
     setError(null);
 
     try {
-      const response = await callApi('/model-audit/check-path', {
+      const data = await callApiTyped<CheckPathResponse>('/model-audit/check-path', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: trimmedPath }),
+        body: { path: trimmedPath },
       });
-
-      const data = await response.json();
 
       if (data.exists) {
         onAddPath({
           path: trimmedPath,
-          type: data.type,
+          type: data.type || 'file',
           name: data.name || extractNameFromPath(trimmedPath),
         });
         setPathInput('');

@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 
-import { callApi } from '../utils/api';
+import { callApiTyped } from '../utils/apiClient';
+import type { GetCloudConfigResponse } from '@promptfoo/dtos';
 
-export type CloudConfigData = {
-  appUrl: string;
-  isEnabled: boolean;
-};
+/**
+ * Cloud config data type.
+ * Re-exported from shared DTOs for convenience.
+ */
+export type CloudConfigData = GetCloudConfigResponse;
 
 /**
  * Loads the current user's cloud config from the API. Useful for getting the Cloud app's URL
@@ -28,11 +30,7 @@ export default function useCloudConfig(): {
     try {
       setIsLoading(true);
       setError(null);
-      const response = await callApi('/user/cloud-config');
-      if (!response.ok) {
-        throw new Error('Failed to fetch cloud config');
-      }
-      const responseData = await response.json();
+      const responseData = await callApiTyped<CloudConfigData>('/user/cloud-config');
       setData(responseData);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';

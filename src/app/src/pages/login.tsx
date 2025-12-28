@@ -3,7 +3,7 @@ import { useActionState, useEffect, useState } from 'react';
 import logoPanda from '@app/assets/logo.svg';
 import { usePageMeta } from '@app/hooks/usePageMeta';
 import { useUserStore } from '@app/stores/userStore';
-import { callApi } from '@app/utils/api';
+import { ApiRequestError, callApiTyped } from '@app/utils/apiClient';
 // Icons
 import KeyIcon from '@mui/icons-material/Key';
 import LaunchIcon from '@mui/icons-material/Launch';
@@ -21,6 +21,7 @@ import Stack from '@mui/material/Stack';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import { useLocation, useNavigate } from 'react-router-dom';
+import type { LoginRequest, LoginResponse } from '@promptfoo/dtos';
 
 interface LoginState {
   success: boolean;
@@ -38,28 +39,29 @@ async function loginAction(_prevState: LoginState, formData: FormData): Promise<
   }
 
   try {
-    const response = await callApi('/user/login', {
+    const body: LoginRequest = {
+      apiKey: apiKey.trim(),
+      apiHost: customUrl || undefined,
+    };
+
+    const data = await callApiTyped<LoginResponse>('/user/login', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        apiKey: apiKey.trim(),
-        apiHost: customUrl || undefined,
-      }),
+      body,
     });
 
-    if (response.ok) {
-      const data = await response.json();
-      return { success: true, email: data.user.email };
+    return { success: true, email: data.user.email };
+  } catch (error) {
+    if (error instanceof ApiRequestError && error.body) {
+      try {
+        const errorData = JSON.parse(error.body);
+        return {
+          success: false,
+          error: errorData.error || 'Authentication failed. Please check your API key.',
+        };
+      } catch {
+        // Failed to parse error body
+      }
     }
-
-    const errorData = await response.json().catch(() => ({}));
-    return {
-      success: false,
-      error: errorData.error || 'Authentication failed. Please check your API key.',
-    };
-  } catch {
     return { success: false, error: 'Network error. Please check your connection and try again.' };
   }
 }

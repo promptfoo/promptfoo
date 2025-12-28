@@ -74,13 +74,16 @@ describe('TraceStore', () => {
       await traceStore.createTrace(traceData);
 
       expect(mockDb.insert).toHaveBeenCalledWith(expect.anything());
-      expect(mockDb.insert().values).toHaveBeenCalledWith({
-        id: 'test-uuid',
-        traceId: 'test-trace-id',
-        evaluationId: 'test-eval-id',
-        testCaseId: 'test-case-id',
-        metadata: { test: 'data' },
-      });
+      expect(mockDb.insert().values).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'test-uuid',
+          traceId: 'test-trace-id',
+          evaluationId: 'test-eval-id',
+          testCaseId: 'test-case-id',
+          metadata: { test: 'data' },
+          createdAt: expect.any(Number),
+        }),
+      );
       expect(mockDb.insert().values().onConflictDoNothing).toHaveBeenCalledWith(
         expect.objectContaining({
           target: expect.anything(),
@@ -213,8 +216,8 @@ describe('TraceStore', () => {
   describe('getTracesByEvaluation', () => {
     it('should retrieve all traces for an evaluation', async () => {
       const mockTraces = [
-        { id: '1', traceId: 'trace-1', evaluationId: 'eval-1' },
-        { id: '2', traceId: 'trace-2', evaluationId: 'eval-1' },
+        { id: '1', traceId: 'trace-1', evaluationId: 'eval-1', createdAt: 1704067200000 },
+        { id: '2', traceId: 'trace-2', evaluationId: 'eval-1', createdAt: 1704067200000 },
       ];
 
       const mockSpans = {
@@ -272,7 +275,7 @@ describe('TraceStore', () => {
 
   describe('getTrace', () => {
     it('should retrieve a single trace with spans', async () => {
-      const mockTrace = { id: '1', traceId: 'trace-1', evaluationId: 'eval-1' };
+      const mockTrace = { id: '1', traceId: 'trace-1', evaluationId: 'eval-1', createdAt: 1704067200000 };
       const mockSpans = [
         { id: '1', traceId: 'trace-1', spanId: 'span-1' },
         { id: '2', traceId: 'trace-1', spanId: 'span-2' },

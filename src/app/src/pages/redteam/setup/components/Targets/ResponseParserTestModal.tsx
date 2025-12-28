@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 
-import { callApi } from '@app/utils/api';
+import { ApiRequestError, callApiTyped } from '@app/utils/apiClient';
 import TransformTestDialog from './TransformTestDialog';
+import type { TestResponseTransformResponse } from '@promptfoo/dtos';
 
 interface ResponseParserTestModalProps {
   open: boolean;
@@ -28,34 +29,36 @@ const ResponseParserTestModal: React.FC<ResponseParserTestModalProps> = ({
 
   // Test handler function for response transform
   const handleTest = async (transformCode: string, testInput: string) => {
-    const response = await callApi('/providers/test-response-transform', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        transformCode,
-        response: testInput,
-      }),
-    });
+    try {
+      const data = await callApiTyped<TestResponseTransformResponse>(
+        '/providers/test-response-transform',
+        {
+          method: 'POST',
+          body: {
+            transformCode,
+            response: testInput,
+          },
+        },
+      );
 
-    if (!response.ok) {
-      const errorData = await response
-        .json()
-        .catch(() => ({ error: `Server error: ${response.status} ${response.statusText}` }));
-
+      const result = data.result as { output?: unknown } | undefined;
+      return {
+        success: data.success,
+        result: result?.output ?? data.result,
+        error: data.error,
+      };
+    } catch (err) {
+      if (err instanceof ApiRequestError) {
+        return {
+          success: false,
+          error: err.message,
+        };
+      }
       return {
         success: false,
-        error: errorData.error || 'Failed to test transform',
+        error: err instanceof Error ? err.message : 'Failed to test transform',
       };
     }
-
-    const data = await response.json();
-    return {
-      success: data.success,
-      result: data.result?.output ?? data.result,
-      error: data.error,
-    };
   };
 
   return (

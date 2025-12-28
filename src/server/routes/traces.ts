@@ -1,7 +1,10 @@
 import { Router } from 'express';
 import logger from '../../logger';
 import { getTraceStore } from '../../tracing/store';
+import { HttpStatus, sendError } from '../middleware';
 import type { Request, Response } from 'express';
+
+import type { GetTraceResponse, GetTracesByEvaluationResponse } from '../../dtos/traces.dto';
 
 export const tracesRouter = Router();
 
@@ -15,10 +18,11 @@ tracesRouter.get('/evaluation/:evaluationId', async (req: Request, res: Response
     const traces = await traceStore.getTracesByEvaluation(evaluationId);
 
     logger.debug(`[TracesRoute] Found ${traces.length} traces for evaluation ${evaluationId}`);
-    res.json({ traces });
+    const response: GetTracesByEvaluationResponse = { traces };
+    res.json(response);
   } catch (error) {
     logger.error(`[TracesRoute] Error fetching traces: ${error}`);
-    res.status(500).json({ error: 'Failed to fetch traces' });
+    sendError(res, HttpStatus.INTERNAL_SERVER_ERROR, 'Failed to fetch traces');
   }
 });
 
@@ -32,14 +36,15 @@ tracesRouter.get('/:traceId', async (req: Request, res: Response) => {
     const trace = await traceStore.getTrace(traceId);
 
     if (!trace) {
-      res.status(404).json({ error: 'Trace not found' });
+      sendError(res, HttpStatus.NOT_FOUND, 'Trace not found');
       return;
     }
 
     logger.debug(`[TracesRoute] Found trace ${traceId} with ${trace.spans?.length || 0} spans`);
-    res.json({ trace });
+    const response: GetTraceResponse = { trace };
+    res.json(response);
   } catch (error) {
     logger.error(`[TracesRoute] Error fetching trace: ${error}`);
-    res.status(500).json({ error: 'Failed to fetch trace' });
+    sendError(res, HttpStatus.INTERNAL_SERVER_ERROR, 'Failed to fetch trace');
   }
 });

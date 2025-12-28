@@ -11,6 +11,14 @@ import telemetry from '../../telemetry';
 import { parseModelAuditArgs } from '../../util/modelAuditCliParser';
 import type { Request, Response } from 'express';
 
+import type {
+  CheckInstalledResponse,
+  CheckPathResponse,
+  DeleteScanResponse,
+  GetLatestScanResponse,
+  GetScanResponse,
+  GetScansResponse,
+} from '../../dtos/modelAudit.dto';
 import type { ModelAuditScanResults } from '../../types/modelAudit';
 
 export const modelAuditRouter = Router();
@@ -20,9 +28,15 @@ modelAuditRouter.get('/check-installed', async (_req: Request, res: Response): P
   try {
     // First try to check if the modelaudit CLI is available
     const { installed, version } = await checkModelAuditInstalled();
-    res.json({ installed, version, cwd: process.cwd() });
+    const response: CheckInstalledResponse = { installed, version, cwd: process.cwd() };
+    res.json(response);
   } catch {
-    res.json({ installed: false, version: null, cwd: process.cwd() });
+    const response: CheckInstalledResponse = {
+      installed: false,
+      version: null,
+      cwd: process.cwd(),
+    };
+    res.json(response);
   }
 });
 
@@ -48,7 +62,8 @@ modelAuditRouter.post('/check-path', async (req: Request, res: Response): Promis
 
     // Check if path exists
     if (!fs.existsSync(absolutePath)) {
-      res.json({ exists: false, type: null });
+      const response: CheckPathResponse = { exists: false, type: null };
+      res.json(response);
       return;
     }
 
@@ -56,12 +71,13 @@ modelAuditRouter.post('/check-path', async (req: Request, res: Response): Promis
     const stats = fs.statSync(absolutePath);
     const type = stats.isDirectory() ? 'directory' : 'file';
 
-    res.json({
+    const response: CheckPathResponse = {
       exists: true,
       type,
       absolutePath,
       name: path.basename(absolutePath),
-    });
+    };
+    res.json(response);
   } catch (error) {
     logger.error(`Error checking path: ${error}`);
     res.status(500).json({ error: String(error) });
@@ -448,12 +464,13 @@ modelAuditRouter.get('/scans', async (req: Request, res: Response): Promise<void
     const audits = await ModelAudit.getMany(limit, offset, sort, order, search);
     const total = await ModelAudit.count(search);
 
-    res.json({
+    const response: GetScansResponse = {
       scans: audits.map((audit) => audit.toJSON()),
       total,
       limit,
       offset,
-    });
+    };
+    res.json(response);
   } catch (error) {
     logger.error(`Error fetching model audits: ${error}`);
     res.status(500).json({ error: String(error) });
@@ -472,7 +489,8 @@ modelAuditRouter.get('/scans/latest', async (_req: Request, res: Response): Prom
       return;
     }
 
-    res.json(audits[0].toJSON());
+    const response: GetLatestScanResponse = audits[0].toJSON();
+    res.json(response);
   } catch (error) {
     logger.error(`Error fetching latest model audit: ${error}`);
     res.status(500).json({ error: String(error) });
@@ -489,7 +507,8 @@ modelAuditRouter.get('/scans/:id', async (req: Request, res: Response): Promise<
       return;
     }
 
-    res.json(audit.toJSON());
+    const response: GetScanResponse = audit.toJSON();
+    res.json(response);
   } catch (error) {
     logger.error(`Error fetching model audit: ${error}`);
     res.status(500).json({ error: String(error) });
@@ -507,7 +526,11 @@ modelAuditRouter.delete('/scans/:id', async (req: Request, res: Response): Promi
     }
 
     await audit.delete();
-    res.json({ success: true, message: 'Model scan deleted successfully' });
+    const response: DeleteScanResponse = {
+      success: true,
+      message: 'Model scan deleted successfully',
+    };
+    res.json(response);
   } catch (error) {
     logger.error(`Error deleting model audit: ${error}`);
     res.status(500).json({ error: String(error) });

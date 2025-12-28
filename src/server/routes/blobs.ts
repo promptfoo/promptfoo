@@ -4,24 +4,25 @@ import { getBlobByHash, getBlobUrl } from '../../blobs';
 import { isBlobStorageEnabled } from '../../blobs/extractor';
 import { getDb } from '../../database';
 import { blobAssetsTable, blobReferencesTable } from '../../database/tables';
+import { GetBlobParamsSchema } from '../../dtos/blobs.dto';
 import logger from '../../logger';
+import { HttpStatus, sendError } from '../middleware';
 import type { Request, Response } from 'express';
 
 export const blobsRouter = express.Router();
 
-const BLOB_HASH_REGEX = /^[a-f0-9]{64}$/i;
-
 blobsRouter.get('/:hash', async (req: Request, res: Response): Promise<void> => {
   if (!isBlobStorageEnabled()) {
-    res.status(404).json({ error: 'Blob storage disabled' });
+    sendError(res, HttpStatus.NOT_FOUND, 'Blob storage disabled');
     return;
   }
 
-  const { hash } = req.params;
-  if (!BLOB_HASH_REGEX.test(hash)) {
-    res.status(400).json({ error: 'Invalid blob hash' });
+  const parsed = GetBlobParamsSchema.safeParse(req.params);
+  if (!parsed.success) {
+    sendError(res, HttpStatus.BAD_REQUEST, 'Invalid blob hash');
     return;
   }
+  const { hash } = parsed.data;
 
   const db = getDb();
   const asset = db
@@ -36,7 +37,7 @@ blobsRouter.get('/:hash', async (req: Request, res: Response): Promise<void> => 
     .get();
 
   if (!asset) {
-    res.status(404).json({ error: 'Blob not found' });
+    sendError(res, HttpStatus.NOT_FOUND, 'Blob not found');
     return;
   }
 
@@ -48,7 +49,7 @@ blobsRouter.get('/:hash', async (req: Request, res: Response): Promise<void> => 
 
   if (!reference) {
     logger.warn('[BlobRoute] Missing reference for blob access', { hash });
-    res.status(403).json({ error: 'Not authorized to access this blob' });
+    sendError(res, HttpStatus.FORBIDDEN, 'Not authorized to access this blob');
     return;
   }
 
@@ -67,6 +68,6 @@ blobsRouter.get('/:hash', async (req: Request, res: Response): Promise<void> => 
     res.send(blob.data);
   } catch (error) {
     logger.error('[BlobRoute] Failed to serve blob', { error, hash });
-    res.status(404).json({ error: 'Blob not found' });
+    sendError(res, HttpStatus.NOT_FOUND, 'Blob not found');
   }
 });

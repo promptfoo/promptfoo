@@ -128,6 +128,12 @@ export interface MediaStorageProvider {
    * @returns Storage key if found, null otherwise
    */
   findByHash(contentHash: string): Promise<string | null>;
+
+  /**
+   * Get storage statistics (optional - only implemented by some providers)
+   * @returns Stats object with file count and total size
+   */
+  getStats?(): { fileCount: number; totalSizeBytes: number };
 }
 
 /**

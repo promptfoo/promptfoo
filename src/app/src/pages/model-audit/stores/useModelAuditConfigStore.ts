@@ -1,6 +1,7 @@
-import { callApi } from '@app/utils/api';
+import { ApiRequestError, callApiTyped } from '@app/utils/apiClient';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
+import type { CheckInstalledResponse } from '@promptfoo/dtos';
 
 import type {
   InstallationStatus,
@@ -173,13 +174,10 @@ export const useModelAuditConfigStore = create<ModelAuditConfigState>()(
         }));
 
         // Create deduplicated promise
-        checkInstallationPromise = callApi('/model-audit/check-installed')
-          .then(async (response) => {
-            if (!response.ok) {
-              throw new Error('Failed to check installation');
-            }
-            const data = await response.json();
-
+        checkInstallationPromise = callApiTyped<CheckInstalledResponse>(
+          '/model-audit/check-installed',
+        )
+          .then((data) => {
             // Update installation status
             set({
               installationStatus: {
@@ -196,11 +194,17 @@ export const useModelAuditConfigStore = create<ModelAuditConfigState>()(
             console.error('Error checking ModelAudit installation:', error);
 
             // Update with error
+            const errorMessage =
+              error instanceof ApiRequestError
+                ? error.message
+                : error instanceof Error
+                  ? error.message
+                  : 'Failed to check installation';
             set({
               installationStatus: {
                 checking: false,
                 installed: false,
-                error: error.message,
+                error: errorMessage,
                 cwd: null,
               },
             });

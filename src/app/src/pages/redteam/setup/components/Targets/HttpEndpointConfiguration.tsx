@@ -4,7 +4,7 @@ import 'prismjs/components/prism-javascript';
 
 import { useCallback, useState } from 'react';
 
-import { callApi } from '@app/utils/api';
+import { ApiRequestError, callApiTyped } from '@app/utils/apiClient';
 import AddIcon from '@mui/icons-material/Add';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
@@ -41,6 +41,7 @@ import HttpAdvancedConfiguration from './HttpAdvancedConfiguration';
 import PostmanImportDialog from './PostmanImportDialog';
 import ResponseParserTestModal from './ResponseParserTestModal';
 import TestSection from './TestSection';
+import type { HttpGeneratorResponse, TestProviderResponse } from '@promptfoo/dtos';
 
 import type { ProviderOptions } from '../../types';
 import type { TestResult } from './TestSection';
@@ -170,52 +171,48 @@ Content-Type: application/json
     }
 
     try {
-      const response = await callApi('/providers/test', {
+      const data = await callApiTyped<TestProviderResponse>('/providers/test', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ providerOptions: selectedTarget }),
+        body: { providerOptions: selectedTarget },
       });
 
-      if (response.ok) {
-        const data = await response.json();
+      // Check for changes_needed field (configuration issues) or success field
+      const hasConfigIssues = data.testResult?.changes_needed === true;
+      const isSuccess = hasConfigIssues ? false : (data.testResult?.success ?? true);
 
-        // Check for changes_needed field (configuration issues) or success field
-        const hasConfigIssues = data.testResult?.changes_needed === true;
-        const isSuccess = hasConfigIssues ? false : (data.testResult?.success ?? true);
+      // Build the message based on the response
+      let message = data.testResult?.message ?? 'Target configuration is valid!';
+      if (hasConfigIssues) {
+        message = data.testResult?.changes_needed_reason || 'Configuration changes are needed';
+      }
 
-        // Build the message based on the response
-        let message = data.testResult?.message ?? 'Target configuration is valid!';
-        if (hasConfigIssues) {
-          message = data.testResult?.changes_needed_reason || 'Configuration changes are needed';
-        }
+      setTestResult({
+        success: isSuccess,
+        message: message,
+        providerResponse: (data.providerResponse as Record<string, unknown>) || {},
+        transformedRequest: data.transformedRequest as string | Record<string, unknown> | undefined,
+        // Include the suggestions if available
+        changes_needed: hasConfigIssues,
+        changes_needed_suggestions: data.testResult?.changes_needed_suggestions,
+      });
 
-        setTestResult({
-          success: isSuccess,
-          message: message,
-          providerResponse: data.providerResponse || {},
-          transformedRequest: data.transformedRequest,
-          // Include the suggestions if available
-          changes_needed: hasConfigIssues,
-          changes_needed_suggestions: data.testResult?.changes_needed_suggestions,
-        });
-
-        if (onTargetTested) {
-          onTargetTested(isSuccess);
-        }
-      } else {
-        const errorData = await response.json();
+      if (onTargetTested) {
+        onTargetTested(isSuccess);
+      }
+    } catch (error) {
+      // Handle API errors
+      if (error instanceof ApiRequestError) {
         setTestResult({
           success: false,
-          message: errorData.error || 'Failed to test target configuration',
-          providerResponse: errorData.providerResponse || {},
-          transformedRequest: errorData.transformedRequest,
+          message: error.message || 'Failed to test target configuration',
+          providerResponse: {},
         });
 
         if (onTargetTested) {
           onTargetTested(false);
         }
+        return;
       }
-    } catch (error) {
       console.error('Error testing target:', error);
       let errorMessage = 'Failed to test target configuration';
       if (error instanceof Error) {
@@ -421,22 +418,14 @@ ${exampleRequest}`;
     setGenerating(true);
     setError('');
     try {
-      const res = await callApi('/providers/http-generator', {
+      const data = await callApiTyped<HttpGeneratorResponse>('/providers/http-generator', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+        body: {
           requestExample: request,
           responseExample: response,
-        }),
+        },
       });
-
-      if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.error || `HTTP error! status: ${res.status}`);
-      }
-
-      const data = await res.json();
-      setGeneratedConfig(data);
+      setGeneratedConfig(data as GeneratedConfig);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'An error occurred');
     } finally {

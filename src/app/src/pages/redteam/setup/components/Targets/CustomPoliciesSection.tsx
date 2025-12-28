@@ -4,7 +4,7 @@ import { DataTable } from '@app/components/data-table/data-table';
 import { useApiHealth } from '@app/hooks/useApiHealth';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import { useToast } from '@app/hooks/useToast';
-import { callApi } from '@app/utils/api';
+import { ApiRequestError, callApiTyped } from '@app/utils/apiClient';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
@@ -25,6 +25,7 @@ import { useRedTeamConfig } from '../../hooks/useRedTeamConfig';
 import { TestCaseGenerateButton } from '../TestCaseDialog';
 import { useTestCaseGeneration } from '../TestCaseGenerationProvider';
 import { PolicySuggestionsSidebar } from './PolicySuggestionsSidebar';
+import type { CustomPolicyGenerationResponse } from '@promptfoo/dtos';
 import type { PolicyObject } from '@promptfoo/redteam/types';
 import type { ColumnDef, RowSelectionState } from '@tanstack/react-table';
 
@@ -384,44 +385,25 @@ export const CustomPoliciesSection = () => {
       ];
 
       // Send the request to `/redteam/:taskId`:
-      const response = await callApi('/redteam/custom-policy-generation-task', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          applicationDefinition: config.applicationDefinition,
-          existingPolicies,
-        }),
-      });
-
-      // Parse the request body prior to handling success/error cases.
-      let data;
-      try {
-        data = (await response.json()) as {
-          result: PolicyObject[];
-          error: string | null;
-          task: string;
-          details?: string; // Optionally set in `logAndSendError`
-        };
-      } catch (error) {
-        // Handle JSON parsing errors
-        toast.showToast(
-          `Failed to generate policies: ${error instanceof Error ? error.message : String(error)}`,
-          'error',
-        );
-        return;
-      }
+      const data = await callApiTyped<CustomPolicyGenerationResponse>(
+        '/redteam/custom-policy-generation-task',
+        {
+          method: 'POST',
+          body: {
+            applicationDefinition: config.applicationDefinition,
+            existingPolicies,
+          },
+        },
+      );
 
       // Handle potential errors:
-      if (!response.ok || data.error) {
-        const errorMessage =
-          data?.details ??
-          data?.error ??
-          `Failed to generate policies: ${response.statusText || response.status}`;
+      if (data.error) {
+        const errorMessage = data.details ?? data.error ?? 'Failed to generate policies';
         throw new Error(errorMessage);
       }
 
       // Otherwise, handle success:
-      const generatedPolicies: PolicyObject[] = data.result ?? [];
+      const generatedPolicies: PolicyObject[] = (data.result ?? []) as PolicyObject[];
 
       if (generatedPolicies.length === 0) {
         toast.showToast(
@@ -436,7 +418,11 @@ export const CustomPoliciesSection = () => {
       console.error('Error generating policies:', error);
       let errorMessage = 'Failed to generate policies';
 
-      if (error instanceof Error) {
+      if (error instanceof ApiRequestError) {
+        // Handle API errors
+        const responseData = error.responseData as { details?: string; error?: string } | undefined;
+        errorMessage = responseData?.details ?? responseData?.error ?? error.message;
+      } else if (error instanceof Error) {
         // Handle network errors
         if (error.message.includes('fetch') || error.message.includes('network')) {
           errorMessage = 'Network error. Please check your connection and try again.';

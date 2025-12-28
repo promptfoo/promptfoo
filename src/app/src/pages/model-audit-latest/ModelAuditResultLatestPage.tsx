@@ -5,13 +5,14 @@ import { Button } from '@app/components/ui/button';
 import { Card, CardContent } from '@app/components/ui/card';
 import { AddIcon, HistoryIcon, SecurityIcon } from '@app/components/ui/icons';
 import { MODEL_AUDIT_ROUTES } from '@app/constants/routes';
-import { callApi } from '@app/utils/api';
+import { ApiRequestError, callApiTyped } from '@app/utils/apiClient';
 import { Link as RouterLink } from 'react-router-dom';
 import { LatestScanSkeleton } from '../model-audit/components/ModelAuditSkeleton';
 import ResultsTab from '../model-audit/components/ResultsTab';
 import ScannedFilesDialog from '../model-audit/components/ScannedFilesDialog';
 import ScanResultHeader from '../model-audit/components/ScanResultHeader';
 import { useSeverityCounts } from '../model-audit/hooks';
+import type { GetScansResponse } from '@promptfoo/dtos';
 
 import type { HistoricalScan } from '../model-audit/stores';
 
@@ -29,23 +30,19 @@ export default function ModelAuditResultLatestPage() {
       setError(null);
 
       try {
-        const response = await callApi('/model-audit/scans?limit=1&sort=createdAt&order=desc', {
-          signal: abortController.signal,
-        });
+        const data = await callApiTyped<GetScansResponse>(
+          '/model-audit/scans?limit=1&sort=createdAt&order=desc',
+          { signal: abortController.signal },
+        );
 
         if (abortController.signal.aborted) {
           return;
         }
 
-        if (!response.ok) {
-          throw new Error('Failed to fetch latest scan');
-        }
-
-        const data = await response.json();
         const scans = data.scans || [];
 
         if (scans.length > 0) {
-          setLatestScan(scans[0]);
+          setLatestScan(scans[0] as unknown as HistoricalScan);
         } else {
           setLatestScan(null);
         }
@@ -53,7 +50,12 @@ export default function ModelAuditResultLatestPage() {
         if (abortController.signal.aborted || (err instanceof Error && err.name === 'AbortError')) {
           return;
         }
-        const errorMessage = err instanceof Error ? err.message : 'Failed to load latest scan';
+        let errorMessage = 'Failed to load latest scan';
+        if (err instanceof ApiRequestError) {
+          errorMessage = err.message;
+        } else if (err instanceof Error) {
+          errorMessage = err.message;
+        }
         setError(errorMessage);
       } finally {
         if (!abortController.signal.aborted) {

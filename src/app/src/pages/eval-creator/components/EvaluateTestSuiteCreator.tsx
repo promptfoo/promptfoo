@@ -14,7 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@app/components/ui/tab
 import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
 import { useStore } from '@app/stores/evalConfig';
-import { callApi } from '@app/utils/api';
+import { callApiTyped } from '@app/utils/apiClient';
 import { Check } from 'lucide-react';
 import { ErrorBoundary } from 'react-error-boundary';
 import ConfigureEnvButton from './ConfigureEnvButton';
@@ -25,6 +25,7 @@ import { RunOptionsSection } from './RunOptionsSection';
 import { StepSection } from './StepSection';
 import TestCasesSection from './TestCasesSection';
 import YamlEditor from './YamlEditor';
+import type { GetConfigStatusResponse } from '@promptfoo/dtos';
 import type { ProviderOptions } from '@promptfoo/types';
 
 function ErrorFallback({
@@ -81,12 +82,9 @@ const EvaluateTestSuiteCreator = () => {
 
     const fetchConfigStatus = async () => {
       try {
-        const response = await callApi('/providers/config-status');
-        if (response.ok) {
-          const data = await response.json();
-          if (isMounted) {
-            setHasCustomConfig(data.hasCustomConfig || false);
-          }
+        const response = await callApiTyped<GetConfigStatusResponse>('/providers/config-status');
+        if (isMounted) {
+          setHasCustomConfig(response.data.hasCustomConfig || false);
         }
       } catch (err) {
         console.error('Failed to fetch provider config status:', err);

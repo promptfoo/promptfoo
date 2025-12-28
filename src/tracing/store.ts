@@ -2,6 +2,7 @@ import { asc, eq, lt } from 'drizzle-orm';
 import { getDb } from '../database/index';
 import { spansTable, tracesTable } from '../database/tables';
 import logger from '../logger';
+import { normalizeTimestamp } from '../util/time';
 
 import type { TraceData } from '../types/tracing';
 
@@ -138,6 +139,7 @@ export class TraceStore {
           traceId: trace.traceId,
           evaluationId: trace.evaluationId,
           testCaseId: trace.testCaseId,
+          createdAt: Date.now(),
           metadata: trace.metadata,
         })
         .onConflictDoNothing({ target: tracesTable.traceId });
@@ -228,6 +230,8 @@ export class TraceStore {
 
           return {
             ...trace,
+            // Normalize timestamp for legacy data that may have string timestamps
+            createdAt: normalizeTimestamp(trace.createdAt),
             spans,
           };
         }),
@@ -264,6 +268,8 @@ export class TraceStore {
 
       return {
         ...trace,
+        // Normalize timestamp for legacy data that may have string timestamps
+        createdAt: normalizeTimestamp(trace.createdAt),
         spans,
       };
     } catch (error) {
