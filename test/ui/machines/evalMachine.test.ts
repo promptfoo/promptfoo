@@ -275,10 +275,10 @@ describe('evalMachine', () => {
       actor.send({
         type: 'ADD_LOG',
         entry: {
+          id: 'test-log-1',
           timestamp: Date.now(),
           level: 'info',
           message: 'Test log message',
-          category: 'provider',
         },
       });
 
