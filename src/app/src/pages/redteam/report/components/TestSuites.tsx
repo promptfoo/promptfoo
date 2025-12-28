@@ -1,10 +1,10 @@
 import React from 'react';
 
 import { DataTable } from '@app/components/data-table/data-table';
-import { EVAL_ROUTES } from '@app/constants/routes';
 import { Button } from '@app/components/ui/button';
 import { Card } from '@app/components/ui/card';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@app/components/ui/tooltip';
+import { EVAL_ROUTES } from '@app/constants/routes';
 import { useTelemetry } from '@app/hooks/useTelemetry';
 import {
   categoryAliases,

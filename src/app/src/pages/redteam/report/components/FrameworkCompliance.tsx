@@ -16,7 +16,6 @@ import { categorizePlugins, expandPluginCollections } from './FrameworkComplianc
 import CSVExporter from './FrameworkCsvExporter';
 import { useReportStore } from './store';
 import type { UnifiedConfig } from '@promptfoo/types';
-import './FrameworkCompliance.css';
 
 import { type TestResultStats } from './FrameworkComplianceUtils';
 
