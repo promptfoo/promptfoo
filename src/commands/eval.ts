@@ -24,22 +24,22 @@ import telemetry from '../telemetry';
 import { EMAIL_OK_STATUS } from '../types/email';
 import { CommandLineOptionsSchema, OutputFileExtension, TestSuiteSchema } from '../types/index';
 import { isApiProvider } from '../types/providers';
+import { initInkEval, shouldUseInkUI } from '../ui/evalRunner';
 import { checkCloudPermissions, getOrgContext } from '../util/cloud';
 import { clearConfigCache, loadDefaultConfig } from '../util/config/default';
 import { resolveConfigs } from '../util/config/load';
 import { maybeLoadFromExternalFile } from '../util/file';
+import { formatDuration } from '../util/formatDuration';
 import { printBorder, setupEnv, writeMultipleOutputs } from '../util/index';
 import invariant from '../util/invariant';
 import { promptfooCommand } from '../util/promptfooCommand';
 import { TokenUsageTracker } from '../util/tokenUsage';
 import { accumulateTokenUsage, createEmptyTokenUsage } from '../util/tokenUsageUtils';
-import { formatDuration } from '../util/formatDuration';
 import { filterProviders } from './eval/filterProviders';
 import { filterTests } from './eval/filterTests';
 import { generateEvalSummary } from './eval/summary';
 import { deleteErrorResults, getErrorResultIds, recalculatePromptMetrics } from './retry';
 import { notCloudEnabledShareInstructions } from './share';
-import { initInkEval, shouldUseInkUI } from '../ui/evalRunner';
 import type { Command } from 'commander';
 
 import type {
@@ -53,6 +53,7 @@ import type { FilterOptions } from './eval/filterTests';
 
 const EvalCommandSchema = CommandLineOptionsSchema.extend({
   help: z.boolean().optional(),
+  interactive: z.boolean().optional(),
   interactiveProviders: z.boolean().optional(),
   remote: z.boolean().optional(),
   noShare: z.boolean().optional(),
@@ -165,7 +166,7 @@ export async function doEval(
         return new Eval({}, { persisted: false });
       }
       // Check if Ink UI will be used (to suppress logger output that interferes with Ink)
-      const willUseInkUIResume = process.env.PROMPTFOO_INTERACTIVE_UI === 'true';
+      const willUseInkUIResume = cmdObj.interactive !== false && shouldUseInkUI();
       if (!willUseInkUIResume) {
         logger.info(chalk.cyan(`Resuming evaluation ${resumeEval.id}...`));
       }
@@ -202,7 +203,7 @@ export async function doEval(
       }
 
       // Check if Ink UI will be used (to suppress logger output that interferes with Ink)
-      const willUseInkUIRetry = process.env.PROMPTFOO_INTERACTIVE_UI === 'true';
+      const willUseInkUIRetry = cmdObj.interactive !== false && shouldUseInkUI();
       if (!willUseInkUIRetry) {
         logger.info('🔄 Retrying ERROR results from latest evaluation...');
       }
@@ -351,7 +352,7 @@ export async function doEval(
     }
 
     // Check if Ink UI will be used (to suppress logger output that interferes with Ink)
-    const willUseInkUI = process.env.PROMPTFOO_INTERACTIVE_UI === 'true';
+    const willUseInkUI = cmdObj.interactive !== false && shouldUseInkUI();
 
     if (cache === false || repeat > 1) {
       if (!willUseInkUI) {
@@ -507,7 +508,8 @@ export async function doEval(
 
     // Run the evaluation!!!!!!
     let ret: Eval;
-    const useInkUI = shouldUseInkUI();
+    // Use Ink UI by default (unless --no-interactive is specified or shouldUseInkUI returns false)
+    const useInkUI = cmdObj.interactive !== false && shouldUseInkUI();
 
     // Track pending share for display after table (shared across Ink UI and table display)
     let pendingInkShare: Promise<string | null> | null = null;
@@ -1318,6 +1320,7 @@ export function evalCommand(
     // Miscellaneous
     .option('--description <description>', 'Description of the eval run')
     .option('--no-progress-bar', 'Do not show progress bar')
+    .option('--no-interactive', 'Disable interactive UI (use standard CLI output)')
     .action(async (opts: EvalCommandOptions, command: Command) => {
       let validatedOpts: z.infer<typeof EvalCommandSchema>;
       try {
