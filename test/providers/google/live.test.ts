@@ -652,6 +652,9 @@ describe('GoogleLiveProvider', () => {
       json: vi.fn().mockResolvedValue({ counter: 5 }),
     } as any);
 
+    // Clear call history to prevent pollution from async callbacks of previous tests
+    mockFetchWithProxy.mockClear();
+
     const response = await provider.callApi('Add to the counter until it reaches 5');
     expect(response).toEqual({
       output: {
