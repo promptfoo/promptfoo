@@ -22,11 +22,5 @@ interface PromptForIdGeneration {
  * @returns A SHA-256 hash string
  */
 export function generateIdFromPrompt(prompt: PromptForIdGeneration): string {
-  if (prompt.label) {
-    return sha256(prompt.label);
-  }
-  if (prompt.id) {
-    return sha256(prompt.id);
-  }
-  return sha256(typeof prompt.raw === 'object' ? JSON.stringify(prompt.raw) : prompt.raw);
+  return sha256(prompt.label ?? prompt.id ?? typeof prompt.raw === 'object' ? JSON.stringify(prompt.raw) : prompt.raw);
 }
