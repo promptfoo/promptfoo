@@ -290,7 +290,7 @@
     "openai": "^6.14.0",
     "opener": "^1.5.2",
     "ora": "^9.0.0",
-    "pem": "^1.15.1",
+    "pem": "~1.14.8",
     "posthog-node": "^5.14.0",
     "protobufjs": "^8.0.0",
     "proxy-agent": "^6.5.0",
