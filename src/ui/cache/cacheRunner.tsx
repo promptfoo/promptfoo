@@ -1,15 +1,16 @@
 /**
  * Entry point for the Ink-based cache management UI.
+ *
+ * IMPORTANT: This module uses dynamic imports for ink-related components to avoid
+ * loading ink/React when promptfoo is used as a library.
  */
-
-import React from 'react';
 
 import { isCI } from '../../envars';
 import logger from '../../logger';
-import { renderInteractive, shouldUseInteractiveUI } from '../render';
-import { CacheApp, type CacheStats } from './CacheApp';
+import { shouldUseInteractiveUI } from '../interactiveCheck';
 
 import type { RenderResult } from '../render';
+import type { CacheStats } from './CacheApp';
 
 export interface CacheRunnerOptions {
   /** Initial stats */
@@ -56,6 +57,13 @@ export function shouldUseInkCache(): boolean {
  * Run the Ink-based cache management UI.
  */
 export async function runInkCache(options: CacheRunnerOptions): Promise<CacheResult> {
+  // Dynamic imports to avoid loading ink/React when used as library
+  const [React, { renderInteractive }, { CacheApp }] = await Promise.all([
+    import('react'),
+    import('../render'),
+    import('./CacheApp'),
+  ]);
+
   let result: CacheResult = { cleared: false };
   let resolveResult: (result: CacheResult) => void;
   const resultPromise = new Promise<CacheResult>((resolve) => {
@@ -104,5 +112,4 @@ export async function runInkCache(options: CacheRunnerOptions): Promise<CacheRes
   return result;
 }
 
-export { CacheApp };
 export type { CacheStats };

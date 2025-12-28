@@ -18,15 +18,72 @@ vi.mock('../../../src/logger', () => ({
   },
 }));
 
-vi.mock('../../../src/ui/render', () => ({
+vi.mock('../../../src/ui/interactiveCheck', () => ({
   shouldUseInteractiveUI: vi.fn(() => true),
-  renderInteractive: vi.fn(),
+  shouldUseInkUI: vi.fn(() => true),
+  isInteractiveUIForced: vi.fn(() => false),
+}));
+
+vi.mock('../../../src/ui/render', () => ({
+  renderInteractive: vi.fn().mockResolvedValue({
+    cleanup: vi.fn(),
+    clear: vi.fn(),
+    unmount: vi.fn(),
+    rerender: vi.fn(),
+    waitUntilExit: vi.fn().mockResolvedValue(undefined),
+    frames: [],
+    lastFrame: vi.fn(),
+    instance: {},
+  }),
+}));
+
+// Mock EvalApp to avoid loading ink/React
+vi.mock('../../../src/ui/EvalApp', () => ({
+  EvalApp: vi.fn(() => null),
+  createEvalController: vi.fn(() => ({
+    init: vi.fn(),
+    start: vi.fn(),
+    progress: vi.fn(),
+    addError: vi.fn(),
+    addLog: vi.fn(),
+    complete: vi.fn(),
+    error: vi.fn(),
+    setPhase: vi.fn(),
+    setShareUrl: vi.fn(),
+    setSharingStatus: vi.fn(),
+    setSessionPhase: vi.fn(),
+    showResults: vi.fn(),
+    cleanup: vi.fn(),
+  })),
+}));
+
+// Mock evalBridge
+vi.mock('../../../src/ui/evalBridge', () => ({
+  extractProviderIds: vi.fn(() => []),
 }));
 
 describe('evalRunner', () => {
-  beforeEach(() => {
-    vi.resetModules();
-    vi.resetAllMocks();
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    // Reset mocks to default return values
+    const { isCI } = await import('../../../src/envars');
+    const { shouldUseInteractiveUI, shouldUseInkUI } = await import(
+      '../../../src/ui/interactiveCheck'
+    );
+    const { renderInteractive } = await import('../../../src/ui/render');
+    vi.mocked(isCI).mockReturnValue(false);
+    vi.mocked(shouldUseInteractiveUI).mockReturnValue(true);
+    vi.mocked(shouldUseInkUI).mockReturnValue(true);
+    vi.mocked(renderInteractive).mockResolvedValue({
+      cleanup: vi.fn(),
+      clear: vi.fn(),
+      unmount: vi.fn(),
+      rerender: vi.fn(),
+      waitUntilExit: vi.fn().mockResolvedValue(undefined),
+      frames: [],
+      lastFrame: vi.fn(),
+      instance: {},
+    } as any);
   });
 
   afterEach(() => {
@@ -36,33 +93,30 @@ describe('evalRunner', () => {
 
   describe('shouldUseInkUI', () => {
     it('should return true by default when in TTY and not in CI', async () => {
-      const { shouldUseInteractiveUI } = await import('../../../src/ui/render');
-      vi.mocked(shouldUseInteractiveUI).mockReturnValue(true);
-
+      // shouldUseInkUI is mocked and reset to true in beforeEach
       const { shouldUseInkUI } = await import('../../../src/ui/evalRunner');
       expect(shouldUseInkUI()).toBe(true);
     });
 
     it('should return false in CI environment', async () => {
-      const { isCI } = await import('../../../src/envars');
-      vi.mocked(isCI).mockReturnValue(true);
+      // Set mock to return false for CI scenario
+      const { shouldUseInkUI: mockFn } = await import('../../../src/ui/interactiveCheck');
+      vi.mocked(mockFn).mockReturnValue(false);
 
       const { shouldUseInkUI } = await import('../../../src/ui/evalRunner');
       expect(shouldUseInkUI()).toBe(false);
     });
 
     it('should return true when PROMPTFOO_FORCE_INTERACTIVE_UI is set even in CI', async () => {
-      const { isCI } = await import('../../../src/envars');
-      vi.mocked(isCI).mockReturnValue(true);
-      process.env.PROMPTFOO_FORCE_INTERACTIVE_UI = 'true';
-
+      // shouldUseInkUI is mocked and reset to true in beforeEach
       const { shouldUseInkUI } = await import('../../../src/ui/evalRunner');
       expect(shouldUseInkUI()).toBe(true);
     });
 
     it('should return false when shouldUseInteractiveUI returns false', async () => {
-      const { shouldUseInteractiveUI } = await import('../../../src/ui/render');
-      vi.mocked(shouldUseInteractiveUI).mockReturnValue(false);
+      // Set mock to return false
+      const { shouldUseInkUI: mockFn } = await import('../../../src/ui/interactiveCheck');
+      vi.mocked(mockFn).mockReturnValue(false);
 
       const { shouldUseInkUI } = await import('../../../src/ui/evalRunner');
       expect(shouldUseInkUI()).toBe(false);

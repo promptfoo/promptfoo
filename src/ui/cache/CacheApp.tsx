@@ -7,6 +7,7 @@
 import { useEffect, useState } from 'react';
 
 import { Box, Text, useApp, useInput } from 'ink';
+import { Spinner } from '../components/shared';
 
 export interface CacheStats {
   /** Total size in bytes */
@@ -38,20 +39,6 @@ function formatBytes(bytes: number): string {
   const sizes = ['B', 'KB', 'MB', 'GB'];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
-}
-
-function Spinner() {
-  const [frame, setFrame] = useState(0);
-  const frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setFrame((prev) => (prev + 1) % frames.length);
-    }, 80);
-    return () => clearInterval(interval);
-  }, []);
-
-  return <Text color="cyan">{frames[frame]}</Text>;
 }
 
 export function CacheApp({ stats: initialStats, onClear, onExit, onRefresh }: CacheAppProps) {

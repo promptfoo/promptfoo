@@ -7,6 +7,7 @@
 import { useEffect, useState } from 'react';
 
 import { Box, Text, useApp, useInput } from 'ink';
+import { Spinner } from '../components/shared';
 
 export type AuthPhase = 'idle' | 'logging_in' | 'selecting_team' | 'success' | 'error';
 
@@ -48,20 +49,6 @@ export interface AuthAppProps {
   onError?: (error: string) => void;
   /** Called when user exits */
   onExit?: () => void;
-}
-
-function Spinner() {
-  const [frame, setFrame] = useState(0);
-  const frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setFrame((prev) => (prev + 1) % frames.length);
-    }, 80);
-    return () => clearInterval(interval);
-  }, []);
-
-  return <Text color="cyan">{frames[frame]}</Text>;
 }
 
 function TeamSelector({

@@ -18,15 +18,48 @@ vi.mock('../../../src/logger', () => ({
   },
 }));
 
-vi.mock('../../../src/ui/render', () => ({
+vi.mock('../../../src/ui/interactiveCheck', () => ({
   shouldUseInteractiveUI: vi.fn(() => true),
-  renderInteractive: vi.fn(),
+  shouldUseInkUI: vi.fn(() => true),
+  isInteractiveUIForced: vi.fn(() => false),
+}));
+
+vi.mock('../../../src/ui/render', () => ({
+  renderInteractive: vi.fn().mockResolvedValue({
+    cleanup: vi.fn(),
+    clear: vi.fn(),
+    unmount: vi.fn(),
+    rerender: vi.fn(),
+    waitUntilExit: vi.fn().mockResolvedValue(undefined),
+    frames: [],
+    lastFrame: vi.fn(),
+    instance: {},
+  }),
+}));
+
+vi.mock('../../../src/ui/list/ListApp', () => ({
+  ListApp: vi.fn(() => null),
 }));
 
 describe('listRunner', () => {
-  beforeEach(() => {
-    vi.resetModules();
-    vi.resetAllMocks();
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    // Reset mocks to default return values
+    const { isCI } = await import('../../../src/envars');
+    const { shouldUseInteractiveUI } = await import('../../../src/ui/interactiveCheck');
+    const { renderInteractive } = await import('../../../src/ui/render');
+    vi.mocked(isCI).mockReturnValue(false);
+    vi.mocked(shouldUseInteractiveUI).mockReturnValue(true);
+    vi.mocked(renderInteractive).mockResolvedValue({
+      cleanup: vi.fn(),
+      clear: vi.fn(),
+      unmount: vi.fn(),
+      rerender: vi.fn(),
+      waitUntilExit: vi.fn().mockResolvedValue(undefined),
+      frames: [],
+      lastFrame: vi.fn(),
+      instance: {},
+    } as any);
   });
 
   afterEach(() => {
@@ -36,9 +69,6 @@ describe('listRunner', () => {
 
   describe('shouldUseInkList', () => {
     it('should return true by default when in TTY and not in CI', async () => {
-      const { shouldUseInteractiveUI } = await import('../../../src/ui/render');
-      vi.mocked(shouldUseInteractiveUI).mockReturnValue(true);
-
       const { shouldUseInkList } = await import('../../../src/ui/list/listRunner');
       expect(shouldUseInkList()).toBe(true);
     });
@@ -46,7 +76,6 @@ describe('listRunner', () => {
     it('should return false in CI environment', async () => {
       const { isCI } = await import('../../../src/envars');
       vi.mocked(isCI).mockReturnValue(true);
-
       const { shouldUseInkList } = await import('../../../src/ui/list/listRunner');
       expect(shouldUseInkList()).toBe(false);
     });
@@ -55,15 +84,13 @@ describe('listRunner', () => {
       const { isCI } = await import('../../../src/envars');
       vi.mocked(isCI).mockReturnValue(true);
       process.env.PROMPTFOO_FORCE_INTERACTIVE_UI = 'true';
-
       const { shouldUseInkList } = await import('../../../src/ui/list/listRunner');
       expect(shouldUseInkList()).toBe(true);
     });
 
     it('should return false when shouldUseInteractiveUI returns false', async () => {
-      const { shouldUseInteractiveUI } = await import('../../../src/ui/render');
+      const { shouldUseInteractiveUI } = await import('../../../src/ui/interactiveCheck');
       vi.mocked(shouldUseInteractiveUI).mockReturnValue(false);
-
       const { shouldUseInkList } = await import('../../../src/ui/list/listRunner');
       expect(shouldUseInkList()).toBe(false);
     });
@@ -72,42 +99,33 @@ describe('listRunner', () => {
   describe('runInkList', () => {
     it('should render ListApp with correct props', async () => {
       const mockCleanup = vi.fn();
-      const mockWaitUntilExit = vi.fn().mockResolvedValue(undefined);
       const { renderInteractive } = await import('../../../src/ui/render');
 
-      vi.mocked(renderInteractive).mockResolvedValue({
-        cleanup: mockCleanup,
-        clear: vi.fn(),
-        unmount: vi.fn(),
-        rerender: vi.fn(),
-        waitUntilExit: mockWaitUntilExit,
-        frames: [],
-        lastFrame: vi.fn(),
-        instance: {},
-      } as any);
+      vi.mocked(renderInteractive).mockImplementation(async (element) => {
+        const props = element.props as any;
+        // Simulate exit immediately
+        setTimeout(() => props.onExit?.(), 0);
+        return {
+          cleanup: mockCleanup,
+          clear: vi.fn(),
+          unmount: vi.fn(),
+          rerender: vi.fn(),
+          waitUntilExit: vi.fn().mockResolvedValue(undefined),
+          frames: [],
+          lastFrame: vi.fn(),
+          instance: {},
+        } as any;
+      });
 
       const { runInkList } = await import('../../../src/ui/list/listRunner');
 
-      // Start the run but don't await - it will wait for user interaction
-      const resultPromise = runInkList({
+      const result = await runInkList({
         resourceType: 'evals',
         items: [],
       });
 
       // Verify renderInteractive was called
       expect(renderInteractive).toHaveBeenCalled();
-
-      // Get the rendered element props
-      const call = vi.mocked(renderInteractive).mock.calls[0];
-      expect(call).toBeDefined();
-
-      // Simulate exit callback
-      const element = call[0];
-      const props = element.props as any;
-      props.onExit?.();
-
-      // Now we can await the result
-      const result = await resultPromise;
       expect(result.cancelled).toBe(true);
       expect(mockCleanup).toHaveBeenCalled();
     });
@@ -115,19 +133,6 @@ describe('listRunner', () => {
     it('should return selected item when onSelect is called', async () => {
       const mockCleanup = vi.fn();
       const { renderInteractive } = await import('../../../src/ui/render');
-
-      vi.mocked(renderInteractive).mockResolvedValue({
-        cleanup: mockCleanup,
-        clear: vi.fn(),
-        unmount: vi.fn(),
-        rerender: vi.fn(),
-        waitUntilExit: vi.fn().mockResolvedValue(undefined),
-        frames: [],
-        lastFrame: vi.fn(),
-        instance: {},
-      } as any);
-
-      const { runInkList } = await import('../../../src/ui/list/listRunner');
 
       const testItem = {
         id: 'test-id',
@@ -137,18 +142,29 @@ describe('listRunner', () => {
         createdAt: new Date(),
       };
 
-      const resultPromise = runInkList({
+      vi.mocked(renderInteractive).mockImplementation(async (element) => {
+        const props = element.props as any;
+        // Simulate selecting the item
+        setTimeout(() => props.onSelect?.(testItem), 0);
+        return {
+          cleanup: mockCleanup,
+          clear: vi.fn(),
+          unmount: vi.fn(),
+          rerender: vi.fn(),
+          waitUntilExit: vi.fn().mockResolvedValue(undefined),
+          frames: [],
+          lastFrame: vi.fn(),
+          instance: {},
+        } as any;
+      });
+
+      const { runInkList } = await import('../../../src/ui/list/listRunner');
+
+      const result = await runInkList({
         resourceType: 'evals',
         items: [testItem],
       });
 
-      // Simulate select callback
-      const call = vi.mocked(renderInteractive).mock.calls[0];
-      const element = call[0];
-      const props = element.props as any;
-      props.onSelect?.(testItem);
-
-      const result = await resultPromise;
       expect(result.cancelled).toBe(false);
       expect(result.selectedItem).toEqual(testItem);
     });

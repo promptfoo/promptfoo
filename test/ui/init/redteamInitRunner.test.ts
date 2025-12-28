@@ -18,25 +18,54 @@ vi.mock('../../../src/logger', () => ({
   },
 }));
 
-vi.mock('../../../src/ui/render', () => ({
+vi.mock('../../../src/ui/interactiveCheck', () => ({
   shouldUseInteractiveUI: vi.fn(() => true),
-  renderInteractive: vi.fn(),
+  shouldUseInkUI: vi.fn(() => true),
+  isInteractiveUIForced: vi.fn(() => false),
+}));
+
+// Mock RedteamInitApp to avoid loading ink/React
+vi.mock('../../../src/ui/init/RedteamInitApp', () => ({
+  RedteamInitApp: vi.fn(() => null),
+}));
+
+vi.mock('../../../src/ui/render', () => ({
+  renderInteractive: vi.fn().mockResolvedValue({
+    cleanup: vi.fn(),
+    clear: vi.fn(),
+    unmount: vi.fn(),
+    rerender: vi.fn(),
+    waitUntilExit: vi.fn().mockResolvedValue(undefined),
+    frames: [],
+    lastFrame: vi.fn(),
+    instance: {},
+  }),
 }));
 
 describe('redteamInitRunner', () => {
   beforeEach(async () => {
-    vi.resetModules();
-    vi.resetAllMocks();
+    vi.clearAllMocks();
     // Reset mocks to default return values
-    const { shouldUseInteractiveUI, renderInteractive } = await import('../../../src/ui/render');
+    const { isCI } = await import('../../../src/envars');
+    const { shouldUseInteractiveUI } = await import('../../../src/ui/interactiveCheck');
+    const { renderInteractive } = await import('../../../src/ui/render');
+    vi.mocked(isCI).mockReturnValue(false);
     vi.mocked(shouldUseInteractiveUI).mockReturnValue(true);
-    vi.mocked(renderInteractive).mockReset();
+    vi.mocked(renderInteractive).mockResolvedValue({
+      cleanup: vi.fn(),
+      clear: vi.fn(),
+      unmount: vi.fn(),
+      rerender: vi.fn(),
+      waitUntilExit: vi.fn().mockResolvedValue(undefined),
+      frames: [],
+      lastFrame: vi.fn(),
+      instance: {},
+    } as any);
   });
 
   afterEach(() => {
     delete process.env.PROMPTFOO_FORCE_INTERACTIVE_INIT;
     delete process.env.PROMPTFOO_DISABLE_INTERACTIVE_UI;
-    vi.restoreAllMocks();
   });
 
   describe('shouldUseInkRedteamInit', () => {
@@ -64,7 +93,7 @@ describe('redteamInitRunner', () => {
     });
 
     it('returns false when shouldUseInteractiveUI returns false', async () => {
-      const { shouldUseInteractiveUI } = await import('../../../src/ui/render');
+      const { shouldUseInteractiveUI } = await import('../../../src/ui/interactiveCheck');
       vi.mocked(shouldUseInteractiveUI).mockReturnValue(false);
 
       const { shouldUseInkRedteamInit } = await import('../../../src/ui/init/redteamInitRunner');

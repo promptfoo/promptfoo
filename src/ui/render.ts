@@ -7,9 +7,9 @@
 
 import type { ComponentType, ReactElement } from 'react';
 
-import { getEnvBool } from '../envars';
 import logger from '../logger';
 import { EXIT_CODES, TIMING } from './constants';
+import { isInteractiveUIForced, shouldUseInteractiveUI } from './interactiveCheck';
 import type { Instance } from 'ink';
 
 // Lazy load Ink to avoid loading React in non-interactive mode
@@ -54,63 +54,8 @@ export interface RenderResult {
   unmount: () => void;
 }
 
-/**
- * Check if the current environment supports interactive UI.
- *
- * Returns false if:
- * - Not running in a TTY
- * - PROMPTFOO_DISABLE_INTERACTIVE_UI is set
- * - CI environment is detected
- * - Output is being piped
- */
-export function shouldUseInteractiveUI(): boolean {
-  // Explicit disable via environment variable
-  if (getEnvBool('PROMPTFOO_DISABLE_INTERACTIVE_UI')) {
-    logger.debug('Interactive UI disabled via PROMPTFOO_DISABLE_INTERACTIVE_UI');
-    return false;
-  }
-
-  // Check if stdout is a TTY
-  if (!process.stdout.isTTY) {
-    logger.debug('Interactive UI disabled: stdout is not a TTY');
-    return false;
-  }
-
-  // Check for CI environments
-  if (process.env.CI || process.env.CONTINUOUS_INTEGRATION) {
-    logger.debug('Interactive UI disabled: CI environment detected');
-    return false;
-  }
-
-  // Check for common CI environment variables
-  const ciEnvVars = [
-    'GITHUB_ACTIONS',
-    'GITLAB_CI',
-    'CIRCLECI',
-    'TRAVIS',
-    'JENKINS_URL',
-    'BUILDKITE',
-    'DRONE',
-    'TEAMCITY_VERSION',
-  ];
-
-  for (const envVar of ciEnvVars) {
-    if (process.env[envVar]) {
-      logger.debug(`Interactive UI disabled: ${envVar} detected`);
-      return false;
-    }
-  }
-
-  return true;
-}
-
-/**
- * Check if the user has explicitly requested interactive UI.
- * This is used to override the default behavior.
- */
-export function isInteractiveUIForced(): boolean {
-  return getEnvBool('PROMPTFOO_FORCE_INTERACTIVE_UI');
-}
+// Re-export for backwards compatibility
+export { isInteractiveUIForced, shouldUseInteractiveUI } from './interactiveCheck';
 
 /**
  * Render an Ink component in the terminal.

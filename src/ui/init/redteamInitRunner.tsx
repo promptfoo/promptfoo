@@ -2,14 +2,14 @@
  * Entry point for the Ink-based redteam init wizard.
  *
  * This module provides the function to run the interactive redteam init experience.
+ *
+ * IMPORTANT: This module uses dynamic imports for ink-related components to avoid
+ * loading ink/React when promptfoo is used as a library.
  */
-
-import React from 'react';
 
 import { isCI } from '../../envars';
 import logger from '../../logger';
-import { renderInteractive, shouldUseInteractiveUI } from '../render';
-import { RedteamInitApp } from './components/RedteamInitApp';
+import { shouldUseInteractiveUI } from '../interactiveCheck';
 
 import type { RenderResult } from '../render';
 
@@ -64,6 +64,13 @@ export function shouldUseInkRedteamInit(): boolean {
 export async function runInkRedteamInit(
   options: RedteamInitRunnerOptions = {},
 ): Promise<RedteamInitResult> {
+  // Dynamic imports to avoid loading ink/React when used as library
+  const [React, { renderInteractive }, { RedteamInitApp }] = await Promise.all([
+    import('react'),
+    import('../render'),
+    import('./components/RedteamInitApp'),
+  ]);
+
   // Track result
   let result: RedteamInitResult = { success: false };
   let resolveResult: (result: RedteamInitResult) => void;
@@ -116,5 +123,3 @@ export async function runInkRedteamInit(
 
   return result;
 }
-
-export { RedteamInitApp } from './components/RedteamInitApp';

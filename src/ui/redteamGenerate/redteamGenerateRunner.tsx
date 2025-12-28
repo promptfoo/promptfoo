@@ -1,19 +1,16 @@
 /**
  * Entry point for the Ink-based redteam generate UI.
+ *
+ * IMPORTANT: This module uses dynamic imports for ink-related components to avoid
+ * loading ink/React when promptfoo is used as a library.
  */
-
-import React from 'react';
 
 import { isCI } from '../../envars';
 import logger from '../../logger';
-import { renderInteractive, shouldUseInteractiveUI } from '../render';
-import {
-  createRedteamGenerateController,
-  RedteamGenerateApp,
-  type RedteamGenerateController,
-} from './RedteamGenerateApp';
+import { shouldUseInteractiveUI } from '../interactiveCheck';
 
 import type { RenderResult } from '../render';
+import type { RedteamGenerateController } from './RedteamGenerateApp';
 
 export interface RedteamGenerateRunnerOptions {
   /** Abort signal for cancellation */
@@ -74,6 +71,10 @@ export function shouldUseInkRedteamGenerate(): boolean {
 export async function initInkRedteamGenerate(
   _options: RedteamGenerateRunnerOptions = {},
 ): Promise<RedteamGenerateUIResult> {
+  // Dynamic imports to avoid loading ink/React when used as library
+  const [React, { renderInteractive }, { RedteamGenerateApp, createRedteamGenerateController }] =
+    await Promise.all([import('react'), import('../render'), import('./RedteamGenerateApp')]);
+
   let resolveExit: () => void;
   const exitPromise = new Promise<void>((resolve) => {
     resolveExit = resolve;
@@ -111,5 +112,5 @@ export async function initInkRedteamGenerate(
   };
 }
 
-export { RedteamGenerateApp, createRedteamGenerateController };
-export type { RedteamGenerateController };
+// Re-export type only (doesn't cause module loading at runtime)
+export type { RedteamGenerateController } from './RedteamGenerateApp';

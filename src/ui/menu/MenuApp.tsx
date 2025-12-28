@@ -4,9 +4,10 @@
  * Provides quick access to common commands with keyboard navigation.
  */
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
 import { Box, Text, useApp, useInput } from 'ink';
+import { Spinner } from '../components/shared';
 
 export interface AuthStatus {
   /** Whether the user is logged in */
@@ -147,20 +148,6 @@ const defaultMenuItems: MenuItem[] = [
     category: 'settings',
   },
 ];
-
-function Spinner() {
-  const [frame, setFrame] = useState(0);
-  const frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setFrame((prev) => (prev + 1) % frames.length);
-    }, 80);
-    return () => clearInterval(interval);
-  }, []);
-
-  return <Text color="cyan">{frames[frame]}</Text>;
-}
 
 function AuthStatusBar({ status, loading }: { status?: AuthStatus; loading?: boolean }) {
   if (loading) {

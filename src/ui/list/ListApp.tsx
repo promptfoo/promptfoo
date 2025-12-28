@@ -46,10 +46,14 @@ export interface ListAppProps {
   onSelect?: (item: ListItem) => void;
   /** Called when user wants to exit */
   onExit?: () => void;
-  /** Called to load more data */
+  /** Called to load more data (pagination) */
   onLoadMore?: (offset: number, limit: number) => Promise<ListItem[]>;
   /** Called when search query changes */
   onSearch?: (query: string) => Promise<ListItem[]>;
+  /** Whether there are more items to load */
+  hasMore?: boolean;
+  /** Page size for pagination */
+  pageSize?: number;
 }
 
 function truncate(str: string, length: number): string {
@@ -214,6 +218,8 @@ export function ListApp({
   onExit,
   onLoadMore,
   onSearch,
+  hasMore: initialHasMore = true,
+  pageSize = 50,
 }: ListAppProps) {
   const { exit } = useApp();
   const [items, setItems] = useState<ListItem[]>(initialItems);
@@ -221,6 +227,8 @@ export function ListApp({
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(initialHasMore);
   const [error, setError] = useState<string | null>(null);
 
   // Terminal dimensions
@@ -246,9 +254,10 @@ export function ListApp({
   useEffect(() => {
     if (initialItems.length === 0 && onLoadMore) {
       setLoading(true);
-      onLoadMore(0, 50)
+      onLoadMore(0, pageSize)
         .then((data) => {
           setItems(data);
+          setHasMore(data.length >= pageSize);
           setLoading(false);
         })
         .catch((err) => {
@@ -270,13 +279,36 @@ export function ListApp({
       const results = await onSearch(searchQuery);
       setItems(results);
       setSelectedIndex(0);
+      setHasMore(results.length >= pageSize);
     } catch (err) {
       setError((err as Error).message);
     } finally {
       setLoading(false);
       setIsSearching(false);
     }
-  }, [searchQuery, onSearch]);
+  }, [searchQuery, onSearch, pageSize]);
+
+  // Load more items (pagination)
+  const handleLoadMore = useCallback(async () => {
+    if (!onLoadMore || loadingMore || !hasMore) {
+      return;
+    }
+
+    setLoadingMore(true);
+    try {
+      const newItems = await onLoadMore(items.length, pageSize);
+      if (newItems.length === 0) {
+        setHasMore(false);
+      } else {
+        setItems((prev) => [...prev, ...newItems]);
+        setHasMore(newItems.length >= pageSize);
+      }
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [onLoadMore, loadingMore, hasMore, items.length, pageSize]);
 
   // Keyboard navigation
   useInput((input, key) => {
@@ -292,15 +324,33 @@ export function ListApp({
     if (key.upArrow || input === 'k') {
       setSelectedIndex((prev) => Math.max(0, prev - 1));
     } else if (key.downArrow || input === 'j') {
-      setSelectedIndex((prev) => Math.min(items.length - 1, prev + 1));
+      setSelectedIndex((prev) => {
+        const newIndex = Math.min(items.length - 1, prev + 1);
+        // Load more when approaching bottom (within 5 items)
+        if (hasMore && newIndex >= items.length - 5) {
+          handleLoadMore();
+        }
+        return newIndex;
+      });
     } else if (key.pageUp) {
       setSelectedIndex((prev) => Math.max(0, prev - visibleRows));
     } else if (key.pageDown) {
-      setSelectedIndex((prev) => Math.min(items.length - 1, prev + visibleRows));
+      setSelectedIndex((prev) => {
+        const newIndex = Math.min(items.length - 1, prev + visibleRows);
+        // Load more when approaching bottom
+        if (hasMore && newIndex >= items.length - 5) {
+          handleLoadMore();
+        }
+        return newIndex;
+      });
     } else if (input === 'g') {
       setSelectedIndex(0);
     } else if (input === 'G') {
       setSelectedIndex(items.length - 1);
+      // Load more when jumping to end
+      if (hasMore) {
+        handleLoadMore();
+      }
     }
 
     // Actions
@@ -315,10 +365,11 @@ export function ListApp({
       // Refresh
       if (onLoadMore) {
         setLoading(true);
-        onLoadMore(0, 50)
+        onLoadMore(0, pageSize)
           .then((data) => {
             setItems(data);
             setSelectedIndex(0);
+            setHasMore(data.length >= pageSize);
             setLoading(false);
           })
           .catch((err) => {
@@ -411,7 +462,9 @@ export function ListApp({
           <Text dimColor>
             Showing {scrollOffset + 1}-{Math.min(scrollOffset + visibleRows, items.length)} of{' '}
             {items.length}
+            {hasMore && ' (more available)'}
           </Text>
+          {loadingMore && <Text color="yellow"> Loading more...</Text>}
         </Box>
       )}
 

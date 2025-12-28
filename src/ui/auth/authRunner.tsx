@@ -1,21 +1,16 @@
 /**
  * Entry point for the Ink-based auth UI.
+ *
+ * IMPORTANT: This module uses dynamic imports for ink-related components to avoid
+ * loading ink/React when promptfoo is used as a library.
  */
-
-import React from 'react';
 
 import { isCI } from '../../envars';
 import logger from '../../logger';
-import { renderInteractive, shouldUseInteractiveUI } from '../render';
-import {
-  AuthApp,
-  type AuthController,
-  createAuthController,
-  type TeamInfo,
-  type UserInfo,
-} from './AuthApp';
+import { shouldUseInteractiveUI } from '../interactiveCheck';
 
 import type { RenderResult } from '../render';
+import type { AuthController, TeamInfo, UserInfo } from './AuthApp';
 
 export interface AuthRunnerOptions {
   /** Initial phase to start with */
@@ -66,6 +61,13 @@ export function shouldUseInkAuth(): boolean {
  * Initialize the Ink-based auth UI.
  */
 export async function initInkAuth(options: AuthRunnerOptions = {}): Promise<AuthUIResult> {
+  // Dynamic imports to avoid loading ink/React when used as library
+  const [React, { renderInteractive }, { AuthApp, createAuthController }] = await Promise.all([
+    import('react'),
+    import('../render'),
+    import('./AuthApp'),
+  ]);
+
   let resolveTeamSelection: (team: TeamInfo | undefined) => void;
   const teamSelectionPromise = new Promise<TeamInfo | undefined>((resolve) => {
     resolveTeamSelection = resolve;
@@ -118,5 +120,4 @@ export async function initInkAuth(options: AuthRunnerOptions = {}): Promise<Auth
   };
 }
 
-export { AuthApp, createAuthController };
 export type { AuthController, TeamInfo, UserInfo };

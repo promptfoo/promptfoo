@@ -1,8 +1,9 @@
 /**
  * Entry point for the Ink-based main menu UI.
+ *
+ * IMPORTANT: This module uses dynamic imports for ink-related components to avoid
+ * loading ink/React when promptfoo is used as a library.
  */
-
-import React from 'react';
 
 import { isCI } from '../../envars';
 import { getUserEmail } from '../../globalConfig/accounts';
@@ -11,10 +12,10 @@ import logger from '../../logger';
 import { resolveTeamId } from '../../util/cloud';
 import { fetchWithProxy } from '../../util/fetch/index';
 import { VERSION } from '../../version';
-import { renderInteractive, shouldUseInteractiveUI } from '../render';
-import { type AuthStatus, MenuApp, type MenuItem } from './MenuApp';
+import { shouldUseInteractiveUI } from '../interactiveCheck';
 
 import type { RenderResult } from '../render';
+import type { AuthStatus, MenuItem } from './MenuApp';
 
 export interface MenuRunnerOptions {
   /** Skip auth status check */
@@ -105,6 +106,13 @@ async function getAuthStatus(): Promise<AuthStatus> {
  * Run the Ink-based main menu UI.
  */
 export async function runInkMenu(options: MenuRunnerOptions = {}): Promise<MenuResult> {
+  // Dynamic imports to avoid loading ink/React when used as library
+  const [React, { renderInteractive }, { MenuApp }] = await Promise.all([
+    import('react'),
+    import('../render'),
+    import('./MenuApp'),
+  ]);
+
   let result: MenuResult = { cancelled: false };
   let resolveResult: (result: MenuResult) => void;
   const resultPromise = new Promise<MenuResult>((resolve) => {
@@ -181,5 +189,4 @@ export async function runInkMenu(options: MenuRunnerOptions = {}): Promise<MenuR
   return result;
 }
 
-export { MenuApp };
 export type { AuthStatus, MenuItem };

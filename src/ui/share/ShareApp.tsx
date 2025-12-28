@@ -7,6 +7,9 @@
 import { useEffect, useState } from 'react';
 
 import { Box, Text, useApp, useInput } from 'ink';
+import opener from 'opener';
+import { Spinner } from '../components/shared';
+import { copyToClipboard, isClipboardAvailable } from '../utils/clipboard';
 
 export type SharePhase =
   | 'confirming'
@@ -28,6 +31,10 @@ export interface ShareProgress {
   description?: string;
   /** Number of test results */
   resultCount?: number;
+  /** Whether URL was copied to clipboard */
+  copiedToClipboard?: boolean;
+  /** Whether browser was opened */
+  openedInBrowser?: boolean;
 }
 
 export interface ShareAppProps {
@@ -45,20 +52,6 @@ export interface ShareAppProps {
   onCancel?: () => void;
   /** Called when complete */
   onComplete?: (shareUrl: string) => void;
-}
-
-function Spinner() {
-  const [frame, setFrame] = useState(0);
-  const frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setFrame((prev) => (prev + 1) % frames.length);
-    }, 80);
-    return () => clearInterval(interval);
-  }, []);
-
-  return <Text color="cyan">{frames[frame]}</Text>;
 }
 
 function ProgressBar({ progress }: { progress: number }) {
@@ -85,11 +78,23 @@ export function ShareApp({
   onComplete,
 }: ShareAppProps) {
   const { exit } = useApp();
+  const [clipboardAvailable] = useState(() => isClipboardAvailable());
   const [progress, setProgress] = useState<ShareProgress>({
     phase: skipConfirmation ? 'preparing' : 'confirming',
     description,
     resultCount,
   });
+
+  // Auto-copy URL to clipboard when sharing completes
+  useEffect(() => {
+    if (progress.phase === 'complete' && progress.shareUrl && clipboardAvailable) {
+      copyToClipboard(progress.shareUrl).then((result) => {
+        if (result.success) {
+          setProgress((prev) => ({ ...prev, copiedToClipboard: true }));
+        }
+      });
+    }
+  }, [progress.phase, progress.shareUrl, clipboardAvailable]);
 
   // Handle keyboard input
   useInput((input, key) => {
@@ -105,11 +110,20 @@ export function ShareApp({
     }
 
     if (progress.phase === 'complete' || progress.phase === 'error') {
-      if (input === 'o' && progress.shareUrl) {
-        // Open URL in browser - handled by parent
+      // Open URL in browser
+      if ((input === 'o' || input === 'O') && progress.shareUrl) {
+        opener(progress.shareUrl);
+        setProgress((prev) => ({ ...prev, openedInBrowser: true }));
+        return;
       }
-      if (input === 'c' && progress.shareUrl) {
-        // Copy URL - handled by parent
+      // Copy URL to clipboard
+      if ((input === 'c' || input === 'C') && progress.shareUrl && clipboardAvailable) {
+        copyToClipboard(progress.shareUrl).then((result) => {
+          if (result.success) {
+            setProgress((prev) => ({ ...prev, copiedToClipboard: true }));
+          }
+        });
+        return;
       }
       if (input === 'q' || key.escape || key.return) {
         if (progress.shareUrl) {
@@ -228,11 +242,43 @@ export function ShareApp({
         </Box>
       )}
 
+      {/* Status indicators */}
+      {progress.phase === 'complete' && (
+        <Box marginBottom={1}>
+          {progress.copiedToClipboard && (
+            <Text color="green" dimColor>
+              ✓ Copied to clipboard
+            </Text>
+          )}
+          {progress.openedInBrowser && (
+            <Box marginLeft={progress.copiedToClipboard ? 2 : 0}>
+              <Text color="green" dimColor>
+                ✓ Opened in browser
+              </Text>
+            </Box>
+          )}
+        </Box>
+      )}
+
       {/* Footer */}
       <Box marginTop={1}>
         {progress.phase === 'confirming' && <Text dimColor>Press y to confirm, n to cancel</Text>}
         {progress.phase === 'complete' && (
-          <Text dimColor>Press Enter to exit | URL copied to clipboard</Text>
+          <Box>
+            <Text dimColor>Press </Text>
+            <Text color="yellow">o</Text>
+            <Text dimColor> to open in browser</Text>
+            {clipboardAvailable && (
+              <>
+                <Text dimColor> | </Text>
+                <Text color="yellow">c</Text>
+                <Text dimColor> to copy URL</Text>
+              </>
+            )}
+            <Text dimColor> | </Text>
+            <Text color="yellow">Enter</Text>
+            <Text dimColor> to exit</Text>
+          </Box>
         )}
         {progress.phase === 'error' && <Text dimColor>Press Enter to exit</Text>}
         {['preparing', 'uploading', 'processing'].includes(progress.phase) && (

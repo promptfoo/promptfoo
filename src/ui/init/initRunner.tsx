@@ -2,14 +2,14 @@
  * Entry point for the Ink-based init wizard.
  *
  * This module provides the function to run the interactive init experience.
+ *
+ * IMPORTANT: This module uses dynamic imports for ink-related components to avoid
+ * loading ink/React when promptfoo is used as a library.
  */
-
-import React from 'react';
 
 import { isCI } from '../../envars';
 import logger from '../../logger';
-import { renderInteractive, shouldUseInteractiveUI } from '../render';
-import { InitApp } from './components/InitApp';
+import { shouldUseInteractiveUI } from '../interactiveCheck';
 
 import type { RenderResult } from '../render';
 
@@ -68,6 +68,13 @@ export function shouldUseInkInit(): boolean {
  * Run the Ink-based init wizard.
  */
 export async function runInkInit(_options: InitRunnerOptions = {}): Promise<InitResult> {
+  // Dynamic imports to avoid loading ink/React when used as library
+  const [React, { renderInteractive }, { InitApp }] = await Promise.all([
+    import('react'),
+    import('../render'),
+    import('./components/InitApp'),
+  ]);
+
   // Track result
   let result: InitResult = { success: false };
   let resolveResult: (result: InitResult) => void;
@@ -119,5 +126,3 @@ export async function runInkInit(_options: InitRunnerOptions = {}): Promise<Init
 
   return result;
 }
-
-export { InitApp } from './components/InitApp';

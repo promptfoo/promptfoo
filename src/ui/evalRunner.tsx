@@ -3,20 +3,20 @@
  *
  * This module provides a function to run evaluations with the interactive Ink UI.
  * It handles the lifecycle of rendering, progress updates, and cleanup.
+ *
+ * IMPORTANT: This module uses dynamic imports for ink-related components to avoid
+ * loading ink/React when promptfoo is used as a library.
  */
 
-import { isCI } from '../envars';
 import logger from '../logger';
-import { EvalApp } from './EvalApp';
-import { type EvalUIController, extractProviderIds } from './evalBridge';
-import { type RenderResult, renderInteractive, shouldUseInteractiveUI } from './render';
-import {
-  type InkUITransport,
-  registerInkUITransport,
-  unregisterInkUITransport,
-} from './utils/InkUITransport';
+
+// Use the lightweight check that doesn't load ink
+export { shouldUseInkUI } from './interactiveCheck';
 
 import type { EvaluateOptions, PromptMetrics, RunEvalOptions, TestSuite } from '../types/index';
+import type { EvalUIController } from './evalBridge';
+import type { RenderResult } from './render';
+import type { InkUITransport } from './utils/InkUITransport';
 
 export interface ShareContext {
   /** Organization name (from cloud config) */
@@ -86,6 +86,13 @@ export interface InkEvalResult {
 export async function initInkEval(options: EvalRunnerOptions): Promise<InkEvalResult> {
   const { title, showHelp = true, evaluateOptions, testSuite, onCancel, shareContext } = options;
 
+  // Dynamic imports to avoid loading ink/React when used as library
+  const [{ EvalApp }, { extractProviderIds }, { renderInteractive }] = await Promise.all([
+    import('./EvalApp'),
+    import('./evalBridge'),
+    import('./render'),
+  ]);
+
   // Extract provider IDs for UI
   const _providerIds = extractProviderIds(
     testSuite.providers.map((p) => ({
@@ -142,7 +149,12 @@ export async function initInkEval(options: EvalRunnerOptions): Promise<InkEvalRe
   // Register logger transport to capture logs in the UI
   // The transport calls controller.addLog for each log entry
   let inkTransport: InkUITransport | null = null;
+  let unregisterTransport: ((logger: typeof import('../logger').default) => void) | null = null;
   try {
+    const { registerInkUITransport, unregisterInkUITransport } = await import(
+      './utils/InkUITransport'
+    );
+    unregisterTransport = unregisterInkUITransport;
     inkTransport = registerInkUITransport(
       logger,
       (entry) => {
@@ -189,9 +201,9 @@ export async function initInkEval(options: EvalRunnerOptions): Promise<InkEvalRe
   // Cleanup function
   const cleanup = () => {
     // Unregister the logger transport first
-    if (inkTransport) {
+    if (inkTransport && unregisterTransport) {
       try {
-        unregisterInkUITransport(logger);
+        unregisterTransport(logger);
       } catch {
         // Ignore cleanup errors
       }
@@ -205,33 +217,4 @@ export async function initInkEval(options: EvalRunnerOptions): Promise<InkEvalRe
     evaluateOptions: modifiedOptions,
     cleanup,
   };
-}
-
-/**
- * Check if the Ink UI should be used for this evaluation.
- *
- * The Ink UI is enabled by default when:
- * - stdout is a TTY (interactive terminal)
- * - NOT in a CI environment
- *
- * Can be controlled via:
- * - PROMPTFOO_FORCE_INTERACTIVE_UI=true - Force enable (even in CI)
- * - PROMPTFOO_DISABLE_INTERACTIVE_UI=true - Force disable
- * - --no-interactive CLI flag (sets disabled)
- */
-export function shouldUseInkUI(): boolean {
-  // Force enable overrides everything (useful for testing in CI)
-  if (process.env.PROMPTFOO_FORCE_INTERACTIVE_UI === 'true') {
-    logger.debug('Ink UI force-enabled via PROMPTFOO_FORCE_INTERACTIVE_UI');
-    return true;
-  }
-
-  // CI environments get non-interactive by default
-  if (isCI()) {
-    logger.debug('Ink UI disabled in CI environment');
-    return false;
-  }
-
-  // Use the shared interactive UI check (handles TTY, explicit disable, etc.)
-  return shouldUseInteractiveUI();
 }

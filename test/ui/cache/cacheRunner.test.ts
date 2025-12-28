@@ -18,15 +18,48 @@ vi.mock('../../../src/logger', () => ({
   },
 }));
 
-vi.mock('../../../src/ui/render', () => ({
+vi.mock('../../../src/ui/interactiveCheck', () => ({
   shouldUseInteractiveUI: vi.fn(() => true),
-  renderInteractive: vi.fn(),
+  shouldUseInkUI: vi.fn(() => true),
+  isInteractiveUIForced: vi.fn(() => false),
+}));
+
+vi.mock('../../../src/ui/render', () => ({
+  renderInteractive: vi.fn().mockResolvedValue({
+    cleanup: vi.fn(),
+    clear: vi.fn(),
+    unmount: vi.fn(),
+    rerender: vi.fn(),
+    waitUntilExit: vi.fn().mockResolvedValue(undefined),
+    frames: [],
+    lastFrame: vi.fn(),
+    instance: {},
+  }),
+}));
+
+vi.mock('../../../src/ui/cache/CacheApp', () => ({
+  CacheApp: vi.fn(() => null),
 }));
 
 describe('cacheRunner', () => {
-  beforeEach(() => {
-    vi.resetModules();
-    vi.resetAllMocks();
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    // Reset mocks to default return values
+    const { isCI } = await import('../../../src/envars');
+    const { shouldUseInteractiveUI } = await import('../../../src/ui/interactiveCheck');
+    const { renderInteractive } = await import('../../../src/ui/render');
+    vi.mocked(isCI).mockReturnValue(false);
+    vi.mocked(shouldUseInteractiveUI).mockReturnValue(true);
+    vi.mocked(renderInteractive).mockResolvedValue({
+      cleanup: vi.fn(),
+      clear: vi.fn(),
+      unmount: vi.fn(),
+      rerender: vi.fn(),
+      waitUntilExit: vi.fn().mockResolvedValue(undefined),
+      frames: [],
+      lastFrame: vi.fn(),
+      instance: {},
+    } as any);
   });
 
   afterEach(() => {
@@ -36,9 +69,6 @@ describe('cacheRunner', () => {
 
   describe('shouldUseInkCache', () => {
     it('should return true by default when in TTY and not in CI', async () => {
-      const { shouldUseInteractiveUI } = await import('../../../src/ui/render');
-      vi.mocked(shouldUseInteractiveUI).mockReturnValue(true);
-
       const { shouldUseInkCache } = await import('../../../src/ui/cache/cacheRunner');
       expect(shouldUseInkCache()).toBe(true);
     });
@@ -46,7 +76,6 @@ describe('cacheRunner', () => {
     it('should return false in CI environment', async () => {
       const { isCI } = await import('../../../src/envars');
       vi.mocked(isCI).mockReturnValue(true);
-
       const { shouldUseInkCache } = await import('../../../src/ui/cache/cacheRunner');
       expect(shouldUseInkCache()).toBe(false);
     });
@@ -55,15 +84,13 @@ describe('cacheRunner', () => {
       const { isCI } = await import('../../../src/envars');
       vi.mocked(isCI).mockReturnValue(true);
       process.env.PROMPTFOO_FORCE_INTERACTIVE_UI = 'true';
-
       const { shouldUseInkCache } = await import('../../../src/ui/cache/cacheRunner');
       expect(shouldUseInkCache()).toBe(true);
     });
 
     it('should return false when shouldUseInteractiveUI returns false', async () => {
-      const { shouldUseInteractiveUI } = await import('../../../src/ui/render');
+      const { shouldUseInteractiveUI } = await import('../../../src/ui/interactiveCheck');
       vi.mocked(shouldUseInteractiveUI).mockReturnValue(false);
-
       const { shouldUseInkCache } = await import('../../../src/ui/cache/cacheRunner');
       expect(shouldUseInkCache()).toBe(false);
     });
@@ -74,16 +101,21 @@ describe('cacheRunner', () => {
       const mockCleanup = vi.fn();
       const { renderInteractive } = await import('../../../src/ui/render');
 
-      vi.mocked(renderInteractive).mockResolvedValue({
-        cleanup: mockCleanup,
-        clear: vi.fn(),
-        unmount: vi.fn(),
-        rerender: vi.fn(),
-        waitUntilExit: vi.fn().mockResolvedValue(undefined),
-        frames: [],
-        lastFrame: vi.fn(),
-        instance: {},
-      } as any);
+      vi.mocked(renderInteractive).mockImplementation(async (element) => {
+        const props = element.props as any;
+        // Simulate exit immediately
+        setTimeout(() => props.onExit?.(), 0);
+        return {
+          cleanup: mockCleanup,
+          clear: vi.fn(),
+          unmount: vi.fn(),
+          rerender: vi.fn(),
+          waitUntilExit: vi.fn().mockResolvedValue(undefined),
+          frames: [],
+          lastFrame: vi.fn(),
+          instance: {},
+        } as any;
+      });
 
       const { runInkCache } = await import('../../../src/ui/cache/cacheRunner');
 
@@ -95,24 +127,13 @@ describe('cacheRunner', () => {
       });
       const mockClearCache = vi.fn().mockResolvedValue(undefined);
 
-      const resultPromise = runInkCache({
+      const result = await runInkCache({
         getStats: mockGetStats,
         clearCache: mockClearCache,
       });
 
       // Verify renderInteractive was called
       expect(renderInteractive).toHaveBeenCalled();
-
-      // Get the rendered element props
-      const call = vi.mocked(renderInteractive).mock.calls[0];
-      expect(call).toBeDefined();
-
-      // Simulate exit callback
-      const element = call[0];
-      const props = element.props as any;
-      props.onExit?.();
-
-      const result = await resultPromise;
       expect(result.cleared).toBe(false);
       expect(mockCleanup).toHaveBeenCalled();
     });
@@ -121,16 +142,26 @@ describe('cacheRunner', () => {
       const mockCleanup = vi.fn();
       const { renderInteractive } = await import('../../../src/ui/render');
 
-      vi.mocked(renderInteractive).mockResolvedValue({
-        cleanup: mockCleanup,
-        clear: vi.fn(),
-        unmount: vi.fn(),
-        rerender: vi.fn(),
-        waitUntilExit: vi.fn().mockResolvedValue(undefined),
-        frames: [],
-        lastFrame: vi.fn(),
-        instance: {},
-      } as any);
+      const mockClearCache = vi.fn().mockResolvedValue(undefined);
+
+      vi.mocked(renderInteractive).mockImplementation(async (element) => {
+        const props = element.props as any;
+        // Simulate clearing cache then exit
+        setTimeout(async () => {
+          await props.onClear?.();
+          props.onExit?.();
+        }, 0);
+        return {
+          cleanup: mockCleanup,
+          clear: vi.fn(),
+          unmount: vi.fn(),
+          rerender: vi.fn(),
+          waitUntilExit: vi.fn().mockResolvedValue(undefined),
+          frames: [],
+          lastFrame: vi.fn(),
+          instance: {},
+        } as any;
+      });
 
       const { runInkCache } = await import('../../../src/ui/cache/cacheRunner');
 
@@ -140,25 +171,12 @@ describe('cacheRunner', () => {
         cachePath: '/test/cache',
         enabled: true,
       });
-      const mockClearCache = vi.fn().mockResolvedValue(undefined);
 
-      const resultPromise = runInkCache({
+      const result = await runInkCache({
         getStats: mockGetStats,
         clearCache: mockClearCache,
       });
 
-      // Get the rendered element props
-      const call = vi.mocked(renderInteractive).mock.calls[0];
-      const element = call[0];
-      const props = element.props as any;
-
-      // Simulate clear callback
-      await props.onClear?.();
-
-      // Then exit
-      props.onExit?.();
-
-      const result = await resultPromise;
       expect(result.cleared).toBe(true);
       expect(mockClearCache).toHaveBeenCalled();
     });

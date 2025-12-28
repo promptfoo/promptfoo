@@ -1,15 +1,16 @@
 /**
  * Entry point for the Ink-based list UI.
+ *
+ * IMPORTANT: This module uses dynamic imports for ink-related components to avoid
+ * loading ink/React when promptfoo is used as a library.
  */
-
-import React from 'react';
 
 import { isCI } from '../../envars';
 import logger from '../../logger';
-import { renderInteractive, shouldUseInteractiveUI } from '../render';
-import { ListApp, type ListItem, type ResourceType } from './ListApp';
+import { shouldUseInteractiveUI } from '../interactiveCheck';
 
 import type { RenderResult } from '../render';
+import type { ListItem, ResourceType } from './ListApp';
 
 export interface ListRunnerOptions {
   /** Resource type to list */
@@ -58,6 +59,13 @@ export function shouldUseInkList(): boolean {
  * Run the Ink-based list UI.
  */
 export async function runInkList(options: ListRunnerOptions): Promise<ListResult> {
+  // Dynamic imports to avoid loading ink/React when used as library
+  const [React, { renderInteractive }, { ListApp }] = await Promise.all([
+    import('react'),
+    import('../render'),
+    import('./ListApp'),
+  ]);
+
   let result: ListResult = { cancelled: false };
   let resolveResult: (result: ListResult) => void;
   const resultPromise = new Promise<ListResult>((resolve) => {
@@ -103,5 +111,4 @@ export async function runInkList(options: ListRunnerOptions): Promise<ListResult
   return result;
 }
 
-export { ListApp };
 export type { ListItem, ResourceType };

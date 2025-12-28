@@ -1,15 +1,16 @@
 /**
  * Entry point for the Ink-based share UI.
+ *
+ * IMPORTANT: This module uses dynamic imports for ink-related components to avoid
+ * loading ink/React when promptfoo is used as a library.
  */
-
-import React from 'react';
 
 import { isCI } from '../../envars';
 import logger from '../../logger';
-import { renderInteractive, shouldUseInteractiveUI } from '../render';
-import { createShareController, ShareApp, type ShareController } from './ShareApp';
+import { shouldUseInteractiveUI } from '../interactiveCheck';
 
 import type { RenderResult } from '../render';
+import type { ShareController } from './ShareApp';
 
 export interface ShareRunnerOptions {
   /** Eval ID to share */
@@ -66,6 +67,13 @@ export function shouldUseInkShare(): boolean {
  * Initialize the Ink-based share UI.
  */
 export async function initInkShare(options: ShareRunnerOptions): Promise<ShareUIResult> {
+  // Dynamic imports to avoid loading ink/React when used as library
+  const [React, { renderInteractive }, { ShareApp, createShareController }] = await Promise.all([
+    import('react'),
+    import('../render'),
+    import('./ShareApp'),
+  ]);
+
   let resolveConfirmation: (confirmed: boolean) => void;
   const confirmationPromise = new Promise<boolean>((resolve) => {
     resolveConfirmation = resolve;
@@ -116,6 +124,3 @@ export async function initInkShare(options: ShareRunnerOptions): Promise<ShareUI
     result: resultPromise,
   };
 }
-
-export { ShareApp, createShareController };
-export type { ShareController };
