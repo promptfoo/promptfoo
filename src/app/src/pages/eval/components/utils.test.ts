@@ -1,7 +1,7 @@
 import { HUMAN_ASSERTION_TYPE } from '@promptfoo/constants';
-import type { EvaluateTableOutput } from '@promptfoo/types';
 import { describe, expect, it } from 'vitest';
 import { getHumanRating, hasHumanRating } from './utils';
+import type { EvaluateTableOutput } from '@promptfoo/types';
 
 // Helper to create a base output object with all required properties
 const createBaseOutput = (): EvaluateTableOutput => ({
