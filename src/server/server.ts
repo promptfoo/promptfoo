@@ -35,6 +35,7 @@ import { BrowserBehavior, BrowserBehaviorNames, openBrowser } from '../util/serv
 import { blobsRouter } from './routes/blobs';
 import { configsRouter } from './routes/configs';
 import { evalRouter } from './routes/eval';
+import generateRouter from './routes/generate';
 import { mediaRouter } from './routes/media';
 import { modelAuditRouter } from './routes/modelAudit';
 import { providersRouter } from './routes/providers';
@@ -270,6 +271,7 @@ export function createApp() {
   app.use('/api/model-audit', modelAuditRouter);
   app.use('/api/traces', tracesRouter);
   app.use('/api/version', versionRouter);
+  app.use('/api/generate', generateRouter);
 
   app.post('/api/telemetry', async (req: Request, res: Response): Promise<void> => {
     try {

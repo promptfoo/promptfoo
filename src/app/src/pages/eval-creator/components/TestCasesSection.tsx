@@ -29,7 +29,9 @@ import { useToast } from '@app/hooks/useToast';
 import { cn } from '@app/lib/utils';
 import { useStore } from '@app/stores/evalConfig';
 import { testCaseFromCsvRow } from '@promptfoo/csv';
+import { Sparkles } from 'lucide-react';
 import AssertsForm from './AssertsForm';
+import GenerateTestCasesDialog from './GenerateTestCasesDialog';
 import TestCaseDialog from './TestCaseDialog';
 import type { Assertion, CsvRow, TestCase } from '@promptfoo/types';
 
@@ -72,7 +74,16 @@ const TestCasesSection = ({ varsList }: TestCasesSectionProps) => {
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false);
   const [testCaseToDelete, setTestCaseToDelete] = React.useState<number | null>(null);
   const [defaultAssertsOpen, setDefaultAssertsOpen] = React.useState(false);
+  const [generateDialogOpen, setGenerateDialogOpen] = React.useState(false);
   const { showToast } = useToast();
+
+  // Get prompts from config for AI generation
+  const prompts = React.useMemo(() => {
+    const configPrompts = config.prompts || [];
+    return configPrompts
+      .map((p) => (typeof p === 'string' ? p : p.raw || ''))
+      .filter((p) => p.trim());
+  }, [config.prompts]);
 
   // Default assertions that apply to all test cases
   const defaultAsserts = (config.defaultTest?.assert || []) as Assertion[];
@@ -264,6 +275,20 @@ const TestCasesSection = ({ varsList }: TestCasesSectionProps) => {
             <TooltipContent>Upload test cases from CSV or YAML</TooltipContent>
           </Tooltip>
 
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => setGenerateDialogOpen(true)}
+                aria-label="Generate test cases with AI"
+              >
+                <Sparkles className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Generate test cases with AI</TooltipContent>
+          </Tooltip>
+
           {testCases.length === 0 && (
             <Button
               variant="secondary"
@@ -323,7 +348,12 @@ const TestCasesSection = ({ varsList }: TestCasesSectionProps) => {
           </CollapsibleTrigger>
           <CollapsibleContent>
             <div className="border-t border-border p-4">
-              <AssertsForm onAdd={setDefaultAsserts} initialValues={defaultAsserts} />
+              <AssertsForm
+                onAdd={setDefaultAsserts}
+                initialValues={defaultAsserts}
+                prompts={prompts}
+                existingTests={testCases}
+              />
             </div>
           </CollapsibleContent>
         </Collapsible>
@@ -457,6 +487,21 @@ const TestCasesSection = ({ varsList }: TestCasesSectionProps) => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Generate Test Cases Dialog */}
+      <GenerateTestCasesDialog
+        open={generateDialogOpen}
+        onOpenChange={setGenerateDialogOpen}
+        prompts={prompts}
+        existingTests={testCases}
+        onAdd={(newTestCases) => {
+          setTestCases([...testCases, ...newTestCases]);
+          showToast(
+            `Added ${newTestCases.length} generated test case${newTestCases.length !== 1 ? 's' : ''}`,
+            'success',
+          );
+        }}
+      />
     </div>
   );
 };
