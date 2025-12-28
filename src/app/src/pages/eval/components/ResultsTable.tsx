@@ -34,17 +34,15 @@ import {
   useReactTable,
 } from '@tanstack/react-table';
 import yaml from 'js-yaml';
-import ReactMarkdown from 'react-markdown';
 import { Link, useNavigate } from 'react-router-dom';
-import remarkGfm from 'remark-gfm';
 import CustomMetrics from './CustomMetrics';
 import CustomMetricsDialog from './CustomMetricsDialog';
 import EvalOutputCell from './EvalOutputCell';
 import EvalOutputPromptDialog from './EvalOutputPromptDialog';
 import { useFilterMode } from './FilterModeProvider';
-import MarkdownErrorBoundary from './MarkdownErrorBoundary';
 import { useResultsViewSettingsStore, useTableStore } from './store';
 import TruncatedText from './TruncatedText';
+import VariableMarkdownCell from './VariableMarkdownCell';
 import type { CellContext, ColumnDef, VisibilityState } from '@tanstack/table-core';
 
 import type { TruncatedTextProps } from './TruncatedText';
@@ -757,13 +755,11 @@ function ResultsTable({
                     value = `\`\`\`json\n${value}\n\`\`\``;
                   }
                 }
+                // Use memoized VariableMarkdownCell to prevent re-renders when
+                // table layout changes (e.g., column visibility toggles).
+                // @see https://github.com/promptfoo/promptfoo/issues/969
                 const cellContent = renderMarkdown ? (
-                  <MarkdownErrorBoundary fallback={value}>
-                    <TruncatedText
-                      text={<ReactMarkdown remarkPlugins={[remarkGfm]}>{value}</ReactMarkdown>}
-                      maxLength={maxTextLength}
-                    />
-                  </MarkdownErrorBoundary>
+                  <VariableMarkdownCell value={value} maxTextLength={maxTextLength} />
                 ) : (
                   <TruncatedText text={value} maxLength={maxTextLength} />
                 );
