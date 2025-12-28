@@ -358,6 +358,13 @@ const RiskCategoryDrawer = ({
           }
           gradingResults={selectedTest?.gradingResult ? [selectedTest.gradingResult] : undefined}
           metadata={selectedTest?.result?.metadata}
+          providerPrompt={
+            selectedTest?.result?.response?.prompt
+              ? typeof selectedTest.result.response.prompt === 'string'
+                ? selectedTest.result.response.prompt
+                : JSON.stringify(selectedTest.result.response.prompt)
+              : undefined
+          }
         />
       </SheetContent>
     </Sheet>

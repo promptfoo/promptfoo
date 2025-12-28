@@ -111,6 +111,7 @@ export async function runMetaAgentRedteam({
   perTurnLayers?: LayerConfig[];
 }): Promise<{
   output: string;
+  prompt?: string;
   metadata: IterativeMetaMetadata;
   tokenUsage: TokenUsage;
   error?: string;
@@ -480,6 +481,7 @@ export async function runMetaAgentRedteam({
 
   return {
     output: bestResponse || lastResponse?.output || '',
+    prompt: bestPrompt,
     ...(lastResponse?.error ? { error: lastResponse.error } : {}),
     metadata: {
       finalIteration,

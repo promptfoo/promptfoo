@@ -1,0 +1,41 @@
+# Example: Provider Prompt Reporting
+#
+# This example demonstrates how custom providers can report the actual prompt
+# they sent to the LLM using the `prompt` field in ProviderResponse.
+#
+# This is useful for frameworks like GenAIScript that generate prompts dynamically.
+# The reported prompt is used for:
+# - Moderation assertions (checks the actual prompt for policy violations)
+# - Display in the web UI ("Actual Prompt Sent")
+# - Debugging and auditing
+
+description: Provider Prompt Reporting Example
+
+providers:
+  - file://./dynamicPromptProvider.mjs
+
+prompts:
+  - 'Tell me about {{topic}}'
+
+tests:
+  - description: Basic test - provider reports dynamic prompt
+    vars:
+      topic: artificial intelligence
+    assert:
+      # The output should contain the topic
+      - type: icontains
+        value: artificial intelligence
+
+  - description: Another test with different topic
+    vars:
+      topic: climate change
+    assert:
+      - type: icontains
+        value: climate change
+
+  - description: Test with special characters in topic
+    vars:
+      topic: "machine learning & neural networks"
+    assert:
+      - type: icontains
+        value: machine learning

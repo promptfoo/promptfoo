@@ -156,6 +156,16 @@ export interface ProviderResponse {
     };
     [key: string]: any;
   };
+  /**
+   * The actual prompt sent to the LLM. If set by a provider, this overrides
+   * the rendered prompt for display and assertions.
+   *
+   * Useful for providers that dynamically generate or modify prompts
+   * (e.g., GenAIScript, multi-turn strategies, agent frameworks).
+   *
+   * Can be a simple string or an array of chat messages.
+   */
+  prompt?: string | Array<{ role: string; content: string }>;
   raw?: string | any;
   output?: string | any;
   /**

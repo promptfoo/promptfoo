@@ -666,14 +666,21 @@ function ResultsTable({
                 const _originalValue = value; // Store original value for tooltip
                 const row = info.row.original;
 
-                // For red team evals, show the final injected prompt for the configured inject variable
-                // This replaces the original prompt with what was actually sent to the model
+                // For red team evals and dynamic prompts, show the actual prompt sent to the model
+                // Priority: 1) response.prompt (provider-reported), 2) redteamFinalPrompt (legacy)
                 if (varName === injectVarName) {
-                  // Check all outputs to find one with redteamFinalPrompt metadata
+                  // Check all outputs to find one with provider-reported prompt or redteamFinalPrompt
                   for (const output of row.outputs || []) {
-                    // Check if redteamFinalPrompt exists
+                    // Check response.prompt first (provider-reported actual prompt)
+                    if (output?.response?.prompt) {
+                      value =
+                        typeof output.response.prompt === 'string'
+                          ? output.response.prompt
+                          : JSON.stringify(output.response.prompt);
+                      break;
+                    }
+                    // Fall back to legacy redteamFinalPrompt
                     if (output?.metadata?.redteamFinalPrompt) {
-                      // Replace the original prompt with the injected version
                       value = output.metadata.redteamFinalPrompt;
                       break;
                     }

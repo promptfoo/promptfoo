@@ -707,6 +707,13 @@ function EvalOutputCell({
               gradingResults={output.gradingResult?.componentResults}
               output={text}
               metadata={output.metadata}
+              providerPrompt={
+                output.response?.prompt
+                  ? typeof output.response.prompt === 'string'
+                    ? output.response.prompt
+                    : JSON.stringify(output.response.prompt)
+                  : undefined
+              }
               evaluationId={evaluationId}
               testCaseId={testCaseId || output.id}
               testIndex={rowIndex}

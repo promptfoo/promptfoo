@@ -40,11 +40,13 @@ export default class RedteamMischievousUserProvider extends SimulatedUser {
     finalTargetResponse: ProviderResponse,
     sessionId: string,
   ) {
+    const finalPrompt = getLastMessageContent(messages, 'user') || '';
     return {
       output: getLastMessageContent(messages, 'assistant') || '',
+      prompt: finalPrompt,
       tokenUsage,
       metadata: {
-        redteamFinalPrompt: getLastMessageContent(messages, 'user') || '',
+        redteamFinalPrompt: finalPrompt,
         messages,
         redteamHistory: messagesToRedteamHistory(messages),
         sessionId,
