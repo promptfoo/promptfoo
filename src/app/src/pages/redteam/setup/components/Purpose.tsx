@@ -23,6 +23,7 @@ import Typography from '@mui/material/Typography';
 import { type TargetPurposeDiscoveryResult } from '@promptfoo/redteam/commands/discover';
 import { DEFAULT_HTTP_TARGET, useRedTeamConfig } from '../hooks/useRedTeamConfig';
 import PageWrapper from './PageWrapper';
+import ReconSummaryBanner from './ReconSummaryBanner';
 
 import type { ApplicationDefinition } from '../types';
 
@@ -374,6 +375,8 @@ export default function Purpose({ onNext, onBack }: PromptsProps) {
               </Typography>
             </ToggleButton>
           </ToggleButtonGroup>
+
+          <ReconSummaryBanner />
 
           {testMode === 'application' ? (
             <Stack direction="column" spacing={4}>
