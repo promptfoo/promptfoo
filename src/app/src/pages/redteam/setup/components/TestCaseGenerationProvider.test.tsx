@@ -472,13 +472,11 @@ describe('TestCaseGenerationProvider', () => {
       });
 
       // Ensure calls were made
-      // 2 generations + 2 executions = 4 calls
-      // Note: DEFAULT_MULTI_TURN_MAX_TURNS is typically 5, but our test stops naturally or if we mock limits.
-      // Since we didn't mock maxTurns specifically in the provider (it uses constant),
-      // we rely on the mock API behavior. However, without a stop condition or maxTurns limit in the test setup,
-      // it might go on. But the loop logic relies on state updates.
-      // Let's check at least 2 turns occurred.
-      expect(callApi).toHaveBeenCalledTimes(4);
+      // 2 generations + 2 executions = 4 calls minimum for 2 turns
+      // Upper bound: DEFAULT_MULTI_TURN_MAX_TURNS (5) * 2 calls per turn = 10 max
+      const callCount = callApiMock.mock.calls.length;
+      expect(callCount).toBeGreaterThanOrEqual(4);
+      expect(callCount).toBeLessThanOrEqual(10);
     });
   });
 

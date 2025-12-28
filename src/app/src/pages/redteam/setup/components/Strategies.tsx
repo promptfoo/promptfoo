@@ -84,7 +84,17 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
   } = useApiHealth();
 
   const [isStatefulValue, setIsStatefulValue] = useState(config.target?.config?.stateful === true);
-  const [isMultiTurnEnabled, setIsMultiTurnEnabled] = useState(false);
+
+  // Check if config has multi-turn strategies
+  const hasMultiTurnStrategies = useMemo(
+    () =>
+      (config.strategies ?? []).some(
+        (s) => s && MULTI_TURN_STRATEGIES.includes(getStrategyId(s) as any),
+      ),
+    [config.strategies],
+  );
+
+  const [isMultiTurnEnabled, setIsMultiTurnEnabled] = useState(hasMultiTurnStrategies);
 
   const [configDialog, setConfigDialog] = useState<ConfigDialogState>({
     isOpen: false,
@@ -158,6 +168,12 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
     };
   }, []);
 
+  // Sync isMultiTurnEnabled when config.strategies changes
+  // This keeps the toggle in sync with the actual state of strategies
+  useEffect(() => {
+    setIsMultiTurnEnabled(hasMultiTurnStrategies);
+  }, [hasMultiTurnStrategies]);
+
   // Determine the initially selected preset
   const initialPreset = useMemo(() => {
     if (!Array.isArray(config.strategies)) {
@@ -167,10 +183,6 @@ export default function Strategies({ onNext, onBack }: StrategiesProps) {
     const hasMultiTurn = config.strategies.some(
       (s) => s && MULTI_TURN_STRATEGIES.includes(getStrategyId(s) as any),
     );
-
-    if (hasMultiTurn) {
-      setIsMultiTurnEnabled(true);
-    }
 
     const matchedPresetId = Object.entries(STRATEGY_PRESETS).find(([_presetId, preset]) => {
       if (!preset) {
