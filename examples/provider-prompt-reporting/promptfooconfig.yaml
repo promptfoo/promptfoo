@@ -1,41 +1,61 @@
-# Example: Provider Prompt Reporting
+# yaml-language-server: $schema=https://promptfoo.dev/config-schema.json
+# Example: Provider Prompt Reporting with Vercel AI SDK
 #
 # This example demonstrates how custom providers can report the actual prompt
 # they sent to the LLM using the `prompt` field in ProviderResponse.
 #
-# This is useful for frameworks like GenAIScript that generate prompts dynamically.
-# The reported prompt is used for:
-# - Moderation assertions (checks the actual prompt for policy violations)
-# - Display in the web UI ("Actual Prompt Sent")
-# - Debugging and auditing
+# The provider dynamically constructs prompts with:
+# - System instructions for consistent behavior
+# - Context based on variables (audience, format)
+# - Structured user prompts
+#
+# Run with: npx promptfoo@latest eval
+#
+# To use the real AI SDK provider (requires OpenAI API key):
+#   npm install ai @ai-sdk/openai
+#   npx promptfoo@latest eval --providers file://./aiSdkProvider.mjs
 
-description: Provider Prompt Reporting Example
+description: Provider prompt reporting with Vercel AI SDK
 
 providers:
-  - file://./dynamicPromptProvider.mjs
+  # Mock provider for testing without API keys
+  - file://./mockProvider.mjs
 
 prompts:
-  - 'Tell me about {{topic}}'
+  - '{{topic}}'
 
 tests:
-  - description: Basic test - provider reports dynamic prompt
+  - description: Explain quantum computing to beginners
     vars:
-      topic: artificial intelligence
+      topic: quantum computing
+      audience: high school students
+      format: bullet points
     assert:
-      # The output should contain the topic
       - type: icontains
-        value: artificial intelligence
+        value: quantum
 
-  - description: Another test with different topic
+  - description: Explain machine learning for developers
     vars:
-      topic: climate change
+      topic: machine learning fundamentals
+      audience: software developers
+      format: code examples included
     assert:
       - type: icontains
-        value: climate change
+        value: learning
 
-  - description: Test with special characters in topic
+  - description: Explain climate change impacts
     vars:
-      topic: "machine learning & neural networks"
+      topic: climate change effects on agriculture
+      audience: farmers and agricultural professionals
     assert:
       - type: icontains
-        value: machine learning
+        value: climate
+
+  - description: Test prompt reporting with special characters
+    vars:
+      topic: "APIs & microservices: best practices"
+      audience: backend engineers
+      format: concise with examples
+    assert:
+      - type: javascript
+        value: output.length > 50
