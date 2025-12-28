@@ -1,6 +1,5 @@
 import { HIDDEN_METADATA_KEYS } from '@app/constants';
 import { callApi } from '@app/utils/api';
-import { hasHumanRating } from './utils';
 import { Severity } from '@promptfoo/redteam/constants';
 import {
   isPolicyMetric,
@@ -12,6 +11,7 @@ import { getRiskCategorySeverityMap } from '@promptfoo/redteam/sharedFrontend';
 import { convertResultsToTable } from '@promptfoo/util/convertEvalResultsToTable';
 import { create } from 'zustand';
 import { persist, subscribeWithSelector } from 'zustand/middleware';
+import { hasHumanRating } from './utils';
 import type { Policy, PolicyObject } from '@promptfoo/redteam/types';
 import type {
   EvalResultsFilterMode,
