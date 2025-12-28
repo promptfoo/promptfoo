@@ -235,7 +235,7 @@ export function DataTableFilter<TData>({ table }: DataTableFilterProps<TData>) {
       operator: isSelectFilter ? 'equals' : 'contains',
       value: isSelectFilter ? '' : '',
     };
-    setActiveFilters([...activeFilters, newFilter]);
+    setActiveFilters((prevFilters) => [...prevFilters, newFilter]);
   };
 
   // Apply filter with operator
@@ -259,36 +259,57 @@ export function DataTableFilter<TData>({ table }: DataTableFilterProps<TData>) {
     [table],
   );
 
-  const removeFilter = (id: string) => {
-    const filter = activeFilters.find((f) => f.id === id);
-    if (filter) {
-      // Clear the column filter
-      const column = table.getColumn(filter.columnId);
-      column?.setFilterValue(undefined);
-    }
-    setActiveFilters(activeFilters.filter((f) => f.id !== id));
-  };
-
-  const updateFilter = (id: string, updates: Partial<ActiveFilter>) => {
-    setActiveFilters(
-      activeFilters.map((f) => {
-        if (f.id === id) {
-          const updated = { ...f, ...updates };
-          applyFilter(updated);
-          return updated;
+  const removeFilter = React.useCallback(
+    (id: string) => {
+      setActiveFilters((prevFilters) => {
+        const filter = prevFilters.find((f) => f.id === id);
+        if (filter) {
+          // Clear the column filter after state update
+          queueMicrotask(() => {
+            const column = table.getColumn(filter.columnId);
+            column?.setFilterValue(undefined);
+          });
         }
-        return f;
-      }),
-    );
-  };
+        return prevFilters.filter((f) => f.id !== id);
+      });
+    },
+    [table],
+  );
 
-  const clearAllFilters = () => {
-    activeFilters.forEach((filter) => {
-      const column = table.getColumn(filter.columnId);
-      column?.setFilterValue(undefined);
+  const updateFilter = React.useCallback(
+    (id: string, updates: Partial<ActiveFilter>) => {
+      setActiveFilters((prevFilters) => {
+        const updatedFilters = prevFilters.map((f) => {
+          if (f.id === id) {
+            return { ...f, ...updates };
+          }
+          return f;
+        });
+
+        // Apply the filter after state update (in a microtask to avoid setState during render)
+        const updatedFilter = updatedFilters.find((f) => f.id === id);
+        if (updatedFilter) {
+          queueMicrotask(() => applyFilter(updatedFilter));
+        }
+
+        return updatedFilters;
+      });
+    },
+    [applyFilter],
+  );
+
+  const clearAllFilters = React.useCallback(() => {
+    setActiveFilters((prevFilters) => {
+      // Clear all filters after state update
+      queueMicrotask(() => {
+        prevFilters.forEach((filter) => {
+          const column = table.getColumn(filter.columnId);
+          column?.setFilterValue(undefined);
+        });
+      });
+      return [];
     });
-    setActiveFilters([]);
-  };
+  }, [table]);
 
   const activeFilterCount = activeFilters.filter((f) => {
     return Array.isArray(f.value) ? f.value.length > 0 : Boolean(f.value);
@@ -352,9 +373,14 @@ export function DataTableFilter<TData>({ table }: DataTableFilterProps<TData>) {
                     <Select
                       value={filter.columnId}
                       onValueChange={(value) => {
-                        // Clear old column filter
-                        const oldColumn = table.getColumn(filter.columnId);
-                        oldColumn?.setFilterValue(undefined);
+                        // Only clear old column filter if no other filters are using it
+                        const otherFiltersOnSameColumn = activeFilters.filter(
+                          (f) => f.id !== filter.id && f.columnId === filter.columnId,
+                        );
+                        if (otherFiltersOnSameColumn.length === 0) {
+                          const oldColumn = table.getColumn(filter.columnId);
+                          oldColumn?.setFilterValue(undefined);
+                        }
                         // Update to new column
                         updateFilter(filter.id, { columnId: value, value: '' });
                       }}
