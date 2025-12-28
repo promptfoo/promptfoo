@@ -6,7 +6,7 @@ import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util/i
 import { getNunjucksEngine } from '../../util/templates';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToGoogle } from '../mcp/transform';
-import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
+import { getCacheOptions, parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
 import { CHAT_MODELS } from './shared';
 import {
   formatCandidateContents,
@@ -178,7 +178,7 @@ export class AIStudioChatProvider extends AIStudioGenericProvider {
         },
         REQUEST_TIMEOUT_MS,
         'json',
-        context?.bustCache ?? context?.debug,
+        getCacheOptions(context),
       )) as unknown as any);
     } catch (err) {
       return {

@@ -16,7 +16,7 @@ import { FINISH_REASON_MAP, normalizeFinishReason } from '../../util/finishReaso
 import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util/index';
 import { MCPClient } from '../mcp/client';
 import { transformMCPToolsToOpenAi } from '../mcp/transform';
-import { parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
+import { getCacheOptions, parseChatPrompt, REQUEST_TIMEOUT_MS } from '../shared';
 import { OpenAiGenericProvider } from './';
 import { calculateOpenAICost, getTokenUsage, OPENAI_CHAT_MODELS } from './util';
 
@@ -430,7 +430,7 @@ export class OpenAiChatCompletionProvider extends OpenAiGenericProvider {
         },
         REQUEST_TIMEOUT_MS,
         'json',
-        context?.bustCache ?? context?.debug,
+        getCacheOptions(context),
         this.config.maxRetries,
       ));
 

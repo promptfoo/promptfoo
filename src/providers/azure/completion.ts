@@ -3,7 +3,7 @@ import { getEnvFloat, getEnvInt, getEnvString } from '../../envars';
 import logger from '../../logger';
 import { normalizeFinishReason } from '../../util/finishReason';
 import invariant from '../../util/invariant';
-import { REQUEST_TIMEOUT_MS } from '../shared';
+import { getCacheOptions, REQUEST_TIMEOUT_MS } from '../shared';
 import { DEFAULT_AZURE_API_VERSION } from './defaults';
 import { AzureGenericProvider } from './generic';
 import { calculateAzureCost } from './util';
@@ -66,7 +66,7 @@ export class AzureCompletionProvider extends AzureGenericProvider {
         },
         REQUEST_TIMEOUT_MS,
         'json',
-        context?.bustCache ?? context?.debug,
+        getCacheOptions(context),
       )) as any);
     } catch (err) {
       return {

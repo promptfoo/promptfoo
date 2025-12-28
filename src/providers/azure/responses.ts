@@ -6,7 +6,7 @@ import { maybeLoadToolsFromExternalFile, renderVarsInObject } from '../../util/i
 import invariant from '../../util/invariant';
 import { FunctionCallbackHandler } from '../functionCallbackUtils';
 import { ResponsesProcessor } from '../responses/index';
-import { REQUEST_TIMEOUT_MS } from '../shared';
+import { getCacheOptions, REQUEST_TIMEOUT_MS } from '../shared';
 import { AzureGenericProvider } from './generic';
 import { calculateAzureCost } from './util';
 
@@ -272,7 +272,7 @@ export class AzureResponsesProvider extends AzureGenericProvider {
         },
         timeout,
         'json',
-        context?.bustCache ?? context?.debug,
+        getCacheOptions(context),
       ));
 
       if (status < 200 || status >= 300) {

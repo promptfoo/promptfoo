@@ -3,7 +3,7 @@ import { getEnvString } from '../envars';
 import logger from '../logger';
 import { type GenAISpanContext, type GenAISpanResult, withGenAISpan } from '../tracing/genaiTracer';
 import { maybeLoadToolsFromExternalFile } from '../util/index';
-import { parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
+import { getCacheOptions, parseChatPrompt, REQUEST_TIMEOUT_MS } from './shared';
 
 import type {
   ApiProvider,
@@ -390,7 +390,7 @@ export class OllamaChatProvider implements ApiProvider {
         },
         REQUEST_TIMEOUT_MS,
         'text',
-        context?.bustCache ?? context?.debug,
+        getCacheOptions(context),
       );
     } catch (err) {
       return {
