@@ -733,6 +733,40 @@ class Evaluator {
     this.fileWriters = jsonlFiles.map((p) => new JsonlFileWriter(p));
   }
 
+  /**
+   * Updates metrics and stats after a comparison assertion (select-best or max-score).
+   */
+  private updateComparisonStats(
+    result: EvalResult,
+    passed: boolean,
+    reason: string,
+    tokensUsed: TokenUsage | undefined,
+    wasSuccess: boolean,
+    wasScore: number,
+    metrics: CompletedPrompt['metrics'] | undefined,
+  ): void {
+    if (metrics) {
+      metrics.assertPassCount += passed ? 1 : 0;
+      metrics.assertFailCount += passed ? 0 : 1;
+      if (tokensUsed) {
+        updateAssertionMetrics(metrics, tokensUsed);
+      }
+      if (!passed && result.score !== wasScore) {
+        metrics.score += result.score - wasScore;
+      }
+    }
+    if (wasSuccess && !result.success) {
+      result.failureReason = ResultFailureReason.ASSERT;
+      result.error = reason;
+      if (metrics) {
+        metrics.testPassCount -= 1;
+        metrics.testFailCount += 1;
+      }
+      this.stats.successes -= 1;
+      this.stats.failures += 1;
+    }
+  }
+
   private async _runEvaluation(): Promise<Eval> {
     const { options } = this;
     let { testSuite } = this;
@@ -1703,33 +1737,25 @@ class Evaluator {
             }
             result.gradingResult.componentResults.push(gradingResult);
           } else {
-            result.gradingResult = gradingResult;
-            result.success = result.success && gradingResult.pass;
-            result.gradingResult.pass = result.success;
+            const newPass = result.success && gradingResult.pass;
+            result.gradingResult = {
+              ...gradingResult,
+              pass: newPass,
+            };
+            result.success = newPass;
             if (!gradingResult.pass) {
               result.score = result.gradingResult.score = gradingResult.score;
             }
           }
-          if (metrics) {
-            metrics.assertPassCount += gradingResult.pass ? 1 : 0;
-            metrics.assertFailCount += gradingResult.pass ? 0 : 1;
-            if (gradingResult.tokensUsed) {
-              updateAssertionMetrics(metrics, gradingResult.tokensUsed);
-            }
-            if (!gradingResult.pass && result.score !== wasScore) {
-              metrics.score += result.score - wasScore;
-            }
-          }
-          if (wasSuccess && !result.success) {
-            result.failureReason = ResultFailureReason.ASSERT;
-            result.error = gradingResult.reason;
-            if (metrics) {
-              metrics.testPassCount -= 1;
-              metrics.testFailCount += 1;
-            }
-            this.stats.successes -= 1;
-            this.stats.failures += 1;
-          }
+          this.updateComparisonStats(
+            result,
+            gradingResult.pass,
+            gradingResult.reason || '',
+            gradingResult.tokensUsed,
+            wasSuccess,
+            wasScore,
+            metrics,
+          );
           if (this.evalRecord.persisted) {
             await result.save();
           }
@@ -1796,15 +1822,21 @@ class Evaluator {
             const existingComponentResults = result.gradingResult?.componentResults || [];
             const existingGradingResult = result.gradingResult;
             const wasSuccess = result.success;
+            const wasScore = result.score;
             const metrics = prompts[result.promptIdx]?.metrics;
             const comparisonPassed = maxScoreGradingResult.pass;
             const previousPass = existingGradingResult?.pass ?? result.success;
             const nextPass = previousPass && comparisonPassed;
 
+            // When max-score fails, update score like select-best does
+            const newScore = comparisonPassed
+              ? (existingGradingResult?.score ?? result.score)
+              : maxScoreGradingResult.score;
+
             result.gradingResult = {
               ...(existingGradingResult || {}),
               pass: nextPass,
-              score: existingGradingResult?.score ?? result.score,
+              score: newScore,
               reason:
                 !comparisonPassed && previousPass
                   ? maxScoreGradingResult.reason
@@ -1820,24 +1852,18 @@ class Evaluator {
 
             // Max-score is an additional assertion, so overall pass depends on existing asserts too.
             result.success = nextPass;
-            if (metrics) {
-              metrics.assertPassCount += comparisonPassed ? 1 : 0;
-              metrics.assertFailCount += comparisonPassed ? 0 : 1;
-              if (maxScoreGradingResult.tokensUsed) {
-                updateAssertionMetrics(metrics, maxScoreGradingResult.tokensUsed);
-              }
+            if (!comparisonPassed) {
+              result.score = newScore;
             }
-            if (wasSuccess && !result.success) {
-              result.failureReason = ResultFailureReason.ASSERT;
-              result.error = maxScoreGradingResult.reason;
-              if (metrics) {
-                metrics.testPassCount -= 1;
-                metrics.testFailCount += 1;
-              }
-              this.stats.successes -= 1;
-              this.stats.failures += 1;
-            }
-
+            this.updateComparisonStats(
+              result,
+              comparisonPassed,
+              maxScoreGradingResult.reason || '',
+              maxScoreGradingResult.tokensUsed,
+              wasSuccess,
+              wasScore,
+              metrics,
+            );
             if (this.evalRecord.persisted) {
               await result.save();
             }
