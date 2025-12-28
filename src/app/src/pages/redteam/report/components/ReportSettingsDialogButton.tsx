@@ -83,7 +83,7 @@ const ReportSettingsDialogButton = () => {
             {/* Slider setting */}
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <Label>Plugin Pass Rate Threshold</Label>
+                <Label htmlFor="plugin-pass-rate">Plugin Pass Rate Threshold</Label>
                 <span className="text-sm font-medium text-muted-foreground">
                   {displayThreshold}%
                 </span>
@@ -92,6 +92,7 @@ const ReportSettingsDialogButton = () => {
                 Sets the threshold for considering a plugin as passed on the risk cards.
               </p>
               <input
+                id="plugin-pass-rate"
                 type="range"
                 value={sliderValue}
                 onChange={(e) => setPluginPassRateThreshold(Number.parseFloat(e.target.value))}
@@ -99,7 +100,6 @@ const ReportSettingsDialogButton = () => {
                 max={1}
                 step={0.05}
                 className="h-2 w-full cursor-pointer appearance-none rounded-lg bg-muted accent-primary"
-                aria-label="Plugin pass rate threshold"
               />
               <div className="flex justify-between text-xs text-muted-foreground">
                 <span>0%</span>

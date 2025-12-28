@@ -1,8 +1,8 @@
 import React from 'react';
 
-import { TooltipProvider } from '@app/components/ui/tooltip';
+import { renderWithProviders } from '@app/utils/testutils';
 import { Severity, severityDisplayNames } from '@promptfoo/redteam/constants';
-import { render, screen } from '@testing-library/react';
+import { screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import FrameworkCard from './FrameworkCard';
 import { type CategoryStats } from './FrameworkComplianceUtils';
@@ -19,11 +19,6 @@ vi.mock('./FrameworkComplianceUtils', async () => {
     getPluginDisplayName: vi.fn((plugin) => plugin),
   };
 });
-
-// Helper to render with TooltipProvider (delayDuration=0 for faster tests)
-const renderWithProviders = (ui: React.ReactElement) => {
-  return render(<TooltipProvider delayDuration={0}>{ui}</TooltipProvider>);
-};
 
 describe('FrameworkCard', () => {
   type FrameworkCardProps = React.ComponentProps<typeof FrameworkCard>;

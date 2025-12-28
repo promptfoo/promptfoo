@@ -108,6 +108,7 @@ const RiskCard = ({
                           setSelectedCategory(test.name);
                           setDrawerOpen(true);
                         }}
+                        aria-label={`View details for ${displayNameOverrides[test.name as keyof typeof displayNameOverrides] || categoryAliases[test.name as keyof typeof categoryAliases]}`}
                       >
                         <span className="text-sm">
                           {displayNameOverrides[test.name as keyof typeof displayNameOverrides] ||

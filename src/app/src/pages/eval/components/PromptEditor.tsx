@@ -65,12 +65,12 @@ export function PromptEditor({
   readOnly = false,
 }: PromptEditorProps) {
   return (
-    <div className="mb-4">
-      <div className="flex items-center justify-between mb-2">
-        <h4 className={subtitleTypographyClassName}>Prompt</h4>
-        <div className="flex gap-2">
-          {!readOnly && !editMode && (
-            <TooltipProvider>
+    <TooltipProvider>
+      <div className="mb-4">
+        <div className="flex items-center justify-between mb-2">
+          <h4 className={subtitleTypographyClassName}>Prompt</h4>
+          <div className="flex gap-2">
+            {!readOnly && !editMode && (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
@@ -85,56 +85,60 @@ export function PromptEditor({
                 </TooltipTrigger>
                 <TooltipContent>Edit & Replay</TooltipContent>
               </Tooltip>
-            </TooltipProvider>
-          )}
-          {!readOnly && editMode && (
-            <>
-              <Button size="sm" onClick={onReplay} disabled={replayLoading || !editedPrompt.trim()}>
-                {replayLoading ? (
-                  <Spinner className="h-4 w-4 mr-2" />
-                ) : (
-                  <Play className="h-4 w-4 mr-2" />
-                )}
-                Replay
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  onCancel();
-                  onEditModeChange(false);
-                  onPromptChange(prompt);
-                }}
-              >
-                Cancel
-              </Button>
-            </>
-          )}
+            )}
+            {!readOnly && editMode && (
+              <>
+                <Button
+                  size="sm"
+                  onClick={onReplay}
+                  disabled={replayLoading || !editedPrompt.trim()}
+                >
+                  {replayLoading ? (
+                    <Spinner className="h-4 w-4 mr-2" />
+                  ) : (
+                    <Play className="h-4 w-4 mr-2" />
+                  )}
+                  Replay
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    onCancel();
+                    onEditModeChange(false);
+                    onPromptChange(prompt);
+                  }}
+                >
+                  Cancel
+                </Button>
+              </>
+            )}
+          </div>
         </div>
+        {editMode ? (
+          <Textarea
+            value={editedPrompt}
+            onChange={(e) => onPromptChange(e.target.value)}
+            className="font-mono text-sm min-h-[100px] max-h-[400px]"
+            rows={4}
+          />
+        ) : (
+          <CodeDisplay
+            content={prompt}
+            title=""
+            onCopy={onCopy}
+            copied={copied}
+            onMouseEnter={() => onMouseEnter('prompt')}
+            onMouseLeave={onMouseLeave}
+            showCopyButton={hoveredElement === 'prompt' || copied}
+          />
+        )}
+        {replayError && (
+          <Alert variant="destructive" className="mt-2">
+            <AlertDescription>{replayError}</AlertDescription>
+          </Alert>
+        )}
       </div>
-      {editMode ? (
-        <Textarea
-          value={editedPrompt}
-          onChange={(e) => onPromptChange(e.target.value)}
-          className="font-mono text-sm min-h-[100px] max-h-[400px]"
-          rows={4}
-        />
-      ) : (
-        <CodeDisplay
-          content={prompt}
-          title=""
-          onCopy={onCopy}
-          copied={copied}
-          onMouseEnter={() => onMouseEnter('prompt')}
-          onMouseLeave={onMouseLeave}
-          showCopyButton={hoveredElement === 'prompt' || copied}
-        />
-      )}
-      {replayError && (
-        <Alert variant="destructive" className="mt-2">
-          <AlertDescription>{replayError}</AlertDescription>
-        </Alert>
-      )}
-    </div>
+    </TooltipProvider>
   );
 }

@@ -112,7 +112,7 @@ const App = () => {
         fetchLatestEvalId();
       }
     }
-  }, []);
+  }, [recordEvent]);
 
   // Track scroll position for persistent header visibility
   useEffect(() => {
@@ -516,6 +516,76 @@ const App = () => {
     return stats;
   }, [hasActiveFilters, filteredCategoryStats, categoryStats, customPolicyIds]);
 
+  const actionButtons = useMemo(
+    () => (
+      <div className="flex items-center gap-1">
+        <Tooltip>
+          {evalId && (
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="view all logs"
+                className="text-muted-foreground hover:text-foreground"
+                onClick={(event) => {
+                  const url = EVAL_ROUTES.DETAIL(evalId);
+                  if (event.ctrlKey || event.metaKey) {
+                    window.open(url, '_blank');
+                  } else if (evalId) {
+                    navigate(url);
+                  }
+                }}
+              >
+                <ListOrdered className="h-5 w-5" />
+              </Button>
+            </TooltipTrigger>
+          )}
+          <TooltipContent>View all logs</TooltipContent>
+        </Tooltip>
+        {evalId && evalData && (
+          <ReportDownloadButton
+            evalDescription={evalData?.config.description || evalId}
+            evalData={evalData}
+          />
+        )}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="print page"
+              className="text-muted-foreground hover:text-foreground"
+              onClick={() => window.print()}
+            >
+              <Printer className="h-5 w-5" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            Print this page (Ctrl+P) and select &apos;Save as PDF&apos; for best results
+          </TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="filter results"
+              onClick={() => setIsFiltersVisible(!isFiltersVisible)}
+              className={
+                hasActiveFilters ? 'text-primary' : 'text-muted-foreground hover:text-foreground'
+              }
+            >
+              <Filter className="h-5 w-5" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Filter results</TooltipContent>
+        </Tooltip>
+        <ReportSettingsDialogButton />
+      </div>
+    ),
+    [evalData, evalId, navigate, hasActiveFilters, isFiltersVisible],
+  );
+
   usePageMeta({
     title: `Report: ${evalData?.config.description || evalId || 'Red Team'}`,
     description: 'Red team evaluation report',
@@ -571,69 +641,6 @@ const App = () => {
     setSearchQuery('');
   };
 
-  const ActionButtons = () => (
-    <div className="flex items-center gap-1">
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label="view all logs"
-            className="text-muted-foreground hover:text-foreground"
-            onClick={(event) => {
-              const url = EVAL_ROUTES.DETAIL(evalId);
-              if (event.ctrlKey || event.metaKey) {
-                window.open(url, '_blank');
-              } else if (evalId) {
-                navigate(url);
-              }
-            }}
-          >
-            <ListOrdered className="h-5 w-5" />
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>View all logs</TooltipContent>
-      </Tooltip>
-      <ReportDownloadButton
-        evalDescription={evalData.config.description || evalId}
-        evalData={evalData}
-      />
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label="print page"
-            className="text-muted-foreground hover:text-foreground"
-            onClick={() => window.print()}
-          >
-            <Printer className="h-5 w-5" />
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>
-          Print this page (Ctrl+P) and select &apos;Save as PDF&apos; for best results
-        </TooltipContent>
-      </Tooltip>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label="filter results"
-            onClick={() => setIsFiltersVisible(!isFiltersVisible)}
-            className={
-              hasActiveFilters ? 'text-primary' : 'text-muted-foreground hover:text-foreground'
-            }
-          >
-            <Filter className="h-5 w-5" />
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>Filter results</TooltipContent>
-      </Tooltip>
-      <ReportSettingsDialogButton />
-    </div>
-  );
-
   return (
     <>
       {/* Persistent header on scroll */}
@@ -648,9 +655,7 @@ const App = () => {
             <h1 className="flex-1 overflow-hidden text-ellipsis whitespace-nowrap pr-4 font-bold">
               {evalData.config.description || 'Risk Assessment'}
             </h1>
-            <div className="flex-shrink-0">
-              <ActionButtons />
-            </div>
+            <div className="shrink-0">{actionButtons}</div>
           </div>
         </div>
       </div>
@@ -661,9 +666,7 @@ const App = () => {
 
           {/* Report Header Card */}
           <Card className="relative rounded-xl p-6 pr-48 shadow-md dark:shadow-none print:pr-4">
-            <div className="absolute right-4 top-4 flex print:hidden">
-              <ActionButtons />
-            </div>
+            <div className="absolute right-4 top-4 flex print:hidden">{actionButtons}</div>
             <h1 className="text-2xl font-bold">
               {evalData.config.description || 'Risk Assessment'}
             </h1>

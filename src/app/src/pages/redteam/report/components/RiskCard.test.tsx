@@ -1,5 +1,5 @@
-import { TooltipProvider } from '@app/components/ui/tooltip';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { renderWithProviders } from '@app/utils/testutils';
+import { fireEvent, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import RiskCard from './RiskCard';
 import { useReportStore } from './store';
@@ -18,11 +18,6 @@ vi.mock('./RiskCategoryDrawer', () => ({
     return <div data-testid="mock-risk-category-drawer" />;
   }),
 }));
-
-// Helper to render with TooltipProvider
-const renderWithProviders = (ui: React.ReactElement) => {
-  return render(<TooltipProvider>{ui}</TooltipProvider>);
-};
 
 describe('RiskCard', () => {
   const mockUseReportStore = vi.mocked(useReportStore);
@@ -86,7 +81,7 @@ describe('RiskCard', () => {
         { name: 'ssrf', categoryPassed: true, numPassed: 0, numFailed: 0 },
       ],
     });
-    const { container } = render(<RiskCard {...props} />);
+    const { container } = renderWithProviders(<RiskCard {...props} />);
     expect(container.firstChild).toBeNull();
   });
 

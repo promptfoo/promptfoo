@@ -147,7 +147,7 @@ export default function LauncherPage() {
         <p
           className={cn(
             'flex items-center gap-2 text-base',
-            isConnecting ? 'text-muted-foreground' : 'text-green-600 dark:text-green-400',
+            isConnecting ? 'text-muted-foreground' : 'text-emerald-600 dark:text-emerald-500',
           )}
         >
           {isConnecting ? (

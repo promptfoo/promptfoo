@@ -25,7 +25,11 @@ const getCssVarAsHsl = (varName: string, fallbackHsl: string): string => {
     return `hsl(${fallbackHsl})`;
   }
   const value = getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
-  return value ? `hsl(${value})` : `hsl(${fallbackHsl})`;
+  // Validate that value looks like HSL format (e.g., "222.2 84% 4.9%")
+  if (value && /^[\d.]+\s+[\d.]+%\s+[\d.]+%$/.test(value)) {
+    return `hsl(${value})`;
+  }
+  return `hsl(${fallbackHsl})`;
 };
 
 // Add custom node component

@@ -39,7 +39,10 @@ const ToolsDialog = ({ open, onClose, tools }: ToolsDialogProps) => {
         <div className="max-h-[60vh] overflow-y-auto">
           <ul className="space-y-4">
             {tools.map((tool, index) => (
-              <li key={index} className="border-b border-border pb-4 last:border-0">
+              <li
+                key={tool.function?.name ?? index}
+                className="border-b border-border pb-4 last:border-0"
+              >
                 {tool?.type === 'function' && tool.function ? (
                   <div>
                     <h4 className="font-medium text-foreground">{tool.function.name}</h4>

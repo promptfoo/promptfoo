@@ -1,5 +1,5 @@
-import { TooltipProvider } from '@app/components/ui/tooltip';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { renderWithProviders } from '@app/utils/testutils';
+import { fireEvent, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import ReportSettingsDialogButton from './ReportSettingsDialogButton';
@@ -7,11 +7,6 @@ import { useReportStore } from './store';
 
 vi.mock('./store');
 const mockUseReportStore = vi.mocked(useReportStore);
-
-// Helper to render with TooltipProvider
-const renderWithProviders = (ui: React.ReactElement) => {
-  return render(<TooltipProvider>{ui}</TooltipProvider>);
-};
 
 describe('ReportSettingsDialogButton', () => {
   const mockSetShowPercentagesOnRiskCards = vi.fn();

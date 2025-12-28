@@ -212,7 +212,14 @@ export default function LoginPage() {
 
               {/* Submit Button */}
               <Button type="submit" className="w-full" size="lg" disabled={isPending}>
-                {isPending ? <Spinner size="sm" /> : 'Sign In'}
+                {isPending ? (
+                  <>
+                    <Spinner size="sm" />
+                    <span className="sr-only">Signing in...</span>
+                  </>
+                ) : (
+                  'Sign In'
+                )}
               </Button>
             </div>
           </form>

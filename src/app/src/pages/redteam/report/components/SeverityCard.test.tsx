@@ -1,13 +1,8 @@
-import { TooltipProvider } from '@app/components/ui/tooltip';
+import { renderWithProviders } from '@app/utils/testutils';
 import { Severity } from '@promptfoo/redteam/constants';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import SeverityCard from './SeverityCard';
-
-// Helper to render with TooltipProvider (required for Radix Tooltip)
-const renderWithProviders = (ui: React.ReactElement) => {
-  return render(<TooltipProvider>{ui}</TooltipProvider>);
-};
 
 describe('SeverityCard', () => {
   const mockNavigateToIssues = vi.fn();
@@ -154,6 +149,22 @@ describe('SeverityCard', () => {
       );
 
       expect(screen.queryByRole('button')).not.toBeInTheDocument();
+    });
+
+    it('should render button with clear filter aria-label when isActive', () => {
+      renderWithProviders(
+        <SeverityCard
+          severity={Severity.Critical}
+          issueCount={3}
+          navigateOnClick={true}
+          navigateToIssues={mockNavigateToIssues}
+          isActive={true}
+          hasActiveFilter={true}
+        />,
+      );
+
+      const cardButton = screen.getByRole('button');
+      expect(cardButton).toHaveAttribute('aria-label', 'Clear Critical filter');
     });
   });
 

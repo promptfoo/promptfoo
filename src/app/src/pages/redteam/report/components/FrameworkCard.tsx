@@ -204,15 +204,11 @@ const FrameworkCard = ({
                   const noTestedPlugins = testedPlugins.length === 0;
 
                   return (
-                    <div
-                      key={categoryId}
-                      className="overflow-hidden rounded border border-black/[0.08] dark:border-white/[0.08]"
-                    >
+                    <div key={categoryId} className="overflow-hidden rounded border border-border">
                       <div
                         className={cn(
-                          'flex items-center justify-between bg-black/[0.05] p-2 dark:bg-white/[0.05]',
-                          !(allCompliant || noTestedPlugins) &&
-                            'border-b border-black/[0.08] dark:border-white/[0.08]',
+                          'flex items-center justify-between bg-black/5 p-2 dark:bg-white/5',
+                          !(allCompliant || noTestedPlugins) && 'border-b border-border',
                         )}
                       >
                         <span className="text-sm font-medium">
@@ -309,8 +305,8 @@ const FrameworkCard = ({
             </div>
           ) : (
             // Standard list view for other frameworks but with same format
-            <div className="overflow-hidden rounded border border-black/[0.08] dark:border-white/[0.08]">
-              <div className="flex items-center justify-between border-b border-black/[0.08] bg-black/[0.05] p-2 dark:border-white/[0.08] dark:bg-white/[0.05]">
+            <div className="overflow-hidden rounded border border-border">
+              <div className="flex items-center justify-between border-b border-border bg-black/5 p-2 dark:bg-white/5">
                 <span className="text-sm font-medium">Framework Results</span>
                 <Badge
                   variant={nonCompliantPlugins.length === 0 ? 'success' : 'destructive'}

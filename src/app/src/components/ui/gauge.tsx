@@ -43,12 +43,20 @@ export function Gauge({
   `;
 
   return (
-    <div className={cn('relative inline-flex items-center justify-center', className)}>
+    <div
+      className={cn('relative inline-flex items-center justify-center', className)}
+      role="meter"
+      aria-valuenow={Number.isNaN(value) ? undefined : value}
+      aria-valuemin={0}
+      aria-valuemax={max}
+      aria-label="Progress gauge"
+    >
       <svg
         width={size}
         height={size / 2 + strokeWidth / 2}
         viewBox={`0 0 ${size} ${size / 2 + strokeWidth / 2}`}
         className="overflow-visible"
+        aria-hidden="true"
       >
         {/* Background arc */}
         <path

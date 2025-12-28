@@ -11,6 +11,8 @@ import { Check, ChevronDown, CircleCheck, CircleX, Copy } from 'lucide-react';
 import { ellipsize } from '../../../../../util/text';
 import type { GradingResult } from '@promptfoo/types';
 
+const COPY_FEEDBACK_DURATION_MS = 2000;
+
 function getValue(result: GradingResult): string {
   // For context-related assertions, read the context value from metadata, if it exists
   // These assertions require special handling and should always use metadata.context
@@ -60,7 +62,7 @@ function AssertionResults({ gradingResults }: { gradingResults?: GradingResult[]
 
     setTimeout(() => {
       setCopiedAssertions((prev) => ({ ...prev, [key]: false }));
-    }, 2000);
+    }, COPY_FEEDBACK_DURATION_MS);
   };
 
   return (

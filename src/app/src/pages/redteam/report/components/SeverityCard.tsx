@@ -18,32 +18,27 @@ const severityStyles: Record<
   {
     border: string;
     text: string;
-    textMuted: string;
     bg: string;
   }
 > = {
   [Severity.Critical]: {
     border: 'border-l-red-800',
     text: 'text-red-800 dark:text-red-400',
-    textMuted: 'text-muted-foreground',
     bg: 'bg-red-50/50 dark:bg-red-950/20',
   },
   [Severity.High]: {
     border: 'border-l-red-500',
     text: 'text-red-500 dark:text-red-400',
-    textMuted: 'text-muted-foreground',
     bg: 'bg-red-50/50 dark:bg-red-900/20',
   },
   [Severity.Medium]: {
     border: 'border-l-amber-500',
     text: 'text-amber-500 dark:text-amber-400',
-    textMuted: 'text-muted-foreground',
     bg: 'bg-amber-50/50 dark:bg-amber-950/20',
   },
   [Severity.Low]: {
     border: 'border-l-emerald-500',
     text: 'text-emerald-500 dark:text-emerald-400',
-    textMuted: 'text-muted-foreground',
     bg: 'bg-emerald-50/50 dark:bg-emerald-950/20',
   },
 };

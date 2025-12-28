@@ -1,14 +1,9 @@
-import { TooltipProvider } from '@app/components/ui/tooltip';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { renderWithProviders } from '@app/utils/testutils';
+import { fireEvent, screen } from '@testing-library/react';
 import { useNavigate } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import RiskCategoryDrawer from './RiskCategoryDrawer';
 import type { AtomicTestCase, EvaluateResult, ResultFailureReason } from '@promptfoo/types';
-
-// Helper to render with TooltipProvider
-const renderWithProviders = (ui: React.ReactElement) => {
-  return render(<TooltipProvider>{ui}</TooltipProvider>);
-};
 
 // Mock dependencies
 vi.mock('react-router-dom', () => ({
