@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../src/envars', () => ({
-  getEnvString: vi.fn(),
+  getEnvString: vi.fn().mockReturnValue(undefined),
 }));
 
 vi.mock('../../src/logger', () => ({
@@ -53,7 +53,7 @@ describe('runtime utilities', () => {
     });
 
     it('should return false when not running under npx', () => {
-      vi.mocked(getEnvString).mockReturnValue(undefined);
+      vi.mocked(getEnvString).mockReturnValue(undefined as unknown as string);
       Object.defineProperty(process, 'execPath', {
         value: '/usr/local/bin/node',
         writable: true,
@@ -63,7 +63,7 @@ describe('runtime utilities', () => {
     });
 
     it('should return true when npm_execpath contains npx', () => {
-      vi.mocked(getEnvString).mockImplementation((key: string) => {
+      (vi.mocked(getEnvString) as any).mockImplementation((key: string) => {
         if (key === 'npm_execpath') {
           return '/usr/local/lib/node_modules/npm/bin/npx-cli.js';
         }
@@ -78,7 +78,7 @@ describe('runtime utilities', () => {
     });
 
     it('should return true when process.execPath contains npx', () => {
-      vi.mocked(getEnvString).mockReturnValue(undefined);
+      vi.mocked(getEnvString).mockReturnValue(undefined as unknown as string);
       Object.defineProperty(process, 'execPath', {
         value: '/home/user/.npm/_npx/123/node_modules/.bin/node',
         writable: true,
@@ -88,7 +88,7 @@ describe('runtime utilities', () => {
     });
 
     it('should return true when npm_lifecycle_script contains npx', () => {
-      vi.mocked(getEnvString).mockImplementation((key: string) => {
+      (vi.mocked(getEnvString) as any).mockImplementation((key: string) => {
         if (key === 'npm_lifecycle_script') {
           return 'npx promptfoo eval';
         }
@@ -113,7 +113,7 @@ describe('runtime utilities', () => {
     });
 
     it('should check npm_execpath first', () => {
-      vi.mocked(getEnvString).mockImplementation((key: string) => {
+      (vi.mocked(getEnvString) as any).mockImplementation((key: string) => {
         if (key === 'npm_execpath') {
           return '/path/to/npx';
         }
