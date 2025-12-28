@@ -6,7 +6,6 @@
  */
 
 import { render } from 'ink-testing-library';
-import React from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
 // Mock terminal size hook used by many components
@@ -99,28 +98,28 @@ import { Badge } from '../../../src/ui/components/shared/Badge';
 
 describe('Badge Integration', () => {
   it('should render success badge', () => {
-    const { lastFrame } = render(<Badge type="success">PASS</Badge>);
+    const { lastFrame } = render(<Badge variant="success">PASS</Badge>);
 
     const output = lastFrame();
     expect(output).toContain('PASS');
   });
 
   it('should render error badge', () => {
-    const { lastFrame } = render(<Badge type="error">FAIL</Badge>);
+    const { lastFrame } = render(<Badge variant="error">FAIL</Badge>);
 
     const output = lastFrame();
     expect(output).toContain('FAIL');
   });
 
   it('should render warning badge', () => {
-    const { lastFrame } = render(<Badge type="warning">WARNING</Badge>);
+    const { lastFrame } = render(<Badge variant="warning">WARNING</Badge>);
 
     const output = lastFrame();
     expect(output).toContain('WARNING');
   });
 
   it('should render info badge', () => {
-    const { lastFrame } = render(<Badge type="info">INFO</Badge>);
+    const { lastFrame } = render(<Badge variant="info">INFO</Badge>);
 
     const output = lastFrame();
     expect(output).toContain('INFO');

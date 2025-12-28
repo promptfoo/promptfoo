@@ -4,6 +4,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { calculateSummaryStats } from '../../../../src/ui/components/table/ResultsTable';
+
 import type { TableRowData } from '../../../../src/ui/components/table/types';
 
 /**
@@ -37,12 +38,15 @@ function createMockRow(
         namedScores: {},
         id: `row-${index}-cell-${i}`,
         tokenUsage: {},
+        prompt: 'test prompt',
+        testCase: { vars: {} },
       },
     })),
     originalRow: {
       vars: [],
       outputs: [],
       testIdx: index,
+      test: { vars: {} },
     },
   };
 }
@@ -158,6 +162,7 @@ describe('calculateSummaryStats', () => {
           vars: [],
           outputs: [],
           testIdx: 0,
+          test: { vars: {} },
         },
       };
       const stats = calculateSummaryStats([row]);
@@ -279,6 +284,7 @@ describe('calculateSummaryStats', () => {
           vars: [],
           outputs: [],
           testIdx: 0,
+          test: { vars: {} },
         },
       };
       const stats = calculateSummaryStats([row]);
@@ -353,6 +359,7 @@ describe('calculateSummaryStats', () => {
           vars: [],
           outputs: [],
           testIdx: 0,
+          test: { vars: {} },
         },
       };
       const stats = calculateSummaryStats([row]);

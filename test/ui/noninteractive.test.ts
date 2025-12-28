@@ -1,4 +1,5 @@
 import { Writable } from 'stream';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   NonInteractiveProgress,
@@ -100,7 +101,7 @@ describe('NonInteractiveProgress', () => {
     progress.start(100);
 
     expect(consoleSpy).toHaveBeenCalled();
-    const output = consoleSpy.mock.calls.map((c) => c[0]).join('');
+    const output = consoleSpy.mock.calls.map((c: unknown[]) => c[0]).join('');
     expect(output).toContain('Evaluating');
     expect(output).toContain('0/100');
   });
@@ -116,7 +117,7 @@ describe('NonInteractiveProgress', () => {
     // Update at threshold - should log
     progress.update({ completed: 10, total: 100 });
 
-    const output = consoleSpy.mock.calls.map((c) => c[0]).join('');
+    const output = consoleSpy.mock.calls.map((c: unknown[]) => c[0]).join('');
     expect(output).toContain('10/100');
     expect(output).toContain('10%');
   });
@@ -129,7 +130,7 @@ describe('NonInteractiveProgress', () => {
 
     progress.complete({ passed: 90, failed: 10, errors: 0 });
 
-    const output = consoleSpy.mock.calls.map((c) => c[0]).join('');
+    const output = consoleSpy.mock.calls.map((c: unknown[]) => c[0]).join('');
     expect(output).toContain('complete');
     expect(output).toContain('90 passed');
     expect(output).toContain('10 failed');
@@ -151,7 +152,7 @@ describe('NonInteractiveSpinner', () => {
     const spinner = new NonInteractiveSpinner();
     spinner.start('Loading...');
 
-    const output = consoleSpy.mock.calls.map((c) => c[0]).join('');
+    const output = consoleSpy.mock.calls.map((c: unknown[]) => c[0]).join('');
     expect(output).toContain('Loading...');
   });
 
@@ -163,7 +164,7 @@ describe('NonInteractiveSpinner', () => {
 
     spinner.succeed('Done!');
 
-    const output = consoleSpy.mock.calls.map((c) => c[0]).join('');
+    const output = consoleSpy.mock.calls.map((c: unknown[]) => c[0]).join('');
     expect(output).toContain('Done!');
   });
 
@@ -175,7 +176,7 @@ describe('NonInteractiveSpinner', () => {
 
     spinner.fail('Failed!');
 
-    const output = consoleSpy.mock.calls.map((c) => c[0]).join('');
+    const output = consoleSpy.mock.calls.map((c: unknown[]) => c[0]).join('');
     expect(output).toContain('Failed!');
   });
 });

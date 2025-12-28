@@ -1,7 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock process properties before importing the module
-const mockProcess = {
+const mockProcess: {
+  stdout: {
+    isTTY: boolean;
+    columns: number;
+    rows: number;
+    hasColors: () => boolean;
+  };
+  env: Record<string, string | undefined>;
+} = {
   stdout: {
     isTTY: true,
     columns: 80,

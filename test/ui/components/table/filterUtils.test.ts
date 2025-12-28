@@ -7,9 +7,10 @@ import {
   filterRows,
   getFilterModeLabel,
   hasActiveFilter,
-  parseSearchQuery,
   matchesQuery,
+  parseSearchQuery,
 } from '../../../../src/ui/components/table/filterUtils';
+
 import type { TableFilterState, TableRowData } from '../../../../src/ui/components/table/types';
 
 /**
@@ -39,12 +40,15 @@ function createMockRow(
         namedScores: {},
         id: `row-${index}`,
         tokenUsage: {},
+        prompt: 'test prompt',
+        testCase: { vars: {} },
       },
     })),
     originalRow: {
       vars: vars,
       outputs: [],
       testIdx: index,
+      test: { vars: {} },
     },
   };
 }
@@ -304,6 +308,8 @@ describe('column filters', () => {
             namedScores: {},
             id: `row-${index}`,
             tokenUsage: {},
+            prompt: 'test prompt',
+            testCase: { vars: {} },
           },
         },
       ],
@@ -311,6 +317,7 @@ describe('column filters', () => {
         vars: [],
         outputs: [],
         testIdx: index,
+        test: { vars: {} },
       },
     };
   }

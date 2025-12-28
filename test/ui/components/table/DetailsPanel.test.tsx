@@ -5,6 +5,7 @@
 import { render } from 'ink-testing-library';
 import { describe, expect, it, vi } from 'vitest';
 import { DetailsPanel } from '../../../../src/ui/components/table/DetailsPanel';
+
 import type {
   TableCellData,
   TableColumn,
@@ -72,6 +73,7 @@ function createTestData(
       outputs: [cellData.output!],
       vars: ['test variable value'],
       test: { vars: { var1: 'test variable value' } },
+      testIdx: 0,
     },
   };
 
