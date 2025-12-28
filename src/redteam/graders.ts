@@ -91,6 +91,7 @@ import { ToxicChatGrader } from './plugins/toxicChat';
 import { UnsafeBenchGrader } from './plugins/unsafebench';
 import { UnverifiableClaimsGrader } from './plugins/unverifiableClaims';
 import { VLGuardGrader } from './plugins/vlguard';
+import { VLSUGrader } from './plugins/vlsu';
 import { WordplayGrader } from './plugins/wordplay';
 
 import type { RedteamGraderBase } from './plugins/base';
@@ -207,6 +208,7 @@ export const GRADERS: Record<RedteamAssertionTypes, RedteamGraderBase> = {
   'promptfoo:redteam:unsafebench': new UnsafeBenchGrader(),
   'promptfoo:redteam:unverifiable-claims': new UnverifiableClaimsGrader(),
   'promptfoo:redteam:vlguard': new VLGuardGrader(),
+  'promptfoo:redteam:vlsu': new VLSUGrader(),
   'promptfoo:redteam:wordplay': new WordplayGrader(),
 };
 

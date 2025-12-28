@@ -346,6 +346,7 @@ export const ADDITIONAL_PLUGINS = [
   'unsafebench',
   'unverifiable-claims',
   'vlguard',
+  'vlsu',
   'wordplay',
   'xstest',
 ] as const;
@@ -368,6 +369,7 @@ export const DATASET_EXEMPT_PLUGINS = [
   'pliny',
   'unsafebench',
   'vlguard',
+  'vlsu',
 ] as const;
 
 // Plugins that don't use strategies (standalone plugins) - combination of agentic and dataset
