@@ -20,6 +20,7 @@ import { generateDatasetCommand } from './commands/generate/dataset';
 import { importCommand } from './commands/import';
 import { initCommand } from './commands/init';
 import { listCommand } from './commands/list';
+import { logsCommand } from './commands/logs';
 import { mcpCommand } from './commands/mcp/index';
 import { modelScanCommand } from './commands/modelScan';
 import { setupRetryCommand } from './commands/retry';
@@ -182,6 +183,7 @@ async function main() {
     .version(VERSION)
     .showHelpAfterError()
     .showSuggestionAfterError()
+    .enablePositionalOptions()
     .on('option:*', function () {
       logger.error('Invalid option(s)');
       program.help();
@@ -208,6 +210,7 @@ async function main() {
   feedbackCommand(program);
   importCommand(program);
   listCommand(program);
+  logsCommand(program);
   modelScanCommand(program);
   setupRetryCommand(program);
   validateCommand(program, defaultConfig, defaultConfigPath);
