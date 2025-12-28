@@ -121,14 +121,30 @@ export type FetchWithCacheResult<T> = {
   deleteFromCache?: () => Promise<void>;
 };
 
+/**
+ * Options for cache behavior in fetchWithCache.
+ * Supports per-repeat caching when evaluations use repeat > 1.
+ */
+export type CacheOptions = {
+  /** Whether to bypass cache read (still writes to cache) */
+  bust?: boolean;
+  /** Repeat index for per-repeat caching. Repeats > 0 get unique cache keys. */
+  repeatIndex?: number;
+};
+
 export async function fetchWithCache<T = any>(
   url: RequestInfo,
   options: RequestInit = {},
   timeout: number = REQUEST_TIMEOUT_MS,
   format: 'json' | 'text' = 'json',
-  bust: boolean = false,
+  bustOrOptions: boolean | CacheOptions = false,
   maxRetries?: number,
 ): Promise<FetchWithCacheResult<T>> {
+  // Normalize to CacheOptions for backward compatibility
+  const cacheOptions: CacheOptions =
+    typeof bustOrOptions === 'boolean' ? { bust: bustOrOptions } : bustOrOptions;
+  const { bust = false, repeatIndex } = cacheOptions;
+
   if (!enabled || bust) {
     const fetchStart = Date.now();
     const resp = await fetchWithRetries(url, options, timeout, maxRetries);
@@ -154,7 +170,9 @@ export async function fetchWithCache<T = any>(
 
   const copy = Object.assign({}, options);
   delete copy.headers;
-  const cacheKey = `fetch:v2:${url}:${JSON.stringify(copy)}`;
+  // Add repeat suffix for repeatIndex > 0 to enable per-repeat caching
+  const repeatSuffix = repeatIndex != null && repeatIndex > 0 ? `:repeat${repeatIndex}` : '';
+  const cacheKey = `fetch:v2:${url}:${JSON.stringify(copy)}${repeatSuffix}`;
   const cache = await getCache();
 
   let cached = true;
