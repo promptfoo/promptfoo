@@ -58,10 +58,30 @@ vi.mock('fs', async () => {
     readdirSync: vi.fn(),
     existsSync: vi.fn(),
     mkdirSync: vi.fn(),
-    createWriteStream: vi.fn(() => ({
-      write: vi.fn(),
-      end: vi.fn(),
-    })),
+    createWriteStream: vi.fn(() => {
+      const listeners: Record<string, Array<(...args: any[]) => void>> = {};
+      return {
+        write: vi.fn(() => true), // Return true to indicate buffer not full
+        end: vi.fn(function (this: any) {
+          // Trigger 'finish' event asynchronously
+          setTimeout(() => {
+            listeners['finish']?.forEach((cb) => cb());
+          }, 0);
+        }),
+        on: vi.fn((event: string, callback: (...args: any[]) => void) => {
+          if (!listeners[event]) {
+            listeners[event] = [];
+          }
+          listeners[event].push(callback);
+        }),
+        once: vi.fn((event: string, callback: (...args: any[]) => void) => {
+          if (!listeners[event]) {
+            listeners[event] = [];
+          }
+          listeners[event].push(callback);
+        }),
+      };
+    }),
   };
 });
 
