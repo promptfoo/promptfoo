@@ -6,15 +6,15 @@ import { providerToIdentifier } from '../../src/util/provider';
 import type { ApiProvider } from '../../src/types/index';
 
 describe('providerToIdentifier', () => {
-  it('works with provider string', async () => {
+  it('works with provider string', () => {
     expect(providerToIdentifier('gpt-3.5-turbo')).toStrictEqual('gpt-3.5-turbo');
   });
 
-  it('works with provider id undefined', async () => {
+  it('works with provider id undefined', () => {
     expect(providerToIdentifier(undefined)).toBeUndefined();
   });
 
-  it('works with ApiProvider', async () => {
+  it('works with ApiProvider', () => {
     const providerId = 'custom';
     const apiProvider = {
       id() {
@@ -25,7 +25,7 @@ describe('providerToIdentifier', () => {
     expect(providerToIdentifier(apiProvider)).toStrictEqual(providerId);
   });
 
-  it('works with ProviderOptions', async () => {
+  it('works with ProviderOptions', () => {
     const providerId = 'custom';
     const providerOptions = {
       id: providerId,
@@ -34,7 +34,7 @@ describe('providerToIdentifier', () => {
     expect(providerToIdentifier(providerOptions)).toStrictEqual(providerId);
   });
 
-  it('uses label when present on ProviderOptions', async () => {
+  it('uses label when present on ProviderOptions', () => {
     const providerOptions = {
       id: 'file://provider.js',
       label: 'my-provider',
@@ -43,34 +43,34 @@ describe('providerToIdentifier', () => {
     expect(providerToIdentifier(providerOptions)).toStrictEqual('my-provider');
   });
 
-  it('canonicalizes relative file paths to absolute', async () => {
+  it('canonicalizes relative file paths to absolute', () => {
     const originalCwd = process.cwd();
     expect(providerToIdentifier('file://./provider.js')).toStrictEqual(
       `file://${path.join(originalCwd, 'provider.js')}`,
     );
   });
 
-  it('canonicalizes JavaScript files without file:// prefix', async () => {
+  it('canonicalizes JavaScript files without file:// prefix', () => {
     const originalCwd = process.cwd();
     expect(providerToIdentifier('./provider.js')).toStrictEqual(
       `file://${path.join(originalCwd, 'provider.js')}`,
     );
   });
 
-  it('preserves absolute file paths', async () => {
+  it('preserves absolute file paths', () => {
     expect(providerToIdentifier('file:///absolute/path/provider.js')).toStrictEqual(
       'file:///absolute/path/provider.js',
     );
   });
 
-  it('canonicalizes exec: paths', async () => {
+  it('canonicalizes exec: paths', () => {
     const originalCwd = process.cwd();
     expect(providerToIdentifier('exec:./script.py')).toStrictEqual(
       `exec:${path.join(originalCwd, 'script.py')}`,
     );
   });
 
-  it('canonicalizes python: paths', async () => {
+  it('canonicalizes python: paths', () => {
     const originalCwd = process.cwd();
     expect(providerToIdentifier('python:./provider.py')).toStrictEqual(
       `python:${path.join(originalCwd, 'provider.py')}`,

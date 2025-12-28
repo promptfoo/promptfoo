@@ -1319,6 +1319,24 @@ describe('file utilities', () => {
 
       expect(filters.testFilter).toBe(mockFilter);
     });
+
+    it('returns empty object when no filters provided', async () => {
+      const filters = await readFilters({});
+      expect(filters).toEqual({});
+    });
+
+    it('handles non-existent filter file gracefully', async () => {
+      vi.mocked(globSync).mockReturnValue([]);
+      const filters = await readFilters({ testFilter: 'nonexistent.js' });
+      expect(filters.testFilter).toBeUndefined();
+    });
+
+    it('throws when importModule fails', async () => {
+      vi.mocked(globSync).mockImplementation((pathOrGlob) => [pathOrGlob].flat());
+      vi.mocked(importModule).mockRejectedValueOnce(new Error('Module load failed'));
+
+      await expect(readFilters({ testFilter: 'invalid.js' })).rejects.toThrow('Module load failed');
+    });
   });
 
   describe('parsePathOrGlob', () => {

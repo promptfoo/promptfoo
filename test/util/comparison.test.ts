@@ -6,13 +6,27 @@ import { filterRuntimeVars, resultIsForTestCase, varsMatch } from '../../src/uti
 import type { EvaluateResult, TestCase } from '../../src/types/index';
 
 describe('varsMatch', () => {
-  it('true with both undefined', async () => {
+  it('true with both undefined', () => {
     expect(varsMatch(undefined, undefined)).toBe(true);
   });
 
-  it('false with one undefined', async () => {
+  it('false with one undefined', () => {
     expect(varsMatch(undefined, {})).toBe(false);
     expect(varsMatch({}, undefined)).toBe(false);
+  });
+
+  it('true with matching non-empty objects', () => {
+    expect(varsMatch({ key: 'value' }, { key: 'value' })).toBe(true);
+    expect(varsMatch({ a: 1, b: 2 }, { a: 1, b: 2 })).toBe(true);
+  });
+
+  it('false with different values', () => {
+    expect(varsMatch({ key: 'value1' }, { key: 'value2' })).toBe(false);
+    expect(varsMatch({ a: 1 }, { a: 2 })).toBe(false);
+  });
+
+  it('false with different keys', () => {
+    expect(varsMatch({ a: 1 }, { b: 1 })).toBe(false);
   });
 });
 

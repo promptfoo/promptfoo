@@ -210,6 +210,8 @@ export async function writeOutput(
     });
     fs.writeFileSync(outputPath, htmlOutput);
   } else if (outputExtension === 'jsonl') {
+    // Truncate file first for consistent behavior with other formats
+    fs.writeFileSync(outputPath, '');
     for await (const batchResults of evalRecord.fetchResultsBatched()) {
       const text = batchResults.map((result) => JSON.stringify(result)).join(os.EOL) + os.EOL;
       fs.appendFileSync(outputPath, text);

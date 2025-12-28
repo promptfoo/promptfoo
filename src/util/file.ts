@@ -318,13 +318,13 @@ export function parsePathOrGlob(
   const safeFilename = path.relative(basePath, safeResolve(basePath, filename));
   return {
     extension: isPathPattern ? undefined : path.parse(safeFilename).ext,
-    filePath: safeFilename.startsWith(basePath) ? safeFilename : path.join(basePath, safeFilename),
+    filePath: path.join(basePath, safeFilename),
     functionName,
     isPathPattern,
   };
 }
 
-export async function readOutput(outputPath: string): Promise<OutputFile> {
+export function readOutput(outputPath: string): OutputFile {
   const ext = path.parse(outputPath).ext.slice(1);
 
   switch (ext) {
@@ -335,6 +335,11 @@ export async function readOutput(outputPath: string): Promise<OutputFile> {
   }
 }
 
+/**
+ * Load custom Nunjucks filters from external files.
+ * Note: If a glob pattern matches multiple files, only the last file's export is used.
+ * Each filter name should typically resolve to a single file.
+ */
 export async function readFilters(
   filters: Record<string, string>,
   basePath: string = '',

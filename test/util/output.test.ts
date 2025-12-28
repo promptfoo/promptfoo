@@ -56,6 +56,7 @@ describe('writeOutput', () => {
 
   afterEach(() => {
     consoleLogSpy.mockRestore();
+    vi.resetAllMocks();
   });
 
   it('writeOutput with CSV output', async () => {

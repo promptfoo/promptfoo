@@ -58,10 +58,8 @@ export function providerToIdentifier(
   }
 
   if (isProviderOptions(provider)) {
-    if (provider.id) {
-      return canonicalizeProviderId(provider.id);
-    }
-    return undefined;
+    // isProviderOptions guarantees provider.id is a non-empty string
+    return canonicalizeProviderId(provider.id);
   }
 
   // Handle any other object with id property
