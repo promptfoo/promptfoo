@@ -1372,19 +1372,25 @@ class Evaluator {
 
       // Create an AbortController to cancel the request if it times out
       const abortController = new AbortController();
-      const { signal } = abortController;
+      const combinedSignal = evalStep.abortSignal
+        ? AbortSignal.any([evalStep.abortSignal, abortController.signal])
+        : abortController.signal;
 
       // Add the abort signal to the evalStep
       const evalStepWithSignal = {
         ...evalStep,
-        abortSignal: signal,
+        abortSignal: combinedSignal,
       };
+
+      let timeoutId: NodeJS.Timeout | undefined;
+      let didTimeout = false;
 
       try {
         return await Promise.race([
           processEvalStep(evalStepWithSignal, index),
           new Promise<void>((_, reject) => {
-            const timeoutId = setTimeout(() => {
+            timeoutId = setTimeout(() => {
+              didTimeout = true;
               // Abort any ongoing requests
               abortController.abort();
 
@@ -1398,13 +1404,13 @@ class Evaluator {
               }
 
               reject(new Error(`Evaluation timed out after ${timeoutMs}ms`));
-
-              // Clear the timeout to prevent memory leaks
-              clearTimeout(timeoutId);
             }, timeoutMs);
           }),
         ]);
       } catch (error) {
+        if (!didTimeout) {
+          throw error;
+        }
         // Create and add an error result for timeout
         const timeoutResult = {
           provider: {
@@ -1443,6 +1449,8 @@ class Evaluator {
           metrics.totalLatencyMs += timeoutMs;
         }
 
+        numComplete++;
+
         // Progress callback
         if (options.progressCallback) {
           options.progressCallback(
@@ -1470,6 +1478,10 @@ class Evaluator {
               cost: 0,
             },
           );
+        }
+      } finally {
+        if (timeoutId) {
+          clearTimeout(timeoutId);
         }
       }
     };
