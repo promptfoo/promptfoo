@@ -1,9 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import fs from 'fs/promises';
-import { Command } from 'commander';
 
-import { logsCommand } from '../../src/commands/logs';
+import { Command } from 'commander';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import cliState from '../../src/cliState';
+import { logsCommand } from '../../src/commands/logs';
 import logger from '../../src/logger';
 import * as logsUtil from '../../src/util/logs';
 
@@ -35,6 +35,8 @@ vi.mock('../../src/util/logs', () => ({
   getLogFilesSync: vi.fn().mockReturnValue([]),
   findLogFile: vi.fn().mockReturnValue(null),
   formatFileSize: vi.fn((bytes: number) => `${bytes} B`),
+  readLastLines: vi.fn().mockResolvedValue([]),
+  readFirstLines: vi.fn().mockResolvedValue([]),
 }));
 vi.mock('../../src/util/index', () => ({
   printBorder: vi.fn(),
@@ -235,17 +237,12 @@ describe('logs command', () => {
 
     it('should limit output with --lines option', async () => {
       mockLogsUtil.findLogFile.mockReturnValue(mockLogPath);
-      const mockOpen = vi.fn().mockResolvedValue({
-        stat: vi.fn().mockResolvedValue({ size: 100 }),
-        readFile: vi.fn().mockResolvedValue(mockLogContent),
-        close: vi.fn(),
-      });
-      mockFs.open = mockOpen as any;
+      mockLogsUtil.readLastLines.mockResolvedValue(['line 1', 'line 2']);
 
       const logsCmd = program.commands.find((c) => c.name() === 'logs');
       await logsCmd?.parseAsync(['node', 'test', '-n', '2']);
 
-      expect(mockFs.open).toHaveBeenCalled();
+      expect(mockLogsUtil.readLastLines).toHaveBeenCalledWith(mockLogPath, 2);
     });
 
     it('should handle permission errors', async () => {

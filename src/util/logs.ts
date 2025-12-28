@@ -1,6 +1,7 @@
+import fsSync, { createReadStream } from 'fs';
 import fs from 'fs/promises';
-import fsSync from 'fs';
 import path from 'path';
+import readline from 'readline';
 
 import { getEnvString } from '../envars';
 import logger from '../logger';
@@ -153,4 +154,63 @@ export function formatFileSize(bytes: number): string {
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
   const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
   return `${(bytes / Math.pow(1024, i)).toFixed(i > 0 ? 1 : 0)} ${units[i]}`;
+}
+
+/**
+ * Reads the last N lines from a file using streaming (memory efficient).
+ * For small files (<1MB), reads the entire file and slices.
+ * For large files, streams line by line keeping only the last N.
+ */
+export async function readLastLines(filePath: string, lineCount: number): Promise<string[]> {
+  const stats = await fs.stat(filePath);
+
+  // For small files, just read the whole thing - it's faster
+  const ONE_MB = 1024 * 1024;
+  if (stats.size < ONE_MB) {
+    const content = await fs.readFile(filePath, 'utf-8');
+    const allLines = content.split('\n');
+    // Remove trailing empty line if present
+    if (allLines.length > 0 && allLines[allLines.length - 1] === '') {
+      allLines.pop();
+    }
+    return allLines.slice(-lineCount);
+  }
+
+  // For large files, stream and keep only the last N lines
+  const lines: string[] = [];
+  const rl = readline.createInterface({
+    input: createReadStream(filePath, { encoding: 'utf-8' }),
+    crlfDelay: Infinity,
+  });
+
+  for await (const line of rl) {
+    lines.push(line);
+    if (lines.length > lineCount) {
+      lines.shift();
+    }
+  }
+
+  return lines;
+}
+
+/**
+ * Reads the first N lines from a file using streaming (memory efficient).
+ * Stops reading as soon as N lines are collected.
+ */
+export async function readFirstLines(filePath: string, lineCount: number): Promise<string[]> {
+  const lines: string[] = [];
+  const rl = readline.createInterface({
+    input: createReadStream(filePath, { encoding: 'utf-8' }),
+    crlfDelay: Infinity,
+  });
+
+  for await (const line of rl) {
+    lines.push(line);
+    if (lines.length >= lineCount) {
+      rl.close();
+      break;
+    }
+  }
+
+  return lines;
 }

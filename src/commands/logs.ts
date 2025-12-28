@@ -1,19 +1,24 @@
-import fs from 'fs/promises';
 import fsSync from 'fs';
+import fs from 'fs/promises';
 import path from 'path';
-import readline from 'readline';
 
 import chalk from 'chalk';
 import debounce from 'debounce';
 import dedent from 'dedent';
-import type { Command } from 'commander';
-
 import cliState from '../cliState';
 import logger from '../logger';
 import { wrapTable } from '../table';
 import telemetry from '../telemetry';
 import { printBorder } from '../util/index';
-import { findLogFile, formatFileSize, getLogDirectory, getLogFiles } from '../util/logs';
+import {
+  findLogFile,
+  formatFileSize,
+  getLogDirectory,
+  getLogFiles,
+  readFirstLines,
+  readLastLines,
+} from '../util/logs';
+import type { Command } from 'commander';
 
 type LogType = 'debug' | 'error' | 'all';
 
@@ -72,71 +77,6 @@ interface PrintOptions {
   grep?: RegExp;
   noColor: boolean;
   noHeader?: boolean;
-}
-
-/**
- * Reads the last N lines from a file using streaming (memory efficient)
- */
-async function readLastLines(filePath: string, lineCount: number): Promise<string[]> {
-  const fileHandle = await fs.open(filePath, 'r');
-  try {
-    const stats = await fileHandle.stat();
-    const lines: string[] = [];
-
-    // For small files, just read the whole thing
-    if (stats.size < 1024 * 1024) {
-      const content = await fileHandle.readFile('utf-8');
-      const allLines = content.split('\n');
-      if (allLines[allLines.length - 1] === '') {
-        allLines.pop();
-      }
-      return allLines.slice(-lineCount);
-    }
-
-    // For large files, use streaming from the end
-    const rl = readline.createInterface({
-      input: fileHandle.createReadStream({ encoding: 'utf-8' }),
-      crlfDelay: Infinity,
-    });
-
-    for await (const line of rl) {
-      lines.push(line);
-      if (lines.length > lineCount) {
-        lines.shift();
-      }
-    }
-
-    return lines;
-  } finally {
-    await fileHandle.close();
-  }
-}
-
-/**
- * Reads the first N lines from a file using streaming (memory efficient)
- */
-async function readFirstLines(filePath: string, lineCount: number): Promise<string[]> {
-  const fileHandle = await fs.open(filePath, 'r');
-  try {
-    const lines: string[] = [];
-
-    const rl = readline.createInterface({
-      input: fileHandle.createReadStream({ encoding: 'utf-8' }),
-      crlfDelay: Infinity,
-    });
-
-    for await (const line of rl) {
-      lines.push(line);
-      if (lines.length >= lineCount) {
-        rl.close();
-        break;
-      }
-    }
-
-    return lines;
-  } finally {
-    await fileHandle.close();
-  }
 }
 
 /**

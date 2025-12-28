@@ -1,7 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import fs from 'fs/promises';
 import fsSync from 'fs';
+import fs from 'fs/promises';
 import path from 'path';
+
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock dependencies before importing the module under test
 vi.mock('fs/promises');

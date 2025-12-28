@@ -10,40 +10,34 @@ vi.mock('../../../../src/logger', () => ({
   },
 }));
 
+const mockReadLastLines = vi.fn();
+const mockReadFirstLines = vi.fn();
+
 vi.mock('../../../../src/util/logs', () => ({
   getLogDirectory: vi.fn().mockReturnValue('/mock/logs'),
   getLogFiles: vi.fn(),
   formatFileSize: vi.fn((bytes: number) => {
-    if (bytes === 0) return '0 B';
+    if (bytes === 0) {
+      return '0 B';
+    }
     const units = ['B', 'KB', 'MB', 'GB'];
     const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
     return `${(bytes / Math.pow(1024, i)).toFixed(i > 0 ? 1 : 0)} ${units[i]}`;
   }),
+  readLastLines: (...args: unknown[]) => mockReadLastLines(...args),
+  readFirstLines: (...args: unknown[]) => mockReadFirstLines(...args),
 }));
 
 vi.mock('fs/promises', () => ({
   default: {
-    open: vi.fn(),
     stat: vi.fn(),
-    access: vi.fn(),
-  },
-}));
-
-vi.mock('fs', () => ({
-  createReadStream: vi.fn(),
-}));
-
-vi.mock('readline', () => ({
-  default: {
-    createInterface: vi.fn(),
   },
 }));
 
 // Import mocked modules
 import fs from 'fs/promises';
-import { createReadStream } from 'fs';
-import readline from 'readline';
-import { getLogDirectory, getLogFiles } from '../../../../src/util/logs';
+
+import { getLogFiles } from '../../../../src/util/logs';
 
 describe('logs MCP tools', () => {
   beforeEach(() => {
@@ -76,9 +70,7 @@ describe('logs MCP tools', () => {
       vi.mocked(getLogFiles).mockResolvedValue(mockLogFiles);
 
       // Import tool after mocks are set up
-      const { registerListLogsTool } = await import(
-        '../../../../src/commands/mcp/tools/logs'
-      );
+      const { registerListLogsTool } = await import('../../../../src/commands/mcp/tools/logs');
 
       // Create a mock server to capture the registered tool
       let registeredHandler: ((args: any) => Promise<any>) | null = null;
@@ -111,9 +103,7 @@ describe('logs MCP tools', () => {
     it('should return empty result when no log files exist', async () => {
       vi.mocked(getLogFiles).mockResolvedValue([]);
 
-      const { registerListLogsTool } = await import(
-        '../../../../src/commands/mcp/tools/logs'
-      );
+      const { registerListLogsTool } = await import('../../../../src/commands/mcp/tools/logs');
 
       let registeredHandler: ((args: any) => Promise<any>) | null = null;
       const mockServer = {
@@ -146,9 +136,7 @@ describe('logs MCP tools', () => {
 
       vi.mocked(getLogFiles).mockResolvedValue(mockLogFiles);
 
-      const { registerListLogsTool } = await import(
-        '../../../../src/commands/mcp/tools/logs'
-      );
+      const { registerListLogsTool } = await import('../../../../src/commands/mcp/tools/logs');
 
       let registeredHandler: ((args: any) => Promise<any>) | null = null;
       const mockServer = {
@@ -168,9 +156,7 @@ describe('logs MCP tools', () => {
     it('should handle errors gracefully', async () => {
       vi.mocked(getLogFiles).mockRejectedValue(new Error('Permission denied'));
 
-      const { registerListLogsTool } = await import(
-        '../../../../src/commands/mcp/tools/logs'
-      );
+      const { registerListLogsTool } = await import('../../../../src/commands/mcp/tools/logs');
 
       let registeredHandler: ((args: any) => Promise<any>) | null = null;
       const mockServer = {
@@ -201,27 +187,13 @@ describe('logs MCP tools', () => {
 
     it('should read latest log file by default', async () => {
       vi.mocked(getLogFiles).mockResolvedValue([mockLogFile]);
-
-      const mockFileHandle = {
-        close: vi.fn().mockResolvedValue(undefined),
-      };
-      vi.mocked(fs.open).mockResolvedValue(mockFileHandle as any);
       vi.mocked(fs.stat).mockResolvedValue({ isFile: () => true } as any);
 
-      // Mock readline to return log lines
+      // Mock readLastLines to return log lines
       const mockLines = ['2024-01-15 [INFO] Test log line 1', '2024-01-15 [ERROR] Test error'];
-      const asyncIterator = {
-        [Symbol.asyncIterator]: async function* () {
-          for (const line of mockLines) {
-            yield line;
-          }
-        },
-      };
-      vi.mocked(readline.createInterface).mockReturnValue(asyncIterator as any);
+      mockReadLastLines.mockResolvedValue(mockLines);
 
-      const { registerReadLogsTool } = await import(
-        '../../../../src/commands/mcp/tools/logs'
-      );
+      const { registerReadLogsTool } = await import('../../../../src/commands/mcp/tools/logs');
 
       let registeredHandler: ((args: any) => Promise<any>) | null = null;
       const mockServer = {
@@ -244,26 +216,11 @@ describe('logs MCP tools', () => {
 
     it('should find log file by partial name', async () => {
       vi.mocked(getLogFiles).mockResolvedValue([mockLogFile]);
-
-      const mockFileHandle = {
-        close: vi.fn().mockResolvedValue(undefined),
-      };
-      vi.mocked(fs.open).mockResolvedValue(mockFileHandle as any);
       vi.mocked(fs.stat).mockResolvedValue({ isFile: () => true } as any);
 
-      const mockLines = ['Test line'];
-      const asyncIterator = {
-        [Symbol.asyncIterator]: async function* () {
-          for (const line of mockLines) {
-            yield line;
-          }
-        },
-      };
-      vi.mocked(readline.createInterface).mockReturnValue(asyncIterator as any);
+      mockReadLastLines.mockResolvedValue(['Test line']);
 
-      const { registerReadLogsTool } = await import(
-        '../../../../src/commands/mcp/tools/logs'
-      );
+      const { registerReadLogsTool } = await import('../../../../src/commands/mcp/tools/logs');
 
       let registeredHandler: ((args: any) => Promise<any>) | null = null;
       const mockServer = {
@@ -284,9 +241,7 @@ describe('logs MCP tools', () => {
     it('should return error when file not found', async () => {
       vi.mocked(getLogFiles).mockResolvedValue([mockLogFile]);
 
-      const { registerReadLogsTool } = await import(
-        '../../../../src/commands/mcp/tools/logs'
-      );
+      const { registerReadLogsTool } = await import('../../../../src/commands/mcp/tools/logs');
 
       let registeredHandler: ((args: any) => Promise<any>) | null = null;
       const mockServer = {
@@ -308,9 +263,7 @@ describe('logs MCP tools', () => {
     it('should return error when no logs exist for type', async () => {
       vi.mocked(getLogFiles).mockResolvedValue([]);
 
-      const { registerReadLogsTool } = await import(
-        '../../../../src/commands/mcp/tools/logs'
-      );
+      const { registerReadLogsTool } = await import('../../../../src/commands/mcp/tools/logs');
 
       let registeredHandler: ((args: any) => Promise<any>) | null = null;
       const mockServer = {
@@ -331,26 +284,11 @@ describe('logs MCP tools', () => {
 
     it('should read from head when specified', async () => {
       vi.mocked(getLogFiles).mockResolvedValue([mockLogFile]);
-
-      const mockFileHandle = {
-        close: vi.fn().mockResolvedValue(undefined),
-      };
-      vi.mocked(fs.open).mockResolvedValue(mockFileHandle as any);
       vi.mocked(fs.stat).mockResolvedValue({ isFile: () => true } as any);
 
-      const mockLines = ['First line', 'Second line', 'Third line'];
-      const asyncIterator = {
-        [Symbol.asyncIterator]: async function* () {
-          for (const line of mockLines) {
-            yield line;
-          }
-        },
-      };
-      vi.mocked(readline.createInterface).mockReturnValue(asyncIterator as any);
+      mockReadFirstLines.mockResolvedValue(['First line', 'Second line']);
 
-      const { registerReadLogsTool } = await import(
-        '../../../../src/commands/mcp/tools/logs'
-      );
+      const { registerReadLogsTool } = await import('../../../../src/commands/mcp/tools/logs');
 
       let registeredHandler: ((args: any) => Promise<any>) | null = null;
       const mockServer = {
@@ -370,11 +308,6 @@ describe('logs MCP tools', () => {
 
     it('should filter content with grep pattern', async () => {
       vi.mocked(getLogFiles).mockResolvedValue([mockLogFile]);
-
-      const mockFileHandle = {
-        close: vi.fn().mockResolvedValue(undefined),
-      };
-      vi.mocked(fs.open).mockResolvedValue(mockFileHandle as any);
       vi.mocked(fs.stat).mockResolvedValue({ isFile: () => true } as any);
 
       const mockLines = [
@@ -383,18 +316,9 @@ describe('logs MCP tools', () => {
         '2024-01-15 [INFO] Another normal message',
         '2024-01-15 [ERROR] Another error',
       ];
-      const asyncIterator = {
-        [Symbol.asyncIterator]: async function* () {
-          for (const line of mockLines) {
-            yield line;
-          }
-        },
-      };
-      vi.mocked(readline.createInterface).mockReturnValue(asyncIterator as any);
+      mockReadLastLines.mockResolvedValue(mockLines);
 
-      const { registerReadLogsTool } = await import(
-        '../../../../src/commands/mcp/tools/logs'
-      );
+      const { registerReadLogsTool } = await import('../../../../src/commands/mcp/tools/logs');
 
       let registeredHandler: ((args: any) => Promise<any>) | null = null;
       const mockServer = {
@@ -417,26 +341,12 @@ describe('logs MCP tools', () => {
 
     it('should handle invalid grep pattern gracefully', async () => {
       vi.mocked(getLogFiles).mockResolvedValue([mockLogFile]);
-
-      const mockFileHandle = {
-        close: vi.fn().mockResolvedValue(undefined),
-      };
-      vi.mocked(fs.open).mockResolvedValue(mockFileHandle as any);
       vi.mocked(fs.stat).mockResolvedValue({ isFile: () => true } as any);
 
       const mockLines = ['Test [ERROR] line', 'Test [INFO] line'];
-      const asyncIterator = {
-        [Symbol.asyncIterator]: async function* () {
-          for (const line of mockLines) {
-            yield line;
-          }
-        },
-      };
-      vi.mocked(readline.createInterface).mockReturnValue(asyncIterator as any);
+      mockReadLastLines.mockResolvedValue(mockLines);
 
-      const { registerReadLogsTool } = await import(
-        '../../../../src/commands/mcp/tools/logs'
-      );
+      const { registerReadLogsTool } = await import('../../../../src/commands/mcp/tools/logs');
 
       let registeredHandler: ((args: any) => Promise<any>) | null = null;
       const mockServer = {
@@ -460,9 +370,7 @@ describe('logs MCP tools', () => {
 
   describe('registerLogTools', () => {
     it('should register both list_logs and read_logs tools', async () => {
-      const { registerLogTools } = await import(
-        '../../../../src/commands/mcp/tools/logs'
-      );
+      const { registerLogTools } = await import('../../../../src/commands/mcp/tools/logs');
 
       const registeredTools: string[] = [];
       const mockServer = {

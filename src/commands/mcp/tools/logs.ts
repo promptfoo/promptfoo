@@ -1,12 +1,17 @@
 import fs from 'fs/promises';
-import readline from 'readline';
-import { createReadStream } from 'fs';
 
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import { formatFileSize, getLogDirectory, getLogFiles, type LogFileInfo } from '../../../util/logs';
+import {
+  formatFileSize,
+  getLogDirectory,
+  getLogFiles,
+  type LogFileInfo,
+  readFirstLines,
+  readLastLines,
+} from '../../../util/logs';
 import { paginate } from '../lib/performance';
 import { createToolResponse } from '../lib/utils';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
 /**
  * Maximum number of lines to return in a single read_logs call
@@ -14,54 +19,6 @@ import { createToolResponse } from '../lib/utils';
  */
 const MAX_LINES = 1000;
 const DEFAULT_LINES = 100;
-
-/**
- * Reads the last N lines from a file using streaming
- */
-async function readLastLines(filePath: string, lineCount: number): Promise<string[]> {
-  const fileHandle = await fs.open(filePath, 'r');
-  try {
-    const rl = readline.createInterface({
-      input: createReadStream(filePath, { encoding: 'utf-8' }),
-      crlfDelay: Infinity,
-    });
-
-    const lines: string[] = [];
-    for await (const line of rl) {
-      lines.push(line);
-      if (lines.length > lineCount) {
-        lines.shift();
-      }
-    }
-    return lines;
-  } finally {
-    await fileHandle.close();
-  }
-}
-
-/**
- * Reads the first N lines from a file using streaming
- */
-async function readFirstLines(filePath: string, lineCount: number): Promise<string[]> {
-  const fileHandle = await fs.open(filePath, 'r');
-  try {
-    const rl = readline.createInterface({
-      input: createReadStream(filePath, { encoding: 'utf-8' }),
-      crlfDelay: Infinity,
-    });
-
-    const lines: string[] = [];
-    for await (const line of rl) {
-      lines.push(line);
-      if (lines.length >= lineCount) {
-        break;
-      }
-    }
-    return lines;
-  } finally {
-    await fileHandle.close();
-  }
-}
 
 /**
  * Filters lines by a grep pattern (case-insensitive regex)
@@ -194,7 +151,9 @@ export function registerReadLogsTool(server: McpServer) {
         .max(MAX_LINES)
         .optional()
         .default(DEFAULT_LINES)
-        .describe(`Number of lines to return from end of file (1-${MAX_LINES}, default: ${DEFAULT_LINES})`),
+        .describe(
+          `Number of lines to return from end of file (1-${MAX_LINES}, default: ${DEFAULT_LINES})`,
+        ),
       head: z
         .boolean()
         .optional()
@@ -216,8 +175,12 @@ export function registerReadLogsTool(server: McpServer) {
           // Get the most recent file of the specified type
           const logFiles = await getLogFiles(type === 'all' ? 'debug' : type);
           if (logFiles.length === 0) {
-            return createToolResponse('read_logs', false, undefined,
-              `No ${type} log files found. Run an evaluation to generate logs.`);
+            return createToolResponse(
+              'read_logs',
+              false,
+              undefined,
+              `No ${type} log files found. Run an evaluation to generate logs.`,
+            );
           }
           targetFile = logFiles[0]; // Already sorted by mtime, newest first
         } else {
@@ -229,22 +192,30 @@ export function registerReadLogsTool(server: McpServer) {
 
           // Try partial match
           if (!targetFile) {
-            targetFile = logFiles.find((l: LogFileInfo) =>
-              l.name.includes(file) || l.name.startsWith(file)
+            targetFile = logFiles.find(
+              (l: LogFileInfo) => l.name.includes(file) || l.name.startsWith(file),
             );
           }
 
           if (!targetFile) {
-            return createToolResponse('read_logs', false, undefined,
-              `Log file not found: "${file}". Use list_logs to see available files.`);
+            return createToolResponse(
+              'read_logs',
+              false,
+              undefined,
+              `Log file not found: "${file}". Use list_logs to see available files.`,
+            );
           }
         }
 
         // Check file exists and get stats
         const stats = await fs.stat(targetFile.path);
         if (!stats.isFile()) {
-          return createToolResponse('read_logs', false, undefined,
-            `Path is not a file: ${targetFile.path}`);
+          return createToolResponse(
+            'read_logs',
+            false,
+            undefined,
+            `Path is not a file: ${targetFile.path}`,
+          );
         }
 
         // Read the file content
