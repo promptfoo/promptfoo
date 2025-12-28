@@ -30,6 +30,12 @@ import {
   PluginConfigSchema,
   StrategyConfigSchema,
 } from '../../redteam/types';
+import {
+  PendingReconConfigSchema,
+  type GetPendingReconResponse,
+  type DeletePendingReconResponse,
+  type ReconErrorResponse,
+} from '../../validators/recon';
 import { type Strategy as StrategyFactory } from '../../redteam/strategies/types';
 import {
   extractGeneratedPrompt,
@@ -485,19 +491,7 @@ function getPendingReconPath(): string {
   return path.join(getConfigDirectoryPath(true), PENDING_RECON_FILENAME);
 }
 
-/**
- * Schema for pending recon data
- */
-const PendingReconSchema = z.object({
-  config: z.object({}).passthrough(),
-  metadata: z.object({
-    source: z.literal('recon-cli'),
-    timestamp: z.number(),
-    codebaseDirectory: z.string().optional(),
-    filesAnalyzed: z.number().optional(),
-  }),
-  reconResult: z.object({}).passthrough().optional(),
-});
+// Schema imported from ../../validators/recon
 
 /**
  * GET /api/redteam/recon/pending
@@ -509,17 +503,22 @@ redteamRouter.get('/recon/pending', async (_req: Request, res: Response): Promis
 
   try {
     if (!fs.existsSync(pendingPath)) {
-      res.status(404).json({ error: 'No pending recon configuration' });
+      const errorResponse: ReconErrorResponse = { error: 'No pending recon configuration' };
+      res.status(404).json(errorResponse);
       return;
     }
 
     const data = JSON.parse(fs.readFileSync(pendingPath, 'utf-8'));
 
-    // Validate the data structure
-    const parsed = PendingReconSchema.safeParse(data);
+    // Validate the data structure using shared schema
+    const parsed = PendingReconConfigSchema.safeParse(data);
     if (!parsed.success) {
       logger.warn('Invalid pending recon file format', { error: parsed.error.message });
-      res.status(400).json({ error: 'Invalid pending recon file format' });
+      const errorResponse: ReconErrorResponse = {
+        error: 'Invalid pending recon file format',
+        details: parsed.error.message,
+      };
+      res.status(400).json(errorResponse);
       return;
     }
 
@@ -527,10 +526,14 @@ redteamRouter.get('/recon/pending', async (_req: Request, res: Response): Promis
       codebaseDirectory: parsed.data.metadata.codebaseDirectory,
     });
 
-    res.json(parsed.data);
+    const response: GetPendingReconResponse = parsed.data;
+    res.json(response);
   } catch (error) {
     logger.error('Failed to read pending recon file', { error });
-    res.status(500).json({ error: 'Failed to read pending recon configuration' });
+    const errorResponse: ReconErrorResponse = {
+      error: 'Failed to read pending recon configuration',
+    };
+    res.status(500).json(errorResponse);
   }
 });
 
@@ -548,9 +551,13 @@ redteamRouter.delete('/recon/pending', async (_req: Request, res: Response): Pro
       logger.debug('Deleted pending recon configuration');
     }
 
-    res.json({ success: true });
+    const response: DeletePendingReconResponse = { success: true };
+    res.json(response);
   } catch (error) {
     logger.error('Failed to delete pending recon file', { error });
-    res.status(500).json({ error: 'Failed to delete pending recon configuration' });
+    const errorResponse: ReconErrorResponse = {
+      error: 'Failed to delete pending recon configuration',
+    };
+    res.status(500).json(errorResponse);
   }
 });

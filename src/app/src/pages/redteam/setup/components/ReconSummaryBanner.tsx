@@ -1,5 +1,3 @@
-import React from 'react';
-
 import CodeIcon from '@mui/icons-material/Code';
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';

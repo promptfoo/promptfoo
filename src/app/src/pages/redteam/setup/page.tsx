@@ -298,7 +298,8 @@ export default function RedTeamSetupPage() {
     },
     [markSetupAsSeen, toast],
   );
-  const { isLoading: isReconLoading, reconApplied } = usePendingRecon(handleReconApplied);
+  // Fetch pending recon configuration from CLI handoff
+  usePendingRecon(handleReconApplied);
 
   // Add new state:
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);

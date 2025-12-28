@@ -1,6 +1,18 @@
 /**
  * Types for the recon command
+ *
+ * Core domain types (DiscoveredTool, ReconResult, etc.) are imported from
+ * the shared validators module to ensure consistency across CLI and server.
  */
+
+// Re-export core domain types from shared validators
+export type {
+  DiscoveredTool,
+  ReconResult,
+  ApplicationDefinition,
+  ReconContext,
+  PendingReconConfig,
+} from '../../../validators/recon';
 
 /**
  * Options passed to the recon command
@@ -16,50 +28,6 @@ export interface ReconOptions {
   envPath?: string;
   /** Open browser with web UI after analysis (default: true) */
   open?: boolean;
-}
-
-/**
- * Discovered tool/function from the codebase
- */
-export interface DiscoveredTool {
-  name: string;
-  description: string;
-  file?: string;
-  parameters?: string;
-}
-
-/**
- * Result of the reconnaissance analysis
- */
-export interface ReconResult {
-  // Core ApplicationDefinition fields
-  purpose: string;
-  features?: string;
-  industry?: string;
-  systemPrompt?: string;
-  hasAccessTo?: string;
-  doesNotHaveAccessTo?: string;
-  userTypes?: string;
-  securityRequirements?: string;
-  sensitiveDataTypes?: string;
-  exampleIdentifiers?: string;
-  criticalActions?: string;
-  forbiddenTopics?: string;
-  attackConstraints?: string;
-  competitors?: string;
-  connectedSystems?: string;
-  redteamUser?: string;
-
-  // Additional recon-specific fields
-  entities?: string[];
-  discoveredTools?: DiscoveredTool[];
-  suggestedPlugins?: string[];
-  securityNotes?: string[];
-  keyFiles?: string[];
-
-  // Conversation capability detection
-  /** Whether the application maintains state across conversation turns */
-  stateful?: boolean;
 }
 
 /**

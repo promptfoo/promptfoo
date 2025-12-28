@@ -9,6 +9,7 @@ import ora from 'ora';
 import logger from '../../../logger';
 import { getConfigDirectoryPath } from '../../../util/config/manage';
 import { writePromptfooConfig } from '../../../util/config/writer';
+import type { PendingReconConfig } from '../../../validators/recon';
 import { buildRedteamConfig } from './config';
 import { buildReconPrompt } from './prompt';
 import {
@@ -29,6 +30,9 @@ const PENDING_RECON_FILENAME = 'pending-recon.json';
 /**
  * Writes the recon result to a pending file for the web UI to pick up.
  * This enables the CLI → Browser handoff flow.
+ *
+ * Uses PendingReconConfig type from shared validators to ensure
+ * data structure is consistent between CLI and server.
  */
 function writePendingReconConfig(
   config: object,
@@ -38,10 +42,11 @@ function writePendingReconConfig(
   const configDir = getConfigDirectoryPath(true);
   const pendingPath = path.join(configDir, PENDING_RECON_FILENAME);
 
-  const pendingData = {
+  // Type-safe pending config structure
+  const pendingData: PendingReconConfig = {
     config,
     metadata: {
-      source: 'recon-cli' as const,
+      source: 'recon-cli',
       timestamp: Date.now(),
       codebaseDirectory,
       filesAnalyzed: result.keyFiles?.length || 0,
